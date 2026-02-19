@@ -8,8 +8,8 @@ authors.workspace = true
 [dependencies]
 signal-proto = { path = "../signal-proto" }
 signal-storage = { path = "../signal-storage" }
-daw-control = { path = "../../../cells/daw/daw-control" }
-daw-proto = { path = "../../../cells/daw/daw-proto" }
+daw-control.workspace = true
+daw-proto.workspace = true
 roam.workspace = true
 eyre = { workspace = true }
 serde = { workspace = true }

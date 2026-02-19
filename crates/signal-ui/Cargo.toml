@@ -13,9 +13,9 @@ signal-controller = { path = "../signal-controller" }
 uuid = { version = "1", features = ["v4"] }
 tokio = { workspace = true }
 tracing.workspace = true
-audio-controls = { path = "../../../cells/audio-controls" }
-dock-dioxus = { path = "../../../cells/dock/dock-dioxus", default-features = false }
-dock-proto = { path = "../../../cells/dock/dock-proto" }
+audio-controls.workspace = true
+dock-dioxus = { workspace = true, default-features = false }
+dock-proto.workspace = true
 
 [features]
 default = ["web"]
