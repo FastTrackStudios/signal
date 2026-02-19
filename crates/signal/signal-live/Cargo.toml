@@ -1,0 +1,22 @@
+[package]
+name = "signal-live"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+signal-proto = { path = "../signal-proto" }
+signal-storage = { path = "../signal-storage" }
+daw-control = { path = "../../../cells/daw/daw-control" }
+daw-proto = { path = "../../../cells/daw/daw-proto" }
+roam.workspace = true
+eyre = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+base64 = "0.22"
+uuid = { workspace = true }
+tokio = { workspace = true, features = ["sync", "time"] }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt", "macros"] }

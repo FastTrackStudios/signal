@@ -1,0 +1,15 @@
+[package]
+name = "signal-controller"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+signal-proto = { path = "../signal-proto" }
+signal-live = { path = "../signal-live" }
+roam.workspace = true
+tokio = { workspace = true, features = ["sync"] }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt", "macros"] }

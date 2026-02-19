@@ -1,0 +1,19 @@
+[package]
+name = "signal-storage"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+signal-proto = { path = "../signal-proto" }
+base64 = "0.22"
+thiserror.workspace = true
+sea-orm = { version = "1.1", features = ["sqlx-sqlite", "runtime-tokio-rustls", "macros"] }
+async-trait = "0.1"
+serde.workspace = true
+serde_json.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
