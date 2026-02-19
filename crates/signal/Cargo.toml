@@ -1,0 +1,28 @@
+[package]
+name = "signal"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[features]
+default = []
+daw = ["dep:daw-control", "dep:daw-proto"]
+
+[dependencies]
+signal-controller = { path = "../signal-controller" }
+signal-live = { path = "../signal-live" }
+signal-proto = { path = "../signal-proto" }
+signal-storage = { path = "../signal-storage" }
+daw-control = { workspace = true, optional = true }
+daw-proto = { workspace = true, optional = true }
+tokio.workspace = true
+
+[dev-dependencies]
+daw-control.workspace = true
+daw-proto.workspace = true
+signal-live = { path = "../signal-live" }
+reaper-test = { path = "../../../libs/reaper-test" }
+eyre.workspace = true
+serde_json.workspace = true
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }

@@ -1,0 +1,22 @@
+[package]
+name = "signal-ui"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+dioxus.workspace = true
+lumen-blocks.workspace = true
+signal = { path = "../signal" }
+signal-controller = { path = "../signal-controller" }
+uuid = { version = "1", features = ["v4"] }
+tokio = { workspace = true }
+tracing.workspace = true
+audio-controls = { path = "../../../cells/audio-controls" }
+dock-dioxus = { path = "../../../cells/dock/dock-dioxus", default-features = false }
+dock-proto = { path = "../../../cells/dock/dock-proto" }
+
+[features]
+default = ["web"]
+web = ["dock-dioxus/web"]
