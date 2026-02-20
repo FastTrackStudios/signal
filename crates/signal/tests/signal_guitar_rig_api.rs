@@ -74,10 +74,10 @@ async fn create_new_block_collection() {
         vec![crunch, high_gain],
     );
 
-    signal.block_presets().save(preset).await;
+    signal.block_presets().save(preset).await.unwrap();
 
     // Reload
-    let collections = signal.block_presets().list(BlockType::Drive).await;
+    let collections = signal.block_presets().list(BlockType::Drive).await.unwrap();
     let loaded = collections
         .iter()
         .find(|p| p.name() == "Custom Drive")
@@ -93,7 +93,7 @@ async fn create_new_block_collection() {
             loaded.id().clone(),
             seed_id("custom-drive-high"),
         )
-        .await
+        .await.unwrap()
         .expect("high gain snapshot should exist");
     assert!((block.first_value().unwrap() - 0.95).abs() < 0.001);
 }
@@ -103,7 +103,7 @@ async fn create_new_block_collection() {
 async fn add_snapshot_to_existing_collection() {
     let signal = controller().await;
 
-    let amp_collections = signal.block_presets().list(BlockType::Amp).await;
+    let amp_collections = signal.block_presets().list(BlockType::Amp).await.unwrap();
     let mut jm_amp = amp_collections
         .iter()
         .find(|p| p.id().to_string() == seed_id("jm-amp").to_string())
@@ -126,10 +126,10 @@ async fn add_snapshot_to_existing_collection() {
         ]),
     );
     jm_amp.variants_mut().push(new_snap);
-    signal.block_presets().save(jm_amp).await;
+    signal.block_presets().save(jm_amp).await.unwrap();
 
     // Reload and verify
-    let reloaded = signal.block_presets().list(BlockType::Amp).await;
+    let reloaded = signal.block_presets().list(BlockType::Amp).await.unwrap();
     let loaded = reloaded
         .iter()
         .find(|p| p.id().to_string() == seed_id("jm-amp").to_string())
@@ -143,7 +143,7 @@ async fn add_snapshot_to_existing_collection() {
             loaded.id().clone(),
             seed_id("jm-amp-highgain"),
         )
-        .await
+        .await.unwrap()
         .expect("high gain snapshot should exist");
     assert!((high_gain.first_value().unwrap() - 0.9).abs() < 0.001);
 }
@@ -154,7 +154,7 @@ async fn update_snapshot_params_increments_version() {
     let signal = controller().await;
 
     // Load the jm-amp Lead snapshot's version before
-    let collections = signal.block_presets().list(BlockType::Amp).await;
+    let collections = signal.block_presets().list(BlockType::Amp).await.unwrap();
     let jm_amp = collections
         .iter()
         .find(|p| p.id().to_string() == seed_id("jm-amp").to_string())
@@ -176,10 +176,10 @@ async fn update_snapshot_params_increments_version() {
         lead_snap.id().clone(),
         block,
     )
-    .await;
+    .await.unwrap();
 
     // Reload
-    let reloaded = signal.block_presets().list(BlockType::Amp).await;
+    let reloaded = signal.block_presets().list(BlockType::Amp).await.unwrap();
     let jm_amp_reloaded = reloaded
         .iter()
         .find(|p| p.id().to_string() == seed_id("jm-amp").to_string())
@@ -209,9 +209,9 @@ async fn block_collections_isolated_by_type() {
             Block::from_parameters(vec![BlockParameter::new("gain", "Gain", 0.5)]),
         ),
     );
-    signal.block_presets().save(custom).await;
+    signal.block_presets().save(custom).await.unwrap();
 
-    let amp_collections = signal.block_presets().list(BlockType::Amp).await;
+    let amp_collections = signal.block_presets().list(BlockType::Amp).await.unwrap();
     assert!(
         !amp_collections.iter().any(|p| p.name() == "Isolated Drive"),
         "drive collection should not appear in amp list"
@@ -235,10 +235,10 @@ async fn delete_block_preset() {
         ),
         vec![],
     );
-    signal.block_presets().save(preset).await;
+    signal.block_presets().save(preset).await.unwrap();
 
     // Verify it exists
-    let before = signal.block_presets().list(BlockType::Drive).await;
+    let before = signal.block_presets().list(BlockType::Drive).await.unwrap();
     let count_before = before.len();
     assert!(
         before.iter().any(|p| p.name() == "Delete Me Drive"),
@@ -247,10 +247,10 @@ async fn delete_block_preset() {
 
     // Delete it
     signal.block_presets().delete(BlockType::Drive, seed_id("delete-me-drive"))
-        .await;
+        .await.unwrap();
 
     // Verify it's gone
-    let after = signal.block_presets().list(BlockType::Drive).await;
+    let after = signal.block_presets().list(BlockType::Drive).await.unwrap();
     assert_eq!(after.len(), count_before - 1, "count should decrease by 1");
     assert!(
         !after.iter().any(|p| p.name() == "Delete Me Drive"),
@@ -309,10 +309,10 @@ async fn create_new_module_collection() {
         vec![],
     );
 
-    signal.module_presets().save(preset).await;
+    signal.module_presets().save(preset).await.unwrap();
 
     // Reload
-    let modules = signal.module_presets().list().await;
+    let modules = signal.module_presets().list().await.unwrap();
     let loaded = modules
         .iter()
         .find(|m| m.name() == "Custom Guitar Module")
@@ -331,7 +331,7 @@ async fn create_new_module_collection() {
 async fn add_variant_to_module_collection() {
     let signal = controller().await;
 
-    let modules = signal.module_presets().list().await;
+    let modules = signal.module_presets().list().await.unwrap();
     let jm_pedals = modules
         .iter()
         .find(|m| m.name() == "JM Pedals")
@@ -355,10 +355,10 @@ async fn add_variant_to_module_collection() {
 
     let mut updated = jm_pedals;
     updated.variants_mut().push(heavy_snap);
-    signal.module_presets().save(updated).await;
+    signal.module_presets().save(updated).await.unwrap();
 
     // Reload
-    let reloaded = signal.module_presets().list().await;
+    let reloaded = signal.module_presets().list().await.unwrap();
     let loaded = reloaded
         .iter()
         .find(|m| m.name() == "JM Pedals")
@@ -409,12 +409,12 @@ async fn module_block_source_references() {
         snap,
         vec![],
     );
-    signal.module_presets().save(preset).await;
+    signal.module_presets().save(preset).await.unwrap();
 
     // Reload
     let loaded_snap = signal
         .module_presets().load_default(seed_id("source-test"))
-        .await
+        .await.unwrap()
         .expect("should find module");
 
     let blocks = loaded_snap.module().blocks();
@@ -480,11 +480,11 @@ async fn module_signal_chain_with_split() {
         snap,
         vec![],
     );
-    signal.module_presets().save(preset).await;
+    signal.module_presets().save(preset).await.unwrap();
 
     let loaded = signal
         .module_presets().load_default(seed_id("split-test"))
-        .await
+        .await.unwrap()
         .expect("should load split module");
 
     assert!(
@@ -515,11 +515,11 @@ async fn build_layer_from_scratch() {
         EngineType::Guitar,
         default_snap,
     );
-    signal.layers().save(layer).await;
+    signal.layers().save(layer).await.unwrap();
 
     let loaded = signal
         .layers().load(seed_id("test-guitar-layer"))
-        .await
+        .await.unwrap()
         .expect("layer should exist");
 
     assert_eq!(loaded.name, "Test Guitar Layer");
@@ -552,11 +552,11 @@ async fn layer_with_multiple_variants() {
     );
     layer.add_variant(crunch);
     layer.add_variant(lead);
-    signal.layers().save(layer).await;
+    signal.layers().save(layer).await.unwrap();
 
     let loaded = signal
         .layers().load(seed_id("multi-variant-layer"))
-        .await
+        .await.unwrap()
         .expect("layer should exist");
 
     assert_eq!(loaded.variants.len(), 3);
@@ -566,7 +566,7 @@ async fn layer_with_multiple_variants() {
             seed_id("multi-variant-layer"),
             seed_id("multi-layer-crunch"),
         )
-        .await
+        .await.unwrap()
         .expect("crunch variant should exist");
     assert_eq!(crunch_loaded.name, "Crunch");
     assert!(crunch_loaded.module_refs[0].variant_id.is_some());
@@ -589,11 +589,11 @@ async fn layer_snapshot_overrides_round_trip() {
         EngineType::Guitar,
         snap,
     );
-    signal.layers().save(layer).await;
+    signal.layers().save(layer).await.unwrap();
 
     let loaded = signal
         .layers().load(seed_id("override-layer"))
-        .await
+        .await.unwrap()
         .expect("layer should exist");
 
     assert_eq!(loaded.variants[0].overrides.len(), 2);
@@ -631,8 +631,8 @@ async fn build_engine_with_layers() {
         EngineType::Guitar,
         layer_b_snap,
     );
-    signal.layers().save(layer_a).await;
-    signal.layers().save(layer_b).await;
+    signal.layers().save(layer_a).await.unwrap();
+    signal.layers().save(layer_b).await.unwrap();
 
     // Build engine with two scenes
     let default_scene = EngineScene::new(seed_id("eng-scene-default"), "Default").with_layer(
@@ -650,11 +650,11 @@ async fn build_engine_with_layers() {
         default_scene,
     );
     engine.add_variant(lead_scene);
-    signal.engines().save(engine).await;
+    signal.engines().save(engine).await.unwrap();
 
     let loaded = signal
         .engines().load(seed_id("test-engine"))
-        .await
+        .await.unwrap()
         .expect("engine should exist");
 
     assert_eq!(loaded.name, "Test Engine");
@@ -663,7 +663,7 @@ async fn build_engine_with_layers() {
 
     let lead = signal
         .engines().load_variant(seed_id("test-engine"), seed_id("eng-scene-lead"))
-        .await
+        .await.unwrap()
         .expect("lead scene should exist");
     assert_eq!(lead.name, "Lead");
 }
@@ -698,11 +698,11 @@ async fn build_rig_with_scenes() {
     rig.add_variant(crunch);
     rig.add_variant(lead);
     rig.add_variant(solo);
-    signal.rigs().save(rig).await;
+    signal.rigs().save(rig).await.unwrap();
 
     let loaded = signal
         .rigs().load(seed_id("custom-guitar-rig"))
-        .await
+        .await.unwrap()
         .expect("rig should exist");
 
     assert_eq!(loaded.name, "Custom Guitar Rig");
@@ -710,7 +710,7 @@ async fn build_rig_with_scenes() {
 
     let solo_loaded = signal
         .rigs().load_variant(seed_id("custom-guitar-rig"), seed_id("rig-scene-solo"))
-        .await
+        .await.unwrap()
         .expect("solo scene should exist");
     assert_eq!(solo_loaded.overrides.len(), 2);
 }
@@ -735,11 +735,11 @@ async fn rig_scene_overrides_stack() {
         ));
 
     let rig = Rig::new(seed_id("override-rig"), "Override Rig", vec![], scene);
-    signal.rigs().save(rig).await;
+    signal.rigs().save(rig).await.unwrap();
 
     let loaded = signal
         .rigs().load(seed_id("override-rig"))
-        .await
+        .await.unwrap()
         .expect("rig should exist");
 
     assert_eq!(loaded.variants[0].overrides.len(), 3);
@@ -772,11 +772,11 @@ async fn rig_scene_engine_selections() {
         scene_a,
     );
     rig.add_variant(scene_b);
-    signal.rigs().save(rig).await;
+    signal.rigs().save(rig).await.unwrap();
 
     let loaded = signal
         .rigs().load(seed_id("sel-rig"))
-        .await
+        .await.unwrap()
         .expect("rig");
 
     let a = &loaded.variants[0];
@@ -805,7 +805,7 @@ async fn reorder_rig_scenes() {
     rig.add_variant(RigScene::new(seed_id("r-scene-b"), "B"));
     rig.add_variant(RigScene::new(seed_id("r-scene-c"), "C"));
     rig.add_variant(RigScene::new(seed_id("r-scene-d"), "D"));
-    signal.rigs().save(rig).await;
+    signal.rigs().save(rig).await.unwrap();
 
     // Reorder to [D, B, A, C]
     signal.rigs().reorder_scenes(
@@ -817,11 +817,11 @@ async fn reorder_rig_scenes() {
             seed_id("r-scene-c").into(),
         ],
     )
-    .await;
+    .await.unwrap();
 
     let loaded = signal
         .rigs().load(seed_id("reorder-rig"))
-        .await
+        .await.unwrap()
         .expect("rig");
 
     let names: Vec<&str> = loaded.variants.iter().map(|v| v.name.as_str()).collect();
@@ -865,7 +865,7 @@ async fn reorder_profile_patches() {
         rig_id.clone(),
         scene_id.clone(),
     ));
-    signal.profiles().save(profile).await;
+    signal.profiles().save(profile).await.unwrap();
 
     signal.profiles().reorder_patches(
         seed_id("reorder-profile"),
@@ -877,11 +877,11 @@ async fn reorder_profile_patches() {
             seed_id("rp-b").into(),
         ],
     )
-    .await;
+    .await.unwrap();
 
     let loaded = signal
         .profiles().load(seed_id("reorder-profile"))
-        .await
+        .await.unwrap()
         .expect("profile");
 
     let names: Vec<&str> = loaded.patches.iter().map(|p| p.name.as_str()).collect();
@@ -924,7 +924,7 @@ async fn reorder_song_sections() {
         rig_id.clone(),
         scene_id.clone(),
     ));
-    signal.songs().save(song).await;
+    signal.songs().save(song).await.unwrap();
 
     signal.songs().reorder_sections(
         seed_id("reorder-song"),
@@ -935,9 +935,9 @@ async fn reorder_song_sections() {
             seed_id("rs-chorus").into(),
         ],
     )
-    .await;
+    .await.unwrap();
 
-    let loaded = signal.songs().load(seed_id("reorder-song")).await.expect("song");
+    let loaded = signal.songs().load(seed_id("reorder-song")).await.unwrap().expect("song");
 
     let names: Vec<&str> = loaded.sections.iter().map(|s| s.name.as_str()).collect();
     assert_eq!(names, vec!["Bridge", "Verse", "Outro", "Chorus"]);
@@ -949,7 +949,7 @@ async fn reorder_setlist_entries() {
     let signal = controller().await;
 
     // We need valid song IDs — use seeded songs
-    let songs = signal.songs().list().await;
+    let songs = signal.songs().list().await.unwrap();
     assert!(!songs.is_empty(), "need at least one seeded song");
     let song_id = songs[0].id.clone();
 
@@ -968,7 +968,7 @@ async fn reorder_setlist_entries() {
         "Entry 3",
         song_id.clone(),
     ));
-    signal.setlists().save(setlist).await;
+    signal.setlists().save(setlist).await.unwrap();
 
     signal.setlists().reorder_entries(
         seed_id("reorder-setlist"),
@@ -978,11 +978,11 @@ async fn reorder_setlist_entries() {
             seed_id("rse-2").into(),
         ],
     )
-    .await;
+    .await.unwrap();
 
     let loaded = signal
         .setlists().load(seed_id("reorder-setlist"))
-        .await
+        .await.unwrap()
         .expect("setlist");
 
     let names: Vec<&str> = loaded.entries.iter().map(|e| e.name.as_str()).collect();
@@ -1042,11 +1042,11 @@ async fn create_profile_with_patches() {
         rig_id.clone(),
         default_scene.clone(),
     ));
-    signal.profiles().save(profile).await;
+    signal.profiles().save(profile).await.unwrap();
 
     let loaded = signal
         .profiles().load(seed_id("custom-profile"))
-        .await
+        .await.unwrap()
         .expect("profile");
 
     assert_eq!(loaded.name, "Custom Guitar Profile");
@@ -1063,7 +1063,7 @@ async fn patch_targets_correct_rig_scene() {
     let signal = controller().await;
 
     // Use seeded Worship profile
-    let profiles = signal.profiles().list().await;
+    let profiles = signal.profiles().list().await.unwrap();
     let worship = profiles
         .iter()
         .find(|p| p.name == "Worship")
@@ -1077,7 +1077,7 @@ async fn patch_targets_correct_rig_scene() {
 
     let loaded = signal
         .profiles().load_patch(worship.id.clone(), lead_patch.id.clone())
-        .await
+        .await.unwrap()
         .expect("lead patch variant");
 
     assert_eq!(loaded.name, "Lead");
@@ -1108,12 +1108,12 @@ async fn retarget_patch_via_set_patch_preset() {
             scene_a.clone(),
         ),
     );
-    signal.profiles().save(profile).await;
+    signal.profiles().save(profile).await.unwrap();
 
     // Verify initial target
     let loaded_before = signal
         .profiles().load(seed_id("retarget-profile"))
-        .await
+        .await.unwrap()
         .expect("profile");
     match &loaded_before.patches[0].target {
         PatchTarget::RigScene { scene_id, .. } => assert_eq!(*scene_id, scene_a),
@@ -1127,11 +1127,11 @@ async fn retarget_patch_via_set_patch_preset() {
         rig_id.clone(),
         scene_b.clone(),
     )
-    .await;
+    .await.unwrap();
 
     let loaded_after = signal
         .profiles().load(seed_id("retarget-profile"))
-        .await
+        .await.unwrap()
         .expect("profile after retarget");
     match &loaded_after.patches[0].target {
         PatchTarget::RigScene { scene_id, .. } => assert_eq!(*scene_id, scene_b),
@@ -1145,7 +1145,7 @@ async fn patch_overrides_affect_resolved_values() {
     let signal = controller().await;
 
     // The seeded worship profile has patches with overrides
-    let profiles = signal.profiles().list().await;
+    let profiles = signal.profiles().list().await.unwrap();
     let worship = profiles
         .iter()
         .find(|p| p.name == "Worship")
@@ -1204,7 +1204,7 @@ async fn create_song_with_mixed_sections() {
             scene_id.clone(),
         ),
     );
-    signal.profiles().save(profile).await;
+    signal.profiles().save(profile).await.unwrap();
 
     let mut song = Song::new(
         seed_id("mixed-song"),
@@ -1222,9 +1222,9 @@ async fn create_song_with_mixed_sections() {
         "Bridge",
         seed_id("song-patch"),
     ));
-    signal.songs().save(song).await;
+    signal.songs().save(song).await.unwrap();
 
-    let loaded = signal.songs().load(seed_id("mixed-song")).await.expect("song");
+    let loaded = signal.songs().load(seed_id("mixed-song")).await.unwrap().expect("song");
 
     assert_eq!(loaded.sections.len(), 3);
     assert!(matches!(
@@ -1258,10 +1258,10 @@ async fn switch_section_source() {
             seed_id("song-patch"),
         ),
     );
-    signal.songs().save(song).await;
+    signal.songs().save(song).await.unwrap();
 
     // Verify initial source
-    let before = signal.songs().load(seed_id("switch-song")).await.expect("song");
+    let before = signal.songs().load(seed_id("switch-song")).await.unwrap().expect("song");
     assert!(matches!(
         before.sections[0].source,
         SectionSource::Patch { .. }
@@ -1276,9 +1276,9 @@ async fn switch_section_source() {
             scene_id: scene_id.clone(),
         },
     )
-    .await;
+    .await.unwrap();
 
-    let after = signal.songs().load(seed_id("switch-song")).await.expect("song");
+    let after = signal.songs().load(seed_id("switch-song")).await.unwrap().expect("song");
     assert!(matches!(
         after.sections[0].source,
         SectionSource::RigScene { .. }
@@ -1291,7 +1291,7 @@ async fn resolve_all_song_sections() {
     let signal = controller().await;
 
     // Use seeded songs
-    let songs = signal.songs().list().await;
+    let songs = signal.songs().list().await.unwrap();
     assert!(!songs.is_empty(), "need seeded songs");
 
     for song in &songs {
@@ -1328,7 +1328,7 @@ async fn resolve_all_song_sections() {
 async fn create_setlist_from_songs() {
     let signal = controller().await;
 
-    let songs = signal.songs().list().await;
+    let songs = signal.songs().list().await.unwrap();
     assert!(!songs.is_empty());
     let song_id = songs[0].id.clone();
 
@@ -1342,11 +1342,11 @@ async fn create_setlist_from_songs() {
         "Song 2",
         song_id.clone(),
     ));
-    signal.setlists().save(setlist).await;
+    signal.setlists().save(setlist).await.unwrap();
 
     let loaded = signal
         .setlists().load(seed_id("test-setlist"))
-        .await
+        .await.unwrap()
         .expect("setlist");
 
     assert_eq!(loaded.entries.len(), 2);
@@ -1359,13 +1359,13 @@ async fn create_setlist_from_songs() {
 async fn full_hierarchy_resolve_sweep() {
     let signal = controller().await;
 
-    let setlists = signal.setlists().list().await;
+    let setlists = signal.setlists().list().await.unwrap();
     assert!(!setlists.is_empty(), "need seeded setlists");
 
     let mut total_resolved = 0;
     for setlist in &setlists {
         for entry in &setlist.entries {
-            let song = signal.songs().load(entry.song_id.clone()).await;
+            let song = signal.songs().load(entry.song_id.clone()).await.unwrap();
             if let Some(song) = song {
                 for section in &song.sections {
                     let result = signal

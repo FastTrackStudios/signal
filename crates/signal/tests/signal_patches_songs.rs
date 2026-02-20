@@ -16,8 +16,7 @@ use fixtures::*;
 use signal::{
     overrides::{NodePath, Override},
     profile::{Patch, PatchId, PatchTarget, Profile, ProfileId},
-    resolve::{ResolveTarget, ResolvedGraph},
-    rig::{RigId, RigSceneId},
+    resolve::ResolveTarget,
     seed_id,
     song::{Section, SectionId, SectionSource, Song, SongId},
 };
@@ -31,7 +30,7 @@ use signal::{
 async fn seed_profiles_are_loaded() {
     let signal = controller().await;
 
-    let profiles = signal.profiles().list().await;
+    let profiles = signal.profiles().list().await.unwrap();
     println!("Seeded profiles:");
     for p in &profiles {
         println!("  {} — {} ({} patches)", p.id, p.name, p.patches.len());
@@ -61,11 +60,12 @@ async fn load_worship_lead_patch() {
     let signal = controller().await;
 
     let patch = signal
-        .profiles().load_patch(
+        .profiles()
+        .load_patch(
             seed_id("guitar-worship-profile"),
             seed_id("guitar-worship-lead"),
         )
-        .await
+        .await.unwrap()
         .expect("guitar-worship-lead patch not found");
 
     match &patch.target {
@@ -134,11 +134,12 @@ async fn create_and_reload_custom_profile() {
     let mut profile = Profile::new(profile_id.clone(), "Test Profile", clean);
     profile.add_patch(lead);
 
-    signal.profiles().save(profile).await;
+    signal.profiles().save(profile).await.unwrap();
 
     let reloaded = signal
-        .profiles().load(profile_id.clone())
-        .await
+        .profiles()
+        .load(profile_id.clone())
+        .await.unwrap()
         .expect("custom profile not found after save");
 
     println!(
@@ -167,8 +168,9 @@ async fn add_patch_to_existing_profile() {
     let signal = controller().await;
 
     let mut worship = signal
-        .profiles().load(seed_id("guitar-worship-profile"))
-        .await
+        .profiles()
+        .load(seed_id("guitar-worship-profile"))
+        .await.unwrap()
         .expect("worship profile not found");
 
     let original_count = worship.patches.len();
@@ -181,11 +183,12 @@ async fn add_patch_to_existing_profile() {
     );
     worship.add_patch(bonus);
 
-    signal.profiles().save(worship).await;
+    signal.profiles().save(worship).await.unwrap();
 
     let reloaded = signal
-        .profiles().load(seed_id("guitar-worship-profile"))
-        .await
+        .profiles()
+        .load(seed_id("guitar-worship-profile"))
+        .await.unwrap()
         .expect("worship profile not found after update");
 
     println!(
@@ -203,8 +206,9 @@ async fn blues_profile_default_is_crunch() {
     let signal = controller().await;
 
     let blues = signal
-        .profiles().load(seed_id("guitar-blues-profile"))
-        .await
+        .profiles()
+        .load(seed_id("guitar-blues-profile"))
+        .await.unwrap()
         .expect("blues profile not found");
 
     let default = blues.default_patch().expect("no default patch");
@@ -229,7 +233,7 @@ async fn blues_profile_default_is_crunch() {
 async fn seed_songs_are_loaded() {
     let signal = controller().await;
 
-    let songs = signal.songs().list().await;
+    let songs = signal.songs().list().await.unwrap();
     println!("Seeded songs:");
     for s in &songs {
         println!("  {} — {} ({} sections)", s.id, s.name, s.sections.len());
@@ -277,11 +281,12 @@ async fn create_song_with_mixed_section_sources() {
     song.add_section(chorus);
     song.add_section(bridge);
 
-    signal.songs().save(song).await;
+    signal.songs().save(song).await.unwrap();
 
     let reloaded = signal
-        .songs().load(song_id.clone())
-        .await
+        .songs()
+        .load(song_id.clone())
+        .await.unwrap()
         .expect("test song not found after save");
 
     println!(
@@ -334,7 +339,7 @@ async fn update_section_override_persists() {
         guitar_megarig_default_scene(),
     );
     let mut song = Song::new(song_id.clone(), "Override Test Song", section);
-    signal.songs().save(song.clone()).await;
+    signal.songs().save(song.clone()).await.unwrap();
 
     // Add an override to the existing section
     if let Some(s) = song.sections.iter_mut().find(|s| s.id == section_id) {
@@ -346,11 +351,12 @@ async fn update_section_override_persists() {
             0.65,
         ));
     }
-    signal.songs().save(song).await;
+    signal.songs().save(song).await.unwrap();
 
     let reloaded = signal
-        .songs().load(song_id)
-        .await
+        .songs()
+        .load(song_id)
+        .await.unwrap()
         .expect("song not found after update");
     let section = reloaded.section(&section_id).unwrap();
 
@@ -483,7 +489,7 @@ async fn resolve_song_section_via_patch_matches_direct_patch() {
     let signal = controller().await;
 
     // guitar-worship-song uses patches from the worship profile
-    let songs = signal.songs().list().await;
+    let songs = signal.songs().list().await.unwrap();
     let worship_song = songs
         .iter()
         .find(|s| s.name.contains("Worship") || s.name.contains("worship"));
@@ -496,7 +502,7 @@ async fn resolve_song_section_via_patch_matches_direct_patch() {
         let song_id = SongId::new();
         let section_id = section.id.clone();
         let song = Song::new(song_id.clone(), "Test Worship Song", section);
-        signal.songs().save(song).await;
+        signal.songs().save(song).await.unwrap();
 
         let graph = signal
             .resolve_target(ResolveTarget::SongSection {
@@ -555,7 +561,7 @@ async fn resolve_rig_scene_section_equals_direct_rig_scene() {
         guitar_megarig_default_scene(),
     );
     let song = Song::new(song_id.clone(), "Direct Scene Song", section);
-    signal.songs().save(song).await;
+    signal.songs().save(song).await.unwrap();
 
     let via_section = signal
         .resolve_target(ResolveTarget::SongSection {
@@ -638,6 +644,182 @@ async fn patch_overrides_stack_on_top_of_rig_scene_overrides() {
 }
 
 // ─────────────────────────────────────────────────────────────
+//  Patch cycle detection
+// ─────────────────────────────────────────────────────────────
+
+/// Self-referencing patch (A → A) should return CycleDetected.
+#[tokio::test]
+async fn resolve_self_referencing_patch_detects_cycle() {
+    let signal = controller().await;
+
+    let patch_a_id = PatchId::new();
+    let profile_id = ProfileId::new();
+
+    // Patch A targets itself
+    let patch_a = Patch::from_patch_ref(patch_a_id.clone(), "Self Ref", patch_a_id.clone());
+
+    let profile = Profile::new(profile_id.clone(), "Cycle Test", patch_a);
+    signal.profiles().save(profile).await.unwrap();
+
+    let result = signal
+        .resolve_target(ResolveTarget::ProfilePatch {
+            profile_id: profile_id.into(),
+            patch_id: patch_a_id.into(),
+        })
+        .await;
+
+    assert!(result.is_err(), "self-referencing patch should fail");
+    let err = result.unwrap_err();
+    assert!(
+        matches!(err, signal::resolve::ResolveError::CycleDetected(_)),
+        "expected CycleDetected, got: {err:?}"
+    );
+}
+
+/// Two-patch cycle (A → B → A) should return CycleDetected.
+#[tokio::test]
+async fn resolve_two_patch_cycle_detects_cycle() {
+    let signal = controller().await;
+
+    let patch_a_id = PatchId::new();
+    let patch_b_id = PatchId::new();
+    let profile_id = ProfileId::new();
+
+    let patch_a = Patch::from_patch_ref(patch_a_id.clone(), "A", patch_b_id.clone());
+    let patch_b = Patch::from_patch_ref(patch_b_id.clone(), "B", patch_a_id.clone());
+
+    let mut profile = Profile::new(profile_id.clone(), "Two Cycle", patch_a);
+    profile.add_patch(patch_b);
+    signal.profiles().save(profile).await.unwrap();
+
+    let result = signal
+        .resolve_target(ResolveTarget::ProfilePatch {
+            profile_id: profile_id.into(),
+            patch_id: patch_a_id.into(),
+        })
+        .await;
+
+    assert!(result.is_err(), "two-patch cycle should fail");
+    let err = result.unwrap_err();
+    assert!(
+        matches!(err, signal::resolve::ResolveError::CycleDetected(_)),
+        "expected CycleDetected, got: {err:?}"
+    );
+}
+
+/// Three-patch cycle (A → B → C → A) should return CycleDetected.
+#[tokio::test]
+async fn resolve_three_patch_cycle_detects_cycle() {
+    let signal = controller().await;
+
+    let patch_a_id = PatchId::new();
+    let patch_b_id = PatchId::new();
+    let patch_c_id = PatchId::new();
+    let profile_id = ProfileId::new();
+
+    let patch_a = Patch::from_patch_ref(patch_a_id.clone(), "A", patch_b_id.clone());
+    let patch_b = Patch::from_patch_ref(patch_b_id.clone(), "B", patch_c_id.clone());
+    let patch_c = Patch::from_patch_ref(patch_c_id.clone(), "C", patch_a_id.clone());
+
+    let mut profile = Profile::new(profile_id.clone(), "Three Cycle", patch_a);
+    profile.add_patch(patch_b);
+    profile.add_patch(patch_c);
+    signal.profiles().save(profile).await.unwrap();
+
+    let result = signal
+        .resolve_target(ResolveTarget::ProfilePatch {
+            profile_id: profile_id.into(),
+            patch_id: patch_a_id.into(),
+        })
+        .await;
+
+    assert!(result.is_err(), "three-patch cycle should fail");
+    let err = result.unwrap_err();
+    assert!(
+        matches!(err, signal::resolve::ResolveError::CycleDetected(_)),
+        "expected CycleDetected, got: {err:?}"
+    );
+}
+
+/// Valid chain (A → B → RigScene) should resolve successfully.
+#[tokio::test]
+async fn resolve_valid_patch_chain_succeeds() {
+    let signal = controller().await;
+
+    let patch_a_id = PatchId::new();
+    let patch_b_id = PatchId::new();
+    let profile_id = ProfileId::new();
+
+    // B targets a real rig scene
+    let patch_b = Patch::from_rig_scene(
+        patch_b_id.clone(),
+        "B",
+        guitar_megarig_id(),
+        guitar_megarig_default_scene(),
+    );
+    // A targets B (cross-reference)
+    let patch_a = Patch::from_patch_ref(patch_a_id.clone(), "A", patch_b_id.clone());
+
+    let mut profile = Profile::new(profile_id.clone(), "Chain Test", patch_a);
+    profile.add_patch(patch_b);
+    signal.profiles().save(profile).await.unwrap();
+
+    let graph = signal
+        .resolve_target(ResolveTarget::ProfilePatch {
+            profile_id: profile_id.into(),
+            patch_id: patch_a_id.into(),
+        })
+        .await
+        .expect("valid patch chain should resolve");
+
+    assert!(
+        !graph.engines.is_empty(),
+        "chain-resolved graph should have engines"
+    );
+}
+
+/// SongSection referencing a cyclic patch should also detect the cycle.
+#[tokio::test]
+async fn resolve_song_section_with_cyclic_patch_detects_cycle() {
+    let signal = controller().await;
+
+    let patch_a_id = PatchId::new();
+    let patch_b_id = PatchId::new();
+    let profile_id = ProfileId::new();
+
+    let patch_a = Patch::from_patch_ref(patch_a_id.clone(), "A", patch_b_id.clone());
+    let patch_b = Patch::from_patch_ref(patch_b_id.clone(), "B", patch_a_id.clone());
+
+    let mut profile = Profile::new(profile_id.clone(), "Song Cycle", patch_a);
+    profile.add_patch(patch_b);
+    signal.profiles().save(profile).await.unwrap();
+
+    // Create a song section referencing the cyclic patch
+    let section_id = SectionId::new();
+    let song_id = SongId::new();
+    let section = Section::from_patch(section_id.clone(), "Cyclic Section", patch_a_id.clone());
+    let song = Song::new(song_id.clone(), "Cycle Song", section);
+    signal.songs().save(song).await.unwrap();
+
+    let result = signal
+        .resolve_target(ResolveTarget::SongSection {
+            song_id: song_id.into(),
+            section_id: section_id.into(),
+        })
+        .await;
+
+    assert!(
+        result.is_err(),
+        "song section with cyclic patch should fail"
+    );
+    let err = result.unwrap_err();
+    assert!(
+        matches!(err, signal::resolve::ResolveError::CycleDetected(_)),
+        "expected CycleDetected, got: {err:?}"
+    );
+}
+
+// ─────────────────────────────────────────────────────────────
 //  All-Around profile — activate_patch for every slot
 // ─────────────────────────────────────────────────────────────
 
@@ -655,8 +837,9 @@ async fn all_around_activate_each_patch() {
     let profile_id = seed_id("guitar-allaround-profile");
 
     let profile = signal
-        .profiles().load(profile_id.clone())
-        .await
+        .profiles()
+        .load(profile_id.clone())
+        .await.unwrap()
         .expect("All-Around profile not found");
 
     assert_eq!(profile.patches.len(), 8, "All-Around should have 8 patches");
@@ -667,7 +850,8 @@ async fn all_around_activate_each_patch() {
 
     // Activate default (None) — should resolve to Clean
     let default_graph = signal
-        .profiles().activate(profile_id.clone(), None::<PatchId>)
+        .profiles()
+        .activate(profile_id.clone(), None::<PatchId>)
         .await
         .expect("activate_patch(default) failed");
     println!(
@@ -684,7 +868,8 @@ async fn all_around_activate_each_patch() {
         );
 
         let graph = signal
-            .profiles().activate(profile_id.clone(), Some(patch.id.clone()))
+            .profiles()
+            .activate(profile_id.clone(), Some(patch.id.clone()))
             .await
             .unwrap_or_else(|e| panic!("activate_patch('{}') failed: {:?}", patch.name, e));
 
