@@ -16,12 +16,12 @@ pub fn CreateProfileButton(on_created: Option<EventHandler<()>>) -> Element {
                 let signal = signal.clone();
                 let on_created = on_created.clone();
                 spawn(async move {
-                    let rigs = signal.rigs().list().await;
+                    let rigs = signal.rigs().list().await.unwrap_or_default();
                     if let Some(r) = rigs.first() {
                         if let Some(s) = r.variants.first() {
                             let patch = Patch::from_rig_scene(PatchId::new(), "Clean", r.id.clone(), s.id.clone());
                             let profile = Profile::new(ProfileId::new(), "New Profile", patch);
-                            signal.profiles().save(profile).await;
+                            let _ = signal.profiles().save(profile).await;
                             tracing::info!("Created new profile");
                             if let Some(handler) = on_created {
                                 handler.call(());
@@ -47,12 +47,12 @@ pub fn CreateSongButton(on_created: Option<EventHandler<()>>) -> Element {
                 let signal = signal.clone();
                 let on_created = on_created.clone();
                 spawn(async move {
-                    let profiles = signal.profiles().list().await;
+                    let profiles = signal.profiles().list().await.unwrap_or_default();
                     if let Some(prof) = profiles.first() {
                         if let Some(patch) = prof.patches.first() {
                             let section = Section::from_patch(SectionId::new(), "Intro", patch.id.clone());
                             let song = Song::new(SongId::new(), "New Song", section);
-                            signal.songs().save(song).await;
+                            let _ = signal.songs().save(song).await;
                             tracing::info!("Created new song");
                             if let Some(handler) = on_created {
                                 handler.call(());

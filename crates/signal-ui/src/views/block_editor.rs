@@ -25,7 +25,7 @@ pub fn BlockEditor(block_type: BlockType) -> Element {
         use_effect(move || {
             let signal = signal.clone();
             spawn(async move {
-                block.set(signal.blocks().get(block_type).await);
+                block.set(signal.blocks().get(block_type).await.unwrap_or_default());
             });
         });
     }

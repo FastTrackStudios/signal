@@ -41,7 +41,7 @@ async fn keys_megarig_structure() {
 
     let rig = signal
         .rigs().load(keys_megarig_id())
-        .await
+        .await.unwrap()
         .expect("keys-megarig should exist");
 
     assert_eq!(rig.name, "MegaRig");
@@ -61,7 +61,7 @@ async fn keys_megarig_structure() {
 async fn keys_engines_have_correct_structure() {
     let signal = controller().await;
 
-    let engines = signal.engines().list().await;
+    let engines = signal.engines().list().await.unwrap();
 
     let keys = engines
         .iter()
@@ -177,8 +177,8 @@ async fn create_engine_with_multiple_scenes() {
         EngineType::Keys,
         layer_b_snap,
     );
-    signal.layers().save(layer_a).await;
-    signal.layers().save(layer_b).await;
+    signal.layers().save(layer_a).await.unwrap();
+    signal.layers().save(layer_b).await.unwrap();
 
     // Create engine with 3 scenes
     let default_scene = EngineScene::new(seed_id("cke-scene-warm"), "Warm")
@@ -219,11 +219,11 @@ async fn create_engine_with_multiple_scenes() {
     );
     engine.add_variant(bright_scene);
     engine.add_variant(ambient_scene);
-    signal.engines().save(engine).await;
+    signal.engines().save(engine).await.unwrap();
 
     let loaded = signal
         .engines().load(seed_id("custom-keys-engine"))
-        .await
+        .await.unwrap()
         .expect("engine should exist");
 
     assert_eq!(loaded.name, "Custom Keys Engine");
@@ -240,7 +240,7 @@ async fn create_engine_with_multiple_scenes() {
 async fn add_scene_to_existing_engine() {
     let signal = controller().await;
 
-    let engines = signal.engines().list().await;
+    let engines = signal.engines().list().await.unwrap();
     let mut keys_engine = engines
         .iter()
         .find(|e| e.name == "Keys Engine")
@@ -262,11 +262,11 @@ async fn add_scene_to_existing_engine() {
         ));
 
     keys_engine.add_variant(new_scene);
-    signal.engines().save(keys_engine).await;
+    signal.engines().save(keys_engine).await.unwrap();
 
     let reloaded = signal
         .engines().load(seed_id("keys-engine"))
-        .await
+        .await.unwrap()
         .expect("keys engine");
 
     assert_eq!(reloaded.variants.len(), original_count + 1);
@@ -285,7 +285,7 @@ async fn load_engine_scene_by_id() {
 
     let scene = signal
         .engines().load_variant(seed_id("keys-engine"), seed_id("keys-engine-bright"))
-        .await
+        .await.unwrap()
         .expect("bright scene should exist");
 
     assert_eq!(scene.name, "Bright");
@@ -304,7 +304,7 @@ async fn engine_scene_overrides_round_trip() {
         EngineType::Keys,
         snap,
     );
-    signal.layers().save(layer).await;
+    signal.layers().save(layer).await.unwrap();
 
     let scene = EngineScene::new(seed_id("ovr-eng-scene"), "Override Scene")
         .with_layer(LayerSelection::new(
@@ -329,9 +329,9 @@ async fn engine_scene_overrides_round_trip() {
         vec![seed_id("ovr-eng-layer").into()],
         scene,
     );
-    signal.engines().save(engine).await;
+    signal.engines().save(engine).await.unwrap();
 
-    let loaded = signal.engines().load(seed_id("ovr-eng")).await.expect("engine");
+    let loaded = signal.engines().load(seed_id("ovr-eng")).await.unwrap().expect("engine");
     assert_eq!(loaded.variants[0].overrides.len(), 2);
 }
 
@@ -347,7 +347,7 @@ async fn delete_engine() {
         EngineType::Keys,
         snap,
     );
-    signal.layers().save(layer).await;
+    signal.layers().save(layer).await.unwrap();
 
     let engine = Engine::new(
         seed_id("del-eng"),
@@ -356,14 +356,14 @@ async fn delete_engine() {
         vec![seed_id("del-eng-layer").into()],
         EngineScene::new(seed_id("del-eng-scene"), "Default"),
     );
-    signal.engines().save(engine).await;
+    signal.engines().save(engine).await.unwrap();
 
-    let exists = signal.engines().load(seed_id("del-eng")).await;
+    let exists = signal.engines().load(seed_id("del-eng")).await.unwrap();
     assert!(exists.is_some());
 
-    signal.engines().delete(seed_id("del-eng")).await;
+    signal.engines().delete(seed_id("del-eng")).await.unwrap();
 
-    let gone = signal.engines().load(seed_id("del-eng")).await;
+    let gone = signal.engines().load(seed_id("del-eng")).await.unwrap();
     assert!(gone.is_none());
 }
 
@@ -396,11 +396,11 @@ async fn layer_with_multiple_ref_types() {
         default_snap,
     );
     layer.add_variant(alt_snap);
-    signal.layers().save(layer).await;
+    signal.layers().save(layer).await.unwrap();
 
     let loaded = signal
         .layers().load(seed_id("mixed-refs-layer"))
-        .await
+        .await.unwrap()
         .expect("layer should exist");
 
     assert_eq!(loaded.variants.len(), 2);
@@ -411,7 +411,7 @@ async fn layer_with_multiple_ref_types() {
 
     let alt = signal
         .layers().load_variant(seed_id("mixed-refs-layer"), seed_id("mixed-refs-alt"))
-        .await
+        .await.unwrap()
         .expect("alt variant");
     assert_eq!(alt.name, "Alt");
     assert!(alt.module_refs[0].variant_id.is_some());
@@ -434,11 +434,11 @@ async fn layer_with_layer_refs() {
         EngineType::Keys,
         snap,
     );
-    signal.layers().save(layer).await;
+    signal.layers().save(layer).await.unwrap();
 
     let loaded = signal
         .layers().load(seed_id("layerref-layer"))
-        .await
+        .await.unwrap()
         .expect("layer");
 
     assert_eq!(loaded.variants[0].layer_refs.len(), 2);
@@ -465,11 +465,11 @@ async fn layer_snapshot_block_param_overrides() {
         EngineType::Keys,
         snap,
     );
-    signal.layers().save(layer).await;
+    signal.layers().save(layer).await.unwrap();
 
     let loaded = signal
         .layers().load(seed_id("block-param-layer"))
-        .await
+        .await.unwrap()
         .expect("layer");
 
     assert_eq!(loaded.variants[0].overrides.len(), 3);
@@ -500,11 +500,11 @@ async fn layer_snapshot_enabled_flag() {
         enabled_snap,
     );
     layer.add_variant(disabled_snap);
-    signal.layers().save(layer).await;
+    signal.layers().save(layer).await.unwrap();
 
     let loaded = signal
         .layers().load(seed_id("enabled-test-layer"))
-        .await
+        .await.unwrap()
         .expect("layer");
 
     assert!(loaded.variants[0].enabled);
@@ -522,11 +522,11 @@ async fn delete_layer() {
         EngineType::Keys,
         LayerSnapshot::new(seed_id("ephemeral-snap"), "Default"),
     );
-    signal.layers().save(layer).await;
+    signal.layers().save(layer).await.unwrap();
 
-    assert!(signal.layers().load(seed_id("ephemeral-layer")).await.is_some());
-    signal.layers().delete(seed_id("ephemeral-layer")).await;
-    assert!(signal.layers().load(seed_id("ephemeral-layer")).await.is_none());
+    assert!(signal.layers().load(seed_id("ephemeral-layer")).await.unwrap().is_some());
+    signal.layers().delete(seed_id("ephemeral-layer")).await.unwrap();
+    assert!(signal.layers().load(seed_id("ephemeral-layer")).await.unwrap().is_none());
 }
 
 // ═════════════════════════════════════════════════════════════
@@ -546,7 +546,7 @@ async fn add_engine_to_rig() {
         EngineType::Keys,
         fx_snap,
     );
-    signal.layers().save(fx_layer).await;
+    signal.layers().save(fx_layer).await.unwrap();
 
     let fx_engine = Engine::new(
         seed_id("fx-engine"),
@@ -555,21 +555,21 @@ async fn add_engine_to_rig() {
         vec![seed_id("fx-eng-layer").into()],
         EngineScene::new(seed_id("fx-eng-scene-default"), "Default"),
     );
-    signal.engines().save(fx_engine).await;
+    signal.engines().save(fx_engine).await.unwrap();
 
     // Load rig, add engine
     let mut rig = signal
         .rigs().load(keys_megarig_id())
-        .await
+        .await.unwrap()
         .expect("keys rig");
     let original_engine_count = rig.engine_ids.len();
 
     rig.engine_ids.push(seed_id("fx-engine").into());
-    signal.rigs().save(rig).await;
+    signal.rigs().save(rig).await.unwrap();
 
     let reloaded = signal
         .rigs().load(keys_megarig_id())
-        .await
+        .await.unwrap()
         .expect("keys rig");
     assert_eq!(reloaded.engine_ids.len(), original_engine_count + 1);
 }
@@ -586,9 +586,9 @@ async fn remove_engine_from_rig() {
     let layer_b = Layer::new(seed_id("rem-layer-b"), "Layer B", EngineType::Synth, snap_b);
     let snap_c = LayerSnapshot::new(seed_id("rem-layer-c-snap"), "Default");
     let layer_c = Layer::new(seed_id("rem-layer-c"), "Layer C", EngineType::Organ, snap_c);
-    signal.layers().save(layer_a).await;
-    signal.layers().save(layer_b).await;
-    signal.layers().save(layer_c).await;
+    signal.layers().save(layer_a).await.unwrap();
+    signal.layers().save(layer_b).await.unwrap();
+    signal.layers().save(layer_c).await.unwrap();
 
     let eng_a = Engine::new(
         seed_id("rem-eng-a"),
@@ -611,9 +611,9 @@ async fn remove_engine_from_rig() {
         vec![seed_id("rem-layer-c").into()],
         EngineScene::new(seed_id("rem-eng-c-scene"), "Default"),
     );
-    signal.engines().save(eng_a).await;
-    signal.engines().save(eng_b).await;
-    signal.engines().save(eng_c).await;
+    signal.engines().save(eng_a).await.unwrap();
+    signal.engines().save(eng_b).await.unwrap();
+    signal.engines().save(eng_c).await.unwrap();
 
     let rig = Rig::new(
         seed_id("removable-rig"),
@@ -625,20 +625,20 @@ async fn remove_engine_from_rig() {
         ],
         RigScene::new(seed_id("removable-rig-default"), "Default"),
     );
-    signal.rigs().save(rig).await;
+    signal.rigs().save(rig).await.unwrap();
 
     // Remove engine B
     let mut loaded = signal
         .rigs().load(seed_id("removable-rig"))
-        .await
+        .await.unwrap()
         .expect("rig");
     let eng_b_id = seed_id("rem-eng-b").to_string();
     loaded.engine_ids.retain(|id| id.as_str() != eng_b_id);
-    signal.rigs().save(loaded).await;
+    signal.rigs().save(loaded).await.unwrap();
 
     let reloaded = signal
         .rigs().load(seed_id("removable-rig"))
-        .await
+        .await.unwrap()
         .expect("rig");
     assert_eq!(reloaded.engine_ids.len(), 2);
     assert!(!reloaded.engine_ids.iter().any(|id| id.as_str() == eng_b_id));
@@ -681,11 +681,11 @@ async fn build_multi_engine_rig_from_scratch() {
     )
     .with_rig_type("keys");
     rig.add_variant(scene_b);
-    signal.rigs().save(rig).await;
+    signal.rigs().save(rig).await.unwrap();
 
     let loaded = signal
         .rigs().load(seed_id("custom-multi-rig"))
-        .await
+        .await.unwrap()
         .expect("rig");
 
     assert_eq!(loaded.engine_ids.len(), 2);
@@ -704,7 +704,7 @@ async fn reorder_engines_in_rig() {
 
     let mut rig = signal
         .rigs().load(seed_id("removable-rig"))
-        .await
+        .await.unwrap()
         .or_else(|| {
             // Might not exist if tests run in isolation — create fresh
             None
@@ -725,8 +725,8 @@ async fn reorder_engines_in_rig() {
         EngineType::Synth,
         snap_y,
     );
-    signal.layers().save(layer_x).await;
-    signal.layers().save(layer_y).await;
+    signal.layers().save(layer_x).await.unwrap();
+    signal.layers().save(layer_y).await.unwrap();
 
     let eng_x = Engine::new(
         seed_id("reord-eng-x"),
@@ -742,8 +742,8 @@ async fn reorder_engines_in_rig() {
         vec![seed_id("reord-layer-y").into()],
         EngineScene::new(seed_id("reord-eng-y-scene"), "Default"),
     );
-    signal.engines().save(eng_x).await;
-    signal.engines().save(eng_y).await;
+    signal.engines().save(eng_x).await.unwrap();
+    signal.engines().save(eng_y).await.unwrap();
 
     let rig_to_save = Rig::new(
         seed_id("reord-rig"),
@@ -751,19 +751,19 @@ async fn reorder_engines_in_rig() {
         vec![seed_id("reord-eng-x").into(), seed_id("reord-eng-y").into()],
         RigScene::new(seed_id("reord-rig-default"), "Default"),
     );
-    signal.rigs().save(rig_to_save).await;
+    signal.rigs().save(rig_to_save).await.unwrap();
 
     // Swap engine order: [Y, X]
     let mut loaded = signal
         .rigs().load(seed_id("reord-rig"))
-        .await
+        .await.unwrap()
         .expect("rig");
     loaded.engine_ids.reverse();
-    signal.rigs().save(loaded).await;
+    signal.rigs().save(loaded).await.unwrap();
 
     let reloaded = signal
         .rigs().load(seed_id("reord-rig"))
-        .await
+        .await.unwrap()
         .expect("rig");
 
     assert_eq!(
@@ -811,11 +811,11 @@ async fn multi_level_overrides_in_rig_scene() {
         vec![],
         scene,
     );
-    signal.rigs().save(rig).await;
+    signal.rigs().save(rig).await.unwrap();
 
     let loaded = signal
         .rigs().load(seed_id("ml-override-rig"))
-        .await
+        .await.unwrap()
         .expect("rig");
 
     assert_eq!(loaded.variants[0].overrides.len(), 3);
@@ -846,11 +846,11 @@ async fn replace_ref_override_in_rig_scene() {
         });
 
     let rig = Rig::new(seed_id("replace-ref-rig"), "Replace Ref Rig", vec![], scene);
-    signal.rigs().save(rig).await;
+    signal.rigs().save(rig).await.unwrap();
 
     let loaded = signal
         .rigs().load(seed_id("replace-ref-rig"))
-        .await
+        .await.unwrap()
         .expect("rig");
 
     let ovr = &loaded.variants[0].overrides[0];
@@ -873,11 +873,11 @@ async fn bypass_override_in_rig_scene() {
         ));
 
     let rig = Rig::new(seed_id("bypass-rig"), "Bypass Rig", vec![], scene);
-    signal.rigs().save(rig).await;
+    signal.rigs().save(rig).await.unwrap();
 
     let loaded = signal
         .rigs().load(seed_id("bypass-rig"))
-        .await
+        .await.unwrap()
         .expect("rig");
 
     let ovr = &loaded.variants[0].overrides[0];
@@ -914,11 +914,11 @@ async fn mixed_override_types_in_scene() {
         vec![],
         scene,
     );
-    signal.rigs().save(rig).await;
+    signal.rigs().save(rig).await.unwrap();
 
     let loaded = signal
         .rigs().load(seed_id("mixed-ovr-rig"))
-        .await
+        .await.unwrap()
         .expect("rig");
 
     let overrides = &loaded.variants[0].overrides;
@@ -947,7 +947,7 @@ async fn mixed_override_types_in_scene() {
 async fn keys_profile_structure() {
     let signal = controller().await;
 
-    let profiles = signal.profiles().list().await;
+    let profiles = signal.profiles().list().await.unwrap();
     let keys_profile = profiles
         .iter()
         .find(|p| p.name == "Keys Feature")
@@ -986,7 +986,7 @@ async fn keys_profile_structure() {
 async fn resolve_keys_profile_patches() {
     let signal = controller().await;
 
-    let profiles = signal.profiles().list().await;
+    let profiles = signal.profiles().list().await.unwrap();
     let keys_profile = profiles
         .iter()
         .find(|p| p.name == "Keys Feature")
@@ -1035,7 +1035,7 @@ async fn custom_keys_profile_with_retarget() {
         keys_megarig_id(),
         keys_megarig_wide_scene(),
     ));
-    signal.profiles().save(profile).await;
+    signal.profiles().save(profile).await.unwrap();
 
     // Retarget "Bright" to the Focus scene
     signal.profiles().set_patch_preset(
@@ -1044,11 +1044,11 @@ async fn custom_keys_profile_with_retarget() {
         keys_megarig_id(),
         keys_megarig_focus_scene(),
     )
-    .await;
+    .await.unwrap();
 
     let loaded = signal
         .profiles().load(seed_id("custom-keys-profile"))
-        .await
+        .await.unwrap()
         .expect("profile");
     let bright = loaded
         .patches
@@ -1068,7 +1068,7 @@ async fn custom_keys_profile_with_retarget() {
 async fn feature_demo_song_resolves() {
     let signal = controller().await;
 
-    let songs = signal.songs().list().await;
+    let songs = signal.songs().list().await.unwrap();
     let demo = songs
         .iter()
         .find(|s| s.name == "Feature-Demo Song")
@@ -1103,11 +1103,11 @@ async fn different_scenes_select_different_engine_scenes() {
 
     let default_scene = signal
         .rigs().load_variant(keys_megarig_id(), keys_megarig_default_scene())
-        .await
+        .await.unwrap()
         .expect("default scene");
     let wide_scene = signal
         .rigs().load_variant(keys_megarig_id(), keys_megarig_wide_scene())
-        .await
+        .await.unwrap()
         .expect("wide scene");
 
     // Both should have engine selections
@@ -1194,7 +1194,7 @@ async fn mixed_engine_type_rig_resolves() {
         scene,
     )
     .with_rig_type("keys");
-    signal.rigs().save(rig).await;
+    signal.rigs().save(rig).await.unwrap();
 
     let graph = signal
         .resolve_target(ResolveTarget::RigScene {
@@ -1228,7 +1228,7 @@ async fn reorder_engine_scenes() {
         EngineType::Keys,
         snap,
     );
-    signal.layers().save(layer).await;
+    signal.layers().save(layer).await.unwrap();
 
     let mut engine = Engine::new(
         seed_id("reord-scene-engine"),
@@ -1240,12 +1240,12 @@ async fn reorder_engine_scenes() {
     engine.add_variant(EngineScene::new(seed_id("rse-b"), "B"));
     engine.add_variant(EngineScene::new(seed_id("rse-c"), "C"));
     engine.add_variant(EngineScene::new(seed_id("rse-d"), "D"));
-    signal.engines().save(engine).await;
+    signal.engines().save(engine).await.unwrap();
 
     // Reorder to [D, B, C, A] by manipulating variants
     let mut loaded = signal
         .engines().load(seed_id("reord-scene-engine"))
-        .await
+        .await.unwrap()
         .expect("engine");
     let original = loaded.variants.clone();
     loaded.variants = vec![
@@ -1254,11 +1254,11 @@ async fn reorder_engine_scenes() {
         original.iter().find(|v| v.name == "C").unwrap().clone(),
         original.iter().find(|v| v.name == "A").unwrap().clone(),
     ];
-    signal.engines().save(loaded).await;
+    signal.engines().save(loaded).await.unwrap();
 
     let reloaded = signal
         .engines().load(seed_id("reord-scene-engine"))
-        .await
+        .await.unwrap()
         .expect("engine");
     let names: Vec<&str> = reloaded.variants.iter().map(|v| v.name.as_str()).collect();
     assert_eq!(names, vec!["D", "B", "C", "A"]);
@@ -1277,12 +1277,12 @@ async fn reorder_layer_variants() {
     );
     layer.add_variant(LayerSnapshot::new(seed_id("rvl-beta"), "Beta"));
     layer.add_variant(LayerSnapshot::new(seed_id("rvl-gamma"), "Gamma"));
-    signal.layers().save(layer).await;
+    signal.layers().save(layer).await.unwrap();
 
     // Reorder to [Gamma, Alpha, Beta]
     let mut loaded = signal
         .layers().load(seed_id("reord-variant-layer"))
-        .await
+        .await.unwrap()
         .expect("layer");
     let original = loaded.variants.clone();
     loaded.variants = vec![
@@ -1290,11 +1290,11 @@ async fn reorder_layer_variants() {
         original.iter().find(|v| v.name == "Alpha").unwrap().clone(),
         original.iter().find(|v| v.name == "Beta").unwrap().clone(),
     ];
-    signal.layers().save(loaded).await;
+    signal.layers().save(loaded).await.unwrap();
 
     let reloaded = signal
         .layers().load(seed_id("reord-variant-layer"))
-        .await
+        .await.unwrap()
         .expect("layer");
     let names: Vec<&str> = reloaded.variants.iter().map(|v| v.name.as_str()).collect();
     assert_eq!(names, vec!["Gamma", "Alpha", "Beta"]);
@@ -1309,7 +1309,7 @@ async fn reorder_layer_variants() {
 async fn resolve_all_keys_patches_end_to_end() {
     let signal = controller().await;
 
-    let profiles = signal.profiles().list().await;
+    let profiles = signal.profiles().list().await.unwrap();
     let keys_profile = profiles
         .iter()
         .find(|p| p.name == "Keys Feature")
@@ -1338,7 +1338,7 @@ async fn resolve_all_keys_patches_end_to_end() {
 async fn full_setlist_sweep_includes_keys() {
     let signal = controller().await;
 
-    let setlists = signal.setlists().list().await;
+    let setlists = signal.setlists().list().await.unwrap();
     assert!(!setlists.is_empty());
 
     let mut resolved_count = 0;
@@ -1346,7 +1346,7 @@ async fn full_setlist_sweep_includes_keys() {
 
     for setlist in &setlists {
         for entry in &setlist.entries {
-            if let Some(song) = signal.songs().load(entry.song_id.clone()).await {
+            if let Some(song) = signal.songs().load(entry.song_id.clone()).await.unwrap() {
                 if song.name == "Feature-Demo Song" {
                     keys_song_found = true;
                 }

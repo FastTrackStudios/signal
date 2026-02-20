@@ -13,38 +13,44 @@ where
     St: SceneTemplateRepo,
     Ra: RackRepo,
 {
-    async fn list_rigs(&self, _cx: &Context) -> Vec<Rig> {
+    async fn list_rigs(&self, _cx: &Context) -> Result<Vec<Rig>, String> {
         {
             let cache = self.cache.read().await;
             if let Some(cached) = cache.rigs.as_ref() {
-                return cached.clone();
+                return Ok(cached.clone());
             }
         }
-        let result = self.rig_repo.list_rigs().await.unwrap_or_default();
+        let result = self.rig_repo.list_rigs().await.map_err(|e| e.to_string())?;
         {
             let mut cache = self.cache.write().await;
             cache.rigs = Some(result.clone());
         }
-        result
+        Ok(result)
     }
 
-    async fn load_rig(&self, _cx: &Context, id: RigId) -> Option<Rig> {
-        self.rig_repo.load_rig(&id).await.ok().flatten()
+    async fn load_rig(&self, _cx: &Context, id: RigId) -> Result<Option<Rig>, String> {
+        self.rig_repo.load_rig(&id).await.map_err(|e| e.to_string())
     }
 
-    async fn save_rig(&self, _cx: &Context, rig: Rig) -> () {
+    async fn save_rig(&self, _cx: &Context, rig: Rig) -> Result<(), String> {
         for variant in &rig.variants {
-            if variant.validate_overrides().is_err() {
-                return;
-            }
+            variant.validate_overrides().map_err(|e| format!("{e:?}"))?;
         }
-        let _ = self.rig_repo.save_rig(&rig).await;
+        self.rig_repo
+            .save_rig(&rig)
+            .await
+            .map_err(|e| e.to_string())?;
         self.cache.write().await.rigs = None;
+        Ok(())
     }
 
-    async fn delete_rig(&self, _cx: &Context, id: RigId) -> () {
-        let _ = self.rig_repo.delete_rig(&id).await;
+    async fn delete_rig(&self, _cx: &Context, id: RigId) -> Result<(), String> {
+        self.rig_repo
+            .delete_rig(&id)
+            .await
+            .map_err(|e| e.to_string())?;
         self.cache.write().await.rigs = None;
+        Ok(())
     }
 
     async fn load_rig_variant(
@@ -52,11 +58,10 @@ where
         _cx: &Context,
         rig_id: RigId,
         variant_id: RigSceneId,
-    ) -> Option<RigScene> {
+    ) -> Result<Option<RigScene>, String> {
         self.rig_repo
             .load_variant(&rig_id, &variant_id)
             .await
-            .ok()
-            .flatten()
+            .map_err(|e| e.to_string())
     }
 }

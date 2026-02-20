@@ -97,7 +97,7 @@ async fn test_live_get_block_returns_seeded_state() -> Result<()> {
     let cx = test_context();
 
     // -- Exec
-    let block = svc.get_block(&cx, BlockType::Amp).await;
+    let block = svc.get_block(&cx, BlockType::Amp).await?;
 
     // -- Check
     assert!(!block.parameters().is_empty());
@@ -143,7 +143,7 @@ async fn test_live_get_block_returns_default_for_empty_repo() -> Result<()> {
     let cx = test_context();
 
     // -- Exec
-    let block = svc.get_block(&cx, BlockType::Amp).await;
+    let block = svc.get_block(&cx, BlockType::Amp).await?;
 
     // -- Check
     assert_eq!(block, Block::default());
@@ -160,11 +160,11 @@ async fn test_live_set_block_persists_and_returns() -> Result<()> {
     // -- Exec
     let returned = svc
         .set_block(&cx, BlockType::Drive, new_block.clone())
-        .await;
+        .await?;
 
     // -- Check
     assert_eq!(returned, new_block);
-    let loaded = svc.get_block(&cx, BlockType::Drive).await;
+    let loaded = svc.get_block(&cx, BlockType::Drive).await?;
     assert_eq!(loaded, new_block);
     Ok(())
 }
@@ -178,11 +178,19 @@ async fn test_live_list_setlists_returns_demo_setlist() -> Result<()> {
     let svc = seeded_service().await?;
     let cx = test_context();
 
-    let setlists = svc.list_setlists(&cx).await;
+    let setlists = svc.list_setlists(&cx).await?;
 
-    assert_eq!(setlists.len(), 1);
-    assert_eq!(setlists[0].name, "Demo Setlist");
-    assert_eq!(setlists[0].entries.len(), 2);
+    assert_eq!(setlists.len(), 2);
+    let worship = setlists
+        .iter()
+        .find(|s| s.name == "Worship Set")
+        .expect("worship set");
+    assert_eq!(worship.entries.len(), 2);
+    let commercial = setlists
+        .iter()
+        .find(|s| s.name == "Commercial Music")
+        .expect("commercial music");
+    assert_eq!(commercial.entries.len(), 3);
     Ok(())
 }
 
@@ -194,10 +202,10 @@ async fn test_live_load_setlist_entry_returns_dummy_song_entry() -> Result<()> {
     let entry = svc
         .load_setlist_entry(
             &cx,
-            signal_proto::setlist::SetlistId::from(seed_id("demo-setlist")),
-            signal_proto::setlist::SetlistEntryId::from(seed_id("demo-setlist-dummy-song")),
+            signal_proto::setlist::SetlistId::from(seed_id("commercial-music")),
+            signal_proto::setlist::SetlistEntryId::from(seed_id("commercial-dummy")),
         )
-        .await;
+        .await?;
 
     assert!(entry.is_some());
     let entry = entry.unwrap();
@@ -217,12 +225,12 @@ async fn test_live_list_collections_returns_seeded_presets() -> Result<()> {
     let cx = test_context();
 
     // -- Exec
-    let amp_collections = svc.list_block_presets(&cx, BlockType::Amp).await;
-    let drive_collections = svc.list_block_presets(&cx, BlockType::Drive).await;
+    let amp_collections = svc.list_block_presets(&cx, BlockType::Amp).await?;
+    let drive_collections = svc.list_block_presets(&cx, BlockType::Drive).await?;
 
     // -- Check
-    assert_eq!(amp_collections.len(), 5);
-    assert_eq!(drive_collections.len(), 5);
+    assert_eq!(amp_collections.len(), 6);
+    assert_eq!(drive_collections.len(), 7);
     Ok(())
 }
 
@@ -265,7 +273,7 @@ async fn test_live_list_collections_empty_repo() -> Result<()> {
     let cx = test_context();
 
     // -- Exec
-    let collections = svc.list_block_presets(&cx, BlockType::Amp).await;
+    let collections = svc.list_block_presets(&cx, BlockType::Amp).await?;
 
     // -- Check
     assert!(collections.is_empty());
@@ -280,7 +288,9 @@ async fn test_live_load_default_variant_applies_block() -> Result<()> {
     let preset_id = PresetId::from_uuid(seed_id("amp-twin"));
 
     // -- Exec: load the default variant (triggers side-effect)
-    let snapshot = svc.load_block_preset(&cx, BlockType::Amp, preset_id).await;
+    let snapshot = svc
+        .load_block_preset(&cx, BlockType::Amp, preset_id)
+        .await?;
 
     // -- Check: variant returned
     assert!(snapshot.is_some());
@@ -291,7 +301,7 @@ async fn test_live_load_default_variant_applies_block() -> Result<()> {
     );
 
     // -- Check: current block was updated to match the loaded variant
-    let current = svc.get_block(&cx, BlockType::Amp).await;
+    let current = svc.get_block(&cx, BlockType::Amp).await?;
     assert_eq!(current, snapshot.block());
     Ok(())
 }
@@ -307,7 +317,7 @@ async fn test_live_load_specific_variant_applies_block() -> Result<()> {
     // -- Exec
     let snapshot = svc
         .load_block_preset_snapshot(&cx, BlockType::Amp, preset_id, snapshot_id.clone())
-        .await;
+        .await?;
 
     // -- Check: correct variant returned
     assert!(snapshot.is_some());
@@ -315,7 +325,7 @@ async fn test_live_load_specific_variant_applies_block() -> Result<()> {
     assert_eq!(snapshot.id(), &snapshot_id);
 
     // -- Check: current block updated
-    let current = svc.get_block(&cx, BlockType::Amp).await;
+    let current = svc.get_block(&cx, BlockType::Amp).await?;
     assert_eq!(current, snapshot.block());
     Ok(())
 }
@@ -329,7 +339,7 @@ async fn test_live_load_nonexistent_collection_returns_none() -> Result<()> {
     // -- Exec
     let result = svc
         .load_block_preset(&cx, BlockType::Amp, PresetId::new())
-        .await;
+        .await?;
 
     // -- Check
     assert!(result.is_none());
@@ -350,7 +360,7 @@ async fn test_live_load_nonexistent_variant_returns_none() -> Result<()> {
             PresetId::from_uuid(seed_id("amp-twin")),
             SnapshotId::new(),
         )
-        .await;
+        .await?;
 
     // -- Check
     assert!(result.is_none());
@@ -368,10 +378,10 @@ async fn test_live_list_module_collections() -> Result<()> {
     let cx = test_context();
 
     // -- Exec
-    let module_collections = svc.list_module_presets(&cx).await;
+    let module_collections = svc.list_module_presets(&cx).await?;
 
     // -- Check
-    assert_eq!(module_collections.len(), 17);
+    assert_eq!(module_collections.len(), 23);
     let mut names: Vec<&str> = module_collections.iter().map(|c| c.name()).collect();
     names.sort();
     assert!(names.contains(&"Drive Duo"));
@@ -390,7 +400,7 @@ async fn test_live_load_module_default_variant() -> Result<()> {
     let preset_id = ModulePresetId::from_uuid(seed_id("drive-full-stack"));
 
     // -- Exec
-    let snapshot = svc.load_module_preset(&cx, preset_id).await;
+    let snapshot = svc.load_module_preset(&cx, preset_id).await?;
 
     // -- Check
     assert!(snapshot.is_some());
@@ -414,7 +424,7 @@ async fn test_live_load_module_specific_variant() -> Result<()> {
     // -- Exec
     let snapshot = svc
         .load_module_preset_snapshot(&cx, preset_id, snapshot_id.clone())
-        .await;
+        .await?;
 
     // -- Check
     assert!(snapshot.is_some());
@@ -431,7 +441,7 @@ async fn test_live_load_nonexistent_module_collection() -> Result<()> {
     let cx = test_context();
 
     // -- Exec
-    let result = svc.load_module_preset(&cx, ModulePresetId::new()).await;
+    let result = svc.load_module_preset(&cx, ModulePresetId::new()).await?;
 
     // -- Check
     assert!(result.is_none());
@@ -456,10 +466,10 @@ async fn test_live_load_variant_then_different_variant_updates_block() -> Result
             PresetId::from_uuid(seed_id("amp-twin")),
             SnapshotId::from_uuid(seed_id("amp-twin-surf")),
         )
-        .await
+        .await?
         .unwrap();
 
-    let block_after_surf = svc.get_block(&cx, BlockType::Amp).await;
+    let block_after_surf = svc.get_block(&cx, BlockType::Amp).await?;
     assert_eq!(block_after_surf, surf.block());
 
     // -- Exec: load "jazz" variant (should overwrite)
@@ -470,11 +480,11 @@ async fn test_live_load_variant_then_different_variant_updates_block() -> Result
             PresetId::from_uuid(seed_id("amp-twin")),
             SnapshotId::from_uuid(seed_id("amp-twin-jazz")),
         )
-        .await
+        .await?
         .unwrap();
 
     // -- Check: current block reflects the most recently loaded variant
-    let block_after_jazz = svc.get_block(&cx, BlockType::Amp).await;
+    let block_after_jazz = svc.get_block(&cx, BlockType::Amp).await?;
     assert_eq!(block_after_jazz, jazz.block());
     assert_ne!(block_after_jazz, surf.block());
     Ok(())
@@ -487,17 +497,17 @@ async fn test_live_cross_collection_load_updates_correct_block_type() -> Result<
     let cx = test_context();
 
     // -- Exec: load an amp variant
-    let amp_before = svc.get_block(&cx, BlockType::Amp).await;
+    let amp_before = svc.get_block(&cx, BlockType::Amp).await?;
     let _drive = svc
         .load_block_preset(
             &cx,
             BlockType::Drive,
             PresetId::from_uuid(seed_id("drive-level")),
         )
-        .await;
+        .await?;
 
     // -- Check: amp block was not affected by loading a drive variant
-    let amp_after = svc.get_block(&cx, BlockType::Amp).await;
+    let amp_after = svc.get_block(&cx, BlockType::Amp).await?;
     assert_eq!(amp_before, amp_after);
     Ok(())
 }
@@ -511,8 +521,8 @@ async fn test_live_list_layers_returns_seeded() -> Result<()> {
     let svc = seeded_service().await?;
     let cx = test_context();
 
-    let layers = svc.list_layers(&cx).await;
-    assert_eq!(layers.len(), 11);
+    let layers = svc.list_layers(&cx).await?;
+    assert_eq!(layers.len(), 12);
     assert!(layers.iter().any(|l| l.name == "Keys Core"));
     assert!(layers.iter().any(|l| l.name == "Guitar Main"));
     assert!(layers.iter().any(|l| l.name == "Vocal Main"));
@@ -526,7 +536,7 @@ async fn test_live_load_layer_by_id() -> Result<()> {
 
     let layer = svc
         .load_layer(&cx, LayerId::from_uuid(seed_id("keys-layer-core")))
-        .await;
+        .await?;
     assert!(layer.is_some());
     let layer = layer.unwrap();
     assert_eq!(layer.variants.len(), 2);
@@ -538,7 +548,7 @@ async fn test_live_load_layer_missing_returns_none() -> Result<()> {
     let svc = seeded_service().await?;
     let cx = test_context();
 
-    let layer = svc.load_layer(&cx, LayerId::new()).await;
+    let layer = svc.load_layer(&cx, LayerId::new()).await?;
     assert!(layer.is_none());
     Ok(())
 }
@@ -555,18 +565,18 @@ async fn test_live_save_and_delete_layer() -> Result<()> {
         signal_proto::EngineType::Guitar,
         variant,
     );
-    svc.save_layer(&cx, layer).await;
+    svc.save_layer(&cx, layer).await?;
 
     let loaded = svc
         .load_layer(&cx, LayerId::from_uuid(seed_id("test-layer")))
-        .await;
+        .await?;
     assert!(loaded.is_some());
 
     svc.delete_layer(&cx, LayerId::from_uuid(seed_id("test-layer")))
-        .await;
+        .await?;
     let after_delete = svc
         .load_layer(&cx, LayerId::from_uuid(seed_id("test-layer")))
-        .await;
+        .await?;
     assert!(after_delete.is_none());
     Ok(())
 }
@@ -582,7 +592,7 @@ async fn test_live_load_layer_variant() -> Result<()> {
             LayerId::from_uuid(seed_id("synth-layer-osc")),
             LayerSnapshotId::from_uuid(seed_id("synth-layer-osc-alt")),
         )
-        .await;
+        .await?;
     assert!(variant.is_some());
     let variant = variant.unwrap();
     assert_eq!(variant.name, "Alt");
@@ -599,7 +609,7 @@ async fn test_live_list_engines_seeded() -> Result<()> {
     let svc = seeded_service().await?;
     let cx = test_context();
 
-    let engines = svc.list_engines(&cx).await;
+    let engines = svc.list_engines(&cx).await?;
     assert_eq!(engines.len(), 6);
     let synth = engines
         .iter()
@@ -629,25 +639,25 @@ async fn test_live_save_load_delete_engine() -> Result<()> {
         scene,
     );
 
-    svc.save_engine(&cx, engine).await;
+    svc.save_engine(&cx, engine).await?;
 
     let loaded = svc
         .load_engine(&cx, EngineId::from_uuid(seed_id("engine-1")))
-        .await;
+        .await?;
     assert!(loaded.is_some());
     let loaded = loaded.unwrap();
     assert_eq!(loaded.name, "Keys Engine Test");
     assert_eq!(loaded.layer_ids.len(), 1);
     assert_eq!(loaded.variants.len(), 1);
 
-    let engines = svc.list_engines(&cx).await;
+    let engines = svc.list_engines(&cx).await?;
     assert_eq!(engines.len(), 7); // 6 seeded + 1 just saved
 
     svc.delete_engine(&cx, EngineId::from_uuid(seed_id("engine-1")))
-        .await;
+        .await?;
     let after_delete = svc
         .load_engine(&cx, EngineId::from_uuid(seed_id("engine-1")))
-        .await;
+        .await?;
     assert!(after_delete.is_none());
     Ok(())
 }
@@ -676,7 +686,7 @@ async fn test_live_load_engine_variant() -> Result<()> {
             seed_id("keys-layer-core-bright"),
         )),
     );
-    svc.save_engine(&cx, engine).await;
+    svc.save_engine(&cx, engine).await?;
 
     let variant = svc
         .load_engine_variant(
@@ -684,7 +694,7 @@ async fn test_live_load_engine_variant() -> Result<()> {
             EngineId::from_uuid(seed_id("engine-2")),
             EngineSceneId::from_uuid(seed_id("scene-heavy")),
         )
-        .await;
+        .await?;
     assert!(variant.is_some());
     let variant = variant.unwrap();
     assert_eq!(variant.name, "Heavy");
@@ -705,7 +715,7 @@ async fn test_live_list_presets_all_seeded() -> Result<()> {
     let svc = seeded_service().await?;
     let cx = test_context();
 
-    let rigs = svc.list_rigs(&cx).await;
+    let rigs = svc.list_rigs(&cx).await?;
     assert_eq!(rigs.len(), 3);
     assert!(rigs.iter().all(|r| r.name == "MegaRig"));
     let keys_rig = rigs
@@ -735,9 +745,11 @@ async fn test_live_save_load_delete_preset() -> Result<()> {
     )
     .with_rig_type("guitar");
 
-    svc.save_rig(&cx, rig).await;
+    svc.save_rig(&cx, rig).await?;
 
-    let loaded = svc.load_rig(&cx, RigId::from_uuid(seed_id("rig-1"))).await;
+    let loaded = svc
+        .load_rig(&cx, RigId::from_uuid(seed_id("rig-1")))
+        .await?;
     assert!(loaded.is_some());
     let loaded = loaded.unwrap();
     assert_eq!(loaded.name, "Guitar Rig");
@@ -745,12 +757,14 @@ async fn test_live_save_load_delete_preset() -> Result<()> {
     assert_eq!(loaded.variants.len(), 1);
     assert_eq!(loaded.rig_type.unwrap().as_str(), "guitar");
 
-    let rigs = svc.list_rigs(&cx).await;
+    let rigs = svc.list_rigs(&cx).await?;
     assert_eq!(rigs.len(), 4); // 3 seeded + 1 just saved
 
     svc.delete_rig(&cx, RigId::from_uuid(seed_id("rig-1")))
-        .await;
-    let after_delete = svc.load_rig(&cx, RigId::from_uuid(seed_id("rig-1"))).await;
+        .await?;
+    let after_delete = svc
+        .load_rig(&cx, RigId::from_uuid(seed_id("rig-1")))
+        .await?;
     assert!(after_delete.is_none());
     Ok(())
 }
@@ -779,7 +793,7 @@ async fn test_live_load_preset_variant() -> Result<()> {
             seed_id("scene-heavy"),
         )),
     );
-    svc.save_rig(&cx, rig).await;
+    svc.save_rig(&cx, rig).await?;
 
     let variant = svc
         .load_rig_variant(
@@ -787,7 +801,7 @@ async fn test_live_load_preset_variant() -> Result<()> {
             RigId::from_uuid(seed_id("rig-2")),
             RigSceneId::from_uuid(seed_id("rs-heavy")),
         )
-        .await;
+        .await?;
     assert!(variant.is_some());
     let variant = variant.unwrap();
     assert_eq!(variant.name, "Heavy");
@@ -804,10 +818,13 @@ async fn test_live_list_profiles_seeded() -> Result<()> {
     let svc = seeded_service().await?;
     let cx = test_context();
 
-    let profiles = svc.list_profiles(&cx).await;
-    assert_eq!(profiles.len(), 1);
-    assert_eq!(profiles[0].name, "Keys Feature");
-    assert_eq!(profiles[0].patches.len(), 4);
+    let profiles = svc.list_profiles(&cx).await?;
+    assert_eq!(profiles.len(), 5);
+    let keys = profiles
+        .iter()
+        .find(|p| p.name == "Keys Feature")
+        .expect("keys feature profile");
+    assert_eq!(keys.patches.len(), 4);
     Ok(())
 }
 
@@ -832,24 +849,24 @@ async fn test_live_save_load_delete_profile() -> Result<()> {
         seed_id("rs-lead"),
     ));
 
-    svc.save_profile(&cx, profile).await;
+    svc.save_profile(&cx, profile).await?;
 
     let loaded = svc
         .load_profile(&cx, ProfileId::from_uuid(seed_id("profile-1")))
-        .await;
+        .await?;
     assert!(loaded.is_some());
     let loaded = loaded.unwrap();
     assert_eq!(loaded.name, "Worship");
     assert_eq!(loaded.patches.len(), 2);
 
-    let profiles = svc.list_profiles(&cx).await;
-    assert_eq!(profiles.len(), 2); // 1 seeded + 1 just saved
+    let profiles = svc.list_profiles(&cx).await?;
+    assert_eq!(profiles.len(), 6); // 5 seeded + 1 just saved
 
     svc.delete_profile(&cx, ProfileId::from_uuid(seed_id("profile-1")))
-        .await;
+        .await?;
     let after_delete = svc
         .load_profile(&cx, ProfileId::from_uuid(seed_id("profile-1")))
-        .await;
+        .await?;
     assert!(after_delete.is_none());
     Ok(())
 }
@@ -874,7 +891,7 @@ async fn test_live_load_profile_variant() -> Result<()> {
         seed_id("rig-1"),
         seed_id("rs-crunch"),
     ));
-    svc.save_profile(&cx, profile).await;
+    svc.save_profile(&cx, profile).await?;
 
     let variant = svc
         .load_profile_variant(
@@ -882,7 +899,7 @@ async fn test_live_load_profile_variant() -> Result<()> {
             ProfileId::from_uuid(seed_id("profile-2")),
             PatchId::from_uuid(seed_id("p-crunch")),
         )
-        .await;
+        .await?;
     assert!(variant.is_some());
     let variant = variant.unwrap();
     assert_eq!(variant.name, "Crunch");
@@ -905,8 +922,8 @@ async fn test_live_list_songs_seeded() -> Result<()> {
     let svc = seeded_service().await?;
     let cx = test_context();
 
-    let songs = svc.list_songs(&cx).await;
-    assert_eq!(songs.len(), 2);
+    let songs = svc.list_songs(&cx).await?;
+    assert_eq!(songs.len(), 3);
     let feature = songs
         .iter()
         .find(|s| s.name == "Feature-Demo Song")
@@ -929,25 +946,25 @@ async fn test_live_save_load_delete_song() -> Result<()> {
     let mut song = Song::new(seed_id("song-1"), "Amazing Grace", verse).with_artist("Traditional");
     song.add_section(chorus);
 
-    svc.save_song(&cx, song).await;
+    svc.save_song(&cx, song).await?;
 
     let loaded = svc
         .load_song(&cx, SongId::from_uuid(seed_id("song-1")))
-        .await;
+        .await?;
     assert!(loaded.is_some());
     let loaded = loaded.unwrap();
     assert_eq!(loaded.name, "Amazing Grace");
     assert_eq!(loaded.artist.as_deref(), Some("Traditional"));
     assert_eq!(loaded.sections.len(), 2);
 
-    let songs = svc.list_songs(&cx).await;
-    assert_eq!(songs.len(), 3); // 2 seeded + 1 just saved
+    let songs = svc.list_songs(&cx).await?;
+    assert_eq!(songs.len(), 4); // 3 seeded + 1 just saved
 
     svc.delete_song(&cx, SongId::from_uuid(seed_id("song-1")))
-        .await;
+        .await?;
     let after_delete = svc
         .load_song(&cx, SongId::from_uuid(seed_id("song-1")))
-        .await;
+        .await?;
     assert!(after_delete.is_none());
     Ok(())
 }
@@ -968,7 +985,7 @@ async fn test_live_load_song_variant() -> Result<()> {
     );
     let mut song = Song::new(seed_id("song-2"), "Instrumental", verse);
     song.add_section(bridge);
-    svc.save_song(&cx, song).await;
+    svc.save_song(&cx, song).await?;
 
     let variant = svc
         .load_song_variant(
@@ -976,7 +993,7 @@ async fn test_live_load_song_variant() -> Result<()> {
             SongId::from_uuid(seed_id("song-2")),
             SectionId::from_uuid(seed_id("sec-bridge")),
         )
-        .await;
+        .await?;
     assert!(variant.is_some());
     let variant = variant.unwrap();
     assert_eq!(variant.name, "Bridge");
@@ -999,7 +1016,7 @@ async fn test_live_browser_index_and_query() -> Result<()> {
     let svc = seeded_service().await?;
     let cx = test_context();
 
-    let index: BrowserIndex = svc.browser_index(&cx).await;
+    let index: BrowserIndex = svc.browser_index(&cx).await?;
     assert!(!index.entries().is_empty());
     assert!(index
         .entries()
@@ -1018,7 +1035,7 @@ async fn test_live_browser_index_and_query() -> Result<()> {
                 ..BrowserQuery::default()
             },
         )
-        .await;
+        .await?;
     assert!(!hits.is_empty());
     Ok(())
 }
@@ -1033,11 +1050,11 @@ async fn test_live_browser_query_strict_filters() -> Result<()> {
             &cx,
             BrowserQuery {
                 kinds: vec![BrowserEntityKind::SetlistCollection],
-                text: Some("demo".to_string()),
+                text: Some("worship".to_string()),
                 ..BrowserQuery::default()
             },
         )
-        .await;
+        .await?;
     assert_eq!(setlist_hits.len(), 1);
     assert!(matches!(
         setlist_hits[0].node.kind,
@@ -1053,7 +1070,7 @@ async fn test_live_browser_query_strict_filters() -> Result<()> {
                 ..BrowserQuery::default()
             },
         )
-        .await;
+        .await?;
     assert!(!strict_keys_hits.is_empty());
     Ok(())
 }
@@ -1064,7 +1081,7 @@ async fn test_live_browser_index_load_time_smoke() -> Result<()> {
     let cx = test_context();
 
     let started = Instant::now();
-    let index: BrowserIndex = svc.browser_index(&cx).await;
+    let index: BrowserIndex = svc.browser_index(&cx).await?;
     let elapsed = started.elapsed();
 
     assert!(!index.entries().is_empty());
@@ -1094,7 +1111,7 @@ async fn test_live_browser_index_load_time_benchmark() -> Result<()> {
     let mut runs = Vec::with_capacity(iterations);
     for _ in 0..iterations {
         let started = Instant::now();
-        let index: BrowserIndex = svc.browser_index(&cx).await;
+        let index: BrowserIndex = svc.browser_index(&cx).await?;
         runs.push(started.elapsed());
         assert!(!index.entries().is_empty());
     }
@@ -1310,7 +1327,7 @@ async fn test_live_resolve_fails_on_missing_replace_ref_module_variant() -> Resu
     });
 
     let song = Song::new(seed_id("bad-replace-ref-song"), "Bad ReplaceRef Song", bad);
-    svc.save_song(&cx, song).await;
+    svc.save_song(&cx, song).await?;
 
     let resolved: core::result::Result<ResolvedGraph, ResolveError> = svc
         .resolve_target(
@@ -1352,7 +1369,7 @@ async fn test_live_resolve_fails_on_missing_replace_ref_engine_scene() -> Result
         "Bad Engine ReplaceRef Song",
         bad,
     );
-    svc.save_song(&cx, song).await;
+    svc.save_song(&cx, song).await?;
 
     let resolved: core::result::Result<ResolvedGraph, ResolveError> = svc
         .resolve_target(
@@ -1394,7 +1411,7 @@ async fn test_live_resolve_fails_on_missing_replace_ref_layer_variant() -> Resul
         "Bad Layer ReplaceRef Song",
         bad,
     );
-    svc.save_song(&cx, song).await;
+    svc.save_song(&cx, song).await?;
 
     let resolved: core::result::Result<ResolvedGraph, ResolveError> = svc
         .resolve_target(

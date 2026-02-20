@@ -13,25 +13,32 @@ where
     St: SceneTemplateRepo,
     Ra: RackRepo,
 {
-    async fn list_songs(&self, _cx: &Context) -> Vec<Song> {
-        self.song_repo.list_songs().await.unwrap_or_default()
+    async fn list_songs(&self, _cx: &Context) -> Result<Vec<Song>, String> {
+        self.song_repo.list_songs().await.map_err(|e| e.to_string())
     }
 
-    async fn load_song(&self, _cx: &Context, id: SongId) -> Option<Song> {
-        self.song_repo.load_song(&id).await.ok().flatten()
+    async fn load_song(&self, _cx: &Context, id: SongId) -> Result<Option<Song>, String> {
+        self.song_repo
+            .load_song(&id)
+            .await
+            .map_err(|e| e.to_string())
     }
 
-    async fn save_song(&self, _cx: &Context, song: Song) -> () {
+    async fn save_song(&self, _cx: &Context, song: Song) -> Result<(), String> {
         for variant in &song.sections {
-            if variant.validate_overrides().is_err() {
-                return;
-            }
+            variant.validate_overrides().map_err(|e| format!("{e:?}"))?;
         }
-        let _ = self.song_repo.save_song(&song).await;
+        self.song_repo
+            .save_song(&song)
+            .await
+            .map_err(|e| e.to_string())
     }
 
-    async fn delete_song(&self, _cx: &Context, id: SongId) -> () {
-        let _ = self.song_repo.delete_song(&id).await;
+    async fn delete_song(&self, _cx: &Context, id: SongId) -> Result<(), String> {
+        self.song_repo
+            .delete_song(&id)
+            .await
+            .map_err(|e| e.to_string())
     }
 
     async fn load_song_variant(
@@ -39,11 +46,10 @@ where
         _cx: &Context,
         song_id: SongId,
         variant_id: SectionId,
-    ) -> Option<Section> {
+    ) -> Result<Option<Section>, String> {
         self.song_repo
             .load_variant(&song_id, &variant_id)
             .await
-            .ok()
-            .flatten()
+            .map_err(|e| e.to_string())
     }
 }

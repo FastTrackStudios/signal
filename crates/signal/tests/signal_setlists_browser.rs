@@ -25,7 +25,7 @@ use signal::{
 #[tokio::test]
 async fn seed_setlists_are_loaded() {
     let signal = controller().await;
-    let setlists = signal.setlists().list().await;
+    let setlists = signal.setlists().list().await.unwrap();
     println!("Seeded setlists:");
     for s in &setlists {
         println!("  {} — {} ({} entries)", s.id, s.name, s.entries.len());
@@ -51,11 +51,13 @@ async fn create_and_reload_custom_setlist() {
 
     let mut setlist = Setlist::new(setlist_id.clone(), "Custom Gig", entry1);
     setlist.add_entry(entry2);
-    signal.setlists().save(setlist).await;
+    signal.setlists().save(setlist).await.unwrap();
 
     let reloaded = signal
-        .setlists().load(setlist_id.clone())
+        .setlists()
+        .load(setlist_id.clone())
         .await
+        .unwrap()
         .expect("setlist not found");
     println!(
         "Reloaded setlist '{}': {} entries",
@@ -72,8 +74,10 @@ async fn load_setlist_entry_by_id() {
     let signal = controller().await;
 
     let entry = signal
-        .setlists().load_entry(seed_id("worship-set"), seed_id("worship-set-worship-song"))
+        .setlists()
+        .load_entry(seed_id("worship-set"), seed_id("worship-set-worship-song"))
         .await
+        .unwrap()
         .expect("setlist entry not found");
 
     println!("Entry '{}' → song_id={}", entry.name, entry.song_id);
@@ -96,15 +100,20 @@ async fn reorder_setlist_entries() {
     );
     setlist.add_entry(SetlistEntry::new(e2.clone(), "B", seed_id("dummy-song")));
     setlist.add_entry(SetlistEntry::new(e3.clone(), "C", seed_id("dummy-song")));
-    signal.setlists().save(setlist).await;
+    signal.setlists().save(setlist).await.unwrap();
 
     // Use the controller's reorder method instead of duplicating the logic.
-    signal.setlists().reorder_entries(sid.clone(), &[e3.clone(), e1.clone(), e2.clone()])
-        .await;
+    signal
+        .setlists()
+        .reorder_entries(sid.clone(), &[e3.clone(), e1.clone(), e2.clone()])
+        .await
+        .unwrap();
 
     let setlist = signal
-        .setlists().load(sid.clone())
+        .setlists()
+        .load(sid.clone())
         .await
+        .unwrap()
         .expect("setlist not found");
 
     println!(
@@ -126,15 +135,15 @@ async fn delete_setlist() {
         "Temp Setlist",
         SetlistEntry::new(SetlistEntryId::new(), "A", seed_id("dummy-song")),
     );
-    signal.setlists().save(setlist).await;
+    signal.setlists().save(setlist).await.unwrap();
 
     assert!(
-        signal.setlists().load(sid.clone()).await.is_some(),
+        signal.setlists().load(sid.clone()).await.unwrap().is_some(),
         "should exist before delete"
     );
-    signal.setlists().delete(sid.clone()).await;
+    signal.setlists().delete(sid.clone()).await.unwrap();
     assert!(
-        signal.setlists().load(sid).await.is_none(),
+        signal.setlists().load(sid).await.unwrap().is_none(),
         "should be gone after delete"
     );
     println!("✓ Setlist deleted");
@@ -149,8 +158,10 @@ async fn reorder_profile_patches() {
     let signal = controller().await;
 
     let worship = signal
-        .profiles().load(seed_id("guitar-worship-profile"))
+        .profiles()
+        .load(seed_id("guitar-worship-profile"))
         .await
+        .unwrap()
         .expect("worship not found");
     let original_order: Vec<String> = worship.patches.iter().map(|p| p.name.clone()).collect();
 
@@ -160,12 +171,17 @@ async fn reorder_profile_patches() {
     new_order.rotate_right(1);
 
     // Use the controller's reorder method.
-    signal.profiles().reorder_patches(seed_id("guitar-worship-profile"), &new_order)
-        .await;
+    signal
+        .profiles()
+        .reorder_patches(seed_id("guitar-worship-profile"), &new_order)
+        .await
+        .unwrap();
 
     let worship = signal
-        .profiles().load(seed_id("guitar-worship-profile"))
+        .profiles()
+        .load(seed_id("guitar-worship-profile"))
         .await
+        .unwrap()
         .expect("worship not found after reorder");
     let new_names: Vec<String> = worship.patches.iter().map(|p| p.name.clone()).collect();
 
@@ -206,13 +222,21 @@ async fn reorder_song_sections() {
         guitar_megarig_id(),
         guitar_megarig_lead_scene(),
     ));
-    signal.songs().save(song).await;
+    signal.songs().save(song).await.unwrap();
 
     // Use the controller's reorder method.
-    signal.songs().reorder_sections(song_id.clone(), &[s3.clone(), s1.clone(), s2.clone()])
-        .await;
+    signal
+        .songs()
+        .reorder_sections(song_id.clone(), &[s3.clone(), s1.clone(), s2.clone()])
+        .await
+        .unwrap();
 
-    let song = signal.songs().load(song_id).await.expect("song not found");
+    let song = signal
+        .songs()
+        .load(song_id)
+        .await
+        .unwrap()
+        .expect("song not found");
     let names: Vec<&str> = song.sections.iter().map(|s| s.name.as_str()).collect();
     println!("Sections after reorder: {:?}", names);
     assert_eq!(names, ["Bridge", "Verse", "Chorus"]);
@@ -232,10 +256,10 @@ async fn set_section_source_switches_from_patch_to_rig_scene() {
     // Start with a Patch source
     let section = Section::from_patch(section_id.clone(), "Intro", seed_id("guitar-worship-clean"));
     let song = Song::new(song_id.clone(), "Mutation Test Song", section);
-    signal.songs().save(song).await;
+    signal.songs().save(song).await.unwrap();
 
     {
-        let loaded = signal.songs().load(song_id.clone()).await.unwrap();
+        let loaded = signal.songs().load(song_id.clone()).await.unwrap().unwrap();
         let s = loaded.section(&section_id).unwrap();
         assert!(
             matches!(s.source, SectionSource::Patch { .. }),
@@ -245,17 +269,20 @@ async fn set_section_source_switches_from_patch_to_rig_scene() {
     }
 
     // Switch to RigScene source
-    signal.songs().set_section_source(
-        song_id.clone(),
-        section_id.clone(),
-        SectionSource::RigScene {
-            rig_id: guitar_megarig_id(),
-            scene_id: guitar_megarig_lead_scene(),
-        },
-    )
-    .await;
+    signal
+        .songs()
+        .set_section_source(
+            song_id.clone(),
+            section_id.clone(),
+            SectionSource::RigScene {
+                rig_id: guitar_megarig_id(),
+                scene_id: guitar_megarig_lead_scene(),
+            },
+        )
+        .await
+        .unwrap();
 
-    let reloaded = signal.songs().load(song_id).await.unwrap();
+    let reloaded = signal.songs().load(song_id).await.unwrap().unwrap();
     let updated = reloaded.section(&section_id).unwrap();
     println!("After: {:?}", updated.source);
     assert!(
@@ -271,8 +298,10 @@ async fn set_patch_preset_retargets_rig_scene() {
     // Load rock profile, retarget Clean patch from default → lead scene
     // (Blues patches are now BlockSnapshot targets, so use Rock which still uses RigScene)
     let before = signal
-        .profiles().load_patch(seed_id("guitar-rock-profile"), seed_id("guitar-rock-clean"))
+        .profiles()
+        .load_patch(seed_id("guitar-rock-profile"), seed_id("guitar-rock-clean"))
         .await
+        .unwrap()
         .expect("rock clean not found");
 
     match &before.target {
@@ -286,17 +315,22 @@ async fn set_patch_preset_retargets_rig_scene() {
         _ => panic!("expected RigScene target"),
     }
 
-    signal.profiles().set_patch_preset(
-        seed_id("guitar-rock-profile"),
-        seed_id("guitar-rock-clean"),
-        guitar_megarig_id(),
-        guitar_megarig_lead_scene(),
-    )
-    .await;
+    signal
+        .profiles()
+        .set_patch_preset(
+            seed_id("guitar-rock-profile"),
+            seed_id("guitar-rock-clean"),
+            guitar_megarig_id(),
+            guitar_megarig_lead_scene(),
+        )
+        .await
+        .unwrap();
 
     let after = signal
-        .profiles().load_patch(seed_id("guitar-rock-profile"), seed_id("guitar-rock-clean"))
+        .profiles()
+        .load_patch(seed_id("guitar-rock-profile"), seed_id("guitar-rock-clean"))
         .await
+        .unwrap()
         .expect("rock clean not found after retarget");
 
     match &after.target {
@@ -327,13 +361,16 @@ async fn delete_profile_and_verify_gone() {
         guitar_megarig_id(),
         guitar_megarig_default_scene(),
     );
-    signal.profiles().save(Profile::new(id.clone(), "Temp Profile", patch))
-        .await;
-    assert!(signal.profiles().load(id.clone()).await.is_some());
+    signal
+        .profiles()
+        .save(Profile::new(id.clone(), "Temp Profile", patch))
+        .await
+        .unwrap();
+    assert!(signal.profiles().load(id.clone()).await.unwrap().is_some());
 
-    signal.profiles().delete(id.clone()).await;
+    signal.profiles().delete(id.clone()).await.unwrap();
     assert!(
-        signal.profiles().load(id).await.is_none(),
+        signal.profiles().load(id).await.unwrap().is_none(),
         "profile should be deleted"
     );
     println!("✓ Profile deleted");
@@ -350,12 +387,18 @@ async fn delete_song_and_verify_gone() {
         guitar_megarig_id(),
         guitar_megarig_default_scene(),
     );
-    signal.songs().save(Song::new(id.clone(), "Temp Song", section))
-        .await;
-    assert!(signal.songs().load(id.clone()).await.is_some());
+    signal
+        .songs()
+        .save(Song::new(id.clone(), "Temp Song", section))
+        .await
+        .unwrap();
+    assert!(signal.songs().load(id.clone()).await.unwrap().is_some());
 
-    signal.songs().delete(id.clone()).await;
-    assert!(signal.songs().load(id).await.is_none(), "song should be deleted");
+    signal.songs().delete(id.clone()).await.unwrap();
+    assert!(
+        signal.songs().load(id).await.unwrap().is_none(),
+        "song should be deleted"
+    );
     println!("✓ Song deleted");
 }
 
@@ -384,11 +427,13 @@ async fn save_and_reload_scene_template() {
     ));
 
     let tmpl_id = tmpl.id.clone();
-    signal.scene_templates().save(tmpl).await;
+    signal.scene_templates().save(tmpl).await.unwrap();
 
     let reloaded = signal
-        .scene_templates().load(tmpl_id.clone())
+        .scene_templates()
+        .load(tmpl_id.clone())
         .await
+        .unwrap()
         .expect("template not found");
     println!(
         "Template '{}': {} overrides",
@@ -412,22 +457,34 @@ async fn save_and_reload_scene_template() {
 async fn list_and_delete_scene_templates() {
     let signal = controller().await;
 
-    let before = signal.scene_templates().list().await.len();
+    let before = signal.scene_templates().list().await.unwrap().len();
 
     let id1 = signal::scene_template::SceneTemplateId::new();
     let id2 = signal::scene_template::SceneTemplateId::new();
-    signal.scene_templates().save(SceneTemplate::new(id1.clone(), "T1"))
-        .await;
-    signal.scene_templates().save(SceneTemplate::new(id2.clone(), "T2"))
-        .await;
+    signal
+        .scene_templates()
+        .save(SceneTemplate::new(id1.clone(), "T1"))
+        .await
+        .unwrap();
+    signal
+        .scene_templates()
+        .save(SceneTemplate::new(id2.clone(), "T2"))
+        .await
+        .unwrap();
 
-    assert_eq!(signal.scene_templates().list().await.len(), before + 2);
+    assert_eq!(
+        signal.scene_templates().list().await.unwrap().len(),
+        before + 2
+    );
 
-    signal.scene_templates().delete(id1).await;
-    assert_eq!(signal.scene_templates().list().await.len(), before + 1);
+    signal.scene_templates().delete(id1).await.unwrap();
+    assert_eq!(
+        signal.scene_templates().list().await.unwrap().len(),
+        before + 1
+    );
 
-    signal.scene_templates().delete(id2).await;
-    assert_eq!(signal.scene_templates().list().await.len(), before);
+    signal.scene_templates().delete(id2).await.unwrap();
+    assert_eq!(signal.scene_templates().list().await.unwrap().len(), before);
     println!("✓ Scene templates created and deleted");
 }
 
@@ -439,18 +496,30 @@ async fn reorder_scene_templates() {
     let t2 = signal::scene_template::SceneTemplateId::new();
     let t3 = signal::scene_template::SceneTemplateId::new();
 
-    signal.scene_templates().save(SceneTemplate::new(t1.clone(), "Alpha"))
-        .await;
-    signal.scene_templates().save(SceneTemplate::new(t2.clone(), "Beta"))
-        .await;
-    signal.scene_templates().save(SceneTemplate::new(t3.clone(), "Gamma"))
-        .await;
+    signal
+        .scene_templates()
+        .save(SceneTemplate::new(t1.clone(), "Alpha"))
+        .await
+        .unwrap();
+    signal
+        .scene_templates()
+        .save(SceneTemplate::new(t2.clone(), "Beta"))
+        .await
+        .unwrap();
+    signal
+        .scene_templates()
+        .save(SceneTemplate::new(t3.clone(), "Gamma"))
+        .await
+        .unwrap();
 
     // Reorder: Gamma, Alpha, Beta
-    signal.scene_templates().reorder(vec![t3.clone(), t1.clone(), t2.clone()])
-        .await;
+    signal
+        .scene_templates()
+        .reorder(vec![t3.clone(), t1.clone(), t2.clone()])
+        .await
+        .unwrap();
 
-    let templates = signal.scene_templates().list().await;
+    let templates = signal.scene_templates().list().await.unwrap();
     // Find our three and check relative order
     let positions: Vec<(usize, &str)> = templates
         .iter()
@@ -488,7 +557,7 @@ async fn reorder_scene_templates() {
 async fn browser_index_covers_all_domain_levels() {
     let signal = controller().await;
 
-    let index = signal.browser_index().await;
+    let index = signal.browser_index().await.unwrap();
     let entries = index.entries();
     println!("Browser index: {} entries", entries.len());
 
@@ -521,9 +590,9 @@ fn text_query(text: &str) -> BrowserQuery {
 #[tokio::test]
 async fn browse_by_text_finds_jm_amp() {
     let signal = controller().await;
-    let index = signal.browser_index().await;
+    let index = signal.browser_index().await.unwrap();
 
-    let hits = signal.browse(text_query("JM Amp")).await;
+    let hits = signal.browse(text_query("JM Amp")).await.unwrap();
     println!("Browse 'JM Amp': {} hits", hits.len());
     for h in hits.iter().take(5) {
         // Look up name in the index
@@ -558,7 +627,7 @@ async fn browse_by_text_finds_jm_amp() {
 async fn browse_by_text_finds_guitar_worship() {
     let signal = controller().await;
 
-    let hits = signal.browse(text_query("Worship")).await;
+    let hits = signal.browse(text_query("Worship")).await.unwrap();
     println!("Browse 'Worship': {} hits", hits.len());
     assert!(!hits.is_empty(), "should find worship-related hits");
     for h in hits.iter().take(3) {
@@ -571,7 +640,8 @@ async fn browse_returns_empty_for_nonsense_query() {
     let signal = controller().await;
     let hits = signal
         .browse(text_query("xyzzy_definitely_not_a_preset_zzz"))
-        .await;
+        .await
+        .unwrap();
     println!("Browse nonsense: {} hits", hits.len());
     assert!(
         hits.is_empty() || hits.iter().all(|h| h.score < 0.1),
@@ -582,7 +652,7 @@ async fn browse_returns_empty_for_nonsense_query() {
 #[tokio::test]
 async fn list_rig_collections_by_guitar_tag() {
     let signal = controller().await;
-    let rigs = signal.rigs().by_tag("guitar").await;
+    let rigs = signal.rigs().by_tag("guitar").await.unwrap();
     println!("Guitar-tagged rigs: {}", rigs.len());
     for r in &rigs {
         println!("  {} — {}", r.id, r.name);
@@ -593,7 +663,7 @@ async fn list_rig_collections_by_guitar_tag() {
 #[tokio::test]
 async fn list_profiles_by_worship_tag() {
     let signal = controller().await;
-    let profiles = signal.profiles().by_tag("worship").await;
+    let profiles = signal.profiles().by_tag("worship").await.unwrap();
     println!("Worship-tagged profiles: {}", profiles.len());
     assert!(!profiles.is_empty(), "should find worship-tagged profiles");
     assert!(
@@ -613,7 +683,7 @@ async fn resolve_all_guitar_profile_patches() {
     use signal::resolve::ResolveTarget;
 
     let signal = controller().await;
-    let profiles = signal.profiles().by_tag("guitar").await;
+    let profiles = signal.profiles().by_tag("guitar").await.unwrap();
 
     let mut total = 0;
     let mut errors = vec![];
@@ -668,7 +738,7 @@ async fn resolve_all_seeded_song_sections() {
     use signal::resolve::ResolveTarget;
 
     let signal = controller().await;
-    let songs = signal.songs().list().await;
+    let songs = signal.songs().list().await.unwrap();
 
     let mut total = 0;
     let mut errors = vec![];

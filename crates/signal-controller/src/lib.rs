@@ -211,15 +211,21 @@ where
     // region: --- Cross-cutting operations
 
     /// Build the current browser index across all signal domain levels.
-    pub async fn browser_index(&self) -> BrowserIndex {
+    pub async fn browser_index(&self) -> Result<BrowserIndex, ops::OpsError> {
         let cx = self.context_factory.make_context();
-        self.service.browser_index(&cx).await
+        self.service
+            .browser_index(&cx)
+            .await
+            .map_err(ops::OpsError::Storage)
     }
 
     /// Query the semantic browser using structured tags and fallback scoring.
-    pub async fn browse(&self, query: BrowserQuery) -> Vec<BrowserHit> {
+    pub async fn browse(&self, query: BrowserQuery) -> Result<Vec<BrowserHit>, ops::OpsError> {
         let cx = self.context_factory.make_context();
-        self.service.browse(&cx, query).await
+        self.service
+            .browse(&cx, query)
+            .await
+            .map_err(ops::OpsError::Storage)
     }
 
     /// Resolve any target (rig scene, profile patch, song section) into an executable graph.
@@ -238,19 +244,23 @@ where
     /// Save all entities from a [`BuiltRig`] in dependency order.
     ///
     /// Saves: block presets → module → layer → engine → rig → profile.
-    pub async fn save_built_rig(&self, built: &signal_proto::builder::BuiltRig) {
+    pub async fn save_built_rig(
+        &self,
+        built: &signal_proto::builder::BuiltRig,
+    ) -> Result<(), ops::OpsError> {
         for bp in &built.block_presets {
-            self.block_presets().save(bp.preset.clone()).await;
+            self.block_presets().save(bp.preset.clone()).await?;
         }
         self.module_presets()
             .save(built.module_preset.clone())
-            .await;
-        self.layers().save(built.layer.clone()).await;
-        self.engines().save(built.engine.clone()).await;
-        self.rigs().save(built.rig.clone()).await;
+            .await?;
+        self.layers().save(built.layer.clone()).await?;
+        self.engines().save(built.engine.clone()).await?;
+        self.rigs().save(built.rig.clone()).await?;
         if let Some(profile) = &built.profile {
-            self.profiles().save(profile.clone()).await;
+            self.profiles().save(profile.clone()).await?;
         }
+        Ok(())
     }
 
     // endregion: --- Builder integration

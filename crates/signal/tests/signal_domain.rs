@@ -34,7 +34,7 @@ async fn controller() -> signal::Signal {
 async fn jm_block_presets_are_seeded() {
     let signal = controller().await;
 
-    let boosts = signal.block_presets().list(BlockType::Boost).await;
+    let boosts = signal.block_presets().list(BlockType::Boost).await.unwrap();
     assert!(
         boosts
             .iter()
@@ -42,7 +42,7 @@ async fn jm_block_presets_are_seeded() {
         "jm-justa-boost not found in Boost collections"
     );
 
-    let drives = signal.block_presets().list(BlockType::Drive).await;
+    let drives = signal.block_presets().list(BlockType::Drive).await.unwrap();
     assert!(
         drives
             .iter()
@@ -56,7 +56,7 @@ async fn jm_block_presets_are_seeded() {
         "jm-tealbreaker not found in Drive collections"
     );
 
-    let amps = signal.block_presets().list(BlockType::Amp).await;
+    let amps = signal.block_presets().list(BlockType::Amp).await.unwrap();
     assert!(
         amps.iter()
             .any(|p| p.id().to_string() == seed_id("jm-amp").to_string()),
@@ -77,8 +77,10 @@ async fn load_jm_amp_default_block() {
     let signal = controller().await;
 
     let block = signal
-        .block_presets().load_default(BlockType::Amp, seed_id("jm-amp"))
+        .block_presets()
+        .load_default(BlockType::Amp, seed_id("jm-amp"))
         .await
+        .unwrap()
         .expect("jm-amp default snapshot not found");
 
     let params = block.parameters().to_vec();
@@ -116,13 +118,17 @@ async fn load_jm_amp_lead_snapshot() {
     let signal = controller().await;
 
     let lead_block = signal
-        .block_presets().load_variant(BlockType::Amp, seed_id("jm-amp"), seed_id("jm-amp-lead"))
+        .block_presets()
+        .load_variant(BlockType::Amp, seed_id("jm-amp"), seed_id("jm-amp-lead"))
         .await
+        .unwrap()
         .expect("jm-amp lead snapshot not found");
 
     let clean_block = signal
-        .block_presets().load_variant(BlockType::Amp, seed_id("jm-amp"), seed_id("jm-amp-clean"))
+        .block_presets()
+        .load_variant(BlockType::Amp, seed_id("jm-amp"), seed_id("jm-amp-clean"))
         .await
+        .unwrap()
         .expect("jm-amp clean snapshot not found");
 
     let lead_gain = lead_block
@@ -155,8 +161,10 @@ async fn mutate_and_persist_jm_boost_snapshot() {
     let signal = controller().await;
 
     let original = signal
-        .block_presets().load_default(BlockType::Boost, seed_id("jm-justa-boost"))
+        .block_presets()
+        .load_default(BlockType::Boost, seed_id("jm-justa-boost"))
         .await
+        .unwrap()
         .expect("jm-justa-boost default not found");
 
     let original_level = original
@@ -174,17 +182,21 @@ async fn mutate_and_persist_jm_boost_snapshot() {
     }
 
     signal
-        .block_presets().update_snapshot_params(
+        .block_presets()
+        .update_snapshot_params(
             BlockType::Boost,
             seed_id("jm-justa-boost"),
             seed_id("jm-justa-boost-default"),
             mutated,
         )
-        .await;
+        .await
+        .unwrap();
 
     let reloaded = signal
-        .block_presets().load_default(BlockType::Boost, seed_id("jm-justa-boost"))
+        .block_presets()
+        .load_default(BlockType::Boost, seed_id("jm-justa-boost"))
         .await
+        .unwrap()
         .expect("jm-justa-boost default not found after save");
 
     let reloaded_level = reloaded
@@ -214,7 +226,7 @@ async fn mutate_and_persist_jm_boost_snapshot() {
 async fn jm_module_presets_are_seeded() {
     let signal = controller().await;
 
-    let modules = signal.module_presets().list().await;
+    let modules = signal.module_presets().list().await.unwrap();
 
     let jm_module_ids = [
         "jm-pedals",
@@ -242,8 +254,10 @@ async fn jm_pedals_module_has_5_blocks() {
     let signal = controller().await;
 
     let snapshot = signal
-        .module_presets().load_default(seed_id("jm-pedals"))
+        .module_presets()
+        .load_default(seed_id("jm-pedals"))
         .await
+        .unwrap()
         .expect("jm-pedals default snapshot not found");
 
     let module = snapshot.module().clone();
@@ -262,13 +276,17 @@ async fn jm_pedals_lead_variant_uses_edge_snapshot() {
     let signal = controller().await;
 
     let default_snap = signal
-        .module_presets().load_default(seed_id("jm-pedals"))
+        .module_presets()
+        .load_default(seed_id("jm-pedals"))
         .await
+        .unwrap()
         .expect("jm-pedals default not found");
 
     let lead_snap = signal
-        .module_presets().load_variant(seed_id("jm-pedals"), seed_id("jm-pedals-lead"))
+        .module_presets()
+        .load_variant(seed_id("jm-pedals"), seed_id("jm-pedals-lead"))
         .await
+        .unwrap()
         .expect("jm-pedals lead variant not found");
 
     // Collect blocks into owned vecs to avoid temporary borrow issues
@@ -311,7 +329,7 @@ async fn jm_pedals_lead_variant_uses_edge_snapshot() {
 async fn jm_amp_module_has_4_snapshots() {
     let signal = controller().await;
 
-    let modules = signal.module_presets().list().await;
+    let modules = signal.module_presets().list().await.unwrap();
     let amp_module = modules
         .iter()
         .find(|m| m.id().to_string() == seed_id("jm-amp-module").to_string())
@@ -340,8 +358,10 @@ async fn guitar_layer_archetype_jm_is_seeded() {
     let signal = controller().await;
 
     let layer = signal
-        .layers().load(seed_id("guitar-layer-archetype-jm"))
+        .layers()
+        .load(seed_id("guitar-layer-archetype-jm"))
         .await
+        .unwrap()
         .expect("guitar-layer-archetype-jm not found");
 
     println!("Layer '{}' variants:", layer.name);
@@ -367,11 +387,13 @@ async fn jm_layer_default_has_6_module_refs() {
     let signal = controller().await;
 
     let variant = signal
-        .layers().load_variant(
+        .layers()
+        .load_variant(
             seed_id("guitar-layer-archetype-jm"),
             seed_id("guitar-layer-archetype-jm-default"),
         )
         .await
+        .unwrap()
         .expect("jm layer default variant not found");
 
     println!("Module refs in default variant:");
@@ -392,11 +414,13 @@ async fn jm_layer_lead_variant_selects_crunch_amp() {
     let signal = controller().await;
 
     let lead_variant = signal
-        .layers().load_variant(
+        .layers()
+        .load_variant(
             seed_id("guitar-layer-archetype-jm"),
             seed_id("guitar-layer-archetype-jm-lead"),
         )
         .await
+        .unwrap()
         .expect("jm layer lead variant not found");
 
     let amp_ref = lead_variant
@@ -424,18 +448,22 @@ async fn save_and_reload_jm_layer() {
     let signal = controller().await;
 
     let mut layer = signal
-        .layers().load(seed_id("guitar-layer-archetype-jm"))
+        .layers()
+        .load(seed_id("guitar-layer-archetype-jm"))
         .await
+        .unwrap()
         .expect("layer not found");
 
     let original_name = layer.name.clone();
     layer.name = format!("{} (modified)", original_name);
 
-    signal.layers().save(layer).await;
+    signal.layers().save(layer).await.unwrap();
 
     let reloaded = signal
-        .layers().load(seed_id("guitar-layer-archetype-jm"))
+        .layers()
+        .load(seed_id("guitar-layer-archetype-jm"))
         .await
+        .unwrap()
         .expect("layer not found after save");
 
     println!("Layer name: '{}' → '{}'", original_name, reloaded.name);
@@ -452,8 +480,10 @@ async fn guitar_engine_has_jm_layer() {
     let signal = controller().await;
 
     let engine = signal
-        .engines().load(seed_id("guitar-engine"))
+        .engines()
+        .load(seed_id("guitar-engine"))
         .await
+        .unwrap()
         .expect("guitar-engine not found");
 
     println!(
@@ -484,8 +514,10 @@ async fn guitar_engine_default_scene_loads() {
     let signal = controller().await;
 
     let scene = signal
-        .engines().load_variant(seed_id("guitar-engine"), seed_id("guitar-engine-default"))
+        .engines()
+        .load_variant(seed_id("guitar-engine"), seed_id("guitar-engine-default"))
         .await
+        .unwrap()
         .expect("guitar-engine default scene not found");
 
     println!(
@@ -507,7 +539,7 @@ async fn guitar_engine_default_scene_loads() {
 async fn guitar_megarig_is_seeded() {
     let signal = controller().await;
 
-    let rigs = signal.rigs().list().await;
+    let rigs = signal.rigs().list().await.unwrap();
     println!("Rigs:");
     for r in &rigs {
         println!("  {} — {} ({} variants)", r.id, r.name, r.variants.len());
@@ -531,8 +563,10 @@ async fn guitar_megarig_lead_scene_has_overrides() {
     let signal = controller().await;
 
     let scene = signal
-        .rigs().load_variant(seed_id("guitar-megarig"), seed_id("guitar-megarig-lead"))
+        .rigs()
+        .load_variant(seed_id("guitar-megarig"), seed_id("guitar-megarig-lead"))
         .await
+        .unwrap()
         .expect("guitar-megarig lead scene not found");
 
     println!(
@@ -558,8 +592,10 @@ async fn save_rig_with_custom_scene_and_override() {
     let signal = controller().await;
 
     let mut rig = signal
-        .rigs().load(seed_id("guitar-megarig"))
+        .rigs()
+        .load(seed_id("guitar-megarig"))
         .await
+        .unwrap()
         .expect("guitar-megarig not found");
 
     let original_count = rig.variants.len();
@@ -580,11 +616,13 @@ async fn save_rig_with_custom_scene_and_override() {
         ));
 
     rig.variants.push(custom_scene);
-    signal.rigs().save(rig).await;
+    signal.rigs().save(rig).await.unwrap();
 
     let reloaded = signal
-        .rigs().load(seed_id("guitar-megarig"))
+        .rigs()
+        .load(seed_id("guitar-megarig"))
         .await
+        .unwrap()
         .expect("guitar-megarig not found after save");
 
     println!(

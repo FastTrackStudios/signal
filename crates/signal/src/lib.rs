@@ -97,107 +97,10 @@ pub async fn bootstrap_in_memory_controller_async() -> Result<SignalController, 
     Ok(SignalController::new(service))
 }
 
-pub fn bootstrap_in_memory_controller() -> SignalController {
-    let runtime = tokio::runtime::Runtime::new().expect("failed to build tokio runtime");
-    let db = runtime.block_on(async {
-        let seeds = runtime_seed_bundle();
-        let db = Database::connect("sqlite::memory:")
-            .await
-            .expect("failed to connect in-memory sqlite");
-
-        let block_repo = BlockRepoLive::new(db.clone());
-        block_repo
-            .init_schema()
-            .await
-            .expect("failed to initialize block schema");
-        block_repo
-            .reseed_defaults(&seeds.block_collections)
-            .await
-            .expect("failed to reseed block collections");
-
-        let module_repo = ModuleRepoLive::new(db.clone());
-        module_repo
-            .init_schema()
-            .await
-            .expect("failed to initialize module schema");
-        module_repo
-            .reseed_defaults(&seeds.module_collections)
-            .await
-            .expect("failed to reseed module collections");
-
-        let layer_repo = LayerRepoLive::new(db.clone());
-        layer_repo
-            .init_schema()
-            .await
-            .expect("failed to initialize layer schema");
-        for layer in seeds.layers {
-            layer_repo
-                .save_layer(&layer)
-                .await
-                .expect("failed to seed layer");
-        }
-
-        let engine_repo = EngineRepoLive::new(db.clone());
-        engine_repo
-            .init_schema()
-            .await
-            .expect("failed to initialize engine schema");
-        for engine in seeds.engines {
-            engine_repo
-                .save_engine(&engine)
-                .await
-                .expect("failed to seed engine");
-        }
-
-        let rig_repo = RigRepoLive::new(db.clone());
-        rig_repo
-            .init_schema()
-            .await
-            .expect("failed to initialize rig schema");
-        for rig in seeds.rigs {
-            rig_repo.save_rig(&rig).await.expect("failed to seed rig");
-        }
-
-        let profile_repo = ProfileRepoLive::new(db.clone());
-        profile_repo
-            .init_schema()
-            .await
-            .expect("failed to initialize profile schema");
-        for profile in seeds.profiles {
-            profile_repo
-                .save_profile(&profile)
-                .await
-                .expect("failed to seed profile");
-        }
-
-        let song_repo = SongRepoLive::new(db.clone());
-        song_repo
-            .init_schema()
-            .await
-            .expect("failed to initialize song schema");
-        for song in seeds.songs {
-            song_repo
-                .save_song(&song)
-                .await
-                .expect("failed to seed song");
-        }
-
-        let setlist_repo = SetlistRepoLive::new(db.clone());
-        setlist_repo
-            .init_schema()
-            .await
-            .expect("failed to initialize setlist schema");
-        for setlist in seeds.setlists {
-            setlist_repo
-                .save_setlist(&setlist)
-                .await
-                .expect("failed to seed setlist");
-        }
-
-        db
-    });
-    let service = Arc::new(SignalLive::from_db(db));
-    SignalController::new(service)
+pub fn bootstrap_in_memory_controller() -> Result<SignalController, StorageError> {
+    let runtime = tokio::runtime::Runtime::new()
+        .map_err(|e| StorageError::Data(format!("failed to build tokio runtime: {e}")))?;
+    runtime.block_on(bootstrap_in_memory_controller_async())
 }
 
 // region: --- DB connection factory
@@ -282,27 +185,27 @@ async fn init_all_schemas(db: &DatabaseConnection) -> Result<(), StorageError> {
 // region: --- Mock constructors
 
 /// Create a mock controller for guitar-type development and testing.
-pub fn mock_guitar() -> SignalController {
+pub fn mock_guitar() -> Result<SignalController, StorageError> {
     bootstrap_in_memory_controller()
 }
 
 /// Create a mock controller for bass-type development and testing.
-pub fn mock_bass() -> SignalController {
+pub fn mock_bass() -> Result<SignalController, StorageError> {
     bootstrap_in_memory_controller()
 }
 
 /// Create a mock controller for keys-type development and testing.
-pub fn mock_keys() -> SignalController {
+pub fn mock_keys() -> Result<SignalController, StorageError> {
     bootstrap_in_memory_controller()
 }
 
 /// Create a mock controller for drums-type development and testing.
-pub fn mock_drums() -> SignalController {
+pub fn mock_drums() -> Result<SignalController, StorageError> {
     bootstrap_in_memory_controller()
 }
 
 /// Create a mock controller for vocals-type development and testing.
-pub fn mock_vocals() -> SignalController {
+pub fn mock_vocals() -> Result<SignalController, StorageError> {
     bootstrap_in_memory_controller()
 }
 

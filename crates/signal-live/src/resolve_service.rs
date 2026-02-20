@@ -188,6 +188,7 @@ where
         snapshot_id: Option<&SnapshotId>,
         node_id: String,
         label: String,
+        saved_at_version: Option<u32>,
     ) -> Result<ResolvedBlock, ResolveError> {
         let snap = match snapshot_id {
             Some(variant_id) => self
@@ -219,6 +220,11 @@ where
             })
         })?;
 
+        let stale = match saved_at_version {
+            Some(saved) => saved < snap.version(),
+            None => false, // unknown/legacy — not flagged
+        };
+
         Ok(ResolvedBlock {
             node_id,
             label,
@@ -227,6 +233,7 @@ where
             source_variant_id: Some(snap.id().clone()),
             block: snap.block(),
             state_data: snap.state_data().map(|d| d.to_vec()),
+            stale,
         })
     }
 
@@ -245,6 +252,7 @@ where
                     snapshot_id,
                     node_id.clone(),
                     label.clone(),
+                    None, // standalone refs don't track saved version
                 )
                 .await;
             if let Ok(resolved) = resolved {
@@ -269,6 +277,7 @@ where
     ) -> Result<ResolvedModule, ResolveError> {
         let mut blocks = Vec::new();
         for block in snapshot.module().blocks() {
+            let saved_ver = block.source().saved_at_version();
             let mut resolved = match block.source() {
                 ModuleBlockSource::PresetDefault { preset_id, .. } => {
                     self.resolve_block_ref(
@@ -277,6 +286,7 @@ where
                         None,
                         block.id().to_string(),
                         block.label().to_string(),
+                        saved_ver,
                     )
                     .await?
                 }
@@ -291,6 +301,7 @@ where
                         Some(snapshot_id),
                         block.id().to_string(),
                         block.label().to_string(),
+                        saved_ver,
                     )
                     .await?
                 }
@@ -302,6 +313,7 @@ where
                     source_variant_id: None,
                     block: inline.clone(),
                     state_data: None,
+                    stale: false,
                 },
             };
             apply_block_parameter_overrides(&mut resolved.block, block.overrides());
@@ -592,11 +604,29 @@ where
         target: &PatchTarget,
         overrides: Vec<signal_proto::overrides::Override>,
     ) -> Result<(RigId, RigSceneId, Vec<signal_proto::overrides::Override>), ResolveError> {
+        let mut visited = HashSet::new();
+        self.resolve_patch_target_inner(target, overrides, &mut visited)
+            .await
+    }
+
+    /// Inner implementation with cycle detection via visited set.
+    async fn resolve_patch_target_inner(
+        &self,
+        target: &PatchTarget,
+        overrides: Vec<signal_proto::overrides::Override>,
+        visited: &mut HashSet<String>,
+    ) -> Result<(RigId, RigSceneId, Vec<signal_proto::overrides::Override>), ResolveError> {
         match target {
             PatchTarget::RigScene { rig_id, scene_id } => {
                 Ok((rig_id.clone(), scene_id.clone(), overrides))
             }
             PatchTarget::Patch { patch_id } => {
+                let key = patch_id.to_string();
+                if !visited.insert(key) {
+                    return Err(ResolveError::CycleDetected(format!(
+                        "patch reference cycle at {patch_id}"
+                    )));
+                }
                 // Find the referenced patch across all profiles
                 let profiles =
                     self.profile_repo.list_profiles().await.map_err(|e| {
@@ -614,8 +644,7 @@ where
                 // Merge overrides: referenced patch's overrides first, then ours on top
                 let mut merged = referenced.overrides.clone();
                 merged.extend(overrides);
-                // Recurse (one level — nested Patch→Patch→Patch is unlikely but safe)
-                Box::pin(self.resolve_patch_target(&referenced.target, merged)).await
+                Box::pin(self.resolve_patch_target_inner(&referenced.target, merged, visited)).await
             }
             _ => Err(ResolveError::InvalidReference(format!(
                 "sub-rig patch targets ({:?}) not yet resolvable to rig scene",
@@ -699,7 +728,10 @@ where
                             .map_err(|e| map_policy_err("section source patch", e))?;
                         let mut ovs = patch.overrides.clone();
                         ovs.extend(section.overrides);
-                        self.resolve_patch_target(&patch.target, ovs).await
+                        // Use cycle-safe inner resolver with fresh visited set
+                        let mut visited = HashSet::new();
+                        self.resolve_patch_target_inner(&patch.target, ovs, &mut visited)
+                            .await
                     }
                 }
             }
@@ -751,6 +783,7 @@ where
             source_variant_id: Some(snapshot_id.clone()),
             state_data: snapshot.state_data().map(|d| d.to_vec()),
             block: snapshot.block(),
+            stale: false,
         };
 
         let graph = ResolvedGraph {

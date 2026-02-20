@@ -141,11 +141,30 @@ macro_rules! typed_uuid_id {
             }
 
             /// Parse back to a UUID value.
+            ///
+            /// # Panics
+            /// Panics if the inner string is not a valid UUID. Prefer
+            /// [`try_to_uuid`](Self::try_to_uuid) at untrusted boundaries.
             pub fn to_uuid(&self) -> uuid::Uuid {
                 self.0.parse().expect(concat!(
                     "corrupted UUID in ",
                     stringify!($name)
                 ))
+            }
+
+            /// Try to parse back to a UUID value, returning an error on invalid data.
+            pub fn try_to_uuid(&self) -> Result<uuid::Uuid, uuid::Error> {
+                self.0.parse()
+            }
+
+            /// Parse a string into this ID type, returning an error if it is not a valid UUID.
+            ///
+            /// Use this at untrusted boundaries (deserialization, user input) instead of
+            /// `From<String>` which panics on invalid input.
+            pub fn try_parse(value: impl Into<String>) -> Result<Self, uuid::Error> {
+                let s = value.into();
+                let _: uuid::Uuid = s.parse()?;
+                Ok(Self(s))
             }
 
             /// Consume and return the inner string.
@@ -954,6 +973,11 @@ impl ModuleSnapshot {
         self
     }
 
+    /// Replace the module state. Used when saving module chain changes.
+    pub fn set_module(&mut self, module: Module) {
+        self.module = module;
+    }
+
     /// Bump the version counter. Called by the storage layer when parameter values change.
     pub fn increment_version(&mut self) {
         self.version += 1;
@@ -1147,115 +1171,131 @@ impl traits::HasMetadata for ModulePreset {
 
 #[roam::service]
 pub trait BlockService {
-    async fn get_block(&self, block_type: BlockType) -> Block;
-    async fn set_block(&self, block_type: BlockType, block: Block) -> Block;
-    async fn list_block_presets(&self, block_type: BlockType) -> Vec<Preset>;
+    async fn get_block(&self, block_type: BlockType) -> Result<Block, String>;
+    async fn set_block(&self, block_type: BlockType, block: Block) -> Result<Block, String>;
+    async fn list_block_presets(&self, block_type: BlockType) -> Result<Vec<Preset>, String>;
     async fn load_block_preset(
         &self,
         block_type: BlockType,
         preset_id: PresetId,
-    ) -> Option<Snapshot>;
+    ) -> Result<Option<Snapshot>, String>;
     async fn load_block_preset_snapshot(
         &self,
         block_type: BlockType,
         preset_id: PresetId,
         snapshot_id: SnapshotId,
-    ) -> Option<Snapshot>;
-    async fn save_block_preset(&self, preset: Preset) -> ();
-    async fn delete_block_preset(&self, block_type: BlockType, preset_id: PresetId) -> ();
-    async fn list_module_presets(&self) -> Vec<ModulePreset>;
-    async fn load_module_preset(&self, preset_id: ModulePresetId) -> Option<ModuleSnapshot>;
+    ) -> Result<Option<Snapshot>, String>;
+    async fn save_block_preset(&self, preset: Preset) -> Result<(), String>;
+    async fn delete_block_preset(
+        &self,
+        block_type: BlockType,
+        preset_id: PresetId,
+    ) -> Result<(), String>;
+    async fn list_module_presets(&self) -> Result<Vec<ModulePreset>, String>;
+    async fn load_module_preset(
+        &self,
+        preset_id: ModulePresetId,
+    ) -> Result<Option<ModuleSnapshot>, String>;
     async fn load_module_preset_snapshot(
         &self,
         preset_id: ModulePresetId,
         snapshot_id: ModuleSnapshotId,
-    ) -> Option<ModuleSnapshot>;
-    async fn save_module_collection(&self, preset: ModulePreset) -> ();
-    async fn delete_module_collection(&self, id: ModulePresetId) -> ();
+    ) -> Result<Option<ModuleSnapshot>, String>;
+    async fn save_module_collection(&self, preset: ModulePreset) -> Result<(), String>;
+    async fn delete_module_collection(&self, id: ModulePresetId) -> Result<(), String>;
 }
 
 #[roam::service]
 pub trait LayerService {
-    async fn list_layers(&self) -> Vec<layer::Layer>;
-    async fn load_layer(&self, id: layer::LayerId) -> Option<layer::Layer>;
-    async fn save_layer(&self, layer: layer::Layer) -> ();
-    async fn delete_layer(&self, id: layer::LayerId) -> ();
+    async fn list_layers(&self) -> Result<Vec<layer::Layer>, String>;
+    async fn load_layer(&self, id: layer::LayerId) -> Result<Option<layer::Layer>, String>;
+    async fn save_layer(&self, layer: layer::Layer) -> Result<(), String>;
+    async fn delete_layer(&self, id: layer::LayerId) -> Result<(), String>;
     async fn load_layer_variant(
         &self,
         layer_id: layer::LayerId,
         variant_id: layer::LayerSnapshotId,
-    ) -> Option<layer::LayerSnapshot>;
+    ) -> Result<Option<layer::LayerSnapshot>, String>;
 }
 
 #[roam::service]
 pub trait EngineService {
-    async fn list_engines(&self) -> Vec<engine::Engine>;
-    async fn load_engine(&self, id: engine::EngineId) -> Option<engine::Engine>;
-    async fn save_engine(&self, engine: engine::Engine) -> ();
-    async fn delete_engine(&self, id: engine::EngineId) -> ();
+    async fn list_engines(&self) -> Result<Vec<engine::Engine>, String>;
+    async fn load_engine(&self, id: engine::EngineId) -> Result<Option<engine::Engine>, String>;
+    async fn save_engine(&self, engine: engine::Engine) -> Result<(), String>;
+    async fn delete_engine(&self, id: engine::EngineId) -> Result<(), String>;
     async fn load_engine_variant(
         &self,
         engine_id: engine::EngineId,
         variant_id: engine::EngineSceneId,
-    ) -> Option<engine::EngineScene>;
+    ) -> Result<Option<engine::EngineScene>, String>;
 }
 
 #[roam::service]
 pub trait RigService {
-    async fn list_rigs(&self) -> Vec<rig::Rig>;
-    async fn load_rig(&self, id: rig::RigId) -> Option<rig::Rig>;
-    async fn save_rig(&self, rig: rig::Rig) -> ();
-    async fn delete_rig(&self, id: rig::RigId) -> ();
+    async fn list_rigs(&self) -> Result<Vec<rig::Rig>, String>;
+    async fn load_rig(&self, id: rig::RigId) -> Result<Option<rig::Rig>, String>;
+    async fn save_rig(&self, rig: rig::Rig) -> Result<(), String>;
+    async fn delete_rig(&self, id: rig::RigId) -> Result<(), String>;
     async fn load_rig_variant(
         &self,
         rig_id: rig::RigId,
         variant_id: rig::RigSceneId,
-    ) -> Option<rig::RigScene>;
+    ) -> Result<Option<rig::RigScene>, String>;
 }
 
 #[roam::service]
 pub trait ProfileService {
-    async fn list_profiles(&self) -> Vec<profile::Profile>;
-    async fn load_profile(&self, id: profile::ProfileId) -> Option<profile::Profile>;
-    async fn save_profile(&self, profile: profile::Profile) -> ();
-    async fn delete_profile(&self, id: profile::ProfileId) -> ();
+    async fn list_profiles(&self) -> Result<Vec<profile::Profile>, String>;
+    async fn load_profile(
+        &self,
+        id: profile::ProfileId,
+    ) -> Result<Option<profile::Profile>, String>;
+    async fn save_profile(&self, profile: profile::Profile) -> Result<(), String>;
+    async fn delete_profile(&self, id: profile::ProfileId) -> Result<(), String>;
     async fn load_profile_variant(
         &self,
         profile_id: profile::ProfileId,
         variant_id: profile::PatchId,
-    ) -> Option<profile::Patch>;
+    ) -> Result<Option<profile::Patch>, String>;
 }
 
 #[roam::service]
 pub trait SongService {
-    async fn list_songs(&self) -> Vec<song::Song>;
-    async fn load_song(&self, id: song::SongId) -> Option<song::Song>;
-    async fn save_song(&self, song: song::Song) -> ();
-    async fn delete_song(&self, id: song::SongId) -> ();
+    async fn list_songs(&self) -> Result<Vec<song::Song>, String>;
+    async fn load_song(&self, id: song::SongId) -> Result<Option<song::Song>, String>;
+    async fn save_song(&self, song: song::Song) -> Result<(), String>;
+    async fn delete_song(&self, id: song::SongId) -> Result<(), String>;
     async fn load_song_variant(
         &self,
         song_id: song::SongId,
         variant_id: song::SectionId,
-    ) -> Option<song::Section>;
+    ) -> Result<Option<song::Section>, String>;
 }
 
 #[roam::service]
 pub trait SetlistService {
-    async fn list_setlists(&self) -> Vec<setlist::Setlist>;
-    async fn load_setlist(&self, id: setlist::SetlistId) -> Option<setlist::Setlist>;
-    async fn save_setlist(&self, setlist: setlist::Setlist) -> ();
-    async fn delete_setlist(&self, id: setlist::SetlistId) -> ();
+    async fn list_setlists(&self) -> Result<Vec<setlist::Setlist>, String>;
+    async fn load_setlist(
+        &self,
+        id: setlist::SetlistId,
+    ) -> Result<Option<setlist::Setlist>, String>;
+    async fn save_setlist(&self, setlist: setlist::Setlist) -> Result<(), String>;
+    async fn delete_setlist(&self, id: setlist::SetlistId) -> Result<(), String>;
     async fn load_setlist_entry(
         &self,
         setlist_id: setlist::SetlistId,
         entry_id: setlist::SetlistEntryId,
-    ) -> Option<setlist::SetlistEntry>;
+    ) -> Result<Option<setlist::SetlistEntry>, String>;
 }
 
 #[roam::service]
 pub trait BrowserService {
-    async fn browser_index(&self) -> tagging::BrowserIndex;
-    async fn browse(&self, query: tagging::BrowserQuery) -> Vec<tagging::BrowserHit>;
+    async fn browser_index(&self) -> Result<tagging::BrowserIndex, String>;
+    async fn browse(
+        &self,
+        query: tagging::BrowserQuery,
+    ) -> Result<Vec<tagging::BrowserHit>, String>;
 }
 
 #[roam::service]
@@ -1268,25 +1308,31 @@ pub trait ResolveService {
 
 #[roam::service]
 pub trait SceneTemplateService {
-    async fn list_scene_templates(&self) -> Vec<scene_template::SceneTemplate>;
+    async fn list_scene_templates(&self) -> Result<Vec<scene_template::SceneTemplate>, String>;
     async fn load_scene_template(
         &self,
         id: scene_template::SceneTemplateId,
-    ) -> Option<scene_template::SceneTemplate>;
-    async fn save_scene_template(&self, template: scene_template::SceneTemplate) -> ();
-    async fn delete_scene_template(&self, id: scene_template::SceneTemplateId) -> ();
+    ) -> Result<Option<scene_template::SceneTemplate>, String>;
+    async fn save_scene_template(
+        &self,
+        template: scene_template::SceneTemplate,
+    ) -> Result<(), String>;
+    async fn delete_scene_template(
+        &self,
+        id: scene_template::SceneTemplateId,
+    ) -> Result<(), String>;
     async fn reorder_scene_templates(
         &self,
         ordered_ids: Vec<scene_template::SceneTemplateId>,
-    ) -> ();
+    ) -> Result<(), String>;
 }
 
 #[roam::service]
 pub trait RackService {
-    async fn list_racks(&self) -> Vec<rack::Rack>;
-    async fn load_rack(&self, id: rack::RackId) -> Option<rack::Rack>;
-    async fn save_rack(&self, rack: rack::Rack) -> ();
-    async fn delete_rack(&self, id: rack::RackId) -> ();
+    async fn list_racks(&self) -> Result<Vec<rack::Rack>, String>;
+    async fn load_rack(&self, id: rack::RackId) -> Result<Option<rack::Rack>, String>;
+    async fn save_rack(&self, rack: rack::Rack) -> Result<(), String>;
+    async fn delete_rack(&self, id: rack::RackId) -> Result<(), String>;
 }
 
 #[cfg(test)]
