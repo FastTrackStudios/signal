@@ -60,6 +60,10 @@ pub struct ResolvedBlock {
     /// Binary plugin state data for direct chunk loading (bypasses param name matching).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub state_data: Option<Vec<u8>>,
+    /// `true` when the block's `saved_at_version` is older than the current snapshot version.
+    /// Indicates the module chain references an outdated snapshot.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub stale: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Facet)]
@@ -94,7 +98,62 @@ pub struct ResolvedGraph {
     pub effective_overrides: Vec<Override>,
 }
 
+/// A block reference whose `saved_at_version` is behind the current snapshot version.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Facet)]
+pub struct StaleReference {
+    /// The block's `node_id` in the resolved graph.
+    pub block_node_id: String,
+    /// Human-readable block label.
+    pub block_label: String,
+    /// The preset that was referenced.
+    pub preset_id: PresetId,
+    /// The version the module chain was saved against.
+    pub saved_version: u32,
+    /// The current version of the snapshot.
+    pub current_version: u32,
+}
+
 impl ResolvedGraph {
+    /// Collect all stale block references in this graph.
+    ///
+    /// A block is stale when its `saved_at_version` is behind the current
+    /// snapshot version (indicated by the `stale` flag set during resolution).
+    pub fn stale_references(&self) -> Vec<StaleReference> {
+        let mut refs = Vec::new();
+        for engine in &self.engines {
+            for layer in &engine.layers {
+                for module in &layer.modules {
+                    for block in &module.blocks {
+                        if block.stale {
+                            refs.push(StaleReference {
+                                block_node_id: block.node_id.clone(),
+                                block_label: block.label.clone(),
+                                preset_id: block
+                                    .source_preset_id
+                                    .clone()
+                                    .unwrap_or_else(PresetId::new),
+                                saved_version: 0, // not available from resolved form
+                                current_version: 0,
+                            });
+                        }
+                    }
+                }
+                for block in &layer.standalone_blocks {
+                    if block.stale {
+                        refs.push(StaleReference {
+                            block_node_id: block.node_id.clone(),
+                            block_label: block.label.clone(),
+                            preset_id: block.source_preset_id.clone().unwrap_or_else(PresetId::new),
+                            saved_version: 0,
+                            current_version: 0,
+                        });
+                    }
+                }
+            }
+        }
+        refs
+    }
+
     /// Find a block parameter value by matching `block_id_fragment` against
     /// each block's `node_id` or `label` (case-insensitive), then returning
     /// the value of the parameter whose id matches `param_id`.

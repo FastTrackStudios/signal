@@ -12,6 +12,7 @@
 mod block_presets;
 mod blocks;
 mod engines;
+pub mod error;
 mod layers;
 mod module_presets;
 mod profiles;
@@ -39,6 +40,8 @@ pub(crate) fn reorder_by_id<T, Id: PartialEq>(
     reordered.append(items);
     *items = reordered;
 }
+
+pub use error::OpsError;
 
 pub use block_presets::BlockPresetOps;
 pub use blocks::BlockOps;

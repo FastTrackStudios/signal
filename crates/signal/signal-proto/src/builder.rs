@@ -316,7 +316,7 @@ impl RigBuilder {
                 bp_builder.block_type,
                 ModuleBlockSource::PresetDefault {
                     preset_id: preset_id.clone(),
-                    saved_at_version: None,
+                    saved_at_version: Some(1),
                 },
             ));
 

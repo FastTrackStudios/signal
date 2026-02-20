@@ -14,25 +14,35 @@ where
     St: SceneTemplateRepo,
     Ra: RackRepo,
 {
-    async fn list_profiles(&self, _cx: &Context) -> Vec<Profile> {
-        self.profile_repo.list_profiles().await.unwrap_or_default()
+    async fn list_profiles(&self, _cx: &Context) -> Result<Vec<Profile>, String> {
+        self.profile_repo
+            .list_profiles()
+            .await
+            .map_err(|e| e.to_string())
     }
 
-    async fn load_profile(&self, _cx: &Context, id: ProfileId) -> Option<Profile> {
-        self.profile_repo.load_profile(&id).await.ok().flatten()
+    async fn load_profile(&self, _cx: &Context, id: ProfileId) -> Result<Option<Profile>, String> {
+        self.profile_repo
+            .load_profile(&id)
+            .await
+            .map_err(|e| e.to_string())
     }
 
-    async fn save_profile(&self, _cx: &Context, profile: Profile) -> () {
+    async fn save_profile(&self, _cx: &Context, profile: Profile) -> Result<(), String> {
         for variant in &profile.patches {
-            if variant.validate_overrides().is_err() {
-                return;
-            }
+            variant.validate_overrides().map_err(|e| format!("{e:?}"))?;
         }
-        let _ = self.profile_repo.save_profile(&profile).await;
+        self.profile_repo
+            .save_profile(&profile)
+            .await
+            .map_err(|e| e.to_string())
     }
 
-    async fn delete_profile(&self, _cx: &Context, id: ProfileId) -> () {
-        let _ = self.profile_repo.delete_profile(&id).await;
+    async fn delete_profile(&self, _cx: &Context, id: ProfileId) -> Result<(), String> {
+        self.profile_repo
+            .delete_profile(&id)
+            .await
+            .map_err(|e| e.to_string())
     }
 
     async fn load_profile_variant(
@@ -40,11 +50,10 @@ where
         _cx: &Context,
         profile_id: ProfileId,
         variant_id: PatchId,
-    ) -> Option<Patch> {
+    ) -> Result<Option<Patch>, String> {
         self.profile_repo
             .load_variant(&profile_id, &variant_id)
             .await
-            .ok()
-            .flatten()
+            .map_err(|e| e.to_string())
     }
 }

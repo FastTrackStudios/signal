@@ -34,7 +34,7 @@ pub(super) async fn fetch_col2(
             let mut items: Vec<ColumnItem> = Vec::new();
 
             // Rig presets (tag: None)
-            let rigs = signal.rigs().list().await;
+            let rigs = signal.rigs().list().await.unwrap_or_default();
             items.extend(
                 rigs.into_iter()
                     .filter(|r| r.rig_type.map_or(false, |rt| rt == rig_type))
@@ -56,8 +56,8 @@ pub(super) async fn fetch_col2(
 
             // Layer presets (tag: Some(LAYER_PRESET_TAG))
             let et = rig_type_to_engine_type(rig_type);
-            let layers = signal.layers().list().await;
-            let all_module_presets = signal.module_presets().list().await;
+            let layers = signal.layers().list().await.unwrap_or_default();
+            let all_module_presets = signal.module_presets().list().await.unwrap_or_default();
             let block_preset_lookup = build_block_preset_lookup(signal).await;
             for layer in layers.into_iter().filter(|l| l.engine_type == et) {
                 let module_chains = resolve_layer_module_chains(
@@ -88,7 +88,7 @@ pub(super) async fn fetch_col2(
         }
         NavCategory::Engines => {
             let et = rig_type_to_engine_type(rig_type);
-            let engines = signal.engines().list().await;
+            let engines = signal.engines().list().await.unwrap_or_default();
             engines
                 .into_iter()
                 .filter(|e| e.engine_type == et)
@@ -110,8 +110,8 @@ pub(super) async fn fetch_col2(
         }
         NavCategory::Layers => {
             let et = rig_type_to_engine_type(rig_type);
-            let layers = signal.layers().list().await;
-            let all_module_presets = signal.module_presets().list().await;
+            let layers = signal.layers().list().await.unwrap_or_default();
+            let all_module_presets = signal.module_presets().list().await.unwrap_or_default();
             let block_preset_lookup = build_block_preset_lookup(signal).await;
             let mut items = Vec::new();
             for layer in layers.into_iter().filter(|l| l.engine_type == et) {
@@ -143,7 +143,7 @@ pub(super) async fn fetch_col2(
         NavCategory::Modules => {
             // Show module types as col2 items (like Blocks shows block types).
             // Count how many presets exist per module type for the badge.
-            let all_presets = signal.module_presets().list().await;
+            let all_presets = signal.module_presets().list().await.unwrap_or_default();
             signal::ALL_MODULE_TYPES
                 .iter()
                 .enumerate()
@@ -203,8 +203,9 @@ pub(super) async fn fetch_col3(
             let is_layer = col2_tag == Some(LAYER_PRESET_TAG);
             let items = if is_layer {
                 // Layer preset — show variants with module chains
-                if let Some(layer) = signal.layers().load(col2_id).await {
-                    let all_module_presets = signal.module_presets().list().await;
+                if let Some(layer) = signal.layers().load(col2_id).await.ok().flatten() {
+                    let all_module_presets =
+                        signal.module_presets().list().await.unwrap_or_default();
                     let block_preset_lookup = build_block_preset_lookup(signal).await;
                     let mut out = Vec::new();
                     for v in &layer.variants {
@@ -239,8 +240,9 @@ pub(super) async fn fetch_col3(
                 }
             } else {
                 // Rig preset — show scenes with engines
-                if let Some(rig) = signal.rigs().load(col2_id).await {
-                    let all_module_presets = signal.module_presets().list().await;
+                if let Some(rig) = signal.rigs().load(col2_id).await.ok().flatten() {
+                    let all_module_presets =
+                        signal.module_presets().list().await.unwrap_or_default();
                     let block_preset_lookup = build_block_preset_lookup(signal).await;
                     let mut out = Vec::new();
                     for (idx, v) in rig.variants.iter().enumerate() {
@@ -281,12 +283,14 @@ pub(super) async fn fetch_col3(
             (items, Vec::new())
         }
         NavCategory::Engines => {
-            let items = if let Some(engine) = signal.engines().load(col2_id).await {
-                let all_module_presets = signal.module_presets().list().await;
+            let items = if let Some(engine) = signal.engines().load(col2_id).await.ok().flatten() {
+                let all_module_presets = signal.module_presets().list().await.unwrap_or_default();
                 let block_preset_lookup = build_block_preset_lookup(signal).await;
                 let mut items = Vec::new();
                 for layer_id in &engine.layer_ids {
-                    if let Some(layer) = signal.layers().load(layer_id.as_str()).await {
+                    if let Some(layer) =
+                        signal.layers().load(layer_id.as_str()).await.ok().flatten()
+                    {
                         let module_chains = resolve_layer_module_chains(
                             signal,
                             &layer,
@@ -318,8 +322,8 @@ pub(super) async fn fetch_col3(
             (items, Vec::new())
         }
         NavCategory::Layers => {
-            let items = if let Some(layer) = signal.layers().load(col2_id).await {
-                let all_module_presets = signal.module_presets().list().await;
+            let items = if let Some(layer) = signal.layers().load(col2_id).await.ok().flatten() {
+                let all_module_presets = signal.module_presets().list().await.unwrap_or_default();
                 let block_preset_lookup = build_block_preset_lookup(signal).await;
                 let mut out = Vec::new();
                 for v in &layer.variants {
@@ -357,7 +361,7 @@ pub(super) async fn fetch_col3(
             // col2 is a module type index — show presets for that type.
             if let Some(idx) = col2_tag {
                 if let Some(&mt) = signal::ALL_MODULE_TYPES.get(idx) {
-                    let all_presets = signal.module_presets().list().await;
+                    let all_presets = signal.module_presets().list().await.unwrap_or_default();
                     let items: Vec<ColumnItem> = all_presets
                         .iter()
                         .filter(|p| p.module_type() == mt)
@@ -387,7 +391,7 @@ pub(super) async fn fetch_col3(
         NavCategory::Blocks => {
             if let Some(idx) = col2_tag {
                 if let Some(&bt) = ALL_BLOCK_TYPES.get(idx) {
-                    let presets = signal.block_presets().list(bt).await;
+                    let presets = signal.block_presets().list(bt).await.unwrap_or_default();
                     let items = presets
                         .iter()
                         .map(|p| {
@@ -450,7 +454,13 @@ async fn resolve_variant_module_chains(
     // 1) Resolve layer_refs (recursive — nested layers)
     for lr in &variant.layer_refs {
         let layer_id_str = lr.collection_id.to_string();
-        if let Some(nested_layer) = signal.layers().load(layer_id_str.as_str()).await {
+        if let Some(nested_layer) = signal
+            .layers()
+            .load(layer_id_str.as_str())
+            .await
+            .ok()
+            .flatten()
+        {
             let nested = Box::pin(resolve_layer_module_chains(
                 signal,
                 &nested_layer,
@@ -480,6 +490,8 @@ async fn resolve_variant_module_chains(
             .module_presets()
             .load_default(collection_id_str)
             .await
+            .ok()
+            .flatten()
         {
             chain = snapshot.module().chain().clone();
         } else {
@@ -560,7 +572,7 @@ async fn build_block_preset_lookup(
 ) -> std::collections::HashMap<String, (BlockType, String)> {
     let mut lookup = std::collections::HashMap::new();
     for &bt in ALL_BLOCK_TYPES {
-        for preset in signal.block_presets().list(bt).await {
+        for preset in signal.block_presets().list(bt).await.unwrap_or_default() {
             lookup.insert(preset.id().to_string(), (bt, preset.name().to_string()));
         }
     }
@@ -579,7 +591,7 @@ async fn resolve_rig_scene_engines(
     let mut engines = Vec::new();
     for es in &scene.engine_selections {
         let engine_id_str = es.engine_id.as_str();
-        let engine = match signal.engines().load(engine_id_str).await {
+        let engine = match signal.engines().load(engine_id_str).await.ok().flatten() {
             Some(e) => e,
             None => continue,
         };
@@ -594,7 +606,7 @@ async fn resolve_rig_scene_engines(
         let mut layers = Vec::new();
         for ls in &engine_variant.layer_selections {
             let layer_id_str = ls.layer_id.as_str();
-            let layer = match signal.layers().load(layer_id_str).await {
+            let layer = match signal.layers().load(layer_id_str).await.ok().flatten() {
                 Some(l) => l,
                 None => continue,
             };
@@ -628,10 +640,10 @@ pub(super) async fn resolve_scene_detail(
     rig_id: &str,
     scene_id: &str,
 ) -> Option<(Vec<EngineFlowData>, ParamLookup)> {
-    let rig = signal.rigs().load(rig_id).await?;
+    let rig = signal.rigs().load(rig_id).await.ok().flatten()?;
     let scene = rig.variants.iter().find(|v| v.id.to_string() == scene_id)?;
 
-    let all_module_presets = signal.module_presets().list().await;
+    let all_module_presets = signal.module_presets().list().await.unwrap_or_default();
     let block_preset_lookup = build_block_preset_lookup(signal).await;
 
     let engines =
@@ -667,8 +679,8 @@ pub(super) async fn resolve_layer_detail(
     layer_id: &str,
     variant_id: Option<&str>,
 ) -> Option<(Vec<EngineFlowData>, ParamLookup)> {
-    let layer = signal.layers().load(layer_id).await?;
-    let all_module_presets = signal.module_presets().list().await;
+    let layer = signal.layers().load(layer_id).await.ok().flatten()?;
+    let all_module_presets = signal.module_presets().list().await.unwrap_or_default();
     let block_preset_lookup = build_block_preset_lookup(signal).await;
 
     // Pick the requested variant, falling back to default
@@ -766,6 +778,8 @@ async fn resolve_node_params(node: &signal::SignalNode, lookup: &mut ParamLookup
                             .block_presets()
                             .load_variant(mb.block_type(), preset_id.clone(), snapshot_id.clone())
                             .await
+                            .ok()
+                            .flatten()
                         {
                             let params: Vec<(String, f32)> = block
                                 .parameters()
@@ -783,6 +797,8 @@ async fn resolve_node_params(node: &signal::SignalNode, lookup: &mut ParamLookup
                             .block_presets()
                             .load_default(mb.block_type(), preset_id.clone())
                             .await
+                            .ok()
+                            .flatten()
                         {
                             let params: Vec<(String, f32)> = block
                                 .parameters()
@@ -846,7 +862,7 @@ mod tests {
             .expect("bootstrap failed");
 
         // Step 1: list rigs filtered by Guitar (same as manage tab effect)
-        let rigs = signal.rigs().list().await;
+        let rigs = signal.rigs().list().await.unwrap();
         let guitar_rigs: Vec<_> = rigs
             .into_iter()
             .filter(|r| r.rig_type.map_or(false, |t| t == RigType::Guitar))

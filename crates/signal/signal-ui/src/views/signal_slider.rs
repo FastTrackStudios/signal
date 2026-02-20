@@ -28,9 +28,15 @@ pub fn SignalSlider() -> Element {
             let signal = signal.clone();
             let selected = block_type();
             spawn(async move {
-                block.set(signal.blocks().get(selected).await);
-                collections.set(signal.block_presets().list(selected).await);
-                module_collections.set(signal.module_presets().list().await);
+                block.set(signal.blocks().get(selected).await.unwrap_or_default());
+                collections.set(
+                    signal
+                        .block_presets()
+                        .list(selected)
+                        .await
+                        .unwrap_or_default(),
+                );
+                module_collections.set(signal.module_presets().list().await.unwrap_or_default());
                 active_variant_id.set(None);
             });
         });
@@ -42,8 +48,9 @@ pub fn SignalSlider() -> Element {
         use_effect(move || {
             let signal = signal.clone();
             spawn(async move {
-                let index = signal.browser_index().await;
-                browser_entry_count.set(index.entries().len());
+                if let Ok(index) = signal.browser_index().await {
+                    browser_entry_count.set(index.entries().len());
+                }
                 browser_hits.set(
                     signal
                         .browse(BrowserQuery {
@@ -51,7 +58,8 @@ pub fn SignalSlider() -> Element {
                             include: vec!["tone:clean".to_string()],
                             ..BrowserQuery::default()
                         })
-                        .await,
+                        .await
+                        .unwrap_or_default(),
                 );
             });
         });
@@ -177,7 +185,8 @@ pub fn SignalSlider() -> Element {
                                             include,
                                             ..BrowserQuery::default()
                                         })
-                                        .await;
+                                        .await
+                                        .unwrap_or_default();
                                     browser_hits.set(hits);
                                 });
                             }
@@ -234,7 +243,7 @@ fn CollectionCard(
                             let collection_id = collection_id.clone();
                             let default_id = default_id.clone();
                             spawn(async move {
-                                if let Some(next_block) = signal.block_presets().load_variant(block_type, collection_id.as_str(), default_id.as_str()).await {
+                                if let Some(next_block) = signal.block_presets().load_variant(block_type, collection_id.as_str(), default_id.as_str()).await.ok().flatten() {
                                     block.set(next_block);
                                     active_variant_id.set(Some(default_id));
                                 }
@@ -267,7 +276,7 @@ fn CollectionCard(
                                         let collection_id = collection_id.clone();
                                         let variant_id = variant_id.clone();
                                         spawn(async move {
-                                            if let Some(next_block) = signal.block_presets().load_variant(block_type, collection_id.as_str(), variant_id.as_str()).await {
+                                            if let Some(next_block) = signal.block_presets().load_variant(block_type, collection_id.as_str(), variant_id.as_str()).await.ok().flatten() {
                                                 block.set(next_block);
                                                 active_variant_id.set(Some(variant_id));
                                             }
@@ -317,7 +326,7 @@ fn ModuleCollectionCard(collection: ModulePreset) -> Element {
                             let collection_id = collection_id.clone();
                             let default_variant_id = default_variant_id.clone();
                             spawn(async move {
-                                let _ = signal.module_presets().load_variant(collection_id.as_str(), default_variant_id.as_str()).await;
+                                let _ = signal.module_presets().load_variant(collection_id.as_str(), default_variant_id.as_str()).await.ok();
                                 loaded_variant.set(Some(default_variant_id));
                             });
                         }
@@ -348,7 +357,7 @@ fn ModuleCollectionCard(collection: ModulePreset) -> Element {
                                         let collection_id = collection_id.clone();
                                         let variant_id = variant_id.clone();
                                         spawn(async move {
-                                            let _ = signal.module_presets().load_variant(collection_id.as_str(), variant_id.as_str()).await;
+                                            let _ = signal.module_presets().load_variant(collection_id.as_str(), variant_id.as_str()).await.ok();
                                             loaded_variant.set(Some(variant_id));
                                         });
                                     }

@@ -93,7 +93,7 @@ fn RigGridDockPanel() -> Element {
         use_effect(move || {
             let signal = signal.clone();
             spawn(async move {
-                let rigs = signal.rigs().list().await;
+                let rigs = signal.rigs().list().await.unwrap_or_default();
                 if let Some(rig) = rigs.first() {
                     if let Some(scene) = rig.variants.first() {
                         let rig_id = rig.id.to_string();
@@ -173,7 +173,7 @@ fn SongPartsDockPanel() -> Element {
         use_effect(move || {
             let signal = signal.clone();
             spawn(async move {
-                let songs = signal.songs().list().await;
+                let songs = signal.songs().list().await.unwrap_or_default();
                 if let Some(song) = songs.first() {
                     song_name.set(song.name.clone());
                     let entries: Vec<SectionEntry> = song
@@ -230,7 +230,7 @@ fn SongSelectorDockPanel() -> Element {
         use_effect(move || {
             let signal = signal.clone();
             spawn(async move {
-                let song_list = signal.songs().list().await;
+                let song_list = signal.songs().list().await.unwrap_or_default();
                 let entries: Vec<SongEntry> = song_list
                     .iter()
                     .map(|s| SongEntry {
@@ -306,7 +306,7 @@ fn SceneGridDockPanel() -> Element {
         use_effect(move || {
             let signal = signal.clone();
             spawn(async move {
-                let rigs = signal.rigs().list().await;
+                let rigs = signal.rigs().list().await.unwrap_or_default();
                 if let Some(rig) = rigs.first() {
                     rig_id.set(Some(rig.id.to_string()));
                     if let Some(scene) = rig.variants.first() {
@@ -360,7 +360,7 @@ fn RigGridEditorDockPanel() -> Element {
         use_effect(move || {
             let signal = signal.clone();
             spawn(async move {
-                let rigs = signal.rigs().list().await;
+                let rigs = signal.rigs().list().await.unwrap_or_default();
                 if let Some(rig) = rigs.first() {
                     if let Some(scene) = rig.variants.first() {
                         let rig_id = rig.id.to_string();

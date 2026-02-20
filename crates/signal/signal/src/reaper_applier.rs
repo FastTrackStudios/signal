@@ -62,7 +62,11 @@ impl ReaperPatchApplier {
     /// Creates (or finds) a "Guitar Rig" folder track with an "Input: Guitar Rig"
     /// child track. The input track has its parent send disabled so audio flows
     /// only through explicit sends to patch child tracks.
-    pub async fn set_target(&self, project: Project, fx_id: impl Into<String>) {
+    pub async fn set_target(
+        &self,
+        project: Project,
+        fx_id: impl Into<String>,
+    ) -> Result<(), PatchApplyError> {
         let fx_id = fx_id.into();
         let tracks = project.tracks();
 
@@ -73,8 +77,10 @@ impl ReaperPatchApplier {
                 let t = tracks
                     .add("Guitar Rig", None)
                     .await
-                    .expect("create folder track");
-                t.set_folder_depth(1).await.expect("set folder start");
+                    .map_err(|e| PatchApplyError::DawError(format!("create folder track: {e}")))?;
+                t.set_folder_depth(1)
+                    .await
+                    .map_err(|e| PatchApplyError::DawError(format!("set folder start: {e}")))?;
                 t
             }
         };
@@ -87,23 +93,25 @@ impl ReaperPatchApplier {
                 folder_track
                     .set_folder_depth(1)
                     .await
-                    .expect("set folder depth");
+                    .map_err(|e| PatchApplyError::DawError(format!("set folder depth: {e}")))?;
 
                 // Insert child after the folder track
-                let folder_info = folder_track.info().await.expect("folder info");
+                let folder_info = folder_track
+                    .info()
+                    .await
+                    .map_err(|e| PatchApplyError::DawError(format!("folder info: {e}")))?;
                 let input = tracks
                     .add("Input: Guitar Rig", Some(folder_info.index + 1))
                     .await
-                    .expect("create input track");
+                    .map_err(|e| PatchApplyError::DawError(format!("create input track: {e}")))?;
 
                 // REAPER automatically sets the child's depth to close the folder
                 // No manual depth management needed!
 
                 // Disable parent send — audio goes through explicit sends, not folder bus
-                input
-                    .set_parent_send(false)
-                    .await
-                    .expect("disable parent send on input");
+                input.set_parent_send(false).await.map_err(|e| {
+                    PatchApplyError::DawError(format!("disable parent send on input: {e}"))
+                })?;
                 input
             }
         };
@@ -116,6 +124,7 @@ impl ReaperPatchApplier {
             fx_id,
             project,
         });
+        Ok(())
     }
 
     /// Clear the target (disconnects from DAW).

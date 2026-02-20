@@ -13,29 +13,44 @@ where
     St: SceneTemplateRepo,
     Ra: RackRepo,
 {
-    async fn list_racks(&self, _cx: &Context) -> Vec<Rack> {
+    async fn list_racks(&self, _cx: &Context) -> Result<Vec<Rack>, String> {
         {
             let cache = self.cache.read().await;
             if let Some(cached) = cache.racks.as_ref() {
-                return cached.clone();
+                return Ok(cached.clone());
             }
         }
-        let result = self.rack_repo.list_racks().await.unwrap_or_default();
+        let result = self
+            .rack_repo
+            .list_racks()
+            .await
+            .map_err(|e| e.to_string())?;
         self.cache.write().await.racks = Some(result.clone());
-        result
+        Ok(result)
     }
 
-    async fn load_rack(&self, _cx: &Context, id: RackId) -> Option<Rack> {
-        self.rack_repo.load_rack(&id).await.ok().flatten()
+    async fn load_rack(&self, _cx: &Context, id: RackId) -> Result<Option<Rack>, String> {
+        self.rack_repo
+            .load_rack(&id)
+            .await
+            .map_err(|e| e.to_string())
     }
 
-    async fn save_rack(&self, _cx: &Context, rack: Rack) {
-        let _ = self.rack_repo.save_rack(&rack).await;
+    async fn save_rack(&self, _cx: &Context, rack: Rack) -> Result<(), String> {
+        self.rack_repo
+            .save_rack(&rack)
+            .await
+            .map_err(|e| e.to_string())?;
         self.cache.write().await.racks = None;
+        Ok(())
     }
 
-    async fn delete_rack(&self, _cx: &Context, id: RackId) {
-        let _ = self.rack_repo.delete_rack(&id).await;
+    async fn delete_rack(&self, _cx: &Context, id: RackId) -> Result<(), String> {
+        self.rack_repo
+            .delete_rack(&id)
+            .await
+            .map_err(|e| e.to_string())?;
         self.cache.write().await.racks = None;
+        Ok(())
     }
 }

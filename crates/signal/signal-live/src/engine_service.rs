@@ -14,46 +14,65 @@ where
     St: SceneTemplateRepo,
     Ra: RackRepo,
 {
-    async fn list_engines(&self, _cx: &Context) -> Vec<Engine> {
+    async fn list_engines(&self, _cx: &Context) -> Result<Vec<Engine>, String> {
         {
             let cache = self.cache.read().await;
             if let Some(cached) = cache.engines.as_ref() {
-                return cached.clone();
+                return Ok(cached.clone());
             }
         }
-        let result = self.engine_repo.list_engines().await.unwrap_or_default();
+        let result = self
+            .engine_repo
+            .list_engines()
+            .await
+            .map_err(|e| e.to_string())?;
         {
             let mut cache = self.cache.write().await;
             cache.engines = Some(result.clone());
         }
-        result
+        Ok(result)
     }
 
-    async fn load_engine(&self, _cx: &Context, id: EngineId) -> Option<Engine> {
-        self.engine_repo.load_engine(&id).await.ok().flatten()
+    async fn load_engine(&self, _cx: &Context, id: EngineId) -> Result<Option<Engine>, String> {
+        self.engine_repo
+            .load_engine(&id)
+            .await
+            .map_err(|e| e.to_string())
     }
 
-    async fn save_engine(&self, _cx: &Context, engine: Engine) -> () {
+    async fn save_engine(&self, _cx: &Context, engine: Engine) -> Result<(), String> {
         for variant in &engine.variants {
-            if variant.validate_overrides().is_err() {
-                return;
-            }
+            variant.validate_overrides().map_err(|e| format!("{e:?}"))?;
         }
         for layer_id in &engine.layer_ids {
-            let Some(layer) = self.layer_repo.load_layer(layer_id).await.ok().flatten() else {
-                return;
-            };
+            let layer = self
+                .layer_repo
+                .load_layer(layer_id)
+                .await
+                .map_err(|e| e.to_string())?
+                .ok_or_else(|| format!("layer not found: {layer_id}"))?;
             if !engine.is_layer_type_compatible(layer.engine_type) {
-                return;
+                return Err(format!(
+                    "layer {} engine type {:?} incompatible with engine {:?}",
+                    layer_id, layer.engine_type, engine.engine_type
+                ));
             }
         }
-        let _ = self.engine_repo.save_engine(&engine).await;
+        self.engine_repo
+            .save_engine(&engine)
+            .await
+            .map_err(|e| e.to_string())?;
         self.cache.write().await.engines = None;
+        Ok(())
     }
 
-    async fn delete_engine(&self, _cx: &Context, id: EngineId) -> () {
-        let _ = self.engine_repo.delete_engine(&id).await;
+    async fn delete_engine(&self, _cx: &Context, id: EngineId) -> Result<(), String> {
+        self.engine_repo
+            .delete_engine(&id)
+            .await
+            .map_err(|e| e.to_string())?;
         self.cache.write().await.engines = None;
+        Ok(())
     }
 
     async fn load_engine_variant(
@@ -61,11 +80,10 @@ where
         _cx: &Context,
         engine_id: EngineId,
         variant_id: EngineSceneId,
-    ) -> Option<EngineScene> {
+    ) -> Result<Option<EngineScene>, String> {
         self.engine_repo
             .load_variant(&engine_id, &variant_id)
             .await
-            .ok()
-            .flatten()
+            .map_err(|e| e.to_string())
     }
 }

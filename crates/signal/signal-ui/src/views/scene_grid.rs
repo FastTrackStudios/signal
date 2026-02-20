@@ -35,7 +35,7 @@ pub fn RigSceneGrid(
             let signal = signal.clone();
             let rig_id = rig_id.clone();
             spawn(async move {
-                rig.set(signal.rigs().load(rig_id.as_str()).await);
+                rig.set(signal.rigs().load(rig_id.as_str()).await.ok().flatten());
             });
         });
     }

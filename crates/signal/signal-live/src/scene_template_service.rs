@@ -14,40 +14,54 @@ where
     St: SceneTemplateRepo,
     Ra: RackRepo,
 {
-    async fn list_scene_templates(&self, _cx: &Context) -> Vec<SceneTemplate> {
+    async fn list_scene_templates(&self, _cx: &Context) -> Result<Vec<SceneTemplate>, String> {
         self.scene_template_repo
             .list_scene_templates()
             .await
-            .unwrap_or_default()
+            .map_err(|e| e.to_string())
     }
 
     async fn load_scene_template(
         &self,
         _cx: &Context,
         id: SceneTemplateId,
-    ) -> Option<SceneTemplate> {
+    ) -> Result<Option<SceneTemplate>, String> {
         self.scene_template_repo
             .load_scene_template(&id)
             .await
-            .ok()
-            .flatten()
+            .map_err(|e| e.to_string())
     }
 
-    async fn save_scene_template(&self, _cx: &Context, template: SceneTemplate) {
-        let _ = self
-            .scene_template_repo
+    async fn save_scene_template(
+        &self,
+        _cx: &Context,
+        template: SceneTemplate,
+    ) -> Result<(), String> {
+        self.scene_template_repo
             .save_scene_template(&template)
-            .await;
+            .await
+            .map_err(|e| e.to_string())
     }
 
-    async fn delete_scene_template(&self, _cx: &Context, id: SceneTemplateId) {
-        let _ = self.scene_template_repo.delete_scene_template(&id).await;
+    async fn delete_scene_template(
+        &self,
+        _cx: &Context,
+        id: SceneTemplateId,
+    ) -> Result<(), String> {
+        self.scene_template_repo
+            .delete_scene_template(&id)
+            .await
+            .map_err(|e| e.to_string())
     }
 
-    async fn reorder_scene_templates(&self, _cx: &Context, ordered_ids: Vec<SceneTemplateId>) {
-        let _ = self
-            .scene_template_repo
+    async fn reorder_scene_templates(
+        &self,
+        _cx: &Context,
+        ordered_ids: Vec<SceneTemplateId>,
+    ) -> Result<(), String> {
+        self.scene_template_repo
             .reorder_scene_templates(&ordered_ids)
-            .await;
+            .await
+            .map_err(|e| e.to_string())
     }
 }
