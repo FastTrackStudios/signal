@@ -1,0 +1,169 @@
+0	Input Gain	0.500000
+1	Output Gain	0.500000
+2	Gate Active	1.000000
+3	Gate Threshold	0.166667
+4	Transpose	0.500000
+5	Doubler Active	0.000000
+6	Doubler Spread	0.176471
+7	Active Pre FX Section	1.000000
+8	Boost Gain	0.500000
+9	Boost Level	0.500000
+10	Boost Bass	0.500000
+11	Boost Treble	0.500000
+12	Boost Active	0.000000
+13	Compressor Compression	0.500000
+14	Compressor Level	0.500000
+15	Compressor Attack	1.000000
+16	Compressor Active	0.000000
+17	Overdrive Drive	0.500000
+18	Overdrive Level	0.500000
+19	Overdrive Tone	0.500000
+20	Overdrive Active	0.000000
+21	Active Amp Section	1.000000
+22	Amp Type	1.000000
+23	Roses Amp Gain	0.500000
+24	Roses Amp Bass	0.500000
+25	Roses Amp Middle	0.500000
+26	Roses Amp Treble	0.500000
+27	Roses Amp Presence	0.500000
+28	Roses Amp Blend	0.500000
+29	Roses Amp Output	0.499999
+30	Cherubs Amp Gain	0.500000
+31	Cherubs Amp Channel	0.000000
+32	Cherubs Amp Bass	0.500000
+33	Cherubs Amp Middle	0.500000
+34	Cherubs Amp Treble	0.500000
+35	Cherubs Amp Presence	0.500000
+36	Cherubs Amp Output	0.499999
+37	Pink Amp Gain	0.500000
+38	Pink Amp Bass	0.500000
+39	Pink Amp Middle	0.500000
+40	Pink Amp Treble	0.500000
+41	Pink Amp Presence	0.500000
+42	Pink Amp Master	0.500000
+43	Pink Amp Output	0.499999
+44	Active Cab Section	1.000000
+45	Cab L Active	1.000000
+46	Cherubs Amp Cab Mic L Type	0.833333
+47	Pink Amp Cab Mic L Type	0.833333
+48	Cab L Position	0.300000
+49	Cab L Distance	0.000000
+50	Cab L Level	0.499999
+51	Cab L Pan	0.500000
+52	Cab L Phase	0.000000
+53	Room L Active	0.000000
+54	Room L Send	0.223317
+55	Cab R Active	1.000000
+56	Cherubs Amp Cab Mic R Type	0.666667
+57	Pink Amp Cab Mic R Type	0.666667
+58	Cab R Position	0.300000
+59	Cab R Distance	0.000000
+60	Cab R Level	0.499999
+61	Cab R Pan	0.500000
+62	Cab R Phase	0.000000
+63	Room R Active	0.000000
+64	Room R Send	0.223317
+65	Active Multivoicer Section	0.000000
+66	Multivoicer Tuning	0.500000
+67	Multivoicer Root	0.000000
+68	Multivoicer Mode	0.500000
+69	Multivoicer Quantize	0.000000
+70	Multivoicer Level Adder	1.000000
+71	Multivoicer Pan Multiplier	0.503000
+72	Multivoicer Detune Multiplier	0.500000
+73	Multivoicer Delay Multiplier	0.500000
+74	Multivoicer Voice 1 Active	1.000000
+75	Multivoicer Voice 1 Interval	0.642857
+76	Multivoicer Voice 1 Semitones	0.500000
+77	Multivoicer Voice 1 Level	0.600000
+78	Multivoicer Voice 1 Pan	0.000000
+79	Multivoicer Voice 1 Detune	0.750000
+80	Multivoicer Voice 1 Delay	0.250000
+81	Multivoicer Voice 2 Active	1.000000
+82	Multivoicer Voice 2 Interval	0.571429
+83	Multivoicer Voice 2 Semitones	0.500000
+84	Multivoicer Voice 2 Level	0.700000
+85	Multivoicer Voice 2 Pan	0.250000
+86	Multivoicer Voice 2 Detune	1.000000
+87	Multivoicer Voice 2 Delay	0.500000
+88	Multivoicer Voice 3 Active	1.000000
+89	Multivoicer Voice 3 Interval	0.642857
+90	Multivoicer Voice 3 Semitones	0.500000
+91	Multivoicer Voice 3 Level	0.700000
+92	Multivoicer Voice 3 Pan	0.750000
+93	Multivoicer Voice 3 Detune	0.250000
+94	Multivoicer Voice 3 Delay	0.750000
+95	Multivoicer Voice 4 Active	1.000000
+96	Multivoicer Voice 4 Interval	0.750000
+97	Multivoicer Voice 4 Semitones	0.500000
+98	Multivoicer Voice 4 Level	0.600000
+99	Multivoicer Voice 4 Pan	1.000000
+100	Multivoicer Voice 4 Detune	0.000000
+101	Multivoicer Voice 4 Delay	1.000000
+102	Multivoicer Unisons	0.500000
+103	Multivoicer Width	0.500000
+104	Multivoicer Tone	0.500000
+105	Multivoicer Output	0.500000
+106	Multivoicer Midi Enabled	0.000000
+107	Multivoicer DI Level	0.800000
+108	Active EQ Section	1.000000
+109	Roses EQ Active	1.000000
+110	Roses EQ Hpf	0.000000
+111	Roses EQ Band 1	0.500000
+112	Roses EQ Band 2	0.500000
+113	Roses EQ Band 3	0.500000
+114	Roses EQ Band 4	0.500000
+115	Roses EQ Band 5	0.500000
+116	Roses EQ Band 6	0.500000
+117	Roses EQ Band 7	0.500000
+118	Roses EQ Band 8	0.500000
+119	Roses EQ Band 9	0.500000
+120	Roses EQ Lpf	1.000000
+121	Cherubs EQ Active	1.000000
+122	Cherubs EQ Hpf	0.000000
+123	Cherubs EQ Band 1	0.500000
+124	Cherubs EQ Band 2	0.500000
+125	Cherubs EQ Band 3	0.500000
+126	Cherubs EQ Band 4	0.500000
+127	Cherubs EQ Band 5	0.500000
+128	Cherubs EQ Band 6	0.500000
+129	Cherubs EQ Band 7	0.500000
+130	Cherubs EQ Band 8	0.500000
+131	Cherubs EQ Band 9	0.500000
+132	Cherubs EQ Lpf	1.000000
+133	Pink EQ Active	1.000000
+134	Pink EQ Hpf	0.000000
+135	Pink EQ Band 1	0.500000
+136	Pink EQ Band 2	0.500000
+137	Pink EQ Band 3	0.500000
+138	Pink EQ Band 4	0.500000
+139	Pink EQ Band 5	0.500000
+140	Pink EQ Band 6	0.500000
+141	Pink EQ Band 7	0.500000
+142	Pink EQ Band 8	0.500000
+143	Pink EQ Band 9	0.500000
+144	Pink EQ Lpf	1.000000
+145	Active Post FX Section	1.000000
+146	Chorus Active	0.000000
+147	Chorus Mix	0.496000
+148	Delay Active	0.000000
+149	Delay Mix	0.500000
+150	Delay Sync	0.500000
+151	Delay Mode	0.500000
+152	Delay Type	0.000000
+153	Delay Feedback	0.263158
+154	Delay Low Cut	0.488079
+155	Delay Note	0.650000
+156	Delay Time	0.163880
+157	Delay Amount	0.500000
+158	Delay High Cut	0.476951
+159	Delay Tempo	0.400000
+160	Reverb Active	1.000000
+161	Reverb Mix	0.500000
+162	Reverb Decay	0.500000
+163	Reverb Shimmer	0.000000
+164	Reverb Low Cut	0.076923
+165	Reverb High Cut	0.777778
+166	Preset Previous	0.000000
+167	Preset Next	0.000000
+168	Bypass	0.000000

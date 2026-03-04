@@ -8,15 +8,16 @@
 //!
 //! | MIDI message              | Action              |
 //! |---------------------------|---------------------|
-//! | CC 102, value > 0         | Next Song           |
-//! | CC 103, value > 0         | Previous Song       |
-//! | CC 104, value > 0         | Next Section        |
-//! | CC 105, value > 0         | Previous Section    |
-//! | Program Change 0–23       | Load Variant 1–24   |
+//! | CC 101 ch1, value > 0     | Load Variant 1      |
+//! | CC 102 ch1, value > 0     | Load Variant 2      |
+//! | …                         | …                   |
+//! | CC 108 ch1, value > 0     | Load Variant 8      |
+//! | CC 109 ch1, value > 0     | Previous Song       |
+//! | CC 110 ch1, value > 0     | Next Song           |
 //!
-//! CC 102–105 are in the "undefined" range (102–119) of the MIDI spec,
+//! CC 101–110 are in the "undefined" range of the MIDI spec,
 //! chosen to avoid collisions with common controller assignments.
-//! Program change 0–23 maps directly to variants 1–24.
+//! All default bindings are channel 1.
 //!
 //! All bindings are user-replaceable via [`MidiActionMap::set`].
 
@@ -64,6 +65,16 @@ impl MidiActionTrigger {
     pub const fn cc_any(cc: u8) -> Self {
         Self::ControlChange {
             channel: None,
+            cc,
+            threshold: CcThreshold::ButtonAny,
+        }
+    }
+
+    /// Convenience: channel-specific CC trigger that fires on any value > 0.
+    /// `channel` is 0-based (0 = MIDI channel 1).
+    pub const fn cc_ch(channel: u8, cc: u8) -> Self {
+        Self::ControlChange {
+            channel: Some(channel),
             cc,
             threshold: CcThreshold::ButtonAny,
         }
@@ -141,33 +152,27 @@ impl MidiActionMap {
     }
 
     /// Create a map pre-loaded with the default bindings (see module docs).
+    ///
+    /// Variants 1–8 on CH1 CC 101–108, navigation on CH1 CC 109–110.
     pub fn with_defaults() -> Self {
         let mut map = Self::empty();
 
-        // Navigation
+        // Load Variant 1–8 via CH1 CC 101–108
+        for i in 0u8..8 {
+            if let Some(action) = load_variant_action((i + 1) as usize) {
+                map.add(MidiActionTrigger::cc_ch(0, 101 + i), action.as_str());
+            }
+        }
+
+        // Navigation: CH1 CC 109 = Previous Song, CC 110 = Next Song
         map.add(
-            MidiActionTrigger::cc_any(102),
-            signal_actions::NEXT_SONG.as_str(),
-        );
-        map.add(
-            MidiActionTrigger::cc_any(103),
+            MidiActionTrigger::cc_ch(0, 109),
             signal_actions::PREVIOUS_SONG.as_str(),
         );
         map.add(
-            MidiActionTrigger::cc_any(104),
-            signal_actions::NEXT_SECTION.as_str(),
+            MidiActionTrigger::cc_ch(0, 110),
+            signal_actions::NEXT_SONG.as_str(),
         );
-        map.add(
-            MidiActionTrigger::cc_any(105),
-            signal_actions::PREVIOUS_SECTION.as_str(),
-        );
-
-        // Load Variant 1–24 via Program Change 0–23
-        for i in 0u8..24 {
-            if let Some(action) = load_variant_action((i + 1) as usize) {
-                map.add(MidiActionTrigger::program(i), action.as_str());
-            }
-        }
 
         map
     }
@@ -228,57 +233,50 @@ mod tests {
     fn default_map_has_navigation_bindings() {
         let map = MidiActionMap::with_defaults();
         assert_eq!(
-            map.find(&MidiActionTrigger::cc_any(102)),
-            Some(signal_actions::NEXT_SONG.as_str())
-        );
-        assert_eq!(
-            map.find(&MidiActionTrigger::cc_any(103)),
+            map.find(&MidiActionTrigger::cc_ch(0, 109)),
             Some(signal_actions::PREVIOUS_SONG.as_str())
         );
         assert_eq!(
-            map.find(&MidiActionTrigger::cc_any(104)),
-            Some(signal_actions::NEXT_SECTION.as_str())
-        );
-        assert_eq!(
-            map.find(&MidiActionTrigger::cc_any(105)),
-            Some(signal_actions::PREVIOUS_SECTION.as_str())
+            map.find(&MidiActionTrigger::cc_ch(0, 110)),
+            Some(signal_actions::NEXT_SONG.as_str())
         );
     }
 
     #[test]
-    fn default_map_has_24_variant_program_changes() {
+    fn default_map_has_8_variant_ccs() {
         let map = MidiActionMap::with_defaults();
-        for i in 0u8..24 {
-            let trigger = MidiActionTrigger::program(i);
+        for i in 0u8..8 {
+            let trigger = MidiActionTrigger::cc_ch(0, 101 + i);
             let action = map
                 .find(&trigger)
-                .expect(&format!("PC {i} should be bound"));
+                .expect(&format!("CC {} should be bound", 101 + i));
             assert!(
                 action.starts_with("fts.signal.load_variant."),
-                "PC {i} → {action}"
+                "CC {} → {action}",
+                101 + i
             );
         }
     }
 
     #[test]
-    fn program_change_25_is_not_bound() {
+    fn cc_111_is_not_bound() {
         let map = MidiActionMap::with_defaults();
-        assert!(map.find(&MidiActionTrigger::program(24)).is_none());
+        assert!(map.find(&MidiActionTrigger::cc_ch(0, 111)).is_none());
     }
 
     #[test]
     fn set_replaces_existing_binding() {
         let mut map = MidiActionMap::with_defaults();
-        map.set(MidiActionTrigger::cc_any(102), "custom.action");
+        map.set(MidiActionTrigger::cc_ch(0, 101), "custom.action");
         assert_eq!(
-            map.find(&MidiActionTrigger::cc_any(102)),
+            map.find(&MidiActionTrigger::cc_ch(0, 101)),
             Some("custom.action")
         );
         // Should not have duplicates
         let count = map
             .bindings()
             .iter()
-            .filter(|b| b.trigger == MidiActionTrigger::cc_any(102))
+            .filter(|b| b.trigger == MidiActionTrigger::cc_ch(0, 101))
             .count();
         assert_eq!(count, 1);
     }
@@ -286,17 +284,17 @@ mod tests {
     #[test]
     fn remove_clears_binding() {
         let mut map = MidiActionMap::with_defaults();
-        map.remove(&MidiActionTrigger::cc_any(104));
-        assert!(map.find(&MidiActionTrigger::cc_any(104)).is_none());
+        map.remove(&MidiActionTrigger::cc_ch(0, 109));
+        assert!(map.find(&MidiActionTrigger::cc_ch(0, 109)).is_none());
     }
 
     #[test]
-    fn triggers_for_finds_all_variant_actions() {
+    fn triggers_for_finds_variant_action() {
         let map = MidiActionMap::with_defaults();
         let variant_1_id = signal_actions::LOAD_VARIANT_1.as_str();
         let triggers: Vec<_> = map.triggers_for(variant_1_id).collect();
         assert_eq!(triggers.len(), 1);
-        assert_eq!(*triggers[0], MidiActionTrigger::program(0));
+        assert_eq!(*triggers[0], MidiActionTrigger::cc_ch(0, 101));
     }
 
     #[test]
