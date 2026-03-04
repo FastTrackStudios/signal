@@ -109,6 +109,14 @@ pub enum GridSelection {
     Module(String),
 }
 
+/// Payload emitted when the user right-clicks a block or module in the grid.
+#[derive(Debug, Clone, PartialEq)]
+pub struct GridContextMenuEvent {
+    pub target: GridSelection,
+    pub client_x: f64,
+    pub client_y: f64,
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Block picker portal state
 // ─────────────────────────────────────────────────────────────────────────────

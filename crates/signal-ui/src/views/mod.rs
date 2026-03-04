@@ -4,6 +4,7 @@
 //! to fetch data, manage state, and compose the dumb [`crate::components`]
 //! building blocks into full editor/browser views.
 
+mod block_detail;
 mod block_editor;
 mod collection_browser;
 mod metadata_display;
@@ -25,10 +26,14 @@ mod profile_editor;
 mod snapshot_panel;
 mod song_setlist_editor;
 
+pub use block_detail::{
+    BlockCustomGui, BlockDetailPanel, BlockDetailTab, BlockMacros, BlockModulation, BlockRawParams,
+};
 pub use block_editor::{BlockCard, BlockEditor, MiniKnob};
 pub use collection_browser::{
     engines_to_grid_slots, resolve_layer_engines, resolve_scene_engines, rig_type_to_engine_type,
-    BrowseLevel, CollectionBrowser, EngineFlowData, EngineParamLookup, LayerFlowData, RigGridPanel,
+    BrowseLevel, BrowserAssignment, CollectionBrowser, EngineFlowData, EngineParamLookup,
+    LayerFlowData, RigGridPanel,
 };
 pub use metadata_display::MetadataDisplay;
 pub use module_view::{ModuleView, ModuleViewMode, ParamChange};

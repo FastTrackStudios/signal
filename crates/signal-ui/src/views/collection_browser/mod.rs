@@ -38,6 +38,24 @@ pub use grid_conversion::ParamLookup as EngineParamLookup;
 pub use grid_conversion::{engines_to_grid_slots, RigGridPanel};
 pub use types::{EngineFlowData, LayerFlowData, ModuleChainData};
 
+/// Payload emitted when the user picks an item in "assign" mode.
+/// Maps to the corresponding `PatchTarget` variant.
+#[derive(Debug, Clone, PartialEq)]
+pub enum BrowserAssignment {
+    /// Rig scene selected (Presets nav → col2 rig + col3 scene).
+    RigScene { rig_id: String, scene_id: String },
+    /// Block snapshot selected (Blocks nav → col3 preset + col4 snapshot).
+    BlockSnapshot {
+        preset_id: String,
+        snapshot_id: String,
+    },
+    /// Block preset selected (Blocks nav → col3 preset, no snapshot picked — uses default).
+    BlockPresetDefault {
+        preset_id: String,
+        snapshot_id: String,
+    },
+}
+
 /// Public API: resolve a rig scene into engine flow data and parameter lookup
 /// for rendering in `RigGridPanel`.
 ///
@@ -91,8 +109,16 @@ impl BrowseLevel {
 
 // region: --- CollectionBrowser
 
+#[derive(Props, Clone, PartialEq)]
+pub struct CollectionBrowserProps {
+    /// When provided, the browser enters "pick mode" — an Assign button appears
+    /// and clicking it fires this callback with the resolved selection.
+    #[props(default)]
+    pub on_assign: Option<EventHandler<BrowserAssignment>>,
+}
+
 #[component]
-pub fn CollectionBrowser() -> Element {
+pub fn CollectionBrowser(props: CollectionBrowserProps) -> Element {
     let signal = crate::use_signal_service();
     let mut nav = use_signal(|| NavCategory::Presets);
     let mut rig_type = use_signal(|| RigType::Guitar);
@@ -632,25 +658,100 @@ pub fn CollectionBrowser() -> Element {
             }
 
             // Status bar
-            div { class: "px-4 py-1.5 border-t border-zinc-800 flex items-center gap-3 flex-shrink-0 bg-zinc-950/60",
-                div { class: "w-1.5 h-1.5 rounded-full bg-green-500" }
-                span { class: "text-[10px] text-zinc-500", "{current_nav.label()}" }
-                div { class: "flex-1" }
-                span { class: "text-[10px] text-zinc-600 mr-1", "Rig:" }
-                for rt in RIG_TYPES.iter() {
-                    {
-                        let t = *rt;
-                        let is_active = current_rt == t;
-                        rsx! {
+            {
+                // Resolve current selection into an assignable target
+                let assignment = {
+                    match current_nav {
+                        NavCategory::Presets => {
+                            // Rig scene: need col2 (rig) + col3 (scene) selected
+                            if let (Some(c2), Some(c3)) = (col2_selected(), col3_selected()) {
+                                let c2_items = &all_col2;
+                                let c3_items = &all_col3;
+                                if let (Some(rig_item), Some(scene_item)) = (c2_items.get(c2), c3_items.get(c3)) {
+                                    Some(BrowserAssignment::RigScene {
+                                        rig_id: rig_item.id.clone(),
+                                        scene_id: scene_item.id.clone(),
+                                    })
+                                } else { None }
+                            } else { None }
+                        }
+                        NavCategory::Blocks => {
+                            if let Some(c3) = col3_selected() {
+                                let c3_items = &all_col3;
+                                if let Some(preset_item) = c3_items.get(c3) {
+                                    let preset_id = preset_item.id.clone();
+                                    if let Some(c4) = col4_selected() {
+                                        // Specific snapshot selected
+                                        let c4_items = &all_col4;
+                                        if let Some(snap_item) = c4_items.get(c4) {
+                                            Some(BrowserAssignment::BlockSnapshot {
+                                                preset_id,
+                                                snapshot_id: snap_item.id.clone(),
+                                            })
+                                        } else { None }
+                                    } else {
+                                        // No snapshot selected — use default snapshot
+                                        let cached = block_presets_cache();
+                                        let default_snap_id = cached.iter()
+                                            .find(|p| p.id().to_string() == preset_id)
+                                            .map(|p| p.default_snapshot().id().to_string());
+                                        if let Some(snap_id) = default_snap_id {
+                                            Some(BrowserAssignment::BlockPresetDefault {
+                                                preset_id,
+                                                snapshot_id: snap_id,
+                                            })
+                                        } else { None }
+                                    }
+                                } else { None }
+                            } else { None }
+                        }
+                        _ => None,
+                    }
+                };
+                let pick_mode = props.on_assign.is_some();
+                let can_assign = assignment.is_some() && pick_mode;
+                let on_assign = props.on_assign.clone();
+
+                rsx! {
+                    div { class: "px-4 py-1.5 border-t border-zinc-800 flex items-center gap-3 flex-shrink-0 bg-zinc-950/60",
+                        if pick_mode {
+                            div { class: "w-1.5 h-1.5 rounded-full bg-amber-500" }
+                            span { class: "text-[10px] text-amber-400 font-medium", "Pick Mode" }
+                        } else {
+                            div { class: "w-1.5 h-1.5 rounded-full bg-green-500" }
+                        }
+                        span { class: "text-[10px] text-zinc-500", "{current_nav.label()}" }
+                        div { class: "flex-1" }
+                        if can_assign {
                             button {
-                                key: "{t.as_str()}",
-                                class: if is_active {
-                                    "px-1.5 py-0.5 text-[10px] rounded bg-zinc-600 text-zinc-100"
-                                } else {
-                                    "px-1.5 py-0.5 text-[10px] rounded text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800"
+                                class: "px-3 py-1 text-xs font-medium rounded \
+                                        bg-amber-600 hover:bg-amber-500 text-white \
+                                        transition-colors duration-150",
+                                onclick: move |_| {
+                                    if let (Some(ref cb), Some(ref assign)) = (&on_assign, &assignment) {
+                                        cb.call(assign.clone());
+                                    }
                                 },
-                                onclick: move |_| rig_type.set(t),
-                                "{rig_type_display(t)}"
+                                "Assign Selection"
+                            }
+                        }
+                        span { class: "text-[10px] text-zinc-600 mr-1", "Rig:" }
+                        for rt in RIG_TYPES.iter() {
+                            {
+                                let t = *rt;
+                                let is_active = current_rt == t;
+                                rsx! {
+                                    button {
+                                        key: "{t.as_str()}",
+                                        class: if is_active {
+                                            "px-1.5 py-0.5 text-[10px] rounded bg-zinc-600 text-zinc-100"
+                                        } else {
+                                            "px-1.5 py-0.5 text-[10px] rounded text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800"
+                                        },
+                                        onclick: move |_| rig_type.set(t),
+                                        "{rig_type_display(t)}"
+                                    }
+                                }
                             }
                         }
                     }

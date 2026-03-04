@@ -65,6 +65,11 @@ pub struct KnobProps {
     #[props(default)]
     on_change: Option<Callback<f64>>,
 
+    /// Accent color for the value arc and thumb (e.g. "#F97316").
+    /// Falls back to `var(--primary)` when not set.
+    #[props(default)]
+    color: Option<String>,
+
     /// Extra CSS classes.
     #[props(default)]
     class: String,
@@ -128,6 +133,11 @@ pub fn Knob(props: KnobProps) -> Element {
     let (tx, ty) = arc_point(cx, cy, r - 6.0, end_angle);
     let (tx2, ty2) = arc_point(cx, cy, r + 1.0, end_angle);
 
+    let accent = props
+        .color
+        .as_deref()
+        .unwrap_or("var(--primary, #3b82f6)");
+
     let disabled_class = if props.disabled {
         " opacity-50 cursor-not-allowed"
     } else {
@@ -157,7 +167,7 @@ pub fn Knob(props: KnobProps) -> Element {
                     path {
                         d: "{value_path}",
                         fill: "none",
-                        stroke: "var(--primary, #3b82f6)",
+                        stroke: "{accent}",
                         stroke_width: "4",
                         stroke_linecap: "round",
                     }

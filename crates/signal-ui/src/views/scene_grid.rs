@@ -56,10 +56,14 @@ pub fn RigSceneGrid(
                 .iter()
                 .map(|v| TileData {
                     name: v.name.clone(),
+                    subtitle: None,
                     active: active_scene_id
                         .as_ref()
                         .map_or(false, |aid| aid == &v.id.to_string()),
                     empty: false,
+                    preloaded: true,
+                    loading: false,
+                    disabled: false,
                 })
                 .collect();
 

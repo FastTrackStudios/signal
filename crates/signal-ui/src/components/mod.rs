@@ -37,7 +37,9 @@ pub use audio_controls::{Knob, KnobSize, XYPad};
 pub use audio_viz::{LevelMeter, LevelMeterOrientation, SpectrumAnalyzer, WaveformDisplay};
 pub use context_menu::{ContextMenu, ContextMenuItem, ContextMenuSeparator};
 pub use dialog::{Dialog, DialogClose, DialogDescription, DialogFooter, DialogHeader, DialogTitle};
-pub use manage_buttons::{CaptureButton, CreateProfileButton, CreateSongButton};
+pub use manage_buttons::{
+    CaptureButton, CreateProfileButton, CreateRigButton, CreateSetlistButton, CreateSongButton,
+};
 pub use side_sheet::{SheetSide, SideSheet};
 pub use slider::{Slider, SliderOrientation};
 pub use tabs::{TabContent, TabList, TabTrigger, Tabs};

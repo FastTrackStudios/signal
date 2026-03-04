@@ -5,15 +5,19 @@
 
 use dioxus::prelude::*;
 use signal::block::BlockCategory;
+use signal::defaults::{
+    archetype_label, archetype_seed_slug, archetype_x_templates, NDSP_ARCHETYPE_X_PLUGIN_NAMES,
+};
+use signal::plugin_block::PluginBlockDef;
 use signal::{BlockType, ModuleType, ALL_BLOCK_TYPES};
 use uuid::Uuid;
 
 use super::layout::module_type_color;
 use super::types::GridSlot;
 
-// ─────────────────────────────────────────────────────────────────────────────
+// ---------------------------------------------------------------------------
 // Props
-// ─────────────────────────────────────────────────────────────────────────────
+// ---------------------------------------------------------------------------
 
 #[derive(Props, Clone, PartialEq)]
 pub struct BlockPickerDropdownProps {
@@ -22,18 +26,21 @@ pub struct BlockPickerDropdownProps {
     pub click_x: f64,
     pub click_y: f64,
     pub on_add_slot: EventHandler<GridSlot>,
+    #[props(default)]
+    pub on_add_slots: Option<EventHandler<Vec<GridSlot>>>,
     pub on_close: EventHandler<()>,
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// ---------------------------------------------------------------------------
 // Picker subtab
-// ─────────────────────────────────────────────────────────────────────────────
+// ---------------------------------------------------------------------------
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum PickerTab {
     All,
     Blocks,
     Modules,
+    Plugins,
 }
 
 /// Module type definitions for the picker (guitar signal chain order).
@@ -56,9 +63,58 @@ fn picker_module_types() -> Vec<(ModuleType, &'static str, &'static str)> {
     ]
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// ---------------------------------------------------------------------------
+// Plugin → GridSlot conversion
+// ---------------------------------------------------------------------------
+
+/// Convert a `PluginBlockDef` into `Vec<GridSlot>` starting at `(col, row)`.
+///
+/// Modules flow left-to-right (each module advances `current_col`).
+/// Blocks within a module stack vertically (incrementing row).
+fn plugin_def_to_grid_slots(def: &PluginBlockDef, col: usize, row: usize) -> Vec<GridSlot> {
+    let slug = archetype_seed_slug(&def.plugin_name);
+    let mut slots = Vec::new();
+    let mut current_col = col;
+
+    for vm in &def.modules {
+        let module_group = format!("ndsp:{}/{}", slug, vm.id);
+        let module_type = Some(vm.module_type);
+
+        for vb in &vm.blocks {
+            let parameters: Vec<(String, f32)> = vb
+                .params
+                .iter()
+                .map(|p| (p.name.clone(), p.default_value))
+                .collect();
+
+            slots.push(GridSlot {
+                id: Uuid::new_v4(),
+                block_type: vb.block_type,
+                block_preset_name: Some(vb.label.clone()),
+                plugin_name: Some(def.plugin_name.clone()),
+                col: current_col,
+                row,
+                module_group: Some(module_group.clone()),
+                module_type,
+                layer_group: None,
+                engine_group: None,
+                is_template: true,
+                bypassed: false,
+                is_phantom: false,
+                parameters,
+                preset_id: None,
+                snapshot_id: None,
+            });
+            current_col += 1;
+        }
+    }
+
+    slots
+}
+
+// ---------------------------------------------------------------------------
 // Component
-// ─────────────────────────────────────────────────────────────────────────────
+// ---------------------------------------------------------------------------
 
 #[component]
 pub fn BlockPickerDropdown(props: BlockPickerDropdownProps) -> Element {
@@ -67,6 +123,12 @@ pub fn BlockPickerDropdown(props: BlockPickerDropdownProps) -> Element {
     let col = props.col;
     let row = props.row;
     let tab = active_tab();
+
+    // Cached archetype templates — parsed once per picker lifetime.
+    let templates = use_signal(archetype_x_templates);
+
+    // Tracks which archetype index is expanded in the Plugins tab.
+    let mut expanded_plugin = use_signal(|| None::<usize>);
 
     let search_lower = search().to_lowercase();
 
@@ -102,10 +164,28 @@ pub fn BlockPickerDropdown(props: BlockPickerDropdownProps) -> Element {
         })
         .collect();
 
+    // Filter plugins by search text
+    let filtered_plugins: Vec<(usize, &str)> = NDSP_ARCHETYPE_X_PLUGIN_NAMES
+        .iter()
+        .enumerate()
+        .filter(|(_, name)| {
+            if search_lower.is_empty() {
+                return true;
+            }
+            archetype_label(name).to_lowercase().contains(&search_lower)
+                || "plugin".contains(&search_lower)
+                || "neural".contains(&search_lower)
+                || "ndsp".contains(&search_lower)
+        })
+        .map(|(i, name)| (i, *name))
+        .collect();
+
     let show_blocks = tab == PickerTab::All || tab == PickerTab::Blocks;
     let show_modules = tab == PickerTab::All || tab == PickerTab::Modules;
+    let show_plugins = tab == PickerTab::Plugins;
     let has_results = (show_blocks && !filtered_blocks.is_empty())
-        || (show_modules && !filtered_modules.is_empty());
+        || (show_modules && !filtered_modules.is_empty())
+        || (show_plugins && !filtered_plugins.is_empty());
 
     let input_id = use_signal(|| format!("grid-picker-input-{}", Uuid::new_v4().as_simple()));
     let iid = input_id();
@@ -148,6 +228,7 @@ pub fn BlockPickerDropdown(props: BlockPickerDropdownProps) -> Element {
                         (PickerTab::All, "All"),
                         (PickerTab::Blocks, "Blocks"),
                         (PickerTab::Modules, "Modules"),
+                        (PickerTab::Plugins, "Plugins"),
                     ];
                     rsx! {
                         for (t, label) in tabs {
@@ -173,7 +254,15 @@ pub fn BlockPickerDropdown(props: BlockPickerDropdownProps) -> Element {
                             text-[11px] text-zinc-200 outline-none focus:border-purple-500/40 \
                             placeholder:text-zinc-600 transition-all",
                     r#type: "text",
-                    placeholder: if show_modules && !show_blocks { "Search modules..." } else if show_blocks && !show_modules { "Search blocks..." } else { "Search blocks & modules..." },
+                    placeholder: if show_plugins {
+                        "Search plugins..."
+                    } else if show_modules && !show_blocks {
+                        "Search modules..."
+                    } else if show_blocks && !show_modules {
+                        "Search blocks..."
+                    } else {
+                        "Search blocks & modules..."
+                    },
                     value: "{search}",
                     oninput: move |evt| search.set(evt.value().clone()),
                 }
@@ -186,6 +275,95 @@ pub fn BlockPickerDropdown(props: BlockPickerDropdownProps) -> Element {
                         p { class: "text-[10px] text-zinc-600", "No results" }
                     }
                 } else {
+                    // Plugins section
+                    if show_plugins && !filtered_plugins.is_empty() {
+                        div { class: "mb-2",
+                            span {
+                                class: "text-[8px] font-semibold text-zinc-600 uppercase tracking-[0.2em] px-1.5",
+                                "NDSP Archetype X"
+                            }
+                            for (idx, plugin_name) in filtered_plugins.iter() {
+                                {
+                                    let idx = *idx;
+                                    let plugin_name = *plugin_name;
+                                    let label = archetype_label(plugin_name);
+                                    let is_expanded = expanded_plugin() == Some(idx);
+                                    rsx! {
+                                        // Plugin header row
+                                        button {
+                                            key: "plugin-{idx}",
+                                            class: "w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-left \
+                                                    hover:bg-zinc-800/60 transition-all duration-100",
+                                            onclick: move |_| {
+                                                if expanded_plugin() == Some(idx) {
+                                                    expanded_plugin.set(None);
+                                                } else {
+                                                    expanded_plugin.set(Some(idx));
+                                                }
+                                            },
+                                            div {
+                                                class: "w-2.5 h-2.5 rounded-sm flex-shrink-0 bg-purple-500/80",
+                                            }
+                                            div { class: "flex-1 min-w-0",
+                                                span { class: "text-[11px] font-medium text-zinc-200 block", "{label}" }
+                                                span { class: "text-[9px] text-zinc-500", "Neural DSP" }
+                                            }
+                                            span {
+                                                class: "text-[9px] text-zinc-500 flex-shrink-0",
+                                                if is_expanded { "\u{25B4}" } else { "\u{25BE}" }
+                                            }
+                                        }
+                                        // Expanded detail
+                                        if is_expanded {
+                                            {
+                                                let defs = templates();
+                                                let def = &defs[idx];
+                                                let module_preview: Vec<(String, usize, ModuleType)> = def.modules.iter().map(|m| {
+                                                    (m.label.clone(), m.blocks.len(), m.module_type)
+                                                }).collect();
+                                                let slots = plugin_def_to_grid_slots(def, col, row);
+                                                rsx! {
+                                                    div { class: "ml-5 mr-1 mb-1.5 border-l border-zinc-800/60 pl-2",
+                                                        // Module list preview
+                                                        for (m_label, block_count, mt) in module_preview.iter() {
+                                                            {
+                                                                let color = module_type_color(*mt);
+                                                                let dot_style = format!("background-color: {};", color.bg);
+                                                                rsx! {
+                                                                    div {
+                                                                        key: "mod-preview-{m_label}",
+                                                                        class: "flex items-center gap-1.5 py-0.5",
+                                                                        div {
+                                                                            class: "w-1.5 h-1.5 rounded-full flex-shrink-0",
+                                                                            style: "{dot_style}",
+                                                                        }
+                                                                        span { class: "text-[10px] text-zinc-400", "{m_label}" }
+                                                                        span { class: "text-[9px] text-zinc-600", "({block_count})" }
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                        // Add Full Chain button
+                                                        button {
+                                                            class: "mt-1.5 w-full px-2 py-1.5 rounded-md text-[10px] font-semibold \
+                                                                    bg-purple-600/30 text-purple-300 hover:bg-purple-600/50 \
+                                                                    transition-colors text-center",
+                                                            onclick: move |_| {
+                                                                if let Some(ref cb) = props.on_add_slots {
+                                                                    cb.call(slots.clone());
+                                                                }
+                                                            },
+                                                            "Add Full Chain"
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                     // Module types section
                     if show_modules && !filtered_modules.is_empty() {
                         div { class: "mb-2",

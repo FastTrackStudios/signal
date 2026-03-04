@@ -43,9 +43,10 @@ pub fn Dialog(props: DialogProps) -> Element {
         // Content
         div {
             class: format!(
-                "fixed left-[50%] top-[50%] z-50 grid w-full max-w-lg gap-4 border border-border bg-background p-6 shadow-lg sm:rounded-lg animate-scale-in {}",
+                "fixed z-50 grid w-full max-w-lg gap-4 border border-border bg-background p-6 shadow-lg sm:rounded-lg animate-scale-in {}",
                 props.class
             ),
+            style: "left: 50%; top: 50%; transform: translate(-50%, -50%);",
             role: "dialog",
             aria_modal: "true",
             onclick: move |evt: MouseEvent| {

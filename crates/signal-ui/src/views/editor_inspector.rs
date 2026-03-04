@@ -15,6 +15,11 @@ pub struct EditorInspectorPanelProps {
     pub on_param_change: Option<EventHandler<(uuid::Uuid, String, f32)>>,
     #[props(default)]
     pub on_save: Option<EventHandler<GridSlot>>,
+    #[props(default)]
+    pub on_save_as_new: Option<EventHandler<(GridSlot, String)>>,
+    /// Callback to expand the full block detail panel.
+    #[props(default)]
+    pub on_expand_detail: Option<EventHandler<()>>,
 }
 
 /// Rich inspector panel with gradient-accented "lumen block" sections.
@@ -52,6 +57,8 @@ pub fn EditorInspectorPanel(props: EditorInspectorPanelProps) -> Element {
                 let bypassed = slot.bypassed;
                 let slot_clone = slot.clone();
                 let has_preset = slot.preset_id.is_some();
+                let mut show_save_as_new = use_signal(|| false);
+                let mut save_as_new_name = use_signal(|| String::new());
 
                 rsx! {
                     div { class: "p-3 space-y-3",
@@ -120,36 +127,46 @@ pub fn EditorInspectorPanel(props: EditorInspectorPanelProps) -> Element {
                                     div { class: "space-y-2",
                                         for (name, value) in slot.parameters.iter() {
                                             {
-                                                let pct = (value * 100.0).round() as u32;
                                                 let name = name.clone();
                                                 let slot_id = slot.id;
                                                 let on_change = props.on_param_change.clone();
+                                                let initial_value = *value;
                                                 rsx! {
-                                                    div { class: "space-y-0.5",
-                                                        div { class: "flex justify-between items-baseline",
-                                                            span { class: "text-[11px] text-zinc-400 truncate", "{name}" }
-                                                            span { class: "text-[10px] text-zinc-600 tabular-nums flex-shrink-0 ml-2", "{pct}%" }
-                                                        }
-                                                        input {
-                                                            r#type: "range",
-                                                            min: "0",
-                                                            max: "100",
-                                                            value: "{pct}",
-                                                            class: "w-full h-1.5",
-                                                            style: "accent-color: {color.bg};",
-                                                            oninput: move |evt: Event<FormData>| {
-                                                                if let Ok(v) = evt.value().parse::<f32>() {
-                                                                    let normalized = (v / 100.0).clamp(0.0, 1.0);
-                                                                    if let Some(ref cb) = on_change {
-                                                                        cb.call((slot_id, name.clone(), normalized));
-                                                                    }
-                                                                }
-                                                            },
-                                                        }
+                                                    InspectorParamSlider {
+                                                        key: "{name}",
+                                                        name: name.clone(),
+                                                        value: initial_value,
+                                                        accent_color: color.bg.to_string(),
+                                                        on_change: move |normalized: f32| {
+                                                            if let Some(ref cb) = on_change {
+                                                                cb.call((slot_id, name.clone(), normalized));
+                                                            }
+                                                        },
                                                     }
                                                 }
                                             }
                                         }
+                                    }
+                                }
+                            }
+                        }
+
+                        // ── Section 2b: Expand Detail (cyan accent) ──
+                        if let Some(ref on_expand) = props.on_expand_detail {
+                            {
+                                let on_expand = on_expand.clone();
+                                rsx! {
+                                    button {
+                                        class: "w-full px-3 py-2 text-xs rounded-lg \
+                                                bg-gradient-to-r from-cyan-900/30 to-blue-900/30 \
+                                                hover:from-cyan-900/50 hover:to-blue-900/50 \
+                                                text-cyan-400 font-medium \
+                                                border border-cyan-800/40 \
+                                                transition-all duration-150 \
+                                                flex items-center justify-center gap-2",
+                                        onclick: move |_| on_expand.call(()),
+                                        span { "\u{2197}" }
+                                        span { "Expand Block Detail" }
                                     }
                                 }
                             }
@@ -220,6 +237,82 @@ pub fn EditorInspectorPanel(props: EditorInspectorPanelProps) -> Element {
                                                     },
                                                     "Save Snapshot"
                                                 }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // ── Section 5: Save As New Preset (amber accent) ──
+                        {
+                            let on_save_as_new = props.on_save_as_new.clone();
+                            let new_slot = slot_clone.clone();
+                            let default_name = format!("{:?} Preset", slot.block_type);
+                            rsx! {
+                                div { class: "relative overflow-hidden rounded-lg border border-zinc-800/60 bg-zinc-900/40",
+                                    div { class: "absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-amber-500 via-yellow-400 to-orange-500" }
+                                    div { class: "pl-4 pr-3 py-3",
+                                        h4 { class: "text-[10px] font-bold uppercase tracking-widest text-zinc-400 mb-2", "New Preset" }
+                                        if show_save_as_new() {
+                                            div { class: "space-y-2",
+                                                input {
+                                                    r#type: "text",
+                                                    class: "w-full px-2 py-1.5 text-xs rounded \
+                                                            bg-zinc-800 border border-zinc-600 text-zinc-200 \
+                                                            focus:border-amber-500 focus:outline-none",
+                                                    placeholder: "Preset name...",
+                                                    value: "{save_as_new_name}",
+                                                    oninput: move |evt: Event<FormData>| {
+                                                        save_as_new_name.set(evt.value());
+                                                    },
+                                                }
+                                                div { class: "flex gap-2",
+                                                    button {
+                                                        class: "flex-1 px-2 py-1.5 text-xs rounded \
+                                                                bg-gradient-to-r from-amber-600 to-orange-600 \
+                                                                hover:from-amber-500 hover:to-orange-500 \
+                                                                text-white font-medium \
+                                                                transition-all duration-150",
+                                                        onclick: {
+                                                            let on_save_as_new = on_save_as_new.clone();
+                                                            let new_slot = new_slot.clone();
+                                                            move |_| {
+                                                                let name = save_as_new_name();
+                                                                if !name.trim().is_empty() {
+                                                                    if let Some(ref cb) = on_save_as_new {
+                                                                        cb.call((new_slot.clone(), name));
+                                                                    }
+                                                                    show_save_as_new.set(false);
+                                                                    save_as_new_name.set(String::new());
+                                                                }
+                                                            }
+                                                        },
+                                                        "Save"
+                                                    }
+                                                    button {
+                                                        class: "flex-1 px-2 py-1.5 text-xs rounded \
+                                                                bg-zinc-700 hover:bg-zinc-600 text-zinc-300 \
+                                                                transition-all duration-150",
+                                                        onclick: move |_| {
+                                                            show_save_as_new.set(false);
+                                                            save_as_new_name.set(String::new());
+                                                        },
+                                                        "Cancel"
+                                                    }
+                                                }
+                                            }
+                                        } else {
+                                            button {
+                                                class: "w-full px-3 py-1.5 text-xs rounded \
+                                                        bg-zinc-800 hover:bg-zinc-700 text-zinc-400 \
+                                                        hover:text-zinc-200 border border-zinc-700 border-dashed \
+                                                        transition-all duration-150",
+                                                onclick: move |_| {
+                                                    save_as_new_name.set(default_name.clone());
+                                                    show_save_as_new.set(true);
+                                                },
+                                                "Save As New Preset..."
                                             }
                                         }
                                     }
@@ -306,6 +399,54 @@ pub fn EditorInspectorPanel(props: EditorInspectorPanelProps) -> Element {
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+// ── InspectorParamSlider ────────────────────────────────────────
+
+/// A single parameter slider with local state for immediate value display.
+///
+/// The percentage text and slider position update instantly during drag
+/// without waiting for the parent's re-render cycle.
+#[component]
+fn InspectorParamSlider(
+    name: String,
+    value: f32,
+    accent_color: String,
+    on_change: EventHandler<f32>,
+) -> Element {
+    let mut local_value = use_signal(|| value);
+
+    // Sync from props when value changes externally
+    use_effect(move || {
+        local_value.set(value);
+    });
+
+    let display = local_value();
+    let pct = (display * 100.0).round() as u32;
+
+    rsx! {
+        div { class: "space-y-0.5",
+            div { class: "flex justify-between items-baseline",
+                span { class: "text-[11px] text-zinc-400 truncate", "{name}" }
+                span { class: "text-[10px] text-zinc-600 tabular-nums flex-shrink-0 ml-2", "{pct}%" }
+            }
+            input {
+                r#type: "range",
+                min: "0",
+                max: "100",
+                value: "{pct}",
+                class: "w-full h-1.5",
+                style: "accent-color: {accent_color};",
+                oninput: move |evt: Event<FormData>| {
+                    if let Ok(v) = evt.value().parse::<f32>() {
+                        let normalized = (v / 100.0).clamp(0.0, 1.0);
+                        local_value.set(normalized);
+                        on_change.call(normalized);
+                    }
+                },
             }
         }
     }

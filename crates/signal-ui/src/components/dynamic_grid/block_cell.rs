@@ -21,6 +21,7 @@ pub(super) struct GridBlockCellProps {
     #[props(default)]
     pub outer_style: String,
     pub on_block_mousedown: EventHandler<MouseEvent>,
+    pub on_context_menu: EventHandler<MouseEvent>,
     pub on_left_port_mousedown: EventHandler<MouseEvent>,
     pub on_right_port_mousedown: EventHandler<MouseEvent>,
     pub on_left_port_enter: EventHandler<()>,
@@ -56,6 +57,9 @@ pub(super) fn GridBlockCell(props: GridBlockCellProps) -> Element {
                 onmousedown: move |evt| {
                     evt.stop_propagation();
                     props.on_block_mousedown.call(evt);
+                },
+                oncontextmenu: move |evt: MouseEvent| {
+                    props.on_context_menu.call(evt);
                 },
                 div { class: "flex items-center gap-1.5",
                     div {
