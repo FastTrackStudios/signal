@@ -11,14 +11,14 @@ use dioxus::prelude::*;
 
 /// Default background colors per grid position.
 const TILE_COLORS: [&str; 8] = [
-    "#92400e", // Amber/warm brown
-    "#065f46", // Emerald/teal
-    "#0e7490", // Cyan/teal
-    "#5b21b6", // Violet/purple
-    "#9a3412", // Orange/rust
-    "#1e40af", // Blue
-    "#7c3aed", // Purple
-    "#374151", // Gray (neutral)
+    "#b45309", // Amber/warm brown (brighter)
+    "#059669", // Emerald/teal (brighter)
+    "#0891b2", // Cyan/teal (brighter)
+    "#7c3aed", // Violet/purple (brighter)
+    "#c2410c", // Orange/rust (brighter)
+    "#2563eb", // Blue (brighter)
+    "#9333ea", // Purple (brighter)
+    "#6b7280", // Gray (brighter)
 ];
 
 /// Data for a single tile in the grid.
@@ -26,10 +26,20 @@ const TILE_COLORS: [&str; 8] = [
 pub struct TileData {
     /// Display name for the tile.
     pub name: String,
+    /// Optional subtitle shown below the name (e.g. profile/patch source).
+    pub subtitle: Option<String>,
     /// Whether this tile is the active/selected one.
     pub active: bool,
     /// Whether this tile is empty (no content assigned).
     pub empty: bool,
+    /// Whether this tile's patch has been preloaded and is ready for instant switching.
+    /// Non-preloaded tiles are rendered darker to indicate they aren't ready yet.
+    pub preloaded: bool,
+    /// Whether this tile is in a loading/switching state (optimistic feedback).
+    /// Loading tiles pulse to indicate a switch is in progress.
+    pub loading: bool,
+    /// Whether this tile exists but can't be activated (unresolvable target).
+    pub disabled: bool,
 }
 
 /// A 4x2 scene tile grid.
@@ -53,16 +63,24 @@ pub fn SceneTileGrid(
                     {
                         let tile = tiles.get(i).cloned().unwrap_or(TileData {
                             name: String::new(),
+                            subtitle: None,
                             active: false,
                             empty: true,
+                            preloaded: false,
+                            loading: false,
+                            disabled: false,
                         });
                         let color = TILE_COLORS[i % TILE_COLORS.len()].to_string();
                         rsx! {
                             SceneTileCell {
                                 key: "{i}",
                                 name: tile.name,
+                                subtitle: tile.subtitle,
                                 active: tile.active,
                                 empty: tile.empty,
+                                preloaded: tile.preloaded,
+                                loading: tile.loading,
+                                disabled: tile.disabled,
                                 color,
                                 on_click: move |_| {
                                     on_tile_click.call(i);
@@ -84,21 +102,44 @@ pub fn SceneTileGrid(
 pub fn SceneTileCell(
     /// Display name.
     name: String,
+    /// Optional subtitle shown below the name.
+    #[props(default)]
+    subtitle: Option<String>,
     /// Whether this tile is active/selected.
     #[props(default)]
     active: bool,
     /// Whether this tile is empty.
     #[props(default)]
     empty: bool,
+    /// Whether this tile's patch is preloaded and ready for instant switching.
+    #[props(default = true)]
+    preloaded: bool,
+    /// Whether this tile is in a loading/switching state (pulse animation).
+    #[props(default)]
+    loading: bool,
+    /// Whether this tile exists but can't be activated (blacked out).
+    #[props(default)]
+    disabled: bool,
     /// Background color (hex, e.g. `"#92400e"`).
     color: String,
     /// Click handler.
     on_click: EventHandler<()>,
 ) -> Element {
+    // Always set all style properties explicitly so Wry's WebView repaints
+    // on changes. Removing a property (e.g. dropping `filter`) doesn't always
+    // trigger a repaint — but changing its value does.
     let bg_style = if empty {
-        "background-color: #374151;".to_string()
+        "background-color: #18181b; filter: brightness(1.0); animation: none;".to_string()
+    } else if disabled {
+        format!("background-color: {color}; filter: brightness(0.08); animation: none;")
+    } else if loading {
+        format!("background-color: {color}; filter: brightness(1.0); animation: tile-pulse 0.8s ease-in-out infinite;")
+    } else if active {
+        format!("background-color: {color}; filter: brightness(1.0); animation: none;")
+    } else if preloaded {
+        format!("background-color: {color}; filter: brightness(0.55); animation: none;")
     } else {
-        format!("background-color: {color};")
+        format!("background-color: {color}; filter: brightness(0.2); animation: none;")
     };
 
     let active_class = if active {
@@ -109,29 +150,47 @@ pub fn SceneTileCell(
 
     let empty_class = if empty { "opacity-50" } else { "" };
 
-    let cursor_class = if empty {
+    let cursor_class = if empty || disabled {
         "cursor-default"
     } else {
         "cursor-pointer hover:brightness-110"
     };
 
     rsx! {
+        // Inject the keyframe animation (only emitted once per page due to <style>)
+        style { "@keyframes tile-pulse {{ 0%, 100% {{ filter: brightness(0.5); }} 50% {{ filter: brightness(1.0); }} }}" }
+
         div {
             class: "relative rounded-lg overflow-hidden transition-all duration-150 {active_class} {empty_class} {cursor_class}",
             style: "{bg_style}",
             onclick: move |_| {
-                if !empty {
+                if !empty && !disabled {
                     on_click.call(());
                 }
             },
 
             if !empty {
                 div {
-                    class: "absolute inset-0 flex items-center justify-center text-center px-2",
+                    class: "absolute inset-0 flex flex-col items-center justify-center text-center px-2",
                     span {
-                        class: "text-sm font-bold text-white uppercase tracking-wide leading-tight",
+                        class: if disabled {
+                            "text-sm font-bold text-white/20 uppercase tracking-wide leading-tight"
+                        } else {
+                            "text-sm font-bold text-white uppercase tracking-wide leading-tight"
+                        },
                         style: "text-shadow: 0 1px 3px rgba(0,0,0,0.5);",
                         "{name}"
+                    }
+                    if let Some(ref sub) = subtitle {
+                        span {
+                            class: if disabled {
+                                "text-[10px] text-white/10 leading-tight mt-0.5 truncate max-w-full"
+                            } else {
+                                "text-[10px] text-white/60 leading-tight mt-0.5 truncate max-w-full"
+                            },
+                            style: "text-shadow: 0 1px 2px rgba(0,0,0,0.5);",
+                            "{sub}"
+                        }
                     }
                 }
             }

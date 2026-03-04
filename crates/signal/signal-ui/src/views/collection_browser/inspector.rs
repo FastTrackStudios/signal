@@ -12,6 +12,8 @@ pub(super) struct BlockInspectorPanelProps {
     pub on_param_change: Option<EventHandler<(uuid::Uuid, String, f32)>>,
     #[props(default)]
     pub on_save: Option<EventHandler<GridSlot>>,
+    #[props(default)]
+    pub on_save_as_new: Option<EventHandler<(GridSlot, String)>>,
 }
 
 /// Shows properties of the currently selected block or module in the grid.
@@ -40,6 +42,8 @@ pub(super) fn BlockInspectorPanel(props: BlockInspectorPanelProps) -> Element {
                 let bypassed = if slot.bypassed { "Yes" } else { "No" };
                 let slot_clone = slot.clone();
                 let has_preset = slot.preset_id.is_some();
+                let mut show_save_as_new = use_signal(|| false);
+                let mut save_as_new_name = use_signal(|| String::new());
 
                 rsx! {
                     div { class: "mt-3 rounded border border-zinc-800 bg-zinc-900/60 overflow-hidden",
@@ -126,6 +130,75 @@ pub(super) fn BlockInspectorPanel(props: BlockInspectorPanelProps) -> Element {
                                                 }
                                             },
                                             "Save Snapshot"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        // Save As New Preset
+                        {
+                            let on_save_as_new = props.on_save_as_new.clone();
+                            let new_slot = slot_clone.clone();
+                            let default_name = format!("{:?} Preset", slot.block_type);
+                            rsx! {
+                                div { class: "px-3 py-2 border-t border-zinc-800",
+                                    if show_save_as_new() {
+                                        div { class: "space-y-2",
+                                            input {
+                                                r#type: "text",
+                                                class: "w-full px-2 py-1 text-xs rounded \
+                                                        bg-zinc-800 border border-zinc-600 text-zinc-200 \
+                                                        focus:border-amber-500 focus:outline-none",
+                                                placeholder: "Preset name...",
+                                                value: "{save_as_new_name}",
+                                                oninput: move |evt: Event<FormData>| {
+                                                    save_as_new_name.set(evt.value());
+                                                },
+                                            }
+                                            div { class: "flex gap-2",
+                                                button {
+                                                    class: "flex-1 px-2 py-1 text-xs rounded \
+                                                            bg-amber-600 hover:bg-amber-500 text-white \
+                                                            transition-colors duration-150",
+                                                    onclick: {
+                                                        let on_save_as_new = on_save_as_new.clone();
+                                                        let new_slot = new_slot.clone();
+                                                        move |_| {
+                                                            let name = save_as_new_name();
+                                                            if !name.trim().is_empty() {
+                                                                if let Some(ref cb) = on_save_as_new {
+                                                                    cb.call((new_slot.clone(), name));
+                                                                }
+                                                                show_save_as_new.set(false);
+                                                                save_as_new_name.set(String::new());
+                                                            }
+                                                        }
+                                                    },
+                                                    "Save"
+                                                }
+                                                button {
+                                                    class: "flex-1 px-2 py-1 text-xs rounded \
+                                                            bg-zinc-700 hover:bg-zinc-600 text-zinc-300 \
+                                                            transition-colors duration-150",
+                                                    onclick: move |_| {
+                                                        show_save_as_new.set(false);
+                                                        save_as_new_name.set(String::new());
+                                                    },
+                                                    "Cancel"
+                                                }
+                                            }
+                                        }
+                                    } else {
+                                        button {
+                                            class: "w-full px-3 py-1.5 text-xs rounded \
+                                                    bg-zinc-800 hover:bg-zinc-700 text-zinc-400 \
+                                                    hover:text-zinc-200 border border-zinc-700 border-dashed \
+                                                    transition-colors duration-150",
+                                            onclick: move |_| {
+                                                save_as_new_name.set(default_name.clone());
+                                                show_save_as_new.set(true);
+                                            },
+                                            "Save As New Preset..."
                                         }
                                     }
                                 }

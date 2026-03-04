@@ -187,6 +187,7 @@ fn SongPartsDockPanel() -> Element {
                             tempo: None,
                             key_signature: None,
                             notes: None,
+                            is_base_profile_section: None,
                         })
                         .collect();
                     if let Some(first) = entries.first() {

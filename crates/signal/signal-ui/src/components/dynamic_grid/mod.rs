@@ -7,6 +7,7 @@
 mod block_cell;
 pub mod block_picker;
 pub(crate) mod cables;
+pub mod context_menu;
 mod empty_cell;
 pub(crate) mod interaction;
 pub(crate) mod layout;
@@ -24,11 +25,13 @@ pub use types::GridSlot;
 
 use interaction::*;
 pub use interaction::{
-    GridConnection, GridSelection, GRID_CONNECTIONS, PICKER_CELL, PICKER_CLICK_POS,
+    GridConnection, GridContextMenuEvent, GridSelection, GRID_CONNECTIONS, PICKER_CELL,
+    PICKER_CLICK_POS,
 };
 
 pub use block_picker::BlockPickerDropdown;
 pub(crate) use cables::*;
+pub use context_menu::GridContextMenu;
 pub(crate) use layout::*;
 
 use types::{BlockVisualState, ModuleVisualState};
@@ -54,6 +57,8 @@ pub struct DynamicGridViewProps {
     pub on_group_reorder: Option<EventHandler<(String, String)>>,
     #[props(default)]
     pub on_bypass_toggle: Option<EventHandler<(GridSelection, bool)>>,
+    #[props(default)]
+    pub on_context_menu: Option<EventHandler<GridContextMenuEvent>>,
 }
 
 #[component]
@@ -799,6 +804,21 @@ pub fn DynamicGridView(props: DynamicGridViewProps) -> Element {
                                                 }));
                                                 *PICKER_CELL.write() = None;
                                             },
+                                            on_context_menu: {
+                                                let on_ctx = props.on_context_menu.clone();
+                                                move |evt: MouseEvent| {
+                                                    if !is_selected {
+                                                        props.on_select.call(Some(GridSelection::Block(slot_id)));
+                                                    }
+                                                    if let Some(ref cb) = on_ctx {
+                                                        cb.call(GridContextMenuEvent {
+                                                            target: GridSelection::Block(slot_id),
+                                                            client_x: evt.client_coordinates().x,
+                                                            client_y: evt.client_coordinates().y,
+                                                        });
+                                                    }
+                                                }
+                                            },
                                             on_left_port_mousedown: move |evt: MouseEvent| {
                                                 let pos = input_port_pos(slot_col, slot_row);
                                                 interaction.set(InteractionMode::WireDraft(GridWireDraft {
@@ -911,6 +931,22 @@ pub fn DynamicGridView(props: DynamicGridViewProps) -> Element {
                                         mouse_y: evt.client_coordinates().y,
                                         shift_held: shift,
                                     }));
+                                },
+                                oncontextmenu: {
+                                    let on_ctx = props.on_context_menu.clone();
+                                    let ctx_name = gname.clone();
+                                    move |evt: MouseEvent| {
+                                        if !is_this_module_selected {
+                                            props.on_select.call(Some(GridSelection::Module(ctx_name.clone())));
+                                        }
+                                        if let Some(ref cb) = on_ctx {
+                                            cb.call(GridContextMenuEvent {
+                                                target: GridSelection::Module(ctx_name.clone()),
+                                                client_x: evt.client_coordinates().x,
+                                                client_y: evt.client_coordinates().y,
+                                            });
+                                        }
+                                    }
                                 },
                             }
                         }

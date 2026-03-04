@@ -174,12 +174,28 @@ pub fn BlockCard(
 /// A labeled parameter knob control.
 #[component]
 fn MiniKnobParam(label: String, value: f32, on_change: EventHandler<f32>) -> Element {
+    // Local display value for immediate visual feedback during drag
+    let mut display_value = use_signal(|| value);
+
+    // Sync from props when not being actively dragged
+    use_effect(move || {
+        display_value.set(value);
+    });
+
+    let dv = display_value();
+
     rsx! {
         div { class: "flex flex-col items-center gap-1",
-            MiniKnob { value, on_change }
+            MiniKnob {
+                value,
+                on_change: move |new_val: f32| {
+                    display_value.set(new_val);
+                    on_change.call(new_val);
+                },
+            }
             span { class: "text-xs text-zinc-400 text-center truncate w-14", "{label}" }
             span { class: "text-xs font-mono text-zinc-300 text-center",
-                "{(value * 100.0) as i32}%"
+                "{(dv * 100.0) as i32}%"
             }
         }
     }
@@ -192,19 +208,37 @@ fn MiniKnobParam(label: String, value: f32, on_change: EventHandler<f32>) -> Ele
 /// An SVG rotary knob with drag-to-adjust interaction.
 ///
 /// Ported from the legacy module_detail_view.rs knob.
+/// Uses local state for immediate visual feedback during drag.
 #[component]
-pub fn MiniKnob(value: f32, on_change: EventHandler<f32>) -> Element {
+pub fn MiniKnob(
+    value: f32,
+    on_change: EventHandler<f32>,
+    /// Accent color for the pointer (e.g. "#F97316"). Defaults to blue.
+    #[props(default)]
+    color: Option<String>,
+) -> Element {
     let mut dragging = use_signal(|| false);
     let mut start_y = use_signal(|| 0.0f32);
     let mut start_value = use_signal(|| 0.0f32);
+    // Local value for immediate pointer feedback during drag
+    let mut drag_value = use_signal(|| value);
+
+    // Sync from prop when not dragging
+    if !dragging() {
+        drag_value.set(value);
+    }
+
+    let display = drag_value();
 
     let size = 36.0;
     let center = size / 2.0;
     let radius = 14.0;
     let stroke_width = 3.0;
 
-    let value_angle = -135.0 + (value * 270.0);
+    let value_angle = 135.0 + (display * 270.0);
     let end_angle: f32 = value_angle.to_radians();
+
+    let accent = color.as_deref().unwrap_or("#3B82F6");
 
     let pointer_length = radius - 3.0;
     let pointer_end_x = center + pointer_length * end_angle.cos();
@@ -242,7 +276,7 @@ pub fn MiniKnob(value: f32, on_change: EventHandler<f32>) -> Element {
                 y1: "{center}",
                 x2: "{pointer_end_x}",
                 y2: "{pointer_end_y}",
-                stroke: "#3B82F6",
+                stroke: "{accent}",
                 stroke_width: "2",
                 stroke_linecap: "round",
             }
@@ -256,27 +290,27 @@ pub fn MiniKnob(value: f32, on_change: EventHandler<f32>) -> Element {
                 onmousedown: move |e| {
                     dragging.set(true);
                     start_y.set(e.client_coordinates().y as f32);
-                    start_value.set(value);
+                    start_value.set(display);
+                    drag_value.set(display);
                 },
             }
         }
 
-        // Drag overlay
+        // Drag overlay — full-viewport capture to prevent text selection,
+        // keep dropdown open, and ensure smooth drag even outside the knob.
         if dragging() {
             div {
-                class: "fixed inset-0 z-50",
-                style: "cursor: ns-resize;",
+                class: "fixed inset-0 z-[100]",
+                style: "cursor: ns-resize; user-select: none; -webkit-user-select: none;",
                 onmousemove: move |e| {
                     if dragging() {
                         let delta = (start_y() - e.client_coordinates().y as f32) / 150.0;
                         let new_value = (start_value() + delta).clamp(0.0, 1.0);
+                        drag_value.set(new_value);
                         on_change.call(new_value);
                     }
                 },
                 onmouseup: move |_| {
-                    dragging.set(false);
-                },
-                onmouseleave: move |_| {
                     dragging.set(false);
                 },
             }

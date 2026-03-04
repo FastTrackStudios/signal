@@ -11,8 +11,8 @@ use signal::SignalChain;
 use super::inspector::BlockInspectorPanel;
 use super::types::{EngineFlowData, ModuleChainData};
 use crate::components::dynamic_grid::{
-    BlockPickerDropdown, DynamicGridView, GridConnection as DynGridConnection, GridSelection,
-    GridSlot, PICKER_CELL, PICKER_CLICK_POS,
+    BlockPickerDropdown, DynamicGridView, GridConnection as DynGridConnection, GridContextMenu,
+    GridContextMenuEvent, GridSelection, GridSlot, PICKER_CELL, PICKER_CLICK_POS,
 };
 
 /// Pre-resolved block parameters keyed by `(preset_id, snapshot_id)`.
@@ -88,10 +88,7 @@ const ROW_BAND_STRIDE: usize = 2;
 ///  - Split nodes fan out vertically within the module's row band
 ///  - Whole-module collision avoidance: if a module's footprint overlaps
 ///    existing blocks, the entire module shifts to a free row position
-pub fn engines_to_grid_slots(
-    engines: &[EngineFlowData],
-    params: &ParamLookup,
-) -> Vec<GridSlot> {
+pub fn engines_to_grid_slots(engines: &[EngineFlowData], params: &ParamLookup) -> Vec<GridSlot> {
     let mut slots = Vec::new();
     let mut occupied = HashSet::new();
     let mut row: usize = 0;
@@ -479,7 +476,22 @@ pub struct RigGridPanelProps {
     #[props(default)]
     pub on_save: Option<EventHandler<GridSlot>>,
     #[props(default)]
+    pub on_save_as_new: Option<EventHandler<(GridSlot, String)>>,
+    #[props(default)]
     pub on_selection_change: Option<EventHandler<Option<GridSelection>>>,
+    // Block snapshot callbacks
+    #[props(default)]
+    pub on_save_block_snapshot: Option<EventHandler<GridSlot>>,
+    #[props(default)]
+    pub on_save_block_snapshot_as: Option<EventHandler<(GridSlot, String)>>,
+    // Module save callbacks
+    #[props(default)]
+    pub on_save_module_preset_as: Option<EventHandler<(Vec<GridSlot>, String, signal::ModuleType)>>,
+    #[props(default)]
+    pub on_save_module_snapshot: Option<EventHandler<Vec<GridSlot>>>,
+    #[props(default)]
+    pub on_save_module_snapshot_as:
+        Option<EventHandler<(Vec<GridSlot>, String, signal::ModuleType)>>,
 }
 
 /// Stateful wrapper around `DynamicGridView` + `BlockPickerDropdown`.
@@ -492,19 +504,39 @@ pub fn RigGridPanel(props: RigGridPanelProps) -> Element {
     let mut selection = use_signal(|| Option::<GridSelection>::None);
     let mut connections = use_signal(Vec::<DynGridConnection>::new);
 
-    // Sync when the parent passes new data (e.g. user selects a different preset)
-    use_effect(move || {
+    // Sync when the parent passes new data (e.g. user selects a different preset).
+    // We track the previous initial_slots to detect prop changes across renders,
+    // because use_effect cannot reactively track plain (non-signal) props.
+    let mut last_initial = use_signal(|| props.initial_slots.clone());
+    if *last_initial.read() != props.initial_slots {
+        tracing::info!(
+            "RigGridPanel: syncing {} -> {} slots",
+            last_initial.read().len(),
+            props.initial_slots.len()
+        );
         chain.set(props.initial_slots.clone());
+        last_initial.set(props.initial_slots.clone());
         selection.set(None);
         connections.set(Vec::new());
-    });
+    }
+
+    // Context menu target — tracks which block/module was right-clicked.
+    // Open/close and positioning are handled by lumen-blocks ContextMenuTrigger.
+    // Name input state lives inside GridContextMenu.
+    let mut ctx_menu_target = use_signal(|| None::<GridSelection>);
 
     let picker_cell = PICKER_CELL();
     let picker_pos = PICKER_CLICK_POS();
 
     let on_param_change_prop = props.on_param_change.clone();
     let on_save_prop = props.on_save.clone();
+    let on_save_as_new_prop = props.on_save_as_new.clone();
     let on_selection_change_prop = props.on_selection_change.clone();
+    let on_save_block_snapshot_prop = props.on_save_block_snapshot.clone();
+    let on_save_block_snapshot_as_prop = props.on_save_block_snapshot_as.clone();
+    let on_save_module_preset_as_prop = props.on_save_module_preset_as.clone();
+    let on_save_module_snapshot_prop = props.on_save_module_snapshot.clone();
+    let on_save_module_snapshot_as_prop = props.on_save_module_snapshot_as.clone();
 
     let current_chain = chain();
     let current_sel = selection();
@@ -527,7 +559,7 @@ pub fn RigGridPanel(props: RigGridPanelProps) -> Element {
 
     rsx! {
         div {
-            class: "flex-1 min-h-0",
+            class: "flex-1 min-h-0 flex flex-col",
             DynamicGridView {
                 chain: current_chain.clone(),
                 selection: current_sel.clone(),
@@ -544,8 +576,24 @@ pub fn RigGridPanel(props: RigGridPanelProps) -> Element {
                         cb.call(sel);
                     }
                 },
+                on_context_menu: move |evt: GridContextMenuEvent| {
+                    ctx_menu_target.set(Some(evt.target));
+                },
+            }
+            GridContextMenu {
+                target: ctx_menu_target(),
+                chain: current_chain.clone(),
+                on_save: on_save_prop.clone(),
+                on_save_as_new: on_save_as_new_prop.clone(),
+                on_save_block_snapshot: on_save_block_snapshot_prop.clone(),
+                on_save_block_snapshot_as: on_save_block_snapshot_as_prop.clone(),
+                on_save_module_preset_as: on_save_module_preset_as_prop.clone(),
+                on_save_module_snapshot: on_save_module_snapshot_prop.clone(),
+                on_save_module_snapshot_as: on_save_module_snapshot_as_prop.clone(),
+                on_close: move |_| { ctx_menu_target.set(None); },
             }
         }
+
         // Block picker rendered outside the transform context
         if let Some((col, row)) = picker_cell {
             BlockPickerDropdown {
@@ -556,6 +604,12 @@ pub fn RigGridPanel(props: RigGridPanelProps) -> Element {
                 on_add_slot: move |slot: GridSlot| {
                     let mut current = chain();
                     current.push(slot);
+                    chain.set(current);
+                    *PICKER_CELL.write() = None;
+                },
+                on_add_slots: move |slots: Vec<GridSlot>| {
+                    let mut current = chain();
+                    current.extend(slots);
                     chain.set(current);
                     *PICKER_CELL.write() = None;
                 },
@@ -570,6 +624,7 @@ pub fn RigGridPanel(props: RigGridPanelProps) -> Element {
             chain: current_chain,
             on_param_change: param_change_handler,
             on_save: on_save_prop.clone(),
+            on_save_as_new: on_save_as_new_prop.clone(),
         }
     }
 }

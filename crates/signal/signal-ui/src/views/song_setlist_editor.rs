@@ -5,7 +5,6 @@
 
 use dioxus::prelude::*;
 
-
 /// A section within a song.
 #[derive(Clone, PartialEq)]
 pub struct SectionEntry {
@@ -16,6 +15,9 @@ pub struct SectionEntry {
     pub tempo: Option<u32>,
     pub key_signature: Option<String>,
     pub notes: Option<String>,
+    /// Whether this section's source belongs to the song's base profile.
+    /// `None` = song has no base profile, `Some(true)` = matches, `Some(false)` = overridden.
+    pub is_base_profile_section: Option<bool>,
 }
 
 /// A song in the setlist.
@@ -69,14 +71,16 @@ pub struct SongEditorProps {
 pub fn SongEditor(props: SongEditorProps) -> Element {
     rsx! {
         div {
-            class: format!("flex flex-col gap-3 p-4 {}", props.class),
+            class: format!("flex flex-col gap-1.5 p-2 {}", props.class),
 
             // Header
             div {
                 class: "flex items-center justify-between",
-                h3 {
-                    class: "text-xs uppercase tracking-widest text-muted-foreground font-semibold",
-                    "{props.song_name}"
+                if !props.song_name.is_empty() {
+                    h3 {
+                        class: "text-xs uppercase tracking-widest text-muted-foreground font-semibold",
+                        "{props.song_name}"
+                    }
                 }
                 button {
                     class: "px-2 py-0.5 text-xs rounded bg-primary text-primary-foreground hover:bg-primary/90",
@@ -104,7 +108,7 @@ pub fn SongEditor(props: SongEditorProps) -> Element {
                         rsx! {
                             div {
                                 class: format!(
-                                    "flex items-start gap-3 px-3 py-2 rounded border cursor-pointer transition-colors {selected_class}"
+                                    "flex items-start gap-2 px-2 py-1.5 rounded border cursor-pointer transition-colors {selected_class}"
                                 ),
                                 onclick: move |_| {
                                     if let Some(cb) = &props.on_select_section {
