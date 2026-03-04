@@ -20,14 +20,12 @@ pub mod block;
 pub mod builder;
 pub mod catalog;
 pub mod defaults;
-pub mod easing;
 pub mod engine;
 pub mod fx_send;
 pub mod layer;
 pub mod metadata;
 pub mod midi;
 pub mod midi_actions;
-pub mod modulation;
 pub mod module_type;
 pub mod override_policy;
 pub mod overrides;
@@ -45,6 +43,19 @@ pub mod tagging;
 pub mod template;
 pub mod traits;
 pub mod versioning;
+
+// ─── Re-exported from macromod ──────────────────────────────────
+pub use macromod::easing;
+pub use macromod::macro_bank;
+pub use macromod::curation as param_curation;
+pub use macromod::runtime;
+pub use macromod::{BlockParameter, MacroBinding, ParameterValue, ParamTarget, ResponseCurve};
+
+/// Backward-compatible `modulation` module path.
+pub mod modulation {
+    pub use macromod::sources::*;
+    pub use macromod::routing::*;
+}
 
 pub use block::*;
 pub use module_type::*;
@@ -290,61 +301,18 @@ impl EngineType {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, Facet)]
-pub struct ParameterValue(f32);
-
-impl ParameterValue {
-    pub fn new(value: f32) -> Self {
-        Self(value.clamp(0.0, 1.0))
-    }
-
-    pub fn get(self) -> f32 {
-        self.0
-    }
-}
-
-impl Default for ParameterValue {
-    fn default() -> Self {
-        Self(0.5)
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Facet)]
-pub struct BlockParameter {
-    id: String,
-    name: String,
-    value: ParameterValue,
-}
-
-impl BlockParameter {
-    pub fn new(id: impl Into<String>, name: impl Into<String>, value: f32) -> Self {
-        Self {
-            id: id.into(),
-            name: name.into(),
-            value: ParameterValue::new(value),
-        }
-    }
-
-    pub fn id(&self) -> &str {
-        &self.id
-    }
-
-    pub fn name(&self) -> &str {
-        &self.name
-    }
-
-    pub fn value(&self) -> ParameterValue {
-        self.value
-    }
-
-    pub fn set_value(&mut self, value: f32) {
-        self.value = ParameterValue::new(value);
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Facet)]
 pub struct Block {
     parameters: Vec<BlockParameter>,
+    /// Optional macro knob bank for this block.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub macro_bank: Option<macromod::MacroBank>,
+    /// Optional parameter curation for the custom GUI.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub param_curation: Option<macromod::ParamCuration>,
+    /// Optional modulation routing for this block.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub modulation: Option<macromod::ModulationRouteSet>,
 }
 
 impl Block {
@@ -363,7 +331,12 @@ impl Block {
             parameters
         };
 
-        Self { parameters }
+        Self {
+            parameters,
+            macro_bank: None,
+            param_curation: None,
+            modulation: None,
+        }
     }
 
     pub fn parameters(&self) -> &[BlockParameter] {

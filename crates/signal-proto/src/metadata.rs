@@ -63,6 +63,12 @@ pub struct Metadata {
     /// `None` means the entity lives at the root level of its collection.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub folder: Option<String>,
+    /// The profile used as the base template when this song was created.
+    ///
+    /// Stores the profile ID as a string. `None` means the song was created
+    /// without a base profile (or predates this field).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub base_profile_id: Option<String>,
 }
 
 impl Metadata {
@@ -91,6 +97,12 @@ impl Metadata {
     #[must_use]
     pub fn with_folder(mut self, folder: impl Into<String>) -> Self {
         self.folder = Some(folder.into());
+        self
+    }
+
+    #[must_use]
+    pub fn with_base_profile_id(mut self, id: impl Into<String>) -> Self {
+        self.base_profile_id = Some(id.into());
         self
     }
 }
@@ -163,5 +175,35 @@ mod tests {
         let json = serde_json::to_string(&meta).unwrap();
         let roundtrip: Metadata = serde_json::from_str(&json).unwrap();
         assert_eq!(roundtrip.folder.as_deref(), Some("John Mayer"));
+    }
+
+    #[test]
+    fn test_metadata_base_profile_backwards_compat() {
+        let json = r#"{"tags":["rock"],"description":"Old song","notes":null}"#;
+        let meta: Metadata = serde_json::from_str(json).unwrap();
+        assert_eq!(meta.base_profile_id, None);
+    }
+
+    #[test]
+    fn test_metadata_base_profile_skip_serializing_none() {
+        let meta = Metadata::new().with_tag("blues");
+        let json = serde_json::to_string(&meta).unwrap();
+        assert!(
+            !json.contains("base_profile_id"),
+            "base_profile_id=None should be omitted"
+        );
+    }
+
+    #[test]
+    fn test_metadata_base_profile_round_trip() {
+        let meta = Metadata::new()
+            .with_base_profile_id("some-profile-uuid")
+            .with_tag("worship");
+        let json = serde_json::to_string(&meta).unwrap();
+        let roundtrip: Metadata = serde_json::from_str(&json).unwrap();
+        assert_eq!(
+            roundtrip.base_profile_id.as_deref(),
+            Some("some-profile-uuid")
+        );
     }
 }

@@ -1,0 +1,195 @@
+0	Input Gain	0.500000
+1	Output Gain	0.500000
+2	Gate Active	1.000000
+3	Gate Threshold	0.166667
+4	Transpose	0.500000
+5	Doubler Active	0.000000
+6	Doubler Spread	0.176471
+7	Active Synth Section	0.000000
+8	Synth Mix	1.000000
+9	Synth Sensitivity	0.500000
+10	Synth Env Retrigger	1.000000
+11	Synth Tuning	0.500000
+12	Synth Pre Post	1.000000
+13	Synth Gate	0.242625
+14	Synth Output	0.500000
+15	Synth Glide	0.341659
+16	Synth Arp Enabled	0.000000
+17	Synth Arp Root	0.000000
+18	Synth Arp Mode	1.000000
+19	Synth Arp Pattern	1.000000
+20	Synth Arp Octave	1.000000
+21	Synth Arp Note 2	0.000000
+22	Synth Arp Note 3	0.000000
+23	Synth Arp Note 4	0.000000
+24	Synth Arp Note 5	0.000000
+25	Synth Arp Note 6	0.000000
+26	Synth Arp Note 7	0.000000
+27	Synth Arp Note 8	1.000000
+28	Synth Arp Sync Rate	0.650000
+29	Synth Arp Sync Mode	0.000000
+30	Synth Arp Free Rate	1.000000
+31	Synth Amplifier Decay/Attack	0.500000
+32	Synth Amplifier Sustain	1.000000
+33	Synth Osc 1 Enable	1.000000
+34	Synth Osc 1 Waveform	0.333333
+35	Synth Osc 1 Semitones	0.250000
+36	Synth Osc 1 Level	0.800000
+37	Synth Osc 1 Detune	0.500000
+38	Synth Osc 2 Enable	1.000000
+39	Synth Osc 2 Waveform	0.333333
+40	Synth Osc 2 Semitones	0.895833
+41	Synth Osc 2 Level	0.700437
+42	Synth Osc 2 Detune	0.500000
+43	Synth Osc 1 Unison Active	1.000000
+44	Synth Osc 2 Unison Active	1.000000
+45	Synth Osc Unisons	1.000000
+46	Synth Osc Unison Width	1.000000
+47	Synth Osc Unison Detune	0.144956
+48	Synth Filter Enable	1.000000
+49	Synth Filter Cutoff	0.645823
+50	Synth Filter Resonance	0.000000
+51	Synth Filter Mode	0.333333
+52	Synth Filter Env Amount	0.290000
+53	Synth Filter Decay/Attack	0.087000
+54	Synth Filter Drive	0.113439
+55	Active Pre FX Section	1.000000
+56	Twin Blade Dual Compressor Dry	1.000000
+57	Twin Blade Dual Compressor In	0.236000
+58	Twin Blade Dual Compressor Out	0.222000
+59	Twin Blade Dual Compressor Att/Rel 1	0.294000
+60	Twin Blade Dual Compressor Thru	0.694000
+61	Twin Blade Dual Compressor Att/Rel 2	0.701000
+62	Twin Blade Dual Compressor Active	0.000000
+63	Chaos Bed Octaver Mode	1.000000
+64	Chaos Bed Octaver Direct Level	0.819233
+65	Chaos Bed Octaver Oct Up	0.129666
+66	Chaos Bed Octaver Oct Down	0.627000
+67	Chaos Bed Octaver Active	0.000000
+68	Colossus Fuzz Fuzz	0.500000
+69	Colossus Fuzz Level	0.804156
+70	Colossus Fuzz Mode	1.000000
+71	Colossus Fuzz Bass	0.500000
+72	Colossus Fuzz Treble	0.500000
+73	Colossus Fuzz Active	0.000000
+74	Paragon Overdrive Drive	0.051496
+75	Paragon Overdrive Level	0.724774
+76	Paragon Overdrive Mode	1.000000
+77	Paragon Overdrive Bass	0.500000
+78	Paragon Overdrive Treble	0.626971
+79	Paragon Overdrive Active	0.000000
+80	Active Amp Section	1.000000
+81	Amp/Cab Linked	0.000000
+82	Amp Type	0.500000
+83	Clean Amp Mid Boost	1.000000
+84	Clean Amp Treble Boost	1.000000
+85	Clean Amp Volume	0.560000
+86	Clean Amp Bass	0.543363
+87	Clean Amp Middle	0.500000
+88	Clean Amp Treble	0.500000
+89	Clean Amp Output	0.499999
+90	Crunch Amp Mid Boost	0.000000
+91	Crunch Amp Treble Boost	1.000000
+92	Crunch Amp Gain	0.253392
+93	Crunch Amp Bass	0.500000
+94	Crunch Amp Middle	0.393323
+95	Crunch Amp Treble	0.656018
+96	Crunch Amp Master	0.399855
+97	Crunch Amp Depth	0.793753
+98	Crunch Amp Output	0.741096
+99	Crunch Amp Tubes	0.000000
+100	Lead Amp Gain	0.710648
+101	Lead Amp Tight	0.416454
+102	Lead Amp Bass	0.500000
+103	Lead Amp Middle	0.359531
+104	Lead Amp Treble	0.695327
+105	Lead Amp Master	0.321195
+106	Lead Amp Presence	0.740596
+107	Lead Amp Depth	0.576918
+108	Lead Amp Output	0.773763
+109	Lead Amp Tubes	0.000000
+110	Active Cab Section	1.000000
+111	Cab Type (Unlinked)	1.000000
+112	Cab L Active	1.000000
+113	Clean Amp Cab L Mic	0.250000
+114	Crunch Amp Cab L Mic	0.500000
+115	Lead Amp Cab L Mic	0.500000
+116	Cab L Position	0.045714
+117	Cab L Distance	0.000000
+118	Cab L Level	0.499999
+119	Cab L Pan	0.500000
+120	Cab L Phase	0.000000
+121	Room L Active	0.000000
+122	Room L Send	0.001033
+123	Cab R Active	1.000000
+124	Clean Amp Cab R Mic	0.833333
+125	Crunch Amp Cab R Mic	0.333333
+126	Lead Amp Cab R Mic	0.333333
+127	Cab R Position	0.057143
+128	Cab R Distance	0.137143
+129	Cab R Level	0.499999
+130	Cab R Pan	0.500000
+131	Cab R Phase	0.000000
+132	Room R Active	0.000000
+133	Room R Send	0.000867
+134	Active EQ Section	1.000000
+135	Clean EQ Active	0.000000
+136	Clean EQ HPF	0.000000
+137	Clean EQ Lo Freq	0.616000
+138	Clean EQ Lo-Mid Freq	0.640000
+139	Clean EQ Hi-Mid Freq	0.945000
+140	Clean EQ Hi Freq	0.622000
+141	Clean EQ LPF	1.000000
+142	Clean EQ Lo Gain	0.366667
+143	Clean EQ Lo-Mid Gain	0.550000
+144	Clean EQ Hi-Mid Gain	0.445833
+145	Clean EQ Hi Gain	0.550000
+146	Crunch EQ Active	0.000000
+147	Crunch EQ HPF	0.000000
+148	Crunch EQ Lo Freq	0.633000
+149	Crunch EQ Lo-Mid Freq	0.407000
+150	Crunch EQ Hi-MidFreq	0.965000
+151	Crunch EQ Hi Freq	0.605000
+152	Crunch EQ LPF	1.000000
+153	Crunch EQ Lo Gain	0.579167
+154	Crunch EQ Lo-Mid Gain	0.445833
+155	Crunch EQ Hi-Mid Gain	0.562500
+156	Crunch EQ Hi Gain	0.595833
+157	Lead EQ Active	0.000000
+158	Lead EQ HPF	0.000000
+159	Lead EQ Lo Freq	0.865006
+160	Lead EQ Lo-Mid Freq	0.573000
+161	Lead EQ Hi-Mid Freq	0.566000
+162	Lead EQ Hi Freq	0.637000
+163	Lead EQ LPF	1.000000
+164	Lead EQ Lo Gain	0.571207
+165	Lead EQ Lo-Mid Gain	0.566667
+166	Lead EQ Hi-Mid Gain	0.570833
+167	Lead EQ Hi Gain	0.525000
+168	Active Post FX Section	1.000000
+169	Atlas Delay Mix	0.170000
+170	Atlas Delay Sync	0.500000
+171	Atlas Delay Pre/Post	1.000000
+172	Atlas Delay Mode	1.000000
+173	Atlas Delay Feedback	0.590000
+174	Atlas Delay Low Cut	0.344000
+175	Atlas Delay Time L	0.400000
+176	Atlas Delay Sync Note L	0.600000
+177	Atlas Delay Cross Feedback	0.490000
+178	Atlas Delay Icicles	0.060000
+179	Atlas Delay Time R	0.400000
+180	Atlas Delay Sync Note R	0.800000
+181	Atlas Delay High Cut	0.618000
+182	Atlas Delay Tempo	0.400000
+183	Atlas Delay Active	1.000000
+184	Aeons Reverb Mix	0.193231
+185	Aeons Reverb Decay	0.690000
+186	Aeons Reverb Low Cut	0.219413
+187	Aeons Reverb Freeze Volume	0.500000
+188	Aeons Reverb Freeze Pitch	0.500000
+189	Aeons Reverb High Cut	0.766520
+190	Aeons Reverb Active	1.000000
+191	Aeons Reverb Freeze	0.000000
+192	Preset Previous	0.000000
+193	Preset Next	0.000000
+194	Bypass	0.000000
