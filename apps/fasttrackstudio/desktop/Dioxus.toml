@@ -19,3 +19,11 @@ script = []
 # Javascript code file
 # serve: [dev-server] only
 script = []
+
+[bundle]
+identifier = "com.fasttrackstudio.fasttrackstudio"
+publisher = "FastTrack Studio"
+icon = ["./assets/favicon.ico"]
+
+[bundle.macos]
+minimum_system_version = "13.0"

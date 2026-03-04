@@ -7,10 +7,14 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-dioxus = { version = "0.7.1", features = ["router"] }
+dioxus = { workspace = true, features = ["desktop"] }
+keyflow-ui = { workspace = true, default-features = false, features = ["web"] }
+rfd = "0.15"
+tokio = { workspace = true, features = ["full"] }
+zip = "2"
 
 [features]
 default = ["desktop"]
 web = ["dioxus/web"]
-desktop = ["dioxus/desktop"]
+desktop = []
 mobile = ["dioxus/mobile"]
