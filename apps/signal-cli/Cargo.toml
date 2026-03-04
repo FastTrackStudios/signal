@@ -1,0 +1,24 @@
+[package]
+name = "signal-cli"
+version.workspace = true
+edition.workspace = true
+
+[lib]
+name = "signal_cli"
+path = "src/lib.rs"
+
+[[bin]]
+name = "signal"
+path = "src/main.rs"
+
+[dependencies]
+signal.workspace = true
+signal-proto.workspace = true
+signal-controller.workspace = true
+tokio.workspace = true
+eyre.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+serde_json.workspace = true
+clap = { version = "4", features = ["derive"] }
+uuid.workspace = true
