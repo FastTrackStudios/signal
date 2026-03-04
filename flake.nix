@@ -29,8 +29,18 @@
           # Version info
           rev = toString (self.shortRev or self.dirtyShortRev or self.lastModified or "unknown");
 
-          # Source filtering
-          src = craneLib.cleanCargoSource ./.;
+          # Source filtering — include Rust sources plus Dioxus assets
+          src = lib.fileset.toSource {
+            root = ./.;
+            fileset = lib.fileset.unions [
+              (craneLib.fileset.commonCargoSources ./.)
+              (lib.fileset.fileFilter (f: f.hasExt "css") ./.)
+              (lib.fileset.fileFilter (f: f.hasExt "ico") ./.)
+              (lib.fileset.fileFilter (f: f.hasExt "svg") ./.)
+              (lib.fileset.fileFilter (f: f.name == "Dioxus.toml") ./.)
+              (lib.fileset.fileFilter (f: f.name == "tailwind-config.js") ./.)
+            ];
+          };
 
           # Build dependencies
           buildInputs = (with pkgs; [
@@ -146,16 +156,33 @@
                 dx build --release --platform desktop
               '';
               installPhaseCommand = ''
-                mkdir -p $out/bin
-                # On macOS, dx produces an .app bundle
+                mkdir -p $out/Applications $out/bin
                 if [ -d "apps/fts-control/desktop/target/dx/fts-control-desktop/release/macos" ]; then
-                  cp -r apps/fts-control/desktop/target/dx/fts-control-desktop/release/macos/* $out/
-                # On Linux, dx produces a binary
-                elif [ -f "apps/fts-control/desktop/target/dx/fts-control-desktop/release/fts-control-desktop" ]; then
-                  cp apps/fts-control/desktop/target/dx/fts-control-desktop/release/fts-control-desktop $out/bin/
-                # Fallback to standard cargo output
+                  cp -r apps/fts-control/desktop/target/dx/fts-control-desktop/release/macos/*.app $out/Applications/
+                  ln -s "$out/Applications/"*.app"/Contents/MacOS/"* $out/bin/fts-control-desktop
                 elif [ -f "target/release/fts-control-desktop" ]; then
                   cp target/release/fts-control-desktop $out/bin/
+                fi
+              '';
+              doCheck = false;
+            });
+
+            # FastTrackStudio Desktop App
+            fasttrackstudio-desktop = craneLib.buildPackage (commonArgs // {
+              pname = "fasttrackstudio-desktop";
+              version = rev;
+              inherit cargoArtifacts;
+              buildPhaseCargoCommand = ''
+                cd apps/fasttrackstudio/desktop
+                dx build --release --platform desktop
+              '';
+              installPhaseCommand = ''
+                mkdir -p $out/Applications $out/bin
+                if [ -d "apps/fasttrackstudio/desktop/target/dx/fasttrackstudio-desktop/release/macos" ]; then
+                  cp -r apps/fasttrackstudio/desktop/target/dx/fasttrackstudio-desktop/release/macos/*.app $out/Applications/
+                  ln -s "$out/Applications/"*.app"/Contents/MacOS/"* $out/bin/fasttrackstudio-desktop
+                elif [ -f "target/release/fasttrackstudio-desktop" ]; then
+                  cp target/release/fasttrackstudio-desktop $out/bin/
                 fi
               '';
               doCheck = false;
