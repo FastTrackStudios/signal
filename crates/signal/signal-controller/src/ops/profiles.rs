@@ -133,17 +133,18 @@ impl<S: SignalApi> ProfileOps<S> {
             .iter()
             .find(|p| p.id == patch_id)
             .map(|p| p.name.as_str());
-        let applied_to_daw = if let Some(applier) = &self.0.daw_applier {
-            match applier.apply_graph(&graph, patch_name).await {
-                Ok(_) => true,
-                Err(e) => {
-                    eprintln!("[signal] activate_patch DAW apply failed: {e}");
-                    false
+        let applied_to_daw =
+            if let Some(applier) = self.0.daw_applier.read().expect("lock poisoned").clone() {
+                match applier.apply_graph(&graph, patch_name).await {
+                    Ok(_) => true,
+                    Err(e) => {
+                        eprintln!("[signal] activate_patch DAW apply failed: {e}");
+                        false
+                    }
                 }
-            }
-        } else {
-            false
-        };
+            } else {
+                false
+            };
 
         self.0.event_bus.emit(events::SignalEvent::PatchActivated {
             profile_id: profile_id.to_string(),

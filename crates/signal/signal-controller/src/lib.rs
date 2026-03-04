@@ -84,7 +84,7 @@ where
     pub(crate) service: Arc<S>,
     pub(crate) context_factory: SharedContextFactory,
     pub(crate) event_bus: Arc<EventBus>,
-    pub(crate) daw_applier: Option<Arc<dyn DawPatchApplier>>,
+    pub(crate) daw_applier: Arc<std::sync::RwLock<Option<Arc<dyn DawPatchApplier>>>>,
 }
 
 impl<S> Clone for SignalController<S>
@@ -125,14 +125,26 @@ where
             service,
             context_factory,
             event_bus: Arc::new(EventBus::default()),
-            daw_applier: None,
+            daw_applier: Arc::new(std::sync::RwLock::new(None)),
         }
     }
 
     /// Attach a DAW patch applier for live FX chain loading.
-    pub fn with_daw_applier(mut self, applier: Arc<dyn DawPatchApplier>) -> Self {
-        self.daw_applier = Some(applier);
+    /// Can be called at construction time or later — all clones share the same slot.
+    pub fn with_daw_applier(self, applier: Arc<dyn DawPatchApplier>) -> Self {
+        *self.daw_applier.write().expect("lock poisoned") = Some(applier);
         self
+    }
+
+    /// Set (or replace) the DAW patch applier after construction.
+    /// All clones share the same slot, so replacing it affects all users.
+    pub fn set_daw_applier(&self, applier: Arc<dyn DawPatchApplier>) {
+        *self.daw_applier.write().expect("lock poisoned") = Some(applier);
+    }
+
+    /// Check if a DAW patch applier is attached.
+    pub fn has_daw_applier(&self) -> bool {
+        self.daw_applier.read().expect("lock poisoned").is_some()
     }
 
     // region: --- Namespace accessors

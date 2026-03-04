@@ -2,6 +2,7 @@ use super::error::OpsError;
 use crate::{SignalApi, SignalController};
 use signal_proto::{
     metadata::Metadata,
+    profile::ProfileId,
     song::{Section, SectionId, SectionSource, Song, SongId},
 };
 
@@ -44,6 +45,91 @@ impl<S: SignalApi> SongOps<S> {
                 metadata: Metadata::new(),
             },
         );
+        self.save(song.clone()).await?;
+        Ok(song)
+    }
+
+    /// Create a song from a profile, generating one section per patch.
+    ///
+    /// Each section is named after its source patch and linked via
+    /// `SectionSource::Patch`. The profile's ID is stored in the song's
+    /// `metadata.base_profile_id`.
+    pub async fn create_from_profile(
+        &self,
+        name: impl Into<String>,
+        profile_id: impl Into<ProfileId>,
+    ) -> Result<Song, OpsError> {
+        let profile_id = profile_id.into();
+        let cx = self.0.context_factory.make_context();
+        let profile = self
+            .0
+            .service
+            .load_profile(&cx, profile_id.clone())
+            .await
+            .map_err(OpsError::Storage)?
+            .ok_or_else(|| OpsError::NotFound {
+                entity_type: "profile",
+                id: profile_id.to_string(),
+            })?;
+
+        let song = Song::from_profile(SongId::new(), name, &profile);
+        self.save(song.clone()).await?;
+        Ok(song)
+    }
+
+    /// Change a song's base profile, remapping non-overridden sections.
+    ///
+    /// Sections still pointing at the old profile's patches are remapped by
+    /// slot position to the new profile. Manually relinked sections are left
+    /// untouched. Saves the song after remapping.
+    pub async fn change_base_profile(
+        &self,
+        song_id: impl Into<SongId>,
+        new_profile_id: impl Into<ProfileId>,
+    ) -> Result<Song, OpsError> {
+        let song_id = song_id.into();
+        let new_profile_id = new_profile_id.into();
+        let cx = self.0.context_factory.make_context();
+
+        let mut song = self
+            .load(song_id)
+            .await?
+            .ok_or_else(|| OpsError::NotFound {
+                entity_type: "song",
+                id: "unknown".to_string(),
+            })?;
+
+        let new_profile = self
+            .0
+            .service
+            .load_profile(&cx, new_profile_id.clone())
+            .await
+            .map_err(OpsError::Storage)?
+            .ok_or_else(|| OpsError::NotFound {
+                entity_type: "profile",
+                id: new_profile_id.to_string(),
+            })?;
+
+        // Load the old base profile (if any) for slot remapping
+        if let Some(old_id) = &song.metadata.base_profile_id {
+            if let Some(old_profile) = self
+                .0
+                .service
+                .load_profile(&cx, old_id.as_str().into())
+                .await
+                .map_err(OpsError::Storage)?
+            {
+                song.change_base_profile(&old_profile, &new_profile);
+            } else {
+                // Old profile was deleted — treat all sections as manually set,
+                // just update the base_profile_id
+                song.metadata.base_profile_id = Some(new_profile_id.to_string());
+            }
+        } else {
+            // No previous base profile — just set it, don't remap anything
+            song.metadata.base_profile_id = Some(new_profile_id.to_string());
+        }
+
         self.save(song.clone()).await?;
         Ok(song)
     }

@@ -65,7 +65,8 @@ async fn load_worship_lead_patch() {
             seed_id("guitar-worship-profile"),
             seed_id("guitar-worship-lead"),
         )
-        .await.unwrap()
+        .await
+        .unwrap()
         .expect("guitar-worship-lead patch not found");
 
     match &patch.target {
@@ -139,7 +140,8 @@ async fn create_and_reload_custom_profile() {
     let reloaded = signal
         .profiles()
         .load(profile_id.clone())
-        .await.unwrap()
+        .await
+        .unwrap()
         .expect("custom profile not found after save");
 
     println!(
@@ -170,7 +172,8 @@ async fn add_patch_to_existing_profile() {
     let mut worship = signal
         .profiles()
         .load(seed_id("guitar-worship-profile"))
-        .await.unwrap()
+        .await
+        .unwrap()
         .expect("worship profile not found");
 
     let original_count = worship.patches.len();
@@ -188,7 +191,8 @@ async fn add_patch_to_existing_profile() {
     let reloaded = signal
         .profiles()
         .load(seed_id("guitar-worship-profile"))
-        .await.unwrap()
+        .await
+        .unwrap()
         .expect("worship profile not found after update");
 
     println!(
@@ -208,7 +212,8 @@ async fn blues_profile_default_is_crunch() {
     let blues = signal
         .profiles()
         .load(seed_id("guitar-blues-profile"))
-        .await.unwrap()
+        .await
+        .unwrap()
         .expect("blues profile not found");
 
     let default = blues.default_patch().expect("no default patch");
@@ -286,7 +291,8 @@ async fn create_song_with_mixed_section_sources() {
     let reloaded = signal
         .songs()
         .load(song_id.clone())
-        .await.unwrap()
+        .await
+        .unwrap()
         .expect("test song not found after save");
 
     println!(
@@ -356,7 +362,8 @@ async fn update_section_override_persists() {
     let reloaded = signal
         .songs()
         .load(song_id)
-        .await.unwrap()
+        .await
+        .unwrap()
         .expect("song not found after update");
     let section = reloaded.section(&section_id).unwrap();
 
@@ -839,7 +846,8 @@ async fn all_around_activate_each_patch() {
     let profile = signal
         .profiles()
         .load(profile_id.clone())
-        .await.unwrap()
+        .await
+        .unwrap()
         .expect("All-Around profile not found");
 
     assert_eq!(profile.patches.len(), 8, "All-Around should have 8 patches");
@@ -881,4 +889,184 @@ async fn all_around_activate_each_patch() {
             graph.effective_overrides.len()
         );
     }
+}
+
+// ─────────────────────────────────────────────────────────────
+//  Song from Profile tests
+// ─────────────────────────────────────────────────────────────
+
+/// Create a song from a profile — each patch becomes a section.
+#[tokio::test]
+async fn create_song_from_profile_generates_sections() {
+    let signal = controller().await;
+
+    let profile = signal
+        .profiles()
+        .load(seed_id("guitar-worship-profile"))
+        .await
+        .unwrap()
+        .expect("guitar-worship-profile not found");
+
+    let song = signal
+        .songs()
+        .create_from_profile("Girl Goodbye", seed_id("guitar-worship-profile"))
+        .await
+        .expect("create_from_profile failed");
+
+    // One section per patch
+    assert_eq!(
+        song.sections.len(),
+        profile.patches.len(),
+        "song should have {} sections, got {}",
+        profile.patches.len(),
+        song.sections.len()
+    );
+
+    // Each section is Patch-sourced with matching patch_id and name
+    for (i, section) in song.sections.iter().enumerate() {
+        let expected_patch = &profile.patches[i];
+        assert_eq!(
+            section.name, expected_patch.name,
+            "section {} name should match patch name",
+            i
+        );
+        match &section.source {
+            SectionSource::Patch { patch_id } => {
+                assert_eq!(
+                    patch_id, &expected_patch.id,
+                    "section {} should reference patch {}",
+                    i, expected_patch.name
+                );
+            }
+            _ => panic!("section {} should be Patch-sourced", i),
+        }
+    }
+
+    // base_profile_id is set
+    assert_eq!(
+        song.metadata.base_profile_id.as_deref(),
+        Some(seed_id("guitar-worship-profile").to_string().as_str()),
+    );
+
+    // Persistence round-trip
+    let reloaded = signal
+        .songs()
+        .load(song.id.clone())
+        .await
+        .unwrap()
+        .expect("song not found after save");
+    assert_eq!(reloaded.sections.len(), profile.patches.len());
+    assert_eq!(
+        reloaded.metadata.base_profile_id.as_deref(),
+        Some(seed_id("guitar-worship-profile").to_string().as_str()),
+    );
+}
+
+/// create_from_profile with a nonexistent profile should return NotFound.
+#[tokio::test]
+async fn create_song_from_missing_profile_returns_error() {
+    let signal = controller().await;
+
+    let result = signal
+        .songs()
+        .create_from_profile("Bad Song", seed_id("nonexistent-profile"))
+        .await;
+
+    assert!(result.is_err(), "should fail for missing profile");
+}
+
+/// Change base profile remaps non-overridden sections, preserves manual relinks.
+#[tokio::test]
+async fn change_base_profile_remaps_sections() {
+    let signal = controller().await;
+
+    // Create song from worship profile
+    let song = signal
+        .songs()
+        .create_from_profile("Thriller", seed_id("guitar-worship-profile"))
+        .await
+        .expect("create_from_profile failed");
+
+    let worship = signal
+        .profiles()
+        .load(seed_id("guitar-worship-profile"))
+        .await
+        .unwrap()
+        .expect("worship profile not found");
+
+    assert_eq!(song.sections.len(), worship.patches.len());
+
+    // Manually relink section 1 to a patch from a different profile
+    let blues = signal
+        .profiles()
+        .load(seed_id("guitar-blues-profile"))
+        .await
+        .unwrap()
+        .expect("blues profile not found");
+    let foreign_patch = &blues.patches[0];
+
+    let _ = signal
+        .songs()
+        .set_section_source(
+            song.id.clone(),
+            song.sections[1].id.clone(),
+            SectionSource::Patch {
+                patch_id: foreign_patch.id.clone(),
+            },
+        )
+        .await;
+
+    // Change base profile to rock
+    let updated = signal
+        .songs()
+        .change_base_profile(song.id.clone(), seed_id("guitar-rock-profile"))
+        .await
+        .expect("change_base_profile failed");
+
+    let rock = signal
+        .profiles()
+        .load(seed_id("guitar-rock-profile"))
+        .await
+        .unwrap()
+        .expect("rock profile not found");
+
+    // base_profile_id updated
+    assert_eq!(
+        updated.metadata.base_profile_id.as_deref(),
+        Some(seed_id("guitar-rock-profile").to_string().as_str()),
+    );
+
+    // Section 0: was worship slot 0 → now rock slot 0
+    match &updated.sections[0].source {
+        SectionSource::Patch { patch_id } => {
+            assert_eq!(
+                patch_id, &rock.patches[0].id,
+                "slot 0 should remap to rock patch 0"
+            );
+        }
+        _ => panic!("expected Patch source"),
+    }
+
+    // Section 1: was manually relinked → still foreign patch
+    match &updated.sections[1].source {
+        SectionSource::Patch { patch_id } => {
+            assert_eq!(
+                patch_id, &foreign_patch.id,
+                "manually relinked section should be preserved"
+            );
+        }
+        _ => panic!("expected Patch source"),
+    }
+
+    // Verify persistence
+    let reloaded = signal
+        .songs()
+        .load(song.id.clone())
+        .await
+        .unwrap()
+        .expect("song not found after change_base_profile");
+    assert_eq!(
+        reloaded.metadata.base_profile_id.as_deref(),
+        Some(seed_id("guitar-rock-profile").to_string().as_str()),
+    );
 }

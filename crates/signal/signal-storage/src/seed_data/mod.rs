@@ -5,6 +5,7 @@
 
 pub mod amp;
 pub mod archetype_jm;
+pub mod archetype_ndsp;
 pub mod boost;
 pub mod catalog_import;
 pub mod chorus;
@@ -90,6 +91,7 @@ pub fn default_block_collections() -> Vec<Preset> {
     out.extend(saturator::presets());
     out.extend(tuner::presets());
     out.extend(archetype_jm::block_presets());
+    out.extend(archetype_ndsp::block_presets());
 
     // Neural DSP catalog from disk (graceful skip if missing)
     let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
@@ -106,6 +108,7 @@ pub fn default_block_collections() -> Vec<Preset> {
 pub fn default_module_collections() -> Vec<ModulePreset> {
     let mut out = module::presets();
     out.extend(archetype_jm::module_presets());
+    out.extend(archetype_ndsp::module_presets());
     out
 }
 

@@ -738,14 +738,15 @@ where
         }
     }
 
-    /// If the target resolves to a `PatchTarget::BlockSnapshot`, load the snapshot
-    /// directly and return a minimal `ResolvedGraph` containing just that block.
-    /// This IS the rig resolution for block-snapshot patches — no overrides, no megarig.
-    async fn try_resolve_block_snapshot(
+    /// Extract the underlying `PatchTarget` from any `ResolveTarget`, following
+    /// patch cross-references. Returns `None` for `RigScene` targets (which don't
+    /// go through a patch).
+    async fn extract_patch_target(
         &self,
         target: &ResolveTarget,
-    ) -> Result<Option<ResolvedGraph>, ResolveError> {
-        let patch_target = match target {
+    ) -> Result<Option<PatchTarget>, ResolveError> {
+        match target {
+            ResolveTarget::RigScene { .. } => Ok(None),
             ResolveTarget::ProfilePatch {
                 profile_id,
                 patch_id,
@@ -760,9 +761,92 @@ where
                     .patch(patch_id)
                     .cloned()
                     .ok_or_else(|| ResolveError::NotFound(format!("patch: {patch_id}")))?;
-                patch.target.clone()
+                Ok(Some(self.follow_patch_refs(patch.target).await?))
             }
-            _ => return Ok(None),
+            ResolveTarget::SongSection {
+                song_id,
+                section_id,
+            } => {
+                let song = self
+                    .song_repo
+                    .load_song(song_id)
+                    .await
+                    .map_err(|e| ResolveError::NotFound(format!("song load: {e}")))?
+                    .ok_or_else(|| ResolveError::NotFound(format!("song: {song_id}")))?;
+                let section = song
+                    .section(section_id)
+                    .cloned()
+                    .ok_or_else(|| ResolveError::NotFound(format!("section: {section_id}")))?;
+                match section.source {
+                    signal_proto::song::SectionSource::RigScene { rig_id, scene_id } => {
+                        Ok(Some(PatchTarget::RigScene { rig_id, scene_id }))
+                    }
+                    signal_proto::song::SectionSource::Patch { patch_id } => {
+                        let profiles =
+                            self.profile_repo.list_profiles().await.map_err(|e| {
+                                ResolveError::NotFound(format!("profiles load: {e}"))
+                            })?;
+                        let patch = profiles
+                            .iter()
+                            .find_map(|p| p.patch(&patch_id))
+                            .cloned()
+                            .ok_or_else(|| {
+                                ResolveError::NotFound(format!(
+                                    "section patch source not found: {patch_id}"
+                                ))
+                            })?;
+                        Ok(Some(self.follow_patch_refs(patch.target).await?))
+                    }
+                }
+            }
+        }
+    }
+
+    /// Follow `PatchTarget::Patch` cross-references to the terminal target.
+    async fn follow_patch_refs(
+        &self,
+        mut target: PatchTarget,
+    ) -> Result<PatchTarget, ResolveError> {
+        let mut visited = HashSet::new();
+        loop {
+            match &target {
+                PatchTarget::Patch { patch_id } => {
+                    let key = patch_id.to_string();
+                    if !visited.insert(key) {
+                        return Err(ResolveError::CycleDetected(format!(
+                            "patch reference cycle at {patch_id}"
+                        )));
+                    }
+                    let profiles =
+                        self.profile_repo.list_profiles().await.map_err(|e| {
+                            ResolveError::NotFound(format!("profiles load: {e}"))
+                        })?;
+                    let patch = profiles
+                        .iter()
+                        .find_map(|p| p.patch(patch_id))
+                        .cloned()
+                        .ok_or_else(|| {
+                            ResolveError::NotFound(format!(
+                                "patch cross-reference not found: {patch_id}"
+                            ))
+                        })?;
+                    target = patch.target;
+                }
+                _ => return Ok(target),
+            }
+        }
+    }
+
+    /// If the target resolves to a `PatchTarget::BlockSnapshot`, load the snapshot
+    /// directly and return a minimal `ResolvedGraph` containing just that block.
+    /// This IS the rig resolution for block-snapshot patches — no overrides, no megarig.
+    async fn try_resolve_block_snapshot(
+        &self,
+        target: &ResolveTarget,
+    ) -> Result<Option<ResolvedGraph>, ResolveError> {
+        let patch_target = match self.extract_patch_target(target).await? {
+            Some(t) => t,
+            None => return Ok(None),
         };
 
         let PatchTarget::BlockSnapshot {

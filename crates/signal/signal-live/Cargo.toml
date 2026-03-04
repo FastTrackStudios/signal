@@ -8,6 +8,7 @@ authors.workspace = true
 [dependencies]
 signal-proto = { path = "../signal-proto" }
 signal-storage = { path = "../signal-storage" }
+macromod.workspace = true
 daw-control.workspace = true
 daw-proto.workspace = true
 roam.workspace = true
