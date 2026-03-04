@@ -168,25 +168,19 @@ fn guitar_worship_profile() -> Profile {
     ))
     .with_metadata(Metadata::new().with_tag("guitar").with_tag("lead"));
 
-    let ambient = Patch::from_rig_scene(
+    // Ambient → Come and See Ambient (presets/Come and See/Ambient.RfxChain)
+    let ambient = Patch::from_block_snapshot(
         seed_id("guitar-worship-ambient"),
         "Ambient",
-        seed_id("guitar-megarig"),
-        seed_id("guitar-megarig-default"),
+        seed_id("preset-come-and-see"),
+        seed_id("preset-come-and-see-ambient"),
     )
-    .with_override(Override::set(
-        guitar_path()
-            .with_block("dream-delay")
-            .with_parameter("mix"),
-        0.65,
-    ))
-    .with_override(Override::set(
-        guitar_path()
-            .with_block("dream-delay")
-            .with_parameter("feedback"),
-        0.55,
-    ))
-    .with_metadata(Metadata::new().with_tag("guitar").with_tag("ambient"));
+    .with_metadata(
+        Metadata::new()
+            .with_tag("guitar")
+            .with_tag("ambient")
+            .with_description("Come and See ambient worship patch — full RfxChain"),
+    );
 
     let tremolo = Patch::from_rig_scene(
         seed_id("guitar-worship-tremolo"),
@@ -626,12 +620,12 @@ fn guitar_all_around_profile() -> Profile {
     )
     .with_metadata(Metadata::new().with_tag("guitar").with_tag("ambient"));
 
-    // 7. Q-Tron → JM Q-Tron
+    // 7. Q-Tron → EHX Micro Q-Tron Funk Quack
     let qtron = Patch::from_block_snapshot(
         seed_id("guitar-allaround-qtron"),
         "Q-Tron",
-        jm,
-        seed_id("ndsp-archetype-john-mayer-x-q-tron"),
+        seed_id("filter-qtron"),
+        seed_id("filter-qtron-funk-quack"),
     )
     .with_metadata(Metadata::new().with_tag("guitar").with_tag("qtron"));
 

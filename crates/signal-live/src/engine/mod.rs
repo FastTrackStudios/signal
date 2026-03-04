@@ -11,6 +11,7 @@
 //! - [`daw_bridge`] — DAW FX chain snapshot types and capture/apply
 //! - [`param_bridge`] — Signal domain Block/Graph → DawParameterSnapshot mapping
 //! - [`vst_bridge`] — VST parameter bridge for bidirectional sync
+//! - [`modulation`] — Real-time modulation runtime (LFO, envelope, MIDI CC → DAW params)
 //! - [`error`] — Engine error types
 
 pub mod commands;
@@ -20,6 +21,7 @@ pub mod error;
 pub mod fx_binding;
 pub mod gapless;
 pub mod mock;
+pub mod modulation;
 pub mod morph;
 pub mod param_bridge;
 pub mod patch_applier;
@@ -58,3 +60,4 @@ pub use snapshot_ops::{
 };
 pub use target::{ModuleTarget, ResolvedSlot, SlotState};
 pub use vst_bridge::{MockVstBridge, ParameterSyncManager, VstParameterBridge};
+pub use modulation::{ModulationRuntime, ParamBinding, ParamWrite};

@@ -118,6 +118,10 @@ pub async fn connect_db(path: &str) -> Result<SignalController, StorageError> {
 }
 
 /// Connect to a database and seed it with default data if empty.
+///
+/// RfxChain-based presets from `~/Music/FastTrackStudio/Library/presets/`
+/// are always refreshed from disk on every startup, so swapping `.RfxChain`
+/// files takes effect immediately without deleting the database.
 pub async fn connect_db_seeded(path: &str) -> Result<SignalController, StorageError> {
     let url = format!("sqlite:{}?mode=rwc", path);
     let db = Database::connect(&url).await?;
@@ -159,10 +163,29 @@ pub async fn connect_db_seeded(path: &str) -> Result<SignalController, StorageEr
         for setlist in seeds.setlists {
             setlist_repo.save_setlist(&setlist).await?;
         }
+    } else {
+        // Always refresh RfxChain presets from disk so file swaps take
+        // effect without deleting the database.
+        refresh_rfxchain_presets(&block_repo).await?;
     }
 
     let service = Arc::new(SignalLive::from_db(db));
     Ok(SignalController::new(service))
+}
+
+/// Re-import all `.RfxChain`-based presets from the library directory.
+///
+/// Uses `save_block_collection` which deletes-then-inserts, so swapped
+/// files on disk are picked up on every app launch.
+async fn refresh_rfxchain_presets(block_repo: &BlockRepoLive) -> Result<(), StorageError> {
+    let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
+    let library_path = std::path::PathBuf::from(home).join("Music/FastTrackStudio/Library");
+    let rfx_presets =
+        signal_storage::seed_data::catalog_import::rfxchain_block_collections(&library_path);
+    for preset in rfx_presets {
+        block_repo.save_block_collection(preset).await?;
+    }
+    Ok(())
 }
 
 /// Initialize all table schemas on a database connection.

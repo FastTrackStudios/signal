@@ -1,0 +1,19 @@
+[package]
+name = "nam-manager"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+signal-proto = { path = "../signal-proto" }
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+sha2 = "0.10"
+walkdir = "2"
+base64 = "0.22"
+regex = "1"
+
+[dev-dependencies]
+tempfile = "3"

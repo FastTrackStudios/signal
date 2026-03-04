@@ -4,10 +4,11 @@ use signal_proto::layer::{BlockRef, Layer, LayerRef, LayerSnapshot, ModuleRef};
 use signal_proto::metadata::Metadata;
 use signal_proto::overrides::{NodePath, Override};
 use signal_proto::{seed_id, EngineType};
+use signal_proto::defaults::archetype_ndsp::{archetype_label, archetype_module_seed_keys, NDSP_ARCHETYPE_X_PLUGIN_NAMES};
 
 /// All default layer collections.
 pub fn layers() -> Vec<Layer> {
-    vec![
+    let mut out = vec![
         keys_layer_core(),
         keys_layer_space(),
         guitar_layer_main(),
@@ -20,7 +21,9 @@ pub fn layers() -> Vec<Layer> {
         pad_layer_foundation(),
         pad_layer_shimmer(),
         vocal_layer_main(),
-    ]
+    ];
+    out.extend(guitar_layers_archetype_ndsp());
+    out
 }
 
 fn keys_layer_core() -> Layer {
@@ -330,6 +333,31 @@ fn guitar_layer_archetype_jm() -> Layer {
     layer
 }
 
+fn guitar_layers_archetype_ndsp() -> Vec<Layer> {
+    NDSP_ARCHETYPE_X_PLUGIN_NAMES
+        .iter()
+        .filter_map(|plugin_name| {
+            let module_keys = archetype_module_seed_keys(plugin_name)?;
+            let slug = signal_proto::defaults::archetype_ndsp::archetype_seed_slug(plugin_name);
+            let short_name = archetype_label(plugin_name).replace("Archetype ", "");
+            let layer_seed = format!("guitar-layer-archetype-{}", slug);
+            let layer_default_seed = format!("{layer_seed}-default");
+
+            let mut default_variant = LayerSnapshot::new(seed_id(&layer_default_seed), "Default");
+            for key in &module_keys {
+                default_variant = default_variant.with_module(ModuleRef::new(seed_id(key)));
+            }
+
+            Some(Layer::new(
+                seed_id(&layer_seed),
+                format!("Archetype {short_name}"),
+                EngineType::Guitar,
+                default_variant,
+            ))
+        })
+        .collect()
+}
+
 fn vocal_layer_main() -> Layer {
     let default_variant = LayerSnapshot::new(seed_id("vocal-layer-main-default"), "Default")
         .with_module(ModuleRef::new(seed_id("vox-rescue")))
@@ -358,7 +386,7 @@ mod tests {
 
     #[test]
     fn layer_count() {
-        assert_eq!(layers().len(), 12);
+        assert_eq!(layers().len(), 19);
     }
 
     #[test]
@@ -397,7 +425,7 @@ mod tests {
                 .iter()
                 .filter(|l| l.engine_type == EngineType::Guitar)
                 .count(),
-            2
+            9
         );
         assert_eq!(
             layers
