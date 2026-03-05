@@ -1,6 +1,7 @@
 //! Block / module inspector panel for the collection browser detail pane.
 
 use dioxus::prelude::*;
+use fts_ui::prelude::*;
 
 use crate::components::dynamic_grid::{GridSelection, GridSlot};
 
@@ -48,39 +49,22 @@ pub(super) fn BlockInspectorPanel(props: BlockInspectorPanelProps) -> Element {
                 rsx! {
                     div { class: "mt-3 rounded border border-zinc-800 bg-zinc-900/60 overflow-hidden",
                         div { class: "px-3 py-1.5 border-b border-zinc-800 flex items-center gap-2",
-                            span {
-                                class: "w-2.5 h-2.5 rounded-full inline-block",
-                                style: "background-color: {color.bg};",
-                            }
+                            StatusDot { color: StatusDotColor::Custom(color.bg.to_string()) }
                             span { class: "text-xs font-semibold text-zinc-200", "{bt_display}" }
                             span { class: "text-[10px] text-zinc-500", "{preset}" }
                         }
                         div { class: "px-3 py-2 text-xs text-zinc-400 space-y-1",
-                            div { class: "flex justify-between",
-                                span { class: "text-zinc-500", "Module" }
-                                span { "{module}" }
-                            }
-                            div { class: "flex justify-between",
-                                span { class: "text-zinc-500", "Position" }
-                                span { "col {slot.col}, row {slot.row}" }
-                            }
-                            div { class: "flex justify-between",
-                                span { class: "text-zinc-500", "Bypassed" }
-                                span { "{bypassed}" }
-                            }
+                            KeyValueRow { label: "Module", value: "{module}", mono: false }
+                            KeyValueRow { label: "Position", value: "col {slot.col}, row {slot.row}", mono: false }
+                            KeyValueRow { label: "Bypassed", value: "{bypassed}", mono: false }
                             if slot.is_template {
-                                div { class: "flex justify-between",
-                                    span { class: "text-zinc-500", "Template" }
-                                    span { "Yes" }
-                                }
+                                KeyValueRow { label: "Template", value: "Yes", mono: false }
                             }
                         }
                         // Interactive parameter sliders
                         if !slot.parameters.is_empty() {
                             div { class: "px-3 py-2 border-t border-zinc-800 space-y-1.5",
-                                h4 { class: "text-[10px] font-semibold text-zinc-500 uppercase tracking-wider mb-1",
-                                    "Parameters ({slot.parameters.len()})"
-                                }
+                                SectionHeader { size: SectionHeaderSize::Small, class: "mb-1", label: "Parameters ({slot.parameters.len()})" }
                                 for (name, value) in slot.parameters.iter() {
                                     {
                                         let pct = (value * 100.0).round() as u32;
@@ -230,18 +214,12 @@ pub(super) fn BlockInspectorPanel(props: BlockInspectorPanelProps) -> Element {
             rsx! {
                 div { class: "mt-3 rounded border border-zinc-800 bg-zinc-900/60 overflow-hidden",
                     div { class: "px-3 py-1.5 border-b border-zinc-800 flex items-center gap-2",
-                        span {
-                            class: "w-2.5 h-2.5 rounded-full inline-block",
-                            style: "background-color: {color.bg};",
-                        }
+                        StatusDot { color: StatusDotColor::Custom(color.bg.to_string()) }
                         span { class: "text-xs font-semibold text-zinc-200", "{display_name}" }
                         span { class: "text-[10px] text-zinc-500", "{mt_display}" }
                     }
                     div { class: "px-3 py-2 text-xs text-zinc-400 space-y-1",
-                        div { class: "flex justify-between",
-                            span { class: "text-zinc-500", "Blocks" }
-                            span { "{module_slots.len()}" }
-                        }
+                        KeyValueRow { label: "Blocks", value: "{module_slots.len()}", mono: false }
                         for slot in module_slots.iter() {
                             {
                                 let bt = format!("{:?}", slot.block_type);
@@ -249,10 +227,7 @@ pub(super) fn BlockInspectorPanel(props: BlockInspectorPanelProps) -> Element {
                                 let sc = slot.block_type.color();
                                 rsx! {
                                     div { class: "flex items-center gap-2 pl-2",
-                                        span {
-                                            class: "w-1.5 h-1.5 rounded-full inline-block flex-shrink-0",
-                                            style: "background-color: {sc.bg};",
-                                        }
+                                        StatusDot { color: StatusDotColor::Custom(sc.bg.to_string()), size: StatusDotSize::Small }
                                         span { class: "text-zinc-500 truncate", "{bt}" }
                                         span { class: "text-zinc-300 truncate", "{preset}" }
                                     }

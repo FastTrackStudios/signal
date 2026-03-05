@@ -18,6 +18,7 @@ mod toolbar;
 mod types;
 
 use dioxus::prelude::*;
+use fts_ui::prelude::*;
 use signal::rig::RigType;
 use signal::tagging::TagSet;
 use signal::{BlockType, ALL_BLOCK_TYPES, ALL_MODULE_TYPES};
@@ -145,6 +146,9 @@ pub fn CollectionBrowser(props: CollectionBrowserProps) -> Element {
     let mut sort_mode = use_signal(|| SortMode::Name);
     let mut active_tag_filters = use_signal(Vec::<String>::new);
     let mut show_tag_panel = use_signal(|| false);
+
+    // Folder expansion state for Col 4 grouped snapshots.
+    let mut expanded_folders = use_signal(std::collections::HashSet::<String>::new);
 
     let nav_memo = use_memo(move || nav());
 
@@ -392,7 +396,7 @@ pub fn CollectionBrowser(props: CollectionBrowserProps) -> Element {
                 // ── Col 1: Nav ──
                 div { class: "w-36 flex-shrink-0 border-r border-zinc-800 flex flex-col min-h-0 bg-zinc-950/60",
                     div { class: "px-3 py-2 border-b border-zinc-800",
-                        h3 { class: "text-[10px] font-semibold text-zinc-500 uppercase tracking-wider", "Browse" }
+                        SectionHeader { size: SectionHeaderSize::Small, label: "Browse" }
                     }
                     div { class: "flex-1 overflow-y-auto py-1",
                         for cat in NavCategory::ALL.iter() {
@@ -419,11 +423,11 @@ pub fn CollectionBrowser(props: CollectionBrowserProps) -> Element {
                 // ── Col 2: Items (auto-fetched) ──
                 div { class: "w-64 flex-shrink-0 border-r border-zinc-800 flex flex-col min-h-0 bg-zinc-950/50",
                     div { class: "px-3 py-2 border-b border-zinc-800",
-                        h3 { class: "text-[10px] font-semibold text-zinc-500 uppercase tracking-wider", "{col2_header}" }
+                        SectionHeader { size: SectionHeaderSize::Small, label: "{col2_header}" }
                     }
                     div { class: "flex-1 overflow-y-auto",
                         if all_col2.is_empty() {
-                            div { class: "text-xs text-zinc-600 text-center py-6", "No items" }
+                            EmptyState { message: "No items", class: "py-6 border-0" }
                         }
                         for (idx, item) in all_col2.iter().enumerate() {
                             {
@@ -557,30 +561,51 @@ pub fn CollectionBrowser(props: CollectionBrowserProps) -> Element {
                                                 let items = col3_items();
                                                 if let Some(item) = items.get(cidx) {
                                                     let item_id = &item.id;
-                                                    // Look up snapshots directly from the cached presets
+                                                    // Look up snapshots from cached presets (default + additional)
                                                     let cached = block_presets_cache();
                                                     let snap_items = cached.iter()
                                                         .find(|p| p.id().to_string() == *item_id)
                                                         .map(|preset| {
-                                                            preset.snapshots().iter().map(|s| ColumnItem {
-                                                                id: s.id().to_string(),
-                                                                name: s.name().to_string(),
-                                                                subtitle: Some(format!("{} param(s)", s.block().parameters().len())),
-                                                                badge: None,
-                                                                metadata: None,
-                                                                structured_tags: TagSet::default(),
-                                                                detail: DetailData {
-                                                                    params: s.block().parameters().iter().map(|p| DetailParam {
-                                                                        name: p.name().to_string(),
-                                                                        value: p.value().get(),
-                                                                    }).collect(),
-                                                                    ..Default::default()
-                                                                },
-                                                                tag: None,
+                                                            let default_snap = preset.default_snapshot();
+                                                            let all_snaps = std::iter::once(&default_snap)
+                                                                .chain(preset.snapshots().iter());
+                                                            all_snaps.map(|s| {
+                                                                let folder = s.metadata().folder.clone();
+                                                                let has_state_data = s.state_data().is_some();
+                                                                let subtitle = if has_state_data {
+                                                                    // Imported preset — show description or folder instead of default block params
+                                                                    s.metadata().description.clone()
+                                                                        .or_else(|| folder.clone())
+                                                                } else {
+                                                                    Some(format!("{} param(s)", s.block().parameters().len()))
+                                                                };
+                                                                ColumnItem {
+                                                                    id: s.id().to_string(),
+                                                                    name: s.name().to_string(),
+                                                                    subtitle,
+                                                                    badge: None,
+                                                                    metadata: Some(s.metadata().clone()),
+                                                                    structured_tags: TagSet::default(),
+                                                                    detail: DetailData {
+                                                                        params: if has_state_data {
+                                                                            Vec::new()
+                                                                        } else {
+                                                                            s.block().parameters().iter().map(|p| DetailParam {
+                                                                                name: p.name().to_string(),
+                                                                                value: p.value().get(),
+                                                                            }).collect()
+                                                                        },
+                                                                        ..Default::default()
+                                                                    },
+                                                                    tag: None,
+                                                                    folder,
+                                                                }
                                                             }).collect::<Vec<_>>()
                                                         })
                                                         .unwrap_or_default();
                                                     col4_items.set(snap_items);
+                                                    // Reset expanded folders when switching presets
+                                                    expanded_folders.set(std::collections::HashSet::new());
                                                 }
                                             }
                                         },
@@ -603,47 +628,143 @@ pub fn CollectionBrowser(props: CollectionBrowserProps) -> Element {
                     }
                 }
 
-                // ── Col 4: Snapshots (only for Blocks) ──
+                // ── Col 4: Snapshots (only for Blocks), grouped by folder ──
                 if has_col4 {
-                    div { class: "w-64 flex-shrink-0 border-r border-zinc-800 flex flex-col min-h-0 bg-zinc-950/30",
-                        div { class: "px-3 py-2 border-b border-zinc-800",
-                            h3 { class: "text-[10px] font-semibold text-zinc-500 uppercase tracking-wider",
-                                {if col3_selected().is_some() { "Snapshots" } else { "—" }}
+                    // Build folder groups: (folder_name, [(flat_idx, item)])
+                    // Ungrouped items (no folder) come first, then sorted folder groups.
+                    {
+                        let mut ungrouped: Vec<(usize, &ColumnItem)> = Vec::new();
+                        let mut folders: std::collections::BTreeMap<String, Vec<(usize, &ColumnItem)>> =
+                            std::collections::BTreeMap::new();
+                        for (idx, item) in all_col4.iter().enumerate() {
+                            match &item.folder {
+                                Some(f) => folders.entry(f.clone()).or_default().push((idx, item)),
+                                None => ungrouped.push((idx, item)),
                             }
                         }
-                        div { class: "flex-1 overflow-y-auto",
-                            if all_col4.is_empty() {
-                                div { class: "text-xs text-zinc-600 text-center py-6",
-                                    {if col3_selected().is_some() { "No items" } else { "Select from left" }}
-                                }
-                            }
-                            for (didx, item) in all_col4.iter().enumerate() {
-                                {
-                                    let is_sel = col4_selected() == Some(didx);
-                                    let name = item.name.clone();
-                                    let subtitle = item.subtitle.clone();
-                                    rsx! {
+                        let has_folders = !folders.is_empty();
+                        let current_expanded = expanded_folders();
+                        // Pre-collect all folder names for the expand-all closure
+                        let all_folder_keys: std::collections::HashSet<String> =
+                            folders.keys().cloned().collect();
+
+                        rsx! {
+                            div { class: "w-64 flex-shrink-0 border-r border-zinc-800 flex flex-col min-h-0 bg-zinc-950/30",
+                                div { class: "px-3 py-2 border-b border-zinc-800 flex items-center gap-2",
+                                    h3 { class: "text-[10px] font-semibold text-zinc-500 uppercase tracking-wider flex-1",
+                                        {if col3_selected().is_some() { "Snapshots" } else { "—" }}
+                                    }
+                                    if has_folders && col3_selected().is_some() {
                                         button {
-                                            key: "{item.id}",
-                                            class: if is_sel {
-                                                "w-full text-left px-3 py-2 border-b border-zinc-800/50 bg-zinc-700/60"
-                                            } else {
-                                                "w-full text-left px-3 py-2 border-b border-zinc-800/50 hover:bg-zinc-800/60"
-                                            },
+                                            class: "text-[9px] text-zinc-600 hover:text-zinc-400",
                                             onclick: move |_| {
-                                                col4_selected.set(Some(didx));
+                                                let current = expanded_folders();
+                                                if current.is_empty() {
+                                                    expanded_folders.set(all_folder_keys.clone());
+                                                } else {
+                                                    expanded_folders.set(std::collections::HashSet::new());
+                                                }
                                             },
-                                            span { class: "text-sm text-zinc-200 truncate", "{name}" }
-                                            if let Some(ref sub) = subtitle {
-                                                div { class: "text-xs text-zinc-500 truncate", "{sub}" }
+                                            {if current_expanded.is_empty() { "expand all" } else { "collapse all" }}
+                                        }
+                                    }
+                                }
+                                div { class: "flex-1 overflow-y-auto",
+                                    if all_col4.is_empty() {
+                                        div { class: "text-xs text-zinc-600 text-center py-6",
+                                            {if col3_selected().is_some() { "No items" } else { "Select from left" }}
+                                        }
+                                    }
+
+                                    // Ungrouped items first (no folder)
+                                    for (didx, item) in ungrouped.iter() {
+                                        {
+                                            let didx = *didx;
+                                            let is_sel = col4_selected() == Some(didx);
+                                            let name = item.name.clone();
+                                            let subtitle = item.subtitle.clone();
+                                            rsx! {
+                                                button {
+                                                    key: "{item.id}",
+                                                    class: if is_sel {
+                                                        "w-full text-left px-3 py-2 border-b border-zinc-800/50 bg-zinc-700/60"
+                                                    } else {
+                                                        "w-full text-left px-3 py-2 border-b border-zinc-800/50 hover:bg-zinc-800/60"
+                                                    },
+                                                    onclick: move |_| {
+                                                        col4_selected.set(Some(didx));
+                                                    },
+                                                    span { class: "text-sm text-zinc-200 truncate", "{name}" }
+                                                    if let Some(ref sub) = subtitle {
+                                                        div { class: "text-xs text-zinc-500 truncate", "{sub}" }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    // Folder groups
+                                    for (folder_name, folder_items) in folders.iter() {
+                                        {
+                                            let is_expanded = current_expanded.contains(folder_name);
+                                            let fname = folder_name.clone();
+                                            let count = folder_items.len();
+                                            rsx! {
+                                                // Folder header
+                                                button {
+                                                    key: "folder-{fname}",
+                                                    class: "w-full text-left px-3 py-1.5 border-b border-zinc-800/50 bg-zinc-900/60 hover:bg-zinc-800/40 flex items-center gap-1.5",
+                                                    onclick: move |_| {
+                                                        let mut set = expanded_folders();
+                                                        if set.contains(&fname) {
+                                                            set.remove(&fname);
+                                                        } else {
+                                                            set.insert(fname.clone());
+                                                        }
+                                                        expanded_folders.set(set);
+                                                    },
+                                                    span { class: "text-[10px] text-zinc-500 flex-shrink-0",
+                                                        {if is_expanded { "\u{25BE}" } else { "\u{25B8}" }}
+                                                    }
+                                                    span { class: "text-xs font-medium text-zinc-400 truncate flex-1", "{folder_name}" }
+                                                    span { class: "text-[10px] text-zinc-600 flex-shrink-0", "{count}" }
+                                                }
+                                                // Folder children (indented)
+                                                if is_expanded {
+                                                    for (didx, item) in folder_items.iter() {
+                                                        {
+                                                            let didx = *didx;
+                                                            let is_sel = col4_selected() == Some(didx);
+                                                            let name = item.name.clone();
+                                                            let subtitle = item.subtitle.clone();
+                                                            rsx! {
+                                                                button {
+                                                                    key: "{item.id}",
+                                                                    class: if is_sel {
+                                                                        "w-full text-left pl-6 pr-3 py-1.5 border-b border-zinc-800/50 bg-zinc-700/60"
+                                                                    } else {
+                                                                        "w-full text-left pl-6 pr-3 py-1.5 border-b border-zinc-800/50 hover:bg-zinc-800/60"
+                                                                    },
+                                                                    onclick: move |_| {
+                                                                        col4_selected.set(Some(didx));
+                                                                    },
+                                                                    span { class: "text-sm text-zinc-200 truncate", "{name}" }
+                                                                    if let Some(ref sub) = subtitle {
+                                                                        div { class: "text-xs text-zinc-500 truncate", "{sub}" }
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
                                             }
                                         }
                                     }
                                 }
+                                div { class: "px-3 py-1 border-t border-zinc-800 flex-shrink-0",
+                                    span { class: "text-[10px] text-zinc-600", "{all_col4.len()}" }
+                                }
                             }
-                        }
-                        div { class: "px-3 py-1 border-t border-zinc-800 flex-shrink-0",
-                            span { class: "text-[10px] text-zinc-600", "{all_col4.len()}" }
                         }
                     }
                 }
@@ -718,7 +839,7 @@ pub fn CollectionBrowser(props: CollectionBrowserProps) -> Element {
                             div { class: "w-1.5 h-1.5 rounded-full bg-amber-500" }
                             span { class: "text-[10px] text-amber-400 font-medium", "Pick Mode" }
                         } else {
-                            div { class: "w-1.5 h-1.5 rounded-full bg-green-500" }
+                            StatusDot { color: StatusDotColor::Success, size: StatusDotSize::Small }
                         }
                         span { class: "text-[10px] text-zinc-500", "{current_nav.label()}" }
                         div { class: "flex-1" }
@@ -736,23 +857,15 @@ pub fn CollectionBrowser(props: CollectionBrowserProps) -> Element {
                             }
                         }
                         span { class: "text-[10px] text-zinc-600 mr-1", "Rig:" }
-                        for rt in RIG_TYPES.iter() {
-                            {
-                                let t = *rt;
-                                let is_active = current_rt == t;
-                                rsx! {
-                                    button {
-                                        key: "{t.as_str()}",
-                                        class: if is_active {
-                                            "px-1.5 py-0.5 text-[10px] rounded bg-zinc-600 text-zinc-100"
-                                        } else {
-                                            "px-1.5 py-0.5 text-[10px] rounded text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800"
-                                        },
-                                        onclick: move |_| rig_type.set(t),
-                                        "{rig_type_display(t)}"
-                                    }
+                        SegmentedControl {
+                            value: current_rt.as_str().to_string(),
+                            on_change: move |v: String| {
+                                if let Some(rt) = RIG_TYPES.iter().find(|r| r.as_str() == v) {
+                                    rig_type.set(*rt);
                                 }
-                            }
+                            },
+                            options: RIG_TYPES.iter().map(|rt| (rt.as_str().to_string(), rig_type_display(*rt).to_string())).collect(),
+                            size: SegmentedControlSize::Small,
                         }
                     }
                 }

@@ -4,6 +4,7 @@
 //! the `HasMetadata` trait. Used by collection cards, editors, and browsers.
 
 use dioxus::prelude::*;
+use fts_ui::prelude::*;
 
 /// Displays metadata (tags, description, notes) for any entity.
 ///
@@ -41,9 +42,7 @@ pub fn MetadataDisplay(
             if has_tags {
                 div {
                     if show_labels {
-                        span { class: "text-xs font-semibold text-zinc-400 uppercase tracking-wider mr-2",
-                            "Tags"
-                        }
+                        SectionHeader { class: "mr-2", label: "Tags" }
                     }
                     div { class: "flex flex-wrap gap-1.5 mt-1",
                         for tag in tags.iter() {
@@ -61,9 +60,7 @@ pub fn MetadataDisplay(
             if has_description {
                 div {
                     if show_labels {
-                        div { class: "text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-0.5",
-                            "Description"
-                        }
+                        SectionHeader { class: "mb-0.5", label: "Description" }
                     }
                     p { class: "text-zinc-300 text-sm leading-relaxed",
                         {description.as_deref().unwrap_or_default()}
@@ -75,9 +72,7 @@ pub fn MetadataDisplay(
             if has_notes {
                 div {
                     if show_labels {
-                        div { class: "text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-0.5",
-                            "Notes"
-                        }
+                        SectionHeader { class: "mb-0.5", label: "Notes" }
                     }
                     p { class: "text-zinc-400 text-xs leading-relaxed italic",
                         {notes.as_deref().unwrap_or_default()}
