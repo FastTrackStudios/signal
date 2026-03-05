@@ -4,6 +4,7 @@
 //! the CSS `transform: scale()` stacking context.
 
 use dioxus::prelude::*;
+use fts_ui::prelude::*;
 use signal::block::BlockCategory;
 use signal::defaults::{
     archetype_label, archetype_seed_slug, archetype_x_templates, NDSP_ARCHETYPE_X_PLUGIN_NAMES,
@@ -278,10 +279,7 @@ pub fn BlockPickerDropdown(props: BlockPickerDropdownProps) -> Element {
                     // Plugins section
                     if show_plugins && !filtered_plugins.is_empty() {
                         div { class: "mb-2",
-                            span {
-                                class: "text-[8px] font-semibold text-zinc-600 uppercase tracking-[0.2em] px-1.5",
-                                "NDSP Archetype X"
-                            }
+                            SectionHeader { size: SectionHeaderSize::Small, class: "px-1.5", label: "NDSP Archetype X" }
                             for (idx, plugin_name) in filtered_plugins.iter() {
                                 {
                                     let idx = *idx;
@@ -301,9 +299,7 @@ pub fn BlockPickerDropdown(props: BlockPickerDropdownProps) -> Element {
                                                     expanded_plugin.set(Some(idx));
                                                 }
                                             },
-                                            div {
-                                                class: "w-2.5 h-2.5 rounded-sm flex-shrink-0 bg-purple-500/80",
-                                            }
+                                            StatusDot { color: StatusDotColor::Custom("rgb(168 85 247 / 0.8)".to_string()), round: false }
                                             div { class: "flex-1 min-w-0",
                                                 span { class: "text-[11px] font-medium text-zinc-200 block", "{label}" }
                                                 span { class: "text-[9px] text-zinc-500", "Neural DSP" }
@@ -328,15 +324,11 @@ pub fn BlockPickerDropdown(props: BlockPickerDropdownProps) -> Element {
                                                         for (m_label, block_count, mt) in module_preview.iter() {
                                                             {
                                                                 let color = module_type_color(*mt);
-                                                                let dot_style = format!("background-color: {};", color.bg);
                                                                 rsx! {
                                                                     div {
                                                                         key: "mod-preview-{m_label}",
                                                                         class: "flex items-center gap-1.5 py-0.5",
-                                                                        div {
-                                                                            class: "w-1.5 h-1.5 rounded-full flex-shrink-0",
-                                                                            style: "{dot_style}",
-                                                                        }
+                                                                        StatusDot { color: StatusDotColor::Custom(color.bg.to_string()), size: StatusDotSize::Small }
                                                                         span { class: "text-[10px] text-zinc-400", "{m_label}" }
                                                                         span { class: "text-[9px] text-zinc-600", "({block_count})" }
                                                                     }
@@ -367,17 +359,13 @@ pub fn BlockPickerDropdown(props: BlockPickerDropdownProps) -> Element {
                     // Module types section
                     if show_modules && !filtered_modules.is_empty() {
                         div { class: "mb-2",
-                            span {
-                                class: "text-[8px] font-semibold text-zinc-600 uppercase tracking-[0.2em] px-1.5",
-                                "Modules"
-                            }
+                            SectionHeader { size: SectionHeaderSize::Small, class: "px-1.5", label: "Modules" }
                             for (mt, name, desc) in filtered_modules.iter() {
                                 {
                                     let mt = *mt;
                                     let name = *name;
                                     let desc = *desc;
                                     let color = module_type_color(mt);
-                                    let dot_style = format!("background-color: {};", color.bg);
                                     rsx! {
                                         button {
                                             key: "mod-{name}",
@@ -404,10 +392,7 @@ pub fn BlockPickerDropdown(props: BlockPickerDropdownProps) -> Element {
                                                 };
                                                 props.on_add_slot.call(new_slot);
                                             },
-                                            div {
-                                                class: "w-2.5 h-2.5 rounded-sm flex-shrink-0",
-                                                style: "{dot_style}",
-                                            }
+                                            StatusDot { color: StatusDotColor::Custom(color.bg.to_string()), round: false }
                                             div { class: "flex-1 min-w-0",
                                                 span { class: "text-[11px] font-medium text-zinc-200 block", "{name}" }
                                                 span { class: "text-[9px] text-zinc-500", "{desc}" }
@@ -432,17 +417,13 @@ pub fn BlockPickerDropdown(props: BlockPickerDropdownProps) -> Element {
                                 let cat_name = category.display_name();
                                 rsx! {
                                     div { class: "mb-1.5",
-                                        span {
-                                            class: "text-[8px] font-semibold text-zinc-600 uppercase tracking-[0.2em] px-1.5",
-                                            "{cat_name}"
-                                        }
+                                        SectionHeader { size: SectionHeaderSize::Small, class: "px-1.5", label: "{cat_name}" }
                                         for bt in cat_items.iter() {
                                             {
                                                 let bt = **bt;
                                                 let name = bt.display_name();
                                                 let desc = bt.category().display_name();
                                                 let color = bt.color();
-                                                let dot_style = format!("background-color: {};", color.bg);
                                                 rsx! {
                                                     button {
                                                         key: "{name}",
@@ -469,10 +450,7 @@ pub fn BlockPickerDropdown(props: BlockPickerDropdownProps) -> Element {
                                                             };
                                                             props.on_add_slot.call(new_slot);
                                                         },
-                                                        div {
-                                                            class: "w-2.5 h-2.5 rounded-full flex-shrink-0",
-                                                            style: "{dot_style}",
-                                                        }
+                                                        StatusDot { color: StatusDotColor::Custom(color.bg.to_string()) }
                                                         div { class: "flex-1 min-w-0",
                                                             span { class: "text-[11px] font-medium text-zinc-200 block", "{name}" }
                                                             span { class: "text-[9px] text-zinc-500", "{desc}" }

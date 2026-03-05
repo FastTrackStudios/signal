@@ -7,6 +7,7 @@ authors.workspace = true
 
 [dependencies]
 dioxus.workspace = true
+fts-ui.workspace = true
 lumen-blocks.workspace = true
 signal = { path = "../signal" }
 signal-controller = { path = "../signal-controller" }

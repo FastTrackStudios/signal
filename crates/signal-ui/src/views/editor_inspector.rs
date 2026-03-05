@@ -4,6 +4,7 @@
 //! interactive parameter sliders, morph point controls, and snapshot management.
 
 use dioxus::prelude::*;
+use fts_ui::prelude::*;
 
 use crate::components::dynamic_grid::{GridSelection, GridSlot};
 
@@ -66,31 +67,16 @@ pub fn EditorInspectorPanel(props: EditorInspectorPanelProps) -> Element {
                         div { class: "relative overflow-hidden rounded-lg border border-zinc-800/60 bg-zinc-900/40",
                             div { class: "absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-amber-500 via-orange-400 to-red-500" }
                             div { class: "pl-4 pr-3 py-3",
-                                h4 { class: "text-[10px] font-bold uppercase tracking-widest text-zinc-400 mb-2", "Block Identity" }
+                                SectionHeader { size: SectionHeaderSize::Small, class: "mb-2", label: "Block Identity" }
                                 div { class: "space-y-1.5",
                                     // Type badge
                                     div { class: "flex items-center gap-2",
-                                        span {
-                                            class: "w-2.5 h-2.5 rounded-full inline-block flex-shrink-0",
-                                            style: "background-color: {color.bg};",
-                                        }
+                                        StatusDot { color: StatusDotColor::Custom(color.bg.to_string()) }
                                         span { class: "text-xs font-semibold text-zinc-200", "{bt_display}" }
                                     }
-                                    // Preset name
-                                    div { class: "flex justify-between text-xs",
-                                        span { class: "text-zinc-500", "Preset" }
-                                        span { class: "text-zinc-300 truncate ml-2", "{preset}" }
-                                    }
-                                    // Module group
-                                    div { class: "flex justify-between text-xs",
-                                        span { class: "text-zinc-500", "Module" }
-                                        span { class: "text-zinc-300 truncate ml-2", "{module}" }
-                                    }
-                                    // Position
-                                    div { class: "flex justify-between text-xs",
-                                        span { class: "text-zinc-500", "Position" }
-                                        span { class: "text-zinc-400", "col {slot.col}, row {slot.row}" }
-                                    }
+                                    KeyValueRow { label: "Preset", value: "{preset}", mono: false }
+                                    KeyValueRow { label: "Module", value: "{module}", mono: false }
+                                    KeyValueRow { label: "Position", value: "col {slot.col}, row {slot.row}", mono: false }
                                     // Bypass toggle
                                     div { class: "flex justify-between items-center text-xs",
                                         span { class: "text-zinc-500", "Bypassed" }
@@ -121,9 +107,7 @@ pub fn EditorInspectorPanel(props: EditorInspectorPanelProps) -> Element {
                             div { class: "relative overflow-hidden rounded-lg border border-zinc-800/60 bg-zinc-900/40",
                                 div { class: "absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-emerald-500 via-teal-400 to-cyan-500" }
                                 div { class: "pl-4 pr-3 py-3",
-                                    h4 { class: "text-[10px] font-bold uppercase tracking-widest text-zinc-400 mb-2",
-                                        "Parameters ({slot.parameters.len()})"
-                                    }
+                                    SectionHeader { size: SectionHeaderSize::Small, class: "mb-2", label: "Parameters ({slot.parameters.len()})" }
                                     div { class: "space-y-2",
                                         for (name, value) in slot.parameters.iter() {
                                             {
@@ -176,7 +160,7 @@ pub fn EditorInspectorPanel(props: EditorInspectorPanelProps) -> Element {
                         div { class: "relative overflow-hidden rounded-lg border border-zinc-800/60 bg-zinc-900/40",
                             div { class: "absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-violet-500 via-purple-400 to-fuchsia-500" }
                             div { class: "pl-4 pr-3 py-3",
-                                h4 { class: "text-[10px] font-bold uppercase tracking-widest text-zinc-400 mb-2", "Morph Points" }
+                                SectionHeader { size: SectionHeaderSize::Small, class: "mb-2", label: "Morph Points" }
                                 div { class: "space-y-2",
                                     div { class: "flex justify-between text-[10px] text-zinc-500 mb-1",
                                         span { "Scene A" }
@@ -209,7 +193,7 @@ pub fn EditorInspectorPanel(props: EditorInspectorPanelProps) -> Element {
                         div { class: "relative overflow-hidden rounded-lg border border-zinc-800/60 bg-zinc-900/40",
                             div { class: "absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-sky-500 via-blue-400 to-indigo-500" }
                             div { class: "pl-4 pr-3 py-3",
-                                h4 { class: "text-[10px] font-bold uppercase tracking-widest text-zinc-400 mb-2", "Snapshot" }
+                                SectionHeader { size: SectionHeaderSize::Small, class: "mb-2", label: "Snapshot" }
                                 div { class: "space-y-2",
                                     div { class: "flex items-center gap-2",
                                         span { class: "text-xs text-zinc-300 truncate flex-1", "{preset}" }
@@ -253,7 +237,7 @@ pub fn EditorInspectorPanel(props: EditorInspectorPanelProps) -> Element {
                                 div { class: "relative overflow-hidden rounded-lg border border-zinc-800/60 bg-zinc-900/40",
                                     div { class: "absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-amber-500 via-yellow-400 to-orange-500" }
                                     div { class: "pl-4 pr-3 py-3",
-                                        h4 { class: "text-[10px] font-bold uppercase tracking-widest text-zinc-400 mb-2", "New Preset" }
+                                        SectionHeader { size: SectionHeaderSize::Small, class: "mb-2", label: "New Preset" }
                                         if show_save_as_new() {
                                             div { class: "space-y-2",
                                                 input {
@@ -350,24 +334,15 @@ pub fn EditorInspectorPanel(props: EditorInspectorPanelProps) -> Element {
                     div { class: "relative overflow-hidden rounded-lg border border-zinc-800/60 bg-zinc-900/40",
                         div { class: "absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-amber-500 via-orange-400 to-red-500" }
                         div { class: "pl-4 pr-3 py-3",
-                            h4 { class: "text-[10px] font-bold uppercase tracking-widest text-zinc-400 mb-2", "Module" }
+                            SectionHeader { size: SectionHeaderSize::Small, class: "mb-2", label: "Module" }
                             div { class: "space-y-1.5",
                                 div { class: "flex items-center gap-2",
-                                    span {
-                                        class: "w-2.5 h-2.5 rounded-full inline-block flex-shrink-0",
-                                        style: "background-color: {color.bg};",
-                                    }
+                                    StatusDot { color: StatusDotColor::Custom(color.bg.to_string()) }
                                     span { class: "text-xs font-semibold text-zinc-200", "{display_name}" }
                                     span { class: "text-[10px] text-zinc-500", "{mt_display}" }
                                 }
-                                div { class: "flex justify-between text-xs",
-                                    span { class: "text-zinc-500", "Blocks" }
-                                    span { class: "text-zinc-300", "{block_count}" }
-                                }
-                                div { class: "flex justify-between text-xs",
-                                    span { class: "text-zinc-500", "Total Params" }
-                                    span { class: "text-zinc-300", "{total_params}" }
-                                }
+                                KeyValueRow { label: "Blocks", value: "{block_count}", mono: false }
+                                KeyValueRow { label: "Total Params", value: "{total_params}", mono: false }
                             }
                         }
                     }
@@ -376,7 +351,7 @@ pub fn EditorInspectorPanel(props: EditorInspectorPanelProps) -> Element {
                     div { class: "relative overflow-hidden rounded-lg border border-zinc-800/60 bg-zinc-900/40",
                         div { class: "absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-emerald-500 via-teal-400 to-cyan-500" }
                         div { class: "pl-4 pr-3 py-3",
-                            h4 { class: "text-[10px] font-bold uppercase tracking-widest text-zinc-400 mb-2", "Blocks" }
+                            SectionHeader { size: SectionHeaderSize::Small, class: "mb-2", label: "Blocks" }
                             div { class: "space-y-1",
                                 for slot in module_slots.iter() {
                                     {
@@ -385,10 +360,7 @@ pub fn EditorInspectorPanel(props: EditorInspectorPanelProps) -> Element {
                                         let sc = slot.block_type.color();
                                         rsx! {
                                             div { class: "flex items-center gap-2",
-                                                span {
-                                                    class: "w-1.5 h-1.5 rounded-full inline-block flex-shrink-0",
-                                                    style: "background-color: {sc.bg};",
-                                                }
+                                                StatusDot { color: StatusDotColor::Custom(sc.bg.to_string()), size: StatusDotSize::Small }
                                                 span { class: "text-[11px] text-zinc-500 truncate", "{bt}" }
                                                 span { class: "text-[11px] text-zinc-300 truncate", "{preset}" }
                                             }

@@ -5,6 +5,7 @@
 //! configures labels and placeholders via [`ModalConfig`].
 
 use dioxus::prelude::*;
+use fts_ui::prelude::*;
 
 // region: --- Config & Data Types
 
@@ -230,9 +231,7 @@ pub fn CreateModal(
                     // Template selection (if templates provided)
                     if has_templates {
                         div {
-                            label { class: "block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-2",
-                                "Template"
-                            }
+                            SectionHeader { class: "mb-2", label: "Template" }
                             div { class: "space-y-1.5",
                                 for (i, opt) in templates.iter().enumerate() {
                                     TemplateCard {
@@ -249,10 +248,7 @@ pub fn CreateModal(
                     }
 
                     // Name field
-                    div {
-                        label { class: "block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5",
-                            "Name"
-                        }
+                    FormField { label: "Name",
                         input {
                             class: "w-full px-4 py-2.5 text-sm bg-zinc-800/80 border {border_class} \
                                     rounded-lg text-zinc-200 placeholder:text-zinc-600 outline-none \
@@ -274,10 +270,7 @@ pub fn CreateModal(
                     }
 
                     // Category field
-                    div {
-                        label { class: "block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5",
-                            "Category"
-                        }
+                    FormField { label: "Category",
                         input {
                             class: "w-full px-4 py-2.5 text-sm bg-zinc-800/80 border {border_class} \
                                     rounded-lg text-zinc-200 placeholder:text-zinc-600 outline-none \
@@ -290,10 +283,7 @@ pub fn CreateModal(
                     }
 
                     // Tags field
-                    div {
-                        label { class: "block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5",
-                            "Tags"
-                        }
+                    FormField { label: "Tags",
                         input {
                             class: "w-full px-4 py-2.5 text-sm bg-zinc-800/80 border {border_class} \
                                     rounded-lg text-zinc-200 placeholder:text-zinc-600 outline-none \
@@ -328,10 +318,7 @@ pub fn CreateModal(
                     }
 
                     // Description field
-                    div {
-                        label { class: "block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5",
-                            "Description"
-                        }
+                    FormField { label: "Description",
                         textarea {
                             class: "w-full px-4 py-2.5 text-sm bg-zinc-800/80 border {border_class} \
                                     rounded-lg text-zinc-200 placeholder:text-zinc-600 outline-none \
