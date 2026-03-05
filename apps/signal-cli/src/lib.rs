@@ -7,6 +7,7 @@
 use std::path::PathBuf;
 
 use clap::Subcommand;
+use daw_control::Daw;
 use eyre::Result;
 use serde_json::json;
 use signal_controller::SignalController;
@@ -88,6 +89,74 @@ pub enum SignalCommand {
     /// Setlist operations (signal-level)
     #[command(subcommand)]
     Setlists(EntityCommand),
+    /// DAW operations (connect to REAPER via socket)
+    #[command(subcommand)]
+    Daw(DawCommand),
+    /// Load a block or module preset onto a DAW track
+    Load {
+        /// Type (eq, amp, drive, etc.) — matches both block types and module types
+        #[arg(name = "type")]
+        preset_type: String,
+        /// Preset ID (block or module)
+        preset_id: String,
+        /// Track (index, GUID, or name)
+        track: String,
+        /// Snapshot index (default: 0 = default snapshot)
+        #[arg(long, default_value = "0")]
+        snapshot: usize,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum DawCommand {
+    /// List all tracks in the current project
+    Tracks,
+    /// List all installed plugins
+    Plugins,
+    /// List FX chain on a track (by index, GUID, or name)
+    Fx {
+        /// Track (index, GUID, or name)
+        track: String,
+    },
+    /// Launch a REAPER instance
+    Launch {
+        /// Config ID (e.g., "fts-tracks", "fts-guitar")
+        #[arg(long)]
+        config: Option<String>,
+    },
+    /// Quit a running REAPER instance (sends SIGTERM)
+    Quit {
+        /// PID of the REAPER instance to kill
+        #[arg(long)]
+        pid: Option<u32>,
+    },
+    /// List open project tabs
+    Projects,
+    /// Open a project file
+    Open {
+        /// Path to the .rpp project file
+        path: String,
+    },
+    /// Close a project tab
+    Close {
+        /// GUID of the project to close (defaults to current)
+        #[arg(long)]
+        guid: Option<String>,
+    },
+    /// Add a new track
+    AddTrack {
+        /// Track name (default: "New Track")
+        #[arg(long)]
+        name: Option<String>,
+        /// Insert at index (default: append)
+        #[arg(long)]
+        at: Option<u32>,
+    },
+    /// Remove a track
+    RemoveTrack {
+        /// Track name or index
+        track: String,
+    },
 }
 
 #[derive(Subcommand)]
@@ -120,6 +189,40 @@ pub enum PresetsCommand {
         block_type: String,
         /// Preset ID
         id: String,
+    },
+    /// Import presets from vendor plugin formats
+    #[command(subcommand)]
+    Import(ImportCommand),
+}
+
+#[derive(Subcommand)]
+pub enum ImportCommand {
+    /// Import FabFilter plugin presets
+    Fabfilter {
+        /// Plugin name (e.g. "Pro-Q 4")
+        #[arg(long)]
+        plugin: Option<String>,
+        /// Import all discoverable FabFilter plugins
+        #[arg(long)]
+        all: bool,
+        /// Show what would be imported without persisting
+        #[arg(long)]
+        dry_run: bool,
+    },
+    /// Import rfxchain presets from signal-library directories
+    Rfxchain {
+        /// Source directory containing preset subdirectories
+        #[arg(long)]
+        source: PathBuf,
+        /// Block type (amp, eq, reverb, etc.)
+        #[arg(long)]
+        block_type: String,
+        /// Optional plugin name override
+        #[arg(long)]
+        name: Option<String>,
+        /// Show what would be imported without persisting
+        #[arg(long)]
+        dry_run: bool,
     },
 }
 
@@ -243,7 +346,29 @@ pub enum MacroCommand {
 // Dispatch
 // ============================================================================
 
-pub async fn run(db: Option<PathBuf>, cmd: SignalCommand, as_json: bool) -> Result<()> {
+pub async fn run(
+    db: Option<PathBuf>,
+    socket: Option<PathBuf>,
+    cmd: SignalCommand,
+    as_json: bool,
+) -> Result<()> {
+    // DAW commands get their own branch — they may or may not need the signal DB.
+    if let SignalCommand::Daw(ref daw_cmd) = cmd {
+        return run_daw(db, socket, daw_cmd, as_json).await;
+    }
+
+    // Load needs both signal DB and DAW connection.
+    if let SignalCommand::Load {
+        ref preset_type,
+        ref preset_id,
+        ref track,
+        snapshot,
+    } = cmd
+    {
+        return cmd_signal_load(db, socket, preset_type, preset_id, track, snapshot, as_json)
+            .await;
+    }
+
     let signal = connect_signal(db).await?;
 
     match cmd {
@@ -262,6 +387,9 @@ pub async fn run(db: Option<PathBuf>, cmd: SignalCommand, as_json: bool) -> Resu
             ref block_type,
             ref id,
         }) => cmd_presets_delete(&signal, block_type, id, as_json).await,
+        SignalCommand::Presets(PresetsCommand::Import(ref import_cmd)) => {
+            cmd_presets_import(&signal, import_cmd).await
+        }
 
         SignalCommand::Modules(ModulesCommand::List) => {
             cmd_modules_list(&signal, as_json).await
@@ -354,6 +482,9 @@ pub async fn run(db: Option<PathBuf>, cmd: SignalCommand, as_json: bool) -> Resu
         SignalCommand::Setlists(EntityCommand::Delete { ref id }) => {
             cmd_setlists_delete(&signal, id, as_json).await
         }
+
+        // Handled above before signal DB connection.
+        SignalCommand::Daw(_) | SignalCommand::Load { .. } => unreachable!(),
     }
 }
 
@@ -498,6 +629,92 @@ async fn cmd_presets_delete(
         println!("deleted {} preset: {}", block_type, id);
     }
     Ok(())
+}
+
+// ============================================================================
+// Command Implementations — Import
+// ============================================================================
+
+async fn cmd_presets_import(signal: &SignalController, cmd: &ImportCommand) -> Result<()> {
+    match cmd {
+        ImportCommand::Fabfilter {
+            plugin,
+            all,
+            dry_run,
+        } => {
+            let importer = signal_import::fabfilter::FabFilterImporter::new();
+
+            if *all {
+                let plugins = importer.discover_plugins()?;
+                if plugins.is_empty() {
+                    println!("No FabFilter preset directories found.");
+                    return Ok(());
+                }
+                println!("Discovered {} FabFilter plugins:", plugins.len());
+                for p in &plugins {
+                    let format = if p.is_text_format { "text" } else { "binary" };
+                    println!(
+                        "  {} — {} presets ({}, {})",
+                        p.plugin_name,
+                        p.preset_count,
+                        p.block_type.display_name(),
+                        format,
+                    );
+                }
+                if *dry_run {
+                    println!("\n[dry run] No changes made.");
+                    return Ok(());
+                }
+                for p in &plugins {
+                    let collection = importer.scan(&p.plugin_name)?;
+                    let report = signal_import::import_presets(signal, collection).await?;
+                    println!(
+                        "  Imported {}: {} snapshots",
+                        report.preset_name, report.snapshots_imported
+                    );
+                }
+            } else if let Some(name) = plugin {
+                let collection = importer.scan(name)?;
+                if *dry_run {
+                    print!("{}", signal_import::dry_run_report(&collection));
+                    println!("[dry run] No changes made.");
+                    return Ok(());
+                }
+                let report = signal_import::import_presets(signal, collection).await?;
+                println!(
+                    "Imported {}: {} snapshots",
+                    report.preset_name, report.snapshots_imported
+                );
+            } else {
+                eyre::bail!("Specify --plugin <name> or --all");
+            }
+            Ok(())
+        }
+        ImportCommand::Rfxchain {
+            source,
+            block_type,
+            name,
+            dry_run,
+        } => {
+            let bt = parse_block_type(block_type)?;
+            let collection = signal_import::rfxchain::RfxChainImporter::scan(
+                source,
+                bt,
+                name.as_deref(),
+            )?;
+            if *dry_run {
+                print!("{}", signal_import::dry_run_report(&collection));
+                println!("[dry run] No changes made.");
+                return Ok(());
+            }
+            let report = signal_import::import_presets(signal, collection).await?;
+            println!(
+                "Imported {}: {} snapshots",
+                report.preset_name, report.snapshots_imported
+            );
+            Ok(())
+        }
+    }
 }
 
 // ============================================================================
@@ -1360,3 +1577,154 @@ async fn cmd_setlists_delete(signal: &SignalController, id: &str, as_json: bool)
     }
     Ok(())
 }
+
+// ============================================================================
+// DAW Commands
+// ============================================================================
+
+async fn run_daw(
+    _db: Option<PathBuf>,
+    socket: Option<PathBuf>,
+    cmd: &DawCommand,
+    as_json: bool,
+) -> Result<()> {
+    // Commands that don't need an RPC connection
+    match cmd {
+        DawCommand::Launch { ref config } => {
+            return daw_cli::cmd_launch(config.as_deref());
+        }
+        DawCommand::Quit { pid } => {
+            return daw_cli::cmd_quit(*pid);
+        }
+        _ => {}
+    }
+
+    let daw = daw_cli::connect(socket).await?;
+
+    match cmd {
+        DawCommand::Tracks => cmd_daw_tracks(&daw, as_json).await,
+        DawCommand::Plugins => daw_cli::cmd_plugins(&daw, as_json).await,
+        DawCommand::Fx { ref track } => cmd_daw_fx(&daw, track, as_json).await,
+        DawCommand::Projects => daw_cli::cmd_projects(&daw, as_json).await,
+        DawCommand::Open { ref path } => daw_cli::cmd_open(&daw, path, as_json).await,
+        DawCommand::Close { ref guid } => daw_cli::cmd_close(&daw, guid.as_deref()).await,
+        DawCommand::AddTrack { ref name, at } => daw_cli::cmd_add_track(&daw, name.as_deref(), *at, as_json).await,
+        DawCommand::RemoveTrack { ref track } => daw_cli::cmd_remove_track(&daw, track).await,
+        // Already handled above
+        DawCommand::Launch { .. } | DawCommand::Quit { .. } => unreachable!(),
+    }
+}
+
+async fn cmd_daw_tracks(daw: &Daw, as_json: bool) -> Result<()> {
+    daw_cli::cmd_tracks(daw, as_json).await
+}
+
+async fn cmd_daw_fx(daw: &Daw, track_arg: &str, as_json: bool) -> Result<()> {
+    daw_cli::cmd_fx(daw, track_arg, as_json).await
+}
+
+// ============================================================================
+// Signal Load Command (block + module auto-detection)
+// ============================================================================
+
+async fn cmd_signal_load(
+    db: Option<PathBuf>,
+    socket: Option<PathBuf>,
+    preset_type: &str,
+    preset_id: &str,
+    track_arg: &str,
+    snapshot_idx: usize,
+    as_json: bool,
+) -> Result<()> {
+    let signal = connect_signal(db).await?;
+    let daw = daw_cli::connect(socket).await?;
+    let track_handle = daw_cli::resolve_track_handle(&daw, track_arg).await?;
+
+    // Try block type first.
+    if let Some(bt) = signal_proto::BlockType::from_str(preset_type) {
+        let pid = signal_proto::PresetId::from(preset_id.to_string());
+
+        // Check if it's a block preset.
+        let block_presets = signal.block_presets().list(bt).await?;
+        if block_presets.iter().any(|p| p.id() == &pid) {
+            let result = signal
+                .service()
+                .load_block_to_track(bt, &pid, snapshot_idx, &track_handle)
+                .await
+                .map_err(|e| eyre::eyre!("{e}"))?;
+
+            if as_json {
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&json!({
+                        "action": "load",
+                        "kind": "block",
+                        "preset_type": preset_type,
+                        "preset_id": preset_id,
+                        "display_name": result.display_name,
+                        "fx_guid": result.fx_guid,
+                        "ok": true,
+                    }))?
+                );
+            } else {
+                println!(
+                    "Loaded \"{}\" to track \"{}\" — FX GUID: {}",
+                    result.display_name, track_arg, result.fx_guid,
+                );
+            }
+            return Ok(());
+        }
+    }
+
+    // Try module type.
+    if let Some(mt) = signal_proto::ModuleType::from_str(preset_type) {
+        let pid = signal_proto::ModulePresetId::from(preset_id.to_string());
+
+        let module_presets = signal.module_presets().list().await?;
+        if module_presets.iter().any(|p| p.id() == &pid) {
+            let result = signal
+                .service()
+                .load_module_to_track(mt, &pid, snapshot_idx, &track_handle)
+                .await
+                .map_err(|e| eyre::eyre!("{e}"))?;
+
+            if as_json {
+                let fx_list: Vec<_> = result
+                    .loaded_fx
+                    .iter()
+                    .map(|f| {
+                        json!({
+                            "fx_guid": f.fx_guid,
+                            "display_name": f.display_name,
+                        })
+                    })
+                    .collect();
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&json!({
+                        "action": "load",
+                        "kind": "module",
+                        "preset_type": preset_type,
+                        "preset_id": preset_id,
+                        "display_name": result.display_name,
+                        "loaded_fx": fx_list,
+                        "ok": true,
+                    }))?
+                );
+            } else {
+                println!(
+                    "Loaded module \"{}\" to track \"{}\" — {} FX instances",
+                    result.display_name,
+                    track_arg,
+                    result.loaded_fx.len(),
+                );
+            }
+            return Ok(());
+        }
+    }
+
+    Err(eyre::eyre!(
+        "No block or module preset found for type \"{preset_type}\" with ID \"{preset_id}\""
+    ))
+}
+

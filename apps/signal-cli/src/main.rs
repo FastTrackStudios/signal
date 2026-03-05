@@ -15,6 +15,10 @@ struct Cli {
     #[arg(long, global = true)]
     db: Option<PathBuf>,
 
+    /// DAW socket path (auto-discovers from /tmp/fts-daw-*.sock if omitted)
+    #[arg(long, global = true)]
+    socket: Option<PathBuf>,
+
     /// Output as JSON
     #[arg(long, global = true)]
     json: bool,
@@ -34,5 +38,5 @@ async fn main() -> Result<()> {
         .init();
 
     let cli = Cli::parse();
-    signal_cli::run(cli.db, cli.command, cli.json).await
+    signal_cli::run(cli.db, cli.socket, cli.command, cli.json).await
 }
