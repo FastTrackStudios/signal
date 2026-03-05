@@ -112,6 +112,7 @@ fn CuratedKnob(
         div { class: "flex flex-col items-center gap-1",
             MiniKnob {
                 value: display,
+                tooltip: Some(format!("{param_name}: {:.0}%", display * 100.0)),
                 on_change: move |new_val: f32| {
                     local_value.set(new_val);
                     on_change.call((param_id.clone(), new_val));

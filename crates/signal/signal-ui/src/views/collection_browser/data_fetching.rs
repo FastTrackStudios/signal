@@ -50,6 +50,7 @@ pub(super) async fn fetch_col2(
                             structured_tags: tags,
                             detail: DetailData::default(),
                             tag: None,
+                            folder: None,
                         }
                     }),
             );
@@ -81,6 +82,7 @@ pub(super) async fn fetch_col2(
                         ..Default::default()
                     },
                     tag: Some(LAYER_PRESET_TAG),
+                    folder: None,
                 });
             }
 
@@ -104,6 +106,7 @@ pub(super) async fn fetch_col2(
                         structured_tags: tags,
                         detail: DetailData::default(),
                         tag: None,
+                        folder: None,
                     }
                 })
                 .collect()
@@ -136,6 +139,7 @@ pub(super) async fn fetch_col2(
                         ..Default::default()
                     },
                     tag: None,
+                    folder: None,
                 });
             }
             items
@@ -164,6 +168,7 @@ pub(super) async fn fetch_col2(
                         structured_tags: tags,
                         detail: DetailData::default(),
                         tag: Some(idx),
+                        folder: None,
                     }
                 })
                 .collect()
@@ -183,6 +188,7 @@ pub(super) async fn fetch_col2(
                     structured_tags: tags,
                     detail: DetailData::default(),
                     tag: Some(idx),
+                    folder: None,
                 }
             })
             .collect(),
@@ -232,6 +238,7 @@ pub(super) async fn fetch_col3(
                                 ..Default::default()
                             },
                             tag: None,
+                            folder: None,
                         });
                     }
                     out
@@ -273,6 +280,7 @@ pub(super) async fn fetch_col3(
                                 ..Default::default()
                             },
                             tag: None,
+                            folder: None,
                         });
                     }
                     out
@@ -312,6 +320,7 @@ pub(super) async fn fetch_col3(
                                 ..Default::default()
                             },
                             tag: None,
+                            folder: None,
                         });
                     }
                 }
@@ -349,6 +358,7 @@ pub(super) async fn fetch_col3(
                             ..Default::default()
                         },
                         tag: None,
+                        folder: None,
                     });
                 }
                 out
@@ -380,6 +390,7 @@ pub(super) async fn fetch_col3(
                                     ..Default::default()
                                 },
                                 tag: col2_tag,
+                                folder: None,
                             }
                         })
                         .collect();
@@ -405,6 +416,7 @@ pub(super) async fn fetch_col3(
                                 structured_tags: tags,
                                 detail: DetailData::default(),
                                 tag: col2_tag,
+                                folder: None,
                             }
                         })
                         .collect();
@@ -663,6 +675,7 @@ pub(super) async fn resolve_scene_detail(
         structured_tags: TagSet::default(),
         detail,
         tag: None,
+        folder: None,
     };
     let params = build_param_lookup(signal, &[temp_item]).await;
 
@@ -716,6 +729,7 @@ pub(super) async fn resolve_layer_detail(
         structured_tags: TagSet::default(),
         detail,
         tag: None,
+        folder: None,
     };
     let params = build_param_lookup(signal, &[temp_item]).await;
 

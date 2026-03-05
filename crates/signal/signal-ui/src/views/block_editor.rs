@@ -4,7 +4,10 @@
 //! parameter sliders with color-coded block cards. Composes
 //! `components::block_color()` for styling.
 
+use std::f64::consts::PI;
+
 use dioxus::prelude::*;
+use dioxus::prelude::dioxus_elements::geometry::WheelDelta;
 use signal::{Block, BlockType};
 
 use crate::components::block_color;
@@ -75,6 +78,33 @@ mod cg_cursor {
 }
 
 // endregion: --- Cursor warp (macOS)
+
+// region: --- Arc geometry helpers
+
+const START_ANGLE: f64 = 135.0;
+const SWEEP: f64 = 270.0;
+
+fn angle_for_value(v: f64) -> f64 {
+    START_ANGLE + v.clamp(0.0, 1.0) * SWEEP
+}
+
+fn arc_point(cx: f64, cy: f64, r: f64, angle_deg: f64) -> (f64, f64) {
+    let rad = angle_deg * PI / 180.0;
+    (cx + r * rad.cos(), cy + r * rad.sin())
+}
+
+fn svg_arc(cx: f64, cy: f64, r: f64, start_deg: f64, end_deg: f64) -> String {
+    let (x1, y1) = arc_point(cx, cy, r, start_deg);
+    let (x2, y2) = arc_point(cx, cy, r, end_deg);
+    let large = if (end_deg - start_deg).abs() > 180.0 {
+        1
+    } else {
+        0
+    };
+    format!("M {x1:.1} {y1:.1} A {r:.1} {r:.1} 0 {large} 1 {x2:.1} {y2:.1}")
+}
+
+// endregion: --- Arc geometry helpers
 
 // region: --- BlockEditor
 
@@ -238,11 +268,23 @@ pub fn BlockCard(
 
 // region: --- MiniKnobParam
 
-/// A labeled parameter knob control.
+/// A labeled parameter knob control with click-to-edit value readout.
 #[component]
-fn MiniKnobParam(label: String, value: f32, on_change: EventHandler<f32>) -> Element {
+fn MiniKnobParam(
+    label: String,
+    value: f32,
+    on_change: EventHandler<f32>,
+    /// When true, display and parse values as bipolar (-100% to +100%).
+    #[props(default)]
+    bipolar: bool,
+    /// Override the display text (e.g. "2.5 kHz" instead of "50%").
+    #[props(default)]
+    format_value: Option<String>,
+) -> Element {
     // Local display value for immediate visual feedback during drag
     let mut display_value = use_signal(|| value);
+    let mut editing = use_signal(|| false);
+    let mut edit_text = use_signal(String::new);
 
     // Sync from props when not being actively dragged
     use_effect(move || {
@@ -251,18 +293,89 @@ fn MiniKnobParam(label: String, value: f32, on_change: EventHandler<f32>) -> Ele
 
     let dv = display_value();
 
+    let display_text = if let Some(ref fmt) = format_value {
+        fmt.clone()
+    } else if bipolar {
+        let pct = ((dv - 0.5) * 200.0) as i32;
+        if pct > 0 {
+            format!("+{pct}%")
+        } else {
+            format!("{pct}%")
+        }
+    } else {
+        format!("{}%", (dv * 100.0) as i32)
+    };
+
+    let tooltip = format!("{label}: {display_text}");
+
     rsx! {
         div { class: "flex flex-col items-center gap-1",
             MiniKnob {
                 value,
+                bipolar,
+                tooltip: tooltip,
                 on_change: move |new_val: f32| {
                     display_value.set(new_val);
                     on_change.call(new_val);
                 },
             }
             span { class: "text-xs text-zinc-400 text-center truncate w-14", "{label}" }
-            span { class: "text-xs font-mono text-zinc-300 text-center",
-                "{(dv * 100.0) as i32}%"
+
+            if editing() {
+                input {
+                    class: "text-xs font-mono text-zinc-300 text-center bg-zinc-800 border border-zinc-600 rounded w-14 px-1 outline-none focus:border-blue-500",
+                    r#type: "text",
+                    value: "{edit_text}",
+                    autofocus: true,
+                    oninput: move |e| {
+                        edit_text.set(e.value());
+                    },
+                    onkeydown: {
+                        let bipolar = bipolar;
+                        move |e: KeyboardEvent| {
+                            if e.key() == Key::Enter {
+                                let text = edit_text().trim().replace('%', "");
+                                if let Ok(v) = text.parse::<f32>() {
+                                    let normalized = if bipolar {
+                                        (v / 200.0 + 0.5).clamp(0.0, 1.0)
+                                    } else {
+                                        (v / 100.0).clamp(0.0, 1.0)
+                                    };
+                                    display_value.set(normalized);
+                                    on_change.call(normalized);
+                                }
+                                editing.set(false);
+                            } else if e.key() == Key::Escape {
+                                editing.set(false);
+                            }
+                        }
+                    },
+                    onblur: {
+                        let bipolar = bipolar;
+                        move |_| {
+                            let text = edit_text().trim().replace('%', "");
+                            if let Ok(v) = text.parse::<f32>() {
+                                let normalized = if bipolar {
+                                    (v / 200.0 + 0.5).clamp(0.0, 1.0)
+                                } else {
+                                    (v / 100.0).clamp(0.0, 1.0)
+                                };
+                                display_value.set(normalized);
+                                on_change.call(normalized);
+                            }
+                            editing.set(false);
+                        }
+                    },
+                }
+            } else {
+                span {
+                    class: "text-xs font-mono text-zinc-300 text-center cursor-text hover:text-zinc-100",
+                    onclick: move |_| {
+                        edit_text.set(display_text.clone());
+                        editing.set(true);
+                    },
+                    "{display_text}"
+                }
             }
         }
     }
@@ -284,6 +397,15 @@ pub fn MiniKnob(
     /// Accent color for the pointer (e.g. "#F97316"). Defaults to blue.
     #[props(default)]
     color: Option<String>,
+    /// Value to reset to on double-click (0.0-1.0). Defaults to 0.5.
+    #[props(default = 0.5)]
+    default_value: f32,
+    /// When true, draw the value arc from center (12 o'clock) outward.
+    #[props(default)]
+    bipolar: bool,
+    /// Native tooltip text shown on hover.
+    #[props(default)]
+    tooltip: Option<String>,
 ) -> Element {
     let mut dragging = use_signal(|| false);
     // Local value for immediate pointer feedback during drag
@@ -291,6 +413,9 @@ pub fn MiniKnob(
     // Saved screen position — used by both eval path and safety fallback
     let mut saved_screen_x = use_signal(|| 0.0f64);
     let mut saved_screen_y = use_signal(|| 0.0f64);
+    // Track last mousedown time for manual double-click detection
+    // (ondoubleclick won't fire because the drag overlay blocks the 2nd click)
+    let mut last_mousedown = use_signal(std::time::Instant::now);
 
     // Sync from prop when not dragging
     if !dragging() {
@@ -299,13 +424,41 @@ pub fn MiniKnob(
 
     let display = drag_value();
 
-    let size = 36.0;
-    let center = size / 2.0;
-    let radius = 14.0;
-    let stroke_width = 3.0;
+    let size: f64 = 36.0;
+    let center: f64 = size / 2.0;
+    let radius: f64 = 14.0;
+
+    // Arc geometry
+    let track_path = svg_arc(center, center, radius, angle_for_value(0.0), angle_for_value(1.0));
+
+    let value_path = if bipolar {
+        let center_angle = angle_for_value(0.5);
+        let val_angle = angle_for_value(display as f64);
+        if display > 0.501 {
+            svg_arc(center, center, radius, center_angle, val_angle)
+        } else if display < 0.499 {
+            svg_arc(center, center, radius, val_angle, center_angle)
+        } else {
+            String::new()
+        }
+    } else if display > 0.001 {
+        svg_arc(
+            center,
+            center,
+            radius,
+            angle_for_value(0.0),
+            angle_for_value(display as f64),
+        )
+    } else {
+        String::new()
+    };
+
+    // Bipolar center tick at 12 o'clock
+    let (tick_x, tick_y) = arc_point(center, center, radius + 2.0, angle_for_value(0.5));
+    let (tick_x2, tick_y2) = arc_point(center, center, radius - 1.0, angle_for_value(0.5));
 
     let value_angle = 135.0 + (display * 270.0);
-    let end_angle: f32 = value_angle.to_radians();
+    let end_angle = (value_angle as f64).to_radians();
 
     let accent = color.as_deref().unwrap_or("#3B82F6");
 
@@ -313,22 +466,65 @@ pub fn MiniKnob(
     let pointer_end_x = center + pointer_length * end_angle.cos();
     let pointer_end_y = center + pointer_length * end_angle.sin();
 
+    let title_attr = tooltip.as_deref().unwrap_or("").to_string();
+
     rsx! {
+        div {
+            title: "{title_attr}",
         svg {
             class: "w-9 h-9 cursor-pointer",
             view_box: "0 0 {size} {size}",
 
-            // Background track
-            circle {
-                cx: "{center}",
-                cy: "{center}",
-                r: "{radius}",
+            // Scroll wheel adjustment
+            onwheel: move |evt: WheelEvent| {
+                evt.prevent_default();
+                let dy = match evt.delta() {
+                    WheelDelta::Pixels(p) => p.y,
+                    WheelDelta::Lines(l) => l.y * 16.0,
+                    WheelDelta::Pages(p) => p.y * 160.0,
+                };
+                let step = if evt.modifiers().contains(keyboard_types::Modifiers::SHIFT) {
+                    0.002
+                } else {
+                    0.01
+                };
+                let delta = if dy < 0.0 { step } else { -step };
+                let new_val = (display + delta as f32).clamp(0.0, 1.0);
+                drag_value.set(new_val);
+                on_change.call(new_val);
+            },
+
+            // Background track arc
+            path {
+                d: "{track_path}",
                 fill: "none",
                 stroke: "#374151",
-                stroke_width: "{stroke_width}",
+                stroke_width: "3",
                 stroke_linecap: "round",
-                stroke_dasharray: "159 60",
-                transform: "rotate(135 {center} {center})",
+            }
+
+            // Value arc
+            if !value_path.is_empty() {
+                path {
+                    d: "{value_path}",
+                    fill: "none",
+                    stroke: "{accent}",
+                    stroke_width: "3",
+                    stroke_linecap: "round",
+                }
+            }
+
+            // Bipolar center tick mark
+            if bipolar {
+                line {
+                    x1: "{tick_x:.1}",
+                    y1: "{tick_y:.1}",
+                    x2: "{tick_x2:.1}",
+                    y2: "{tick_y2:.1}",
+                    stroke: "#6B7280",
+                    stroke_width: "1.5",
+                    stroke_linecap: "round",
+                }
             }
 
             // Center circle
@@ -343,8 +539,8 @@ pub fn MiniKnob(
             line {
                 x1: "{center}",
                 y1: "{center}",
-                x2: "{pointer_end_x}",
-                y2: "{pointer_end_y}",
+                x2: "{pointer_end_x:.1}",
+                y2: "{pointer_end_y:.1}",
                 stroke: "{accent}",
                 stroke_width: "2",
                 stroke_linecap: "round",
@@ -357,6 +553,21 @@ pub fn MiniKnob(
                 r: "{radius + 2.0}",
                 fill: "transparent",
                 onmousedown: move |e| {
+                    // Cmd+click reset (Logic Pro convention)
+                    if e.modifiers().contains(keyboard_types::Modifiers::META) {
+                        on_change.call(default_value);
+                        return;
+                    }
+
+                    // Double-click detection: if two mousedowns within 300ms, reset
+                    let now = std::time::Instant::now();
+                    let prev = last_mousedown();
+                    last_mousedown.set(now);
+                    if now.duration_since(prev).as_millis() < 300 {
+                        on_change.call(default_value);
+                        return;
+                    }
+
                     let start_val = display;
                     saved_screen_x.set(e.screen_coordinates().x);
                     saved_screen_y.set(e.screen_coordinates().y);
@@ -377,7 +588,8 @@ pub fn MiniKnob(
                             let accumulated = 0;
 
                             const onMove = (e) => {
-                                accumulated -= e.movementY;
+                                const step = e.shiftKey ? 5 : 1;
+                                accumulated -= e.movementY / step;
                                 // Clamp accumulator to the valid range so that
                                 // reversing direction responds immediately —
                                 // no dead zone past 0% or 100%.
@@ -432,6 +644,7 @@ pub fn MiniKnob(
                 class: "fixed inset-0 z-[100]",
                 style: "user-select: none; -webkit-user-select: none;",
             }
+        }
         }
     }
 }

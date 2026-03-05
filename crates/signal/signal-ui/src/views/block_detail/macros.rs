@@ -150,6 +150,8 @@ pub fn BlockMacros(props: BlockMacrosProps) -> Element {
                                     },
                                     MiniKnob {
                                         value,
+                                        color: Some(accent.to_string()),
+                                        tooltip: Some(format!("{knob_label}: {:.0}%", value * 100.0)),
                                         on_change: move |new_val: f32| {
                                             if let Some(ref cb) = on_change {
                                                 cb.call((knob_id_for_change.clone(), new_val));
