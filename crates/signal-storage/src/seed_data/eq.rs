@@ -3,8 +3,12 @@
 //! Each preset corresponds to a real EQ with its band controls.
 //! Parameter IDs represent frequency bands. Values are normalized
 //! 0.0–1.0 where 0.5 = flat / 0 dB gain.
+//!
+//! The abstract parameter names (low, low_mid, mid, high_mid, high)
+//! are mapped to real DAW plugin parameter names (e.g. "Band 1 Gain")
+//! at load time by the plugin parameter mapping in `daw_block_ops`.
 
-use signal_proto::{seed_id, Block, BlockParameter, BlockType, Preset, Snapshot};
+use signal_proto::{metadata::Metadata, seed_id, Block, BlockParameter, BlockType, Preset, Snapshot};
 
 pub fn presets() -> Vec<Preset> {
     vec![reaeq(), pro_q4()]
@@ -57,12 +61,17 @@ fn reaeq() -> Preset {
             ),
         ],
     )
+    .with_metadata(Metadata::new().with_tag("source:VST: ReaEQ (Cockos)"))
 }
 
 // ─── FabFilter Pro-Q 4 ─────────────────────────────────────────
 // Bands: Low, LowMid, Mid, HighMid, High, Output (6 controls)
 // The industry-standard surgical EQ — dynamic bands, linear phase,
 // spectrum analyzer. Output gain at the end of the chain.
+//
+// Values are normalized 0.0–1.0 gain values where 0.5 = 0 dB (flat).
+// At load time, the plugin parameter mapping expands these into real
+// Pro-Q 4 CLAP band parameters (Used, Enabled, Frequency, Gain, Q, Shape).
 
 fn proq4_block(low: f32, low_mid: f32, mid: f32, high_mid: f32, high: f32, output: f32) -> Block {
     Block::from_parameters(vec![
@@ -113,6 +122,7 @@ fn pro_q4() -> Preset {
             ),
         ],
     )
+    .with_metadata(Metadata::new().with_tag("source:CLAP: Pro-Q 4 (FabFilter)"))
 }
 
 // ─── Tests ──────────────────────────────────────────────────────
