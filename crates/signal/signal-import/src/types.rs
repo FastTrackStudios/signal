@@ -8,6 +8,21 @@ use std::path::PathBuf;
 
 use signal_proto::block::BlockType;
 
+/// A single extracted parameter from a vendor preset.
+#[derive(Debug, Clone)]
+pub struct ImportedParameter {
+    /// Display name (may be shortened, e.g. `"B1 Freq"`).
+    pub name: String,
+    /// Normalized value in `[0.0, 1.0]`.
+    pub value: f32,
+    /// Original DAW plugin parameter name, if it differs from `name`.
+    ///
+    /// For example, FabFilter Pro-Q renames `"Band 1 Frequency"` to `"B1 Freq"` for
+    /// display — this field preserves `"Band 1 Frequency"` so we can send it back
+    /// to REAPER's `set_parameter_by_name`.
+    pub daw_name: Option<String>,
+}
+
 /// A single preset variation parsed from a vendor file.
 #[derive(Debug, Clone)]
 pub struct ImportedSnapshot {
@@ -21,8 +36,21 @@ pub struct ImportedSnapshot {
     pub description: Option<String>,
     /// Raw tags from the vendor preset file (e.g. FabFilter comma-separated tags).
     pub vendor_tags: Vec<String>,
-    /// Entire file contents — stored as `Snapshot.state_data` for round-trip restore.
+    /// Entire file contents — may or may not be stored as `Snapshot.state_data`
+    /// depending on `store_raw_as_state`.
     pub raw_bytes: Vec<u8>,
+    /// Extracted parameters (normalized 0-1) for UI display and DAW apply.
+    /// Empty for binary-format presets where parameters can't be parsed.
+    pub parameters: Vec<ImportedParameter>,
+    /// Full REAPER plugin identifier (e.g. `"VST3: FabFilter Pro-Q 4 (FabFilter)"`).
+    /// When present, a `source:{value}` tag is added to enable dedup matching,
+    /// non-template display, and "Add to FX Chain".
+    pub source_plugin: Option<String>,
+    /// Whether to store `raw_bytes` as `Snapshot.state_data`.
+    /// Set to `false` for vendor-native formats (e.g. FabFilter `.ffp`) that REAPER
+    /// can't load via `set_state_chunk`. Set to `true` for REAPER-native formats
+    /// (e.g. rfxchain) where the bytes ARE valid state chunks.
+    pub store_raw_as_state: bool,
 }
 
 /// A collection of snapshots for one plugin, ready for conversion to a `Preset`.

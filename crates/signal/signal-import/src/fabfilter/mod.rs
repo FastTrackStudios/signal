@@ -161,17 +161,23 @@ fn scan_directory(
             .filter(|rel| !rel.as_os_str().is_empty())
             .map(|rel| rel.to_string_lossy().to_string());
 
-        // Extract metadata from text-format presets
-        let (author, description, vendor_tags) = if entry.format == FfpFormat::Text {
+        // Extract metadata and parameters from text-format presets
+        let (author, description, vendor_tags, parameters) = if entry.format == FfpFormat::Text {
             match parser::parse_ffp_text(&String::from_utf8_lossy(&raw_bytes)) {
-                Ok(parsed) => (parsed.author, parsed.description, parsed.tags),
+                Ok(parsed) => {
+                    let params = parser::extract_block_parameters(
+                        &parsed.signature,
+                        &parsed.parameters,
+                    );
+                    (parsed.author, parsed.description, parsed.tags, params)
+                }
                 Err(e) => {
                     debug!("Failed to parse text preset {}: {e}", path.display());
-                    (None, None, Vec::new())
+                    (None, None, Vec::new(), Vec::new())
                 }
             }
         } else {
-            (None, None, Vec::new())
+            (None, None, Vec::new(), Vec::new())
         };
 
         snapshots.push(ImportedSnapshot {
@@ -181,6 +187,9 @@ fn scan_directory(
             description,
             vendor_tags,
             raw_bytes,
+            parameters,
+            source_plugin: Some(entry.reaper_name.to_string()),
+            store_raw_as_state: false, // .ffp bytes are NOT REAPER state chunks
         });
     }
 
