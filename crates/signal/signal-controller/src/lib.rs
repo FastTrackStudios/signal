@@ -147,6 +147,11 @@ where
         self.daw_applier.read().expect("lock poisoned").is_some()
     }
 
+    /// Access the underlying service implementation.
+    pub fn service(&self) -> &Arc<S> {
+        &self.service
+    }
+
     // region: --- Namespace accessors
 
     /// Block parameter operations.
