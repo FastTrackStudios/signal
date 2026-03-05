@@ -9,6 +9,73 @@ use signal::{Block, BlockType};
 
 use crate::components::block_color;
 
+// region: --- Cursor warp (macOS)
+
+/// CoreGraphics FFI for cursor control on macOS.
+///
+/// WKWebView doesn't support the Pointer Lock API, so we use native CG
+/// calls to grab/release the cursor. `CGAssociateMouseAndMouseCursorPosition`
+/// freezes the cursor at its current position while still delivering mouse
+/// events with correct deltas to the webview — this is the same function
+/// that `tao::Window::set_cursor_grab` calls under the hood.
+#[cfg(target_os = "macos")]
+mod cg_cursor {
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    /// Guard to ensure exactly one hide is matched with one show,
+    /// even if grab() is called multiple times (double-click, re-render).
+    static GRABBED: AtomicBool = AtomicBool::new(false);
+
+    #[repr(C)]
+    #[derive(Clone, Copy)]
+    struct CGPoint {
+        x: f64,
+        y: f64,
+    }
+
+    unsafe extern "C" {
+        fn CGMainDisplayID() -> u32;
+        fn CGDisplayHideCursor(display: u32) -> i32;
+        fn CGDisplayShowCursor(display: u32) -> i32;
+        fn CGWarpMouseCursorPosition(point: CGPoint) -> i32;
+        fn CGAssociateMouseAndMouseCursorPosition(connected: i32) -> i32;
+    }
+
+    /// Freeze the cursor and hide it. The mouse can move freely but the
+    /// cursor stays pinned. JS `movementY` still reports correct deltas.
+    /// Safe to call multiple times — only the first call hides the cursor.
+    pub fn grab() {
+        if GRABBED.swap(true, Ordering::SeqCst) {
+            return; // already grabbed
+        }
+        unsafe {
+            CGAssociateMouseAndMouseCursorPosition(0);
+            CGDisplayHideCursor(CGMainDisplayID());
+        }
+    }
+
+    /// Unfreeze the cursor, warp it to the saved position, and show it.
+    /// Safe to call multiple times — only the first call shows the cursor.
+    pub fn release(x: f64, y: f64) {
+        if !GRABBED.swap(false, Ordering::SeqCst) {
+            return; // wasn't grabbed
+        }
+        unsafe {
+            CGAssociateMouseAndMouseCursorPosition(1);
+            CGWarpMouseCursorPosition(CGPoint { x, y });
+            CGDisplayShowCursor(CGMainDisplayID());
+        }
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+mod cg_cursor {
+    pub fn grab() {}
+    pub fn release(_x: f64, _y: f64) {}
+}
+
+// endregion: --- Cursor warp (macOS)
+
 // region: --- BlockEditor
 
 /// A block parameter editor.
@@ -207,8 +274,9 @@ fn MiniKnobParam(label: String, value: f32, on_change: EventHandler<f32>) -> Ele
 
 /// An SVG rotary knob with drag-to-adjust interaction.
 ///
-/// Ported from the legacy module_detail_view.rs knob.
-/// Uses local state for immediate visual feedback during drag.
+/// Hides the cursor during drag for DAW-style knob control. Uses a
+/// full-viewport overlay to capture all mouse events and prevent text
+/// selection or hover-chain breakage while dragging.
 #[component]
 pub fn MiniKnob(
     value: f32,
@@ -218,10 +286,11 @@ pub fn MiniKnob(
     color: Option<String>,
 ) -> Element {
     let mut dragging = use_signal(|| false);
-    let mut start_y = use_signal(|| 0.0f32);
-    let mut start_value = use_signal(|| 0.0f32);
     // Local value for immediate pointer feedback during drag
     let mut drag_value = use_signal(|| value);
+    // Saved screen position — used by both eval path and safety fallback
+    let mut saved_screen_x = use_signal(|| 0.0f64);
+    let mut saved_screen_y = use_signal(|| 0.0f64);
 
     // Sync from prop when not dragging
     if !dragging() {
@@ -281,38 +350,87 @@ pub fn MiniKnob(
                 stroke_linecap: "round",
             }
 
-            // Hit area
+            // Hit area — drag starts here, then JS captures all movement
             circle {
                 cx: "{center}",
                 cy: "{center}",
                 r: "{radius + 2.0}",
                 fill: "transparent",
                 onmousedown: move |e| {
+                    let start_val = display;
+                    saved_screen_x.set(e.screen_coordinates().x);
+                    saved_screen_y.set(e.screen_coordinates().y);
                     dragging.set(true);
-                    start_y.set(e.client_coordinates().y as f32);
-                    start_value.set(display);
                     drag_value.set(display);
+
+                    // Freeze + hide cursor at the OS level. The cursor is
+                    // pinned in place, but JS movementY still reports deltas.
+                    cg_cursor::grab();
+                    document::eval("document.body.style.userSelect = 'none';");
+
+                    // Drive the entire drag from JS via movementY deltas.
+                    spawn(async move {
+                        let mut eval = document::eval(
+                            r#"
+                            const startVal = await dioxus.recv();
+                            const sens = 150;
+                            let accumulated = 0;
+
+                            const onMove = (e) => {
+                                accumulated -= e.movementY;
+                                // Clamp accumulator to the valid range so that
+                                // reversing direction responds immediately —
+                                // no dead zone past 0% or 100%.
+                                const lo = -startVal * sens;
+                                const hi = (1 - startVal) * sens;
+                                accumulated = Math.max(lo, Math.min(hi, accumulated));
+                                dioxus.send(accumulated);
+                            };
+
+                            document.addEventListener('mousemove', onMove);
+
+                            await new Promise(resolve => {
+                                document.addEventListener('mouseup', () => {
+                                    document.removeEventListener('mousemove', onMove);
+                                    // Send sentinel so Rust breaks the recv loop immediately
+                                    // instead of waiting for the eval channel to close.
+                                    dioxus.send("done");
+                                    resolve();
+                                }, { once: true });
+                            });
+                        "#,
+                        );
+
+                        // Send start value so JS can compute clamp bounds
+                        let _ = eval.send(start_val as f64);
+
+                        loop {
+                            match eval.recv::<f64>().await {
+                                Ok(acc) => {
+                                    let new_val = start_val + acc as f32 / 150.0;
+                                    drag_value.set(new_val);
+                                    on_change.call(new_val);
+                                }
+                                // "done" sentinel (fails f64 parse) or channel closed
+                                Err(_) => break,
+                            }
+                        }
+
+                        // Drag done — unfreeze, warp to start position, show cursor
+                        cg_cursor::release(saved_screen_x(), saved_screen_y());
+                        dragging.set(false);
+                        document::eval("document.body.style.userSelect = '';");
+                    });
                 },
             }
         }
 
-        // Drag overlay — full-viewport capture to prevent text selection,
-        // keep dropdown open, and ensure smooth drag even outside the knob.
+        // Drag overlay — blocks all other UI interactions while dragging.
+        // Mouseup is handled by the JS document listener in the eval above.
         if dragging() {
             div {
                 class: "fixed inset-0 z-[100]",
-                style: "cursor: ns-resize; user-select: none; -webkit-user-select: none;",
-                onmousemove: move |e| {
-                    if dragging() {
-                        let delta = (start_y() - e.client_coordinates().y as f32) / 150.0;
-                        let new_value = (start_value() + delta).clamp(0.0, 1.0);
-                        drag_value.set(new_value);
-                        on_change.call(new_value);
-                    }
-                },
-                onmouseup: move |_| {
-                    dragging.set(false);
-                },
+                style: "user-select: none; -webkit-user-select: none;",
             }
         }
     }
