@@ -11,6 +11,8 @@ pub fn presets() -> Vec<ModulePreset> {
         drive_full_stack(),
         drive_duo(),
         time_parallel(),
+        eq_proq4_3band(),
+        eq_proq4_4band(),
         guitar_source(),
         guitar_dynamics(),
         guitar_special(),
@@ -303,6 +305,113 @@ fn time_parallel() -> ModulePreset {
                 },
             ])),
         )],
+    )
+}
+
+fn eq_proq4_3band() -> ModulePreset {
+    ModulePreset::new(
+        seed_id("eq-proq4-3band"),
+        "Pro-Q 4 - 3-Band",
+        ModuleType::Eq,
+        ModuleSnapshot::new(
+            seed_id("eq-proq4-3band-default"),
+            "Default",
+            Module::from_blocks(vec![
+                // Block 1: Surgical Cut — narrow mid cut for resonance removal
+                ModuleBlock::new(
+                    "eq-surgical",
+                    "Surgical Cut",
+                    BlockType::Eq,
+                    ModuleBlockSource::PresetSnapshot {
+                        preset_id: PresetId::from(seed_id("eq-proq4")),
+                        snapshot_id: SnapshotId::from(seed_id("eq-proq4-surgical-cut")),
+                        saved_at_version: None,
+                    },
+                ),
+                // Block 2: Hi-Fi — slight warmth + airy highs
+                ModuleBlock::new(
+                    "eq-hifi",
+                    "Hi-Fi",
+                    BlockType::Eq,
+                    ModuleBlockSource::PresetSnapshot {
+                        preset_id: PresetId::from(seed_id("eq-proq4")),
+                        snapshot_id: SnapshotId::from(seed_id("eq-proq4-hifi")),
+                        saved_at_version: None,
+                    },
+                ),
+                // Block 3: Warm Analog — low-end body, gentle high roll-off
+                ModuleBlock::new(
+                    "eq-warm",
+                    "Warm Analog",
+                    BlockType::Eq,
+                    ModuleBlockSource::PresetSnapshot {
+                        preset_id: PresetId::from(seed_id("eq-proq4")),
+                        snapshot_id: SnapshotId::from(seed_id("eq-proq4-warm-analog")),
+                        saved_at_version: None,
+                    },
+                ),
+            ]),
+        ),
+        vec![],
+    )
+}
+
+fn eq_proq4_4band() -> ModulePreset {
+    ModulePreset::new(
+        seed_id("eq-proq4-4band"),
+        "Pro-Q 4 - 4-Band Full",
+        ModuleType::Eq,
+        ModuleSnapshot::new(
+            seed_id("eq-proq4-4band-default"),
+            "Default",
+            Module::from_blocks(vec![
+                // Block 1: Surgical Cut — resonance removal
+                ModuleBlock::new(
+                    "eq-surgical",
+                    "Surgical Cut",
+                    BlockType::Eq,
+                    ModuleBlockSource::PresetSnapshot {
+                        preset_id: PresetId::from(seed_id("eq-proq4")),
+                        snapshot_id: SnapshotId::from(seed_id("eq-proq4-surgical-cut")),
+                        saved_at_version: None,
+                    },
+                ),
+                // Block 2: Warm Analog — low-end body
+                ModuleBlock::new(
+                    "eq-warm",
+                    "Warm Analog",
+                    BlockType::Eq,
+                    ModuleBlockSource::PresetSnapshot {
+                        preset_id: PresetId::from(seed_id("eq-proq4")),
+                        snapshot_id: SnapshotId::from(seed_id("eq-proq4-warm-analog")),
+                        saved_at_version: None,
+                    },
+                ),
+                // Block 3: Hi-Fi — airy highs + slight warmth
+                ModuleBlock::new(
+                    "eq-hifi",
+                    "Hi-Fi",
+                    BlockType::Eq,
+                    ModuleBlockSource::PresetSnapshot {
+                        preset_id: PresetId::from(seed_id("eq-proq4")),
+                        snapshot_id: SnapshotId::from(seed_id("eq-proq4-hifi")),
+                        saved_at_version: None,
+                    },
+                ),
+                // Block 4: Bright Mix — presence and air boost
+                ModuleBlock::new(
+                    "eq-bright",
+                    "Bright Mix",
+                    BlockType::Eq,
+                    ModuleBlockSource::PresetSnapshot {
+                        preset_id: PresetId::from(seed_id("eq-proq4")),
+                        snapshot_id: SnapshotId::from(seed_id("eq-proq4-bright-mix")),
+                        saved_at_version: None,
+                    },
+                ),
+            ]),
+        ),
+        vec![],
     )
 }
 
