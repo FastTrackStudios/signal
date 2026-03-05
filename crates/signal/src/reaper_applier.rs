@@ -21,7 +21,8 @@ use tokio::sync::RwLock;
 
 use daw_control::{Project, TrackHandle};
 use daw_proto::TrackRef;
-use signal_live::engine::{graph_state_chunks, DawPatchApplier, PatchApplyError};
+use signal_live::engine::{graph_state_chunks, DawPatchApplier, DawStateChunk, PatchApplyError};
+use signal_proto::plugin_block::FxRole;
 use signal_proto::resolve::ResolvedGraph;
 
 /// State for a single patch child track.
@@ -356,6 +357,9 @@ impl ReaperPatchApplier {
             .await
             .map_err(|e| PatchApplyError::DawError(format!("set_chunk: {e}")))?;
 
+        // Rename FX using FxRole::Block convention
+        rename_fx_on_track(&track, chunk, name).await;
+
         // Enable parent send so audio flows to folder bus
         let _ = track.set_parent_send(true).await;
 
@@ -523,6 +527,25 @@ async fn unmute_send_to_track(source_track: &TrackHandle, dest_guid: &str) -> bo
         }
     }
     false
+}
+
+/// Rename the first FX on a track using the `FxRole::Block` naming convention.
+///
+/// Produces names like `"EQ Block: Pro-Q 4 - Flat"` from the block's type,
+/// plugin name, and patch name.
+async fn rename_fx_on_track(track: &TrackHandle, chunk: &DawStateChunk, patch_name: &str) {
+    let fx_name = format!("{} - {}", chunk.plugin_name, patch_name);
+    let display_name = FxRole::Block {
+        block_type: chunk.block_type,
+        name: fx_name,
+    }
+    .display_name();
+
+    if let Ok(Some(fx)) = track.fx_chain().by_index(0).await {
+        if let Err(e) = fx.rename(&display_name).await {
+            eprintln!("[WARN] Failed to rename FX to '{display_name}': {e}");
+        }
+    }
 }
 
 /// Replace the `<FXCHAIN ...>` section in a track chunk with new rfxchain content.
@@ -787,6 +810,9 @@ impl DawPatchApplier for ReaperPatchApplier {
                 .set_chunk(new_chunk)
                 .await
                 .map_err(|e| PatchApplyError::DawError(format!("set_chunk: {e}")))?;
+
+            // --- 4b. Rename FX using FxRole::Block convention ---
+            rename_fx_on_track(&new_track, chunk, patch_label).await;
 
             // --- 5. Ensure parent send is ON ---
             let _ = new_track.set_parent_send(true).await;

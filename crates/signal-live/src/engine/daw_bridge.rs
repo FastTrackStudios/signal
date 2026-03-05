@@ -11,6 +11,7 @@
 
 use super::morph::{DawParamValue, DawParameterSnapshot};
 use serde::{Deserialize, Serialize};
+use signal_proto::BlockType;
 use std::collections::HashMap;
 
 /// Raw state chunk data for a single FX plugin (RPP format in REAPER).
@@ -20,6 +21,8 @@ pub struct DawStateChunk {
     pub fx_id: String,
     /// Plugin name (for display).
     pub plugin_name: String,
+    /// Functional category of the block (e.g. Eq, Drive, Reverb).
+    pub block_type: BlockType,
     /// Raw state data (base64-encoded RPP chunk or equivalent).
     pub chunk_data: Vec<u8>,
 }
@@ -231,6 +234,7 @@ impl DawBridge for MockDawBridge {
 mod tests {
     use super::*;
     use crate::engine::morph::DawParamValue;
+    use signal_proto::BlockType;
 
     fn param(fx: &str, idx: u32, val: f64) -> DawParamValue {
         DawParamValue {
@@ -299,6 +303,7 @@ mod tests {
             vec![DawStateChunk {
                 fx_id: "fx1".into(),
                 plugin_name: "Test Plugin".into(),
+                block_type: BlockType::Drive,
                 chunk_data: vec![1, 2, 3, 4],
             }],
         );

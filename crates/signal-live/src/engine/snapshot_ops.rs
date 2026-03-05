@@ -81,6 +81,7 @@ fn stored_to_chunk(stored: &StoredChunkSnapshot) -> Result<DawStateChunk, Snapsh
     Ok(DawStateChunk {
         fx_id: stored.fx_id.clone(),
         plugin_name: stored.plugin_name.clone(),
+        block_type: signal_proto::BlockType::Custom,
         chunk_data,
     })
 }
@@ -319,6 +320,7 @@ mod tests {
         let original = DawStateChunk {
             fx_id: "fx-1".into(),
             plugin_name: "Helix Native".into(),
+            block_type: signal_proto::BlockType::Custom,
             chunk_data: vec![0xDE, 0xAD, 0xBE, 0xEF, 0x01, 0x02, 0x03],
         };
         let stored = chunk_to_stored(&original, "owner-1");
