@@ -135,6 +135,7 @@ pub fn graph_state_chunks(graph: &ResolvedGraph, fx_id: &str) -> Vec<DawStateChu
                         chunks.push(DawStateChunk {
                             fx_id: fx_id.to_string(),
                             plugin_name: rb.label.clone(),
+                            block_type: rb.block_type,
                             chunk_data: data.clone(),
                         });
                     }
