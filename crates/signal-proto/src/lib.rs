@@ -34,6 +34,7 @@ pub mod profile;
 pub mod rack;
 pub mod resolve;
 pub mod rig;
+pub mod rig_template;
 pub mod routing;
 pub mod scene_template;
 pub mod setlist;

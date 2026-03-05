@@ -351,6 +351,102 @@ impl std::fmt::Display for PluginBlockDefError {
 
 impl std::error::Error for PluginBlockDefError {}
 
+// ─── FX Name Formatting ─────────────────────────────────────────
+
+/// Controls which parts of an FX display name are visible.
+///
+/// An FX display name has up to 4 parts:
+/// ```text
+/// DRIVE Module: Simple Drive - Low
+/// │     │       │              │
+/// │     │       │              └─ variation
+/// │     │       └─ preset
+/// │     └─ collection_type ("Module" or "Block")
+/// └─ type_name ("DRIVE", "AMP", etc.)
+/// ```
+///
+/// Default format: `Type: Preset - Variation` (e.g., `DRIVE: Simple Drive - Low`).
+#[derive(Debug, Clone, PartialEq)]
+pub struct FxDisplayOptions {
+    /// Show the type prefix (e.g., "DRIVE", "AMP").
+    pub show_type: bool,
+    /// Show the collection keyword ("Module" or "Block").
+    pub show_collection_type: bool,
+    /// Show the preset/collection name (e.g., "Simple Drive").
+    pub show_preset: bool,
+    /// Show the variation name (e.g., "Low").
+    pub show_variation: bool,
+}
+
+impl Default for FxDisplayOptions {
+    /// Default: `Type: Preset - Variation` (collection type hidden).
+    fn default() -> Self {
+        Self {
+            show_type: true,
+            show_collection_type: false,
+            show_preset: true,
+            show_variation: true,
+        }
+    }
+}
+
+impl FxDisplayOptions {
+    /// Show everything: `DRIVE Module: Simple Drive - Low`.
+    pub fn full() -> Self {
+        Self {
+            show_type: true,
+            show_collection_type: true,
+            show_preset: true,
+            show_variation: true,
+        }
+    }
+
+    /// Show only preset and variation: `Simple Drive - Low`.
+    pub fn name_only() -> Self {
+        Self {
+            show_type: false,
+            show_collection_type: false,
+            show_preset: true,
+            show_variation: true,
+        }
+    }
+}
+
+/// The decomposed parts of an FX name's content portion (after the type/keyword prefix).
+///
+/// Given `"Simple Drive - Low"`, this splits into:
+/// - `preset`: `"Simple Drive"`
+/// - `variation`: `Some("Low")`
+///
+/// If there's no ` - ` separator, the whole string is the preset with no variation.
+#[derive(Debug, Clone, PartialEq)]
+pub struct FxNameParts {
+    pub preset: String,
+    pub variation: Option<String>,
+}
+
+impl FxNameParts {
+    /// Split a combined name like `"Simple Drive - Low"` into preset + variation.
+    pub fn split(combined: &str) -> Self {
+        // Split on the last ` - ` to handle presets containing hyphens
+        // e.g., "Spring-Box - Boing" → preset="Spring-Box", variation="Boing"
+        if let Some(pos) = combined.rfind(" - ") {
+            let preset = combined[..pos].trim().to_string();
+            let variation = combined[pos + 3..].trim().to_string();
+            if !preset.is_empty() && !variation.is_empty() {
+                return Self {
+                    preset,
+                    variation: Some(variation),
+                };
+            }
+        }
+        Self {
+            preset: combined.trim().to_string(),
+            variation: None,
+        }
+    }
+}
+
 // ─── FX Name Parsing ────────────────────────────────────────────
 
 /// Classification of an FX item based on its display name.
@@ -378,6 +474,12 @@ impl FxRole {
     /// - `"Module: <name>"` → `GenericModule { name }`
     /// - Anything else → `Unknown { name }`
     pub fn parse(display_name: &str) -> Self {
+        // Strip optional [M] / [B] prefix
+        let display_name = display_name
+            .strip_prefix("[M] ")
+            .or_else(|| display_name.strip_prefix("[B] "))
+            .unwrap_or(display_name);
+
         // Try "<Word> Module: <rest>" first
         if let Some(rest) = Self::strip_keyword(display_name, "Module:") {
             let prefix = display_name[..display_name.len() - rest.len() - "Module:".len()]
@@ -455,6 +557,200 @@ impl FxRole {
             "limiter" => Some(BlockType::Limiter),
             "utility" => Some(BlockType::Volume),
             _ => None,
+        }
+    }
+
+    /// Format this FX role as a display name using the given options.
+    ///
+    /// # Examples
+    ///
+    /// ```text
+    /// // Default (show_type + show_preset + show_variation):
+    /// "DRIVE: Simple Drive - Low"
+    ///
+    /// // Full (all flags on):
+    /// "DRIVE Module: Simple Drive - Low"
+    ///
+    /// // Name only (type + collection_type off):
+    /// "Simple Drive - Low"
+    /// ```
+    pub fn format(&self, opts: &FxDisplayOptions) -> String {
+        match self {
+            Self::Module { module_type, name } => {
+                let base = Self::format_parts(
+                    opts,
+                    &module_type.as_str().to_uppercase(),
+                    "Module",
+                    name,
+                );
+                format!("[M] {base}")
+            }
+            Self::Block { block_type, name } => {
+                let type_label = Self::block_type_label(*block_type);
+                let base = Self::format_parts(opts, &type_label, "Block", name);
+                format!("[B] {base}")
+            }
+            Self::GenericModule { name } => {
+                // GenericModule has no type prefix, only "Module" keyword
+                let parts = FxNameParts::split(name);
+                let base = Self::format_name_portion(opts, &parts);
+                format!("[M] {base}")
+            }
+            Self::Unknown { name } => name.clone(),
+        }
+    }
+
+    /// Format with the default display options.
+    pub fn display_name(&self) -> String {
+        self.format(&FxDisplayOptions::default())
+    }
+
+    /// Get the type label for a block type as used in FX naming.
+    fn block_type_label(block_type: BlockType) -> String {
+        match block_type {
+            BlockType::Reverb => "Reverb".to_string(),
+            BlockType::Tremolo => "Trem".to_string(),
+            BlockType::Volume => "Utility".to_string(),
+            _ => {
+                // Capitalize first letter: "eq" → "EQ", "drive" → "Drive"
+                let name = block_type.display_name();
+                name.to_string()
+            }
+        }
+    }
+
+    /// Assemble the display string from type, collection keyword, and name parts.
+    fn format_parts(opts: &FxDisplayOptions, type_name: &str, collection_kw: &str, combined_name: &str) -> String {
+        let parts = FxNameParts::split(combined_name);
+        let mut result = String::new();
+
+        // Type prefix (e.g., "DRIVE")
+        if opts.show_type {
+            result.push_str(type_name);
+        }
+
+        // Collection keyword (e.g., "Module" or "Block")
+        if opts.show_collection_type {
+            if !result.is_empty() {
+                result.push(' ');
+            }
+            result.push_str(collection_kw);
+        }
+
+        // Separator between prefix and name portion
+        let name_portion = Self::format_name_portion(opts, &parts);
+        if !name_portion.is_empty() {
+            if !result.is_empty() {
+                result.push_str(": ");
+            }
+            result.push_str(&name_portion);
+        }
+
+        result
+    }
+
+    /// Format just the preset + variation portion based on options.
+    fn format_name_portion(opts: &FxDisplayOptions, parts: &FxNameParts) -> String {
+        match (opts.show_preset, opts.show_variation) {
+            (true, true) => {
+                if let Some(ref var) = parts.variation {
+                    format!("{} - {}", parts.preset, var)
+                } else {
+                    parts.preset.clone()
+                }
+            }
+            (true, false) => parts.preset.clone(),
+            (false, true) => parts.variation.as_deref().unwrap_or(&parts.preset).to_string(),
+            (false, false) => String::new(),
+        }
+    }
+}
+
+// ─── Track Name Roles ───────────────────────────────────────────
+
+/// Display options controlling which parts of a track name are shown.
+#[derive(Debug, Clone, PartialEq)]
+pub struct TrackDisplayOptions {
+    /// Show the bracket prefix (e.g., `[L]`, `[E]`, `[R]`).
+    pub show_prefix: bool,
+    /// Show the role keyword (e.g., "Layer", "Engine", "Rig").
+    pub show_role: bool,
+    /// Show the name portion.
+    pub show_name: bool,
+}
+
+impl Default for TrackDisplayOptions {
+    fn default() -> Self {
+        Self {
+            show_prefix: true,
+            show_role: false,
+            show_name: true,
+        }
+    }
+}
+
+/// Classification of a REAPER track based on its role in the Signal hierarchy.
+///
+/// Parallel to [`FxRole`] (which classifies FX items), this classifies tracks:
+/// - `[R]` — Rig (top-level folder)
+/// - `[E]` — Engine (sub-folder under a rig)
+/// - `[L]` — Layer (leaf track, holds FX chain of modules + blocks)
+#[derive(Debug, Clone, PartialEq)]
+pub enum TrackRole {
+    /// A rig-level track (top-level folder): `"[R] <name>"`.
+    Rig { name: String },
+    /// An engine-level track (sub-folder): `"[E] <name>"`.
+    Engine { name: String },
+    /// A layer-level track (leaf track with FX): `"[L] <name>"`.
+    Layer { name: String },
+}
+
+impl TrackRole {
+    /// Format this track role as a display name using the given options.
+    pub fn format(&self, opts: &TrackDisplayOptions) -> String {
+        let (prefix, role, name) = match self {
+            Self::Rig { name } => ("[R]", "Rig", name.as_str()),
+            Self::Engine { name } => ("[E]", "Engine", name.as_str()),
+            Self::Layer { name } => ("[L]", "Layer", name.as_str()),
+        };
+
+        let mut result = String::new();
+        if opts.show_prefix {
+            result.push_str(prefix);
+        }
+        if opts.show_role {
+            if !result.is_empty() {
+                result.push(' ');
+            }
+            result.push_str(role);
+        }
+        if opts.show_name {
+            if !result.is_empty() {
+                result.push(' ');
+            }
+            result.push_str(name);
+        }
+        result
+    }
+
+    /// Format with the default display options (`[X] <name>`).
+    pub fn display_name(&self) -> String {
+        self.format(&TrackDisplayOptions::default())
+    }
+
+    /// Parse a track display name into a structured role.
+    ///
+    /// Recognizes `[R] ...`, `[E] ...`, `[L] ...` prefixes.
+    /// Returns `None` if the name doesn't match any known prefix.
+    pub fn parse(display_name: &str) -> Option<Self> {
+        if let Some(rest) = display_name.strip_prefix("[R] ") {
+            Some(Self::Rig { name: rest.to_string() })
+        } else if let Some(rest) = display_name.strip_prefix("[E] ") {
+            Some(Self::Engine { name: rest.to_string() })
+        } else if let Some(rest) = display_name.strip_prefix("[L] ") {
+            Some(Self::Layer { name: rest.to_string() })
+        } else {
+            None
         }
     }
 }
@@ -1027,5 +1323,230 @@ mod tests {
         assert_eq!(amp_module.blocks[0].resolve_fx_index(1), Some(9));
         assert_eq!(amp_module.blocks[1].resolve_fx_index(0), Some(11));
         assert_eq!(amp_module.blocks[1].resolve_fx_index(1), Some(12));
+    }
+
+    // ─── FxNameParts tests ─────────────────────────────────────
+
+    #[test]
+    fn name_parts_with_variation() {
+        let parts = FxNameParts::split("Simple Drive - Low");
+        assert_eq!(parts.preset, "Simple Drive");
+        assert_eq!(parts.variation.as_deref(), Some("Low"));
+    }
+
+    #[test]
+    fn name_parts_no_variation() {
+        let parts = FxNameParts::split("Trim");
+        assert_eq!(parts.preset, "Trim");
+        assert_eq!(parts.variation, None);
+    }
+
+    #[test]
+    fn name_parts_hyphenated_preset() {
+        // "Spring-Box - Boing" → preset = "Spring-Box", variation = "Boing"
+        let parts = FxNameParts::split("Spring-Box - Boing");
+        assert_eq!(parts.preset, "Spring-Box");
+        assert_eq!(parts.variation.as_deref(), Some("Boing"));
+    }
+
+    #[test]
+    fn name_parts_parenthetical() {
+        let parts = FxNameParts::split("ReaVerbate - Ambient Room (Reaverbate)");
+        assert_eq!(parts.preset, "ReaVerbate");
+        assert_eq!(
+            parts.variation.as_deref(),
+            Some("Ambient Room (Reaverbate)")
+        );
+    }
+
+    // ─── FxRole formatting tests ───────────────────────────────
+
+    #[test]
+    fn format_module_default() {
+        let role = FxRole::parse("DRIVE Module: Simple Drive - Low");
+        assert_eq!(role.display_name(), "[M] DRIVE: Simple Drive - Low");
+    }
+
+    #[test]
+    fn format_module_full() {
+        let role = FxRole::parse("DRIVE Module: Simple Drive - Low");
+        assert_eq!(
+            role.format(&FxDisplayOptions::full()),
+            "[M] DRIVE Module: Simple Drive - Low"
+        );
+    }
+
+    #[test]
+    fn format_module_name_only() {
+        let role = FxRole::parse("DRIVE Module: Simple Drive - Low");
+        assert_eq!(
+            role.format(&FxDisplayOptions::name_only()),
+            "[M] Simple Drive - Low"
+        );
+    }
+
+    #[test]
+    fn format_module_type_only() {
+        let role = FxRole::parse("DRIVE Module: Simple Drive - Low");
+        let opts = FxDisplayOptions {
+            show_type: true,
+            show_collection_type: false,
+            show_preset: false,
+            show_variation: false,
+        };
+        assert_eq!(role.format(&opts), "[M] DRIVE");
+    }
+
+    #[test]
+    fn format_module_variation_only() {
+        let role = FxRole::parse("DRIVE Module: Simple Drive - Low");
+        let opts = FxDisplayOptions {
+            show_type: false,
+            show_collection_type: false,
+            show_preset: false,
+            show_variation: true,
+        };
+        assert_eq!(role.format(&opts), "[M] Low");
+    }
+
+    #[test]
+    fn format_module_preset_no_variation() {
+        let role = FxRole::parse("DRIVE Module: Simple Drive - Low");
+        let opts = FxDisplayOptions {
+            show_type: true,
+            show_collection_type: false,
+            show_preset: true,
+            show_variation: false,
+        };
+        assert_eq!(role.format(&opts), "[M] DRIVE: Simple Drive");
+    }
+
+    #[test]
+    fn format_block_default() {
+        let role = FxRole::parse("EQ Block: ReaEQ - Mud Removal (ReaEQ)");
+        assert_eq!(role.display_name(), "[B] EQ: ReaEQ - Mud Removal (ReaEQ)");
+    }
+
+    #[test]
+    fn format_block_full() {
+        let role = FxRole::parse("EQ Block: ReaEQ - Mud Removal (ReaEQ)");
+        assert_eq!(
+            role.format(&FxDisplayOptions::full()),
+            "[B] EQ Block: ReaEQ - Mud Removal (ReaEQ)"
+        );
+    }
+
+    #[test]
+    fn format_block_no_variation() {
+        let role = FxRole::parse("Utility Block: Trim");
+        assert_eq!(role.display_name(), "[B] Utility: Trim");
+    }
+
+    #[test]
+    fn format_unknown_unchanged() {
+        let role = FxRole::parse("ReaComp (Cockos)");
+        assert_eq!(role.display_name(), "ReaComp (Cockos)");
+        assert_eq!(
+            role.format(&FxDisplayOptions::full()),
+            "ReaComp (Cockos)"
+        );
+    }
+
+    #[test]
+    fn format_all_guitar_rig_modules_default() {
+        // Verify the default format for every module in the guitar rig
+        let cases = [
+            (
+                "INPUT Module: Guitar Input - Relaxed",
+                "[M] SOURCE: Guitar Input - Relaxed",
+            ),
+            (
+                "DRIVE Module: Simple Drive - Low",
+                "[M] DRIVE: Simple Drive - Low",
+            ),
+            (
+                "AMP Module: JS / Tukan Combo - Clean",
+                "[M] AMP: JS / Tukan Combo - Clean",
+            ),
+            (
+                "MODULATION Module: Stock - Heavy",
+                "[M] MODULATION: Stock - Heavy",
+            ),
+            ("TIME Module: StockJS - Heavy", "[M] TIME: StockJS - Heavy"),
+            (
+                "MOTION Module: StockJS - Wonky",
+                "[M] MOTION: StockJS - Wonky",
+            ),
+            (
+                "MASTER Module: Polish - Light Mud Removal",
+                "[M] MASTER: Polish - Light Mud Removal",
+            ),
+        ];
+        for (input, expected) in &cases {
+            let role = FxRole::parse(input);
+            assert_eq!(role.display_name(), *expected, "input: {input}");
+        }
+    }
+
+    // ─── TrackRole tests ────────────────────────────────────────
+
+    #[test]
+    fn track_role_layer_display_name() {
+        let role = TrackRole::Layer { name: "Guitar Main".to_string() };
+        assert_eq!(role.display_name(), "[L] Guitar Main");
+    }
+
+    #[test]
+    fn track_role_engine_display_name() {
+        let role = TrackRole::Engine { name: "Guitar Engine".to_string() };
+        assert_eq!(role.display_name(), "[E] Guitar Engine");
+    }
+
+    #[test]
+    fn track_role_rig_display_name() {
+        let role = TrackRole::Rig { name: "Guitar MegaRig".to_string() };
+        assert_eq!(role.display_name(), "[R] Guitar MegaRig");
+    }
+
+    #[test]
+    fn track_role_parse_roundtrip() {
+        let cases = [
+            ("[L] Keys Core", TrackRole::Layer { name: "Keys Core".to_string() }),
+            ("[E] Synth Engine", TrackRole::Engine { name: "Synth Engine".to_string() }),
+            ("[R] Vocal MegaRig", TrackRole::Rig { name: "Vocal MegaRig".to_string() }),
+        ];
+        for (input, expected) in &cases {
+            let parsed = TrackRole::parse(input).expect(&format!("should parse '{input}'"));
+            assert_eq!(&parsed, expected);
+            assert_eq!(parsed.display_name(), *input);
+        }
+    }
+
+    #[test]
+    fn track_role_format_no_prefix() {
+        let role = TrackRole::Layer { name: "Guitar Main".to_string() };
+        let opts = TrackDisplayOptions {
+            show_prefix: false,
+            show_role: false,
+            show_name: true,
+        };
+        assert_eq!(role.format(&opts), "Guitar Main");
+    }
+
+    #[test]
+    fn track_role_format_with_role_keyword() {
+        let role = TrackRole::Layer { name: "Guitar Main".to_string() };
+        let opts = TrackDisplayOptions {
+            show_prefix: true,
+            show_role: true,
+            show_name: true,
+        };
+        assert_eq!(role.format(&opts), "[L] Layer Guitar Main");
+    }
+
+    #[test]
+    fn track_role_parse_returns_none_for_unknown() {
+        assert!(TrackRole::parse("Guitar Main").is_none());
+        assert!(TrackRole::parse("[M] EQ Module").is_none());
     }
 }
