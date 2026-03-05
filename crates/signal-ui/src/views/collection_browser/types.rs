@@ -102,6 +102,8 @@ pub(super) struct ColumnItem {
     pub detail: DetailData,
     /// Extra data for context (e.g. block type index for Blocks nav).
     pub tag: Option<usize>,
+    /// Folder path for grouping (e.g. "Guitar", "Drums/Kick").
+    pub folder: Option<String>,
 }
 
 #[derive(Clone, PartialEq)]
@@ -172,6 +174,7 @@ pub(super) const FILTER_CATEGORIES: &[TagCategory] = &[
     TagCategory::Instrument,
     TagCategory::Block,
     TagCategory::Module,
+    TagCategory::Workflow,
 ];
 
 // endregion: --- Constants
