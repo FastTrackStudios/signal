@@ -20,6 +20,7 @@ tokio.workspace = true
 
 [dev-dependencies]
 signal-live = { path = "../signal-live" }
+daw-control.workspace = true
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 eyre.workspace = true
 reaper-test = { path = "../../../../FTS-Extensions/crates/reaper-test" }
