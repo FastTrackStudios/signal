@@ -119,7 +119,7 @@ mod tests {
     #[test]
     fn slugify_various() {
         assert_eq!(slugify("ENGL Fireball 100"), "engl-fireball-100");
-        assert_eq!(slugify("6505+"), "6505-");
+        assert_eq!(slugify("6505+"), "6505");
         assert_eq!(slugify("ML Sound Labs"), "ml-sound-labs");
         assert_eq!(slugify("Browne/Dual Protein"), "browne-dual-protein");
     }

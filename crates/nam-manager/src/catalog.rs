@@ -157,6 +157,7 @@ impl std::fmt::Display for CatalogStats {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use signal_proto::tagging::TagSet;
 
     #[test]
     fn catalog_round_trip() {
