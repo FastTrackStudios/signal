@@ -1,0 +1,13 @@
+[package]
+name = "signal-import"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+signal-proto.workspace = true
+signal-controller.workspace = true
+uuid.workspace = true
+eyre.workspace = true
+tracing.workspace = true
+serde.workspace = true
+serde_json.workspace = true
