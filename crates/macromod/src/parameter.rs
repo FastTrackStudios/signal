@@ -29,6 +29,12 @@ pub struct BlockParameter {
     id: String,
     name: String,
     value: ParameterValue,
+    /// Original DAW plugin parameter name, when it differs from `name`.
+    ///
+    /// Some importers rename parameters for display (e.g. `"Band 1 Frequency"` → `"B1 Freq"`).
+    /// This field preserves the original name so `set_parameter_by_name` can use it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    daw_name: Option<String>,
 }
 
 impl BlockParameter {
@@ -37,6 +43,7 @@ impl BlockParameter {
             id: id.into(),
             name: name.into(),
             value: ParameterValue::new(value),
+            daw_name: None,
         }
     }
 
@@ -54,6 +61,24 @@ impl BlockParameter {
 
     pub fn set_value(&mut self, value: f32) {
         self.value = ParameterValue::new(value);
+    }
+
+    /// Set the original DAW parameter name (builder pattern).
+    pub fn with_daw_name(mut self, name: impl Into<String>) -> Self {
+        self.daw_name = Some(name.into());
+        self
+    }
+
+    /// The original DAW parameter name, if it differs from the display name.
+    pub fn daw_name(&self) -> Option<&str> {
+        self.daw_name.as_deref()
+    }
+
+    /// The name to use when setting parameters in the DAW.
+    ///
+    /// Returns `daw_name` if set, otherwise falls back to `name`.
+    pub fn effective_daw_name(&self) -> &str {
+        self.daw_name.as_deref().unwrap_or(&self.name)
     }
 }
 

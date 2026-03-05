@@ -6,7 +6,7 @@
 //!
 //! Subdirectories under a block type represent individual presets/variations.
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use eyre::{Result, WrapErr};
 use signal_proto::block::BlockType;
@@ -85,6 +85,9 @@ impl RfxChainImporter {
                 description,
                 vendor_tags: Vec::new(),
                 raw_bytes,
+                parameters: Vec::new(),
+                source_plugin: None,
+                store_raw_as_state: true, // rfxchain bytes ARE REAPER state chunks
             });
         }
 

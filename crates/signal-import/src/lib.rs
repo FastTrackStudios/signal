@@ -12,7 +12,7 @@ use eyre::Result;
 use signal_controller::SignalController;
 use signal_proto::metadata::Metadata;
 use signal_proto::tagging::{StructuredTag, TagCategory, TagSet, TagSource};
-use signal_proto::{Block, Preset, PresetId, Snapshot, SnapshotId};
+use signal_proto::{Block, BlockParameter, Preset, PresetId, Snapshot, SnapshotId};
 use uuid::Uuid;
 
 use types::{ImportReport, ImportedPresetCollection};
@@ -71,6 +71,12 @@ pub async fn import_presets(
         // Build structured tags
         let mut tag_set = TagSet::new();
 
+        // Workflow origin tag — distinguishes imported presets from user-created ones
+        tag_set.insert(
+            StructuredTag::new(TagCategory::Workflow, "imported")
+                .with_source(TagSource::Imported),
+        );
+
         // Vendor + plugin tags
         tag_set.insert(
             StructuredTag::new(TagCategory::Vendor, &collection.vendor.to_ascii_lowercase())
@@ -93,6 +99,10 @@ pub async fn import_presets(
         // Build metadata
         let mut metadata = Metadata::new();
         metadata.tags = tag_set.to_tags();
+        // Source tag as raw string — matches fx_capture.rs format "source:{reaper_name}"
+        if let Some(ref source) = imported.source_plugin {
+            metadata.tags.add(format!("source:{source}"));
+        }
         if let Some(folder) = &imported.folder {
             metadata = metadata.with_folder(folder.clone());
         }
@@ -100,9 +110,31 @@ pub async fn import_presets(
             metadata = metadata.with_description(desc.clone());
         }
 
-        let snapshot = Snapshot::new(snap_id, &imported.name, Block::default())
-            .with_metadata(metadata)
-            .with_state_data(imported.raw_bytes.clone());
+        // Build block with actual parsed parameters (if available),
+        // otherwise fall back to the default 3-param block.
+        let block = if imported.parameters.is_empty() {
+            Block::default()
+        } else {
+            let params: Vec<BlockParameter> = imported
+                .parameters
+                .iter()
+                .map(|p| {
+                    let id = p.name.to_lowercase().replace(' ', "_");
+                    let mut bp = BlockParameter::new(id, &p.name, p.value);
+                    if let Some(ref daw_name) = p.daw_name {
+                        bp = bp.with_daw_name(daw_name);
+                    }
+                    bp
+                })
+                .collect();
+            Block::from_parameters(params)
+        };
+
+        let mut snapshot = Snapshot::new(snap_id, &imported.name, block)
+            .with_metadata(metadata);
+        if imported.store_raw_as_state {
+            snapshot = snapshot.with_state_data(imported.raw_bytes.clone());
+        }
 
         snapshots.push(snapshot);
     }
@@ -114,6 +146,10 @@ pub async fn import_presets(
 
     // Build preset-level metadata
     let mut preset_tags = TagSet::new();
+    preset_tags.insert(
+        StructuredTag::new(TagCategory::Workflow, "imported")
+            .with_source(TagSource::Imported),
+    );
     preset_tags.insert(
         StructuredTag::new(TagCategory::Vendor, &collection.vendor.to_ascii_lowercase())
             .with_source(TagSource::Imported),
@@ -127,6 +163,10 @@ pub async fn import_presets(
         collection.plugin_name, collection.vendor
     ));
     preset_metadata.tags = preset_tags.to_tags();
+    // Add source tag at preset level too (grab from first snapshot)
+    if let Some(ref source) = collection.snapshots.first().and_then(|s| s.source_plugin.as_ref()) {
+        preset_metadata.tags.add(format!("source:{source}"));
+    }
 
     let preset = Preset::new(
         preset_id,
