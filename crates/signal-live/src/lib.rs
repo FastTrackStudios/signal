@@ -24,6 +24,8 @@
 //! the current active block.  This deterministic "load = apply" contract ensures
 //! the active block always reflects the last loaded variant.
 
+pub mod daw_block_ops;
+pub mod daw_rig_builder;
 pub mod engine;
 
 mod block_service;

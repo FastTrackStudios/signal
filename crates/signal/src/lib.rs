@@ -15,6 +15,9 @@ pub use signal_live::engine::{
     live_params_into_block, param_name_matches, DawParamValue, DawParameterSnapshot, DawStateChunk,
     LiveParam, MorphDiffEntry, MorphEngine, MorphParamChange,
 };
+pub use signal_live::daw_block_ops::{
+    LoadBlockResult, LoadModuleResult, ResolvedFxLoad, ResolvedModuleLoad,
+};
 pub use signal_live::SignalLive;
 pub use signal_proto::*;
 pub use signal_storage::{
