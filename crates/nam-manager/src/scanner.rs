@@ -132,6 +132,22 @@ pub fn sha256_hex(data: &[u8]) -> String {
     format!("{:x}", hasher.finalize())
 }
 
+/// Apply pack definitions to scanned entries, overriding/merging tags from pack metadata.
+///
+/// This is the primary tagging mechanism — pack JSON files are the curated source of truth
+/// for vendor, model, category, and tone tags.
+pub fn apply_packs(
+    entries: &mut HashMap<String, NamFileEntry>,
+    packs: &[crate::PackDefinition],
+) {
+    for entry in entries.values_mut() {
+        if let Some(pack) = crate::pack::find_pack_for_file(packs, &entry.relative_path) {
+            let pack_tags = crate::pack::tags_for_file(pack, &entry.filename);
+            entry.tags.merge(&pack_tags);
+        }
+    }
+}
+
 /// Collect all files from a source directory and return their paths grouped by subdirectory.
 /// Used during import to map source structure to signal-library layout.
 pub fn collect_source_files(source_dir: &Path) -> Vec<PathBuf> {
