@@ -1,5 +1,5 @@
 use super::*;
-use signal_proto::seed_id;
+use signal_proto::{seed_id, ModuleType};
 use signal_storage::{
     runtime_seed_bundle, BlockRepoLive, Database, EngineRepoLive, LayerRepoLive, ModuleRepoLive,
     ProfileRepoLive, RackRepoLive, RigRepoLive, SetlistRepoLive, SongRepoLive,
@@ -1430,3 +1430,270 @@ async fn test_live_resolve_fails_on_missing_replace_ref_layer_variant() -> Resul
 }
 
 // endregion: --- Resolver service
+
+// region: --- Block / Module resolution (daw_block_ops)
+
+#[tokio::test]
+async fn test_resolve_block_load_eq_proq4() -> Result<()> {
+    let svc = seeded_service().await?;
+    let preset_id = PresetId::from(seed_id("eq-proq4"));
+
+    let resolved = svc
+        .resolve_block_load(BlockType::Eq, &preset_id, 0)
+        .await
+        .expect("resolve_block_load should succeed");
+
+    assert_eq!(resolved.plugin_name, "CLAP: Pro-Q 4 (FabFilter)");
+    assert_eq!(resolved.block.parameters().len(), 6);
+    assert!(
+        resolved.display_name.contains("EQ"),
+        "display_name should contain 'EQ', got '{}'",
+        resolved.display_name
+    );
+    assert!(
+        resolved.display_name.contains("Pro-Q 4"),
+        "display_name should contain 'Pro-Q 4', got '{}'",
+        resolved.display_name
+    );
+    assert!(resolved.overrides.is_empty());
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_resolve_block_load_snapshot_idx() -> Result<()> {
+    let svc = seeded_service().await?;
+    let preset_id = PresetId::from(seed_id("eq-proq4"));
+
+    // Non-default snapshot should have distinct gain values.
+    // Find "Surgical Cut" by name to avoid index ordering issues after DB roundtrip.
+    let presets = svc
+        .block_repo
+        .list_block_collections(BlockType::Eq)
+        .await
+        .unwrap();
+    let proq4 = presets.iter().find(|p| p.name() == "Pro-Q 4").unwrap();
+    let surgical_idx = proq4
+        .snapshots()
+        .iter()
+        .position(|s| s.name() == "Surgical Cut")
+        .expect("Surgical Cut snapshot should exist");
+
+    let resolved = svc
+        .resolve_block_load(BlockType::Eq, &preset_id, surgical_idx)
+        .await
+        .expect("resolve_block_load for Surgical Cut should succeed");
+
+    // Surgical Cut has a narrow mid cut (0.28), different from default (0.50)
+    let params = resolved.block.parameters();
+    let mid = params.iter().find(|p| p.id() == "mid").unwrap();
+    assert!(
+        mid.value().get() < 0.35,
+        "Surgical Cut mid should be < 0.35, got {}",
+        mid.value().get()
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_resolve_block_load_missing_preset() -> Result<()> {
+    let svc = seeded_service().await?;
+    let bad_id = PresetId::from(seed_id("nonexistent-preset"));
+
+    let result = svc
+        .resolve_block_load(BlockType::Eq, &bad_id, 0)
+        .await;
+
+    assert!(result.is_err());
+    assert!(
+        result.unwrap_err().contains("Preset not found"),
+        "error should mention 'Preset not found'"
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_resolve_module_load_3band() -> Result<()> {
+    let svc = seeded_service().await?;
+    let preset_id = ModulePresetId::from_uuid(seed_id("eq-proq4-3band"));
+
+    let resolved = svc
+        .resolve_module_load(ModuleType::Eq, &preset_id, 0)
+        .await
+        .expect("resolve_module_load should succeed");
+
+    assert_eq!(resolved.fx_loads.len(), 3);
+    assert!(
+        resolved.display_name.contains("EQ"),
+        "module display_name should contain 'EQ', got '{}'",
+        resolved.display_name
+    );
+    assert!(
+        resolved.display_name.contains("Pro-Q 4 - 3-Band"),
+        "module display_name should contain 'Pro-Q 4 - 3-Band', got '{}'",
+        resolved.display_name
+    );
+
+    // Each block should resolve to the Pro-Q 4 plugin with distinct snapshots
+    for (i, fx_load) in resolved.fx_loads.iter().enumerate() {
+        assert_eq!(
+            fx_load.plugin_name, "CLAP: Pro-Q 4 (FabFilter)",
+            "block {} should use Pro-Q 4",
+            i
+        );
+        assert!(
+            fx_load.display_name.contains("EQ"),
+            "block {} display_name should contain 'EQ', got '{}'",
+            i, fx_load.display_name
+        );
+    }
+
+    // Verify each block's parameters match the corresponding snapshot values.
+    // Parameter order: low, low_mid, mid, high_mid, high, output
+    let params: Vec<Vec<f32>> = resolved
+        .fx_loads
+        .iter()
+        .map(|fl| fl.block.parameters().iter().map(|p| p.value().get()).collect())
+        .collect();
+
+    // Block 0: Surgical Cut — proq4_block(0.50, 0.50, 0.28, 0.50, 0.50, 0.50)
+    assert!((params[0][2] - 0.28).abs() < 0.001, "Surgical Cut mid should be 0.28, got {}", params[0][2]);
+
+    // Block 1: Hi-Fi — proq4_block(0.58, 0.50, 0.50, 0.52, 0.64, 0.50)
+    assert!((params[1][0] - 0.58).abs() < 0.001, "Hi-Fi low should be 0.58, got {}", params[1][0]);
+    assert!((params[1][4] - 0.64).abs() < 0.001, "Hi-Fi high should be 0.64, got {}", params[1][4]);
+
+    // Block 2: Warm Analog — proq4_block(0.65, 0.55, 0.50, 0.48, 0.38, 0.50)
+    assert!((params[2][0] - 0.65).abs() < 0.001, "Warm Analog low should be 0.65, got {}", params[2][0]);
+    assert!((params[2][4] - 0.38).abs() < 0.001, "Warm Analog high should be 0.38, got {}", params[2][4]);
+
+    // All 3 should be distinct from each other
+    assert_ne!(params[0], params[1], "Surgical Cut and Hi-Fi should differ");
+    assert_ne!(params[1], params[2], "Hi-Fi and Warm Analog should differ");
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_resolve_module_load_missing_source_tag() -> Result<()> {
+    let svc = seeded_service().await?;
+    let preset_id = ModulePresetId::from_uuid(seed_id("drive-full-stack"));
+
+    // drive-full-stack references block presets (boost-ep, etc.) that lack
+    // `source:` metadata tags, so resolution should fail with a clear error.
+    let result = svc
+        .resolve_module_load(ModuleType::Drive, &preset_id, 0)
+        .await;
+
+    assert!(result.is_err());
+    assert!(
+        result.unwrap_err().contains("no source: tag"),
+        "error should mention missing source: tag"
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_resolve_module_load_missing() -> Result<()> {
+    let svc = seeded_service().await?;
+    let bad_id = ModulePresetId::from_uuid(seed_id("nonexistent-module"));
+
+    let result = svc
+        .resolve_module_load(ModuleType::Eq, &bad_id, 0)
+        .await;
+
+    assert!(result.is_err());
+    assert!(
+        result.unwrap_err().contains("Module preset not found"),
+        "error should mention 'Module preset not found'"
+    );
+    Ok(())
+}
+
+// endregion: --- Block / Module resolution (daw_block_ops)
+
+// region: --- Rig / Layer structure resolution
+
+#[tokio::test]
+async fn test_resolve_guitar_layer_structure() -> Result<()> {
+    let svc = seeded_service().await?;
+    let cx = test_context();
+
+    let graph: ResolvedGraph = svc
+        .resolve_target(
+            &cx,
+            ResolveTarget::RigScene {
+                rig_id: RigId::from_uuid(seed_id("guitar-megarig")),
+                scene_id: RigSceneId::from_uuid(seed_id("guitar-megarig-default")),
+            },
+        )
+        .await
+        .expect("resolve guitar megarig default scene");
+
+    // Guitar rig should have at least 1 engine
+    assert!(
+        !graph.engines.is_empty(),
+        "guitar megarig should have at least one engine"
+    );
+
+    let engine = &graph.engines[0];
+    assert!(
+        !engine.layers.is_empty(),
+        "guitar engine should have at least one layer"
+    );
+
+    // Each layer should have modules and/or standalone blocks
+    for layer in &engine.layers {
+        let total = layer.modules.len() + layer.standalone_blocks.len();
+        assert!(
+            total > 0,
+            "layer {:?} should have modules or standalone blocks",
+            layer.layer_id
+        );
+
+        // Every module should have at least one block
+        for module in &layer.modules {
+            assert!(
+                !module.blocks.is_empty(),
+                "module {:?} should have at least one block",
+                module.source_preset_id
+            );
+        }
+    }
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_resolve_keys_layer_structure() -> Result<()> {
+    let svc = seeded_service().await?;
+    let cx = test_context();
+
+    let graph: ResolvedGraph = svc
+        .resolve_target(
+            &cx,
+            ResolveTarget::RigScene {
+                rig_id: RigId::from_uuid(seed_id("keys-megarig")),
+                scene_id: RigSceneId::from_uuid(seed_id("keys-megarig-default")),
+            },
+        )
+        .await
+        .expect("resolve keys megarig default scene");
+
+    // Keys rig has multiple engines (keys, synth, organ, pad)
+    assert!(
+        graph.engines.len() >= 2,
+        "keys megarig should have multiple engines, got {}",
+        graph.engines.len()
+    );
+
+    // Collect all layers across all engines
+    let total_layers: usize = graph.engines.iter().map(|e| e.layers.len()).sum();
+    assert!(
+        total_layers >= 2,
+        "keys megarig should have at least 2 layers total, got {}",
+        total_layers
+    );
+
+    Ok(())
+}
+
+// endregion: --- Rig / Layer structure resolution
