@@ -1611,6 +1611,133 @@ async fn test_resolve_module_load_missing() -> Result<()> {
 
 // endregion: --- Block / Module resolution (daw_block_ops)
 
+// region: --- Parallel signal chain resolution (daw_block_ops)
+
+/// Verify that `resolve_module_load` preserves `Split` node topology.
+///
+/// Creates a synthetic module with a serial EQ block followed by a parallel
+/// `Split` containing two EQ lanes. EQ presets have `source:` tags so
+/// resolution succeeds in-memory without a running DAW.
+///
+/// Expected resolved topology:
+///   chain.nodes = [Fx(eq-reaeq), Split([lane_a: Fx(eq-proq4), lane_b: Fx(eq-reaeq)])]
+///
+/// The flat `fx_loads()` view should see 3 blocks total.
+#[tokio::test]
+async fn test_resolve_module_load_parallel_topology() -> Result<()> {
+    use crate::daw_block_ops::ResolvedSignalNode;
+    use signal_proto::{
+        Module, ModuleBlock, ModuleBlockSource, ModulePreset, ModuleSnapshot, PresetId, SignalChain, SignalNode,
+    };
+
+    let svc = seeded_service().await?;
+
+    // Build a synthetic module:
+    //   Block(reaeq) → Split([Block(pro-q4) | Block(reaeq)])
+    // Uses EQ presets which have `source:` metadata tags.
+    let reaeq_id = PresetId::from_uuid(seed_id("eq-reaeq"));
+    let proq4_id = PresetId::from_uuid(seed_id("eq-proq4"));
+
+    let chain = SignalChain::new(vec![
+        SignalNode::Block(ModuleBlock::new(
+            "eq-serial",
+            "Serial EQ",
+            BlockType::Eq,
+            ModuleBlockSource::PresetDefault {
+                preset_id: reaeq_id.clone(),
+                saved_at_version: None,
+            },
+        )),
+        SignalNode::Split {
+            lanes: vec![
+                SignalChain::serial(vec![ModuleBlock::new(
+                    "eq-lane-a",
+                    "Pro-Q Lane",
+                    BlockType::Eq,
+                    ModuleBlockSource::PresetDefault {
+                        preset_id: proq4_id.clone(),
+                        saved_at_version: None,
+                    },
+                )]),
+                SignalChain::serial(vec![ModuleBlock::new(
+                    "eq-lane-b",
+                    "ReaEQ Lane",
+                    BlockType::Eq,
+                    ModuleBlockSource::PresetDefault {
+                        preset_id: reaeq_id.clone(),
+                        saved_at_version: None,
+                    },
+                )]),
+                SignalChain::new(vec![]), // empty placeholder lane
+            ],
+        },
+    ]);
+
+    let test_preset_id = ModulePresetId::from_uuid(seed_id("test-parallel-eq-module"));
+    let module_preset = ModulePreset::new(
+        seed_id("test-parallel-eq-module"),
+        "Test Parallel EQ",
+        ModuleType::Eq,
+        ModuleSnapshot::new(
+            seed_id("test-parallel-eq-default"),
+            "Default",
+            Module::from_chain(chain),
+        ),
+        vec![],
+    );
+    let cx = test_context();
+    svc.save_module_collection(&cx, module_preset).await?;
+
+    let resolved = svc
+        .resolve_module_load(ModuleType::Eq, &test_preset_id, 0)
+        .await
+        .expect("resolve_module_load should succeed for parallel EQ module");
+
+    // Flat view: 1 serial + 2 in split = 3 blocks total
+    let flat = resolved.fx_loads();
+    assert_eq!(flat.len(), 3, "expected 3 leaf FX loads (1 serial + 2 in split)");
+
+    // Topology: top-level chain must have exactly 2 nodes: Fx then Split
+    let top_nodes = &resolved.chain.nodes;
+    assert_eq!(top_nodes.len(), 2, "chain should have 2 top-level nodes (Fx + Split)");
+
+    assert!(
+        matches!(top_nodes[0], ResolvedSignalNode::Fx(_)),
+        "first top-level node should be Fx"
+    );
+
+    match &top_nodes[1] {
+        ResolvedSignalNode::Split(lanes) => {
+            // Resolve phase preserves all 3 lanes (including empty placeholder).
+            assert_eq!(lanes.len(), 3, "Split should have 3 resolved lanes");
+
+            // Lane 0 and 1: each have exactly 1 Fx node.
+            for j in 0..2 {
+                assert_eq!(lanes[j].nodes.len(), 1, "lane {j} should have 1 Fx node");
+                assert!(
+                    matches!(lanes[j].nodes[0], ResolvedSignalNode::Fx(_)),
+                    "lane {j} node should be Fx"
+                );
+            }
+
+            // Lane 2: empty placeholder preserved by resolve.
+            assert!(lanes[2].nodes.is_empty(), "lane 2 (placeholder) should be empty");
+        }
+        ResolvedSignalNode::Fx(_) => panic!("second top-level node should be Split, not Fx"),
+    }
+
+    // Verify display name includes module type.
+    assert!(
+        resolved.display_name.contains("EQ"),
+        "module display_name should contain 'EQ', got '{}'",
+        resolved.display_name
+    );
+
+    Ok(())
+}
+
+// endregion: --- Parallel signal chain resolution (daw_block_ops)
+
 // region: --- Rig / Layer structure resolution
 
 #[tokio::test]
