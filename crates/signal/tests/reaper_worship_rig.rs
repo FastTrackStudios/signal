@@ -56,7 +56,10 @@ async fn worship_rig_load_and_verify(ctx: &ReaperTestContext) -> eyre::Result<()
     let result = svc
         .load_rig_to_daw(&rig, None, &project)
         .await
-        .map_err(|e| eyre::eyre!("{e}"))?;
+        .map_err(|e| {
+            ctx.log(&format!("load_rig_to_daw FAILED: {e}"));
+            eyre::eyre!("{e}")
+        })?;
     let load_time = start.elapsed();
     settle().await;
 

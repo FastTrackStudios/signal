@@ -10,6 +10,7 @@ pub struct Model {
     pub rig_type_id: Option<String>,
     pub engine_ids_json: String,
     pub default_variant_id: String,
+    pub macro_bank_json: Option<String>,
     pub metadata_json: String,
 }
 
