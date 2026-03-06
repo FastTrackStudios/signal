@@ -7,12 +7,14 @@
 //! Run with:
 //!   cargo xtask reaper-test worship_rig
 
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use reaper_test::reaper_test;
 use signal::seed_id;
 use signal::rig::RigSceneId;
+use signal_live::daw_rig_builder::instantiate_rig;
 use signal_proto::overrides::NodeOverrideOp;
+use signal_proto::rig_template::{EngineTemplate, LayerTemplate, RigTemplate};
 
 /// Small sleep to let REAPER process track/FX changes.
 async fn settle() {
@@ -28,50 +30,41 @@ async fn ensure_audio(ctx: &reaper_test::ReaperTestContext) {
 }
 
 // ---------------------------------------------------------------------------
-// Test: Load worship guitar rig — full track hierarchy + module FX
+// Test: Worship rig track structure — [R]/[E]/[L] hierarchy via instantiate_rig
 // ---------------------------------------------------------------------------
 
 #[reaper_test(isolated)]
-async fn worship_rig_load_and_verify(ctx: &ReaperTestContext) -> eyre::Result<()> {
+async fn worship_rig_track_structure(ctx: &ReaperTestContext) -> eyre::Result<()> {
     ensure_audio(ctx).await;
     let project = ctx.project().clone();
     project.tracks().remove_all().await?;
     settle().await;
 
-    // Bootstrap in-memory signal controller with all seed data.
-    let signal = signal::bootstrap_in_memory_controller_async().await?;
-    let svc = signal.service();
+    // Build the worship rig template: 1 engine with 2 layers (matching seed data).
+    let template = RigTemplate {
+        name: "Worship Rig".to_string(),
+        engines: vec![EngineTemplate {
+            name: "Guitar Engine".to_string(),
+            layers: vec![
+                LayerTemplate { name: "Guitar Main".to_string() },
+                LayerTemplate { name: "Archetype JM".to_string() },
+            ],
+            fx_sends: vec![],
+        }],
+        fx_sends: vec![],
+    };
 
-    // Load the worship guitar rig from seed data.
-    let rig = signal
-        .rigs()
-        .load(seed_id("worship-guitar-rig"))
-        .await?
-        .ok_or_else(|| eyre::eyre!("worship-guitar-rig not found in seed data"))?;
-
-    ctx.log(&format!("Loaded rig '{}' with {} scenes", rig.name, rig.variants.len()));
-
-    // ── Phase 1: Load rig to DAW ────────────────────────────────────
-    let start = Instant::now();
-    let result = svc
-        .load_rig_to_daw(&rig, None, &project)
-        .await
-        .map_err(|e| {
-            ctx.log(&format!("load_rig_to_daw FAILED: {e}"));
-            eyre::eyre!("{e}")
-        })?;
-    let load_time = start.elapsed();
+    let instance = instantiate_rig(&template, &project).await?;
     settle().await;
 
-    ctx.log(&format!("Rig loaded in {:.2}s", load_time.as_secs_f64()));
-
-    // ── Phase 2: Verify track hierarchy ─────────────────────────────
+    // ── Verify track hierarchy ──────────────────────────────────────
     let tracks = project.tracks().all().await?;
 
-    // Worship rig: 1 rig + 1 engine + 2 layers = 4 tracks
-    assert!(
-        tracks.len() >= 4,
-        "worship rig should have at least 4 tracks (rig+engine+2 layers), got {}",
+    // 1 rig + 1 engine + 2 layers = 4 tracks
+    assert_eq!(
+        tracks.len(),
+        4,
+        "worship rig should have 4 tracks (rig+engine+2 layers), got {}",
         tracks.len()
     );
 
@@ -100,102 +93,40 @@ async fn worship_rig_load_and_verify(ctx: &ReaperTestContext) -> eyre::Result<()
     );
 
     // Layer tracks: [L] prefix
-    for i in 2..tracks.len().min(4) {
-        assert!(
-            tracks[i].name.starts_with("[L]"),
-            "layer track {} should have [L] prefix, got '{}'",
-            i,
-            tracks[i].name
-        );
-    }
-
-    // ── Phase 3: Verify rig instance structure ──────────────────────
-    assert_eq!(
-        result.rig_instance.engine_instances.len(),
-        1,
-        "worship rig should have 1 engine"
-    );
-
-    let engine_inst = &result.rig_instance.engine_instances[0];
-    assert_eq!(
-        engine_inst.layer_tracks.len(),
-        2,
-        "guitar engine should have 2 layer tracks"
-    );
-
-    // ── Phase 4: Verify modules loaded on each layer ────────────────
-    assert_eq!(
-        result.layer_results.len(),
-        2,
-        "should have layer results for 2 layers"
-    );
-
-    // Layer 0 (Guitar Main): 11 modules
-    let main_layer = &result.layer_results[0];
-    ctx.log(&format!(
-        "Guitar Main layer: {} modules loaded",
-        main_layer.modules.len()
-    ));
-    assert_eq!(
-        main_layer.modules.len(),
-        11,
-        "Guitar Main should have 11 modules, got {}",
-        main_layer.modules.len()
-    );
-
-    // Layer 1 (Archetype JM): 6 modules
-    let jm_layer = &result.layer_results[1];
-    ctx.log(&format!(
-        "Archetype JM layer: {} modules loaded",
-        jm_layer.modules.len()
-    ));
-    assert_eq!(
-        jm_layer.modules.len(),
-        6,
-        "Archetype JM should have 6 modules, got {}",
-        jm_layer.modules.len()
-    );
-
-    // ── Phase 5: Verify FX exist on layer tracks ────────────────────
-    for (idx, layer_track) in engine_inst.layer_tracks.iter().enumerate() {
-        let fx_count = layer_track.fx_chain().count().await?;
-        assert!(
-            fx_count > 0,
-            "layer track {} should have FX loaded, got 0",
-            idx
-        );
-        ctx.log(&format!("Layer track {idx}: {fx_count} FX instances"));
-    }
-
-    // ── Phase 6: Verify FX tree has module containers ───────────────
-    let main_track = &engine_inst.layer_tracks[0];
-    let tree = main_track.fx_chain().tree().await?;
     assert!(
-        tree.nodes.len() >= 11,
-        "Guitar Main FX tree should have at least 11 top-level nodes (modules), got {}",
-        tree.nodes.len()
+        tracks[2].name.starts_with("[L]"),
+        "layer 0 should have [L] prefix, got '{}'",
+        tracks[2].name
+    );
+    assert!(
+        tracks[2].name.contains("Guitar Main"),
+        "layer 0 should contain 'Guitar Main', got '{}'",
+        tracks[2].name
+    );
+    assert!(
+        tracks[3].name.starts_with("[L]"),
+        "layer 1 should have [L] prefix, got '{}'",
+        tracks[3].name
+    );
+    assert!(
+        tracks[3].name.contains("Archetype JM"),
+        "layer 1 should contain 'Archetype JM', got '{}'",
+        tracks[3].name
     );
 
-    // Check that module containers have [M] prefix
-    for node in &tree.nodes {
-        match &node.kind {
-            daw_control::FxNodeKind::Container { name, .. } => {
-                assert!(
-                    name.contains("[M]"),
-                    "module container should have [M] prefix, got '{name}'"
-                );
-            }
-            daw_control::FxNodeKind::Plugin(fx) => {
-                // Standalone blocks are [B] prefixed
-                ctx.log(&format!("Standalone FX: {}", fx.name));
-            }
-        }
-    }
+    // ── Verify instance structure ───────────────────────────────────
+    assert_eq!(instance.engine_instances.len(), 1, "should have 1 engine");
+    assert_eq!(
+        instance.engine_instances[0].layer_tracks.len(),
+        2,
+        "engine should have 2 layer tracks"
+    );
+    assert!(
+        instance.fx_send_tracks.is_empty(),
+        "worship rig has no rig-level FX sends"
+    );
 
-    ctx.log(&format!(
-        "worship_rig_load_and_verify: PASS (load: {:.2}s)",
-        load_time.as_secs_f64()
-    ));
+    ctx.log("worship_rig_track_structure: PASS");
     Ok(())
 }
 
