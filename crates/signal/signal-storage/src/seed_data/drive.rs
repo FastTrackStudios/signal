@@ -4,7 +4,7 @@
 //! Parameter IDs match the physical control names. Values are normalized
 //! 0.0–1.0 where 0.5 ≈ noon on the dial.
 
-use signal_proto::{seed_id, Block, BlockParameter, BlockType, Preset, Snapshot};
+use signal_proto::{metadata::Metadata, seed_id, Block, BlockParameter, BlockType, Preset, Snapshot};
 
 pub fn presets() -> Vec<Preset> {
     vec![
@@ -13,6 +13,7 @@ pub fn presets() -> Vec<Preset> {
         fulltone_ocd(),
         bluesbreaker(),
         morning_glory(),
+        parametric_od(),
     ]
 }
 
@@ -255,6 +256,55 @@ fn morning_glory() -> Preset {
     )
 }
 
+// ─── Parametric Overdrive ────────────────────────────────────────
+// Knobs: Drive, Tone, Level
+// Maps to the Cockos JS amp/drive plugin bundled with REAPER.
+// Parameter names match the JS plugin's slider names directly,
+// so no daw_name override is needed — REAPER looks them up by display name.
+
+fn pod_block(drive: f32, tone: f32, level: f32) -> Block {
+    Block::from_parameters(vec![
+        BlockParameter::new("drive", "Drive", drive),
+        BlockParameter::new("tone", "Tone", tone),
+        BlockParameter::new("level", "Level", level),
+    ])
+}
+
+fn parametric_od() -> Preset {
+    Preset::new(
+        seed_id("drive-parametric-od"),
+        "Parametric OD",
+        BlockType::Drive,
+        // Default: moderate drive, neutral tone, unity level
+        Snapshot::new(
+            seed_id("drive-parametric-od-default"),
+            "Default",
+            pod_block(0.50, 0.50, 0.50),
+        ),
+        vec![
+            // Light touch — just enough to add warmth and presence
+            Snapshot::new(
+                seed_id("drive-parametric-od-light"),
+                "Light",
+                pod_block(0.25, 0.52, 0.58),
+            ),
+            // Heavy drive — pushed hard for lead tones
+            Snapshot::new(
+                seed_id("drive-parametric-od-heavy"),
+                "Heavy",
+                pod_block(0.78, 0.48, 0.46),
+            ),
+            // Bright cut — roll off lows, boost highs for single-coil clarity
+            Snapshot::new(
+                seed_id("drive-parametric-od-bright"),
+                "Bright Cut",
+                pod_block(0.45, 0.72, 0.52),
+            ),
+        ],
+    )
+    .with_metadata(Metadata::new().with_tag("source:JS: Amp (Cockos)"))
+}
+
 // ─── Tests ──────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -264,7 +314,7 @@ mod tests {
     #[test]
     fn drive_preset_count() {
         let presets = presets();
-        assert_eq!(presets.len(), 5);
+        assert_eq!(presets.len(), 6);
     }
 
     #[test]
@@ -308,6 +358,21 @@ mod tests {
         let mg = &presets()[4];
         assert_eq!(mg.name(), "Morning Glory");
         assert_eq!(mg.snapshots().len(), 5);
+    }
+
+    #[test]
+    fn parametric_od_has_4_snapshots() {
+        let pod = &presets()[5];
+        assert_eq!(pod.name(), "Parametric OD");
+        assert_eq!(pod.snapshots().len(), 4); // default + 3
+    }
+
+    #[test]
+    fn parametric_od_has_source_tag() {
+        let pod = &presets()[5];
+        let tags = &pod.metadata().tags;
+        let has_source = tags.as_slice().iter().any(|t| t.starts_with("source:"));
+        assert!(has_source, "Parametric OD preset must have a source: tag");
     }
 
     #[test]
