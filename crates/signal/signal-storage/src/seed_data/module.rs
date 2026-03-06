@@ -27,6 +27,12 @@ pub fn presets() -> Vec<ModulePreset> {
         vocal_tonal(),
         vocal_modulation(),
         vocal_time(),
+        worship_gtr_input(),
+        worship_gtr_drive(),
+        worship_gtr_amp(),
+        worship_gtr_modulation(),
+        worship_gtr_time(),
+        worship_gtr_master(),
     ]
 }
 
@@ -911,6 +917,254 @@ fn vocal_time() -> ModulePreset {
                     BlockType::Reverb,
                     ModuleBlockSource::PresetDefault {
                         preset_id: PresetId::from(seed_id("reverb-rv6")),
+                        saved_at_version: None,
+                    },
+                ),
+            ]),
+        ),
+        vec![],
+    )
+}
+
+// ─── Worship Guitar Modules ──────────────────────────────────────────────────
+
+fn worship_gtr_input() -> ModulePreset {
+    ModulePreset::new(
+        seed_id("wg-input"),
+        "WG Input",
+        ModuleType::Source,
+        ModuleSnapshot::new(
+            seed_id("wg-input-default"),
+            "Default",
+            Module::from_blocks(vec![
+                ModuleBlock::new(
+                    "trim",
+                    "Utility Trim",
+                    BlockType::Volume,
+                    ModuleBlockSource::PresetDefault {
+                        preset_id: PresetId::from(seed_id("volume-utility")),
+                        saved_at_version: None,
+                    },
+                ),
+                ModuleBlock::new(
+                    "gate",
+                    "Pro-G",
+                    BlockType::Gate,
+                    ModuleBlockSource::PresetDefault {
+                        preset_id: PresetId::from(seed_id("gate-prog")),
+                        saved_at_version: None,
+                    },
+                ),
+            ]),
+        ),
+        vec![],
+    )
+}
+
+fn worship_gtr_drive() -> ModulePreset {
+    ModulePreset::new(
+        seed_id("wg-drive"),
+        "WG Drive",
+        ModuleType::Drive,
+        ModuleSnapshot::new(
+            seed_id("wg-drive-default"),
+            "Default",
+            Module::from_blocks(vec![
+                ModuleBlock::new(
+                    "parametric-od",
+                    "ParametricOD",
+                    BlockType::Drive,
+                    ModuleBlockSource::PresetDefault {
+                        preset_id: PresetId::from(seed_id("drive-morning-glory")),
+                        saved_at_version: None,
+                    },
+                ),
+                ModuleBlock::new(
+                    "klone",
+                    "NAM Klone",
+                    BlockType::Drive,
+                    ModuleBlockSource::PresetDefault {
+                        preset_id: PresetId::from(seed_id("drive-klon")),
+                        saved_at_version: None,
+                    },
+                ),
+                ModuleBlock::new(
+                    "ts",
+                    "NAM TubeScreamer",
+                    BlockType::Drive,
+                    ModuleBlockSource::PresetDefault {
+                        preset_id: PresetId::from(seed_id("drive-ts808")),
+                        saved_at_version: None,
+                    },
+                ),
+            ]),
+        ),
+        vec![],
+    )
+}
+
+fn worship_gtr_amp() -> ModulePreset {
+    ModulePreset::new(
+        seed_id("wg-amp"),
+        "WG Amp",
+        ModuleType::Amp,
+        ModuleSnapshot::new(
+            seed_id("wg-amp-default"),
+            "Default",
+            Module::from_blocks(vec![
+                ModuleBlock::new(
+                    "amp",
+                    "NAM Two Rock",
+                    BlockType::Amp,
+                    ModuleBlockSource::PresetDefault {
+                        preset_id: PresetId::from(seed_id("amp-twin")),
+                        saved_at_version: None,
+                    },
+                ),
+                ModuleBlock::new(
+                    "amp-eq",
+                    "Pro-Q 4 Shape",
+                    BlockType::Eq,
+                    ModuleBlockSource::PresetSnapshot {
+                        preset_id: PresetId::from(seed_id("eq-proq4")),
+                        snapshot_id: SnapshotId::from(seed_id("eq-proq4-hifi")),
+                        saved_at_version: None,
+                    },
+                ),
+                ModuleBlock::new(
+                    "amp-verb",
+                    "Pro-R Room",
+                    BlockType::Reverb,
+                    ModuleBlockSource::PresetSnapshot {
+                        preset_id: PresetId::from(seed_id("reverb-bigsky")),
+                        snapshot_id: SnapshotId::from(seed_id("reverb-bigsky-room")),
+                        saved_at_version: None,
+                    },
+                ),
+            ]),
+        ),
+        vec![],
+    )
+}
+
+fn worship_gtr_modulation() -> ModulePreset {
+    ModulePreset::new(
+        seed_id("wg-modulation"),
+        "WG Modulation",
+        ModuleType::Modulation,
+        ModuleSnapshot::new(
+            seed_id("wg-modulation-default"),
+            "Default",
+            Module::from_blocks(vec![ModuleBlock::new(
+                "chorus",
+                "Timeless 3 Chorus",
+                BlockType::Delay,
+                ModuleBlockSource::PresetDefault {
+                    preset_id: PresetId::from(seed_id("delay-timeless")),
+                    saved_at_version: None,
+                },
+            )]),
+        ),
+        vec![],
+    )
+}
+
+fn worship_gtr_time() -> ModulePreset {
+    ModulePreset::new(
+        seed_id("wg-time"),
+        "WG Time",
+        ModuleType::Time,
+        ModuleSnapshot::new(
+            seed_id("wg-time-default"),
+            "Default",
+            Module::from_chain(SignalChain::new(vec![
+                SignalNode::Split {
+                    lanes: vec![
+                        SignalChain::serial(vec![ModuleBlock::new(
+                            "dly-1",
+                            "Timeline",
+                            BlockType::Delay,
+                            ModuleBlockSource::PresetSnapshot {
+                                preset_id: PresetId::from(seed_id("delay-timeline")),
+                                snapshot_id: SnapshotId::from(seed_id("delay-timeline-ambient")),
+                                saved_at_version: None,
+                            },
+                        )]),
+                        SignalChain::serial(vec![ModuleBlock::new(
+                            "dly-2",
+                            "Timeless 3",
+                            BlockType::Delay,
+                            ModuleBlockSource::PresetDefault {
+                                preset_id: PresetId::from(seed_id("delay-timeless")),
+                                saved_at_version: None,
+                            },
+                        )]),
+                        SignalChain::new(vec![]),
+                    ],
+                },
+                SignalNode::Split {
+                    lanes: vec![
+                        SignalChain::serial(vec![ModuleBlock::new(
+                            "verb-1",
+                            "BigSky Room",
+                            BlockType::Reverb,
+                            ModuleBlockSource::PresetSnapshot {
+                                preset_id: PresetId::from(seed_id("reverb-bigsky")),
+                                snapshot_id: SnapshotId::from(seed_id("reverb-bigsky-room")),
+                                saved_at_version: None,
+                            },
+                        )]),
+                        SignalChain::serial(vec![ModuleBlock::new(
+                            "verb-2",
+                            "SLO",
+                            BlockType::Reverb,
+                            ModuleBlockSource::PresetDefault {
+                                preset_id: PresetId::from(seed_id("reverb-slo")),
+                                saved_at_version: None,
+                            },
+                        )]),
+                        SignalChain::new(vec![]),
+                    ],
+                },
+            ])),
+        ),
+        vec![],
+    )
+}
+
+fn worship_gtr_master() -> ModulePreset {
+    ModulePreset::new(
+        seed_id("wg-master"),
+        "WG Master",
+        ModuleType::Master,
+        ModuleSnapshot::new(
+            seed_id("wg-master-default"),
+            "Default",
+            Module::from_blocks(vec![
+                ModuleBlock::new(
+                    "master-eq",
+                    "Pro-Q 4 EQ",
+                    BlockType::Eq,
+                    ModuleBlockSource::PresetDefault {
+                        preset_id: PresetId::from(seed_id("eq-proq4")),
+                        saved_at_version: None,
+                    },
+                ),
+                ModuleBlock::new(
+                    "master-trim",
+                    "Utility Trim",
+                    BlockType::Volume,
+                    ModuleBlockSource::PresetDefault {
+                        preset_id: PresetId::from(seed_id("volume-utility")),
+                        saved_at_version: None,
+                    },
+                ),
+                ModuleBlock::new(
+                    "limiter",
+                    "ReaLimit",
+                    BlockType::Limiter,
+                    ModuleBlockSource::PresetDefault {
+                        preset_id: PresetId::from(seed_id("limiter-realimit")),
                         saved_at_version: None,
                     },
                 ),
