@@ -14,6 +14,7 @@ pub fn engines() -> Vec<Engine> {
         organ_engine(),
         pad_engine(),
         guitar_engine(),
+        worship_guitar_engine(),
         vocal_engine(),
     ]
 }
@@ -233,6 +234,23 @@ fn guitar_engine() -> Engine {
     engine
 }
 
+fn worship_guitar_engine() -> Engine {
+    let default_scene = EngineScene::new(seed_id("worship-gtr-engine-default"), "Default")
+        .with_layer(LayerSelection::new(
+            seed_id("worship-gtr-layer"),
+            seed_id("worship-gtr-layer-default"),
+        ));
+
+    Engine::new(
+        seed_id("worship-gtr-engine"),
+        "Worship Guitar Engine",
+        EngineType::Guitar,
+        vec![LayerId::from(seed_id("worship-gtr-layer"))],
+        default_scene,
+    )
+    .with_metadata(Metadata::new().with_tag("guitar").with_tag("worship"))
+}
+
 fn vocal_engine() -> Engine {
     let default_scene = EngineScene::new(seed_id("vocal-engine-default"), "Default")
         .with_layer(LayerSelection::new(
@@ -263,7 +281,7 @@ mod tests {
 
     #[test]
     fn engine_count() {
-        assert_eq!(engines().len(), 6);
+        assert_eq!(engines().len(), 7);
     }
 
     #[test]
