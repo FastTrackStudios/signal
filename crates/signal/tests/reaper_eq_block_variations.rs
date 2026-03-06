@@ -193,8 +193,8 @@ async fn eq_block_load_and_cycle_variations(ctx: &ReaperTestContext) -> eyre::Re
         let fx_info = patch_fx.info().await?;
         println!("[eq_variations]   FX name: {}", fx_info.name);
         assert!(
-            fx_info.name.contains("EQ Block:"),
-            "FX name should contain 'EQ Block:', got '{}'",
+            fx_info.name.contains("[B] EQ:"),
+            "FX name should contain '[B] EQ:', got '{}'",
             fx_info.name
         );
         assert!(
@@ -232,8 +232,8 @@ async fn eq_block_load_and_cycle_variations(ctx: &ReaperTestContext) -> eyre::Re
     let flat_fx_info = flat_fx.info().await?;
     println!("[eq_variations] Flat cycle-back FX name: {}", flat_fx_info.name);
     assert!(
-        flat_fx_info.name.contains("EQ Block:"),
-        "Cycled-back Flat FX name should contain 'EQ Block:', got '{}'",
+        flat_fx_info.name.contains("[B] EQ:"),
+        "Cycled-back Flat FX name should contain '[B] EQ:', got '{}'",
         flat_fx_info.name
     );
     assert!(
