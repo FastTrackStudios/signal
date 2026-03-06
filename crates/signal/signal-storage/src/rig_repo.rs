@@ -120,6 +120,12 @@ impl RigRepoLive {
             .as_ref()
             .map(|s| RigType::from_str(s).unwrap_or_default());
 
+        let macro_bank = match &model.macro_bank_json {
+            Some(json) if !json.is_empty() => serde_json::from_str(json)
+                .map_err(|e| StorageError::Data(format!("failed to parse macro_bank json: {e}")))?,
+            _ => None,
+        };
+
         Ok(Rig {
             id: model.rig_id_branded(),
             name: model.name.clone(),
@@ -129,7 +135,7 @@ impl RigRepoLive {
             variants,
             fx_sends: Vec::new(),
             input_track_ref: None,
-            macro_bank: None,
+            macro_bank,
             modulation: None,
             metadata,
         })
@@ -187,12 +193,22 @@ impl RigRepo for RigRepoLive {
             .await
             .ok();
 
+        let macro_bank_json = rig
+            .macro_bank
+            .as_ref()
+            .map(|mb| {
+                serde_json::to_string(mb)
+                    .map_err(|e| StorageError::Data(format!("failed to serialize macro_bank: {e}")))
+            })
+            .transpose()?;
+
         entity::rig::Entity::insert(entity::rig::ActiveModel {
             id: Set(rig.id.as_str().to_string()),
             name: Set(rig.name.clone()),
             rig_type_id: Set(rig.rig_type.as_ref().map(|t| t.as_str().to_string())),
             engine_ids_json: Set(Self::engine_ids_to_json(&rig.engine_ids)?),
             default_variant_id: Set(rig.default_variant_id.as_str().to_string()),
+            macro_bank_json: Set(macro_bank_json),
             metadata_json: Set(Self::metadata_to_json(&rig.metadata)?),
         })
         .exec(&self.db)
