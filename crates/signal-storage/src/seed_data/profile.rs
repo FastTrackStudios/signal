@@ -103,134 +103,166 @@ fn guitar_path() -> NodePath {
     NodePath::engine("guitar-engine").with_layer("guitar-layer-archetype-jm")
 }
 
-/// Worship profile — 8 patches, default: Clean.
+/// Worship profile — 8 patches targeting the worship-guitar-rig scenes.
+///
+/// Patches reference the worship rig's Default, Dry, and Ambient scenes
+/// with additional parameter overrides for performance variations.
+/// Patch IDs are preserved for backward compatibility with song references.
 fn guitar_worship_profile() -> Profile {
+    let worship_rig = seed_id("worship-guitar-rig");
+
+    // Helper for worship rig overrides
+    let wg_path = || {
+        NodePath::engine("worship-gtr-engine").with_layer("worship-gtr-layer")
+    };
+
+    // Patch 1: Clean — default scene with lower drive
     let clean = Patch::from_rig_scene(
         seed_id("guitar-worship-clean"),
         "Clean",
-        seed_id("guitar-megarig"),
-        seed_id("guitar-megarig-default"),
+        worship_rig.clone(),
+        seed_id("worship-rig-default"),
     )
-    .with_override(Override {
-        path: guitar_path().with_module("pre-fx"),
-        op: NodeOverrideOp::ReplaceRef(seed_id("pre-fx-gravity-tank").to_string()),
-    })
     .with_override(Override::set(
-        guitar_path().with_block("amp").with_parameter("gain"),
-        0.18,
+        wg_path()
+            .with_module("wg-drive")
+            .with_block("parametric-od")
+            .with_parameter("drive"),
+        0.15,
     ))
     .with_metadata(
         Metadata::new()
             .with_tag("guitar")
             .with_tag("clean")
-            .with_description("AC30 Ambient Clean w/ Pre-FX → Gravity Tank / Spring Reverb Light"),
+            .with_description("Worship clean — low drive, full signal chain"),
     );
 
+    // Patch 2: Crunch — default scene with moderate drive
     let crunch = Patch::from_rig_scene(
         seed_id("guitar-worship-crunch"),
         "Crunch",
-        seed_id("guitar-megarig"),
-        seed_id("guitar-megarig-default"),
+        worship_rig.clone(),
+        seed_id("worship-rig-default"),
     )
     .with_override(Override::set(
-        guitar_path().with_block("amp").with_parameter("gain"),
-        0.42,
+        wg_path()
+            .with_module("wg-drive")
+            .with_block("parametric-od")
+            .with_parameter("drive"),
+        0.55,
     ))
     .with_metadata(Metadata::new().with_tag("guitar").with_tag("crunch"));
 
+    // Patch 3: Drive — default scene with high drive
     let drive = Patch::from_rig_scene(
         seed_id("guitar-worship-drive"),
         "Drive",
-        seed_id("guitar-megarig"),
-        seed_id("guitar-megarig-default"),
+        worship_rig.clone(),
+        seed_id("worship-rig-default"),
     )
     .with_override(Override::set(
-        guitar_path().with_block("amp").with_parameter("gain"),
-        0.62,
+        wg_path()
+            .with_module("wg-drive")
+            .with_block("parametric-od")
+            .with_parameter("drive"),
+        0.65,
     ))
-    .with_override(Override {
-        path: guitar_path().with_module("jm-amp-module"),
-        op: NodeOverrideOp::ReplaceRef(seed_id("jm-amp-module-crunch").to_string()),
-    })
     .with_metadata(Metadata::new().with_tag("guitar").with_tag("drive"));
 
+    // Patch 4: Lead — default scene with high drive + delay
     let lead = Patch::from_rig_scene(
         seed_id("guitar-worship-lead"),
         "Lead",
-        seed_id("guitar-megarig"),
-        seed_id("guitar-megarig-lead"),
+        worship_rig.clone(),
+        seed_id("worship-rig-default"),
     )
     .with_override(Override::set(
-        guitar_path()
-            .with_block("dream-delay")
+        wg_path()
+            .with_module("wg-drive")
+            .with_block("parametric-od")
+            .with_parameter("drive"),
+        0.72,
+    ))
+    .with_override(Override::set(
+        wg_path()
+            .with_module("wg-time")
+            .with_block("dly-1")
             .with_parameter("mix"),
         0.38,
     ))
     .with_metadata(Metadata::new().with_tag("guitar").with_tag("lead"));
 
-    // Ambient → Come and See Ambient (presets/Come and See/Ambient.RfxChain)
-    let ambient = Patch::from_block_snapshot(
+    // Patch 5: Ambient — worship rig ambient scene (full chain, lush effects)
+    let ambient = Patch::from_rig_scene(
         seed_id("guitar-worship-ambient"),
         "Ambient",
-        seed_id("preset-come-and-see"),
-        seed_id("preset-come-and-see-ambient"),
+        worship_rig.clone(),
+        seed_id("worship-rig-ambient"),
     )
     .with_metadata(
         Metadata::new()
             .with_tag("guitar")
             .with_tag("ambient")
-            .with_description("Come and See ambient worship patch — full RfxChain"),
+            .with_description("Full chain — lush reverb, delay, chorus, tremolo engaged"),
     );
 
+    // Patch 6: Tremolo — default scene with tremolo depth/rate tweaks
     let tremolo = Patch::from_rig_scene(
         seed_id("guitar-worship-tremolo"),
         "Tremolo",
-        seed_id("guitar-megarig"),
-        seed_id("guitar-megarig-default"),
+        worship_rig.clone(),
+        seed_id("worship-rig-default"),
     )
     .with_override(Override::set(
-        guitar_path().with_block("mod").with_parameter("rate"),
+        wg_path()
+            .with_module("gtr-motion")
+            .with_block("tremolo")
+            .with_parameter("rate"),
         0.50,
     ))
     .with_override(Override::set(
-        guitar_path().with_block("mod").with_parameter("depth"),
+        wg_path()
+            .with_module("gtr-motion")
+            .with_block("tremolo")
+            .with_parameter("depth"),
         0.70,
     ))
     .with_metadata(Metadata::new().with_tag("guitar").with_tag("tremolo"));
 
+    // Patch 7: Delay — default scene with delay mix tweaks
     let delay = Patch::from_rig_scene(
         seed_id("guitar-worship-delay"),
         "Delay",
-        seed_id("guitar-megarig"),
-        seed_id("guitar-megarig-default"),
+        worship_rig.clone(),
+        seed_id("worship-rig-default"),
     )
     .with_override(Override::set(
-        guitar_path()
-            .with_block("dream-delay")
+        wg_path()
+            .with_module("wg-time")
+            .with_block("dly-1")
             .with_parameter("mix"),
         0.52,
     ))
-    .with_override(Override::set(
-        guitar_path()
-            .with_block("dream-delay")
-            .with_parameter("time"),
-        0.40,
-    ))
     .with_metadata(Metadata::new().with_tag("guitar").with_tag("delay"));
 
+    // Patch 8: Solo — default scene with boosted drive + delay
     let solo = Patch::from_rig_scene(
         seed_id("guitar-worship-solo"),
         "Solo",
-        seed_id("guitar-megarig"),
-        seed_id("guitar-megarig-lead"),
+        worship_rig,
+        seed_id("worship-rig-default"),
     )
     .with_override(Override::set(
-        guitar_path().with_block("amp").with_parameter("gain"),
-        0.72,
+        wg_path()
+            .with_module("wg-drive")
+            .with_block("parametric-od")
+            .with_parameter("drive"),
+        0.80,
     ))
     .with_override(Override::set(
-        guitar_path()
-            .with_block("dream-delay")
+        wg_path()
+            .with_module("wg-time")
+            .with_block("dly-1")
             .with_parameter("mix"),
         0.30,
     ))
@@ -250,7 +282,7 @@ fn guitar_worship_profile() -> Profile {
             .with_tag("worship")
             .with_tag("setlist")
             .with_description(
-                "Worship guitar profile — ambient cleans, lush delays, dynamic drive",
+                "Worship guitar profile — 8 patches with Dry/Ambient scenes targeting worship-guitar-rig",
             ),
     )
 }
@@ -783,12 +815,14 @@ mod tests {
             for patch in &profile.patches {
                 match &patch.target {
                     PatchTarget::RigScene { rig_id, .. } => {
-                        assert_eq!(
-                            rig_id.as_str(),
-                            seed_id("guitar-megarig").to_string(),
-                            "patch '{}' in '{}' should target guitar-megarig",
+                        let megarig = seed_id("guitar-megarig").to_string();
+                        let worship = seed_id("worship-guitar-rig").to_string();
+                        assert!(
+                            rig_id.as_str() == megarig || rig_id.as_str() == worship,
+                            "patch '{}' in '{}' should target guitar-megarig or worship-guitar-rig, got {}",
                             patch.name,
                             profile.name,
+                            rig_id.as_str(),
                         );
                     }
                     PatchTarget::BlockSnapshot {
