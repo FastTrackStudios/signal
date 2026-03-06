@@ -13,6 +13,7 @@ pub fn layers() -> Vec<Layer> {
         keys_layer_space(),
         guitar_layer_main(),
         guitar_layer_archetype_jm(),
+        worship_guitar_layer(),
         synth_layer_osc(),
         synth_layer_motion(),
         synth_layer_texture(),
@@ -333,6 +334,24 @@ fn guitar_layer_archetype_jm() -> Layer {
     layer
 }
 
+fn worship_guitar_layer() -> Layer {
+    let default_variant = LayerSnapshot::new(seed_id("worship-gtr-layer-default"), "Default")
+        .with_module(ModuleRef::new(seed_id("wg-input")))
+        .with_module(ModuleRef::new(seed_id("wg-drive")))
+        .with_module(ModuleRef::new(seed_id("wg-amp")))
+        .with_module(ModuleRef::new(seed_id("wg-modulation")))
+        .with_module(ModuleRef::new(seed_id("wg-time")))
+        .with_module(ModuleRef::new(seed_id("gtr-motion")))
+        .with_module(ModuleRef::new(seed_id("wg-master")));
+
+    Layer::new(
+        seed_id("worship-gtr-layer"),
+        "Guitar",
+        EngineType::Guitar,
+        default_variant,
+    )
+}
+
 fn guitar_layers_archetype_ndsp() -> Vec<Layer> {
     NDSP_ARCHETYPE_X_PLUGIN_NAMES
         .iter()
@@ -386,7 +405,7 @@ mod tests {
 
     #[test]
     fn layer_count() {
-        assert_eq!(layers().len(), 19);
+        assert_eq!(layers().len(), 20);
     }
 
     #[test]
@@ -425,7 +444,7 @@ mod tests {
                 .iter()
                 .filter(|l| l.engine_type == EngineType::Guitar)
                 .count(),
-            9
+            10
         );
         assert_eq!(
             layers

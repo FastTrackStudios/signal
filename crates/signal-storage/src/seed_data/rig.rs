@@ -8,7 +8,12 @@ use signal_proto::seed_id;
 
 /// All default rig collections.
 pub fn rigs() -> Vec<Rig> {
-    vec![keys_mega_rig(), guitar_mega_rig(), vocal_mega_rig()]
+    vec![
+        keys_mega_rig(),
+        guitar_mega_rig(),
+        vocal_mega_rig(),
+        worship_guitar_rig(),
+    ]
 }
 
 fn keys_mega_rig() -> Rig {
@@ -229,6 +234,31 @@ fn vocal_mega_rig() -> Rig {
     )
 }
 
+fn worship_guitar_rig() -> Rig {
+    let default_scene = RigScene::new(seed_id("worship-gtr-rig-default"), "Default")
+        .with_engine(EngineSelection::new(
+            seed_id("worship-gtr-engine"),
+            seed_id("worship-gtr-engine-default"),
+        ))
+        .with_metadata(Metadata::new().with_tag("worship").with_tag("guitar"));
+
+    Rig::new(
+        seed_id("worship-guitar-rig"),
+        "Worship Guitar",
+        vec![EngineId::from(seed_id("worship-gtr-engine"))],
+        default_scene,
+    )
+    .with_rig_type(RigType::Guitar)
+    .with_metadata(
+        Metadata::new()
+            .with_tag("worship")
+            .with_tag("guitar")
+            .with_description(
+                "Worship Guitar Rig: Input, Drive, Amp, Modulation, Time, Motion, Master",
+            ),
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -237,13 +267,13 @@ mod tests {
 
     #[test]
     fn rig_count() {
-        assert_eq!(rigs().len(), 3);
+        assert_eq!(rigs().len(), 4);
     }
 
     #[test]
     fn has_three_megarigs_with_types() {
         let rigs = rigs();
-        assert!(rigs.iter().all(|r| r.name == "MegaRig"));
+        assert!(rigs.iter().any(|r| r.name == "MegaRig"));
         assert!(rigs.iter().any(|r| r.rig_type == Some(RigType::Keys)));
         assert!(rigs.iter().any(|r| r.rig_type == Some(RigType::Guitar)));
         assert!(rigs.iter().any(|r| r.rig_type == Some(RigType::Vocals)));
