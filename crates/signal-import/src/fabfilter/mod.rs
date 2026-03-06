@@ -6,6 +6,7 @@
 
 pub mod parser;
 pub mod registry;
+pub mod rig_presets;
 pub mod tags;
 
 use std::path::{Path, PathBuf};
