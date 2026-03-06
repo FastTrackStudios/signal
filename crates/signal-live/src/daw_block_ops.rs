@@ -157,6 +157,7 @@ fn apply_plugin_param_mapping(plugin_name: &str, block: &Block) -> Block {
 
     match plugin_name {
         s if s.contains("Pro-Q") && s.contains("FabFilter") => map_proq4_params(block),
+        s if s.contains("Volume/Pan v3") => map_js_volume_params(block),
         _ => block.clone(),
     }
 }
@@ -239,6 +240,32 @@ fn map_proq4_params(block: &Block) -> Block {
     );
 
     Block::from_parameters(daw_params)
+}
+
+/// Map abstract utility gain param to JS: Volume/Pan v3 REAPER parameter.
+///
+/// Abstract param: level (0.0–1.0, where 0.5 = unity / 0 dB)
+/// JS Volume/Pan v3 slider: "Volume" range [0, 4], where 1.0 = unity.
+///
+/// REAPER normalizes sliders linearly over their declared range, so
+/// the normalized value for unity (1.0 on a [0,4] slider) is 0.25.
+/// We scale: reaper_norm = abstract_level / 2.0
+fn map_js_volume_params(block: &Block) -> Block {
+    use signal_proto::BlockParameter as BP;
+
+    let level = block
+        .parameters()
+        .iter()
+        .find(|p| p.id() == "level")
+        .map(|p| p.value().get())
+        .unwrap_or(0.5);
+
+    // abstract 0.5 (unity) → REAPER normalized 0.25 (slider value 1.0 on [0,4])
+    let volume_norm = (level / 2.0).clamp(0.0, 1.0);
+
+    Block::from_parameters(vec![
+        BP::new("level", "Level", volume_norm).with_daw_name("Volume"),
+    ])
 }
 
 // ─── SignalLive impl ────────────────────────────────────────────
