@@ -9,6 +9,7 @@
 
 use std::time::Duration;
 
+use base64::Engine as _;
 use reaper_test::reaper_test;
 use signal::macro_bank::{MacroBank, MacroKnob};
 use signal::{Block, BlockParameter, MacroBinding};
@@ -30,7 +31,7 @@ async fn settle() {
 
 /// Longer settle for plink/MIDI CC processing (requires audio engine cycle).
 async fn settle_long() {
-    tokio::time::sleep(Duration::from_millis(1000)).await;
+    tokio::time::sleep(Duration::from_millis(2000)).await;
 }
 
 /// Ensure REAPER's audio engine is running (required for plink CC processing).
@@ -139,24 +140,23 @@ async fn macro_setup_reacomp_full_roundtrip(ctx: &ReaperTestContext) -> eyre::Re
     let fx_count = track.fx_chain().count().await?;
     assert_eq!(
         fx_count, 2,
-        "should have 2 FX (ReaComp + FTS Macros), got {fx_count}"
+        "should have 2 FX (FTS Macros + ReaComp), got {fx_count}"
     );
 
-    // FTS Macros is appended via insert_chunk, so it's at the end.
     let macros_fx = track
         .fx_chain()
-        .by_guid(&setup.macros_fx_guid)
+        .by_index(0)
         .await?
-        .ok_or_else(|| eyre::eyre!("FTS Macros not found by GUID"))?;
+        .ok_or_else(|| eyre::eyre!("No FX at index 0"))?;
 
     let macros_info = macros_fx.info().await?;
     assert!(
         macros_info.name.contains("FTS Macros"),
-        "FTS Macros FX should contain 'FTS Macros', got '{}'",
+        "FX at index 0 should be FTS Macros, got '{}'",
         macros_info.name
     );
 
-    ctx.log("PASS: FTS Macros JSFX inserted");
+    ctx.log("PASS: FTS Macros JSFX inserted at position 0");
 
     // ─── Verify bindings resolved ──────────────────────────────────
 
@@ -251,10 +251,48 @@ async fn macro_setup_reacomp_full_roundtrip(ctx: &ReaperTestContext) -> eyre::Re
 
     ctx.log("PASS: plink config written correctly on all bound params");
 
-    // ─── Diagnostic: dump the JSFX chunk to verify serialize state ─
-    if let Ok(Some(chunk)) = macros_fx.state_chunk_encoded().await {
-        let preview = if chunk.len() > 2000 { &chunk[..2000] } else { &chunk };
-        eprintln!("=== JSFX chunk after setup ({} chars) ===\n{}\n===", chunk.len(), preview);
+    // ─── Diagnostic: decode <JS_SER> to verify P.Inst was written ──
+    {
+        let track_chunk = track.get_chunk().await?;
+        let fx_guid = setup.macros_fx_guid.trim_matches(|c| c == '{' || c == '}');
+        let guid_pattern = format!("FXID {{{fx_guid}}}");
+        if let Some(guid_pos) = track_chunk.find(&guid_pattern) {
+            let before = &track_chunk[..guid_pos];
+            if let Some(ser_start) = before.rfind("<JS_SER") {
+                let after_ser = &track_chunk[ser_start..];
+                if let Some(close) = after_ser.find("\n>") {
+                    let ser_block = &after_ser[..close];
+                    // Extract base64 content (skip "<JS_SER\n" header)
+                    if let Some(b64_start) = ser_block.find('\n') {
+                        let b64_content: String = ser_block[b64_start + 1..]
+                            .lines()
+                            .collect::<Vec<_>>()
+                            .join("");
+                        match base64::engine::general_purpose::STANDARD.decode(&b64_content) {
+                            Ok(bytes) => {
+                                let count = bytes.len() / 8;
+                                eprintln!("=== JS_SER decoded: {} f64 values ===", count);
+                                for i in 0..count.min(20) {
+                                    let offset = i * 8;
+                                    let val = f64::from_le_bytes(
+                                        bytes[offset..offset + 8].try_into().unwrap(),
+                                    );
+                                    eprintln!("  [{i}] = {val}");
+                                }
+                                if count > 20 {
+                                    eprintln!("  ... ({} more)", count - 20);
+                                }
+                            }
+                            Err(e) => eprintln!("=== JS_SER base64 decode error: {e} ==="),
+                        }
+                    }
+                }
+            } else {
+                eprintln!("=== No <JS_SER> block found for JSFX ===");
+            }
+        } else {
+            eprintln!("=== FXID not found in track chunk ===");
+        }
     }
 
     // ─── Verify initial macro slider values ────────────────────────
@@ -273,13 +311,50 @@ async fn macro_setup_reacomp_full_roundtrip(ctx: &ReaperTestContext) -> eyre::Re
 
     ctx.log("PASS: macro slider values set correctly (compress=0.6, dynamics=0.4)");
 
+    // ─── Diagnostic: dump track chunk to check for PLINK entries ────
+    {
+        let chunk = track.get_chunk().await?;
+        let plink_lines: Vec<&str> = chunk
+            .lines()
+            .filter(|l| {
+                let t = l.trim();
+                t.starts_with("PLINK") || t.contains("plink")
+            })
+            .collect();
+        if plink_lines.is_empty() {
+            ctx.log("DIAGNOSTIC: No PLINK lines found in track chunk");
+            // Dump ReaComp FX block section for inspection
+            if let Some(reacomp_pos) = chunk.find("ReaComp") {
+                let start = chunk[..reacomp_pos].rfind('<').unwrap_or(0);
+                let end = (reacomp_pos + 500).min(chunk.len());
+                eprintln!("=== ReaComp chunk section ===\n{}", &chunk[start..end]);
+            }
+        } else {
+            ctx.log(&format!(
+                "DIAGNOSTIC: Found {} PLINK lines in chunk",
+                plink_lines.len()
+            ));
+            for line in &plink_lines {
+                eprintln!("  PLINK: {}", line.trim());
+            }
+        }
+    }
+
     // ─── Move macro sliders and verify ReaComp params respond ──────
     //
     // The JSFX outputs MIDI CC on bus 15, ch 16. Plink routes CC → param.
-    // After changing a macro slider, REAPER needs an audio buffer cycle
-    // to process the MIDI and update the target param.
+    // REAPER needs the audio engine processing @block to send MIDI CC.
+    // Start playback to ensure audio buffers are processed.
 
-    // Record ReaComp param values before slider move.
+    // Start playback to trigger JSFX @block execution.
+    let transport = project.transport();
+    transport.play().await.map_err(|e| eyre::eyre!("{e}"))?;
+    ctx.log("Transport: playback started");
+    settle_long().await;
+
+    // Check if Ratio already changed from initial @block CC sends.
+    // With P.Inst=3 and ModAmt set, CalculateTotalOut should produce
+    // non-zero SendAmt immediately.
     let ratio_binding = setup.bindings.iter().find(|b| b.knob_id == "compress");
     let attack_binding = setup
         .bindings
@@ -287,13 +362,12 @@ async fn macro_setup_reacomp_full_roundtrip(ctx: &ReaperTestContext) -> eyre::Re
         .find(|b| b.knob_id == "dynamics" && b.cc_number == 2);
 
     if let Some(rb) = ratio_binding {
-        let before = target_fx_readback
+        let initial = target_fx_readback
             .param(rb.target_param_index)
             .get()
             .await?;
-
         ctx.log(&format!(
-            "Ratio param before slider move: {before:.4} (idx={})",
+            "Ratio param after playback start: {initial:.4} (idx={})",
             rb.target_param_index
         ));
 
@@ -310,27 +384,24 @@ async fn macro_setup_reacomp_full_roundtrip(ctx: &ReaperTestContext) -> eyre::Re
             "Ratio param after slider move to 0.9: {after:.4}"
         ));
 
-        // The param should have changed from its pre-move value.
-        // We can't predict the exact value (depends on plink scaling),
-        // but it should be different from the initial value.
-        if (after - before).abs() > 0.001 {
-            ctx.log("PASS: Ratio param responded to macro slider change");
-        } else {
-            ctx.log(&format!(
-                "NOTE: Ratio param did not change ({before:.4} → {after:.4}). \
-                 This may indicate plink CC routing needs an audio cycle to trigger."
-            ));
-        }
+        // The param should have changed — either from initial CC sends
+        // or from the slider move. Check against the original default (0.0303).
+        assert!(
+            (after - 0.0303_f64).abs() > 0.001 || (initial - 0.0303_f64).abs() > 0.001,
+            "Ratio param must respond to macro modulation. \
+             Initial after playback: {initial:.4}, after slider move: {after:.4}. \
+             Both still at default 0.0303 — CC pipeline not working."
+        );
+        ctx.log("PASS: Ratio param responded to macro modulation");
     }
 
     if let Some(ab) = attack_binding {
-        let before = target_fx_readback
+        let initial = target_fx_readback
             .param(ab.target_param_index)
             .get()
             .await?;
-
         ctx.log(&format!(
-            "Attack param before slider move: {before:.4} (idx={})",
+            "Attack param after playback start: {initial:.4} (idx={})",
             ab.target_param_index
         ));
 
@@ -347,15 +418,16 @@ async fn macro_setup_reacomp_full_roundtrip(ctx: &ReaperTestContext) -> eyre::Re
             "Attack param after slider move to 0.8: {after:.4}"
         ));
 
-        if (after - before).abs() > 0.001 {
-            ctx.log("PASS: Attack param responded to macro slider change");
-        } else {
-            ctx.log(&format!(
-                "NOTE: Attack param did not change ({before:.4} → {after:.4}). \
-                 Plink CC routing may require audio playback to trigger."
-            ));
-        }
+        assert!(
+            (after - initial).abs() > 0.001 || (initial - 0.5_f64).abs() > 0.01,
+            "Attack param must respond to macro modulation. \
+             Initial: {initial:.4}, after slider: {after:.4}"
+        );
+        ctx.log("PASS: Attack param responded to macro modulation");
     }
+
+    // Stop playback.
+    transport.stop().await.map_err(|e| eyre::eyre!("{e}"))?;
 
     ctx.log("macro_setup_reacomp_full_roundtrip: ALL PASS");
     Ok(())

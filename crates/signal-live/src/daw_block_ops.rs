@@ -11,11 +11,12 @@
 //! 2. **Execute** — add the FX to a DAW track, apply state, and rename. Requires a
 //!    running DAW instance.
 
-use daw::{FxNodeId, TrackHandle};
+use daw::{FxNodeId, FxRoutingMode, TrackHandle};
 use signal_proto::plugin_block::FxRole;
 use signal_proto::traits::HasMetadata;
 use signal_proto::{
-    Block, BlockParameterOverride, BlockType, ModulePresetId, ModuleType, PresetId, SnapshotId,
+    Block, BlockParameterOverride, BlockType, ModuleBlock, ModulePresetId, ModuleType, PresetId,
+    SignalChain, SignalNode, SnapshotId,
 };
 
 use crate::macro_setup::MacroSetupResult;
@@ -65,13 +66,62 @@ pub struct ResolvedFxLoad {
     pub display_name: String,
 }
 
+/// A resolved node in the signal chain — either a single FX or a parallel split.
+#[derive(Debug)]
+pub enum ResolvedSignalNode {
+    /// A single FX plugin to load.
+    Fx(ResolvedFxLoad),
+    /// A parallel split: each inner chain is one lane, mixed back at the output.
+    Split(Vec<ResolvedSignalChain>),
+}
+
+/// A resolved sequence of signal-chain nodes, preserving parallel routing structure.
+#[derive(Debug)]
+pub struct ResolvedSignalChain {
+    pub nodes: Vec<ResolvedSignalNode>,
+}
+
+impl ResolvedSignalChain {
+    /// Collect all leaf `ResolvedFxLoad`s in depth-first order.
+    ///
+    /// Used by callers that only need a flat list regardless of topology —
+    /// e.g., existing tests or simple serial modules.
+    pub fn all_fx_loads(&self) -> Vec<&ResolvedFxLoad> {
+        let mut out = Vec::new();
+        self.collect_fx_loads(&mut out);
+        out
+    }
+
+    fn collect_fx_loads<'a>(&'a self, out: &mut Vec<&'a ResolvedFxLoad>) {
+        for node in &self.nodes {
+            match node {
+                ResolvedSignalNode::Fx(fx) => out.push(fx),
+                ResolvedSignalNode::Split(lanes) => {
+                    for lane in lanes {
+                        lane.collect_fx_loads(out);
+                    }
+                }
+            }
+        }
+    }
+}
+
 /// Pre-resolved data for loading a full module (multiple FX) onto a DAW track.
 #[derive(Debug)]
 pub struct ResolvedModuleLoad {
-    /// One resolved load per block in the module.
-    pub fx_loads: Vec<ResolvedFxLoad>,
+    /// Resolved signal chain preserving parallel routing structure.
+    pub chain: ResolvedSignalChain,
     /// Module-level display name (e.g. `"EQ Module: Pro-Q 4 35-Band"`).
     pub display_name: String,
+}
+
+impl ResolvedModuleLoad {
+    /// Flat list of all resolved FX loads in depth-first order.
+    ///
+    /// Backward-compatible accessor for callers that don't need topology.
+    pub fn fx_loads(&self) -> Vec<&ResolvedFxLoad> {
+        self.chain.all_fx_loads()
+    }
 }
 
 // ─── Helpers ────────────────────────────────────────────────────
@@ -311,80 +361,10 @@ where
                 })?
         };
 
-        // 3. For each block in the module, resolve source → gather state.
-        let blocks = snapshot.module().blocks();
-        let mut fx_loads = Vec::with_capacity(blocks.len());
-
-        for module_block in &blocks {
-            let (block_preset, snapshot_to_apply) = match module_block.source() {
-                signal_proto::ModuleBlockSource::PresetDefault { preset_id, .. } => {
-                    let presets = self
-                        .block_repo
-                        .list_block_collections(module_block.block_type())
-                        .await
-                        .map_err(|e| format!("Failed to list block presets: {e}"))?;
-                    let preset = presets
-                        .into_iter()
-                        .find(|p| p.id() == preset_id)
-                        .ok_or_else(|| {
-                            format!("Block preset not found: {preset_id}")
-                        })?;
-                    let snap = preset.default_snapshot();
-                    (preset, snap)
-                }
-                signal_proto::ModuleBlockSource::PresetSnapshot {
-                    preset_id,
-                    snapshot_id,
-                    ..
-                } => {
-                    let presets = self
-                        .block_repo
-                        .list_block_collections(module_block.block_type())
-                        .await
-                        .map_err(|e| format!("Failed to list block presets: {e}"))?;
-                    let preset = presets
-                        .into_iter()
-                        .find(|p| p.id() == preset_id)
-                        .ok_or_else(|| {
-                            format!("Block preset not found: {preset_id}")
-                        })?;
-                    let snap = preset.snapshot(snapshot_id).ok_or_else(|| {
-                        format!("Snapshot not found: {snapshot_id}")
-                    })?;
-                    (preset, snap)
-                }
-                signal_proto::ModuleBlockSource::Inline { block: _ } => {
-                    return Err(format!(
-                        "Inline block source for '{}' cannot be loaded (no plugin name)",
-                        module_block.label()
-                    ));
-                }
-            };
-
-            let plugin_name = raw_plugin_name(&block_preset).ok_or_else(|| {
-                format!(
-                    "Block preset '{}' has no source: tag — cannot determine plugin name",
-                    block_preset.name()
-                )
-            })?;
-
-            let block = snapshot_to_apply.block();
-            let state_data = snapshot_to_apply.state_data().map(|d| d.to_vec());
-
-            let role = FxRole::Block {
-                block_type: module_block.block_type(),
-                name: format!("{} - {}", block_preset.name(), module_block.label()),
-            };
-            let display_name = role.display_name();
-
-            fx_loads.push(ResolvedFxLoad {
-                plugin_name,
-                block,
-                state_data,
-                overrides: module_block.overrides().to_vec(),
-                display_name,
-            });
-        }
+        // 3. Recursively resolve the signal chain, preserving parallel routing topology.
+        let chain = self
+            .resolve_signal_chain(snapshot.module().chain())
+            .await?;
 
         // 4. Build module-level display name.
         let module_role = FxRole::Module {
@@ -393,8 +373,108 @@ where
         };
         let display_name = module_role.display_name();
 
-        Ok(ResolvedModuleLoad {
-            fx_loads,
+        Ok(ResolvedModuleLoad { chain, display_name })
+    }
+
+    // ── Resolve helpers ─────────────────────────────────────────
+
+    /// Recursively resolve a `SignalChain` into a `ResolvedSignalChain`.
+    ///
+    /// Preserves parallel split topology — each `SignalNode::Split` becomes a
+    /// `ResolvedSignalNode::Split` with one resolved lane per non-empty child chain.
+    fn resolve_signal_chain<'a>(
+        &'a self,
+        chain: &'a SignalChain,
+    ) -> futures::future::BoxFuture<'a, Result<ResolvedSignalChain, String>> {
+        Box::pin(async move {
+            let mut nodes = Vec::new();
+            for node in chain.nodes() {
+                match node {
+                    SignalNode::Block(module_block) => {
+                        let resolved = self.resolve_module_block(module_block).await?;
+                        nodes.push(ResolvedSignalNode::Fx(resolved));
+                    }
+                    SignalNode::Split { lanes } => {
+                        let mut resolved_lanes = Vec::with_capacity(lanes.len());
+                        for lane in lanes {
+                            let resolved_lane = self.resolve_signal_chain(lane).await?;
+                            resolved_lanes.push(resolved_lane);
+                        }
+                        nodes.push(ResolvedSignalNode::Split(resolved_lanes));
+                    }
+                }
+            }
+            Ok(ResolvedSignalChain { nodes })
+        })
+    }
+
+    /// Resolve a single `ModuleBlock` reference into a `ResolvedFxLoad`.
+    async fn resolve_module_block(
+        &self,
+        module_block: &ModuleBlock,
+    ) -> Result<ResolvedFxLoad, String> {
+        let (block_preset, snapshot_to_apply) = match module_block.source() {
+            signal_proto::ModuleBlockSource::PresetDefault { preset_id, .. } => {
+                let presets = self
+                    .block_repo
+                    .list_block_collections(module_block.block_type())
+                    .await
+                    .map_err(|e| format!("Failed to list block presets: {e}"))?;
+                let preset = presets
+                    .into_iter()
+                    .find(|p| p.id() == preset_id)
+                    .ok_or_else(|| format!("Block preset not found: {preset_id}"))?;
+                let snap = preset.default_snapshot();
+                (preset, snap)
+            }
+            signal_proto::ModuleBlockSource::PresetSnapshot {
+                preset_id,
+                snapshot_id,
+                ..
+            } => {
+                let presets = self
+                    .block_repo
+                    .list_block_collections(module_block.block_type())
+                    .await
+                    .map_err(|e| format!("Failed to list block presets: {e}"))?;
+                let preset = presets
+                    .into_iter()
+                    .find(|p| p.id() == preset_id)
+                    .ok_or_else(|| format!("Block preset not found: {preset_id}"))?;
+                let snap = preset
+                    .snapshot(snapshot_id)
+                    .ok_or_else(|| format!("Snapshot not found: {snapshot_id}"))?;
+                (preset, snap)
+            }
+            signal_proto::ModuleBlockSource::Inline { block: _ } => {
+                return Err(format!(
+                    "Inline block source for '{}' cannot be loaded (no plugin name)",
+                    module_block.label()
+                ));
+            }
+        };
+
+        let plugin_name = raw_plugin_name(&block_preset).ok_or_else(|| {
+            format!(
+                "Block preset '{}' has no source: tag — cannot determine plugin name",
+                block_preset.name()
+            )
+        })?;
+
+        let block = snapshot_to_apply.block();
+        let state_data = snapshot_to_apply.state_data().map(|d| d.to_vec());
+
+        let role = FxRole::Block {
+            block_type: module_block.block_type(),
+            name: format!("{} - {}", block_preset.name(), module_block.label()),
+        };
+        let display_name = role.display_name();
+
+        Ok(ResolvedFxLoad {
+            plugin_name,
+            block,
+            state_data,
+            overrides: module_block.overrides().to_vec(),
             display_name,
         })
     }
@@ -419,8 +499,11 @@ where
 
     /// Load a module preset onto a DAW track inside an FX container.
     ///
-    /// Adds each block as an FX instance, applies state, renames, then wraps
-    /// all the loaded FX in a container named after the module (e.g. "EQ: Pro-Q 4 3-Band").
+    /// Handles serial and parallel (`Split`) nodes:
+    /// - Serial blocks are loaded directly in order.
+    /// - `Split` nodes create a parallel REAPER container with one sub-container per lane.
+    ///
+    /// The outer module container wraps all top-level nodes.
     pub async fn load_module_to_track(
         &self,
         module_type: ModuleType,
@@ -432,22 +515,14 @@ where
             .resolve_module_load(module_type, preset_id, snapshot_idx)
             .await?;
 
-        // Load each block as a flat FX on the track.
-        let mut loaded_fx = Vec::with_capacity(resolved.fx_loads.len());
-        for fx_load in &resolved.fx_loads {
-            let result = Self::execute_fx_load(fx_load, track).await?;
-            loaded_fx.push(result);
-        }
+        // Recursively load FX and build parallel containers for Split nodes.
+        let (loaded_fx, top_node_ids) =
+            execute_chain_nodes(&resolved.chain, track).await?;
 
-        // Enclose all loaded FX in a container named after the module.
-        let node_ids: Vec<FxNodeId> = loaded_fx
-            .iter()
-            .map(|r| FxNodeId::from_guid(&r.fx_guid))
-            .collect();
-
+        // Enclose all top-level nodes in the outer module container.
         track
             .fx_chain()
-            .enclose_in_container(&node_ids, &resolved.display_name)
+            .enclose_in_container(&top_node_ids, &resolved.display_name)
             .await
             .map_err(|e| format!("Failed to create module container: {e}"))?;
 
@@ -462,25 +537,8 @@ where
         resolved: &ResolvedFxLoad,
         track: &TrackHandle,
     ) -> Result<LoadBlockResult, String> {
-        // Remember the FX index before adding — we'll use this to re-acquire
-        // the handle if binary state injection invalidates the GUID reference.
-        let fx_index = track
-            .fx_chain()
-            .count()
-            .await
-            .map_err(|e| format!("Failed to count FX: {e}"))?;
-
-        // 1. Add FX to the track.
-        let fx = track
-            .fx_chain()
-            .add(&resolved.plugin_name)
-            .await
-            .map_err(|e| format!("Failed to add FX: {e}"))?;
-
-        // 2–5. Configure the FX (state, overrides, rename, macros).
-        Self::configure_fx(resolved, track, fx, fx_index).await
+        execute_fx_load_free(resolved, track).await
     }
-
     /// Load multiple block presets onto a DAW track in parallel.
     ///
     /// Adds all FX sequentially (to get stable indices), then configures
@@ -518,76 +576,166 @@ where
             .into_iter()
             .map(|(r, fx, idx)| {
                 let track = track.clone();
-                async move { Self::configure_fx(&r, &track, fx, idx).await }
+                async move { configure_fx_free(&r, &track, fx, idx).await }
             })
             .collect();
         futures::future::try_join_all(configure_futures).await
     }
 
-    /// Configure an already-added FX: apply state, overrides, rename, macros.
-    async fn configure_fx(
-        resolved: &ResolvedFxLoad,
-        track: &TrackHandle,
-        mut fx: daw::FxHandle,
-        fx_index: u32,
-    ) -> Result<LoadBlockResult, String> {
-        // Apply state — prefer chunk, fall back to param-by-param.
-        if let Some(data) = &resolved.state_data {
-            if resolved.plugin_name.contains("NeuralAmpModeler") {
-                let model_path = std::str::from_utf8(data)
-                    .map_err(|e| format!("NAM state_data is not valid UTF-8: {e}"))?;
-                inject_nam_model_state(&fx, model_path)
-                    .await
-                    .map_err(|e| format!("Failed to load NAM model: {e}"))?;
-            } else if std::str::from_utf8(data).is_ok() {
-                fx.set_state_chunk(data.clone())
-                    .await
-                    .map_err(|e| format!("Failed to apply state chunk: {e}"))?;
-            } else {
-                inject_binary_state(&fx, data)
-                    .await
-                    .map_err(|e| format!("Failed to inject binary state: {e}"))?;
-                fx = track
-                    .fx_chain()
-                    .by_index(fx_index)
-                    .await
-                    .map_err(|e| format!("Failed to re-acquire FX after binary inject: {e}"))?
-                    .ok_or("FX disappeared after binary state injection")?;
-            }
-        } else {
-            let mapped = apply_plugin_param_mapping(&resolved.plugin_name, &resolved.block);
-            for param in mapped.parameters() {
-                fx.param_by_name(param.effective_daw_name())
-                    .set(param.value().get() as f64)
-                    .await
-                    .map_err(|e| format!("Failed to set param '{}': {e}", param.name()))?;
-            }
-        }
+}
 
-        // Apply module-level parameter overrides.
-        for ovr in &resolved.overrides {
-            fx.param_by_name(ovr.parameter_id())
-                .set(ovr.value().get() as f64)
+/// Load a single resolved FX onto a DAW track: add, configure, and rename.
+async fn execute_fx_load_free(
+    resolved: &ResolvedFxLoad,
+    track: &TrackHandle,
+) -> Result<LoadBlockResult, String> {
+    let fx_index = track
+        .fx_chain()
+        .count()
+        .await
+        .map_err(|e| format!("Failed to count FX: {e}"))?;
+    let fx = track
+        .fx_chain()
+        .add(&resolved.plugin_name)
+        .await
+        .map_err(|e| format!("Failed to add FX: {e}"))?;
+    configure_fx_free(resolved, track, fx, fx_index).await
+}
+
+/// Configure an already-added FX: apply state, overrides, rename, macros.
+async fn configure_fx_free(
+    resolved: &ResolvedFxLoad,
+    track: &TrackHandle,
+    mut fx: daw::FxHandle,
+    fx_index: u32,
+) -> Result<LoadBlockResult, String> {
+    if let Some(data) = &resolved.state_data {
+        if resolved.plugin_name.contains("NeuralAmpModeler") {
+            let model_path = std::str::from_utf8(data)
+                .map_err(|e| format!("NAM state_data is not valid UTF-8: {e}"))?;
+            inject_nam_model_state(&fx, model_path)
                 .await
-                .map_err(|e| format!("Failed to apply override '{}': {e}", ovr.parameter_id()))?;
+                .map_err(|e| format!("Failed to load NAM model: {e}"))?;
+        } else if std::str::from_utf8(data).is_ok() {
+            fx.set_state_chunk(data.clone())
+                .await
+                .map_err(|e| format!("Failed to apply state chunk: {e}"))?;
+        } else {
+            inject_binary_state(&fx, data)
+                .await
+                .map_err(|e| format!("Failed to inject binary state: {e}"))?;
+            fx = track
+                .fx_chain()
+                .by_index(fx_index)
+                .await
+                .map_err(|e| format!("Failed to re-acquire FX after binary inject: {e}"))?
+                .ok_or("FX disappeared after binary state injection")?;
+        }
+    } else {
+        let mapped = apply_plugin_param_mapping(&resolved.plugin_name, &resolved.block);
+        for param in mapped.parameters() {
+            fx.param_by_name(param.effective_daw_name())
+                .set(param.value().get() as f64)
+                .await
+                .map_err(|e| format!("Failed to set param '{}': {e}", param.name()))?;
+        }
+    }
+
+    for ovr in &resolved.overrides {
+        fx.param_by_name(ovr.parameter_id())
+            .set(ovr.value().get() as f64)
+            .await
+            .map_err(|e| format!("Failed to apply override '{}': {e}", ovr.parameter_id()))?;
+    }
+
+    fx.rename(&resolved.display_name)
+        .await
+        .map_err(|e| format!("Failed to rename FX: {e}"))?;
+
+    let macro_setup =
+        crate::macro_setup::setup_macros_for_block(track, &fx, &resolved.block).await?;
+
+    Ok(LoadBlockResult {
+        fx_guid: fx.guid().to_string(),
+        display_name: resolved.display_name.clone(),
+        macro_setup,
+    })
+}
+
+/// Recursively execute a `ResolvedSignalChain`, loading FX and building
+/// parallel containers for `Split` nodes.
+///
+/// Returns `(all_block_results, top_level_node_ids)` where `top_level_node_ids`
+/// are the FX node IDs at the current level — either direct FX GUIDs or
+/// container IDs created for split nodes. The caller uses `top_level_node_ids`
+/// to enclose everything in the outer module container.
+fn execute_chain_nodes<'a>(
+    chain: &'a ResolvedSignalChain,
+    track: &'a TrackHandle,
+) -> futures::future::BoxFuture<'a, Result<(Vec<LoadBlockResult>, Vec<FxNodeId>), String>> {
+    Box::pin(async move {
+        let mut all_results: Vec<LoadBlockResult> = Vec::new();
+        let mut top_node_ids: Vec<FxNodeId> = Vec::new();
+
+        for node in &chain.nodes {
+            match node {
+                ResolvedSignalNode::Fx(resolved) => {
+                    let result = execute_fx_load_free(resolved, track).await?;
+                    let node_id = FxNodeId::from_guid(&result.fx_guid);
+                    top_node_ids.push(node_id);
+                    all_results.push(result);
+                }
+                ResolvedSignalNode::Split(lanes) => {
+                    let mut lane_node_ids: Vec<FxNodeId> = Vec::new();
+
+                    for (lane_idx, lane) in lanes.iter().enumerate() {
+                        if lane.nodes.is_empty() {
+                            continue; // skip empty placeholder lanes
+                        }
+
+                        let (lane_results, lane_top_ids) =
+                            execute_chain_nodes(lane, track).await?;
+                        all_results.extend(lane_results);
+
+                        // Lanes with a single node are used directly; multi-node
+                        // lanes need a serial sub-container so they run in sequence.
+                        let lane_node_id = if lane_top_ids.len() == 1 {
+                            lane_top_ids.into_iter().next().unwrap()
+                        } else {
+                            let lane_name = format!("Lane {}", lane_idx + 1);
+                            track
+                                .fx_chain()
+                                .enclose_in_container(&lane_top_ids, &lane_name)
+                                .await
+                                .map_err(|e| format!("Failed to create lane container: {e}"))?
+                        };
+                        lane_node_ids.push(lane_node_id);
+                    }
+
+                    if lane_node_ids.is_empty() {
+                        continue; // all lanes were empty
+                    }
+
+                    // Wrap all lanes in a parallel container.
+                    let split_id = track
+                        .fx_chain()
+                        .enclose_in_container(&lane_node_ids, "Split")
+                        .await
+                        .map_err(|e| format!("Failed to create split container: {e}"))?;
+
+                    track
+                        .fx_chain()
+                        .set_routing_mode(&split_id, FxRoutingMode::Parallel)
+                        .await
+                        .map_err(|e| format!("Failed to set parallel routing on split: {e}"))?;
+
+                    top_node_ids.push(split_id);
+                }
+            }
         }
 
-        // Rename the FX slot.
-        fx.rename(&resolved.display_name)
-            .await
-            .map_err(|e| format!("Failed to rename FX: {e}"))?;
-
-        // Set up macro bindings if block has a macro bank.
-        let macro_setup = crate::macro_setup::setup_macros_for_block(
-            track, &fx, &resolved.block,
-        ).await?;
-
-        Ok(LoadBlockResult {
-            fx_guid: fx.guid().to_string(),
-            display_name: resolved.display_name.clone(),
-            macro_setup,
-        })
-    }
+        Ok((all_results, top_node_ids))
+    })
 }
 
 /// Load a NAM model into an already-added NeuralAmpModeler FX instance.

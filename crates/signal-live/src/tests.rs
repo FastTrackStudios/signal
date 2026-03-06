@@ -1522,7 +1522,8 @@ async fn test_resolve_module_load_3band() -> Result<()> {
         .await
         .expect("resolve_module_load should succeed");
 
-    assert_eq!(resolved.fx_loads.len(), 3);
+    let fx_loads = resolved.fx_loads();
+    assert_eq!(fx_loads.len(), 3);
     assert!(
         resolved.display_name.contains("EQ"),
         "module display_name should contain 'EQ', got '{}'",
@@ -1535,7 +1536,7 @@ async fn test_resolve_module_load_3band() -> Result<()> {
     );
 
     // Each block should resolve to the Pro-Q 4 plugin with distinct snapshots
-    for (i, fx_load) in resolved.fx_loads.iter().enumerate() {
+    for (i, fx_load) in fx_loads.iter().enumerate() {
         assert_eq!(
             fx_load.plugin_name, "CLAP: Pro-Q 4 (FabFilter)",
             "block {} should use Pro-Q 4",
@@ -1550,10 +1551,9 @@ async fn test_resolve_module_load_3band() -> Result<()> {
 
     // Verify each block's parameters match the corresponding snapshot values.
     // Parameter order: low, low_mid, mid, high_mid, high, output
-    let params: Vec<Vec<f32>> = resolved
-        .fx_loads
+    let params: Vec<Vec<f32>> = fx_loads
         .iter()
-        .map(|fl| fl.block.parameters().iter().map(|p| p.value().get()).collect())
+        .map(|fl| fl.block.parameters().iter().map(|p: &signal_proto::BlockParameter| p.value().get()).collect())
         .collect();
 
     // Block 0: Surgical Cut — proq4_block(0.50, 0.50, 0.28, 0.50, 0.50, 0.50)

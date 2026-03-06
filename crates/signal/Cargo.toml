@@ -29,3 +29,4 @@ eyre.workspace = true
 reaper-test.workspace = true
 uuid.workspace = true
 futures.workspace = true
+base64 = "0.22"

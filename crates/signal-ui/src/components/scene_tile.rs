@@ -57,7 +57,7 @@ pub fn SceneTileGrid(
     slot_count: usize,
 ) -> Element {
     rsx! {
-        div { class: "h-full w-full bg-card p-2",
+        div { class: "h-full w-full bg-zinc-950 p-2",
             div { class: "grid grid-cols-4 grid-rows-2 gap-2 h-full",
                 for i in 0..slot_count {
                     {
