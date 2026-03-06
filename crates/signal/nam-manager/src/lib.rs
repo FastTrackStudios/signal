@@ -3,6 +3,8 @@
 //! Provides content-addressable identity (SHA-256), a JSON catalog with tags and gain stage
 //! groups, NAM VST3 state chunk rewriting, and path resolution across machines.
 
+use std::collections::HashMap;
+
 pub mod catalog;
 pub mod gain_group;
 pub mod ir;
@@ -20,7 +22,7 @@ pub use nam_file::{NamFileEntry, NamFileKind, NamMetadata};
 pub use pack::{FileOverride, PackCategory, PackDefinition};
 pub use resolve::{nam_root_from_env, resolve_path, resolve_path_unchecked};
 pub use scanner::{apply_packs, merge_into_catalog, scan_directory, sha256_hex};
-pub use vst_chunk::{decode_chunk, encode_chunk, rewrite_paths, NamVstChunk};
+pub use vst_chunk::{create_default_chunk, decode_chunk, encode_chunk, rewrite_paths, NamVstChunk};
 
 /// Errors that can occur in nam-manager operations.
 #[derive(Debug, thiserror::Error)]
@@ -344,6 +346,134 @@ fn infer_vendor_from_name(name: &str) -> String {
         .next()
         .unwrap_or(name)
         .to_string()
+}
+
+/// A FULL-rig model file resolved to its pack and filesystem path.
+#[derive(Debug, Clone)]
+pub struct FullRigModel {
+    /// Original filename from the pack (e.g. "ML PEAV Block Clean FULL.nam")
+    pub filename: String,
+    /// Absolute path to the .nam file on this machine
+    pub absolute_path: String,
+    /// Tone tag inferred from pack metadata or filename (e.g. "clean", "drive", "lead")
+    pub tone: Option<String>,
+}
+
+/// Return FULL-rig `.nam` models grouped by their pack definition.
+///
+/// Loads all pack definitions from `packs_dir`, filters to the given `vendor`
+/// and `PackCategory::Amp`, then resolves FULL-rig filenames (those containing
+/// "FULL" in the filename) to absolute paths by searching `search_roots` recursively.
+///
+/// Multiple search roots are supported — the first match wins. This allows finding
+/// files both in the signal-library and in a source captures directory.
+///
+/// Packs with no resolvable FULL files are omitted.
+pub fn full_rig_models_by_pack(
+    packs_dir: &std::path::Path,
+    search_roots: &[&std::path::Path],
+    vendor: &str,
+) -> Result<Vec<(PackDefinition, Vec<FullRigModel>)>, NamError> {
+    // Build a filename → absolute path index from all search roots
+    let mut filename_index: HashMap<String, std::path::PathBuf> = HashMap::new();
+    for root in search_roots {
+        if !root.exists() {
+            continue;
+        }
+        for entry in walkdir::WalkDir::new(root)
+            .follow_links(true)
+            .into_iter()
+            .filter_map(|e| e.ok())
+        {
+            let path = entry.path();
+            if path.is_file() && path.extension().map_or(false, |e| e == "nam") {
+                if let Some(name) = path.file_name() {
+                    let name_str = name.to_string_lossy().to_string();
+                    // First match wins — don't overwrite
+                    filename_index.entry(name_str).or_insert_with(|| path.to_path_buf());
+                }
+            }
+        }
+    }
+
+    let packs = pack::load_packs(packs_dir)?;
+    let mut results = Vec::new();
+
+    for pack in packs {
+        if pack.category != PackCategory::Amp {
+            continue;
+        }
+        if !pack.vendor.eq_ignore_ascii_case(vendor) {
+            continue;
+        }
+
+        let mut models = Vec::new();
+        for (filename, file_override) in &pack.files {
+            if !filename.contains("FULL") {
+                continue;
+            }
+
+            let abs_path = match filename_index.get(filename) {
+                Some(p) => p,
+                None => continue,
+            };
+
+            // Tone: prefer per-file override, then pack default, then infer from filename
+            let tone = file_override
+                .tone
+                .clone()
+                .or_else(|| pack.default_tone.clone())
+                .or_else(|| infer_tone_from_filename(filename));
+
+            models.push(FullRigModel {
+                filename: filename.clone(),
+                absolute_path: abs_path.to_string_lossy().to_string(),
+                tone,
+            });
+        }
+
+        // Sort by tone for deterministic ordering: clean → drive → lead/overdrive
+        models.sort_by(|a, b| tone_sort_key(&a.tone).cmp(&tone_sort_key(&b.tone)));
+
+        if !models.is_empty() {
+            results.push((pack, models));
+        }
+    }
+
+    // Sort packs by label for deterministic output
+    results.sort_by(|a, b| a.0.label.cmp(&b.0.label));
+
+    Ok(results)
+}
+
+/// Infer a tone label from a FULL-rig filename.
+fn infer_tone_from_filename(filename: &str) -> Option<String> {
+    let lower = filename.to_lowercase();
+    if lower.contains("clean") {
+        Some("clean".to_string())
+    } else if lower.contains("lead") {
+        Some("lead".to_string())
+    } else if lower.contains("overdrive") {
+        Some("overdrive".to_string())
+    } else if lower.contains("drive") {
+        Some("drive".to_string())
+    } else if lower.contains("plexi") {
+        Some("crunch".to_string())
+    } else {
+        None
+    }
+}
+
+/// Sort key for tone ordering: clean first, then drive, then lead/overdrive.
+fn tone_sort_key(tone: &Option<String>) -> u8 {
+    match tone.as_deref() {
+        Some("clean") => 0,
+        Some("crunch") => 1,
+        Some("drive") => 2,
+        Some("lead") => 3,
+        Some("overdrive") => 4,
+        _ => 5,
+    }
 }
 
 #[cfg(test)]

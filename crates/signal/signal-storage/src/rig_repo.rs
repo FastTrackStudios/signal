@@ -129,6 +129,8 @@ impl RigRepoLive {
             variants,
             fx_sends: Vec::new(),
             input_track_ref: None,
+            macro_bank: None,
+            modulation: None,
             metadata,
         })
     }

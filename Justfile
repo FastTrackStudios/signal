@@ -174,6 +174,28 @@ uninstall-extension:
 
     echo "🗑️  Extension removed from: $EXTENSION_DIR"
 
+# Symlink JSFX effects to REAPER's Effects/FastTrackStudio directory
+link-effects:
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    if [ -f .env ]; then set -a; source .env; set +a; fi
+
+    REAPER_PATH="${REAPER_PATH:-/Users/codywright/Music/FastTrackStudio/Reaper/FTS-TRACKS/}"
+    EFFECTS_DIR="$REAPER_PATH/Effects/FastTrackStudio"
+
+    mkdir -p "$EFFECTS_DIR"
+
+    echo "🔗 Linking JSFX effects to $EFFECTS_DIR..."
+
+    for jsfx in effects/*.jsfx; do
+        [ -f "$jsfx" ] || continue
+        NAME="$(basename "$jsfx")"
+        ABS_PATH="$(cd "$(dirname "$jsfx")" && pwd)/$NAME"
+        ln -sf "$ABS_PATH" "$EFFECTS_DIR/$NAME"
+        echo "  ✅ $NAME"
+    done
+
 # Launch REAPER (foreground, shows logs)
 launch-reaper:
     #!/usr/bin/env bash

@@ -167,6 +167,12 @@ pub struct Rig {
     /// DAW track reference for this rig's input track (GUID or name).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub input_track_ref: Option<String>,
+    /// Macro knob bank for rig-level control of engine/layer parameters.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub macro_bank: Option<macromod::MacroBank>,
+    /// Modulation routing for rig-level macro parameters.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub modulation: Option<macromod::ModulationRouteSet>,
     pub metadata: Metadata,
 }
 
@@ -187,6 +193,8 @@ impl Rig {
             variants: vec![default_variant],
             fx_sends: Vec::new(),
             input_track_ref: None,
+            macro_bank: None,
+            modulation: None,
             metadata: Metadata::new(),
         }
     }

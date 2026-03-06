@@ -22,6 +22,7 @@ pub mod gate;
 pub mod layer;
 pub mod limiter;
 pub mod module;
+pub mod nam_amp;
 pub mod phaser;
 pub mod pitch;
 pub mod profile;
@@ -92,6 +93,7 @@ pub fn default_block_collections() -> Vec<Preset> {
     out.extend(tuner::presets());
     out.extend(archetype_jm::block_presets());
     out.extend(archetype_ndsp::block_presets());
+    out.extend(nam_amp::presets());
 
     // Neural DSP catalog from disk (graceful skip if missing)
     let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());

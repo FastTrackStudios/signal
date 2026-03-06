@@ -23,7 +23,9 @@ mod midi_learn;
 mod param_inspector;
 mod performance_view;
 mod profile_editor;
+mod profile_patch_grid;
 mod snapshot_panel;
+mod song_section_grid;
 mod song_setlist_editor;
 
 pub use block_detail::{
@@ -55,5 +57,7 @@ pub use performance_view::{
     SnapshotBank, SnapshotSlot, SongNav, SongNavState,
 };
 pub use profile_editor::{OverrideEntry, PatchEditor, PatchEntry, ProfileList, ProfileListEntry};
+pub use profile_patch_grid::ProfilePatchGrid;
 pub use snapshot_panel::{CaptureType, SnapshotEntry, SnapshotPanel};
+pub use song_section_grid::SongSectionGrid;
 pub use song_setlist_editor::{SectionEntry, SetlistEditor, SetlistEntry, SongEditor, SongEntry};

@@ -127,6 +127,8 @@ impl LayerRepoLive {
             default_variant_id: model.default_variant_id_branded(),
             variants,
             fx_sends: Vec::new(),
+            macro_bank: None,
+            modulation: None,
             metadata,
         })
     }

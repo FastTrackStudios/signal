@@ -28,7 +28,7 @@ pub(super) fn Toolbar(props: ToolbarProps) -> Element {
 
     rsx! {
         // ── Search + sort + filter toggle ──
-        div { class: "px-3 py-1.5 border-b border-zinc-800 flex items-center gap-2 flex-shrink-0 bg-zinc-950/50",
+        div { class: "px-3 py-1.5 border-b border-white/[0.06] flex items-center gap-2 flex-shrink-0 bg-zinc-950/60",
             // Search input
             div { class: "flex items-center gap-1.5 flex-1 min-w-0",
                 span { class: "text-zinc-500 text-xs flex-shrink-0", ">" }
@@ -54,7 +54,7 @@ pub(super) fn Toolbar(props: ToolbarProps) -> Element {
             }
             // Sort dropdown
             select {
-                class: "px-1.5 py-0.5 text-[10px] rounded bg-zinc-800 text-zinc-300 border border-zinc-700 outline-none cursor-pointer flex-shrink-0",
+                class: "px-1.5 py-0.5 text-[10px] rounded bg-white/[0.06] text-zinc-300 border border-white/[0.08] outline-none cursor-pointer flex-shrink-0",
                 value: "{props.current_sort.value()}",
                 onchange: move |evt: Event<FormData>| {
                     props.on_sort_change.call(SortMode::from_value(&evt.value()));
@@ -75,9 +75,9 @@ pub(super) fn Toolbar(props: ToolbarProps) -> Element {
             // Tag filter toggle
             button {
                 class: if props.tag_panel_open {
-                    "px-2 py-0.5 text-[10px] rounded bg-zinc-600 text-zinc-100 flex-shrink-0"
+                    "px-2 py-0.5 text-[10px] rounded bg-white/[0.15] text-zinc-100 flex-shrink-0"
                 } else {
-                    "px-2 py-0.5 text-[10px] rounded bg-zinc-800 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-700 flex-shrink-0"
+                    "px-2 py-0.5 text-[10px] rounded bg-white/[0.06] text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.10] flex-shrink-0"
                 },
                 onclick: move |_| props.on_toggle_tag_panel.call(()),
                 if props.active_filters.is_empty() {
@@ -90,7 +90,7 @@ pub(super) fn Toolbar(props: ToolbarProps) -> Element {
 
         // ── Active tag chips ──
         if !props.active_filters.is_empty() {
-            div { class: "px-3 py-1 border-b border-zinc-800 flex items-center gap-1 flex-shrink-0 flex-wrap bg-zinc-950/40",
+            div { class: "px-3 py-1 border-b border-white/[0.06] flex items-center gap-1 flex-shrink-0 flex-wrap bg-zinc-950/40",
                 for filter_key in props.active_filters.iter() {
                     {
                         let key = filter_key.clone();
@@ -99,7 +99,7 @@ pub(super) fn Toolbar(props: ToolbarProps) -> Element {
                         rsx! {
                             button {
                                 key: "{key}",
-                                class: "inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] rounded bg-zinc-700 text-zinc-200 hover:bg-zinc-600",
+                                class: "inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] rounded bg-white/[0.08] text-zinc-200 hover:bg-white/[0.12]",
                                 onclick: move |_| {
                                     let mut filters = current_filters.clone();
                                     filters.retain(|f| f != &key);
@@ -116,7 +116,7 @@ pub(super) fn Toolbar(props: ToolbarProps) -> Element {
 
         // ── Tag filter panel (collapsible) ──
         if props.tag_panel_open {
-            div { class: "px-3 py-2 border-b border-zinc-800 flex-shrink-0 bg-zinc-900/60 max-h-40 overflow-y-auto",
+            div { class: "px-3 py-2 border-b border-white/[0.06] flex-shrink-0 bg-zinc-900/40 max-h-40 overflow-y-auto",
                 if props.available_tags.is_empty() {
                     div { class: "text-xs text-zinc-600 italic", "No tags available" }
                 }
@@ -137,9 +137,9 @@ pub(super) fn Toolbar(props: ToolbarProps) -> Element {
                                                 button {
                                                     key: "{k}",
                                                     class: if is_active {
-                                                        "px-1.5 py-0.5 text-[10px] rounded bg-zinc-500 text-zinc-100"
+                                                        "px-1.5 py-0.5 text-[10px] rounded bg-white/[0.15] text-zinc-100"
                                                     } else {
-                                                        "px-1.5 py-0.5 text-[10px] rounded bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-200"
+                                                        "px-1.5 py-0.5 text-[10px] rounded bg-white/[0.06] text-zinc-400 hover:bg-white/[0.10] hover:text-zinc-200"
                                                     },
                                                     onclick: move |_| {
                                                         let mut filters = current_filters.clone();
