@@ -20,7 +20,12 @@ tokio.workspace = true
 
 [dev-dependencies]
 signal-live = { path = "../signal-live" }
+signal-import = { path = "../signal-import" }
+signal-proto = { path = "../signal-proto" }
+nam-manager.workspace = true
 daw-control.workspace = true
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 eyre.workspace = true
 reaper-test.workspace = true
+uuid.workspace = true
+futures.workspace = true

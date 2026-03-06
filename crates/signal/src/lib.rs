@@ -18,6 +18,7 @@ pub use signal_live::engine::{
 pub use signal_live::daw_block_ops::{
     LoadBlockResult, LoadModuleResult, ResolvedFxLoad, ResolvedModuleLoad,
 };
+pub use signal_live::macro_setup::{self, MacroSetupResult, ResolvedMacroBinding};
 pub use signal_live::SignalLive;
 pub use signal_proto::*;
 pub use signal_storage::{
