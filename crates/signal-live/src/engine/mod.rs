@@ -26,6 +26,7 @@ pub mod morph;
 pub mod param_bridge;
 pub mod patch_applier;
 pub mod rig_engine;
+pub mod scene_applier;
 pub mod slot;
 pub mod snapshot_ops;
 pub mod target;
@@ -41,6 +42,7 @@ pub use error::EngineError;
 pub use fx_binding::{DiscoveredFx, DiscoveredModule, DiscoveredRig, FxRigBinding};
 pub use gapless::{GaplessSwapEngine, SwapConfig, SwapResult};
 pub use mock::MockRigEngine;
+pub use scene_applier::{apply_scene_switch, SceneSwitchResult};
 pub use morph::{
     DawParamValue, DawParameterSnapshot, MorphDiffEntry, MorphEngine, MorphParamChange,
 };
