@@ -252,7 +252,11 @@
               cargo-nextest
               bacon
               nodejs_22  # For Playwright tests
-            ];
+            ]
+            ++ lib.optionals pkgs.stdenv.isLinux (with pkgs; [
+              xvfb-run  # Virtual framebuffer for headless REAPER tests
+              reaper    # REAPER DAW for integration tests
+            ]);
 
             shellHook = ''
               ${if pkgs.stdenv.isLinux then ''
