@@ -173,6 +173,20 @@ fn render_source_config(source: &ModulationSource) -> Element {
                 "Macro: {knob_id}"
             }
         },
+        ModulationSource::Follower(cfg) => rsx! {
+            div { class: "flex items-center gap-3 text-[10px] text-zinc-500",
+                span { "Atk: {cfg.attack_ms:.0}ms" }
+                span { "Rel: {cfg.release_ms:.0}ms" }
+                span { "Depth: {(cfg.depth * 100.0) as i32}%" }
+            }
+        },
+        ModulationSource::Random(cfg) => rsx! {
+            div { class: "flex items-center gap-3 text-[10px] text-zinc-500",
+                span { "{cfg.rate_hz:.1} Hz" }
+                span { "Smooth: {(cfg.smoothing * 100.0) as i32}%" }
+                span { "Depth: {(cfg.depth * 100.0) as i32}%" }
+            }
+        },
     }
 }
 
@@ -184,6 +198,8 @@ fn source_icon(source: &ModulationSource) -> &'static str {
         ModulationSource::MidiCc { .. } => "\u{266A}",  // ♪ music note
         ModulationSource::Expression => "\u{21C5}",     // ⇅ up down arrows
         ModulationSource::Macro { .. } => "\u{25C9}",   // ◉ macro knob
+        ModulationSource::Follower(_) => "\u{2261}",    // ≡ audio level
+        ModulationSource::Random(_) => "\u{2684}",      // ⚄ die
     }
 }
 
@@ -195,5 +211,7 @@ fn source_color(source: &ModulationSource) -> &'static str {
         ModulationSource::MidiCc { .. } => "#3B82F6",    // blue
         ModulationSource::Expression => "#22C55E",       // green
         ModulationSource::Macro { .. } => "#EAB308",     // yellow
+        ModulationSource::Follower(_) => "#EC4899",      // pink
+        ModulationSource::Random(_) => "#14B8A6",        // teal
     }
 }

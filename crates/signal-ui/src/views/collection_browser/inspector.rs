@@ -47,8 +47,8 @@ pub(super) fn BlockInspectorPanel(props: BlockInspectorPanelProps) -> Element {
                 let mut save_as_new_name = use_signal(|| String::new());
 
                 rsx! {
-                    div { class: "mt-3 rounded border border-zinc-800 bg-zinc-900/60 overflow-hidden",
-                        div { class: "px-3 py-1.5 border-b border-zinc-800 flex items-center gap-2",
+                    div { class: "mt-3 rounded border border-white/[0.06] bg-zinc-900/40 overflow-hidden",
+                        div { class: "px-3 py-1.5 border-b border-white/[0.06] flex items-center gap-2",
                             StatusDot { color: StatusDotColor::Custom(color.bg.to_string()) }
                             span { class: "text-xs font-semibold text-zinc-200", "{bt_display}" }
                             span { class: "text-[10px] text-zinc-500", "{preset}" }
@@ -63,7 +63,7 @@ pub(super) fn BlockInspectorPanel(props: BlockInspectorPanelProps) -> Element {
                         }
                         // Interactive parameter sliders
                         if !slot.parameters.is_empty() {
-                            div { class: "px-3 py-2 border-t border-zinc-800 space-y-1.5",
+                            div { class: "px-3 py-2 border-t border-white/[0.06] space-y-1.5",
                                 SectionHeader { size: SectionHeaderSize::Small, class: "mb-1", label: "Parameters ({slot.parameters.len()})" }
                                 for (name, value) in slot.parameters.iter() {
                                     {
@@ -103,10 +103,10 @@ pub(super) fn BlockInspectorPanel(props: BlockInspectorPanelProps) -> Element {
                                 let on_save = props.on_save.clone();
                                 let save_slot = slot_clone.clone();
                                 rsx! {
-                                    div { class: "px-3 py-2 border-t border-zinc-800",
+                                    div { class: "px-3 py-2 border-t border-white/[0.06]",
                                         button {
                                             class: "w-full px-3 py-1.5 text-xs rounded \
-                                                    bg-zinc-700 hover:bg-zinc-600 text-zinc-200 \
+                                                    bg-white/[0.08] hover:bg-white/[0.12] text-zinc-200 \
                                                     transition-colors duration-150",
                                             onclick: move |_| {
                                                 if let Some(ref cb) = on_save {
@@ -125,14 +125,14 @@ pub(super) fn BlockInspectorPanel(props: BlockInspectorPanelProps) -> Element {
                             let new_slot = slot_clone.clone();
                             let default_name = format!("{:?} Preset", slot.block_type);
                             rsx! {
-                                div { class: "px-3 py-2 border-t border-zinc-800",
+                                div { class: "px-3 py-2 border-t border-white/[0.06]",
                                     if show_save_as_new() {
                                         div { class: "space-y-2",
                                             input {
                                                 r#type: "text",
                                                 class: "w-full px-2 py-1 text-xs rounded \
-                                                        bg-zinc-800 border border-zinc-600 text-zinc-200 \
-                                                        focus:border-amber-500 focus:outline-none",
+                                                        bg-white/[0.06] border border-white/[0.08] text-zinc-200 \
+                                                        focus:border-blue-500/50 focus:outline-none",
                                                 placeholder: "Preset name...",
                                                 value: "{save_as_new_name}",
                                                 oninput: move |evt: Event<FormData>| {
@@ -162,7 +162,7 @@ pub(super) fn BlockInspectorPanel(props: BlockInspectorPanelProps) -> Element {
                                                 }
                                                 button {
                                                     class: "flex-1 px-2 py-1 text-xs rounded \
-                                                            bg-zinc-700 hover:bg-zinc-600 text-zinc-300 \
+                                                            bg-white/[0.08] hover:bg-white/[0.12] text-zinc-300 \
                                                             transition-colors duration-150",
                                                     onclick: move |_| {
                                                         show_save_as_new.set(false);
@@ -175,8 +175,8 @@ pub(super) fn BlockInspectorPanel(props: BlockInspectorPanelProps) -> Element {
                                     } else {
                                         button {
                                             class: "w-full px-3 py-1.5 text-xs rounded \
-                                                    bg-zinc-800 hover:bg-zinc-700 text-zinc-400 \
-                                                    hover:text-zinc-200 border border-zinc-700 border-dashed \
+                                                    bg-white/[0.04] hover:bg-white/[0.08] text-zinc-400 \
+                                                    hover:text-zinc-200 border border-white/[0.08] border-dashed \
                                                     transition-colors duration-150",
                                             onclick: move |_| {
                                                 save_as_new_name.set(default_name.clone());
@@ -212,8 +212,8 @@ pub(super) fn BlockInspectorPanel(props: BlockInspectorPanelProps) -> Element {
                 .unwrap_or_else(|| signal::BlockType::Custom.color());
 
             rsx! {
-                div { class: "mt-3 rounded border border-zinc-800 bg-zinc-900/60 overflow-hidden",
-                    div { class: "px-3 py-1.5 border-b border-zinc-800 flex items-center gap-2",
+                div { class: "mt-3 rounded border border-white/[0.06] bg-zinc-900/40 overflow-hidden",
+                    div { class: "px-3 py-1.5 border-b border-white/[0.06] flex items-center gap-2",
                         StatusDot { color: StatusDotColor::Custom(color.bg.to_string()) }
                         span { class: "text-xs font-semibold text-zinc-200", "{display_name}" }
                         span { class: "text-[10px] text-zinc-500", "{mt_display}" }

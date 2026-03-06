@@ -101,9 +101,9 @@ pub enum SignalCommand {
         preset_id: String,
         /// Track (index, GUID, or name)
         track: String,
-        /// Snapshot index (default: 0 = default snapshot)
-        #[arg(long, default_value = "0")]
-        snapshot: usize,
+        /// Snapshot ID (omit for default snapshot)
+        #[arg(long)]
+        snapshot: Option<String>,
     },
 }
 
@@ -365,7 +365,7 @@ pub async fn run(
         snapshot,
     } = cmd
     {
-        return cmd_signal_load(db, socket, preset_type, preset_id, track, snapshot, as_json)
+        return cmd_signal_load(db, socket, preset_type, preset_id, track, snapshot.as_deref(), as_json)
             .await;
     }
 
@@ -636,6 +636,9 @@ async fn cmd_presets_delete(
 // ============================================================================
 
 async fn cmd_presets_import(signal: &SignalController, cmd: &ImportCommand) -> Result<()> {
+    // Compute library root for file-based preset writing
+    let library_root = expand_tilde("~/Music/FastTrackStudio/Library");
+
     match cmd {
         ImportCommand::Fabfilter {
             plugin,
@@ -667,7 +670,9 @@ async fn cmd_presets_import(signal: &SignalController, cmd: &ImportCommand) -> R
                 }
                 for p in &plugins {
                     let collection = importer.scan(&p.plugin_name)?;
-                    let report = signal_import::import_presets(signal, collection).await?;
+                    let report = signal_import::import_presets_with_library(
+                        signal, collection, Some(&library_root),
+                    ).await?;
                     println!(
                         "  Imported {}: {} snapshots",
                         report.preset_name, report.snapshots_imported
@@ -680,7 +685,9 @@ async fn cmd_presets_import(signal: &SignalController, cmd: &ImportCommand) -> R
                     println!("[dry run] No changes made.");
                     return Ok(());
                 }
-                let report = signal_import::import_presets(signal, collection).await?;
+                let report = signal_import::import_presets_with_library(
+                    signal, collection, Some(&library_root),
+                ).await?;
                 println!(
                     "Imported {}: {} snapshots",
                     report.preset_name, report.snapshots_imported
@@ -707,7 +714,9 @@ async fn cmd_presets_import(signal: &SignalController, cmd: &ImportCommand) -> R
                 println!("[dry run] No changes made.");
                 return Ok(());
             }
-            let report = signal_import::import_presets(signal, collection).await?;
+            let report = signal_import::import_presets_with_library(
+                signal, collection, Some(&library_root),
+            ).await?;
             println!(
                 "Imported {}: {} snapshots",
                 report.preset_name, report.snapshots_imported
@@ -1633,12 +1642,14 @@ async fn cmd_signal_load(
     preset_type: &str,
     preset_id: &str,
     track_arg: &str,
-    snapshot_idx: usize,
+    snapshot_id: Option<&str>,
     as_json: bool,
 ) -> Result<()> {
     let signal = connect_signal(db).await?;
     let daw = daw_cli::connect(socket).await?;
     let track_handle = daw_cli::resolve_track_handle(&daw, track_arg).await?;
+
+    let snap_id = snapshot_id.map(|s| signal_proto::SnapshotId::from(s.to_string()));
 
     // Try block type first.
     if let Some(bt) = signal_proto::BlockType::from_str(preset_type) {
@@ -1649,7 +1660,7 @@ async fn cmd_signal_load(
         if block_presets.iter().any(|p| p.id() == &pid) {
             let result = signal
                 .service()
-                .load_block_to_track(bt, &pid, snapshot_idx, &track_handle)
+                .load_block_to_track(bt, &pid, snap_id.as_ref(), &track_handle)
                 .await
                 .map_err(|e| eyre::eyre!("{e}"))?;
 
@@ -1684,7 +1695,7 @@ async fn cmd_signal_load(
         if module_presets.iter().any(|p| p.id() == &pid) {
             let result = signal
                 .service()
-                .load_module_to_track(mt, &pid, snapshot_idx, &track_handle)
+                .load_module_to_track(mt, &pid, 0, &track_handle)
                 .await
                 .map_err(|e| eyre::eyre!("{e}"))?;
 

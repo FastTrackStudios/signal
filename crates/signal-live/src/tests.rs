@@ -1439,7 +1439,7 @@ async fn test_resolve_block_load_eq_proq4() -> Result<()> {
     let preset_id = PresetId::from(seed_id("eq-proq4"));
 
     let resolved = svc
-        .resolve_block_load(BlockType::Eq, &preset_id, 0)
+        .resolve_block_load(BlockType::Eq, &preset_id, None)
         .await
         .expect("resolve_block_load should succeed");
 
@@ -1465,21 +1465,22 @@ async fn test_resolve_block_load_snapshot_idx() -> Result<()> {
     let preset_id = PresetId::from(seed_id("eq-proq4"));
 
     // Non-default snapshot should have distinct gain values.
-    // Find "Surgical Cut" by name to avoid index ordering issues after DB roundtrip.
+    // Find "Surgical Cut" by ID to avoid index ordering issues after DB roundtrip.
     let presets = svc
         .block_repo
         .list_block_collections(BlockType::Eq)
         .await
         .unwrap();
     let proq4 = presets.iter().find(|p| p.name() == "Pro-Q 4").unwrap();
-    let surgical_idx = proq4
+    let surgical_id = proq4
         .snapshots()
         .iter()
-        .position(|s| s.name() == "Surgical Cut")
+        .find(|s| s.name() == "Surgical Cut")
+        .map(|s| s.id().clone())
         .expect("Surgical Cut snapshot should exist");
 
     let resolved = svc
-        .resolve_block_load(BlockType::Eq, &preset_id, surgical_idx)
+        .resolve_block_load(BlockType::Eq, &preset_id, Some(&surgical_id))
         .await
         .expect("resolve_block_load for Surgical Cut should succeed");
 
@@ -1500,7 +1501,7 @@ async fn test_resolve_block_load_missing_preset() -> Result<()> {
     let bad_id = PresetId::from(seed_id("nonexistent-preset"));
 
     let result = svc
-        .resolve_block_load(BlockType::Eq, &bad_id, 0)
+        .resolve_block_load(BlockType::Eq, &bad_id, None)
         .await;
 
     assert!(result.is_err());

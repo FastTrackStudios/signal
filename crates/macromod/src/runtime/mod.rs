@@ -17,5 +17,5 @@ pub mod waveform;
 
 pub use envelope_state::{EnvelopeStage, EnvelopeState};
 pub use lfo_state::LfoState;
-pub use processor::{ModulationOutput, ModulationProcessor, TickContext};
+pub use processor::{FollowerState, ModulationOutput, ModulationProcessor, RandomState, TickContext};
 pub use waveform::evaluate_waveform;

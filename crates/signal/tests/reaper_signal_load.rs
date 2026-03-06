@@ -50,7 +50,7 @@ async fn signal_load_block_to_track(ctx: &ReaperTestContext) -> eyre::Result<()>
         .load_block_to_track(
             BlockType::Eq,
             &PresetId::from(seed_id("eq-proq4")),
-            0, // default snapshot
+            None, // default snapshot
             &track,
         )
         .await
@@ -228,7 +228,7 @@ async fn signal_load_layer_to_track(ctx: &ReaperTestContext) -> eyre::Result<()>
         .load_block_to_track(
             BlockType::Eq,
             &PresetId::from(seed_id("eq-proq4")),
-            0,
+            None,
             &track,
         )
         .await

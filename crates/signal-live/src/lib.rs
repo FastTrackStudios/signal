@@ -27,6 +27,7 @@
 pub mod daw_block_ops;
 pub mod daw_rig_builder;
 pub mod engine;
+pub mod macro_setup;
 
 mod block_service;
 mod browser_service;

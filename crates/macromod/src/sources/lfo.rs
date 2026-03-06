@@ -138,6 +138,10 @@ pub struct LfoConfig {
     /// Pulse width for square wave (0.0–1.0, 0.5 = symmetric).
     #[serde(default = "default_pulse_width")]
     pub pulse_width: f32,
+    /// Step values for the `StepSequence` waveform (each 0.0–1.0).
+    /// Ignored for other waveforms.
+    #[serde(default)]
+    pub steps: Option<Vec<f32>>,
 }
 
 fn default_pulse_width() -> f32 {
@@ -155,6 +159,7 @@ impl Default for LfoConfig {
             sync_division: None,
             retrigger: RetriggerMode::Free,
             pulse_width: 0.5,
+            steps: None,
         }
     }
 }

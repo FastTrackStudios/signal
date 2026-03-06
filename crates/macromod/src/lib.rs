@@ -30,13 +30,13 @@ pub use parameter::{BlockParameter, ParameterValue};
 pub use response::ResponseCurve;
 pub use routing::{ModulationRoute, ModulationRouteSet};
 pub use sources::{
-    EnvelopeConfig, EnvelopeMode, LfoConfig, LfoWaveform, ModulationSource, RetriggerMode,
-    TempoDiv,
+    EnvelopeConfig, EnvelopeMode, FollowerConfig, FollowerInput, LfoConfig, LfoWaveform,
+    ModulationSource, RandomConfig, RetriggerMode, TempoDiv,
 };
 pub use target::{ModulationTarget, ParamTarget};
 
 // Runtime engine re-exports
 pub use runtime::{
-    EnvelopeStage, EnvelopeState, LfoState, ModulationOutput, ModulationProcessor, TickContext,
-    evaluate_waveform,
+    EnvelopeStage, EnvelopeState, FollowerState, LfoState, ModulationOutput, ModulationProcessor,
+    RandomState, TickContext, evaluate_waveform,
 };

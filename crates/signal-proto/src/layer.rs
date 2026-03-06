@@ -222,6 +222,12 @@ pub struct Layer {
     /// FX sends owned by this layer (optional — most layers don't have these).
     #[serde(default)]
     pub fx_sends: Vec<FxSend>,
+    /// Macro knob bank aggregating block-level macros across modules in this layer.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub macro_bank: Option<macromod::MacroBank>,
+    /// Modulation routing for layer-level macro parameters.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub modulation: Option<macromod::ModulationRouteSet>,
     pub metadata: Metadata,
 }
 
@@ -240,6 +246,8 @@ impl Layer {
             default_variant_id,
             variants: vec![default_variant],
             fx_sends: Vec::new(),
+            macro_bank: None,
+            modulation: None,
             metadata: Metadata::new(),
         }
     }

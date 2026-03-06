@@ -32,6 +32,9 @@ pub struct MacroKnob {
     /// Sub-macros — e.g. a "Drive" parent with "Drive 1", "Drive 2", "Drive 3" children.
     #[serde(default)]
     pub children: Vec<MacroKnob>,
+    /// Whether child sub-macros are collapsed in the UI.
+    #[serde(default)]
+    pub collapsed: bool,
 }
 
 impl MacroKnob {
@@ -45,6 +48,7 @@ impl MacroKnob {
             bypassed: false,
             bipolar: false,
             children: Vec::new(),
+            collapsed: false,
         }
     }
 

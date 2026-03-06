@@ -189,7 +189,7 @@ fn scan_directory(
             raw_bytes,
             parameters,
             source_plugin: Some(entry.reaper_name.to_string()),
-            store_raw_as_state: false, // .ffp bytes are NOT REAPER state chunks
+            store_raw_as_state: entry.format == FfpFormat::Binary, // binary .ffp = valid CLAP state
         });
     }
 

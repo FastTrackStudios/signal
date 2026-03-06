@@ -15,9 +15,10 @@ use daw::{FxNodeId, TrackHandle};
 use signal_proto::plugin_block::FxRole;
 use signal_proto::traits::HasMetadata;
 use signal_proto::{
-    Block, BlockParameterOverride, BlockType, ModulePresetId, ModuleType, PresetId,
+    Block, BlockParameterOverride, BlockType, ModulePresetId, ModuleType, PresetId, SnapshotId,
 };
 
+use crate::macro_setup::MacroSetupResult;
 use crate::SignalLive;
 use signal_storage::{
     BlockRepo, EngineRepo, LayerRepo, ModuleRepo, ProfileRepo, RackRepo, RigRepo,
@@ -40,6 +41,8 @@ pub struct LoadBlockResult {
     pub fx_guid: String,
     /// The display name applied to the FX slot (e.g. "EQ Block: My Preset").
     pub display_name: String,
+    /// Macro setup result, present when the block has a `MacroBank`.
+    pub macro_setup: Option<MacroSetupResult>,
 }
 
 // ─── Resolved types (DAW-independent) ───────────────────────────
@@ -214,7 +217,7 @@ where
         &self,
         block_type: BlockType,
         preset_id: &PresetId,
-        snapshot_idx: usize,
+        snapshot_id: Option<&SnapshotId>,
     ) -> Result<ResolvedFxLoad, String> {
         // 1. Load preset from block repo.
         let presets = self
@@ -232,25 +235,27 @@ where
         let plugin_name = raw_plugin_name(&preset)
             .ok_or("Preset has no source: tag — cannot determine plugin name")?;
 
-        // 3. Get the requested snapshot.
-        let snapshots = preset.snapshots();
-        let snapshot = if snapshot_idx == 0 {
-            preset.default_snapshot()
-        } else {
-            snapshots.get(snapshot_idx).cloned().ok_or_else(|| {
-                format!(
-                    "Snapshot index {} out of range (preset has {} snapshots)",
-                    snapshot_idx,
-                    snapshots.len()
-                )
-            })?
+        // 3. Get the requested snapshot by ID, or default if None.
+        let (snapshot, is_default) = match snapshot_id {
+            None => (preset.default_snapshot(), true),
+            Some(id) => {
+                let default = preset.default_snapshot();
+                if default.id() == id {
+                    (default, true)
+                } else {
+                    let snap = preset.snapshot(id).ok_or_else(|| {
+                        format!("Snapshot not found: {id}")
+                    })?;
+                    (snap, false)
+                }
+            }
         };
 
         let block = snapshot.block();
         let state_data = snapshot.state_data().map(|d| d.to_vec());
 
         // 4. Build display name — include snapshot name for non-default.
-        let name = if snapshot_idx == 0 {
+        let name = if is_default {
             preset.name().to_string()
         } else {
             format!("{} - {}", preset.name(), snapshot.name())
@@ -403,11 +408,11 @@ where
         &self,
         block_type: BlockType,
         preset_id: &PresetId,
-        snapshot_idx: usize,
+        snapshot_id: Option<&SnapshotId>,
         track: &TrackHandle,
     ) -> Result<LoadBlockResult, String> {
         let resolved = self
-            .resolve_block_load(block_type, preset_id, snapshot_idx)
+            .resolve_block_load(block_type, preset_id, snapshot_id)
             .await?;
         Self::execute_fx_load(&resolved, track).await
     }
@@ -457,6 +462,14 @@ where
         resolved: &ResolvedFxLoad,
         track: &TrackHandle,
     ) -> Result<LoadBlockResult, String> {
+        // Remember the FX index before adding — we'll use this to re-acquire
+        // the handle if binary state injection invalidates the GUID reference.
+        let fx_index = track
+            .fx_chain()
+            .count()
+            .await
+            .map_err(|e| format!("Failed to count FX: {e}"))?;
+
         // 1. Add FX to the track.
         let fx = track
             .fx_chain()
@@ -464,13 +477,83 @@ where
             .await
             .map_err(|e| format!("Failed to add FX: {e}"))?;
 
-        // 2. Apply state — prefer chunk, fall back to param-by-param.
-        //    For param-by-param, apply plugin mapping to translate abstract
-        //    parameter names to real DAW plugin names (e.g. "low" → "Band 1 Gain").
-        if let Some(data) = &resolved.state_data {
-            fx.set_state_chunk(data.clone())
+        // 2–5. Configure the FX (state, overrides, rename, macros).
+        Self::configure_fx(resolved, track, fx, fx_index).await
+    }
+
+    /// Load multiple block presets onto a DAW track in parallel.
+    ///
+    /// Adds all FX sequentially (to get stable indices), then configures
+    /// them (state injection, rename, macros) concurrently.
+    pub async fn load_blocks_to_track(
+        &self,
+        loads: Vec<(BlockType, &PresetId, Option<&SnapshotId>)>,
+        track: &TrackHandle,
+    ) -> Result<Vec<LoadBlockResult>, String> {
+        // Phase 1: Resolve all loads in parallel.
+        let resolve_futures: Vec<_> = loads
+            .iter()
+            .map(|(bt, pid, sid)| self.resolve_block_load(*bt, pid, *sid))
+            .collect();
+        let resolved: Vec<ResolvedFxLoad> = futures::future::try_join_all(resolve_futures).await?;
+
+        // Phase 2: Add all FX sequentially (index tracking requires ordering).
+        let mut fx_pairs: Vec<(ResolvedFxLoad, daw::FxHandle, u32)> = Vec::with_capacity(resolved.len());
+        for r in resolved {
+            let fx_index = track
+                .fx_chain()
+                .count()
                 .await
-                .map_err(|e| format!("Failed to apply state chunk: {e}"))?;
+                .map_err(|e| format!("Failed to count FX: {e}"))?;
+            let fx = track
+                .fx_chain()
+                .add(&r.plugin_name)
+                .await
+                .map_err(|e| format!("Failed to add FX '{}': {e}", r.plugin_name))?;
+            fx_pairs.push((r, fx, fx_index));
+        }
+
+        // Phase 3: Configure all FX in parallel (state, rename, macros).
+        let configure_futures: Vec<_> = fx_pairs
+            .into_iter()
+            .map(|(r, fx, idx)| {
+                let track = track.clone();
+                async move { Self::configure_fx(&r, &track, fx, idx).await }
+            })
+            .collect();
+        futures::future::try_join_all(configure_futures).await
+    }
+
+    /// Configure an already-added FX: apply state, overrides, rename, macros.
+    async fn configure_fx(
+        resolved: &ResolvedFxLoad,
+        track: &TrackHandle,
+        mut fx: daw::FxHandle,
+        fx_index: u32,
+    ) -> Result<LoadBlockResult, String> {
+        // Apply state — prefer chunk, fall back to param-by-param.
+        if let Some(data) = &resolved.state_data {
+            if resolved.plugin_name.contains("NeuralAmpModeler") {
+                let model_path = std::str::from_utf8(data)
+                    .map_err(|e| format!("NAM state_data is not valid UTF-8: {e}"))?;
+                inject_nam_model_state(&fx, model_path)
+                    .await
+                    .map_err(|e| format!("Failed to load NAM model: {e}"))?;
+            } else if std::str::from_utf8(data).is_ok() {
+                fx.set_state_chunk(data.clone())
+                    .await
+                    .map_err(|e| format!("Failed to apply state chunk: {e}"))?;
+            } else {
+                inject_binary_state(&fx, data)
+                    .await
+                    .map_err(|e| format!("Failed to inject binary state: {e}"))?;
+                fx = track
+                    .fx_chain()
+                    .by_index(fx_index)
+                    .await
+                    .map_err(|e| format!("Failed to re-acquire FX after binary inject: {e}"))?
+                    .ok_or("FX disappeared after binary state injection")?;
+            }
         } else {
             let mapped = apply_plugin_param_mapping(&resolved.plugin_name, &resolved.block);
             for param in mapped.parameters() {
@@ -481,27 +564,265 @@ where
             }
         }
 
-        // 3. Apply module-level parameter overrides on top.
+        // Apply module-level parameter overrides.
         for ovr in &resolved.overrides {
             fx.param_by_name(ovr.parameter_id())
                 .set(ovr.value().get() as f64)
                 .await
-                .map_err(|e| {
-                    format!(
-                        "Failed to apply override '{}': {e}",
-                        ovr.parameter_id(),
-                    )
-                })?;
+                .map_err(|e| format!("Failed to apply override '{}': {e}", ovr.parameter_id()))?;
         }
 
-        // 4. Rename the FX slot.
+        // Rename the FX slot.
         fx.rename(&resolved.display_name)
             .await
             .map_err(|e| format!("Failed to rename FX: {e}"))?;
 
+        // Set up macro bindings if block has a macro bank.
+        let macro_setup = crate::macro_setup::setup_macros_for_block(
+            track, &fx, &resolved.block,
+        ).await?;
+
         Ok(LoadBlockResult {
             fx_guid: fx.guid().to_string(),
             display_name: resolved.display_name.clone(),
+            macro_setup,
         })
     }
+}
+
+/// Load a NAM model into an already-added NeuralAmpModeler FX instance.
+///
+/// Follows the proven approach from `reaper_nam_load.rs`:
+/// 1. Get the FX's default REAPER chunk (has valid VST3 header)
+/// 2. Extract the base64 plugin state
+/// 3. Decode it as a `NamVstChunk`
+/// 4. Rewrite the model path
+/// 5. Re-encode and set back via the rebuilt REAPER chunk
+async fn inject_nam_model_state(fx: &daw::FxHandle, model_path: &str) -> Result<(), String> {
+    use nam_manager::{decode_chunk, encode_chunk, rewrite_paths};
+
+    // 1. Get the default REAPER chunk from the just-added FX.
+    let reaper_chunk = fx
+        .state_chunk_encoded()
+        .await
+        .map_err(|e| format!("Failed to get default chunk: {e}"))?
+        .ok_or("FX has no default chunk")?;
+
+    // 2. Extract the base64 plugin state from the REAPER chunk.
+    let segments = extract_state_base64(&reaper_chunk)
+        .ok_or("Failed to extract base64 state from REAPER chunk")?;
+    let unified_b64 = first_base64_segment(&segments);
+
+    // 3. Decode the NAM binary chunk (gets the real REAPER VST3 header).
+    let mut nam_chunk = decode_chunk(unified_b64.trim())
+        .map_err(|e| format!("Failed to decode NAM chunk: {e}"))?;
+
+    // 4. Rewrite the model path.
+    rewrite_paths(&mut nam_chunk, Some(model_path), None);
+
+    // 5. Re-encode and rebuild the REAPER chunk.
+    let new_state_b64 = encode_chunk(&nam_chunk);
+    let rebuilt = rebuild_chunk_with_state(&reaper_chunk, &new_state_b64);
+    fx.set_state_chunk_encoded(rebuilt)
+        .await
+        .map_err(|e| format!("Failed to set rebuilt chunk: {e}"))
+}
+
+/// Inject raw binary plugin state into an FX's default REAPER chunk.
+///
+/// Replaces the base64 state segment in the FX's existing REAPER chunk
+/// with the provided binary data (base64-encoded).
+async fn inject_binary_state(fx: &daw::FxHandle, binary_state: &[u8]) -> Result<(), String> {
+    use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
+
+    let existing = fx
+        .state_chunk_encoded()
+        .await
+        .map_err(|e| format!("Failed to get default chunk: {e}"))?
+        .ok_or("FX has no default chunk to inject state into")?;
+
+    let new_b64 = BASE64.encode(binary_state);
+    let rebuilt = rebuild_chunk_with_state(&existing, &new_b64);
+    fx.set_state_chunk_encoded(rebuilt)
+        .await
+        .map_err(|e| format!("Failed to set rebuilt chunk: {e}"))
+}
+
+// ─── REAPER chunk helpers ──────────────────────────────────────
+
+/// Extract base64 data lines from a REAPER VST/VST3/CLAP chunk block.
+///
+/// For VST/VST3, extracts lines between header and footer.
+/// For CLAP, extracts lines from within the `<STATE` block.
+fn extract_state_base64(chunk: &str) -> Option<Vec<String>> {
+    let lines: Vec<&str> = chunk.lines().collect();
+    if lines.len() < 3 {
+        return None;
+    }
+
+    let header = lines[0].trim();
+    if header.starts_with("<CLAP") {
+        // CLAP: extract only lines inside <STATE ... >
+        let mut in_state = false;
+        let mut data_lines = Vec::new();
+        for &line in &lines[1..] {
+            let trimmed = line.trim();
+            if !in_state && trimmed.starts_with("<STATE") {
+                in_state = true;
+                continue;
+            }
+            if in_state {
+                if trimmed == ">" {
+                    break;
+                }
+                if !trimmed.is_empty() {
+                    data_lines.push(trimmed.to_string());
+                }
+            }
+        }
+        if data_lines.is_empty() { None } else { Some(data_lines) }
+    } else {
+        // VST/VST3: flat structure
+        let data_lines: Vec<String> = lines[1..lines.len() - 1]
+            .iter()
+            .map(|l| l.trim().to_string())
+            .filter(|l| !l.is_empty())
+            .collect();
+        if data_lines.is_empty() { None } else { Some(data_lines) }
+    }
+}
+
+/// Extract the first base64 segment (up to and including the `=`-padded line).
+fn first_base64_segment(segments: &[String]) -> String {
+    let mut result = String::new();
+    for line in segments {
+        result.push_str(line);
+        if line.ends_with('=') {
+            break;
+        }
+    }
+    result
+}
+
+/// Rebuild a REAPER text chunk with new base64 plugin state.
+///
+/// Handles two chunk formats:
+/// - **VST/VST3**: flat structure — header, base64 data, optional trailing metadata, `>`
+/// - **CLAP**: nested structure — header, CFG/IN_PINS/etc., `<STATE` block with base64, `>`
+///
+/// For CLAP chunks, only the `<STATE>` block content is replaced; everything else
+/// (CFG, IN_PINS, etc.) is preserved.
+fn rebuild_chunk_with_state(chunk: &str, new_b64: &str) -> String {
+    let lines: Vec<&str> = chunk.lines().collect();
+    let header = lines.first().copied().unwrap_or("");
+
+    // Detect CLAP chunk format by header
+    let trimmed_header = header.trim();
+    if trimmed_header.starts_with("<CLAP") {
+        return rebuild_clap_chunk_with_state(&lines, new_b64);
+    }
+
+    // VST/VST3: flat structure
+    let data_lines: Vec<&str> = lines[1..lines.len().saturating_sub(1)]
+        .iter()
+        .map(|l| l.trim())
+        .filter(|l| !l.is_empty())
+        .collect();
+    let mut trailing: Vec<&str> = Vec::new();
+    let mut found_end = false;
+    for line in &data_lines {
+        if found_end {
+            trailing.push(line);
+        } else if line.ends_with('=') {
+            found_end = true;
+        }
+    }
+
+    let mut result = String::from(header);
+    result.push('\n');
+    for chunk_line in new_b64.as_bytes().chunks(128) {
+        result.push_str("  ");
+        result.push_str(&String::from_utf8_lossy(chunk_line));
+        result.push('\n');
+    }
+    for t in &trailing {
+        result.push_str("  ");
+        result.push_str(t);
+        result.push('\n');
+    }
+    result.push('>');
+    result
+}
+
+/// Rebuild a CLAP chunk, replacing only the `<STATE` block content.
+///
+/// CLAP chunk structure:
+/// ```text
+/// <CLAP "CLAP: Pro-R 2 (FabFilter)" com.fabfilter.pro-r.2 ""
+///   CFG 4 760 335 ""
+///   <IN_PINS
+///   >
+///   <STATE
+///     <base64 lines>
+///   >
+/// >
+/// ```
+fn rebuild_clap_chunk_with_state(lines: &[&str], new_b64: &str) -> String {
+    let mut result = String::new();
+
+    // Track whether we're inside the <STATE block
+    let mut in_state = false;
+    let mut state_replaced = false;
+
+    for &line in lines {
+        let trimmed = line.trim();
+
+        if !in_state && trimmed.starts_with("<STATE") {
+            // Start of STATE block — write the opening tag
+            result.push_str(line);
+            result.push('\n');
+            in_state = true;
+            // Write new base64 content
+            for b64_chunk in new_b64.as_bytes().chunks(128) {
+                result.push_str("    ");
+                result.push_str(&String::from_utf8_lossy(b64_chunk));
+                result.push('\n');
+            }
+            state_replaced = true;
+        } else if in_state {
+            if trimmed == ">" {
+                // End of STATE block — write the closing >
+                result.push_str(line);
+                result.push('\n');
+                in_state = false;
+            }
+            // Skip original STATE content (replaced above)
+        } else {
+            // Preserve everything outside STATE block (header, CFG, IN_PINS, etc.)
+            result.push_str(line);
+            result.push('\n');
+        }
+    }
+
+    // If no STATE block was found, fall back to appending state before the final >
+    if !state_replaced {
+        // Remove trailing > and newline, add STATE block, re-add >
+        let trimmed = result.trim_end().trim_end_matches('>').to_string();
+        result = trimmed;
+        result.push_str("  <STATE\n");
+        for b64_chunk in new_b64.as_bytes().chunks(128) {
+            result.push_str("    ");
+            result.push_str(&String::from_utf8_lossy(b64_chunk));
+            result.push('\n');
+        }
+        result.push_str("  >\n");
+        result.push('>');
+    } else {
+        // Remove trailing newline added by the loop
+        if result.ends_with('\n') {
+            result.pop();
+        }
+    }
+
+    result
 }

@@ -56,6 +56,13 @@ pub enum SignalEvent {
         patch_id: String,
         applied_to_daw: bool,
     },
+    /// A block preset was activated directly (loaded + optionally applied to DAW).
+    PresetActivated {
+        block_type: BlockType,
+        preset_id: String,
+        snapshot_id: String,
+        applied_to_daw: bool,
+    },
 }
 
 /// Subscription handle for signal events.

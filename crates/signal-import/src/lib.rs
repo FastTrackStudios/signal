@@ -5,8 +5,11 @@
 //! `ImportedPresetCollection` which the orchestrator converts and persists.
 
 pub mod fabfilter;
+pub mod library_writer;
 pub mod rfxchain;
 pub mod types;
+
+use std::path::Path;
 
 use eyre::Result;
 use signal_controller::SignalController;
@@ -22,18 +25,39 @@ use types::{ImportReport, ImportedPresetCollection};
 /// All imported presets/snapshots derive their IDs from this namespace via UUID v5,
 /// making re-imports idempotent — the same vendor+plugin+file always produces the
 /// same ID, so a second import overwrites rather than duplicates.
-const IMPORT_NAMESPACE: Uuid = Uuid::from_bytes([
+pub const IMPORT_NAMESPACE: Uuid = Uuid::from_bytes([
     0x73, 0x69, 0x67, 0x6e, 0x61, 0x6c, 0x2d, 0x69,
     0x6d, 0x70, 0x6f, 0x72, 0x74, 0x2d, 0x6e, 0x73,
 ]);
+
+/// Compute the deterministic preset ID for a vendor+plugin combination.
+pub fn import_preset_id(vendor: &str, plugin_name: &str) -> PresetId {
+    let uuid = Uuid::new_v5(
+        &IMPORT_NAMESPACE,
+        format!("{vendor}:{plugin_name}").as_bytes(),
+    );
+    PresetId::from(uuid.to_string())
+}
 
 /// Import a collection of vendor presets into Signal's library.
 ///
 /// Creates (or replaces) a `Preset` for the plugin, with one `Snapshot` per
 /// imported file. Uses deterministic UUIDs so re-running the import is safe.
+///
+/// If `library_root` is provided, also writes preset files to the library
+/// directory structure (the DB acts as a queryable cache).
 pub async fn import_presets(
     signal: &SignalController,
     collection: ImportedPresetCollection,
+) -> Result<ImportReport> {
+    import_presets_with_library(signal, collection, None).await
+}
+
+/// Import presets with optional file-based library writing.
+pub async fn import_presets_with_library(
+    signal: &SignalController,
+    collection: ImportedPresetCollection,
+    library_root: Option<&Path>,
 ) -> Result<ImportReport> {
     if collection.snapshots.is_empty() {
         return Ok(ImportReport {
@@ -178,7 +202,12 @@ pub async fn import_presets(
     .with_metadata(preset_metadata);
 
     // Persist — save() does delete+insert, so re-import is handled
-    signal.block_presets().save(preset).await?;
+    signal.block_presets().save(preset.clone()).await?;
+
+    // Write to file-based library if a root path was provided
+    if let Some(root) = library_root {
+        library_writer::write_preset_to_library(root, &collection.vendor, &preset)?;
+    }
 
     Ok(ImportReport {
         preset_name: collection.plugin_name,

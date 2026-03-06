@@ -113,6 +113,12 @@ pub struct Engine {
     /// DAW track reference for this engine's input track (GUID or name).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub input_track_ref: Option<String>,
+    /// Macro knob bank for engine-level control of layer parameters.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub macro_bank: Option<macromod::MacroBank>,
+    /// Modulation routing for engine-level macro parameters.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub modulation: Option<macromod::ModulationRouteSet>,
     pub metadata: Metadata,
 }
 
@@ -134,6 +140,8 @@ impl Engine {
             variants: vec![default_variant],
             fx_sends: Vec::new(),
             input_track_ref: None,
+            macro_bank: None,
+            modulation: None,
             metadata: Metadata::new(),
         }
     }
