@@ -4,7 +4,7 @@
 //! Parameter IDs match the physical control names. Values are normalized
 //! 0.0–1.0 where 0.5 ≈ noon on the dial.
 
-use signal_proto::{seed_id, Block, BlockParameter, BlockType, Preset, Snapshot};
+use signal_proto::{metadata::Metadata, seed_id, Block, BlockParameter, BlockType, Preset, Snapshot};
 
 pub fn presets() -> Vec<Preset> {
     vec![volume_pedal(), utility_gain()]
@@ -77,6 +77,7 @@ fn utility_gain() -> Preset {
             Snapshot::new(seed_id("volume-utility-pad"), "Pad", utility_block(0.25)),
         ],
     )
+    .with_metadata(Metadata::new().with_tag("source:JS: Volume/Pan v3"))
 }
 
 // ─── Tests ──────────────────────────────────────────────────────
