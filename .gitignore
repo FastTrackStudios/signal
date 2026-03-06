@@ -185,3 +185,14 @@ callgrind.out.*
 *.pfx
 secrets/
 .secrets/
+
+# =============================================================================
+# Ralph TUI (volatile session state)
+# =============================================================================
+.ralph-tui/session.json
+.ralph-tui/session-meta.json
+.ralph-tui/ralph.lock
+.ralph-tui/progress.md
+.ralph-tui/reports/
+.ralph-tui/iterations/
+.ralph-tui/tasks/
