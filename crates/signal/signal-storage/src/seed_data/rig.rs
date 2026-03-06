@@ -1,5 +1,6 @@
 //! Rig seed data — default rig collections for development/demo.
 
+use macromod::{MacroBank, MacroBinding, MacroKnob};
 use signal_proto::engine::EngineId;
 use signal_proto::metadata::Metadata;
 use signal_proto::overrides::{NodeOverrideOp, NodePath, Override};
@@ -369,7 +370,70 @@ fn worship_guitar_rig() -> Rig {
     );
     rig.add_variant(dry_scene);
     rig.add_variant(ambient_scene);
+    rig.macro_bank = Some(worship_macro_bank());
     rig
+}
+
+/// Macro bank for the worship guitar rig — 8 performance knobs.
+///
+/// Each knob maps to specific plugin parameters across the rig's modules.
+/// The block IDs reference ModuleBlock::id values from the worship module
+/// presets (wg-drive, wg-amp, wg-modulation, wg-time, gtr-motion, wg-master).
+fn worship_macro_bank() -> MacroBank {
+    let mut bank = MacroBank::default();
+
+    // Knob 0: Drive — controls ParametricOD drive amount + Klone gain
+    let mut drive = MacroKnob::new("drive", "Drive");
+    drive.value = 0.4;
+    drive.bindings.push(MacroBinding::from_ids("parametric-od", "drive", 0.0, 1.0));
+    drive.bindings.push(MacroBinding::from_ids("klone", "gain", 0.0, 0.7));
+    bank.add(drive);
+
+    // Knob 1: Tone — controls Amp EQ (Pro-Q 4) high shelf gain
+    let mut tone = MacroKnob::new("tone", "Tone");
+    tone.value = 0.5;
+    tone.bindings.push(MacroBinding::from_ids("amp-eq", "Gain", 0.3, 0.7));
+    bank.add(tone);
+
+    // Knob 2: Room — controls Pro-R room reverb mix on amp module
+    let mut room = MacroKnob::new("room", "Room");
+    room.value = 0.25;
+    room.bindings.push(MacroBinding::from_ids("amp-verb", "mix", 0.0, 0.6));
+    bank.add(room);
+
+    // Knob 3: Delay Mix — controls Time module delay wet/dry
+    let mut delay_mix = MacroKnob::new("delay-mix", "Delay Mix");
+    delay_mix.value = 0.35;
+    delay_mix.bindings.push(MacroBinding::from_ids("dly-1", "mix", 0.0, 0.7));
+    delay_mix.bindings.push(MacroBinding::from_ids("dly-2", "mix", 0.0, 0.5));
+    bank.add(delay_mix);
+
+    // Knob 4: Reverb Mix — controls Time module reverb wet/dry
+    let mut reverb_mix = MacroKnob::new("reverb-mix", "Reverb Mix");
+    reverb_mix.value = 0.3;
+    reverb_mix.bindings.push(MacroBinding::from_ids("verb-1", "mix", 0.0, 0.7));
+    reverb_mix.bindings.push(MacroBinding::from_ids("verb-2", "mix", 0.0, 0.5));
+    bank.add(reverb_mix);
+
+    // Knob 5: Mod Depth — controls chorus depth (Timeless 3)
+    let mut mod_depth = MacroKnob::new("mod-depth", "Mod Depth");
+    mod_depth.value = 0.3;
+    mod_depth.bindings.push(MacroBinding::from_ids("chorus", "depth", 0.0, 1.0));
+    bank.add(mod_depth);
+
+    // Knob 6: Tremolo Rate — controls Motion tremolo speed
+    let mut trem_rate = MacroKnob::new("trem-rate", "Trem Rate");
+    trem_rate.value = 0.4;
+    trem_rate.bindings.push(MacroBinding::from_ids("tremolo", "rate", 0.1, 0.9));
+    bank.add(trem_rate);
+
+    // Knob 7: Master Volume — controls Master utility trim
+    let mut master = MacroKnob::new("master-vol", "Master Vol");
+    master.value = 0.7;
+    master.bindings.push(MacroBinding::from_ids("master-trim", "Volume", 0.0, 1.0));
+    bank.add(master);
+
+    bank
 }
 
 fn vocal_mega_rig() -> Rig {

@@ -8,6 +8,7 @@ authors.workspace = true
 [dependencies]
 signal-proto = { path = "../signal-proto" }
 nam-manager = { path = "../nam-manager" }
+macromod = { path = "../../macromod/macromod" }
 base64 = "0.22"
 thiserror.workspace = true
 sea-orm = { version = "1.1", features = ["sqlx-sqlite", "runtime-tokio-rustls", "macros"] }
