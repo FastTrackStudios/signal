@@ -170,12 +170,35 @@ pub trait DawBridge: Send + Sync {
 
     /// Build a GUID remapping table between two tracks' FX chains.
     fn build_guid_map(&self, source_track: &str, target_track: &str) -> HashMap<String, String>;
+
+    /// Enable or disable a module by type (in REAPER: bypass the container FX).
+    ///
+    /// `enabled = true` means the module is active; `false` means bypassed/disabled.
+    fn set_module_enabled(
+        &self,
+        track_id: &str,
+        module_type: signal_proto::module_type::ModuleType,
+        enabled: bool,
+    );
+
+    /// Query whether a module is currently enabled for a track.
+    fn is_module_enabled(
+        &self,
+        track_id: &str,
+        module_type: signal_proto::module_type::ModuleType,
+    ) -> bool;
 }
 
 /// Mock DAW bridge for testing.
 pub struct MockDawBridge {
     /// Stored snapshots keyed by track ID.
     snapshots: std::sync::Mutex<HashMap<String, DawParameterSnapshot>>,
+    /// Enabled/disabled state per (track_id, module_type).
+    ///
+    /// Absent key = enabled (default). Explicit `false` = disabled.
+    enabled_modules: std::sync::Mutex<
+        HashMap<(String, signal_proto::module_type::ModuleType), bool>,
+    >,
 }
 
 impl Default for MockDawBridge {
@@ -188,6 +211,7 @@ impl MockDawBridge {
     pub fn new() -> Self {
         Self {
             snapshots: std::sync::Mutex::new(HashMap::new()),
+            enabled_modules: std::sync::Mutex::new(HashMap::new()),
         }
     }
 
@@ -227,6 +251,31 @@ impl DawBridge for MockDawBridge {
 
     fn build_guid_map(&self, _source: &str, _target: &str) -> HashMap<String, String> {
         HashMap::new()
+    }
+
+    fn set_module_enabled(
+        &self,
+        track_id: &str,
+        module_type: signal_proto::module_type::ModuleType,
+        enabled: bool,
+    ) {
+        self.enabled_modules
+            .lock()
+            .unwrap()
+            .insert((track_id.to_string(), module_type), enabled);
+    }
+
+    fn is_module_enabled(
+        &self,
+        track_id: &str,
+        module_type: signal_proto::module_type::ModuleType,
+    ) -> bool {
+        self.enabled_modules
+            .lock()
+            .unwrap()
+            .get(&(track_id.to_string(), module_type))
+            .copied()
+            .unwrap_or(true) // default: enabled
     }
 }
 
