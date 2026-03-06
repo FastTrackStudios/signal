@@ -24,10 +24,15 @@ use crate::components::block_color;
 #[cfg(target_os = "macos")]
 mod cg_cursor {
     use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::Mutex;
 
     /// Guard to ensure exactly one hide is matched with one show,
     /// even if grab() is called multiple times (double-click, re-render).
     static GRABBED: AtomicBool = AtomicBool::new(false);
+
+    /// CG cursor position saved at grab time — in the CoreGraphics global
+    /// display coordinate space, so it warps back to the correct monitor.
+    static SAVED_POS: Mutex<(f64, f64)> = Mutex::new((0.0, 0.0));
 
     #[repr(C)]
     #[derive(Clone, Copy)]
@@ -36,33 +41,55 @@ mod cg_cursor {
         y: f64,
     }
 
+    // Opaque type — we only hold a pointer.
+    enum CGEvent {}
+
     unsafe extern "C" {
         fn CGMainDisplayID() -> u32;
         fn CGDisplayHideCursor(display: u32) -> i32;
         fn CGDisplayShowCursor(display: u32) -> i32;
         fn CGWarpMouseCursorPosition(point: CGPoint) -> i32;
         fn CGAssociateMouseAndMouseCursorPosition(connected: i32) -> i32;
+        fn CGEventCreate(source: *const core::ffi::c_void) -> *mut CGEvent;
+        fn CGEventGetLocation(event: *const CGEvent) -> CGPoint;
+        fn CFRelease(cf: *const core::ffi::c_void);
     }
 
-    /// Freeze the cursor and hide it. The mouse can move freely but the
-    /// cursor stays pinned. JS `movementY` still reports correct deltas.
+    /// Read the current cursor position in CG global display coordinates.
+    /// This coordinate space spans all monitors and is the same space that
+    /// `CGWarpMouseCursorPosition` expects, so the cursor always warps back
+    /// to the correct display regardless of monitor arrangement or scaling.
+    fn cg_cursor_position() -> (f64, f64) {
+        unsafe {
+            let event = CGEventCreate(core::ptr::null());
+            let pos = CGEventGetLocation(event);
+            CFRelease(event as *const _);
+            (pos.x, pos.y)
+        }
+    }
+
+    /// Freeze the cursor and hide it. Saves the current CG cursor position
+    /// so `release()` can warp back to the correct display.
     /// Safe to call multiple times — only the first call hides the cursor.
     pub fn grab() {
         if GRABBED.swap(true, Ordering::SeqCst) {
             return; // already grabbed
         }
+        // Save position in CG coordinates before freezing.
+        *SAVED_POS.lock().unwrap() = cg_cursor_position();
         unsafe {
             CGAssociateMouseAndMouseCursorPosition(0);
             CGDisplayHideCursor(CGMainDisplayID());
         }
     }
 
-    /// Unfreeze the cursor, warp it to the saved position, and show it.
+    /// Unfreeze the cursor, warp it to the saved CG position, and show it.
     /// Safe to call multiple times — only the first call shows the cursor.
-    pub fn release(x: f64, y: f64) {
+    pub fn release() {
         if !GRABBED.swap(false, Ordering::SeqCst) {
             return; // wasn't grabbed
         }
+        let (x, y) = *SAVED_POS.lock().unwrap();
         unsafe {
             CGAssociateMouseAndMouseCursorPosition(1);
             CGWarpMouseCursorPosition(CGPoint { x, y });
@@ -74,7 +101,7 @@ mod cg_cursor {
 #[cfg(not(target_os = "macos"))]
 mod cg_cursor {
     pub fn grab() {}
-    pub fn release(_x: f64, _y: f64) {}
+    pub fn release() {}
 }
 
 // endregion: --- Cursor warp (macOS)
@@ -410,9 +437,6 @@ pub fn MiniKnob(
     let mut dragging = use_signal(|| false);
     // Local value for immediate pointer feedback during drag
     let mut drag_value = use_signal(|| value);
-    // Saved screen position — used by both eval path and safety fallback
-    let mut saved_screen_x = use_signal(|| 0.0f64);
-    let mut saved_screen_y = use_signal(|| 0.0f64);
     // Track last mousedown time for manual double-click detection
     // (ondoubleclick won't fire because the drag overlay blocks the 2nd click)
     let mut last_mousedown = use_signal(std::time::Instant::now);
@@ -569,8 +593,6 @@ pub fn MiniKnob(
                     }
 
                     let start_val = display;
-                    saved_screen_x.set(e.screen_coordinates().x);
-                    saved_screen_y.set(e.screen_coordinates().y);
                     dragging.set(true);
                     drag_value.set(display);
 
@@ -628,8 +650,8 @@ pub fn MiniKnob(
                             }
                         }
 
-                        // Drag done — unfreeze, warp to start position, show cursor
-                        cg_cursor::release(saved_screen_x(), saved_screen_y());
+                        // Drag done — unfreeze, warp to saved CG position, show cursor
+                        cg_cursor::release();
                         dragging.set(false);
                         document::eval("document.body.style.userSelect = '';");
                     });
