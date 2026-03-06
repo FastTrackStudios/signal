@@ -8,7 +8,12 @@ use signal_proto::seed_id;
 
 /// All default rig collections.
 pub fn rigs() -> Vec<Rig> {
-    vec![keys_mega_rig(), guitar_mega_rig(), vocal_mega_rig()]
+    vec![
+        keys_mega_rig(),
+        guitar_mega_rig(),
+        vocal_mega_rig(),
+        worship_guitar_rig(),
+    ]
 }
 
 fn keys_mega_rig() -> Rig {
@@ -204,6 +209,169 @@ fn guitar_mega_rig() -> Rig {
     rig
 }
 
+/// Worship guitar rig — single-engine rig with Dry and Ambient scene states.
+///
+/// Scene layout:
+/// - Default: baseline worship tone (Klone drive, parallel time, full signal chain)
+/// - Dry: Input + Drive + Amp active; Modulation, Time, Motion bypassed
+/// - Ambient: full chain active; lush reverb/delay mix, chorus, tremolo engaged
+fn worship_guitar_rig() -> Rig {
+    let default_scene = RigScene::new(seed_id("worship-rig-default"), "Default")
+        .with_engine(EngineSelection::new(
+            seed_id("guitar-engine"),
+            seed_id("guitar-engine-default"),
+        ))
+        .with_metadata(Metadata::new().with_tag("worship").with_tag("guitar"));
+
+    // Scene 5 — Dry
+    // Input, Drive, Amp, Master enabled; Modulation, Time, Motion bypassed.
+    // Spring reverb on JM Pre-FX provides minimal room character.
+    let dry_scene = RigScene::new(seed_id("worship-rig-dry"), "Dry")
+        .with_engine(EngineSelection::new(
+            seed_id("guitar-engine"),
+            seed_id("guitar-engine-default"),
+        ))
+        // Drive: Klone (drive-2) engaged via sweetener snapshot
+        .with_override(Override {
+            path: NodePath::engine("guitar-engine")
+                .with_layer("guitar-layer-main")
+                .with_module("drive-full-stack")
+                .with_block("drive-2"),
+            op: NodeOverrideOp::ReplaceRef(seed_id("drive-klon-sweetener").to_string()),
+        })
+        // Amp: Room reverb at low mix via JM spring reverb (0.15)
+        .with_override(Override::set(
+            NodePath::engine("guitar-engine")
+                .with_layer("guitar-layer-archetype-jm")
+                .with_module("jm-pre-fx")
+                .with_block("spring-reverb")
+                .with_parameter("mix"),
+            0.15,
+        ))
+        // Modulation Module: bypassed
+        .with_override(Override::bypass(
+            NodePath::engine("guitar-engine")
+                .with_layer("guitar-layer-main")
+                .with_module("gtr-modulation"),
+            true,
+        ))
+        // Time Module: bypassed (all delays + reverbs off)
+        .with_override(Override::bypass(
+            NodePath::engine("guitar-engine")
+                .with_layer("guitar-layer-main")
+                .with_module("time-parallel"),
+            true,
+        ))
+        // Motion Module: bypassed
+        .with_override(Override::bypass(
+            NodePath::engine("guitar-engine")
+                .with_layer("guitar-layer-main")
+                .with_module("gtr-motion"),
+            true,
+        ))
+        .with_metadata(
+            Metadata::new()
+                .with_tag("worship")
+                .with_tag("guitar")
+                .with_tag("dry"),
+        );
+
+    // Scene 6 — Ambient
+    // All modules enabled; lush reverb/delay/modulation settings engaged.
+    let ambient_scene = RigScene::new(seed_id("worship-rig-ambient"), "Ambient")
+        .with_engine(EngineSelection::new(
+            seed_id("guitar-engine"),
+            seed_id("guitar-engine-default"),
+        ))
+        // Drive: lighter drive settings (lower drive-1 drive amount)
+        .with_override(Override::set(
+            NodePath::engine("guitar-engine")
+                .with_layer("guitar-layer-main")
+                .with_module("drive-full-stack")
+                .with_block("drive-1")
+                .with_parameter("drive"),
+            0.35,
+        ))
+        // Amp: Room reverb at higher mix via JM spring reverb (0.42)
+        .with_override(Override::set(
+            NodePath::engine("guitar-engine")
+                .with_layer("guitar-layer-archetype-jm")
+                .with_module("jm-pre-fx")
+                .with_block("spring-reverb")
+                .with_parameter("mix"),
+            0.42,
+        ))
+        // Modulation: chorus active at moderate mix
+        .with_override(Override::set(
+            NodePath::engine("guitar-engine")
+                .with_layer("guitar-layer-main")
+                .with_module("gtr-modulation")
+                .with_block("chorus")
+                .with_parameter("mix"),
+            0.55,
+        ))
+        // Time: delay mix (dly-1) at ambient level
+        .with_override(Override::set(
+            NodePath::engine("guitar-engine")
+                .with_layer("guitar-layer-main")
+                .with_module("time-parallel")
+                .with_block("dly-1")
+                .with_parameter("mix"),
+            0.48,
+        ))
+        // Time: reverb mix (verb-1) at ambient level
+        .with_override(Override::set(
+            NodePath::engine("guitar-engine")
+                .with_layer("guitar-layer-main")
+                .with_module("time-parallel")
+                .with_block("verb-1")
+                .with_parameter("mix"),
+            0.52,
+        ))
+        // Motion: tremolo active with worshipful depth and rate
+        .with_override(Override::set(
+            NodePath::engine("guitar-engine")
+                .with_layer("guitar-layer-main")
+                .with_module("gtr-motion")
+                .with_block("tremolo")
+                .with_parameter("depth"),
+            0.65,
+        ))
+        .with_override(Override::set(
+            NodePath::engine("guitar-engine")
+                .with_layer("guitar-layer-main")
+                .with_module("gtr-motion")
+                .with_block("tremolo")
+                .with_parameter("rate"),
+            0.40,
+        ))
+        .with_metadata(
+            Metadata::new()
+                .with_tag("worship")
+                .with_tag("guitar")
+                .with_tag("ambient"),
+        );
+
+    let mut rig = Rig::new(
+        seed_id("worship-guitar-rig"),
+        "Worship Rig",
+        vec![EngineId::from(seed_id("guitar-engine"))],
+        default_scene,
+    )
+    .with_rig_type(RigType::Guitar)
+    .with_metadata(
+        Metadata::new()
+            .with_tag("worship")
+            .with_tag("guitar")
+            .with_description(
+            "Worship guitar rig with Dry (bypass mod/time/motion) and Ambient (full chain) scenes",
+        ),
+    );
+    rig.add_variant(dry_scene);
+    rig.add_variant(ambient_scene);
+    rig
+}
+
 fn vocal_mega_rig() -> Rig {
     let default_scene = RigScene::new(seed_id("vocal-megarig-default"), "Default")
         .with_engine(EngineSelection::new(
@@ -237,16 +405,96 @@ mod tests {
 
     #[test]
     fn rig_count() {
-        assert_eq!(rigs().len(), 3);
+        assert_eq!(rigs().len(), 4);
     }
 
     #[test]
     fn has_three_megarigs_with_types() {
         let rigs = rigs();
-        assert!(rigs.iter().all(|r| r.name == "MegaRig"));
-        assert!(rigs.iter().any(|r| r.rig_type == Some(RigType::Keys)));
-        assert!(rigs.iter().any(|r| r.rig_type == Some(RigType::Guitar)));
-        assert!(rigs.iter().any(|r| r.rig_type == Some(RigType::Vocals)));
+        let megarigs: Vec<_> = rigs.iter().filter(|r| r.name == "MegaRig").collect();
+        assert_eq!(megarigs.len(), 3);
+        assert!(megarigs.iter().any(|r| r.rig_type == Some(RigType::Keys)));
+        assert!(megarigs.iter().any(|r| r.rig_type == Some(RigType::Guitar)));
+        assert!(megarigs.iter().any(|r| r.rig_type == Some(RigType::Vocals)));
+    }
+
+    #[test]
+    fn worship_rig_has_dry_and_ambient_scenes() {
+        use signal_proto::overrides::NodeOverrideOp;
+
+        let worship = rigs()
+            .into_iter()
+            .find(|r| r.name == "Worship Rig")
+            .expect("worship rig not found");
+
+        assert_eq!(worship.rig_type, Some(RigType::Guitar));
+
+        let dry = worship
+            .variants
+            .iter()
+            .find(|v| v.name == "Dry")
+            .expect("Dry scene missing");
+
+        // Modulation, Time, Motion should be bypassed in Dry
+        let bypass_paths: Vec<_> = dry
+            .overrides
+            .iter()
+            .filter_map(|ov| match &ov.op {
+                NodeOverrideOp::Bypass(true) => Some(ov.path.as_str()),
+                _ => None,
+            })
+            .collect();
+        assert!(
+            bypass_paths.iter().any(|p| p.contains("gtr-modulation")),
+            "Dry scene must bypass gtr-modulation"
+        );
+        assert!(
+            bypass_paths.iter().any(|p| p.contains("time-parallel")),
+            "Dry scene must bypass time-parallel"
+        );
+        assert!(
+            bypass_paths.iter().any(|p| p.contains("gtr-motion")),
+            "Dry scene must bypass gtr-motion"
+        );
+
+        let ambient = worship
+            .variants
+            .iter()
+            .find(|v| v.name == "Ambient")
+            .expect("Ambient scene missing");
+
+        // Ambient should NOT bypass modulation/time/motion
+        let ambient_bypasses: Vec<_> = ambient
+            .overrides
+            .iter()
+            .filter(|ov| matches!(&ov.op, NodeOverrideOp::Bypass(true)))
+            .collect();
+        assert!(
+            ambient_bypasses.is_empty(),
+            "Ambient scene must not bypass any modules"
+        );
+
+        // Ambient should set reverb and delay parameters
+        let set_paths: Vec<_> = ambient
+            .overrides
+            .iter()
+            .filter_map(|ov| match &ov.op {
+                NodeOverrideOp::Set(_) => Some(ov.path.as_str()),
+                _ => None,
+            })
+            .collect();
+        assert!(
+            set_paths.iter().any(|p| p.contains("spring-reverb")),
+            "Ambient scene must set spring-reverb mix"
+        );
+        assert!(
+            set_paths.iter().any(|p| p.contains("time-parallel")),
+            "Ambient scene must set time-parallel parameters"
+        );
+        assert!(
+            set_paths.iter().any(|p| p.contains("gtr-motion")),
+            "Ambient scene must set tremolo parameters"
+        );
     }
 
     #[test]
