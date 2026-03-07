@@ -22,7 +22,11 @@ pub use nam_file::{NamFileEntry, NamFileKind, NamMetadata};
 pub use pack::{FileOverride, PackCategory, PackDefinition};
 pub use resolve::{nam_root_from_env, resolve_path, resolve_path_unchecked};
 pub use scanner::{apply_packs, merge_into_catalog, scan_directory, sha256_hex};
-pub use vst_chunk::{create_default_chunk, decode_chunk, encode_chunk, rewrite_paths, NamVstChunk};
+pub use vst_chunk::{
+    create_default_chunk, decode_chunk, encode_chunk, extract_state_base64,
+    first_base64_segment, rebuild_chunk_with_state, rebuild_clap_chunk_with_state,
+    rewrite_paths, NamVstChunk,
+};
 
 /// Errors that can occur in nam-manager operations.
 #[derive(Debug, thiserror::Error)]
@@ -443,6 +447,75 @@ pub fn full_rig_models_by_pack(
     // Sort packs by label for deterministic output
     results.sort_by(|a, b| a.0.label.cmp(&b.0.label));
 
+    Ok(results)
+}
+
+/// Return all `.nam` models from drive-category packs, grouped by pack.
+///
+/// Similar to `full_rig_models_by_pack` but for drive pedals: includes ALL `.nam`
+/// files (no "FULL" filter) and filters to `PackCategory::Drive`.
+pub fn drive_models_by_pack(
+    packs_dir: &std::path::Path,
+    search_roots: &[&std::path::Path],
+) -> Result<Vec<(PackDefinition, Vec<FullRigModel>)>, NamError> {
+    let mut filename_index: HashMap<String, std::path::PathBuf> = HashMap::new();
+    for root in search_roots {
+        if !root.exists() {
+            continue;
+        }
+        for entry in walkdir::WalkDir::new(root)
+            .follow_links(true)
+            .into_iter()
+            .filter_map(|e| e.ok())
+        {
+            let path = entry.path();
+            if path.is_file() && path.extension().map_or(false, |e| e == "nam") {
+                if let Some(name) = path.file_name() {
+                    let name_str = name.to_string_lossy().to_string();
+                    filename_index
+                        .entry(name_str)
+                        .or_insert_with(|| path.to_path_buf());
+                }
+            }
+        }
+    }
+
+    let packs = pack::load_packs(packs_dir)?;
+    let mut results = Vec::new();
+
+    for pack in packs {
+        if pack.category != PackCategory::Drive {
+            continue;
+        }
+
+        let mut models = Vec::new();
+        for (filename, file_override) in &pack.files {
+            let abs_path = match filename_index.get(filename) {
+                Some(p) => p,
+                None => continue,
+            };
+
+            let tone = file_override
+                .tone
+                .clone()
+                .or_else(|| pack.default_tone.clone())
+                .or_else(|| infer_tone_from_filename(filename));
+
+            models.push(FullRigModel {
+                filename: filename.clone(),
+                absolute_path: abs_path.to_string_lossy().to_string(),
+                tone,
+            });
+        }
+
+        models.sort_by(|a, b| a.filename.cmp(&b.filename));
+
+        if !models.is_empty() {
+            results.push((pack, models));
+        }
+    }
+
+    results.sort_by(|a, b| a.0.label.cmp(&b.0.label));
     Ok(results)
 }
 

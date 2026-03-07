@@ -452,10 +452,66 @@ mod tests {
 
     type Result<T> = core::result::Result<T, Box<dyn std::error::Error>>;
 
-    async fn seeded_repo() -> Result<BlockRepoLive> {
+    async fn empty_repo() -> Result<BlockRepoLive> {
         let repo = BlockRepoLive::connect_sqlite_in_memory().await?;
         repo.init_schema().await?;
-        repo.reseed_defaults(&crate::seed_data::default_block_collections())
+        Ok(repo)
+    }
+
+    /// Build a test amp preset with multiple snapshots.
+    fn test_amp_preset() -> Preset {
+        let default_block = Block::from_parameters(vec![
+            BlockParameter::new("gain", "Gain", 0.50),
+            BlockParameter::new("bass", "Bass", 0.50),
+            BlockParameter::new("treble", "Treble", 0.50),
+            BlockParameter::new("reverb", "Reverb", 0.30),
+        ]);
+        let surf_block = Block::from_parameters(vec![
+            BlockParameter::new("gain", "Gain", 0.30),
+            BlockParameter::new("bass", "Bass", 0.40),
+            BlockParameter::new("treble", "Treble", 0.60),
+            BlockParameter::new("reverb", "Reverb", 0.75),
+        ]);
+        let crunch_block = Block::from_parameters(vec![
+            BlockParameter::new("gain", "Gain", 0.80),
+            BlockParameter::new("bass", "Bass", 0.55),
+            BlockParameter::new("treble", "Treble", 0.65),
+            BlockParameter::new("reverb", "Reverb", 0.20),
+        ]);
+        Preset::new(
+            seed_id("test-amp"),
+            "Test Amp",
+            BlockType::Amp,
+            Snapshot::new(seed_id("test-amp-default"), "Default", default_block),
+            vec![
+                Snapshot::new(seed_id("test-amp-surf"), "Surf", surf_block),
+                Snapshot::new(seed_id("test-amp-crunch"), "Crunch", crunch_block),
+            ],
+        )
+    }
+
+    /// Build a test drive preset with named parameters.
+    fn test_drive_preset() -> Preset {
+        Preset::new(
+            seed_id("test-drive"),
+            "Test Drive",
+            BlockType::Drive,
+            Snapshot::new(
+                seed_id("test-drive-default"),
+                "Default",
+                Block::from_parameters(vec![
+                    BlockParameter::new("drive", "Drive", 0.50),
+                    BlockParameter::new("tone", "Tone", 0.60),
+                    BlockParameter::new("level", "Level", 0.70),
+                ]),
+            ),
+            vec![],
+        )
+    }
+
+    async fn seeded_repo() -> Result<BlockRepoLive> {
+        let repo = empty_repo().await?;
+        repo.reseed_defaults(&[test_amp_preset(), test_drive_preset()])
             .await?;
         Ok(repo)
     }
@@ -503,14 +559,14 @@ mod tests {
 
         // -- Exec
         let collections = repo.list_block_collections(BlockType::Amp).await?;
-        let twin = collections
+        let amp = collections
             .iter()
-            .find(|c| c.name() == "Fender Twin Reverb")
+            .find(|c| c.name() == "Test Amp")
             .unwrap();
 
-        // -- Check: default + 4 additional = 5 total
-        assert_eq!(twin.snapshots().len(), 5);
-        assert_eq!(twin.default_snapshot().name(), "Default");
+        // -- Check: default + 2 additional = 3 total
+        assert_eq!(amp.snapshots().len(), 3);
+        assert_eq!(amp.default_snapshot().name(), "Default");
         Ok(())
     }
 
@@ -520,7 +576,7 @@ mod tests {
     async fn load_block_default_variant_returns_snapshot() -> Result<()> {
         // -- Setup & Fixtures
         let repo = seeded_repo().await?;
-        let collection_id = PresetId::from_uuid(seed_id("amp-twin"));
+        let collection_id = PresetId::from_uuid(seed_id("test-amp"));
 
         // -- Exec
         let variant = repo
@@ -532,7 +588,7 @@ mod tests {
         assert_eq!(variant.name(), "Default");
         assert_eq!(
             variant.id(),
-            &SnapshotId::from_uuid(seed_id("amp-twin-default"))
+            &SnapshotId::from_uuid(seed_id("test-amp-default"))
         );
         Ok(())
     }
@@ -541,8 +597,8 @@ mod tests {
     async fn load_block_variant_by_id() -> Result<()> {
         // -- Setup & Fixtures
         let repo = seeded_repo().await?;
-        let collection_id = PresetId::from_uuid(seed_id("amp-twin"));
-        let variant_id = SnapshotId::from_uuid(seed_id("amp-twin-surf"));
+        let collection_id = PresetId::from_uuid(seed_id("test-amp"));
+        let variant_id = SnapshotId::from_uuid(seed_id("test-amp-surf"));
 
         // -- Exec
         let variant = repo
@@ -563,9 +619,9 @@ mod tests {
     async fn load_block_variant_wrong_type_returns_none() -> Result<()> {
         // -- Setup & Fixtures
         let repo = seeded_repo().await?;
-        let collection_id = PresetId::from_uuid(seed_id("amp-twin"));
+        let collection_id = PresetId::from_uuid(seed_id("test-amp"));
 
-        // -- Exec: amp-twin is Amp, not Drive
+        // -- Exec: test-amp is Amp, not Drive
         let variant = repo
             .load_block_default_variant(BlockType::Drive, &collection_id)
             .await?;
@@ -595,7 +651,7 @@ mod tests {
     async fn load_block_variant_missing_variant_returns_none() -> Result<()> {
         // -- Setup & Fixtures
         let repo = seeded_repo().await?;
-        let collection_id = PresetId::from_uuid(seed_id("amp-twin"));
+        let collection_id = PresetId::from_uuid(seed_id("test-amp"));
         let variant_id = SnapshotId::new();
 
         // -- Exec
@@ -619,7 +675,7 @@ mod tests {
         let collections = repo.list_block_collections(BlockType::Drive).await?;
         let ts = collections
             .iter()
-            .find(|c| c.name() == "Tubescreamer")
+            .find(|c| c.name() == "Test Drive")
             .unwrap();
         let default = ts.default_snapshot();
 
@@ -689,13 +745,13 @@ mod tests {
 
         // -- Exec: load an amp collection and check version
         let collections = repo.list_block_collections(BlockType::Amp).await?;
-        let twin = collections
+        let amp = collections
             .iter()
-            .find(|c| c.name() == "Fender Twin Reverb")
-            .expect("should find Twin Reverb");
+            .find(|c| c.name() == "Test Amp")
+            .expect("should find Test Amp");
 
         // -- Check: seed data starts at version 1
-        for snap in twin.snapshots() {
+        for snap in amp.snapshots() {
             assert_eq!(
                 snap.version(),
                 1,
@@ -764,14 +820,14 @@ mod tests {
     async fn save_block_collection_round_trip() -> Result<()> {
         // -- Setup & Fixtures
         let repo = seeded_repo().await?;
-        let preset_id = PresetId::from_uuid(seed_id("amp-twin"));
+        let preset_id = PresetId::from_uuid(seed_id("test-amp"));
 
         // Load the preset, mutate a snapshot param, save it back
         let collections = repo.list_block_collections(BlockType::Amp).await?;
         let mut preset = collections
             .into_iter()
             .find(|c| *c.id() == preset_id)
-            .expect("twin preset");
+            .expect("test amp preset");
         let snap = &mut preset.variants_mut()[0];
         let mut block = snap.block();
         block.set_parameter_value(0, 0.99);
@@ -782,14 +838,14 @@ mod tests {
 
         // Reload and verify
         let reloaded = repo.list_block_collections(BlockType::Amp).await?;
-        let twin = reloaded
+        let amp = reloaded
             .iter()
             .find(|c| *c.id() == preset_id)
-            .expect("twin after save");
-        assert_eq!(twin.snapshots().len(), preset.snapshots().len());
-        let first_param = twin.snapshots()[0].block().parameters()[0].value().get();
+            .expect("test amp after save");
+        assert_eq!(amp.snapshots().len(), preset.snapshots().len());
+        let first_param = amp.snapshots()[0].block().parameters()[0].value().get();
         assert!((first_param - 0.99).abs() < 0.001);
-        assert_eq!(twin.snapshots()[0].version(), 2);
+        assert_eq!(amp.snapshots()[0].version(), 2);
         Ok(())
     }
 }

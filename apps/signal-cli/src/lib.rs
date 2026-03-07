@@ -4,7 +4,7 @@
 //! for querying and manipulating the Signal library (presets, rigs, profiles,
 //! macros, songs, setlists).
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use clap::Subcommand;
 use daw_control::Daw;
@@ -62,13 +62,16 @@ pub enum SignalCommand {
     Modules(ModulesCommand),
     /// Layer operations
     #[command(subcommand)]
-    Layers(EntityCommand),
+    Layers(LayersCommand),
     /// Engine operations
     #[command(subcommand)]
-    Engines(EntityCommand),
+    Engines(EnginesCommand),
     /// Rig operations
     #[command(subcommand)]
-    Rigs(EntityCommand),
+    Rigs(RigsCommand),
+    /// NAM model operations
+    #[command(subcommand)]
+    Nam(NamCommand),
     /// Profile operations
     #[command(subcommand)]
     Profiles(ProfilesCommand),
@@ -237,7 +240,7 @@ pub enum ModulesCommand {
     },
 }
 
-/// Shared CRUD subcommands for layers, engines, rigs, songs, setlists.
+/// Shared CRUD subcommands for songs, setlists.
 #[derive(Subcommand)]
 pub enum EntityCommand {
     /// List all
@@ -256,6 +259,162 @@ pub enum EntityCommand {
     Delete {
         /// Entity ID
         id: String,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum LayersCommand {
+    /// List all layers
+    List,
+    /// Show layer detail (block refs, module refs)
+    Show {
+        /// Layer ID
+        id: String,
+    },
+    /// Create a new layer
+    Create {
+        /// Layer name
+        name: String,
+        /// Engine type (guitar, bass, keys, drums, vocals)
+        #[arg(long, default_value = "guitar")]
+        r#type: String,
+    },
+    /// Delete a layer
+    Delete {
+        /// Layer ID
+        id: String,
+    },
+    /// Add a block preset reference to a layer's default snapshot
+    AddBlock {
+        /// Layer ID
+        layer_id: String,
+        /// Block preset ID
+        preset_id: String,
+        /// Snapshot variant ID (omit for default)
+        #[arg(long)]
+        variant: Option<String>,
+    },
+    /// Remove a block preset reference from a layer's default snapshot
+    RemoveBlock {
+        /// Layer ID
+        layer_id: String,
+        /// Block preset ID to remove
+        preset_id: String,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum EnginesCommand {
+    /// List all engines
+    List,
+    /// Show engine detail (resolves layer names)
+    Show {
+        /// Engine ID
+        id: String,
+    },
+    /// Create a new engine
+    Create {
+        /// Engine name
+        name: String,
+        /// Engine type (guitar, bass, keys, drums, vocals)
+        #[arg(long, default_value = "guitar")]
+        r#type: String,
+        /// Layer IDs to include
+        #[arg(long)]
+        layer: Vec<String>,
+    },
+    /// Delete an engine
+    Delete {
+        /// Engine ID
+        id: String,
+    },
+    /// Add a layer to an engine (updates all scenes)
+    AddLayer {
+        /// Engine ID
+        engine_id: String,
+        /// Layer ID
+        layer_id: String,
+    },
+    /// Remove a layer from an engine (updates all scenes)
+    RemoveLayer {
+        /// Engine ID
+        engine_id: String,
+        /// Layer ID
+        layer_id: String,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum RigsCommand {
+    /// List all rigs
+    List,
+    /// Show rig detail (full hierarchy: engine -> layer -> block)
+    Show {
+        /// Rig ID
+        id: String,
+    },
+    /// Create a new rig
+    Create {
+        /// Rig name
+        name: String,
+    },
+    /// Delete a rig
+    Delete {
+        /// Rig ID
+        id: String,
+    },
+    /// Add an engine to a rig (updates all scenes)
+    AddEngine {
+        /// Rig ID
+        rig_id: String,
+        /// Engine ID
+        engine_id: String,
+    },
+    /// Remove an engine from a rig (updates all scenes)
+    RemoveEngine {
+        /// Rig ID
+        rig_id: String,
+        /// Engine ID
+        engine_id: String,
+    },
+    /// Open a rig in REAPER (creates [R]/[E]/[L] track hierarchy and loads all FX)
+    Open {
+        /// Rig ID
+        id: String,
+        /// Spawn and manage a dedicated REAPER instance instead of connecting to a running one
+        #[arg(long)]
+        own_reaper: bool,
+        /// Kill REAPER after the rig loads (only meaningful with --own-reaper; useful for testing)
+        #[arg(long)]
+        close_after_load: bool,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum NamCommand {
+    /// List available NAM packs
+    Packs {
+        /// Filter by vendor
+        #[arg(long)]
+        vendor: Option<String>,
+        /// Filter by category (amp, drive)
+        #[arg(long)]
+        category: Option<String>,
+    },
+    /// Import NAM packs as block presets
+    Import {
+        /// Filter by vendor
+        #[arg(long)]
+        vendor: Option<String>,
+        /// Filter by category (amp, drive)
+        #[arg(long)]
+        category: Option<String>,
+        /// Show what would be imported without persisting
+        #[arg(long)]
+        dry_run: bool,
+        /// Spawn and manage a dedicated REAPER instance instead of connecting to a running one
+        #[arg(long)]
+        own_reaper: bool,
     },
 }
 
@@ -369,6 +528,11 @@ pub async fn run(
             .await;
     }
 
+    // Rigs Open needs both signal DB and DAW connection.
+    if let SignalCommand::Rigs(RigsCommand::Open { ref id, own_reaper, close_after_load }) = cmd {
+        return cmd_rigs_open(db, socket, id, own_reaper, close_after_load).await;
+    }
+
     let signal = connect_signal(db).await?;
 
     match cmd {
@@ -398,37 +562,75 @@ pub async fn run(
             cmd_modules_show(&signal, id, as_json).await
         }
 
-        SignalCommand::Layers(EntityCommand::List) => cmd_layers_list(&signal, as_json).await,
-        SignalCommand::Layers(EntityCommand::Show { ref id }) => {
+        SignalCommand::Layers(LayersCommand::List) => cmd_layers_list(&signal, as_json).await,
+        SignalCommand::Layers(LayersCommand::Show { ref id }) => {
             cmd_layers_show(&signal, id, as_json).await
         }
-        SignalCommand::Layers(EntityCommand::Create { ref name }) => {
-            cmd_layers_create(&signal, name, as_json).await
+        SignalCommand::Layers(LayersCommand::Create { ref name, ref r#type }) => {
+            cmd_layers_create(&signal, name, r#type, as_json).await
         }
-        SignalCommand::Layers(EntityCommand::Delete { ref id }) => {
+        SignalCommand::Layers(LayersCommand::Delete { ref id }) => {
             cmd_layers_delete(&signal, id, as_json).await
         }
+        SignalCommand::Layers(LayersCommand::AddBlock { ref layer_id, ref preset_id, ref variant }) => {
+            cmd_layers_add_block(&signal, layer_id, preset_id, variant.as_deref(), as_json).await
+        }
+        SignalCommand::Layers(LayersCommand::RemoveBlock { ref layer_id, ref preset_id }) => {
+            cmd_layers_remove_block(&signal, layer_id, preset_id, as_json).await
+        }
 
-        SignalCommand::Engines(EntityCommand::List) => cmd_engines_list(&signal, as_json).await,
-        SignalCommand::Engines(EntityCommand::Show { ref id }) => {
+        SignalCommand::Engines(EnginesCommand::List) => cmd_engines_list(&signal, as_json).await,
+        SignalCommand::Engines(EnginesCommand::Show { ref id }) => {
             cmd_engines_show(&signal, id, as_json).await
         }
-        SignalCommand::Engines(EntityCommand::Create { ref name }) => {
-            cmd_engines_create(&signal, name, as_json).await
+        SignalCommand::Engines(EnginesCommand::Create { ref name, ref r#type, ref layer }) => {
+            cmd_engines_create(&signal, name, r#type, layer, as_json).await
         }
-        SignalCommand::Engines(EntityCommand::Delete { ref id }) => {
+        SignalCommand::Engines(EnginesCommand::Delete { ref id }) => {
             cmd_engines_delete(&signal, id, as_json).await
         }
+        SignalCommand::Engines(EnginesCommand::AddLayer { ref engine_id, ref layer_id }) => {
+            cmd_engines_add_layer(&signal, engine_id, layer_id, as_json).await
+        }
+        SignalCommand::Engines(EnginesCommand::RemoveLayer { ref engine_id, ref layer_id }) => {
+            cmd_engines_remove_layer(&signal, engine_id, layer_id, as_json).await
+        }
 
-        SignalCommand::Rigs(EntityCommand::List) => cmd_rigs_list(&signal, as_json).await,
-        SignalCommand::Rigs(EntityCommand::Show { ref id }) => {
+        SignalCommand::Rigs(RigsCommand::List) => cmd_rigs_list(&signal, as_json).await,
+        SignalCommand::Rigs(RigsCommand::Show { ref id }) => {
             cmd_rigs_show(&signal, id, as_json).await
         }
-        SignalCommand::Rigs(EntityCommand::Create { ref name }) => {
+        SignalCommand::Rigs(RigsCommand::Create { ref name }) => {
             cmd_rigs_create(&signal, name, as_json).await
         }
-        SignalCommand::Rigs(EntityCommand::Delete { ref id }) => {
+        SignalCommand::Rigs(RigsCommand::Delete { ref id }) => {
             cmd_rigs_delete(&signal, id, as_json).await
+        }
+        SignalCommand::Rigs(RigsCommand::AddEngine { ref rig_id, ref engine_id }) => {
+            cmd_rigs_add_engine(&signal, rig_id, engine_id, as_json).await
+        }
+        SignalCommand::Rigs(RigsCommand::RemoveEngine { ref rig_id, ref engine_id }) => {
+            cmd_rigs_remove_engine(&signal, rig_id, engine_id, as_json).await
+        }
+
+        SignalCommand::Nam(NamCommand::Packs { ref vendor, ref category }) => {
+            cmd_nam_packs(vendor.as_deref(), category.as_deref()).await
+        }
+        SignalCommand::Nam(NamCommand::Import { ref vendor, ref category, dry_run, own_reaper }) => {
+            if dry_run {
+                cmd_nam_import_dry_run(vendor.as_deref(), category.as_deref()).await
+            } else if own_reaper {
+                let (daw, pid, sock) =
+                    daw_cli::launch_and_connect("fts-guitar").await
+                        .map_err(|e| eyre::eyre!("Failed to launch REAPER: {e}"))?;
+                let result = cmd_nam_import(&signal, &daw, vendor.as_deref(), category.as_deref()).await;
+                daw_cli::teardown_owned(pid, &sock);
+                result
+            } else {
+                let daw = daw_cli::connect(socket.clone()).await
+                    .map_err(|e| eyre::eyre!("REAPER required for nam import: {e}"))?;
+                cmd_nam_import(&signal, &daw, vendor.as_deref(), category.as_deref()).await
+            }
         }
 
         SignalCommand::Profiles(ProfilesCommand::List) => {
@@ -484,7 +686,7 @@ pub async fn run(
         }
 
         // Handled above before signal DB connection.
-        SignalCommand::Daw(_) | SignalCommand::Load { .. } => unreachable!(),
+        SignalCommand::Daw(_) | SignalCommand::Load { .. } | SignalCommand::Rigs(RigsCommand::Open { .. }) => unreachable!(),
     }
 }
 
@@ -822,22 +1024,66 @@ async fn cmd_layers_show(signal: &SignalController, id: &str, as_json: bool) -> 
     let layer = signal.layers().load(id.to_string()).await?;
     match layer {
         Some(l) => {
+            // Load default snapshot to show block_refs, module_refs
+            let snapshot = signal
+                .layers()
+                .load_variant(l.id.clone(), l.default_variant_id.clone())
+                .await?;
+
             if as_json {
-                println!(
-                    "{}",
-                    serde_json::to_string_pretty(&json!({
-                        "id": l.id.to_string(),
-                        "name": l.name,
-                        "variants": l.variants.iter().map(|v| json!({
-                            "id": v.id.to_string(),
-                            "name": v.name,
-                        })).collect::<Vec<_>>(),
-                    }))?
-                );
+                let mut obj = json!({
+                    "id": l.id.to_string(),
+                    "name": l.name,
+                    "engine_type": l.engine_type.as_str(),
+                    "variants": l.variants.iter().map(|v| json!({
+                        "id": v.id.to_string(),
+                        "name": v.name,
+                    })).collect::<Vec<_>>(),
+                });
+                if let Some(ref snap) = snapshot {
+                    obj["block_refs"] = json!(snap.block_refs.iter().map(|br| json!({
+                        "collection_id": br.collection_id.to_string(),
+                        "variant_id": br.variant_id.as_ref().map(|v| v.to_string()),
+                    })).collect::<Vec<_>>());
+                    obj["module_refs"] = json!(snap.module_refs.iter().map(|mr| json!({
+                        "collection_id": mr.collection_id.to_string(),
+                        "variant_id": mr.variant_id.as_ref().map(|v| v.to_string()),
+                    })).collect::<Vec<_>>());
+                }
+                println!("{}", serde_json::to_string_pretty(&obj)?);
             } else {
-                println!("Layer: {} ({})", l.name, l.id);
+                println!("Layer: {} ({}) [{:?}]", l.name, l.id, l.engine_type);
+                println!("  Variants:");
                 for v in &l.variants {
-                    println!("  {} — {}", v.id, v.name);
+                    let is_default = v.id == l.default_variant_id;
+                    println!(
+                        "    {} {} — {}",
+                        if is_default { "*" } else { " " },
+                        v.id,
+                        v.name,
+                    );
+                }
+                if let Some(snap) = snapshot {
+                    if !snap.block_refs.is_empty() {
+                        println!("  Block refs (default snapshot):");
+                        for br in &snap.block_refs {
+                            // Try to look up the preset name
+                            let name = lookup_preset_name(signal, &br.collection_id).await;
+                            println!("    - {} ({})", name, br.collection_id);
+                        }
+                    }
+                    if !snap.module_refs.is_empty() {
+                        println!("  Module refs (default snapshot):");
+                        for mr in &snap.module_refs {
+                            println!("    - {}", mr.collection_id);
+                        }
+                    }
+                    if !snap.plugin_refs.is_empty() {
+                        println!("  Plugin refs (default snapshot):");
+                        for pr in &snap.plugin_refs {
+                            println!("    - {:?}", pr.def);
+                        }
+                    }
                 }
             }
         }
@@ -846,14 +1092,62 @@ async fn cmd_layers_show(signal: &SignalController, id: &str, as_json: bool) -> 
     Ok(())
 }
 
+/// Try to find a human-readable name for a block preset by checking all block types.
+async fn lookup_preset_name(
+    signal: &SignalController,
+    preset_id: &signal_proto::PresetId,
+) -> String {
+    // Try common block types
+    for bt in &[
+        signal_proto::BlockType::Amp,
+        signal_proto::BlockType::Drive,
+        signal_proto::BlockType::Eq,
+        signal_proto::BlockType::Reverb,
+        signal_proto::BlockType::Delay,
+        signal_proto::BlockType::Compressor,
+        signal_proto::BlockType::Gate,
+        signal_proto::BlockType::Chorus,
+        signal_proto::BlockType::Flanger,
+        signal_proto::BlockType::Phaser,
+        signal_proto::BlockType::Tremolo,
+        signal_proto::BlockType::Cabinet,
+        signal_proto::BlockType::Boost,
+        signal_proto::BlockType::Saturator,
+        signal_proto::BlockType::Limiter,
+        signal_proto::BlockType::Volume,
+    ] {
+        if let Ok(presets) = signal.block_presets().list(*bt).await {
+            if let Some(p) = presets.iter().find(|p| p.id() == preset_id) {
+                return p.name().to_string();
+            }
+        }
+    }
+    preset_id.to_string()
+}
+
+fn parse_engine_type(s: &str) -> Result<signal_proto::EngineType> {
+    match s.to_lowercase().as_str() {
+        "guitar" => Ok(signal_proto::EngineType::Guitar),
+        "bass" => Ok(signal_proto::EngineType::Bass),
+        "vocal" | "vocals" => Ok(signal_proto::EngineType::Vocal),
+        "keys" => Ok(signal_proto::EngineType::Keys),
+        "synth" => Ok(signal_proto::EngineType::Synth),
+        "organ" => Ok(signal_proto::EngineType::Organ),
+        "pad" => Ok(signal_proto::EngineType::Pad),
+        _ => eyre::bail!("Unknown engine type: \"{s}\". Valid: guitar, bass, vocals, keys, synth, organ, pad"),
+    }
+}
+
 async fn cmd_layers_create(
     signal: &SignalController,
     name: &str,
+    type_str: &str,
     as_json: bool,
 ) -> Result<()> {
+    let engine_type = parse_engine_type(type_str)?;
     let layer = signal
         .layers()
-        .create(name.to_string(), signal_proto::EngineType::Guitar)
+        .create(name.to_string(), engine_type)
         .await?;
 
     if as_json {
@@ -885,6 +1179,101 @@ async fn cmd_layers_delete(signal: &SignalController, id: &str, as_json: bool) -
         );
     } else {
         println!("deleted layer: {}", id);
+    }
+    Ok(())
+}
+
+async fn cmd_layers_add_block(
+    signal: &SignalController,
+    layer_id: &str,
+    preset_id: &str,
+    variant_id: Option<&str>,
+    as_json: bool,
+) -> Result<()> {
+    let lid = signal_proto::layer::LayerId::from(layer_id.to_string());
+    let pid = signal_proto::PresetId::from(preset_id.to_string());
+
+    let layer = signal
+        .layers()
+        .load(lid.clone())
+        .await?
+        .ok_or_else(|| eyre::eyre!("Layer not found: {layer_id}"))?;
+
+    let mut snapshot = signal
+        .layers()
+        .load_variant(lid.clone(), layer.default_variant_id.clone())
+        .await?
+        .ok_or_else(|| eyre::eyre!("Default snapshot not found for layer {layer_id}"))?;
+
+    let block_ref = if let Some(vid) = variant_id {
+        signal_proto::layer::BlockRef::new(pid.clone())
+            .with_variant(signal_proto::SnapshotId::from(vid.to_string()))
+    } else {
+        signal_proto::layer::BlockRef::new(pid.clone())
+    };
+    snapshot.block_refs.push(block_ref);
+
+    signal.layers().save_variant(lid.clone(), snapshot).await?;
+
+    if as_json {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&json!({
+                "action": "add_block",
+                "layer_id": layer_id,
+                "preset_id": preset_id,
+                "ok": true,
+            }))?
+        );
+    } else {
+        println!("added block {} to layer {}", preset_id, layer.name);
+    }
+    Ok(())
+}
+
+async fn cmd_layers_remove_block(
+    signal: &SignalController,
+    layer_id: &str,
+    preset_id: &str,
+    as_json: bool,
+) -> Result<()> {
+    let lid = signal_proto::layer::LayerId::from(layer_id.to_string());
+    let pid = signal_proto::PresetId::from(preset_id.to_string());
+
+    let layer = signal
+        .layers()
+        .load(lid.clone())
+        .await?
+        .ok_or_else(|| eyre::eyre!("Layer not found: {layer_id}"))?;
+
+    let mut snapshot = signal
+        .layers()
+        .load_variant(lid.clone(), layer.default_variant_id.clone())
+        .await?
+        .ok_or_else(|| eyre::eyre!("Default snapshot not found for layer {layer_id}"))?;
+
+    let before = snapshot.block_refs.len();
+    snapshot.block_refs.retain(|br| br.collection_id != pid);
+    let removed = before - snapshot.block_refs.len();
+
+    if removed == 0 {
+        eyre::bail!("Block {} not found in layer {}", preset_id, layer.name);
+    }
+
+    signal.layers().save_variant(lid.clone(), snapshot).await?;
+
+    if as_json {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&json!({
+                "action": "remove_block",
+                "layer_id": layer_id,
+                "preset_id": preset_id,
+                "ok": true,
+            }))?
+        );
+    } else {
+        println!("removed block {} from layer {}", preset_id, layer.name);
     }
     Ok(())
 }
@@ -928,25 +1317,55 @@ async fn cmd_engines_show(signal: &SignalController, id: &str, as_json: bool) ->
     let engine = signal.engines().load(id.to_string()).await?;
     match engine {
         Some(e) => {
+            // Resolve layer names
+            let mut layer_info = Vec::new();
+            for lid in &e.layer_ids {
+                let name = if let Some(l) = signal.layers().load(lid.clone()).await? {
+                    l.name
+                } else {
+                    format!("(missing: {})", lid)
+                };
+                layer_info.push((lid.to_string(), name));
+            }
+
             if as_json {
                 println!(
                     "{}",
                     serde_json::to_string_pretty(&json!({
                         "id": e.id.to_string(),
                         "name": e.name,
-                        "engine_type": format!("{:?}", e.engine_type),
-                        "layer_ids": e.layer_ids.iter().map(|l| l.to_string()).collect::<Vec<_>>(),
+                        "engine_type": e.engine_type.as_str(),
+                        "layers": layer_info.iter().map(|(id, name)| json!({
+                            "id": id,
+                            "name": name,
+                        })).collect::<Vec<_>>(),
                         "scenes": e.variants.iter().map(|v| json!({
                             "id": v.id.to_string(),
                             "name": v.name,
+                            "layer_selections": v.layer_selections.iter().map(|s| json!({
+                                "layer_id": s.layer_id.to_string(),
+                                "variant_id": s.variant_id.to_string(),
+                            })).collect::<Vec<_>>(),
                         })).collect::<Vec<_>>(),
                     }))?
                 );
             } else {
-                println!("Engine: {} ({}) [{:?}]", e.name, e.id, e.engine_type);
-                println!("  Layers: {}", e.layer_ids.iter().map(|l| l.to_string()).collect::<Vec<_>>().join(", "));
+                println!("Engine: {} ({}) [{}]", e.name, e.id, e.engine_type.as_str());
+                println!("  Layers:");
+                for (lid, name) in &layer_info {
+                    println!("    - {} ({})", name, lid);
+                }
                 for v in &e.variants {
-                    println!("  Scene: {} — {}", v.id, v.name);
+                    let is_default = v.id == e.default_variant_id;
+                    println!(
+                        "  {} Scene: {} — {}",
+                        if is_default { "*" } else { " " },
+                        v.name,
+                        v.id,
+                    );
+                    for sel in &v.layer_selections {
+                        println!("      Layer {} → snapshot {}", sel.layer_id, sel.variant_id);
+                    }
                 }
             }
         }
@@ -958,12 +1377,45 @@ async fn cmd_engines_show(signal: &SignalController, id: &str, as_json: bool) ->
 async fn cmd_engines_create(
     signal: &SignalController,
     name: &str,
+    type_str: &str,
+    layer_ids_str: &[String],
     as_json: bool,
 ) -> Result<()> {
-    let engine = signal
+    let engine_type = parse_engine_type(type_str)?;
+
+    // Parse and validate layer IDs
+    let mut layer_ids = Vec::new();
+    let mut layer_selections = Vec::new();
+    for lid_str in layer_ids_str {
+        let lid = signal_proto::layer::LayerId::from(lid_str.to_string());
+        let layer = signal
+            .layers()
+            .load(lid.clone())
+            .await?
+            .ok_or_else(|| eyre::eyre!("Layer not found: {lid_str}"))?;
+        layer_selections.push(signal_proto::engine::LayerSelection::new(
+            lid.clone(),
+            layer.default_variant_id.clone(),
+        ));
+        layer_ids.push(lid);
+    }
+
+    let mut engine = signal
         .engines()
-        .create(name.to_string(), signal_proto::EngineType::Guitar, vec![])
+        .create(name.to_string(), engine_type, layer_ids)
         .await?;
+
+    // Wire layer selections into the default scene
+    if !layer_selections.is_empty() {
+        for scene in &mut engine.variants {
+            for sel in &layer_selections {
+                if !scene.layer_selections.iter().any(|s| s.layer_id == sel.layer_id) {
+                    scene.layer_selections.push(sel.clone());
+                }
+            }
+        }
+        engine = signal.engines().save(engine).await?;
+    }
 
     if as_json {
         println!(
@@ -994,6 +1446,97 @@ async fn cmd_engines_delete(signal: &SignalController, id: &str, as_json: bool) 
         );
     } else {
         println!("deleted engine: {}", id);
+    }
+    Ok(())
+}
+
+async fn cmd_engines_add_layer(
+    signal: &SignalController,
+    engine_id: &str,
+    layer_id: &str,
+    as_json: bool,
+) -> Result<()> {
+    let eid = signal_proto::engine::EngineId::from(engine_id.to_string());
+    let lid = signal_proto::layer::LayerId::from(layer_id.to_string());
+
+    let mut engine = signal
+        .engines()
+        .load(eid.clone())
+        .await?
+        .ok_or_else(|| eyre::eyre!("Engine not found: {engine_id}"))?;
+    let layer = signal
+        .layers()
+        .load(lid.clone())
+        .await?
+        .ok_or_else(|| eyre::eyre!("Layer not found: {layer_id}"))?;
+
+    engine.layer_ids.push(lid.clone());
+
+    let selection = signal_proto::engine::LayerSelection::new(
+        lid,
+        layer.default_variant_id.clone(),
+    );
+    for scene in &mut engine.variants {
+        scene.layer_selections.push(selection.clone());
+    }
+
+    signal.engines().save(engine).await?;
+
+    if as_json {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&json!({
+                "action": "add_layer",
+                "engine_id": engine_id,
+                "layer_id": layer_id,
+                "ok": true,
+            }))?
+        );
+    } else {
+        println!("added layer {} to engine {}", layer.name, engine_id);
+    }
+    Ok(())
+}
+
+async fn cmd_engines_remove_layer(
+    signal: &SignalController,
+    engine_id: &str,
+    layer_id: &str,
+    as_json: bool,
+) -> Result<()> {
+    let eid = signal_proto::engine::EngineId::from(engine_id.to_string());
+    let lid = signal_proto::layer::LayerId::from(layer_id.to_string());
+
+    let mut engine = signal
+        .engines()
+        .load(eid.clone())
+        .await?
+        .ok_or_else(|| eyre::eyre!("Engine not found: {engine_id}"))?;
+
+    let before = engine.layer_ids.len();
+    engine.layer_ids.retain(|l| *l != lid);
+    if engine.layer_ids.len() == before {
+        eyre::bail!("Layer {} not found in engine {}", layer_id, engine.name);
+    }
+
+    for scene in &mut engine.variants {
+        scene.layer_selections.retain(|s| s.layer_id != lid);
+    }
+
+    signal.engines().save(engine).await?;
+
+    if as_json {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&json!({
+                "action": "remove_layer",
+                "engine_id": engine_id,
+                "layer_id": layer_id,
+                "ok": true,
+            }))?
+        );
+    } else {
+        println!("removed layer {} from engine {}", layer_id, engine_id);
     }
     Ok(())
 }
@@ -1039,12 +1582,43 @@ async fn cmd_rigs_show(signal: &SignalController, id: &str, as_json: bool) -> Re
     match rig {
         Some(r) => {
             if as_json {
+                let mut engines_json = Vec::new();
+                for eid in &r.engine_ids {
+                    if let Some(engine) = signal.engines().load(eid.clone()).await? {
+                        let mut layers_json = Vec::new();
+                        for lid in &engine.layer_ids {
+                            if let Some(layer) = signal.layers().load(lid.clone()).await? {
+                                let snap = signal
+                                    .layers()
+                                    .load_variant(lid.clone(), layer.default_variant_id.clone())
+                                    .await?;
+                                let blocks: Vec<_> = if let Some(ref s) = snap {
+                                    s.block_refs.iter().map(|br| json!({
+                                        "collection_id": br.collection_id.to_string(),
+                                    })).collect()
+                                } else {
+                                    vec![]
+                                };
+                                layers_json.push(json!({
+                                    "id": lid.to_string(),
+                                    "name": layer.name,
+                                    "block_refs": blocks,
+                                }));
+                            }
+                        }
+                        engines_json.push(json!({
+                            "id": eid.to_string(),
+                            "name": engine.name,
+                            "layers": layers_json,
+                        }));
+                    }
+                }
                 println!(
                     "{}",
                     serde_json::to_string_pretty(&json!({
                         "id": r.id.to_string(),
                         "name": r.name,
-                        "engine_ids": r.engine_ids.iter().map(|e| e.to_string()).collect::<Vec<_>>(),
+                        "engines": engines_json,
                         "scenes": r.variants.iter().map(|v| json!({
                             "id": v.id.to_string(),
                             "name": v.name,
@@ -1053,9 +1627,37 @@ async fn cmd_rigs_show(signal: &SignalController, id: &str, as_json: bool) -> Re
                 );
             } else {
                 println!("Rig: {} ({})", r.name, r.id);
-                println!("  Engines: {}", r.engine_ids.iter().map(|e| e.to_string()).collect::<Vec<_>>().join(", "));
                 for v in &r.variants {
-                    println!("  Scene: {} — {}", v.id, v.name);
+                    let is_default = v.id == r.default_variant_id;
+                    println!(
+                        "  {} Scene: {}",
+                        if is_default { "*" } else { " " },
+                        v.name,
+                    );
+                    for es in &v.engine_selections {
+                        if let Some(engine) = signal.engines().load(es.engine_id.clone()).await? {
+                            println!("    Engine: {} (scene: {})", engine.name, es.variant_id);
+                            // Find the engine scene to get layer selections
+                            if let Some(scene) = engine.variants.iter().find(|s| s.id == es.variant_id) {
+                                for ls in &scene.layer_selections {
+                                    if let Some(layer) = signal.layers().load(ls.layer_id.clone()).await? {
+                                        println!("      Layer: {} (snapshot: {})", layer.name, ls.variant_id);
+                                        // Load the layer snapshot to show block refs
+                                        if let Some(snap) = signal.layers().load_variant(ls.layer_id.clone(), ls.variant_id.clone()).await? {
+                                            for br in &snap.block_refs {
+                                                let name = lookup_preset_name(signal, &br.collection_id).await;
+                                                println!("        Block: {}", name);
+                                            }
+                                        }
+                                    } else {
+                                        println!("      Layer: (missing: {})", ls.layer_id);
+                                    }
+                                }
+                            }
+                        } else {
+                            println!("    Engine: (missing: {})", es.engine_id);
+                        }
+                    }
                 }
             }
         }
@@ -1097,6 +1699,650 @@ async fn cmd_rigs_delete(signal: &SignalController, id: &str, as_json: bool) -> 
         println!("deleted rig: {}", id);
     }
     Ok(())
+}
+
+async fn cmd_rigs_add_engine(
+    signal: &SignalController,
+    rig_id: &str,
+    engine_id: &str,
+    as_json: bool,
+) -> Result<()> {
+    let rid = signal_proto::rig::RigId::from(rig_id.to_string());
+    let eid = signal_proto::engine::EngineId::from(engine_id.to_string());
+
+    let mut rig = signal
+        .rigs()
+        .load(rid.clone())
+        .await?
+        .ok_or_else(|| eyre::eyre!("Rig not found: {rig_id}"))?;
+    let engine = signal
+        .engines()
+        .load(eid.clone())
+        .await?
+        .ok_or_else(|| eyre::eyre!("Engine not found: {engine_id}"))?;
+
+    rig.engine_ids.push(eid.clone());
+
+    let selection = signal_proto::rig::EngineSelection::new(
+        eid,
+        engine.default_variant_id.clone(),
+    );
+    for scene in &mut rig.variants {
+        scene.engine_selections.push(selection.clone());
+    }
+
+    signal.rigs().save(rig).await?;
+
+    if as_json {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&json!({
+                "action": "add_engine",
+                "rig_id": rig_id,
+                "engine_id": engine_id,
+                "ok": true,
+            }))?
+        );
+    } else {
+        println!("added engine {} to rig {}", engine.name, rig_id);
+    }
+    Ok(())
+}
+
+async fn cmd_rigs_remove_engine(
+    signal: &SignalController,
+    rig_id: &str,
+    engine_id: &str,
+    as_json: bool,
+) -> Result<()> {
+    let rid = signal_proto::rig::RigId::from(rig_id.to_string());
+    let eid = signal_proto::engine::EngineId::from(engine_id.to_string());
+
+    let mut rig = signal
+        .rigs()
+        .load(rid.clone())
+        .await?
+        .ok_or_else(|| eyre::eyre!("Rig not found: {rig_id}"))?;
+
+    let before = rig.engine_ids.len();
+    rig.engine_ids.retain(|e| *e != eid);
+    if rig.engine_ids.len() == before {
+        eyre::bail!("Engine {} not found in rig {}", engine_id, rig.name);
+    }
+
+    for scene in &mut rig.variants {
+        scene.engine_selections.retain(|s| s.engine_id != eid);
+    }
+
+    signal.rigs().save(rig).await?;
+
+    if as_json {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&json!({
+                "action": "remove_engine",
+                "rig_id": rig_id,
+                "engine_id": engine_id,
+                "ok": true,
+            }))?
+        );
+    } else {
+        println!("removed engine {} from rig {}", engine_id, rig_id);
+    }
+    Ok(())
+}
+
+async fn cmd_rigs_open(
+    db: Option<PathBuf>,
+    socket: Option<PathBuf>,
+    rig_id: &str,
+    own_reaper: bool,
+    close_after_load: bool,
+) -> Result<()> {
+    let signal = connect_signal(db).await?;
+
+    // Load rig from DB
+    let rig = signal
+        .rigs()
+        .load(rig_id.to_string())
+        .await?
+        .ok_or_else(|| eyre::eyre!("Rig not found: {rig_id}"))?;
+
+    eprintln!("Opening rig: {} ({})", rig.name, rig.id);
+
+    // Connect to REAPER — owned or existing
+    let (daw, owned) = if own_reaper {
+        let (daw, pid, sock) = daw_cli::launch_and_connect("fts-guitar")
+            .await
+            .map_err(|e| eyre::eyre!("Failed to launch REAPER: {e}"))?;
+        (daw, Some((pid, sock)))
+    } else {
+        let daw = daw_cli::connect(socket)
+            .await
+            .map_err(|e| eyre::eyre!("REAPER required for rig open: {e}"))?;
+        (daw, None)
+    };
+
+    // Load rig into current REAPER project
+    let project = daw.current_project().await?;
+    let load_result = signal
+        .service()
+        .load_rig_to_daw(&rig, None, &project)
+        .await
+        .map_err(|e| eyre::eyre!("{e}"));
+
+    // Verify FX actually loaded on each layer track (runs before teardown so
+    // REAPER is still alive). Collects issues but doesn't fail the command —
+    // we still want teardown and the summary to print.
+    let mut verify_issues: Vec<String> = Vec::new();
+    if let Ok(ref result) = load_result {
+        for layer_result in &result.layer_results {
+            let track = project
+                .tracks()
+                .by_guid(&layer_result.track_guid)
+                .await;
+            let track = match track {
+                Ok(Some(t)) => t,
+                _ => {
+                    verify_issues.push(format!(
+                        "Layer track {} not found in REAPER",
+                        layer_result.track_guid
+                    ));
+                    continue;
+                }
+            };
+
+            // Count expected FX: modules (blocks inside modules) + standalone blocks
+            let module_fx: usize = layer_result
+                .modules
+                .iter()
+                .map(|m| m.loaded_fx.len())
+                .sum();
+            let expected_fx = module_fx + layer_result.standalone_blocks.len();
+
+            let actual_fx = match track.fx_chain().all().await {
+                Ok(fx_list) => fx_list,
+                Err(e) => {
+                    verify_issues.push(format!(
+                        "Failed to query FX on track {}: {e}",
+                        layer_result.track_guid
+                    ));
+                    continue;
+                }
+            };
+
+            if actual_fx.len() != expected_fx {
+                verify_issues.push(format!(
+                    "Track '{}': expected {} FX, found {} in REAPER",
+                    layer_result.track_guid,
+                    expected_fx,
+                    actual_fx.len()
+                ));
+            } else {
+                // Verify each FX GUID matches what we expected
+                let expected_guids: Vec<&str> = layer_result
+                    .modules
+                    .iter()
+                    .flat_map(|m| m.loaded_fx.iter().map(|b| b.fx_guid.as_str()))
+                    .chain(layer_result.standalone_blocks.iter().map(|b| b.fx_guid.as_str()))
+                    .collect();
+                for (i, expected_guid) in expected_guids.iter().enumerate() {
+                    if i < actual_fx.len() && actual_fx[i].guid != *expected_guid {
+                        verify_issues.push(format!(
+                            "FX[{}] GUID mismatch: expected {}, found {}",
+                            i, expected_guid, actual_fx[i].guid
+                        ));
+                    }
+                }
+            }
+        }
+    }
+
+    // Teardown if requested (runs even on error)
+    if close_after_load {
+        if let Some((pid, sock)) = owned {
+            daw_cli::teardown_owned(pid, &sock);
+        }
+    } else if let Some((pid, _)) = &owned {
+        eprintln!("REAPER (PID {pid}) left open for inspection.");
+    }
+
+    let result = load_result?;
+
+    // Print verification summary
+    if verify_issues.is_empty() {
+        let total_fx: usize = result
+            .layer_results
+            .iter()
+            .map(|l| {
+                let module_fx: usize = l.modules.iter().map(|m| m.loaded_fx.len()).sum();
+                module_fx + l.standalone_blocks.len()
+            })
+            .sum();
+        eprintln!(
+            "Rig \"{}\" loaded and verified: {} layers, {} FX confirmed in REAPER.",
+            rig.name,
+            result.layer_results.len(),
+            total_fx,
+        );
+    } else {
+        eprintln!("Rig \"{}\" loaded with verification issues:", rig.name);
+        for issue in &verify_issues {
+            eprintln!("  ⚠ {issue}");
+        }
+        return Err(eyre::eyre!(
+            "{} verification issue(s) — FX may not have loaded correctly",
+            verify_issues.len()
+        ));
+    }
+
+    Ok(())
+}
+
+// ============================================================================
+// Command Implementations — NAM
+// ============================================================================
+
+const DEFAULT_NAM_ROOT: &str =
+    "~/Documents/Development/FastTrackStudio/signal-library/nam";
+
+async fn cmd_nam_packs(
+    vendor: Option<&str>,
+    category: Option<&str>,
+) -> Result<()> {
+    let nam_root = nam_manager::nam_root_from_env(&expand_tilde(DEFAULT_NAM_ROOT));
+    let packs_dir = nam_root.join("packs");
+
+    let packs = nam_manager::pack::load_packs(&packs_dir)
+        .map_err(|e| eyre::eyre!("Failed to load packs: {e}"))?;
+
+    let cat_filter = category
+        .map(|c| match c.to_lowercase().as_str() {
+            "amp" => Ok(nam_manager::PackCategory::Amp),
+            "drive" => Ok(nam_manager::PackCategory::Drive),
+            "ir" => Ok(nam_manager::PackCategory::Ir),
+            "archetype" => Ok(nam_manager::PackCategory::Archetype),
+            _ => Err(eyre::eyre!("Unknown category: {c}. Valid: amp, drive, ir, archetype")),
+        })
+        .transpose()?;
+
+    let filtered: Vec<_> = packs
+        .into_iter()
+        .filter(|p| {
+            if let Some(ref v) = vendor {
+                if !p.vendor.to_lowercase().contains(&v.to_lowercase()) {
+                    return false;
+                }
+            }
+            if let Some(ref c) = cat_filter {
+                if p.category != *c {
+                    return false;
+                }
+            }
+            true
+        })
+        .collect();
+
+    if filtered.is_empty() {
+        println!("No packs found.");
+        return Ok(());
+    }
+
+    println!("NAM packs ({}):", filtered.len());
+    for p in &filtered {
+        let file_count = p.files.len();
+        let gear = p.gear_model.as_deref().unwrap_or("-");
+        println!(
+            "  {} — {} [{}] vendor={} files={} gear={}",
+            p.id,
+            p.label,
+            p.category.as_str(),
+            p.vendor,
+            file_count,
+            gear,
+        );
+    }
+    Ok(())
+}
+
+/// Capture the full REAPER state chunk for a NAM FX instance.
+///
+/// Loads the NAM plugin, injects the model path into its state, then reads
+/// back the complete REAPER chunk. This produces a portable, host-validated
+/// state representation rather than storing raw file paths.
+async fn nam_capture_state(fx: &daw_control::FxHandle, model_path: &str) -> Result<String> {
+    let reaper_chunk = fx.state_chunk_encoded().await?
+        .ok_or_else(|| eyre::eyre!("FX has no default chunk"))?;
+    let segments = nam_manager::extract_state_base64(&reaper_chunk)
+        .ok_or_else(|| eyre::eyre!("Failed to extract base64 from chunk"))?;
+    let unified_b64 = nam_manager::first_base64_segment(&segments);
+    let mut nam_chunk = nam_manager::decode_chunk(unified_b64.trim())
+        .map_err(|e| eyre::eyre!("Failed to decode NAM chunk: {e}"))?;
+    nam_manager::rewrite_paths(&mut nam_chunk, Some(model_path), None);
+    let new_b64 = nam_manager::encode_chunk(&nam_chunk);
+    let rebuilt = nam_manager::rebuild_chunk_with_state(&reaper_chunk, &new_b64);
+    fx.set_state_chunk_encoded(rebuilt).await
+        .map_err(|e| eyre::eyre!("Failed to set chunk: {e}"))?;
+    // Read back the final state after REAPER has processed it
+    fx.state_chunk_encoded().await?
+        .ok_or_else(|| eyre::eyre!("No state after injection"))
+}
+
+/// Filter packs by vendor/category for NAM import.
+fn filter_nam_packs(
+    packs_dir: &Path,
+    vendor: Option<&str>,
+    category: Option<&str>,
+) -> Result<Vec<nam_manager::PackDefinition>> {
+    let packs = nam_manager::pack::load_packs(packs_dir)
+        .map_err(|e| eyre::eyre!("Failed to load packs: {e}"))?;
+
+    let cat_filter = category
+        .map(|c| match c.to_lowercase().as_str() {
+            "amp" => Ok(nam_manager::PackCategory::Amp),
+            "drive" => Ok(nam_manager::PackCategory::Drive),
+            _ => Err(eyre::eyre!("Unknown category for import: {c}. Valid: amp, drive")),
+        })
+        .transpose()?;
+
+    Ok(packs
+        .into_iter()
+        .filter(|p| {
+            if let Some(ref v) = vendor {
+                if !p.vendor.to_lowercase().contains(&v.to_lowercase()) {
+                    return false;
+                }
+            }
+            if let Some(ref c) = cat_filter {
+                if p.category != *c {
+                    return false;
+                }
+            }
+            matches!(p.category, nam_manager::PackCategory::Amp | nam_manager::PackCategory::Drive)
+        })
+        .collect())
+}
+
+/// Collect (tone, filename) pairs from a pack definition.
+fn collect_tone_files(pack: &nam_manager::PackDefinition) -> Vec<(String, String)> {
+    let is_amp = pack.category == nam_manager::PackCategory::Amp;
+    let mut tone_files: Vec<(String, String)> = Vec::new();
+
+    if is_amp {
+        for (filename, file_override) in &pack.files {
+            if let Some(ref tone) = file_override.tone {
+                tone_files.push((tone.clone(), filename.clone()));
+            }
+        }
+        tone_files.sort_by(|a, b| tone_sort_key(&a.0).cmp(&tone_sort_key(&b.0)));
+    } else {
+        for (filename, file_override) in &pack.files {
+            let tone = file_override
+                .tone
+                .clone()
+                .or_else(|| pack.default_tone.clone())
+                .unwrap_or_else(|| filename_to_tone(filename));
+            tone_files.push((tone, filename.clone()));
+        }
+        tone_files.sort_by(|a, b| a.0.cmp(&b.0));
+    }
+
+    tone_files
+}
+
+const NAM_PLUGIN_NAME: &str = "VST3: NeuralAmpModeler (Steven Atkinson)";
+
+/// Dry-run NAM import: prints what would be imported without REAPER or DB changes.
+async fn cmd_nam_import_dry_run(
+    vendor: Option<&str>,
+    category: Option<&str>,
+) -> Result<()> {
+    let nam_root = nam_manager::nam_root_from_env(&expand_tilde(DEFAULT_NAM_ROOT));
+    let packs_dir = nam_root.join("packs");
+    let filtered = filter_nam_packs(&packs_dir, vendor, category)?;
+
+    if filtered.is_empty() {
+        println!("No importable packs found.");
+        return Ok(());
+    }
+
+    let mut total_presets = 0;
+    let mut total_snapshots = 0;
+
+    for pack in &filtered {
+        let tone_files = collect_tone_files(pack);
+        if tone_files.is_empty() {
+            continue;
+        }
+
+        let is_amp = pack.category == nam_manager::PackCategory::Amp;
+        let category_prefix = if is_amp { "nam-amp" } else { "nam-drive" };
+        let preset_id = signal_proto::seed_id(&format!("{}-{}", category_prefix, pack.id));
+        let gear_model = pack.gear_model.as_deref().unwrap_or(&pack.label);
+        let preset_name = format!("{} [NAM]", gear_model);
+        let snap_count = tone_files.len();
+
+        println!(
+            "  [dry run] {} — {} ({} snapshots: {})",
+            preset_id,
+            preset_name,
+            snap_count,
+            tone_files
+                .iter()
+                .map(|(t, _)| capitalize(t))
+                .collect::<Vec<_>>()
+                .join(", "),
+        );
+
+        total_presets += 1;
+        total_snapshots += snap_count;
+    }
+
+    println!(
+        "\n[dry run] Would import {} presets ({} total snapshots). No changes made.",
+        total_presets, total_snapshots,
+    );
+
+    Ok(())
+}
+
+/// Live NAM import: loads each model in REAPER, captures real state chunks.
+async fn cmd_nam_import(
+    signal: &SignalController,
+    daw: &Daw,
+    vendor: Option<&str>,
+    category: Option<&str>,
+) -> Result<()> {
+    let nam_root = nam_manager::nam_root_from_env(&expand_tilde(DEFAULT_NAM_ROOT));
+    let packs_dir = nam_root.join("packs");
+    let filtered = filter_nam_packs(&packs_dir, vendor, category)?;
+
+    if filtered.is_empty() {
+        println!("No importable packs found.");
+        return Ok(());
+    }
+
+    // Create a scratch track for loading NAM instances
+    let project = daw.current_project().await?;
+    let scratch_track = project.tracks().add("__nam_import__", None).await?;
+
+    let mut total_presets = 0;
+    let mut total_snapshots = 0;
+
+    for pack in &filtered {
+        let tone_files = collect_tone_files(pack);
+        if tone_files.is_empty() {
+            continue;
+        }
+
+        let is_amp = pack.category == nam_manager::PackCategory::Amp;
+        let category_prefix = if is_amp { "nam-amp" } else { "nam-drive" };
+        let block_type = if is_amp {
+            signal_proto::BlockType::Amp
+        } else {
+            signal_proto::BlockType::Drive
+        };
+
+        let preset_id = signal_proto::seed_id(&format!("{}-{}", category_prefix, pack.id));
+        let gear_model = pack.gear_model.as_deref().unwrap_or(&pack.label);
+        let preset_name = format!("{} [NAM]", gear_model);
+
+        // Build snapshots by loading each tone in REAPER
+        let mut snapshots: Vec<signal_proto::Snapshot> = Vec::new();
+
+        for (tone, filename) in &tone_files {
+            let snap_id =
+                signal_proto::seed_id(&format!("{}-{}-{}", category_prefix, pack.id, tone));
+            let path = resolve_nam_path(&nam_root, pack, filename);
+
+            let path_str = match path {
+                Some(p) => p,
+                None => {
+                    eprintln!("  warning: {} not found, skipping tone '{}'", filename, tone);
+                    continue;
+                }
+            };
+
+            // Add NAM FX, capture state, then remove
+            let block = signal_proto::Block::from_parameters(nam_block_params());
+            let snapshot = match async {
+                let fx = scratch_track
+                    .fx_chain()
+                    .add(NAM_PLUGIN_NAME)
+                    .await
+                    .map_err(|e| eyre::eyre!("Failed to add NAM FX: {e}"))?;
+
+                let chunk_text = nam_capture_state(&fx, &path_str).await?;
+                let state_data = chunk_text.into_bytes();
+
+                fx.remove().await
+                    .map_err(|e| eyre::eyre!("Failed to remove FX: {e}"))?;
+
+                Ok::<_, eyre::Report>(
+                    signal_proto::Snapshot::new(
+                        signal_proto::SnapshotId::from(snap_id.to_string()),
+                        capitalize(tone),
+                        block,
+                    )
+                    .with_state_data(state_data),
+                )
+            }
+            .await
+            {
+                Ok(s) => s,
+                Err(e) => {
+                    eprintln!("  warning: failed to capture '{}' ({}): {}", tone, filename, e);
+                    continue;
+                }
+            };
+
+            snapshots.push(snapshot);
+        }
+
+        if snapshots.is_empty() {
+            eprintln!("  skipping {} — no tones captured successfully", preset_name);
+            continue;
+        }
+
+        let default_snapshot = snapshots.remove(0);
+        let snap_count = 1 + snapshots.len();
+
+        let metadata = signal_proto::metadata::Metadata::new()
+            .with_tag(format!("source:{}", NAM_PLUGIN_NAME));
+
+        let preset = signal_proto::Preset::new(
+            signal_proto::PresetId::from(preset_id.to_string()),
+            preset_name.clone(),
+            block_type,
+            default_snapshot,
+            snapshots,
+        )
+        .with_metadata(metadata);
+
+        signal.block_presets().save(preset).await?;
+        println!(
+            "  imported: {} — {} ({} snapshots)",
+            preset_id, preset_name, snap_count,
+        );
+
+        total_presets += 1;
+        total_snapshots += snap_count;
+    }
+
+    // Clean up scratch track
+    project
+        .tracks()
+        .remove(daw_control::TrackRef::Guid(scratch_track.guid().to_string()))
+        .await?;
+
+    println!(
+        "\nImported {} presets ({} total snapshots).",
+        total_presets, total_snapshots,
+    );
+
+    Ok(())
+}
+
+/// Resolve a NAM file path: {nam_root}/{category_dir}/{pack_directory}/{filename}
+fn resolve_nam_path(
+    nam_root: &Path,
+    pack: &nam_manager::PackDefinition,
+    filename: &str,
+) -> Option<String> {
+    let dir = pack.directory.as_deref().unwrap_or(&pack.id);
+    let path = nam_root
+        .join(pack.category.directory())
+        .join(dir)
+        .join(filename);
+    if path.exists() {
+        Some(path.to_string_lossy().to_string())
+    } else {
+        None
+    }
+}
+
+/// Default NAM block parameters.
+fn nam_block_params() -> Vec<signal_proto::BlockParameter> {
+    vec![
+        signal_proto::BlockParameter::new("INPUT_LEVEL", "Input Level", 0.5),
+        signal_proto::BlockParameter::new("OUTPUT_LEVEL", "Output Level", 0.5),
+        signal_proto::BlockParameter::new("NOISE_GATE_THRESHOLD", "Noise Gate Threshold", 0.0),
+        signal_proto::BlockParameter::new("NOISE_GATE_ACTIVE", "Noise Gate Active", 0.0),
+    ]
+}
+
+/// Tone sort key for ordering: clean first, then crunch, drive, lead, overdrive.
+fn tone_sort_key(tone: &str) -> u8 {
+    match tone.to_lowercase().as_str() {
+        "clean" => 0,
+        "crunch" => 1,
+        "drive" => 2,
+        "lead" => 3,
+        "overdrive" => 4,
+        _ => 5,
+    }
+}
+
+/// Capitalize first letter of a string.
+fn capitalize(s: &str) -> String {
+    let mut chars = s.chars();
+    match chars.next() {
+        None => String::new(),
+        Some(c) => c.to_uppercase().to_string() + chars.as_str(),
+    }
+}
+
+/// Extract a tone-like label from a filename.
+fn filename_to_tone(filename: &str) -> String {
+    let stem = filename
+        .rsplit('.')
+        .nth(1)
+        .unwrap_or(filename);
+    // Remove common prefixes like "ML PEAV Block" etc.
+    stem.split_whitespace()
+        .last()
+        .unwrap_or(stem)
+        .to_lowercase()
 }
 
 // ============================================================================

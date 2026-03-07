@@ -23,5 +23,6 @@ serde_json.workspace = true
 clap = { version = "4", features = ["derive"] }
 uuid.workspace = true
 signal-import.workspace = true
+nam-manager.workspace = true
 daw-cli.workspace = true
 daw-control.workspace = true

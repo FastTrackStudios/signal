@@ -307,3 +307,17 @@ async fn worship_rig_macro_bank(ctx: &ReaperTestContext) -> eyre::Result<()> {
     ctx.log("worship_rig_macro_bank: PASS");
     Ok(())
 }
+
+// ---------------------------------------------------------------------------
+// Diagnostic: Dump all installed FX plugins (temporary — remove after use)
+// ---------------------------------------------------------------------------
+
+#[reaper_test(isolated)]
+async fn dump_installed_plugins(ctx: &ReaperTestContext) -> eyre::Result<()> {
+    let plugins = ctx.daw.installed_plugins().await?;
+    ctx.log(&format!("=== Installed FX plugins: {} total ===", plugins.len()));
+    for p in &plugins {
+        ctx.log(&format!("  {} | {}", p.name, p.ident));
+    }
+    Ok(())
+}
