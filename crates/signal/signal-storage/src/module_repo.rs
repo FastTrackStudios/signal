@@ -394,10 +394,169 @@ mod tests {
 
     type Result<T> = core::result::Result<T, Box<dyn std::error::Error>>;
 
+    /// Build a test "drive stack" module preset with 4 blocks and 2 snapshots.
+    fn test_drive_stack_preset() -> ModulePreset {
+        let default_module = Module::from_blocks(vec![
+            ModuleBlock::new(
+                "boost",
+                "Boost",
+                BlockType::Drive,
+                ModuleBlockSource::PresetDefault {
+                    preset_id: PresetId::from_uuid(seed_id("test-boost")),
+                    saved_at_version: None,
+                },
+            ),
+            ModuleBlock::new(
+                "drive-1",
+                "TS808",
+                BlockType::Drive,
+                ModuleBlockSource::PresetDefault {
+                    preset_id: PresetId::from_uuid(seed_id("test-ts808")),
+                    saved_at_version: None,
+                },
+            ),
+            ModuleBlock::new(
+                "drive-2",
+                "Klon",
+                BlockType::Drive,
+                ModuleBlockSource::PresetSnapshot {
+                    preset_id: PresetId::from_uuid(seed_id("test-klon")),
+                    snapshot_id: signal_proto::SnapshotId::from_uuid(seed_id("test-klon-bright")),
+                    saved_at_version: None,
+                },
+            )
+            .with_overrides(vec![
+                BlockParameterOverride::new("treble", 0.55),
+                BlockParameterOverride::new("output", 0.65),
+            ]),
+            ModuleBlock::new(
+                "drive-3",
+                "OCD",
+                BlockType::Drive,
+                ModuleBlockSource::PresetSnapshot {
+                    preset_id: PresetId::from_uuid(seed_id("test-ocd")),
+                    snapshot_id: signal_proto::SnapshotId::from_uuid(seed_id("test-ocd-hot")),
+                    saved_at_version: None,
+                },
+            ),
+        ]);
+
+        let push_module = Module::from_blocks(vec![
+            ModuleBlock::new(
+                "boost",
+                "Boost",
+                BlockType::Drive,
+                ModuleBlockSource::PresetDefault {
+                    preset_id: PresetId::from_uuid(seed_id("test-boost")),
+                    saved_at_version: None,
+                },
+            ),
+            ModuleBlock::new(
+                "drive-1",
+                "TS808",
+                BlockType::Drive,
+                ModuleBlockSource::PresetDefault {
+                    preset_id: PresetId::from_uuid(seed_id("test-ts808")),
+                    saved_at_version: None,
+                },
+            ),
+            ModuleBlock::new(
+                "drive-2",
+                "Klon",
+                BlockType::Drive,
+                ModuleBlockSource::PresetSnapshot {
+                    preset_id: PresetId::from_uuid(seed_id("test-klon")),
+                    snapshot_id: signal_proto::SnapshotId::from_uuid(seed_id("test-klon-bright")),
+                    saved_at_version: None,
+                },
+            ),
+            ModuleBlock::new(
+                "drive-3",
+                "OCD",
+                BlockType::Drive,
+                ModuleBlockSource::PresetSnapshot {
+                    preset_id: PresetId::from_uuid(seed_id("test-ocd")),
+                    snapshot_id: signal_proto::SnapshotId::from_uuid(seed_id("test-ocd-hot")),
+                    saved_at_version: None,
+                },
+            ),
+        ]);
+
+        ModulePreset::new(
+            seed_id("test-drive-stack"),
+            "Test Drive Stack",
+            ModuleType::Custom,
+            ModuleSnapshot::new(seed_id("test-drive-stack-default"), "Default", default_module),
+            vec![ModuleSnapshot::new(
+                seed_id("test-drive-stack-push"),
+                "Push",
+                push_module,
+            )],
+        )
+    }
+
+    /// Build a test "parallel time" module preset with splits.
+    fn test_parallel_time_preset() -> ModulePreset {
+        let module = Module::from_chain(SignalChain::new(vec![
+            SignalNode::Split {
+                lanes: vec![
+                    SignalChain::serial(vec![ModuleBlock::new(
+                        "dly-1",
+                        "Delay A",
+                        BlockType::Delay,
+                        ModuleBlockSource::PresetDefault {
+                            preset_id: PresetId::from_uuid(seed_id("test-delay-a")),
+                            saved_at_version: None,
+                        },
+                    )]),
+                    SignalChain::serial(vec![ModuleBlock::new(
+                        "dly-2",
+                        "Delay B",
+                        BlockType::Delay,
+                        ModuleBlockSource::PresetDefault {
+                            preset_id: PresetId::from_uuid(seed_id("test-delay-b")),
+                            saved_at_version: None,
+                        },
+                    )]),
+                ],
+            },
+            SignalNode::Split {
+                lanes: vec![
+                    SignalChain::serial(vec![ModuleBlock::new(
+                        "verb-1",
+                        "Reverb A",
+                        BlockType::Reverb,
+                        ModuleBlockSource::PresetDefault {
+                            preset_id: PresetId::from_uuid(seed_id("test-reverb-a")),
+                            saved_at_version: None,
+                        },
+                    )]),
+                    SignalChain::serial(vec![ModuleBlock::new(
+                        "verb-2",
+                        "Reverb B",
+                        BlockType::Reverb,
+                        ModuleBlockSource::PresetDefault {
+                            preset_id: PresetId::from_uuid(seed_id("test-reverb-b")),
+                            saved_at_version: None,
+                        },
+                    )]),
+                ],
+            },
+        ]));
+
+        ModulePreset::new(
+            seed_id("test-time-parallel"),
+            "Test Parallel Time",
+            ModuleType::Time,
+            ModuleSnapshot::new(seed_id("test-time-parallel-default"), "Default", module),
+            vec![],
+        )
+    }
+
     async fn seeded_repo() -> Result<ModuleRepoLive> {
         let repo = ModuleRepoLive::connect_sqlite_in_memory().await?;
         repo.init_schema().await?;
-        repo.reseed_defaults(&crate::seed_data::default_module_collections())
+        repo.reseed_defaults(&[test_drive_stack_preset(), test_parallel_time_preset()])
             .await?;
         Ok(repo)
     }
@@ -413,7 +572,7 @@ mod tests {
         let collections = repo.list_module_collections().await?;
         let stack = collections
             .iter()
-            .find(|c| c.name() == "Full Drive Stack")
+            .find(|c| c.name() == "Test Drive Stack")
             .unwrap();
 
         // -- Check: default + 1 additional = 2 total
@@ -428,7 +587,7 @@ mod tests {
     async fn load_module_default_variant_returns_snapshot() -> Result<()> {
         // -- Setup & Fixtures
         let repo = seeded_repo().await?;
-        let collection_id = ModulePresetId::from_uuid(seed_id("drive-full-stack"));
+        let collection_id = ModulePresetId::from_uuid(seed_id("test-drive-stack"));
 
         // -- Exec
         let variant = repo.load_module_default_variant(&collection_id).await?;
@@ -444,8 +603,8 @@ mod tests {
     async fn load_module_variant_by_id() -> Result<()> {
         // -- Setup & Fixtures
         let repo = seeded_repo().await?;
-        let collection_id = ModulePresetId::from_uuid(seed_id("drive-full-stack"));
-        let variant_id = ModuleSnapshotId::from_uuid(seed_id("drive-full-stack-push"));
+        let collection_id = ModulePresetId::from_uuid(seed_id("test-drive-stack"));
+        let variant_id = ModuleSnapshotId::from_uuid(seed_id("test-drive-stack-push"));
 
         // -- Exec
         let variant = repo
@@ -479,7 +638,7 @@ mod tests {
     async fn module_override_round_trip() -> Result<()> {
         // -- Setup & Fixtures
         let repo = seeded_repo().await?;
-        let collection_id = ModulePresetId::from_uuid(seed_id("drive-full-stack"));
+        let collection_id = ModulePresetId::from_uuid(seed_id("test-drive-stack"));
 
         // -- Exec
         let variant = repo
@@ -537,7 +696,7 @@ mod tests {
     async fn module_block_source_types_round_trip() -> Result<()> {
         // -- Setup & Fixtures
         let repo = seeded_repo().await?;
-        let collection_id = ModulePresetId::from_uuid(seed_id("drive-full-stack"));
+        let collection_id = ModulePresetId::from_uuid(seed_id("test-drive-stack"));
 
         // -- Exec
         let variant = repo
@@ -702,7 +861,9 @@ mod tests {
         // -- Setup & Fixtures: load the "Parallel Time" default variant
         let repo = seeded_repo().await?;
         let original = repo
-            .load_module_default_variant(&ModulePresetId::from_uuid(seed_id("time-parallel")))
+            .load_module_default_variant(&ModulePresetId::from_uuid(seed_id(
+                "test-time-parallel",
+            )))
             .await?
             .expect("should find variant");
 

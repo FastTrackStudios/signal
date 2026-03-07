@@ -637,13 +637,15 @@ async fn configure_fx_free(
     fx_index: u32,
 ) -> Result<LoadBlockResult, String> {
     if let Some(data) = &resolved.state_data {
-        if resolved.plugin_name.contains("NeuralAmpModeler") {
+        if resolved.plugin_name.contains("NeuralAmpModeler") && !data.starts_with(b"<") {
+            // Legacy path-based: state_data is a UTF-8 file path
             let model_path = std::str::from_utf8(data)
-                .map_err(|e| format!("NAM state_data is not valid UTF-8: {e}"))?;
+                .map_err(|e| format!("Invalid NAM path: {e}"))?;
             inject_nam_model_state(&fx, model_path)
                 .await
                 .map_err(|e| format!("Failed to load NAM model: {e}"))?;
         } else if std::str::from_utf8(data).is_ok() {
+            // Chunk-based (VST3, CLAP, or NAM captured from REAPER)
             fx.set_state_chunk(data.clone())
                 .await
                 .map_err(|e| format!("Failed to apply state chunk: {e}"))?;
@@ -774,7 +776,10 @@ fn execute_chain_nodes<'a>(
 /// 4. Rewrite the model path
 /// 5. Re-encode and set back via the rebuilt REAPER chunk
 async fn inject_nam_model_state(fx: &daw::FxHandle, model_path: &str) -> Result<(), String> {
-    use nam_manager::{decode_chunk, encode_chunk, rewrite_paths};
+    use nam_manager::{
+        decode_chunk, encode_chunk, extract_state_base64, first_base64_segment,
+        rebuild_chunk_with_state, rewrite_paths,
+    };
 
     // 1. Get the default REAPER chunk from the just-added FX.
     let reaper_chunk = fx
@@ -817,187 +822,9 @@ async fn inject_binary_state(fx: &daw::FxHandle, binary_state: &[u8]) -> Result<
         .ok_or("FX has no default chunk to inject state into")?;
 
     let new_b64 = BASE64.encode(binary_state);
-    let rebuilt = rebuild_chunk_with_state(&existing, &new_b64);
+    let rebuilt = nam_manager::rebuild_chunk_with_state(&existing, &new_b64);
     fx.set_state_chunk_encoded(rebuilt)
         .await
         .map_err(|e| format!("Failed to set rebuilt chunk: {e}"))
 }
 
-// ─── REAPER chunk helpers ──────────────────────────────────────
-
-/// Extract base64 data lines from a REAPER VST/VST3/CLAP chunk block.
-///
-/// For VST/VST3, extracts lines between header and footer.
-/// For CLAP, extracts lines from within the `<STATE` block.
-fn extract_state_base64(chunk: &str) -> Option<Vec<String>> {
-    let lines: Vec<&str> = chunk.lines().collect();
-    if lines.len() < 3 {
-        return None;
-    }
-
-    let header = lines[0].trim();
-    if header.starts_with("<CLAP") {
-        // CLAP: extract only lines inside <STATE ... >
-        let mut in_state = false;
-        let mut data_lines = Vec::new();
-        for &line in &lines[1..] {
-            let trimmed = line.trim();
-            if !in_state && trimmed.starts_with("<STATE") {
-                in_state = true;
-                continue;
-            }
-            if in_state {
-                if trimmed == ">" {
-                    break;
-                }
-                if !trimmed.is_empty() {
-                    data_lines.push(trimmed.to_string());
-                }
-            }
-        }
-        if data_lines.is_empty() { None } else { Some(data_lines) }
-    } else {
-        // VST/VST3: flat structure
-        let data_lines: Vec<String> = lines[1..lines.len() - 1]
-            .iter()
-            .map(|l| l.trim().to_string())
-            .filter(|l| !l.is_empty())
-            .collect();
-        if data_lines.is_empty() { None } else { Some(data_lines) }
-    }
-}
-
-/// Extract the first base64 segment (up to and including the `=`-padded line).
-fn first_base64_segment(segments: &[String]) -> String {
-    let mut result = String::new();
-    for line in segments {
-        result.push_str(line);
-        if line.ends_with('=') {
-            break;
-        }
-    }
-    result
-}
-
-/// Rebuild a REAPER text chunk with new base64 plugin state.
-///
-/// Handles two chunk formats:
-/// - **VST/VST3**: flat structure — header, base64 data, optional trailing metadata, `>`
-/// - **CLAP**: nested structure — header, CFG/IN_PINS/etc., `<STATE` block with base64, `>`
-///
-/// For CLAP chunks, only the `<STATE>` block content is replaced; everything else
-/// (CFG, IN_PINS, etc.) is preserved.
-fn rebuild_chunk_with_state(chunk: &str, new_b64: &str) -> String {
-    let lines: Vec<&str> = chunk.lines().collect();
-    let header = lines.first().copied().unwrap_or("");
-
-    // Detect CLAP chunk format by header
-    let trimmed_header = header.trim();
-    if trimmed_header.starts_with("<CLAP") {
-        return rebuild_clap_chunk_with_state(&lines, new_b64);
-    }
-
-    // VST/VST3: flat structure
-    let data_lines: Vec<&str> = lines[1..lines.len().saturating_sub(1)]
-        .iter()
-        .map(|l| l.trim())
-        .filter(|l| !l.is_empty())
-        .collect();
-    let mut trailing: Vec<&str> = Vec::new();
-    let mut found_end = false;
-    for line in &data_lines {
-        if found_end {
-            trailing.push(line);
-        } else if line.ends_with('=') {
-            found_end = true;
-        }
-    }
-
-    let mut result = String::from(header);
-    result.push('\n');
-    for chunk_line in new_b64.as_bytes().chunks(128) {
-        result.push_str("  ");
-        result.push_str(&String::from_utf8_lossy(chunk_line));
-        result.push('\n');
-    }
-    for t in &trailing {
-        result.push_str("  ");
-        result.push_str(t);
-        result.push('\n');
-    }
-    result.push('>');
-    result
-}
-
-/// Rebuild a CLAP chunk, replacing only the `<STATE` block content.
-///
-/// CLAP chunk structure:
-/// ```text
-/// <CLAP "CLAP: Pro-R 2 (FabFilter)" com.fabfilter.pro-r.2 ""
-///   CFG 4 760 335 ""
-///   <IN_PINS
-///   >
-///   <STATE
-///     <base64 lines>
-///   >
-/// >
-/// ```
-fn rebuild_clap_chunk_with_state(lines: &[&str], new_b64: &str) -> String {
-    let mut result = String::new();
-
-    // Track whether we're inside the <STATE block
-    let mut in_state = false;
-    let mut state_replaced = false;
-
-    for &line in lines {
-        let trimmed = line.trim();
-
-        if !in_state && trimmed.starts_with("<STATE") {
-            // Start of STATE block — write the opening tag
-            result.push_str(line);
-            result.push('\n');
-            in_state = true;
-            // Write new base64 content
-            for b64_chunk in new_b64.as_bytes().chunks(128) {
-                result.push_str("    ");
-                result.push_str(&String::from_utf8_lossy(b64_chunk));
-                result.push('\n');
-            }
-            state_replaced = true;
-        } else if in_state {
-            if trimmed == ">" {
-                // End of STATE block — write the closing >
-                result.push_str(line);
-                result.push('\n');
-                in_state = false;
-            }
-            // Skip original STATE content (replaced above)
-        } else {
-            // Preserve everything outside STATE block (header, CFG, IN_PINS, etc.)
-            result.push_str(line);
-            result.push('\n');
-        }
-    }
-
-    // If no STATE block was found, fall back to appending state before the final >
-    if !state_replaced {
-        // Remove trailing > and newline, add STATE block, re-add >
-        let trimmed = result.trim_end().trim_end_matches('>').to_string();
-        result = trimmed;
-        result.push_str("  <STATE\n");
-        for b64_chunk in new_b64.as_bytes().chunks(128) {
-            result.push_str("    ");
-            result.push_str(&String::from_utf8_lossy(b64_chunk));
-            result.push('\n');
-        }
-        result.push_str("  >\n");
-        result.push('>');
-    } else {
-        // Remove trailing newline added by the loop
-        if result.ends_with('\n') {
-            result.pop();
-        }
-    }
-
-    result
-}

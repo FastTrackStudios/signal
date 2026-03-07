@@ -16,14 +16,14 @@ use daw::Project;
 use signal_proto::{
     rig::{Rig, RigSceneId},
     rig_template::{EngineTemplate, FxSendTemplate, LayerTemplate, RigTemplate},
-    ModulePresetId, ModuleSnapshotId,
+    BlockType, ModulePresetId, ModuleSnapshotId, PresetId, SnapshotId, ALL_BLOCK_TYPES,
 };
 use signal_storage::{
     BlockRepo, EngineRepo, LayerRepo, ModuleRepo, ProfileRepo, RackRepo, RigRepo, SceneTemplateRepo,
     SetlistRepo, SongRepo,
 };
 
-use crate::daw_block_ops::LoadModuleResult;
+use crate::daw_block_ops::{LoadBlockResult, LoadModuleResult};
 use crate::daw_rig_builder::{instantiate_rig, RigInstance};
 use crate::SignalLive;
 
@@ -35,6 +35,8 @@ pub struct LayerLoadResult {
     pub track_guid: String,
     /// Loaded modules on this layer track, in module-ref order.
     pub modules: Vec<LoadModuleResult>,
+    /// Standalone block presets loaded directly (not wrapped in a module).
+    pub standalone_blocks: Vec<LoadBlockResult>,
 }
 
 /// Result of loading an entire rig onto REAPER tracks.
@@ -57,10 +59,18 @@ struct ResolvedModuleRef {
     module_type: signal_proto::ModuleType,
 }
 
-/// Resolved layer data (name + modules to load).
+/// Resolved standalone block reference ready for DAW execution.
+struct ResolvedBlockRef {
+    block_type: BlockType,
+    preset_id: PresetId,
+    snapshot_id: Option<SnapshotId>,
+}
+
+/// Resolved layer data (name + modules + standalone blocks to load).
 struct ResolvedLayerInfo {
     name: String,
     module_refs: Vec<ResolvedModuleRef>,
+    block_refs: Vec<ResolvedBlockRef>,
 }
 
 /// Resolved engine data (name + layers + FX send names).
@@ -120,6 +130,18 @@ where
             .await
             .map_err(|e| format!("Failed to list module presets: {e}"))?;
 
+        // Load all block presets once — used to look up block_type from
+        // collection_id for standalone block_refs on layer snapshots.
+        let mut all_block_presets = Vec::new();
+        for &bt in ALL_BLOCK_TYPES {
+            let presets = self
+                .block_repo
+                .list_block_collections(bt)
+                .await
+                .map_err(|e| format!("Failed to list {bt:?} block presets: {e}"))?;
+            all_block_presets.extend(presets);
+        }
+
         let mut engine_infos: Vec<ResolvedEngineInfo> = Vec::new();
 
         for engine_sel in &scene.engine_selections {
@@ -177,9 +199,27 @@ where
                     });
                 }
 
+                // Resolve each block_ref to (block_type, preset_id, snapshot_id).
+                let mut resolved_block_refs: Vec<ResolvedBlockRef> = Vec::new();
+                for block_ref in &snapshot.block_refs {
+                    let block_preset = all_block_presets
+                        .iter()
+                        .find(|p| p.id() == &block_ref.collection_id)
+                        .ok_or_else(|| {
+                            format!("Block preset not found: {}", block_ref.collection_id)
+                        })?;
+
+                    resolved_block_refs.push(ResolvedBlockRef {
+                        block_type: block_preset.block_type(),
+                        preset_id: block_ref.collection_id.clone(),
+                        snapshot_id: block_ref.variant_id.clone(),
+                    });
+                }
+
                 layer_infos.push(ResolvedLayerInfo {
                     name: layer.name.clone(),
                     module_refs: resolved_module_refs,
+                    block_refs: resolved_block_refs,
                 });
             }
 
@@ -224,7 +264,7 @@ where
             .await
             .map_err(|e| format!("Failed to instantiate rig tracks: {e}"))?;
 
-        // ── Phase 3: Load modules onto each layer track ────────────────
+        // ── Phase 3: Load modules + standalone blocks onto each layer track ──
 
         let mut layer_results: Vec<LayerLoadResult> = Vec::new();
 
@@ -250,9 +290,26 @@ where
                     loaded_modules.push(result);
                 }
 
+                // Load standalone block presets directly onto the layer track.
+                let mut loaded_blocks: Vec<LoadBlockResult> = Vec::new();
+
+                for block_ref in &layer_info.block_refs {
+                    let result = self
+                        .load_block_to_track(
+                            block_ref.block_type,
+                            &block_ref.preset_id,
+                            block_ref.snapshot_id.as_ref(),
+                            layer_track,
+                        )
+                        .await?;
+
+                    loaded_blocks.push(result);
+                }
+
                 layer_results.push(LayerLoadResult {
                     track_guid,
                     modules: loaded_modules,
+                    standalone_blocks: loaded_blocks,
                 });
             }
         }
