@@ -15,6 +15,7 @@ mod engines;
 pub mod error;
 mod layers;
 mod module_presets;
+pub mod rig_importer;
 mod profiles;
 mod racks;
 mod rigs;

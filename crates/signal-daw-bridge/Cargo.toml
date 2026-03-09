@@ -1,0 +1,10 @@
+[package]
+name = "signal-daw-bridge"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+daw-proto.workspace = true
+signal-proto.workspace = true
+signal-import.workspace = true
+serde = { workspace = true, features = ["derive"] }

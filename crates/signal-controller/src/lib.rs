@@ -281,4 +281,21 @@ where
     }
 
     // endregion: --- Builder integration
+
+    // region: --- Import
+
+    /// Import a signal chain as a complete rig preset hierarchy.
+    ///
+    /// Creates block presets → module presets → layer → engine → rig.
+    /// Blocks are structural skeletons (default params); use `presets capture`
+    /// to fill in live values later.
+    pub async fn import_rig_from_chain(
+        &self,
+        chain: &ops::rig_importer::ImportChain,
+        rig_name: &str,
+    ) -> Result<ops::rig_importer::ImportedRig, ops::OpsError> {
+        ops::rig_importer::import_rig_from_chain(self, chain, rig_name).await
+    }
+
+    // endregion: --- Import
 }

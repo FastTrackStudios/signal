@@ -149,7 +149,7 @@ const CORY_MODULES: &[ModuleSpec] = &[
     ModuleSpec {
         id: "source",
         label: "Source",
-        module_type: ModuleType::Source,
+        module_type: ModuleType::Input,
         blocks: &[SOURCE_BLOCK],
     },
     ModuleSpec {
@@ -372,7 +372,7 @@ const CORY_MODULES: &[ModuleSpec] = &[
 ];
 
 const JOHN_MAYER_MODULES: &[ModuleSpec] = &[
-    ModuleSpec { id: "source", label: "Source", module_type: ModuleType::Source, blocks: &[SOURCE_BLOCK] },
+    ModuleSpec { id: "source", label: "Source", module_type: ModuleType::Input, blocks: &[SOURCE_BLOCK] },
     ModuleSpec {
         id: "pre-fx",
         label: "Pre-FX",
@@ -393,7 +393,7 @@ const JOHN_MAYER_MODULES: &[ModuleSpec] = &[
         blocks: &[
             BlockSpec { id: "gravity-tank-section", label: "Gravity Tank Section", block_type: BlockType::Special, exact: &["Active Gravity Tank Section"], prefixes: &[] },
             BlockSpec { id: "spring-reverb", label: "Spring Reverb", block_type: BlockType::Reverb, exact: &[], prefixes: &["Spring Reverb "] },
-            BlockSpec { id: "harmonic-tremolo", label: "Harmonic Tremolo", block_type: BlockType::Tremolo, exact: &[], prefixes: &["Harmonic Tremolo "] },
+            BlockSpec { id: "harmonic-tremolo", label: "Harmonic Tremolo", block_type: BlockType::Trem, exact: &[], prefixes: &["Harmonic Tremolo "] },
         ],
     },
     ModuleSpec {
@@ -449,7 +449,7 @@ const JOHN_MAYER_MODULES: &[ModuleSpec] = &[
 ];
 
 const MISHA_MODULES: &[ModuleSpec] = &[
-    ModuleSpec { id: "source", label: "Source", module_type: ModuleType::Source, blocks: &[SOURCE_BLOCK] },
+    ModuleSpec { id: "source", label: "Source", module_type: ModuleType::Input, blocks: &[SOURCE_BLOCK] },
     ModuleSpec {
         id: "special-fx",
         label: "Special FX",
@@ -521,7 +521,7 @@ const MISHA_MODULES: &[ModuleSpec] = &[
 ];
 
 const NOLLY_MODULES: &[ModuleSpec] = &[
-    ModuleSpec { id: "source", label: "Source", module_type: ModuleType::Source, blocks: &[SOURCE_BLOCK] },
+    ModuleSpec { id: "source", label: "Source", module_type: ModuleType::Input, blocks: &[SOURCE_BLOCK] },
     ModuleSpec {
         id: "pre-fx",
         label: "Pre-FX",
@@ -583,7 +583,7 @@ const NOLLY_MODULES: &[ModuleSpec] = &[
 ];
 
 const PETRUCCI_MODULES: &[ModuleSpec] = &[
-    ModuleSpec { id: "source", label: "Source", module_type: ModuleType::Source, blocks: &[SOURCE_BLOCK] },
+    ModuleSpec { id: "source", label: "Source", module_type: ModuleType::Input, blocks: &[SOURCE_BLOCK] },
     ModuleSpec {
         id: "wah-comp",
         label: "Wah/Comp",
@@ -664,7 +664,7 @@ const PETRUCCI_MODULES: &[ModuleSpec] = &[
 ];
 
 const RABEA_MODULES: &[ModuleSpec] = &[
-    ModuleSpec { id: "source", label: "Source", module_type: ModuleType::Source, blocks: &[SOURCE_BLOCK] },
+    ModuleSpec { id: "source", label: "Source", module_type: ModuleType::Input, blocks: &[SOURCE_BLOCK] },
     ModuleSpec {
         id: "synth",
         label: "Synth",
@@ -739,7 +739,7 @@ const RABEA_MODULES: &[ModuleSpec] = &[
 ];
 
 const TIM_HENSON_MODULES: &[ModuleSpec] = &[
-    ModuleSpec { id: "source", label: "Source", module_type: ModuleType::Source, blocks: &[SOURCE_BLOCK] },
+    ModuleSpec { id: "source", label: "Source", module_type: ModuleType::Input, blocks: &[SOURCE_BLOCK] },
     ModuleSpec {
         id: "pre-fx",
         label: "Pre-FX",

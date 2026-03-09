@@ -62,7 +62,7 @@ pub fn archetype_john_mayer() -> PluginBlockDef {
         .with_module(
             VirtualModule::new("pre-fx", "Pre-FX", ModuleType::PreFx)
                 .with_block(
-                    VirtualBlock::new("harmonic-tremolo", "Harmonic Tremolo", BlockType::Tremolo)
+                    VirtualBlock::new("harmonic-tremolo", "Harmonic Tremolo", BlockType::Trem)
                         .with_params(vec![
                             ParamMapping::new("Rate", 50, 0.3),
                             ParamMapping::new("Depth", 51, 0.6),

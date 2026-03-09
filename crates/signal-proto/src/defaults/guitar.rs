@@ -47,7 +47,7 @@ pub fn guitar_rig_template() -> RigTemplate {
 // ─── Module builders ────────────────────────────────────────────
 
 fn source() -> ModuleTemplate {
-    ModuleTemplate::new("Source", ModuleType::Source)
+    ModuleTemplate::new("Source", ModuleType::Input)
         .with_metadata(
             TemplateMetadata::new()
                 .with_description("Input conditioning — gate and initial volume"),
@@ -165,7 +165,7 @@ fn motion() -> ModuleTemplate {
             TemplateMetadata::new()
                 .with_description("Rhythmic motion effects — tremolo, vibrato, rotary"),
         )
-        .with_block(BlockTemplate::new("Tremolo", BlockType::Tremolo))
+        .with_block(BlockTemplate::new("Tremolo", BlockType::Trem))
         .with_block(BlockTemplate::new("Vibrato", BlockType::Vibrato))
         .with_block(BlockTemplate::new("Rotary", BlockType::Rotary))
 }

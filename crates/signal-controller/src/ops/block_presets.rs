@@ -9,7 +9,8 @@ use signal_proto::resolve::{
 use signal_proto::rig::{RigId, RigSceneId};
 use signal_proto::traits::Collection;
 use signal_proto::{
-    Block, BlockType, ModulePresetId, ModuleSnapshotId, Preset, PresetId, Snapshot, SnapshotId,
+    Block, BlockParameter, BlockType, ModulePresetId, ModuleSnapshotId, Preset, PresetId, Snapshot,
+    SnapshotId,
 };
 
 /// Handle for block preset (collection) operations.
@@ -222,5 +223,144 @@ impl<S: SignalApi> BlockPresetOps<S> {
         });
 
         Ok(graph)
+    }
+
+    /// Overwrite an existing snapshot with fresh DAW capture data (params + state bytes).
+    pub async fn update_snapshot_from_capture(
+        &self,
+        block_type: BlockType,
+        preset_id: impl Into<PresetId>,
+        snapshot_id: impl Into<SnapshotId>,
+        params: &[(u32, String, f32)],
+        state_bytes: Vec<u8>,
+    ) -> Result<(), OpsError> {
+        let preset_id = preset_id.into();
+        let snapshot_id = snapshot_id.into();
+        let presets = self.list(block_type).await?;
+        let mut preset = presets
+            .into_iter()
+            .find(|p| *p.id() == preset_id)
+            .ok_or_else(|| OpsError::NotFound {
+                entity_type: "BlockPreset",
+                id: preset_id.to_string(),
+            })?;
+
+        let snap = preset
+            .variants_mut()
+            .iter_mut()
+            .find(|s| *s.id() == snapshot_id)
+            .ok_or_else(|| OpsError::VariantNotFound {
+                entity_type: "BlockPreset",
+                parent_id: preset_id.to_string(),
+                variant_id: snapshot_id.to_string(),
+            })?;
+
+        let block_params: Vec<BlockParameter> = params
+            .iter()
+            .map(|(index, param_name, value)| {
+                BlockParameter::new(format!("p{index}"), param_name, *value)
+                    .with_daw_name(param_name)
+            })
+            .collect();
+
+        snap.set_block(Block::from_parameters(block_params));
+        snap.set_state_data(state_bytes);
+        snap.increment_version();
+        self.save(preset).await?;
+        Ok(())
+    }
+
+    /// Patch a single parameter value by name on an existing snapshot.
+    pub async fn update_snapshot_param_by_name(
+        &self,
+        block_type: BlockType,
+        preset_id: impl Into<PresetId>,
+        snapshot_id: impl Into<SnapshotId>,
+        param_name: &str,
+        value: f32,
+    ) -> Result<(), OpsError> {
+        let preset_id = preset_id.into();
+        let snapshot_id = snapshot_id.into();
+        let presets = self.list(block_type).await?;
+        let mut preset = presets
+            .into_iter()
+            .find(|p| *p.id() == preset_id)
+            .ok_or_else(|| OpsError::NotFound {
+                entity_type: "BlockPreset",
+                id: preset_id.to_string(),
+            })?;
+
+        let snap = preset
+            .variants_mut()
+            .iter_mut()
+            .find(|s| *s.id() == snapshot_id)
+            .ok_or_else(|| OpsError::VariantNotFound {
+                entity_type: "BlockPreset",
+                parent_id: preset_id.to_string(),
+                variant_id: snapshot_id.to_string(),
+            })?;
+
+        let mut block = snap.block();
+        let index = block
+            .parameters()
+            .iter()
+            .position(|p| p.effective_daw_name() == param_name)
+            .ok_or_else(|| OpsError::NotFound {
+                entity_type: "BlockParameter",
+                id: param_name.to_string(),
+            })?;
+
+        block.set_parameter_value(index, value);
+        snap.set_block(block);
+        snap.increment_version();
+        self.save(preset).await?;
+        Ok(())
+    }
+
+    /// Create a block preset from captured DAW parameters and state.
+    ///
+    /// This is the ops-layer equivalent of the capture workflow: given raw
+    /// parameter data and binary state from a DAW plugin, it constructs the
+    /// full `Preset` hierarchy and persists it.
+    pub async fn create_from_capture(
+        &self,
+        block_type: BlockType,
+        name: impl Into<String>,
+        snap_name: impl Into<String>,
+        plugin_name: impl Into<String>,
+        params: &[(u32, String, f32)],
+        state_bytes: Vec<u8>,
+    ) -> Result<Preset, OpsError> {
+        let name = name.into();
+        let snap_name = snap_name.into();
+        let plugin_name = plugin_name.into();
+
+        let block_params: Vec<BlockParameter> = params
+            .iter()
+            .map(|(index, param_name, value)| {
+                BlockParameter::new(format!("p{index}"), param_name, *value)
+                    .with_daw_name(param_name)
+            })
+            .collect();
+
+        let block = Block::from_parameters(block_params);
+        let source_tag = format!("source:{plugin_name}");
+
+        let snapshot = Snapshot::new(SnapshotId::new(), &snap_name, block)
+            .with_metadata(
+                signal_proto::metadata::Metadata::new().with_tag(source_tag.clone()),
+            )
+            .with_state_data(state_bytes);
+
+        let preset = Preset::new(
+            PresetId::new(),
+            &name,
+            block_type,
+            snapshot,
+            vec![],
+        )
+        .with_metadata(signal_proto::metadata::Metadata::new().with_tag(source_tag));
+
+        self.save(preset).await
     }
 }

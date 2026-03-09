@@ -169,7 +169,7 @@ module_types! {
     Sends,              "sends",              Vocal,      ("#6B7280", "#F9FAFB", "#4B5563");
 
     // ── Instrument chain ────────────────────────────────────────
-    Source,             "source",             Instrument, ("#6B7280", "#F9FAFB", "#4B5563");
+    Input,              "input",              Instrument, ("#6B7280", "#F9FAFB", "#4B5563");
     Eq,                 "eq",                 Instrument, ("#22C55E", "#F0FDF4", "#16A34A"), as "EQ";
     Dynamics,           "dynamics",           Instrument, ("#3B82F6", "#EFF6FF", "#2563EB");
     Special,            "special",            Instrument, ("#EC4899", "#FDF2F8", "#DB2777");
@@ -185,6 +185,18 @@ module_types! {
 
     // ── Catch-all ───────────────────────────────────────────────
     Custom,             "custom",             Other,      ("#A8A29E", "#FAFAF9", "#78716C");
+}
+
+impl ModuleType {
+    /// Parse with legacy/alias support on top of the macro-generated `from_str`.
+    pub fn from_str_lenient(value: &str) -> Option<Self> {
+        Self::from_str(value).or_else(|| {
+            Some(match value {
+                "source" => Self::Input,
+                _ => return None,
+            })
+        })
+    }
 }
 
 impl std::fmt::Display for ModuleType {
