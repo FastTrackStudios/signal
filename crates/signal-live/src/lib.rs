@@ -23,11 +23,22 @@
 //! service applies a **side-effect**: the resolved block state is persisted as
 //! the current active block.  This deterministic "load = apply" contract ensures
 //! the active block always reflects the last loaded variant.
+//!
+//! # Macro System
+//!
+//! Real-time parameter automation via hierarchical macro knobs:
+//! - **macro_setup**: Resolve abstract bindings to concrete FX parameters
+//! - **macro_registry**: Global thread-safe binding store
+//! - **macro_recorder**: Real-time knob movement recording
+//! - **macro_system**: Architecture overview and integration patterns
+//!
+//! See `macro_integration_guide.md` for complete integration documentation.
 
 pub mod daw_block_ops;
 pub mod daw_rig_builder;
 pub mod daw_rig_ops;
 pub mod engine;
+pub mod macro_error;
 pub mod macro_setup;
 pub mod macro_registry;
 pub mod macro_recorder;
