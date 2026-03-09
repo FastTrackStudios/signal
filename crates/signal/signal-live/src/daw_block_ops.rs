@@ -756,6 +756,11 @@ async fn configure_fx_free(
     let macro_setup =
         crate::macro_setup::setup_macros_for_block(track, &fx, &resolved.block).await?;
 
+    // Register macro bindings in the global registry for direct DAW parameter updates.
+    if let Some(ref result) = macro_setup {
+        crate::macro_registry::register(result);
+    }
+
     Ok(LoadBlockResult {
         fx_guid: fx.guid().to_string(),
         display_name: resolved.display_name.clone(),
