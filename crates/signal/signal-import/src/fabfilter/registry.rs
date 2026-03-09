@@ -204,3 +204,12 @@ pub fn lookup_plugin(name: &str) -> Option<&'static FabFilterPluginEntry> {
         .iter()
         .find(|p| p.name.eq_ignore_ascii_case(name))
 }
+
+/// Look up a plugin by its full REAPER identifier (case-insensitive).
+///
+/// Matches against the `reaper_name` field, e.g. `"CLAP: Pro-Q 4 (FabFilter)"`.
+pub fn lookup_by_reaper_name(reaper_name: &str) -> Option<&'static FabFilterPluginEntry> {
+    FABFILTER_PLUGINS
+        .iter()
+        .find(|p| p.reaper_name.eq_ignore_ascii_case(reaper_name))
+}

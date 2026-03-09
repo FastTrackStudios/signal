@@ -237,7 +237,7 @@ block_types! {
     RingModulator, "ring-modulator", Modulation, ("#9333EA", "#FAF5FF", "#7E22CE"), as "Ring Modulator";
 
     // ── Motion ──────────────────────────────────────────────────
-    Tremolo,       "tremolo",        Motion,   ("#C084FC", "#FAF5FF", "#A855F7");
+    Trem,          "trem",           Motion,   ("#C084FC", "#FAF5FF", "#A855F7");
     Panner,        "panner",         Motion,   ("#C084FC", "#FAF5FF", "#A855F7");
     Vibrato,       "vibrato",        Motion,   ("#C084FC", "#FAF5FF", "#A855F7");
     Rotary,        "rotary",         Motion,   ("#C084FC", "#FAF5FF", "#A855F7");
@@ -256,6 +256,21 @@ block_types! {
 
     // ── Catch-all ───────────────────────────────────────────────
     Custom,        "custom",         Other,    ("#A8A29E", "#FAFAF9", "#78716C");
+}
+
+impl BlockType {
+    /// Parse with legacy/alias support on top of the macro-generated `from_str`.
+    ///
+    /// Use this when accepting user or external input that may use older names.
+    pub fn from_str_lenient(value: &str) -> Option<Self> {
+        Self::from_str(value).or_else(|| {
+            Some(match value {
+                "tremolo" => Self::Trem,
+                "utility" => Self::Volume,
+                _ => return None,
+            })
+        })
+    }
 }
 
 #[cfg(test)]
@@ -354,7 +369,7 @@ mod tests {
         assert_eq!(BlockType::Amp.category(), BlockCategory::Amp);
         assert_eq!(BlockType::Eq.category(), BlockCategory::Eq);
         assert_eq!(BlockType::Chorus.category(), BlockCategory::Modulation);
-        assert_eq!(BlockType::Tremolo.category(), BlockCategory::Motion);
+        assert_eq!(BlockType::Trem.category(), BlockCategory::Motion);
         assert_eq!(BlockType::Delay.category(), BlockCategory::Time);
         assert_eq!(BlockType::Wah.category(), BlockCategory::Special);
         assert_eq!(BlockType::Custom.category(), BlockCategory::Other);

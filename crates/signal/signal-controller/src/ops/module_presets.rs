@@ -1,7 +1,10 @@
 use super::error::OpsError;
 use crate::{SignalApi, SignalController};
 use signal_proto::traits::Collection;
-use signal_proto::{Module, ModulePreset, ModulePresetId, ModuleSnapshot, ModuleSnapshotId};
+use signal_proto::{
+    BlockType, Module, ModuleBlock, ModuleBlockSource, ModulePreset, ModulePresetId,
+    ModuleSnapshot, ModuleSnapshotId, ModuleType, PresetId,
+};
 
 /// Handle for module preset (collection) operations.
 pub struct ModulePresetOps<S: SignalApi>(pub(crate) SignalController<S>);
@@ -89,5 +92,69 @@ impl<S: SignalApi> ModulePresetOps<S> {
     /// Count all module presets.
     pub async fn count(&self) -> Result<usize, OpsError> {
         Ok(self.list().await?.len())
+    }
+
+    /// Create a new module preset from block preset references.
+    ///
+    /// Verifies each `PresetId` exists under its `BlockType`, then builds
+    /// the full `ModulePreset` hierarchy and persists it.
+    pub async fn create(
+        &self,
+        name: impl Into<String>,
+        module_type: ModuleType,
+        blocks: Vec<(BlockType, PresetId, String)>,
+    ) -> Result<ModulePreset, OpsError> {
+        let name = name.into();
+        let mut module_blocks = Vec::new();
+
+        for (i, (bt, preset_id, label)) in blocks.into_iter().enumerate() {
+            // Verify the block preset exists
+            let presets = self.0.block_presets().list(bt).await?;
+            if !presets.iter().any(|p| *p.id() == preset_id) {
+                return Err(OpsError::NotFound {
+                    entity_type: "BlockPreset",
+                    id: preset_id.to_string(),
+                });
+            }
+
+            let block_id = format!("{}_{}", bt.as_str(), i);
+            let source = ModuleBlockSource::PresetDefault {
+                preset_id,
+                saved_at_version: None,
+            };
+            module_blocks.push(ModuleBlock::new(block_id, label, bt, source));
+        }
+
+        let module = Module::from_blocks(module_blocks);
+        let snapshot = ModuleSnapshot::new(ModuleSnapshotId::new(), &name, module);
+        let preset = ModulePreset::new(
+            ModulePresetId::new(),
+            &name,
+            module_type,
+            snapshot,
+            vec![],
+        );
+
+        self.save(preset).await
+    }
+
+    /// Add a snapshot (variation) to an existing module preset.
+    pub async fn add_snapshot(
+        &self,
+        preset_id: impl Into<ModulePresetId>,
+        snapshot: ModuleSnapshot,
+    ) -> Result<ModulePreset, OpsError> {
+        let preset_id = preset_id.into();
+        let mut preset = self
+            .list()
+            .await?
+            .into_iter()
+            .find(|p| *p.id() == preset_id)
+            .ok_or_else(|| OpsError::NotFound {
+                entity_type: "ModulePreset",
+                id: preset_id.to_string(),
+            })?;
+        preset.add_snapshot(snapshot);
+        self.save(preset).await
     }
 }

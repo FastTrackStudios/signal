@@ -521,7 +521,7 @@ impl FxRole {
 
     fn infer_module_type(prefix: &str) -> ModuleType {
         match prefix {
-            "INPUT" | "SOURCE" => ModuleType::Source,
+            "INPUT" | "SOURCE" => ModuleType::Input,
             "DRIVE" => ModuleType::Drive,
             "PRE-FX" | "PREFX" => ModuleType::PreFx,
             "AMP" => ModuleType::Amp,
@@ -551,7 +551,7 @@ impl FxRole {
             "chorus" => Some(BlockType::Chorus),
             "flanger" => Some(BlockType::Flanger),
             "delay" => Some(BlockType::Delay),
-            "trem" | "tremolo" => Some(BlockType::Tremolo),
+            "trem" | "tremolo" => Some(BlockType::Trem),
             "vibrato" => Some(BlockType::Vibrato),
             "rotary" => Some(BlockType::Rotary),
             "limiter" => Some(BlockType::Limiter),
@@ -609,7 +609,7 @@ impl FxRole {
     fn block_type_label(block_type: BlockType) -> String {
         match block_type {
             BlockType::Reverb => "Reverb".to_string(),
-            BlockType::Tremolo => "Trem".to_string(),
+            BlockType::Trem => "Trem".to_string(),
             BlockType::Volume => "Utility".to_string(),
             _ => {
                 // Capitalize first letter: "eq" → "EQ", "drive" → "Drive"
@@ -868,7 +868,7 @@ mod tests {
         assert_eq!(
             role,
             FxRole::Module {
-                module_type: ModuleType::Source,
+                module_type: ModuleType::Input,
                 name: "Guitar Input - Relaxed".to_string(),
             }
         );
@@ -1048,7 +1048,7 @@ mod tests {
                 "Reverb Block: Abyss (Saike) - Blackhole (Abyss Reverb)",
                 BlockType::Reverb,
             ),
-            ("Trem Block: Tukan AC - Light (AC Trem)", BlockType::Tremolo),
+            ("Trem Block: Tukan AC - Light (AC Trem)", BlockType::Trem),
             (
                 "Vibrato Block: Garaint Luff - Fast (Vibrarto by Geraint Luff)",
                 BlockType::Vibrato,
@@ -1226,7 +1226,7 @@ mod tests {
         assert_eq!(
             module_types,
             vec![
-                ModuleType::Source,
+                ModuleType::Input,
                 ModuleType::Drive,
                 ModuleType::PreFx,
                 ModuleType::Amp,
@@ -1285,7 +1285,7 @@ mod tests {
 
         // MOTION has 3 blocks
         assert_eq!(modules[6].2.len(), 3);
-        assert_eq!(modules[6].2[0].0, BlockType::Tremolo);
+        assert_eq!(modules[6].2[0].0, BlockType::Trem);
         assert_eq!(modules[6].2[1].0, BlockType::Vibrato);
         assert_eq!(modules[6].2[2].0, BlockType::Rotary);
 

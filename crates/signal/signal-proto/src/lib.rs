@@ -477,6 +477,11 @@ impl Snapshot {
         self.block = block;
     }
 
+    /// Replace the binary plugin state data.
+    pub fn set_state_data(&mut self, data: Vec<u8>) {
+        self.state_data = Some(data);
+    }
+
     /// Bump the version counter. Called by the storage layer when parameter values change.
     pub fn increment_version(&mut self) {
         self.version += 1;
