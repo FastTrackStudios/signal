@@ -29,6 +29,7 @@ pub mod daw_rig_builder;
 pub mod daw_rig_ops;
 pub mod engine;
 pub mod macro_setup;
+pub mod macro_registry;
 
 mod block_service;
 mod browser_service;
