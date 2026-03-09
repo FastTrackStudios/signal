@@ -2,6 +2,55 @@
 //!
 //! Records macro knob value changes with timestamps during performance,
 //! allowing playback of recorded sequences with accurate timing.
+//!
+//! # Use Cases
+//!
+//! - **Performance automation**: Record knob movements during a live performance
+//! - **Jamming**: Capture spontaneous parameter tweaks and replay them
+//! - **Layering**: Record multiple macro sequences and stack them
+//! - **Live FX**: Use recordings as modulation sources in future enhancements
+//!
+//! # Thread Safety
+//!
+//! Uses `Arc<Mutex<RecordingState>>` to:
+//! - Allow sharing across async tasks without lifetime constraints
+//! - Safely mutate state from multiple callers (record, start, stop)
+//! - Avoid circular dependencies and borrowing issues
+//!
+//! # Performance
+//!
+//! - **Record**: O(1) append to Vec, minimal mutex contention
+//! - **Stop/Peek**: O(n) clone where n = number of records
+//! - **Memory**: Each record is 32 bytes (u64 + String + f32), so 100KB per 3300 records
+//!
+//! # Example
+//!
+//! ```ignore
+//! let recorder = MacroRecorder::new();
+//!
+//! // Start recording
+//! recorder.start();
+//!
+//! // Simulate knob movements
+//! recorder.record("drive".into(), 0.5);
+//! tokio::time::sleep(Duration::from_millis(10)).await;
+//! recorder.record("drive".into(), 0.6);
+//!
+//! // Get recording
+//! let sequence = recorder.stop();
+//! assert_eq!(sequence.len(), 2);
+//! assert_eq!(sequence[1].knob_id, "drive");
+//! assert_eq!(sequence[1].value, 0.6);
+//! assert!(sequence[1].time_ms >= 10);
+//! ```
+//!
+//! # Future Enhancements
+//!
+//! - **Serialization**: Save/load recordings with `bincode` or `serde_json`
+//! - **Playback**: Schedule recorded values with timing accuracy
+//! - **Smoothing**: Interpolate recorded values for smoother playback
+//! - **Compression**: Downsample or delta-encode long sequences
+//! - **Named sequences**: Allow naming and organizing recordings
 
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -99,6 +148,53 @@ impl MacroRecorder {
         let state = self.state.lock().expect("lock poisoned");
         matches!(&*state, RecordingState::Recording { .. })
     }
+
+    /// Get the number of recorded changes without stopping.
+    pub fn record_count(&self) -> usize {
+        let state = self.state.lock().expect("lock poisoned");
+        match &*state {
+            RecordingState::Recording { records, .. } => records.len(),
+            RecordingState::Idle => 0,
+        }
+    }
+
+    /// Get the duration of current recording in milliseconds.
+    /// Returns None if not currently recording.
+    pub fn elapsed_ms(&self) -> Option<u64> {
+        let now = current_time_ms();
+        let state = self.state.lock().expect("lock poisoned");
+        match &*state {
+            RecordingState::Recording { start_time_ms, .. } => {
+                Some(now.saturating_sub(*start_time_ms))
+            }
+            RecordingState::Idle => None,
+        }
+    }
+
+    /// Get statistics about the recording (count, duration, knobs touched).
+    /// Returns (record_count, duration_ms, unique_knob_ids)
+    pub fn stats(&self) -> (usize, u64, Vec<String>) {
+        let now = current_time_ms();
+        let state = self.state.lock().expect("lock poisoned");
+
+        match &*state {
+            RecordingState::Recording {
+                start_time_ms,
+                records,
+            } => {
+                let duration = now.saturating_sub(*start_time_ms);
+                let mut knobs: Vec<String> = records
+                    .iter()
+                    .map(|r| r.knob_id.clone())
+                    .collect::<std::collections::HashSet<_>>()
+                    .into_iter()
+                    .collect();
+                knobs.sort();
+                (records.len(), duration, knobs)
+            }
+            RecordingState::Idle => (0, 0, Vec::new()),
+        }
+    }
 }
 
 impl Default for MacroRecorder {
@@ -188,5 +284,59 @@ mod tests {
         // Should only have the new recording
         assert_eq!(records.len(), 1);
         assert_eq!(records[0].knob_id, "tone");
+    }
+
+    #[test]
+    fn test_record_count() {
+        let recorder = MacroRecorder::new();
+        assert_eq!(recorder.record_count(), 0);
+
+        recorder.start();
+        recorder.record("drive".into(), 0.5);
+        assert_eq!(recorder.record_count(), 1);
+
+        recorder.record("tone".into(), 0.7);
+        assert_eq!(recorder.record_count(), 2);
+
+        recorder.stop();
+        assert_eq!(recorder.record_count(), 0);
+    }
+
+    #[test]
+    fn test_elapsed_ms() {
+        let recorder = MacroRecorder::new();
+        assert!(recorder.elapsed_ms().is_none());
+
+        recorder.start();
+        assert!(recorder.elapsed_ms().is_some());
+
+        thread::sleep(Duration::from_millis(20));
+        let elapsed = recorder.elapsed_ms().unwrap();
+        assert!(elapsed >= 20);
+
+        recorder.stop();
+        assert!(recorder.elapsed_ms().is_none());
+    }
+
+    #[test]
+    fn test_stats() {
+        let recorder = MacroRecorder::new();
+
+        recorder.start();
+        recorder.record("drive".into(), 0.5);
+        recorder.record("tone".into(), 0.7);
+        recorder.record("drive".into(), 0.6);
+
+        let (count, _duration, knobs) = recorder.stats();
+        assert_eq!(count, 3);
+        assert_eq!(knobs.len(), 2);
+        assert!(knobs.contains(&"drive".to_string()));
+        assert!(knobs.contains(&"tone".to_string()));
+
+        recorder.stop();
+        let (count, duration, knobs) = recorder.stats();
+        assert_eq!(count, 0);
+        assert_eq!(duration, 0);
+        assert!(knobs.is_empty());
     }
 }
