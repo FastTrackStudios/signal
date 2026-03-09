@@ -35,7 +35,7 @@ pub use block_editor::{BlockCard, BlockEditor, MiniKnob};
 pub use collection_browser::{
     engines_to_grid_slots, resolve_layer_engines, resolve_scene_engines, rig_type_to_engine_type,
     BrowseLevel, BrowserAssignment, CollectionBrowser, EngineFlowData, EngineParamLookup,
-    LayerFlowData, RigGridPanel,
+    LayerFlowData, ModuleChainData, RigGridPanel,
 };
 pub use metadata_display::MetadataDisplay;
 pub use module_view::{ModuleView, ModuleViewMode, ParamChange};

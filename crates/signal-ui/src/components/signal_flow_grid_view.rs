@@ -548,7 +548,7 @@ impl ModuleCategory {
             Self::Amp => matches!(block_type, BlockType::Amp | BlockType::Cabinet),
             Self::Modulation => matches!(
                 block_type,
-                BlockType::Modulation | BlockType::Pitch | BlockType::Tremolo
+                BlockType::Modulation | BlockType::Pitch | BlockType::Trem
             ),
             Self::Time => matches!(
                 block_type,
@@ -640,7 +640,7 @@ fn get_all_modules() -> Vec<ModuleInfo> {
         ModuleInfo {
             name: "Tremolo",
             description: "Amplitude modulation",
-            block_type: BlockType::Tremolo,
+            block_type: BlockType::Trem,
             icon: "trem",
         },
         ModuleInfo {
