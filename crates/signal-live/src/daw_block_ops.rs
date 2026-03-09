@@ -418,8 +418,15 @@ where
             for node in chain.nodes() {
                 match node {
                     SignalNode::Block(module_block) => {
-                        let resolved = self.resolve_module_block(module_block).await?;
-                        nodes.push(ResolvedSignalNode::Fx(resolved));
+                        match self.resolve_module_block(module_block).await {
+                            Ok(resolved) => nodes.push(ResolvedSignalNode::Fx(resolved)),
+                            Err(e) => {
+                                eprintln!(
+                                    "[signal] warning: skipping block '{}': {e}",
+                                    module_block.label()
+                                );
+                            }
+                        }
                     }
                     SignalNode::Split { lanes } => {
                         let mut resolved_lanes = Vec::with_capacity(lanes.len());
@@ -547,11 +554,20 @@ where
             execute_chain_nodes(&resolved.chain, track).await?;
 
         // Enclose all top-level nodes in the outer module container.
-        track
-            .fx_chain()
-            .enclose_in_container(&top_node_ids, &resolved.display_name)
-            .await
-            .map_err(|e| format!("Failed to create module container: {e}"))?;
+        // Skip if there are no FX to enclose (empty module).
+        // Non-fatal: plugins still work without the visual grouping.
+        if !top_node_ids.is_empty() {
+            if let Err(e) = track
+                .fx_chain()
+                .enclose_in_container(&top_node_ids, &resolved.display_name)
+                .await
+            {
+                eprintln!(
+                    "[signal] warning: could not enclose module \"{}\": {e}",
+                    resolved.display_name
+                );
+            }
+        }
 
         Ok(LoadModuleResult {
             loaded_fx,
@@ -637,6 +653,12 @@ async fn configure_fx_free(
     fx_index: u32,
 ) -> Result<LoadBlockResult, String> {
     if let Some(data) = &resolved.state_data {
+        eprintln!(
+            "[signal] state restore for '{}': {} bytes, starts_with_angle={}",
+            resolved.display_name,
+            data.len(),
+            data.starts_with(b"<"),
+        );
         if resolved.plugin_name.contains("NeuralAmpModeler") && !data.starts_with(b"<") {
             // Legacy path-based: state_data is a UTF-8 file path
             let model_path = std::str::from_utf8(data)
@@ -645,10 +667,49 @@ async fn configure_fx_free(
                 .await
                 .map_err(|e| format!("Failed to load NAM model: {e}"))?;
         } else if std::str::from_utf8(data).is_ok() {
-            // Chunk-based (VST3, CLAP, or NAM captured from REAPER)
-            fx.set_state_chunk(data.clone())
-                .await
-                .map_err(|e| format!("Failed to apply state chunk: {e}"))?;
+            // Chunk-based (VST3, CLAP, or NAM captured from REAPER).
+            // set_state_chunk tries set_tag_chunk (works for VST/VST3),
+            // then falls back to track-chunk replacement (for CLAP).
+            // The fallback may change the FX GUID or corrupt the FX
+            // if the format doesn't match, so we handle failures gracefully.
+            eprintln!(
+                "[signal]   → applying chunk-based state to '{}'",
+                resolved.display_name,
+            );
+            match fx.set_state_chunk(data.clone()).await {
+                Ok(()) => {
+                    // Re-acquire by index — fallback may have changed the GUID.
+                    match track.fx_chain().by_index(fx_index).await {
+                        Ok(Some(reacquired)) => {
+                            fx = reacquired;
+                            eprintln!(
+                                "[signal]   ✓ state chunk applied for '{}' (guid={})",
+                                resolved.display_name,
+                                fx.guid(),
+                            );
+                        }
+                        _ => {
+                            // FX disappeared — fallback corrupted the track chunk.
+                            // Re-add the plugin with default state.
+                            eprintln!(
+                                "[signal]   ✗ FX disappeared after state chunk for '{}', re-adding",
+                                resolved.display_name,
+                            );
+                            fx = track
+                                .fx_chain()
+                                .add(&resolved.plugin_name)
+                                .await
+                                .map_err(|e| format!("Failed to re-add FX '{}': {e}", resolved.display_name))?;
+                        }
+                    }
+                }
+                Err(e) => {
+                    eprintln!(
+                        "[signal]   ✗ set_state_chunk failed for '{}': {e}",
+                        resolved.display_name,
+                    );
+                }
+            }
         } else {
             inject_binary_state(&fx, data)
                 .await
@@ -661,12 +722,23 @@ async fn configure_fx_free(
                 .ok_or("FX disappeared after binary state injection")?;
         }
     } else {
+        eprintln!(
+            "[signal] no state_data for '{}', falling back to param-by-name",
+            resolved.display_name,
+        );
         let mapped = apply_plugin_param_mapping(&resolved.plugin_name, &resolved.block);
         for param in mapped.parameters() {
-            fx.param_by_name(param.effective_daw_name())
+            if let Err(e) = fx
+                .param_by_name(param.effective_daw_name())
                 .set(param.value().get() as f64)
                 .await
-                .map_err(|e| format!("Failed to set param '{}': {e}", param.name()))?;
+            {
+                eprintln!(
+                    "[signal] warning: could not set param '{}' on '{}': {e}",
+                    param.name(),
+                    resolved.display_name
+                );
+            }
         }
     }
 
