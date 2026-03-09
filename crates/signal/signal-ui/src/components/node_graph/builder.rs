@@ -18,7 +18,7 @@ impl NodeGraph {
             BlockType::Delay => (NodeWidget::DelayGraph, NodeSize::large()),
             BlockType::Reverb => (NodeWidget::ReverbGraph, NodeSize::large()),
             BlockType::Drive | BlockType::Saturator => (NodeWidget::DriveGraph, NodeSize::medium()),
-            BlockType::Modulation | BlockType::Tremolo | BlockType::Pitch => {
+            BlockType::Modulation | BlockType::Trem | BlockType::Pitch => {
                 (NodeWidget::ModulationGraph, NodeSize::medium())
             }
             BlockType::Amp | BlockType::Cabinet => (NodeWidget::AmpCab, NodeSize::medium()),

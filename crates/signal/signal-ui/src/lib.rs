@@ -14,6 +14,7 @@
 
 pub mod components;
 pub mod hooks;
+pub mod infer_adapter;
 pub mod panel_registration;
 pub mod views;
 

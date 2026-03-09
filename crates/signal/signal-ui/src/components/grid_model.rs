@@ -225,7 +225,7 @@ impl SignalFlowGrid {
             BlockType::Drive | BlockType::Saturator => {
                 (BlockWidget::DriveGraph, GridSize::square())
             }
-            BlockType::Modulation | BlockType::Tremolo | BlockType::Pitch => {
+            BlockType::Modulation | BlockType::Trem | BlockType::Pitch => {
                 (BlockWidget::ModulationGraph, GridSize::wide())
             }
             BlockType::Amp | BlockType::Cabinet => (BlockWidget::AmpCab, GridSize::square()),
