@@ -1,6 +1,7 @@
 //! Toolbar components: search, sort, tag filter panel, active tag chips.
 
 use dioxus::prelude::*;
+use fts_ui::prelude::*;
 use signal::tagging::TagCategory;
 
 use super::detail_panel::{tag_category_label, tag_display_value};
@@ -28,12 +29,13 @@ pub(super) fn Toolbar(props: ToolbarProps) -> Element {
 
     rsx! {
         // ── Search + sort + filter toggle ──
-        div { class: "px-3 py-1.5 border-b border-white/[0.06] flex items-center gap-2 flex-shrink-0 bg-zinc-950/60",
+        div {
+            class: "px-3 py-1.5 flex items-center gap-2 flex-shrink-0 border-b border-border bg-card/50",
             // Search input
             div { class: "flex items-center gap-1.5 flex-1 min-w-0",
-                span { class: "text-zinc-500 text-xs flex-shrink-0", ">" }
+                span { class: "text-muted-foreground text-xs flex-shrink-0", ">" }
                 input {
-                    class: "bg-transparent text-xs text-zinc-200 outline-none flex-1 min-w-0 placeholder-zinc-600",
+                    class: "bg-transparent text-xs text-foreground outline-none flex-1 min-w-0 placeholder-muted-foreground",
                     r#type: "text",
                     placeholder: "Search {props.current_nav.label().to_ascii_lowercase()}...",
                     value: "{props.current_search}",
@@ -42,9 +44,10 @@ pub(super) fn Toolbar(props: ToolbarProps) -> Element {
                     },
                 }
                 if has_active_filters {
-                    button {
-                        class: "text-[10px] text-zinc-500 hover:text-zinc-300 px-1",
-                        onclick: move |_| {
+                    Button {
+                        variant: ButtonVariant::Ghost,
+                        size: ButtonSize::Small,
+                        on_click: move |_| {
                             props.on_search_change.call(String::new());
                             props.on_filters_change.call(Vec::new());
                         },
@@ -52,32 +55,21 @@ pub(super) fn Toolbar(props: ToolbarProps) -> Element {
                     }
                 }
             }
-            // Sort dropdown
-            select {
-                class: "px-1.5 py-0.5 text-[10px] rounded bg-white/[0.06] text-zinc-300 border border-white/[0.08] outline-none cursor-pointer flex-shrink-0",
-                value: "{props.current_sort.value()}",
-                onchange: move |evt: Event<FormData>| {
-                    props.on_sort_change.call(SortMode::from_value(&evt.value()));
+            // Sort picker
+            SegmentedControl {
+                value: props.current_sort.value().to_string(),
+                on_change: move |v: String| {
+                    props.on_sort_change.call(SortMode::from_value(&v));
                 },
-                for sm in SortMode::ALL.iter() {
-                    {
-                        let s = *sm;
-                        rsx! {
-                            option {
-                                value: "{s.value()}",
-                                selected: props.current_sort == s,
-                                "{s.label()}"
-                            }
-                        }
-                    }
-                }
+                options: SortMode::ALL.iter().map(|s| (s.value().to_string(), s.label().to_string())).collect::<Vec<_>>(),
+                size: SegmentedControlSize::Small,
             }
             // Tag filter toggle
             button {
                 class: if props.tag_panel_open {
-                    "px-2 py-0.5 text-[10px] rounded bg-white/[0.15] text-zinc-100 flex-shrink-0"
+                    "px-2 py-0.5 text-[10px] rounded flex-shrink-0 bg-secondary text-secondary-foreground"
                 } else {
-                    "px-2 py-0.5 text-[10px] rounded bg-white/[0.06] text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.10] flex-shrink-0"
+                    "px-2 py-0.5 text-[10px] rounded flex-shrink-0 bg-secondary/50 text-muted-foreground"
                 },
                 onclick: move |_| props.on_toggle_tag_panel.call(()),
                 if props.active_filters.is_empty() {
@@ -90,7 +82,7 @@ pub(super) fn Toolbar(props: ToolbarProps) -> Element {
 
         // ── Active tag chips ──
         if !props.active_filters.is_empty() {
-            div { class: "px-3 py-1 border-b border-white/[0.06] flex items-center gap-1 flex-shrink-0 flex-wrap bg-zinc-950/40",
+            div { class: "px-3 py-1 flex items-center gap-1 flex-shrink-0 flex-wrap border-b border-border",
                 for filter_key in props.active_filters.iter() {
                     {
                         let key = filter_key.clone();
@@ -99,14 +91,15 @@ pub(super) fn Toolbar(props: ToolbarProps) -> Element {
                         rsx! {
                             button {
                                 key: "{key}",
-                                class: "inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] rounded bg-white/[0.08] text-zinc-200 hover:bg-white/[0.12]",
                                 onclick: move |_| {
                                     let mut filters = current_filters.clone();
                                     filters.retain(|f| f != &key);
                                     props.on_filters_change.call(filters);
                                 },
-                                "{display}"
-                                span { class: "text-zinc-400", "x" }
+                                Badge { variant: BadgeVariant::Secondary,
+                                    "{display} "
+                                    span { class: "text-muted-foreground", "x" }
+                                }
                             }
                         }
                     }
@@ -116,16 +109,16 @@ pub(super) fn Toolbar(props: ToolbarProps) -> Element {
 
         // ── Tag filter panel (collapsible) ──
         if props.tag_panel_open {
-            div { class: "px-3 py-2 border-b border-white/[0.06] flex-shrink-0 bg-zinc-900/40 max-h-40 overflow-y-auto",
+            div { class: "px-3 py-2 flex-shrink-0 max-h-40 overflow-y-auto border-b border-border bg-card/30",
                 if props.available_tags.is_empty() {
-                    div { class: "text-xs text-zinc-600 italic", "No tags available" }
+                    div { class: "text-xs text-muted-foreground italic", "No tags available" }
                 }
                 for (cat, keys) in props.available_tags.iter() {
                     {
                         let cat_label = tag_category_label(*cat);
                         rsx! {
                             div { class: "mb-1.5",
-                                h4 { class: "text-[10px] font-semibold text-zinc-500 uppercase tracking-wider mb-0.5", "{cat_label}" }
+                                h4 { class: "text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-0.5", "{cat_label}" }
                                 div { class: "flex flex-wrap gap-1",
                                     for key in keys.iter() {
                                         {
@@ -136,11 +129,6 @@ pub(super) fn Toolbar(props: ToolbarProps) -> Element {
                                             rsx! {
                                                 button {
                                                     key: "{k}",
-                                                    class: if is_active {
-                                                        "px-1.5 py-0.5 text-[10px] rounded bg-white/[0.15] text-zinc-100"
-                                                    } else {
-                                                        "px-1.5 py-0.5 text-[10px] rounded bg-white/[0.06] text-zinc-400 hover:bg-white/[0.10] hover:text-zinc-200"
-                                                    },
                                                     onclick: move |_| {
                                                         let mut filters = current_filters.clone();
                                                         if is_active {
@@ -150,7 +138,10 @@ pub(super) fn Toolbar(props: ToolbarProps) -> Element {
                                                         }
                                                         props.on_filters_change.call(filters);
                                                     },
-                                                    "{display}"
+                                                    Badge {
+                                                        variant: if is_active { BadgeVariant::Default } else { BadgeVariant::Secondary },
+                                                        "{display}"
+                                                    }
                                                 }
                                             }
                                         }
