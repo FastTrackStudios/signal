@@ -12,9 +12,9 @@ use signal_proto::layer::{Layer, LayerId, LayerSnapshot, LayerSnapshotId, Module
 use signal_proto::rig::{EngineSelection, Rig, RigId, RigScene, RigSceneId};
 use signal_proto::traits::Collection;
 use signal_proto::{
-    Block, BlockType, EngineType, Module, ModuleBlock, ModuleBlockSource, ModulePreset,
-    ModulePresetId, ModuleSnapshot, ModuleSnapshotId, ModuleType, Preset, PresetId, Snapshot,
-    SnapshotId,
+    Block, BlockParameter, BlockType, EngineType, Module, ModuleBlock, ModuleBlockSource,
+    ModulePreset, ModulePresetId, ModuleSnapshot, ModuleSnapshotId, ModuleType, Preset, PresetId,
+    Snapshot, SnapshotId,
 };
 
 // ── Input types ──────────────────────────────────────────────────
@@ -41,6 +41,10 @@ pub struct ImportBlock {
     /// Binary plugin state captured from the live DAW.
     /// Stored on the block preset snapshot for full restore via `rigs open`.
     pub state_data: Option<Vec<u8>>,
+    /// Individual plugin parameters captured from the live DAW.
+    /// Each tuple is `(param_index_id, param_name, normalized_value)`.
+    /// Stored on the Block inside the snapshot for param-by-name fallback.
+    pub parameters: Vec<(String, String, f64)>,
 }
 
 /// Top-level input for the rig importer.
@@ -96,6 +100,7 @@ pub async fn import_rig_from_chain<S: SignalApi>(
                 &block.label,
                 block.plugin_name.as_deref(),
                 block.state_data.as_deref(),
+                &block.parameters,
             )
             .await?;
 
@@ -139,6 +144,7 @@ pub async fn import_rig_from_chain<S: SignalApi>(
                 &sb.label,
                 sb.plugin_name.as_deref(),
                 sb.state_data.as_deref(),
+                &sb.parameters,
             )
             .await?;
             if is_new {
@@ -236,6 +242,7 @@ async fn find_or_create_block_preset<S: SignalApi>(
     label: &str,
     plugin_name: Option<&str>,
     state_data: Option<&[u8]>,
+    parameters: &[(String, String, f64)],
 ) -> Result<(PresetId, bool), OpsError> {
     let existing = signal.block_presets().list(block_type).await?;
     if let Some(mut preset) = existing.into_iter().find(|p| p.name() == label) {
@@ -251,14 +258,48 @@ async fn find_or_create_block_preset<S: SignalApi>(
             }
         }
 
-        // Always overwrite state data when provided — earlier imports may have
-        // stored data in the wrong format.
+        // Always overwrite state data and parameters when provided — earlier
+        // imports may have stored data in the wrong format or missed params.
         if let Some(data) = state_data {
             let default_id = preset.default_snapshot().id().clone();
+            // Build block from captured parameters for existing presets too.
+            let block = if parameters.is_empty() {
+                None
+            } else {
+                Some(Block::from_parameters(
+                    parameters
+                        .iter()
+                        .map(|(id, name, value)| {
+                            BlockParameter::new(id, name, *value as f32)
+                                .with_daw_name(name.clone())
+                        })
+                        .collect(),
+                ))
+            };
             if let Some(snap) = preset.variants_mut().iter_mut().find(|s| *s.id() == default_id) {
                 snap.set_state_data(data.to_vec());
+                if let Some(b) = block {
+                    snap.set_block(b);
+                }
             }
             // Sync the private `default_snapshot` field from the updated snapshots vec.
+            preset.set_default_variant_id(default_id);
+            dirty = true;
+        } else if !parameters.is_empty() {
+            // Parameters provided without state_data — still update the block.
+            let default_id = preset.default_snapshot().id().clone();
+            let block = Block::from_parameters(
+                parameters
+                    .iter()
+                    .map(|(id, name, value)| {
+                        BlockParameter::new(id, name, *value as f32)
+                            .with_daw_name(name.clone())
+                    })
+                    .collect(),
+            );
+            if let Some(snap) = preset.variants_mut().iter_mut().find(|s| *s.id() == default_id) {
+                snap.set_block(block);
+            }
             preset.set_default_variant_id(default_id);
             dirty = true;
         }
@@ -269,8 +310,23 @@ async fn find_or_create_block_preset<S: SignalApi>(
         return Ok((preset.id().clone(), false));
     }
 
+    // Build block from captured parameters (or default if none captured).
+    let block = if parameters.is_empty() {
+        Block::default()
+    } else {
+        Block::from_parameters(
+            parameters
+                .iter()
+                .map(|(id, name, value)| {
+                    BlockParameter::new(id, name, *value as f32)
+                        .with_daw_name(name.clone())
+                })
+                .collect(),
+        )
+    };
+
     // Build snapshot — attach state data if captured from the live DAW.
-    let mut snapshot = Snapshot::new(SnapshotId::new(), "Default", Block::default());
+    let mut snapshot = Snapshot::new(SnapshotId::new(), "Default", block);
     if let Some(data) = state_data {
         snapshot = snapshot.with_state_data(data.to_vec());
     }
