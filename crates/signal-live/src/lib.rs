@@ -31,6 +31,7 @@ pub mod engine;
 pub mod macro_setup;
 pub mod macro_registry;
 pub mod macro_recorder;
+pub mod macro_system;  // Comprehensive documentation & re-exports
 
 // Re-export macromod types for unified macro system
 pub use macromod::{

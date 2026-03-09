@@ -1,11 +1,46 @@
-//! Direct macro-to-FX parameter binding registry.
+//! Macro binding resolution from abstract names to concrete FX parameters.
 //!
-//! When a block with a `MacroBank` is loaded onto a REAPER track, this module:
-//! 1. Resolves macro bindings to concrete FX parameter indices
-//! 2. Registers the bindings in a global thread-safe registry
-//! 3. The performance tab uses registry to drive parameter values directly via DAW RPC
+//! This module bridges the gap between Signal's abstract macro definitions
+//! and REAPER's concrete FX parameter indices. When a block is loaded:
 //!
-//! No JSFX, MIDI CC, or plink configuration — just direct parameter writes.
+//! 1. Collect bindings from the MacroBank (including sub-macros)
+//! 2. Query the target FX plugin for available parameters
+//! 3. Match parameter names using semantic name resolution
+//! 4. Return resolved bindings ready for registration in the global registry
+//!
+//! # Architecture
+//!
+//! **Input**: `Block.macro_bank` with abstract bindings like:
+//! ```ignore
+//! MacroBinding {
+//!     block_id: "my_eq",
+//!     target: "low_freq",  // Abstract parameter name
+//!     min: 20.0,
+//!     max: 5000.0,
+//! }
+//! ```
+//!
+//! **Process**:
+//! - Recursive knob tree traversal (collect_knob_bindings)
+//! - Parameter name matching (param_name_matches from engine)
+//! - Index resolution from FX parameter list
+//!
+//! **Output**: `MacroSetupResult` with concrete indices:
+//! ```ignore
+//! LiveMacroBinding {
+//!     knob_id: "drive",
+//!     param_index: 5,  // Concrete index on the FX
+//!     min: 0.0,
+//!     max: 1.0,
+//! }
+//! ```
+//!
+//! # Design Principles
+//!
+//! - **No side effects**: setup_macros_for_block is pure, returns result for caller to register
+//! - **No JSFX/MIDI**: Direct API, no middleware injection
+//! - **Fail gracefully**: Missing parameters are skipped (logged as warnings)
+//! - **Recursive**: Supports nested sub-macros (children in knob tree)
 
 use daw::{FxHandle, TrackHandle};
 use macromod::{MacroBank, MacroBinding, MacroKnob};
