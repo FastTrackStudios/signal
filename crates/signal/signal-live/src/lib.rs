@@ -30,6 +30,26 @@ pub mod daw_rig_ops;
 pub mod engine;
 pub mod macro_setup;
 pub mod macro_registry;
+pub mod macro_recorder;
+
+// Re-export macromod types for unified macro system
+pub use macromod::{
+    binding::MacroBinding,
+    easing::EasingCurve,
+    macro_bank::{GroupSelector, MacroBank, MacroGroup, MacroKnob},
+    parameter::BlockParameter as MacromodBlockParameter,
+    response::ResponseCurve,
+    routing::{ModulationRoute, ModulationRouteSet},
+    sources::{
+        EnvelopeConfig, EnvelopeMode, FollowerConfig, FollowerInput, LfoConfig, LfoWaveform,
+        ModulationSource, RandomConfig, RetriggerMode, TempoDiv,
+    },
+    target::{ModulationTarget, ParamTarget},
+    runtime::{ModulationProcessor, TickContext},
+};
+
+// Re-export recorder types
+pub use macro_recorder::{MacroRecord, MacroRecorder};
 
 mod block_service;
 mod browser_service;

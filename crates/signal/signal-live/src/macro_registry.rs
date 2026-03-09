@@ -69,6 +69,10 @@ mod tests {
     use super::*;
     use crate::macro_setup::LiveMacroBinding;
 
+    // Note: Tests share global state, so we run them serially to avoid races.
+    // To run serially: cargo test -- --test-threads=1
+    // This is only for testing; production code doesn't care about test order.
+
     #[test]
     fn test_register_and_get() {
         clear(); // Start fresh
