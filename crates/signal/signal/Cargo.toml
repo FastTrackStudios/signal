@@ -30,3 +30,6 @@ reaper-test.workspace = true
 uuid.workspace = true
 futures.workspace = true
 base64 = "0.22"
+dawfile-reaper.workspace = true
+signal-daw-bridge.workspace = true
+signal-controller = { path = "../signal-controller" }
