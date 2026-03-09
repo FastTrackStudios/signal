@@ -394,8 +394,10 @@ pub fn CollectionBrowser(props: CollectionBrowserProps) -> Element {
             div { class: "flex-1 flex min-h-0 overflow-hidden",
 
                 // ── Col 1: Nav ──
-                div { class: "w-36 flex-shrink-0 border-r border-white/[0.06] flex flex-col min-h-0 bg-zinc-950/60",
-                    div { class: "px-3 py-2 border-b border-white/[0.06]",
+                div {
+                    class: "w-36 flex-shrink-0 flex flex-col min-h-0 border-r border-border bg-card/40",
+                    div {
+                        class: "px-3 py-2 border-b border-border",
                         SectionHeader { size: SectionHeaderSize::Small, label: "Browse" }
                     }
                     div { class: "flex-1 overflow-y-auto py-1",
@@ -407,9 +409,9 @@ pub fn CollectionBrowser(props: CollectionBrowserProps) -> Element {
                                     button {
                                         key: "{c.label()}",
                                         class: if is_active {
-                                            "w-full text-left px-3 py-2 text-sm font-medium bg-white/[0.10] text-zinc-100"
+                                            "w-full text-left px-3 py-2 text-sm bg-accent text-accent-foreground font-medium"
                                         } else {
-                                            "w-full text-left px-3 py-2 text-sm text-zinc-400 hover:bg-white/[0.04] hover:text-zinc-200"
+                                            "w-full text-left px-3 py-2 text-sm text-muted-foreground hover:bg-accent/30"
                                         },
                                         onclick: move |_| nav.set(c),
                                         "{c.label()}"
@@ -421,8 +423,10 @@ pub fn CollectionBrowser(props: CollectionBrowserProps) -> Element {
                 }
 
                 // ── Col 2: Items (auto-fetched) ──
-                div { class: "w-64 flex-shrink-0 border-r border-white/[0.06] flex flex-col min-h-0 bg-zinc-950/60",
-                    div { class: "px-3 py-2 border-b border-white/[0.06]",
+                div {
+                    class: "w-64 flex-shrink-0 flex flex-col min-h-0 border-r border-border bg-card/40",
+                    div {
+                        class: "px-3 py-2 border-b border-border",
                         SectionHeader { size: SectionHeaderSize::Small, label: "{col2_header}" }
                     }
                     div { class: "flex-1 overflow-y-auto",
@@ -451,9 +455,9 @@ pub fn CollectionBrowser(props: CollectionBrowserProps) -> Element {
                                     button {
                                         key: "{item_id}",
                                         class: if is_sel {
-                                            "w-full text-left px-3 py-2 border-b border-white/[0.04] bg-white/[0.08]"
+                                            "w-full text-left px-3 py-2 border-b border-border/50 bg-accent text-accent-foreground"
                                         } else {
-                                            "w-full text-left px-3 py-2 border-b border-white/[0.04] hover:bg-white/[0.04]"
+                                            "w-full text-left px-3 py-2 border-b border-border/50 hover:bg-accent/30"
                                         },
                                         onclick: move |_| {
                                             col2_selected.set(Some(idx));
@@ -481,40 +485,43 @@ pub fn CollectionBrowser(props: CollectionBrowserProps) -> Element {
                                                     style: "background-color: {bg}",
                                                 }
                                             }
-                                            span { class: "text-sm text-zinc-200 truncate flex-1", "{name}" }
+                                            span { class: "text-sm text-foreground truncate flex-1", "{name}" }
                                             if let Some(ref b) = badge {
-                                                span { class: "text-[10px] text-zinc-500 flex-shrink-0", "{b}" }
+                                                span { class: "text-[10px] text-muted-foreground flex-shrink-0", "{b}" }
                                             }
                                         }
                                         if let Some(ref sub) = subtitle {
-                                            div { class: "text-xs text-zinc-500 truncate", "{sub}" }
+                                            div { class: "text-xs text-muted-foreground truncate", "{sub}" }
                                         }
                                     }
                                 }
                             }
                         }
                     }
-                    div { class: "px-3 py-1 border-t border-white/[0.06] flex-shrink-0",
+                    div {
+                        class: "px-3 py-1 flex-shrink-0 border-t border-border",
                         if has_active_filters {
-                            span { class: "text-[10px] text-zinc-600",
+                            span { class: "text-[10px] text-muted-foreground",
                                 "{all_col2.len()} / {col2_items().len()}"
                             }
                         } else {
-                            span { class: "text-[10px] text-zinc-600", "{all_col2.len()}" }
+                            span { class: "text-[10px] text-muted-foreground", "{all_col2.len()}" }
                         }
                     }
                 }
 
                 // ── Col 3: Children (on col2 click) ──
-                div { class: "w-64 flex-shrink-0 border-r border-white/[0.06] flex flex-col min-h-0 bg-zinc-950/60",
-                    div { class: "px-3 py-2 border-b border-white/[0.06]",
-                        h3 { class: "text-[10px] font-semibold text-zinc-500 uppercase tracking-wider",
+                div {
+                    class: "w-64 flex-shrink-0 flex flex-col min-h-0 border-r border-border bg-card/40",
+                    div {
+                        class: "px-3 py-2 border-b border-border",
+                        h3 { class: "text-[10px] font-semibold text-muted-foreground uppercase tracking-wider",
                             {if col2_selected().is_some() { col3_header } else { "—" }}
                         }
                     }
                     div { class: "flex-1 overflow-y-auto",
                         if all_col3.is_empty() {
-                            div { class: "text-xs text-zinc-600 text-center py-6",
+                            div { class: "text-xs text-muted-foreground text-center py-6",
                                 {if col2_selected().is_some() { "No items" } else { "Select from left" }}
                             }
                         }
@@ -531,9 +538,9 @@ pub fn CollectionBrowser(props: CollectionBrowserProps) -> Element {
                                     button {
                                         key: "{child_id}",
                                         class: if is_sel {
-                                            "w-full text-left px-3 py-2 border-b border-white/[0.04] bg-white/[0.08]"
+                                            "w-full text-left px-3 py-2 border-b border-border/50 bg-accent text-accent-foreground"
                                         } else {
-                                            "w-full text-left px-3 py-2 border-b border-white/[0.04] hover:bg-white/[0.04]"
+                                            "w-full text-left px-3 py-2 border-b border-border/50 hover:bg-accent/30"
                                         },
                                         onclick: move |_| {
                                             col3_selected.set(Some(cidx));
@@ -610,21 +617,22 @@ pub fn CollectionBrowser(props: CollectionBrowserProps) -> Element {
                                             }
                                         },
                                         div { class: "flex items-center gap-1.5",
-                                            span { class: "text-sm text-zinc-200 truncate flex-1", "{name}" }
+                                            span { class: "text-sm text-foreground truncate flex-1", "{name}" }
                                             if let Some(ref b) = badge {
-                                                span { class: "text-[10px] text-zinc-500 flex-shrink-0", "{b}" }
+                                                span { class: "text-[10px] text-muted-foreground flex-shrink-0", "{b}" }
                                             }
                                         }
                                         if let Some(ref sub) = subtitle {
-                                            div { class: "text-xs text-zinc-500 truncate", "{sub}" }
+                                            div { class: "text-xs text-muted-foreground truncate", "{sub}" }
                                         }
                                     }
                                 }
                             }
                         }
                     }
-                    div { class: "px-3 py-1 border-t border-white/[0.06] flex-shrink-0",
-                        span { class: "text-[10px] text-zinc-600", "{all_col3.len()}" }
+                    div {
+                        class: "px-3 py-1 flex-shrink-0 border-t border-border",
+                        span { class: "text-[10px] text-muted-foreground", "{all_col3.len()}" }
                     }
                 }
 
@@ -649,14 +657,16 @@ pub fn CollectionBrowser(props: CollectionBrowserProps) -> Element {
                             folders.keys().cloned().collect();
 
                         rsx! {
-                            div { class: "w-64 flex-shrink-0 border-r border-white/[0.06] flex flex-col min-h-0 bg-zinc-950/60",
-                                div { class: "px-3 py-2 border-b border-white/[0.06] flex items-center gap-2",
-                                    h3 { class: "text-[10px] font-semibold text-zinc-500 uppercase tracking-wider flex-1",
+                            div {
+                                class: "w-64 flex-shrink-0 flex flex-col min-h-0 border-r border-border bg-card/40",
+                                div {
+                                    class: "px-3 py-2 flex items-center gap-2 border-b border-border",
+                                    h3 { class: "text-[10px] font-semibold text-muted-foreground uppercase tracking-wider flex-1",
                                         {if col3_selected().is_some() { "Snapshots" } else { "—" }}
                                     }
                                     if has_folders && col3_selected().is_some() {
                                         button {
-                                            class: "text-[9px] text-zinc-600 hover:text-zinc-400",
+                                            class: "text-[9px] text-muted-foreground hover:text-foreground",
                                             onclick: move |_| {
                                                 let current = expanded_folders();
                                                 if current.is_empty() {
@@ -671,7 +681,7 @@ pub fn CollectionBrowser(props: CollectionBrowserProps) -> Element {
                                 }
                                 div { class: "flex-1 overflow-y-auto",
                                     if all_col4.is_empty() {
-                                        div { class: "text-xs text-zinc-600 text-center py-6",
+                                        div { class: "text-xs text-muted-foreground text-center py-6",
                                             {if col3_selected().is_some() { "No items" } else { "Select from left" }}
                                         }
                                     }
@@ -687,16 +697,16 @@ pub fn CollectionBrowser(props: CollectionBrowserProps) -> Element {
                                                 button {
                                                     key: "{item.id}",
                                                     class: if is_sel {
-                                                        "w-full text-left px-3 py-2 border-b border-white/[0.04] bg-white/[0.08]"
+                                                        "w-full text-left px-3 py-2 border-b border-border/50 bg-accent text-accent-foreground"
                                                     } else {
-                                                        "w-full text-left px-3 py-2 border-b border-white/[0.04] hover:bg-white/[0.04]"
+                                                        "w-full text-left px-3 py-2 border-b border-border/50 hover:bg-accent/30"
                                                     },
                                                     onclick: move |_| {
                                                         col4_selected.set(Some(didx));
                                                     },
-                                                    span { class: "text-sm text-zinc-200 truncate", "{name}" }
+                                                    span { class: "text-sm text-foreground truncate", "{name}" }
                                                     if let Some(ref sub) = subtitle {
-                                                        div { class: "text-xs text-zinc-500 truncate", "{sub}" }
+                                                        div { class: "text-xs text-muted-foreground truncate", "{sub}" }
                                                     }
                                                 }
                                             }
@@ -713,7 +723,7 @@ pub fn CollectionBrowser(props: CollectionBrowserProps) -> Element {
                                                 // Folder header
                                                 button {
                                                     key: "folder-{fname}",
-                                                    class: "w-full text-left px-3 py-1.5 border-b border-white/[0.04] bg-white/[0.03] hover:bg-white/[0.05] flex items-center gap-1.5",
+                                                    class: "w-full text-left px-3 py-1.5 flex items-center gap-1.5 border-b border-border/50 bg-card/30",
                                                     onclick: move |_| {
                                                         let mut set = expanded_folders();
                                                         if set.contains(&fname) {
@@ -723,11 +733,11 @@ pub fn CollectionBrowser(props: CollectionBrowserProps) -> Element {
                                                         }
                                                         expanded_folders.set(set);
                                                     },
-                                                    span { class: "text-[10px] text-zinc-500 flex-shrink-0",
+                                                    span { class: "text-[10px] text-muted-foreground flex-shrink-0",
                                                         {if is_expanded { "\u{25BE}" } else { "\u{25B8}" }}
                                                     }
-                                                    span { class: "text-xs font-medium text-zinc-400 truncate flex-1", "{folder_name}" }
-                                                    span { class: "text-[10px] text-zinc-600 flex-shrink-0", "{count}" }
+                                                    span { class: "text-xs font-medium text-muted-foreground truncate flex-1", "{folder_name}" }
+                                                    span { class: "text-[10px] text-muted-foreground flex-shrink-0", "{count}" }
                                                 }
                                                 // Folder children (indented)
                                                 if is_expanded {
@@ -741,16 +751,16 @@ pub fn CollectionBrowser(props: CollectionBrowserProps) -> Element {
                                                                 button {
                                                                     key: "{item.id}",
                                                                     class: if is_sel {
-                                                                        "w-full text-left pl-6 pr-3 py-1.5 border-b border-white/[0.04] bg-white/[0.08]"
+                                                                        "w-full text-left pl-6 pr-3 py-1.5 border-b border-border/50 bg-accent text-accent-foreground"
                                                                     } else {
-                                                                        "w-full text-left pl-6 pr-3 py-1.5 border-b border-white/[0.04] hover:bg-white/[0.04]"
+                                                                        "w-full text-left pl-6 pr-3 py-1.5 border-b border-border/50 hover:bg-accent/30"
                                                                     },
                                                                     onclick: move |_| {
                                                                         col4_selected.set(Some(didx));
                                                                     },
-                                                                    span { class: "text-sm text-zinc-200 truncate", "{name}" }
+                                                                    span { class: "text-sm text-foreground truncate", "{name}" }
                                                                     if let Some(ref sub) = subtitle {
-                                                                        div { class: "text-xs text-zinc-500 truncate", "{sub}" }
+                                                                        div { class: "text-xs text-muted-foreground truncate", "{sub}" }
                                                                     }
                                                                 }
                                                             }
@@ -761,8 +771,9 @@ pub fn CollectionBrowser(props: CollectionBrowserProps) -> Element {
                                         }
                                     }
                                 }
-                                div { class: "px-3 py-1 border-t border-white/[0.06] flex-shrink-0",
-                                    span { class: "text-[10px] text-zinc-600", "{all_col4.len()}" }
+                                div {
+                                    class: "px-3 py-1 flex-shrink-0 border-t border-border",
+                                    span { class: "text-[10px] text-muted-foreground", "{all_col4.len()}" }
                                 }
                             }
                         }
@@ -834,14 +845,15 @@ pub fn CollectionBrowser(props: CollectionBrowserProps) -> Element {
                 let on_assign = props.on_assign.clone();
 
                 rsx! {
-                    div { class: "px-4 py-1.5 border-t border-white/[0.06] flex items-center gap-3 flex-shrink-0 bg-zinc-950/60",
+                    div {
+                        class: "px-4 py-1.5 flex items-center gap-3 flex-shrink-0 border-t border-border bg-card/60",
                         if pick_mode {
                             div { class: "w-1.5 h-1.5 rounded-full bg-amber-500" }
                             span { class: "text-[10px] text-amber-400 font-medium", "Pick Mode" }
                         } else {
                             StatusDot { color: StatusDotColor::Success, size: StatusDotSize::Small }
                         }
-                        span { class: "text-[10px] text-zinc-500", "{current_nav.label()}" }
+                        span { class: "text-[10px] text-muted-foreground", "{current_nav.label()}" }
                         div { class: "flex-1" }
                         if can_assign {
                             button {
@@ -856,7 +868,7 @@ pub fn CollectionBrowser(props: CollectionBrowserProps) -> Element {
                                 "Assign Selection"
                             }
                         }
-                        span { class: "text-[10px] text-zinc-600 mr-1", "Rig:" }
+                        span { class: "text-[10px] text-muted-foreground mr-1", "Rig:" }
                         SegmentedControl {
                             value: current_rt.as_str().to_string(),
                             on_change: move |v: String| {

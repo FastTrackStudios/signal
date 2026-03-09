@@ -84,7 +84,8 @@ pub(super) fn render_param_bars(params: &[DetailParam]) -> Element {
                 rsx! {
                     div { class: "flex items-center gap-2",
                         span { class: "text-xs text-zinc-400 w-24 truncate flex-shrink-0", "{name}" }
-                        div { class: "flex-1 h-1.5 bg-white/[0.06] rounded-full overflow-hidden",
+                        div { class: "flex-1 h-1.5 rounded-full overflow-hidden",
+                            style: "background: rgba(255,255,255,0.06);",
                             div {
                                 class: "h-full bg-zinc-400 rounded-full",
                                 style: "width: {width_pct}",
