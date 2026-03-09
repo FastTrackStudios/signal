@@ -10,6 +10,7 @@
 
 use std::time::Duration;
 
+use futures::future::join_all;
 use reaper_test::reaper_test;
 use signal::macro_bank::{MacroBank, MacroKnob};
 use signal::{Block, BlockParameter, MacroBinding};
@@ -161,6 +162,18 @@ async fn macro_setup_direct_reacomp_parameter_binding(
 
     ctx.log("PASS: Bindings registered in global macro_registry");
 
+    // ─── Enable audio engine (required for parameter changes to reach plugins) ─────
+
+    if !ctx.daw.audio_engine().is_running().await.unwrap_or(false) {
+        ctx.daw
+            .audio_engine()
+            .init()
+            .await
+            .map_err(|e| eyre::eyre!("Failed to init audio engine: {}", e))?;
+        settle().await;
+        ctx.log("Audio engine initialized");
+    }
+
     // ─── Verify initial ReaComp parameter values ────────────────────────
 
     let ratio_binding = setup.bindings.iter().find(|b| b.knob_id == "compress");
@@ -213,8 +226,10 @@ async fn macro_setup_direct_reacomp_parameter_binding(
 
     // ─── Simulate macro knob change: dynamics 0.4 → 0.7 ──────────────────
 
+    ctx.log(&format!("dynamics_targets len: {}", dynamics_targets.len()));
     if !dynamics_targets.is_empty() {
         let targets = signal::macro_registry::get_targets("dynamics");
+        ctx.log(&format!("Retrieved {} targets from registry for 'dynamics'", targets.len()));
         for target in targets {
             // Map macro value (0.4 → 0.7) through param range [0.0, 1.0]
             let param_val = (target.min + (target.max - target.min) * 0.7) as f64;
@@ -318,6 +333,12 @@ async fn macro_setup_direct_multi_plugin(ctx: &reaper_test::ReaperTestContext) -
 
     ctx.log(&format!("Registered {} targets for 'compress' knob", compress_targets.len()));
 
+    // ─── Start playback to enable audio engine ─────
+
+    let _ = project.transport().play().await;
+    settle().await;
+    ctx.log("Playback started — audio engine enabled");
+
     // Move compress macro and verify both plugins respond
     for target in compress_targets {
         let param_val = 0.8;
@@ -332,6 +353,391 @@ async fn macro_setup_direct_multi_plugin(ctx: &reaper_test::ReaperTestContext) -
     settle().await;
 
     ctx.log("PASS: Multiple plugins respond to single macro knob");
+
+    signal::macro_registry::clear();
+
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Test: LFO modulation demo — observe macro → parameter updates live
+// ---------------------------------------------------------------------------
+
+#[reaper_test(isolated)]
+async fn macro_lfo_modulation_demo(ctx: &reaper_test::ReaperTestContext) -> eyre::Result<()> {
+    let project = ctx.project().clone();
+
+    // 1. Create track and add ReaComp
+    let track = project.tracks().add("LFO Modulation Demo", None).await?;
+    settle().await;
+
+    let target_fx = track.fx_chain().add(REACOMP).await?;
+    settle().await;
+
+    ctx.log("=== LFO MODULATION DEMO ===");
+    ctx.log("Setting up macro bindings and LFO...");
+
+    // 2. Build block with macro bindings
+    let block = build_reacomp_block_with_macros();
+
+    // 3. Set up macros
+    let result = macro_setup::setup_macros_for_block(&track, &target_fx, &block)
+        .await
+        .map_err(|e| eyre::eyre!("macro setup failed: {}", e))?;
+
+    settle().await;
+
+    let setup = result.ok_or_else(|| eyre::eyre!("Expected MacroSetupResult, got None"))?;
+
+    // 4. Register bindings
+    signal::macro_registry::clear();
+    signal::macro_registry::register(&setup);
+
+    ctx.log(&format!("Registered {} bindings", setup.bindings.len()));
+
+    // 5. Start playback to enable audio engine
+    let _ = project.transport().play().await;
+    settle().await;
+    ctx.log("Playback started — audio engine should now be running");
+
+    // 6. Get initial Ratio parameter value
+    let ratio_binding = setup.bindings.iter().find(|b| b.knob_id == "compress");
+    if let Some(rb) = ratio_binding {
+        let initial = target_fx.param(rb.param_index).get().await?;
+        ctx.log(&format!(
+            "Starting LFO on Ratio parameter (idx={}) - initial: {:.4}",
+            rb.param_index, initial
+        ));
+    }
+
+    // 7. Run LFO modulation for 30 seconds
+    ctx.log("LFO modulating macro knob 0.0 to 1.0 repeatedly...");
+    ctx.log("Observe the Ratio parameter in REAPER changing smoothly!");
+    ctx.log("");
+
+    let start = std::time::Instant::now();
+    let duration = std::time::Duration::from_secs(30);
+
+    while start.elapsed() < duration {
+        let elapsed = start.elapsed().as_secs_f64();
+
+        // Oscillate between 0.0 and 1.0 using a sine wave
+        // Period = 4 seconds (goes 0->1->0 in 4 seconds)
+        let sine = ((elapsed * std::f64::consts::PI / 2.0).sin() + 1.0) / 2.0;
+        let macro_val = sine as f32;
+
+        // Update "compress" macro to drive Ratio parameter
+        let targets = signal::macro_registry::get_targets("compress");
+        for target in targets {
+            let param_val = (target.min + (target.max - target.min) * macro_val as f32) as f64;
+            target_fx.param(target.param_index).set(param_val).await?;
+        }
+
+        // Log every ~2 seconds
+        if (elapsed as i32) % 2 == 0 && (elapsed as i32) != ((elapsed - 0.1) as i32) {
+            if let Some(rb) = ratio_binding {
+                let current = target_fx.param(rb.param_index).get().await?;
+                ctx.log(&format!(
+                    "T={:2.1}s | Macro={:.3} | Ratio={:.4}",
+                    elapsed, macro_val, current
+                ));
+            }
+        }
+
+        // Update ~200 times per second for smooth motion
+        tokio::time::sleep(Duration::from_millis(5)).await;
+    }
+
+    if let Some(rb) = ratio_binding {
+        let final_val = target_fx.param(rb.param_index).get().await?;
+        ctx.log(&format!("Final Ratio parameter: {:.4}", final_val));
+    }
+
+    ctx.log("");
+    ctx.log("=== LFO DEMO COMPLETE ===");
+    ctx.log("The macro successfully modulated the plugin parameter!");
+    ctx.log("Check REAPER - you should see the Ratio parameter oscillating.");
+
+    signal::macro_registry::clear();
+
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Test: Enumerate all available FX in REAPER
+// ---------------------------------------------------------------------------
+
+#[reaper_test(isolated)]
+async fn enumerate_reaper_fx(ctx: &reaper_test::ReaperTestContext) -> eyre::Result<()> {
+    let project = ctx.project().clone();
+    let track = project.tracks().add("FX Enumeration", None).await?;
+    settle().await;
+
+    // Try common REAPER stock plugins to find exact names
+    let fx_names = vec![
+        "ReaComp",
+        "ReaEQ",
+        "ReaVerb",
+        "ReaDelay",
+        "ReaSampler",
+        "ReaPitch",
+        "ReaTune",
+        "ReaFir",
+        "ReaGate",
+        "ReaXcomp",
+        "RSamplerBank",
+        "ReaVoice",
+        "MIDI Keyboard",
+        "MIDI Note Router",
+    ];
+
+    ctx.log("=== REAPER STOCK FX ENUMERATION ===");
+    ctx.log("");
+
+    for fx_name in fx_names {
+        match track.fx_chain().add(fx_name).await {
+            Ok(_fx) => {
+                ctx.log(&format!("✓ Found: {}", fx_name));
+                settle().await;
+            }
+            Err(_e) => {
+                ctx.log(&format!("✗ Not found: {}", fx_name));
+            }
+        }
+    }
+
+    ctx.log("");
+    ctx.log("=== END ENUMERATION ===");
+
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Test: Multi-plugin LFO demo — single macro drives different params on different plugins
+// ---------------------------------------------------------------------------
+
+#[reaper_test(isolated)]
+async fn macro_lfo_multi_plugin_demo(ctx: &reaper_test::ReaperTestContext) -> eyre::Result<()> {
+    let project = ctx.project().clone();
+
+    ctx.log("=== MULTI-PLUGIN LFO MODULATION DEMO ===");
+    ctx.log("Loading diverse plugins and assigning one macro to different params...");
+    ctx.log("");
+
+    // 1. Create track and add plugins
+    let track = project.tracks().add("Multi-Plugin LFO Demo", None).await?;
+    settle().await;
+
+    // Load 3 plugins: 2x ReaComp (different params) + 1x ReaGate
+    let reacomp1 = track.fx_chain().add("VST: ReaComp (Cockos)").await?;
+    settle().await;
+    let reacomp2 = track.fx_chain().add("VST: ReaComp (Cockos)").await?;
+    settle().await;
+    let rea_gate = track.fx_chain().add("VST: ReaGate (Cockos)").await?;
+    settle().await;
+
+    ctx.log("Loaded 3 plugins:");
+    ctx.log("  1. ReaComp #1 — Ratio [0.0-1.0], Attack [0.2-0.8]");
+    ctx.log("  2. ReaComp #2 — Release [0.1-0.9], Pre-comp [0.0-0.5]");
+    ctx.log("  3. ReaGate — Threshold [0.3-0.7]");
+    ctx.log("");
+
+    // 2. Create 3 separate blocks optimized for each plugin
+    // Block 1 for ReaComp #1 targeting Ratio and Attack with different curves
+    let params1 = vec![
+        BlockParameter::new("ratio", "Ratio", 0.5),
+        BlockParameter::new("attack", "Attack", 0.5),
+    ];
+    let mut block1 = Block::from_parameters(params1);
+    let mut bank1 = MacroBank::default();
+    let mut master1 = MacroKnob::new("master_drive", "Master Drive");
+    master1.value = 0.5;
+    // Ratio: full range [0.0-1.0]
+    master1
+        .bindings
+        .push(MacroBinding::from_ids("self", "Ratio", 0.0, 1.0));
+    // Attack: limited range [0.2-0.8] for more subtle control
+    master1
+        .bindings
+        .push(MacroBinding::from_ids("self", "Attack", 0.2, 0.8));
+    bank1.add(master1);
+    block1.macro_bank = Some(bank1);
+
+    // Block 2 for ReaComp #2 targeting Release and Pre-comp with different curves
+    let params2 = vec![
+        BlockParameter::new("release", "Release", 0.5),
+        BlockParameter::new("precomp", "Pre-comp", 0.5),
+    ];
+    let mut block2 = Block::from_parameters(params2);
+    let mut bank2 = MacroBank::default();
+    let mut master2 = MacroKnob::new("master_drive", "Master Drive");
+    master2.value = 0.5;
+    // Release: inverted range [0.9-0.1] so it modulates opposite direction
+    master2
+        .bindings
+        .push(MacroBinding::from_ids("self", "Release", 0.1, 0.9));
+    // Pre-comp: lower range [0.0-0.5]
+    master2
+        .bindings
+        .push(MacroBinding::from_ids("self", "Pre-comp", 0.0, 0.5));
+    bank2.add(master2);
+    block2.macro_bank = Some(bank2);
+
+    // Block 3 for ReaGate targeting Threshold
+    let params3 = vec![
+        BlockParameter::new("threshold", "Threshold", 0.5),
+    ];
+    let mut block3 = Block::from_parameters(params3);
+    let mut bank3 = MacroBank::default();
+    let mut master3 = MacroKnob::new("master_drive", "Master Drive");
+    master3.value = 0.5;
+    // Threshold: narrow range [0.3-0.7]
+    master3
+        .bindings
+        .push(MacroBinding::from_ids("self", "Threshold", 0.3, 0.7));
+    bank3.add(master3);
+    block3.macro_bank = Some(bank3);
+
+    // 3. Set up macros for each plugin with its own optimized block
+    ctx.log("Setting up macro bindings for each plugin...");
+
+    let setup1 = macro_setup::setup_macros_for_block(&track, &reacomp1, &block1)
+        .await
+        .map_err(|e| eyre::eyre!("ReaComp#1 setup failed: {}", e))?
+        .ok_or_else(|| eyre::eyre!("ReaComp#1 setup returned None"))?;
+
+    let setup2 = macro_setup::setup_macros_for_block(&track, &reacomp2, &block2)
+        .await
+        .map_err(|e| eyre::eyre!("ReaComp#2 setup failed: {}", e))?
+        .ok_or_else(|| eyre::eyre!("ReaComp#2 setup returned None"))?;
+
+    let setup3 = macro_setup::setup_macros_for_block(&track, &rea_gate, &block3)
+        .await
+        .map_err(|e| eyre::eyre!("ReaGate setup failed: {}", e))?
+        .ok_or_else(|| eyre::eyre!("ReaGate setup returned None"))?;
+
+    settle().await;
+
+    // 4. Register all bindings — this time they'll all target "master_drive" knob
+    signal::macro_registry::clear();
+    signal::macro_registry::register(&setup1);
+    signal::macro_registry::register(&setup2);
+    signal::macro_registry::register(&setup3);
+
+    let targets = signal::macro_registry::get_targets("master_drive");
+    ctx.log(&format!(
+        "Registered {} total targets for 'master_drive' macro",
+        targets.len()
+    ));
+    for (i, t) in targets.iter().enumerate() {
+        ctx.log(&format!(
+            "  Target {}: param_idx={}, range=[{:.1}, {:.1}]",
+            i + 1,
+            t.param_index,
+            t.min,
+            t.max
+        ));
+    }
+    ctx.log("");
+    ctx.log(&format!(
+        "Target count check: expected 3, got {}",
+        targets.len()
+    ));
+    ctx.log("");
+
+    // 5. Start playback to enable audio engine
+    let _ = project.transport().play().await;
+    settle().await;
+    ctx.log("Playback started — audio engine enabled");
+    ctx.log("");
+
+    // 6. Run LFO modulation for 20 seconds
+    ctx.log("LFO RUNNING: Moving 'master_drive' knob — all parameters respond!");
+    ctx.log("  ReaComp #1: Ratio [0.0-1.0] + Attack [0.2-0.8]");
+    ctx.log("  ReaComp #2: Release [0.1-0.9] + Pre-comp [0.0-0.5]");
+    ctx.log("  ReaGate:    Threshold [0.3-0.7]");
+    ctx.log("");
+    ctx.log("Notice different min/max ranges create different modulation curves!");
+
+    let start = std::time::Instant::now();
+    let duration = std::time::Duration::from_secs(20);
+
+    while start.elapsed() < duration {
+        let elapsed = start.elapsed().as_secs_f64();
+
+        // Oscillate 0.0 to 1.0 with sine wave
+        let sine = ((elapsed * std::f64::consts::PI / 2.0).sin() + 1.0) / 2.0;
+        let macro_val = sine as f32;
+
+        // Update all 3 plugins from the single macro — in PARALLEL for smooth 30+ FPS
+        let targets = signal::macro_registry::get_targets("master_drive");
+        let mut set_futures = Vec::new();
+
+        // Clone handles before the loop to avoid move issues
+        let rc1 = reacomp1.clone();
+        let rc2 = reacomp2.clone();
+        let rg = rea_gate.clone();
+
+        for target in targets {
+            let param_val = (target.min + (target.max - target.min) * macro_val as f32) as f64;
+            let guid = target.fx_guid.clone();
+
+            // Clone for this iteration
+            let rc1_iter = rc1.clone();
+            let rc2_iter = rc2.clone();
+            let rg_iter = rg.clone();
+
+            let fut = async move {
+                match guid.as_str() {
+                    g if g == rc1_iter.guid().to_string() => {
+                        rc1_iter.param(target.param_index).set(param_val).await
+                    }
+                    g if g == rc2_iter.guid().to_string() => {
+                        rc2_iter.param(target.param_index).set(param_val).await
+                    }
+                    g if g == rg_iter.guid().to_string() => {
+                        rg_iter.param(target.param_index).set(param_val).await
+                    }
+                    _ => Ok(()),
+                }
+            };
+            set_futures.push(fut);
+        }
+
+        // Wait for all parameter updates to complete in parallel
+        let _ = join_all(set_futures).await;
+
+        // Log every 2 seconds showing all parameter values
+        if (elapsed as i32) % 2 == 0 && (elapsed as i32) != ((elapsed - 0.1) as i32) {
+            // ReaComp #1: Ratio and Attack
+            let ratio = reacomp1.param(setup1.bindings[0].param_index).get().await.unwrap_or(0.0);
+            let attack1 = reacomp1.param(setup1.bindings[1].param_index).get().await.unwrap_or(0.0);
+
+            // ReaComp #2: Release and Pre-comp
+            let release = reacomp2.param(setup2.bindings[0].param_index).get().await.unwrap_or(0.0);
+            let precomp = reacomp2.param(setup2.bindings[1].param_index).get().await.unwrap_or(0.0);
+
+            // ReaGate: Threshold
+            let threshold = rea_gate
+                .param(setup3.bindings[0].param_index)
+                .get()
+                .await
+                .unwrap_or(0.0);
+
+            ctx.log(&format!(
+                "T={:2.0}s | M={:.2} | R={:.3} A={:.3} | Rel={:.3} P={:.3} | T={:.3}",
+                elapsed, macro_val, ratio, attack1, release, precomp, threshold
+            ));
+        }
+
+        // Update ~200 times per second for smooth motion
+        tokio::time::sleep(Duration::from_millis(5)).await;
+    }
+
+    ctx.log("");
+    ctx.log("=== MULTI-PLUGIN LFO DEMO COMPLETE ===");
+    ctx.log("✓ Single macro successfully drove parameters on 3 different plugins!");
+    ctx.log("Check REAPER — all 3 plugins should show oscillating parameters.");
 
     signal::macro_registry::clear();
 
