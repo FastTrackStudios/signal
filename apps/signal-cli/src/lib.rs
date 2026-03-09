@@ -2303,38 +2303,71 @@ async fn cmd_rigs_remove_engine(
     Ok(())
 }
 
-/// Walk parsed FX nodes (plugins + containers) and replace each plugin's
-/// raw_block with the stored source raw_block if a matching preset is found.
-/// Matching is by custom_name → extract preset name → look up in state map.
-/// Replace plugin raw_blocks within a container by matching children by position
-/// against the ordered block states resolved from the rig's module preset.
+/// Replace children within a module container by matching 1:1 by position
+/// against stored raw_block state data from the rig's block presets.
+///
+/// Handles both Plugin and Container (sub-container) children. For plugins,
+/// state_data and raw_block are transplanted. For containers, the entire node
+/// is replaced wholesale (children, raw_block, and all) since REAPER's
+/// `set_state_chunk` API doesn't work on container FX.
 fn replace_by_position(
     children: &mut [dawfile_reaper::types::FxChainNode],
     block_states: &[Vec<u8>],
     replaced: &mut usize,
     skipped: &mut usize,
 ) {
-    // Walk children, matching only Plugin nodes to block_states by index.
-    // Skip Container children (nested sub-containers).
     let mut block_idx = 0;
     for child in children.iter_mut() {
-        if let dawfile_reaper::types::FxChainNode::Plugin(p) = child {
-            if block_idx < block_states.len() {
-                let source_bytes = &block_states[block_idx];
-                block_idx += 1;
-                if !source_bytes.is_empty() && try_replace_raw_block(p, source_bytes) {
+        if block_idx >= block_states.len() {
+            *skipped += 1;
+            continue;
+        }
+        let source_bytes = &block_states[block_idx];
+        block_idx += 1;
+
+        if source_bytes.is_empty() {
+            *skipped += 1;
+            continue;
+        }
+
+        match child {
+            dawfile_reaper::types::FxChainNode::Plugin(p) => {
+                if try_replace_raw_block(p, source_bytes) {
                     let display = p.custom_name.as_deref().unwrap_or(&p.name);
                     eprintln!(
-                        "[state] replaced '{}' ({} bytes)",
-                        display, source_bytes.len(),
+                        "[state] replaced plugin '{}' ({} bytes)",
+                        display,
+                        source_bytes.len(),
                     );
                     *replaced += 1;
-                    continue;
+                } else {
+                    *skipped += 1;
                 }
             }
-            *skipped += 1;
+            dawfile_reaper::types::FxChainNode::Container(c) => {
+                if try_replace_container(c, source_bytes) {
+                    eprintln!(
+                        "[state] replaced container '{}' ({} bytes)",
+                        c.name,
+                        source_bytes.len(),
+                    );
+                    *replaced += 1;
+                } else {
+                    *skipped += 1;
+                }
+            }
         }
     }
+}
+
+/// Parse source raw_block bytes into an FxChainNode (Plugin or Container).
+fn parse_raw_block_bytes(source_bytes: &[u8]) -> Option<dawfile_reaper::types::FxChainNode> {
+    let source_str = std::str::from_utf8(source_bytes).ok()?;
+    let source_chain = dawfile_reaper::FxChain::parse(&format!(
+        "<FXCHAIN\nSHOW 0\nLASTSEL 0\nDOCKED 0\n{source_str}\n>\n"
+    ))
+    .ok()?;
+    source_chain.nodes.into_iter().next()
 }
 
 /// Parse source raw_block bytes and transplant state into a loaded plugin,
@@ -2343,23 +2376,34 @@ fn try_replace_raw_block(
     plugin: &mut dawfile_reaper::types::FxPlugin,
     source_bytes: &[u8],
 ) -> bool {
-    let source_str = match std::str::from_utf8(source_bytes) {
-        Ok(s) => s,
-        Err(_) => return false,
-    };
-    let source_chain = match dawfile_reaper::FxChain::parse(&format!(
-        "<FXCHAIN\nSHOW 0\nLASTSEL 0\nDOCKED 0\n{source_str}\n>\n"
-    )) {
-        Ok(c) => c,
-        Err(_) => return false,
-    };
     if let Some(dawfile_reaper::types::FxChainNode::Plugin(source_plugin)) =
-        source_chain.nodes.first()
+        parse_raw_block_bytes(source_bytes)
     {
         let loaded_fxid = plugin.fxid.clone();
         plugin.state_data = source_plugin.state_data.clone();
         plugin.raw_block = source_plugin.raw_block.clone();
         plugin.fxid = loaded_fxid;
+        true
+    } else {
+        false
+    }
+}
+
+/// Replace a container node's contents with data from stored raw_block bytes.
+/// Preserves the loaded container's FXID but replaces children, raw_block,
+/// and container_cfg from the source.
+fn try_replace_container(
+    container: &mut dawfile_reaper::types::FxContainer,
+    source_bytes: &[u8],
+) -> bool {
+    if let Some(dawfile_reaper::types::FxChainNode::Container(source_container)) =
+        parse_raw_block_bytes(source_bytes)
+    {
+        let loaded_fxid = container.fxid.clone();
+        container.children = source_container.children;
+        container.raw_block = source_container.raw_block;
+        container.container_cfg = source_container.container_cfg;
+        container.fxid = loaded_fxid;
         true
     } else {
         false
@@ -2397,12 +2441,10 @@ async fn cmd_rigs_open(
         (daw, None)
     };
 
-    // Collect raw_block state data from all block presets in the DB.
-    // Three indexes:
-    //   1. by PresetId → state bytes (used for position-based module matching)
-    //   2. by preset name → state bytes (fallback for standalone plugins)
-    //   3. by source plugin name → state bytes (for plugins without custom_name,
-    //      only when the source tag is unambiguous)
+    let project = daw.current_project().await?;
+
+    // ── 1. Collect all block preset state data from DB ──
+    // Index by PresetId → raw_block bytes. Also keep name/source indexes for verification.
     let mut state_by_preset_id: std::collections::HashMap<String, Vec<u8>> =
         std::collections::HashMap::new();
     let mut state_by_preset_name: std::collections::HashMap<String, Vec<u8>> =
@@ -2416,22 +2458,18 @@ async fn cmd_rigs_open(
             for preset in presets {
                 if let Some(data) = preset.default_snapshot().state_data() {
                     let bytes = data.to_vec();
-                    state_by_preset_id
-                        .insert(preset.id().to_string(), bytes.clone());
-                    state_by_preset_name
-                        .insert(preset.name().to_string(), bytes.clone());
+                    state_by_preset_id.insert(preset.id().to_string(), bytes.clone());
+                    state_by_preset_name.insert(preset.name().to_string(), bytes.clone());
                     for tag in preset.metadata().tags.as_slice() {
                         if let Some(source) = tag.strip_prefix("source:") {
                             *source_plugin_counts.entry(source.to_string()).or_insert(0) += 1;
-                            state_by_source_plugin
-                                .insert(source.to_string(), bytes.clone());
+                            state_by_source_plugin.insert(source.to_string(), bytes.clone());
                         }
                     }
                 }
             }
         }
     }
-    // Remove ambiguous source entries (shared by multiple presets)
     for (key, count) in &source_plugin_counts {
         if *count > 1 {
             state_by_source_plugin.remove(key);
@@ -2442,24 +2480,266 @@ async fn cmd_rigs_open(
         state_by_preset_id.len(),
     );
 
-    // Load rig into current REAPER project
-    let project = daw.current_project().await?;
-    let load_result = signal
-        .service()
-        .load_rig_to_daw(&rig, None, &project)
-        .await
-        .map_err(|e| eyre::eyre!("{e}"));
+    // ── 2. Resolve rig hierarchy → per-layer module/block specs ──
+    use signal_proto::plugin_block::FxRole;
+    use signal_proto::ModuleBlockSource;
 
-    // ── Post-load state replacement via track chunk manipulation ─────
-    // The per-FX set_state_chunk (in configure_fx_free) applies state individually.
-    // This second pass reinforces it by replacing raw_blocks in the track chunk
-    // directly, matching plugins by POSITION within their module containers.
-    // This handles cases where set_state_chunk's fallback path re-serializes state.
-    //
-    // Strategy: walk each module container in the parsed FXCHAIN and match children
-    // 1:1 by index against the corresponding module's loaded_fx list from the load result.
-    if let Ok(ref result) = load_result {
-        for layer_result in &result.layer_results {
+    struct BlockSpec {
+        #[allow(dead_code)]
+        display_name: String,
+        state_data: Option<Vec<u8>>,
+    }
+    struct ModuleSpec {
+        container_name: String,
+        blocks: Vec<BlockSpec>,
+    }
+    struct LayerSpec {
+        name: String,
+        modules: Vec<ModuleSpec>,
+    }
+    struct EngineSpec {
+        name: String,
+        layers: Vec<LayerSpec>,
+    }
+
+    let all_mp = signal.module_presets().list().await.unwrap_or_default();
+    let default_scene = rig
+        .default_variant()
+        .ok_or_else(|| eyre::eyre!("Rig has no default scene"))?;
+
+    let mut engine_specs: Vec<EngineSpec> = Vec::new();
+    for engine_sel in &default_scene.engine_selections {
+        let engine = signal
+            .engines()
+            .load(engine_sel.engine_id.to_string())
+            .await?
+            .ok_or_else(|| eyre::eyre!("Engine not found: {}", engine_sel.engine_id))?;
+        let engine_scene = engine
+            .variant(&engine_sel.variant_id)
+            .or_else(|| engine.default_variant())
+            .ok_or_else(|| eyre::eyre!("No scene for engine {}", engine.name))?;
+
+        let mut layer_specs = Vec::new();
+        for layer_sel in &engine_scene.layer_selections {
+            let layer = signal
+                .layers()
+                .load(layer_sel.layer_id.to_string())
+                .await?
+                .ok_or_else(|| eyre::eyre!("Layer not found: {}", layer_sel.layer_id))?;
+            let layer_snap = layer
+                .variant(&layer_sel.variant_id)
+                .or_else(|| layer.default_variant())
+                .ok_or_else(|| eyre::eyre!("No snapshot for layer {}", layer.name))?;
+
+            let mut module_specs = Vec::new();
+            for module_ref in &layer_snap.module_refs {
+                if let Some(mp) = all_mp.iter().find(|p| p.id() == &module_ref.collection_id) {
+                    let snap = module_ref
+                        .variant_id
+                        .as_ref()
+                        .and_then(|vid| mp.snapshot(vid))
+                        .unwrap_or_else(|| mp.default_snapshot().clone());
+
+                    let mut blocks = Vec::new();
+                    for block in snap.module().blocks() {
+                        let preset_data = match block.source() {
+                            ModuleBlockSource::PresetDefault { preset_id, .. }
+                            | ModuleBlockSource::PresetSnapshot { preset_id, .. } => {
+                                state_by_preset_id.get(&preset_id.to_string()).cloned()
+                            }
+                            _ => None,
+                        };
+                        let role = FxRole::Block {
+                            block_type: block.block_type(),
+                            name: block.label().to_string(),
+                        };
+                        blocks.push(BlockSpec {
+                            display_name: role.display_name(),
+                            state_data: preset_data,
+                        });
+                    }
+
+                    let role = FxRole::Module {
+                        module_type: mp.module_type(),
+                        name: mp.name().to_string(),
+                    };
+                    module_specs.push(ModuleSpec {
+                        container_name: role.display_name(),
+                        blocks,
+                    });
+                }
+            }
+            layer_specs.push(LayerSpec {
+                name: layer.name.clone(),
+                modules: module_specs,
+            });
+        }
+        engine_specs.push(EngineSpec {
+            name: engine.name.clone(),
+            layers: layer_specs,
+        });
+    }
+
+    // ── 3. Check if fast path is viable (all blocks have state_data) ──
+    let total_blocks: usize = engine_specs
+        .iter()
+        .flat_map(|e| &e.layers)
+        .flat_map(|l| &l.modules)
+        .map(|m| m.blocks.len())
+        .sum();
+    let blocks_with_state: usize = engine_specs
+        .iter()
+        .flat_map(|e| &e.layers)
+        .flat_map(|l| &l.modules)
+        .flat_map(|m| &m.blocks)
+        .filter(|b| b.state_data.is_some())
+        .count();
+    let fast_path = blocks_with_state == total_blocks && total_blocks > 0;
+
+    // Track layer tracks for verification (both paths populate this).
+    let mut layer_track_guids: Vec<String> = Vec::new();
+
+    if fast_path {
+        // ── 4a. FAST PATH: build FXCHAIN from raw_blocks, single set_chunk ──
+        eprintln!(
+            "[rigs open] fast path: building FXCHAIN from {} stored chunks",
+            blocks_with_state,
+        );
+
+        use signal_proto::plugin_block::TrackRole;
+
+        // Create track hierarchy: [R] → [E] → [L]
+        let rig_track = project
+            .tracks()
+            .add(
+                &TrackRole::Rig {
+                    name: rig.name.clone(),
+                }
+                .display_name(),
+                None,
+            )
+            .await?;
+        rig_track.set_folder_depth(1).await?;
+
+        let engine_count = engine_specs.len();
+        for (ei, engine) in engine_specs.iter().enumerate() {
+            let engine_track = project
+                .tracks()
+                .add(
+                    &TrackRole::Engine {
+                        name: engine.name.clone(),
+                    }
+                    .display_name(),
+                    None,
+                )
+                .await?;
+            engine_track.set_folder_depth(1).await?;
+
+            let layer_count = engine.layers.len();
+            for (li, layer) in engine.layers.iter().enumerate() {
+                let layer_track = project
+                    .tracks()
+                    .add(
+                        &TrackRole::Layer {
+                            name: layer.name.clone(),
+                        }
+                        .display_name(),
+                        None,
+                    )
+                    .await?;
+
+                // Close folders: last layer closes engine, last engine closes rig
+                let is_last_layer = li == layer_count - 1;
+                let is_last_engine = ei == engine_count - 1;
+                if is_last_layer {
+                    let close = if is_last_engine { -2 } else { -1 };
+                    layer_track.set_folder_depth(close).await?;
+                }
+
+                // Build FXCHAIN for this layer
+                let mut fxchain_nodes = Vec::new();
+                let mut fx_count = 0usize;
+                for module in &layer.modules {
+                    let mut children = Vec::new();
+                    for block in &module.blocks {
+                        if let Some(ref data) = block.state_data {
+                            if let Some(node) = parse_raw_block_bytes(data) {
+                                children.push(node);
+                                fx_count += 1;
+                            }
+                        }
+                    }
+                    fxchain_nodes.push(dawfile_reaper::types::FxChainNode::Container(
+                        dawfile_reaper::types::FxContainer {
+                            name: module.container_name.clone(),
+                            bypassed: false,
+                            offline: false,
+                            fxid: None,
+                            float_pos: None,
+                            parallel: false,
+                            container_cfg: None, // serial (REAPER default)
+                            show: 0,
+                            last_sel: 0,
+                            docked: false,
+                            children,
+                            raw_block: String::new(),
+                        },
+                    ));
+                }
+
+                let fxchain = dawfile_reaper::FxChain {
+                    window_rect: None,
+                    show: 0,
+                    last_sel: 0,
+                    docked: false,
+                    nodes: fxchain_nodes,
+                    raw_content: String::new(),
+                };
+
+                // Inject FXCHAIN into the track chunk
+                let chunk = layer_track.get_chunk().await?;
+                let fxchain_text = fxchain.to_rpp_string();
+                let new_chunk =
+                    if let Some(existing) = dawfile_reaper::chunk_ops::extract_fxchain_block(&chunk)
+                    {
+                        chunk.replace(existing, &fxchain_text)
+                    } else {
+                        // Insert FXCHAIN before the closing >
+                        let pos = chunk.rfind('>').ok_or_else(|| {
+                            eyre::eyre!("Invalid track chunk: no closing >")
+                        })?;
+                        format!("{}{}\n{}", &chunk[..pos], fxchain_text, &chunk[pos..])
+                    };
+
+                layer_track.set_chunk(new_chunk).await?;
+                eprintln!(
+                    "[rigs open] set FXCHAIN on '{}' ({} FX in {} modules)",
+                    layer.name,
+                    fx_count,
+                    layer.modules.len(),
+                );
+
+                layer_track_guids.push(layer_track.guid().to_string());
+            }
+        }
+
+        // Brief settle for REAPER to process the chunks
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+    } else {
+        // ── 4b. FALLBACK: API-based loading + post-load chunk patching ──
+        eprintln!(
+            "[rigs open] fallback path: {}/{} blocks have state data, using API loading",
+            blocks_with_state, total_blocks,
+        );
+
+        let load_result = signal
+            .service()
+            .load_rig_to_daw(&rig, None, &project)
+            .await
+            .map_err(|e| eyre::eyre!("{e}"))?;
+
+        // Post-load: patch raw_blocks via track chunk manipulation
+        for layer_result in &load_result.layer_results {
             let track = match project
                 .tracks()
                 .by_guid(&layer_result.track_guid)
@@ -2476,7 +2756,6 @@ async fn cmd_rigs_open(
                     continue;
                 }
             };
-
             let fxchain_text = match dawfile_reaper::chunk_ops::extract_fxchain_block(&chunk_str) {
                 Some(t) => t,
                 None => {
@@ -2484,7 +2763,6 @@ async fn cmd_rigs_open(
                     continue;
                 }
             };
-
             let mut parsed = match dawfile_reaper::FxChain::parse(fxchain_text) {
                 Ok(p) => p,
                 Err(e) => {
@@ -2493,63 +2771,22 @@ async fn cmd_rigs_open(
                 }
             };
 
-            // Build per-module ordered state lists by resolving the rig's
-            // preset hierarchy: rig → engine → layer → module_preset → blocks.
-            // Each block's PresetId maps directly to its state data — no name
-            // parsing needed. Keyed by module container display name.
+            // Build per-module state lists from resolved hierarchy
             let mut module_states: std::collections::HashMap<String, Vec<Vec<u8>>> =
                 std::collections::HashMap::new();
-            {
-                use signal_proto::plugin_block::FxRole;
-                use signal_proto::ModuleBlockSource;
-
-                let all_mp = signal.module_presets().list().await.unwrap_or_default();
-                let default_scene = rig.default_variant().unwrap();
-                for engine_sel in &default_scene.engine_selections {
-                    if let Ok(Some(engine)) = signal.engines().load(engine_sel.engine_id.to_string()).await {
-                        let engine_scene = engine.variant(&engine_sel.variant_id)
-                            .or_else(|| engine.default_variant());
-                        if let Some(es) = engine_scene {
-                            for layer_sel in &es.layer_selections {
-                                if let Ok(Some(layer)) = signal.layers().load(layer_sel.layer_id.to_string()).await {
-                                    let layer_snap = layer.variant(&layer_sel.variant_id)
-                                        .or_else(|| layer.default_variant());
-                                    if let Some(ls) = layer_snap {
-                                        for module_ref in &ls.module_refs {
-                                            if let Some(mp) = all_mp.iter().find(|p| p.id() == &module_ref.collection_id) {
-                                                let snap = module_ref.variant_id.as_ref()
-                                                    .and_then(|vid| mp.snapshot(vid))
-                                                    .unwrap_or_else(|| mp.default_snapshot().clone());
-                                                let mut block_data = Vec::new();
-                                                for block in snap.module().blocks() {
-                                                    let data = match block.source() {
-                                                        ModuleBlockSource::PresetDefault { preset_id, .. }
-                                                        | ModuleBlockSource::PresetSnapshot { preset_id, .. } => {
-                                                            state_by_preset_id.get(&preset_id.to_string())
-                                                                .cloned()
-                                                                .unwrap_or_default()
-                                                        }
-                                                        _ => Vec::new(),
-                                                    };
-                                                    block_data.push(data);
-                                                }
-                                                // Compute the module container name (same as load_module_to_track)
-                                                let role = FxRole::Module {
-                                                    module_type: mp.module_type(),
-                                                    name: mp.name().to_string(),
-                                                };
-                                                module_states.insert(role.display_name(), block_data);
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
+            for engine in &engine_specs {
+                for layer in &engine.layers {
+                    for module in &layer.modules {
+                        let block_data: Vec<Vec<u8>> = module
+                            .blocks
+                            .iter()
+                            .map(|b| b.state_data.clone().unwrap_or_default())
+                            .collect();
+                        module_states.insert(module.container_name.clone(), block_data);
                     }
                 }
             }
 
-            // Walk the parsed FXCHAIN and replace by position within containers
             let mut replaced = 0usize;
             let mut skipped = 0usize;
             for node in parsed.nodes.iter_mut() {
@@ -2568,8 +2805,6 @@ async fn cmd_rigs_open(
                         }
                     }
                     dawfile_reaper::types::FxChainNode::Plugin(p) => {
-                        // Standalone plugin (not in a container) — match by source tag
-                        // or preset name (unique source tags only).
                         let source = state_by_source_plugin
                             .get(&p.name)
                             .or_else(|| {
@@ -2593,155 +2828,131 @@ async fn cmd_rigs_open(
             if replaced > 0 {
                 let new_fxchain = parsed.to_rpp_string();
                 let new_chunk = chunk_str.replace(fxchain_text, &new_fxchain);
-                match track.set_chunk(new_chunk).await {
-                    Ok(()) => {
-                        eprintln!(
-                            "[state] replaced state for {replaced} plugins ({skipped} skipped)"
-                        );
-                    }
-                    Err(e) => {
-                        eprintln!("[state] failed to set track chunk: {e}");
-                    }
+                if let Err(e) = track.set_chunk(new_chunk).await {
+                    eprintln!("[state] failed to set track chunk: {e}");
                 }
-            } else {
-                eprintln!("[state] no plugins matched for state replacement");
+                eprintln!(
+                    "[state] replaced state for {replaced} plugins ({skipped} skipped)"
+                );
             }
+
+            layer_track_guids.push(layer_result.track_guid.clone());
         }
     }
 
-    // Verify FX actually loaded on each layer track (runs before teardown so
-    // REAPER is still alive). Scans all FX on the track by index — GUIDs may
-    // have changed during state chunk application (track-chunk fallback
-    // replaces the full RPP block including FXID).
+    // ── 5. Verify FX loaded correctly by parsing track chunks ──
     let mut verify_issues: Vec<String> = Vec::new();
-    if let Ok(ref result) = load_result {
-        for layer_result in &result.layer_results {
-            let track = match project
-                .tracks()
-                .by_guid(&layer_result.track_guid)
-                .await
-            {
-                Ok(Some(t)) => t,
-                _ => {
-                    verify_issues.push(format!(
-                        "Layer track {} not found in REAPER",
-                        layer_result.track_guid
-                    ));
-                    continue;
-                }
-            };
+    let mut verified_fx = 0usize;
+    for guid in &layer_track_guids {
+        let track = match project.tracks().by_guid(guid).await {
+            Ok(Some(t)) => t,
+            _ => {
+                verify_issues.push(format!("Layer track {guid} not found in REAPER"));
+                continue;
+            }
+        };
 
-            // Verify by parsing the loaded track chunk — this lets us see
-            // inside containers, unlike fx_chain().all() which only shows top-level.
-            let chunk_str = match track.get_chunk().await {
-                Ok(c) => c,
-                Err(e) => {
-                    verify_issues.push(format!("Could not get track chunk: {e}"));
-                    continue;
-                }
-            };
+        let chunk_str = match track.get_chunk().await {
+            Ok(c) => c,
+            Err(e) => {
+                verify_issues.push(format!("Could not get track chunk: {e}"));
+                continue;
+            }
+        };
+        let fxchain_text = match dawfile_reaper::chunk_ops::extract_fxchain_block(&chunk_str) {
+            Some(t) => t,
+            None => {
+                verify_issues.push("No FXCHAIN block in loaded track".to_string());
+                continue;
+            }
+        };
+        let parsed = match dawfile_reaper::FxChain::parse(fxchain_text) {
+            Ok(p) => p,
+            Err(e) => {
+                verify_issues.push(format!("Failed to parse FXCHAIN: {e}"));
+                continue;
+            }
+        };
 
-            let fxchain_text = match dawfile_reaper::chunk_ops::extract_fxchain_block(&chunk_str) {
-                Some(t) => t,
-                None => {
-                    verify_issues.push("No FXCHAIN block in loaded track".to_string());
-                    continue;
-                }
-            };
+        fn verify_nodes(
+            nodes: &[dawfile_reaper::types::FxChainNode],
+            state_by_preset: &std::collections::HashMap<String, Vec<u8>>,
+            state_by_source: &std::collections::HashMap<String, Vec<u8>>,
+            issues: &mut Vec<String>,
+            count: &mut usize,
+        ) {
+            for node in nodes {
+                match node {
+                    dawfile_reaper::types::FxChainNode::Plugin(p) => {
+                        let display = p.custom_name.as_deref().unwrap_or(&p.name);
+                        let loaded_size = p.raw_block.len();
 
-            let parsed = match dawfile_reaper::FxChain::parse(fxchain_text) {
-                Ok(p) => p,
-                Err(e) => {
-                    verify_issues.push(format!("Failed to parse FXCHAIN: {e}"));
-                    continue;
-                }
-            };
+                        let source = state_by_source
+                            .get(&p.name)
+                            .or_else(|| {
+                                p.custom_name.as_deref().and_then(|cn| {
+                                    let stripped = cn
+                                        .strip_prefix("[B] ")
+                                        .or_else(|| cn.strip_prefix("[M] "))
+                                        .unwrap_or(cn);
+                                    stripped
+                                        .split_once(": ")
+                                        .map(|(_, name)| name)
+                                        .and_then(|name| state_by_preset.get(name))
+                                })
+                            });
 
-            // Walk all plugins (including inside containers) and verify state.
-            // Matches loaded plugins to source state using the `source:` tag index
-            // (by raw plugin name) and the preset name index (by custom_name extraction).
-            fn verify_nodes(
-                nodes: &[dawfile_reaper::types::FxChainNode],
-                state_by_preset: &std::collections::HashMap<String, Vec<u8>>,
-                state_by_source: &std::collections::HashMap<String, Vec<u8>>,
-                issues: &mut Vec<String>,
-            ) {
-                for node in nodes {
-                    match node {
-                        dawfile_reaper::types::FxChainNode::Plugin(p) => {
-                            let display = p.custom_name.as_deref().unwrap_or(&p.name);
-                            // Compare raw_block sizes — source stores raw_block, so
-                            // use raw_block.len() for the loaded plugin too.
-                            let loaded_size = p.raw_block.len();
-
-                            // Try to find source state: by plugin name first, then custom_name
-                            let source = state_by_source
-                                .get(&p.name)
-                                .or_else(|| {
-                                    p.custom_name.as_deref().and_then(|cn| {
-                                        let stripped = cn
-                                            .strip_prefix("[B] ")
-                                            .or_else(|| cn.strip_prefix("[M] "))
-                                            .unwrap_or(cn);
-                                        stripped
-                                            .split_once(": ")
-                                            .map(|(_, name)| name)
-                                            .and_then(|name| state_by_preset.get(name))
-                                    })
-                                });
-
-                            let match_status = if let Some(source_data) = source {
-                                let source_size = source_data.len();
-                                // REAPER re-serializes plugin state on read-back, so the
-                                // loaded raw_block may be significantly smaller than the
-                                // source (especially for CLAP plugins). A >10% ratio is
-                                // good enough to confirm state was applied.
-                                if loaded_size > 0 && (loaded_size as f64 / source_size as f64) > 0.1 {
-                                    "ok"
-                                } else if loaded_size == 0 {
-                                    issues.push(format!(
-                                        "'{}': source has {} bytes but loaded plugin has no state",
-                                        display, source_size,
-                                    ));
-                                    "EMPTY"
-                                } else {
-                                    issues.push(format!(
-                                        "'{}': raw_block size mismatch (loaded={}, source={})",
-                                        display, loaded_size, source_size,
-                                    ));
-                                    "size-mismatch"
-                                }
-                            } else if loaded_size > 0 {
-                                // Plugin has state but we couldn't find its source — that's fine,
-                                // it just means we can't compare. Not an issue.
-                                "ok (unmatched)"
+                        let match_status = if let Some(source_data) = source {
+                            let source_size = source_data.len();
+                            if loaded_size > 0 && (loaded_size as f64 / source_size as f64) > 0.1 {
+                                "ok"
+                            } else if loaded_size == 0 {
+                                issues.push(format!(
+                                    "'{}': source has {} bytes but loaded plugin has no state",
+                                    display, source_size,
+                                ));
+                                "EMPTY"
                             } else {
-                                // No source and no state — might be a utility plugin (Volume, etc.)
-                                "no-state"
-                            };
+                                issues.push(format!(
+                                    "'{}': raw_block size mismatch (loaded={}, source={})",
+                                    display, loaded_size, source_size,
+                                ));
+                                "size-mismatch"
+                            }
+                        } else if loaded_size > 0 {
+                            "ok (unmatched)"
+                        } else {
+                            "no-state"
+                        };
 
-                            eprintln!(
-                                "[verify]   {} '{}': {} bytes [{}]",
-                                if match_status.starts_with("ok") { "✓" } else { "✗" },
-                                display,
-                                loaded_size,
-                                match_status,
-                            );
-                        }
-                        dawfile_reaper::types::FxChainNode::Container(c) => {
-                            eprintln!(
-                                "[verify] ┌ container '{}' ({} children)",
-                                c.name,
-                                c.children.len()
-                            );
-                            verify_nodes(&c.children, state_by_preset, state_by_source, issues);
-                            eprintln!("[verify] └ end '{}'", c.name);
-                        }
+                        eprintln!(
+                            "[verify]   {} '{}': {} bytes [{}]",
+                            if match_status.starts_with("ok") { "✓" } else { "✗" },
+                            display,
+                            loaded_size,
+                            match_status,
+                        );
+                        *count += 1;
+                    }
+                    dawfile_reaper::types::FxChainNode::Container(c) => {
+                        eprintln!(
+                            "[verify] ┌ container '{}' ({} children)",
+                            c.name,
+                            c.children.len()
+                        );
+                        verify_nodes(&c.children, state_by_preset, state_by_source, issues, count);
+                        eprintln!("[verify] └ end '{}'", c.name);
                     }
                 }
             }
-            verify_nodes(&parsed.nodes, &state_by_preset_name, &state_by_source_plugin, &mut verify_issues);
         }
+        verify_nodes(
+            &parsed.nodes,
+            &state_by_preset_name,
+            &state_by_source_plugin,
+            &mut verify_issues,
+            &mut verified_fx,
+        );
     }
 
     // Teardown if requested (runs even on error)
@@ -2753,23 +2964,13 @@ async fn cmd_rigs_open(
         eprintln!("REAPER (PID {pid}) left open for inspection.");
     }
 
-    let result = load_result?;
-
     // Print verification summary
     if verify_issues.is_empty() {
-        let total_fx: usize = result
-            .layer_results
-            .iter()
-            .map(|l| {
-                let module_fx: usize = l.modules.iter().map(|m| m.loaded_fx.len()).sum();
-                module_fx + l.standalone_blocks.len()
-            })
-            .sum();
         eprintln!(
             "Rig \"{}\" loaded and verified: {} layers, {} FX confirmed in REAPER.",
             rig.name,
-            result.layer_results.len(),
-            total_fx,
+            layer_track_guids.len(),
+            verified_fx,
         );
     } else {
         eprintln!("Rig \"{}\" loaded with verification issues:", rig.name);
@@ -3805,24 +4006,40 @@ async fn cmd_daw_import(
                         for node in nodes {
                             match node {
                                 dawfile_reaper::types::FxChainNode::Plugin(p) => {
-                                    if let Some(fxid) = &p.fxid {
-                                        if !p.raw_block.is_empty() {
-                                            // Strip braces: RPP uses {GUID}, tree uses GUID
+                                    if !p.raw_block.is_empty() {
+                                        if let Some(fxid) = &p.fxid {
+                                            // Store by GUID (strip braces: RPP {GUID} → tree GUID)
                                             let guid = fxid
                                                 .strip_prefix('{')
                                                 .and_then(|s| s.strip_suffix('}'))
                                                 .unwrap_or(fxid);
-                                            // Always store raw_block — the full RPP block.
-                                            // State is applied post-load via track chunk
-                                            // replacement, which needs the complete block.
                                             out.insert(
                                                 guid.to_string(),
+                                                p.raw_block.as_bytes().to_vec(),
+                                            );
+                                        } else if let Some(cn) = &p.custom_name {
+                                            // Fallback for plugins without FXID (e.g. JS
+                                            // inside containers): store by custom_name.
+                                            // The inferred chain uses the display name as
+                                            // the block ID for these plugins.
+                                            out.insert(
+                                                cn.clone(),
                                                 p.raw_block.as_bytes().to_vec(),
                                             );
                                         }
                                     }
                                 }
                                 dawfile_reaper::types::FxChainNode::Container(c) => {
+                                    // Store the entire container's raw_block keyed by its
+                                    // name — sub-containers use name as their block ID in
+                                    // the inferred chain. This allows `rigs open` to
+                                    // restore the full container structure.
+                                    if !c.raw_block.is_empty() {
+                                        out.insert(
+                                            c.name.clone(),
+                                            c.raw_block.as_bytes().to_vec(),
+                                        );
+                                    }
                                     collect_plugin_state(&c.children, out);
                                 }
                             }
@@ -3841,6 +4058,17 @@ async fn cmd_daw_import(
         }
     }
 
+    // Capture per-plugin parameters by walking the FX tree and querying
+    // each plugin's parameter list via the DAW API. Keyed by GUID.
+    let mut params_by_guid: HashMap<String, Vec<(String, String, f64)>> = HashMap::new();
+    for node in &tree.nodes {
+        collect_fx_params(&handle, node, &mut params_by_guid).await;
+    }
+    eprintln!(
+        "[import] captured parameters for {} plugins from DAW",
+        params_by_guid.len()
+    );
+
     // Convert InferredChain → ImportChain (bridge-free input type).
     let chain = ImportChain {
         modules: inferred
@@ -3856,15 +4084,22 @@ async fn cmd_daw_import(
                         .iter()
                         .enumerate()
                         .map(|(i, b)| {
-                            let sd = state_by_guid.get(b.id()).cloned();
+                            // Look up by GUID first, then fall back to label
+                            // (JS plugins inside containers may lack FXID, so
+                            // collect_plugin_state stores them by custom_name).
+                            let label_str = b.label();
+                            let sd = state_by_guid
+                                .get(b.id())
+                                .or_else(|| state_by_guid.get(label_str))
+                                .cloned();
                             eprintln!(
                                 "[import]   block '{}' id={} state={}",
-                                b.label(),
+                                label_str,
                                 b.id(),
                                 sd.as_ref().map_or("NONE".to_string(), |d| format!("{} bytes", d.len()))
                             );
                             ImportBlock {
-                                label: b.label().to_string(),
+                                label: label_str.to_string(),
                                 block_type: b.block_type(),
                                 plugin_name: m
                                     .block_plugin_names
@@ -3872,6 +4107,11 @@ async fn cmd_daw_import(
                                     .filter(|s| !s.is_empty())
                                     .cloned(),
                                 state_data: sd,
+                                parameters: params_by_guid
+                                    .get(b.id())
+                                    .or_else(|| params_by_guid.get(label_str))
+                                    .cloned()
+                                    .unwrap_or_default(),
                             }
                         })
                         .collect(),
@@ -3886,6 +4126,7 @@ async fn cmd_daw_import(
                 block_type: b.block_type,
                 plugin_name: Some(b.plugin_name.clone()),
                 state_data: None, // standalone blocks don't have GUIDs in the tree
+                parameters: Vec::new(),
             })
             .collect(),
     };
@@ -3905,6 +4146,54 @@ async fn cmd_daw_import(
     );
     println!("Run: signal rigs open {}", result.rig_id);
     Ok(())
+}
+
+/// Recursively collect plugin parameters from the FX tree by querying each
+/// plugin's parameter list via the DAW API. Results are keyed by GUID.
+async fn collect_fx_params(
+    track: &daw_control::TrackHandle,
+    node: &daw_control::FxNode,
+    out: &mut std::collections::HashMap<String, Vec<(String, String, f64)>>,
+) {
+    use daw_control::FxNodeKind;
+    match &node.kind {
+        FxNodeKind::Plugin(fx) => {
+            let guid = &fx.guid;
+            match track.fx_chain().by_guid(guid).await {
+                Ok(Some(fx_handle)) => match fx_handle.parameters().await {
+                    Ok(params) => {
+                        let mapped: Vec<(String, String, f64)> = params
+                            .into_iter()
+                            .map(|p| (format!("p{}", p.index), p.name, p.value))
+                            .collect();
+                        eprintln!(
+                            "[import]   params for '{}': {} parameters",
+                            fx.name,
+                            mapped.len()
+                        );
+                        out.insert(guid.clone(), mapped);
+                    }
+                    Err(e) => {
+                        eprintln!(
+                            "[import]   warning: could not get params for '{}': {e}",
+                            fx.name
+                        );
+                    }
+                },
+                _ => {
+                    eprintln!(
+                        "[import]   warning: could not find FX handle for '{}'",
+                        fx.name
+                    );
+                }
+            }
+        }
+        FxNodeKind::Container { children, .. } => {
+            for child in children {
+                Box::pin(collect_fx_params(track, child, out)).await;
+            }
+        }
+    }
 }
 
 // ============================================================================

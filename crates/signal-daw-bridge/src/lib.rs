@@ -123,8 +123,8 @@ fn build_module_chain(
                         block: Block::default(),
                     },
                 ));
-                // Sub-containers don't have a single plugin name.
-                plugin_names.push(String::new());
+                // Sub-containers are loaded as REAPER Container FX.
+                plugin_names.push("Container".to_string());
             }
         }
     }
