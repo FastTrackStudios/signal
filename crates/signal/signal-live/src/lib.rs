@@ -38,11 +38,13 @@ pub mod daw_block_ops;
 pub mod daw_rig_builder;
 pub mod daw_rig_ops;
 pub mod engine;
+pub mod macro_constants;
 pub mod macro_error;
 pub mod macro_setup;
 pub mod macro_registry;
 pub mod macro_recorder;
-pub mod macro_system;  // Comprehensive documentation & re-exports
+pub mod macro_system;
+pub mod macro_templates;
 
 // Re-export macromod types for unified macro system
 pub use macromod::{
