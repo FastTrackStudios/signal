@@ -10,19 +10,17 @@ pub struct SetlistOps<S: SignalApi>(pub(crate) SignalController<S>);
 
 impl<S: SignalApi> SetlistOps<S> {
     pub async fn list(&self) -> Result<Vec<Setlist>, OpsError> {
-        let cx = self.0.context_factory.make_context();
         self.0
             .service
-            .list_setlists(&cx)
+            .list_setlists()
             .await
             .map_err(OpsError::Storage)
     }
 
     pub async fn load(&self, id: impl Into<SetlistId>) -> Result<Option<Setlist>, OpsError> {
-        let cx = self.0.context_factory.make_context();
         self.0
             .service
-            .load_setlist(&cx, id.into())
+            .load_setlist(id.into())
             .await
             .map_err(OpsError::Storage)
     }
@@ -43,20 +41,18 @@ impl<S: SignalApi> SetlistOps<S> {
     }
 
     pub async fn save(&self, setlist: Setlist) -> Result<Setlist, OpsError> {
-        let cx = self.0.context_factory.make_context();
         self.0
             .service
-            .save_setlist(&cx, setlist.clone())
+            .save_setlist(setlist.clone())
             .await
             .map_err(OpsError::Storage)?;
         Ok(setlist)
     }
 
     pub async fn delete(&self, id: impl Into<SetlistId>) -> Result<(), OpsError> {
-        let cx = self.0.context_factory.make_context();
         self.0
             .service
-            .delete_setlist(&cx, id.into())
+            .delete_setlist(id.into())
             .await
             .map_err(OpsError::Storage)
     }
@@ -66,10 +62,9 @@ impl<S: SignalApi> SetlistOps<S> {
         setlist_id: impl Into<SetlistId>,
         entry_id: impl Into<SetlistEntryId>,
     ) -> Result<Option<SetlistEntry>, OpsError> {
-        let cx = self.0.context_factory.make_context();
         self.0
             .service
-            .load_setlist_entry(&cx, setlist_id.into(), entry_id.into())
+            .load_setlist_entry(setlist_id.into(), entry_id.into())
             .await
             .map_err(OpsError::Storage)
     }

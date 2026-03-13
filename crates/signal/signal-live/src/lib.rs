@@ -80,7 +80,6 @@ mod song_service;
 #[cfg(test)]
 mod tests;
 
-use roam::Context;
 use signal_proto::{
     engine::{Engine, EngineId, EngineScene, EngineSceneId},
     layer::{Layer, LayerId, LayerSnapshot, LayerSnapshotId},

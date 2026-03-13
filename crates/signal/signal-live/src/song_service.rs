@@ -13,18 +13,18 @@ where
     St: SceneTemplateRepo,
     Ra: RackRepo,
 {
-    async fn list_songs(&self, _cx: &Context) -> Result<Vec<Song>, String> {
+    async fn list_songs(&self) -> Result<Vec<Song>, String> {
         self.song_repo.list_songs().await.map_err(|e| e.to_string())
     }
 
-    async fn load_song(&self, _cx: &Context, id: SongId) -> Result<Option<Song>, String> {
+    async fn load_song(&self, id: SongId) -> Result<Option<Song>, String> {
         self.song_repo
             .load_song(&id)
             .await
             .map_err(|e| e.to_string())
     }
 
-    async fn save_song(&self, _cx: &Context, song: Song) -> Result<(), String> {
+    async fn save_song(&self, song: Song) -> Result<(), String> {
         for variant in &song.sections {
             variant.validate_overrides().map_err(|e| format!("{e:?}"))?;
         }
@@ -34,7 +34,7 @@ where
             .map_err(|e| e.to_string())
     }
 
-    async fn delete_song(&self, _cx: &Context, id: SongId) -> Result<(), String> {
+    async fn delete_song(&self, id: SongId) -> Result<(), String> {
         self.song_repo
             .delete_song(&id)
             .await
@@ -43,7 +43,6 @@ where
 
     async fn load_song_variant(
         &self,
-        _cx: &Context,
         song_id: SongId,
         variant_id: SectionId,
     ) -> Result<Option<Section>, String> {

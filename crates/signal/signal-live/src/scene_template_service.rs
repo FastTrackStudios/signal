@@ -14,7 +14,7 @@ where
     St: SceneTemplateRepo,
     Ra: RackRepo,
 {
-    async fn list_scene_templates(&self, _cx: &Context) -> Result<Vec<SceneTemplate>, String> {
+    async fn list_scene_templates(&self) -> Result<Vec<SceneTemplate>, String> {
         self.scene_template_repo
             .list_scene_templates()
             .await
@@ -23,7 +23,6 @@ where
 
     async fn load_scene_template(
         &self,
-        _cx: &Context,
         id: SceneTemplateId,
     ) -> Result<Option<SceneTemplate>, String> {
         self.scene_template_repo
@@ -34,7 +33,6 @@ where
 
     async fn save_scene_template(
         &self,
-        _cx: &Context,
         template: SceneTemplate,
     ) -> Result<(), String> {
         self.scene_template_repo
@@ -45,7 +43,6 @@ where
 
     async fn delete_scene_template(
         &self,
-        _cx: &Context,
         id: SceneTemplateId,
     ) -> Result<(), String> {
         self.scene_template_repo
@@ -56,7 +53,6 @@ where
 
     async fn reorder_scene_templates(
         &self,
-        _cx: &Context,
         ordered_ids: Vec<SceneTemplateId>,
     ) -> Result<(), String> {
         self.scene_template_repo

@@ -10,19 +10,17 @@ pub struct LayerOps<S: SignalApi>(pub(crate) SignalController<S>);
 
 impl<S: SignalApi> LayerOps<S> {
     pub async fn list(&self) -> Result<Vec<Layer>, OpsError> {
-        let cx = self.0.context_factory.make_context();
         self.0
             .service
-            .list_layers(&cx)
+            .list_layers()
             .await
             .map_err(OpsError::Storage)
     }
 
     pub async fn load(&self, id: impl Into<LayerId>) -> Result<Option<Layer>, OpsError> {
-        let cx = self.0.context_factory.make_context();
         self.0
             .service
-            .load_layer(&cx, id.into())
+            .load_layer(id.into())
             .await
             .map_err(OpsError::Storage)
     }
@@ -43,20 +41,18 @@ impl<S: SignalApi> LayerOps<S> {
     }
 
     pub async fn save(&self, layer: Layer) -> Result<Layer, OpsError> {
-        let cx = self.0.context_factory.make_context();
         self.0
             .service
-            .save_layer(&cx, layer.clone())
+            .save_layer(layer.clone())
             .await
             .map_err(OpsError::Storage)?;
         Ok(layer)
     }
 
     pub async fn delete(&self, id: impl Into<LayerId>) -> Result<(), OpsError> {
-        let cx = self.0.context_factory.make_context();
         self.0
             .service
-            .delete_layer(&cx, id.into())
+            .delete_layer(id.into())
             .await
             .map_err(OpsError::Storage)
     }
@@ -66,10 +62,9 @@ impl<S: SignalApi> LayerOps<S> {
         layer_id: impl Into<LayerId>,
         variant_id: impl Into<LayerSnapshotId>,
     ) -> Result<Option<LayerSnapshot>, OpsError> {
-        let cx = self.0.context_factory.make_context();
         self.0
             .service
-            .load_layer_variant(&cx, layer_id.into(), variant_id.into())
+            .load_layer_variant(layer_id.into(), variant_id.into())
             .await
             .map_err(OpsError::Storage)
     }

@@ -14,7 +14,7 @@ where
     St: SceneTemplateRepo,
     Ra: RackRepo,
 {
-    async fn list_engines(&self, _cx: &Context) -> Result<Vec<Engine>, String> {
+    async fn list_engines(&self) -> Result<Vec<Engine>, String> {
         {
             let cache = self.cache.read().await;
             if let Some(cached) = cache.engines.as_ref() {
@@ -33,14 +33,14 @@ where
         Ok(result)
     }
 
-    async fn load_engine(&self, _cx: &Context, id: EngineId) -> Result<Option<Engine>, String> {
+    async fn load_engine(&self, id: EngineId) -> Result<Option<Engine>, String> {
         self.engine_repo
             .load_engine(&id)
             .await
             .map_err(|e| e.to_string())
     }
 
-    async fn save_engine(&self, _cx: &Context, engine: Engine) -> Result<(), String> {
+    async fn save_engine(&self, engine: Engine) -> Result<(), String> {
         for variant in &engine.variants {
             variant.validate_overrides().map_err(|e| format!("{e:?}"))?;
         }
@@ -66,7 +66,7 @@ where
         Ok(())
     }
 
-    async fn delete_engine(&self, _cx: &Context, id: EngineId) -> Result<(), String> {
+    async fn delete_engine(&self, id: EngineId) -> Result<(), String> {
         self.engine_repo
             .delete_engine(&id)
             .await
@@ -77,7 +77,6 @@ where
 
     async fn load_engine_variant(
         &self,
-        _cx: &Context,
         engine_id: EngineId,
         variant_id: EngineSceneId,
     ) -> Result<Option<EngineScene>, String> {

@@ -52,7 +52,7 @@ where
     St: SceneTemplateRepo,
     Ra: RackRepo,
 {
-    async fn browser_index(&self, _cx: &Context) -> Result<BrowserIndex, String> {
+    async fn browser_index(&self) -> Result<BrowserIndex, String> {
         let mut index = BrowserIndex::default();
 
         for block_type in ALL_BLOCK_TYPES {
@@ -324,8 +324,8 @@ where
         Ok(index)
     }
 
-    async fn browse(&self, cx: &Context, query: BrowserQuery) -> Result<Vec<BrowserHit>, String> {
-        let index: BrowserIndex = BrowserService::browser_index(self, cx).await?;
+    async fn browse(&self, query: BrowserQuery) -> Result<Vec<BrowserHit>, String> {
+        let index: BrowserIndex = BrowserService::browser_index(self).await?;
         Ok(index.query(&query, &TagWeights::default()))
     }
 }

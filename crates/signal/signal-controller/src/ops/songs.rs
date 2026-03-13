@@ -11,19 +11,17 @@ pub struct SongOps<S: SignalApi>(pub(crate) SignalController<S>);
 
 impl<S: SignalApi> SongOps<S> {
     pub async fn list(&self) -> Result<Vec<Song>, OpsError> {
-        let cx = self.0.context_factory.make_context();
         self.0
             .service
-            .list_songs(&cx)
+            .list_songs()
             .await
             .map_err(OpsError::Storage)
     }
 
     pub async fn load(&self, id: impl Into<SongId>) -> Result<Option<Song>, OpsError> {
-        let cx = self.0.context_factory.make_context();
         self.0
             .service
-            .load_song(&cx, id.into())
+            .load_song(id.into())
             .await
             .map_err(OpsError::Storage)
     }
@@ -60,11 +58,10 @@ impl<S: SignalApi> SongOps<S> {
         profile_id: impl Into<ProfileId>,
     ) -> Result<Song, OpsError> {
         let profile_id = profile_id.into();
-        let cx = self.0.context_factory.make_context();
         let profile = self
             .0
             .service
-            .load_profile(&cx, profile_id.clone())
+            .load_profile(profile_id.clone())
             .await
             .map_err(OpsError::Storage)?
             .ok_or_else(|| OpsError::NotFound {
@@ -89,7 +86,6 @@ impl<S: SignalApi> SongOps<S> {
     ) -> Result<Song, OpsError> {
         let song_id = song_id.into();
         let new_profile_id = new_profile_id.into();
-        let cx = self.0.context_factory.make_context();
 
         let mut song = self
             .load(song_id)
@@ -102,7 +98,7 @@ impl<S: SignalApi> SongOps<S> {
         let new_profile = self
             .0
             .service
-            .load_profile(&cx, new_profile_id.clone())
+            .load_profile(new_profile_id.clone())
             .await
             .map_err(OpsError::Storage)?
             .ok_or_else(|| OpsError::NotFound {
@@ -115,7 +111,7 @@ impl<S: SignalApi> SongOps<S> {
             if let Some(old_profile) = self
                 .0
                 .service
-                .load_profile(&cx, old_id.as_str().into())
+                .load_profile(old_id.as_str().into())
                 .await
                 .map_err(OpsError::Storage)?
             {
@@ -135,20 +131,18 @@ impl<S: SignalApi> SongOps<S> {
     }
 
     pub async fn save(&self, song: Song) -> Result<Song, OpsError> {
-        let cx = self.0.context_factory.make_context();
         self.0
             .service
-            .save_song(&cx, song.clone())
+            .save_song(song.clone())
             .await
             .map_err(OpsError::Storage)?;
         Ok(song)
     }
 
     pub async fn delete(&self, id: impl Into<SongId>) -> Result<(), OpsError> {
-        let cx = self.0.context_factory.make_context();
         self.0
             .service
-            .delete_song(&cx, id.into())
+            .delete_song(id.into())
             .await
             .map_err(OpsError::Storage)
     }
@@ -158,10 +152,9 @@ impl<S: SignalApi> SongOps<S> {
         song_id: impl Into<SongId>,
         section_id: impl Into<SectionId>,
     ) -> Result<Option<Section>, OpsError> {
-        let cx = self.0.context_factory.make_context();
         self.0
             .service
-            .load_song_variant(&cx, song_id.into(), section_id.into())
+            .load_song_variant(song_id.into(), section_id.into())
             .await
             .map_err(OpsError::Storage)
     }

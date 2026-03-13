@@ -13,7 +13,7 @@ where
     St: SceneTemplateRepo,
     Ra: RackRepo,
 {
-    async fn list_rigs(&self, _cx: &Context) -> Result<Vec<Rig>, String> {
+    async fn list_rigs(&self) -> Result<Vec<Rig>, String> {
         {
             let cache = self.cache.read().await;
             if let Some(cached) = cache.rigs.as_ref() {
@@ -28,11 +28,11 @@ where
         Ok(result)
     }
 
-    async fn load_rig(&self, _cx: &Context, id: RigId) -> Result<Option<Rig>, String> {
+    async fn load_rig(&self, id: RigId) -> Result<Option<Rig>, String> {
         self.rig_repo.load_rig(&id).await.map_err(|e| e.to_string())
     }
 
-    async fn save_rig(&self, _cx: &Context, rig: Rig) -> Result<(), String> {
+    async fn save_rig(&self, rig: Rig) -> Result<(), String> {
         for variant in &rig.variants {
             variant.validate_overrides().map_err(|e| format!("{e:?}"))?;
         }
@@ -44,7 +44,7 @@ where
         Ok(())
     }
 
-    async fn delete_rig(&self, _cx: &Context, id: RigId) -> Result<(), String> {
+    async fn delete_rig(&self, id: RigId) -> Result<(), String> {
         self.rig_repo
             .delete_rig(&id)
             .await
@@ -55,7 +55,6 @@ where
 
     async fn load_rig_variant(
         &self,
-        _cx: &Context,
         rig_id: RigId,
         variant_id: RigSceneId,
     ) -> Result<Option<RigScene>, String> {

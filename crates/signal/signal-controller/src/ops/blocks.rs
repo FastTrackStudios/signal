@@ -7,19 +7,17 @@ pub struct BlockOps<S: SignalApi>(pub(crate) SignalController<S>);
 
 impl<S: SignalApi> BlockOps<S> {
     pub async fn get(&self, block_type: BlockType) -> Result<Block, OpsError> {
-        let cx = self.0.context_factory.make_context();
         self.0
             .service
-            .get_block(&cx, block_type)
+            .get_block(block_type)
             .await
             .map_err(OpsError::Storage)
     }
 
     pub async fn set(&self, block_type: BlockType, block: Block) -> Result<Block, OpsError> {
-        let cx = self.0.context_factory.make_context();
         self.0
             .service
-            .set_block(&cx, block_type, block)
+            .set_block(block_type, block)
             .await
             .map_err(OpsError::Storage)
     }

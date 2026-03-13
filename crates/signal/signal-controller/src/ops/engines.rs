@@ -11,19 +11,17 @@ pub struct EngineOps<S: SignalApi>(pub(crate) SignalController<S>);
 
 impl<S: SignalApi> EngineOps<S> {
     pub async fn list(&self) -> Result<Vec<Engine>, OpsError> {
-        let cx = self.0.context_factory.make_context();
         self.0
             .service
-            .list_engines(&cx)
+            .list_engines()
             .await
             .map_err(OpsError::Storage)
     }
 
     pub async fn load(&self, id: impl Into<EngineId>) -> Result<Option<Engine>, OpsError> {
-        let cx = self.0.context_factory.make_context();
         self.0
             .service
-            .load_engine(&cx, id.into())
+            .load_engine(id.into())
             .await
             .map_err(OpsError::Storage)
     }
@@ -46,20 +44,18 @@ impl<S: SignalApi> EngineOps<S> {
     }
 
     pub async fn save(&self, engine: Engine) -> Result<Engine, OpsError> {
-        let cx = self.0.context_factory.make_context();
         self.0
             .service
-            .save_engine(&cx, engine.clone())
+            .save_engine(engine.clone())
             .await
             .map_err(OpsError::Storage)?;
         Ok(engine)
     }
 
     pub async fn delete(&self, id: impl Into<EngineId>) -> Result<(), OpsError> {
-        let cx = self.0.context_factory.make_context();
         self.0
             .service
-            .delete_engine(&cx, id.into())
+            .delete_engine(id.into())
             .await
             .map_err(OpsError::Storage)
     }
@@ -69,10 +65,9 @@ impl<S: SignalApi> EngineOps<S> {
         engine_id: impl Into<EngineId>,
         variant_id: impl Into<EngineSceneId>,
     ) -> Result<Option<EngineScene>, OpsError> {
-        let cx = self.0.context_factory.make_context();
         self.0
             .service
-            .load_engine_variant(&cx, engine_id.into(), variant_id.into())
+            .load_engine_variant(engine_id.into(), variant_id.into())
             .await
             .map_err(OpsError::Storage)
     }
