@@ -13,7 +13,7 @@ where
     St: SceneTemplateRepo,
     Ra: RackRepo,
 {
-    async fn list_racks(&self, _cx: &Context) -> Result<Vec<Rack>, String> {
+    async fn list_racks(&self) -> Result<Vec<Rack>, String> {
         {
             let cache = self.cache.read().await;
             if let Some(cached) = cache.racks.as_ref() {
@@ -29,14 +29,14 @@ where
         Ok(result)
     }
 
-    async fn load_rack(&self, _cx: &Context, id: RackId) -> Result<Option<Rack>, String> {
+    async fn load_rack(&self, id: RackId) -> Result<Option<Rack>, String> {
         self.rack_repo
             .load_rack(&id)
             .await
             .map_err(|e| e.to_string())
     }
 
-    async fn save_rack(&self, _cx: &Context, rack: Rack) -> Result<(), String> {
+    async fn save_rack(&self, rack: Rack) -> Result<(), String> {
         self.rack_repo
             .save_rack(&rack)
             .await
@@ -45,7 +45,7 @@ where
         Ok(())
     }
 
-    async fn delete_rack(&self, _cx: &Context, id: RackId) -> Result<(), String> {
+    async fn delete_rack(&self, id: RackId) -> Result<(), String> {
         self.rack_repo
             .delete_rack(&id)
             .await

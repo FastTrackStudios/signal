@@ -15,7 +15,7 @@ where
 {
     /// Load the current active block state for a given block type.
     /// Returns `Block::default()` when no state has been persisted yet.
-    async fn get_block(&self, _cx: &Context, block_type: BlockType) -> Result<Block, String> {
+    async fn get_block(&self, block_type: BlockType) -> Result<Block, String> {
         Ok(self
             .block_repo
             .load_block_state(block_type)
@@ -27,7 +27,6 @@ where
     /// Persist a new block state and return it.
     async fn set_block(
         &self,
-        _cx: &Context,
         block_type: BlockType,
         block: Block,
     ) -> Result<Block, String> {
@@ -41,7 +40,6 @@ where
     /// List all block collections (presets) for a given block type.
     async fn list_block_presets(
         &self,
-        _cx: &Context,
         block_type: BlockType,
     ) -> Result<Vec<Preset>, String> {
         {
@@ -66,7 +64,6 @@ where
     /// current active block.
     async fn load_block_preset(
         &self,
-        _cx: &Context,
         block_type: BlockType,
         preset_id: PresetId,
     ) -> Result<Option<Snapshot>, String> {
@@ -88,7 +85,6 @@ where
     /// current active block.
     async fn load_block_preset_snapshot(
         &self,
-        _cx: &Context,
         block_type: BlockType,
         preset_id: PresetId,
         snapshot_id: SnapshotId,
@@ -108,7 +104,7 @@ where
     }
 
     /// List all module collections.
-    async fn list_module_presets(&self, _cx: &Context) -> Result<Vec<ModulePreset>, String> {
+    async fn list_module_presets(&self) -> Result<Vec<ModulePreset>, String> {
         {
             let cache = self.cache.read().await;
             if let Some(cached) = cache.module_collections.as_ref() {
@@ -130,7 +126,6 @@ where
     /// Load the default variant of a module collection.
     async fn load_module_preset(
         &self,
-        _cx: &Context,
         preset_id: ModulePresetId,
     ) -> Result<Option<ModuleSnapshot>, String> {
         self.module_repo
@@ -142,7 +137,6 @@ where
     /// Load a specific variant from a module collection.
     async fn load_module_preset_snapshot(
         &self,
-        _cx: &Context,
         preset_id: ModulePresetId,
         snapshot_id: ModuleSnapshotId,
     ) -> Result<Option<ModuleSnapshot>, String> {
@@ -153,7 +147,7 @@ where
     }
 
     /// Save (upsert) a block collection and invalidate the cache for its block type.
-    async fn save_block_preset(&self, _cx: &Context, preset: Preset) -> Result<(), String> {
+    async fn save_block_preset(&self, preset: Preset) -> Result<(), String> {
         let bt = preset.block_type();
         self.block_repo
             .save_block_collection(preset)
@@ -167,7 +161,6 @@ where
     /// Delete a block collection (preset) by ID and invalidate the cache for its block type.
     async fn delete_block_preset(
         &self,
-        _cx: &Context,
         block_type: BlockType,
         preset_id: PresetId,
     ) -> Result<(), String> {
@@ -183,7 +176,6 @@ where
     /// Save (upsert) a module collection and invalidate the module cache.
     async fn save_module_collection(
         &self,
-        _cx: &Context,
         preset: ModulePreset,
     ) -> Result<(), String> {
         self.module_repo
@@ -198,7 +190,6 @@ where
     /// Delete a module collection and invalidate the module cache.
     async fn delete_module_collection(
         &self,
-        _cx: &Context,
         id: ModulePresetId,
     ) -> Result<(), String> {
         self.module_repo

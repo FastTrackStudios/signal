@@ -54,27 +54,6 @@ impl<T> SignalApi for T where
 {
 }
 
-pub trait ContextFactory: Send + Sync {
-    fn make_context(&self) -> roam::Context;
-}
-
-pub type SharedContextFactory = Arc<dyn ContextFactory>;
-
-#[derive(Default)]
-pub struct DefaultContextFactory;
-
-impl ContextFactory for DefaultContextFactory {
-    fn make_context(&self) -> roam::Context {
-        roam::Context::new(
-            Default::default(),
-            Default::default(),
-            Default::default(),
-            Default::default(),
-            vec![],
-        )
-    }
-}
-
 pub mod ops;
 
 pub struct SignalController<S = SignalLive>
@@ -82,7 +61,6 @@ where
     S: SignalApi,
 {
     pub(crate) service: Arc<S>,
-    pub(crate) context_factory: SharedContextFactory,
     pub(crate) event_bus: Arc<EventBus>,
     pub(crate) daw_applier: Arc<std::sync::RwLock<Option<Arc<dyn DawPatchApplier>>>>,
 }
@@ -94,7 +72,6 @@ where
     fn clone(&self) -> Self {
         Self {
             service: self.service.clone(),
-            context_factory: self.context_factory.clone(),
             event_bus: self.event_bus.clone(),
             daw_applier: self.daw_applier.clone(),
         }
@@ -117,13 +94,8 @@ where
     S: SignalApi,
 {
     pub fn new(service: Arc<S>) -> Self {
-        Self::new_with_context(service, Arc::new(DefaultContextFactory))
-    }
-
-    pub fn new_with_context(service: Arc<S>, context_factory: SharedContextFactory) -> Self {
         Self {
             service,
-            context_factory,
             event_bus: Arc::new(EventBus::default()),
             daw_applier: Arc::new(std::sync::RwLock::new(None)),
         }
@@ -229,18 +201,16 @@ where
 
     /// Build the current browser index across all signal domain levels.
     pub async fn browser_index(&self) -> Result<BrowserIndex, ops::OpsError> {
-        let cx = self.context_factory.make_context();
         self.service
-            .browser_index(&cx)
+            .browser_index()
             .await
             .map_err(ops::OpsError::Storage)
     }
 
     /// Query the semantic browser using structured tags and fallback scoring.
     pub async fn browse(&self, query: BrowserQuery) -> Result<Vec<BrowserHit>, ops::OpsError> {
-        let cx = self.context_factory.make_context();
         self.service
-            .browse(&cx, query)
+            .browse(query)
             .await
             .map_err(ops::OpsError::Storage)
     }
@@ -250,8 +220,7 @@ where
         &self,
         target: ResolveTarget,
     ) -> Result<ResolvedGraph, ResolveError> {
-        let cx = self.context_factory.make_context();
-        self.service.resolve_target(&cx, target).await
+        self.service.resolve_target(target).await
     }
 
     // endregion: --- Cross-cutting operations

@@ -13,7 +13,7 @@ where
     St: SceneTemplateRepo,
     Ra: RackRepo,
 {
-    async fn list_layers(&self, _cx: &Context) -> Result<Vec<Layer>, String> {
+    async fn list_layers(&self) -> Result<Vec<Layer>, String> {
         {
             let cache = self.cache.read().await;
             if let Some(cached) = cache.layers.as_ref() {
@@ -32,14 +32,14 @@ where
         Ok(result)
     }
 
-    async fn load_layer(&self, _cx: &Context, id: LayerId) -> Result<Option<Layer>, String> {
+    async fn load_layer(&self, id: LayerId) -> Result<Option<Layer>, String> {
         self.layer_repo
             .load_layer(&id)
             .await
             .map_err(|e| e.to_string())
     }
 
-    async fn save_layer(&self, _cx: &Context, layer: Layer) -> Result<(), String> {
+    async fn save_layer(&self, layer: Layer) -> Result<(), String> {
         for variant in &layer.variants {
             variant.validate_overrides().map_err(|e| format!("{e:?}"))?;
         }
@@ -51,7 +51,7 @@ where
         Ok(())
     }
 
-    async fn delete_layer(&self, _cx: &Context, id: LayerId) -> Result<(), String> {
+    async fn delete_layer(&self, id: LayerId) -> Result<(), String> {
         self.layer_repo
             .delete_layer(&id)
             .await
@@ -62,7 +62,6 @@ where
 
     async fn load_layer_variant(
         &self,
-        _cx: &Context,
         layer_id: LayerId,
         variant_id: LayerSnapshotId,
     ) -> Result<Option<LayerSnapshot>, String> {

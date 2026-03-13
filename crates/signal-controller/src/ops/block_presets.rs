@@ -18,10 +18,9 @@ pub struct BlockPresetOps<S: SignalApi>(pub(crate) SignalController<S>);
 
 impl<S: SignalApi> BlockPresetOps<S> {
     pub async fn list(&self, block_type: BlockType) -> Result<Vec<Preset>, OpsError> {
-        let cx = self.0.context_factory.make_context();
         self.0
             .service
-            .list_block_presets(&cx, block_type)
+            .list_block_presets(block_type)
             .await
             .map_err(OpsError::Storage)
     }
@@ -31,11 +30,10 @@ impl<S: SignalApi> BlockPresetOps<S> {
         block_type: BlockType,
         collection_id: impl Into<PresetId>,
     ) -> Result<Option<Block>, OpsError> {
-        let cx = self.0.context_factory.make_context();
         let snapshot = self
             .0
             .service
-            .load_block_preset(&cx, block_type, collection_id.into())
+            .load_block_preset(block_type, collection_id.into())
             .await
             .map_err(OpsError::Storage)?;
         Ok(snapshot.map(|s| s.block()))
@@ -47,11 +45,10 @@ impl<S: SignalApi> BlockPresetOps<S> {
         collection_id: impl Into<PresetId>,
         variant_id: impl Into<SnapshotId>,
     ) -> Result<Option<Block>, OpsError> {
-        let cx = self.0.context_factory.make_context();
         let snapshot = self
             .0
             .service
-            .load_block_preset_snapshot(&cx, block_type, collection_id.into(), variant_id.into())
+            .load_block_preset_snapshot(block_type, collection_id.into(), variant_id.into())
             .await
             .map_err(OpsError::Storage)?;
         Ok(snapshot.map(|s| s.block()))
@@ -74,10 +71,9 @@ impl<S: SignalApi> BlockPresetOps<S> {
     }
 
     pub async fn save(&self, preset: Preset) -> Result<Preset, OpsError> {
-        let cx = self.0.context_factory.make_context();
         self.0
             .service
-            .save_block_preset(&cx, preset.clone())
+            .save_block_preset(preset.clone())
             .await
             .map_err(OpsError::Storage)?;
         Ok(preset)
@@ -88,10 +84,9 @@ impl<S: SignalApi> BlockPresetOps<S> {
         block_type: BlockType,
         preset_id: impl Into<PresetId>,
     ) -> Result<(), OpsError> {
-        let cx = self.0.context_factory.make_context();
         self.0
             .service
-            .delete_block_preset(&cx, block_type, preset_id.into())
+            .delete_block_preset(block_type, preset_id.into())
             .await
             .map_err(OpsError::Storage)
     }
@@ -140,11 +135,10 @@ impl<S: SignalApi> BlockPresetOps<S> {
         let snapshot_id = snapshot_id.into();
 
         // Load the specific snapshot
-        let cx = self.0.context_factory.make_context();
         let snapshot = self
             .0
             .service
-            .load_block_preset_snapshot(&cx, block_type, preset_id.clone(), snapshot_id.clone())
+            .load_block_preset_snapshot(block_type, preset_id.clone(), snapshot_id.clone())
             .await
             .map_err(OpsError::Storage)?
             .ok_or_else(|| OpsError::VariantNotFound {

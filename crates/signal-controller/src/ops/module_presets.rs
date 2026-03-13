@@ -11,10 +11,9 @@ pub struct ModulePresetOps<S: SignalApi>(pub(crate) SignalController<S>);
 
 impl<S: SignalApi> ModulePresetOps<S> {
     pub async fn list(&self) -> Result<Vec<ModulePreset>, OpsError> {
-        let cx = self.0.context_factory.make_context();
         self.0
             .service
-            .list_module_presets(&cx)
+            .list_module_presets()
             .await
             .map_err(OpsError::Storage)
     }
@@ -23,10 +22,9 @@ impl<S: SignalApi> ModulePresetOps<S> {
         &self,
         collection_id: impl Into<ModulePresetId>,
     ) -> Result<Option<ModuleSnapshot>, OpsError> {
-        let cx = self.0.context_factory.make_context();
         self.0
             .service
-            .load_module_preset(&cx, collection_id.into())
+            .load_module_preset(collection_id.into())
             .await
             .map_err(OpsError::Storage)
     }
@@ -36,29 +34,26 @@ impl<S: SignalApi> ModulePresetOps<S> {
         collection_id: impl Into<ModulePresetId>,
         variant_id: impl Into<ModuleSnapshotId>,
     ) -> Result<Option<ModuleSnapshot>, OpsError> {
-        let cx = self.0.context_factory.make_context();
         self.0
             .service
-            .load_module_preset_snapshot(&cx, collection_id.into(), variant_id.into())
+            .load_module_preset_snapshot(collection_id.into(), variant_id.into())
             .await
             .map_err(OpsError::Storage)
     }
 
     pub async fn save(&self, preset: ModulePreset) -> Result<ModulePreset, OpsError> {
-        let cx = self.0.context_factory.make_context();
         self.0
             .service
-            .save_module_collection(&cx, preset.clone())
+            .save_module_collection(preset.clone())
             .await
             .map_err(OpsError::Storage)?;
         Ok(preset)
     }
 
     pub async fn delete(&self, id: impl Into<ModulePresetId>) -> Result<(), OpsError> {
-        let cx = self.0.context_factory.make_context();
         self.0
             .service
-            .delete_module_collection(&cx, id.into())
+            .delete_module_collection(id.into())
             .await
             .map_err(OpsError::Storage)
     }

@@ -10,19 +10,17 @@ pub struct RigOps<S: SignalApi>(pub(crate) SignalController<S>);
 
 impl<S: SignalApi> RigOps<S> {
     pub async fn list(&self) -> Result<Vec<Rig>, OpsError> {
-        let cx = self.0.context_factory.make_context();
         self.0
             .service
-            .list_rigs(&cx)
+            .list_rigs()
             .await
             .map_err(OpsError::Storage)
     }
 
     pub async fn load(&self, id: impl Into<RigId>) -> Result<Option<Rig>, OpsError> {
-        let cx = self.0.context_factory.make_context();
         self.0
             .service
-            .load_rig(&cx, id.into())
+            .load_rig(id.into())
             .await
             .map_err(OpsError::Storage)
     }
@@ -43,20 +41,18 @@ impl<S: SignalApi> RigOps<S> {
     }
 
     pub async fn save(&self, rig: Rig) -> Result<Rig, OpsError> {
-        let cx = self.0.context_factory.make_context();
         self.0
             .service
-            .save_rig(&cx, rig.clone())
+            .save_rig(rig.clone())
             .await
             .map_err(OpsError::Storage)?;
         Ok(rig)
     }
 
     pub async fn delete(&self, id: impl Into<RigId>) -> Result<(), OpsError> {
-        let cx = self.0.context_factory.make_context();
         self.0
             .service
-            .delete_rig(&cx, id.into())
+            .delete_rig(id.into())
             .await
             .map_err(OpsError::Storage)
     }
@@ -66,10 +62,9 @@ impl<S: SignalApi> RigOps<S> {
         rig_id: impl Into<RigId>,
         variant_id: impl Into<RigSceneId>,
     ) -> Result<Option<RigScene>, OpsError> {
-        let cx = self.0.context_factory.make_context();
         self.0
             .service
-            .load_rig_variant(&cx, rig_id.into(), variant_id.into())
+            .load_rig_variant(rig_id.into(), variant_id.into())
             .await
             .map_err(OpsError::Storage)
     }

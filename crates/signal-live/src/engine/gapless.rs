@@ -268,12 +268,12 @@ impl GaplessSwapEngine {
     ///
     /// Returns the saved pin mappings for later restoration via `activate_fx`.
     async fn silence_fx(&self, fx: &FxHandle) -> eyre::Result<FxPinMappings> {
-        fx.silence_output().await
+        fx.silence_output().await.map_err(|e| eyre::eyre!("{:?}", e))
     }
 
     /// Activate a non-container FX by restoring its output pin mappings.
     async fn activate_fx(&self, fx: &FxHandle, saved: FxPinMappings) -> eyre::Result<()> {
-        fx.restore_output(saved).await
+        fx.restore_output(saved).await.map_err(|e| eyre::eyre!("{:?}", e))
     }
 
     /// Silence a container by setting its `container_nch_out` to 0.
@@ -285,6 +285,7 @@ impl GaplessSwapEngine {
         chain
             .set_container_channel_config(container_id, FxContainerChannelConfig::silent())
             .await
+            .map_err(|e| eyre::eyre!("{:?}", e))
     }
 
     /// Activate a container by restoring its channel config to stereo.
@@ -296,6 +297,7 @@ impl GaplessSwapEngine {
         chain
             .set_container_channel_config(container_id, FxContainerChannelConfig::stereo())
             .await
+            .map_err(|e| eyre::eyre!("{:?}", e))
     }
 
     /// Poll until an FX is fully loaded and ready.

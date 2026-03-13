@@ -941,7 +941,6 @@ where
 {
     async fn resolve_target(
         &self,
-        _cx: &Context,
         target: ResolveTarget,
     ) -> Result<ResolvedGraph, ResolveError> {
         // BlockSnapshot targets resolve directly — the snapshot IS the rig.

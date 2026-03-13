@@ -8,15 +8,6 @@ use std::time::{Duration, Instant};
 
 type Result<T> = core::result::Result<T, Box<dyn std::error::Error>>;
 
-fn test_context() -> Context {
-    Context::new(
-        Default::default(),
-        Default::default(),
-        Default::default(),
-        Default::default(),
-        vec![],
-    )
-}
 
 async fn seeded_service() -> Result<
     SignalLive<
@@ -94,10 +85,9 @@ async fn seeded_service() -> Result<
 async fn test_live_get_block_returns_seeded_state() -> Result<()> {
     // -- Setup & Fixtures
     let svc = seeded_service().await?;
-    let cx = test_context();
 
     // -- Exec
-    let block = svc.get_block(&cx, BlockType::Amp).await?;
+    let block = svc.get_block(BlockType::Amp).await?;
 
     // -- Check
     assert!(!block.parameters().is_empty());
@@ -140,10 +130,9 @@ async fn test_live_get_block_returns_default_for_empty_repo() -> Result<()> {
         Arc::new(scene_template_repo),
         Arc::new(rack_repo),
     );
-    let cx = test_context();
 
     // -- Exec
-    let block = svc.get_block(&cx, BlockType::Amp).await?;
+    let block = svc.get_block(BlockType::Amp).await?;
 
     // -- Check
     assert_eq!(block, Block::default());
@@ -154,17 +143,16 @@ async fn test_live_get_block_returns_default_for_empty_repo() -> Result<()> {
 async fn test_live_set_block_persists_and_returns() -> Result<()> {
     // -- Setup & Fixtures
     let svc = seeded_service().await?;
-    let cx = test_context();
     let new_block = Block::new(0.1, 0.2, 0.3);
 
     // -- Exec
     let returned = svc
-        .set_block(&cx, BlockType::Drive, new_block.clone())
+        .set_block(BlockType::Drive, new_block.clone())
         .await?;
 
     // -- Check
     assert_eq!(returned, new_block);
-    let loaded = svc.get_block(&cx, BlockType::Drive).await?;
+    let loaded = svc.get_block(BlockType::Drive).await?;
     assert_eq!(loaded, new_block);
     Ok(())
 }
@@ -176,9 +164,8 @@ async fn test_live_set_block_persists_and_returns() -> Result<()> {
 #[tokio::test]
 async fn test_live_list_setlists_returns_demo_setlist() -> Result<()> {
     let svc = seeded_service().await?;
-    let cx = test_context();
 
-    let setlists = svc.list_setlists(&cx).await?;
+    let setlists = svc.list_setlists(.await?;
 
     assert!(setlists.len() >= 2, "expected at least 2 setlists, got {}", setlists.len());
     let worship = setlists
@@ -197,7 +184,6 @@ async fn test_live_list_setlists_returns_demo_setlist() -> Result<()> {
 #[tokio::test]
 async fn test_live_load_setlist_entry_returns_dummy_song_entry() -> Result<()> {
     let svc = seeded_service().await?;
-    let cx = test_context();
 
     let entry = svc
         .load_setlist_entry(
@@ -222,11 +208,10 @@ async fn test_live_load_setlist_entry_returns_dummy_song_entry() -> Result<()> {
 async fn test_live_list_collections_returns_seeded_presets() -> Result<()> {
     // -- Setup & Fixtures
     let svc = seeded_service().await?;
-    let cx = test_context();
 
     // -- Exec
-    let amp_collections = svc.list_block_presets(&cx, BlockType::Amp).await?;
-    let drive_collections = svc.list_block_presets(&cx, BlockType::Drive).await?;
+    let amp_collections = svc.list_block_presets(BlockType::Amp).await?;
+    let drive_collections = svc.list_block_presets(BlockType::Drive).await?;
 
     // -- Check
     assert!(amp_collections.len() >= 6, "expected at least 6 amp presets, got {}", amp_collections.len());
@@ -270,10 +255,9 @@ async fn test_live_list_collections_empty_repo() -> Result<()> {
         Arc::new(scene_template_repo),
         Arc::new(rack_repo),
     );
-    let cx = test_context();
 
     // -- Exec
-    let collections = svc.list_block_presets(&cx, BlockType::Amp).await?;
+    let collections = svc.list_block_presets(BlockType::Amp).await?;
 
     // -- Check
     assert!(collections.is_empty());
@@ -284,12 +268,11 @@ async fn test_live_list_collections_empty_repo() -> Result<()> {
 async fn test_live_load_default_variant_applies_block() -> Result<()> {
     // -- Setup & Fixtures
     let svc = seeded_service().await?;
-    let cx = test_context();
     let preset_id = PresetId::from_uuid(seed_id("amp-twin"));
 
     // -- Exec: load the default variant (triggers side-effect)
     let snapshot = svc
-        .load_block_preset(&cx, BlockType::Amp, preset_id)
+        .load_block_preset(BlockType::Amp, preset_id)
         .await?;
 
     // -- Check: variant returned
@@ -301,7 +284,7 @@ async fn test_live_load_default_variant_applies_block() -> Result<()> {
     );
 
     // -- Check: current block was updated to match the loaded variant
-    let current = svc.get_block(&cx, BlockType::Amp).await?;
+    let current = svc.get_block(BlockType::Amp).await?;
     assert_eq!(current, snapshot.block());
     Ok(())
 }
@@ -310,13 +293,12 @@ async fn test_live_load_default_variant_applies_block() -> Result<()> {
 async fn test_live_load_specific_variant_applies_block() -> Result<()> {
     // -- Setup & Fixtures
     let svc = seeded_service().await?;
-    let cx = test_context();
     let preset_id = PresetId::from_uuid(seed_id("amp-twin"));
     let snapshot_id = SnapshotId::from_uuid(seed_id("amp-twin-surf"));
 
     // -- Exec
     let snapshot = svc
-        .load_block_preset_snapshot(&cx, BlockType::Amp, preset_id, snapshot_id.clone())
+        .load_block_preset_snapshot(BlockType::Amp, preset_id, snapshot_id.clone())
         .await?;
 
     // -- Check: correct variant returned
@@ -325,7 +307,7 @@ async fn test_live_load_specific_variant_applies_block() -> Result<()> {
     assert_eq!(snapshot.id(), &snapshot_id);
 
     // -- Check: current block updated
-    let current = svc.get_block(&cx, BlockType::Amp).await?;
+    let current = svc.get_block(BlockType::Amp).await?;
     assert_eq!(current, snapshot.block());
     Ok(())
 }
@@ -334,11 +316,10 @@ async fn test_live_load_specific_variant_applies_block() -> Result<()> {
 async fn test_live_load_nonexistent_collection_returns_none() -> Result<()> {
     // -- Setup & Fixtures
     let svc = seeded_service().await?;
-    let cx = test_context();
 
     // -- Exec
     let result = svc
-        .load_block_preset(&cx, BlockType::Amp, PresetId::new())
+        .load_block_preset(BlockType::Amp, PresetId::new())
         .await?;
 
     // -- Check
@@ -350,7 +331,6 @@ async fn test_live_load_nonexistent_collection_returns_none() -> Result<()> {
 async fn test_live_load_nonexistent_variant_returns_none() -> Result<()> {
     // -- Setup & Fixtures
     let svc = seeded_service().await?;
-    let cx = test_context();
 
     // -- Exec
     let result = svc
@@ -375,10 +355,9 @@ async fn test_live_load_nonexistent_variant_returns_none() -> Result<()> {
 async fn test_live_list_module_collections() -> Result<()> {
     // -- Setup & Fixtures
     let svc = seeded_service().await?;
-    let cx = test_context();
 
     // -- Exec
-    let module_collections = svc.list_module_presets(&cx).await?;
+    let module_collections = svc.list_module_presets(.await?;
 
     // -- Check
     assert!(module_collections.len() >= 23, "expected at least 23 module collections, got {}", module_collections.len());
@@ -396,11 +375,10 @@ async fn test_live_list_module_collections() -> Result<()> {
 async fn test_live_load_module_default_variant() -> Result<()> {
     // -- Setup & Fixtures
     let svc = seeded_service().await?;
-    let cx = test_context();
     let preset_id = ModulePresetId::from_uuid(seed_id("drive-full-stack"));
 
     // -- Exec
-    let snapshot = svc.load_module_preset(&cx, preset_id).await?;
+    let snapshot = svc.load_module_preset(preset_id).await?;
 
     // -- Check
     assert!(snapshot.is_some());
@@ -417,13 +395,12 @@ async fn test_live_load_module_default_variant() -> Result<()> {
 async fn test_live_load_module_specific_variant() -> Result<()> {
     // -- Setup & Fixtures
     let svc = seeded_service().await?;
-    let cx = test_context();
     let preset_id = ModulePresetId::from_uuid(seed_id("drive-full-stack"));
     let snapshot_id = ModuleSnapshotId::from_uuid(seed_id("drive-full-stack-push"));
 
     // -- Exec
     let snapshot = svc
-        .load_module_preset_snapshot(&cx, preset_id, snapshot_id.clone())
+        .load_module_preset_snapshot(preset_id, snapshot_id.clone())
         .await?;
 
     // -- Check
@@ -438,10 +415,9 @@ async fn test_live_load_module_specific_variant() -> Result<()> {
 async fn test_live_load_nonexistent_module_collection() -> Result<()> {
     // -- Setup & Fixtures
     let svc = seeded_service().await?;
-    let cx = test_context();
 
     // -- Exec
-    let result = svc.load_module_preset(&cx, ModulePresetId::new()).await?;
+    let result = svc.load_module_preset(ModulePresetId::new()).await?;
 
     // -- Check
     assert!(result.is_none());
@@ -456,7 +432,6 @@ async fn test_live_load_nonexistent_module_collection() -> Result<()> {
 async fn test_live_load_variant_then_different_variant_updates_block() -> Result<()> {
     // -- Setup & Fixtures
     let svc = seeded_service().await?;
-    let cx = test_context();
 
     // -- Exec: load "surf" variant
     let surf = svc
@@ -469,7 +444,7 @@ async fn test_live_load_variant_then_different_variant_updates_block() -> Result
         .await?
         .unwrap();
 
-    let block_after_surf = svc.get_block(&cx, BlockType::Amp).await?;
+    let block_after_surf = svc.get_block(BlockType::Amp).await?;
     assert_eq!(block_after_surf, surf.block());
 
     // -- Exec: load "jazz" variant (should overwrite)
@@ -484,7 +459,7 @@ async fn test_live_load_variant_then_different_variant_updates_block() -> Result
         .unwrap();
 
     // -- Check: current block reflects the most recently loaded variant
-    let block_after_jazz = svc.get_block(&cx, BlockType::Amp).await?;
+    let block_after_jazz = svc.get_block(BlockType::Amp).await?;
     assert_eq!(block_after_jazz, jazz.block());
     assert_ne!(block_after_jazz, surf.block());
     Ok(())
@@ -494,10 +469,9 @@ async fn test_live_load_variant_then_different_variant_updates_block() -> Result
 async fn test_live_cross_collection_load_updates_correct_block_type() -> Result<()> {
     // -- Setup & Fixtures
     let svc = seeded_service().await?;
-    let cx = test_context();
 
     // -- Exec: load an amp variant
-    let amp_before = svc.get_block(&cx, BlockType::Amp).await?;
+    let amp_before = svc.get_block(BlockType::Amp).await?;
     let _drive = svc
         .load_block_preset(
             &cx,
@@ -507,7 +481,7 @@ async fn test_live_cross_collection_load_updates_correct_block_type() -> Result<
         .await?;
 
     // -- Check: amp block was not affected by loading a drive variant
-    let amp_after = svc.get_block(&cx, BlockType::Amp).await?;
+    let amp_after = svc.get_block(BlockType::Amp).await?;
     assert_eq!(amp_before, amp_after);
     Ok(())
 }
@@ -519,9 +493,8 @@ async fn test_live_cross_collection_load_updates_correct_block_type() -> Result<
 #[tokio::test]
 async fn test_live_list_layers_returns_seeded() -> Result<()> {
     let svc = seeded_service().await?;
-    let cx = test_context();
 
-    let layers = svc.list_layers(&cx).await?;
+    let layers = svc.list_layers(.await?;
     assert!(layers.len() >= 12, "expected at least 12 layers, got {}", layers.len());
     assert!(layers.iter().any(|l| l.name == "Keys Core"));
     assert!(layers.iter().any(|l| l.name == "Guitar Main"));
@@ -532,10 +505,9 @@ async fn test_live_list_layers_returns_seeded() -> Result<()> {
 #[tokio::test]
 async fn test_live_load_layer_by_id() -> Result<()> {
     let svc = seeded_service().await?;
-    let cx = test_context();
 
     let layer = svc
-        .load_layer(&cx, LayerId::from_uuid(seed_id("keys-layer-core")))
+        .load_layer(LayerId::from_uuid(seed_id("keys-layer-core")))
         .await?;
     assert!(layer.is_some());
     let layer = layer.unwrap();
@@ -546,9 +518,8 @@ async fn test_live_load_layer_by_id() -> Result<()> {
 #[tokio::test]
 async fn test_live_load_layer_missing_returns_none() -> Result<()> {
     let svc = seeded_service().await?;
-    let cx = test_context();
 
-    let layer = svc.load_layer(&cx, LayerId::new()).await?;
+    let layer = svc.load_layer(LayerId::new()).await?;
     assert!(layer.is_none());
     Ok(())
 }
@@ -556,7 +527,6 @@ async fn test_live_load_layer_missing_returns_none() -> Result<()> {
 #[tokio::test]
 async fn test_live_save_and_delete_layer() -> Result<()> {
     let svc = seeded_service().await?;
-    let cx = test_context();
 
     let variant = LayerSnapshot::new(seed_id("test-v1"), "Test Default");
     let layer = Layer::new(
@@ -565,17 +535,17 @@ async fn test_live_save_and_delete_layer() -> Result<()> {
         signal_proto::EngineType::Guitar,
         variant,
     );
-    svc.save_layer(&cx, layer).await?;
+    svc.save_layer(layer).await?;
 
     let loaded = svc
-        .load_layer(&cx, LayerId::from_uuid(seed_id("test-layer")))
+        .load_layer(LayerId::from_uuid(seed_id("test-layer")))
         .await?;
     assert!(loaded.is_some());
 
-    svc.delete_layer(&cx, LayerId::from_uuid(seed_id("test-layer")))
+    svc.delete_layer(LayerId::from_uuid(seed_id("test-layer")))
         .await?;
     let after_delete = svc
-        .load_layer(&cx, LayerId::from_uuid(seed_id("test-layer")))
+        .load_layer(LayerId::from_uuid(seed_id("test-layer")))
         .await?;
     assert!(after_delete.is_none());
     Ok(())
@@ -584,7 +554,6 @@ async fn test_live_save_and_delete_layer() -> Result<()> {
 #[tokio::test]
 async fn test_live_load_layer_variant() -> Result<()> {
     let svc = seeded_service().await?;
-    let cx = test_context();
 
     let variant = svc
         .load_layer_variant(
@@ -607,9 +576,8 @@ async fn test_live_load_layer_variant() -> Result<()> {
 #[tokio::test]
 async fn test_live_list_engines_seeded() -> Result<()> {
     let svc = seeded_service().await?;
-    let cx = test_context();
 
-    let engines = svc.list_engines(&cx).await?;
+    let engines = svc.list_engines(.await?;
     assert_eq!(engines.len(), 6);
     let synth = engines
         .iter()
@@ -624,7 +592,6 @@ async fn test_live_save_load_delete_engine() -> Result<()> {
     use signal_proto::engine::{EngineScene, LayerSelection};
 
     let svc = seeded_service().await?;
-    let cx = test_context();
 
     let scene =
         EngineScene::new(seed_id("scene-1"), "Default Scene").with_layer(LayerSelection::new(
@@ -639,10 +606,10 @@ async fn test_live_save_load_delete_engine() -> Result<()> {
         scene,
     );
 
-    svc.save_engine(&cx, engine).await?;
+    svc.save_engine(engine).await?;
 
     let loaded = svc
-        .load_engine(&cx, EngineId::from_uuid(seed_id("engine-1")))
+        .load_engine(EngineId::from_uuid(seed_id("engine-1")))
         .await?;
     assert!(loaded.is_some());
     let loaded = loaded.unwrap();
@@ -650,13 +617,13 @@ async fn test_live_save_load_delete_engine() -> Result<()> {
     assert_eq!(loaded.layer_ids.len(), 1);
     assert_eq!(loaded.variants.len(), 1);
 
-    let engines = svc.list_engines(&cx).await?;
+    let engines = svc.list_engines(.await?;
     assert_eq!(engines.len(), 7); // 6 seeded + 1 just saved
 
-    svc.delete_engine(&cx, EngineId::from_uuid(seed_id("engine-1")))
+    svc.delete_engine(EngineId::from_uuid(seed_id("engine-1")))
         .await?;
     let after_delete = svc
-        .load_engine(&cx, EngineId::from_uuid(seed_id("engine-1")))
+        .load_engine(EngineId::from_uuid(seed_id("engine-1")))
         .await?;
     assert!(after_delete.is_none());
     Ok(())
@@ -667,7 +634,6 @@ async fn test_live_load_engine_variant() -> Result<()> {
     use signal_proto::engine::{EngineScene, LayerSelection};
 
     let svc = seeded_service().await?;
-    let cx = test_context();
 
     let scene = EngineScene::new(seed_id("scene-clean"), "Clean").with_layer(LayerSelection::new(
         seed_id("keys-layer-core"),
@@ -686,7 +652,7 @@ async fn test_live_load_engine_variant() -> Result<()> {
             seed_id("keys-layer-core-bright"),
         )),
     );
-    svc.save_engine(&cx, engine).await?;
+    svc.save_engine(engine).await?;
 
     let variant = svc
         .load_engine_variant(
@@ -713,9 +679,8 @@ async fn test_live_load_engine_variant() -> Result<()> {
 #[tokio::test]
 async fn test_live_list_presets_all_seeded() -> Result<()> {
     let svc = seeded_service().await?;
-    let cx = test_context();
 
-    let rigs = svc.list_rigs(&cx).await?;
+    let rigs = svc.list_rigs(.await?;
     assert_eq!(rigs.len(), 3);
     assert!(rigs.iter().all(|r| r.name == "MegaRig"));
     let keys_rig = rigs
@@ -732,7 +697,6 @@ async fn test_live_save_load_delete_preset() -> Result<()> {
     use signal_proto::rig::{EngineSelection, RigScene};
 
     let svc = seeded_service().await?;
-    let cx = test_context();
 
     let scene = RigScene::new(seed_id("rs-default"), "Default Scene").with_engine(
         EngineSelection::new(seed_id("engine-1"), seed_id("scene-1")),
@@ -745,10 +709,10 @@ async fn test_live_save_load_delete_preset() -> Result<()> {
     )
     .with_rig_type("guitar");
 
-    svc.save_rig(&cx, rig).await?;
+    svc.save_rig(rig).await?;
 
     let loaded = svc
-        .load_rig(&cx, RigId::from_uuid(seed_id("rig-1")))
+        .load_rig(RigId::from_uuid(seed_id("rig-1")))
         .await?;
     assert!(loaded.is_some());
     let loaded = loaded.unwrap();
@@ -757,13 +721,13 @@ async fn test_live_save_load_delete_preset() -> Result<()> {
     assert_eq!(loaded.variants.len(), 1);
     assert_eq!(loaded.rig_type.unwrap().as_str(), "guitar");
 
-    let rigs = svc.list_rigs(&cx).await?;
+    let rigs = svc.list_rigs(.await?;
     assert_eq!(rigs.len(), 4); // 3 seeded + 1 just saved
 
-    svc.delete_rig(&cx, RigId::from_uuid(seed_id("rig-1")))
+    svc.delete_rig(RigId::from_uuid(seed_id("rig-1")))
         .await?;
     let after_delete = svc
-        .load_rig(&cx, RigId::from_uuid(seed_id("rig-1")))
+        .load_rig(RigId::from_uuid(seed_id("rig-1")))
         .await?;
     assert!(after_delete.is_none());
     Ok(())
@@ -775,7 +739,6 @@ async fn test_live_load_preset_variant() -> Result<()> {
     use signal_proto::rig::{EngineSelection, RigScene};
 
     let svc = seeded_service().await?;
-    let cx = test_context();
 
     let scene1 = RigScene::new(seed_id("rs-clean"), "Clean").with_engine(EngineSelection::new(
         seed_id("engine-1"),
@@ -793,7 +756,7 @@ async fn test_live_load_preset_variant() -> Result<()> {
             seed_id("scene-heavy"),
         )),
     );
-    svc.save_rig(&cx, rig).await?;
+    svc.save_rig(rig).await?;
 
     let variant = svc
         .load_rig_variant(
@@ -816,9 +779,8 @@ async fn test_live_load_preset_variant() -> Result<()> {
 #[tokio::test]
 async fn test_live_list_profiles_seeded() -> Result<()> {
     let svc = seeded_service().await?;
-    let cx = test_context();
 
-    let profiles = svc.list_profiles(&cx).await?;
+    let profiles = svc.list_profiles(.await?;
     assert_eq!(profiles.len(), 5);
     let keys = profiles
         .iter()
@@ -833,7 +795,6 @@ async fn test_live_save_load_delete_profile() -> Result<()> {
     use signal_proto::profile::Patch;
 
     let svc = seeded_service().await?;
-    let cx = test_context();
 
     let patch = Patch::from_rig_scene(
         seed_id("p-clean"),
@@ -849,23 +810,23 @@ async fn test_live_save_load_delete_profile() -> Result<()> {
         seed_id("rs-lead"),
     ));
 
-    svc.save_profile(&cx, profile).await?;
+    svc.save_profile(profile).await?;
 
     let loaded = svc
-        .load_profile(&cx, ProfileId::from_uuid(seed_id("profile-1")))
+        .load_profile(ProfileId::from_uuid(seed_id("profile-1")))
         .await?;
     assert!(loaded.is_some());
     let loaded = loaded.unwrap();
     assert_eq!(loaded.name, "Worship");
     assert_eq!(loaded.patches.len(), 2);
 
-    let profiles = svc.list_profiles(&cx).await?;
+    let profiles = svc.list_profiles(.await?;
     assert_eq!(profiles.len(), 6); // 5 seeded + 1 just saved
 
-    svc.delete_profile(&cx, ProfileId::from_uuid(seed_id("profile-1")))
+    svc.delete_profile(ProfileId::from_uuid(seed_id("profile-1")))
         .await?;
     let after_delete = svc
-        .load_profile(&cx, ProfileId::from_uuid(seed_id("profile-1")))
+        .load_profile(ProfileId::from_uuid(seed_id("profile-1")))
         .await?;
     assert!(after_delete.is_none());
     Ok(())
@@ -876,7 +837,6 @@ async fn test_live_load_profile_variant() -> Result<()> {
     use signal_proto::profile::{Patch, PatchTarget};
 
     let svc = seeded_service().await?;
-    let cx = test_context();
 
     let patch1 = Patch::from_rig_scene(
         seed_id("p-clean"),
@@ -891,7 +851,7 @@ async fn test_live_load_profile_variant() -> Result<()> {
         seed_id("rig-1"),
         seed_id("rs-crunch"),
     ));
-    svc.save_profile(&cx, profile).await?;
+    svc.save_profile(profile).await?;
 
     let variant = svc
         .load_profile_variant(
@@ -920,9 +880,8 @@ async fn test_live_load_profile_variant() -> Result<()> {
 #[tokio::test]
 async fn test_live_list_songs_seeded() -> Result<()> {
     let svc = seeded_service().await?;
-    let cx = test_context();
 
-    let songs = svc.list_songs(&cx).await?;
+    let songs = svc.list_songs(.await?;
     assert!(songs.len() >= 3, "expected at least 3 songs, got {}", songs.len());
     let feature = songs
         .iter()
@@ -939,17 +898,16 @@ async fn test_live_save_load_delete_song() -> Result<()> {
     use signal_proto::song::Section;
 
     let svc = seeded_service().await?;
-    let cx = test_context();
 
     let verse = Section::from_patch(seed_id("sec-verse"), "Verse", seed_id("patch-clean"));
     let chorus = Section::from_patch(seed_id("sec-chorus"), "Chorus", seed_id("patch-lead"));
     let mut song = Song::new(seed_id("song-1"), "Amazing Grace", verse).with_artist("Traditional");
     song.add_section(chorus);
 
-    svc.save_song(&cx, song).await?;
+    svc.save_song(song).await?;
 
     let loaded = svc
-        .load_song(&cx, SongId::from_uuid(seed_id("song-1")))
+        .load_song(SongId::from_uuid(seed_id("song-1")))
         .await?;
     assert!(loaded.is_some());
     let loaded = loaded.unwrap();
@@ -957,13 +915,13 @@ async fn test_live_save_load_delete_song() -> Result<()> {
     assert_eq!(loaded.artist.as_deref(), Some("Traditional"));
     assert_eq!(loaded.sections.len(), 2);
 
-    let songs = svc.list_songs(&cx).await?;
+    let songs = svc.list_songs(.await?;
     assert!(songs.len() >= 4, "expected at least 4 songs (seeded + 1 saved), got {}", songs.len());
 
-    svc.delete_song(&cx, SongId::from_uuid(seed_id("song-1")))
+    svc.delete_song(SongId::from_uuid(seed_id("song-1")))
         .await?;
     let after_delete = svc
-        .load_song(&cx, SongId::from_uuid(seed_id("song-1")))
+        .load_song(SongId::from_uuid(seed_id("song-1")))
         .await?;
     assert!(after_delete.is_none());
     Ok(())
@@ -974,7 +932,6 @@ async fn test_live_load_song_variant() -> Result<()> {
     use signal_proto::song::{Section, SectionSource};
 
     let svc = seeded_service().await?;
-    let cx = test_context();
 
     let verse = Section::from_patch(seed_id("sec-verse"), "Verse", seed_id("patch-clean"));
     let bridge = Section::from_rig_scene(
@@ -985,7 +942,7 @@ async fn test_live_load_song_variant() -> Result<()> {
     );
     let mut song = Song::new(seed_id("song-2"), "Instrumental", verse);
     song.add_section(bridge);
-    svc.save_song(&cx, song).await?;
+    svc.save_song(song).await?;
 
     let variant = svc
         .load_song_variant(
@@ -1014,9 +971,8 @@ async fn test_live_load_song_variant() -> Result<()> {
 #[tokio::test]
 async fn test_live_browser_index_and_query() -> Result<()> {
     let svc = seeded_service().await?;
-    let cx = test_context();
 
-    let index: BrowserIndex = svc.browser_index(&cx).await?;
+    let index: BrowserIndex = svc.browser_index(.await?;
     assert!(!index.entries().is_empty());
     assert!(index
         .entries()
@@ -1043,7 +999,6 @@ async fn test_live_browser_index_and_query() -> Result<()> {
 #[tokio::test]
 async fn test_live_browser_query_strict_filters() -> Result<()> {
     let svc = seeded_service().await?;
-    let cx = test_context();
 
     let setlist_hits: Vec<BrowserHit> = svc
         .browse(
@@ -1078,10 +1033,9 @@ async fn test_live_browser_query_strict_filters() -> Result<()> {
 #[tokio::test]
 async fn test_live_browser_index_load_time_smoke() -> Result<()> {
     let svc = seeded_service().await?;
-    let cx = test_context();
 
     let started = Instant::now();
-    let index: BrowserIndex = svc.browser_index(&cx).await?;
+    let index: BrowserIndex = svc.browser_index(.await?;
     let elapsed = started.elapsed();
 
     assert!(!index.entries().is_empty());
@@ -1097,7 +1051,6 @@ async fn test_live_browser_index_load_time_smoke() -> Result<()> {
 #[ignore = "performance benchmark; run manually to profile browser index build time"]
 async fn test_live_browser_index_load_time_benchmark() -> Result<()> {
     let svc = seeded_service().await?;
-    let cx = test_context();
 
     let iterations: usize = std::env::var("SIGNAL2_BROWSER_INDEX_BENCH_ITERS")
         .ok()
@@ -1111,7 +1064,7 @@ async fn test_live_browser_index_load_time_benchmark() -> Result<()> {
     let mut runs = Vec::with_capacity(iterations);
     for _ in 0..iterations {
         let started = Instant::now();
-        let index: BrowserIndex = svc.browser_index(&cx).await?;
+        let index: BrowserIndex = svc.browser_index(.await?;
         runs.push(started.elapsed());
         assert!(!index.entries().is_empty());
     }
@@ -1148,7 +1101,6 @@ async fn test_live_browser_index_load_time_benchmark() -> Result<()> {
 #[tokio::test]
 async fn test_live_resolve_rig_scene_keys_megarig() -> Result<()> {
     let svc = seeded_service().await?;
-    let cx = test_context();
 
     let graph: ResolvedGraph = svc
         .resolve_target(
@@ -1174,7 +1126,6 @@ async fn test_live_resolve_rig_scene_keys_megarig() -> Result<()> {
 #[tokio::test]
 async fn test_live_keys_megarig_load_time_smoke() -> Result<()> {
     let svc = seeded_service().await?;
-    let cx = test_context();
 
     let started = Instant::now();
     let graph: ResolvedGraph = svc
@@ -1202,7 +1153,6 @@ async fn test_live_keys_megarig_load_time_smoke() -> Result<()> {
 #[ignore = "performance benchmark; run manually to profile Keys MegaRig load time"]
 async fn test_live_keys_megarig_load_time_benchmark() -> Result<()> {
     let svc = seeded_service().await?;
-    let cx = test_context();
 
     let iterations: usize = std::env::var("SIGNAL2_KEYS_MEGARIG_BENCH_ITERS")
         .ok()
@@ -1258,7 +1208,6 @@ async fn test_live_keys_megarig_load_time_benchmark() -> Result<()> {
 #[tokio::test]
 async fn test_live_resolve_song_section_from_patch() -> Result<()> {
     let svc = seeded_service().await?;
-    let cx = test_context();
 
     let graph: ResolvedGraph = svc
         .resolve_target(
@@ -1280,7 +1229,6 @@ async fn test_live_resolve_song_section_from_patch() -> Result<()> {
 #[tokio::test]
 async fn test_live_resolve_applies_replace_ref_engine_scene() -> Result<()> {
     let svc = seeded_service().await?;
-    let cx = test_context();
 
     let graph: ResolvedGraph = svc
         .resolve_target(
@@ -1311,7 +1259,6 @@ async fn test_live_resolve_fails_on_missing_replace_ref_module_variant() -> Resu
     use signal_proto::song::Section;
 
     let svc = seeded_service().await?;
-    let cx = test_context();
 
     let bad = Section::from_rig_scene(
         seed_id("bad-replace-ref-section"),
@@ -1327,7 +1274,7 @@ async fn test_live_resolve_fails_on_missing_replace_ref_module_variant() -> Resu
     });
 
     let song = Song::new(seed_id("bad-replace-ref-song"), "Bad ReplaceRef Song", bad);
-    svc.save_song(&cx, song).await?;
+    svc.save_song(song).await?;
 
     let resolved: core::result::Result<ResolvedGraph, ResolveError> = svc
         .resolve_target(
@@ -1351,7 +1298,6 @@ async fn test_live_resolve_fails_on_missing_replace_ref_engine_scene() -> Result
     use signal_proto::song::Section;
 
     let svc = seeded_service().await?;
-    let cx = test_context();
 
     let bad = Section::from_rig_scene(
         seed_id("bad-replace-ref-engine-section"),
@@ -1369,7 +1315,7 @@ async fn test_live_resolve_fails_on_missing_replace_ref_engine_scene() -> Result
         "Bad Engine ReplaceRef Song",
         bad,
     );
-    svc.save_song(&cx, song).await?;
+    svc.save_song(song).await?;
 
     let resolved: core::result::Result<ResolvedGraph, ResolveError> = svc
         .resolve_target(
@@ -1393,7 +1339,6 @@ async fn test_live_resolve_fails_on_missing_replace_ref_layer_variant() -> Resul
     use signal_proto::song::Section;
 
     let svc = seeded_service().await?;
-    let cx = test_context();
 
     let bad = Section::from_rig_scene(
         seed_id("bad-replace-ref-layer-section"),
@@ -1411,7 +1356,7 @@ async fn test_live_resolve_fails_on_missing_replace_ref_layer_variant() -> Resul
         "Bad Layer ReplaceRef Song",
         bad,
     );
-    svc.save_song(&cx, song).await?;
+    svc.save_song(song).await?;
 
     let resolved: core::result::Result<ResolvedGraph, ResolveError> = svc
         .resolve_target(
@@ -1685,8 +1630,7 @@ async fn test_resolve_module_load_parallel_topology() -> Result<()> {
         ),
         vec![],
     );
-    let cx = test_context();
-    svc.save_module_collection(&cx, module_preset).await?;
+    svc.save_module_collection(module_preset).await?;
 
     let resolved = svc
         .resolve_module_load(ModuleType::Eq, &test_preset_id, 0)
@@ -1743,7 +1687,6 @@ async fn test_resolve_module_load_parallel_topology() -> Result<()> {
 #[tokio::test]
 async fn test_resolve_guitar_layer_structure() -> Result<()> {
     let svc = seeded_service().await?;
-    let cx = test_context();
 
     let graph: ResolvedGraph = svc
         .resolve_target(
@@ -1793,7 +1736,6 @@ async fn test_resolve_guitar_layer_structure() -> Result<()> {
 #[tokio::test]
 async fn test_resolve_keys_layer_structure() -> Result<()> {
     let svc = seeded_service().await?;
-    let cx = test_context();
 
     let graph: ResolvedGraph = svc
         .resolve_target(

@@ -12,19 +12,17 @@ pub struct ProfileOps<S: SignalApi>(pub(crate) SignalController<S>);
 
 impl<S: SignalApi> ProfileOps<S> {
     pub async fn list(&self) -> Result<Vec<Profile>, OpsError> {
-        let cx = self.0.context_factory.make_context();
         self.0
             .service
-            .list_profiles(&cx)
+            .list_profiles()
             .await
             .map_err(OpsError::Storage)
     }
 
     pub async fn load(&self, id: impl Into<ProfileId>) -> Result<Option<Profile>, OpsError> {
-        let cx = self.0.context_factory.make_context();
         self.0
             .service
-            .load_profile(&cx, id.into())
+            .load_profile(id.into())
             .await
             .map_err(OpsError::Storage)
     }
@@ -45,20 +43,18 @@ impl<S: SignalApi> ProfileOps<S> {
     }
 
     pub async fn save(&self, profile: Profile) -> Result<Profile, OpsError> {
-        let cx = self.0.context_factory.make_context();
         self.0
             .service
-            .save_profile(&cx, profile.clone())
+            .save_profile(profile.clone())
             .await
             .map_err(OpsError::Storage)?;
         Ok(profile)
     }
 
     pub async fn delete(&self, id: impl Into<ProfileId>) -> Result<(), OpsError> {
-        let cx = self.0.context_factory.make_context();
         self.0
             .service
-            .delete_profile(&cx, id.into())
+            .delete_profile(id.into())
             .await
             .map_err(OpsError::Storage)
     }
@@ -68,10 +64,9 @@ impl<S: SignalApi> ProfileOps<S> {
         profile_id: impl Into<ProfileId>,
         patch_id: impl Into<PatchId>,
     ) -> Result<Option<Patch>, OpsError> {
-        let cx = self.0.context_factory.make_context();
         self.0
             .service
-            .load_profile_variant(&cx, profile_id.into(), patch_id.into())
+            .load_profile_variant(profile_id.into(), patch_id.into())
             .await
             .map_err(OpsError::Storage)
     }
@@ -99,12 +94,11 @@ impl<S: SignalApi> ProfileOps<S> {
         patch_id: Option<impl Into<PatchId>>,
     ) -> Result<ResolvedGraph, ResolveError> {
         let profile_id = profile_id.into();
-        let cx = self.0.context_factory.make_context();
 
         let profile = self
             .0
             .service
-            .load_profile(&cx, profile_id.clone())
+            .load_profile(profile_id.clone())
             .await
             .map_err(|e| {
                 ResolveError::NotFound(format!("storage error loading profile {profile_id}: {e}"))
@@ -120,7 +114,6 @@ impl<S: SignalApi> ProfileOps<S> {
             .0
             .service
             .resolve_target(
-                &cx,
                 ResolveTarget::ProfilePatch {
                     profile_id: profile_id.clone(),
                     patch_id: patch_id.clone(),
