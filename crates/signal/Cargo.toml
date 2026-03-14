@@ -24,6 +24,7 @@ signal-import = { path = "../signal-import" }
 signal-proto = { path = "../signal-proto" }
 nam-manager.workspace = true
 daw-control.workspace = true
+daw-proto.workspace = true
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 eyre.workspace = true
 reaper-test.workspace = true
@@ -32,4 +33,5 @@ futures.workspace = true
 base64 = "0.22"
 dawfile-reaper.workspace = true
 signal-daw-bridge.workspace = true
+serde_json.workspace = true
 signal-controller = { path = "../signal-controller" }

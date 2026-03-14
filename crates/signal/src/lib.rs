@@ -1,9 +1,54 @@
-//! Public Signal crate.
+//! Signal facade crate -- the public API surface for the signal domain.
 //!
-//! Re-exports protocol types and controller APIs for consumers.
+//! This crate re-exports types from every layer of the signal stack so that
+//! consumers only need a single `signal` dependency. It also provides bootstrap
+//! functions for constructing a fully-wired [`SignalController`] with a database
+//! and seeded default data.
+//!
+//! # Re-export strategy
+//!
+//! - `signal-proto` is re-exported via glob (`pub use signal_proto::*`) so all
+//!   domain types, IDs, and service traits are available at the `signal::` path.
+//! - `signal-storage` repo traits, error types, and seed helpers are explicitly
+//!   re-exported.
+//! - `signal-live` engine utilities (morph engine, DAW param snapshots, macro
+//!   setup) are explicitly re-exported.
+//! - `signal-controller` provides [`SignalController`] (aliased as [`Signal`])
+//!   and the `ops` namespace.
+//!
+//! # Bootstrap functions
+//!
+//! - [`bootstrap_in_memory_controller`] / [`bootstrap_in_memory_controller_async`] --
+//!   creates a controller with an in-memory SQLite database pre-seeded with
+//!   default content. Useful for tests and development.
+//! - [`connect_db`] -- connects to a file-based SQLite database with schema
+//!   initialization (no seed data).
+//! - [`connect_db_seeded`] -- connects to a file-based SQLite database, seeds
+//!   default data on first run, and refreshes RfxChain presets from disk on
+//!   every startup.
+//! - [`mock_guitar`], [`mock_bass`], etc. -- convenience constructors for
+//!   instrument-specific mock controllers.
+//!
+//! # Architecture position
+//!
+//! ```text
+//! signal-proto -> signal-storage -> signal-live -> signal-controller
+//!                                                       |
+//!                                                       v
+//!                                                signal (this crate)
+//! ```
+//!
+//! **Depends on**: `signal-proto`, `signal-storage`, `signal-live`,
+//! `signal-controller`, `nam-manager`. Optionally `daw-control`, `daw-proto`
+//! (behind the `daw` feature).
+//!
+//! **Depended on by**: `signal-ui`, application crates (`fts-control-desktop`)
 
 #[cfg(feature = "daw")]
 pub mod reaper_applier;
+
+#[cfg(feature = "daw")]
+pub mod rig_scene_manager;
 
 pub use signal_controller::ops;
 pub use signal_controller::SignalController;
