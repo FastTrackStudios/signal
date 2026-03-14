@@ -9,24 +9,18 @@
 //! The test ONLY sets macro values (via ExtState) and reads back ReaComp values.
 //! The plugin's timer callback does all the driving.
 //!
-//! ## Why ExtState for mappings?
+//! ## Synchronization
 //!
-//! Instead of writing a file before plugin load, we inject mappings via ExtState
-//! (`FTS_MACROS/mapping_config`). The plugin's timer callback picks up the JSON,
-//! updates the shared `Arc<Mutex<MacroMappingBank>>` (which is also the `#[persist]`
-//! field), and deletes the key. This makes mappings survive project save/load.
+//! No arbitrary sleeps. The test uses deterministic polling:
+//! - **Mapping config:** polls `FTS_MACROS/mapping_config_ack` (written by timer after consuming config)
+//! - **Param values:** polls target FX params until they reach expected values (with tolerance)
 //!
 //! Run with:
 //!   cargo xtask reaper-test compression_macro
 
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use reaper_test::reaper_test;
-
-/// Small sleep to let the plugin's timer callback (~30Hz) pick up changes.
-async fn settle() {
-    tokio::time::sleep(Duration::from_millis(500)).await;
-}
 
 /// ReaComp plugin name in REAPER's FX browser.
 const REACOMP: &str = "VST: ReaComp (Cockos)";
@@ -37,6 +31,12 @@ const FTS_MACROS_NAME: &str = "FTS Macros";
 
 /// ExtState section used by fts-macros timer to read macro values and mapping config.
 const EXT_STATE_SECTION: &str = "FTS_MACROS";
+
+/// Default timeout for polling operations.
+const POLL_TIMEOUT: Duration = Duration::from_secs(5);
+
+/// Polling interval between checks.
+const POLL_INTERVAL: Duration = Duration::from_millis(50);
 
 /// Build the mapping config JSON for the compression macro.
 ///
@@ -84,6 +84,62 @@ async fn set_macro_via_ext_state(
     Ok(())
 }
 
+/// Poll an ExtState key until it has a non-empty value, or timeout.
+/// Returns the value string on success.
+async fn poll_ext_state(
+    ctx: &reaper_test::ReaperTestContext,
+    section: &str,
+    key: &str,
+    timeout: Duration,
+) -> eyre::Result<String> {
+    let start = Instant::now();
+    loop {
+        if let Some(val) = ctx.daw.ext_state().get(section, key).await? {
+            if !val.is_empty() {
+                return Ok(val);
+            }
+        }
+        if start.elapsed() > timeout {
+            return Err(eyre::eyre!(
+                "Timed out waiting for ExtState {}/{} (waited {:?})",
+                section,
+                key,
+                timeout
+            ));
+        }
+        tokio::time::sleep(POLL_INTERVAL).await;
+    }
+}
+
+/// Poll an FX parameter until it reaches the expected value (within tolerance), or timeout.
+/// Returns the actual value when matched.
+async fn poll_param_value(
+    fx: &daw_control::FxHandle,
+    param_idx: u32,
+    expected: f64,
+    tolerance: f64,
+    timeout: Duration,
+) -> eyre::Result<f64> {
+    let start = Instant::now();
+    loop {
+        let actual = fx.param(param_idx).get().await?;
+        if (actual - expected).abs() < tolerance {
+            return Ok(actual);
+        }
+        if start.elapsed() > timeout {
+            return Err(eyre::eyre!(
+                "Timed out waiting for param {} to reach {:.4} (got {:.4}, tolerance {:.4}, waited {:?})",
+                param_idx,
+                expected,
+                actual,
+                tolerance,
+                timeout
+            ));
+        }
+        tokio::time::sleep(POLL_INTERVAL).await;
+    }
+}
+
 /// Clean up ExtState keys.
 async fn cleanup_ext_state(ctx: &reaper_test::ReaperTestContext) {
     for i in 0..8 {
@@ -93,11 +149,15 @@ async fn cleanup_ext_state(ctx: &reaper_test::ReaperTestContext) {
             .delete(EXT_STATE_SECTION, &format!("macro_{}", i), false)
             .await;
     }
-    // Also clean up mapping_config key
     let _ = ctx
         .daw
         .ext_state()
         .delete(EXT_STATE_SECTION, "mapping_config", false)
+        .await;
+    let _ = ctx
+        .daw
+        .ext_state()
+        .delete(EXT_STATE_SECTION, "mapping_config_ack", false)
         .await;
 }
 
@@ -121,7 +181,6 @@ async fn compression_macro_drives_threshold_and_ratio(
     // ─── 1. Create track and load FTS Macros FIRST (FX index 0) ──────
 
     let track = project.tracks().add("Compression Macro Test", None).await?;
-    settle().await;
 
     let _macros_fx = match track.fx_chain().add(FTS_MACROS_CLAP).await {
         Ok(fx) => fx,
@@ -131,14 +190,12 @@ async fn compression_macro_drives_threshold_and_ratio(
             .await
             .map_err(|e| eyre::eyre!("Could not add FTS Macros plugin: {}", e))?,
     };
-    settle().await;
 
     ctx.log("FTS Macros loaded at FX index 0");
 
     // ─── 2. Load ReaComp SECOND (FX index 1) ─────────────────────────
 
     let target_fx = track.fx_chain().add(REACOMP).await?;
-    settle().await;
 
     ctx.log("ReaComp loaded at FX index 1");
 
@@ -179,8 +236,9 @@ async fn compression_macro_drives_threshold_and_ratio(
         .await?;
     ctx.log("Injected mapping config via ExtState (FTS_MACROS/mapping_config)");
 
-    // Wait for timer to pick up the mapping config
-    tokio::time::sleep(Duration::from_millis(1500)).await;
+    // Poll for ack — timer consumed the config and updated the mapping bank
+    let ack = poll_ext_state(ctx, EXT_STATE_SECTION, "mapping_config_ack", POLL_TIMEOUT).await?;
+    ctx.log(&format!("Mapping config acknowledged: {} mappings loaded", ack));
 
     // Verify both plugins loaded
     let fx_count = track.fx_chain().count().await?;
@@ -196,26 +254,13 @@ async fn compression_macro_drives_threshold_and_ratio(
     ctx.log("--- Macro 0 = 0.0 (minimum compression) ---");
 
     set_macro_via_ext_state(ctx, 0, 0.0).await?;
-    // Wait for timer to pick up the change (~30Hz = 33ms per tick, wait several ticks)
-    tokio::time::sleep(Duration::from_millis(500)).await;
 
-    let thresh_at_0 = target_fx.param(threshold_param.index).get().await?;
-    let ratio_at_0 = target_fx.param(ratio_param.index).get().await?;
+    let thresh_at_0 = poll_param_value(&target_fx, threshold_param.index, 0.80, 0.05, POLL_TIMEOUT).await?;
+    let ratio_at_0 = poll_param_value(&target_fx, ratio_param.index, 0.00, 0.05, POLL_TIMEOUT).await?;
     ctx.log(&format!(
-        "ReaComp: Threshold={:.4} (expect ~0.80), Ratio={:.4} (expect ~0.00)",
+        "ReaComp: Threshold={:.4}, Ratio={:.4}",
         thresh_at_0, ratio_at_0
     ));
-
-    assert!(
-        (thresh_at_0 - 0.80).abs() < 0.05,
-        "At Macro 0=0.0, threshold should be ~0.80, got {:.4}",
-        thresh_at_0
-    );
-    assert!(
-        (ratio_at_0 - 0.00).abs() < 0.05,
-        "At Macro 0=0.0, ratio should be ~0.00, got {:.4}",
-        ratio_at_0
-    );
     ctx.log("PASS: Low compression — high threshold, low ratio");
 
     // ─── 6. Macro 0 = 1.0 → verify ReaComp at heavy compression ─────
@@ -224,25 +269,13 @@ async fn compression_macro_drives_threshold_and_ratio(
     ctx.log("--- Macro 0 = 1.0 (maximum compression) ---");
 
     set_macro_via_ext_state(ctx, 0, 1.0).await?;
-    tokio::time::sleep(Duration::from_millis(500)).await;
 
-    let thresh_at_1 = target_fx.param(threshold_param.index).get().await?;
-    let ratio_at_1 = target_fx.param(ratio_param.index).get().await?;
+    let thresh_at_1 = poll_param_value(&target_fx, threshold_param.index, 0.10, 0.05, POLL_TIMEOUT).await?;
+    let ratio_at_1 = poll_param_value(&target_fx, ratio_param.index, 0.80, 0.05, POLL_TIMEOUT).await?;
     ctx.log(&format!(
-        "ReaComp: Threshold={:.4} (expect ~0.10), Ratio={:.4} (expect ~0.80)",
+        "ReaComp: Threshold={:.4}, Ratio={:.4}",
         thresh_at_1, ratio_at_1
     ));
-
-    assert!(
-        (thresh_at_1 - 0.10).abs() < 0.05,
-        "At Macro 0=1.0, threshold should be ~0.10, got {:.4}",
-        thresh_at_1
-    );
-    assert!(
-        (ratio_at_1 - 0.80).abs() < 0.05,
-        "At Macro 0=1.0, ratio should be ~0.80, got {:.4}",
-        ratio_at_1
-    );
     ctx.log("PASS: Heavy compression — low threshold, high ratio");
 
     // ─── 7. Sweep Macro 0 from 0.0 → 1.0, verify monotonic ──────────
@@ -256,11 +289,14 @@ async fn compression_macro_drives_threshold_and_ratio(
     for step in 0..=4 {
         let macro_val = step as f64 / 4.0;
 
-        set_macro_via_ext_state(ctx, 0, macro_val).await?;
-        tokio::time::sleep(Duration::from_millis(300)).await;
+        // Expected values from the ScaleRange mappings
+        let expected_thresh = 0.8 + macro_val * (0.1 - 0.8); // inverted
+        let expected_ratio = 0.0 + macro_val * 0.8;           // direct
 
-        let thresh = target_fx.param(threshold_param.index).get().await?;
-        let ratio = target_fx.param(ratio_param.index).get().await?;
+        set_macro_via_ext_state(ctx, 0, macro_val).await?;
+
+        let thresh = poll_param_value(&target_fx, threshold_param.index, expected_thresh, 0.05, POLL_TIMEOUT).await?;
+        let ratio = poll_param_value(&target_fx, ratio_param.index, expected_ratio, 0.05, POLL_TIMEOUT).await?;
         ctx.log(&format!(
             "  Macro 0={:.2} → Threshold={:.4}, Ratio={:.4}",
             macro_val, thresh, ratio
