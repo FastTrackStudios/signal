@@ -118,6 +118,7 @@ async fn signal_load_two_modules_to_track(ctx: &ReaperTestContext) -> eyre::Resu
             &ModulePresetId::from_uuid(seed_id("eq-proq4-3band")),
             0,
             &track,
+            None,
         )
         .await
         .map_err(|e| eyre::eyre!("{e}"))?;
@@ -131,6 +132,7 @@ async fn signal_load_two_modules_to_track(ctx: &ReaperTestContext) -> eyre::Resu
             &ModulePresetId::from_uuid(seed_id("eq-proq4-4band")),
             0,
             &track,
+            None,
         )
         .await
         .map_err(|e| eyre::eyre!("{e}"))?;
@@ -206,6 +208,7 @@ async fn signal_load_layer_to_track(ctx: &ReaperTestContext) -> eyre::Result<()>
             &ModulePresetId::from_uuid(seed_id("eq-proq4-3band")),
             0,
             &track,
+            None,
         )
         .await
         .map_err(|e| eyre::eyre!("{e}"))?;
@@ -218,6 +221,7 @@ async fn signal_load_layer_to_track(ctx: &ReaperTestContext) -> eyre::Result<()>
             &ModulePresetId::from_uuid(seed_id("eq-proq4-4band")),
             0,
             &track,
+            None,
         )
         .await
         .map_err(|e| eyre::eyre!("{e}"))?;
