@@ -1,3 +1,8 @@
+//! Block operations — raw parameter get/set for individual block types.
+//!
+//! Provides [`BlockOps`], a controller handle for reading and writing
+//! block parameter values and bypass state.
+
 use super::error::OpsError;
 use crate::{SignalApi, SignalController};
 use signal_proto::{Block, BlockType};

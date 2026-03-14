@@ -1,3 +1,8 @@
+//! Browser service implementation — tag inference and faceted search.
+//!
+//! Implements [`BrowserService`] on [`SignalLive`], providing structured
+//! tag extraction from entity names and hierarchical browsing queries.
+
 use super::*;
 
 fn tags_from_name(name: &str) -> TagSet {
@@ -52,7 +57,7 @@ where
     St: SceneTemplateRepo,
     Ra: RackRepo,
 {
-    async fn browser_index(&self) -> Result<BrowserIndex, String> {
+    async fn browser_index(&self) -> Result<BrowserIndex, SignalServiceError> {
         let mut index = BrowserIndex::default();
 
         for block_type in ALL_BLOCK_TYPES {
@@ -60,7 +65,7 @@ where
                 .block_repo
                 .list_block_collections(*block_type)
                 .await
-                .map_err(|e| e.to_string())?;
+                .map_err(|e| SignalServiceError::StorageError(e.to_string()))?;
 
             for collection in collections {
                 let mut ctags = tags_from_name(collection.name());
@@ -96,7 +101,7 @@ where
             .module_repo
             .list_module_collections()
             .await
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| SignalServiceError::StorageError(e.to_string()))?;
         for collection in module_collections {
             let mut ctags = tags_from_name(collection.name());
             ctags.merge(&TagSet::from_tags(&collection.metadata().tags));
@@ -129,7 +134,7 @@ where
             .layer_repo
             .list_layers()
             .await
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| SignalServiceError::StorageError(e.to_string()))?;
         for layer in layers {
             let mut ctags = tags_from_name(&layer.name);
             ctags.merge(&TagSet::from_tags(&layer.metadata.tags));
@@ -162,7 +167,7 @@ where
             .engine_repo
             .list_engines()
             .await
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| SignalServiceError::StorageError(e.to_string()))?;
         for engine in engines {
             let mut ctags = tags_from_name(&engine.name);
             ctags.merge(&TagSet::from_tags(&engine.metadata.tags));
@@ -191,7 +196,7 @@ where
             }
         }
 
-        let rigs = self.rig_repo.list_rigs().await.map_err(|e| e.to_string())?;
+        let rigs = self.rig_repo.list_rigs().await.map_err(|e| SignalServiceError::StorageError(e.to_string()))?;
         for rig in rigs {
             let mut ctags = tags_from_name(&rig.name);
             ctags.merge(&TagSet::from_tags(&rig.metadata.tags));
@@ -226,7 +231,7 @@ where
             .profile_repo
             .list_profiles()
             .await
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| SignalServiceError::StorageError(e.to_string()))?;
         for profile in profiles {
             let mut ctags = tags_from_name(&profile.name);
             ctags.merge(&TagSet::from_tags(&profile.metadata.tags));
@@ -258,7 +263,7 @@ where
             .song_repo
             .list_songs()
             .await
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| SignalServiceError::StorageError(e.to_string()))?;
         for song in songs {
             let mut ctags = tags_from_name(&song.name);
             ctags.merge(&TagSet::from_tags(&song.metadata.tags));
@@ -293,7 +298,7 @@ where
             .setlist_repo
             .list_setlists()
             .await
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| SignalServiceError::StorageError(e.to_string()))?;
         for setlist in setlists {
             let mut ctags = tags_from_name(&setlist.name);
             ctags.merge(&TagSet::from_tags(&setlist.metadata.tags));
@@ -324,7 +329,7 @@ where
         Ok(index)
     }
 
-    async fn browse(&self, query: BrowserQuery) -> Result<Vec<BrowserHit>, String> {
+    async fn browse(&self, query: BrowserQuery) -> Result<Vec<BrowserHit>, SignalServiceError> {
         let index: BrowserIndex = BrowserService::browser_index(self).await?;
         Ok(index.query(&query, &TagWeights::default()))
     }

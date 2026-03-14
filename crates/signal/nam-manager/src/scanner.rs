@@ -44,8 +44,7 @@ fn scan_file(
     nam_root: &Path,
     kind: NamFileKind,
 ) -> Result<NamFileEntry, NamError> {
-    let contents = std::fs::read(path)
-        .map_err(|e| NamError::Io(format!("reading {}: {}", path.display(), e)))?;
+    let contents = std::fs::read(path)?;
 
     let hash = sha256_hex(&contents);
 

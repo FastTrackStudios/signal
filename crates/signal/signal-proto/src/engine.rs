@@ -15,14 +15,25 @@ use crate::EngineType;
 
 // ─── IDs ────────────────────────────────────────────────────────
 
-crate::typed_uuid_id!(
+crate::impl_collection! {
     /// Identifies an Engine collection.
-    EngineId
-);
-crate::typed_uuid_id!(
+    collection_id: EngineId,
+
     /// Identifies a specific Engine variant (scene).
-    EngineSceneId
-);
+    variant_id: EngineSceneId,
+
+    variant EngineScene {
+        id: EngineSceneId,
+        overrides: Override,
+        default_named: |name| Self::new(EngineSceneId::new(), name),
+    }
+
+    collection Engine {
+        variant_type: EngineScene,
+        variants_field: variants,
+        default_id_field: default_variant_id,
+    }
+}
 
 // ─── Layer selection ────────────────────────────────────────────
 
@@ -192,69 +203,8 @@ impl Engine {
     }
 }
 
-// ─── Trait impls ────────────────────────────────────────────────
-
-impl crate::traits::Variant for EngineScene {
-    type Id = EngineSceneId;
-    type BaseRef = ();
-    type Override = Override;
-    fn id(&self) -> &EngineSceneId {
-        &self.id
-    }
-    fn name(&self) -> &str {
-        &self.name
-    }
-    fn set_name(&mut self, name: impl Into<String>) {
-        self.name = name.into();
-    }
-    fn overrides(&self) -> Option<&[Self::Override]> {
-        Some(&self.overrides)
-    }
-    fn overrides_mut(&mut self) -> Option<&mut Vec<Self::Override>> {
-        Some(&mut self.overrides)
-    }
-}
-
-impl crate::traits::DefaultVariant for EngineScene {
-    fn default_named(name: impl Into<String>) -> Self {
-        Self::new(EngineSceneId::new(), name)
-    }
-}
-
-impl crate::traits::Collection for Engine {
-    type Variant = EngineScene;
-
-    fn variants(&self) -> &[EngineScene] {
-        &self.variants
-    }
-    fn variants_mut(&mut self) -> &mut Vec<EngineScene> {
-        &mut self.variants
-    }
-    fn default_variant_id(&self) -> &EngineSceneId {
-        &self.default_variant_id
-    }
-    fn set_default_variant_id(&mut self, id: EngineSceneId) {
-        self.default_variant_id = id;
-    }
-}
-
-impl crate::traits::HasMetadata for EngineScene {
-    fn metadata(&self) -> &Metadata {
-        &self.metadata
-    }
-    fn metadata_mut(&mut self) -> &mut Metadata {
-        &mut self.metadata
-    }
-}
-
-impl crate::traits::HasMetadata for Engine {
-    fn metadata(&self) -> &Metadata {
-        &self.metadata
-    }
-    fn metadata_mut(&mut self) -> &mut Metadata {
-        &mut self.metadata
-    }
-}
+// Trait impls (Variant, DefaultVariant, Collection, HasMetadata) are generated
+// by the `impl_collection!` macro invocation at the top of this file.
 
 #[cfg(test)]
 mod tests {

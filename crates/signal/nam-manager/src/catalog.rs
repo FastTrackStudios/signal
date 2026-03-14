@@ -41,22 +41,20 @@ impl NamCatalog {
     /// Load catalog from a JSON file.
     pub fn load(path: &Path) -> Result<Self, NamError> {
         let contents = std::fs::read_to_string(path)
-            .map_err(|e| NamError::Io(format!("reading catalog {}: {}", path.display(), e)))?;
+            .map_err(|e| NamError::CatalogError(format!("reading catalog {}: {}", path.display(), e)))?;
         let catalog: Self = serde_json::from_str(&contents)
-            .map_err(|e| NamError::Parse(format!("parsing catalog: {}", e)))?;
+            .map_err(|e| NamError::CatalogError(format!("parsing catalog {}: {}", path.display(), e)))?;
         Ok(catalog)
     }
 
     /// Save catalog to a JSON file (pretty-printed).
     pub fn save(&self, path: &Path) -> Result<(), NamError> {
         if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent)
-                .map_err(|e| NamError::Io(format!("creating catalog dir: {}", e)))?;
+            std::fs::create_dir_all(parent)?;
         }
         let json = serde_json::to_string_pretty(self)
-            .map_err(|e| NamError::Parse(format!("serializing catalog: {}", e)))?;
-        std::fs::write(path, json)
-            .map_err(|e| NamError::Io(format!("writing catalog {}: {}", path.display(), e)))?;
+            .map_err(|e| NamError::CatalogError(format!("serializing catalog: {}", e)))?;
+        std::fs::write(path, json)?;
         Ok(())
     }
 

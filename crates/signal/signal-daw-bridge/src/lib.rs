@@ -1,7 +1,41 @@
-//! Bridge between the DAW FX tree and the Signal domain.
+//! DAW-to-Signal bridge -- infers signal domain structure from REAPER FX trees.
 //!
-//! Infers signal chain structure (modules, blocks, routing topology) from a
-//! REAPER track's FX container hierarchy (`FxTree`).
+//! Translates a REAPER track's FX container hierarchy (`FxTree` from `daw-proto`)
+//! into signal domain concepts: modules, blocks, signal chains, and routing
+//! topology. This is the primary mechanism for discovering an existing rig's
+//! structure from a live DAW session.
+//!
+//! # Architecture position
+//!
+//! ```text
+//! daw-proto + signal-proto + signal-import
+//!                |
+//!                v
+//!     signal-daw-bridge (this crate)
+//!                |
+//!                v
+//!          signal-ui
+//! ```
+//!
+//! **Depends on**: `daw-proto`, `signal-proto`, `signal-import`
+//!
+//! **Depended on by**: `signal-ui`
+//!
+//! # Key types and functions
+//!
+//! - [`infer_chain_from_fx_tree`] -- core inference: converts an `FxTree` into an
+//!   [`InferredChain`] of modules and standalone blocks
+//! - [`InferredChain`] -- result containing inferred modules and standalone blocks
+//! - [`InferredModule`] -- a module inferred from a top-level FX container, with
+//!   its signal chain and routing mode
+//! - [`InferredBlock`] -- a standalone block inferred from a top-level flat plugin
+//!
+//! # Inference rules
+//!
+//! - Depth-0 flat plugin -> standalone block
+//! - Depth-0 container -> Module (type inferred from `[M]`/`[B]` naming convention)
+//! - Parallel routing -> `SignalChain` with a `Split` node
+//! - Plugin names matched against the FabFilter registry and FTS naming conventions
 
 use daw_proto::fx::tree::{FxNode, FxNodeKind, FxRoutingMode, FxTree};
 use signal_proto::plugin_block::FxRole;

@@ -169,7 +169,7 @@ async fn macro_setup_direct_reacomp_parameter_binding(
             .audio_engine()
             .init()
             .await
-            .map_err(|e| eyre::eyre!("Failed to init audio engine: {}", e))?;
+            .map_err(|e| eyre::eyre!("Failed to init audio engine: {:?}", e))?;
         settle().await;
         ctx.log("Audio engine initialized");
     }

@@ -1,3 +1,8 @@
+//! Engine service implementation — CRUD for engines and engine scenes.
+//!
+//! Implements [`EngineService`] on [`SignalLive`], with an in-memory cache
+//! for fast repeated reads.
+
 use super::*;
 
 impl<B, M, L, E, R, P, So, Se, St, Ra> EngineService
@@ -14,7 +19,7 @@ where
     St: SceneTemplateRepo,
     Ra: RackRepo,
 {
-    async fn list_engines(&self) -> Result<Vec<Engine>, String> {
+    async fn list_engines(&self) -> Result<Vec<Engine>, SignalServiceError> {
         {
             let cache = self.cache.read().await;
             if let Some(cached) = cache.engines.as_ref() {
@@ -25,7 +30,7 @@ where
             .engine_repo
             .list_engines()
             .await
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| SignalServiceError::StorageError(e.to_string()))?;
         {
             let mut cache = self.cache.write().await;
             cache.engines = Some(result.clone());
@@ -33,44 +38,44 @@ where
         Ok(result)
     }
 
-    async fn load_engine(&self, id: EngineId) -> Result<Option<Engine>, String> {
+    async fn load_engine(&self, id: EngineId) -> Result<Option<Engine>, SignalServiceError> {
         self.engine_repo
             .load_engine(&id)
             .await
-            .map_err(|e| e.to_string())
+            .map_err(|e| SignalServiceError::StorageError(e.to_string()))
     }
 
-    async fn save_engine(&self, engine: Engine) -> Result<(), String> {
+    async fn save_engine(&self, engine: Engine) -> Result<(), SignalServiceError> {
         for variant in &engine.variants {
-            variant.validate_overrides().map_err(|e| format!("{e:?}"))?;
+            variant.validate_overrides().map_err(|e| SignalServiceError::ValidationError(format!("{e:?}")))?;
         }
         for layer_id in &engine.layer_ids {
             let layer = self
                 .layer_repo
                 .load_layer(layer_id)
                 .await
-                .map_err(|e| e.to_string())?
-                .ok_or_else(|| format!("layer not found: {layer_id}"))?;
+                .map_err(|e| SignalServiceError::StorageError(e.to_string()))?
+                .ok_or_else(|| SignalServiceError::not_found("Layer", &layer_id))?;
             if !engine.is_layer_type_compatible(layer.engine_type) {
-                return Err(format!(
+                return Err(SignalServiceError::ValidationError(format!(
                     "layer {} engine type {:?} incompatible with engine {:?}",
                     layer_id, layer.engine_type, engine.engine_type
-                ));
+                )));
             }
         }
         self.engine_repo
             .save_engine(&engine)
             .await
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| SignalServiceError::StorageError(e.to_string()))?;
         self.cache.write().await.engines = None;
         Ok(())
     }
 
-    async fn delete_engine(&self, id: EngineId) -> Result<(), String> {
+    async fn delete_engine(&self, id: EngineId) -> Result<(), SignalServiceError> {
         self.engine_repo
             .delete_engine(&id)
             .await
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| SignalServiceError::StorageError(e.to_string()))?;
         self.cache.write().await.engines = None;
         Ok(())
     }
@@ -79,10 +84,10 @@ where
         &self,
         engine_id: EngineId,
         variant_id: EngineSceneId,
-    ) -> Result<Option<EngineScene>, String> {
+    ) -> Result<Option<EngineScene>, SignalServiceError> {
         self.engine_repo
             .load_variant(&engine_id, &variant_id)
             .await
-            .map_err(|e| e.to_string())
+            .map_err(|e| SignalServiceError::StorageError(e.to_string()))
     }
 }

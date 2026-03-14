@@ -583,8 +583,8 @@ mod tests {
         // But the module should have 2 blocks (new + existing)
         let blocks = built.module_preset.default_snapshot().module().blocks();
         assert_eq!(blocks.len(), 2);
-        assert_eq!(blocks[0].label, "New Amp");
-        assert_eq!(blocks[1].label, "External Drive");
+        assert_eq!(blocks[0].label(), "New Amp");
+        assert_eq!(blocks[1].label(), "External Drive");
     }
 
     #[test]

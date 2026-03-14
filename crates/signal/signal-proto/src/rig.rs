@@ -14,14 +14,25 @@ use crate::overrides::Override;
 
 // ─── IDs ────────────────────────────────────────────────────────
 
-crate::typed_uuid_id!(
+crate::impl_collection! {
     /// Identifies a Rig collection.
-    RigId
-);
-crate::typed_uuid_id!(
+    collection_id: RigId,
+
     /// Identifies a specific Rig variant (scene).
-    RigSceneId
-);
+    variant_id: RigSceneId,
+
+    variant RigScene {
+        id: RigSceneId,
+        overrides: Override,
+        default_named: |name| Self::new(RigSceneId::new(), name),
+    }
+
+    collection Rig {
+        variant_type: RigScene,
+        variants_field: variants,
+        default_id_field: default_variant_id,
+    }
+}
 // Legacy branded string id used by template internals.
 crate::typed_string_id!(
     /// Deprecated in favor of [`RigType`].
@@ -247,69 +258,8 @@ impl Rig {
     }
 }
 
-// ─── Trait impls ────────────────────────────────────────────────
-
-impl crate::traits::Variant for RigScene {
-    type Id = RigSceneId;
-    type BaseRef = ();
-    type Override = Override;
-    fn id(&self) -> &RigSceneId {
-        &self.id
-    }
-    fn name(&self) -> &str {
-        &self.name
-    }
-    fn set_name(&mut self, name: impl Into<String>) {
-        self.name = name.into();
-    }
-    fn overrides(&self) -> Option<&[Self::Override]> {
-        Some(&self.overrides)
-    }
-    fn overrides_mut(&mut self) -> Option<&mut Vec<Self::Override>> {
-        Some(&mut self.overrides)
-    }
-}
-
-impl crate::traits::DefaultVariant for RigScene {
-    fn default_named(name: impl Into<String>) -> Self {
-        Self::new(RigSceneId::new(), name)
-    }
-}
-
-impl crate::traits::Collection for Rig {
-    type Variant = RigScene;
-
-    fn variants(&self) -> &[RigScene] {
-        &self.variants
-    }
-    fn variants_mut(&mut self) -> &mut Vec<RigScene> {
-        &mut self.variants
-    }
-    fn default_variant_id(&self) -> &RigSceneId {
-        &self.default_variant_id
-    }
-    fn set_default_variant_id(&mut self, id: RigSceneId) {
-        self.default_variant_id = id;
-    }
-}
-
-impl crate::traits::HasMetadata for RigScene {
-    fn metadata(&self) -> &Metadata {
-        &self.metadata
-    }
-    fn metadata_mut(&mut self) -> &mut Metadata {
-        &mut self.metadata
-    }
-}
-
-impl crate::traits::HasMetadata for Rig {
-    fn metadata(&self) -> &Metadata {
-        &self.metadata
-    }
-    fn metadata_mut(&mut self) -> &mut Metadata {
-        &mut self.metadata
-    }
-}
+// Trait impls (Variant, DefaultVariant, Collection, HasMetadata) are generated
+// by the `impl_collection!` macro invocation at the top of this file.
 
 #[cfg(test)]
 mod tests {

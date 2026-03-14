@@ -1,3 +1,8 @@
+//! Profile operations — CRUD for profiles and patch variants.
+//!
+//! Provides [`ProfileOps`], a controller handle for managing profiles,
+//! their patch variants, and resolving patches to full signal graphs.
+
 use super::error::OpsError;
 use crate::events;
 use crate::{SignalApi, SignalController};
@@ -110,15 +115,62 @@ impl<S: SignalApi> ProfileOps<S> {
             None => profile.default_patch_id.clone(),
         };
 
+        // Fast path: if the patch targets a RigScene and a rig scene applier is
+        // available, switch via preloaded rig hierarchies (mute/unmute only, <5ms).
+        // This skips the expensive graph resolution entirely.
+        let patch = profile.patches.iter().find(|p| p.id == patch_id);
+        if let Some(p) = &patch {
+            if let PatchTarget::RigScene {
+                ref rig_id,
+                ref scene_id,
+            } = p.target
+            {
+                if let Some(rig_applier) =
+                    self.0.daw_rig_applier.read().expect("lock poisoned").clone()
+                {
+                    let applied = match rig_applier
+                        .switch_scene(
+                            &rig_id.to_string(),
+                            &scene_id.to_string(),
+                            Some(&p.name),
+                        )
+                        .await
+                    {
+                        Ok(applied) => applied,
+                        Err(e) => {
+                            eprintln!("[signal] activate rig scene switch failed: {e}");
+                            false
+                        }
+                    };
+
+                    self.0.event_bus.emit(events::SignalEvent::PatchActivated {
+                        profile_id: profile_id.to_string(),
+                        patch_id: patch_id.to_string(),
+                        applied_to_daw: applied,
+                    });
+
+                    // Return a minimal graph — the rig hierarchy is already in REAPER
+                    return Ok(ResolvedGraph {
+                        target: ResolveTarget::ProfilePatch {
+                            profile_id: profile_id.clone(),
+                            patch_id: patch_id.clone(),
+                        },
+                        rig_id: rig_id.clone(),
+                        rig_scene_id: scene_id.clone(),
+                        engines: Vec::new(),
+                        effective_overrides: Vec::new(),
+                    });
+                }
+            }
+        }
+
         let graph = self
             .0
             .service
-            .resolve_target(
-                ResolveTarget::ProfilePatch {
-                    profile_id: profile_id.clone(),
-                    patch_id: patch_id.clone(),
-                },
-            )
+            .resolve_target(ResolveTarget::ProfilePatch {
+                profile_id: profile_id.clone(),
+                patch_id: patch_id.clone(),
+            })
             .await?;
 
         let patch_name = profile

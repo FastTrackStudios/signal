@@ -1,3 +1,8 @@
+//! Rack operations — CRUD for racks and rack slots.
+//!
+//! Provides [`RackOps`], a controller handle for managing racks,
+//! the top-level grouping above rigs in the signal hierarchy.
+
 use super::error::OpsError;
 use crate::{SignalApi, SignalController};
 use signal_proto::rack::{Rack, RackId};

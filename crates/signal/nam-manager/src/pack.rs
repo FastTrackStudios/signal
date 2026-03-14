@@ -114,8 +114,7 @@ pub fn load_packs(packs_dir: &Path) -> Result<Vec<PackDefinition>, NamError> {
         return Ok(packs);
     }
 
-    let mut entries: Vec<_> = std::fs::read_dir(packs_dir)
-        .map_err(|e| NamError::Io(format!("reading packs dir: {}", e)))?
+    let mut entries: Vec<_> = std::fs::read_dir(packs_dir)?
         .filter_map(|e| e.ok())
         .filter(|e| {
             e.path()
@@ -126,10 +125,9 @@ pub fn load_packs(packs_dir: &Path) -> Result<Vec<PackDefinition>, NamError> {
     entries.sort_by_key(|e| e.path());
 
     for entry in entries {
-        let contents = std::fs::read_to_string(entry.path())
-            .map_err(|e| NamError::Io(format!("reading {}: {}", entry.path().display(), e)))?;
+        let contents = std::fs::read_to_string(entry.path())?;
         let pack: PackDefinition = serde_json::from_str(&contents)
-            .map_err(|e| NamError::Parse(format!("parsing {}: {}", entry.path().display(), e)))?;
+            .map_err(|e| NamError::ParseError(format!("parsing {}: {}", entry.path().display(), e)))?;
         packs.push(pack);
     }
 

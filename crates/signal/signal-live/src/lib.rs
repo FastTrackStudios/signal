@@ -1,12 +1,43 @@
-//! Live service implementation for signal.
+//! Live runtime services for the signal domain.
+//!
+//! This crate is the runtime bridge between `signal-proto` service traits and
+//! `signal-storage` repository implementations. The central type, [`SignalLive`],
+//! is generic over all repository traits so tests can inject in-memory repos
+//! while production code uses the default `*RepoLive` types.
+//!
+//! # Architecture position
+//!
+//! ```text
+//! signal-proto + signal-storage + nam-manager
+//!                    |
+//!                    v
+//!              signal-live (this crate)
+//!                    |
+//!                    v
+//!            signal-controller
+//! ```
+//!
+//! **Depends on**: `signal-proto`, `signal-storage`, `nam-manager`, `macromod`,
+//! `daw`, `daw-control`, `daw-proto`
+//!
+//! **Depended on by**: `signal-controller`, `signal` (facade)
+//!
+//! # Service trait mapping
 //!
 //! Maps service traits onto storage repos:
-//! - `BlockService` → `BlockRepo` + `ModuleRepo`
-//! - `LayerService` → `LayerRepo`
-//! - `EngineService` → `EngineRepo`
-//! - `RigService` → `RigRepo`
-//! - `ProfileService` → `ProfileRepo`
-//! - `SongService` → `SongRepo`
+//! - `BlockService` -> `BlockRepo` + `ModuleRepo`
+//! - `LayerService` -> `LayerRepo`
+//! - `EngineService` -> `EngineRepo`
+//! - `RigService` -> `RigRepo`
+//! - `ProfileService` -> `ProfileRepo`
+//! - `SongService` -> `SongRepo`
+//!
+//! # Key types
+//!
+//! - [`SignalLive`] -- the generic live service implementing all `signal-proto` service traits
+//! - [`ServiceCache`] -- in-memory read cache for list queries
+//! - DAW integration: `DawPatchApplier`, `RigSceneApplier`, `MorphEngine`
+//! - Macro system: [`MacroRecorder`], `MacroSetup`, `MacroRegistry`
 //!
 //! # Collection / Variant Mapping
 //!
@@ -102,7 +133,8 @@ use signal_proto::{
     Block, BlockParameterOverride, BlockService, BlockType, BrowserService, EngineService,
     LayerService, ModuleBlockSource, ModulePreset, ModulePresetId, ModuleSnapshot,
     ModuleSnapshotId, Preset, PresetId, ProfileService, RackService, ResolveService, RigService,
-    SceneTemplateService, SetlistService, Snapshot, SnapshotId, SongService, ALL_BLOCK_TYPES,
+    SceneTemplateService, SetlistService, SignalServiceError, Snapshot, SnapshotId, SongService,
+    ALL_BLOCK_TYPES,
 };
 use signal_storage::{
     BlockRepo, BlockRepoLive, DatabaseConnection, EngineRepo, EngineRepoLive, LayerRepo,

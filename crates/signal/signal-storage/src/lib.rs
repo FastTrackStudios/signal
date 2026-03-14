@@ -1,4 +1,36 @@
-//! Signal storage layer built on SeaORM.
+//! Signal storage layer -- SQLite persistence for the signal domain, built on SeaORM.
+//!
+//! Provides repository traits and their live implementations for every signal
+//! entity (blocks, modules, layers, engines, rigs, profiles, songs, setlists,
+//! scene templates, racks). Each repository follows the pattern of a trait
+//! (e.g. `BlockRepo`) paired with a `*Live` implementation backed by a
+//! `DatabaseConnection`.
+//!
+//! # Architecture position
+//!
+//! ```text
+//! signal-proto (domain types)
+//!       |
+//!       v
+//! signal-storage (this crate -- persistence)
+//!       |
+//!       v
+//! signal-live (runtime services)
+//! ```
+//!
+//! **Depends on**: `signal-proto`
+//!
+//! **Depended on by**: `signal-live`, `signal` (facade)
+//!
+//! # Key types
+//!
+//! - **Repository traits**: [`BlockRepo`], [`ModuleRepo`], [`LayerRepo`], [`EngineRepo`],
+//!   [`RigRepo`], [`ProfileRepo`], [`SongRepo`], [`SetlistRepo`], [`SceneTemplateRepo`],
+//!   [`RackRepo`]
+//! - **Live implementations**: [`BlockRepoLive`], [`ModuleRepoLive`], [`LayerRepoLive`], etc.
+//! - **Import/export**: [`ExportBundle`], [`ImportOptions`], [`ImportResult`], [`ConflictStrategy`]
+//! - **Seed data**: [`SeedBundle`], [`runtime_seed_bundle`] for default content
+//! - **Error types**: [`StorageError`], [`StorageResult`]
 
 pub mod block_repo;
 pub mod daw_snapshot_repo;

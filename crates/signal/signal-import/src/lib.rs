@@ -1,8 +1,39 @@
-//! Signal preset import system.
+//! Signal preset import system -- converts vendor plugin presets into the signal domain.
 //!
 //! Converts vendor plugin presets (FabFilter, rfxchain, etc.) into Signal's
 //! `Preset` / `Snapshot` model. Each vendor importer produces an
-//! `ImportedPresetCollection` which the orchestrator converts and persists.
+//! `ImportedPresetCollection` which the orchestrator converts and persists
+//! via [`SignalController`](signal_controller::SignalController).
+//!
+//! # Architecture position
+//!
+//! ```text
+//! signal-proto + signal-controller
+//!           |
+//!           v
+//!   signal-import (this crate)
+//!           |
+//!           v
+//!   signal-daw-bridge, signal (facade)
+//! ```
+//!
+//! **Depends on**: `signal-proto`, `signal-controller`
+//!
+//! **Depended on by**: `signal-daw-bridge`, `signal` (facade, via dev/test path)
+//!
+//! # Key types and functions
+//!
+//! - [`import_presets`] / [`import_presets_with_library`] -- orchestrator that
+//!   converts an `ImportedPresetCollection` into persisted `Preset`/`Snapshot` entities
+//! - [`import_preset_id`] -- deterministic UUID v5 generation for idempotent re-imports
+//! - [`dry_run_report`] -- preview what an import would produce without persisting
+//! - [`types::ImportedPresetCollection`] -- vendor-agnostic intermediate representation
+//! - [`types::ImportReport`] -- summary of an import run
+//!
+//! # Vendor modules
+//!
+//! - [`fabfilter`] -- FabFilter Pro-Q, Pro-R, Saturn, etc. preset parsing and tag mapping
+//! - [`rfxchain`] -- REAPER `.RfxChain` file parsing
 
 pub mod fabfilter;
 pub mod library_writer;

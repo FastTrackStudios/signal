@@ -48,10 +48,10 @@ const COMPONENT_SIZE_OFFSET: usize = 0x3C;
 pub fn decode_chunk(base64_data: &str) -> Result<NamVstChunk, NamError> {
     let data = BASE64
         .decode(base64_data.trim())
-        .map_err(|e| NamError::Parse(format!("base64 decode: {}", e)))?;
+        .map_err(|e| NamError::ParseError(format!("base64 decode: {}", e)))?;
 
     if data.len() < HEADER_SIZE {
-        return Err(NamError::Parse(format!(
+        return Err(NamError::ParseError(format!(
             "chunk too short: {} bytes (need at least {})",
             data.len(),
             HEADER_SIZE
@@ -176,7 +176,7 @@ pub fn rewrite_paths(
 /// Read a length-prefixed string: [4-byte LE length][UTF-8 bytes]
 fn read_length_prefixed_string(data: &[u8], cursor: &mut usize) -> Result<String, NamError> {
     if *cursor + 4 > data.len() {
-        return Err(NamError::Parse(format!(
+        return Err(NamError::ParseError(format!(
             "unexpected end of chunk at offset {} reading string length",
             cursor
         )));
@@ -191,7 +191,7 @@ fn read_length_prefixed_string(data: &[u8], cursor: &mut usize) -> Result<String
     *cursor += 4;
 
     if *cursor + len > data.len() {
-        return Err(NamError::Parse(format!(
+        return Err(NamError::ParseError(format!(
             "string length {} exceeds chunk size at offset {}",
             len,
             *cursor - 4

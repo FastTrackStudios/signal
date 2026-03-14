@@ -1,3 +1,8 @@
+//! Engine operations — CRUD for engines and engine scene variants.
+//!
+//! Provides [`EngineOps`], a controller handle for managing engines,
+//! their scene variants, and layer selections within each scene.
+
 use super::error::OpsError;
 use crate::{SignalApi, SignalController};
 use signal_proto::{
