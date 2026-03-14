@@ -30,16 +30,14 @@ pub struct IrMetadata {
 /// data chunk: "data" + 4-byte size + samples
 /// ```
 pub fn parse_wav_header(path: &Path) -> Result<IrMetadata, NamError> {
-    let mut file = std::fs::File::open(path)
-        .map_err(|e| NamError::Io(format!("opening {}: {}", path.display(), e)))?;
+    let mut file = std::fs::File::open(path)?;
 
     let mut header = [0u8; 44];
-    file.read_exact(&mut header)
-        .map_err(|e| NamError::Io(format!("reading WAV header of {}: {}", path.display(), e)))?;
+    file.read_exact(&mut header)?;
 
     // Validate RIFF header
     if &header[0..4] != b"RIFF" || &header[8..12] != b"WAVE" {
-        return Err(NamError::Parse(format!(
+        return Err(NamError::ParseError(format!(
             "{}: not a valid WAV file",
             path.display()
         )));
@@ -93,8 +91,7 @@ fn find_data_chunk_size(
 
     // Re-read from scan_start by seeking
     use std::io::Seek;
-    file.seek(std::io::SeekFrom::Start(scan_start as u64))
-        .map_err(|e| NamError::Io(format!("seeking WAV: {}", e)))?;
+    file.seek(std::io::SeekFrom::Start(scan_start as u64))?;
 
     // Scan for "data" chunk (read 8 bytes at a time: 4 id + 4 size)
     let mut chunk_header = [0u8; 8];
@@ -118,11 +115,10 @@ fn find_data_chunk_size(
             chunk_header[6],
             chunk_header[7],
         ]);
-        file.seek(std::io::SeekFrom::Current(chunk_size as i64))
-            .map_err(|e| NamError::Io(format!("skipping WAV chunk: {}", e)))?;
+        file.seek(std::io::SeekFrom::Current(chunk_size as i64))?;
     }
 
-    Err(NamError::Parse("WAV file has no data chunk".into()))
+    Err(NamError::ParseError("WAV file has no data chunk".into()))
 }
 
 #[cfg(test)]

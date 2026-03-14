@@ -14,11 +14,14 @@ use crate::rig::{RigId, RigSceneId};
 use crate::song::{SectionId, SongId};
 use crate::{Block, BlockType, ModulePresetId, ModuleSnapshotId, PresetId, SnapshotId};
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Facet)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Facet, thiserror::Error)]
 #[repr(C)]
 pub enum ResolveError {
+    #[error("not found: {0}")]
     NotFound(String),
+    #[error("invalid reference: {0}")]
     InvalidReference(String),
+    #[error("cycle detected: {0}")]
     CycleDetected(String),
 }
 

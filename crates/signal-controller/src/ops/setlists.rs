@@ -1,3 +1,8 @@
+//! Setlist operations — CRUD for setlists and their song entries.
+//!
+//! Provides [`SetlistOps`], a controller handle for managing ordered
+//! performance setlists and their constituent song entries.
+
 use super::error::OpsError;
 use crate::{SignalApi, SignalController};
 use signal_proto::{

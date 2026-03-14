@@ -26,6 +26,7 @@ pub mod morph;
 pub mod param_bridge;
 pub mod patch_applier;
 pub mod rig_engine;
+pub mod rig_scene_applier;
 pub mod scene_applier;
 pub mod slot;
 pub mod snapshot_ops;
@@ -51,6 +52,7 @@ pub use param_bridge::{
     live_params_into_block, param_name_matches, LiveParam,
 };
 pub use patch_applier::{DawPatchApplier, PatchApplyError};
+pub use rig_scene_applier::{RigSceneApplier, RigSceneApplyError};
 pub use rig_engine::{
     PreloadPriority, PresetLoadHandle, PresetReadiness, RigEngine, SnapshotTween, SwitchOutcome,
     TransitionResult, TweenState,

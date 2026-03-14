@@ -1,3 +1,8 @@
+//! Block preset operations — list, load, save, and recall block-level presets.
+//!
+//! Provides [`BlockPresetOps`], a controller handle for managing block preset
+//! collections and their snapshot variants.
+
 use super::error::OpsError;
 use crate::{events, SignalApi, SignalController};
 use signal_proto::engine::{EngineId, EngineSceneId};

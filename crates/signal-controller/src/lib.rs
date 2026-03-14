@@ -1,4 +1,34 @@
-//! Service-driven controller for the signal domain.
+//! User-facing controller for the signal domain.
+//!
+//! Provides [`SignalController`], the single entry point for all signal domain
+//! operations. Domain-specific methods are organized into **namespace accessors**
+//! (e.g. `blocks()`, `rigs()`, `profiles()`) that return lightweight ops structs,
+//! while cross-cutting concerns live directly on the controller.
+//!
+//! # Architecture position
+//!
+//! ```text
+//! signal-proto + signal-live
+//!           |
+//!           v
+//!   signal-controller (this crate)
+//!           |
+//!           v
+//!   signal (facade), signal-import, signal-ui
+//! ```
+//!
+//! **Depends on**: `signal-proto`, `signal-live`
+//!
+//! **Depended on by**: `signal` (facade), `signal-import`, `signal-ui`
+//!
+//! # Key types
+//!
+//! - [`SignalController`] -- the primary API surface, generic over any `SignalApi` impl
+//! - [`SignalApi`] -- blanket trait combining all `signal-proto` service traits
+//! - [`ops`] -- namespace modules (`BlockOps`, `RigOps`, `ProfileOps`, etc.)
+//! - [`events::EventBus`] -- broadcast channel for reactive UI updates
+//!
+//! # Usage
 //!
 //! All domain operations are accessed through **namespace accessors**:
 //!
@@ -9,14 +39,15 @@
 //! ```
 //!
 //! Cross-cutting operations that span multiple domains live directly on `SignalController`:
-//! - [`resolve_target`](SignalController::resolve_target) — resolve any target into an executable graph
-//! - [`browse`](SignalController::browse) / [`browser_index`](SignalController::browser_index) — semantic search across all domains
-//! - [`save_built_rig`](SignalController::save_built_rig) — persist a complete rig graph in dependency order
+//! - [`resolve_target`](SignalController::resolve_target) -- resolve any target into an executable graph
+//! - [`browse`](SignalController::browse) / [`browser_index`](SignalController::browser_index) -- semantic search across all domains
+//! - [`save_built_rig`](SignalController::save_built_rig) -- persist a complete rig graph in dependency order
 
 pub mod events;
 
 use events::EventBus;
 use signal_live::engine::patch_applier::DawPatchApplier;
+use signal_live::engine::rig_scene_applier::RigSceneApplier;
 use signal_live::SignalLive;
 use signal_proto::{
     resolve::{ResolveError, ResolveTarget, ResolvedGraph},
@@ -63,6 +94,7 @@ where
     pub(crate) service: Arc<S>,
     pub(crate) event_bus: Arc<EventBus>,
     pub(crate) daw_applier: Arc<std::sync::RwLock<Option<Arc<dyn DawPatchApplier>>>>,
+    pub(crate) daw_rig_applier: Arc<std::sync::RwLock<Option<Arc<dyn RigSceneApplier>>>>,
 }
 
 impl<S> Clone for SignalController<S>
@@ -74,6 +106,7 @@ where
             service: self.service.clone(),
             event_bus: self.event_bus.clone(),
             daw_applier: self.daw_applier.clone(),
+            daw_rig_applier: self.daw_rig_applier.clone(),
         }
     }
 }
@@ -84,6 +117,7 @@ where
 {
     fn eq(&self, other: &Self) -> bool {
         Arc::ptr_eq(&self.service, &other.service)
+            && Arc::ptr_eq(&self.daw_rig_applier, &other.daw_rig_applier)
     }
 }
 
@@ -98,6 +132,7 @@ where
             service,
             event_bus: Arc::new(EventBus::default()),
             daw_applier: Arc::new(std::sync::RwLock::new(None)),
+            daw_rig_applier: Arc::new(std::sync::RwLock::new(None)),
         }
     }
 
@@ -117,6 +152,24 @@ where
     /// Check if a DAW patch applier is attached.
     pub fn has_daw_applier(&self) -> bool {
         self.daw_applier.read().expect("lock poisoned").is_some()
+    }
+
+    /// Attach a rig scene applier for preloaded rig hierarchy switching.
+    /// Can be called at construction time or later — all clones share the same slot.
+    pub fn with_rig_scene_applier(self, applier: Arc<dyn RigSceneApplier>) -> Self {
+        *self.daw_rig_applier.write().expect("lock poisoned") = Some(applier);
+        self
+    }
+
+    /// Set (or replace) the rig scene applier after construction.
+    /// All clones share the same slot, so replacing it affects all users.
+    pub fn set_rig_scene_applier(&self, applier: Arc<dyn RigSceneApplier>) {
+        *self.daw_rig_applier.write().expect("lock poisoned") = Some(applier);
+    }
+
+    /// Check if a rig scene applier is attached.
+    pub fn has_rig_scene_applier(&self) -> bool {
+        self.daw_rig_applier.read().expect("lock poisoned").is_some()
     }
 
     /// Access the underlying service implementation.

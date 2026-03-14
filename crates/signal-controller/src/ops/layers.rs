@@ -1,3 +1,8 @@
+//! Layer operations — CRUD for layers and layer snapshot variants.
+//!
+//! Provides [`LayerOps`], a controller handle for managing layers
+//! and their snapshot variants within the signal hierarchy.
+
 use super::error::OpsError;
 use crate::{SignalApi, SignalController};
 use signal_proto::{

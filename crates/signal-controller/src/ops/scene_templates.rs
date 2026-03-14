@@ -1,3 +1,8 @@
+//! Scene template operations — CRUD for reusable scene configurations.
+//!
+//! Provides [`SceneTemplateOps`], a controller handle for managing standalone
+//! scene templates that can be applied across different rigs.
+
 use super::error::OpsError;
 use crate::{SignalApi, SignalController};
 use signal_proto::scene_template::{SceneTemplate, SceneTemplateId};

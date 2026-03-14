@@ -12,12 +12,12 @@ pub fn resolve_path(
 ) -> Result<PathBuf, NamError> {
     let entry = catalog
         .get_entry(hash)
-        .ok_or_else(|| NamError::NotFound(format!("no entry with hash {}", hash)))?;
+        .ok_or_else(|| NamError::ContentError(format!("no entry with hash {}", hash)))?;
 
     let absolute = nam_root.join(&entry.relative_path);
 
     if !absolute.exists() {
-        return Err(NamError::NotFound(format!(
+        return Err(NamError::ContentError(format!(
             "file not found at resolved path: {}",
             absolute.display()
         )));
@@ -35,7 +35,7 @@ pub fn resolve_path_unchecked(
 ) -> Result<PathBuf, NamError> {
     let entry = catalog
         .get_entry(hash)
-        .ok_or_else(|| NamError::NotFound(format!("no entry with hash {}", hash)))?;
+        .ok_or_else(|| NamError::ContentError(format!("no entry with hash {}", hash)))?;
 
     Ok(nam_root.join(&entry.relative_path))
 }

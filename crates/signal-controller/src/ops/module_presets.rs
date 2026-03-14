@@ -1,3 +1,8 @@
+//! Module preset operations — list, load, save, and recall module-level presets.
+//!
+//! Provides [`ModulePresetOps`], a controller handle for managing module preset
+//! collections and their snapshot variants.
+
 use super::error::OpsError;
 use crate::{SignalApi, SignalController};
 use signal_proto::traits::Collection;

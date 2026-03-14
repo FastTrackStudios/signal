@@ -1,3 +1,8 @@
+//! Module type domain — categories and types for FX container modules.
+//!
+//! Provides [`ModuleCategory`] and [`ModuleType`] enums that classify
+//! modules (e.g., Guitar Amp, Vocal Chain) for UI grouping and filtering.
+
 use facet::Facet;
 use serde::{Deserialize, Serialize};
 

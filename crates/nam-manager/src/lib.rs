@@ -1,7 +1,37 @@
-//! NAM Manager — manages Neural Amp Modeler captures and IR files as first-class entities.
+//! NAM Manager -- manages Neural Amp Modeler (NAM) captures and IR files as first-class entities.
 //!
 //! Provides content-addressable identity (SHA-256), a JSON catalog with tags and gain stage
-//! groups, NAM VST3 state chunk rewriting, and path resolution across machines.
+//! groups, NAM VST3/CLAP state chunk rewriting, and path resolution across machines.
+//! This crate is mostly standalone -- it depends only on `signal-proto` for
+//! block type definitions used during pack categorization.
+//!
+//! # Architecture position
+//!
+//! ```text
+//! signal-proto
+//!      |
+//!      v
+//! nam-manager (this crate)
+//!      |
+//!      v
+//! signal-live, signal (facade)
+//! ```
+//!
+//! **Depends on**: `signal-proto` (for `BlockType` and related types)
+//!
+//! **Depended on by**: `signal-live`, `signal` (facade)
+//!
+//! # Key types and functions
+//!
+//! - [`NamCatalog`] -- the central JSON catalog of all known NAM/IR files
+//! - [`NamFileEntry`] / [`NamMetadata`] -- individual file entries with SHA-256 identity
+//! - [`IrMetadata`] -- impulse response metadata (sample rate, duration, channels)
+//! - [`GainStageGroup`] / [`GainStage`] -- tone grouping for amp models
+//! - [`PackDefinition`] -- curated pack definitions for organizing captures by model
+//! - [`scan_directory`] / [`merge_into_catalog`] -- filesystem scanning and catalog updates
+//! - [`import_directory`] -- copy files into the signal-library and update the catalog
+//! - [`rewrite_paths`] / [`rebuild_chunk_with_state`] -- NAM VST3 state chunk manipulation
+//! - [`resolve_path`] -- cross-machine path resolution for NAM files
 
 use std::collections::HashMap;
 
@@ -31,12 +61,21 @@ pub use vst_chunk::{
 /// Errors that can occur in nam-manager operations.
 #[derive(Debug, thiserror::Error)]
 pub enum NamError {
-    #[error("I/O error: {0}")]
-    Io(String),
-    #[error("Parse error: {0}")]
-    Parse(String),
-    #[error("Not found: {0}")]
-    NotFound(String),
+    /// An I/O error (e.g. reading/writing files on disk).
+    #[error("I/O error")]
+    IoError(#[from] std::io::Error),
+
+    /// A parse or serialization error (base64, JSON, WAV headers, etc.).
+    #[error("parse error: {0}")]
+    ParseError(String),
+
+    /// A content-level error (missing entries, invalid file structures, etc.).
+    #[error("content error: {0}")]
+    ContentError(String),
+
+    /// A catalog-level error (load/save/merge failures with context).
+    #[error("catalog error: {0}")]
+    CatalogError(String),
 }
 
 /// Slugify a string for use as a directory name.
@@ -94,21 +133,13 @@ pub fn import_directory(
             dest.push(part);
         }
 
-        std::fs::create_dir_all(&dest)
-            .map_err(|e| NamError::Io(format!("creating dir {}: {}", dest.display(), e)))?;
+        std::fs::create_dir_all(&dest)?;
 
         dest.push(&filename);
 
         // Only copy if not already present
         if !dest.exists() {
-            std::fs::copy(source_path, &dest).map_err(|e| {
-                NamError::Io(format!(
-                    "copying {} → {}: {}",
-                    source_path.display(),
-                    dest.display(),
-                    e
-                ))
-            })?;
+            std::fs::copy(source_path, &dest)?;
             count += 1;
         }
     }
@@ -135,8 +166,7 @@ pub fn generate_pack_skeletons(
 ) -> Result<Vec<String>, NamError> {
     use std::collections::HashMap;
 
-    std::fs::create_dir_all(packs_output_dir)
-        .map_err(|e| NamError::Io(format!("creating packs dir: {}", e)))?;
+    std::fs::create_dir_all(packs_output_dir)?;
 
     let category_map: HashMap<&str, PackCategory> = [
         ("Amps", PackCategory::Amp),
@@ -198,10 +228,9 @@ pub fn generate_pack_skeletons(
             };
 
             let json = serde_json::to_string_pretty(&pack)
-                .map_err(|e| NamError::Parse(format!("serializing pack: {}", e)))?;
+                .map_err(|e| NamError::ParseError(format!("serializing pack: {}", e)))?;
             let out_path = packs_output_dir.join(format!("{}.json", pack_id));
-            std::fs::write(&out_path, &json)
-                .map_err(|e| NamError::Io(format!("writing {}: {}", out_path.display(), e)))?;
+            std::fs::write(&out_path, &json)?;
 
             generated.push(pack_id);
         }
@@ -230,7 +259,7 @@ fn discover_model_dirs(dir: &std::path::Path) -> Result<Vec<std::path::PathBuf>,
 
     // Check children
     let children: Vec<_> = std::fs::read_dir(dir)
-        .map_err(|e| NamError::Io(format!("reading {}: {}", dir.display(), e)))?
+        .map_err(NamError::IoError)?
         .filter_map(|e| e.ok())
         .filter(|e| e.path().is_dir())
         .collect();

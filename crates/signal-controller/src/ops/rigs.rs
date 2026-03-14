@@ -1,3 +1,8 @@
+//! Rig operations — CRUD for rigs and rig scene variants.
+//!
+//! Provides [`RigOps`], a controller handle for managing rigs,
+//! their scene variants, and engine selections within each scene.
+
 use super::error::OpsError;
 use crate::{SignalApi, SignalController};
 use signal_proto::{

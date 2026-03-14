@@ -1,3 +1,8 @@
+//! Song operations — CRUD for songs and section variants.
+//!
+//! Provides [`SongOps`], a controller handle for managing songs,
+//! their section variants, and section-to-patch/rig bindings.
+
 use super::error::OpsError;
 use crate::{SignalApi, SignalController};
 use signal_proto::{

@@ -1,3 +1,9 @@
+//! Resolve service implementation — compiles variant selections into a resolved graph.
+//!
+//! Implements [`ResolveService`] on [`SignalLive`], walking the hierarchy from
+//! a resolve target (rig scene, profile patch, or song section) down to concrete
+//! block parameter values with the override stack applied.
+
 use super::*;
 
 fn apply_block_parameter_overrides(block: &mut Block, overrides: &[BlockParameterOverride]) {

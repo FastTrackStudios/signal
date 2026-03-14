@@ -8,9 +8,11 @@ authors.workspace = true
 [dependencies]
 actions-proto.workspace = true
 macromod.workspace = true
+utils.workspace = true
 serde.workspace = true
 facet.workspace = true
 roam.workspace = true
+thiserror.workspace = true
 uuid.workspace = true
 
 [dev-dependencies]

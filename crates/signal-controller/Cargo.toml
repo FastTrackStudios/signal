@@ -9,6 +9,7 @@ authors.workspace = true
 signal-proto = { path = "../signal-proto" }
 signal-live = { path = "../signal-live" }
 roam.workspace = true
+thiserror.workspace = true
 tokio = { workspace = true, features = ["sync"] }
 
 [dev-dependencies]

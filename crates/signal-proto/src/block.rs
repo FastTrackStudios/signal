@@ -1,3 +1,9 @@
+//! Block domain types — categories, types, parameters, and snapshot state.
+//!
+//! Defines [`BlockCategory`], [`BlockType`], and [`Block`] which represent
+//! individual FX processing units (amp, drive, EQ, etc.) with their
+//! parameter values and bypass state.
+
 use facet::Facet;
 use serde::{Deserialize, Serialize};
 
