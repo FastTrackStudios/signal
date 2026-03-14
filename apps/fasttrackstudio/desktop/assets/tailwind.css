@@ -3752,13 +3752,6 @@
       }
     }
   }
-  .hover\:text-zinc-400 {
-    &:hover {
-      @media (hover: hover) {
-        color: var(--color-zinc-400);
-      }
-    }
-  }
   .hover\:underline {
     &:hover {
       @media (hover: hover) {
