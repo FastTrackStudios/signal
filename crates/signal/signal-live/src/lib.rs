@@ -68,6 +68,7 @@
 pub mod daw_block_ops;
 pub mod daw_rig_builder;
 pub mod daw_rig_ops;
+pub mod macro_bridge;
 pub mod engine;
 pub mod macro_constants;
 pub mod macro_error;

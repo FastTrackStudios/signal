@@ -277,6 +277,7 @@ where
 
                 let mut loaded_modules: Vec<LoadModuleResult> = Vec::new();
 
+                let ext_state = project.ext_state();
                 for module_ref in &layer_info.module_refs {
                     let result = self
                         .load_module_to_track(
@@ -284,6 +285,7 @@ where
                             &module_ref.preset_id,
                             module_ref.snapshot_idx,
                             layer_track,
+                            Some(&ext_state),
                         )
                         .await?;
 
