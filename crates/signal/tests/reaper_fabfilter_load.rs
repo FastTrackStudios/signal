@@ -45,7 +45,11 @@ const FABFILTER_CHAIN: &[(&str, BlockType, &str)] = &[
 ];
 
 /// Compute a deterministic snapshot ID for a FabFilter preset snapshot.
-fn fabfilter_snapshot_id(plugin_name: &str, snapshot_name: &str, folder: Option<&str>) -> SnapshotId {
+fn fabfilter_snapshot_id(
+    plugin_name: &str,
+    snapshot_name: &str,
+    folder: Option<&str>,
+) -> SnapshotId {
     let preset_uuid = Uuid::new_v5(
         &IMPORT_NAMESPACE,
         format!("FabFilter:{plugin_name}").as_bytes(),
@@ -88,7 +92,10 @@ async fn fabfilter_load_full_chain(ctx: &ReaperTestContext) -> eyre::Result<()> 
             report.preset_name, report.snapshots_imported
         );
     }
-    eprintln!("  Imports completed in {:.1}s", import_start.elapsed().as_secs_f64());
+    eprintln!(
+        "  Imports completed in {:.1}s",
+        import_start.elapsed().as_secs_f64()
+    );
 
     let svc = signal.service();
 
@@ -111,7 +118,9 @@ async fn fabfilter_load_full_chain(ctx: &ReaperTestContext) -> eyre::Result<()> 
             if default.name() == snapshot_name {
                 default.metadata().folder.clone()
             } else {
-                preset.snapshots().iter()
+                preset
+                    .snapshots()
+                    .iter()
                     .find(|s| s.name() == snapshot_name)
                     .and_then(|s| s.metadata().folder.clone())
             }
@@ -129,7 +138,9 @@ async fn fabfilter_load_full_chain(ctx: &ReaperTestContext) -> eyre::Result<()> 
     let total_start = Instant::now();
 
     // Build load specs with references to owned data.
-    let load_specs: Vec<_> = loads.iter().enumerate()
+    let load_specs: Vec<_> = loads
+        .iter()
+        .enumerate()
         .map(|(i, &bt)| (bt, &preset_ids[i], Some(&snap_ids[i])))
         .collect();
 
@@ -164,26 +175,39 @@ async fn fabfilter_load_full_chain(ctx: &ReaperTestContext) -> eyre::Result<()> 
     // ── Diagnostic dump: parameters for each loaded plugin ──
     eprintln!("\n=== PARAMETER DUMP ===\n");
     for (i, &(plugin_name, _block_type, snapshot_name)) in FABFILTER_CHAIN.iter().enumerate() {
-        let fx = track.fx_chain().by_index(i as u32).await?
+        let fx = track
+            .fx_chain()
+            .by_index(i as u32)
+            .await?
             .ok_or_else(|| eyre::eyre!("FX at index {i} not found"))?;
 
         eprintln!("── {} ('{}') ──", plugin_name, snapshot_name);
 
         if let Ok(Some(preset_info)) = fx.preset_index().await {
-            eprintln!("  Active preset: {:?} (index {:?} of {})",
-                preset_info.name, preset_info.index, preset_info.count);
+            eprintln!(
+                "  Active preset: {:?} (index {:?} of {})",
+                preset_info.name, preset_info.index, preset_info.count
+            );
         }
 
         let params = fx.parameters().await?;
-        let interesting: Vec<_> = params.iter()
-            .filter(|p| (p.value - 0.0).abs() > 0.001 && (p.value - 0.5).abs() > 0.001 && (p.value - 1.0).abs() > 0.001)
+        let interesting: Vec<_> = params
+            .iter()
+            .filter(|p| {
+                (p.value - 0.0).abs() > 0.001
+                    && (p.value - 0.5).abs() > 0.001
+                    && (p.value - 1.0).abs() > 0.001
+            })
             .take(15)
             .collect();
         if interesting.is_empty() {
             eprintln!("  PARAMS: all at defaults (0.0/0.5/1.0)");
         } else {
             for p in &interesting {
-                eprintln!("  [{}] {} = {:.4} ({})", p.index, p.name, p.value, p.formatted);
+                eprintln!(
+                    "  [{}] {} = {:.4} ({})",
+                    p.index, p.name, p.value, p.formatted
+                );
             }
         }
         eprintln!();
