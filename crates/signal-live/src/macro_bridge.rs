@@ -3,19 +3,16 @@
 //! When a module with a `MacroBank` is loaded onto a REAPER track, this module:
 //! 1. Adds an fts-macros CLAP plugin instance to the track (after all block FX)
 //! 2. Converts resolved `LiveMacroBinding`s into the fts-macros JSON mapping format
-//! 3. Injects the config via REAPER ExtState IPC
-//! 4. Polls for acknowledgment from the plugin's timer callback
+//! 3. Stores the config in track P_EXT (`P_EXT:FTS_MACROS:mapping_config`)
 //!
-//! The fts-macros plugin autonomously drives target FX parameters via its timer —
-//! no ongoing communication is needed after the initial config injection.
+//! The fts-macros plugin reads mapping config from its own track's P_EXT on each
+//! timer tick — no global ExtState IPC or acknowledgment polling needed.
 
-use std::time::{Duration, Instant};
-
-use daw::{ExtState, FxHandle, TrackHandle};
+use daw::{FxHandle, TrackHandle};
 
 use crate::daw_block_ops::LoadBlockResult;
 
-/// ExtState section used by fts-macros for IPC.
+/// P_EXT section used by fts-macros for track-scoped config storage.
 const EXT_STATE_SECTION: &str = "FTS_MACROS";
 
 /// CLAP plugin identifier for fts-macros.
@@ -23,12 +20,6 @@ const FTS_MACROS_CLAP: &str = "CLAP: FTS Macros";
 
 /// Fallback display name if CLAP ID doesn't match.
 const FTS_MACROS_NAME: &str = "FTS Macros";
-
-/// Timeout for polling the mapping config acknowledgment.
-const POLL_TIMEOUT: Duration = Duration::from_secs(3);
-
-/// Interval between polling attempts.
-const POLL_INTERVAL: Duration = Duration::from_millis(50);
 
 /// Build the mapping bank JSON from loaded FX results.
 ///
@@ -77,13 +68,14 @@ pub fn build_mapping_bank_json(
 /// 1. Checks if any loaded FX have macro bindings — returns `Ok(None)` if not
 /// 2. Resolves the actual FX index for each block via its GUID
 /// 3. Adds an fts-macros CLAP instance to the track
-/// 4. Injects the mapping config JSON via ExtState
-/// 5. Polls for acknowledgment from the plugin's timer
+/// 4. Stores the mapping config JSON in the track's P_EXT
+///
+/// The fts-macros plugin reads `P_EXT:FTS_MACROS:mapping_config` from its own
+/// track on each timer tick, so no acknowledgment polling is needed.
 ///
 /// This function is **non-fatal**: failures are logged but do not block module loading.
 pub async fn bridge_macros(
     track: &TrackHandle,
-    ext_state: &ExtState,
     loaded_fx: &[LoadBlockResult],
 ) -> Result<Option<FxHandle>, String> {
     // Quick check: any macros at all?
@@ -140,37 +132,16 @@ pub async fn bridge_macros(
             .map_err(|e| format!("Could not add FTS Macros plugin: {e}"))?,
     };
 
-    // Inject mapping config via ExtState.
-    ext_state
-        .set(EXT_STATE_SECTION, "mapping_config", &mapping_json, false)
+    // Store mapping config in track P_EXT — the plugin reads this on its timer tick.
+    track
+        .set_ext_state(EXT_STATE_SECTION, "mapping_config", &mapping_json)
         .await
-        .map_err(|e| format!("Failed to set mapping config: {e}"))?;
+        .map_err(|e| format!("Failed to set track P_EXT mapping config: {e}"))?;
 
-    // Poll for acknowledgment (non-blocking deterministic polling).
-    let start = Instant::now();
-    loop {
-        if let Ok(Some(val)) = ext_state
-            .get(EXT_STATE_SECTION, "mapping_config_ack")
-            .await
-        {
-            if !val.is_empty() {
-                eprintln!(
-                    "[signal] macro bridge: fts-macros acknowledged config ({} mappings)",
-                    val
-                );
-                break;
-            }
-        }
-        if start.elapsed() > POLL_TIMEOUT {
-            eprintln!(
-                "[signal] macro bridge: timed out waiting for mapping_config_ack ({}s) — \
-                 plugin may not be running or timer not active",
-                POLL_TIMEOUT.as_secs()
-            );
-            break;
-        }
-        tokio::time::sleep(POLL_INTERVAL).await;
-    }
+    eprintln!(
+        "[signal] macro bridge: stored mapping config in track P_EXT ({} chars)",
+        mapping_json.len()
+    );
 
     Ok(Some(macros_fx))
 }

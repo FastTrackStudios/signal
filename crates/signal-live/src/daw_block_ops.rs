@@ -11,7 +11,7 @@
 //! 2. **Execute** — add the FX to a DAW track, apply state, and rename. Requires a
 //!    running DAW instance.
 
-use daw::{ExtState, FxNodeId, FxRoutingMode, TrackHandle};
+use daw::{FxNodeId, FxRoutingMode, TrackHandle};
 use signal_proto::plugin_block::FxRole;
 use signal_proto::traits::HasMetadata;
 use signal_proto::{
@@ -544,7 +544,6 @@ where
         preset_id: &ModulePresetId,
         snapshot_idx: usize,
         track: &TrackHandle,
-        ext_state: Option<&ExtState>,
     ) -> Result<LoadModuleResult, String> {
         let resolved = self
             .resolve_module_load(module_type, preset_id, snapshot_idx)
@@ -571,12 +570,8 @@ where
         }
 
         // Bridge macros to fts-macros plugin (non-fatal).
-        if let Some(ext) = ext_state {
-            if let Err(e) =
-                crate::macro_bridge::bridge_macros(track, ext, &loaded_fx).await
-            {
-                eprintln!("[signal] macro bridge warning: {e}");
-            }
+        if let Err(e) = crate::macro_bridge::bridge_macros(track, &loaded_fx).await {
+            eprintln!("[signal] macro bridge warning: {e}");
         }
 
         Ok(LoadModuleResult {

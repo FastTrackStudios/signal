@@ -4259,7 +4259,7 @@ async fn cmd_signal_load(
         if module_presets.iter().any(|p| p.id() == &pid) {
             let result = signal
                 .service()
-                .load_module_to_track(mt, &pid, 0, &track_handle, None)
+                .load_module_to_track(mt, &pid, 0, &track_handle)
                 .await
                 .map_err(|e| eyre::eyre!("{e}"))?;
 

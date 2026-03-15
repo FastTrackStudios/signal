@@ -7,6 +7,8 @@
 //! This validates the real-world use case of a "tone shaper" macro that
 //! tightens compression and brightens EQ in one knob turn.
 //!
+//! Mapping config is stored in track P_EXT (`P_EXT:FTS_MACROS:mapping_config`).
+//!
 //! Run with:
 //!   cargo xtask reaper-test multi_fx_macro
 
@@ -70,29 +72,6 @@ fn build_mapping_json(
     .to_string()
 }
 
-async fn poll_ext_state(
-    ctx: &reaper_test::ReaperTestContext,
-    section: &str,
-    key: &str,
-    timeout: Duration,
-) -> eyre::Result<String> {
-    let start = Instant::now();
-    loop {
-        if let Some(val) = ctx.daw.ext_state().get(section, key).await? {
-            if !val.is_empty() {
-                return Ok(val);
-            }
-        }
-        if start.elapsed() > timeout {
-            return Err(eyre::eyre!(
-                "Timed out waiting for ExtState {}/{} (waited {:?})",
-                section, key, timeout
-            ));
-        }
-        tokio::time::sleep(POLL_INTERVAL).await;
-    }
-}
-
 async fn poll_param_value(
     fx: &daw_control::FxHandle,
     param_idx: u32,
@@ -114,14 +93,6 @@ async fn poll_param_value(
         }
         tokio::time::sleep(POLL_INTERVAL).await;
     }
-}
-
-async fn cleanup_ext_state(ctx: &reaper_test::ReaperTestContext) {
-    for i in 0..8 {
-        let _ = ctx.daw.ext_state().delete(EXT_STATE_SECTION, &format!("macro_{}", i), false).await;
-    }
-    let _ = ctx.daw.ext_state().delete(EXT_STATE_SECTION, "mapping_config", false).await;
-    let _ = ctx.daw.ext_state().delete(EXT_STATE_SECTION, "mapping_config_ack", false).await;
 }
 
 /// Find a parameter by name substring (case-insensitive).
@@ -146,8 +117,6 @@ async fn multi_fx_macro_drives_comp_and_eq(
     ctx.log("=== MULTI-FX MACRO TEST ===");
     ctx.log("Macro 0 → ReaComp (Threshold + Ratio) + ReaEQ (Gain + Freq)");
     ctx.log("");
-
-    cleanup_ext_state(ctx).await;
 
     // ─── 1. Create track and load FX chain ───────────────────────────
 
@@ -197,16 +166,16 @@ async fn multi_fx_macro_drives_comp_and_eq(
     let eq_freq = find_param(&eq_params, "freq")?;
     ctx.log(&format!("ReaEQ: Gain={}, Freq={}", eq_gain, eq_freq));
 
-    // ─── 3. Inject mapping config ────────────────────────────────────
+    // ─── 3. Store mapping config in track P_EXT ─────────────────────
 
     let mapping_json = build_mapping_json(comp_threshold, comp_ratio, eq_gain, eq_freq);
-    ctx.daw
-        .ext_state()
-        .set(EXT_STATE_SECTION, "mapping_config", &mapping_json, false)
+    track
+        .set_ext_state(EXT_STATE_SECTION, "mapping_config", &mapping_json)
         .await?;
+    ctx.log("Stored mapping config in track P_EXT");
 
-    let ack = poll_ext_state(ctx, EXT_STATE_SECTION, "mapping_config_ack", POLL_TIMEOUT).await?;
-    ctx.log(&format!("Mapping config acknowledged: {} mappings", ack));
+    // Give the timer a moment to pick up the new config
+    tokio::time::sleep(Duration::from_millis(200)).await;
 
     // Verify FX chain
     let fx_count = track.fx_chain().count().await?;
@@ -322,10 +291,6 @@ async fn multi_fx_macro_drives_comp_and_eq(
     project.run_command("_S&M_WNTSHW1").await
         .map_err(|e| eyre::eyre!("Failed to show plugin windows: {e}"))?;
     ctx.log("Opened all plugin windows floating");
-
-    // ─── Clean up ────────────────────────────────────────────────────
-
-    cleanup_ext_state(ctx).await;
 
     ctx.log("");
     ctx.log("=== TEST PASSED: Single macro drives 4 params across 2 plugins ===");

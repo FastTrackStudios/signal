@@ -3,7 +3,7 @@
 //! Tests the full macro pipeline end-to-end:
 //!   1. FTS Macros loaded FIRST (FX index 0) — always present in real workflow
 //!   2. ReaComp loaded SECOND as the compressor target (FX index 1)
-//!   3. Mapping config injected via ExtState IPC → stored in plugin's persist field
+//!   3. Mapping config stored in track P_EXT (`P_EXT:FTS_MACROS:mapping_config`)
 //!   4. Setting FTS Macros parameter values drives ReaComp's Threshold + Ratio
 //!
 //! The test sets macro values via the FX parameter API (so the plugin knobs
@@ -13,7 +13,7 @@
 //! ## Synchronization
 //!
 //! No arbitrary sleeps. The test uses deterministic polling:
-//! - **Mapping config:** polls `FTS_MACROS/mapping_config_ack` (written by timer after consuming config)
+//! - **Mapping config:** stored via track P_EXT, plugin reads on next timer tick
 //! - **Param values:** polls target FX params until they reach expected values (with tolerance)
 //!
 //! Run with:
@@ -30,7 +30,7 @@ const REACOMP: &str = "VST: ReaComp (Cockos)";
 const FTS_MACROS_CLAP: &str = "CLAP: FTS Macros";
 const FTS_MACROS_NAME: &str = "FTS Macros";
 
-/// ExtState section used by fts-macros timer to read macro values and mapping config.
+/// P_EXT section used by fts-macros for track-scoped config.
 const EXT_STATE_SECTION: &str = "FTS_MACROS";
 
 /// Default timeout for polling operations.
@@ -67,33 +67,6 @@ fn build_mapping_json(threshold_param_idx: u32, ratio_param_idx: u32) -> String 
     .to_string()
 }
 
-/// Poll an ExtState key until it has a non-empty value, or timeout.
-/// Returns the value string on success.
-async fn poll_ext_state(
-    ctx: &reaper_test::ReaperTestContext,
-    section: &str,
-    key: &str,
-    timeout: Duration,
-) -> eyre::Result<String> {
-    let start = Instant::now();
-    loop {
-        if let Some(val) = ctx.daw.ext_state().get(section, key).await? {
-            if !val.is_empty() {
-                return Ok(val);
-            }
-        }
-        if start.elapsed() > timeout {
-            return Err(eyre::eyre!(
-                "Timed out waiting for ExtState {}/{} (waited {:?})",
-                section,
-                key,
-                timeout
-            ));
-        }
-        tokio::time::sleep(POLL_INTERVAL).await;
-    }
-}
-
 /// Poll an FX parameter until it reaches the expected value (within tolerance), or timeout.
 /// Returns the actual value when matched.
 async fn poll_param_value(
@@ -123,27 +96,6 @@ async fn poll_param_value(
     }
 }
 
-/// Clean up ExtState keys.
-async fn cleanup_ext_state(ctx: &reaper_test::ReaperTestContext) {
-    for i in 0..8 {
-        let _ = ctx
-            .daw
-            .ext_state()
-            .delete(EXT_STATE_SECTION, &format!("macro_{}", i), false)
-            .await;
-    }
-    let _ = ctx
-        .daw
-        .ext_state()
-        .delete(EXT_STATE_SECTION, "mapping_config", false)
-        .await;
-    let _ = ctx
-        .daw
-        .ext_state()
-        .delete(EXT_STATE_SECTION, "mapping_config_ack", false)
-        .await;
-}
-
 // ---------------------------------------------------------------------------
 // Test: FTS Macros autonomously drives ReaComp via timer + FX params
 // ---------------------------------------------------------------------------
@@ -157,9 +109,6 @@ async fn compression_macro_drives_threshold_and_ratio(
     ctx.log("=== COMPRESSION MACRO TEST (autonomous plugin control) ===");
     ctx.log("FTS Macros (source, FX 0) + ReaComp (target, FX 1) on same track");
     ctx.log("");
-
-    // Clean up any stale state from previous runs
-    cleanup_ext_state(ctx).await;
 
     // ─── 1. Create track and load FTS Macros FIRST (FX index 0) ──────
 
@@ -210,18 +159,16 @@ async fn compression_macro_drives_threshold_and_ratio(
         threshold_param.index, ratio_param.index
     ));
 
-    // ─── 4. Inject mapping config via ExtState IPC ───────────────────
+    // ─── 4. Store mapping config in track P_EXT ──────────────────────
 
     let mapping_json = build_mapping_json(threshold_param.index, ratio_param.index);
-    ctx.daw
-        .ext_state()
-        .set(EXT_STATE_SECTION, "mapping_config", &mapping_json, false)
+    track
+        .set_ext_state(EXT_STATE_SECTION, "mapping_config", &mapping_json)
         .await?;
-    ctx.log("Injected mapping config via ExtState (FTS_MACROS/mapping_config)");
+    ctx.log("Stored mapping config in track P_EXT (FTS_MACROS/mapping_config)");
 
-    // Poll for ack — timer consumed the config and updated the mapping bank
-    let ack = poll_ext_state(ctx, EXT_STATE_SECTION, "mapping_config_ack", POLL_TIMEOUT).await?;
-    ctx.log(&format!("Mapping config acknowledged: {} mappings loaded", ack));
+    // Give the timer a moment to pick up the new config
+    tokio::time::sleep(Duration::from_millis(200)).await;
 
     // Verify both plugins loaded
     let fx_count = track.fx_chain().count().await?;
@@ -314,10 +261,6 @@ async fn compression_macro_drives_threshold_and_ratio(
     project.run_command("_S&M_WNTSHW1").await
         .map_err(|e| eyre::eyre!("Failed to run show-windows action: {e}"))?;
     ctx.log("Opened all plugin windows floating (SWS: _S&M_WNTSHW1)");
-
-    // ─── Clean up ────────────────────────────────────────────────────
-
-    cleanup_ext_state(ctx).await;
 
     ctx.log("");
     ctx.log("=== TEST PASSED: FTS Macros autonomously drives ReaComp via timer + FX params ===");
