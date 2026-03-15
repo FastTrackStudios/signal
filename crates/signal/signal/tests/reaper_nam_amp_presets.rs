@@ -222,7 +222,6 @@ async fn nam_amp_load_eq_plus_fender(ctx: &ReaperTestContext) -> eyre::Result<()
             &ModulePresetId::from_uuid(seed_id("eq-proq4-3band")),
             0,
             layer_track,
-            None,
         )
         .await
         .map_err(|e| eyre::eyre!("Failed to load EQ module: {e}"))?;
