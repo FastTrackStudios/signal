@@ -196,3 +196,8 @@ secrets/
 .ralph-tui/reports/
 .ralph-tui/iterations/
 .ralph-tui/tasks/
+.ship/
+
+# Dolt database files (added by bd init)
+.dolt/
+*.db
