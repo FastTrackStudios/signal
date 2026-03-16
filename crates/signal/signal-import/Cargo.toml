@@ -4,8 +4,8 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
-signal-proto.workspace = true
-signal-controller.workspace = true
+signal-proto = { path = "../signal-proto" }
+signal-controller = { path = "../signal-controller" }
 uuid.workspace = true
 eyre.workspace = true
 tracing.workspace = true

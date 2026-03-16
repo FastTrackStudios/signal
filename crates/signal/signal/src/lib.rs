@@ -50,8 +50,12 @@ pub mod reaper_applier;
 #[cfg(feature = "daw")]
 pub mod rig_scene_manager;
 
+pub use signal_controller::active_context::{ActiveContext, ActiveContextState};
 pub use signal_controller::ops;
+pub use signal_controller::variation::SwitchResult;
 pub use signal_controller::SignalController;
+pub use signal_live::engine::patch_applier::{DawPatchApplier, PatchApplyError};
+pub use signal_live::engine::rig_scene_applier::{RigSceneApplier, RigSceneApplyError};
 
 /// Ergonomic alias: `let signal = Signal::new(service);`
 pub type Signal = SignalController;
@@ -60,12 +64,20 @@ pub use signal_live::engine::{
     live_params_into_block, param_name_matches, DawParamValue, DawParameterSnapshot, DawStateChunk,
     LiveParam, MorphDiffEntry, MorphEngine, MorphParamChange,
 };
+
+// Re-export companion crates through the facade so external consumers
+// never need to depend on internal signal crates directly.
+pub use nam_manager;
+pub use signal_daw_bridge;
+pub use signal_import;
 pub use signal_live::daw_block_ops::{
     LoadBlockResult, LoadModuleResult, ResolvedFxLoad, ResolvedModuleLoad,
 };
 pub use signal_live::macro_setup::{self, LiveMacroBinding, MacroSetupResult};
 pub use signal_live::macro_registry;
+pub use signal_live::{MacroRecord, MacroRecorder};
 pub use signal_live::SignalLive;
+pub use signal_controller;
 pub use signal_proto::*;
 pub use signal_storage::{
     default_block_collections, default_module_collections, default_seed_engines,

@@ -11,7 +11,7 @@ fts-ui.workspace = true
 lumen-blocks.workspace = true
 signal = { path = "../signal" }
 signal-controller = { path = "../signal-controller" }
-signal-daw-bridge.workspace = true
+signal-daw-bridge = { path = "../signal-daw-bridge" }
 uuid = { version = "1", features = ["v4"] }
 tokio = { workspace = true }
 tracing.workspace = true
