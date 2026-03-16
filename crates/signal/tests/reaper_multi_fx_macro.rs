@@ -73,7 +73,7 @@ fn build_mapping_json(
 }
 
 async fn poll_param_value(
-    fx: &daw_control::FxHandle,
+    fx: &daw::FxHandle,
     param_idx: u32,
     expected: f64,
     tolerance: f64,
@@ -96,7 +96,7 @@ async fn poll_param_value(
 }
 
 /// Find a parameter by name substring (case-insensitive).
-fn find_param(params: &[daw_proto::FxParameter], needle: &str) -> eyre::Result<u32> {
+fn find_param(params: &[daw::service::FxParameter], needle: &str) -> eyre::Result<u32> {
     params
         .iter()
         .find(|p| p.name.to_lowercase().contains(&needle.to_lowercase()))
