@@ -47,7 +47,7 @@ pub enum RigType {
     Bass,
     Keys,
     Drums,
-    DrumReplacement,
+    DrumEnhancement,
     Vocals,
 }
 
@@ -58,7 +58,7 @@ impl RigType {
             Self::Bass => "bass",
             Self::Keys => "keys",
             Self::Drums => "drums",
-            Self::DrumReplacement => "drum-replacement",
+            Self::DrumEnhancement => "drum-enhancement",
             Self::Vocals => "vocals",
         }
     }
@@ -70,7 +70,7 @@ impl RigType {
             "bass" => Some(Self::Bass),
             "keys" => Some(Self::Keys),
             "drums" => Some(Self::Drums),
-            "drum-replacement" => Some(Self::DrumReplacement),
+            "drum-replacement" | "drum-enhancement" => Some(Self::DrumEnhancement),
             "vocals" => Some(Self::Vocals),
             _ => None,
         }

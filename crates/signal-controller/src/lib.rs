@@ -43,8 +43,11 @@
 //! - [`browse`](SignalController::browse) / [`browser_index`](SignalController::browser_index) -- semantic search across all domains
 //! - [`save_built_rig`](SignalController::save_built_rig) -- persist a complete rig graph in dependency order
 
+pub mod active_context;
 pub mod events;
+pub mod variation;
 
+use active_context::ActiveContextState;
 use events::EventBus;
 use signal_live::engine::patch_applier::DawPatchApplier;
 use signal_live::engine::rig_scene_applier::RigSceneApplier;
@@ -95,6 +98,7 @@ where
     pub(crate) event_bus: Arc<EventBus>,
     pub(crate) daw_applier: Arc<std::sync::RwLock<Option<Arc<dyn DawPatchApplier>>>>,
     pub(crate) daw_rig_applier: Arc<std::sync::RwLock<Option<Arc<dyn RigSceneApplier>>>>,
+    pub(crate) active_context: ActiveContextState,
 }
 
 impl<S> Clone for SignalController<S>
@@ -107,6 +111,7 @@ where
             event_bus: self.event_bus.clone(),
             daw_applier: self.daw_applier.clone(),
             daw_rig_applier: self.daw_rig_applier.clone(),
+            active_context: self.active_context.clone(),
         }
     }
 }
@@ -117,7 +122,6 @@ where
 {
     fn eq(&self, other: &Self) -> bool {
         Arc::ptr_eq(&self.service, &other.service)
-            && Arc::ptr_eq(&self.daw_rig_applier, &other.daw_rig_applier)
     }
 }
 
@@ -133,6 +137,7 @@ where
             event_bus: Arc::new(EventBus::default()),
             daw_applier: Arc::new(std::sync::RwLock::new(None)),
             daw_rig_applier: Arc::new(std::sync::RwLock::new(None)),
+            active_context: ActiveContextState::default(),
         }
     }
 
@@ -249,6 +254,15 @@ where
     }
 
     // endregion: --- Event streaming
+
+    // region: --- Active context
+
+    /// Get the active context state (shared across all clones).
+    pub fn active_context(&self) -> &ActiveContextState {
+        &self.active_context
+    }
+
+    // endregion: --- Active context
 
     // region: --- Cross-cutting operations
 

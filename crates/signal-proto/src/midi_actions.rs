@@ -21,14 +21,16 @@
 //!
 //! All bindings are user-replaceable via [`MidiActionMap::set`].
 
+use facet::Facet;
 use serde::{Deserialize, Serialize};
 
-use crate::actions::{load_variant_action, signal_actions};
+use crate::actions::{signal_actions, switch_to_variation_action};
 
 // ── Trigger types ─────────────────────────────────────────────────────────────
 
 /// A MIDI message pattern that can trigger an action.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, Facet)]
+#[repr(C)]
 pub enum MidiActionTrigger {
     /// A MIDI Note On message with any velocity > 0.
     ///
@@ -98,7 +100,8 @@ impl MidiActionTrigger {
 }
 
 /// When a CC trigger fires relative to its value.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Facet)]
+#[repr(C)]
 pub enum CcThreshold {
     /// Fire when value >= 64 (sustain-pedal convention).
     ButtonHigh,
@@ -109,7 +112,7 @@ pub enum CcThreshold {
 // ── Mapping entry ─────────────────────────────────────────────────────────────
 
 /// One entry in the MIDI action map: a trigger bound to an action ID string.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Facet)]
 pub struct MidiActionBinding {
     /// The MIDI message pattern that fires the action.
     pub trigger: MidiActionTrigger,
@@ -132,7 +135,7 @@ impl MidiActionBinding {
 ///
 /// Start with [`MidiActionMap::default()`] for the built-in bindings, then
 /// call [`set`] / [`remove`] to customise.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Facet)]
 pub struct MidiActionMap {
     bindings: Vec<MidiActionBinding>,
 }
@@ -157,9 +160,9 @@ impl MidiActionMap {
     pub fn with_defaults() -> Self {
         let mut map = Self::empty();
 
-        // Load Variant 1–8 via CH1 CC 101–108
+        // Switch to Variation 1–8 via CH1 CC 101–108
         for i in 0u8..8 {
-            if let Some(action) = load_variant_action((i + 1) as usize) {
+            if let Some(action) = switch_to_variation_action((i + 1) as usize) {
                 map.add(MidiActionTrigger::cc_ch(0, 101 + i), action.as_str());
             }
         }
@@ -291,19 +294,19 @@ mod tests {
     #[test]
     fn triggers_for_finds_variant_action() {
         let map = MidiActionMap::with_defaults();
-        let variant_1_id = signal_actions::LOAD_VARIANT_1.as_str();
+        let variant_1_id = signal_actions::SWITCH_TO_VARIATION_1.as_str();
         let triggers: Vec<_> = map.triggers_for(variant_1_id).collect();
         assert_eq!(triggers.len(), 1);
         assert_eq!(*triggers[0], MidiActionTrigger::cc_ch(0, 101));
     }
 
     #[test]
-    fn load_variant_action_bounds() {
-        use crate::actions::load_variant_action;
-        assert!(load_variant_action(0).is_none());
-        assert!(load_variant_action(1).is_some());
-        assert!(load_variant_action(24).is_some());
-        assert!(load_variant_action(25).is_none());
+    fn switch_to_variation_action_bounds() {
+        use crate::actions::switch_to_variation_action;
+        assert!(switch_to_variation_action(0).is_none());
+        assert!(switch_to_variation_action(1).is_some());
+        assert!(switch_to_variation_action(24).is_some());
+        assert!(switch_to_variation_action(25).is_none());
     }
 
     #[test]

@@ -159,7 +159,7 @@ pub(super) const RIG_TYPES: &[RigType] = &[
     RigType::Bass,
     RigType::Keys,
     RigType::Drums,
-    RigType::DrumReplacement,
+    RigType::DrumEnhancement,
     RigType::Vocals,
 ];
 
