@@ -37,7 +37,7 @@
 //! - Parallel routing -> `SignalChain` with a `Split` node
 //! - Plugin names matched against the FabFilter registry and FTS naming conventions
 
-use daw_proto::fx::tree::{FxNode, FxNodeKind, FxRoutingMode, FxTree};
+use daw::service::fx::tree::{FxNode, FxNodeKind, FxRoutingMode, FxTree};
 use signal_proto::plugin_block::FxRole;
 use signal_proto::{
     Block, BlockType, ModuleBlock, ModuleBlockSource, ModuleType, SignalChain, SignalNode,
@@ -296,8 +296,8 @@ fn clean_container_name(raw: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use daw_proto::fx::tree::{FxContainerChannelConfig, FxNodeId};
-    use daw_proto::fx::Fx;
+    use daw::service::fx::tree::{FxContainerChannelConfig, FxNodeId};
+    use daw::service::fx::Fx;
 
     fn plugin_node(guid: &str, name: &str, plugin_name: &str) -> FxNode {
         FxNode {
@@ -307,7 +307,7 @@ mod tests {
                 index: 0,
                 name: name.to_string(),
                 plugin_name: plugin_name.to_string(),
-                plugin_type: daw_proto::fx::FxType::default(),
+                plugin_type: daw::service::fx::FxType::default(),
                 enabled: true,
                 offline: false,
                 window_open: false,

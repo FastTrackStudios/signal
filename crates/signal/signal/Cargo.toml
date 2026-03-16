@@ -7,31 +7,25 @@ authors.workspace = true
 
 [features]
 default = []
-daw = ["dep:daw-control", "dep:daw-proto"]
+daw = ["dep:daw"]
 
 [dependencies]
 signal-controller = { path = "../signal-controller" }
+signal-daw-bridge = { path = "../signal-daw-bridge" }
+signal-import = { path = "../signal-import" }
 signal-live = { path = "../signal-live" }
 signal-proto = { path = "../signal-proto" }
 signal-storage = { path = "../signal-storage" }
-daw-control = { workspace = true, optional = true }
-daw-proto = { workspace = true, optional = true }
+nam-manager = { path = "../nam-manager" }
+daw = { workspace = true, optional = true }
 tokio.workspace = true
 
 [dev-dependencies]
-signal-live = { path = "../signal-live" }
-signal-import = { path = "../signal-import" }
-signal-proto = { path = "../signal-proto" }
-nam-manager.workspace = true
-daw-control.workspace = true
-daw-proto.workspace = true
+daw = { workspace = true, features = ["file"] }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 eyre.workspace = true
 reaper-test.workspace = true
 uuid.workspace = true
 futures.workspace = true
 base64 = "0.22"
-dawfile-reaper.workspace = true
-signal-daw-bridge.workspace = true
 serde_json.workspace = true
-signal-controller = { path = "../signal-controller" }

@@ -20,7 +20,7 @@ use std::pin::Pin;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-use daw_control::{Project, TrackHandle};
+use daw::{Project, TrackHandle};
 use signal_live::engine::rig_scene_applier::{RigSceneApplier, RigSceneApplyError};
 use signal_live::SignalLive;
 use signal_proto::rig::{Rig, RigSceneId};
@@ -105,7 +105,7 @@ impl RigSceneManager {
         // Record-arm + input monitoring
         let _ = input_track.arm().await;
         let _ = input_track
-            .set_input_monitoring(daw_proto::InputMonitoringMode::Normal)
+            .set_input_monitoring(daw::service::InputMonitoringMode::Normal)
             .await;
 
         // Recover existing scene tracks from a previous session.
