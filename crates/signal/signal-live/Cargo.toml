@@ -19,6 +19,7 @@ base64 = "0.22"
 futures.workspace = true
 uuid = { workspace = true }
 tokio = { workspace = true, features = ["sync", "time"] }
+moire.workspace = true
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["rt", "macros"] }

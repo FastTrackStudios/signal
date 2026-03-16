@@ -17,7 +17,7 @@ use std::collections::{HashMap, HashSet};
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
-use tokio::sync::RwLock;
+use moire::sync::{Mutex, RwLock};
 
 use daw::{Project, TrackHandle};
 use daw::service::TrackRef;
@@ -62,7 +62,7 @@ struct FolderRigState {
     /// GUIDs of tracks with pending delayed mutes (for reverb tail ring-out).
     /// When a track is re-activated before the delay fires, its GUID is removed
     /// from this set, cancelling the mute.
-    pending_mutes: Arc<tokio::sync::Mutex<HashSet<String>>>,
+    pending_mutes: Arc<Mutex<HashSet<String>>>,
 }
 
 /// Applies resolved graphs to REAPER using a folder-based multi-track layout.
@@ -73,7 +73,7 @@ pub struct ReaperPatchApplier {
 impl ReaperPatchApplier {
     pub fn new() -> Self {
         Self {
-            state: RwLock::new(None),
+            state: RwLock::new("signal.applier.state", None),
         }
     }
 
@@ -212,7 +212,7 @@ impl ReaperPatchApplier {
             project,
             preloaded_patches: recovered_preloaded,
             preloading_active: false,
-            pending_mutes: Arc::new(tokio::sync::Mutex::new(HashSet::new())),
+            pending_mutes: Arc::new(Mutex::new("signal.applier.pending_mutes", HashSet::new())),
         });
         Ok(())
     }
@@ -468,7 +468,7 @@ const TAIL_MUTE_DELAY: std::time::Duration = std::time::Duration::from_secs(7);
 /// fires, the mute is cancelled.
 async fn schedule_delayed_track_mute(
     track: &TrackHandle,
-    pending_mutes: &Arc<tokio::sync::Mutex<HashSet<String>>>,
+    pending_mutes: &Arc<Mutex<HashSet<String>>>,
 ) {
     let guid = track.guid().to_string();
     let track = track.clone();
@@ -491,7 +491,7 @@ async fn schedule_delayed_track_mute(
 }
 
 /// Cancel any pending delayed mute for the given track GUID.
-async fn cancel_pending_mute(guid: &str, pending_mutes: &Arc<tokio::sync::Mutex<HashSet<String>>>) {
+async fn cancel_pending_mute(guid: &str, pending_mutes: &Arc<Mutex<HashSet<String>>>) {
     pending_mutes.lock().await.remove(guid);
 }
 

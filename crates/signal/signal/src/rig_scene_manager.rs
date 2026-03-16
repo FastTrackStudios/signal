@@ -18,7 +18,7 @@ use std::collections::{HashMap, HashSet};
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
-use tokio::sync::RwLock;
+use moire::sync::{Mutex, RwLock};
 
 use daw::{Project, TrackHandle};
 use signal_live::engine::rig_scene_applier::{RigSceneApplier, RigSceneApplyError};
@@ -52,7 +52,7 @@ struct RigSceneState {
     /// Preloaded scene slots keyed by scene_id, ready for instant switching.
     preloaded: HashMap<String, SceneSlot>,
     /// GUIDs of rig tracks with pending delayed mutes.
-    pending_mutes: Arc<tokio::sync::Mutex<HashSet<String>>>,
+    pending_mutes: Arc<Mutex<HashSet<String>>>,
     /// True once preloading has started.
     preloading_active: bool,
 }
@@ -69,7 +69,7 @@ pub struct RigSceneManager {
 impl RigSceneManager {
     pub fn new(signal_live: Arc<SignalLive>) -> Self {
         Self {
-            state: RwLock::new(None),
+            state: RwLock::new("signal.rig_scene.state", None),
             signal_live,
         }
     }
@@ -183,7 +183,7 @@ impl RigSceneManager {
             current: recovered_current,
             tail: None,
             preloaded: recovered_preloaded,
-            pending_mutes: Arc::new(tokio::sync::Mutex::new(HashSet::new())),
+            pending_mutes: Arc::new(Mutex::new("signal.rig_scene.pending_mutes", HashSet::new())),
             preloading_active: false,
         });
 
@@ -518,7 +518,7 @@ async fn unmute_send_to_track(source_track: &TrackHandle, dest_guid: &str) -> bo
 /// folder saves CPU.
 async fn schedule_delayed_folder_mute(
     track: &TrackHandle,
-    pending_mutes: &Arc<tokio::sync::Mutex<HashSet<String>>>,
+    pending_mutes: &Arc<Mutex<HashSet<String>>>,
 ) {
     let guid = track.guid().to_string();
     let track = track.clone();
@@ -539,6 +539,6 @@ async fn schedule_delayed_folder_mute(
 }
 
 /// Cancel any pending delayed mute for the given track GUID.
-async fn cancel_pending_mute(guid: &str, pending_mutes: &Arc<tokio::sync::Mutex<HashSet<String>>>) {
+async fn cancel_pending_mute(guid: &str, pending_mutes: &Arc<Mutex<HashSet<String>>>) {
     pending_mutes.lock().await.remove(guid);
 }
