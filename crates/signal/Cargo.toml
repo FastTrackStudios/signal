@@ -19,6 +19,7 @@ signal-storage = { path = "../signal-storage" }
 nam-manager = { path = "../nam-manager" }
 daw = { workspace = true, optional = true }
 tokio.workspace = true
+moire.workspace = true
 
 [dev-dependencies]
 daw = { workspace = true, features = ["file"] }
