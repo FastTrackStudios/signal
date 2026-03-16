@@ -10,6 +10,7 @@ signal-proto = { path = "../signal-proto" }
 signal-live = { path = "../signal-live" }
 roam.workspace = true
 thiserror.workspace = true
+tracing.workspace = true
 tokio = { workspace = true, features = ["sync"] }
 
 [dev-dependencies]

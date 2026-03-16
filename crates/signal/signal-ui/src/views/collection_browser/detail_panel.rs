@@ -265,7 +265,7 @@ pub(super) fn rig_type_display(rt: signal::rig::RigType) -> &'static str {
         signal::rig::RigType::Bass => "Bass",
         signal::rig::RigType::Keys => "Keys",
         signal::rig::RigType::Drums => "Drums",
-        signal::rig::RigType::DrumReplacement => "Drum Repl.",
+        signal::rig::RigType::DrumEnhancement => "Drum Enh.",
         signal::rig::RigType::Vocals => "Vocals",
     }
 }

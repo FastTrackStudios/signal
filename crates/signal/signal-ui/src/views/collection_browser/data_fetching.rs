@@ -847,7 +847,7 @@ pub fn rig_type_to_engine_type(rig_type: RigType) -> signal::EngineType {
         RigType::Guitar => signal::EngineType::Guitar,
         RigType::Bass => signal::EngineType::Bass,
         RigType::Keys => signal::EngineType::Keys,
-        RigType::Drums | RigType::DrumReplacement => signal::EngineType::Guitar,
+        RigType::Drums | RigType::DrumEnhancement => signal::EngineType::Guitar,
         RigType::Vocals => signal::EngineType::Vocal,
     }
 }
