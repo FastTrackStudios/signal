@@ -145,7 +145,7 @@ use signal_storage::{
 };
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
-use tokio::sync::RwLock;
+use moire::sync::RwLock;
 
 // region: --- ServiceCache
 
@@ -217,6 +217,29 @@ pub struct SignalLive<
     pub(crate) cache: Arc<RwLock<ServiceCache>>,
 }
 
+impl<B, M, L, E, R, P, So, Se, St, Ra> Clone for SignalLive<B, M, L, E, R, P, So, Se, St, Ra>
+where
+    B: BlockRepo, M: ModuleRepo, L: LayerRepo, E: EngineRepo,
+    R: RigRepo, P: ProfileRepo, So: SongRepo, Se: SetlistRepo,
+    St: SceneTemplateRepo, Ra: RackRepo,
+{
+    fn clone(&self) -> Self {
+        Self {
+            block_repo: self.block_repo.clone(),
+            module_repo: self.module_repo.clone(),
+            layer_repo: self.layer_repo.clone(),
+            engine_repo: self.engine_repo.clone(),
+            rig_repo: self.rig_repo.clone(),
+            profile_repo: self.profile_repo.clone(),
+            song_repo: self.song_repo.clone(),
+            setlist_repo: self.setlist_repo.clone(),
+            scene_template_repo: self.scene_template_repo.clone(),
+            rack_repo: self.rack_repo.clone(),
+            cache: self.cache.clone(),
+        }
+    }
+}
+
 impl<B, M, L, E, R, P, So, Se, St, Ra> SignalLive<B, M, L, E, R, P, So, Se, St, Ra>
 where
     B: BlockRepo,
@@ -253,7 +276,7 @@ where
             setlist_repo,
             scene_template_repo,
             rack_repo,
-            cache: Arc::new(RwLock::new(ServiceCache::new())),
+            cache: Arc::new(RwLock::new("signal.service_cache", ServiceCache::new())),
         }
     }
 }
