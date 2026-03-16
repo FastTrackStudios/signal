@@ -70,7 +70,7 @@ fn build_mapping_json(threshold_param_idx: u32, ratio_param_idx: u32) -> String 
 /// Poll an FX parameter until it reaches the expected value (within tolerance), or timeout.
 /// Returns the actual value when matched.
 async fn poll_param_value(
-    fx: &daw_control::FxHandle,
+    fx: &daw::FxHandle,
     param_idx: u32,
     expected: f64,
     tolerance: f64,

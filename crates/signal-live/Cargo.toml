@@ -11,8 +11,6 @@ signal-storage = { path = "../signal-storage" }
 nam-manager = { path = "../nam-manager" }
 macromod.workspace = true
 daw.workspace = true
-daw-control.workspace = true
-daw-proto.workspace = true
 roam.workspace = true
 eyre = { workspace = true }
 serde = { workspace = true }

@@ -19,8 +19,8 @@ use std::pin::Pin;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-use daw_control::{Project, TrackHandle};
-use daw_proto::TrackRef;
+use daw::{Project, TrackHandle};
+use daw::service::TrackRef;
 use signal_live::engine::{graph_state_chunks, DawPatchApplier, DawStateChunk, PatchApplyError};
 use signal_proto::plugin_block::FxRole;
 use signal_proto::resolve::ResolvedGraph;
@@ -237,7 +237,7 @@ impl ReaperPatchApplier {
 
         // Set mono hardware input (channel_index maps directly to I_RECINPUT for mono)
         input_track
-            .set_record_input(daw_proto::RecordInput::Raw(channel_index as i32))
+            .set_record_input(daw::service::RecordInput::Raw(channel_index as i32))
             .await
             .map_err(|e| PatchApplyError::DawError(format!("set record input: {e}")))?;
 
@@ -249,7 +249,7 @@ impl ReaperPatchApplier {
 
         // Enable input monitoring so we hear the guitar through the FX chain
         input_track
-            .set_input_monitoring(daw_proto::InputMonitoringMode::Normal)
+            .set_input_monitoring(daw::service::InputMonitoringMode::Normal)
             .await
             .map_err(|e| PatchApplyError::DawError(format!("set input monitoring: {e}")))?;
 

@@ -24,8 +24,8 @@
 //! `SetNamedConfigParm`. Pin mappings (`TrackFX_SetPinMappings`) are the reliable
 //! writable mechanism for controlling FX output routing.
 
-use daw_control::{FxChain, FxHandle};
-use daw_proto::{FxContainerChannelConfig, FxNodeId, FxPinMappings};
+use daw::{FxChain, FxHandle};
+use daw::service::{FxContainerChannelConfig, FxNodeId, FxPinMappings};
 use std::time::Duration;
 
 /// Result of a gapless swap operation.

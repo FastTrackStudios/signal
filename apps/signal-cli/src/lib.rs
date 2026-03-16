@@ -7,12 +7,12 @@
 use std::path::{Path, PathBuf};
 
 use clap::Subcommand;
-use daw_control::Daw;
+use daw::Daw;
 use eyre::Result;
 use serde_json::json;
-use signal_controller::SignalController;
-use signal_proto::profile::{Patch, PatchId};
-use signal_proto::traits::Collection;
+use signal::SignalController;
+use signal::profile::{Patch, PatchId};
+use signal::traits::Collection;
 
 // ============================================================================
 // Connection
@@ -124,7 +124,7 @@ pub enum DawCommand {
     },
     /// Launch a REAPER instance
     Launch {
-        /// Config ID (e.g., "fts-tracks", "fts-guitar")
+        /// Config ID (e.g., "fts-tracks", "fts-signal")
         #[arg(long)]
         config: Option<String>,
     },
@@ -744,7 +744,7 @@ pub async fn run(
                 cmd_nam_import_dry_run(vendor.as_deref(), category.as_deref()).await
             } else if own_reaper {
                 let (daw, pid, sock) =
-                    daw_cli::launch_and_connect("fts-guitar").await
+                    daw_cli::launch_and_connect("fts-signal").await
                         .map_err(|e| eyre::eyre!("Failed to launch REAPER: {e}"))?;
                 let result = cmd_nam_import(&signal, &daw, vendor.as_deref(), category.as_deref()).await;
                 daw_cli::teardown_owned(pid, &sock);
@@ -817,13 +817,13 @@ pub async fn run(
 // Block Type Resolution
 // ============================================================================
 
-fn parse_block_type(s: &str) -> Result<signal_proto::BlockType> {
-    signal_proto::BlockType::from_str(s)
+fn parse_block_type(s: &str) -> Result<signal::BlockType> {
+    signal::BlockType::from_str(s)
         .ok_or_else(|| eyre::eyre!("Unknown block type: \"{s}\". Valid types: amp, drive, eq, reverb, delay, compressor, gate, chorus, flanger, phaser, tremolo, cabinet, etc."))
 }
 
-fn parse_module_type(s: &str) -> Result<signal_proto::ModuleType> {
-    signal_proto::ModuleType::from_str(s)
+fn parse_module_type(s: &str) -> Result<signal::ModuleType> {
+    signal::ModuleType::from_str(s)
         .ok_or_else(|| eyre::eyre!("Unknown module type: \"{s}\". Valid types: amp, drive, eq, time, dynamics, modulation, special, source, volume, master, etc."))
 }
 
@@ -1048,7 +1048,7 @@ async fn cmd_presets_recapture(
         .ok_or_else(|| eyre::eyre!("FX returned no state chunk"))?;
 
     // Find the preset
-    let preset_id = signal_proto::PresetId::from(preset_id_str.to_string());
+    let preset_id = signal::PresetId::from(preset_id_str.to_string());
     let preset = signal
         .block_presets()
         .list(bt)
@@ -1059,7 +1059,7 @@ async fn cmd_presets_recapture(
 
     // Resolve snapshot ID
     let snapshot_id = match snapshot_arg {
-        Some(s) => signal_proto::SnapshotId::from(s.to_string()),
+        Some(s) => signal::SnapshotId::from(s.to_string()),
         None => preset.default_variant_id().clone(),
     };
 
@@ -1100,7 +1100,7 @@ async fn cmd_presets_set_param(
         .map_err(|_| eyre::eyre!("Invalid value \"{val_str}\" in assignment \"{assignment}\""))?;
 
     // Find the preset
-    let preset_id = signal_proto::PresetId::from(preset_id_str.to_string());
+    let preset_id = signal::PresetId::from(preset_id_str.to_string());
     let preset = signal
         .block_presets()
         .list(bt)
@@ -1111,7 +1111,7 @@ async fn cmd_presets_set_param(
 
     // Resolve snapshot ID
     let snapshot_id = match snapshot_arg {
-        Some(s) => signal_proto::SnapshotId::from(s.to_string()),
+        Some(s) => signal::SnapshotId::from(s.to_string()),
         None => preset.default_variant_id().clone(),
     };
 
@@ -1138,7 +1138,7 @@ async fn cmd_presets_import(signal: &SignalController, cmd: &ImportCommand) -> R
             all,
             dry_run,
         } => {
-            let importer = signal_import::fabfilter::FabFilterImporter::new();
+            let importer = signal::signal_import::fabfilter::FabFilterImporter::new();
 
             if *all {
                 let plugins = importer.discover_plugins()?;
@@ -1163,7 +1163,7 @@ async fn cmd_presets_import(signal: &SignalController, cmd: &ImportCommand) -> R
                 }
                 for p in &plugins {
                     let collection = importer.scan(&p.plugin_name)?;
-                    let report = signal_import::import_presets_with_library(
+                    let report = signal::signal_import::import_presets_with_library(
                         signal, collection, Some(&library_root),
                     ).await?;
                     println!(
@@ -1174,11 +1174,11 @@ async fn cmd_presets_import(signal: &SignalController, cmd: &ImportCommand) -> R
             } else if let Some(name) = plugin {
                 let collection = importer.scan(name)?;
                 if *dry_run {
-                    print!("{}", signal_import::dry_run_report(&collection));
+                    print!("{}", signal::signal_import::dry_run_report(&collection));
                     println!("[dry run] No changes made.");
                     return Ok(());
                 }
-                let report = signal_import::import_presets_with_library(
+                let report = signal::signal_import::import_presets_with_library(
                     signal, collection, Some(&library_root),
                 ).await?;
                 println!(
@@ -1197,17 +1197,17 @@ async fn cmd_presets_import(signal: &SignalController, cmd: &ImportCommand) -> R
             dry_run,
         } => {
             let bt = parse_block_type(block_type)?;
-            let collection = signal_import::rfxchain::RfxChainImporter::scan(
+            let collection = signal::signal_import::rfxchain::RfxChainImporter::scan(
                 source,
                 bt,
                 name.as_deref(),
             )?;
             if *dry_run {
-                print!("{}", signal_import::dry_run_report(&collection));
+                print!("{}", signal::signal_import::dry_run_report(&collection));
                 println!("[dry run] No changes made.");
                 return Ok(());
             }
-            let report = signal_import::import_presets_with_library(
+            let report = signal::signal_import::import_presets_with_library(
                 signal, collection, Some(&library_root),
             ).await?;
             println!(
@@ -1293,7 +1293,7 @@ async fn cmd_modules_create(
             ))?;
 
         let bt = parse_block_type(bt_str)?;
-        let preset_id = signal_proto::PresetId::from(preset_id_str.to_string());
+        let preset_id = signal::PresetId::from(preset_id_str.to_string());
 
         // Look up label for display
         let label = signal.block_presets().list(bt).await?
@@ -1321,7 +1321,7 @@ async fn cmd_modules_add_variation(
     name: &str,
     override_specs: &[String],
 ) -> Result<()> {
-    let preset_id = signal_proto::ModulePresetId::from(preset_id_str.to_string());
+    let preset_id = signal::ModulePresetId::from(preset_id_str.to_string());
 
     // Load the module preset
     let preset = signal
@@ -1354,16 +1354,16 @@ async fn cmd_modules_add_variation(
     }
 
     // Rebuild blocks with overrides applied
-    let rebuilt_blocks: Vec<signal_proto::ModuleBlock> = source_blocks
+    let rebuilt_blocks: Vec<signal::ModuleBlock> = source_blocks
         .into_iter()
         .map(|block| {
-            let overrides_for_block: Vec<signal_proto::BlockParameterOverride> = parsed_overrides
+            let overrides_for_block: Vec<signal::BlockParameterOverride> = parsed_overrides
                 .iter()
                 .filter(|(bid, _, _)| bid == block.id())
-                .map(|(_, param, val)| signal_proto::BlockParameterOverride::new(param, *val))
+                .map(|(_, param, val)| signal::BlockParameterOverride::new(param, *val))
                 .collect();
 
-            let mut new_block = signal_proto::ModuleBlock::new(
+            let mut new_block = signal::ModuleBlock::new(
                 block.id(),
                 block.label(),
                 block.block_type(),
@@ -1376,9 +1376,9 @@ async fn cmd_modules_add_variation(
         })
         .collect();
 
-    let module = signal_proto::Module::from_blocks(rebuilt_blocks);
-    let snapshot = signal_proto::ModuleSnapshot::new(
-        signal_proto::ModuleSnapshotId::new(),
+    let module = signal::Module::from_blocks(rebuilt_blocks);
+    let snapshot = signal::ModuleSnapshot::new(
+        signal::ModuleSnapshotId::new(),
         name,
         module,
     );
@@ -1395,8 +1395,8 @@ async fn cmd_modules_edit_variation(
     override_specs: &[String],
     block_specs: &[String],
 ) -> Result<()> {
-    let preset_id = signal_proto::ModulePresetId::from(preset_id_str.to_string());
-    let snapshot_id = signal_proto::ModuleSnapshotId::from(snapshot_id_str.to_string());
+    let preset_id = signal::ModulePresetId::from(preset_id_str.to_string());
+    let snapshot_id = signal::ModuleSnapshotId::from(snapshot_id_str.to_string());
 
     // Load the module preset and find the target snapshot
     let preset = signal
@@ -1432,7 +1432,7 @@ async fn cmd_modules_edit_variation(
     }
 
     // Parse block source reassignments: "block_id:block_type:preset_id"
-    let mut parsed_blocks: Vec<(String, signal_proto::BlockType, signal_proto::PresetId)> = Vec::new();
+    let mut parsed_blocks: Vec<(String, signal::BlockType, signal::PresetId)> = Vec::new();
     for spec in block_specs {
         let parts: Vec<&str> = spec.splitn(3, ':').collect();
         if parts.len() != 3 {
@@ -1441,17 +1441,17 @@ async fn cmd_modules_edit_variation(
             );
         }
         let bt = parse_block_type(parts[1])?;
-        let pid = signal_proto::PresetId::from(parts[2].to_string());
+        let pid = signal::PresetId::from(parts[2].to_string());
         parsed_blocks.push((parts[0].to_string(), bt, pid));
     }
 
     // Rebuild blocks with overrides and source reassignments applied
-    let rebuilt_blocks: Vec<signal_proto::ModuleBlock> = source_blocks
+    let rebuilt_blocks: Vec<signal::ModuleBlock> = source_blocks
         .into_iter()
         .map(|block| {
             // Check for source reassignment
             let source = if let Some((_, _, ref pid)) = parsed_blocks.iter().find(|(bid, _, _)| bid == block.id()) {
-                signal_proto::ModuleBlockSource::PresetDefault {
+                signal::ModuleBlockSource::PresetDefault {
                     preset_id: pid.clone(),
                     saved_at_version: None,
                 }
@@ -1467,13 +1467,13 @@ async fn cmd_modules_edit_variation(
             };
 
             // Check for overrides
-            let overrides_for_block: Vec<signal_proto::BlockParameterOverride> = parsed_overrides
+            let overrides_for_block: Vec<signal::BlockParameterOverride> = parsed_overrides
                 .iter()
                 .filter(|(bid, _, _)| bid == block.id())
-                .map(|(_, param, val)| signal_proto::BlockParameterOverride::new(param, *val))
+                .map(|(_, param, val)| signal::BlockParameterOverride::new(param, *val))
                 .collect();
 
-            let mut new_block = signal_proto::ModuleBlock::new(
+            let mut new_block = signal::ModuleBlock::new(
                 block.id(),
                 block.label(),
                 block_type,
@@ -1486,7 +1486,7 @@ async fn cmd_modules_edit_variation(
         })
         .collect();
 
-    let module = signal_proto::Module::from_blocks(rebuilt_blocks);
+    let module = signal::Module::from_blocks(rebuilt_blocks);
     signal
         .module_presets()
         .update_snapshot_module(preset_id, snapshot_id, module)
@@ -1606,26 +1606,26 @@ async fn cmd_layers_show(signal: &SignalController, id: &str, as_json: bool) -> 
 /// Try to find a human-readable name for a block preset by checking all block types.
 async fn lookup_preset_name(
     signal: &SignalController,
-    preset_id: &signal_proto::PresetId,
+    preset_id: &signal::PresetId,
 ) -> String {
     // Try common block types
     for bt in &[
-        signal_proto::BlockType::Amp,
-        signal_proto::BlockType::Drive,
-        signal_proto::BlockType::Eq,
-        signal_proto::BlockType::Reverb,
-        signal_proto::BlockType::Delay,
-        signal_proto::BlockType::Compressor,
-        signal_proto::BlockType::Gate,
-        signal_proto::BlockType::Chorus,
-        signal_proto::BlockType::Flanger,
-        signal_proto::BlockType::Phaser,
-        signal_proto::BlockType::Trem,
-        signal_proto::BlockType::Cabinet,
-        signal_proto::BlockType::Boost,
-        signal_proto::BlockType::Saturator,
-        signal_proto::BlockType::Limiter,
-        signal_proto::BlockType::Volume,
+        signal::BlockType::Amp,
+        signal::BlockType::Drive,
+        signal::BlockType::Eq,
+        signal::BlockType::Reverb,
+        signal::BlockType::Delay,
+        signal::BlockType::Compressor,
+        signal::BlockType::Gate,
+        signal::BlockType::Chorus,
+        signal::BlockType::Flanger,
+        signal::BlockType::Phaser,
+        signal::BlockType::Trem,
+        signal::BlockType::Cabinet,
+        signal::BlockType::Boost,
+        signal::BlockType::Saturator,
+        signal::BlockType::Limiter,
+        signal::BlockType::Volume,
     ] {
         if let Ok(presets) = signal.block_presets().list(*bt).await {
             if let Some(p) = presets.iter().find(|p| p.id() == preset_id) {
@@ -1636,15 +1636,15 @@ async fn lookup_preset_name(
     preset_id.to_string()
 }
 
-fn parse_engine_type(s: &str) -> Result<signal_proto::EngineType> {
+fn parse_engine_type(s: &str) -> Result<signal::EngineType> {
     match s.to_lowercase().as_str() {
-        "guitar" => Ok(signal_proto::EngineType::Guitar),
-        "bass" => Ok(signal_proto::EngineType::Bass),
-        "vocal" | "vocals" => Ok(signal_proto::EngineType::Vocal),
-        "keys" => Ok(signal_proto::EngineType::Keys),
-        "synth" => Ok(signal_proto::EngineType::Synth),
-        "organ" => Ok(signal_proto::EngineType::Organ),
-        "pad" => Ok(signal_proto::EngineType::Pad),
+        "guitar" => Ok(signal::EngineType::Guitar),
+        "bass" => Ok(signal::EngineType::Bass),
+        "vocal" | "vocals" => Ok(signal::EngineType::Vocal),
+        "keys" => Ok(signal::EngineType::Keys),
+        "synth" => Ok(signal::EngineType::Synth),
+        "organ" => Ok(signal::EngineType::Organ),
+        "pad" => Ok(signal::EngineType::Pad),
         _ => eyre::bail!("Unknown engine type: \"{s}\". Valid: guitar, bass, vocals, keys, synth, organ, pad"),
     }
 }
@@ -1701,8 +1701,8 @@ async fn cmd_layers_add_block(
     variant_id: Option<&str>,
     as_json: bool,
 ) -> Result<()> {
-    let lid = signal_proto::layer::LayerId::from(layer_id.to_string());
-    let pid = signal_proto::PresetId::from(preset_id.to_string());
+    let lid = signal::layer::LayerId::from(layer_id.to_string());
+    let pid = signal::PresetId::from(preset_id.to_string());
 
     let layer = signal
         .layers()
@@ -1717,10 +1717,10 @@ async fn cmd_layers_add_block(
         .ok_or_else(|| eyre::eyre!("Default snapshot not found for layer {layer_id}"))?;
 
     let block_ref = if let Some(vid) = variant_id {
-        signal_proto::layer::BlockRef::new(pid.clone())
-            .with_variant(signal_proto::SnapshotId::from(vid.to_string()))
+        signal::layer::BlockRef::new(pid.clone())
+            .with_variant(signal::SnapshotId::from(vid.to_string()))
     } else {
-        signal_proto::layer::BlockRef::new(pid.clone())
+        signal::layer::BlockRef::new(pid.clone())
     };
     snapshot.block_refs.push(block_ref);
 
@@ -1748,8 +1748,8 @@ async fn cmd_layers_remove_block(
     preset_id: &str,
     as_json: bool,
 ) -> Result<()> {
-    let lid = signal_proto::layer::LayerId::from(layer_id.to_string());
-    let pid = signal_proto::PresetId::from(preset_id.to_string());
+    let lid = signal::layer::LayerId::from(layer_id.to_string());
+    let pid = signal::PresetId::from(preset_id.to_string());
 
     let layer = signal
         .layers()
@@ -1898,13 +1898,13 @@ async fn cmd_engines_create(
     let mut layer_ids = Vec::new();
     let mut layer_selections = Vec::new();
     for lid_str in layer_ids_str {
-        let lid = signal_proto::layer::LayerId::from(lid_str.to_string());
+        let lid = signal::layer::LayerId::from(lid_str.to_string());
         let layer = signal
             .layers()
             .load(lid.clone())
             .await?
             .ok_or_else(|| eyre::eyre!("Layer not found: {lid_str}"))?;
-        layer_selections.push(signal_proto::engine::LayerSelection::new(
+        layer_selections.push(signal::engine::LayerSelection::new(
             lid.clone(),
             layer.default_variant_id.clone(),
         ));
@@ -1967,8 +1967,8 @@ async fn cmd_engines_add_layer(
     layer_id: &str,
     as_json: bool,
 ) -> Result<()> {
-    let eid = signal_proto::engine::EngineId::from(engine_id.to_string());
-    let lid = signal_proto::layer::LayerId::from(layer_id.to_string());
+    let eid = signal::engine::EngineId::from(engine_id.to_string());
+    let lid = signal::layer::LayerId::from(layer_id.to_string());
 
     let mut engine = signal
         .engines()
@@ -1983,7 +1983,7 @@ async fn cmd_engines_add_layer(
 
     engine.layer_ids.push(lid.clone());
 
-    let selection = signal_proto::engine::LayerSelection::new(
+    let selection = signal::engine::LayerSelection::new(
         lid,
         layer.default_variant_id.clone(),
     );
@@ -2015,8 +2015,8 @@ async fn cmd_engines_remove_layer(
     layer_id: &str,
     as_json: bool,
 ) -> Result<()> {
-    let eid = signal_proto::engine::EngineId::from(engine_id.to_string());
-    let lid = signal_proto::layer::LayerId::from(layer_id.to_string());
+    let eid = signal::engine::EngineId::from(engine_id.to_string());
+    let lid = signal::layer::LayerId::from(layer_id.to_string());
 
     let mut engine = signal
         .engines()
@@ -2218,8 +2218,8 @@ async fn cmd_rigs_add_engine(
     engine_id: &str,
     as_json: bool,
 ) -> Result<()> {
-    let rid = signal_proto::rig::RigId::from(rig_id.to_string());
-    let eid = signal_proto::engine::EngineId::from(engine_id.to_string());
+    let rid = signal::rig::RigId::from(rig_id.to_string());
+    let eid = signal::engine::EngineId::from(engine_id.to_string());
 
     let mut rig = signal
         .rigs()
@@ -2234,7 +2234,7 @@ async fn cmd_rigs_add_engine(
 
     rig.engine_ids.push(eid.clone());
 
-    let selection = signal_proto::rig::EngineSelection::new(
+    let selection = signal::rig::EngineSelection::new(
         eid,
         engine.default_variant_id.clone(),
     );
@@ -2266,8 +2266,8 @@ async fn cmd_rigs_remove_engine(
     engine_id: &str,
     as_json: bool,
 ) -> Result<()> {
-    let rid = signal_proto::rig::RigId::from(rig_id.to_string());
-    let eid = signal_proto::engine::EngineId::from(engine_id.to_string());
+    let rid = signal::rig::RigId::from(rig_id.to_string());
+    let eid = signal::engine::EngineId::from(engine_id.to_string());
 
     let mut rig = signal
         .rigs()
@@ -2311,7 +2311,7 @@ async fn cmd_rigs_remove_engine(
 /// is replaced wholesale (children, raw_block, and all) since REAPER's
 /// `set_state_chunk` API doesn't work on container FX.
 fn replace_by_position(
-    children: &mut [dawfile_reaper::types::FxChainNode],
+    children: &mut [daw::file::types::FxChainNode],
     block_states: &[Vec<u8>],
     replaced: &mut usize,
     skipped: &mut usize,
@@ -2331,7 +2331,7 @@ fn replace_by_position(
         }
 
         match child {
-            dawfile_reaper::types::FxChainNode::Plugin(p) => {
+            daw::file::types::FxChainNode::Plugin(p) => {
                 if try_replace_raw_block(p, source_bytes) {
                     let display = p.custom_name.as_deref().unwrap_or(&p.name);
                     eprintln!(
@@ -2344,7 +2344,7 @@ fn replace_by_position(
                     *skipped += 1;
                 }
             }
-            dawfile_reaper::types::FxChainNode::Container(c) => {
+            daw::file::types::FxChainNode::Container(c) => {
                 if try_replace_container(c, source_bytes) {
                     eprintln!(
                         "[state] replaced container '{}' ({} bytes)",
@@ -2361,9 +2361,9 @@ fn replace_by_position(
 }
 
 /// Parse source raw_block bytes into an FxChainNode (Plugin or Container).
-fn parse_raw_block_bytes(source_bytes: &[u8]) -> Option<dawfile_reaper::types::FxChainNode> {
+fn parse_raw_block_bytes(source_bytes: &[u8]) -> Option<daw::file::types::FxChainNode> {
     let source_str = std::str::from_utf8(source_bytes).ok()?;
-    let source_chain = dawfile_reaper::FxChain::parse(&format!(
+    let source_chain = daw::file::FxChain::parse(&format!(
         "<FXCHAIN\nSHOW 0\nLASTSEL 0\nDOCKED 0\n{source_str}\n>\n"
     ))
     .ok()?;
@@ -2373,10 +2373,10 @@ fn parse_raw_block_bytes(source_bytes: &[u8]) -> Option<dawfile_reaper::types::F
 /// Parse source raw_block bytes and transplant state into a loaded plugin,
 /// preserving the loaded plugin's FXID. Returns true on success.
 fn try_replace_raw_block(
-    plugin: &mut dawfile_reaper::types::FxPlugin,
+    plugin: &mut daw::file::types::FxPlugin,
     source_bytes: &[u8],
 ) -> bool {
-    if let Some(dawfile_reaper::types::FxChainNode::Plugin(source_plugin)) =
+    if let Some(daw::file::types::FxChainNode::Plugin(source_plugin)) =
         parse_raw_block_bytes(source_bytes)
     {
         let loaded_fxid = plugin.fxid.clone();
@@ -2393,10 +2393,10 @@ fn try_replace_raw_block(
 /// Preserves the loaded container's FXID but replaces children, raw_block,
 /// and container_cfg from the source.
 fn try_replace_container(
-    container: &mut dawfile_reaper::types::FxContainer,
+    container: &mut daw::file::types::FxContainer,
     source_bytes: &[u8],
 ) -> bool {
-    if let Some(dawfile_reaper::types::FxChainNode::Container(source_container)) =
+    if let Some(daw::file::types::FxChainNode::Container(source_container)) =
         parse_raw_block_bytes(source_bytes)
     {
         let loaded_fxid = container.fxid.clone();
@@ -2430,7 +2430,7 @@ async fn cmd_rigs_open(
 
     // Connect to REAPER — owned or existing
     let (daw, owned) = if own_reaper {
-        let (daw, pid, sock) = daw_cli::launch_and_connect("fts-guitar")
+        let (daw, pid, sock) = daw_cli::launch_and_connect("fts-signal")
             .await
             .map_err(|e| eyre::eyre!("Failed to launch REAPER: {e}"))?;
         (daw, Some((pid, sock)))
@@ -2453,7 +2453,7 @@ async fn cmd_rigs_open(
         std::collections::HashMap::new();
     let mut state_by_source_plugin: std::collections::HashMap<String, Vec<u8>> =
         std::collections::HashMap::new();
-    for &bt in signal_proto::ALL_BLOCK_TYPES {
+    for &bt in signal::ALL_BLOCK_TYPES {
         if let Ok(presets) = signal.block_presets().list(bt).await {
             for preset in presets {
                 if let Some(data) = preset.default_snapshot().state_data() {
@@ -2481,8 +2481,8 @@ async fn cmd_rigs_open(
     );
 
     // ── 2. Resolve rig hierarchy → per-layer module/block specs ──
-    use signal_proto::plugin_block::FxRole;
-    use signal_proto::ModuleBlockSource;
+    use signal::plugin_block::FxRole;
+    use signal::ModuleBlockSource;
 
     struct BlockSpec {
         #[allow(dead_code)]
@@ -2606,7 +2606,7 @@ async fn cmd_rigs_open(
             blocks_with_state,
         );
 
-        use signal_proto::plugin_block::TrackRole;
+        use signal::plugin_block::TrackRole;
 
         // Create track hierarchy: [R] → [E] → [L]
         let rig_track = project
@@ -2669,8 +2669,8 @@ async fn cmd_rigs_open(
                             }
                         }
                     }
-                    fxchain_nodes.push(dawfile_reaper::types::FxChainNode::Container(
-                        dawfile_reaper::types::FxContainer {
+                    fxchain_nodes.push(daw::file::types::FxChainNode::Container(
+                        daw::file::types::FxContainer {
                             name: module.container_name.clone(),
                             bypassed: false,
                             offline: false,
@@ -2687,7 +2687,7 @@ async fn cmd_rigs_open(
                     ));
                 }
 
-                let fxchain = dawfile_reaper::FxChain {
+                let fxchain = daw::file::FxChain {
                     window_rect: None,
                     show: 0,
                     last_sel: 0,
@@ -2700,7 +2700,7 @@ async fn cmd_rigs_open(
                 let chunk = layer_track.get_chunk().await?;
                 let fxchain_text = fxchain.to_rpp_string();
                 let new_chunk =
-                    if let Some(existing) = dawfile_reaper::chunk_ops::extract_fxchain_block(&chunk)
+                    if let Some(existing) = daw::file::chunk_ops::extract_fxchain_block(&chunk)
                     {
                         chunk.replace(existing, &fxchain_text)
                     } else {
@@ -2756,14 +2756,14 @@ async fn cmd_rigs_open(
                     continue;
                 }
             };
-            let fxchain_text = match dawfile_reaper::chunk_ops::extract_fxchain_block(&chunk_str) {
+            let fxchain_text = match daw::file::chunk_ops::extract_fxchain_block(&chunk_str) {
                 Some(t) => t,
                 None => {
                     eprintln!("[state] no FXCHAIN block in loaded track");
                     continue;
                 }
             };
-            let mut parsed = match dawfile_reaper::FxChain::parse(fxchain_text) {
+            let mut parsed = match daw::file::FxChain::parse(fxchain_text) {
                 Ok(p) => p,
                 Err(e) => {
                     eprintln!("[state] failed to parse loaded FXCHAIN: {e}");
@@ -2791,7 +2791,7 @@ async fn cmd_rigs_open(
             let mut skipped = 0usize;
             for node in parsed.nodes.iter_mut() {
                 match node {
-                    dawfile_reaper::types::FxChainNode::Container(c) => {
+                    daw::file::types::FxChainNode::Container(c) => {
                         if let Some(block_states) = module_states.get(&c.name) {
                             replace_by_position(
                                 &mut c.children,
@@ -2804,7 +2804,7 @@ async fn cmd_rigs_open(
                             skipped += c.children.len();
                         }
                     }
-                    dawfile_reaper::types::FxChainNode::Plugin(p) => {
+                    daw::file::types::FxChainNode::Plugin(p) => {
                         let source = state_by_source_plugin
                             .get(&p.name)
                             .or_else(|| {
@@ -2859,14 +2859,14 @@ async fn cmd_rigs_open(
                 continue;
             }
         };
-        let fxchain_text = match dawfile_reaper::chunk_ops::extract_fxchain_block(&chunk_str) {
+        let fxchain_text = match daw::file::chunk_ops::extract_fxchain_block(&chunk_str) {
             Some(t) => t,
             None => {
                 verify_issues.push("No FXCHAIN block in loaded track".to_string());
                 continue;
             }
         };
-        let parsed = match dawfile_reaper::FxChain::parse(fxchain_text) {
+        let parsed = match daw::file::FxChain::parse(fxchain_text) {
             Ok(p) => p,
             Err(e) => {
                 verify_issues.push(format!("Failed to parse FXCHAIN: {e}"));
@@ -2875,7 +2875,7 @@ async fn cmd_rigs_open(
         };
 
         fn verify_nodes(
-            nodes: &[dawfile_reaper::types::FxChainNode],
+            nodes: &[daw::file::types::FxChainNode],
             state_by_preset: &std::collections::HashMap<String, Vec<u8>>,
             state_by_source: &std::collections::HashMap<String, Vec<u8>>,
             issues: &mut Vec<String>,
@@ -2883,7 +2883,7 @@ async fn cmd_rigs_open(
         ) {
             for node in nodes {
                 match node {
-                    dawfile_reaper::types::FxChainNode::Plugin(p) => {
+                    daw::file::types::FxChainNode::Plugin(p) => {
                         let display = p.custom_name.as_deref().unwrap_or(&p.name);
                         let loaded_size = p.raw_block.len();
 
@@ -2934,7 +2934,7 @@ async fn cmd_rigs_open(
                         );
                         *count += 1;
                     }
-                    dawfile_reaper::types::FxChainNode::Container(c) => {
+                    daw::file::types::FxChainNode::Container(c) => {
                         eprintln!(
                             "[verify] ┌ container '{}' ({} children)",
                             c.name,
@@ -2997,18 +2997,18 @@ async fn cmd_nam_packs(
     vendor: Option<&str>,
     category: Option<&str>,
 ) -> Result<()> {
-    let nam_root = nam_manager::nam_root_from_env(&expand_tilde(DEFAULT_NAM_ROOT));
+    let nam_root = signal::nam_manager::nam_root_from_env(&expand_tilde(DEFAULT_NAM_ROOT));
     let packs_dir = nam_root.join("packs");
 
-    let packs = nam_manager::pack::load_packs(&packs_dir)
+    let packs = signal::nam_manager::pack::load_packs(&packs_dir)
         .map_err(|e| eyre::eyre!("Failed to load packs: {e}"))?;
 
     let cat_filter = category
         .map(|c| match c.to_lowercase().as_str() {
-            "amp" => Ok(nam_manager::PackCategory::Amp),
-            "drive" => Ok(nam_manager::PackCategory::Drive),
-            "ir" => Ok(nam_manager::PackCategory::Ir),
-            "archetype" => Ok(nam_manager::PackCategory::Archetype),
+            "amp" => Ok(signal::nam_manager::PackCategory::Amp),
+            "drive" => Ok(signal::nam_manager::PackCategory::Drive),
+            "ir" => Ok(signal::nam_manager::PackCategory::Ir),
+            "archetype" => Ok(signal::nam_manager::PackCategory::Archetype),
             _ => Err(eyre::eyre!("Unknown category: {c}. Valid: amp, drive, ir, archetype")),
         })
         .transpose()?;
@@ -3057,17 +3057,17 @@ async fn cmd_nam_packs(
 /// Loads the NAM plugin, injects the model path into its state, then reads
 /// back the complete REAPER chunk. This produces a portable, host-validated
 /// state representation rather than storing raw file paths.
-async fn nam_capture_state(fx: &daw_control::FxHandle, model_path: &str) -> Result<String> {
+async fn nam_capture_state(fx: &daw::FxHandle, model_path: &str) -> Result<String> {
     let reaper_chunk = fx.state_chunk_encoded().await?
         .ok_or_else(|| eyre::eyre!("FX has no default chunk"))?;
-    let segments = nam_manager::extract_state_base64(&reaper_chunk)
+    let segments = signal::nam_manager::extract_state_base64(&reaper_chunk)
         .ok_or_else(|| eyre::eyre!("Failed to extract base64 from chunk"))?;
-    let unified_b64 = nam_manager::first_base64_segment(&segments);
-    let mut nam_chunk = nam_manager::decode_chunk(unified_b64.trim())
+    let unified_b64 = signal::nam_manager::first_base64_segment(&segments);
+    let mut nam_chunk = signal::nam_manager::decode_chunk(unified_b64.trim())
         .map_err(|e| eyre::eyre!("Failed to decode NAM chunk: {e}"))?;
-    nam_manager::rewrite_paths(&mut nam_chunk, Some(model_path), None);
-    let new_b64 = nam_manager::encode_chunk(&nam_chunk);
-    let rebuilt = nam_manager::rebuild_chunk_with_state(&reaper_chunk, &new_b64);
+    signal::nam_manager::rewrite_paths(&mut nam_chunk, Some(model_path), None);
+    let new_b64 = signal::nam_manager::encode_chunk(&nam_chunk);
+    let rebuilt = signal::nam_manager::rebuild_chunk_with_state(&reaper_chunk, &new_b64);
     fx.set_state_chunk_encoded(rebuilt).await
         .map_err(|e| eyre::eyre!("Failed to set chunk: {e}"))?;
     // Read back the final state after REAPER has processed it
@@ -3080,14 +3080,14 @@ fn filter_nam_packs(
     packs_dir: &Path,
     vendor: Option<&str>,
     category: Option<&str>,
-) -> Result<Vec<nam_manager::PackDefinition>> {
-    let packs = nam_manager::pack::load_packs(packs_dir)
+) -> Result<Vec<signal::nam_manager::PackDefinition>> {
+    let packs = signal::nam_manager::pack::load_packs(packs_dir)
         .map_err(|e| eyre::eyre!("Failed to load packs: {e}"))?;
 
     let cat_filter = category
         .map(|c| match c.to_lowercase().as_str() {
-            "amp" => Ok(nam_manager::PackCategory::Amp),
-            "drive" => Ok(nam_manager::PackCategory::Drive),
+            "amp" => Ok(signal::nam_manager::PackCategory::Amp),
+            "drive" => Ok(signal::nam_manager::PackCategory::Drive),
             _ => Err(eyre::eyre!("Unknown category for import: {c}. Valid: amp, drive")),
         })
         .transpose()?;
@@ -3105,14 +3105,14 @@ fn filter_nam_packs(
                     return false;
                 }
             }
-            matches!(p.category, nam_manager::PackCategory::Amp | nam_manager::PackCategory::Drive)
+            matches!(p.category, signal::nam_manager::PackCategory::Amp | signal::nam_manager::PackCategory::Drive)
         })
         .collect())
 }
 
 /// Collect (tone, filename) pairs from a pack definition.
-fn collect_tone_files(pack: &nam_manager::PackDefinition) -> Vec<(String, String)> {
-    let is_amp = pack.category == nam_manager::PackCategory::Amp;
+fn collect_tone_files(pack: &signal::nam_manager::PackDefinition) -> Vec<(String, String)> {
+    let is_amp = pack.category == signal::nam_manager::PackCategory::Amp;
     let mut tone_files: Vec<(String, String)> = Vec::new();
 
     if is_amp {
@@ -3144,7 +3144,7 @@ async fn cmd_nam_import_dry_run(
     vendor: Option<&str>,
     category: Option<&str>,
 ) -> Result<()> {
-    let nam_root = nam_manager::nam_root_from_env(&expand_tilde(DEFAULT_NAM_ROOT));
+    let nam_root = signal::nam_manager::nam_root_from_env(&expand_tilde(DEFAULT_NAM_ROOT));
     let packs_dir = nam_root.join("packs");
     let filtered = filter_nam_packs(&packs_dir, vendor, category)?;
 
@@ -3162,9 +3162,9 @@ async fn cmd_nam_import_dry_run(
             continue;
         }
 
-        let is_amp = pack.category == nam_manager::PackCategory::Amp;
+        let is_amp = pack.category == signal::nam_manager::PackCategory::Amp;
         let category_prefix = if is_amp { "nam-amp" } else { "nam-drive" };
-        let preset_id = signal_proto::seed_id(&format!("{}-{}", category_prefix, pack.id));
+        let preset_id = signal::seed_id(&format!("{}-{}", category_prefix, pack.id));
         let gear_model = pack.gear_model.as_deref().unwrap_or(&pack.label);
         let preset_name = format!("{} [NAM]", gear_model);
         let snap_count = tone_files.len();
@@ -3200,7 +3200,7 @@ async fn cmd_nam_import(
     vendor: Option<&str>,
     category: Option<&str>,
 ) -> Result<()> {
-    let nam_root = nam_manager::nam_root_from_env(&expand_tilde(DEFAULT_NAM_ROOT));
+    let nam_root = signal::nam_manager::nam_root_from_env(&expand_tilde(DEFAULT_NAM_ROOT));
     let packs_dir = nam_root.join("packs");
     let filtered = filter_nam_packs(&packs_dir, vendor, category)?;
 
@@ -3222,24 +3222,24 @@ async fn cmd_nam_import(
             continue;
         }
 
-        let is_amp = pack.category == nam_manager::PackCategory::Amp;
+        let is_amp = pack.category == signal::nam_manager::PackCategory::Amp;
         let category_prefix = if is_amp { "nam-amp" } else { "nam-drive" };
         let block_type = if is_amp {
-            signal_proto::BlockType::Amp
+            signal::BlockType::Amp
         } else {
-            signal_proto::BlockType::Drive
+            signal::BlockType::Drive
         };
 
-        let preset_id = signal_proto::seed_id(&format!("{}-{}", category_prefix, pack.id));
+        let preset_id = signal::seed_id(&format!("{}-{}", category_prefix, pack.id));
         let gear_model = pack.gear_model.as_deref().unwrap_or(&pack.label);
         let preset_name = format!("{} [NAM]", gear_model);
 
         // Build snapshots by loading each tone in REAPER
-        let mut snapshots: Vec<signal_proto::Snapshot> = Vec::new();
+        let mut snapshots: Vec<signal::Snapshot> = Vec::new();
 
         for (tone, filename) in &tone_files {
             let snap_id =
-                signal_proto::seed_id(&format!("{}-{}-{}", category_prefix, pack.id, tone));
+                signal::seed_id(&format!("{}-{}-{}", category_prefix, pack.id, tone));
             let path = resolve_nam_path(&nam_root, pack, filename);
 
             let path_str = match path {
@@ -3251,7 +3251,7 @@ async fn cmd_nam_import(
             };
 
             // Add NAM FX, capture state, then remove
-            let block = signal_proto::Block::from_parameters(nam_block_params());
+            let block = signal::Block::from_parameters(nam_block_params());
             let snapshot = match async {
                 let fx = scratch_track
                     .fx_chain()
@@ -3266,8 +3266,8 @@ async fn cmd_nam_import(
                     .map_err(|e| eyre::eyre!("Failed to remove FX: {e}"))?;
 
                 Ok::<_, eyre::Report>(
-                    signal_proto::Snapshot::new(
-                        signal_proto::SnapshotId::from(snap_id.to_string()),
+                    signal::Snapshot::new(
+                        signal::SnapshotId::from(snap_id.to_string()),
                         capitalize(tone),
                         block,
                     )
@@ -3294,11 +3294,11 @@ async fn cmd_nam_import(
         let default_snapshot = snapshots.remove(0);
         let snap_count = 1 + snapshots.len();
 
-        let metadata = signal_proto::metadata::Metadata::new()
+        let metadata = signal::metadata::Metadata::new()
             .with_tag(format!("source:{}", NAM_PLUGIN_NAME));
 
-        let preset = signal_proto::Preset::new(
-            signal_proto::PresetId::from(preset_id.to_string()),
+        let preset = signal::Preset::new(
+            signal::PresetId::from(preset_id.to_string()),
             preset_name.clone(),
             block_type,
             default_snapshot,
@@ -3319,7 +3319,7 @@ async fn cmd_nam_import(
     // Clean up scratch track
     project
         .tracks()
-        .remove(daw_control::TrackRef::Guid(scratch_track.guid().to_string()))
+        .remove(daw::TrackRef::Guid(scratch_track.guid().to_string()))
         .await?;
 
     println!(
@@ -3333,7 +3333,7 @@ async fn cmd_nam_import(
 /// Resolve a NAM file path: {nam_root}/{category_dir}/{pack_directory}/{filename}
 fn resolve_nam_path(
     nam_root: &Path,
-    pack: &nam_manager::PackDefinition,
+    pack: &signal::nam_manager::PackDefinition,
     filename: &str,
 ) -> Option<String> {
     let dir = pack.directory.as_deref().unwrap_or(&pack.id);
@@ -3349,12 +3349,12 @@ fn resolve_nam_path(
 }
 
 /// Default NAM block parameters.
-fn nam_block_params() -> Vec<signal_proto::BlockParameter> {
+fn nam_block_params() -> Vec<signal::BlockParameter> {
     vec![
-        signal_proto::BlockParameter::new("INPUT_LEVEL", "Input Level", 0.5),
-        signal_proto::BlockParameter::new("OUTPUT_LEVEL", "Output Level", 0.5),
-        signal_proto::BlockParameter::new("NOISE_GATE_THRESHOLD", "Noise Gate Threshold", 0.0),
-        signal_proto::BlockParameter::new("NOISE_GATE_ACTIVE", "Noise Gate Active", 0.0),
+        signal::BlockParameter::new("INPUT_LEVEL", "Input Level", 0.5),
+        signal::BlockParameter::new("OUTPUT_LEVEL", "Output Level", 0.5),
+        signal::BlockParameter::new("NOISE_GATE_THRESHOLD", "Noise Gate Threshold", 0.0),
+        signal::BlockParameter::new("NOISE_GATE_ACTIVE", "Noise Gate Active", 0.0),
     ]
 }
 
@@ -3629,7 +3629,7 @@ async fn cmd_patches_remove(
 
 async fn cmd_browse(signal: &SignalController, query: &str, as_json: bool) -> Result<()> {
     let results = signal
-        .browse(signal_proto::tagging::BrowserQuery {
+        .browse(signal::tagging::BrowserQuery {
             text: Some(query.to_string()),
             ..Default::default()
         })
@@ -3938,7 +3938,7 @@ async fn cmd_daw_fx(daw: &Daw, track_arg: &str, as_json: bool) -> Result<()> {
 async fn cmd_daw_scan(daw: &Daw, track_arg: &str, as_json: bool) -> Result<()> {
     let handle = daw_cli::resolve_track_handle(daw, track_arg).await?;
     let tree = handle.fx_chain().tree().await?;
-    let chain = signal_daw_bridge::infer_chain_from_fx_tree(&tree);
+    let chain = signal::signal_daw_bridge::infer_chain_from_fx_tree(&tree);
 
     if as_json {
         println!("{}", serde_json::to_string_pretty(&chain)?);
@@ -3978,7 +3978,7 @@ async fn cmd_daw_import(
     track_arg: &str,
     rig_name: &str,
 ) -> Result<()> {
-    use signal_controller::ops::rig_importer::{ImportBlock, ImportChain, ImportModule};
+    use signal::ops::rig_importer::{ImportBlock, ImportChain, ImportModule};
     use std::collections::HashMap;
 
     let daw = daw_cli::connect(socket).await?;
@@ -3986,7 +3986,7 @@ async fn cmd_daw_import(
 
     let handle = daw_cli::resolve_track_handle(&daw, track_arg).await?;
     let tree = handle.fx_chain().tree().await?;
-    let inferred = signal_daw_bridge::infer_chain_from_fx_tree(&tree);
+    let inferred = signal::signal_daw_bridge::infer_chain_from_fx_tree(&tree);
 
     // Capture per-plugin state by parsing the full track RPP chunk.
     // This avoids REAPER API limitations with encoded container-child indices.
@@ -3996,16 +3996,16 @@ async fn cmd_daw_import(
     match handle.get_chunk().await {
         Ok(chunk_str) => {
             if let Some(fxchain_text) =
-                dawfile_reaper::chunk_ops::extract_fxchain_block(&chunk_str)
+                daw::file::chunk_ops::extract_fxchain_block(&chunk_str)
             {
-                if let Ok(parsed) = dawfile_reaper::FxChain::parse(fxchain_text) {
+                if let Ok(parsed) = daw::file::FxChain::parse(fxchain_text) {
                     fn collect_plugin_state(
-                        nodes: &[dawfile_reaper::types::FxChainNode],
+                        nodes: &[daw::file::types::FxChainNode],
                         out: &mut HashMap<String, Vec<u8>>,
                     ) {
                         for node in nodes {
                             match node {
-                                dawfile_reaper::types::FxChainNode::Plugin(p) => {
+                                daw::file::types::FxChainNode::Plugin(p) => {
                                     if !p.raw_block.is_empty() {
                                         if let Some(fxid) = &p.fxid {
                                             // Store by GUID (strip braces: RPP {GUID} → tree GUID)
@@ -4029,7 +4029,7 @@ async fn cmd_daw_import(
                                         }
                                     }
                                 }
-                                dawfile_reaper::types::FxChainNode::Container(c) => {
+                                daw::file::types::FxChainNode::Container(c) => {
                                     // Store the entire container's raw_block keyed by its
                                     // name — sub-containers use name as their block ID in
                                     // the inferred chain. This allows `rigs open` to
@@ -4151,11 +4151,11 @@ async fn cmd_daw_import(
 /// Recursively collect plugin parameters from the FX tree by querying each
 /// plugin's parameter list via the DAW API. Results are keyed by GUID.
 async fn collect_fx_params(
-    track: &daw_control::TrackHandle,
-    node: &daw_control::FxNode,
+    track: &daw::TrackHandle,
+    node: &daw::FxNode,
     out: &mut std::collections::HashMap<String, Vec<(String, String, f64)>>,
 ) {
-    use daw_control::FxNodeKind;
+    use daw::FxNodeKind;
     match &node.kind {
         FxNodeKind::Plugin(fx) => {
             let guid = &fx.guid;
@@ -4213,11 +4213,11 @@ async fn cmd_signal_load(
     let daw = daw_cli::connect(socket).await?;
     let track_handle = daw_cli::resolve_track_handle(&daw, track_arg).await?;
 
-    let snap_id = snapshot_id.map(|s| signal_proto::SnapshotId::from(s.to_string()));
+    let snap_id = snapshot_id.map(|s| signal::SnapshotId::from(s.to_string()));
 
     // Try block type first.
-    if let Some(bt) = signal_proto::BlockType::from_str(preset_type) {
-        let pid = signal_proto::PresetId::from(preset_id.to_string());
+    if let Some(bt) = signal::BlockType::from_str(preset_type) {
+        let pid = signal::PresetId::from(preset_id.to_string());
 
         // Check if it's a block preset.
         let block_presets = signal.block_presets().list(bt).await?;
@@ -4252,8 +4252,8 @@ async fn cmd_signal_load(
     }
 
     // Try module type.
-    if let Some(mt) = signal_proto::ModuleType::from_str(preset_type) {
-        let pid = signal_proto::ModulePresetId::from(preset_id.to_string());
+    if let Some(mt) = signal::ModuleType::from_str(preset_type) {
+        let pid = signal::ModulePresetId::from(preset_id.to_string());
 
         let module_presets = signal.module_presets().list().await?;
         if module_presets.iter().any(|p| p.id() == &pid) {
