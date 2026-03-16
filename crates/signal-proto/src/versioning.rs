@@ -2,6 +2,7 @@
 //!
 //! Also defines sync metadata for device/cloud synchronization.
 
+use facet::Facet;
 use serde::{Deserialize, Serialize};
 use std::marker::PhantomData;
 
@@ -124,7 +125,7 @@ impl<T: PartialEq, S> PartialEq for Versioned<T, S> {
 // ---------------------------------------------------------------------------
 
 /// Metadata for device/cloud synchronization.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Facet)]
 pub struct SyncMetadata {
     /// Device ID that last modified this entity.
     pub device_id: String,

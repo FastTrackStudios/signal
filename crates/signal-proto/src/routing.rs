@@ -3,10 +3,12 @@
 //! Defines how audio flows between blocks within a module, and where
 //! audio originates (hardware inputs, virtual instruments, etc.).
 
+use facet::Facet;
 use serde::{Deserialize, Serialize};
 
 /// Audio source — where signal originates before entering the processing chain.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Facet)]
+#[repr(C)]
 pub enum AudioSource {
     /// Hardware audio input (e.g. guitar DI, microphone).
     HardwareInput {
@@ -51,7 +53,8 @@ impl AudioSource {
 }
 
 /// Audio destination — where processed signal goes after the chain.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Facet)]
+#[repr(C)]
 pub enum AudioDestination {
     /// Hardware output (e.g. main L/R, headphone out).
     HardwareOutput {
@@ -75,7 +78,7 @@ impl Default for AudioDestination {
 }
 
 /// Configuration for a signal routing point within a module chain.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Facet)]
 pub struct RouteConfig {
     /// Source of audio for this route.
     pub source: AudioSource,

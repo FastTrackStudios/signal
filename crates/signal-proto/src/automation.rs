@@ -6,10 +6,12 @@
 
 use crate::easing::EasingCurve;
 use crate::rig::RigSceneId;
+use facet::Facet;
 use serde::{Deserialize, Serialize};
 
 /// An action triggered by an automation event.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Facet)]
+#[repr(C)]
 pub enum AutomationAction {
     /// Instantly apply a snapshot/scene.
     ApplySnapshot { scene_id: RigSceneId },
@@ -35,7 +37,7 @@ pub enum AutomationAction {
 }
 
 /// A single automation event on the timeline.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Facet)]
 pub struct AutomationEvent {
     /// Unique ID for this event.
     pub id: String,
@@ -63,7 +65,7 @@ impl AutomationEvent {
 }
 
 /// A lane of automation events, typically associated with a song section.
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, Facet)]
 pub struct AutomationLane {
     /// Human-readable name (e.g. "Scene Changes", "Morph Automation").
     pub name: String,
@@ -104,7 +106,7 @@ impl AutomationLane {
 }
 
 /// Collection of automation lanes for a song section.
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, Facet)]
 pub struct SnapshotAutomation {
     pub lanes: Vec<AutomationLane>,
 }

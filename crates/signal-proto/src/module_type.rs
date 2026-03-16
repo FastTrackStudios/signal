@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 // ─── Module category ────────────────────────────────────────────
 
 /// High-level grouping of module types.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Facet)]
 #[repr(C)]
 pub enum ModuleCategory {
     Vocal,

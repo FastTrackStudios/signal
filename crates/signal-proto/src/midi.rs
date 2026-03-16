@@ -1,9 +1,11 @@
 //! MIDI CC mapping and learn types for external controller integration.
 
+use facet::Facet;
 use serde::{Deserialize, Serialize};
 
 /// Response curve for a MIDI CC → parameter mapping.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Facet)]
+#[repr(C)]
 pub enum CcCurve {
     /// Direct 1:1 mapping.
     Linear,
@@ -65,7 +67,8 @@ impl CcCurve {
 }
 
 /// What a MIDI CC controls.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Facet)]
+#[repr(C)]
 pub enum MidiTarget {
     /// Controls the morph slider position (0.0–1.0).
     MorphSlider,
@@ -81,7 +84,7 @@ pub enum MidiTarget {
 }
 
 /// A single MIDI CC → target mapping.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Facet)]
 pub struct MidiCcMapping {
     /// MIDI channel (0–15, None = omni).
     pub channel: Option<u8>,
@@ -122,7 +125,8 @@ impl MidiCcMapping {
 }
 
 /// State of the MIDI learn process.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Facet)]
+#[repr(C)]
 pub enum MidiLearnState {
     /// Not learning — normal operation.
     Idle,
@@ -143,7 +147,7 @@ impl Default for MidiLearnState {
 }
 
 /// Collection of MIDI CC mappings for a rig.
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, Facet)]
 pub struct MidiMappingSet {
     pub mappings: Vec<MidiCcMapping>,
 }
