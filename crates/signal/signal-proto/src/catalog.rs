@@ -15,6 +15,7 @@
 //! }
 //! ```
 
+use facet::Facet;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -108,7 +109,7 @@ pub const NDSP_PLUGINS: &[NdspPlugin] = &[
 // ─── Catalogue Types ────────────────────────────────────────────
 
 /// Top-level catalogue index.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Facet)]
 pub struct Catalog {
     pub version: u32,
     pub generated: String,
@@ -116,7 +117,7 @@ pub struct Catalog {
 }
 
 /// Per-plugin block entry in the top-level catalogue index.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Facet)]
 pub struct CatalogPlugin {
     pub name: String,
     pub manufacturer: String,
@@ -128,7 +129,7 @@ pub struct CatalogPlugin {
 }
 
 /// A preset discovered on disk in a plugin's preset library.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Facet)]
 pub struct DiskPreset {
     /// Human-readable name parsed from the binary file.
     pub name: String,
@@ -148,7 +149,7 @@ pub struct DiskPreset {
 /// all Neural DSP plugins without hardcoding parameter names. The keys are
 /// parameter names (e.g., "threeInOneGain", "selectedAmp") and values are
 /// the parameter values as strings (f64 for numeric, raw string for enum-like).
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, Facet)]
 pub struct PresetFingerprint {
     pub params: BTreeMap<String, String>,
 }
@@ -197,7 +198,7 @@ impl PresetFingerprint {
 ///
 /// Each Neural DSP "preset" maps to a **Snapshot** in our domain model —
 /// a saved parameter state of a plugin block.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Facet)]
 pub struct SnapshotMetadata {
     pub name: String,
     /// URL/filesystem-safe slug derived from the name (e.g., "gravity-clean").
@@ -224,7 +225,7 @@ pub struct SnapshotMetadata {
 /// Each Neural DSP plugin maps to a single **PluginBlock** — the block
 /// definition with all its parameter mappings. The snapshots (factory
 /// "presets") live in the `snapshots/` subdirectory.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Facet)]
 pub struct BlockMetadata {
     pub name: String,
     pub manufacturer: String,

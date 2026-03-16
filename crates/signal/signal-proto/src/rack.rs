@@ -79,7 +79,7 @@ impl Rack {
 ///
 /// Contains multiple racks (e.g. Guitar Rack, Bass Rack, Keys Rack)
 /// and controls global routing between them.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Facet)]
 pub struct Director {
     pub id: DirectorId,
     pub name: String,

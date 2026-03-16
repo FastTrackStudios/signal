@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 // ─── Block category ─────────────────────────────────────────────
 
 /// Type-safe grouping of block types for UI selectors and filters.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Facet)]
 #[repr(C)]
 pub enum BlockCategory {
     Utility,
