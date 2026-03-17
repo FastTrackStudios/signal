@@ -763,7 +763,7 @@ mod tests {
         repo.init_schema().await?;
 
         let module = Module::from_chain(SignalChain::new(vec![
-            SignalNode::Block(ModuleBlock::new(
+            SignalNode::Block(Box::new(ModuleBlock::new(
                 "pre-eq",
                 "Pre EQ",
                 BlockType::Eq,
@@ -771,7 +771,7 @@ mod tests {
                     preset_id: PresetId::from_uuid(seed_id("eq-reaeq")),
                     saved_at_version: None,
                 },
-            )),
+            ))),
             SignalNode::Split {
                 lanes: vec![
                     SignalChain::serial(vec![ModuleBlock::new(
@@ -799,7 +799,7 @@ mod tests {
                     .with_overrides(vec![BlockParameterOverride::new("decay", 0.80)])]),
                 ],
             },
-            SignalNode::Block(ModuleBlock::new(
+            SignalNode::Block(Box::new(ModuleBlock::new(
                 "post-vol",
                 "Post Volume",
                 BlockType::Volume,
@@ -808,7 +808,7 @@ mod tests {
                         "level", "Level", 0.70,
                     )]),
                 },
-            )),
+            ))),
         ]));
 
         let collection = ModulePreset::new(

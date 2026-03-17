@@ -39,7 +39,7 @@ pub fn inferred_chain_to_module_chains(chain: &InferredChain) -> Vec<ModuleChain
             color_bg: color.bg.to_string(),
             color_fg: color.fg.to_string(),
             color_border: color.border.to_string(),
-            chain: SignalChain::new(vec![SignalNode::Block(module_block)]),
+            chain: SignalChain::new(vec![SignalNode::Block(Box::new(module_block))]),
             module_type: None,
         });
     }

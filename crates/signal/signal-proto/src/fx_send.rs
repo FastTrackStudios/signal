@@ -30,9 +30,10 @@ crate::typed_uuid_id!(
 /// Semantic category for an FX send effect.
 ///
 /// Used for UI grouping, icon selection, and default routing templates.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Facet)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Facet)]
 #[repr(C)]
 pub enum FxSendCategory {
+    #[default]
     Reverb,
     Delay,
     Chorus,
@@ -80,12 +81,6 @@ impl FxSendCategory {
         } else {
             Self::Custom(name.to_string())
         }
-    }
-}
-
-impl Default for FxSendCategory {
-    fn default() -> Self {
-        Self::Reverb
     }
 }
 

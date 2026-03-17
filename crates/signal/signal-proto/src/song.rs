@@ -177,10 +177,7 @@ impl Song {
             .map(|patch| Section::from_patch(SectionId::new(), &patch.name, patch.id.clone()))
             .collect();
 
-        let default_section_id = sections
-            .first()
-            .map(|s| s.id.clone())
-            .unwrap_or_else(SectionId::new);
+        let default_section_id = sections.first().map(|s| s.id.clone()).unwrap_or_default();
 
         let metadata = Metadata::new().with_base_profile_id(profile.id.to_string());
 

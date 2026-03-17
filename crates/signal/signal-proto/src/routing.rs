@@ -7,7 +7,7 @@ use facet::Facet;
 use serde::{Deserialize, Serialize};
 
 /// Audio source — where signal originates before entering the processing chain.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Facet)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, Facet)]
 #[repr(C)]
 pub enum AudioSource {
     /// Hardware audio input (e.g. guitar DI, microphone).
@@ -32,13 +32,8 @@ pub enum AudioSource {
         rig_id: String,
     },
     /// No audio source (bypass/silence).
+    #[default]
     None,
-}
-
-impl Default for AudioSource {
-    fn default() -> Self {
-        Self::None
-    }
 }
 
 impl AudioSource {
@@ -53,7 +48,7 @@ impl AudioSource {
 }
 
 /// Audio destination — where processed signal goes after the chain.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Facet)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, Facet)]
 #[repr(C)]
 pub enum AudioDestination {
     /// Hardware output (e.g. main L/R, headphone out).
@@ -65,13 +60,8 @@ pub enum AudioDestination {
     /// Send to another rack/rig.
     RackReceive { rack_id: String, rig_id: String },
     /// No destination (muted).
+    #[default]
     None,
-}
-
-impl Default for AudioDestination {
-    fn default() -> Self {
-        Self::None
-    }
 }
 
 /// Configuration for a signal routing point within a module chain.

@@ -4,10 +4,11 @@ use facet::Facet;
 use serde::{Deserialize, Serialize};
 
 /// Response curve for a MIDI CC → parameter mapping.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Facet)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, Facet)]
 #[repr(C)]
 pub enum CcCurve {
     /// Direct 1:1 mapping.
+    #[default]
     Linear,
     /// Slow start, fast end — finer control at low CC values.
     Logarithmic,
@@ -15,12 +16,6 @@ pub enum CcCurve {
     Exponential,
     /// On/off toggle at midpoint (CC >= 64 = on).
     Toggle,
-}
-
-impl Default for CcCurve {
-    fn default() -> Self {
-        Self::Linear
-    }
 }
 
 impl CcCurve {
@@ -125,10 +120,11 @@ impl MidiCcMapping {
 }
 
 /// State of the MIDI learn process.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Facet)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, Facet)]
 #[repr(C)]
 pub enum MidiLearnState {
     /// Not learning — normal operation.
+    #[default]
     Idle,
     /// Waiting for a CC message to assign to the target.
     Learning { target: MidiTarget },
@@ -138,12 +134,6 @@ pub enum MidiLearnState {
         cc_number: u8,
         channel: Option<u8>,
     },
-}
-
-impl Default for MidiLearnState {
-    fn default() -> Self {
-        Self::Idle
-    }
 }
 
 /// Collection of MIDI CC mappings for a rig.
