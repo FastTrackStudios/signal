@@ -68,16 +68,16 @@ pub use signal_live::engine::{
 // Re-export companion crates through the facade so external consumers
 // never need to depend on internal signal crates directly.
 pub use nam_manager;
+pub use signal_controller;
 pub use signal_daw_bridge;
 pub use signal_import;
 pub use signal_live::daw_block_ops::{
     LoadBlockResult, LoadModuleResult, ResolvedFxLoad, ResolvedModuleLoad,
 };
-pub use signal_live::macro_setup::{self, LiveMacroBinding, MacroSetupResult};
 pub use signal_live::macro_registry;
-pub use signal_live::{MacroRecord, MacroRecorder};
+pub use signal_live::macro_setup::{self, LiveMacroBinding, MacroSetupResult};
 pub use signal_live::SignalLive;
-pub use signal_controller;
+pub use signal_live::{MacroRecord, MacroRecorder};
 pub use signal_proto::*;
 pub use signal_storage::{
     default_block_collections, default_module_collections, default_seed_engines,

@@ -84,7 +84,9 @@ async fn randomize_all_fx(track: &daw::TrackHandle, seed: u64) -> eyre::Result<u
                 let params = handle.parameters().await?;
                 eprintln!(
                     "[randomize] FX '{}' index={} has {} params",
-                    fx.name, fx.index, params.len()
+                    fx.name,
+                    fx.index,
+                    params.len()
                 );
                 if let Some(first) = params.first() {
                     eprintln!(
@@ -122,8 +124,13 @@ async fn save_variation(
     block_preset_ids: &[(signal_proto::PresetId, signal_proto::BlockType)],
     signal: &signal::SignalController,
     name: &str,
-) -> eyre::Result<Vec<(signal_proto::SnapshotId, signal_proto::PresetId, signal_proto::BlockType)>>
-{
+) -> eyre::Result<
+    Vec<(
+        signal_proto::SnapshotId,
+        signal_proto::PresetId,
+        signal_proto::BlockType,
+    )>,
+> {
     let chunk_str = track.get_chunk().await?;
     let fxchain_text = daw::file::chunk_ops::extract_fxchain_block(&chunk_str)
         .ok_or_else(|| eyre::eyre!("No FXCHAIN in track chunk"))?;
@@ -165,7 +172,11 @@ async fn save_variation(
 /// raw_blocks, replacing the current FX state via a single `set_chunk` call.
 async fn apply_variation(
     track: &daw::TrackHandle,
-    variation: &[(signal_proto::SnapshotId, signal_proto::PresetId, signal_proto::BlockType)],
+    variation: &[(
+        signal_proto::SnapshotId,
+        signal_proto::PresetId,
+        signal_proto::BlockType,
+    )],
     signal: &signal::SignalController,
 ) -> eyre::Result<usize> {
     // Collect state_data for each snapshot.
@@ -239,30 +250,21 @@ async fn fast_path_open(
         name: rig_name.to_string(),
     }
     .display_name();
-    let rig_track = project
-        .tracks()
-        .add(&rig_name_display, None)
-        .await?;
+    let rig_track = project.tracks().add(&rig_name_display, None).await?;
     rig_track.set_folder_depth(1).await?;
 
     let engine_name_display = TrackRole::Engine {
         name: "Engine".to_string(),
     }
     .display_name();
-    let engine_track = project
-        .tracks()
-        .add(&engine_name_display, None)
-        .await?;
+    let engine_track = project.tracks().add(&engine_name_display, None).await?;
     engine_track.set_folder_depth(1).await?;
 
     let layer_name_display = TrackRole::Layer {
         name: layer_name.to_string(),
     }
     .display_name();
-    let layer_track = project
-        .tracks()
-        .add(&layer_name_display, None)
-        .await?;
+    let layer_track = project.tracks().add(&layer_name_display, None).await?;
     layer_track.set_folder_depth(-2).await?;
 
     // Build FXCHAIN from module specs.
@@ -305,15 +307,14 @@ async fn fast_path_open(
 
     let chunk: String = layer_track.get_chunk().await?;
     let fxchain_text = fxchain.to_rpp_string();
-    let new_chunk =
-        if let Some(existing) = daw::file::chunk_ops::extract_fxchain_block(&chunk) {
-            chunk.replace(existing, &fxchain_text)
-        } else {
-            let pos = chunk
-                .rfind('>')
-                .ok_or_else(|| eyre::eyre!("invalid track chunk"))?;
-            format!("{}{}\n{}", &chunk[..pos], fxchain_text, &chunk[pos..])
-        };
+    let new_chunk = if let Some(existing) = daw::file::chunk_ops::extract_fxchain_block(&chunk) {
+        chunk.replace(existing, &fxchain_text)
+    } else {
+        let pos = chunk
+            .rfind('>')
+            .ok_or_else(|| eyre::eyre!("invalid track chunk"))?;
+        format!("{}{}\n{}", &chunk[..pos], fxchain_text, &chunk[pos..])
+    };
     layer_track.set_chunk(new_chunk).await?;
 
     Ok(layer_track)
@@ -475,8 +476,7 @@ async fn fast_path_variation_save_load(ctx: &ReaperTestContext) -> eyre::Result<
 
                     for block in snap.module().blocks() {
                         if let ModuleBlockSource::PresetDefault { preset_id, .. }
-                        | ModuleBlockSource::PresetSnapshot { preset_id, .. } =
-                            block.source()
+                        | ModuleBlockSource::PresetSnapshot { preset_id, .. } = block.source()
                         {
                             block_preset_ids.push((preset_id.clone(), block.block_type()));
                         }
@@ -590,13 +590,7 @@ async fn fast_path_variation_save_load(ctx: &ReaperTestContext) -> eyre::Result<
         .map(|(name, states)| (*name, states.as_slice()))
         .collect();
 
-    let layer_track = fast_path_open(
-        &project,
-        &rig.name,
-        &layer_name,
-        &module_refs,
-    )
-    .await?;
+    let layer_track = fast_path_open(&project, &rig.name, &layer_name, &module_refs).await?;
 
     let open_ms = t_open.elapsed().as_secs_f64() * 1000.0;
     settle().await;
@@ -627,8 +621,7 @@ async fn fast_path_variation_save_load(ctx: &ReaperTestContext) -> eyre::Result<
 
     // ── 8. Save variation ──
     let t_save = Instant::now();
-    let variation =
-        save_variation(&layer_track, &block_preset_ids, &signal, "Randomized").await?;
+    let variation = save_variation(&layer_track, &block_preset_ids, &signal, "Randomized").await?;
     let save_ms = t_save.elapsed().as_secs_f64() * 1000.0;
 
     ctx.log(&format!(
@@ -648,8 +641,8 @@ async fn fast_path_variation_save_load(ctx: &ReaperTestContext) -> eyre::Result<
     let randomized_fxc = daw::file::chunk_ops::extract_fxchain_block(&randomized_chunk)
         .ok_or_else(|| eyre::eyre!("no FXCHAIN after randomization"))?;
     let randomized_raw_blocks: Vec<String> = {
-        let parsed = daw::file::FxChain::parse(randomized_fxc)
-            .map_err(|e| eyre::eyre!("parse: {e}"))?;
+        let parsed =
+            daw::file::FxChain::parse(randomized_fxc).map_err(|e| eyre::eyre!("parse: {e}"))?;
         flatten_to_raw_blocks(&parsed.nodes)
             .into_iter()
             .map(|s| s.to_string())
@@ -661,13 +654,7 @@ async fn fast_path_variation_save_load(ctx: &ReaperTestContext) -> eyre::Result<
     settle().await;
 
     let t_reload = Instant::now();
-    let layer_track = fast_path_open(
-        &project,
-        &rig.name,
-        &layer_name,
-        &module_refs,
-    )
-    .await?;
+    let layer_track = fast_path_open(&project, &rig.name, &layer_name, &module_refs).await?;
     let reload_ms = t_reload.elapsed().as_secs_f64() * 1000.0;
     settle().await;
     ctx.log(&format!("Reloaded original rig in {:.1}ms", reload_ms));
@@ -703,8 +690,8 @@ async fn fast_path_variation_save_load(ctx: &ReaperTestContext) -> eyre::Result<
     let applied_chunk = layer_track.get_chunk().await?;
     let applied_fxc = daw::file::chunk_ops::extract_fxchain_block(&applied_chunk)
         .ok_or_else(|| eyre::eyre!("no FXCHAIN after apply"))?;
-    let applied_parsed = daw::file::FxChain::parse(applied_fxc)
-        .map_err(|e| eyre::eyre!("parse: {e}"))?;
+    let applied_parsed =
+        daw::file::FxChain::parse(applied_fxc).map_err(|e| eyre::eyre!("parse: {e}"))?;
 
     let applied_raw_blocks: Vec<&str> = flatten_to_raw_blocks(&applied_parsed.nodes);
     assert_eq!(

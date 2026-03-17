@@ -42,7 +42,12 @@ async fn signal_guitar_rig_structure(ctx: &ReaperTestContext) -> eyre::Result<()
 
     // Verify track count: 1 rig + 1 engine + 1 layer = 3
     let tracks = project.tracks().all().await?;
-    assert_eq!(tracks.len(), 3, "guitar rig should have 3 tracks, got {}", tracks.len());
+    assert_eq!(
+        tracks.len(),
+        3,
+        "guitar rig should have 3 tracks, got {}",
+        tracks.len()
+    );
 
     // Verify rig track has [R] prefix
     assert!(
@@ -93,7 +98,12 @@ async fn signal_keys_megarig_structure(ctx: &ReaperTestContext) -> eyre::Result<
 
     // Expected: 1 rig + 3 engines + 7 layers + 3 engine send folders + 6 engine sends
     //         + 1 rig send folder + 2 rig sends = 23
-    assert_eq!(tracks.len(), 23, "keys megarig should have 23 tracks, got {}", tracks.len());
+    assert_eq!(
+        tracks.len(),
+        23,
+        "keys megarig should have 23 tracks, got {}",
+        tracks.len()
+    );
 
     // Verify [R] prefix on rig track
     assert!(
@@ -108,21 +118,49 @@ async fn signal_keys_megarig_structure(ctx: &ReaperTestContext) -> eyre::Result<
 
     // Keys Engine: 2 layers, 2 FX sends
     let keys = &instance.engine_instances[0];
-    assert_eq!(keys.layer_tracks.len(), 2, "Keys engine should have 2 layers");
-    assert_eq!(keys.fx_send_tracks.len(), 2, "Keys engine should have 2 FX sends");
+    assert_eq!(
+        keys.layer_tracks.len(),
+        2,
+        "Keys engine should have 2 layers"
+    );
+    assert_eq!(
+        keys.fx_send_tracks.len(),
+        2,
+        "Keys engine should have 2 FX sends"
+    );
 
     // Synth Engine: 3 layers, 2 FX sends
     let synth = &instance.engine_instances[1];
-    assert_eq!(synth.layer_tracks.len(), 3, "Synth engine should have 3 layers");
-    assert_eq!(synth.fx_send_tracks.len(), 2, "Synth engine should have 2 FX sends");
+    assert_eq!(
+        synth.layer_tracks.len(),
+        3,
+        "Synth engine should have 3 layers"
+    );
+    assert_eq!(
+        synth.fx_send_tracks.len(),
+        2,
+        "Synth engine should have 2 FX sends"
+    );
 
     // Organ Engine: 2 layers, 2 FX sends
     let organ = &instance.engine_instances[2];
-    assert_eq!(organ.layer_tracks.len(), 2, "Organ engine should have 2 layers");
-    assert_eq!(organ.fx_send_tracks.len(), 2, "Organ engine should have 2 FX sends");
+    assert_eq!(
+        organ.layer_tracks.len(),
+        2,
+        "Organ engine should have 2 layers"
+    );
+    assert_eq!(
+        organ.fx_send_tracks.len(),
+        2,
+        "Organ engine should have 2 FX sends"
+    );
 
     // Rig-level FX sends
-    assert_eq!(instance.fx_send_tracks.len(), 2, "rig should have 2 FX sends");
+    assert_eq!(
+        instance.fx_send_tracks.len(),
+        2,
+        "rig should have 2 FX sends"
+    );
 
     // Verify engine tracks have [E] prefix
     for engine_inst in &instance.engine_instances {

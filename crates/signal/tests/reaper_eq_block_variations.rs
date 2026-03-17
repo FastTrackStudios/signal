@@ -230,7 +230,10 @@ async fn eq_block_load_and_cycle_variations(ctx: &ReaperTestContext) -> eyre::Re
 
     // Verify FX name on the cycled-back Flat track
     let flat_fx_info = flat_fx.info().await?;
-    println!("[eq_variations] Flat cycle-back FX name: {}", flat_fx_info.name);
+    println!(
+        "[eq_variations] Flat cycle-back FX name: {}",
+        flat_fx_info.name
+    );
     assert!(
         flat_fx_info.name.contains("[B] EQ:"),
         "Cycled-back Flat FX name should contain '[B] EQ:', got '{}'",

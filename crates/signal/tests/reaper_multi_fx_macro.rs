@@ -179,7 +179,11 @@ async fn multi_fx_macro_drives_comp_and_eq(
 
     // Verify FX chain
     let fx_count = track.fx_chain().count().await?;
-    assert_eq!(fx_count, 3, "should have 3 FX (macros + comp + eq), got {}", fx_count);
+    assert_eq!(
+        fx_count, 3,
+        "should have 3 FX (macros + comp + eq), got {}",
+        fx_count
+    );
 
     // ─── 4. Macro 0 = 0.0 → all targets at min ──────────────────────
 
@@ -193,14 +197,8 @@ async fn multi_fx_macro_drives_comp_and_eq(
     let eg0 = poll_param_value(&eq_fx, eq_gain, 0.50, 0.05, POLL_TIMEOUT).await?;
     let ef0 = poll_param_value(&eq_fx, eq_freq, 0.30, 0.05, POLL_TIMEOUT).await?;
 
-    ctx.log(&format!(
-        "  Comp: Threshold={:.4}, Ratio={:.4}",
-        ct0, cr0
-    ));
-    ctx.log(&format!(
-        "  EQ:   Gain={:.4}, Freq={:.4}",
-        eg0, ef0
-    ));
+    ctx.log(&format!("  Comp: Threshold={:.4}, Ratio={:.4}", ct0, cr0));
+    ctx.log(&format!("  EQ:   Gain={:.4}, Freq={:.4}", eg0, ef0));
     ctx.log("PASS: All 4 targets at minimum position");
 
     // ─── 5. Macro 0 = 1.0 → all targets at max ──────────────────────
@@ -215,14 +213,8 @@ async fn multi_fx_macro_drives_comp_and_eq(
     let eg1 = poll_param_value(&eq_fx, eq_gain, 1.00, 0.05, POLL_TIMEOUT).await?;
     let ef1 = poll_param_value(&eq_fx, eq_freq, 0.90, 0.05, POLL_TIMEOUT).await?;
 
-    ctx.log(&format!(
-        "  Comp: Threshold={:.4}, Ratio={:.4}",
-        ct1, cr1
-    ));
-    ctx.log(&format!(
-        "  EQ:   Gain={:.4}, Freq={:.4}",
-        eg1, ef1
-    ));
+    ctx.log(&format!("  Comp: Threshold={:.4}, Ratio={:.4}", ct1, cr1));
+    ctx.log(&format!("  EQ:   Gain={:.4}, Freq={:.4}", eg1, ef1));
     ctx.log("PASS: All 4 targets at maximum position");
 
     // ─── 6. Sweep and verify all 4 targets move monotonically ────────
@@ -238,10 +230,10 @@ async fn multi_fx_macro_drives_comp_and_eq(
     for step in 0..=4 {
         let v = step as f64 / 4.0;
 
-        let exp_ct = 0.8 + v * (0.1 - 0.8);  // inverted: 0.8 → 0.1
-        let exp_cr = v * 0.8;                  // direct:   0.0 → 0.8
-        let exp_eg = 0.5 + v * 0.5;           // direct:   0.5 → 1.0
-        let exp_ef = 0.3 + v * 0.6;           // direct:   0.3 → 0.9
+        let exp_ct = 0.8 + v * (0.1 - 0.8); // inverted: 0.8 → 0.1
+        let exp_cr = v * 0.8; // direct:   0.0 → 0.8
+        let exp_eg = 0.5 + v * 0.5; // direct:   0.5 → 1.0
+        let exp_ef = 0.3 + v * 0.6; // direct:   0.3 → 0.9
 
         macros_fx.param(0).set(v).await?;
 
@@ -259,22 +251,30 @@ async fn multi_fx_macro_drives_comp_and_eq(
             assert!(
                 ct <= prev_ct + 0.02,
                 "Threshold should decrease (step {}): {:.4} → {:.4}",
-                step, prev_ct, ct
+                step,
+                prev_ct,
+                ct
             );
             assert!(
                 cr >= prev_cr - 0.02,
                 "Ratio should increase (step {}): {:.4} → {:.4}",
-                step, prev_cr, cr
+                step,
+                prev_cr,
+                cr
             );
             assert!(
                 eg >= prev_eg - 0.02,
                 "EQ Gain should increase (step {}): {:.4} → {:.4}",
-                step, prev_eg, eg
+                step,
+                prev_eg,
+                eg
             );
             assert!(
                 ef >= prev_ef - 0.02,
                 "EQ Freq should increase (step {}): {:.4} → {:.4}",
-                step, prev_ef, ef
+                step,
+                prev_ef,
+                ef
             );
         }
 
@@ -288,7 +288,9 @@ async fn multi_fx_macro_drives_comp_and_eq(
 
     // ─── 7. Show plugin windows ──────────────────────────────────────
 
-    project.run_command("_S&M_WNTSHW1").await
+    project
+        .run_command("_S&M_WNTSHW1")
+        .await
         .map_err(|e| eyre::eyre!("Failed to show plugin windows: {e}"))?;
     ctx.log("Opened all plugin windows floating");
 

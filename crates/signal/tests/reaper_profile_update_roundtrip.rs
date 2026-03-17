@@ -74,7 +74,9 @@ async fn profile_update_roundtrip(ctx: &ReaperTestContext) -> eyre::Result<()> {
     ctx.log(&format!("V1 chunk: {} bytes", chunk_v1.len()));
     assert!(chunk_v1.contains("<FXCHAIN"), "chunk should have FXCHAIN");
     assert!(
-        chunk_v1.contains("<CONTAINER") || chunk_v1.contains("<VST ") || chunk_v1.contains("<CLAP "),
+        chunk_v1.contains("<CONTAINER")
+            || chunk_v1.contains("<VST ")
+            || chunk_v1.contains("<CLAP "),
         "chunk should contain plugin data"
     );
 
@@ -99,8 +101,7 @@ async fn profile_update_roundtrip(ctx: &ReaperTestContext) -> eyre::Result<()> {
     assert!(sidecar_v1.exists(), "V1 sidecar should exist");
 
     // Parse sidecar and verify
-    let sc = signal::sidecar::read_sidecar(&path_v1)
-        .expect("sidecar should parse");
+    let sc = signal::sidecar::read_sidecar(&path_v1).expect("sidecar should parse");
     assert_eq!(sc.version, 1);
     assert_eq!(sc.kind, signal::sidecar::PresetKind::Layer);
     assert!(sc.tags.contains(&"test".to_string()));
@@ -116,7 +117,10 @@ async fn profile_update_roundtrip(ctx: &ReaperTestContext) -> eyre::Result<()> {
     ctx.log(&format!("V2 chunk: {} bytes", chunk_v2.len()));
 
     // V2 should differ from V1 (volume/pan changed)
-    assert_ne!(chunk_v1, chunk_v2, "modified chunk should differ from original");
+    assert_ne!(
+        chunk_v1, chunk_v2,
+        "modified chunk should differ from original"
+    );
 
     // FXCHAIN should be identical (we only changed track-level params)
     let fxchain_v1 = extract_fxchain(&chunk_v1).expect("V1 FXCHAIN");
@@ -175,8 +179,14 @@ async fn profile_update_roundtrip(ctx: &ReaperTestContext) -> eyre::Result<()> {
 
     // Content should be the new chunk
     let overwritten = std::fs::read_to_string(&path_v1)?;
-    assert_eq!(overwritten, chunk_v1_updated, "overwritten file should have new content");
-    assert_ne!(overwritten, chunk_v1, "overwritten should differ from original V1");
+    assert_eq!(
+        overwritten, chunk_v1_updated,
+        "overwritten file should have new content"
+    );
+    assert_ne!(
+        overwritten, chunk_v1,
+        "overwritten should differ from original V1"
+    );
     ctx.log("Overwrite of Default variation: correct ✓");
 
     // ── Step 6: Verify scanner finds both variations ──
@@ -187,7 +197,10 @@ async fn profile_update_roundtrip(ctx: &ReaperTestContext) -> eyre::Result<()> {
         .iter()
         .filter(|t| t.preset_name == "Roundtrip-Test")
         .collect();
-    ctx.log(&format!("Scanner found {} Roundtrip-Test variations", roundtrip_variants.len()));
+    ctx.log(&format!(
+        "Scanner found {} Roundtrip-Test variations",
+        roundtrip_variants.len()
+    ));
     for t in &roundtrip_variants {
         ctx.log(&format!("  {} / {}", t.preset_name, t.variation_name));
     }

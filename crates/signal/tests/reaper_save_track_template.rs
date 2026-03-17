@@ -10,8 +10,8 @@
 use std::time::Duration;
 
 use reaper_test::reaper_test;
-use signal::{BlockRepo, BlockType};
 use signal::track_template::{self, Instrument, TemplateTier};
+use signal::{BlockRepo, BlockType};
 
 /// Sleep to let REAPER process changes.
 async fn settle() {
@@ -92,7 +92,10 @@ async fn save_track_template(ctx: &ReaperTestContext) -> eyre::Result<()> {
         Some("Test clean guitar layer"),
     )?;
 
-    ctx.log(&format!("Saved layer template: {}", template_path.display()));
+    ctx.log(&format!(
+        "Saved layer template: {}",
+        template_path.display()
+    ));
     assert!(template_path.exists(), "template file should exist");
 
     // Verify sidecar was written
@@ -179,23 +182,22 @@ async fn save_track_template(ctx: &ReaperTestContext) -> eyre::Result<()> {
     );
 
     // Verify the layer template is in Guitar/01-Layers/
-    let layer_found = scanned
-        .iter()
-        .any(|t| {
-            t.preset_name == layer_name
-                && t.instrument.as_deref() == Some("Guitar")
-                && t.tier == Some(TemplateTier::Layer)
-        });
-    assert!(layer_found, "should find the layer template in scanner results");
+    let layer_found = scanned.iter().any(|t| {
+        t.preset_name == layer_name
+            && t.instrument.as_deref() == Some("Guitar")
+            && t.tier == Some(TemplateTier::Layer)
+    });
+    assert!(
+        layer_found,
+        "should find the layer template in scanner results"
+    );
 
     // Verify the rig template is in Guitar/03-Rigs/
-    let rig_found = scanned
-        .iter()
-        .any(|t| {
-            t.preset_name == rig_name
-                && t.instrument.as_deref() == Some("Guitar")
-                && t.tier == Some(TemplateTier::Rig)
-        });
+    let rig_found = scanned.iter().any(|t| {
+        t.preset_name == rig_name
+            && t.instrument.as_deref() == Some("Guitar")
+            && t.tier == Some(TemplateTier::Rig)
+    });
     assert!(rig_found, "should find the rig template in scanner results");
 
     // ── Verify the saved template is valid ──
@@ -203,9 +205,14 @@ async fn save_track_template(ctx: &ReaperTestContext) -> eyre::Result<()> {
     // The template file contains a valid <TRACK> block — REAPER can load it
     // via its native Track Template menu. We verify the content is well-formed.
     let saved_content = std::fs::read_to_string(&template_path)?;
-    assert!(saved_content.contains("<FXCHAIN"), "template should contain FXCHAIN block");
-    assert!(saved_content.contains("<VST ") || saved_content.contains("<CLAP "),
-        "template should contain plugin blocks");
+    assert!(
+        saved_content.contains("<FXCHAIN"),
+        "template should contain FXCHAIN block"
+    );
+    assert!(
+        saved_content.contains("<VST ") || saved_content.contains("<CLAP "),
+        "template should contain plugin blocks"
+    );
     ctx.log("Layer template validated: contains FXCHAIN + plugin blocks");
 
     // Clean up test templates
