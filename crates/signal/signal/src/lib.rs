@@ -88,6 +88,43 @@ pub use signal_storage::{
     SceneTemplateRepo, SceneTemplateRepoLive, SetlistRepo, SetlistRepoLive, SongRepo, SongRepoLive,
     StorageError, StorageResult,
 };
+
+/// Sidecar metadata for REAPER-native signal presets (`.signal.styx` files).
+pub mod sidecar {
+    pub use signal_storage::sidecar::*;
+}
+
+/// Track template writer for REAPER-native signal presets.
+pub mod track_template {
+    pub use signal_storage::track_template::*;
+}
+
+/// FXChains directory scanner and paths for REAPER-native signal presets.
+pub mod fxchains {
+    pub use signal_storage::seed_data::fxchains_scan::*;
+}
+
+/// Strip the `<FXCHAIN\n...\n>` wrapper from an FX chain chunk text.
+///
+/// REAPER's `.RfxChain` format is the *inner* content only — no `<FXCHAIN>` delimiters.
+/// This function removes the header line and closing `>`, returning just the bare FX blocks.
+pub fn strip_fxchain_wrapper(chunk: &str) -> String {
+    let trimmed = chunk.trim();
+    if trimmed.starts_with("<FXCHAIN") {
+        let after_header = trimmed
+            .find('\n')
+            .map(|i| &trimmed[i + 1..])
+            .unwrap_or(trimmed);
+        let inner = after_header.trim_end();
+        if inner.ends_with('>') {
+            inner[..inner.len() - 1].trim_end().to_string()
+        } else {
+            inner.to_string()
+        }
+    } else {
+        trimmed.to_string()
+    }
+}
 use std::sync::Arc;
 
 pub async fn bootstrap_in_memory_controller_async() -> Result<SignalController, StorageError> {
@@ -181,7 +218,7 @@ pub async fn connect_db(path: &str) -> Result<SignalController, StorageError> {
 
 /// Connect to a database and seed it with default data if empty.
 ///
-/// RfxChain-based presets from `~/Music/FastTrackStudio/Library/presets/`
+/// RfxChain-based presets from `<fts_home>/Library/presets/`
 /// are always refreshed from disk on every startup, so swapping `.RfxChain`
 /// files takes effect immediately without deleting the database.
 pub async fn connect_db_seeded(path: &str) -> Result<SignalController, StorageError> {
@@ -226,9 +263,10 @@ pub async fn connect_db_seeded(path: &str) -> Result<SignalController, StorageEr
             setlist_repo.save_setlist(&setlist).await?;
         }
     } else {
-        // Always refresh RfxChain presets from disk so file swaps take
+        // Always refresh file-backed presets from disk so file swaps take
         // effect without deleting the database.
         refresh_rfxchain_presets(&block_repo).await?;
+        refresh_fxchains_presets(&block_repo).await?;
     }
 
     let service = Arc::new(SignalLive::from_db(db));
@@ -240,11 +278,23 @@ pub async fn connect_db_seeded(path: &str) -> Result<SignalController, StorageEr
 /// Uses `save_block_collection` which deletes-then-inserts, so swapped
 /// files on disk are picked up on every app launch.
 async fn refresh_rfxchain_presets(block_repo: &BlockRepoLive) -> Result<(), StorageError> {
-    let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
-    let library_path = std::path::PathBuf::from(home).join("Music/FastTrackStudio/Library");
+    let library_path = utils::paths::library_dir();
     let rfx_presets =
         signal_storage::seed_data::catalog_import::rfxchain_block_collections(&library_path);
     for preset in rfx_presets {
+        block_repo.save_block_collection(preset).await?;
+    }
+    Ok(())
+}
+
+/// Re-import block presets from the REAPER-native FXChains directory.
+///
+/// Scans `FXChains/FTS-Signal/01-Blocks/` for `.RfxChain` files with
+/// optional `.signal.styx` sidecars, refreshing on every startup.
+async fn refresh_fxchains_presets(block_repo: &BlockRepoLive) -> Result<(), StorageError> {
+    let fxchains_root = signal_storage::seed_data::fxchains_scan::fxchains_root();
+    let block_presets = signal_storage::seed_data::fxchains_scan::scan_blocks(&fxchains_root);
+    for preset in block_presets {
         block_repo.save_block_collection(preset).await?;
     }
     Ok(())

@@ -45,7 +45,9 @@ pub mod rig_repo;
 pub mod scene_template_repo;
 pub mod seed_data;
 pub mod setlist_repo;
+pub mod sidecar;
 pub mod song_repo;
+pub mod track_template;
 
 pub use block_repo::{BlockRepo, BlockRepoLive};
 pub use daw_snapshot_repo::{
