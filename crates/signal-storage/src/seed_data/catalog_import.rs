@@ -1,6 +1,6 @@
 //! Import Neural DSP catalog from disk into domain `Preset`/`Snapshot` types.
 //!
-//! Reads the file-based catalog at `~/Music/FastTrackStudio/Library/` (produced
+//! Reads the file-based catalog at `<fts_home>/Library/` (produced
 //! by `cargo xtask catalog`) and converts each NDSP plugin into a `Preset`
 //! with `BlockType::Custom`, one `Snapshot` per factory preset.
 //!
