@@ -2,17 +2,70 @@
 
 specs (
     {
-        name hello-world
-        prefix r
-        include (cells/hello-world/hello-world-proto/spec/**/*.md)
+        name signal
+        include (docs/spec/signal/**/*.md)
         impls (
             {
-                name hello-world-proto
-                include (cells/hello-world/hello-world-proto/src/**/*.rs)
+                name signal-proto
+                include (crates/signal/signal-proto/src/**/*.rs)
             }
             {
-                name hello-world
-                include (cells/hello-world/hello-world/src/**/*.rs)
+                name signal-storage
+                include (crates/signal/signal-storage/src/**/*.rs)
+            }
+            {
+                name signal-live
+                include (crates/signal/signal-live/src/**/*.rs)
+            }
+            {
+                name signal-controller
+                include (crates/signal/signal-controller/src/**/*.rs)
+            }
+            {
+                name signal-facade
+                include (crates/signal/signal/src/**/*.rs)
+            }
+            {
+                name signal-daw-bridge
+                include (crates/signal/signal-daw-bridge/src/**/*.rs)
+            }
+            {
+                name reaper-extension
+                include (apps/reaper-extension/src/**/*.rs)
+            }
+            {
+                name signal-tests
+                include (crates/signal/signal/tests/**/*.rs)
+            }
+        )
+    }
+    {
+        name session
+        include (docs/spec/session/**/*.md)
+        impls (
+            {
+                name session-proto
+                include (crates/session/session-proto/src/**/*.rs)
+            }
+            {
+                name session
+                include (crates/session/session/src/**/*.rs)
+            }
+            {
+                name session-cli
+                include (apps/session-cli/src/**/*.rs)
+            }
+            {
+                name reaper-extension
+                include (apps/reaper-extension/src/**/*.rs)
+            }
+            {
+                name dawfile-reaper
+                include (../daw/crates/dawfile-reaper/src/**/*.rs)
+            }
+            {
+                name dawfile-tests
+                include (../daw/crates/dawfile-reaper/tests/**/*.rs)
             }
         )
     }
