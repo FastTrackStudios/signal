@@ -270,7 +270,7 @@ impl PluginBlockDef {
     /// suitable for the grid rendering pipeline.
     ///
     /// Each `VirtualModule` becomes a tuple. Each `VirtualBlock` becomes a
-    /// `SignalNode::Block(ModuleBlock)` with `ModuleBlockSource::Inline`,
+    /// `SignalNode::Block(Box<ModuleBlock>)` with `ModuleBlockSource::Inline`,
     /// carrying the virtual block's parameters as `BlockParameter`s.
     pub fn to_module_chains(&self) -> Vec<(String, ModuleType, SignalChain)> {
         self.modules
@@ -301,7 +301,10 @@ impl PluginBlockDef {
                     })
                     .collect();
 
-                let nodes: Vec<SignalNode> = blocks.into_iter().map(SignalNode::Block).collect();
+                let nodes: Vec<SignalNode> = blocks
+                    .into_iter()
+                    .map(|b| SignalNode::Block(Box::new(b)))
+                    .collect();
                 let chain = SignalChain::new(nodes);
                 (vm.label.clone(), vm.module_type, chain)
             })

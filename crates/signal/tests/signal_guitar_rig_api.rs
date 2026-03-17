@@ -449,14 +449,14 @@ async fn module_signal_chain_with_split() {
     let signal = controller().await;
 
     let chain = SignalChain::new(vec![
-        SignalNode::Block(ModuleBlock::new(
+        SignalNode::Block(Box::new(ModuleBlock::new(
             "pre-eq",
             "Pre EQ",
             BlockType::Eq,
             ModuleBlockSource::Inline {
                 block: Block::from_parameters(vec![BlockParameter::new("gain", "Gain", 0.5)]),
             },
-        )),
+        ))),
         SignalNode::Split {
             lanes: vec![
                 SignalChain::serial(vec![ModuleBlock::new(

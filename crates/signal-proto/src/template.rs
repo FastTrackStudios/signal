@@ -766,7 +766,7 @@ impl Templateable for crate::Module {
                         let preset_id = bt.preset_id.assigned().unwrap();
                         let idx = *counter;
                         *counter += 1;
-                        crate::SignalNode::Block(crate::ModuleBlock::new(
+                        crate::SignalNode::Block(Box::new(crate::ModuleBlock::new(
                             format!("block-{idx}"),
                             &bt.name,
                             bt.block_type,
@@ -774,7 +774,7 @@ impl Templateable for crate::Module {
                                 preset_id: preset_id.clone(),
                                 saved_at_version: None,
                             },
-                        ))
+                        )))
                     }
                     SignalNodeTemplate::Split { lanes } => crate::SignalNode::Split {
                         lanes: lanes

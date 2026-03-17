@@ -164,12 +164,15 @@ fn build_module_chain(children: &[FxNode], routing: &FxRoutingMode) -> (SignalCh
         FxRoutingMode::Parallel => SignalChain::new(vec![SignalNode::Split {
             lanes: blocks
                 .into_iter()
-                .map(|b| SignalChain::new(vec![SignalNode::Block(b)]))
+                .map(|b| SignalChain::new(vec![SignalNode::Block(Box::new(b))]))
                 .collect(),
         }]),
-        FxRoutingMode::Serial => {
-            SignalChain::new(blocks.into_iter().map(SignalNode::Block).collect())
-        }
+        FxRoutingMode::Serial => SignalChain::new(
+            blocks
+                .into_iter()
+                .map(|b| SignalNode::Block(Box::new(b)))
+                .collect(),
+        ),
     };
     (chain, plugin_names)
 }

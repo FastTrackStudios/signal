@@ -538,12 +538,12 @@ async fn resolve_variant_module_chains(
                 saved_at_version: None,
             },
         };
-        let node = SignalNode::Block(ModuleBlock::new(
+        let node = SignalNode::Block(Box::new(ModuleBlock::new(
             preset_id_str.clone(),
             &preset_name,
             bt,
             source,
-        ));
+        )));
         let chain = SignalChain::new(vec![node]);
         let color = bt.color();
         out.push(ModuleChainData {

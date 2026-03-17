@@ -30,7 +30,7 @@ use crate::ModuleBlock;
 #[repr(C)]
 pub enum SignalNode {
     /// A single processing block in the chain.
-    Block(ModuleBlock),
+    Block(Box<ModuleBlock>),
     /// Audio is copied to N parallel lanes, each processed independently,
     /// then summed back together.
     Split { lanes: Vec<SignalChain> },
@@ -85,7 +85,10 @@ impl SignalChain {
     /// This is the backward-compatible path: `Module::from_blocks()` delegates here.
     pub fn serial(blocks: Vec<ModuleBlock>) -> Self {
         Self {
-            nodes: blocks.into_iter().map(SignalNode::Block).collect(),
+            nodes: blocks
+                .into_iter()
+                .map(|b| SignalNode::Block(Box::new(b)))
+                .collect(),
         }
     }
 
@@ -193,14 +196,14 @@ mod tests {
     #[test]
     fn parallel_split() {
         let chain = SignalChain::new(vec![
-            SignalNode::Block(test_block("drive", BlockType::Drive)),
+            SignalNode::Block(Box::new(test_block("drive", BlockType::Drive))),
             SignalNode::Split {
                 lanes: vec![
                     SignalChain::serial(vec![test_block("delay", BlockType::Delay)]),
                     SignalChain::serial(vec![test_block("reverb", BlockType::Reverb)]),
                 ],
             },
-            SignalNode::Block(test_block("cab", BlockType::Cabinet)),
+            SignalNode::Block(Box::new(test_block("cab", BlockType::Cabinet))),
         ]);
 
         assert_eq!(chain.len(), 3);
@@ -219,12 +222,12 @@ mod tests {
     fn nested_split() {
         // Drive → (A: Delay → (A1: Chorus ∥ A2: Flanger) ∥ B: Reverb) → Cab
         let chain = SignalChain::new(vec![
-            SignalNode::Block(test_block("drive", BlockType::Drive)),
+            SignalNode::Block(Box::new(test_block("drive", BlockType::Drive))),
             SignalNode::Split {
                 lanes: vec![
                     // Lane A: Delay → nested split
                     SignalChain::new(vec![
-                        SignalNode::Block(test_block("delay", BlockType::Delay)),
+                        SignalNode::Block(Box::new(test_block("delay", BlockType::Delay))),
                         SignalNode::Split {
                             lanes: vec![
                                 SignalChain::serial(vec![test_block("chorus", BlockType::Chorus)]),
@@ -239,7 +242,7 @@ mod tests {
                     SignalChain::serial(vec![test_block("reverb", BlockType::Reverb)]),
                 ],
             },
-            SignalNode::Block(test_block("cab", BlockType::Cabinet)),
+            SignalNode::Block(Box::new(test_block("cab", BlockType::Cabinet))),
         ]);
 
         // Flat: drive, delay, chorus, flanger, reverb, cab
@@ -263,7 +266,7 @@ mod tests {
 
     #[test]
     fn signal_node_accessors() {
-        let block_node = SignalNode::Block(test_block("drive", BlockType::Drive));
+        let block_node = SignalNode::Block(Box::new(test_block("drive", BlockType::Drive)));
         assert!(block_node.as_block().is_some());
         assert!(block_node.as_split().is_none());
 
@@ -281,7 +284,7 @@ mod tests {
     #[test]
     fn blocks_mut_can_modify() {
         let mut chain = SignalChain::new(vec![
-            SignalNode::Block(test_block("drive", BlockType::Drive)),
+            SignalNode::Block(Box::new(test_block("drive", BlockType::Drive))),
             SignalNode::Split {
                 lanes: vec![SignalChain::serial(vec![test_block(
                     "delay",
@@ -309,7 +312,7 @@ mod tests {
     #[test]
     fn serde_round_trip_parallel() {
         let chain = SignalChain::new(vec![
-            SignalNode::Block(test_block("drive", BlockType::Drive)),
+            SignalNode::Block(Box::new(test_block("drive", BlockType::Drive))),
             SignalNode::Split {
                 lanes: vec![
                     SignalChain::serial(vec![test_block("delay", BlockType::Delay)]),
