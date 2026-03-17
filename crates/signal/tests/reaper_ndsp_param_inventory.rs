@@ -91,10 +91,7 @@ async fn capture_ndsp_full_parameter_lists(ctx: &ReaperTestContext) -> eyre::Res
 
         combined_report.push_str(&format!("## {}\n", plugin_name));
         combined_report.push_str(&format!("- parameter_count: {}\n", params.len()));
-        combined_report.push_str(&format!(
-            "- report: {}\n\n",
-            plugin_path.to_string_lossy()
-        ));
+        combined_report.push_str(&format!("- report: {}\n\n", plugin_path.to_string_lossy()));
     }
 
     let combined_path = report_dir.join("ndsp-full-parameter-list.md");

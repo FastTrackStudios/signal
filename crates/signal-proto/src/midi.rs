@@ -164,9 +164,7 @@ impl MidiMappingSet {
         self.mappings
             .iter()
             .filter(|m| {
-                m.enabled
-                    && m.cc_number == cc_number
-                    && m.channel.map_or(true, |ch| ch == channel)
+                m.enabled && m.cc_number == cc_number && m.channel.map_or(true, |ch| ch == channel)
             })
             .collect()
     }

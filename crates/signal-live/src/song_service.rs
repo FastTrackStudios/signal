@@ -19,7 +19,10 @@ where
     Ra: RackRepo,
 {
     async fn list_songs(&self) -> Result<Vec<Song>, SignalServiceError> {
-        self.song_repo.list_songs().await.map_err(|e| SignalServiceError::StorageError(e.to_string()))
+        self.song_repo
+            .list_songs()
+            .await
+            .map_err(|e| SignalServiceError::StorageError(e.to_string()))
     }
 
     async fn load_song(&self, id: SongId) -> Result<Option<Song>, SignalServiceError> {
@@ -31,7 +34,9 @@ where
 
     async fn save_song(&self, song: Song) -> Result<(), SignalServiceError> {
         for variant in &song.sections {
-            variant.validate_overrides().map_err(|e| SignalServiceError::ValidationError(format!("{e:?}")))?;
+            variant
+                .validate_overrides()
+                .map_err(|e| SignalServiceError::ValidationError(format!("{e:?}")))?;
         }
         self.song_repo
             .save_song(&song)

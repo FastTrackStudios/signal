@@ -577,12 +577,8 @@ impl FxRole {
     pub fn format(&self, opts: &FxDisplayOptions) -> String {
         match self {
             Self::Module { module_type, name } => {
-                let base = Self::format_parts(
-                    opts,
-                    &module_type.as_str().to_uppercase(),
-                    "Module",
-                    name,
-                );
+                let base =
+                    Self::format_parts(opts, &module_type.as_str().to_uppercase(), "Module", name);
                 format!("[M] {base}")
             }
             Self::Block { block_type, name } => {
@@ -620,7 +616,12 @@ impl FxRole {
     }
 
     /// Assemble the display string from type, collection keyword, and name parts.
-    fn format_parts(opts: &FxDisplayOptions, type_name: &str, collection_kw: &str, combined_name: &str) -> String {
+    fn format_parts(
+        opts: &FxDisplayOptions,
+        type_name: &str,
+        collection_kw: &str,
+        combined_name: &str,
+    ) -> String {
         let parts = FxNameParts::split(combined_name);
         let mut result = String::new();
 
@@ -660,7 +661,11 @@ impl FxRole {
                 }
             }
             (true, false) => parts.preset.clone(),
-            (false, true) => parts.variation.as_deref().unwrap_or(&parts.preset).to_string(),
+            (false, true) => parts
+                .variation
+                .as_deref()
+                .unwrap_or(&parts.preset)
+                .to_string(),
             (false, false) => String::new(),
         }
     }
@@ -744,11 +749,17 @@ impl TrackRole {
     /// Returns `None` if the name doesn't match any known prefix.
     pub fn parse(display_name: &str) -> Option<Self> {
         if let Some(rest) = display_name.strip_prefix("[R] ") {
-            Some(Self::Rig { name: rest.to_string() })
+            Some(Self::Rig {
+                name: rest.to_string(),
+            })
         } else if let Some(rest) = display_name.strip_prefix("[E] ") {
-            Some(Self::Engine { name: rest.to_string() })
+            Some(Self::Engine {
+                name: rest.to_string(),
+            })
         } else if let Some(rest) = display_name.strip_prefix("[L] ") {
-            Some(Self::Layer { name: rest.to_string() })
+            Some(Self::Layer {
+                name: rest.to_string(),
+            })
         } else {
             None
         }
@@ -1446,10 +1457,7 @@ mod tests {
     fn format_unknown_unchanged() {
         let role = FxRole::parse("ReaComp (Cockos)");
         assert_eq!(role.display_name(), "ReaComp (Cockos)");
-        assert_eq!(
-            role.format(&FxDisplayOptions::full()),
-            "ReaComp (Cockos)"
-        );
+        assert_eq!(role.format(&FxDisplayOptions::full()), "ReaComp (Cockos)");
     }
 
     #[test]
@@ -1492,28 +1500,49 @@ mod tests {
 
     #[test]
     fn track_role_layer_display_name() {
-        let role = TrackRole::Layer { name: "Guitar Main".to_string() };
+        let role = TrackRole::Layer {
+            name: "Guitar Main".to_string(),
+        };
         assert_eq!(role.display_name(), "[L] Guitar Main");
     }
 
     #[test]
     fn track_role_engine_display_name() {
-        let role = TrackRole::Engine { name: "Guitar Engine".to_string() };
+        let role = TrackRole::Engine {
+            name: "Guitar Engine".to_string(),
+        };
         assert_eq!(role.display_name(), "[E] Guitar Engine");
     }
 
     #[test]
     fn track_role_rig_display_name() {
-        let role = TrackRole::Rig { name: "Guitar MegaRig".to_string() };
+        let role = TrackRole::Rig {
+            name: "Guitar MegaRig".to_string(),
+        };
         assert_eq!(role.display_name(), "[R] Guitar MegaRig");
     }
 
     #[test]
     fn track_role_parse_roundtrip() {
         let cases = [
-            ("[L] Keys Core", TrackRole::Layer { name: "Keys Core".to_string() }),
-            ("[E] Synth Engine", TrackRole::Engine { name: "Synth Engine".to_string() }),
-            ("[R] Vocal MegaRig", TrackRole::Rig { name: "Vocal MegaRig".to_string() }),
+            (
+                "[L] Keys Core",
+                TrackRole::Layer {
+                    name: "Keys Core".to_string(),
+                },
+            ),
+            (
+                "[E] Synth Engine",
+                TrackRole::Engine {
+                    name: "Synth Engine".to_string(),
+                },
+            ),
+            (
+                "[R] Vocal MegaRig",
+                TrackRole::Rig {
+                    name: "Vocal MegaRig".to_string(),
+                },
+            ),
         ];
         for (input, expected) in &cases {
             let parsed = TrackRole::parse(input).expect(&format!("should parse '{input}'"));
@@ -1524,7 +1553,9 @@ mod tests {
 
     #[test]
     fn track_role_format_no_prefix() {
-        let role = TrackRole::Layer { name: "Guitar Main".to_string() };
+        let role = TrackRole::Layer {
+            name: "Guitar Main".to_string(),
+        };
         let opts = TrackDisplayOptions {
             show_prefix: false,
             show_role: false,
@@ -1535,7 +1566,9 @@ mod tests {
 
     #[test]
     fn track_role_format_with_role_keyword() {
-        let role = TrackRole::Layer { name: "Guitar Main".to_string() };
+        let role = TrackRole::Layer {
+            name: "Guitar Main".to_string(),
+        };
         let opts = TrackDisplayOptions {
             show_prefix: true,
             show_role: true,

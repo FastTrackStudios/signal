@@ -4,10 +4,11 @@ use facet::Facet;
 use serde::{Deserialize, Serialize};
 
 /// Easing curve for smooth transitions between parameter values.
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, Facet)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Serialize, Deserialize, Facet)]
 #[repr(C)]
 pub enum EasingCurve {
     /// Constant-speed interpolation.
+    #[default]
     Linear,
     /// Slow start, fast end (quadratic).
     EaseIn,
@@ -21,12 +22,6 @@ pub enum EasingCurve {
     CubicOut,
     /// Cubic ease-in-out for pronounced S-curve.
     CubicInOut,
-}
-
-impl Default for EasingCurve {
-    fn default() -> Self {
-        Self::Linear
-    }
 }
 
 impl EasingCurve {
@@ -109,12 +104,7 @@ mod tests {
         for curve in EasingCurve::ALL {
             let start = curve.apply(0.0);
             let end = curve.apply(1.0);
-            assert!(
-                (start - 0.0).abs() < 1e-10,
-                "{:?} start = {}",
-                curve,
-                start
-            );
+            assert!((start - 0.0).abs() < 1e-10, "{:?} start = {}", curve, start);
             assert!((end - 1.0).abs() < 1e-10, "{:?} end = {}", curve, end);
         }
     }

@@ -99,8 +99,8 @@ mod tests {
 
     #[test]
     fn serde_round_trip() {
-        let binding = MacroBinding::from_ids("amp", "gain", 0.0, 1.0)
-            .with_curve(EasingCurve::CubicInOut);
+        let binding =
+            MacroBinding::from_ids("amp", "gain", 0.0, 1.0).with_curve(EasingCurve::CubicInOut);
         let json = serde_json::to_string(&binding).unwrap();
         let parsed: MacroBinding = serde_json::from_str(&json).unwrap();
         assert_eq!(binding, parsed);

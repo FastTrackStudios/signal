@@ -15,11 +15,7 @@ pub struct RigOps<S: SignalApi>(pub(crate) SignalController<S>);
 
 impl<S: SignalApi> RigOps<S> {
     pub async fn list(&self) -> Result<Vec<Rig>, OpsError> {
-        self.0
-            .service
-            .list_rigs()
-            .await
-            .map_err(OpsError::Storage)
+        self.0.service.list_rigs().await.map_err(OpsError::Storage)
     }
 
     pub async fn load(&self, id: impl Into<RigId>) -> Result<Option<Rig>, OpsError> {

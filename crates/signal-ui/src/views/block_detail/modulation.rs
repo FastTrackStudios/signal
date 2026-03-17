@@ -194,24 +194,24 @@ fn render_source_config(source: &ModulationSource) -> Element {
 fn source_icon(source: &ModulationSource) -> &'static str {
     match source {
         ModulationSource::Lfo(_) => "\u{223F}",        // ∿ sine wave
-        ModulationSource::Envelope(_) => "\u{25B3}",    // △ triangle
-        ModulationSource::MidiCc { .. } => "\u{266A}",  // ♪ music note
-        ModulationSource::Expression => "\u{21C5}",     // ⇅ up down arrows
-        ModulationSource::Macro { .. } => "\u{25C9}",   // ◉ macro knob
-        ModulationSource::Follower(_) => "\u{2261}",    // ≡ audio level
-        ModulationSource::Random(_) => "\u{2684}",      // ⚄ die
+        ModulationSource::Envelope(_) => "\u{25B3}",   // △ triangle
+        ModulationSource::MidiCc { .. } => "\u{266A}", // ♪ music note
+        ModulationSource::Expression => "\u{21C5}",    // ⇅ up down arrows
+        ModulationSource::Macro { .. } => "\u{25C9}",  // ◉ macro knob
+        ModulationSource::Follower(_) => "\u{2261}",   // ≡ audio level
+        ModulationSource::Random(_) => "\u{2684}",     // ⚄ die
     }
 }
 
 /// Accent color for a modulation source type.
 fn source_color(source: &ModulationSource) -> &'static str {
     match source {
-        ModulationSource::Lfo(_) => "#A855F7",          // purple
-        ModulationSource::Envelope(_) => "#F97316",      // orange
-        ModulationSource::MidiCc { .. } => "#3B82F6",    // blue
-        ModulationSource::Expression => "#22C55E",       // green
-        ModulationSource::Macro { .. } => "#EAB308",     // yellow
-        ModulationSource::Follower(_) => "#EC4899",      // pink
-        ModulationSource::Random(_) => "#14B8A6",        // teal
+        ModulationSource::Lfo(_) => "#A855F7",        // purple
+        ModulationSource::Envelope(_) => "#F97316",   // orange
+        ModulationSource::MidiCc { .. } => "#3B82F6", // blue
+        ModulationSource::Expression => "#22C55E",    // green
+        ModulationSource::Macro { .. } => "#EAB308",  // yellow
+        ModulationSource::Follower(_) => "#EC4899",   // pink
+        ModulationSource::Random(_) => "#14B8A6",     // teal
     }
 }

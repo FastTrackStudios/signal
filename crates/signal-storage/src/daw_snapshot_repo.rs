@@ -41,19 +41,15 @@ pub struct StoredChunkSnapshot {
 #[async_trait::async_trait]
 pub trait DawSnapshotRepo: Send + Sync {
     // Parameter snapshots
-    async fn list_param_snapshots(
-        &self,
-        owner_id: &str,
-    ) -> StorageResult<Vec<StoredParamSnapshot>>;
+    async fn list_param_snapshots(&self, owner_id: &str)
+        -> StorageResult<Vec<StoredParamSnapshot>>;
     async fn save_param_snapshot(&self, snapshot: &StoredParamSnapshot) -> StorageResult<()>;
     async fn delete_param_snapshot(&self, id: &str) -> StorageResult<()>;
     async fn delete_param_snapshots_by_owner(&self, owner_id: &str) -> StorageResult<()>;
 
     // Chunk snapshots
-    async fn list_chunk_snapshots(
-        &self,
-        owner_id: &str,
-    ) -> StorageResult<Vec<StoredChunkSnapshot>>;
+    async fn list_chunk_snapshots(&self, owner_id: &str)
+        -> StorageResult<Vec<StoredChunkSnapshot>>;
     async fn save_chunk_snapshot(&self, snapshot: &StoredChunkSnapshot) -> StorageResult<()>;
     async fn delete_chunk_snapshot(&self, id: &str) -> StorageResult<()>;
     async fn delete_chunk_snapshots_by_owner(&self, owner_id: &str) -> StorageResult<()>;
@@ -81,8 +77,7 @@ impl DawSnapshotRepoLive {
         params.if_not_exists();
         self.db.execute(backend.build(&params)).await?;
 
-        let mut chunks =
-            schema.create_table_from_entity(entity::daw_snapshot::chunk::Entity);
+        let mut chunks = schema.create_table_from_entity(entity::daw_snapshot::chunk::Entity);
         chunks.if_not_exists();
         self.db.execute(backend.build(&chunks)).await?;
 
@@ -185,16 +180,14 @@ impl DawSnapshotRepo for DawSnapshotRepoLive {
             .await
             .ok();
 
-        entity::daw_snapshot::chunk::Entity::insert(
-            entity::daw_snapshot::chunk::ActiveModel {
-                id: Set(snapshot.id.clone()),
-                owner_id: Set(snapshot.owner_id.clone()),
-                fx_id: Set(snapshot.fx_id.clone()),
-                plugin_name: Set(snapshot.plugin_name.clone()),
-                chunk_data_b64: Set(snapshot.chunk_data_b64.clone()),
-                created_at: Set(snapshot.created_at.clone()),
-            },
-        )
+        entity::daw_snapshot::chunk::Entity::insert(entity::daw_snapshot::chunk::ActiveModel {
+            id: Set(snapshot.id.clone()),
+            owner_id: Set(snapshot.owner_id.clone()),
+            fx_id: Set(snapshot.fx_id.clone()),
+            plugin_name: Set(snapshot.plugin_name.clone()),
+            chunk_data_b64: Set(snapshot.chunk_data_b64.clone()),
+            created_at: Set(snapshot.created_at.clone()),
+        })
         .exec(&self.db)
         .await?;
 
@@ -286,9 +279,7 @@ mod tests {
         }
 
         assert_eq!(repo.list_param_snapshots("rig-1").await.unwrap().len(), 3);
-        repo.delete_param_snapshots_by_owner("rig-1")
-            .await
-            .unwrap();
+        repo.delete_param_snapshots_by_owner("rig-1").await.unwrap();
         assert_eq!(repo.list_param_snapshots("rig-1").await.unwrap().len(), 0);
     }
 

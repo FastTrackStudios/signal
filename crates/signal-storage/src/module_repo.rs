@@ -486,7 +486,11 @@ mod tests {
             seed_id("test-drive-stack"),
             "Test Drive Stack",
             ModuleType::Custom,
-            ModuleSnapshot::new(seed_id("test-drive-stack-default"), "Default", default_module),
+            ModuleSnapshot::new(
+                seed_id("test-drive-stack-default"),
+                "Default",
+                default_module,
+            ),
             vec![ModuleSnapshot::new(
                 seed_id("test-drive-stack-push"),
                 "Push",
@@ -861,9 +865,7 @@ mod tests {
         // -- Setup & Fixtures: load the "Parallel Time" default variant
         let repo = seeded_repo().await?;
         let original = repo
-            .load_module_default_variant(&ModulePresetId::from_uuid(seed_id(
-                "test-time-parallel",
-            )))
+            .load_module_default_variant(&ModulePresetId::from_uuid(seed_id("test-time-parallel")))
             .await?
             .expect("should find variant");
 

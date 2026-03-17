@@ -465,7 +465,10 @@ Mix=1
         assert!(names.contains(&"Mix"));
 
         // Pro-C "Style" display name differs from DAW name
-        let style_param = params.iter().find(|p| p.name.starts_with("Style:")).unwrap();
+        let style_param = params
+            .iter()
+            .find(|p| p.name.starts_with("Style:"))
+            .unwrap();
         assert_eq!(style_param.daw_name.as_deref(), Some("Style"));
         // Other Pro-C params match REAPER names directly
         let threshold = params.iter().find(|p| p.name == "Threshold").unwrap();

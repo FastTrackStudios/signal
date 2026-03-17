@@ -66,19 +66,14 @@ async fn bootstrap_log_shows_success(_ctx: &reaper_test::ReaperTestContext) -> e
 // ---------------------------------------------------------------------------
 
 #[reaper_test(isolated)]
-async fn instantiate_fts_macros_plugin(
-    ctx: &reaper_test::ReaperTestContext,
-) -> eyre::Result<()> {
+async fn instantiate_fts_macros_plugin(ctx: &reaper_test::ReaperTestContext) -> eyre::Result<()> {
     println!("\n=== instantiate fts-macros CLAP plugin ===");
 
     let daw = &ctx.daw;
 
     // Add a track and load fts-macros as an FX
     let project = daw.current_project().await?;
-    let track = project
-        .tracks()
-        .add("Macros Bootstrap Test", None)
-        .await?;
+    let track = project.tracks().add("Macros Bootstrap Test", None).await?;
     let chain = track.fx_chain();
 
     // Try adding by CLAP ID or plugin name
@@ -117,14 +112,21 @@ async fn instantiate_fts_macros_plugin(
 
     // Find the macro parameters by name (they may not be at index 0-7
     // if nih_plug puts internal params first)
-    let macro_params: Vec<_> = params.iter().filter(|p| p.name.starts_with("Macro ")).collect();
+    let macro_params: Vec<_> = params
+        .iter()
+        .filter(|p| p.name.starts_with("Macro "))
+        .collect();
     assert_eq!(macro_params.len(), 8, "should have 8 Macro parameters");
     assert!(macro_params.iter().any(|p| p.name == "Macro 1"));
     assert!(macro_params.iter().any(|p| p.name == "Macro 8"));
 
     // Verify parameter set/get works (through the standard FX parameter API)
     // Use the first Macro parameter's actual index (may not be 0 due to nih_plug internals)
-    let macro1_idx = macro_params.iter().find(|p| p.name == "Macro 1").unwrap().index;
+    let macro1_idx = macro_params
+        .iter()
+        .find(|p| p.name == "Macro 1")
+        .unwrap()
+        .index;
     let param0 = fx.param(macro1_idx);
     let original = param0.get().await?;
     param0.set(0.42).await?;
@@ -144,8 +146,7 @@ async fn instantiate_fts_macros_plugin(
     param0.set(original).await?;
 
     // Check bootstrap log for REAPER API verification
-    let log_content = std::fs::read_to_string("/tmp/fts-macros-bootstrap.log")
-        .unwrap_or_default();
+    let log_content = std::fs::read_to_string("/tmp/fts-macros-bootstrap.log").unwrap_or_default();
     if log_content.contains("REAPER API verified") {
         println!("\n  Plugin-side REAPER API access confirmed via bootstrap log!");
     } else {

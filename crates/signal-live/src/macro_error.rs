@@ -100,9 +100,10 @@ pub fn validate_macro_bank(bank: &macromod::MacroBank) -> MacroResult<()> {
         }
         for child in &knob.children {
             if child.id.is_empty() {
-                return Err(MacroError::InvalidKnobRef(
-                    format!("child knob of '{}' has empty ID", knob.id),
-                ));
+                return Err(MacroError::InvalidKnobRef(format!(
+                    "child knob of '{}' has empty ID",
+                    knob.id
+                )));
             }
         }
     }
@@ -117,9 +118,10 @@ pub fn validate_macro_bank(bank: &macromod::MacroBank) -> MacroResult<()> {
             }
             for child in &knob.children {
                 if child.id.is_empty() {
-                    return Err(MacroError::InvalidKnobRef(
-                        format!("child knob of '{}' in group has empty ID", knob.id),
-                    ));
+                    return Err(MacroError::InvalidKnobRef(format!(
+                        "child knob of '{}' in group has empty ID",
+                        knob.id
+                    )));
                 }
             }
         }
@@ -161,10 +163,7 @@ mod tests {
         bank.add(knob);
 
         let result = validate_macro_bank(&bank);
-        assert!(matches!(
-            result,
-            Err(MacroError::InvalidKnobRef(_))
-        ));
+        assert!(matches!(result, Err(MacroError::InvalidKnobRef(_))));
     }
 
     #[test]

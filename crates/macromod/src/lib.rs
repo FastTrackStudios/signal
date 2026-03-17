@@ -24,7 +24,7 @@ pub mod target;
 
 pub use binding::MacroBinding;
 pub use curation::ParamCuration;
-pub use easing::{EasingCurve, lerp_eased};
+pub use easing::{lerp_eased, EasingCurve};
 pub use macro_bank::{GroupSelector, MacroBank, MacroGroup, MacroKnob};
 pub use parameter::{BlockParameter, ParameterValue};
 pub use response::ResponseCurve;
@@ -37,6 +37,6 @@ pub use target::{ModulationTarget, ParamTarget};
 
 // Runtime engine re-exports
 pub use runtime::{
-    EnvelopeStage, EnvelopeState, FollowerState, LfoState, ModulationOutput, ModulationProcessor,
-    RandomState, TickContext, evaluate_waveform,
+    evaluate_waveform, EnvelopeStage, EnvelopeState, FollowerState, LfoState, ModulationOutput,
+    ModulationProcessor, RandomState, TickContext,
 };

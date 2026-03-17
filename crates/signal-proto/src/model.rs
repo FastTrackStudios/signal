@@ -12,9 +12,7 @@
 use facet::Facet;
 use serde::{Deserialize, Serialize};
 
-use crate::ids::{
-    ModulePresetId, ModuleSnapshotId, PresetId, SnapshotId,
-};
+use crate::ids::{ModulePresetId, ModuleSnapshotId, PresetId, SnapshotId};
 use crate::metadata;
 use crate::module_type::ModuleType;
 use crate::signal_chain::SignalChain;

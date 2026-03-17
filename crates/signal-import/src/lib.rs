@@ -57,8 +57,7 @@ use types::{ImportReport, ImportedPresetCollection};
 /// making re-imports idempotent — the same vendor+plugin+file always produces the
 /// same ID, so a second import overwrites rather than duplicates.
 pub const IMPORT_NAMESPACE: Uuid = Uuid::from_bytes([
-    0x73, 0x69, 0x67, 0x6e, 0x61, 0x6c, 0x2d, 0x69,
-    0x6d, 0x70, 0x6f, 0x72, 0x74, 0x2d, 0x6e, 0x73,
+    0x73, 0x69, 0x67, 0x6e, 0x61, 0x6c, 0x2d, 0x69, 0x6d, 0x70, 0x6f, 0x72, 0x74, 0x2d, 0x6e, 0x73,
 ]);
 
 /// Compute the deterministic preset ID for a vendor+plugin combination.
@@ -128,8 +127,7 @@ pub async fn import_presets_with_library(
 
         // Workflow origin tag — distinguishes imported presets from user-created ones
         tag_set.insert(
-            StructuredTag::new(TagCategory::Workflow, "imported")
-                .with_source(TagSource::Imported),
+            StructuredTag::new(TagCategory::Workflow, "imported").with_source(TagSource::Imported),
         );
 
         // Vendor + plugin tags
@@ -185,8 +183,7 @@ pub async fn import_presets_with_library(
             Block::from_parameters(params)
         };
 
-        let mut snapshot = Snapshot::new(snap_id, &imported.name, block)
-            .with_metadata(metadata);
+        let mut snapshot = Snapshot::new(snap_id, &imported.name, block).with_metadata(metadata);
         if imported.store_raw_as_state {
             snapshot = snapshot.with_state_data(imported.raw_bytes.clone());
         }
@@ -202,16 +199,14 @@ pub async fn import_presets_with_library(
     // Build preset-level metadata
     let mut preset_tags = TagSet::new();
     preset_tags.insert(
-        StructuredTag::new(TagCategory::Workflow, "imported")
-            .with_source(TagSource::Imported),
+        StructuredTag::new(TagCategory::Workflow, "imported").with_source(TagSource::Imported),
     );
     preset_tags.insert(
         StructuredTag::new(TagCategory::Vendor, &collection.vendor.to_ascii_lowercase())
             .with_source(TagSource::Imported),
     );
     preset_tags.insert(
-        StructuredTag::new(TagCategory::Plugin, &plugin_tag_value)
-            .with_source(TagSource::Imported),
+        StructuredTag::new(TagCategory::Plugin, &plugin_tag_value).with_source(TagSource::Imported),
     );
     let mut preset_metadata = Metadata::new().with_description(format!(
         "Imported {} presets from {}",
@@ -219,7 +214,11 @@ pub async fn import_presets_with_library(
     ));
     preset_metadata.tags = preset_tags.to_tags();
     // Add source tag at preset level too (grab from first snapshot)
-    if let Some(ref source) = collection.snapshots.first().and_then(|s| s.source_plugin.as_ref()) {
+    if let Some(ref source) = collection
+        .snapshots
+        .first()
+        .and_then(|s| s.source_plugin.as_ref())
+    {
         preset_metadata.tags.add(format!("source:{source}"));
     }
 
@@ -256,10 +255,7 @@ pub fn dry_run_report(collection: &ImportedPresetCollection) -> String {
         collection.block_type.display_name()
     ));
     out.push_str(&format!("Vendor: {}\n", collection.vendor));
-    out.push_str(&format!(
-        "Snapshots: {}\n",
-        collection.snapshots.len()
-    ));
+    out.push_str(&format!("Snapshots: {}\n", collection.snapshots.len()));
 
     // Group by folder
     let mut folders = std::collections::BTreeMap::<String, usize>::new();

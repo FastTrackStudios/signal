@@ -48,10 +48,7 @@ pub fn inferred_chain_to_module_chains(chain: &InferredChain) -> Vec<ModuleChain
 }
 
 /// Wrap an inferred chain as a single-layer engine flow for the grid renderer.
-pub fn inferred_chain_to_engine_flow(
-    chain: &InferredChain,
-    track_name: &str,
-) -> EngineFlowData {
+pub fn inferred_chain_to_engine_flow(chain: &InferredChain, track_name: &str) -> EngineFlowData {
     EngineFlowData {
         name: track_name.to_string(),
         layers: vec![LayerFlowData {

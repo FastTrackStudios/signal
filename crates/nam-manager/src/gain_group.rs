@@ -51,10 +51,12 @@ pub fn auto_group(entries: &HashMap<String, NamFileEntry>) -> HashMap<String, Ga
             let prefix = caps[1].to_string();
             let num: u8 = caps[2].parse().unwrap_or(0);
             let label = format!("Gain {}", &caps[2]);
-            groups
-                .entry(slugify(&prefix))
-                .or_default()
-                .push((num, label, entry.hash.clone(), entry.gain));
+            groups.entry(slugify(&prefix)).or_default().push((
+                num,
+                label,
+                entry.hash.clone(),
+                entry.gain,
+            ));
             grouped_hashes.insert(&entry.hash);
         }
     }
@@ -66,13 +68,15 @@ pub fn auto_group(entries: &HashMap<String, NamFileEntry>) -> HashMap<String, Ga
             continue;
         }
         if let Some(caps) = revv_re.captures(&entry.filename) {
-            let group_key = format!("{}_{}_{}",  &caps[1], &caps[3], &caps[4]);
+            let group_key = format!("{}_{}_{}", &caps[1], &caps[3], &caps[4]);
             let aggr: u8 = caps[2].parse().unwrap_or(0);
             let label = format!("aggr{}", aggr);
-            groups
-                .entry(slugify(&group_key))
-                .or_default()
-                .push((aggr, label, entry.hash.clone(), entry.gain));
+            groups.entry(slugify(&group_key)).or_default().push((
+                aggr,
+                label,
+                entry.hash.clone(),
+                entry.gain,
+            ));
             grouped_hashes.insert(&entry.hash);
         }
     }
@@ -87,10 +91,12 @@ pub fn auto_group(entries: &HashMap<String, NamFileEntry>) -> HashMap<String, Ga
             let prefix = caps[1].to_string();
             let num: u8 = caps[2].parse().unwrap_or(0);
             let label = format!("Gain {}", num);
-            groups
-                .entry(slugify(&prefix))
-                .or_default()
-                .push((num, label, entry.hash.clone(), entry.gain));
+            groups.entry(slugify(&prefix)).or_default().push((
+                num,
+                label,
+                entry.hash.clone(),
+                entry.gain,
+            ));
             grouped_hashes.insert(&entry.hash);
         }
     }
@@ -127,10 +133,12 @@ pub fn auto_group(entries: &HashMap<String, NamFileEntry>) -> HashMap<String, Ga
                 .strip_suffix(".nam")
                 .unwrap_or(&entry.filename)
                 .to_string();
-            groups
-                .entry(group_key.clone())
-                .or_default()
-                .push((i as u8, label, entry.hash.clone(), entry.gain));
+            groups.entry(group_key.clone()).or_default().push((
+                i as u8,
+                label,
+                entry.hash.clone(),
+                entry.gain,
+            ));
         }
     }
 

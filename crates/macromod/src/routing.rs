@@ -46,9 +46,7 @@ pub struct ModulationRouteSet {
 
 impl ModulationRouteSet {
     pub fn new() -> Self {
-        Self {
-            routes: Vec::new(),
-        }
+        Self { routes: Vec::new() }
     }
 
     pub fn add(&mut self, route: ModulationRoute) {
@@ -63,9 +61,7 @@ impl ModulationRouteSet {
     pub fn routes_for_param(&self, block_id: &str, param_id: &str) -> Vec<&ModulationRoute> {
         self.routes
             .iter()
-            .filter(|r| {
-                r.enabled && r.target.block_id == block_id && r.target.param_id == param_id
-            })
+            .filter(|r| r.enabled && r.target.block_id == block_id && r.target.param_id == param_id)
             .collect()
     }
 }

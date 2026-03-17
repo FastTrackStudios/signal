@@ -82,11 +82,12 @@ pub fn decode_chunk(base64_data: &str) -> Result<NamVstChunk, NamError> {
 
     // Controller tail = total data after header minus component state size
     let total_after_header = data.len() - HEADER_SIZE;
-    let controller_tail_size = if component_state_size > 0 && total_after_header > component_state_size {
-        total_after_header - component_state_size
-    } else {
-        0
-    };
+    let controller_tail_size =
+        if component_state_size > 0 && total_after_header > component_state_size {
+            total_after_header - component_state_size
+        } else {
+            0
+        };
 
     Ok(NamVstChunk {
         header,
@@ -106,8 +107,13 @@ pub fn decode_chunk(base64_data: &str) -> Result<NamVstChunk, NamError> {
 /// - Offset 0x3C: component state size = (data after header) - controller_tail_size
 pub fn encode_chunk(chunk: &NamVstChunk) -> String {
     let mut data = Vec::with_capacity(
-        HEADER_SIZE + 16 + chunk.plugin_id.len() + chunk.version.len()
-            + chunk.model_path.len() + chunk.ir_path.len() + chunk.tail.len(),
+        HEADER_SIZE
+            + 16
+            + chunk.plugin_id.len()
+            + chunk.version.len()
+            + chunk.model_path.len()
+            + chunk.ir_path.len()
+            + chunk.tail.len(),
     );
 
     data.extend_from_slice(&chunk.header);
@@ -121,8 +127,7 @@ pub fn encode_chunk(chunk: &NamVstChunk) -> String {
     if data.len() > HEADER_SIZE {
         // Total outer size at 0x30 = everything from 0x3C onward
         let outer_size = (data.len() - (COMPONENT_SIZE_OFFSET)) as u32;
-        data[OUTER_SIZE_OFFSET..OUTER_SIZE_OFFSET + 4]
-            .copy_from_slice(&outer_size.to_le_bytes());
+        data[OUTER_SIZE_OFFSET..OUTER_SIZE_OFFSET + 4].copy_from_slice(&outer_size.to_le_bytes());
 
         // Component state size at 0x3C = data after header minus controller tail
         let total_after_header = data.len() - HEADER_SIZE;
@@ -246,7 +251,11 @@ pub fn extract_state_base64(chunk: &str) -> Option<Vec<String>> {
                 }
             }
         }
-        if data_lines.is_empty() { None } else { Some(data_lines) }
+        if data_lines.is_empty() {
+            None
+        } else {
+            Some(data_lines)
+        }
     } else {
         // VST/VST3: flat structure
         let data_lines: Vec<String> = lines[1..lines.len() - 1]
@@ -254,7 +263,11 @@ pub fn extract_state_base64(chunk: &str) -> Option<Vec<String>> {
             .map(|l| l.trim().to_string())
             .filter(|l| !l.is_empty())
             .collect();
-        if data_lines.is_empty() { None } else { Some(data_lines) }
+        if data_lines.is_empty() {
+            None
+        } else {
+            Some(data_lines)
+        }
     }
 }
 
@@ -413,8 +426,7 @@ mod tests {
 
         // Patch both size fields
         let outer_size = (data.len() - COMPONENT_SIZE_OFFSET) as u32;
-        data[OUTER_SIZE_OFFSET..OUTER_SIZE_OFFSET + 4]
-            .copy_from_slice(&outer_size.to_le_bytes());
+        data[OUTER_SIZE_OFFSET..OUTER_SIZE_OFFSET + 4].copy_from_slice(&outer_size.to_le_bytes());
         let component_size = (data.len() - HEADER_SIZE) as u32; // no controller tail in test
         data[COMPONENT_SIZE_OFFSET..COMPONENT_SIZE_OFFSET + 4]
             .copy_from_slice(&component_size.to_le_bytes());

@@ -170,10 +170,7 @@ impl MorphEngine {
             let key = (pa.fx_id.as_str(), pa.param_index);
             seen.insert((pa.fx_id.clone(), pa.param_index));
 
-            let value_b = b_lookup
-                .get(&key)
-                .map(|pb| pb.value)
-                .unwrap_or(0.0); // param only in A → morph toward 0
+            let value_b = b_lookup.get(&key).map(|pb| pb.value).unwrap_or(0.0); // param only in A → morph toward 0
 
             if (pa.value - value_b).abs() > f64::EPSILON {
                 self.diffs.push(MorphDiffEntry {
@@ -225,10 +222,7 @@ mod tests {
     #[test]
     fn identical_snapshots_zero_diffs() {
         let mut engine = MorphEngine::new();
-        let snap = DawParameterSnapshot::new(vec![
-            param("fx1", 0, 0.5),
-            param("fx1", 1, 0.8),
-        ]);
+        let snap = DawParameterSnapshot::new(vec![param("fx1", 0, 0.5), param("fx1", 1, 0.8)]);
         engine.set_a(snap.clone());
         engine.set_b(snap);
         assert!(engine.is_ready());

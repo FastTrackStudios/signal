@@ -34,10 +34,7 @@ async fn ensure_audio(ctx: &reaper_test::ReaperTestContext) {
 async fn proq4_load_and_enumerate_params(ctx: &ReaperTestContext) -> eyre::Result<()> {
     let project = ctx.project().clone();
 
-    let track = project
-        .tracks()
-        .add("ProQ4 Enumerate", None)
-        .await?;
+    let track = project.tracks().add("ProQ4 Enumerate", None).await?;
     let fx = track.fx_chain().add(CLAP_PROQ4).await?;
     settle().await;
 
@@ -91,10 +88,7 @@ async fn proq4_set_param_by_index(ctx: &ReaperTestContext) -> eyre::Result<()> {
     ensure_audio(ctx).await;
     let project = ctx.project().clone();
 
-    let track = project
-        .tracks()
-        .add("ProQ4 ByIndex", None)
-        .await?;
+    let track = project.tracks().add("ProQ4 ByIndex", None).await?;
     let fx = track.fx_chain().add(CLAP_PROQ4).await?;
     settle().await;
 
@@ -123,7 +117,10 @@ async fn proq4_set_param_by_index(ctx: &ReaperTestContext) -> eyre::Result<()> {
 
     let delta = (readback - target_value).abs();
     if delta < 0.01 {
-        println!("[proq4] SUCCESS: param set by index works (delta={:.6})", delta);
+        println!(
+            "[proq4] SUCCESS: param set by index works (delta={:.6})",
+            delta
+        );
     } else {
         println!(
             "[proq4] FAIL: param set by index did NOT take effect. Expected {:.6}, got {:.6} (delta={:.6})",
@@ -133,7 +130,10 @@ async fn proq4_set_param_by_index(ctx: &ReaperTestContext) -> eyre::Result<()> {
 
     ctx.log(&format!(
         "set_by_index: target={:.6} readback={:.6} delta={:.6} ok={}",
-        target_value, readback, delta, delta < 0.01
+        target_value,
+        readback,
+        delta,
+        delta < 0.01
     ));
 
     Ok(())
@@ -148,10 +148,7 @@ async fn proq4_set_param_by_name(ctx: &ReaperTestContext) -> eyre::Result<()> {
     ensure_audio(ctx).await;
     let project = ctx.project().clone();
 
-    let track = project
-        .tracks()
-        .add("ProQ4 ByName", None)
-        .await?;
+    let track = project.tracks().add("ProQ4 ByName", None).await?;
     let fx = track.fx_chain().add(CLAP_PROQ4).await?;
     settle().await;
 
@@ -182,7 +179,12 @@ async fn proq4_set_param_by_name(ctx: &ReaperTestContext) -> eyre::Result<()> {
 
         ctx.log(&format!(
             "set_by_name({}): original={:.6} target={:.6} readback={:.6} delta={:.6} ok={}",
-            name, original, target, readback, delta, delta < 0.01
+            name,
+            original,
+            target,
+            readback,
+            delta,
+            delta < 0.01
         ));
     }
 
@@ -198,10 +200,7 @@ async fn proq4_bulk_param_set(ctx: &ReaperTestContext) -> eyre::Result<()> {
     ensure_audio(ctx).await;
     let project = ctx.project().clone();
 
-    let track = project
-        .tracks()
-        .add("ProQ4 Bulk", None)
-        .await?;
+    let track = project.tracks().add("ProQ4 Bulk", None).await?;
     let fx = track.fx_chain().add(CLAP_PROQ4).await?;
     settle().await;
 
@@ -265,23 +264,16 @@ async fn proq4_state_chunk_roundtrip(ctx: &ReaperTestContext) -> eyre::Result<()
     ensure_audio(ctx).await;
     let project = ctx.project().clone();
 
-    let track = project
-        .tracks()
-        .add("ProQ4 StateChunk", None)
-        .await?;
+    let track = project.tracks().add("ProQ4 StateChunk", None).await?;
     let fx = track.fx_chain().add(CLAP_PROQ4).await?;
     // CLAP plugins need extra time to initialize in the audio engine
     tokio::time::sleep(Duration::from_millis(1000)).await;
 
     // Capture default state
-    let default_chunk = fx
-        .state_chunk()
-        .await?
-        .ok_or_else(|| eyre::eyre!("Failed to get default state chunk — tag_chunk() returned None for CLAP plugin"))?;
-    println!(
-        "[proq4] Default state chunk: {} bytes",
-        default_chunk.len()
-    );
+    let default_chunk = fx.state_chunk().await?.ok_or_else(|| {
+        eyre::eyre!("Failed to get default state chunk — tag_chunk() returned None for CLAP plugin")
+    })?;
+    println!("[proq4] Default state chunk: {} bytes", default_chunk.len());
     assert!(
         default_chunk.len() > 10,
         "State chunk suspiciously small: {} bytes",
@@ -327,16 +319,16 @@ async fn proq4_state_chunk_roundtrip(ctx: &ReaperTestContext) -> eyre::Result<()
         .ok_or_else(|| eyre::eyre!("Failed to get restored state chunk"))?;
 
     let restore_matches = default_chunk == restored_chunk;
-    println!(
-        "[proq4] State restored to original: {}",
-        restore_matches
-    );
+    println!("[proq4] State restored to original: {}", restore_matches);
 
     if restore_matches {
         println!("[proq4] SUCCESS: state chunk roundtrip works");
     } else {
-        println!("[proq4] WARN: restored chunk differs from original ({} vs {} bytes)",
-            default_chunk.len(), restored_chunk.len());
+        println!(
+            "[proq4] WARN: restored chunk differs from original ({} vs {} bytes)",
+            default_chunk.len(),
+            restored_chunk.len()
+        );
     }
 
     ctx.log(&format!(
@@ -360,10 +352,7 @@ async fn proq4_state_chunk_reflects_in_params(ctx: &ReaperTestContext) -> eyre::
     ensure_audio(ctx).await;
     let project = ctx.project().clone();
 
-    let track = project
-        .tracks()
-        .add("ProQ4 ChunkParams", None)
-        .await?;
+    let track = project.tracks().add("ProQ4 ChunkParams", None).await?;
     let fx = track.fx_chain().add(CLAP_PROQ4).await?;
     settle().await;
 
@@ -436,10 +425,7 @@ async fn proq4_state_chunk_reflects_in_params(ctx: &ReaperTestContext) -> eyre::
 async fn proq4_encoded_chunk_roundtrip(ctx: &ReaperTestContext) -> eyre::Result<()> {
     let project = ctx.project().clone();
 
-    let track = project
-        .tracks()
-        .add("ProQ4 Encoded", None)
-        .await?;
+    let track = project.tracks().add("ProQ4 Encoded", None).await?;
     let fx = track.fx_chain().add(CLAP_PROQ4).await?;
     settle().await;
 
@@ -485,10 +471,7 @@ async fn proq4_param_sweep(ctx: &ReaperTestContext) -> eyre::Result<()> {
     ensure_audio(ctx).await;
     let project = ctx.project().clone();
 
-    let track = project
-        .tracks()
-        .add("ProQ4 Sweep", None)
-        .await?;
+    let track = project.tracks().add("ProQ4 Sweep", None).await?;
     let fx = track.fx_chain().add(CLAP_PROQ4).await?;
     settle().await;
 
@@ -563,10 +546,7 @@ async fn proq4_param_sweep(ctx: &ReaperTestContext) -> eyre::Result<()> {
 async fn proq4_dump_track_chunk(ctx: &ReaperTestContext) -> eyre::Result<()> {
     let project = ctx.project().clone();
 
-    let track = project
-        .tracks()
-        .add("ProQ4 ChunkDump", None)
-        .await?;
+    let track = project.tracks().add("ProQ4 ChunkDump", None).await?;
     let fx = track.fx_chain().add(CLAP_PROQ4).await?;
     tokio::time::sleep(Duration::from_millis(1000)).await;
 

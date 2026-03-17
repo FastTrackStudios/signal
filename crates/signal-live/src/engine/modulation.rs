@@ -6,9 +6,9 @@
 
 use std::collections::HashMap;
 
+use macromod::routing::ModulationRoute;
 use macromod::runtime::processor::{ModulationProcessor, TickContext};
 use macromod::target::ParamTarget;
-use macromod::routing::ModulationRoute;
 
 /// Binding between a [`ParamTarget`] and a concrete DAW FX parameter.
 #[derive(Debug, Clone)]
@@ -71,12 +71,7 @@ impl ModulationRuntime {
     }
 
     /// Bind a `ParamTarget` to a concrete DAW FX parameter.
-    pub fn bind_param(
-        &mut self,
-        target: ParamTarget,
-        fx_id: impl Into<String>,
-        param_index: u32,
-    ) {
+    pub fn bind_param(&mut self, target: ParamTarget, fx_id: impl Into<String>, param_index: u32) {
         self.bindings.insert(
             target,
             ParamBinding {
@@ -90,7 +85,8 @@ impl ModulationRuntime {
     ///
     /// Call this when a scene changes or a snapshot is applied.
     pub fn set_base_value(&mut self, target: &ParamTarget, value: f64) {
-        self.base_values.insert(target.clone(), value.clamp(0.0, 1.0));
+        self.base_values
+            .insert(target.clone(), value.clamp(0.0, 1.0));
     }
 
     /// Access the underlying processor for external input and trigger methods.
@@ -332,7 +328,9 @@ mod tests {
 
         // LFO should produce varying values
         assert!(values.len() >= 2, "LFO should produce writes");
-        let all_same = values.windows(2).all(|w| (w[0] - w[1]).abs() < DEDUP_EPSILON);
+        let all_same = values
+            .windows(2)
+            .all(|w| (w[0] - w[1]).abs() < DEDUP_EPSILON);
         assert!(!all_same, "LFO values should vary: {values:?}");
     }
 

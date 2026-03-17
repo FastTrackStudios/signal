@@ -4,9 +4,10 @@ use facet::Facet;
 use serde::{Deserialize, Serialize};
 
 /// Waveform shape for an LFO modulation source.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Facet)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Facet)]
 #[repr(C)]
 pub enum LfoWaveform {
+    #[default]
     Sine,
     Triangle,
     Square,
@@ -16,12 +17,6 @@ pub enum LfoWaveform {
     SampleAndHold,
     /// Step sequencer pattern (inspired by surge-lfo).
     StepSequence,
-}
-
-impl Default for LfoWaveform {
-    fn default() -> Self {
-        Self::Sine
-    }
 }
 
 impl LfoWaveform {
@@ -49,11 +44,12 @@ impl LfoWaveform {
 }
 
 /// Tempo-sync division for rate-locked LFOs.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Facet)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Facet)]
 #[repr(C)]
 pub enum TempoDiv {
     Whole,
     Half,
+    #[default]
     Quarter,
     Eighth,
     Sixteenth,
@@ -63,12 +59,6 @@ pub enum TempoDiv {
     TripletHalf,
     TripletQuarter,
     TripletEighth,
-}
-
-impl Default for TempoDiv {
-    fn default() -> Self {
-        Self::Quarter
-    }
 }
 
 impl TempoDiv {

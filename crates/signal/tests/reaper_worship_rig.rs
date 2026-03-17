@@ -10,8 +10,8 @@
 use std::time::Duration;
 
 use reaper_test::reaper_test;
-use signal::seed_id;
 use signal::rig::RigSceneId;
+use signal::seed_id;
 use signal_live::daw_rig_builder::instantiate_rig;
 use signal_proto::overrides::NodeOverrideOp;
 use signal_proto::rig_template::{EngineTemplate, LayerTemplate, RigTemplate};
@@ -46,8 +46,12 @@ async fn worship_rig_track_structure(ctx: &ReaperTestContext) -> eyre::Result<()
         engines: vec![EngineTemplate {
             name: "Guitar Engine".to_string(),
             layers: vec![
-                LayerTemplate { name: "Guitar Main".to_string() },
-                LayerTemplate { name: "Archetype JM".to_string() },
+                LayerTemplate {
+                    name: "Guitar Main".to_string(),
+                },
+                LayerTemplate {
+                    name: "Archetype JM".to_string(),
+                },
             ],
             fx_sends: vec![],
         }],
@@ -273,14 +277,14 @@ async fn worship_rig_macro_bank(ctx: &ReaperTestContext) -> eyre::Result<()> {
 
     // Verify knob names and binding counts
     let expected: &[(&str, usize)] = &[
-        ("Drive", 2),       // parametric-od + klone
-        ("Tone", 1),        // amp-eq
-        ("Room", 1),        // amp-verb
-        ("Delay Mix", 2),   // dly-1 + dly-2
-        ("Reverb Mix", 2),  // verb-1 + verb-2
-        ("Mod Depth", 1),   // chorus
-        ("Trem Rate", 1),   // tremolo
-        ("Master Vol", 1),  // master-trim
+        ("Drive", 2),      // parametric-od + klone
+        ("Tone", 1),       // amp-eq
+        ("Room", 1),       // amp-verb
+        ("Delay Mix", 2),  // dly-1 + dly-2
+        ("Reverb Mix", 2), // verb-1 + verb-2
+        ("Mod Depth", 1),  // chorus
+        ("Trem Rate", 1),  // tremolo
+        ("Master Vol", 1), // master-trim
     ];
 
     for (i, (name, binding_count)) in expected.iter().enumerate() {
@@ -315,7 +319,10 @@ async fn worship_rig_macro_bank(ctx: &ReaperTestContext) -> eyre::Result<()> {
 #[reaper_test(isolated)]
 async fn dump_installed_plugins(ctx: &ReaperTestContext) -> eyre::Result<()> {
     let plugins = ctx.daw.installed_plugins().await?;
-    ctx.log(&format!("=== Installed FX plugins: {} total ===", plugins.len()));
+    ctx.log(&format!(
+        "=== Installed FX plugins: {} total ===",
+        plugins.len()
+    ));
     for p in &plugins {
         ctx.log(&format!("  {} | {}", p.name, p.ident));
     }

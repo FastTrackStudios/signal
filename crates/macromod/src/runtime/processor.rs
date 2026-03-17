@@ -36,7 +36,7 @@ pub struct ModulationOutput {
 }
 
 /// Runtime state for the envelope follower source.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct FollowerState {
     /// Current envelope follower level (0.0–1.0).
     level: f64,
@@ -291,8 +291,7 @@ impl ModulationProcessor {
 
     /// Set a MIDI CC value (0.0–1.0).
     pub fn set_midi_cc(&mut self, cc_number: u8, value: f64) {
-        self.midi_cc_values
-            .insert(cc_number, value.clamp(0.0, 1.0));
+        self.midi_cc_values.insert(cc_number, value.clamp(0.0, 1.0));
     }
 
     /// Set the expression pedal value (0.0–1.0).
@@ -542,7 +541,10 @@ mod tests {
         proc.gate_on_all_envelopes();
         let outputs = proc.tick(ctx(0.033));
         assert_eq!(outputs.len(), 1);
-        assert!(outputs[0].offset > 0.0, "envelope should produce output after gate_on");
+        assert!(
+            outputs[0].offset > 0.0,
+            "envelope should produce output after gate_on"
+        );
     }
 
     #[test]
@@ -581,7 +583,7 @@ mod tests {
         let mut proc = ModulationProcessor::new(vec![ModulationRoute::new(
             "r1",
             ModulationSource::Follower(FollowerConfig {
-                attack_ms: 1.0, // very fast attack
+                attack_ms: 1.0,  // very fast attack
                 release_ms: 1.0, // very fast release
                 depth: 1.0,
                 ..Default::default()

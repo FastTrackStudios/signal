@@ -278,11 +278,7 @@ mod tests {
 
         // Sustain holds
         env.tick(1.0, &config);
-        assert!(
-            (env.level() - 0.5).abs() < 0.01,
-            "sustain: {}",
-            env.level()
-        );
+        assert!((env.level() - 0.5).abs() < 0.01, "sustain: {}", env.level());
 
         // Release
         env.gate_off();
@@ -290,11 +286,7 @@ mod tests {
         for _ in 0..10 {
             env.tick(0.01, &config);
         }
-        assert!(
-            env.level() < 0.01,
-            "after release: {}",
-            env.level()
-        );
+        assert!(env.level() < 0.01, "after release: {}", env.level());
     }
 
     #[test]
@@ -385,9 +377,7 @@ mod tests {
 
         // Past hold → decay
         env.tick(0.06, &config);
-        assert!(
-            env.stage() == EnvelopeStage::Decay || env.stage() == EnvelopeStage::Sustain
-        );
+        assert!(env.stage() == EnvelopeStage::Decay || env.stage() == EnvelopeStage::Sustain);
     }
 
     #[test]

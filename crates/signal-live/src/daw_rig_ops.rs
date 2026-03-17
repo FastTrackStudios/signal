@@ -19,8 +19,8 @@ use signal_proto::{
     BlockType, ModulePresetId, ModuleSnapshotId, PresetId, SnapshotId, ALL_BLOCK_TYPES,
 };
 use signal_storage::{
-    BlockRepo, EngineRepo, LayerRepo, ModuleRepo, ProfileRepo, RackRepo, RigRepo, SceneTemplateRepo,
-    SetlistRepo, SongRepo,
+    BlockRepo, EngineRepo, LayerRepo, ModuleRepo, ProfileRepo, RackRepo, RigRepo,
+    SceneTemplateRepo, SetlistRepo, SongRepo,
 };
 
 use crate::daw_block_ops::{LoadBlockResult, LoadModuleResult};
@@ -117,9 +117,7 @@ where
             Some(id) => rig
                 .variant(id)
                 .ok_or_else(|| format!("Rig scene not found: {id}"))?,
-            None => rig
-                .default_variant()
-                .ok_or("Rig has no default scene")?,
+            None => rig.default_variant().ok_or("Rig has no default scene")?,
         };
 
         // Load all module presets once — used to look up module_type and
@@ -152,14 +150,12 @@ where
                 .map_err(|e| format!("Failed to load engine {}: {e}", engine_sel.engine_id))?
                 .ok_or_else(|| format!("Engine not found: {}", engine_sel.engine_id))?;
 
-            let engine_scene = engine
-                .variant(&engine_sel.variant_id)
-                .ok_or_else(|| {
-                    format!(
-                        "Engine scene '{}' not found in engine '{}'",
-                        engine_sel.variant_id, engine.name
-                    )
-                })?;
+            let engine_scene = engine.variant(&engine_sel.variant_id).ok_or_else(|| {
+                format!(
+                    "Engine scene '{}' not found in engine '{}'",
+                    engine_sel.variant_id, engine.name
+                )
+            })?;
 
             let mut layer_infos: Vec<ResolvedLayerInfo> = Vec::new();
 
@@ -244,7 +240,9 @@ where
                     layers: e
                         .layers
                         .iter()
-                        .map(|l| LayerTemplate { name: l.name.clone() })
+                        .map(|l| LayerTemplate {
+                            name: l.name.clone(),
+                        })
                         .collect(),
                     fx_sends: e
                         .fx_send_names
@@ -256,7 +254,9 @@ where
             fx_sends: rig
                 .fx_sends
                 .iter()
-                .map(|s| FxSendTemplate { name: s.name.clone() })
+                .map(|s| FxSendTemplate {
+                    name: s.name.clone(),
+                })
                 .collect(),
         };
 
@@ -332,9 +332,6 @@ fn resolve_snapshot_idx(
 ) -> usize {
     match variant_id {
         None => 0,
-        Some(vid) => snapshots
-            .iter()
-            .position(|s| s.id() == vid)
-            .unwrap_or(0),
+        Some(vid) => snapshots.iter().position(|s| s.id() == vid).unwrap_or(0),
     }
 }

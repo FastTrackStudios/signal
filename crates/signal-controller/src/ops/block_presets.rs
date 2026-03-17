@@ -346,19 +346,11 @@ impl<S: SignalApi> BlockPresetOps<S> {
         let source_tag = format!("source:{plugin_name}");
 
         let snapshot = Snapshot::new(SnapshotId::new(), &snap_name, block)
-            .with_metadata(
-                signal_proto::metadata::Metadata::new().with_tag(source_tag.clone()),
-            )
+            .with_metadata(signal_proto::metadata::Metadata::new().with_tag(source_tag.clone()))
             .with_state_data(state_bytes);
 
-        let preset = Preset::new(
-            PresetId::new(),
-            &name,
-            block_type,
-            snapshot,
-            vec![],
-        )
-        .with_metadata(signal_proto::metadata::Metadata::new().with_tag(source_tag));
+        let preset = Preset::new(PresetId::new(), &name, block_type, snapshot, vec![])
+            .with_metadata(signal_proto::metadata::Metadata::new().with_tag(source_tag));
 
         self.save(preset).await
     }

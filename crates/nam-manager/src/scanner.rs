@@ -39,11 +39,7 @@ pub fn scan_directory(nam_root: &Path) -> Result<HashMap<String, NamFileEntry>, 
 }
 
 /// Scan a single file: hash it, extract metadata, build a `NamFileEntry`.
-fn scan_file(
-    path: &Path,
-    nam_root: &Path,
-    kind: NamFileKind,
-) -> Result<NamFileEntry, NamError> {
+fn scan_file(path: &Path, nam_root: &Path, kind: NamFileKind) -> Result<NamFileEntry, NamError> {
     let contents = std::fs::read(path)?;
 
     let hash = sha256_hex(&contents);
@@ -111,10 +107,7 @@ fn scan_file(
 }
 
 /// Merge newly scanned entries into an existing catalog, preserving user-assigned tags.
-pub fn merge_into_catalog(
-    catalog: &mut NamCatalog,
-    scanned: HashMap<String, NamFileEntry>,
-) {
+pub fn merge_into_catalog(catalog: &mut NamCatalog, scanned: HashMap<String, NamFileEntry>) {
     for (hash, mut new_entry) in scanned {
         if let Some(existing) = catalog.entries.get(&hash) {
             // Preserve user-assigned tags from existing entry
@@ -135,10 +128,7 @@ pub fn sha256_hex(data: &[u8]) -> String {
 ///
 /// This is the primary tagging mechanism — pack JSON files are the curated source of truth
 /// for vendor, model, category, and tone tags.
-pub fn apply_packs(
-    entries: &mut HashMap<String, NamFileEntry>,
-    packs: &[crate::PackDefinition],
-) {
+pub fn apply_packs(entries: &mut HashMap<String, NamFileEntry>, packs: &[crate::PackDefinition]) {
     for entry in entries.values_mut() {
         if let Some(pack) = crate::pack::find_pack_for_file(packs, &entry.relative_path) {
             let pack_tags = crate::pack::tags_for_file(pack, &entry.filename);

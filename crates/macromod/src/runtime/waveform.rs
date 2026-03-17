@@ -86,14 +86,8 @@ mod tests {
     #[test]
     fn square_symmetric() {
         assert_eq!(evaluate_waveform(LfoWaveform::Square, 0.0, 0.5, HELD), 1.0);
-        assert_eq!(
-            evaluate_waveform(LfoWaveform::Square, 0.25, 0.5, HELD),
-            1.0
-        );
-        assert_eq!(
-            evaluate_waveform(LfoWaveform::Square, 0.5, 0.5, HELD),
-            -1.0
-        );
+        assert_eq!(evaluate_waveform(LfoWaveform::Square, 0.25, 0.5, HELD), 1.0);
+        assert_eq!(evaluate_waveform(LfoWaveform::Square, 0.5, 0.5, HELD), -1.0);
         assert_eq!(
             evaluate_waveform(LfoWaveform::Square, 0.75, 0.5, HELD),
             -1.0
@@ -122,12 +116,8 @@ mod tests {
     #[test]
     fn inverse_sawtooth_ramp() {
         let eps = 1e-10;
-        assert!(
-            (evaluate_waveform(LfoWaveform::InverseSawtooth, 0.0, PW, HELD) - 1.0).abs() < eps
-        );
-        assert!(
-            (evaluate_waveform(LfoWaveform::InverseSawtooth, 0.5, PW, HELD) - 0.0).abs() < eps
-        );
+        assert!((evaluate_waveform(LfoWaveform::InverseSawtooth, 0.0, PW, HELD) - 1.0).abs() < eps);
+        assert!((evaluate_waveform(LfoWaveform::InverseSawtooth, 0.5, PW, HELD) - 0.0).abs() < eps);
         assert!(evaluate_waveform(LfoWaveform::InverseSawtooth, 0.999, PW, HELD) < -0.99);
     }
 

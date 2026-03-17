@@ -704,7 +704,11 @@ async fn load_nonexistent_rig_returns_none() {
 #[tokio::test]
 async fn load_nonexistent_engine_returns_none() {
     let signal = controller().await;
-    let result = signal.engines().load(seed_id("does-not-exist")).await.unwrap();
+    let result = signal
+        .engines()
+        .load(seed_id("does-not-exist"))
+        .await
+        .unwrap();
     assert!(result.is_none());
 }
 
@@ -712,7 +716,11 @@ async fn load_nonexistent_engine_returns_none() {
 #[tokio::test]
 async fn load_nonexistent_profile_returns_none() {
     let signal = controller().await;
-    let result = signal.profiles().load(seed_id("does-not-exist")).await.unwrap();
+    let result = signal
+        .profiles()
+        .load(seed_id("does-not-exist"))
+        .await
+        .unwrap();
     assert!(result.is_none());
 }
 
@@ -720,7 +728,11 @@ async fn load_nonexistent_profile_returns_none() {
 #[tokio::test]
 async fn load_nonexistent_song_returns_none() {
     let signal = controller().await;
-    let result = signal.songs().load(seed_id("does-not-exist")).await.unwrap();
+    let result = signal
+        .songs()
+        .load(seed_id("does-not-exist"))
+        .await
+        .unwrap();
     assert!(result.is_none());
 }
 
@@ -728,7 +740,11 @@ async fn load_nonexistent_song_returns_none() {
 #[tokio::test]
 async fn load_nonexistent_layer_returns_none() {
     let signal = controller().await;
-    let result = signal.layers().load(seed_id("does-not-exist")).await.unwrap();
+    let result = signal
+        .layers()
+        .load(seed_id("does-not-exist"))
+        .await
+        .unwrap();
     assert!(result.is_none());
 }
 
@@ -736,7 +752,11 @@ async fn load_nonexistent_layer_returns_none() {
 #[tokio::test]
 async fn load_nonexistent_setlist_returns_none() {
     let signal = controller().await;
-    let result = signal.setlists().load(seed_id("does-not-exist")).await.unwrap();
+    let result = signal
+        .setlists()
+        .load(seed_id("does-not-exist"))
+        .await
+        .unwrap();
     assert!(result.is_none());
 }
 
@@ -784,8 +804,10 @@ async fn empty_rig_save_load() {
     signal.rigs().save(rig).await.unwrap();
 
     let loaded = signal
-        .rigs().load(seed_id("empty-rig"))
-        .await.unwrap()
+        .rigs()
+        .load(seed_id("empty-rig"))
+        .await
+        .unwrap()
         .expect("empty rig should save/load");
     assert_eq!(loaded.engine_ids.len(), 0);
     assert_eq!(loaded.variants.len(), 1);
@@ -805,8 +827,10 @@ async fn empty_engine_save_load() {
     signal.engines().save(engine).await.unwrap();
 
     let loaded = signal
-        .engines().load(seed_id("empty-engine"))
-        .await.unwrap()
+        .engines()
+        .load(seed_id("empty-engine"))
+        .await
+        .unwrap()
         .expect("empty engine should save/load");
     assert_eq!(loaded.layer_ids.len(), 0);
     assert_eq!(loaded.variants.len(), 1);
@@ -827,8 +851,10 @@ async fn empty_layer_snapshot_save_load() {
     signal.layers().save(layer).await.unwrap();
 
     let loaded = signal
-        .layers().load(seed_id("empty-layer"))
-        .await.unwrap()
+        .layers()
+        .load(seed_id("empty-layer"))
+        .await
+        .unwrap()
         .expect("empty layer should save/load");
     assert_eq!(loaded.variants.len(), 1);
     assert!(loaded.variants[0].module_refs.is_empty());
@@ -852,8 +878,10 @@ async fn minimal_setlist_save_load() {
     signal.setlists().save(setlist).await.unwrap();
 
     let loaded = signal
-        .setlists().load(seed_id("min-setlist"))
-        .await.unwrap()
+        .setlists()
+        .load(seed_id("min-setlist"))
+        .await
+        .unwrap()
         .expect("minimal setlist should save/load");
     assert_eq!(loaded.entries.len(), 1);
 }
@@ -902,7 +930,12 @@ async fn empty_song_save_load() {
     );
     signal.songs().save(song).await.unwrap();
 
-    let loaded = signal.songs().load(seed_id("minimal-song")).await.unwrap().expect("song");
+    let loaded = signal
+        .songs()
+        .load(seed_id("minimal-song"))
+        .await
+        .unwrap()
+        .expect("song");
     assert_eq!(loaded.sections.len(), 1);
 }
 
@@ -922,10 +955,20 @@ async fn delete_rig_collection() {
         RigScene::new(seed_id("del-rig-scene"), "Default"),
     );
     signal.rigs().save(rig).await.unwrap();
-    assert!(signal.rigs().load(seed_id("del-rig")).await.unwrap().is_some());
+    assert!(signal
+        .rigs()
+        .load(seed_id("del-rig"))
+        .await
+        .unwrap()
+        .is_some());
 
     signal.rigs().delete(seed_id("del-rig")).await.unwrap();
-    assert!(signal.rigs().load(seed_id("del-rig")).await.unwrap().is_none());
+    assert!(signal
+        .rigs()
+        .load(seed_id("del-rig"))
+        .await
+        .unwrap()
+        .is_none());
 }
 
 /// Delete a module collection, verify it's gone.
@@ -937,7 +980,11 @@ async fn delete_module_collection() {
     assert!(!modules.is_empty());
     let first_id = modules[0].id().clone();
 
-    signal.module_presets().delete(first_id.clone()).await.unwrap();
+    signal
+        .module_presets()
+        .delete(first_id.clone())
+        .await
+        .unwrap();
     let after = signal.module_presets().list().await.unwrap();
     assert!(after.iter().all(|m| m.id() != &first_id));
 }
@@ -958,10 +1005,24 @@ async fn delete_profile() {
         ),
     );
     signal.profiles().save(profile).await.unwrap();
-    assert!(signal.profiles().load(seed_id("del-profile")).await.unwrap().is_some());
+    assert!(signal
+        .profiles()
+        .load(seed_id("del-profile"))
+        .await
+        .unwrap()
+        .is_some());
 
-    signal.profiles().delete(seed_id("del-profile")).await.unwrap();
-    assert!(signal.profiles().load(seed_id("del-profile")).await.unwrap().is_none());
+    signal
+        .profiles()
+        .delete(seed_id("del-profile"))
+        .await
+        .unwrap();
+    assert!(signal
+        .profiles()
+        .load(seed_id("del-profile"))
+        .await
+        .unwrap()
+        .is_none());
 }
 
 /// Delete a song, verify it's gone.
@@ -980,10 +1041,20 @@ async fn delete_song() {
         ),
     );
     signal.songs().save(song).await.unwrap();
-    assert!(signal.songs().load(seed_id("del-song")).await.unwrap().is_some());
+    assert!(signal
+        .songs()
+        .load(seed_id("del-song"))
+        .await
+        .unwrap()
+        .is_some());
 
     signal.songs().delete(seed_id("del-song")).await.unwrap();
-    assert!(signal.songs().load(seed_id("del-song")).await.unwrap().is_none());
+    assert!(signal
+        .songs()
+        .load(seed_id("del-song"))
+        .await
+        .unwrap()
+        .is_none());
 }
 
 /// Delete a setlist, verify it's gone.
@@ -1000,10 +1071,24 @@ async fn delete_setlist() {
     );
     let setlist = Setlist::new(seed_id("del-setlist"), "Deletable Setlist", entry);
     signal.setlists().save(setlist).await.unwrap();
-    assert!(signal.setlists().load(seed_id("del-setlist")).await.unwrap().is_some());
+    assert!(signal
+        .setlists()
+        .load(seed_id("del-setlist"))
+        .await
+        .unwrap()
+        .is_some());
 
-    signal.setlists().delete(seed_id("del-setlist")).await.unwrap();
-    assert!(signal.setlists().load(seed_id("del-setlist")).await.unwrap().is_none());
+    signal
+        .setlists()
+        .delete(seed_id("del-setlist"))
+        .await
+        .unwrap();
+    assert!(signal
+        .setlists()
+        .load(seed_id("del-setlist"))
+        .await
+        .unwrap()
+        .is_none());
 }
 
 // ═════════════════════════════════════════════════════════════
@@ -1027,8 +1112,10 @@ async fn scene_template_create_save_load() {
     signal.scene_templates().save(template).await.unwrap();
 
     let loaded = signal
-        .scene_templates().load(seed_id("clean-template"))
-        .await.unwrap()
+        .scene_templates()
+        .load(seed_id("clean-template"))
+        .await
+        .unwrap()
         .expect("template should exist");
     assert_eq!(loaded.name, "Clean");
     assert_eq!(loaded.engine_selections.len(), 1);
@@ -1040,12 +1127,21 @@ async fn scene_template_create_save_load() {
 async fn scene_template_list() {
     let signal = controller().await;
 
-    signal.scene_templates().save(SceneTemplate::new(seed_id("tpl-a"), "Template A"))
-        .await.unwrap();
-    signal.scene_templates().save(SceneTemplate::new(seed_id("tpl-b"), "Template B"))
-        .await.unwrap();
-    signal.scene_templates().save(SceneTemplate::new(seed_id("tpl-c"), "Template C"))
-        .await.unwrap();
+    signal
+        .scene_templates()
+        .save(SceneTemplate::new(seed_id("tpl-a"), "Template A"))
+        .await
+        .unwrap();
+    signal
+        .scene_templates()
+        .save(SceneTemplate::new(seed_id("tpl-b"), "Template B"))
+        .await
+        .unwrap();
+    signal
+        .scene_templates()
+        .save(SceneTemplate::new(seed_id("tpl-c"), "Template C"))
+        .await
+        .unwrap();
 
     let templates = signal.scene_templates().list().await.unwrap();
     assert!(templates.len() >= 3);
@@ -1056,12 +1152,29 @@ async fn scene_template_list() {
 async fn scene_template_delete() {
     let signal = controller().await;
 
-    signal.scene_templates().save(SceneTemplate::new(seed_id("tpl-del"), "Delete Me"))
-        .await.unwrap();
-    assert!(signal.scene_templates().load(seed_id("tpl-del")).await.unwrap().is_some());
+    signal
+        .scene_templates()
+        .save(SceneTemplate::new(seed_id("tpl-del"), "Delete Me"))
+        .await
+        .unwrap();
+    assert!(signal
+        .scene_templates()
+        .load(seed_id("tpl-del"))
+        .await
+        .unwrap()
+        .is_some());
 
-    signal.scene_templates().delete(seed_id("tpl-del")).await.unwrap();
-    assert!(signal.scene_templates().load(seed_id("tpl-del")).await.unwrap().is_none());
+    signal
+        .scene_templates()
+        .delete(seed_id("tpl-del"))
+        .await
+        .unwrap();
+    assert!(signal
+        .scene_templates()
+        .load(seed_id("tpl-del"))
+        .await
+        .unwrap()
+        .is_none());
 }
 
 /// Convert scene template to rig scene.
@@ -1097,8 +1210,10 @@ async fn scene_template_to_rig_scene() {
     signal.rigs().save(rig).await.unwrap();
 
     let loaded = signal
-        .rigs().load(seed_id("tpl-rig"))
-        .await.unwrap()
+        .rigs()
+        .load(seed_id("tpl-rig"))
+        .await
+        .unwrap()
         .expect("rig");
     assert_eq!(loaded.variants[0].name, "Lead Template");
 }
@@ -1442,8 +1557,10 @@ async fn load_song_variant_by_id() {
     let first_section = &song.sections[0];
 
     let loaded = signal
-        .songs().load_section(song.id.clone(), first_section.id.clone())
-        .await.unwrap();
+        .songs()
+        .load_section(song.id.clone(), first_section.id.clone())
+        .await
+        .unwrap();
     assert!(loaded.is_some());
     let section = loaded.unwrap();
     assert_eq!(section.name, first_section.name);
@@ -1456,8 +1573,10 @@ async fn load_nonexistent_variant_returns_none() {
 
     // Valid rig, nonexistent scene
     let result = signal
-        .rigs().load_variant(guitar_rig_id(), seed_id("nonexistent-scene"))
-        .await.unwrap();
+        .rigs()
+        .load_variant(guitar_rig_id(), seed_id("nonexistent-scene"))
+        .await
+        .unwrap();
     assert!(result.is_none());
 }
 
@@ -1467,8 +1586,10 @@ async fn load_nonexistent_engine_variant_returns_none() {
     let signal = controller().await;
 
     let result = signal
-        .engines().load_variant(seed_id("keys-engine"), seed_id("nonexistent-variant"))
-        .await.unwrap();
+        .engines()
+        .load_variant(seed_id("keys-engine"), seed_id("nonexistent-variant"))
+        .await
+        .unwrap();
     assert!(result.is_none());
 }
 

@@ -10,9 +10,9 @@ use clap::Subcommand;
 use daw::Daw;
 use eyre::Result;
 use serde_json::json;
-use signal::SignalController;
 use signal::profile::{Patch, PatchId};
 use signal::traits::Collection;
+use signal::SignalController;
 
 // ============================================================================
 // Connection
@@ -615,27 +615,60 @@ pub async fn run(
         snapshot,
     } = cmd
     {
-        return cmd_signal_load(db, socket, preset_type, preset_id, track, snapshot.as_deref(), as_json)
-            .await;
+        return cmd_signal_load(
+            db,
+            socket,
+            preset_type,
+            preset_id,
+            track,
+            snapshot.as_deref(),
+            as_json,
+        )
+        .await;
     }
 
     // Rigs Open needs both signal DB and DAW connection.
-    if let SignalCommand::Rigs(RigsCommand::Open { ref id, own_reaper, close_after_load }) = cmd {
+    if let SignalCommand::Rigs(RigsCommand::Open {
+        ref id,
+        own_reaper,
+        close_after_load,
+    }) = cmd
+    {
         return cmd_rigs_open(db, socket, id, own_reaper, close_after_load).await;
     }
 
     // Capture needs both signal DB and DAW connection.
     if let SignalCommand::Presets(PresetsCommand::Capture {
-        ref block_type, ref name, ref variation, ref track, fx
-    }) = cmd {
-        return cmd_presets_capture(db, socket, block_type, name, variation.as_deref(), track, fx).await;
+        ref block_type,
+        ref name,
+        ref variation,
+        ref track,
+        fx,
+    }) = cmd
+    {
+        return cmd_presets_capture(
+            db,
+            socket,
+            block_type,
+            name,
+            variation.as_deref(),
+            track,
+            fx,
+        )
+        .await;
     }
 
     // Recapture needs both signal DB and DAW connection.
     if let SignalCommand::Presets(PresetsCommand::Recapture {
-        ref block_type, ref id, ref snapshot, ref track, fx
-    }) = cmd {
-        return cmd_presets_recapture(db, socket, block_type, id, snapshot.as_deref(), track, fx).await;
+        ref block_type,
+        ref id,
+        ref snapshot,
+        ref track,
+        fx,
+    }) = cmd
+    {
+        return cmd_presets_recapture(db, socket, block_type, id, snapshot.as_deref(), track, fx)
+            .await;
     }
 
     let signal = connect_signal(db).await?;
@@ -660,58 +693,74 @@ pub async fn run(
             cmd_presets_import(&signal, import_cmd).await
         }
         SignalCommand::Presets(PresetsCommand::SetParam {
-            ref block_type, ref id, ref snapshot, ref assignment,
+            ref block_type,
+            ref id,
+            ref snapshot,
+            ref assignment,
         }) => cmd_presets_set_param(&signal, block_type, id, snapshot.as_deref(), assignment).await,
 
-        SignalCommand::Modules(ModulesCommand::List) => {
-            cmd_modules_list(&signal, as_json).await
-        }
+        SignalCommand::Modules(ModulesCommand::List) => cmd_modules_list(&signal, as_json).await,
         SignalCommand::Modules(ModulesCommand::Show { ref id }) => {
             cmd_modules_show(&signal, id, as_json).await
         }
         SignalCommand::Modules(ModulesCommand::Create {
-            ref module_type, ref name, ref blocks,
+            ref module_type,
+            ref name,
+            ref blocks,
         }) => cmd_modules_create(&signal, module_type, name, blocks).await,
         SignalCommand::Modules(ModulesCommand::AddVariation {
-            ref id, ref name, ref overrides,
+            ref id,
+            ref name,
+            ref overrides,
         }) => cmd_modules_add_variation(&signal, id, name, overrides).await,
         SignalCommand::Modules(ModulesCommand::EditVariation {
-            ref id, ref snapshot, ref overrides, ref blocks,
+            ref id,
+            ref snapshot,
+            ref overrides,
+            ref blocks,
         }) => cmd_modules_edit_variation(&signal, id, snapshot, overrides, blocks).await,
 
         SignalCommand::Layers(LayersCommand::List) => cmd_layers_list(&signal, as_json).await,
         SignalCommand::Layers(LayersCommand::Show { ref id }) => {
             cmd_layers_show(&signal, id, as_json).await
         }
-        SignalCommand::Layers(LayersCommand::Create { ref name, ref r#type }) => {
-            cmd_layers_create(&signal, name, r#type, as_json).await
-        }
+        SignalCommand::Layers(LayersCommand::Create {
+            ref name,
+            ref r#type,
+        }) => cmd_layers_create(&signal, name, r#type, as_json).await,
         SignalCommand::Layers(LayersCommand::Delete { ref id }) => {
             cmd_layers_delete(&signal, id, as_json).await
         }
-        SignalCommand::Layers(LayersCommand::AddBlock { ref layer_id, ref preset_id, ref variant }) => {
-            cmd_layers_add_block(&signal, layer_id, preset_id, variant.as_deref(), as_json).await
-        }
-        SignalCommand::Layers(LayersCommand::RemoveBlock { ref layer_id, ref preset_id }) => {
-            cmd_layers_remove_block(&signal, layer_id, preset_id, as_json).await
-        }
+        SignalCommand::Layers(LayersCommand::AddBlock {
+            ref layer_id,
+            ref preset_id,
+            ref variant,
+        }) => cmd_layers_add_block(&signal, layer_id, preset_id, variant.as_deref(), as_json).await,
+        SignalCommand::Layers(LayersCommand::RemoveBlock {
+            ref layer_id,
+            ref preset_id,
+        }) => cmd_layers_remove_block(&signal, layer_id, preset_id, as_json).await,
 
         SignalCommand::Engines(EnginesCommand::List) => cmd_engines_list(&signal, as_json).await,
         SignalCommand::Engines(EnginesCommand::Show { ref id }) => {
             cmd_engines_show(&signal, id, as_json).await
         }
-        SignalCommand::Engines(EnginesCommand::Create { ref name, ref r#type, ref layer }) => {
-            cmd_engines_create(&signal, name, r#type, layer, as_json).await
-        }
+        SignalCommand::Engines(EnginesCommand::Create {
+            ref name,
+            ref r#type,
+            ref layer,
+        }) => cmd_engines_create(&signal, name, r#type, layer, as_json).await,
         SignalCommand::Engines(EnginesCommand::Delete { ref id }) => {
             cmd_engines_delete(&signal, id, as_json).await
         }
-        SignalCommand::Engines(EnginesCommand::AddLayer { ref engine_id, ref layer_id }) => {
-            cmd_engines_add_layer(&signal, engine_id, layer_id, as_json).await
-        }
-        SignalCommand::Engines(EnginesCommand::RemoveLayer { ref engine_id, ref layer_id }) => {
-            cmd_engines_remove_layer(&signal, engine_id, layer_id, as_json).await
-        }
+        SignalCommand::Engines(EnginesCommand::AddLayer {
+            ref engine_id,
+            ref layer_id,
+        }) => cmd_engines_add_layer(&signal, engine_id, layer_id, as_json).await,
+        SignalCommand::Engines(EnginesCommand::RemoveLayer {
+            ref engine_id,
+            ref layer_id,
+        }) => cmd_engines_remove_layer(&signal, engine_id, layer_id, as_json).await,
 
         SignalCommand::Rigs(RigsCommand::List) => cmd_rigs_list(&signal, as_json).await,
         SignalCommand::Rigs(RigsCommand::Show { ref id }) => {
@@ -723,36 +772,44 @@ pub async fn run(
         SignalCommand::Rigs(RigsCommand::Delete { ref id }) => {
             cmd_rigs_delete(&signal, id, as_json).await
         }
-        SignalCommand::Rigs(RigsCommand::AddEngine { ref rig_id, ref engine_id }) => {
-            cmd_rigs_add_engine(&signal, rig_id, engine_id, as_json).await
-        }
-        SignalCommand::Rigs(RigsCommand::RemoveEngine { ref rig_id, ref engine_id }) => {
-            cmd_rigs_remove_engine(&signal, rig_id, engine_id, as_json).await
-        }
+        SignalCommand::Rigs(RigsCommand::AddEngine {
+            ref rig_id,
+            ref engine_id,
+        }) => cmd_rigs_add_engine(&signal, rig_id, engine_id, as_json).await,
+        SignalCommand::Rigs(RigsCommand::RemoveEngine {
+            ref rig_id,
+            ref engine_id,
+        }) => cmd_rigs_remove_engine(&signal, rig_id, engine_id, as_json).await,
 
-        SignalCommand::Nam(NamCommand::Packs { ref vendor, ref category }) => {
-            cmd_nam_packs(vendor.as_deref(), category.as_deref()).await
-        }
-        SignalCommand::Nam(NamCommand::Import { ref vendor, ref category, dry_run, own_reaper }) => {
+        SignalCommand::Nam(NamCommand::Packs {
+            ref vendor,
+            ref category,
+        }) => cmd_nam_packs(vendor.as_deref(), category.as_deref()).await,
+        SignalCommand::Nam(NamCommand::Import {
+            ref vendor,
+            ref category,
+            dry_run,
+            own_reaper,
+        }) => {
             if dry_run {
                 cmd_nam_import_dry_run(vendor.as_deref(), category.as_deref()).await
             } else if own_reaper {
-                let (daw, pid, sock) =
-                    daw_cli::launch_and_connect("fts-signal").await
-                        .map_err(|e| eyre::eyre!("Failed to launch REAPER: {e}"))?;
-                let result = cmd_nam_import(&signal, &daw, vendor.as_deref(), category.as_deref()).await;
+                let (daw, pid, sock) = daw_cli::launch_and_connect("fts-signal")
+                    .await
+                    .map_err(|e| eyre::eyre!("Failed to launch REAPER: {e}"))?;
+                let result =
+                    cmd_nam_import(&signal, &daw, vendor.as_deref(), category.as_deref()).await;
                 daw_cli::teardown_owned(pid, &sock);
                 result
             } else {
-                let daw = daw_cli::connect(socket.clone()).await
+                let daw = daw_cli::connect(socket.clone())
+                    .await
                     .map_err(|e| eyre::eyre!("REAPER required for nam import: {e}"))?;
                 cmd_nam_import(&signal, &daw, vendor.as_deref(), category.as_deref()).await
             }
         }
 
-        SignalCommand::Profiles(ProfilesCommand::List) => {
-            cmd_profiles_list(&signal, as_json).await
-        }
+        SignalCommand::Profiles(ProfilesCommand::List) => cmd_profiles_list(&signal, as_json).await,
         SignalCommand::Profiles(ProfilesCommand::Show { ref id }) => {
             cmd_profiles_show(&signal, id, as_json).await
         }
@@ -789,9 +846,7 @@ pub async fn run(
             cmd_songs_delete(&signal, id, as_json).await
         }
 
-        SignalCommand::Setlists(EntityCommand::List) => {
-            cmd_setlists_list(&signal, as_json).await
-        }
+        SignalCommand::Setlists(EntityCommand::List) => cmd_setlists_list(&signal, as_json).await,
         SignalCommand::Setlists(EntityCommand::Show { ref id }) => {
             cmd_setlists_show(&signal, id, as_json).await
         }
@@ -803,7 +858,11 @@ pub async fn run(
         }
 
         // Handled above before signal DB connection.
-        SignalCommand::Daw(_) | SignalCommand::Load { .. } | SignalCommand::Rigs(RigsCommand::Open { .. }) | SignalCommand::Presets(PresetsCommand::Capture { .. }) | SignalCommand::Presets(PresetsCommand::Recapture { .. }) => unreachable!(),
+        SignalCommand::Daw(_)
+        | SignalCommand::Load { .. }
+        | SignalCommand::Rigs(RigsCommand::Open { .. })
+        | SignalCommand::Presets(PresetsCommand::Capture { .. })
+        | SignalCommand::Presets(PresetsCommand::Recapture { .. }) => unreachable!(),
     }
 }
 
@@ -922,7 +981,12 @@ async fn cmd_presets_create(
             }))?
         );
     } else {
-        println!("created {} preset: {} ({})", block_type, preset.name(), preset.id());
+        println!(
+            "created {} preset: {} ({})",
+            block_type,
+            preset.name(),
+            preset.id()
+        );
     }
     Ok(())
 }
@@ -934,10 +998,7 @@ async fn cmd_presets_delete(
     as_json: bool,
 ) -> Result<()> {
     let bt = parse_block_type(block_type)?;
-    signal
-        .block_presets()
-        .delete(bt, id.to_string())
-        .await?;
+    signal.block_presets().delete(bt, id.to_string()).await?;
 
     if as_json {
         println!(
@@ -970,7 +1031,8 @@ async fn cmd_presets_capture(
 ) -> Result<()> {
     let bt = parse_block_type(block_type)?;
     let signal = connect_signal(db).await?;
-    let daw = daw_cli::connect(socket).await
+    let daw = daw_cli::connect(socket)
+        .await
         .map_err(|e| eyre::eyre!("REAPER required for capture: {e}"))?;
 
     // Resolve track and FX
@@ -993,7 +1055,10 @@ async fn cmd_presets_capture(
 
     eprintln!(
         "Capturing: \"{}\" from \"{}\" ({} params, {} bytes)",
-        info.plugin_name, track_arg, params.len(), state_bytes.len()
+        info.plugin_name,
+        track_arg,
+        params.len(),
+        state_bytes.len()
     );
 
     // Build param tuples for the ops method
@@ -1004,7 +1069,14 @@ async fn cmd_presets_capture(
 
     let preset = signal
         .block_presets()
-        .create_from_capture(bt, name, snap_name, &info.plugin_name, &param_tuples, state_bytes)
+        .create_from_capture(
+            bt,
+            name,
+            snap_name,
+            &info.plugin_name,
+            &param_tuples,
+            state_bytes,
+        )
         .await?;
 
     eprintln!("Saved {} preset \"{}\" ({})", block_type, name, preset.id());
@@ -1022,7 +1094,8 @@ async fn cmd_presets_recapture(
 ) -> Result<()> {
     let bt = parse_block_type(block_type)?;
     let signal = connect_signal(db).await?;
-    let daw = daw_cli::connect(socket).await
+    let daw = daw_cli::connect(socket)
+        .await
         .map_err(|e| eyre::eyre!("REAPER required for recapture: {e}"))?;
 
     // Resolve track and FX
@@ -1059,7 +1132,10 @@ async fn cmd_presets_recapture(
 
     eprintln!(
         "Recapturing: \"{}\" from \"{}\" ({} params, {} bytes)",
-        info.plugin_name, track_arg, params.len(), state_bytes.len()
+        info.plugin_name,
+        track_arg,
+        params.len(),
+        state_bytes.len()
     );
 
     let param_tuples: Vec<(u32, String, f32)> = params
@@ -1090,7 +1166,8 @@ async fn cmd_presets_set_param(
         .ok_or_else(|| eyre::eyre!(
             "Invalid assignment \"{assignment}\". Expected format: param_name=value (e.g. \"Mix=0.75\")"
         ))?;
-    let value: f32 = val_str.parse()
+    let value: f32 = val_str
+        .parse()
         .map_err(|_| eyre::eyre!("Invalid value \"{val_str}\" in assignment \"{assignment}\""))?;
 
     // Find the preset
@@ -1114,7 +1191,13 @@ async fn cmd_presets_set_param(
         .update_snapshot_param_by_name(bt, preset_id, snapshot_id, param_name, value)
         .await?;
 
-    eprintln!("Set {}={} on {} preset \"{}\"", param_name, value, block_type, preset.name());
+    eprintln!(
+        "Set {}={} on {} preset \"{}\"",
+        param_name,
+        value,
+        block_type,
+        preset.name()
+    );
     Ok(())
 }
 
@@ -1158,8 +1241,11 @@ async fn cmd_presets_import(signal: &SignalController, cmd: &ImportCommand) -> R
                 for p in &plugins {
                     let collection = importer.scan(&p.plugin_name)?;
                     let report = signal::signal_import::import_presets_with_library(
-                        signal, collection, Some(&library_root),
-                    ).await?;
+                        signal,
+                        collection,
+                        Some(&library_root),
+                    )
+                    .await?;
                     println!(
                         "  Imported {}: {} snapshots",
                         report.preset_name, report.snapshots_imported
@@ -1173,8 +1259,11 @@ async fn cmd_presets_import(signal: &SignalController, cmd: &ImportCommand) -> R
                     return Ok(());
                 }
                 let report = signal::signal_import::import_presets_with_library(
-                    signal, collection, Some(&library_root),
-                ).await?;
+                    signal,
+                    collection,
+                    Some(&library_root),
+                )
+                .await?;
                 println!(
                     "Imported {}: {} snapshots",
                     report.preset_name, report.snapshots_imported
@@ -1202,8 +1291,11 @@ async fn cmd_presets_import(signal: &SignalController, cmd: &ImportCommand) -> R
                 return Ok(());
             }
             let report = signal::signal_import::import_presets_with_library(
-                signal, collection, Some(&library_root),
-            ).await?;
+                signal,
+                collection,
+                Some(&library_root),
+            )
+            .await?;
             println!(
                 "Imported {}: {} snapshots",
                 report.preset_name, report.snapshots_imported
@@ -1245,10 +1337,7 @@ async fn cmd_modules_list(signal: &SignalController, as_json: bool) -> Result<()
 }
 
 async fn cmd_modules_show(signal: &SignalController, id: &str, as_json: bool) -> Result<()> {
-    let snapshot = signal
-        .module_presets()
-        .load_default(id.to_string())
-        .await?;
+    let snapshot = signal.module_presets().load_default(id.to_string()).await?;
 
     match snapshot {
         Some(snap) => {
@@ -1290,7 +1379,10 @@ async fn cmd_modules_create(
         let preset_id = signal::PresetId::from(preset_id_str.to_string());
 
         // Look up label for display
-        let label = signal.block_presets().list(bt).await?
+        let label = signal
+            .block_presets()
+            .list(bt)
+            .await?
             .into_iter()
             .find(|p| *p.id() == preset_id)
             .map(|p| p.name().to_string())
@@ -1305,7 +1397,12 @@ async fn cmd_modules_create(
     }
 
     let preset = signal.module_presets().create(name, mt, blocks).await?;
-    eprintln!("Saved {} module preset \"{}\" ({})", module_type, name, preset.id());
+    eprintln!(
+        "Saved {} module preset \"{}\" ({})",
+        module_type,
+        name,
+        preset.id()
+    );
     Ok(())
 }
 
@@ -1327,22 +1424,22 @@ async fn cmd_modules_add_variation(
         .ok_or_else(|| eyre::eyre!("Module preset not found: {preset_id_str}"))?;
 
     // Get blocks from the default snapshot
-    let default_snapshot = preset.default_variant()
+    let default_snapshot = preset
+        .default_variant()
         .ok_or_else(|| eyre::eyre!("Module preset has no default snapshot"))?;
     let source_blocks = default_snapshot.module().blocks();
 
     // Parse overrides: "block_id:param_name=value"
     let mut parsed_overrides: Vec<(String, String, f32)> = Vec::new();
     for spec in override_specs {
-        let (block_id, rest) = spec.split_once(':')
-            .ok_or_else(|| eyre::eyre!(
-                "Invalid override \"{spec}\". Expected format: block_id:param_name=value"
-            ))?;
-        let (param_name, val_str) = rest.split_once('=')
-            .ok_or_else(|| eyre::eyre!(
-                "Invalid override \"{spec}\". Expected format: block_id:param_name=value"
-            ))?;
-        let value: f32 = val_str.parse()
+        let (block_id, rest) = spec.split_once(':').ok_or_else(|| {
+            eyre::eyre!("Invalid override \"{spec}\". Expected format: block_id:param_name=value")
+        })?;
+        let (param_name, val_str) = rest.split_once('=').ok_or_else(|| {
+            eyre::eyre!("Invalid override \"{spec}\". Expected format: block_id:param_name=value")
+        })?;
+        let value: f32 = val_str
+            .parse()
             .map_err(|_| eyre::eyre!("Invalid value \"{val_str}\" in override \"{spec}\""))?;
         parsed_overrides.push((block_id.to_string(), param_name.to_string(), value));
     }
@@ -1371,14 +1468,16 @@ async fn cmd_modules_add_variation(
         .collect();
 
     let module = signal::Module::from_blocks(rebuilt_blocks);
-    let snapshot = signal::ModuleSnapshot::new(
-        signal::ModuleSnapshotId::new(),
-        name,
-        module,
-    );
+    let snapshot = signal::ModuleSnapshot::new(signal::ModuleSnapshotId::new(), name, module);
 
-    signal.module_presets().add_snapshot(preset_id, snapshot).await?;
-    eprintln!("Added variation \"{}\" to module preset {}", name, preset_id_str);
+    signal
+        .module_presets()
+        .add_snapshot(preset_id, snapshot)
+        .await?;
+    eprintln!(
+        "Added variation \"{}\" to module preset {}",
+        name, preset_id_str
+    );
     Ok(())
 }
 
@@ -1412,15 +1511,14 @@ async fn cmd_modules_edit_variation(
     // Parse overrides: "block_id:param_name=value"
     let mut parsed_overrides: Vec<(String, String, f32)> = Vec::new();
     for spec in override_specs {
-        let (block_id, rest) = spec.split_once(':')
-            .ok_or_else(|| eyre::eyre!(
-                "Invalid override \"{spec}\". Expected format: block_id:param_name=value"
-            ))?;
-        let (param_name, val_str) = rest.split_once('=')
-            .ok_or_else(|| eyre::eyre!(
-                "Invalid override \"{spec}\". Expected format: block_id:param_name=value"
-            ))?;
-        let value: f32 = val_str.parse()
+        let (block_id, rest) = spec.split_once(':').ok_or_else(|| {
+            eyre::eyre!("Invalid override \"{spec}\". Expected format: block_id:param_name=value")
+        })?;
+        let (param_name, val_str) = rest.split_once('=').ok_or_else(|| {
+            eyre::eyre!("Invalid override \"{spec}\". Expected format: block_id:param_name=value")
+        })?;
+        let value: f32 = val_str
+            .parse()
             .map_err(|_| eyre::eyre!("Invalid value \"{val_str}\" in override \"{spec}\""))?;
         parsed_overrides.push((block_id.to_string(), param_name.to_string(), value));
     }
@@ -1444,7 +1542,9 @@ async fn cmd_modules_edit_variation(
         .into_iter()
         .map(|block| {
             // Check for source reassignment
-            let source = if let Some((_, _, ref pid)) = parsed_blocks.iter().find(|(bid, _, _)| bid == block.id()) {
+            let source = if let Some((_, _, ref pid)) =
+                parsed_blocks.iter().find(|(bid, _, _)| bid == block.id())
+            {
                 signal::ModuleBlockSource::PresetDefault {
                     preset_id: pid.clone(),
                     saved_at_version: None,
@@ -1454,7 +1554,9 @@ async fn cmd_modules_edit_variation(
             };
 
             // Check for block type reassignment
-            let block_type = if let Some((_, bt, _)) = parsed_blocks.iter().find(|(bid, _, _)| bid == block.id()) {
+            let block_type = if let Some((_, bt, _)) =
+                parsed_blocks.iter().find(|(bid, _, _)| bid == block.id())
+            {
                 *bt
             } else {
                 block.block_type()
@@ -1467,12 +1569,8 @@ async fn cmd_modules_edit_variation(
                 .map(|(_, param, val)| signal::BlockParameterOverride::new(param, *val))
                 .collect();
 
-            let mut new_block = signal::ModuleBlock::new(
-                block.id(),
-                block.label(),
-                block_type,
-                source,
-            );
+            let mut new_block =
+                signal::ModuleBlock::new(block.id(), block.label(), block_type, source);
             if !overrides_for_block.is_empty() {
                 new_block = new_block.with_overrides(overrides_for_block);
             }
@@ -1486,7 +1584,10 @@ async fn cmd_modules_edit_variation(
         .update_snapshot_module(preset_id, snapshot_id, module)
         .await?;
 
-    eprintln!("Updated variation \"{}\" on module preset {}", snapshot_id_str, preset_id_str);
+    eprintln!(
+        "Updated variation \"{}\" on module preset {}",
+        snapshot_id_str, preset_id_str
+    );
     Ok(())
 }
 
@@ -1516,10 +1617,7 @@ async fn cmd_layers_list(signal: &SignalController, as_json: bool) -> Result<()>
         }
         println!("Layers ({}):", layers.len());
         for l in &layers {
-            println!(
-                "  {} — {} ({} variants)",
-                l.id, l.name, l.variants.len()
-            );
+            println!("  {} — {} ({} variants)", l.id, l.name, l.variants.len());
         }
     }
     Ok(())
@@ -1546,14 +1644,22 @@ async fn cmd_layers_show(signal: &SignalController, id: &str, as_json: bool) -> 
                     })).collect::<Vec<_>>(),
                 });
                 if let Some(ref snap) = snapshot {
-                    obj["block_refs"] = json!(snap.block_refs.iter().map(|br| json!({
-                        "collection_id": br.collection_id.to_string(),
-                        "variant_id": br.variant_id.as_ref().map(|v| v.to_string()),
-                    })).collect::<Vec<_>>());
-                    obj["module_refs"] = json!(snap.module_refs.iter().map(|mr| json!({
-                        "collection_id": mr.collection_id.to_string(),
-                        "variant_id": mr.variant_id.as_ref().map(|v| v.to_string()),
-                    })).collect::<Vec<_>>());
+                    obj["block_refs"] = json!(snap
+                        .block_refs
+                        .iter()
+                        .map(|br| json!({
+                            "collection_id": br.collection_id.to_string(),
+                            "variant_id": br.variant_id.as_ref().map(|v| v.to_string()),
+                        }))
+                        .collect::<Vec<_>>());
+                    obj["module_refs"] = json!(snap
+                        .module_refs
+                        .iter()
+                        .map(|mr| json!({
+                            "collection_id": mr.collection_id.to_string(),
+                            "variant_id": mr.variant_id.as_ref().map(|v| v.to_string()),
+                        }))
+                        .collect::<Vec<_>>());
                 }
                 println!("{}", serde_json::to_string_pretty(&obj)?);
             } else {
@@ -1598,10 +1704,7 @@ async fn cmd_layers_show(signal: &SignalController, id: &str, as_json: bool) -> 
 }
 
 /// Try to find a human-readable name for a block preset by checking all block types.
-async fn lookup_preset_name(
-    signal: &SignalController,
-    preset_id: &signal::PresetId,
-) -> String {
+async fn lookup_preset_name(signal: &SignalController, preset_id: &signal::PresetId) -> String {
     // Try common block types
     for bt in &[
         signal::BlockType::Amp,
@@ -1639,7 +1742,9 @@ fn parse_engine_type(s: &str) -> Result<signal::EngineType> {
         "synth" => Ok(signal::EngineType::Synth),
         "organ" => Ok(signal::EngineType::Organ),
         "pad" => Ok(signal::EngineType::Pad),
-        _ => eyre::bail!("Unknown engine type: \"{s}\". Valid: guitar, bass, vocals, keys, synth, organ, pad"),
+        _ => eyre::bail!(
+            "Unknown engine type: \"{s}\". Valid: guitar, bass, vocals, keys, synth, organ, pad"
+        ),
     }
 }
 
@@ -1809,10 +1914,7 @@ async fn cmd_engines_list(signal: &SignalController, as_json: bool) -> Result<()
         }
         println!("Engines ({}):", engines.len());
         for e in &engines {
-            println!(
-                "  {} — {} ({} scenes)",
-                e.id, e.name, e.variants.len()
-            );
+            println!("  {} — {} ({} scenes)", e.id, e.name, e.variants.len());
         }
     }
     Ok(())
@@ -1914,7 +2016,11 @@ async fn cmd_engines_create(
     if !layer_selections.is_empty() {
         for scene in &mut engine.variants {
             for sel in &layer_selections {
-                if !scene.layer_selections.iter().any(|s| s.layer_id == sel.layer_id) {
+                if !scene
+                    .layer_selections
+                    .iter()
+                    .any(|s| s.layer_id == sel.layer_id)
+                {
                     scene.layer_selections.push(sel.clone());
                 }
             }
@@ -1977,10 +2083,7 @@ async fn cmd_engines_add_layer(
 
     engine.layer_ids.push(lid.clone());
 
-    let selection = signal::engine::LayerSelection::new(
-        lid,
-        layer.default_variant_id.clone(),
-    );
+    let selection = signal::engine::LayerSelection::new(lid, layer.default_variant_id.clone());
     for scene in &mut engine.variants {
         scene.layer_selections.push(selection.clone());
     }
@@ -2075,7 +2178,10 @@ async fn cmd_rigs_list(signal: &SignalController, as_json: bool) -> Result<()> {
         for r in &rigs {
             println!(
                 "  {} — {} ({} engines, {} scenes)",
-                r.id, r.name, r.engine_ids.len(), r.variants.len()
+                r.id,
+                r.name,
+                r.engine_ids.len(),
+                r.variants.len()
             );
         }
     }
@@ -2098,9 +2204,14 @@ async fn cmd_rigs_show(signal: &SignalController, id: &str, as_json: bool) -> Re
                                     .load_variant(lid.clone(), layer.default_variant_id.clone())
                                     .await?;
                                 let blocks: Vec<_> = if let Some(ref s) = snap {
-                                    s.block_refs.iter().map(|br| json!({
-                                        "collection_id": br.collection_id.to_string(),
-                                    })).collect()
+                                    s.block_refs
+                                        .iter()
+                                        .map(|br| {
+                                            json!({
+                                                "collection_id": br.collection_id.to_string(),
+                                            })
+                                        })
+                                        .collect()
                                 } else {
                                     vec![]
                                 };
@@ -2134,23 +2245,35 @@ async fn cmd_rigs_show(signal: &SignalController, id: &str, as_json: bool) -> Re
                 println!("Rig: {} ({})", r.name, r.id);
                 for v in &r.variants {
                     let is_default = v.id == r.default_variant_id;
-                    println!(
-                        "  {} Scene: {}",
-                        if is_default { "*" } else { " " },
-                        v.name,
-                    );
+                    println!("  {} Scene: {}", if is_default { "*" } else { " " }, v.name,);
                     for es in &v.engine_selections {
                         if let Some(engine) = signal.engines().load(es.engine_id.clone()).await? {
                             println!("    Engine: {} (scene: {})", engine.name, es.variant_id);
                             // Find the engine scene to get layer selections
-                            if let Some(scene) = engine.variants.iter().find(|s| s.id == es.variant_id) {
+                            if let Some(scene) =
+                                engine.variants.iter().find(|s| s.id == es.variant_id)
+                            {
                                 for ls in &scene.layer_selections {
-                                    if let Some(layer) = signal.layers().load(ls.layer_id.clone()).await? {
-                                        println!("      Layer: {} (snapshot: {})", layer.name, ls.variant_id);
+                                    if let Some(layer) =
+                                        signal.layers().load(ls.layer_id.clone()).await?
+                                    {
+                                        println!(
+                                            "      Layer: {} (snapshot: {})",
+                                            layer.name, ls.variant_id
+                                        );
                                         // Load the layer snapshot to show block refs
-                                        if let Some(snap) = signal.layers().load_variant(ls.layer_id.clone(), ls.variant_id.clone()).await? {
+                                        if let Some(snap) = signal
+                                            .layers()
+                                            .load_variant(
+                                                ls.layer_id.clone(),
+                                                ls.variant_id.clone(),
+                                            )
+                                            .await?
+                                        {
                                             for br in &snap.block_refs {
-                                                let name = lookup_preset_name(signal, &br.collection_id).await;
+                                                let name =
+                                                    lookup_preset_name(signal, &br.collection_id)
+                                                        .await;
                                                 println!("        Block: {}", name);
                                             }
                                         }
@@ -2228,10 +2351,7 @@ async fn cmd_rigs_add_engine(
 
     rig.engine_ids.push(eid.clone());
 
-    let selection = signal::rig::EngineSelection::new(
-        eid,
-        engine.default_variant_id.clone(),
-    );
+    let selection = signal::rig::EngineSelection::new(eid, engine.default_variant_id.clone());
     for scene in &mut rig.variants {
         scene.engine_selections.push(selection.clone());
     }
@@ -2366,10 +2486,7 @@ fn parse_raw_block_bytes(source_bytes: &[u8]) -> Option<daw::file::types::FxChai
 
 /// Parse source raw_block bytes and transplant state into a loaded plugin,
 /// preserving the loaded plugin's FXID. Returns true on success.
-fn try_replace_raw_block(
-    plugin: &mut daw::file::types::FxPlugin,
-    source_bytes: &[u8],
-) -> bool {
+fn try_replace_raw_block(plugin: &mut daw::file::types::FxPlugin, source_bytes: &[u8]) -> bool {
     if let Some(daw::file::types::FxChainNode::Plugin(source_plugin)) =
         parse_raw_block_bytes(source_bytes)
     {
@@ -2694,14 +2811,13 @@ async fn cmd_rigs_open(
                 let chunk = layer_track.get_chunk().await?;
                 let fxchain_text = fxchain.to_rpp_string();
                 let new_chunk =
-                    if let Some(existing) = daw::file::chunk_ops::extract_fxchain_block(&chunk)
-                    {
+                    if let Some(existing) = daw::file::chunk_ops::extract_fxchain_block(&chunk) {
                         chunk.replace(existing, &fxchain_text)
                     } else {
                         // Insert FXCHAIN before the closing >
-                        let pos = chunk.rfind('>').ok_or_else(|| {
-                            eyre::eyre!("Invalid track chunk: no closing >")
-                        })?;
+                        let pos = chunk
+                            .rfind('>')
+                            .ok_or_else(|| eyre::eyre!("Invalid track chunk: no closing >"))?;
                         format!("{}{}\n{}", &chunk[..pos], fxchain_text, &chunk[pos..])
                     };
 
@@ -2734,11 +2850,7 @@ async fn cmd_rigs_open(
 
         // Post-load: patch raw_blocks via track chunk manipulation
         for layer_result in &load_result.layer_results {
-            let track = match project
-                .tracks()
-                .by_guid(&layer_result.track_guid)
-                .await
-            {
+            let track = match project.tracks().by_guid(&layer_result.track_guid).await {
                 Ok(Some(t)) => t,
                 _ => continue,
             };
@@ -2799,15 +2911,13 @@ async fn cmd_rigs_open(
                         }
                     }
                     daw::file::types::FxChainNode::Plugin(p) => {
-                        let source = state_by_source_plugin
-                            .get(&p.name)
-                            .or_else(|| {
-                                p.custom_name.as_deref().and_then(|cn| {
-                                    cn.strip_prefix("[B] ")
-                                        .and_then(|s| s.split_once(": ").map(|(_, name)| name))
-                                        .and_then(|name| state_by_preset_name.get(name))
-                                })
-                            });
+                        let source = state_by_source_plugin.get(&p.name).or_else(|| {
+                            p.custom_name.as_deref().and_then(|cn| {
+                                cn.strip_prefix("[B] ")
+                                    .and_then(|s| s.split_once(": ").map(|(_, name)| name))
+                                    .and_then(|name| state_by_preset_name.get(name))
+                            })
+                        });
                         if let Some(source_bytes) = source {
                             if try_replace_raw_block(p, source_bytes) {
                                 replaced += 1;
@@ -2825,9 +2935,7 @@ async fn cmd_rigs_open(
                 if let Err(e) = track.set_chunk(new_chunk).await {
                     eprintln!("[state] failed to set track chunk: {e}");
                 }
-                eprintln!(
-                    "[state] replaced state for {replaced} plugins ({skipped} skipped)"
-                );
+                eprintln!("[state] replaced state for {replaced} plugins ({skipped} skipped)");
             }
 
             layer_track_guids.push(layer_result.track_guid.clone());
@@ -2881,20 +2989,18 @@ async fn cmd_rigs_open(
                         let display = p.custom_name.as_deref().unwrap_or(&p.name);
                         let loaded_size = p.raw_block.len();
 
-                        let source = state_by_source
-                            .get(&p.name)
-                            .or_else(|| {
-                                p.custom_name.as_deref().and_then(|cn| {
-                                    let stripped = cn
-                                        .strip_prefix("[B] ")
-                                        .or_else(|| cn.strip_prefix("[M] "))
-                                        .unwrap_or(cn);
-                                    stripped
-                                        .split_once(": ")
-                                        .map(|(_, name)| name)
-                                        .and_then(|name| state_by_preset.get(name))
-                                })
-                            });
+                        let source = state_by_source.get(&p.name).or_else(|| {
+                            p.custom_name.as_deref().and_then(|cn| {
+                                let stripped = cn
+                                    .strip_prefix("[B] ")
+                                    .or_else(|| cn.strip_prefix("[M] "))
+                                    .unwrap_or(cn);
+                                stripped
+                                    .split_once(": ")
+                                    .map(|(_, name)| name)
+                                    .and_then(|name| state_by_preset.get(name))
+                            })
+                        });
 
                         let match_status = if let Some(source_data) = source {
                             let source_size = source_data.len();
@@ -2921,7 +3027,11 @@ async fn cmd_rigs_open(
 
                         eprintln!(
                             "[verify]   {} '{}': {} bytes [{}]",
-                            if match_status.starts_with("ok") { "✓" } else { "✗" },
+                            if match_status.starts_with("ok") {
+                                "✓"
+                            } else {
+                                "✗"
+                            },
                             display,
                             loaded_size,
                             match_status,
@@ -2984,13 +3094,9 @@ async fn cmd_rigs_open(
 // Command Implementations — NAM
 // ============================================================================
 
-const DEFAULT_NAM_ROOT: &str =
-    "~/Documents/Development/FastTrackStudio/signal-library/nam";
+const DEFAULT_NAM_ROOT: &str = "~/Documents/Development/FastTrackStudio/signal-library/nam";
 
-async fn cmd_nam_packs(
-    vendor: Option<&str>,
-    category: Option<&str>,
-) -> Result<()> {
+async fn cmd_nam_packs(vendor: Option<&str>, category: Option<&str>) -> Result<()> {
     let nam_root = signal::nam_manager::nam_root_from_env(&expand_tilde(DEFAULT_NAM_ROOT));
     let packs_dir = nam_root.join("packs");
 
@@ -3003,7 +3109,9 @@ async fn cmd_nam_packs(
             "drive" => Ok(signal::nam_manager::PackCategory::Drive),
             "ir" => Ok(signal::nam_manager::PackCategory::Ir),
             "archetype" => Ok(signal::nam_manager::PackCategory::Archetype),
-            _ => Err(eyre::eyre!("Unknown category: {c}. Valid: amp, drive, ir, archetype")),
+            _ => Err(eyre::eyre!(
+                "Unknown category: {c}. Valid: amp, drive, ir, archetype"
+            )),
         })
         .transpose()?;
 
@@ -3052,7 +3160,9 @@ async fn cmd_nam_packs(
 /// back the complete REAPER chunk. This produces a portable, host-validated
 /// state representation rather than storing raw file paths.
 async fn nam_capture_state(fx: &daw::FxHandle, model_path: &str) -> Result<String> {
-    let reaper_chunk = fx.state_chunk_encoded().await?
+    let reaper_chunk = fx
+        .state_chunk_encoded()
+        .await?
         .ok_or_else(|| eyre::eyre!("FX has no default chunk"))?;
     let segments = signal::nam_manager::extract_state_base64(&reaper_chunk)
         .ok_or_else(|| eyre::eyre!("Failed to extract base64 from chunk"))?;
@@ -3062,10 +3172,12 @@ async fn nam_capture_state(fx: &daw::FxHandle, model_path: &str) -> Result<Strin
     signal::nam_manager::rewrite_paths(&mut nam_chunk, Some(model_path), None);
     let new_b64 = signal::nam_manager::encode_chunk(&nam_chunk);
     let rebuilt = signal::nam_manager::rebuild_chunk_with_state(&reaper_chunk, &new_b64);
-    fx.set_state_chunk_encoded(rebuilt).await
+    fx.set_state_chunk_encoded(rebuilt)
+        .await
         .map_err(|e| eyre::eyre!("Failed to set chunk: {e}"))?;
     // Read back the final state after REAPER has processed it
-    fx.state_chunk_encoded().await?
+    fx.state_chunk_encoded()
+        .await?
         .ok_or_else(|| eyre::eyre!("No state after injection"))
 }
 
@@ -3082,7 +3194,9 @@ fn filter_nam_packs(
         .map(|c| match c.to_lowercase().as_str() {
             "amp" => Ok(signal::nam_manager::PackCategory::Amp),
             "drive" => Ok(signal::nam_manager::PackCategory::Drive),
-            _ => Err(eyre::eyre!("Unknown category for import: {c}. Valid: amp, drive")),
+            _ => Err(eyre::eyre!(
+                "Unknown category for import: {c}. Valid: amp, drive"
+            )),
         })
         .transpose()?;
 
@@ -3099,7 +3213,10 @@ fn filter_nam_packs(
                     return false;
                 }
             }
-            matches!(p.category, signal::nam_manager::PackCategory::Amp | signal::nam_manager::PackCategory::Drive)
+            matches!(
+                p.category,
+                signal::nam_manager::PackCategory::Amp | signal::nam_manager::PackCategory::Drive
+            )
         })
         .collect())
 }
@@ -3134,10 +3251,7 @@ fn collect_tone_files(pack: &signal::nam_manager::PackDefinition) -> Vec<(String
 const NAM_PLUGIN_NAME: &str = "VST3: NeuralAmpModeler (Steven Atkinson)";
 
 /// Dry-run NAM import: prints what would be imported without REAPER or DB changes.
-async fn cmd_nam_import_dry_run(
-    vendor: Option<&str>,
-    category: Option<&str>,
-) -> Result<()> {
+async fn cmd_nam_import_dry_run(vendor: Option<&str>, category: Option<&str>) -> Result<()> {
     let nam_root = signal::nam_manager::nam_root_from_env(&expand_tilde(DEFAULT_NAM_ROOT));
     let packs_dir = nam_root.join("packs");
     let filtered = filter_nam_packs(&packs_dir, vendor, category)?;
@@ -3232,14 +3346,16 @@ async fn cmd_nam_import(
         let mut snapshots: Vec<signal::Snapshot> = Vec::new();
 
         for (tone, filename) in &tone_files {
-            let snap_id =
-                signal::seed_id(&format!("{}-{}-{}", category_prefix, pack.id, tone));
+            let snap_id = signal::seed_id(&format!("{}-{}-{}", category_prefix, pack.id, tone));
             let path = resolve_nam_path(&nam_root, pack, filename);
 
             let path_str = match path {
                 Some(p) => p,
                 None => {
-                    eprintln!("  warning: {} not found, skipping tone '{}'", filename, tone);
+                    eprintln!(
+                        "  warning: {} not found, skipping tone '{}'",
+                        filename, tone
+                    );
                     continue;
                 }
             };
@@ -3256,7 +3372,8 @@ async fn cmd_nam_import(
                 let chunk_text = nam_capture_state(&fx, &path_str).await?;
                 let state_data = chunk_text.into_bytes();
 
-                fx.remove().await
+                fx.remove()
+                    .await
                     .map_err(|e| eyre::eyre!("Failed to remove FX: {e}"))?;
 
                 Ok::<_, eyre::Report>(
@@ -3272,7 +3389,10 @@ async fn cmd_nam_import(
             {
                 Ok(s) => s,
                 Err(e) => {
-                    eprintln!("  warning: failed to capture '{}' ({}): {}", tone, filename, e);
+                    eprintln!(
+                        "  warning: failed to capture '{}' ({}): {}",
+                        tone, filename, e
+                    );
                     continue;
                 }
             };
@@ -3281,15 +3401,18 @@ async fn cmd_nam_import(
         }
 
         if snapshots.is_empty() {
-            eprintln!("  skipping {} — no tones captured successfully", preset_name);
+            eprintln!(
+                "  skipping {} — no tones captured successfully",
+                preset_name
+            );
             continue;
         }
 
         let default_snapshot = snapshots.remove(0);
         let snap_count = 1 + snapshots.len();
 
-        let metadata = signal::metadata::Metadata::new()
-            .with_tag(format!("source:{}", NAM_PLUGIN_NAME));
+        let metadata =
+            signal::metadata::Metadata::new().with_tag(format!("source:{}", NAM_PLUGIN_NAME));
 
         let preset = signal::Preset::new(
             signal::PresetId::from(preset_id.to_string()),
@@ -3375,10 +3498,7 @@ fn capitalize(s: &str) -> String {
 
 /// Extract a tone-like label from a filename.
 fn filename_to_tone(filename: &str) -> String {
-    let stem = filename
-        .rsplit('.')
-        .nth(1)
-        .unwrap_or(filename);
+    let stem = filename.rsplit('.').nth(1).unwrap_or(filename);
     // Remove common prefixes like "ML PEAV Block" etc.
     stem.split_whitespace()
         .last()
@@ -3413,10 +3533,7 @@ async fn cmd_profiles_list(signal: &SignalController, as_json: bool) -> Result<(
         }
         println!("Profiles ({}):", profiles.len());
         for p in &profiles {
-            println!(
-                "  {} — {} ({} patches)",
-                p.id, p.name, p.patches.len()
-            );
+            println!("  {} — {} ({} patches)", p.id, p.name, p.patches.len());
         }
     }
     Ok(())
@@ -3485,7 +3602,11 @@ async fn cmd_profiles_activate(
             }))?
         );
     } else {
-        println!("activated profile {} patch {:?}", id, patch.unwrap_or("(default)"));
+        println!(
+            "activated profile {} patch {:?}",
+            id,
+            patch.unwrap_or("(default)")
+        );
     }
     Ok(())
 }
@@ -3526,7 +3647,8 @@ async fn cmd_patches_list(
         }
         println!(
             "Patches in \"{}\" ({}):",
-            profile.name, profile.patches.len()
+            profile.name,
+            profile.patches.len()
         );
         for p in &profile.patches {
             let is_default = p.id == profile.default_patch_id;
@@ -3648,7 +3770,10 @@ async fn cmd_browse(signal: &SignalController, query: &str, as_json: bool) -> Re
         }
         println!("Results for \"{}\" ({}):", query, results.len());
         for h in &results {
-            println!("  [{:?}] {} (score: {:.2})", h.node.kind, h.node.id, h.score);
+            println!(
+                "  [{:?}] {} (score: {:.2})",
+                h.node.kind, h.node.id, h.score
+            );
         }
     }
     Ok(())
@@ -3680,10 +3805,7 @@ async fn cmd_songs_list(signal: &SignalController, as_json: bool) -> Result<()> 
         }
         println!("Songs ({}):", songs.len());
         for s in &songs {
-            println!(
-                "  {} — {} ({} sections)",
-                s.id, s.name, s.sections.len()
-            );
+            println!("  {} — {} ({} sections)", s.id, s.name, s.sections.len());
         }
     }
     Ok(())
@@ -3788,10 +3910,7 @@ async fn cmd_setlists_list(signal: &SignalController, as_json: bool) -> Result<(
         }
         println!("Setlists ({}):", setlists.len());
         for s in &setlists {
-            println!(
-                "  {} — {} ({} entries)",
-                s.id, s.name, s.entries.len()
-            );
+            println!("  {} — {} ({} entries)", s.id, s.name, s.entries.len());
         }
     }
     Ok(())
@@ -3826,11 +3945,7 @@ async fn cmd_setlists_show(signal: &SignalController, id: &str, as_json: bool) -
     Ok(())
 }
 
-async fn cmd_setlists_create(
-    signal: &SignalController,
-    name: &str,
-    as_json: bool,
-) -> Result<()> {
+async fn cmd_setlists_create(signal: &SignalController, name: &str, as_json: bool) -> Result<()> {
     let songs = signal.songs().list().await?;
     let song = songs
         .first()
@@ -3911,7 +4026,9 @@ async fn run_daw(
         DawCommand::Projects => daw_cli::cmd_projects(&daw, as_json).await,
         DawCommand::Open { ref path } => daw_cli::cmd_open(&daw, path, as_json).await,
         DawCommand::Close { ref guid } => daw_cli::cmd_close(&daw, guid.as_deref()).await,
-        DawCommand::AddTrack { ref name, at } => daw_cli::cmd_add_track(&daw, name.as_deref(), *at, as_json).await,
+        DawCommand::AddTrack { ref name, at } => {
+            daw_cli::cmd_add_track(&daw, name.as_deref(), *at, as_json).await
+        }
         DawCommand::RemoveTrack { ref track } => daw_cli::cmd_remove_track(&daw, track).await,
         DawCommand::Scan { ref track } => cmd_daw_scan(&daw, track, as_json).await,
         // Already handled above
@@ -3948,11 +4065,7 @@ async fn cmd_daw_scan(daw: &Daw, track_arg: &str, as_json: bool) -> Result<()> {
                 if block_count == 1 { "" } else { "s" }
             );
             for block in module.chain.blocks() {
-                println!(
-                    "    - {} ({})",
-                    block.label(),
-                    block.block_type().as_str()
-                );
+                println!("    - {} ({})", block.label(), block.block_type().as_str());
             }
         }
         for block in &chain.standalone_blocks {
@@ -3989,9 +4102,7 @@ async fn cmd_daw_import(
     let mut state_by_guid: HashMap<String, Vec<u8>> = HashMap::new();
     match handle.get_chunk().await {
         Ok(chunk_str) => {
-            if let Some(fxchain_text) =
-                daw::file::chunk_ops::extract_fxchain_block(&chunk_str)
-            {
+            if let Some(fxchain_text) = daw::file::chunk_ops::extract_fxchain_block(&chunk_str) {
                 if let Ok(parsed) = daw::file::FxChain::parse(fxchain_text) {
                     fn collect_plugin_state(
                         nodes: &[daw::file::types::FxChainNode],
@@ -4016,10 +4127,7 @@ async fn cmd_daw_import(
                                             // inside containers): store by custom_name.
                                             // The inferred chain uses the display name as
                                             // the block ID for these plugins.
-                                            out.insert(
-                                                cn.clone(),
-                                                p.raw_block.as_bytes().to_vec(),
-                                            );
+                                            out.insert(cn.clone(), p.raw_block.as_bytes().to_vec());
                                         }
                                     }
                                 }
@@ -4029,10 +4137,7 @@ async fn cmd_daw_import(
                                     // the inferred chain. This allows `rigs open` to
                                     // restore the full container structure.
                                     if !c.raw_block.is_empty() {
-                                        out.insert(
-                                            c.name.clone(),
-                                            c.raw_block.as_bytes().to_vec(),
-                                        );
+                                        out.insert(c.name.clone(), c.raw_block.as_bytes().to_vec());
                                     }
                                     collect_plugin_state(&c.children, out);
                                 }
@@ -4090,7 +4195,8 @@ async fn cmd_daw_import(
                                 "[import]   block '{}' id={} state={}",
                                 label_str,
                                 b.id(),
-                                sd.as_ref().map_or("NONE".to_string(), |d| format!("{} bytes", d.len()))
+                                sd.as_ref()
+                                    .map_or("NONE".to_string(), |d| format!("{} bytes", d.len()))
                             );
                             ImportBlock {
                                 label: label_str.to_string(),
@@ -4135,7 +4241,11 @@ async fn cmd_daw_import(
     println!(
         "  {} new block preset{}, {} reused",
         result.new_block_preset_count,
-        if result.new_block_preset_count == 1 { "" } else { "s" },
+        if result.new_block_preset_count == 1 {
+            ""
+        } else {
+            "s"
+        },
         result.reused_block_preset_count
     );
     println!("Run: signal rigs open {}", result.rig_id);
@@ -4296,4 +4406,3 @@ async fn cmd_signal_load(
         "No block or module preset found for type \"{preset_type}\" with ID \"{preset_id}\""
     ))
 }
-

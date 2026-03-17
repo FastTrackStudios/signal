@@ -56,7 +56,8 @@ pub fn ProfilePatchGrid(
         },
         Some(p) => {
             let pid = p.id.to_string();
-            let patch_ids: Vec<String> = p.patches.iter().map(|patch| patch.id.to_string()).collect();
+            let patch_ids: Vec<String> =
+                p.patches.iter().map(|patch| patch.id.to_string()).collect();
 
             let tiles: Vec<TileData> = p
                 .patches

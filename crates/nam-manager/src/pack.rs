@@ -116,18 +116,15 @@ pub fn load_packs(packs_dir: &Path) -> Result<Vec<PackDefinition>, NamError> {
 
     let mut entries: Vec<_> = std::fs::read_dir(packs_dir)?
         .filter_map(|e| e.ok())
-        .filter(|e| {
-            e.path()
-                .extension()
-                .map_or(false, |ext| ext == "json")
-        })
+        .filter(|e| e.path().extension().map_or(false, |ext| ext == "json"))
         .collect();
     entries.sort_by_key(|e| e.path());
 
     for entry in entries {
         let contents = std::fs::read_to_string(entry.path())?;
-        let pack: PackDefinition = serde_json::from_str(&contents)
-            .map_err(|e| NamError::ParseError(format!("parsing {}: {}", entry.path().display(), e)))?;
+        let pack: PackDefinition = serde_json::from_str(&contents).map_err(|e| {
+            NamError::ParseError(format!("parsing {}: {}", entry.path().display(), e))
+        })?;
         packs.push(pack);
     }
 
@@ -183,8 +180,11 @@ pub fn tags_for_file(pack: &PackDefinition, filename: &str) -> TagSet {
         // Boost pedal
         if let Some(ref pedal) = overrides.boost_pedal {
             tags.insert(
-                StructuredTag::new(TagCategory::Module, format!("boost:{}", pedal.to_lowercase()))
-                    .with_source(TagSource::Imported),
+                StructuredTag::new(
+                    TagCategory::Module,
+                    format!("boost:{}", pedal.to_lowercase()),
+                )
+                .with_source(TagSource::Imported),
             );
         }
 
@@ -205,8 +205,11 @@ pub fn tags_for_file(pack: &PackDefinition, filename: &str) -> TagSet {
     // Modeled by
     if let Some(ref modeler) = pack.modeled_by {
         tags.insert(
-            StructuredTag::new(TagCategory::Vendor, format!("modeler:{}", modeler.to_lowercase()))
-                .with_source(TagSource::Imported),
+            StructuredTag::new(
+                TagCategory::Vendor,
+                format!("modeler:{}", modeler.to_lowercase()),
+            )
+            .with_source(TagSource::Imported),
         );
     }
 
@@ -262,15 +265,21 @@ mod tests {
             characters: vec!["tight".into(), "aggressive".into()],
             files: {
                 let mut m = HashMap::new();
-                m.insert("ENGL Fireball+Ts9.nam".into(), FileOverride {
-                    boost_pedal: Some("TS9".into()),
-                    ..Default::default()
-                });
-                m.insert("ENGL Fireball Clean.nam".into(), FileOverride {
-                    tone: Some("clean".into()),
-                    characters: vec!["warm".into()],
-                    ..Default::default()
-                });
+                m.insert(
+                    "ENGL Fireball+Ts9.nam".into(),
+                    FileOverride {
+                        boost_pedal: Some("TS9".into()),
+                        ..Default::default()
+                    },
+                );
+                m.insert(
+                    "ENGL Fireball Clean.nam".into(),
+                    FileOverride {
+                        tone: Some("clean".into()),
+                        characters: vec!["warm".into()],
+                        ..Default::default()
+                    },
+                );
                 m
             },
             directory: None,
@@ -296,7 +305,8 @@ mod tests {
         let tags = tags_for_file(&pack, "ENGL Fireball+Ts9.nam");
 
         // Should have boost pedal as module tag
-        let module_tags: Vec<_> = tags.by_category(TagCategory::Module)
+        let module_tags: Vec<_> = tags
+            .by_category(TagCategory::Module)
             .iter()
             .map(|t| t.value.clone())
             .collect();
@@ -309,7 +319,8 @@ mod tests {
         let tags = tags_for_file(&pack, "ENGL Fireball Clean.nam");
 
         // Tone should be overridden to "clean" instead of pack default "high-gain"
-        let tone_tags: Vec<_> = tags.by_category(TagCategory::Tone)
+        let tone_tags: Vec<_> = tags
+            .by_category(TagCategory::Tone)
             .iter()
             .map(|t| t.value.clone())
             .collect();

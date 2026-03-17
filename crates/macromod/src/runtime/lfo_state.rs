@@ -311,8 +311,7 @@ mod tests {
             assert!((-1.0..=1.0).contains(v), "random value {v} out of range");
         }
         // At least some should differ
-        let unique: std::collections::HashSet<u64> =
-            values.iter().map(|v| v.to_bits()).collect();
+        let unique: std::collections::HashSet<u64> = values.iter().map(|v| v.to_bits()).collect();
         assert!(unique.len() > 1, "PRNG produced identical values");
     }
 }

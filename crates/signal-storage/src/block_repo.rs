@@ -559,10 +559,7 @@ mod tests {
 
         // -- Exec
         let collections = repo.list_block_collections(BlockType::Amp).await?;
-        let amp = collections
-            .iter()
-            .find(|c| c.name() == "Test Amp")
-            .unwrap();
+        let amp = collections.iter().find(|c| c.name() == "Test Amp").unwrap();
 
         // -- Check: default + 2 additional = 3 total
         assert_eq!(amp.snapshots().len(), 3);

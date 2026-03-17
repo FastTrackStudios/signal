@@ -8,11 +8,7 @@
 //! The context is owned by [`SignalController`] and shared across all clones
 //! via `Arc<RwLock<..>>`. UI navigation sets the context; action handlers read it.
 
-use signal_proto::{
-    profile::ProfileId,
-    rig::RigId,
-    song::SongId,
-};
+use signal_proto::{profile::ProfileId, rig::RigId, song::SongId};
 
 /// The currently active collection context for variation switching.
 ///

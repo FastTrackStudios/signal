@@ -122,7 +122,12 @@ mod tests {
     fn dry_to_ambient_enables_modules() {
         let bridge = MockDawBridge::new();
         let dry = set(&[ModuleType::Amp]);
-        let ambient = set(&[ModuleType::Amp, ModuleType::Modulation, ModuleType::Time, ModuleType::Motion]);
+        let ambient = set(&[
+            ModuleType::Amp,
+            ModuleType::Modulation,
+            ModuleType::Time,
+            ModuleType::Motion,
+        ]);
 
         let result = apply_scene_switch(&bridge, "track-1", &dry, &ambient, None);
 
@@ -143,7 +148,12 @@ mod tests {
     #[test]
     fn ambient_to_dry_disables_modules() {
         let bridge = MockDawBridge::new();
-        let ambient = set(&[ModuleType::Amp, ModuleType::Modulation, ModuleType::Time, ModuleType::Motion]);
+        let ambient = set(&[
+            ModuleType::Amp,
+            ModuleType::Modulation,
+            ModuleType::Time,
+            ModuleType::Motion,
+        ]);
         let dry = set(&[ModuleType::Amp]);
 
         let result = apply_scene_switch(&bridge, "track-1", &ambient, &dry, None);

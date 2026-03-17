@@ -73,10 +73,7 @@ pub fn parse_wav_header(path: &Path) -> Result<IrMetadata, NamError> {
 }
 
 /// Search for the "data" chunk and return its size.
-fn find_data_chunk_size(
-    file: &mut std::fs::File,
-    header: &[u8; 44],
-) -> Result<u32, NamError> {
+fn find_data_chunk_size(file: &mut std::fs::File, header: &[u8; 44]) -> Result<u32, NamError> {
     // Check the standard position first (offset 36)
     if &header[36..40] == b"data" {
         return Ok(u32::from_le_bytes([

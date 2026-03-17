@@ -48,9 +48,7 @@ impl FabFilterImporter {
 
     /// Create an importer with a custom root directory (useful for testing).
     pub fn with_root(root: PathBuf) -> Self {
-        Self {
-            presets_root: root,
-        }
+        Self { presets_root: root }
     }
 
     /// Discover all FabFilter plugins that have preset directories on disk.
@@ -87,10 +85,7 @@ impl FabFilterImporter {
 
         let dir = self.presets_root.join(entry.name);
         if !dir.is_dir() {
-            eyre::bail!(
-                "Preset directory not found: {}",
-                dir.display()
-            );
+            eyre::bail!("Preset directory not found: {}", dir.display());
         }
 
         let snapshots = scan_directory(&dir, &dir, entry)?;
@@ -112,7 +107,10 @@ fn count_ffp_files(dir: &Path) -> usize {
             let path = entry.path();
             if path.is_dir() {
                 count += count_ffp_files(&path);
-            } else if path.extension().is_some_and(|e| e.eq_ignore_ascii_case("ffp")) {
+            } else if path
+                .extension()
+                .is_some_and(|e| e.eq_ignore_ascii_case("ffp"))
+            {
                 count += 1;
             }
         }
@@ -142,7 +140,10 @@ fn scan_directory(
             continue;
         }
 
-        if !path.extension().is_some_and(|e| e.eq_ignore_ascii_case("ffp")) {
+        if !path
+            .extension()
+            .is_some_and(|e| e.eq_ignore_ascii_case("ffp"))
+        {
             continue;
         }
 
@@ -166,10 +167,8 @@ fn scan_directory(
         let (author, description, vendor_tags, parameters) = if entry.format == FfpFormat::Text {
             match parser::parse_ffp_text(&String::from_utf8_lossy(&raw_bytes)) {
                 Ok(parsed) => {
-                    let params = parser::extract_block_parameters(
-                        &parsed.signature,
-                        &parsed.parameters,
-                    );
+                    let params =
+                        parser::extract_block_parameters(&parsed.signature, &parsed.parameters);
                     (parsed.author, parsed.description, parsed.tags, params)
                 }
                 Err(e) => {

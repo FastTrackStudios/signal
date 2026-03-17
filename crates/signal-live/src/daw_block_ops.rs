@@ -182,11 +182,11 @@ fn map_proq4_params(block: &Block) -> Block {
     // Band layout: (abstract_id, band_num, freq_hz, shape_norm)
     // Shape: Bell=0.0, LowShelf=0.125, HighShelf=0.375
     let bands: &[(&str, u8, f32, f32)] = &[
-        ("low",      1, 100.0,   0.125), // Low shelf
-        ("low_mid",  2, 400.0,   0.0),   // Bell
-        ("mid",      3, 1500.0,  0.0),   // Bell
-        ("high_mid", 4, 4000.0,  0.0),   // Bell
-        ("high",     5, 10000.0, 0.375), // High shelf
+        ("low", 1, 100.0, 0.125),     // Low shelf
+        ("low_mid", 2, 400.0, 0.0),   // Bell
+        ("mid", 3, 1500.0, 0.0),      // Bell
+        ("high_mid", 4, 4000.0, 0.0), // Bell
+        ("high", 5, 10000.0, 0.375),  // High shelf
     ];
 
     let params = block.parameters();
@@ -234,10 +234,7 @@ fn map_proq4_params(block: &Block) -> Block {
         .find(|p| p.id() == "output")
         .map(|p| p.value().get())
         .unwrap_or(0.5);
-    daw_params.push(
-        BP::new("output", "Output", output)
-            .with_daw_name("Output Level"),
-    );
+    daw_params.push(BP::new("output", "Output", output).with_daw_name("Output Level"));
 
     Block::from_parameters(daw_params)
 }
@@ -264,7 +261,7 @@ fn map_js_volume_params(block: &Block) -> Block {
     let volume_norm = (level / 2.0).clamp(0.0, 1.0);
 
     Block::from_parameters(vec![
-        BP::new("level", "Level", volume_norm).with_daw_name("Volume"),
+        BP::new("level", "Level", volume_norm).with_daw_name("Volume")
     ])
 }
 
@@ -320,9 +317,9 @@ where
                 if default.id() == id {
                     (default, true)
                 } else {
-                    let snap = preset.snapshot(id).ok_or_else(|| {
-                        format!("Snapshot not found: {id}")
-                    })?;
+                    let snap = preset
+                        .snapshot(id)
+                        .ok_or_else(|| format!("Snapshot not found: {id}"))?;
                     (snap, false)
                 }
             }
@@ -337,10 +334,7 @@ where
         } else {
             format!("{} - {}", preset.name(), snapshot.name())
         };
-        let role = FxRole::Block {
-            block_type,
-            name,
-        };
+        let role = FxRole::Block { block_type, name };
         let display_name = role.display_name();
 
         Ok(ResolvedFxLoad {
@@ -376,22 +370,17 @@ where
         let snapshot = if snapshot_idx == 0 {
             module_preset.default_snapshot().clone()
         } else {
-            snapshots
-                .get(snapshot_idx)
-                .cloned()
-                .ok_or_else(|| {
-                    format!(
-                        "Snapshot index {} out of range (module preset has {} snapshots)",
-                        snapshot_idx,
-                        snapshots.len()
-                    )
-                })?
+            snapshots.get(snapshot_idx).cloned().ok_or_else(|| {
+                format!(
+                    "Snapshot index {} out of range (module preset has {} snapshots)",
+                    snapshot_idx,
+                    snapshots.len()
+                )
+            })?
         };
 
         // 3. Recursively resolve the signal chain, preserving parallel routing topology.
-        let chain = self
-            .resolve_signal_chain(snapshot.module().chain())
-            .await?;
+        let chain = self.resolve_signal_chain(snapshot.module().chain()).await?;
 
         // 4. Build module-level display name.
         let module_role = FxRole::Module {
@@ -400,7 +389,10 @@ where
         };
         let display_name = module_role.display_name();
 
-        Ok(ResolvedModuleLoad { chain, display_name })
+        Ok(ResolvedModuleLoad {
+            chain,
+            display_name,
+        })
     }
 
     // ── Resolve helpers ─────────────────────────────────────────
@@ -550,8 +542,7 @@ where
             .await?;
 
         // Recursively load FX and build parallel containers for Split nodes.
-        let (loaded_fx, top_node_ids) =
-            execute_chain_nodes(&resolved.chain, track).await?;
+        let (loaded_fx, top_node_ids) = execute_chain_nodes(&resolved.chain, track).await?;
 
         // Enclose all top-level nodes in the outer module container.
         // Skip if there are no FX to enclose (empty module).
@@ -604,7 +595,8 @@ where
         let resolved: Vec<ResolvedFxLoad> = futures::future::try_join_all(resolve_futures).await?;
 
         // Phase 2: Add all FX sequentially (index tracking requires ordering).
-        let mut fx_pairs: Vec<(ResolvedFxLoad, daw::FxHandle, u32)> = Vec::with_capacity(resolved.len());
+        let mut fx_pairs: Vec<(ResolvedFxLoad, daw::FxHandle, u32)> =
+            Vec::with_capacity(resolved.len());
         for r in resolved {
             let fx_index = track
                 .fx_chain()
@@ -629,7 +621,6 @@ where
             .collect();
         futures::future::try_join_all(configure_futures).await
     }
-
 }
 
 /// Load a single resolved FX onto a DAW track: add, configure, and rename.
@@ -666,8 +657,8 @@ async fn configure_fx_free(
         );
         if resolved.plugin_name.contains("NeuralAmpModeler") && !data.starts_with(b"<") {
             // Legacy path-based: state_data is a UTF-8 file path
-            let model_path = std::str::from_utf8(data)
-                .map_err(|e| format!("Invalid NAM path: {e}"))?;
+            let model_path =
+                std::str::from_utf8(data).map_err(|e| format!("Invalid NAM path: {e}"))?;
             inject_nam_model_state(&fx, model_path)
                 .await
                 .map_err(|e| format!("Failed to load NAM model: {e}"))?;
@@ -700,11 +691,17 @@ async fn configure_fx_free(
                                 "[signal]   ✗ FX disappeared after state chunk for '{}', re-adding",
                                 resolved.display_name,
                             );
-                            fx = track
-                                .fx_chain()
-                                .add(&resolved.plugin_name)
-                                .await
-                                .map_err(|e| format!("Failed to re-add FX '{}': {e}", resolved.display_name))?;
+                            fx =
+                                track
+                                    .fx_chain()
+                                    .add(&resolved.plugin_name)
+                                    .await
+                                    .map_err(|e| {
+                                        format!(
+                                            "Failed to re-add FX '{}': {e}",
+                                            resolved.display_name
+                                        )
+                                    })?;
                         }
                     }
                 }
@@ -804,8 +801,7 @@ fn execute_chain_nodes<'a>(
                             continue; // skip empty placeholder lanes
                         }
 
-                        let (lane_results, lane_top_ids) =
-                            execute_chain_nodes(lane, track).await?;
+                        let (lane_results, lane_top_ids) = execute_chain_nodes(lane, track).await?;
                         all_results.extend(lane_results);
 
                         // Lanes with a single node are used directly; multi-node
@@ -876,8 +872,8 @@ async fn inject_nam_model_state(fx: &daw::FxHandle, model_path: &str) -> Result<
     let unified_b64 = first_base64_segment(&segments);
 
     // 3. Decode the NAM binary chunk (gets the real REAPER VST3 header).
-    let mut nam_chunk = decode_chunk(unified_b64.trim())
-        .map_err(|e| format!("Failed to decode NAM chunk: {e}"))?;
+    let mut nam_chunk =
+        decode_chunk(unified_b64.trim()).map_err(|e| format!("Failed to decode NAM chunk: {e}"))?;
 
     // 4. Rewrite the model path.
     rewrite_paths(&mut nam_chunk, Some(model_path), None);
@@ -909,4 +905,3 @@ async fn inject_binary_state(fx: &daw::FxHandle, binary_state: &[u8]) -> Result<
         .await
         .map_err(|e| format!("Failed to set rebuilt chunk: {e}"))
 }
-

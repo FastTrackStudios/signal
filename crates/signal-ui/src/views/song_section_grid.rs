@@ -33,14 +33,7 @@ pub fn SongSectionGrid(
             let signal = signal.clone();
             let song_id = song_id.clone();
             spawn(async move {
-                song.set(
-                    signal
-                        .songs()
-                        .load(song_id.as_str())
-                        .await
-                        .ok()
-                        .flatten(),
-                );
+                song.set(signal.songs().load(song_id.as_str()).await.ok().flatten());
             });
         });
     }

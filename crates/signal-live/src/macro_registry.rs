@@ -25,9 +25,9 @@
 //!
 //! Typical performance: <1ms for lookup + parameter setting across multiple targets
 
+use crate::macro_setup::MacroSetupResult;
 use std::collections::HashMap;
 use std::sync::{LazyLock, RwLock};
-use crate::macro_setup::MacroSetupResult;
 
 /// Target FX parameter for a macro knob.
 #[derive(Clone, Debug)]
@@ -71,7 +71,8 @@ pub fn register(result: &MacroSetupResult) {
 /// Get all parameter targets for a macro knob.
 /// Returns an empty vector if the knob has no registered targets.
 pub fn get_targets(knob_id: &str) -> Vec<MacroParamTarget> {
-    BINDINGS.read()
+    BINDINGS
+        .read()
         .expect("lock poisoned")
         .get(knob_id)
         .cloned()
@@ -289,15 +290,13 @@ mod tests {
         let result = MacroSetupResult {
             track_guid: "track-1".to_string(),
             target_fx_guid: "fx-1".to_string(),
-            bindings: vec![
-                LiveMacroBinding {
-                    knob_index: 0,
-                    knob_id: "test".to_string(),
-                    param_index: 1,
-                    min: 0.0,
-                    max: 1.0,
-                },
-            ],
+            bindings: vec![LiveMacroBinding {
+                knob_index: 0,
+                knob_id: "test".to_string(),
+                param_index: 1,
+                min: 0.0,
+                max: 1.0,
+            }],
         };
 
         register(&result);

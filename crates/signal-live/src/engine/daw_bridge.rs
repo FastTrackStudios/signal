@@ -196,9 +196,8 @@ pub struct MockDawBridge {
     /// Enabled/disabled state per (track_id, module_type).
     ///
     /// Absent key = enabled (default). Explicit `false` = disabled.
-    enabled_modules: std::sync::Mutex<
-        HashMap<(String, signal_proto::module_type::ModuleType), bool>,
-    >,
+    enabled_modules:
+        std::sync::Mutex<HashMap<(String, signal_proto::module_type::ModuleType), bool>>,
 }
 
 impl Default for MockDawBridge {
@@ -338,9 +337,8 @@ mod tests {
 
     #[test]
     fn scene_snapshot_params_only() {
-        let snap = DawSceneSnapshot::params_only(DawParameterSnapshot::new(vec![param(
-            "fx1", 0, 0.5,
-        )]));
+        let snap =
+            DawSceneSnapshot::params_only(DawParameterSnapshot::new(vec![param("fx1", 0, 0.5)]));
         assert!(snap.chunks.is_empty());
         assert_eq!(snap.params.params.len(), 1);
     }

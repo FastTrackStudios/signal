@@ -13,14 +13,14 @@
 //! reverb/delay tail rings out naturally, while the new patch plays
 //! immediately on a fresh child track.
 
+use moire::sync::{Mutex, RwLock};
 use std::collections::{HashMap, HashSet};
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
-use moire::sync::{Mutex, RwLock};
 
-use daw::{Project, TrackHandle};
 use daw::service::TrackRef;
+use daw::{Project, TrackHandle};
 use signal_live::engine::{graph_state_chunks, DawPatchApplier, DawStateChunk, PatchApplyError};
 use signal_proto::plugin_block::FxRole;
 use signal_proto::resolve::ResolvedGraph;

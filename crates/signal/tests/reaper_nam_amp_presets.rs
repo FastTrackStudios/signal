@@ -84,7 +84,10 @@ async fn nam_amp_load_guitar_rig(ctx: &ReaperTestContext) -> eyre::Result<()> {
         "engine should have one layer per NAM preset"
     );
 
-    eprintln!("Rig structure created, loading {} presets in parallel...", nam_presets.len());
+    eprintln!(
+        "Rig structure created, loading {} presets in parallel...",
+        nam_presets.len()
+    );
 
     // 4. Load all NAM presets in parallel.
     let total_start = Instant::now();
@@ -126,7 +129,11 @@ async fn nam_amp_load_guitar_rig(ctx: &ReaperTestContext) -> eyre::Result<()> {
         match handle.await {
             Ok(Ok((name, _result, track))) => {
                 let fx_count = track.fx_chain().count().await.unwrap_or(0);
-                assert_eq!(fx_count, 1, "'{}' should have exactly 1 FX, got {}", name, fx_count);
+                assert_eq!(
+                    fx_count, 1,
+                    "'{}' should have exactly 1 FX, got {}",
+                    name, fx_count
+                );
             }
             Ok(Err(e)) => load_errors.push(e),
             Err(e) => load_errors.push(format!("Task panicked: {e}")),
@@ -158,8 +165,14 @@ async fn nam_amp_load_guitar_rig(ctx: &ReaperTestContext) -> eyre::Result<()> {
         tracks.len()
     );
 
-    assert!(tracks[0].name.starts_with("[R]"), "first track should be [R] rig folder");
-    assert!(tracks[1].name.starts_with("[E]"), "second track should be [E] engine folder");
+    assert!(
+        tracks[0].name.starts_with("[R]"),
+        "first track should be [R] rig folder"
+    );
+    assert!(
+        tracks[1].name.starts_with("[E]"),
+        "second track should be [E] engine folder"
+    );
     for track in &tracks[2..] {
         assert!(
             track.name.starts_with("[L]"),

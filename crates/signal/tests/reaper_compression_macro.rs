@@ -186,8 +186,10 @@ async fn compression_macro_drives_threshold_and_ratio(
     // Set macro via FX parameter API — the knob moves and the timer picks it up
     macros_fx.param(0).set(0.0).await?;
 
-    let thresh_at_0 = poll_param_value(&target_fx, threshold_param.index, 0.80, 0.05, POLL_TIMEOUT).await?;
-    let ratio_at_0 = poll_param_value(&target_fx, ratio_param.index, 0.00, 0.05, POLL_TIMEOUT).await?;
+    let thresh_at_0 =
+        poll_param_value(&target_fx, threshold_param.index, 0.80, 0.05, POLL_TIMEOUT).await?;
+    let ratio_at_0 =
+        poll_param_value(&target_fx, ratio_param.index, 0.00, 0.05, POLL_TIMEOUT).await?;
     ctx.log(&format!(
         "ReaComp: Threshold={:.4}, Ratio={:.4}",
         thresh_at_0, ratio_at_0
@@ -201,8 +203,10 @@ async fn compression_macro_drives_threshold_and_ratio(
 
     macros_fx.param(0).set(1.0).await?;
 
-    let thresh_at_1 = poll_param_value(&target_fx, threshold_param.index, 0.10, 0.05, POLL_TIMEOUT).await?;
-    let ratio_at_1 = poll_param_value(&target_fx, ratio_param.index, 0.80, 0.05, POLL_TIMEOUT).await?;
+    let thresh_at_1 =
+        poll_param_value(&target_fx, threshold_param.index, 0.10, 0.05, POLL_TIMEOUT).await?;
+    let ratio_at_1 =
+        poll_param_value(&target_fx, ratio_param.index, 0.80, 0.05, POLL_TIMEOUT).await?;
     ctx.log(&format!(
         "ReaComp: Threshold={:.4}, Ratio={:.4}",
         thresh_at_1, ratio_at_1
@@ -222,13 +226,27 @@ async fn compression_macro_drives_threshold_and_ratio(
 
         // Expected values from the ScaleRange mappings
         let expected_thresh = 0.8 + macro_val * (0.1 - 0.8); // inverted
-        let expected_ratio = 0.0 + macro_val * 0.8;           // direct
+        let expected_ratio = 0.0 + macro_val * 0.8; // direct
 
         // Set via FX parameter — knob moves, timer reads it
         macros_fx.param(0).set(macro_val).await?;
 
-        let thresh = poll_param_value(&target_fx, threshold_param.index, expected_thresh, 0.05, POLL_TIMEOUT).await?;
-        let ratio = poll_param_value(&target_fx, ratio_param.index, expected_ratio, 0.05, POLL_TIMEOUT).await?;
+        let thresh = poll_param_value(
+            &target_fx,
+            threshold_param.index,
+            expected_thresh,
+            0.05,
+            POLL_TIMEOUT,
+        )
+        .await?;
+        let ratio = poll_param_value(
+            &target_fx,
+            ratio_param.index,
+            expected_ratio,
+            0.05,
+            POLL_TIMEOUT,
+        )
+        .await?;
         ctx.log(&format!(
             "  Macro 0={:.2} → Threshold={:.4}, Ratio={:.4}",
             macro_val, thresh, ratio
@@ -258,7 +276,9 @@ async fn compression_macro_drives_threshold_and_ratio(
 
     // ─── 8. Show all plugin windows floating ───────────────────────
 
-    project.run_command("_S&M_WNTSHW1").await
+    project
+        .run_command("_S&M_WNTSHW1")
+        .await
         .map_err(|e| eyre::eyre!("Failed to run show-windows action: {e}"))?;
     ctx.log("Opened all plugin windows floating (SWS: _S&M_WNTSHW1)");
 

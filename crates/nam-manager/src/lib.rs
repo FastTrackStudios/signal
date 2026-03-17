@@ -53,9 +53,8 @@ pub use pack::{FileOverride, PackCategory, PackDefinition};
 pub use resolve::{nam_root_from_env, resolve_path, resolve_path_unchecked};
 pub use scanner::{apply_packs, merge_into_catalog, scan_directory, sha256_hex};
 pub use vst_chunk::{
-    create_default_chunk, decode_chunk, encode_chunk, extract_state_base64,
-    first_base64_segment, rebuild_chunk_with_state, rebuild_clap_chunk_with_state,
-    rewrite_paths, NamVstChunk,
+    create_default_chunk, decode_chunk, encode_chunk, extract_state_base64, first_base64_segment,
+    rebuild_chunk_with_state, rebuild_clap_chunk_with_state, rewrite_paths, NamVstChunk,
 };
 
 /// Errors that can occur in nam-manager operations.
@@ -196,9 +195,7 @@ pub fn generate_pack_skeletons(
 
             // Build the label from the path components below the category dir.
             // e.g. "ML Sound Labs/Fender Deluxe Reverb" or just "ENGL Fireball Pack"
-            let rel = model_dir
-                .strip_prefix(&category_dir)
-                .unwrap_or(&model_dir);
+            let rel = model_dir.strip_prefix(&category_dir).unwrap_or(&model_dir);
             let label = rel.to_string_lossy().replace('/', " — ");
             let pack_id = slugify(&label);
 
@@ -270,9 +267,7 @@ fn discover_model_dirs(dir: &std::path::Path) -> Result<Vec<std::path::PathBuf>,
 
     // Check if ALL child dirs are "variant" dirs (contain audio files directly)
     // If so, this directory is the model level.
-    let all_children_have_files = children
-        .iter()
-        .all(|c| dir_has_audio_files(&c.path()));
+    let all_children_have_files = children.iter().all(|c| dir_has_audio_files(&c.path()));
     let any_child_is_variant = children.iter().any(|c| {
         let name = c.file_name().to_string_lossy().to_lowercase();
         matches!(
@@ -355,9 +350,31 @@ fn infer_vendor_from_name(name: &str) -> String {
 
     // Single-word amp/pedal brands
     let known_brands = [
-        "ENGL", "EVH", "Revv", "Matchless", "Vox", "Marshall", "Mesa", "Fender", "Friedman",
-        "Orange", "Peavey", "Browne", "JHS", "Boss", "MXR", "Ibanez", "Bogner", "Diezel",
-        "Hughes", "Soldano", "Randall", "Blackstar", "PRS", "Suhr", "Roland",
+        "ENGL",
+        "EVH",
+        "Revv",
+        "Matchless",
+        "Vox",
+        "Marshall",
+        "Mesa",
+        "Fender",
+        "Friedman",
+        "Orange",
+        "Peavey",
+        "Browne",
+        "JHS",
+        "Boss",
+        "MXR",
+        "Ibanez",
+        "Bogner",
+        "Diezel",
+        "Hughes",
+        "Soldano",
+        "Randall",
+        "Blackstar",
+        "PRS",
+        "Suhr",
+        "Roland",
     ];
 
     // Check first segment for amp brands
@@ -423,7 +440,9 @@ pub fn full_rig_models_by_pack(
                 if let Some(name) = path.file_name() {
                     let name_str = name.to_string_lossy().to_string();
                     // First match wins — don't overwrite
-                    filename_index.entry(name_str).or_insert_with(|| path.to_path_buf());
+                    filename_index
+                        .entry(name_str)
+                        .or_insert_with(|| path.to_path_buf());
                 }
             }
         }

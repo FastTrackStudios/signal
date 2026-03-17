@@ -85,9 +85,8 @@ pub fn scan_modules(root: &Path) -> Vec<ModulePreset> {
         let slug = slugify(&name);
         let seed_key = format!("fxc-module-{slug}");
         let preset_id = signal_proto::ModulePresetId::from_uuid(seed_id(&seed_key));
-        let snapshot_id = signal_proto::ModuleSnapshotId::from_uuid(seed_id(&format!(
-            "{seed_key}-default"
-        )));
+        let snapshot_id =
+            signal_proto::ModuleSnapshotId::from_uuid(seed_id(&format!("{seed_key}-default")));
 
         let sidecar = sidecar::read_sidecar(&path);
 
@@ -103,17 +102,12 @@ pub fn scan_modules(root: &Path) -> Vec<ModulePreset> {
 
         // Create a minimal module (empty chain — the rfxchain IS the state).
         let module = Module::from_chain(SignalChain::serial(vec![]));
-        let snapshot = ModuleSnapshot::new(snapshot_id, &name, module)
-            .with_metadata(metadata.clone());
+        let snapshot =
+            ModuleSnapshot::new(snapshot_id, &name, module).with_metadata(metadata.clone());
 
-        let module_preset = ModulePreset::new(
-            preset_id,
-            &name,
-            ModuleType::default(),
-            snapshot,
-            vec![],
-        )
-        .with_metadata(metadata);
+        let module_preset =
+            ModulePreset::new(preset_id, &name, ModuleType::default(), snapshot, vec![])
+                .with_metadata(metadata);
 
         module_presets.push(module_preset);
     }
@@ -144,9 +138,7 @@ fn collect_rfxchain_presets_recursive(
         }
 
         let name = file_stem(&path);
-        let relative = path
-            .strip_prefix(base)
-            .unwrap_or(&path);
+        let relative = path.strip_prefix(base).unwrap_or(&path);
 
         // Build a slug from the full relative path for uniqueness
         let path_slug = slugify(&relative.to_string_lossy().replace(['/', '\\'], "-"));
@@ -199,8 +191,8 @@ fn collect_rfxchain_presets_recursive(
             }
         };
 
-        let preset = Preset::new(preset_id, &name, block_type, snapshot, vec![])
-            .with_metadata(metadata);
+        let preset =
+            Preset::new(preset_id, &name, block_type, snapshot, vec![]).with_metadata(metadata);
 
         out.push(preset);
     }

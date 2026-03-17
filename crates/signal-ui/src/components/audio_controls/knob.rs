@@ -133,10 +133,7 @@ pub fn Knob(props: KnobProps) -> Element {
     let (tx, ty) = arc_point(cx, cy, r - 6.0, end_angle);
     let (tx2, ty2) = arc_point(cx, cy, r + 1.0, end_angle);
 
-    let accent = props
-        .color
-        .as_deref()
-        .unwrap_or("var(--primary, #3b82f6)");
+    let accent = props.color.as_deref().unwrap_or("var(--primary, #3b82f6)");
 
     let disabled_class = if props.disabled {
         " opacity-50 cursor-not-allowed"

@@ -281,10 +281,7 @@ fn find_knob_recursive<'a>(knobs: &'a [MacroKnob], id: &str) -> Option<&'a Macro
 }
 
 /// Recursively search a mutable slice of knobs (and their children) for a knob by ID.
-fn find_knob_recursive_mut<'a>(
-    knobs: &'a mut [MacroKnob],
-    id: &str,
-) -> Option<&'a mut MacroKnob> {
+fn find_knob_recursive_mut<'a>(knobs: &'a mut [MacroKnob], id: &str) -> Option<&'a mut MacroKnob> {
     for knob in knobs {
         if knob.id == id {
             return Some(knob);
@@ -376,8 +373,7 @@ mod tests {
         let mut bank = MacroBank::new();
         let mut knob = MacroKnob::new("k1", "Drive");
         knob.bindings.push(
-            MacroBinding::from_ids("amp", "gain", 0.0, 1.0)
-                .with_curve(EasingCurve::CubicInOut),
+            MacroBinding::from_ids("amp", "gain", 0.0, 1.0).with_curve(EasingCurve::CubicInOut),
         );
         bank.add(knob);
         let json = serde_json::to_string(&bank).unwrap();
@@ -388,7 +384,8 @@ mod tests {
     #[test]
     fn serde_backward_compat_old_json_without_groups() {
         // Old serialized JSON only had "knobs" — no group_selector or groups
-        let old_json = r#"{"knobs":[{"id":"k1","label":"Drive","value":0.5,"color":null,"bindings":[]}]}"#;
+        let old_json =
+            r#"{"knobs":[{"id":"k1","label":"Drive","value":0.5,"color":null,"bindings":[]}]}"#;
         let bank: MacroBank = serde_json::from_str(old_json).unwrap();
         assert_eq!(bank.knobs.len(), 1);
         assert!(bank.group_selector.is_none());

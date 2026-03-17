@@ -208,8 +208,8 @@ mod tests {
         };
 
         let rendered = render_sidecar_styx(&sidecar);
-        let parsed: SignalSidecar = facet_styx::from_str(&rendered)
-            .expect("should parse rendered styx");
+        let parsed: SignalSidecar =
+            facet_styx::from_str(&rendered).expect("should parse rendered styx");
 
         assert_eq!(parsed.version, 1);
         assert_eq!(parsed.id, sidecar.id);
@@ -232,8 +232,8 @@ mod tests {
         };
 
         let rendered = render_sidecar_styx(&sidecar);
-        let parsed: SignalSidecar = facet_styx::from_str(&rendered)
-            .expect("should parse rendered styx");
+        let parsed: SignalSidecar =
+            facet_styx::from_str(&rendered).expect("should parse rendered styx");
 
         assert_eq!(parsed.kind, PresetKind::Module);
         assert_eq!(parsed.tags, sidecar.tags);
@@ -248,8 +248,8 @@ version 1
 id test-id
 kind @Module@
 "#;
-        let parsed: SignalSidecar = facet_styx::from_str(styx)
-            .expect("should parse minimal sidecar");
+        let parsed: SignalSidecar =
+            facet_styx::from_str(styx).expect("should parse minimal sidecar");
 
         assert_eq!(parsed.version, 1);
         assert_eq!(parsed.id, "test-id");

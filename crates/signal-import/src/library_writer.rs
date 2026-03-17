@@ -105,8 +105,8 @@ fn write_snapshot(snapshots_dir: &Path, snapshot: &Snapshot) -> Result<()> {
     };
 
     let json_path = snapshots_dir.join(format!("{id_str}.json"));
-    let json_bytes = serde_json::to_string_pretty(&snap_file)
-        .wrap_err("Failed to serialize snapshot JSON")?;
+    let json_bytes =
+        serde_json::to_string_pretty(&snap_file).wrap_err("Failed to serialize snapshot JSON")?;
     std::fs::write(&json_path, json_bytes)
         .wrap_err_with(|| format!("Failed to write {}", json_path.display()))?;
 
@@ -132,11 +132,7 @@ fn write_snapshot(snapshots_dir: &Path, snapshot: &Snapshot) -> Result<()> {
 ///     {snapshot_id}.json
 ///     ...
 /// ```
-pub fn write_preset_to_library(
-    library_root: &Path,
-    vendor: &str,
-    preset: &Preset,
-) -> Result<()> {
+pub fn write_preset_to_library(library_root: &Path, vendor: &str, preset: &Preset) -> Result<()> {
     let vendor_lower = vendor.to_ascii_lowercase();
     let preset_dir = library_root
         .join("blocks")
@@ -167,8 +163,8 @@ pub fn write_preset_to_library(
     };
 
     let manifest_path = preset_dir.join("manifest.json");
-    let manifest_json = serde_json::to_string_pretty(&manifest)
-        .wrap_err("Failed to serialize manifest")?;
+    let manifest_json =
+        serde_json::to_string_pretty(&manifest).wrap_err("Failed to serialize manifest")?;
     std::fs::write(&manifest_path, manifest_json)
         .wrap_err_with(|| format!("Failed to write {}", manifest_path.display()))?;
 

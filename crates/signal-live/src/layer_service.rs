@@ -46,7 +46,9 @@ where
 
     async fn save_layer(&self, layer: Layer) -> Result<(), SignalServiceError> {
         for variant in &layer.variants {
-            variant.validate_overrides().map_err(|e| SignalServiceError::ValidationError(format!("{e:?}")))?;
+            variant
+                .validate_overrides()
+                .map_err(|e| SignalServiceError::ValidationError(format!("{e:?}")))?;
         }
         self.layer_repo
             .save_layer(&layer)

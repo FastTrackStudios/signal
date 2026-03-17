@@ -29,44 +29,99 @@ struct SongDef {
 
 const SETLIST: &[SongDef] = &[
     SongDef {
-        title: "Belief", artist: "John Mayer", profile: "All-Around",
-        sections: &[("Intro", "Clean"), ("Verse", "Clean"), ("Chorus", "Crunch"),
-                     ("Solo", "Lead"), ("Outro", "Clean")],
+        title: "Belief",
+        artist: "John Mayer",
+        profile: "All-Around",
+        sections: &[
+            ("Intro", "Clean"),
+            ("Verse", "Clean"),
+            ("Chorus", "Crunch"),
+            ("Solo", "Lead"),
+            ("Outro", "Clean"),
+        ],
     },
     SongDef {
-        title: "Vienna", artist: "Couch", profile: "Worship",
-        sections: &[("Intro", "Shimmer"), ("Verse", "Clean"), ("Chorus", "Pad"),
-                     ("Bridge", "Ambient"), ("Outro", "Shimmer")],
+        title: "Vienna",
+        artist: "Couch",
+        profile: "Worship",
+        sections: &[
+            ("Intro", "Shimmer"),
+            ("Verse", "Clean"),
+            ("Chorus", "Pad"),
+            ("Bridge", "Ambient"),
+            ("Outro", "Shimmer"),
+        ],
     },
     SongDef {
-        title: "Anomalie Medley", artist: "Anomalie", profile: "All-Around",
-        sections: &[("Intro", "Funk"), ("A", "Funk"), ("B", "Clean"),
-                     ("Solo", "Lead"), ("Outro", "Funk")],
+        title: "Anomalie Medley",
+        artist: "Anomalie",
+        profile: "All-Around",
+        sections: &[
+            ("Intro", "Funk"),
+            ("A", "Funk"),
+            ("B", "Clean"),
+            ("Solo", "Lead"),
+            ("Outro", "Funk"),
+        ],
     },
     SongDef {
-        title: "New Whip", artist: "Eliv8", profile: "All-Around",
-        sections: &[("Intro", "Clean"), ("Verse", "Funk"),
-                     ("Chorus", "Crunch"), ("Drop", "Drive")],
+        title: "New Whip",
+        artist: "Eliv8",
+        profile: "All-Around",
+        sections: &[
+            ("Intro", "Clean"),
+            ("Verse", "Funk"),
+            ("Chorus", "Crunch"),
+            ("Drop", "Drive"),
+        ],
     },
     SongDef {
-        title: "Leave No Stone", artist: "Intervals", profile: "Rock",
-        sections: &[("Intro", "Clean"), ("Riff", "Power"), ("Lead", "Lead"),
-                     ("Breakdown", "Rhythm"), ("Solo", "Solo")],
+        title: "Leave No Stone",
+        artist: "Intervals",
+        profile: "Rock",
+        sections: &[
+            ("Intro", "Clean"),
+            ("Riff", "Power"),
+            ("Lead", "Lead"),
+            ("Breakdown", "Rhythm"),
+            ("Solo", "Solo"),
+        ],
     },
     SongDef {
-        title: "Won't Stand Down", artist: "Muse", profile: "Rock",
-        sections: &[("Intro", "Crunch"), ("Verse", "Rhythm"), ("Chorus", "Power"),
-                     ("Bridge", "Clean"), ("Solo", "Lead")],
+        title: "Won't Stand Down",
+        artist: "Muse",
+        profile: "Rock",
+        sections: &[
+            ("Intro", "Crunch"),
+            ("Verse", "Rhythm"),
+            ("Chorus", "Power"),
+            ("Bridge", "Clean"),
+            ("Solo", "Lead"),
+        ],
     },
     SongDef {
-        title: "What About Me", artist: "Snarky Puppy", profile: "All-Around",
-        sections: &[("Intro", "Clean"), ("Groove", "Funk"), ("Solo", "Lead"),
-                     ("Build", "Crunch"), ("Outro", "Q-Tron")],
+        title: "What About Me",
+        artist: "Snarky Puppy",
+        profile: "All-Around",
+        sections: &[
+            ("Intro", "Clean"),
+            ("Groove", "Funk"),
+            ("Solo", "Lead"),
+            ("Build", "Crunch"),
+            ("Outro", "Q-Tron"),
+        ],
     },
     SongDef {
-        title: "Harder to Breathe", artist: "Maroon 5", profile: "Rock",
-        sections: &[("Intro", "Crunch"), ("Verse", "Crunch"), ("Chorus", "Power"),
-                     ("Solo", "Lead"), ("Outro", "Power")],
+        title: "Harder to Breathe",
+        artist: "Maroon 5",
+        profile: "Rock",
+        sections: &[
+            ("Intro", "Crunch"),
+            ("Verse", "Crunch"),
+            ("Chorus", "Power"),
+            ("Solo", "Lead"),
+            ("Outro", "Power"),
+        ],
     },
 ];
 
@@ -143,7 +198,11 @@ async fn guitar_setlist(ctx: &ReaperTestContext) -> eyre::Result<()> {
             ctx.log(&format!("MISSING: {profile}/{variation}"));
         }
     }
-    ctx.log(&format!("Cached {}/{} templates", cache.len(), needed.len()));
+    ctx.log(&format!(
+        "Cached {}/{} templates",
+        cache.len(),
+        needed.len()
+    ));
 
     // Build the full track list
     let entries = build_track_list(SETLIST, &cache);
@@ -185,11 +244,15 @@ async fn guitar_setlist(ctx: &ReaperTestContext) -> eyre::Result<()> {
         let mut vars: Vec<&str> = Vec::new();
         let mut seen = std::collections::HashSet::new();
         for &(_, v) in song.sections {
-            if seen.insert(v) { vars.push(v); }
+            if seen.insert(v) {
+                vars.push(v);
+            }
         }
         ctx.log(&format!(
             "  {} [{}]: {}",
-            song.title, song.profile, vars.join(", ")
+            song.title,
+            song.profile,
+            vars.join(", ")
         ));
     }
 
@@ -218,7 +281,13 @@ fn set_isbus_in_chunk(chunk: &str, depth: i32) -> String {
     if has_isbus {
         chunk
             .lines()
-            .map(|l| if l.trim_start().starts_with("ISBUS ") { isbus_line.as_str() } else { l })
+            .map(|l| {
+                if l.trim_start().starts_with("ISBUS ") {
+                    isbus_line.as_str()
+                } else {
+                    l
+                }
+            })
             .collect::<Vec<_>>()
             .join("\n")
     } else {

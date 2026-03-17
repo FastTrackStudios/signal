@@ -9,7 +9,6 @@ use std::time::{Duration, Instant};
 
 type Result<T> = core::result::Result<T, Box<dyn std::error::Error>>;
 
-
 async fn seeded_service() -> Result<
     SignalLive<
         BlockRepoLive,
@@ -149,9 +148,7 @@ async fn test_live_set_block_persists_and_returns() -> Result<()> {
     let new_block = Block::new(0.1, 0.2, 0.3);
 
     // -- Exec
-    let returned = svc
-        .set_block(BlockType::Drive, new_block.clone())
-        .await?;
+    let returned = svc.set_block(BlockType::Drive, new_block.clone()).await?;
 
     // -- Check
     assert_eq!(returned, new_block);
@@ -527,9 +524,7 @@ async fn test_resolve_block_load_missing_preset() -> Result<()> {
     let svc = seeded_service().await?;
     let bad_id = PresetId::from(seed_id("nonexistent-preset"));
 
-    let result = svc
-        .resolve_block_load(BlockType::Eq, &bad_id, None)
-        .await;
+    let result = svc.resolve_block_load(BlockType::Eq, &bad_id, None).await;
 
     assert!(result.is_err());
     assert!(
@@ -544,9 +539,7 @@ async fn test_resolve_module_load_missing() -> Result<()> {
     let svc = seeded_service().await?;
     let bad_id = ModulePresetId::from_uuid(seed_id("nonexistent-module"));
 
-    let result = svc
-        .resolve_module_load(ModuleType::Eq, &bad_id, 0)
-        .await;
+    let result = svc.resolve_module_load(ModuleType::Eq, &bad_id, 0).await;
 
     assert!(result.is_err());
     assert!(

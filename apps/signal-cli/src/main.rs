@@ -6,10 +6,7 @@ use clap::Parser;
 use eyre::Result;
 
 #[derive(Parser)]
-#[command(
-    name = "signal",
-    about = "Query and manipulate the Signal library"
-)]
+#[command(name = "signal", about = "Query and manipulate the Signal library")]
 struct Cli {
     /// Signal DB path (defaults to $FTS_HOME/Library/signal.db)
     #[arg(long, global = true)]
@@ -31,8 +28,7 @@ struct Cli {
 async fn main() -> Result<()> {
     tracing_subscriber::fmt()
         .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "warn".into()),
+            tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "warn".into()),
         )
         .with_writer(std::io::stderr)
         .init();

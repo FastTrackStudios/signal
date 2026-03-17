@@ -112,10 +112,7 @@ async fn macro_setup_direct_reacomp_parameter_binding(
         setup.bindings.len()
     ));
     for b in &setup.bindings {
-        ctx.log(&format!(
-            "  knob={} param_idx={}",
-            b.knob_id, b.param_index
-        ));
+        ctx.log(&format!("  knob={} param_idx={}", b.knob_id, b.param_index));
     }
 
     // ─── Verify NO JSFX insertion (direct approach) ─────────────────────
@@ -184,12 +181,18 @@ async fn macro_setup_direct_reacomp_parameter_binding(
 
     if let Some(rb) = ratio_binding {
         let initial = target_fx.param(rb.param_index).get().await?;
-        ctx.log(&format!("Ratio param (idx={}) initial: {:.4}", rb.param_index, initial));
+        ctx.log(&format!(
+            "Ratio param (idx={}) initial: {:.4}",
+            rb.param_index, initial
+        ));
     }
 
     if let Some(ab) = attack_binding {
         let initial = target_fx.param(ab.param_index).get().await?;
-        ctx.log(&format!("Attack param (idx={}) initial: {:.4}", ab.param_index, initial));
+        ctx.log(&format!(
+            "Attack param (idx={}) initial: {:.4}",
+            ab.param_index, initial
+        ));
     }
 
     // ─── Simulate macro knob change: compress 0.6 → 0.9 ──────────────────
@@ -215,7 +218,10 @@ async fn macro_setup_direct_reacomp_parameter_binding(
     // Verify the parameter changed
     if let Some(rb) = ratio_binding {
         let after = target_fx.param(rb.param_index).get().await?;
-        ctx.log(&format!("Ratio param after macro change to 0.9: {:.4}", after));
+        ctx.log(&format!(
+            "Ratio param after macro change to 0.9: {:.4}",
+            after
+        ));
         assert!(
             (after - 0.9).abs() < 0.05,
             "Ratio param should be ~0.9, got {:.4}",
@@ -229,7 +235,10 @@ async fn macro_setup_direct_reacomp_parameter_binding(
     ctx.log(&format!("dynamics_targets len: {}", dynamics_targets.len()));
     if !dynamics_targets.is_empty() {
         let targets = signal::macro_registry::get_targets("dynamics");
-        ctx.log(&format!("Retrieved {} targets from registry for 'dynamics'", targets.len()));
+        ctx.log(&format!(
+            "Retrieved {} targets from registry for 'dynamics'",
+            targets.len()
+        ));
         for target in targets {
             // Map macro value (0.4 → 0.7) through param range [0.0, 1.0]
             let param_val = (target.min + (target.max - target.min) * 0.7) as f64;
@@ -246,7 +255,10 @@ async fn macro_setup_direct_reacomp_parameter_binding(
     // Verify both Attack and Release changed via dynamics_targets
     if dynamics_targets.len() >= 2 {
         // First target (Attack)
-        let attack_val = target_fx.param(dynamics_targets[0].param_index).get().await?;
+        let attack_val = target_fx
+            .param(dynamics_targets[0].param_index)
+            .get()
+            .await?;
         ctx.log(&format!(
             "Attack param after macro change to 0.7: {:.4}",
             attack_val
@@ -258,7 +270,10 @@ async fn macro_setup_direct_reacomp_parameter_binding(
         );
 
         // Second target (Release)
-        let release_val = target_fx.param(dynamics_targets[1].param_index).get().await?;
+        let release_val = target_fx
+            .param(dynamics_targets[1].param_index)
+            .get()
+            .await?;
         ctx.log(&format!(
             "Release param after macro change to 0.7: {:.4}",
             release_val
@@ -290,7 +305,10 @@ async fn macro_setup_direct_multi_plugin(ctx: &reaper_test::ReaperTestContext) -
     let project = ctx.project().clone();
 
     // Create track with two ReaComp instances
-    let track = project.tracks().add("Multi-Plugin Macro Test", None).await?;
+    let track = project
+        .tracks()
+        .add("Multi-Plugin Macro Test", None)
+        .await?;
     settle().await;
 
     let fx1 = track.fx_chain().add(REACOMP).await?;
@@ -331,7 +349,10 @@ async fn macro_setup_direct_multi_plugin(ctx: &reaper_test::ReaperTestContext) -
         compress_targets.len()
     );
 
-    ctx.log(&format!("Registered {} targets for 'compress' knob", compress_targets.len()));
+    ctx.log(&format!(
+        "Registered {} targets for 'compress' knob",
+        compress_targets.len()
+    ));
 
     // ─── Start playback to enable audio engine ─────
 
@@ -584,9 +605,7 @@ async fn macro_lfo_multi_plugin_demo(ctx: &reaper_test::ReaperTestContext) -> ey
     block2.macro_bank = Some(bank2);
 
     // Block 3 for ReaGate targeting Threshold
-    let params3 = vec![
-        BlockParameter::new("threshold", "Threshold", 0.5),
-    ];
+    let params3 = vec![BlockParameter::new("threshold", "Threshold", 0.5)];
     let mut block3 = Block::from_parameters(params3);
     let mut bank3 = MacroBank::default();
     let mut master3 = MacroKnob::new("master_drive", "Master Drive");
@@ -710,12 +729,28 @@ async fn macro_lfo_multi_plugin_demo(ctx: &reaper_test::ReaperTestContext) -> ey
         // Log every 2 seconds showing all parameter values
         if (elapsed as i32) % 2 == 0 && (elapsed as i32) != ((elapsed - 0.1) as i32) {
             // ReaComp #1: Ratio and Attack
-            let ratio = reacomp1.param(setup1.bindings[0].param_index).get().await.unwrap_or(0.0);
-            let attack1 = reacomp1.param(setup1.bindings[1].param_index).get().await.unwrap_or(0.0);
+            let ratio = reacomp1
+                .param(setup1.bindings[0].param_index)
+                .get()
+                .await
+                .unwrap_or(0.0);
+            let attack1 = reacomp1
+                .param(setup1.bindings[1].param_index)
+                .get()
+                .await
+                .unwrap_or(0.0);
 
             // ReaComp #2: Release and Pre-comp
-            let release = reacomp2.param(setup2.bindings[0].param_index).get().await.unwrap_or(0.0);
-            let precomp = reacomp2.param(setup2.bindings[1].param_index).get().await.unwrap_or(0.0);
+            let release = reacomp2
+                .param(setup2.bindings[0].param_index)
+                .get()
+                .await
+                .unwrap_or(0.0);
+            let precomp = reacomp2
+                .param(setup2.bindings[1].param_index)
+                .get()
+                .await
+                .unwrap_or(0.0);
 
             // ReaGate: Threshold
             let threshold = rea_gate

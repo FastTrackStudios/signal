@@ -35,14 +35,23 @@ async fn ensure_audio(ctx: &reaper_test::ReaperTestContext) {
 
 /// Each variant loads a different subset of module types.
 const VARIANTS: &[(&str, &[&str])] = &[
-    ("Clean",   &["input", "amp", "master"]),
-    ("Crunch",  &["input", "drive", "amp", "master"]),
-    ("Drive",   &["input", "drive", "amp", "dynamics", "master"]),
-    ("Lead",    &["input", "drive", "amp", "modulation", "time", "master"]),
-    ("Funk",    &["input", "amp", "dynamics", "modulation", "master"]),
+    ("Clean", &["input", "amp", "master"]),
+    ("Crunch", &["input", "drive", "amp", "master"]),
+    ("Drive", &["input", "drive", "amp", "dynamics", "master"]),
+    (
+        "Lead",
+        &["input", "drive", "amp", "modulation", "time", "master"],
+    ),
+    (
+        "Funk",
+        &["input", "amp", "dynamics", "modulation", "master"],
+    ),
     ("Ambient", &["input", "amp", "modulation", "time", "master"]),
-    ("Q-Tron",  &["input", "drive", "amp", "modulation", "master"]),
-    ("Solo",    &["input", "drive", "amp", "time", "dynamics", "master"]),
+    ("Q-Tron", &["input", "drive", "amp", "modulation", "master"]),
+    (
+        "Solo",
+        &["input", "drive", "amp", "time", "dynamics", "master"],
+    ),
 ];
 
 // ---------------------------------------------------------------------------

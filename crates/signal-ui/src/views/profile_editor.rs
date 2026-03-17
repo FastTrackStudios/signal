@@ -5,7 +5,6 @@
 
 use dioxus::prelude::*;
 
-
 /// A profile entry for the list panel.
 #[derive(Clone, PartialEq)]
 pub struct ProfileListEntry {

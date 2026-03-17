@@ -84,9 +84,21 @@ async fn a2_list_racks_empty_initially() {
 #[tokio::test]
 async fn a3_list_racks_returns_saved() {
     let signal = bootstrap_in_memory_controller_async().await.unwrap();
-    signal.racks().save(Rack::new(seed_id("r1"), "Rack A")).await.unwrap();
-    signal.racks().save(Rack::new(seed_id("r2"), "Rack B")).await.unwrap();
-    signal.racks().save(Rack::new(seed_id("r3"), "Rack C")).await.unwrap();
+    signal
+        .racks()
+        .save(Rack::new(seed_id("r1"), "Rack A"))
+        .await
+        .unwrap();
+    signal
+        .racks()
+        .save(Rack::new(seed_id("r2"), "Rack B"))
+        .await
+        .unwrap();
+    signal
+        .racks()
+        .save(Rack::new(seed_id("r3"), "Rack C"))
+        .await
+        .unwrap();
 
     let racks = signal.racks().list().await.unwrap();
     assert_eq!(racks.len(), 3);
@@ -125,7 +137,12 @@ async fn b1_rack_with_single_slot() {
     rack.active_slot = Some(0);
     signal.racks().save(rack).await.unwrap();
 
-    let loaded = signal.racks().load(rkid("guitar-rack")).await.unwrap().unwrap();
+    let loaded = signal
+        .racks()
+        .load(rkid("guitar-rack"))
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(loaded.slots.len(), 1);
     assert_eq!(loaded.active_rig_id(), Some(&guitar_rig_id()));
 }
@@ -144,7 +161,12 @@ async fn b2_rack_with_multiple_slots() {
     rack.active_slot = Some(1);
     signal.racks().save(rack).await.unwrap();
 
-    let loaded = signal.racks().load(rkid("multi-rack")).await.unwrap().unwrap();
+    let loaded = signal
+        .racks()
+        .load(rkid("multi-rack"))
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(loaded.slots.len(), 4);
     assert_eq!(loaded.active_slot, Some(1));
     // Active rig is slot 1 (which is active=true)
@@ -157,7 +179,12 @@ async fn b3_add_slot_to_existing_rack() {
     signal.racks().save(vocal_rack()).await.unwrap();
 
     // Load, add a third slot, save back
-    let mut rack = signal.racks().load(rkid("vocal-rack")).await.unwrap().unwrap();
+    let mut rack = signal
+        .racks()
+        .load(rkid("vocal-rack"))
+        .await
+        .unwrap()
+        .unwrap();
     rack.slots.push(RackSlot {
         position: 2,
         rig_id: rid("vox-background-rig"),
@@ -165,7 +192,12 @@ async fn b3_add_slot_to_existing_rack() {
     });
     signal.racks().save(rack).await.unwrap();
 
-    let loaded = signal.racks().load(rkid("vocal-rack")).await.unwrap().unwrap();
+    let loaded = signal
+        .racks()
+        .load(rkid("vocal-rack"))
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(loaded.slots.len(), 3);
     assert!(!loaded.slots[2].active);
 }
@@ -175,11 +207,21 @@ async fn b4_remove_slot_from_rack() {
     let signal = bootstrap_in_memory_controller_async().await.unwrap();
     signal.racks().save(vocal_rack()).await.unwrap();
 
-    let mut rack = signal.racks().load(rkid("vocal-rack")).await.unwrap().unwrap();
+    let mut rack = signal
+        .racks()
+        .load(rkid("vocal-rack"))
+        .await
+        .unwrap()
+        .unwrap();
     rack.slots.retain(|s| s.position != 1); // Remove harmony slot
     signal.racks().save(rack).await.unwrap();
 
-    let loaded = signal.racks().load(rkid("vocal-rack")).await.unwrap().unwrap();
+    let loaded = signal
+        .racks()
+        .load(rkid("vocal-rack"))
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(loaded.slots.len(), 1);
     assert_eq!(loaded.slots[0].rig_id, rid("vox-lead-rig"));
 }
@@ -189,7 +231,12 @@ async fn b5_switch_active_slot() {
     let signal = bootstrap_in_memory_controller_async().await.unwrap();
     signal.racks().save(vocal_rack()).await.unwrap();
 
-    let mut rack = signal.racks().load(rkid("vocal-rack")).await.unwrap().unwrap();
+    let mut rack = signal
+        .racks()
+        .load(rkid("vocal-rack"))
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(rack.active_slot, Some(0));
     assert_eq!(rack.active_rig_id(), Some(&rid("vox-lead-rig")));
 
@@ -197,7 +244,12 @@ async fn b5_switch_active_slot() {
     rack.active_slot = Some(1);
     signal.racks().save(rack).await.unwrap();
 
-    let loaded = signal.racks().load(rkid("vocal-rack")).await.unwrap().unwrap();
+    let loaded = signal
+        .racks()
+        .load(rkid("vocal-rack"))
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(loaded.active_slot, Some(1));
     assert_eq!(loaded.active_rig_id(), Some(&rid("vox-harmony-rig")));
 }
@@ -207,12 +259,22 @@ async fn b6_deactivate_slot() {
     let signal = bootstrap_in_memory_controller_async().await.unwrap();
     signal.racks().save(vocal_rack()).await.unwrap();
 
-    let mut rack = signal.racks().load(rkid("vocal-rack")).await.unwrap().unwrap();
+    let mut rack = signal
+        .racks()
+        .load(rkid("vocal-rack"))
+        .await
+        .unwrap()
+        .unwrap();
     // Deactivate the active slot — should return None for active rig
     rack.slots[0].active = false;
     signal.racks().save(rack).await.unwrap();
 
-    let loaded = signal.racks().load(rkid("vocal-rack")).await.unwrap().unwrap();
+    let loaded = signal
+        .racks()
+        .load(rkid("vocal-rack"))
+        .await
+        .unwrap()
+        .unwrap();
     // Slot 0 is inactive, so even though active_slot=0, active_rig_id returns None
     assert!(loaded.active_rig_id().is_none());
 }
@@ -265,7 +327,12 @@ async fn c1_rack_with_fx_send_buses() {
     ));
     signal.racks().save(rack).await.unwrap();
 
-    let loaded = signal.racks().load(rkid("vocal-rack")).await.unwrap().unwrap();
+    let loaded = signal
+        .racks()
+        .load(rkid("vocal-rack"))
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(loaded.fx_send_buses.len(), 2);
     assert_eq!(loaded.fx_send_buses[0].name, "Vocal AUX");
     assert_eq!(loaded.fx_send_buses[0].sends.len(), 2);
@@ -306,7 +373,12 @@ async fn c3_add_bus_to_existing_rack() {
     let signal = bootstrap_in_memory_controller_async().await.unwrap();
     signal.racks().save(vocal_rack()).await.unwrap();
 
-    let mut rack = signal.racks().load(rkid("vocal-rack")).await.unwrap().unwrap();
+    let mut rack = signal
+        .racks()
+        .load(rkid("vocal-rack"))
+        .await
+        .unwrap()
+        .unwrap();
     assert!(rack.fx_send_buses.is_empty());
 
     rack.fx_send_buses.push(make_fx_bus(
@@ -320,7 +392,12 @@ async fn c3_add_bus_to_existing_rack() {
     ));
     signal.racks().save(rack).await.unwrap();
 
-    let loaded = signal.racks().load(rkid("vocal-rack")).await.unwrap().unwrap();
+    let loaded = signal
+        .racks()
+        .load(rkid("vocal-rack"))
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(loaded.fx_send_buses.len(), 1);
     assert_eq!(loaded.fx_send_buses[0].sends[0].name, "Chorus");
 }
@@ -336,7 +413,12 @@ async fn c4_fx_send_mix_and_enabled_round_trip() {
         .push(make_fx_bus("Bus", None, vec![send]));
     signal.racks().save(rack).await.unwrap();
 
-    let loaded = signal.racks().load(rkid("mix-rack")).await.unwrap().unwrap();
+    let loaded = signal
+        .racks()
+        .load(rkid("mix-rack"))
+        .await
+        .unwrap()
+        .unwrap();
     let send = &loaded.fx_send_buses[0].sends[0];
     assert!((send.mix - 0.25).abs() < f32::EPSILON);
     assert!(!send.enabled);
@@ -363,7 +445,12 @@ async fn d1_rack_referencing_seeded_guitar_rig() {
     rack.active_slot = Some(0);
     signal.racks().save(rack).await.unwrap();
 
-    let loaded = signal.racks().load(rkid("guitar-rack")).await.unwrap().unwrap();
+    let loaded = signal
+        .racks()
+        .load(rkid("guitar-rack"))
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(loaded.active_rig_id(), Some(&guitar_rig_id()));
 
     // Verify we can still load the rig referenced by the rack
@@ -384,7 +471,12 @@ async fn d2_rack_referencing_seeded_keys_rig() {
     rack.active_slot = Some(0);
     signal.racks().save(rack).await.unwrap();
 
-    let loaded = signal.racks().load(rkid("keys-rack")).await.unwrap().unwrap();
+    let loaded = signal
+        .racks()
+        .load(rkid("keys-rack"))
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(loaded.active_rig_id(), Some(&keys_rig_id()));
 }
 
@@ -407,7 +499,12 @@ async fn d3_multi_instrument_rack() {
     rack.active_slot = Some(0);
     signal.racks().save(rack).await.unwrap();
 
-    let loaded = signal.racks().load(rkid("multi-inst")).await.unwrap().unwrap();
+    let loaded = signal
+        .racks()
+        .load(rkid("multi-inst"))
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(loaded.slots.len(), 2);
     // Can switch between instruments
     assert_eq!(loaded.active_rig_id(), Some(&guitar_rig_id()));
@@ -431,7 +528,12 @@ async fn d4_rack_slot_with_dynamically_created_rig() {
     signal.racks().save(rack).await.unwrap();
 
     // Verify rack loads correctly
-    let loaded = signal.racks().load(rkid("dynamic-rack")).await.unwrap().unwrap();
+    let loaded = signal
+        .racks()
+        .load(rkid("dynamic-rack"))
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(loaded.active_rig_id(), Some(&rid("vox-lead-rig")));
 
     // Verify the rig itself is loadable
@@ -489,14 +591,24 @@ async fn e1_vocal_rack_full_lifecycle() {
     signal.racks().save(rack).await.unwrap();
 
     // Verify the full structure
-    let loaded = signal.racks().load(rkid("vocal-live")).await.unwrap().unwrap();
+    let loaded = signal
+        .racks()
+        .load(rkid("vocal-live"))
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(loaded.slots.len(), 2);
     assert_eq!(loaded.fx_send_buses.len(), 1);
 
     // Both rigs are independently accessible
     let lead = signal.rigs().load(rid("vox-lead")).await.unwrap().unwrap();
     assert_eq!(lead.variants.len(), 2);
-    let harmony = signal.rigs().load(rid("vox-harmony")).await.unwrap().unwrap();
+    let harmony = signal
+        .rigs()
+        .load(rid("vox-harmony"))
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(harmony.variants.len(), 1);
 }
 
@@ -506,12 +618,22 @@ async fn e2_vocal_rack_scene_switching_via_active_slot() {
     signal.racks().save(vocal_rack()).await.unwrap();
 
     // Simulate switching from lead to harmony
-    let mut rack = signal.racks().load(rkid("vocal-rack")).await.unwrap().unwrap();
+    let mut rack = signal
+        .racks()
+        .load(rkid("vocal-rack"))
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(rack.active_slot, Some(0)); // Lead
     rack.active_slot = Some(1); // Switch to harmony
     signal.racks().save(rack).await.unwrap();
 
-    let loaded = signal.racks().load(rkid("vocal-rack")).await.unwrap().unwrap();
+    let loaded = signal
+        .racks()
+        .load(rkid("vocal-rack"))
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(loaded.active_rig_id(), Some(&rid("vox-harmony-rig")));
 }
 
@@ -539,11 +661,21 @@ async fn e3_vocal_rack_mute_unmute_slots() {
     signal.racks().save(rack).await.unwrap();
 
     // Mute the background vocal
-    let mut rack = signal.racks().load(rkid("vox-mute")).await.unwrap().unwrap();
+    let mut rack = signal
+        .racks()
+        .load(rkid("vox-mute"))
+        .await
+        .unwrap()
+        .unwrap();
     rack.slots[2].active = false;
     signal.racks().save(rack).await.unwrap();
 
-    let loaded = signal.racks().load(rkid("vox-mute")).await.unwrap().unwrap();
+    let loaded = signal
+        .racks()
+        .load(rkid("vox-mute"))
+        .await
+        .unwrap()
+        .unwrap();
     assert!(loaded.slots[0].active);
     assert!(loaded.slots[1].active);
     assert!(!loaded.slots[2].active);
@@ -555,14 +687,24 @@ async fn e4_vocal_rack_reorder_slots() {
     signal.racks().save(vocal_rack()).await.unwrap();
 
     // Reorder: move harmony to position 0, lead to position 1
-    let mut rack = signal.racks().load(rkid("vocal-rack")).await.unwrap().unwrap();
+    let mut rack = signal
+        .racks()
+        .load(rkid("vocal-rack"))
+        .await
+        .unwrap()
+        .unwrap();
     rack.slots.reverse();
     rack.slots[0].position = 0;
     rack.slots[1].position = 1;
     rack.active_slot = Some(0); // Now points to harmony
     signal.racks().save(rack).await.unwrap();
 
-    let loaded = signal.racks().load(rkid("vocal-rack")).await.unwrap().unwrap();
+    let loaded = signal
+        .racks()
+        .load(rkid("vocal-rack"))
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(loaded.slots[0].rig_id, rid("vox-harmony-rig"));
     assert_eq!(loaded.slots[1].rig_id, rid("vox-lead-rig"));
     assert_eq!(loaded.active_rig_id(), Some(&rid("vox-harmony-rig")));
@@ -575,7 +717,12 @@ async fn e5_no_active_slot_returns_none() {
     rack.active_slot = None;
     signal.racks().save(rack).await.unwrap();
 
-    let loaded = signal.racks().load(rkid("vocal-rack")).await.unwrap().unwrap();
+    let loaded = signal
+        .racks()
+        .load(rkid("vocal-rack"))
+        .await
+        .unwrap()
+        .unwrap();
     assert!(loaded.active_rig_id().is_none());
 }
 
@@ -610,8 +757,18 @@ async fn f1_multiple_racks_independent() {
     assert_eq!(racks.len(), 2);
 
     // Each rack references its own rig
-    let g = signal.racks().load(rkid("guitar-rack")).await.unwrap().unwrap();
-    let k = signal.racks().load(rkid("keys-rack")).await.unwrap().unwrap();
+    let g = signal
+        .racks()
+        .load(rkid("guitar-rack"))
+        .await
+        .unwrap()
+        .unwrap();
+    let k = signal
+        .racks()
+        .load(rkid("keys-rack"))
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(g.active_rig_id(), Some(&guitar_rig_id()));
     assert_eq!(k.active_rig_id(), Some(&keys_rig_id()));
 }
@@ -620,9 +777,21 @@ async fn f1_multiple_racks_independent() {
 async fn f2_delete_one_rack_leaves_others() {
     let signal = bootstrap_in_memory_controller_async().await.unwrap();
 
-    signal.racks().save(Rack::new(seed_id("r1"), "Rack 1")).await.unwrap();
-    signal.racks().save(Rack::new(seed_id("r2"), "Rack 2")).await.unwrap();
-    signal.racks().save(Rack::new(seed_id("r3"), "Rack 3")).await.unwrap();
+    signal
+        .racks()
+        .save(Rack::new(seed_id("r1"), "Rack 1"))
+        .await
+        .unwrap();
+    signal
+        .racks()
+        .save(Rack::new(seed_id("r2"), "Rack 2"))
+        .await
+        .unwrap();
+    signal
+        .racks()
+        .save(Rack::new(seed_id("r3"), "Rack 3"))
+        .await
+        .unwrap();
 
     signal.racks().delete(rkid("r2")).await.unwrap();
 
@@ -683,7 +852,12 @@ async fn g2_active_slot_out_of_range() {
     rack.active_slot = Some(99); // No slot at position 99
     signal.racks().save(rack).await.unwrap();
 
-    let loaded = signal.racks().load(rkid("vocal-rack")).await.unwrap().unwrap();
+    let loaded = signal
+        .racks()
+        .load(rkid("vocal-rack"))
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(loaded.active_slot, Some(99));
     // active_rig_id returns None because no slot matches position 99
     assert!(loaded.active_rig_id().is_none());
@@ -708,7 +882,12 @@ async fn g3_save_overwrites_completely() {
     let rack2 = Rack::new(seed_id("vocal-rack"), "Renamed Rack");
     signal.racks().save(rack2).await.unwrap();
 
-    let loaded = signal.racks().load(rkid("vocal-rack")).await.unwrap().unwrap();
+    let loaded = signal
+        .racks()
+        .load(rkid("vocal-rack"))
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(loaded.name, "Renamed Rack");
     assert!(loaded.slots.is_empty());
     assert!(loaded.fx_send_buses.is_empty());
@@ -729,7 +908,12 @@ async fn g4_with_fx_send_bus_builder() {
     let rack = Rack::new(seed_id("builder-rack"), "Builder Rack").with_fx_send_bus(bus);
     signal.racks().save(rack).await.unwrap();
 
-    let loaded = signal.racks().load(rkid("builder-rack")).await.unwrap().unwrap();
+    let loaded = signal
+        .racks()
+        .load(rkid("builder-rack"))
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(loaded.fx_send_buses.len(), 1);
     assert_eq!(loaded.fx_send_buses[0].sub_category.as_deref(), Some("AUX"));
 }
@@ -747,7 +931,11 @@ async fn h1_list_caches_and_invalidates_on_save() {
     assert_eq!(racks1.len(), 0);
 
     // Save should invalidate cache
-    signal.racks().save(Rack::new(seed_id("new"), "New")).await.unwrap();
+    signal
+        .racks()
+        .save(Rack::new(seed_id("new"), "New"))
+        .await
+        .unwrap();
 
     // Second call should see the new rack
     let racks2 = signal.racks().list().await.unwrap();
@@ -757,7 +945,11 @@ async fn h1_list_caches_and_invalidates_on_save() {
 #[tokio::test]
 async fn h2_list_caches_and_invalidates_on_delete() {
     let signal = bootstrap_in_memory_controller_async().await.unwrap();
-    signal.racks().save(Rack::new(seed_id("d1"), "Delete Me")).await.unwrap();
+    signal
+        .racks()
+        .save(Rack::new(seed_id("d1"), "Delete Me"))
+        .await
+        .unwrap();
 
     let racks1 = signal.racks().list().await.unwrap();
     assert_eq!(racks1.len(), 1);
@@ -771,8 +963,16 @@ async fn h2_list_caches_and_invalidates_on_delete() {
 #[tokio::test]
 async fn h3_repeated_list_calls_consistent() {
     let signal = bootstrap_in_memory_controller_async().await.unwrap();
-    signal.racks().save(Rack::new(seed_id("r1"), "R1")).await.unwrap();
-    signal.racks().save(Rack::new(seed_id("r2"), "R2")).await.unwrap();
+    signal
+        .racks()
+        .save(Rack::new(seed_id("r1"), "R1"))
+        .await
+        .unwrap();
+    signal
+        .racks()
+        .save(Rack::new(seed_id("r2"), "R2"))
+        .await
+        .unwrap();
 
     // Multiple list calls should return the same result
     let a = signal.racks().list().await.unwrap();

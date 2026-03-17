@@ -179,10 +179,7 @@ where
     }
 
     /// Save (upsert) a module collection and invalidate the module cache.
-    async fn save_module_collection(
-        &self,
-        preset: ModulePreset,
-    ) -> Result<(), SignalServiceError> {
+    async fn save_module_collection(&self, preset: ModulePreset) -> Result<(), SignalServiceError> {
         self.module_repo
             .save_module_collection(preset)
             .await
@@ -193,10 +190,7 @@ where
     }
 
     /// Delete a module collection and invalidate the module cache.
-    async fn delete_module_collection(
-        &self,
-        id: ModulePresetId,
-    ) -> Result<(), SignalServiceError> {
+    async fn delete_module_collection(&self, id: ModulePresetId) -> Result<(), SignalServiceError> {
         self.module_repo
             .delete_module_collection(&id)
             .await

@@ -50,11 +50,7 @@ pub struct AutomationEvent {
 }
 
 impl AutomationEvent {
-    pub fn new(
-        id: impl Into<String>,
-        position_beats: f64,
-        action: AutomationAction,
-    ) -> Self {
+    pub fn new(id: impl Into<String>, position_beats: f64, action: AutomationAction) -> Self {
         Self {
             id: id.into(),
             position_beats,
@@ -100,7 +96,9 @@ impl AutomationLane {
     pub fn events_in_range(&self, start_beats: f64, end_beats: f64) -> Vec<&AutomationEvent> {
         self.events
             .iter()
-            .filter(|e| e.enabled && e.position_beats >= start_beats && e.position_beats < end_beats)
+            .filter(|e| {
+                e.enabled && e.position_beats >= start_beats && e.position_beats < end_beats
+            })
             .collect()
     }
 }
@@ -121,11 +119,7 @@ impl SnapshotAutomation {
     }
 
     /// All events across all lanes in a time range, sorted by position.
-    pub fn all_events_in_range(
-        &self,
-        start_beats: f64,
-        end_beats: f64,
-    ) -> Vec<&AutomationEvent> {
+    pub fn all_events_in_range(&self, start_beats: f64, end_beats: f64) -> Vec<&AutomationEvent> {
         let mut events: Vec<&AutomationEvent> = self
             .lanes
             .iter()

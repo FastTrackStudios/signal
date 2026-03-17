@@ -84,8 +84,7 @@ impl<'de> Deserialize<'de> for ResponseCurve {
 
         // Try bare string → EasingCurve (backward compat from old MacroBinding.curve field)
         if value.is_string() {
-            let curve: EasingCurve =
-                serde_json::from_value(value).map_err(de::Error::custom)?;
+            let curve: EasingCurve = serde_json::from_value(value).map_err(de::Error::custom)?;
             return Ok(Self::Easing(curve));
         }
 

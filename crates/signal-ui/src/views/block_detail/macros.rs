@@ -57,11 +57,12 @@ pub fn BlockMacros(props: BlockMacrosProps) -> Element {
     let active_group_color = active_group.map(|g| g.color.clone());
 
     // Visible knobs: shared + active group
-    let visible_knobs: Vec<&signal::macro_bank::MacroKnob> = if let Some(val) = props.active_group_selector_value {
-        bank.visible_knobs_for(val)
-    } else {
-        bank.visible_knobs()
-    };
+    let visible_knobs: Vec<&signal::macro_bank::MacroKnob> =
+        if let Some(val) = props.active_group_selector_value {
+            bank.visible_knobs_for(val)
+        } else {
+            bank.visible_knobs()
+        };
     let shared_count = bank.knobs.len();
     let total_knob_count = visible_knobs.len();
     let selector_knob_id = bank.group_selector.as_ref().map(|s| s.knob_id.clone());

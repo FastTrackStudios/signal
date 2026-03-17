@@ -136,41 +136,71 @@ impl RigTemplate {
                 EngineTemplate {
                     name: "Keys Engine".into(),
                     layers: vec![
-                        LayerTemplate { name: "Keys Core".into() },
-                        LayerTemplate { name: "Keys Space".into() },
+                        LayerTemplate {
+                            name: "Keys Core".into(),
+                        },
+                        LayerTemplate {
+                            name: "Keys Space".into(),
+                        },
                     ],
                     fx_sends: vec![
-                        FxSendTemplate { name: "Reverb".into() },
-                        FxSendTemplate { name: "Delay".into() },
+                        FxSendTemplate {
+                            name: "Reverb".into(),
+                        },
+                        FxSendTemplate {
+                            name: "Delay".into(),
+                        },
                     ],
                 },
                 EngineTemplate {
                     name: "Synth Engine".into(),
                     layers: vec![
-                        LayerTemplate { name: "Synth Osc".into() },
-                        LayerTemplate { name: "Synth Motion".into() },
-                        LayerTemplate { name: "Synth Texture".into() },
+                        LayerTemplate {
+                            name: "Synth Osc".into(),
+                        },
+                        LayerTemplate {
+                            name: "Synth Motion".into(),
+                        },
+                        LayerTemplate {
+                            name: "Synth Texture".into(),
+                        },
                     ],
                     fx_sends: vec![
-                        FxSendTemplate { name: "Reverb".into() },
-                        FxSendTemplate { name: "Delay".into() },
+                        FxSendTemplate {
+                            name: "Reverb".into(),
+                        },
+                        FxSendTemplate {
+                            name: "Delay".into(),
+                        },
                     ],
                 },
                 EngineTemplate {
                     name: "Organ Engine".into(),
                     layers: vec![
-                        LayerTemplate { name: "Organ Body".into() },
-                        LayerTemplate { name: "Organ Air".into() },
+                        LayerTemplate {
+                            name: "Organ Body".into(),
+                        },
+                        LayerTemplate {
+                            name: "Organ Air".into(),
+                        },
                     ],
                     fx_sends: vec![
-                        FxSendTemplate { name: "Reverb".into() },
-                        FxSendTemplate { name: "Delay".into() },
+                        FxSendTemplate {
+                            name: "Reverb".into(),
+                        },
+                        FxSendTemplate {
+                            name: "Delay".into(),
+                        },
                     ],
                 },
             ],
             fx_sends: vec![
-                FxSendTemplate { name: "Reverb".into() },
-                FxSendTemplate { name: "Delay".into() },
+                FxSendTemplate {
+                    name: "Reverb".into(),
+                },
+                FxSendTemplate {
+                    name: "Delay".into(),
+                },
             ],
         }
     }
@@ -181,7 +211,9 @@ impl RigTemplate {
             name: "Guitar Rig".into(),
             engines: vec![EngineTemplate {
                 name: "Guitar Engine".into(),
-                layers: vec![LayerTemplate { name: "Guitar Main".into() }],
+                layers: vec![LayerTemplate {
+                    name: "Guitar Main".into(),
+                }],
                 fx_sends: vec![],
             }],
             fx_sends: vec![],
@@ -199,10 +231,18 @@ impl RigTemplate {
                     name: format!("Vocal {}", index),
                 }],
                 fx_sends: vec![
-                    FxSendTemplate { name: "Verb Ambient".into() },
-                    FxSendTemplate { name: "Verb Long".into() },
-                    FxSendTemplate { name: "Delay Slap".into() },
-                    FxSendTemplate { name: "Delay Long".into() },
+                    FxSendTemplate {
+                        name: "Verb Ambient".into(),
+                    },
+                    FxSendTemplate {
+                        name: "Verb Long".into(),
+                    },
+                    FxSendTemplate {
+                        name: "Delay Slap".into(),
+                    },
+                    FxSendTemplate {
+                        name: "Delay Long".into(),
+                    },
                 ],
             }],
             fx_sends: vec![],
@@ -229,19 +269,35 @@ impl RackTemplate {
                 FxSendGroupTemplate {
                     name: "AUX".into(),
                     sends: vec![
-                        FxSendTemplate { name: "Chorus".into() },
-                        FxSendTemplate { name: "Octave Low".into() },
-                        FxSendTemplate { name: "Octave High".into() },
-                        FxSendTemplate { name: "Vocoder".into() },
+                        FxSendTemplate {
+                            name: "Chorus".into(),
+                        },
+                        FxSendTemplate {
+                            name: "Octave Low".into(),
+                        },
+                        FxSendTemplate {
+                            name: "Octave High".into(),
+                        },
+                        FxSendTemplate {
+                            name: "Vocoder".into(),
+                        },
                     ],
                 },
                 FxSendGroupTemplate {
                     name: "TIME".into(),
                     sends: vec![
-                        FxSendTemplate { name: "Long Verb".into() },
-                        FxSendTemplate { name: "Short Verb".into() },
-                        FxSendTemplate { name: "Slap".into() },
-                        FxSendTemplate { name: "Delay".into() },
+                        FxSendTemplate {
+                            name: "Long Verb".into(),
+                        },
+                        FxSendTemplate {
+                            name: "Short Verb".into(),
+                        },
+                        FxSendTemplate {
+                            name: "Slap".into(),
+                        },
+                        FxSendTemplate {
+                            name: "Delay".into(),
+                        },
                     ],
                 },
             ],

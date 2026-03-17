@@ -88,12 +88,14 @@ async fn create_new_block_collection() {
 
     // Verify specific snapshot
     let block = signal
-        .block_presets().load_variant(
+        .block_presets()
+        .load_variant(
             BlockType::Drive,
             loaded.id().clone(),
             seed_id("custom-drive-high"),
         )
-        .await.unwrap()
+        .await
+        .unwrap()
         .expect("high gain snapshot should exist");
     assert!((block.first_value().unwrap() - 0.95).abs() < 0.001);
 }
@@ -138,12 +140,14 @@ async fn add_snapshot_to_existing_collection() {
     assert_eq!(loaded.snapshots().len(), original_count + 1);
 
     let high_gain = signal
-        .block_presets().load_variant(
+        .block_presets()
+        .load_variant(
             BlockType::Amp,
             loaded.id().clone(),
             seed_id("jm-amp-highgain"),
         )
-        .await.unwrap()
+        .await
+        .unwrap()
         .expect("high gain snapshot should exist");
     assert!((high_gain.first_value().unwrap() - 0.9).abs() < 0.001);
 }
@@ -170,13 +174,16 @@ async fn update_snapshot_params_increments_version() {
     // Update params
     let mut block = lead_snap.block();
     block.set_first_value(0.85);
-    signal.block_presets().update_snapshot_params(
-        BlockType::Amp,
-        jm_amp.id().clone(),
-        lead_snap.id().clone(),
-        block,
-    )
-    .await.unwrap();
+    signal
+        .block_presets()
+        .update_snapshot_params(
+            BlockType::Amp,
+            jm_amp.id().clone(),
+            lead_snap.id().clone(),
+            block,
+        )
+        .await
+        .unwrap();
 
     // Reload
     let reloaded = signal.block_presets().list(BlockType::Amp).await.unwrap();
@@ -246,8 +253,11 @@ async fn delete_block_preset() {
     );
 
     // Delete it
-    signal.block_presets().delete(BlockType::Drive, seed_id("delete-me-drive"))
-        .await.unwrap();
+    signal
+        .block_presets()
+        .delete(BlockType::Drive, seed_id("delete-me-drive"))
+        .await
+        .unwrap();
 
     // Verify it's gone
     let after = signal.block_presets().list(BlockType::Drive).await.unwrap();
@@ -413,8 +423,10 @@ async fn module_block_source_references() {
 
     // Reload
     let loaded_snap = signal
-        .module_presets().load_default(seed_id("source-test"))
-        .await.unwrap()
+        .module_presets()
+        .load_default(seed_id("source-test"))
+        .await
+        .unwrap()
         .expect("should find module");
 
     let blocks = loaded_snap.module().blocks();
@@ -483,8 +495,10 @@ async fn module_signal_chain_with_split() {
     signal.module_presets().save(preset).await.unwrap();
 
     let loaded = signal
-        .module_presets().load_default(seed_id("split-test"))
-        .await.unwrap()
+        .module_presets()
+        .load_default(seed_id("split-test"))
+        .await
+        .unwrap()
         .expect("should load split module");
 
     assert!(
@@ -518,8 +532,10 @@ async fn build_layer_from_scratch() {
     signal.layers().save(layer).await.unwrap();
 
     let loaded = signal
-        .layers().load(seed_id("test-guitar-layer"))
-        .await.unwrap()
+        .layers()
+        .load(seed_id("test-guitar-layer"))
+        .await
+        .unwrap()
         .expect("layer should exist");
 
     assert_eq!(loaded.name, "Test Guitar Layer");
@@ -555,18 +571,22 @@ async fn layer_with_multiple_variants() {
     signal.layers().save(layer).await.unwrap();
 
     let loaded = signal
-        .layers().load(seed_id("multi-variant-layer"))
-        .await.unwrap()
+        .layers()
+        .load(seed_id("multi-variant-layer"))
+        .await
+        .unwrap()
         .expect("layer should exist");
 
     assert_eq!(loaded.variants.len(), 3);
 
     let crunch_loaded = signal
-        .layers().load_variant(
+        .layers()
+        .load_variant(
             seed_id("multi-variant-layer"),
             seed_id("multi-layer-crunch"),
         )
-        .await.unwrap()
+        .await
+        .unwrap()
         .expect("crunch variant should exist");
     assert_eq!(crunch_loaded.name, "Crunch");
     assert!(crunch_loaded.module_refs[0].variant_id.is_some());
@@ -592,8 +612,10 @@ async fn layer_snapshot_overrides_round_trip() {
     signal.layers().save(layer).await.unwrap();
 
     let loaded = signal
-        .layers().load(seed_id("override-layer"))
-        .await.unwrap()
+        .layers()
+        .load(seed_id("override-layer"))
+        .await
+        .unwrap()
         .expect("layer should exist");
 
     assert_eq!(loaded.variants[0].overrides.len(), 2);
@@ -653,8 +675,10 @@ async fn build_engine_with_layers() {
     signal.engines().save(engine).await.unwrap();
 
     let loaded = signal
-        .engines().load(seed_id("test-engine"))
-        .await.unwrap()
+        .engines()
+        .load(seed_id("test-engine"))
+        .await
+        .unwrap()
         .expect("engine should exist");
 
     assert_eq!(loaded.name, "Test Engine");
@@ -662,8 +686,10 @@ async fn build_engine_with_layers() {
     assert_eq!(loaded.variants.len(), 2);
 
     let lead = signal
-        .engines().load_variant(seed_id("test-engine"), seed_id("eng-scene-lead"))
-        .await.unwrap()
+        .engines()
+        .load_variant(seed_id("test-engine"), seed_id("eng-scene-lead"))
+        .await
+        .unwrap()
         .expect("lead scene should exist");
     assert_eq!(lead.name, "Lead");
 }
@@ -701,16 +727,20 @@ async fn build_rig_with_scenes() {
     signal.rigs().save(rig).await.unwrap();
 
     let loaded = signal
-        .rigs().load(seed_id("custom-guitar-rig"))
-        .await.unwrap()
+        .rigs()
+        .load(seed_id("custom-guitar-rig"))
+        .await
+        .unwrap()
         .expect("rig should exist");
 
     assert_eq!(loaded.name, "Custom Guitar Rig");
     assert_eq!(loaded.variants.len(), 4);
 
     let solo_loaded = signal
-        .rigs().load_variant(seed_id("custom-guitar-rig"), seed_id("rig-scene-solo"))
-        .await.unwrap()
+        .rigs()
+        .load_variant(seed_id("custom-guitar-rig"), seed_id("rig-scene-solo"))
+        .await
+        .unwrap()
         .expect("solo scene should exist");
     assert_eq!(solo_loaded.overrides.len(), 2);
 }
@@ -738,8 +768,10 @@ async fn rig_scene_overrides_stack() {
     signal.rigs().save(rig).await.unwrap();
 
     let loaded = signal
-        .rigs().load(seed_id("override-rig"))
-        .await.unwrap()
+        .rigs()
+        .load(seed_id("override-rig"))
+        .await
+        .unwrap()
         .expect("rig should exist");
 
     assert_eq!(loaded.variants[0].overrides.len(), 3);
@@ -775,8 +807,10 @@ async fn rig_scene_engine_selections() {
     signal.rigs().save(rig).await.unwrap();
 
     let loaded = signal
-        .rigs().load(seed_id("sel-rig"))
-        .await.unwrap()
+        .rigs()
+        .load(seed_id("sel-rig"))
+        .await
+        .unwrap()
         .expect("rig");
 
     let a = &loaded.variants[0];
@@ -808,20 +842,25 @@ async fn reorder_rig_scenes() {
     signal.rigs().save(rig).await.unwrap();
 
     // Reorder to [D, B, A, C]
-    signal.rigs().reorder_scenes(
-        seed_id("reorder-rig"),
-        &[
-            seed_id("r-scene-d").into(),
-            seed_id("r-scene-b").into(),
-            seed_id("r-scene-a").into(),
-            seed_id("r-scene-c").into(),
-        ],
-    )
-    .await.unwrap();
+    signal
+        .rigs()
+        .reorder_scenes(
+            seed_id("reorder-rig"),
+            &[
+                seed_id("r-scene-d").into(),
+                seed_id("r-scene-b").into(),
+                seed_id("r-scene-a").into(),
+                seed_id("r-scene-c").into(),
+            ],
+        )
+        .await
+        .unwrap();
 
     let loaded = signal
-        .rigs().load(seed_id("reorder-rig"))
-        .await.unwrap()
+        .rigs()
+        .load(seed_id("reorder-rig"))
+        .await
+        .unwrap()
         .expect("rig");
 
     let names: Vec<&str> = loaded.variants.iter().map(|v| v.name.as_str()).collect();
@@ -867,21 +906,26 @@ async fn reorder_profile_patches() {
     ));
     signal.profiles().save(profile).await.unwrap();
 
-    signal.profiles().reorder_patches(
-        seed_id("reorder-profile"),
-        &[
-            seed_id("rp-e").into(),
-            seed_id("rp-c").into(),
-            seed_id("rp-a").into(),
-            seed_id("rp-d").into(),
-            seed_id("rp-b").into(),
-        ],
-    )
-    .await.unwrap();
+    signal
+        .profiles()
+        .reorder_patches(
+            seed_id("reorder-profile"),
+            &[
+                seed_id("rp-e").into(),
+                seed_id("rp-c").into(),
+                seed_id("rp-a").into(),
+                seed_id("rp-d").into(),
+                seed_id("rp-b").into(),
+            ],
+        )
+        .await
+        .unwrap();
 
     let loaded = signal
-        .profiles().load(seed_id("reorder-profile"))
-        .await.unwrap()
+        .profiles()
+        .load(seed_id("reorder-profile"))
+        .await
+        .unwrap()
         .expect("profile");
 
     let names: Vec<&str> = loaded.patches.iter().map(|p| p.name.as_str()).collect();
@@ -926,18 +970,26 @@ async fn reorder_song_sections() {
     ));
     signal.songs().save(song).await.unwrap();
 
-    signal.songs().reorder_sections(
-        seed_id("reorder-song"),
-        &[
-            seed_id("rs-bridge").into(),
-            seed_id("rs-verse").into(),
-            seed_id("rs-outro").into(),
-            seed_id("rs-chorus").into(),
-        ],
-    )
-    .await.unwrap();
+    signal
+        .songs()
+        .reorder_sections(
+            seed_id("reorder-song"),
+            &[
+                seed_id("rs-bridge").into(),
+                seed_id("rs-verse").into(),
+                seed_id("rs-outro").into(),
+                seed_id("rs-chorus").into(),
+            ],
+        )
+        .await
+        .unwrap();
 
-    let loaded = signal.songs().load(seed_id("reorder-song")).await.unwrap().expect("song");
+    let loaded = signal
+        .songs()
+        .load(seed_id("reorder-song"))
+        .await
+        .unwrap()
+        .expect("song");
 
     let names: Vec<&str> = loaded.sections.iter().map(|s| s.name.as_str()).collect();
     assert_eq!(names, vec!["Bridge", "Verse", "Outro", "Chorus"]);
@@ -970,19 +1022,24 @@ async fn reorder_setlist_entries() {
     ));
     signal.setlists().save(setlist).await.unwrap();
 
-    signal.setlists().reorder_entries(
-        seed_id("reorder-setlist"),
-        &[
-            seed_id("rse-3").into(),
-            seed_id("rse-1").into(),
-            seed_id("rse-2").into(),
-        ],
-    )
-    .await.unwrap();
+    signal
+        .setlists()
+        .reorder_entries(
+            seed_id("reorder-setlist"),
+            &[
+                seed_id("rse-3").into(),
+                seed_id("rse-1").into(),
+                seed_id("rse-2").into(),
+            ],
+        )
+        .await
+        .unwrap();
 
     let loaded = signal
-        .setlists().load(seed_id("reorder-setlist"))
-        .await.unwrap()
+        .setlists()
+        .load(seed_id("reorder-setlist"))
+        .await
+        .unwrap()
         .expect("setlist");
 
     let names: Vec<&str> = loaded.entries.iter().map(|e| e.name.as_str()).collect();
@@ -1045,8 +1102,10 @@ async fn create_profile_with_patches() {
     signal.profiles().save(profile).await.unwrap();
 
     let loaded = signal
-        .profiles().load(seed_id("custom-profile"))
-        .await.unwrap()
+        .profiles()
+        .load(seed_id("custom-profile"))
+        .await
+        .unwrap()
         .expect("profile");
 
     assert_eq!(loaded.name, "Custom Guitar Profile");
@@ -1076,8 +1135,10 @@ async fn patch_targets_correct_rig_scene() {
         .expect("lead patch");
 
     let loaded = signal
-        .profiles().load_patch(worship.id.clone(), lead_patch.id.clone())
-        .await.unwrap()
+        .profiles()
+        .load_patch(worship.id.clone(), lead_patch.id.clone())
+        .await
+        .unwrap()
         .expect("lead patch variant");
 
     assert_eq!(loaded.name, "Lead");
@@ -1112,8 +1173,10 @@ async fn retarget_patch_via_set_patch_preset() {
 
     // Verify initial target
     let loaded_before = signal
-        .profiles().load(seed_id("retarget-profile"))
-        .await.unwrap()
+        .profiles()
+        .load(seed_id("retarget-profile"))
+        .await
+        .unwrap()
         .expect("profile");
     match &loaded_before.patches[0].target {
         PatchTarget::RigScene { scene_id, .. } => assert_eq!(*scene_id, scene_a),
@@ -1121,17 +1184,22 @@ async fn retarget_patch_via_set_patch_preset() {
     }
 
     // Retarget
-    signal.profiles().set_patch_preset(
-        seed_id("retarget-profile"),
-        seed_id("retarget-patch"),
-        rig_id.clone(),
-        scene_b.clone(),
-    )
-    .await.unwrap();
+    signal
+        .profiles()
+        .set_patch_preset(
+            seed_id("retarget-profile"),
+            seed_id("retarget-patch"),
+            rig_id.clone(),
+            scene_b.clone(),
+        )
+        .await
+        .unwrap();
 
     let loaded_after = signal
-        .profiles().load(seed_id("retarget-profile"))
-        .await.unwrap()
+        .profiles()
+        .load(seed_id("retarget-profile"))
+        .await
+        .unwrap()
         .expect("profile after retarget");
     match &loaded_after.patches[0].target {
         PatchTarget::RigScene { scene_id, .. } => assert_eq!(*scene_id, scene_b),
@@ -1224,7 +1292,12 @@ async fn create_song_with_mixed_sections() {
     ));
     signal.songs().save(song).await.unwrap();
 
-    let loaded = signal.songs().load(seed_id("mixed-song")).await.unwrap().expect("song");
+    let loaded = signal
+        .songs()
+        .load(seed_id("mixed-song"))
+        .await
+        .unwrap()
+        .expect("song");
 
     assert_eq!(loaded.sections.len(), 3);
     assert!(matches!(
@@ -1261,24 +1334,37 @@ async fn switch_section_source() {
     signal.songs().save(song).await.unwrap();
 
     // Verify initial source
-    let before = signal.songs().load(seed_id("switch-song")).await.unwrap().expect("song");
+    let before = signal
+        .songs()
+        .load(seed_id("switch-song"))
+        .await
+        .unwrap()
+        .expect("song");
     assert!(matches!(
         before.sections[0].source,
         SectionSource::Patch { .. }
     ));
 
     // Switch to rig scene
-    signal.songs().set_section_source(
-        seed_id("switch-song"),
-        seed_id("switch-section"),
-        SectionSource::RigScene {
-            rig_id: rig_id.clone(),
-            scene_id: scene_id.clone(),
-        },
-    )
-    .await.unwrap();
+    signal
+        .songs()
+        .set_section_source(
+            seed_id("switch-song"),
+            seed_id("switch-section"),
+            SectionSource::RigScene {
+                rig_id: rig_id.clone(),
+                scene_id: scene_id.clone(),
+            },
+        )
+        .await
+        .unwrap();
 
-    let after = signal.songs().load(seed_id("switch-song")).await.unwrap().expect("song");
+    let after = signal
+        .songs()
+        .load(seed_id("switch-song"))
+        .await
+        .unwrap()
+        .expect("song");
     assert!(matches!(
         after.sections[0].source,
         SectionSource::RigScene { .. }
@@ -1345,8 +1431,10 @@ async fn create_setlist_from_songs() {
     signal.setlists().save(setlist).await.unwrap();
 
     let loaded = signal
-        .setlists().load(seed_id("test-setlist"))
-        .await.unwrap()
+        .setlists()
+        .load(seed_id("test-setlist"))
+        .await
+        .unwrap()
         .expect("setlist");
 
     assert_eq!(loaded.entries.len(), 2);

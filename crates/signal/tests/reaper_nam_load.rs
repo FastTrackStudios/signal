@@ -8,9 +8,9 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use nam_manager::{
-    scan_directory, merge_into_catalog, NamCatalog,
-    resolve_path, nam_root_from_env,
+    merge_into_catalog, nam_root_from_env, resolve_path, scan_directory,
     vst_chunk::{decode_chunk, encode_chunk, rewrite_paths},
+    NamCatalog,
 };
 use reaper_test::reaper_test;
 
@@ -29,8 +29,7 @@ async fn ensure_audio(ctx: &reaper_test::ReaperTestContext) {
 
 /// Default NAM root path (signal-library/nam in the parent repo).
 fn default_nam_root() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../../../signal-library/nam")
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../../signal-library/nam")
 }
 
 /// Extract the base64 plugin state lines from a REAPER chunk block.
@@ -135,8 +134,8 @@ async fn nam_load_model_via_chunk_rewrite(ctx: &ReaperTestContext) -> eyre::Resu
 
     ctx.log(&format!("NAM root: {}", nam_root.display()));
 
-    let scanned = scan_directory(&nam_root)
-        .map_err(|e| eyre::eyre!("Failed to scan NAM directory: {e}"))?;
+    let scanned =
+        scan_directory(&nam_root).map_err(|e| eyre::eyre!("Failed to scan NAM directory: {e}"))?;
 
     let mut catalog = NamCatalog::new();
     merge_into_catalog(&mut catalog, scanned);
@@ -175,7 +174,9 @@ async fn nam_load_model_via_chunk_rewrite(ctx: &ReaperTestContext) -> eyre::Resu
     ctx.log(&format!("FX loaded: {}", info.name));
 
     // Step 3: Get the REAPER chunk and extract the plugin state base64
-    let reaper_chunk = fx.state_chunk_encoded().await?
+    let reaper_chunk = fx
+        .state_chunk_encoded()
+        .await?
         .ok_or_else(|| eyre::eyre!("Failed to get NAM plugin state chunk"))?;
 
     let segments = extract_state_base64(&reaper_chunk)
@@ -208,7 +209,9 @@ async fn nam_load_model_via_chunk_rewrite(ctx: &ReaperTestContext) -> eyre::Resu
     tokio::time::sleep(Duration::from_millis(2000)).await;
 
     // Step 6: Verify — read back and confirm the model path persisted
-    let readback_chunk = fx.state_chunk_encoded().await?
+    let readback_chunk = fx
+        .state_chunk_encoded()
+        .await?
         .ok_or_else(|| eyre::eyre!("Failed to read back state chunk after rewrite"))?;
 
     let readback_segments = extract_state_base64(&readback_chunk)
@@ -218,7 +221,10 @@ async fn nam_load_model_via_chunk_rewrite(ctx: &ReaperTestContext) -> eyre::Resu
     let readback_nam = decode_chunk(&readback_unified)
         .map_err(|e| eyre::eyre!("Failed to decode readback chunk: {e}"))?;
 
-    ctx.log(&format!("Readback model path: '{}'", readback_nam.model_path));
+    ctx.log(&format!(
+        "Readback model path: '{}'",
+        readback_nam.model_path
+    ));
 
     assert_eq!(
         readback_nam.model_path,

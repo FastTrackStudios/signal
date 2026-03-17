@@ -6,8 +6,8 @@
 
 use std::f64::consts::PI;
 
-use dioxus::prelude::*;
 use dioxus::prelude::dioxus_elements::geometry::WheelDelta;
+use dioxus::prelude::*;
 use signal::{Block, BlockType};
 
 use crate::components::block_color;
@@ -453,7 +453,13 @@ pub fn MiniKnob(
     let radius: f64 = 14.0;
 
     // Arc geometry
-    let track_path = svg_arc(center, center, radius, angle_for_value(0.0), angle_for_value(1.0));
+    let track_path = svg_arc(
+        center,
+        center,
+        radius,
+        angle_for_value(0.0),
+        angle_for_value(1.0),
+    );
 
     let value_path = if bipolar {
         let center_angle = angle_for_value(0.5);

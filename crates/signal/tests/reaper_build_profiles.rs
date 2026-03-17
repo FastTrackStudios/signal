@@ -40,14 +40,14 @@ const WORSHIP: ProfileDef = ProfileDef {
     tag: "worship",
     description: "Worship guitar tones — clean, atmospheric, ambient",
     variants: &[
-        ("Clean",    &["input", "amp", "master"]),
-        ("Shimmer",  &["input", "amp", "modulation", "time", "master"]),
-        ("Pad",      &["input", "amp", "modulation", "time", "master"]),
-        ("Swell",    &["input", "amp", "dynamics", "time", "master"]),
-        ("Ambient",  &["input", "amp", "modulation", "time", "master"]),
-        ("Sparkle",  &["input", "amp", "modulation", "master"]),
-        ("Lead",     &["input", "drive", "amp", "time", "master"]),
-        ("Edge",     &["input", "drive", "amp", "modulation", "master"]),
+        ("Clean", &["input", "amp", "master"]),
+        ("Shimmer", &["input", "amp", "modulation", "time", "master"]),
+        ("Pad", &["input", "amp", "modulation", "time", "master"]),
+        ("Swell", &["input", "amp", "dynamics", "time", "master"]),
+        ("Ambient", &["input", "amp", "modulation", "time", "master"]),
+        ("Sparkle", &["input", "amp", "modulation", "master"]),
+        ("Lead", &["input", "drive", "amp", "time", "master"]),
+        ("Edge", &["input", "drive", "amp", "modulation", "master"]),
     ],
 };
 
@@ -56,14 +56,20 @@ const ROCK: ProfileDef = ProfileDef {
     tag: "rock",
     description: "Rock guitar tones — crunch, drive, power",
     variants: &[
-        ("Clean",       &["input", "amp", "master"]),
-        ("Crunch",      &["input", "drive", "amp", "master"]),
-        ("Rhythm",      &["input", "drive", "amp", "dynamics", "master"]),
-        ("Power",       &["input", "drive", "amp", "dynamics", "master"]),
-        ("Lead",        &["input", "drive", "amp", "modulation", "time", "master"]),
-        ("Solo",        &["input", "drive", "amp", "time", "dynamics", "master"]),
+        ("Clean", &["input", "amp", "master"]),
+        ("Crunch", &["input", "drive", "amp", "master"]),
+        ("Rhythm", &["input", "drive", "amp", "dynamics", "master"]),
+        ("Power", &["input", "drive", "amp", "dynamics", "master"]),
+        (
+            "Lead",
+            &["input", "drive", "amp", "modulation", "time", "master"],
+        ),
+        (
+            "Solo",
+            &["input", "drive", "amp", "time", "dynamics", "master"],
+        ),
         ("Dirty Clean", &["input", "drive", "amp", "master"]),
-        ("Boost",       &["input", "drive", "amp", "dynamics", "master"]),
+        ("Boost", &["input", "drive", "amp", "dynamics", "master"]),
     ],
 };
 
@@ -194,7 +200,11 @@ async fn build_profiles(ctx: &ReaperTestContext) -> eyre::Result<()> {
             saved,
             profile.variants.len()
         ));
-        assert!(saved > 0, "{} should save at least 1 variation", profile.name);
+        assert!(
+            saved > 0,
+            "{} should save at least 1 variation",
+            profile.name
+        );
     }
 
     // ── Verify scanner finds everything ──

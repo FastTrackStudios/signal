@@ -11,8 +11,8 @@
 use std::time::Duration;
 
 use reaper_test::reaper_test;
-use signal::{ModuleRepo, ModuleRepoLive};
 use signal::track_template::{self, Instrument, TemplateTier};
+use signal::{ModuleRepo, ModuleRepoLive};
 
 async fn settle() {
     tokio::time::sleep(Duration::from_millis(500)).await;
@@ -132,11 +132,10 @@ async fn guitar_rig_save(ctx: &ReaperTestContext) -> eyre::Result<()> {
         TemplateTier::Layer,
         &track_chunk,
         &uuid::Uuid::new_v4().to_string(),
-        &[
-            "guitar".to_string(),
-            "full-chain".to_string(),
-        ],
-        Some("Full guitar signal chain: input → drive → amp → modulation → time → dynamics → master"),
+        &["guitar".to_string(), "full-chain".to_string()],
+        Some(
+            "Full guitar signal chain: input → drive → amp → modulation → time → dynamics → master",
+        ),
     )?;
 
     ctx.log(&format!("Saved layer: {}", layer_path.display()));
@@ -150,7 +149,10 @@ async fn guitar_rig_save(ctx: &ReaperTestContext) -> eyre::Result<()> {
     let rig_name = "Guitar Rig";
 
     // Create the rig folder track (no FX, just a label)
-    let folder = project.tracks().add(&format!("RIG: {rig_name}"), None).await?;
+    let folder = project
+        .tracks()
+        .add(&format!("RIG: {rig_name}"), None)
+        .await?;
     settle().await;
 
     // Re-create the layer track with all modules
@@ -195,7 +197,10 @@ async fn guitar_rig_save(ctx: &ReaperTestContext) -> eyre::Result<()> {
 
     let root = track_template::track_templates_root();
     let scanned = track_template::scan_track_templates(&root);
-    ctx.log(&format!("\nScanner found {} track templates:", scanned.len()));
+    ctx.log(&format!(
+        "\nScanner found {} track templates:",
+        scanned.len()
+    ));
     for t in &scanned {
         ctx.log(&format!(
             "  {}/{:?}: {} / {} ({})",
@@ -213,7 +218,10 @@ async fn guitar_rig_save(ctx: &ReaperTestContext) -> eyre::Result<()> {
 
     // Verify content
     let layer_content = std::fs::read_to_string(&layer_path)?;
-    assert!(layer_content.contains("<FXCHAIN"), "layer should have FXCHAIN");
+    assert!(
+        layer_content.contains("<FXCHAIN"),
+        "layer should have FXCHAIN"
+    );
 
     let rig_content = std::fs::read_to_string(&rig_path)?;
     let track_count = rig_content.matches("<TRACK").count();

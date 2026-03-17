@@ -153,8 +153,7 @@ mod tests {
                 assert_ne!(
                     ids[i], ids[j],
                     "Snapshot ID collision between '{}' and '{}'",
-                    ALL_RIG_PRESETS[i].name,
-                    ALL_RIG_PRESETS[j].name,
+                    ALL_RIG_PRESETS[i].name, ALL_RIG_PRESETS[j].name,
                 );
             }
         }

@@ -27,10 +27,7 @@ pub enum SwitchResult {
     /// No active context — nothing to switch.
     NoContext,
     /// The requested index is out of bounds for the active collection.
-    OutOfBounds {
-        requested: usize,
-        available: usize,
-    },
+    OutOfBounds { requested: usize, available: usize },
     /// The active collection could not be loaded.
     LoadError(String),
     /// The activation call failed.
@@ -66,13 +63,9 @@ where
                 self.switch_profile_variation(id.clone(), index).await
             }
 
-            ActiveContext::Rig { id, .. } => {
-                self.switch_rig_variation(id.clone(), index).await
-            }
+            ActiveContext::Rig { id, .. } => self.switch_rig_variation(id.clone(), index).await,
 
-            ActiveContext::Song { id, .. } => {
-                self.switch_song_variation(id.clone(), index).await
-            }
+            ActiveContext::Song { id, .. } => self.switch_song_variation(id.clone(), index).await,
         }
     }
 
@@ -105,11 +98,7 @@ where
         profile_id: signal_proto::profile::ProfileId,
         index: usize,
     ) -> SwitchResult {
-        let profile = match self
-            .service
-            .load_profile(profile_id.clone())
-            .await
-        {
+        let profile = match self.service.load_profile(profile_id.clone()).await {
             Ok(Some(p)) => p,
             Ok(None) => return SwitchResult::LoadError(format!("profile {profile_id} not found")),
             Err(e) => return SwitchResult::LoadError(format!("loading profile: {e}")),
@@ -129,7 +118,11 @@ where
 
         info!("switching to profile patch {}: {}", index + 1, name);
 
-        match self.profiles().activate(profile_id.clone(), Some(patch_id)).await {
+        match self
+            .profiles()
+            .activate(profile_id.clone(), Some(patch_id))
+            .await
+        {
             Ok(_) => {
                 self.active_context.set(ActiveContext::Profile {
                     id: profile_id,
@@ -173,11 +166,7 @@ where
         let rig_applier = self.daw_rig_applier.read().expect("lock poisoned").clone();
         if let Some(rig_applier) = rig_applier {
             match rig_applier
-                .switch_scene(
-                    &rig_id.to_string(),
-                    &scene_id.to_string(),
-                    Some(&name),
-                )
+                .switch_scene(&rig_id.to_string(), &scene_id.to_string(), Some(&name))
                 .await
             {
                 Ok(true) => {
@@ -256,11 +245,7 @@ where
             signal_proto::song::SectionSource::RigScene { rig_id, scene_id } => {
                 if let Some(rig_applier) = rig_applier {
                     match rig_applier
-                        .switch_scene(
-                            &rig_id.to_string(),
-                            &scene_id.to_string(),
-                            Some(&name),
-                        )
+                        .switch_scene(&rig_id.to_string(), &scene_id.to_string(), Some(&name))
                         .await
                     {
                         Ok(_) => {
