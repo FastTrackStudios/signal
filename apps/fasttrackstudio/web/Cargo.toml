@@ -14,20 +14,21 @@ lumen-blocks = { workspace = true }
 lucide-dioxus = { workspace = true }
 
 # Chart parsing and layout
-keyflow = { workspace = true, features = ["engraver"] }
+keyflow = { workspace = true, features = ["engraver", "highlighting"] }
+
+# FTS design system (components, layout, typography, theme tokens)
+fts-ui = { workspace = true }
 
 # Audio FX controls
 audio-controls = { workspace = true }
 
-# Extension system (WASM-compatible)
-daw = { workspace = true, features = ["standalone"] }
-
 # Geometry (match engraver version)
-kurbo = "0.12"
+kurbo = "0.13"
 
 # Graphics rendering (cross-platform)
-vello = "0.6"
-peniko = "0.3"
+vello = { workspace = true }
+peniko = { workspace = true }
+anyrender_vello = { workspace = true }
 
 # Serialization
 serde = { version = "1.0", features = ["derive"] }
@@ -97,8 +98,8 @@ web-sys = { version = "0.3", features = [
     "HtmlAnchorElement",
 ] }
 
-# Graphics rendering (WASM) - version must match vello 0.6's wgpu dependency
-wgpu = { version = "26", features = ["webgpu", "webgl"] }
+# Graphics rendering (WASM) - version must match vello 0.7's wgpu dependency
+wgpu = { version = "27", features = ["webgpu", "webgl"] }
 
 # Async runtime for WASM
 tokio = { version = "1.0", default-features = false, features = ["sync"] }

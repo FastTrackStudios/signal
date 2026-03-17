@@ -1,21 +1,10 @@
 [application]
+name = "fasttrackstudio-web"
+default_platform = "web"
 
 [web.app]
+title = "FastTrackStudio"
 
-# HTML title tag content
-title = "web"
-
-# include `assets` in web platform
-[web.resource]
-
-# Additional CSS style files
-style = []
-
-# Additional JavaScript files
-script = []
-
-[web.resource.dev]
-
-# Javascript code file
-# serve: [dev-server] only
-script = []
+[web.watcher]
+reload_html = true
+watch_path = ["src", "assets", "tailwind.css"]
