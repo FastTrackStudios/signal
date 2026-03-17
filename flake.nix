@@ -215,7 +215,71 @@
               doCheck = false;
             });
 
+            # FTS Installer Desktop App
+            fts-installer = craneLib.buildPackage (commonArgs // {
+              pname = "fts-installer";
+              version = rev;
+              inherit cargoArtifacts;
+              buildPhaseCargoCommand = ''
+                cd apps/installer
+                dx build --release --platform desktop
+              '';
+              installPhaseCommand = ''
+                mkdir -p $out/Applications $out/bin
+                if [ -d "apps/installer/target/dx/fts-installer/release/macos" ]; then
+                  cp -r apps/installer/target/dx/fts-installer/release/macos/*.app $out/Applications/
+                  ln -s "$out/Applications/"*.app"/Contents/MacOS/"* $out/bin/fts-installer
+                elif [ -f "target/release/fts-installer" ]; then
+                  cp target/release/fts-installer $out/bin/
+                fi
+              '';
+              doCheck = false;
+            });
+
             default = self'.packages.test-extension;
+          };
+
+          # ============================================================
+          # Apps — installer DMG
+          # ============================================================
+          apps.create-installer-dmg = {
+            type = "app";
+            program = let
+              script = pkgs.writeShellScript "create-installer-dmg" ''
+                set -euo pipefail
+
+                INSTALLER_APP="${self'.packages.fts-installer}/Applications"
+                FTS_CONTROL_APP="${self'.packages.fts-control-desktop}/Applications"
+                OUTPUT="FastTrackStudio-Installer-${rev}.dmg"
+                STAGING=$(mktemp -d)
+
+                echo "Assembling installer DMG..."
+
+                # Copy installer app
+                if [ -d "$INSTALLER_APP" ]; then
+                  cp -r "$INSTALLER_APP"/*.app "$STAGING/"
+                else
+                  echo "ERROR: FTS Installer app not found at $INSTALLER_APP"
+                  exit 1
+                fi
+
+                # Copy FTS Control app (installer will copy this into the install dir)
+                if [ -d "$FTS_CONTROL_APP" ]; then
+                  cp -r "$FTS_CONTROL_APP"/*.app "$STAGING/"
+                else
+                  echo "WARNING: FTS Control app not found, installer will skip that step"
+                fi
+
+                # Create the DMG
+                hdiutil create -volname "FastTrackStudio" \
+                  -srcfolder "$STAGING" \
+                  -ov -format UDZO \
+                  "$OUTPUT"
+
+                rm -rf "$STAGING"
+                echo "Created $OUTPUT ($(du -h "$OUTPUT" | cut -f1))"
+              '';
+            in "${script}";
           };
 
           # ============================================================

@@ -1,0 +1,41 @@
+name: Build Installer
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+jobs:
+  build-installer:
+    strategy:
+      matrix:
+        include:
+          - os: macos-14         # Apple Silicon
+            system: aarch64-darwin
+          - os: macos-13         # Intel
+            system: x86_64-darwin
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: cachix/install-nix-action@v27
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - name: Build installer app
+        run: nix build .#fts-installer --no-link
+
+      - name: Build FTS Control app
+        run: nix build .#fts-control-desktop --no-link
+
+      - name: Create installer DMG
+        run: nix run .#create-installer-dmg
+
+      - name: Upload DMG
+        uses: actions/upload-artifact@v4
+        with:
+          name: FastTrackStudio-Installer-${{ matrix.system }}
+          path: FastTrackStudio-Installer-*.dmg

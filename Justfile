@@ -2,6 +2,11 @@
 # Install just: cargo install just
 # Run commands: just <recipe-name>
 
+# FTS installation root — override via .env or FTS_HOME env var
+fts_home := env("FTS_HOME", env("HOME") / "Music" / "FastTrackStudio")
+reaper_dir := fts_home / "Reaper"
+reaper_exe := reaper_dir / "FTS-LIVE.app" / "Contents" / "MacOS" / "REAPER"
+
 # Default recipe - show help
 _default:
     @just --list
@@ -130,7 +135,7 @@ link-extension: build-extension
     # Load .env file if it exists
     if [ -f .env ]; then set -a; source .env; set +a; fi
 
-    REAPER_PATH="${REAPER_PATH:-/Users/codywright/Music/FastTrackStudio/Reaper/FTS-TRACKS/}"
+    REAPER_PATH="${REAPER_PATH:-{{reaper_dir}}}"
     EXTENSION_DIR="$REAPER_PATH/UserPlugins"
     BUILD_MODE="${BUILD_MODE:-debug}"
     BUILD_DIR="target/$BUILD_MODE"
@@ -166,7 +171,7 @@ uninstall-extension:
 
     if [ -f .env ]; then set -a; source .env; set +a; fi
 
-    REAPER_PATH="${REAPER_PATH:-/Users/codywright/Music/FastTrackStudio/Reaper/FTS-TRACKS/}"
+    REAPER_PATH="${REAPER_PATH:-{{reaper_dir}}}"
     EXTENSION_DIR="$REAPER_PATH/UserPlugins"
 
     rm -f "$EXTENSION_DIR/reaper_fts.dylib"
@@ -181,7 +186,7 @@ link-effects:
 
     if [ -f .env ]; then set -a; source .env; set +a; fi
 
-    REAPER_PATH="${REAPER_PATH:-/Users/codywright/Music/FastTrackStudio/Reaper/FTS-TRACKS/}"
+    REAPER_PATH="${REAPER_PATH:-{{reaper_dir}}}"
     EFFECTS_DIR="$REAPER_PATH/Effects/FastTrackStudio"
 
     mkdir -p "$EFFECTS_DIR"
@@ -203,7 +208,7 @@ launch-reaper:
 
     if [ -f .env ]; then set -a; source .env; set +a; fi
 
-    REAPER_EXECUTABLE="${REAPER_EXECUTABLE:-/Users/codywright/Music/FastTrackStudio/Reaper/FTS-TRACKS/FTS-LIVE.app/Contents/MacOS/REAPER}"
+    REAPER_EXECUTABLE="${REAPER_EXECUTABLE:-{{reaper_exe}}}"
 
     if [[ ! -f "$REAPER_EXECUTABLE" ]]; then
         echo "❌ REAPER not found: $REAPER_EXECUTABLE"
@@ -243,17 +248,16 @@ link-cells: build-cells
 
     if [ -f .env ]; then set -a; source .env; set +a; fi
 
-    REAPER_EXECUTABLE="${REAPER_EXECUTABLE:-/Users/codywright/Music/FastTrackStudio/Reaper/FTS-TRACKS/FTS-LIVE.app/Contents/MacOS/REAPER}"
+    REAPER_EXECUTABLE="${REAPER_EXECUTABLE:-{{reaper_exe}}}"
     BUILD_MODE="${BUILD_MODE:-debug}"
     BUILD_DIR="target/$BUILD_MODE"
 
     # Calculate path to Extensions/FTS2
-    # REAPER_EXECUTABLE: /path/to/FastTrackStudio/Reaper/FTS-TRACKS/FTS-LIVE.app/Contents/MacOS/REAPER
-    # APP_DIR:           /path/to/FastTrackStudio/Reaper/FTS-TRACKS/FTS-LIVE.app
-    # RESOURCE_DIR:      /path/to/FastTrackStudio/Reaper/FTS-TRACKS (REAPER resource dir)
-    # PARENT:            /path/to/FastTrackStudio/Reaper
-    # GRANDPARENT:       /path/to/FastTrackStudio
-    # CELLS_DIR:         /path/to/FastTrackStudio/Extensions/FTS2
+    # REAPER_EXECUTABLE: <fts_home>/Reaper/FTS-LIVE.app/Contents/MacOS/REAPER
+    # APP_DIR:           <fts_home>/Reaper/FTS-LIVE.app
+    # RESOURCE_DIR:      <fts_home>/Reaper (REAPER resource dir)
+    # PARENT:            <fts_home>
+    # CELLS_DIR:         <fts_home>/Extensions/FTS2
     APP_DIR="$(dirname "$(dirname "$(dirname "$REAPER_EXECUTABLE")")")"
     RESOURCE_DIR="$(dirname "$APP_DIR")"
     PARENT="$(dirname "$RESOURCE_DIR")"
@@ -297,7 +301,7 @@ test-reaper: link-extension
 
     if [ -f .env ]; then set -a; source .env; set +a; fi
 
-    REAPER_EXECUTABLE="${REAPER_EXECUTABLE:-/Users/codywright/Music/FastTrackStudio/Reaper/FTS-TRACKS/FTS-LIVE.app/Contents/MacOS/REAPER}"
+    REAPER_EXECUTABLE="${REAPER_EXECUTABLE:-{{reaper_exe}}}"
 
     echo ""
     echo "✅ Extension built and linked"
@@ -320,7 +324,7 @@ test-signal-reaper: link-extension
 
     if [ -f .env ]; then set -a; source .env; set +a; fi
 
-    REAPER_EXECUTABLE="${REAPER_EXECUTABLE:-/Users/codywright/Music/FastTrackStudio/Reaper/FTS-TRACKS/FTS-LIVE.app/Contents/MacOS/REAPER}"
+    REAPER_EXECUTABLE="${REAPER_EXECUTABLE:-{{reaper_exe}}}"
     SOCKET_PATH="/tmp/fts-control.sock"
     SOCKET_TIMEOUT=30
 
@@ -370,8 +374,8 @@ show-reaper-path:
     #!/usr/bin/env bash
     if [ -f .env ]; then set -a; source .env; set +a; fi
 
-    REAPER_PATH="${REAPER_PATH:-/Users/codywright/Music/FastTrackStudio/Reaper/FTS-TRACKS/}"
-    REAPER_EXECUTABLE="${REAPER_EXECUTABLE:-/Users/codywright/Music/FastTrackStudio/Reaper/FTS-TRACKS/FTS-LIVE.app/Contents/MacOS/REAPER}"
+    REAPER_PATH="${REAPER_PATH:-{{reaper_dir}}}"
+    REAPER_EXECUTABLE="${REAPER_EXECUTABLE:-{{reaper_exe}}}"
 
     echo "📁 REAPER Path: $REAPER_PATH"
     echo "📁 UserPlugins: $REAPER_PATH/UserPlugins"
