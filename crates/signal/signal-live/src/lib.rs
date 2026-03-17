@@ -68,13 +68,13 @@
 pub mod daw_block_ops;
 pub mod daw_rig_builder;
 pub mod daw_rig_ops;
-pub mod macro_bridge;
 pub mod engine;
+pub mod macro_bridge;
 pub mod macro_constants;
 pub mod macro_error;
-pub mod macro_setup;
-pub mod macro_registry;
 pub mod macro_recorder;
+pub mod macro_registry;
+pub mod macro_setup;
 pub mod macro_system;
 pub mod macro_templates;
 
@@ -86,12 +86,12 @@ pub use macromod::{
     parameter::BlockParameter as MacromodBlockParameter,
     response::ResponseCurve,
     routing::{ModulationRoute, ModulationRouteSet},
+    runtime::{ModulationProcessor, TickContext},
     sources::{
         EnvelopeConfig, EnvelopeMode, FollowerConfig, FollowerInput, LfoConfig, LfoWaveform,
         ModulationSource, RandomConfig, RetriggerMode, TempoDiv,
     },
     target::{ModulationTarget, ParamTarget},
-    runtime::{ModulationProcessor, TickContext},
 };
 
 // Re-export recorder types
@@ -112,6 +112,7 @@ mod song_service;
 #[cfg(test)]
 mod tests;
 
+use moire::sync::RwLock;
 use signal_proto::{
     engine::{Engine, EngineId, EngineScene, EngineSceneId},
     layer::{Layer, LayerId, LayerSnapshot, LayerSnapshotId},
@@ -145,7 +146,6 @@ use signal_storage::{
 };
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
-use moire::sync::RwLock;
 
 // region: --- ServiceCache
 
@@ -219,9 +219,16 @@ pub struct SignalLive<
 
 impl<B, M, L, E, R, P, So, Se, St, Ra> Clone for SignalLive<B, M, L, E, R, P, So, Se, St, Ra>
 where
-    B: BlockRepo, M: ModuleRepo, L: LayerRepo, E: EngineRepo,
-    R: RigRepo, P: ProfileRepo, So: SongRepo, Se: SetlistRepo,
-    St: SceneTemplateRepo, Ra: RackRepo,
+    B: BlockRepo,
+    M: ModuleRepo,
+    L: LayerRepo,
+    E: EngineRepo,
+    R: RigRepo,
+    P: ProfileRepo,
+    So: SongRepo,
+    Se: SetlistRepo,
+    St: SceneTemplateRepo,
+    Ra: RackRepo,
 {
     fn clone(&self) -> Self {
         Self {

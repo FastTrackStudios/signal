@@ -252,9 +252,7 @@ mod tests {
             "test",
             signal_proto::Module::from_blocks(vec![]),
         );
-        let result = engine
-            .apply_snapshot(ModuleType::Amp, &snapshot)
-            .await;
+        let result = engine.apply_snapshot(ModuleType::Amp, &snapshot).await;
         assert!(result.is_err());
     }
 

@@ -18,7 +18,7 @@
 //! block.macro_bank = Some(eq_bank);
 //! ```
 
-use macromod::{MacroBank, MacroKnob, MacroBinding};
+use macromod::{MacroBank, MacroBinding, MacroKnob};
 
 /// Simple 3-band EQ macro configuration.
 ///
@@ -35,32 +35,24 @@ pub fn eq_3band() -> MacroBank {
     // Low frequency band
     let mut low = MacroKnob::new("eq_low", "Low");
     low.bindings.push(MacroBinding::from_ids(
-        "eq",
-        "low_freq",
-        0.0,  // 20 Hz
-        1.0,  // 500 Hz
+        "eq", "low_freq", 0.0, // 20 Hz
+        1.0, // 500 Hz
     ));
     low.bindings.push(MacroBinding::from_ids(
-        "eq",
-        "low_gain",
-        0.0,  // -12 dB
-        1.0,  // +12 dB
+        "eq", "low_gain", 0.0, // -12 dB
+        1.0, // +12 dB
     ));
     bank.add(low);
 
     // Mid frequency band
     let mut mid = MacroKnob::new("eq_mid", "Mid");
     mid.bindings.push(MacroBinding::from_ids(
-        "eq",
-        "mid_freq",
-        0.0,  // 500 Hz
-        1.0,  // 5 kHz
+        "eq", "mid_freq", 0.0, // 500 Hz
+        1.0, // 5 kHz
     ));
     mid.bindings.push(MacroBinding::from_ids(
-        "eq",
-        "mid_gain",
-        0.0,  // -12 dB
-        1.0,  // +12 dB
+        "eq", "mid_gain", 0.0, // -12 dB
+        1.0, // +12 dB
     ));
     bank.add(mid);
 
@@ -69,14 +61,14 @@ pub fn eq_3band() -> MacroBank {
     high.bindings.push(MacroBinding::from_ids(
         "eq",
         "high_freq",
-        0.0,  // 5 kHz
-        1.0,  // 20 kHz
+        0.0, // 5 kHz
+        1.0, // 20 kHz
     ));
     high.bindings.push(MacroBinding::from_ids(
         "eq",
         "high_gain",
-        0.0,  // -12 dB
-        1.0,  // +12 dB
+        0.0, // -12 dB
+        1.0, // +12 dB
     ));
     bank.add(high);
 
@@ -100,8 +92,8 @@ pub fn compressor() -> MacroBank {
     threshold.bindings.push(MacroBinding::from_ids(
         "compressor",
         "threshold",
-        0.0,  // -60 dB
-        1.0,  // 0 dB
+        0.0, // -60 dB
+        1.0, // 0 dB
     ));
     bank.add(threshold);
 
@@ -110,8 +102,8 @@ pub fn compressor() -> MacroBank {
     ratio.bindings.push(MacroBinding::from_ids(
         "compressor",
         "ratio",
-        0.0,  // 1:1
-        1.0,  // 20:1
+        0.0, // 1:1
+        1.0, // 20:1
     ));
     bank.add(ratio);
 
@@ -120,8 +112,8 @@ pub fn compressor() -> MacroBank {
     makeup.bindings.push(MacroBinding::from_ids(
         "compressor",
         "makeup_gain",
-        0.0,  // 0 dB
-        1.0,  // 24 dB
+        0.0, // 0 dB
+        1.0, // 24 dB
     ));
     bank.add(makeup);
 
@@ -144,8 +136,8 @@ pub fn reverb() -> MacroBank {
     room.bindings.push(MacroBinding::from_ids(
         "reverb",
         "room_size",
-        0.0,  // Small
-        1.0,  // Large
+        0.0, // Small
+        1.0, // Large
     ));
     bank.add(room);
 
@@ -154,18 +146,16 @@ pub fn reverb() -> MacroBank {
     decay.bindings.push(MacroBinding::from_ids(
         "reverb",
         "decay_time",
-        0.0,  // 0.1s
-        1.0,  // 5s
+        0.0, // 0.1s
+        1.0, // 5s
     ));
     bank.add(decay);
 
     // Wet/Dry Mix
     let mut mix = MacroKnob::new("reverb_mix", "Mix");
     mix.bindings.push(MacroBinding::from_ids(
-        "reverb",
-        "wet_dry",
-        0.0,  // Dry
-        1.0,  // Wet
+        "reverb", "wet_dry", 0.0, // Dry
+        1.0, // Wet
     ));
     bank.add(mix);
 
@@ -184,10 +174,8 @@ pub fn master_level() -> MacroBank {
 
     let mut level = MacroKnob::new("master_level", "Level");
     level.bindings.push(MacroBinding::from_ids(
-        "output",
-        "level",
-        0.0,  // Silent
-        1.0,  // Nominal
+        "output", "level", 0.0, // Silent
+        1.0, // Nominal
     ));
     bank.add(level);
 

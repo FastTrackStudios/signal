@@ -129,7 +129,11 @@ pub async fn instantiate_rig(
         let is_last_engine = i == engine_count - 1;
         // If this is the last engine and there are no rig-level sends,
         // the engine's last track must also close the rig folder.
-        let close_extra = if is_last_engine && !has_rig_sends { 1 } else { 0 };
+        let close_extra = if is_last_engine && !has_rig_sends {
+            1
+        } else {
+            0
+        };
         let instance = build_engine(project, engine, close_extra).await?;
         engine_instances.push(instance);
     }
@@ -207,7 +211,11 @@ pub async fn instantiate_rack(
         for (ei, engine) in rig_template.engines.iter().enumerate() {
             let is_last_engine = ei == engine_count - 1;
             // close_extra for engine: if last engine and no rig sends, close rig folder too
-            let mut close_extra = if is_last_engine && !has_rig_sends { 1 } else { 0 };
+            let mut close_extra = if is_last_engine && !has_rig_sends {
+                1
+            } else {
+                0
+            };
             // Additionally, if this is also the last rig with no rack send groups
             if is_last_engine && !has_rig_sends && is_last_rig && !has_send_groups {
                 close_extra += 1; // also close rack folder

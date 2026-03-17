@@ -51,10 +51,10 @@ pub use utils::typed_uuid_id;
 
 // ─── Organizational sub-modules ────────────────────────────────
 
+pub mod collection_macro;
 pub mod ids;
 pub mod model;
 pub mod services;
-pub mod collection_macro;
 
 // ─── Domain modules ─────────────────────────────────────────────
 
@@ -91,23 +91,23 @@ pub mod versioning;
 
 // ─── Re-exported from macromod ──────────────────────────────────
 
+pub use macromod::curation as param_curation;
 pub use macromod::easing;
 pub use macromod::macro_bank;
-pub use macromod::curation as param_curation;
 pub use macromod::runtime;
-pub use macromod::{BlockParameter, MacroBinding, ParameterValue, ParamTarget, ResponseCurve};
+pub use macromod::{BlockParameter, MacroBinding, ParamTarget, ParameterValue, ResponseCurve};
 
 /// Backward-compatible `modulation` module path.
 pub mod modulation {
-    pub use macromod::sources::*;
     pub use macromod::routing::*;
+    pub use macromod::sources::*;
 }
 
 // ─── Re-exports from ids ────────────────────────────────────────
 
 pub use ids::{
-    IdFactory, ModulePresetId, ModuleSnapshotId, PresetId, RuntimeIdFactory, SEED_UUID_NS,
-    SnapshotId, seed_id,
+    seed_id, IdFactory, ModulePresetId, ModuleSnapshotId, PresetId, RuntimeIdFactory, SnapshotId,
+    SEED_UUID_NS,
 };
 
 // ─── Re-exports from model ──────────────────────────────────────

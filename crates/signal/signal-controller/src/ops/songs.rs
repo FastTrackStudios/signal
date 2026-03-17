@@ -16,11 +16,7 @@ pub struct SongOps<S: SignalApi>(pub(crate) SignalController<S>);
 
 impl<S: SignalApi> SongOps<S> {
     pub async fn list(&self) -> Result<Vec<Song>, OpsError> {
-        self.0
-            .service
-            .list_songs()
-            .await
-            .map_err(OpsError::Storage)
+        self.0.service.list_songs().await.map_err(OpsError::Storage)
     }
 
     pub async fn load(&self, id: impl Into<SongId>) -> Result<Option<Song>, OpsError> {

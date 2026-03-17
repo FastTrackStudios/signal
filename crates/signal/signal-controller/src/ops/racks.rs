@@ -12,11 +12,7 @@ pub struct RackOps<S: SignalApi>(pub(crate) SignalController<S>);
 
 impl<S: SignalApi> RackOps<S> {
     pub async fn list(&self) -> Result<Vec<Rack>, OpsError> {
-        self.0
-            .service
-            .list_racks()
-            .await
-            .map_err(OpsError::Storage)
+        self.0.service.list_racks().await.map_err(OpsError::Storage)
     }
 
     pub async fn load(&self, id: impl Into<RackId>) -> Result<Option<Rack>, OpsError> {

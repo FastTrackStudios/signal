@@ -6,7 +6,6 @@
 
 use dioxus::prelude::*;
 
-
 /// A snapshot entry in the list.
 #[derive(Clone, PartialEq)]
 pub struct SnapshotEntry {

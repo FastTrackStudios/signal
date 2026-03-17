@@ -36,20 +36,14 @@ where
             .map_err(|e| SignalServiceError::StorageError(e.to_string()))
     }
 
-    async fn save_scene_template(
-        &self,
-        template: SceneTemplate,
-    ) -> Result<(), SignalServiceError> {
+    async fn save_scene_template(&self, template: SceneTemplate) -> Result<(), SignalServiceError> {
         self.scene_template_repo
             .save_scene_template(&template)
             .await
             .map_err(|e| SignalServiceError::StorageError(e.to_string()))
     }
 
-    async fn delete_scene_template(
-        &self,
-        id: SceneTemplateId,
-    ) -> Result<(), SignalServiceError> {
+    async fn delete_scene_template(&self, id: SceneTemplateId) -> Result<(), SignalServiceError> {
         self.scene_template_repo
             .delete_scene_template(&id)
             .await

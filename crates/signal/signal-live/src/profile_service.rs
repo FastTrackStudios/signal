@@ -35,7 +35,9 @@ where
 
     async fn save_profile(&self, profile: Profile) -> Result<(), SignalServiceError> {
         for variant in &profile.patches {
-            variant.validate_overrides().map_err(|e| SignalServiceError::ValidationError(format!("{e:?}")))?;
+            variant
+                .validate_overrides()
+                .map_err(|e| SignalServiceError::ValidationError(format!("{e:?}")))?;
         }
         self.profile_repo
             .save_profile(&profile)

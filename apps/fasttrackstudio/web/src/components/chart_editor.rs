@@ -981,7 +981,12 @@ fn DynamicChartCanvas(
                         manager.layout_chart_with_mode(&chart, css_width, is_snippet);
 
                         if let Err(e) = manager
-                            .render_to_canvas_with_transform(&html_canvas, tx * dpr, ty * dpr, s * dpr)
+                            .render_to_canvas_with_transform(
+                                &html_canvas,
+                                tx * dpr,
+                                ty * dpr,
+                                s * dpr,
+                            )
                             .await
                         {
                             tracing::error!("Failed to render chart: {}", e);
@@ -1348,7 +1353,11 @@ fn ExportButton(source: Signal<String>) -> Element {
                             Ok(pages) => {
                                 if pages.len() == 1 {
                                     // Single page - export directly
-                                    (pages.into_iter().next().unwrap().into_bytes(), "image/svg+xml", "svg")
+                                    (
+                                        pages.into_iter().next().unwrap().into_bytes(),
+                                        "image/svg+xml",
+                                        "svg",
+                                    )
                                 } else {
                                     // Multi-page - create a zip file containing all pages
                                     match create_svg_zip(&pages, &base_filename) {
@@ -1559,8 +1568,8 @@ fn highlight_class(kind: HighlightKind) -> &'static str {
 #[cfg(target_arch = "wasm32")]
 fn create_svg_zip(pages: &[String], base_filename: &str) -> Result<Vec<u8>, String> {
     use std::io::{Cursor, Write};
-    use zip::write::SimpleFileOptions;
     use zip::ZipWriter;
+    use zip::write::SimpleFileOptions;
 
     let mut buffer = Cursor::new(Vec::new());
     let mut zip = ZipWriter::new(&mut buffer);

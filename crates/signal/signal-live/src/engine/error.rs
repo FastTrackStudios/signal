@@ -11,7 +11,9 @@ pub enum EngineError {
     /// A requested plugin/FX was not found in the DAW.
     PluginNotFound { plugin_id: String },
     /// The slot for a module type hasn't been initialized yet.
-    SlotNotInitialized { module_type: signal_proto::module_type::ModuleType },
+    SlotNotInitialized {
+        module_type: signal_proto::module_type::ModuleType,
+    },
     /// A state transition was attempted from an unexpected state.
     InvalidState {
         expected: InstanceState,
@@ -46,7 +48,10 @@ impl fmt::Display for EngineError {
                 module_preset_id,
                 timeout_ms,
             } => {
-                write!(f, "load timeout for {module_preset_id} after {timeout_ms}ms")
+                write!(
+                    f,
+                    "load timeout for {module_preset_id} after {timeout_ms}ms"
+                )
             }
             Self::ModulePresetNotFound { module_preset_id } => {
                 write!(f, "module preset not found: {module_preset_id}")

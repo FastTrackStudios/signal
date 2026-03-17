@@ -8,17 +8,17 @@ mod renderer;
 mod state;
 
 use dioxus::prelude::*;
-use fts_ui::prelude::*;
 use fts_ui::lucide_dioxus::{
     ArrowLeft, BookOpen, ChevronDown, ChevronLeft, ChevronRight, Circle, Code, ExternalLink,
     FileCode, FileText, Github, ListMusic, Music, PenLine, PenTool, Play, SkipBack, SkipForward,
     Square, User, Users,
 };
+use fts_ui::prelude::*;
 
 use audio_controls::widgets::{
-    CompressorGraph, CompressorMetering, CompressorMode, CompressorParams, CompressorWidget, DbRange,
-    EqBand, EqBandShape, EqGraph,
-    GateDbRange, GateGraph, GateMetering, GateMode, GateParams,
+    CompressorGraph, CompressorMetering, CompressorMode, CompressorParams, CompressorWidget,
+    DbRange, EqBand, EqBandShape, EqGraph, GateDbRange, GateGraph, GateMetering, GateMode,
+    GateParams,
 };
 
 // Static assets
@@ -88,8 +88,9 @@ fn main() {
         use tracing_subscriber::EnvFilter;
         tracing_subscriber::fmt()
             .with_env_filter(
-                EnvFilter::try_from_default_env()
-                    .unwrap_or_else(|_| EnvFilter::new("warn,fasttrackstudio_web=debug,keyflow=info")),
+                EnvFilter::try_from_default_env().unwrap_or_else(|_| {
+                    EnvFilter::new("warn,fasttrackstudio_web=debug,keyflow=info")
+                }),
             )
             .init();
     }
@@ -732,22 +733,30 @@ fn ShowcaseCarousel(
     // and computes how far through the "runway" we've scrolled.
     #[cfg(target_arch = "wasm32")]
     use_effect(move || {
-        use wasm_bindgen::prelude::*;
         use wasm_bindgen::JsCast;
+        use wasm_bindgen::prelude::*;
 
         let window = web_sys::window().unwrap();
         let document = window.document().unwrap();
 
         let closure = Closure::<dyn FnMut()>::new(move || {
-            let Some(window) = web_sys::window() else { return };
-            let Some(document) = window.document() else { return };
-            let Some(section) = document.get_element_by_id("showcase-scroll-section") else { return };
+            let Some(window) = web_sys::window() else {
+                return;
+            };
+            let Some(document) = window.document() else {
+                return;
+            };
+            let Some(section) = document.get_element_by_id("showcase-scroll-section") else {
+                return;
+            };
             let rect = section.get_bounding_client_rect();
             let section_height = rect.height();
             let viewport_h = window.inner_height().unwrap().as_f64().unwrap();
 
             let runway = section_height - viewport_h;
-            if runway <= 0.0 { return; }
+            if runway <= 0.0 {
+                return;
+            }
 
             let scrolled = -rect.top();
             let progress = (scrolled / runway).clamp(0.0, 1.0);
@@ -1171,12 +1180,34 @@ fn DocsHome() -> Element {
 }
 
 #[component]
-fn DocsSection(to: Route, title: &'static str, description: &'static str, icon: Element, color: &'static str) -> Element {
+fn DocsSection(
+    to: Route,
+    title: &'static str,
+    description: &'static str,
+    icon: Element,
+    color: &'static str,
+) -> Element {
     let (bg_color, border_color, text_color) = match color {
-        "emerald" => ("bg-emerald-500/10", "hover:border-emerald-500/50", "text-emerald-500"),
-        "violet" => ("bg-violet-500/10", "hover:border-violet-500/50", "text-violet-500"),
-        "blue" => ("bg-blue-500/10", "hover:border-blue-500/50", "text-blue-500"),
-        "amber" => ("bg-amber-500/10", "hover:border-amber-500/50", "text-amber-500"),
+        "emerald" => (
+            "bg-emerald-500/10",
+            "hover:border-emerald-500/50",
+            "text-emerald-500",
+        ),
+        "violet" => (
+            "bg-violet-500/10",
+            "hover:border-violet-500/50",
+            "text-violet-500",
+        ),
+        "blue" => (
+            "bg-blue-500/10",
+            "hover:border-blue-500/50",
+            "text-blue-500",
+        ),
+        "amber" => (
+            "bg-amber-500/10",
+            "hover:border-amber-500/50",
+            "text-amber-500",
+        ),
         _ => ("bg-primary/10", "hover:border-primary/50", "text-primary"),
     };
 
@@ -1422,23 +1453,45 @@ fn UnifiedSnippetsView(selected_id: String) -> Element {
     let pattern = find_pattern(&selected_id);
 
     let mut expanded_categories = use_signal(|| {
-        PatternCategory::all().iter().map(|c| (*c, true)).collect::<std::collections::HashMap<_, _>>()
+        PatternCategory::all()
+            .iter()
+            .map(|c| (*c, true))
+            .collect::<std::collections::HashMap<_, _>>()
     });
 
-    let current_index = patterns.iter().position(|p| p.id == selected_id).unwrap_or(0);
-    let prev_pattern = if current_index > 0 { patterns.get(current_index - 1) } else { None };
+    let current_index = patterns
+        .iter()
+        .position(|p| p.id == selected_id)
+        .unwrap_or(0);
+    let prev_pattern = if current_index > 0 {
+        patterns.get(current_index - 1)
+    } else {
+        None
+    };
     let next_pattern = patterns.get(current_index + 1);
 
     let mut last_pattern_id = use_signal(|| selected_id.clone());
     let mut source = use_signal(|| pattern.map(|p| p.source.to_string()).unwrap_or_default());
     let mut preview_mode = use_signal(|| {
-        pattern.map(|p| if p.category == PatternCategory::Examples { PreviewMode::Page } else { PreviewMode::Snippet }).unwrap_or(PreviewMode::Snippet)
+        pattern
+            .map(|p| {
+                if p.category == PatternCategory::Examples {
+                    PreviewMode::Page
+                } else {
+                    PreviewMode::Snippet
+                }
+            })
+            .unwrap_or(PreviewMode::Snippet)
     });
 
     if *last_pattern_id.peek() != selected_id {
         if let Some(p) = pattern {
             source.set(p.source.to_string());
-            let new_mode = if p.category == PatternCategory::Examples { PreviewMode::Page } else { PreviewMode::Snippet };
+            let new_mode = if p.category == PatternCategory::Examples {
+                PreviewMode::Page
+            } else {
+                PreviewMode::Snippet
+            };
             preview_mode.set(new_mode);
         }
         last_pattern_id.set(selected_id.clone());
@@ -1603,7 +1656,9 @@ fn UnifiedSnippetsView(selected_id: String) -> Element {
 #[component]
 fn PatternBrowser() -> Element {
     let nav = use_navigator();
-    use_effect(move || { nav.push(Route::SnippetsBrowser {}); });
+    use_effect(move || {
+        nav.push(Route::SnippetsBrowser {});
+    });
     rsx! { div { class: "flex items-center justify-center h-64 text-muted-foreground", "Redirecting..." } }
 }
 
@@ -1616,7 +1671,11 @@ fn ChartEditor() -> Element {
 fn PatternView(id: String) -> Element {
     let nav = use_navigator();
     let id_clone = id.clone();
-    use_effect(move || { nav.push(Route::SnippetsView { id: id_clone.clone() }); });
+    use_effect(move || {
+        nav.push(Route::SnippetsView {
+            id: id_clone.clone(),
+        });
+    });
     rsx! { div { class: "flex items-center justify-center h-64 text-muted-foreground", "Redirecting..." } }
 }
 
@@ -1658,11 +1717,56 @@ fn TestFxUi() -> Element {
     // === EQ State ===
     let mut bands = use_signal(|| {
         vec![
-            EqBand { index: 0, used: true, enabled: true, frequency: 80.0, gain: 3.0, q: 0.7, shape: EqBandShape::LowShelf, ..Default::default() },
-            EqBand { index: 1, used: true, enabled: true, frequency: 250.0, gain: -2.5, q: 1.5, shape: EqBandShape::Bell, ..Default::default() },
-            EqBand { index: 2, used: true, enabled: true, frequency: 1000.0, gain: 1.5, q: 2.0, shape: EqBandShape::Bell, ..Default::default() },
-            EqBand { index: 3, used: true, enabled: true, frequency: 4000.0, gain: 2.0, q: 1.0, shape: EqBandShape::Bell, ..Default::default() },
-            EqBand { index: 4, used: true, enabled: true, frequency: 12000.0, gain: 4.0, q: 0.8, shape: EqBandShape::HighShelf, ..Default::default() },
+            EqBand {
+                index: 0,
+                used: true,
+                enabled: true,
+                frequency: 80.0,
+                gain: 3.0,
+                q: 0.7,
+                shape: EqBandShape::LowShelf,
+                ..Default::default()
+            },
+            EqBand {
+                index: 1,
+                used: true,
+                enabled: true,
+                frequency: 250.0,
+                gain: -2.5,
+                q: 1.5,
+                shape: EqBandShape::Bell,
+                ..Default::default()
+            },
+            EqBand {
+                index: 2,
+                used: true,
+                enabled: true,
+                frequency: 1000.0,
+                gain: 1.5,
+                q: 2.0,
+                shape: EqBandShape::Bell,
+                ..Default::default()
+            },
+            EqBand {
+                index: 3,
+                used: true,
+                enabled: true,
+                frequency: 4000.0,
+                gain: 2.0,
+                q: 1.0,
+                shape: EqBandShape::Bell,
+                ..Default::default()
+            },
+            EqBand {
+                index: 4,
+                used: true,
+                enabled: true,
+                frequency: 12000.0,
+                gain: 4.0,
+                q: 0.8,
+                shape: EqBandShape::HighShelf,
+                ..Default::default()
+            },
         ]
     });
     let mut selected_band = use_signal(|| 0_usize);
@@ -1716,8 +1820,12 @@ fn TestFxUi() -> Element {
                 input_history.push(input_clamped);
 
                 const MAX_HISTORY: usize = 128;
-                if gr_history.len() > MAX_HISTORY { gr_history.drain(0..gr_history.len() - MAX_HISTORY); }
-                if input_history.len() > MAX_HISTORY { input_history.drain(0..input_history.len() - MAX_HISTORY); }
+                if gr_history.len() > MAX_HISTORY {
+                    gr_history.drain(0..gr_history.len() - MAX_HISTORY);
+                }
+                if input_history.len() > MAX_HISTORY {
+                    input_history.drain(0..input_history.len() - MAX_HISTORY);
+                }
 
                 metering.set(CompressorMetering {
                     input_level: input_clamped,
@@ -1732,7 +1840,10 @@ fn TestFxUi() -> Element {
             }) as Box<dyn FnMut()>);
 
             let window = web_sys::window().unwrap();
-            let _ = window.set_interval_with_callback_and_timeout_and_arguments_0(closure.as_ref().unchecked_ref(), 50);
+            let _ = window.set_interval_with_callback_and_timeout_and_arguments_0(
+                closure.as_ref().unchecked_ref(),
+                50,
+            );
             closure.forget();
         }
     });
@@ -1881,5 +1992,9 @@ fn GateSection() -> Element {
 }
 
 fn format_frequency(freq: f32) -> String {
-    if freq >= 1000.0 { format!("{:.1}k", freq / 1000.0) } else { format!("{:.0}", freq) }
+    if freq >= 1000.0 {
+        format!("{:.1}k", freq / 1000.0)
+    } else {
+        format!("{:.0}", freq)
+    }
 }

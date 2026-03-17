@@ -122,13 +122,8 @@ pub async fn import_rig_from_chain<S: SignalApi>(
             ));
         }
 
-        let mp_id = create_module_preset(
-            signal,
-            &module.name,
-            module.module_type,
-            module_blocks,
-        )
-        .await?;
+        let mp_id =
+            create_module_preset(signal, &module.name, module.module_type, module_blocks).await?;
 
         module_preset_ids.push((module.name.clone(), mp_id));
     }
@@ -252,8 +247,8 @@ async fn find_or_create_block_preset<S: SignalApi>(
         if let Some(pn) = plugin_name {
             if !pn.is_empty() && !has_source_tag(&preset) {
                 let tag = format!("source:{pn}");
-                preset = preset
-                    .with_metadata(signal_proto::metadata::Metadata::new().with_tag(tag));
+                preset =
+                    preset.with_metadata(signal_proto::metadata::Metadata::new().with_tag(tag));
                 dirty = true;
             }
         }
@@ -270,13 +265,16 @@ async fn find_or_create_block_preset<S: SignalApi>(
                     parameters
                         .iter()
                         .map(|(id, name, value)| {
-                            BlockParameter::new(id, name, *value as f32)
-                                .with_daw_name(name.clone())
+                            BlockParameter::new(id, name, *value as f32).with_daw_name(name.clone())
                         })
                         .collect(),
                 ))
             };
-            if let Some(snap) = preset.variants_mut().iter_mut().find(|s| *s.id() == default_id) {
+            if let Some(snap) = preset
+                .variants_mut()
+                .iter_mut()
+                .find(|s| *s.id() == default_id)
+            {
                 snap.set_state_data(data.to_vec());
                 if let Some(b) = block {
                     snap.set_block(b);
@@ -292,12 +290,15 @@ async fn find_or_create_block_preset<S: SignalApi>(
                 parameters
                     .iter()
                     .map(|(id, name, value)| {
-                        BlockParameter::new(id, name, *value as f32)
-                            .with_daw_name(name.clone())
+                        BlockParameter::new(id, name, *value as f32).with_daw_name(name.clone())
                     })
                     .collect(),
             );
-            if let Some(snap) = preset.variants_mut().iter_mut().find(|s| *s.id() == default_id) {
+            if let Some(snap) = preset
+                .variants_mut()
+                .iter_mut()
+                .find(|s| *s.id() == default_id)
+            {
                 snap.set_block(block);
             }
             preset.set_default_variant_id(default_id);
@@ -318,8 +319,7 @@ async fn find_or_create_block_preset<S: SignalApi>(
             parameters
                 .iter()
                 .map(|(id, name, value)| {
-                    BlockParameter::new(id, name, *value as f32)
-                        .with_daw_name(name.clone())
+                    BlockParameter::new(id, name, *value as f32).with_daw_name(name.clone())
                 })
                 .collect(),
         )
@@ -331,14 +331,12 @@ async fn find_or_create_block_preset<S: SignalApi>(
         snapshot = snapshot.with_state_data(data.to_vec());
     }
 
-    let mut preset =
-        Preset::with_default_snapshot(PresetId::new(), label, block_type, snapshot);
+    let mut preset = Preset::with_default_snapshot(PresetId::new(), label, block_type, snapshot);
 
     if let Some(pn) = plugin_name {
         if !pn.is_empty() {
             let tag = format!("source:{pn}");
-            preset = preset
-                .with_metadata(signal_proto::metadata::Metadata::new().with_tag(tag));
+            preset = preset.with_metadata(signal_proto::metadata::Metadata::new().with_tag(tag));
         }
     }
 

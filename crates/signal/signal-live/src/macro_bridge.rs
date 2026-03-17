@@ -79,9 +79,11 @@ pub async fn bridge_macros(
     loaded_fx: &[LoadBlockResult],
 ) -> Result<Option<FxHandle>, String> {
     // Quick check: any macros at all?
-    let has_macros = loaded_fx
-        .iter()
-        .any(|r| r.macro_setup.as_ref().is_some_and(|s| !s.bindings.is_empty()));
+    let has_macros = loaded_fx.iter().any(|r| {
+        r.macro_setup
+            .as_ref()
+            .is_some_and(|s| !s.bindings.is_empty())
+    });
     if !has_macros {
         return Ok(None);
     }
@@ -116,9 +118,7 @@ pub async fn bridge_macros(
     }
 
     // Build mapping JSON.
-    let Some(mapping_json) =
-        build_mapping_bank_json(track_index, &fx_indices, loaded_fx)
-    else {
+    let Some(mapping_json) = build_mapping_bank_json(track_index, &fx_indices, loaded_fx) else {
         return Ok(None);
     };
 

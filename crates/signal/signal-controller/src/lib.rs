@@ -174,7 +174,10 @@ where
 
     /// Check if a rig scene applier is attached.
     pub fn has_rig_scene_applier(&self) -> bool {
-        self.daw_rig_applier.read().expect("lock poisoned").is_some()
+        self.daw_rig_applier
+            .read()
+            .expect("lock poisoned")
+            .is_some()
     }
 
     /// Access the underlying service implementation.

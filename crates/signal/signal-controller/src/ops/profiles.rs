@@ -125,15 +125,15 @@ impl<S: SignalApi> ProfileOps<S> {
                 ref scene_id,
             } = p.target
             {
-                if let Some(rig_applier) =
-                    self.0.daw_rig_applier.read().expect("lock poisoned").clone()
+                if let Some(rig_applier) = self
+                    .0
+                    .daw_rig_applier
+                    .read()
+                    .expect("lock poisoned")
+                    .clone()
                 {
                     let applied = match rig_applier
-                        .switch_scene(
-                            &rig_id.to_string(),
-                            &scene_id.to_string(),
-                            Some(&p.name),
-                        )
+                        .switch_scene(&rig_id.to_string(), &scene_id.to_string(), Some(&p.name))
                         .await
                     {
                         Ok(applied) => applied,

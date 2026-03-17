@@ -254,10 +254,9 @@ mod tests {
         let bridge = test_bridge_with_params();
 
         // Capture
-        let captured =
-            capture_and_save_snapshot(&bridge, &repo, "track-1", "rig-1", "Clean")
-                .await
-                .unwrap();
+        let captured = capture_and_save_snapshot(&bridge, &repo, "track-1", "rig-1", "Clean")
+            .await
+            .unwrap();
         assert_eq!(captured.params.params.len(), 2);
         assert!(captured.chunks.is_empty());
 
@@ -287,10 +286,9 @@ mod tests {
         let bridge = test_bridge_with_params();
 
         // Capture (MockDawBridge returns empty chunks, but we test the plumbing)
-        let captured =
-            capture_and_save_preset(&bridge, &repo, "track-1", "rig-1", "Full Preset")
-                .await
-                .unwrap();
+        let captured = capture_and_save_preset(&bridge, &repo, "track-1", "rig-1", "Full Preset")
+            .await
+            .unwrap();
         assert_eq!(captured.params.params.len(), 2);
 
         // Verify params persisted
@@ -328,7 +326,10 @@ mod tests {
 
         assert_eq!(restored.fx_id, "fx-1");
         assert_eq!(restored.plugin_name, "Helix Native");
-        assert_eq!(restored.chunk_data, vec![0xDE, 0xAD, 0xBE, 0xEF, 0x01, 0x02, 0x03]);
+        assert_eq!(
+            restored.chunk_data,
+            vec![0xDE, 0xAD, 0xBE, 0xEF, 0x01, 0x02, 0x03]
+        );
     }
 
     #[tokio::test]

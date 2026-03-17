@@ -24,8 +24,8 @@
 //! `SetNamedConfigParm`. Pin mappings (`TrackFX_SetPinMappings`) are the reliable
 //! writable mechanism for controlling FX output routing.
 
-use daw::{FxChain, FxHandle};
 use daw::service::{FxContainerChannelConfig, FxNodeId, FxPinMappings};
+use daw::{FxChain, FxHandle};
 use std::time::Duration;
 
 /// Result of a gapless swap operation.
@@ -268,12 +268,16 @@ impl GaplessSwapEngine {
     ///
     /// Returns the saved pin mappings for later restoration via `activate_fx`.
     async fn silence_fx(&self, fx: &FxHandle) -> eyre::Result<FxPinMappings> {
-        fx.silence_output().await.map_err(|e| eyre::eyre!("{:?}", e))
+        fx.silence_output()
+            .await
+            .map_err(|e| eyre::eyre!("{:?}", e))
     }
 
     /// Activate a non-container FX by restoring its output pin mappings.
     async fn activate_fx(&self, fx: &FxHandle, saved: FxPinMappings) -> eyre::Result<()> {
-        fx.restore_output(saved).await.map_err(|e| eyre::eyre!("{:?}", e))
+        fx.restore_output(saved)
+            .await
+            .map_err(|e| eyre::eyre!("{:?}", e))
     }
 
     /// Silence a container by setting its `container_nch_out` to 0.

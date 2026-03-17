@@ -87,6 +87,6 @@
 //! - **No MIDI learn**: Currently manual binding definition. Could add UI
 //!   to detect MIDI CC changes and auto-bind parameters.
 
+pub use crate::macro_recorder::{MacroRecord, MacroRecorder};
 pub use crate::macro_registry::MacroParamTarget;
 pub use crate::macro_setup::{LiveMacroBinding, MacroSetupResult};
-pub use crate::macro_recorder::{MacroRecord, MacroRecorder};

@@ -823,10 +823,11 @@ where
                             "patch reference cycle at {patch_id}"
                         )));
                     }
-                    let profiles =
-                        self.profile_repo.list_profiles().await.map_err(|e| {
-                            ResolveError::NotFound(format!("profiles load: {e}"))
-                        })?;
+                    let profiles = self
+                        .profile_repo
+                        .list_profiles()
+                        .await
+                        .map_err(|e| ResolveError::NotFound(format!("profiles load: {e}")))?;
                     let patch = profiles
                         .iter()
                         .find_map(|p| p.patch(patch_id))
@@ -945,10 +946,7 @@ where
     St: SceneTemplateRepo,
     Ra: RackRepo,
 {
-    async fn resolve_target(
-        &self,
-        target: ResolveTarget,
-    ) -> Result<ResolvedGraph, ResolveError> {
+    async fn resolve_target(&self, target: ResolveTarget) -> Result<ResolvedGraph, ResolveError> {
         // BlockSnapshot targets resolve directly — the snapshot IS the rig.
         if let Some(graph) = self.try_resolve_block_snapshot(&target).await? {
             return Ok(graph);

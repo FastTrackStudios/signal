@@ -327,7 +327,9 @@ mod tests {
 
         let diffs = compute_diff(&[slot], &targets, &lookup);
         assert_eq!(diffs.len(), 1);
-        assert!(matches!(diffs[0], SlotDiff::Activate { handle, .. } if handle == preloaded_handle));
+        assert!(
+            matches!(diffs[0], SlotDiff::Activate { handle, .. } if handle == preloaded_handle)
+        );
     }
 
     #[test]

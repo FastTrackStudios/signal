@@ -196,7 +196,11 @@ where
             }
         }
 
-        let rigs = self.rig_repo.list_rigs().await.map_err(|e| SignalServiceError::StorageError(e.to_string()))?;
+        let rigs = self
+            .rig_repo
+            .list_rigs()
+            .await
+            .map_err(|e| SignalServiceError::StorageError(e.to_string()))?;
         for rig in rigs {
             let mut ctags = tags_from_name(&rig.name);
             ctags.merge(&TagSet::from_tags(&rig.metadata.tags));

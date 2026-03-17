@@ -33,10 +33,7 @@ use crate::tagging;
 pub enum SignalServiceError {
     /// Entity not found by ID.
     #[error("{entity} not found: {id}")]
-    NotFound {
-        entity: String,
-        id: String,
-    },
+    NotFound { entity: String, id: String },
 
     /// Underlying storage/persistence failure.
     #[error("storage error: {0}")]
@@ -112,14 +109,8 @@ pub trait BlockService {
         preset_id: ModulePresetId,
         snapshot_id: ModuleSnapshotId,
     ) -> Result<Option<ModuleSnapshot>, SignalServiceError>;
-    async fn save_module_collection(
-        &self,
-        preset: ModulePreset,
-    ) -> Result<(), SignalServiceError>;
-    async fn delete_module_collection(
-        &self,
-        id: ModulePresetId,
-    ) -> Result<(), SignalServiceError>;
+    async fn save_module_collection(&self, preset: ModulePreset) -> Result<(), SignalServiceError>;
+    async fn delete_module_collection(&self, id: ModulePresetId) -> Result<(), SignalServiceError>;
 }
 
 #[roam::service]
@@ -189,10 +180,7 @@ pub trait ProfileService {
 #[roam::service]
 pub trait SongService {
     async fn list_songs(&self) -> Result<Vec<song::Song>, SignalServiceError>;
-    async fn load_song(
-        &self,
-        id: song::SongId,
-    ) -> Result<Option<song::Song>, SignalServiceError>;
+    async fn load_song(&self, id: song::SongId) -> Result<Option<song::Song>, SignalServiceError>;
     async fn save_song(&self, song: song::Song) -> Result<(), SignalServiceError>;
     async fn delete_song(&self, id: song::SongId) -> Result<(), SignalServiceError>;
     async fn load_song_variant(
@@ -261,10 +249,7 @@ pub trait SceneTemplateService {
 #[roam::service]
 pub trait RackService {
     async fn list_racks(&self) -> Result<Vec<rack::Rack>, SignalServiceError>;
-    async fn load_rack(
-        &self,
-        id: rack::RackId,
-    ) -> Result<Option<rack::Rack>, SignalServiceError>;
+    async fn load_rack(&self, id: rack::RackId) -> Result<Option<rack::Rack>, SignalServiceError>;
     async fn save_rack(&self, rack: rack::Rack) -> Result<(), SignalServiceError>;
     async fn delete_rack(&self, id: rack::RackId) -> Result<(), SignalServiceError>;
 }

@@ -123,8 +123,7 @@ pub fn Typewriter(props: TypewriterProps) -> Element {
                     let promise = js_sys::Promise::new(&mut |resolve, _| {
                         if let Some(window) = web_sys::window() {
                             let _ = window.set_timeout_with_callback_and_timeout_and_arguments_0(
-                                &resolve,
-                                530,
+                                &resolve, 530,
                             );
                         }
                     });
@@ -248,7 +247,8 @@ pub fn ChartTypewriter(props: ChartTypewriterProps) -> Element {
                     // Typing
                     if current_char_idx < current_chart.len() {
                         // Get the substring up to current char (handle UTF-8 properly)
-                        let text: String = current_chart.chars().take(current_char_idx + 1).collect();
+                        let text: String =
+                            current_chart.chars().take(current_char_idx + 1).collect();
                         output.set(text);
                         char_index.set(current_char_idx + 1);
                     } else {
@@ -259,7 +259,8 @@ pub fn ChartTypewriter(props: ChartTypewriterProps) -> Element {
                 } else {
                     // Deleting
                     if current_char_idx > 0 {
-                        let text: String = current_chart.chars().take(current_char_idx - 1).collect();
+                        let text: String =
+                            current_chart.chars().take(current_char_idx - 1).collect();
                         output.set(text);
                         char_index.set(current_char_idx - 1);
                     } else {

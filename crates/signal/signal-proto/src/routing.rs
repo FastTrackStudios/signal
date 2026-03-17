@@ -63,10 +63,7 @@ pub enum AudioDestination {
         label: String,
     },
     /// Send to another rack/rig.
-    RackReceive {
-        rack_id: String,
-        rig_id: String,
-    },
+    RackReceive { rack_id: String, rig_id: String },
     /// No destination (muted).
     None,
 }

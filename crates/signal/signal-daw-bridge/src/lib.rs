@@ -128,10 +128,7 @@ pub fn infer_chain_from_fx_tree(tree: &FxTree) -> InferredChain {
 
 // ─── Internal helpers ──────────────────────────────────────────
 
-fn build_module_chain(
-    children: &[FxNode],
-    routing: &FxRoutingMode,
-) -> (SignalChain, Vec<String>) {
+fn build_module_chain(children: &[FxNode], routing: &FxRoutingMode) -> (SignalChain, Vec<String>) {
     let mut blocks = Vec::new();
     let mut plugin_names = Vec::new();
 
@@ -275,7 +272,9 @@ fn parse_type_colon_prefix(s: &str) -> Option<BlockType> {
 fn clean_container_name(raw: &str) -> String {
     // FxRole::parse handles both "[M] TYPE Module: name" and "[M] Type: name" (as Unknown)
     match FxRole::parse(raw) {
-        FxRole::Module { name, .. } | FxRole::Block { name, .. } | FxRole::GenericModule { name } => {
+        FxRole::Module { name, .. }
+        | FxRole::Block { name, .. }
+        | FxRole::GenericModule { name } => {
             return name;
         }
         FxRole::Unknown { .. } => {}
@@ -397,14 +396,29 @@ mod tests {
         // [M] prefix + colon format (real REAPER container names)
         assert_eq!(infer_module_type("[M] Drive: Hype"), ModuleType::Drive);
         assert_eq!(infer_module_type("[M] AMP: Fender Deluxe"), ModuleType::Amp);
-        assert_eq!(infer_module_type("[M] TIME: Timeless + BigSky"), ModuleType::Time);
-        assert_eq!(infer_module_type("[M] Modulation: Chorus"), ModuleType::Modulation);
-        assert_eq!(infer_module_type("[M] Master: Light Polish"), ModuleType::Master);
-        assert_eq!(infer_module_type("[M] Dynamics: Compressor"), ModuleType::Dynamics);
+        assert_eq!(
+            infer_module_type("[M] TIME: Timeless + BigSky"),
+            ModuleType::Time
+        );
+        assert_eq!(
+            infer_module_type("[M] Modulation: Chorus"),
+            ModuleType::Modulation
+        );
+        assert_eq!(
+            infer_module_type("[M] Master: Light Polish"),
+            ModuleType::Master
+        );
+        assert_eq!(
+            infer_module_type("[M] Dynamics: Compressor"),
+            ModuleType::Dynamics
+        );
         assert_eq!(infer_module_type("[M] Input: Default"), ModuleType::Input);
         // Full "Module:" keyword format
         assert_eq!(infer_module_type("DRIVE Module: Main"), ModuleType::Drive);
-        assert_eq!(infer_module_type("[M] DRIVE Module: Main"), ModuleType::Drive);
+        assert_eq!(
+            infer_module_type("[M] DRIVE Module: Main"),
+            ModuleType::Drive
+        );
     }
 
     #[test]
@@ -413,7 +427,10 @@ mod tests {
         assert_eq!(clean_container_name("DRIVE Module: Main"), "Main");
         // "[M] Type: Name" → "Name"
         assert_eq!(clean_container_name("[M] Drive: Hype"), "Hype");
-        assert_eq!(clean_container_name("[M] AMP: Fender Deluxe"), "Fender Deluxe");
+        assert_eq!(
+            clean_container_name("[M] AMP: Fender Deluxe"),
+            "Fender Deluxe"
+        );
         // Bare name
         assert_eq!(clean_container_name("AMP"), "AMP");
     }
@@ -421,11 +438,26 @@ mod tests {
     #[test]
     fn block_type_from_display_name() {
         // [B] prefix blocks
-        assert_eq!(infer_block_type("VST: Whatever", "[B] Drive: Klone - Medium"), BlockType::Drive);
-        assert_eq!(infer_block_type("VST: Whatever", "[B] Reverb: Pro R2"), BlockType::Reverb);
-        assert_eq!(infer_block_type("VST: Whatever", "[B] Delay: Timeless 3 - Tape"), BlockType::Delay);
-        assert_eq!(infer_block_type("VST: Whatever", "[B] Amp: Fender NAM"), BlockType::Amp);
+        assert_eq!(
+            infer_block_type("VST: Whatever", "[B] Drive: Klone - Medium"),
+            BlockType::Drive
+        );
+        assert_eq!(
+            infer_block_type("VST: Whatever", "[B] Reverb: Pro R2"),
+            BlockType::Reverb
+        );
+        assert_eq!(
+            infer_block_type("VST: Whatever", "[B] Delay: Timeless 3 - Tape"),
+            BlockType::Delay
+        );
+        assert_eq!(
+            infer_block_type("VST: Whatever", "[B] Amp: Fender NAM"),
+            BlockType::Amp
+        );
         // "Block:" keyword format still works
-        assert_eq!(infer_block_type("VST: Whatever", "Drive Block: Screamer"), BlockType::Drive);
+        assert_eq!(
+            infer_block_type("VST: Whatever", "Drive Block: Screamer"),
+            BlockType::Drive
+        );
     }
 }

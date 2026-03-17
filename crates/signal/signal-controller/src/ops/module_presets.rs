@@ -127,13 +127,7 @@ impl<S: SignalApi> ModulePresetOps<S> {
 
         let module = Module::from_blocks(module_blocks);
         let snapshot = ModuleSnapshot::new(ModuleSnapshotId::new(), &name, module);
-        let preset = ModulePreset::new(
-            ModulePresetId::new(),
-            &name,
-            module_type,
-            snapshot,
-            vec![],
-        );
+        let preset = ModulePreset::new(ModulePresetId::new(), &name, module_type, snapshot, vec![]);
 
         self.save(preset).await
     }

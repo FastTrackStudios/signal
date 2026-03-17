@@ -3,13 +3,13 @@
 //! Renders charts using Vello with WebGPU backend.
 //! Ported from apps/web/src/renderer.rs for the documentation site.
 
+use anyrender_vello::VelloScenePainter;
 use keyflow::Chart;
 use keyflow::engraver::fonts::ChartFontBundle;
 use keyflow::engraver::layout::ChartLayoutMode;
 use keyflow::engraver::layout::chart::{ChartLayoutConfig, ChartLayoutEngine, ChartLayoutResult};
 use keyflow::engraver::renderer::scene_renderer::SceneRenderBuilder;
 use keyflow::engraver::style::MStyle;
-use anyrender_vello::VelloScenePainter;
 use vello::Scene;
 use vello::kurbo::{Affine, Rect};
 use vello::peniko::Color;
@@ -110,7 +110,8 @@ impl ChartLayoutManager {
         use_page_offsets: bool,
     ) {
         // Simple hash based on chart data, mode, and offset setting
-        let chart_hash = self.compute_chart_hash_with_options(chart, snippet_mode, use_page_offsets);
+        let chart_hash =
+            self.compute_chart_hash_with_options(chart, snippet_mode, use_page_offsets);
 
         // Skip if already laid out
         if self.layout_result.is_some() && chart_hash == self.last_chart_hash {
@@ -212,7 +213,11 @@ impl ChartLayoutManager {
             renderer.set_viewport(viewport_rect);
 
             // Render with user's view transform
-            renderer.render_with_transform(&mut VelloScenePainter::new(scene), &layout.scene, transform);
+            renderer.render_with_transform(
+                &mut VelloScenePainter::new(scene),
+                &layout.scene,
+                transform,
+            );
         }
     }
 
@@ -266,7 +271,11 @@ impl ChartLayoutManager {
             renderer.set_viewport(viewport_rect);
 
             // Render with user's view transform
-            renderer.render_with_transform(&mut VelloScenePainter::new(&mut scene), &layout.scene, transform);
+            renderer.render_with_transform(
+                &mut VelloScenePainter::new(&mut scene),
+                &layout.scene,
+                transform,
+            );
         }
 
         // Render to canvas (access wgpu_renderer mutably again)
@@ -338,7 +347,11 @@ impl ChartLayoutManager {
             renderer.set_viewport(viewport_rect);
 
             // Render with user's view transform
-            renderer.render_with_transform(&mut VelloScenePainter::new(&mut scene), &layout.scene, transform);
+            renderer.render_with_transform(
+                &mut VelloScenePainter::new(&mut scene),
+                &layout.scene,
+                transform,
+            );
         }
 
         // Render to canvas (access wgpu_renderer mutably again)
@@ -424,7 +437,11 @@ impl ChartLayoutManager {
             renderer.set_viewport(viewport_rect);
 
             // Render with transform
-            renderer.render_with_transform(&mut VelloScenePainter::new(&mut scene), &layout.scene, transform);
+            renderer.render_with_transform(
+                &mut VelloScenePainter::new(&mut scene),
+                &layout.scene,
+                transform,
+            );
         }
 
         // Render to canvas with TRANSPARENT base color (only page content shows)
@@ -504,7 +521,11 @@ impl ChartLayoutManager {
             let viewport_rect = Rect::new(0.0, 0.0, canvas_width as f64, canvas_height as f64);
             renderer.set_viewport(viewport_rect);
 
-            renderer.render_with_transform(&mut VelloScenePainter::new(&mut scene), &layout.scene, transform);
+            renderer.render_with_transform(
+                &mut VelloScenePainter::new(&mut scene),
+                &layout.scene,
+                transform,
+            );
         }
 
         // Render with WHITE base color to prevent flashing
@@ -579,7 +600,11 @@ impl ChartLayoutManager {
             let viewport_rect = Rect::new(0.0, 0.0, canvas_width as f64, canvas_height as f64);
             renderer.set_viewport(viewport_rect);
 
-            renderer.render_with_transform(&mut VelloScenePainter::new(&mut scene), &layout.scene, transform);
+            renderer.render_with_transform(
+                &mut VelloScenePainter::new(&mut scene),
+                &layout.scene,
+                transform,
+            );
         }
 
         // Render with WHITE base color
@@ -775,7 +800,11 @@ impl ChartLayoutManager {
             renderer.set_viewport(viewport_rect);
 
             // Render with user's view transform
-            renderer.render_with_transform(&mut VelloScenePainter::new(&mut scene), &layout.scene, transform);
+            renderer.render_with_transform(
+                &mut VelloScenePainter::new(&mut scene),
+                &layout.scene,
+                transform,
+            );
         }
 
         // Render to canvas with TRANSPARENT base color - scene already has white page backgrounds
@@ -819,15 +848,36 @@ impl ChartLayoutManager {
             default_stroke_width: 0.5,
             embedded_fonts: vec![
                 // SMuFL music symbol font
-                ("Bravura".to_string(), self.font_bundle.symbol_font_data().as_ref().clone()),
+                (
+                    "Bravura".to_string(),
+                    self.font_bundle.symbol_font_data().as_ref().clone(),
+                ),
                 // Chord symbol fonts
-                ("MuseJazzText".to_string(), self.font_bundle.text_font_data().as_ref().clone()),
-                ("MuseJazz".to_string(), self.font_bundle.text_font_data().as_ref().clone()),
+                (
+                    "MuseJazzText".to_string(),
+                    self.font_bundle.text_font_data().as_ref().clone(),
+                ),
+                (
+                    "MuseJazz".to_string(),
+                    self.font_bundle.text_font_data().as_ref().clone(),
+                ),
                 // Text fonts - FreeSans with all aliases used in the chart
-                ("FreeSans".to_string(), self.font_bundle.aux_font_data().as_ref().clone()),
-                ("title-bold".to_string(), self.font_bundle.aux_font_data().as_ref().clone()),
-                ("part-name-bold".to_string(), self.font_bundle.aux_font_data().as_ref().clone()),
-                ("sans-serif".to_string(), self.font_bundle.aux_font_data().as_ref().clone()),
+                (
+                    "FreeSans".to_string(),
+                    self.font_bundle.aux_font_data().as_ref().clone(),
+                ),
+                (
+                    "title-bold".to_string(),
+                    self.font_bundle.aux_font_data().as_ref().clone(),
+                ),
+                (
+                    "part-name-bold".to_string(),
+                    self.font_bundle.aux_font_data().as_ref().clone(),
+                ),
+                (
+                    "sans-serif".to_string(),
+                    self.font_bundle.aux_font_data().as_ref().clone(),
+                ),
             ],
         };
 
@@ -866,15 +916,36 @@ impl ChartLayoutManager {
             // Include embedded fonts so SVGs are self-contained
             let config = SvgExportConfig::for_page(page_x, page_y, page_width, page_height)
                 // SMuFL music symbol font
-                .with_embedded_font("Bravura", self.font_bundle.symbol_font_data().as_ref().clone())
+                .with_embedded_font(
+                    "Bravura",
+                    self.font_bundle.symbol_font_data().as_ref().clone(),
+                )
                 // Chord symbol fonts
-                .with_embedded_font("MuseJazzText", self.font_bundle.text_font_data().as_ref().clone())
-                .with_embedded_font("MuseJazz", self.font_bundle.text_font_data().as_ref().clone())
+                .with_embedded_font(
+                    "MuseJazzText",
+                    self.font_bundle.text_font_data().as_ref().clone(),
+                )
+                .with_embedded_font(
+                    "MuseJazz",
+                    self.font_bundle.text_font_data().as_ref().clone(),
+                )
                 // Text fonts - FreeSans with all aliases used in the chart
-                .with_embedded_font("FreeSans", self.font_bundle.aux_font_data().as_ref().clone())
-                .with_embedded_font("title-bold", self.font_bundle.aux_font_data().as_ref().clone())
-                .with_embedded_font("part-name-bold", self.font_bundle.aux_font_data().as_ref().clone())
-                .with_embedded_font("sans-serif", self.font_bundle.aux_font_data().as_ref().clone());
+                .with_embedded_font(
+                    "FreeSans",
+                    self.font_bundle.aux_font_data().as_ref().clone(),
+                )
+                .with_embedded_font(
+                    "title-bold",
+                    self.font_bundle.aux_font_data().as_ref().clone(),
+                )
+                .with_embedded_font(
+                    "part-name-bold",
+                    self.font_bundle.aux_font_data().as_ref().clone(),
+                )
+                .with_embedded_font(
+                    "sans-serif",
+                    self.font_bundle.aux_font_data().as_ref().clone(),
+                );
 
             let mut serializer = SvgSerializer::new(config);
             let svg = serializer.serialize(&layout.scene);
@@ -923,7 +994,8 @@ impl ChartLayoutManager {
         let mut serializer = PdfSerializer::new(config);
 
         // Add additional named fonts for font-family matching
-        if let Err(e) = serializer.add_named_font("MuseJazzText", self.font_bundle.text_font_data()) {
+        if let Err(e) = serializer.add_named_font("MuseJazzText", self.font_bundle.text_font_data())
+        {
             tracing::warn!("Failed to add MuseJazzText font: {}", e);
         }
         if let Err(e) = serializer.add_named_font("MuseJazz", self.font_bundle.text_font_data()) {
@@ -1096,7 +1168,11 @@ impl ChartLayoutManager {
             let viewport_rect = Rect::new(0.0, 0.0, canvas_width as f64, canvas_height as f64);
             renderer.set_viewport(viewport_rect);
 
-            renderer.render_with_transform(&mut VelloScenePainter::new(&mut scene), &layout.scene, transform);
+            renderer.render_with_transform(
+                &mut VelloScenePainter::new(&mut scene),
+                &layout.scene,
+                transform,
+            );
         }
 
         // Render with transparent base (scene has white page backgrounds)
@@ -1198,7 +1274,10 @@ impl ChartLayoutManager {
         let fonts: Vec<(&str, &[u8])> = vec![
             ("Bravura", self.font_bundle.symbol_font_data().as_slice()),
             // MuseJazz font file has internal family name "MuseJazz Text" (with space)
-            ("MuseJazz Text", self.font_bundle.text_font_data().as_slice()),
+            (
+                "MuseJazz Text",
+                self.font_bundle.text_font_data().as_slice(),
+            ),
             ("FreeSans", self.font_bundle.aux_font_data().as_slice()),
         ];
 
@@ -1257,7 +1336,9 @@ impl ChartLayoutManager {
                 // Find and replace the viewBox attribute
                 if let Some(start) = base_svg.find("viewBox=\"") {
                     if let Some(end) = base_svg[start..].find('"').and_then(|s| {
-                        base_svg[start + s + 1..].find('"').map(|e| start + s + 1 + e + 1)
+                        base_svg[start + s + 1..]
+                            .find('"')
+                            .map(|e| start + s + 1 + e + 1)
                     }) {
                         let mut modified = base_svg[..start].to_string();
                         modified.push_str(&viewbox);
@@ -1280,7 +1361,10 @@ impl ChartLayoutManager {
         let fonts: Vec<(&str, &[u8])> = vec![
             ("Bravura", self.font_bundle.symbol_font_data().as_slice()),
             // MuseJazz font file has internal family name "MuseJazz Text" (with space)
-            ("MuseJazz Text", self.font_bundle.text_font_data().as_slice()),
+            (
+                "MuseJazz Text",
+                self.font_bundle.text_font_data().as_slice(),
+            ),
             ("FreeSans", self.font_bundle.aux_font_data().as_slice()),
         ];
 
@@ -1436,7 +1520,11 @@ pub mod wasm {
         }
 
         /// Render a Vello scene to the canvas with a custom base color.
-        pub fn render_with_base_color(&mut self, scene: &Scene, base_color: Color) -> Result<(), String> {
+        pub fn render_with_base_color(
+            &mut self,
+            scene: &Scene,
+            base_color: Color,
+        ) -> Result<(), String> {
             let surface_texture = self
                 .surface
                 .get_current_texture()

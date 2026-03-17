@@ -5,7 +5,6 @@
 
 use dioxus::prelude::*;
 
-
 /// Connection health state for the DAW FX binding.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum BindingHealth {

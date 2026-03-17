@@ -21,8 +21,7 @@ pub trait SceneTemplateRepo: Send + Sync {
     ) -> StorageResult<Option<SceneTemplate>>;
     async fn save_scene_template(&self, template: &SceneTemplate) -> StorageResult<()>;
     async fn delete_scene_template(&self, id: &SceneTemplateId) -> StorageResult<()>;
-    async fn reorder_scene_templates(&self, ordered_ids: &[SceneTemplateId])
-        -> StorageResult<()>;
+    async fn reorder_scene_templates(&self, ordered_ids: &[SceneTemplateId]) -> StorageResult<()>;
 }
 
 // endregion: --- Trait
@@ -68,9 +67,8 @@ impl SceneTemplateRepoLive {
     }
 
     fn state_from_json(json: &str) -> StorageResult<SceneTemplateStateOwned> {
-        serde_json::from_str(json).map_err(|e| {
-            StorageError::Data(format!("failed to parse scene template json: {e}"))
-        })
+        serde_json::from_str(json)
+            .map_err(|e| StorageError::Data(format!("failed to parse scene template json: {e}")))
     }
 
     fn metadata_to_json(metadata: &Metadata) -> StorageResult<String> {
@@ -143,21 +141,20 @@ impl SceneTemplateRepo for SceneTemplateRepoLive {
 
     async fn save_scene_template(&self, template: &SceneTemplate) -> StorageResult<()> {
         // Get current sort_order if updating, or assign next order for new entries.
-        let sort_order = match entity::scene_template::Entity::find_by_id(
-            template.id.as_str().to_string(),
-        )
-        .one(&self.db)
-        .await?
-        {
-            Some(existing) => existing.sort_order,
-            None => {
-                // Assign next available order.
-                let count = entity::scene_template::Entity::find()
-                    .count(&self.db)
-                    .await? as i32;
-                count
-            }
-        };
+        let sort_order =
+            match entity::scene_template::Entity::find_by_id(template.id.as_str().to_string())
+                .one(&self.db)
+                .await?
+            {
+                Some(existing) => existing.sort_order,
+                None => {
+                    // Assign next available order.
+                    let count = entity::scene_template::Entity::find()
+                        .count(&self.db)
+                        .await? as i32;
+                    count
+                }
+            };
 
         entity::scene_template::Entity::delete_by_id(template.id.as_str().to_string())
             .exec(&self.db)
@@ -184,10 +181,7 @@ impl SceneTemplateRepo for SceneTemplateRepoLive {
         Ok(())
     }
 
-    async fn reorder_scene_templates(
-        &self,
-        ordered_ids: &[SceneTemplateId],
-    ) -> StorageResult<()> {
+    async fn reorder_scene_templates(&self, ordered_ids: &[SceneTemplateId]) -> StorageResult<()> {
         for (idx, id) in ordered_ids.iter().enumerate() {
             entity::scene_template::Entity::update_many()
                 .col_expr(

@@ -25,7 +25,11 @@ where
                 return Ok(cached.clone());
             }
         }
-        let result = self.rig_repo.list_rigs().await.map_err(|e| SignalServiceError::StorageError(e.to_string()))?;
+        let result = self
+            .rig_repo
+            .list_rigs()
+            .await
+            .map_err(|e| SignalServiceError::StorageError(e.to_string()))?;
         {
             let mut cache = self.cache.write().await;
             cache.rigs = Some(result.clone());
@@ -34,12 +38,17 @@ where
     }
 
     async fn load_rig(&self, id: RigId) -> Result<Option<Rig>, SignalServiceError> {
-        self.rig_repo.load_rig(&id).await.map_err(|e| SignalServiceError::StorageError(e.to_string()))
+        self.rig_repo
+            .load_rig(&id)
+            .await
+            .map_err(|e| SignalServiceError::StorageError(e.to_string()))
     }
 
     async fn save_rig(&self, rig: Rig) -> Result<(), SignalServiceError> {
         for variant in &rig.variants {
-            variant.validate_overrides().map_err(|e| SignalServiceError::ValidationError(format!("{e:?}")))?;
+            variant
+                .validate_overrides()
+                .map_err(|e| SignalServiceError::ValidationError(format!("{e:?}")))?;
         }
         self.rig_repo
             .save_rig(&rig)

@@ -14,11 +14,11 @@
 //!     [L] Drive / [L] Amp / [L] Time
 //! ```
 
+use moire::sync::{Mutex, RwLock};
 use std::collections::{HashMap, HashSet};
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
-use moire::sync::{Mutex, RwLock};
 
 use daw::{Project, TrackHandle};
 use signal_live::engine::rig_scene_applier::{RigSceneApplier, RigSceneApplyError};
@@ -171,9 +171,7 @@ impl RigSceneManager {
         let recovered_count =
             recovered_preloaded.len() + if recovered_current.is_some() { 1 } else { 0 };
         if recovered_count > 0 {
-            eprintln!(
-                "[INFO] Recovered {recovered_count} existing rig scene track(s) from REAPER"
-            );
+            eprintln!("[INFO] Recovered {recovered_count} existing rig scene track(s) from REAPER");
         }
 
         *self.state.write().await = Some(RigSceneState {
@@ -260,27 +258,25 @@ impl RigSceneManager {
             // Rename the rig track to include the scene name
             let display_name = {
                 let guard = self.state.read().await;
-                let state = guard.as_ref().ok_or_else(|| {
-                    RigSceneApplyError::NoTarget("no target configured".into())
-                })?;
+                let state = guard
+                    .as_ref()
+                    .ok_or_else(|| RigSceneApplyError::NoTarget("no target configured".into()))?;
                 format!("[R] {} :: {}", state.rig_name, scene_name)
             };
             let _ = rig_track.rename(&display_name).await;
 
             // Create send from input → rig track, then set up mute state
             let mut guard = self.state.write().await;
-            let state = guard.as_mut().ok_or_else(|| {
-                RigSceneApplyError::NoTarget("no target configured".into())
-            })?;
+            let state = guard
+                .as_mut()
+                .ok_or_else(|| RigSceneApplyError::NoTarget("no target configured".into()))?;
 
             state
                 .input_track
                 .sends()
                 .add_to(rig_track.guid())
                 .await
-                .map_err(|e| {
-                    RigSceneApplyError::DawError(format!("create send to scene: {e}"))
-                })?;
+                .map_err(|e| RigSceneApplyError::DawError(format!("create send to scene: {e}")))?;
 
             let scene_id_str = scene_id.to_string();
 
@@ -417,7 +413,9 @@ impl RigSceneManager {
                         from_preload: true,
                     });
 
-                    eprintln!("[INFO] Fast-switched to preloaded rig scene '{scene_name_str}' (by name)");
+                    eprintln!(
+                        "[INFO] Fast-switched to preloaded rig scene '{scene_name_str}' (by name)"
+                    );
                     return Ok(true);
                 }
             }

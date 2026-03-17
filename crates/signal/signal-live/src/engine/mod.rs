@@ -43,7 +43,7 @@ pub use error::EngineError;
 pub use fx_binding::{DiscoveredFx, DiscoveredModule, DiscoveredRig, FxRigBinding};
 pub use gapless::{GaplessSwapEngine, SwapConfig, SwapResult};
 pub use mock::MockRigEngine;
-pub use scene_applier::{apply_scene_switch, SceneSwitchResult};
+pub use modulation::{ModulationRuntime, ParamBinding, ParamWrite};
 pub use morph::{
     DawParamValue, DawParameterSnapshot, MorphDiffEntry, MorphEngine, MorphParamChange,
 };
@@ -52,11 +52,12 @@ pub use param_bridge::{
     live_params_into_block, param_name_matches, LiveParam,
 };
 pub use patch_applier::{DawPatchApplier, PatchApplyError};
-pub use rig_scene_applier::{RigSceneApplier, RigSceneApplyError};
 pub use rig_engine::{
     PreloadPriority, PresetLoadHandle, PresetReadiness, RigEngine, SnapshotTween, SwitchOutcome,
     TransitionResult, TweenState,
 };
+pub use rig_scene_applier::{RigSceneApplier, RigSceneApplyError};
+pub use scene_applier::{apply_scene_switch, SceneSwitchResult};
 pub use slot::{ActivateResult, InstanceHandle, InstanceState, LoadResult, ModuleSlot};
 pub use snapshot_ops::{
     capture_and_save_preset, capture_and_save_snapshot, recall_preset, recall_snapshot,
@@ -64,4 +65,3 @@ pub use snapshot_ops::{
 };
 pub use target::{ModuleTarget, ResolvedSlot, SlotState};
 pub use vst_bridge::{MockVstBridge, ParameterSyncManager, VstParameterBridge};
-pub use modulation::{ModulationRuntime, ParamBinding, ParamWrite};

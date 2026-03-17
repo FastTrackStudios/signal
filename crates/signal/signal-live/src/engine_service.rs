@@ -47,7 +47,9 @@ where
 
     async fn save_engine(&self, engine: Engine) -> Result<(), SignalServiceError> {
         for variant in &engine.variants {
-            variant.validate_overrides().map_err(|e| SignalServiceError::ValidationError(format!("{e:?}")))?;
+            variant
+                .validate_overrides()
+                .map_err(|e| SignalServiceError::ValidationError(format!("{e:?}")))?;
         }
         for layer_id in &engine.layer_ids {
             let layer = self

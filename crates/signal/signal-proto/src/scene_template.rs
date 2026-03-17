@@ -66,7 +66,10 @@ impl SceneTemplate {
     }
 
     /// Convert this template into a [`RigScene`](crate::rig::RigScene) with a new ID.
-    pub fn to_rig_scene(&self, scene_id: impl Into<crate::rig::RigSceneId>) -> crate::rig::RigScene {
+    pub fn to_rig_scene(
+        &self,
+        scene_id: impl Into<crate::rig::RigSceneId>,
+    ) -> crate::rig::RigScene {
         crate::rig::RigScene {
             id: scene_id.into(),
             name: self.name.clone(),
@@ -95,10 +98,7 @@ mod tests {
     #[test]
     fn create_scene_template() {
         let template = SceneTemplate::new(SceneTemplateId::new(), "Clean")
-            .with_engine(EngineSelection::new(
-                EngineId::new(),
-                EngineSceneId::new(),
-            ));
+            .with_engine(EngineSelection::new(EngineId::new(), EngineSceneId::new()));
 
         assert_eq!(template.name, "Clean");
         assert_eq!(template.engine_selections.len(), 1);
@@ -107,10 +107,7 @@ mod tests {
     #[test]
     fn convert_to_rig_scene() {
         let template = SceneTemplate::new(SceneTemplateId::new(), "Lead")
-            .with_engine(EngineSelection::new(
-                EngineId::new(),
-                EngineSceneId::new(),
-            ));
+            .with_engine(EngineSelection::new(EngineId::new(), EngineSceneId::new()));
 
         let scene = template.to_rig_scene(crate::rig::RigSceneId::new());
         assert_eq!(scene.name, "Lead");

@@ -40,10 +40,12 @@ impl NamCatalog {
 
     /// Load catalog from a JSON file.
     pub fn load(path: &Path) -> Result<Self, NamError> {
-        let contents = std::fs::read_to_string(path)
-            .map_err(|e| NamError::CatalogError(format!("reading catalog {}: {}", path.display(), e)))?;
-        let catalog: Self = serde_json::from_str(&contents)
-            .map_err(|e| NamError::CatalogError(format!("parsing catalog {}: {}", path.display(), e)))?;
+        let contents = std::fs::read_to_string(path).map_err(|e| {
+            NamError::CatalogError(format!("reading catalog {}: {}", path.display(), e))
+        })?;
+        let catalog: Self = serde_json::from_str(&contents).map_err(|e| {
+            NamError::CatalogError(format!("parsing catalog {}: {}", path.display(), e))
+        })?;
         Ok(catalog)
     }
 
@@ -65,10 +67,7 @@ impl NamCatalog {
 
     /// Return all entries of a given kind.
     pub fn entries_by_kind(&self, kind: NamFileKind) -> Vec<&NamFileEntry> {
-        self.entries
-            .values()
-            .filter(|e| e.kind == kind)
-            .collect()
+        self.entries.values().filter(|e| e.kind == kind).collect()
     }
 
     /// Return all entries that have a tag matching the given category and value.

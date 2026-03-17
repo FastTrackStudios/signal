@@ -182,7 +182,6 @@ fn collect_knob_bindings<'a>(
     }
 }
 
-
 // ─── Tests ─────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -204,7 +203,10 @@ mod tests {
     fn collect_bindings_flat_knobs() {
         let mut bank = MacroBank::default();
         bank.add(make_knob("drive", vec![make_binding("gain")]));
-        bank.add(make_knob("tone", vec![make_binding("treble"), make_binding("bass")]));
+        bank.add(make_knob(
+            "tone",
+            vec![make_binding("treble"), make_binding("bass")],
+        ));
 
         let collected = collect_all_bindings(&bank);
         assert_eq!(collected.len(), 3);
