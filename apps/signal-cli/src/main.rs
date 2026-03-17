@@ -11,7 +11,7 @@ use eyre::Result;
     about = "Query and manipulate the Signal library"
 )]
 struct Cli {
-    /// Signal DB path (defaults to ~/Music/FastTrackStudio/Library/signal.db)
+    /// Signal DB path (defaults to $FTS_HOME/Library/signal.db)
     #[arg(long, global = true)]
     db: Option<PathBuf>,
 

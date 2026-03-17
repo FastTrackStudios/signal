@@ -18,25 +18,19 @@ use signal::traits::Collection;
 // Connection
 // ============================================================================
 
-const DEFAULT_DB_PATH: &str = "~/Music/FastTrackStudio/Library/signal.db";
-
 fn expand_tilde(path: &str) -> PathBuf {
     if let Some(rest) = path.strip_prefix("~/") {
-        if let Some(home) = dirs_home() {
+        if let Some(home) = std::env::var_os("HOME").map(PathBuf::from) {
             return home.join(rest);
         }
     }
     PathBuf::from(path)
 }
 
-fn dirs_home() -> Option<PathBuf> {
-    std::env::var_os("HOME").map(PathBuf::from)
-}
-
 pub async fn connect_signal(db: Option<PathBuf>) -> Result<SignalController> {
     let path = match db {
         Some(p) => p,
-        None => expand_tilde(DEFAULT_DB_PATH),
+        None => utils::paths::signal_db(),
     };
     let path_str = path
         .to_str()
@@ -1130,7 +1124,7 @@ async fn cmd_presets_set_param(
 
 async fn cmd_presets_import(signal: &SignalController, cmd: &ImportCommand) -> Result<()> {
     // Compute library root for file-based preset writing
-    let library_root = expand_tilde("~/Music/FastTrackStudio/Library");
+    let library_root = utils::paths::library_dir();
 
     match cmd {
         ImportCommand::Fabfilter {

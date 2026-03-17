@@ -22,3 +22,4 @@ clap = { version = "4", features = ["derive"] }
 uuid.workspace = true
 daw-cli.workspace = true
 daw = { workspace = true, features = ["file"] }
+utils.workspace = true
