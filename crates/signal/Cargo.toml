@@ -20,6 +20,7 @@ nam-manager = { path = "../nam-manager" }
 daw = { workspace = true, optional = true }
 tokio.workspace = true
 moire.workspace = true
+utils.workspace = true
 
 [dev-dependencies]
 daw = { workspace = true, features = ["file"] }
