@@ -9,10 +9,28 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
     crane.url = "github:ipetkov/crane";
+    devenv.url = "github:cachix/devenv";
+    nix2container.url = "github:nlewo/nix2container";
+    nix2container.inputs.nixpkgs.follows = "nixpkgs";
+    mk-shell-bin.url = "github:rrbutani/nix-mk-shell-bin";
+    fts-flake.url = "github:FastTrackStudios/fts-flake";
   };
 
-  outputs = { self, flake-parts, crane, ... } @inputs:
+  nixConfig = {
+    extra-trusted-public-keys = [
+      "devenv.cachix.org-1:w1cLUi8dv3hnoSPGAuibQv+f9TZLr6cv/Hm9XgU50cw="
+      "fasttrackstudio.cachix.org-1:r7v7WXBeSZ7m5meL6w0wttnvsOltRvTpXeVNItcy9f4="
+    ];
+    extra-substituters = [
+      "https://devenv.cachix.org"
+      "https://fasttrackstudio.cachix.org"
+    ];
+  };
+
+  outputs = { self, flake-parts, crane, devenv, nix2container, fts-flake, ... } @inputs:
     flake-parts.lib.mkFlake { inherit inputs; } {
+      imports = [ inputs.devenv.flakeModule ];
+
       systems = [ "x86_64-linux" "x86_64-darwin" "aarch64-darwin" "aarch64-linux" ];
 
       perSystem = { self', config, pkgs, lib, system, ... }:
@@ -301,11 +319,17 @@
           };
 
           # ============================================================
-          # Dev Shell
+          # Dev Shells (devenv-powered)
           # ============================================================
-          devShells.default = pkgs.mkShell {
-            name = "fasttrackstudio-dev";
-            inherit buildInputs nativeBuildInputs;
+          devenv.shells.default = let
+            ftsPkgs = lib.optionalAttrs pkgs.stdenv.isLinux (
+              fts-flake.lib.mkFtsPackages {
+                inherit pkgs;
+                cfg = fts-flake.presets.dev;
+              }
+            );
+          in {
+            cachix.pull = [ "fasttrackstudio" ];
 
             packages = with pkgs; [
               rustToolchain
@@ -315,33 +339,176 @@
               cargo-watch
               cargo-nextest
               bacon
-              nodejs_22  # For Playwright tests
+              nodejs_22
             ]
-            ++ lib.optionals pkgs.stdenv.isLinux (with pkgs; [
-              xvfb-run  # Virtual framebuffer for headless REAPER tests
-              reaper    # REAPER DAW for integration tests
-            ]);
+            ++ buildInputs
+            ++ nativeBuildInputs
+            ++ lib.optionals pkgs.stdenv.isLinux [
+              ftsPkgs.fts-test
+              ftsPkgs.fts-gui
+              ftsPkgs.reaper-fhs
+            ];
 
-            shellHook = ''
-              ${if pkgs.stdenv.isLinux then ''
-                export LD_LIBRARY_PATH="${libPath}:$LD_LIBRARY_PATH"
-                export XDG_DATA_DIRS="${pkgs.gsettings-desktop-schemas}/share/gsettings-schemas/${pkgs.gsettings-desktop-schemas.name}:${pkgs.gtk3}/share/gsettings-schemas/${pkgs.gtk3.name}:$XDG_DATA_DIRS"
-              '' else ''
-                export DYLD_LIBRARY_PATH="${libPath}:$DYLD_LIBRARY_PATH"
-              ''}
-              export CC_wasm32_unknown_unknown="${pkgs.llvmPackages_18.clang}/bin/clang"
-              export AR_wasm32_unknown_unknown="${pkgs.llvmPackages_18.bintools}/bin/llvm-ar"
-              export RUST_SRC_PATH="${rustToolchain}/lib/rustlib/src/rust/library"
+            env = {
+              LIBCLANG_PATH = "${pkgs.llvmPackages.libclang.lib}/lib";
+              OPENSSL_DIR = "${pkgs.openssl.dev}";
+              OPENSSL_LIB_DIR = "${pkgs.openssl.out}/lib";
+              CC_wasm32_unknown_unknown = "${pkgs.llvmPackages_18.clang}/bin/clang";
+              AR_wasm32_unknown_unknown = "${pkgs.llvmPackages_18.bintools}/bin/llvm-ar";
+              RUST_SRC_PATH = "${rustToolchain}/lib/rustlib/src/rust/library";
+            }
+            // lib.optionalAttrs pkgs.stdenv.isLinux {
+              LD_LIBRARY_PATH = libPath;
+              XDG_DATA_DIRS = "${pkgs.gsettings-desktop-schemas}/share/gsettings-schemas/${pkgs.gsettings-desktop-schemas.name}:${pkgs.gtk3}/share/gsettings-schemas/${pkgs.gtk3.name}";
+              FTS_REAPER_EXECUTABLE = "${ftsPkgs.reaper}/bin/reaper";
+              FTS_REAPER_RESOURCES = "${ftsPkgs.reaper}/opt/REAPER";
+            }
+            // lib.optionalAttrs pkgs.stdenv.isDarwin {
+              DYLD_LIBRARY_PATH = libPath;
+            };
+
+            scripts = {
+              fts-check.exec = "cargo clippy --workspace -- -D warnings";
+              fts-check.description = "Run clippy with warnings-as-errors";
+
+              fts-fmt.exec = "cargo fmt --all -- --check";
+              fts-fmt.description = "Check formatting";
+
+              fts-test.exec = "cargo nextest run --workspace";
+              fts-test.description = "Run all unit tests";
+
+              fts-build.exec = "cargo build --workspace";
+              fts-build.description = "Build entire workspace";
+            }
+            // lib.optionalAttrs pkgs.stdenv.isLinux {
+              fts-smoke.exec = ''
+                fts-test bash -c '
+                  "$FTS_REAPER_EXECUTABLE" -newinst -nosplash -ignoreerrors &
+                  RPID=$!
+                  sleep 3
+                  if kill -0 $RPID 2>/dev/null; then
+                    echo "REAPER running (PID $RPID) — smoke test passed"
+                    kill $RPID
+                  else
+                    echo "REAPER failed to start"
+                    exit 1
+                  fi
+                '
+              '';
+              fts-smoke.description = "REAPER headless smoke test";
+
+              fts-reaper-test.exec = ''
+                fts-test bash -c '
+                  "$FTS_REAPER_EXECUTABLE" -newinst -nosplash -ignoreerrors &
+                  RPID=$!
+                  echo "Waiting for REAPER socket..."
+                  SOCK=""
+                  for i in $(seq 1 30); do
+                    SOCK=$(ls /tmp/fts-daw-*.sock 2>/dev/null | head -1)
+                    if [ -n "$SOCK" ]; then break; fi
+                    sleep 1
+                  done
+                  if [ -z "$SOCK" ]; then
+                    echo "No socket found after 30s"
+                    kill $RPID 2>/dev/null
+                    exit 1
+                  fi
+                  echo "Socket ready: $SOCK"
+                  cargo test -p reaper-extension -- --ignored --nocapture
+                  STATUS=$?
+                  kill $RPID 2>/dev/null
+                  exit $STATUS
+                '
+              '';
+              fts-reaper-test.description = "Run REAPER integration tests (headless)";
+            };
+
+            claude.code = {
+              enable = true;
+              commands = {
+                build = ''
+                  Build the entire workspace
+
+                  ```bash
+                  fts-build
+                  ```
+                '';
+                check = ''
+                  Run clippy with warnings-as-errors
+
+                  ```bash
+                  fts-check
+                  ```
+                '';
+                test = ''
+                  Run all unit tests
+
+                  ```bash
+                  fts-test
+                  ```
+                '';
+              };
+            };
+
+            git-hooks.hooks = {
+              rustfmt.enable = true;
+              clippy.enable = true;
+            };
+
+            enterShell = ''
               [ -f .env ] && { set -a; source .env; set +a; }
-              echo "FastTrackStudio dev environment (${system})"
-              echo "  - Rust: $(rustc --version)"
-              echo "  - dx: $(dx --version)"
-              echo "  - wasm-bindgen: $(wasm-bindgen --version)"
+              echo ""
+              echo "  FastTrackStudio dev shell (devenv)"
+              echo "  ────────────────────────────────────────"
+              echo "  fts-build        — cargo build --workspace"
+              echo "  fts-check        — clippy (warnings-as-errors)"
+              echo "  fts-fmt          — check formatting"
+              echo "  fts-test         — cargo nextest run --workspace"
+            '' + lib.optionalString pkgs.stdenv.isLinux ''
+              echo "  fts-smoke        — REAPER headless smoke test"
+              echo "  fts-reaper-test  — REAPER integration tests"
+              echo "  fts-gui          — launch REAPER with GUI"
+            '' + ''
+              echo ""
+              echo "  Rust: $(rustc --version)"
+              echo "  dx:   $(dx --version 2>/dev/null || echo 'not available')"
+              echo ""
             '';
+          };
 
-            LIBCLANG_PATH = "${pkgs.llvmPackages.libclang.lib}/lib";
-            OPENSSL_DIR = "${pkgs.openssl.dev}";
-            OPENSSL_LIB_DIR = "${pkgs.openssl.out}/lib";
+          devenv.shells.ci = let
+            ftsCi = lib.optionalAttrs pkgs.stdenv.isLinux (
+              fts-flake.lib.mkFtsPackages {
+                inherit pkgs;
+                cfg = fts-flake.presets.ci;
+              }
+            );
+          in {
+            cachix.pull = [ "fasttrackstudio" ];
+
+            packages = with pkgs; [
+              rustToolchain
+              cargo-nextest
+            ]
+            ++ buildInputs
+            ++ nativeBuildInputs
+            ++ lib.optionals pkgs.stdenv.isLinux [
+              ftsCi.fts-test
+              ftsCi.reaper-fhs
+            ];
+
+            env = {
+              LIBCLANG_PATH = "${pkgs.llvmPackages.libclang.lib}/lib";
+              OPENSSL_DIR = "${pkgs.openssl.dev}";
+              OPENSSL_LIB_DIR = "${pkgs.openssl.out}/lib";
+              CC_wasm32_unknown_unknown = "${pkgs.llvmPackages_18.clang}/bin/clang";
+              AR_wasm32_unknown_unknown = "${pkgs.llvmPackages_18.bintools}/bin/llvm-ar";
+            }
+            // lib.optionalAttrs pkgs.stdenv.isLinux {
+              LD_LIBRARY_PATH = libPath;
+              FTS_REAPER_EXECUTABLE = "${ftsCi.reaper}/bin/reaper";
+              FTS_REAPER_RESOURCES = "${ftsCi.reaper}/opt/REAPER";
+            };
           };
         };
     };

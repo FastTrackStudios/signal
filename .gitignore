@@ -16,6 +16,9 @@
 result
 result-*
 .direnv/
+.devenv/
+.devenv.flake.nix
+devenv.local.nix
 
 # =============================================================================
 # Node.js / JavaScript (Playwright, npm packages)
