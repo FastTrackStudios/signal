@@ -36,7 +36,8 @@
       perSystem = { self', config, pkgs, lib, system, ... }:
         let
           # Rust toolchain with WASM support
-          rustToolchain = pkgs.rust-bin.stable.latest.default.override {
+          # Pin to 1.94.0 — keep devenv git-hooks in sync via packageOverrides.
+          rustToolchain = pkgs.rust-bin.stable."1.94.0".default.override {
             extensions = [ "rust-src" "rust-analyzer" "clippy" "rustfmt" ];
             targets = [ "wasm32-unknown-unknown" ];
           };
@@ -429,8 +430,16 @@
             };
 
             git-hooks.hooks = {
-              rustfmt.enable = true;
-              clippy.enable = true;
+              rustfmt = {
+                enable = true;
+                packageOverrides.cargo = rustToolchain;
+                packageOverrides.rustfmt = rustToolchain;
+              };
+              clippy = {
+                enable = true;
+                packageOverrides.cargo = rustToolchain;
+                packageOverrides.clippy = rustToolchain;
+              };
             };
 
             enterShell = ''
