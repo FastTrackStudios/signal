@@ -1,0 +1,18 @@
+[package]
+name = "signal-extension"
+version.workspace = true
+edition.workspace = true
+description = "Signal domain SHM guest — connects to REAPER via daw-bridge"
+
+[[bin]]
+name = "signal-extension"
+path = "src/main.rs"
+
+[dependencies]
+daw.workspace = true
+daw-extension-runtime.workspace = true
+signal.workspace = true
+tokio = { workspace = true, features = ["time", "net", "rt"] }
+eyre.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
