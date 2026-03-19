@@ -66,6 +66,14 @@ async fn run() -> Result<()> {
     let mut rx = registry.subscribe_actions().await?;
     info!("[signal:{pid}] Subscribed to action events");
 
+    // TODO: Move signal_bridge.rs from reaper-extension into this process:
+    //   - Initialize SQLite-backed SignalController
+    //   - Wire appliers: ReaperPatchApplier + RigSceneManager
+    //   - Expose 11 signal services (Block, Layer, Engine, Rig, Profile,
+    //     Song, Setlist, Browser, Resolve, SceneTemplate, Rack)
+    // TODO: Move signal_save.rs from reaper-extension into this process:
+    //   - Capture track/FX state as Signal presets
+    //   - Write .signal.styx sidecar files
     // TODO: Watch for project/track changes and infer signal chains
     // TODO: Sync preset state with signal.db
 
@@ -83,7 +91,7 @@ async fn run() -> Result<()> {
 }
 
 fn handle_action(command_name: &str) {
-    // TODO: Wire to SignalController once it lives in this process.
-    // For now, log the trigger so we can verify the end-to-end flow.
+    // TODO: Dispatch to SignalController (rig/profile/preset operations)
+    // TODO: Dispatch to signal save (capture FX state → .signal.styx)
     info!("[signal] Action triggered: {command_name}");
 }
