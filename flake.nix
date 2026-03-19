@@ -374,8 +374,8 @@
               fts-fmt.exec = "cargo fmt --all -- --check";
               fts-fmt.description = "Check formatting";
 
-              fts-test.exec = "cargo nextest run --workspace";
-              fts-test.description = "Run all unit tests";
+              fts-unit-test.exec = "cargo nextest run --workspace";
+              fts-unit-test.description = "Run all unit tests";
 
               fts-build.exec = "cargo build --workspace";
               fts-build.description = "Build entire workspace";
@@ -397,29 +397,7 @@
               '';
               fts-smoke.description = "REAPER headless smoke test";
 
-              fts-reaper-test.exec = ''
-                fts-test bash -c '
-                  "$FTS_REAPER_EXECUTABLE" -newinst -nosplash -ignoreerrors &
-                  RPID=$!
-                  echo "Waiting for REAPER socket..."
-                  SOCK=""
-                  for i in $(seq 1 30); do
-                    SOCK=$(ls /tmp/fts-daw-*.sock 2>/dev/null | head -1)
-                    if [ -n "$SOCK" ]; then break; fi
-                    sleep 1
-                  done
-                  if [ -z "$SOCK" ]; then
-                    echo "No socket found after 30s"
-                    kill $RPID 2>/dev/null
-                    exit 1
-                  fi
-                  echo "Socket ready: $SOCK"
-                  cargo test -p reaper-extension -- --ignored --nocapture
-                  STATUS=$?
-                  kill $RPID 2>/dev/null
-                  exit $STATUS
-                '
-              '';
+              fts-reaper-test.exec = "cargo xtask reaper-test \"$@\"";
               fts-reaper-test.description = "Run REAPER integration tests (headless)";
             };
 
@@ -444,7 +422,7 @@
                   Run all unit tests
 
                   ```bash
-                  fts-test
+                  fts-unit-test
                   ```
                 '';
               };
@@ -463,7 +441,7 @@
               echo "  fts-build        — cargo build --workspace"
               echo "  fts-check        — clippy (warnings-as-errors)"
               echo "  fts-fmt          — check formatting"
-              echo "  fts-test         — cargo nextest run --workspace"
+              echo "  fts-unit-test    — cargo nextest run --workspace"
             '' + lib.optionalString pkgs.stdenv.isLinux ''
               echo "  fts-smoke        — REAPER headless smoke test"
               echo "  fts-reaper-test  — REAPER integration tests"
