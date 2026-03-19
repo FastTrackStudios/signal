@@ -3,10 +3,14 @@
 //! Connects to REAPER via daw-bridge SHM and manages signal chain state:
 //! FX inference, module/block lifecycle, preset loading, and rig synchronization.
 //!
+//! Registers signal-domain actions with REAPER and handles their execution
+//! locally when triggered. The host (daw-bridge) is domain-agnostic.
+//!
 //! Placed in `UserPlugins/fts-extensions/` and hot-reloaded by daw-bridge.
 
 use daw_extension_runtime::GuestOptions;
 use eyre::Result;
+use signal::actions::signal_actions;
 use tracing::info;
 
 fn main() -> Result<()> {
@@ -44,12 +48,42 @@ async fn run() -> Result<()> {
         .await?;
     info!("[signal:{pid}] Health beacon written");
 
-    // TODO: Register signal-domain actions
+    // Register signal-domain actions with REAPER.
+    // Action definitions live in signal-proto — single source of truth.
+    let registry = daw.action_registry();
+    for def in signal_actions::definitions() {
+        let cmd_name = def.id.to_command_id();
+        let cmd_id = registry.register(&cmd_name, &def.description).await?;
+        if cmd_id == 0 {
+            tracing::warn!("[signal:{pid}] Failed to register action: {cmd_name}");
+        } else {
+            info!("[signal:{pid}] Registered {cmd_name} (cmd_id={cmd_id})");
+        }
+    }
+    info!("[signal:{pid}] All signal actions registered");
+
+    // Subscribe to action trigger events and handle them locally.
+    let mut rx = registry.subscribe_actions().await?;
+    info!("[signal:{pid}] Subscribed to action events");
+
     // TODO: Watch for project/track changes and infer signal chains
     // TODO: Sync preset state with signal.db
 
-    // Keep the process alive — daw-bridge will kill us on reload
-    loop {
-        tokio::time::sleep(std::time::Duration::from_secs(60)).await;
+    // Event loop — handle action triggers from REAPER
+    while let Ok(Some(event)) = rx.recv().await {
+        match &*event {
+            daw::service::ActionEvent::Triggered { command_name } => {
+                handle_action(command_name);
+            }
+        }
     }
+
+    info!("[signal:{pid}] Action event stream ended");
+    Ok(())
+}
+
+fn handle_action(command_name: &str) {
+    // TODO: Wire to SignalController once it lives in this process.
+    // For now, log the trigger so we can verify the end-to-end flow.
+    info!("[signal] Action triggered: {command_name}");
 }
