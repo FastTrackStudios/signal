@@ -7,6 +7,7 @@
 use std::path::{Path, PathBuf};
 
 use clap::Subcommand;
+use daw::file::RppSerialize;
 use daw::Daw;
 use eyre::Result;
 use serde_json::json;
