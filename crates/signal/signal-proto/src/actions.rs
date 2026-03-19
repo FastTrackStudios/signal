@@ -13,40 +13,42 @@
 //! active-context state and resolves N to a concrete entity when the action
 //! fires.
 
-actions_proto::declare_actions! {
+actions_proto::define_actions! {
     /// Signal navigation action ID constants.
     pub signal_actions {
+        prefix: "fts.signal",
+        title: "Signal",
 
         // ── Song navigation ───────────────────────────────────────────
 
-        NEXT_SONG = "fts.signal.next_song" {
+        NEXT_SONG = "next_song" {
             name: "Next Song",
             description: "Advance to the next song in the active setlist",
             category: Session,
-            menu_path: "FTS/Signal/Navigate",
+            group: "Navigate",
         }
 
-        PREVIOUS_SONG = "fts.signal.previous_song" {
+        PREVIOUS_SONG = "previous_song" {
             name: "Previous Song",
             description: "Go back to the previous song in the active setlist",
             category: Session,
-            menu_path: "FTS/Signal/Navigate",
+            group: "Navigate",
         }
 
         // ── Section / variant navigation ──────────────────────────────
 
-        NEXT_SECTION = "fts.signal.next_section" {
+        NEXT_SECTION = "next_section" {
             name: "Next Section",
             description: "Advance to the next section (or patch/scene) within the active song",
             category: Session,
-            menu_path: "FTS/Signal/Navigate",
+            group: "Navigate",
         }
 
-        PREVIOUS_SECTION = "fts.signal.previous_section" {
+        PREVIOUS_SECTION = "previous_section" {
             name: "Previous Section",
             description: "Go back to the previous section within the active song",
             category: Session,
-            menu_path: "FTS/Signal/Navigate",
+            group: "Navigate",
         }
 
         // ── Direct variant switch (1–24) ─────────────────────────────
@@ -54,149 +56,149 @@ actions_proto::declare_actions! {
         // Each action switches to the Nth variant of whatever collection
         // is currently active: song sections, profile patches, rig scenes, etc.
 
-        SWITCH_TO_VARIATION_1 = "fts.signal.switch_to_variation.1" {
+        SWITCH_TO_VARIATION_1 = "switch_to_variation.1" {
             name: "Switch to Variation 1",
             description: "Switch to the 1st variation of the active collection",
             category: Session,
-            menu_path: "FTS/Signal/Variations",
+            group: "Variations",
         }
-        SWITCH_TO_VARIATION_2 = "fts.signal.switch_to_variation.2" {
+        SWITCH_TO_VARIATION_2 = "switch_to_variation.2" {
             name: "Switch to Variation 2",
             description: "Switch to the 2nd variation of the active collection",
             category: Session,
-            menu_path: "FTS/Signal/Variations",
+            group: "Variations",
         }
-        SWITCH_TO_VARIATION_3 = "fts.signal.switch_to_variation.3" {
+        SWITCH_TO_VARIATION_3 = "switch_to_variation.3" {
             name: "Switch to Variation 3",
             description: "Switch to the 3rd variation of the active collection",
             category: Session,
-            menu_path: "FTS/Signal/Variations",
+            group: "Variations",
         }
-        SWITCH_TO_VARIATION_4 = "fts.signal.switch_to_variation.4" {
+        SWITCH_TO_VARIATION_4 = "switch_to_variation.4" {
             name: "Switch to Variation 4",
             description: "Switch to the 4th variation of the active collection",
             category: Session,
-            menu_path: "FTS/Signal/Variations",
+            group: "Variations",
         }
-        SWITCH_TO_VARIATION_5 = "fts.signal.switch_to_variation.5" {
+        SWITCH_TO_VARIATION_5 = "switch_to_variation.5" {
             name: "Switch to Variation 5",
             description: "Switch to the 5th variation of the active collection",
             category: Session,
-            menu_path: "FTS/Signal/Variations",
+            group: "Variations",
         }
-        SWITCH_TO_VARIATION_6 = "fts.signal.switch_to_variation.6" {
+        SWITCH_TO_VARIATION_6 = "switch_to_variation.6" {
             name: "Switch to Variation 6",
             description: "Switch to the 6th variation of the active collection",
             category: Session,
-            menu_path: "FTS/Signal/Variations",
+            group: "Variations",
         }
-        SWITCH_TO_VARIATION_7 = "fts.signal.switch_to_variation.7" {
+        SWITCH_TO_VARIATION_7 = "switch_to_variation.7" {
             name: "Switch to Variation 7",
             description: "Switch to the 7th variation of the active collection",
             category: Session,
-            menu_path: "FTS/Signal/Variations",
+            group: "Variations",
         }
-        SWITCH_TO_VARIATION_8 = "fts.signal.switch_to_variation.8" {
+        SWITCH_TO_VARIATION_8 = "switch_to_variation.8" {
             name: "Switch to Variation 8",
             description: "Switch to the 8th variation of the active collection",
             category: Session,
-            menu_path: "FTS/Signal/Variations",
+            group: "Variations",
         }
-        SWITCH_TO_VARIATION_9 = "fts.signal.switch_to_variation.9" {
+        SWITCH_TO_VARIATION_9 = "switch_to_variation.9" {
             name: "Switch to Variation 9",
             description: "Switch to the 9th variation of the active collection",
             category: Session,
-            menu_path: "FTS/Signal/Variations",
+            group: "Variations",
         }
-        SWITCH_TO_VARIATION_10 = "fts.signal.switch_to_variation.10" {
+        SWITCH_TO_VARIATION_10 = "switch_to_variation.10" {
             name: "Switch to Variation 10",
             description: "Switch to the 10th variation of the active collection",
             category: Session,
-            menu_path: "FTS/Signal/Variations",
+            group: "Variations",
         }
-        SWITCH_TO_VARIATION_11 = "fts.signal.switch_to_variation.11" {
+        SWITCH_TO_VARIATION_11 = "switch_to_variation.11" {
             name: "Switch to Variation 11",
             description: "Switch to the 11th variation of the active collection",
             category: Session,
-            menu_path: "FTS/Signal/Variations",
+            group: "Variations",
         }
-        SWITCH_TO_VARIATION_12 = "fts.signal.switch_to_variation.12" {
+        SWITCH_TO_VARIATION_12 = "switch_to_variation.12" {
             name: "Switch to Variation 12",
             description: "Switch to the 12th variation of the active collection",
             category: Session,
-            menu_path: "FTS/Signal/Variations",
+            group: "Variations",
         }
-        SWITCH_TO_VARIATION_13 = "fts.signal.switch_to_variation.13" {
+        SWITCH_TO_VARIATION_13 = "switch_to_variation.13" {
             name: "Switch to Variation 13",
             description: "Switch to the 13th variation of the active collection",
             category: Session,
-            menu_path: "FTS/Signal/Variations",
+            group: "Variations",
         }
-        SWITCH_TO_VARIATION_14 = "fts.signal.switch_to_variation.14" {
+        SWITCH_TO_VARIATION_14 = "switch_to_variation.14" {
             name: "Switch to Variation 14",
             description: "Switch to the 14th variation of the active collection",
             category: Session,
-            menu_path: "FTS/Signal/Variations",
+            group: "Variations",
         }
-        SWITCH_TO_VARIATION_15 = "fts.signal.switch_to_variation.15" {
+        SWITCH_TO_VARIATION_15 = "switch_to_variation.15" {
             name: "Switch to Variation 15",
             description: "Switch to the 15th variation of the active collection",
             category: Session,
-            menu_path: "FTS/Signal/Variations",
+            group: "Variations",
         }
-        SWITCH_TO_VARIATION_16 = "fts.signal.switch_to_variation.16" {
+        SWITCH_TO_VARIATION_16 = "switch_to_variation.16" {
             name: "Switch to Variation 16",
             description: "Switch to the 16th variation of the active collection",
             category: Session,
-            menu_path: "FTS/Signal/Variations",
+            group: "Variations",
         }
-        SWITCH_TO_VARIATION_17 = "fts.signal.switch_to_variation.17" {
+        SWITCH_TO_VARIATION_17 = "switch_to_variation.17" {
             name: "Switch to Variation 17",
             description: "Switch to the 17th variation of the active collection",
             category: Session,
-            menu_path: "FTS/Signal/Variations",
+            group: "Variations",
         }
-        SWITCH_TO_VARIATION_18 = "fts.signal.switch_to_variation.18" {
+        SWITCH_TO_VARIATION_18 = "switch_to_variation.18" {
             name: "Switch to Variation 18",
             description: "Switch to the 18th variation of the active collection",
             category: Session,
-            menu_path: "FTS/Signal/Variations",
+            group: "Variations",
         }
-        SWITCH_TO_VARIATION_19 = "fts.signal.switch_to_variation.19" {
+        SWITCH_TO_VARIATION_19 = "switch_to_variation.19" {
             name: "Switch to Variation 19",
             description: "Switch to the 19th variation of the active collection",
             category: Session,
-            menu_path: "FTS/Signal/Variations",
+            group: "Variations",
         }
-        SWITCH_TO_VARIATION_20 = "fts.signal.switch_to_variation.20" {
+        SWITCH_TO_VARIATION_20 = "switch_to_variation.20" {
             name: "Switch to Variation 20",
             description: "Switch to the 20th variation of the active collection",
             category: Session,
-            menu_path: "FTS/Signal/Variations",
+            group: "Variations",
         }
-        SWITCH_TO_VARIATION_21 = "fts.signal.switch_to_variation.21" {
+        SWITCH_TO_VARIATION_21 = "switch_to_variation.21" {
             name: "Switch to Variation 21",
             description: "Switch to the 21st variation of the active collection",
             category: Session,
-            menu_path: "FTS/Signal/Variations",
+            group: "Variations",
         }
-        SWITCH_TO_VARIATION_22 = "fts.signal.switch_to_variation.22" {
+        SWITCH_TO_VARIATION_22 = "switch_to_variation.22" {
             name: "Switch to Variation 22",
             description: "Switch to the 22nd variation of the active collection",
             category: Session,
-            menu_path: "FTS/Signal/Variations",
+            group: "Variations",
         }
-        SWITCH_TO_VARIATION_23 = "fts.signal.switch_to_variation.23" {
+        SWITCH_TO_VARIATION_23 = "switch_to_variation.23" {
             name: "Switch to Variation 23",
             description: "Switch to the 23rd variation of the active collection",
             category: Session,
-            menu_path: "FTS/Signal/Variations",
+            group: "Variations",
         }
-        SWITCH_TO_VARIATION_24 = "fts.signal.switch_to_variation.24" {
+        SWITCH_TO_VARIATION_24 = "switch_to_variation.24" {
             name: "Switch to Variation 24",
             description: "Switch to the 24th variation of the active collection",
             category: Session,
-            menu_path: "FTS/Signal/Variations",
+            group: "Variations",
         }
     }
 }
