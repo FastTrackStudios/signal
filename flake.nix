@@ -10,6 +10,10 @@
     };
     crane.url = "github:ipetkov/crane";
     devenv.url = "github:cachix/devenv";
+    devenv-root = {
+      url = "file+file:///dev/null";
+      flake = false;
+    };
     nix2container.url = "github:nlewo/nix2container";
     nix2container.inputs.nixpkgs.follows = "nixpkgs";
     mk-shell-bin.url = "github:rrbutani/nix-mk-shell-bin";
@@ -27,7 +31,7 @@
     ];
   };
 
-  outputs = { self, flake-parts, crane, devenv, nix2container, fts-flake, ... } @inputs:
+  outputs = { self, flake-parts, crane, devenv, devenv-root, nix2container, fts-flake, ... } @inputs:
     flake-parts.lib.mkFlake { inherit inputs; } {
       imports = [ inputs.devenv.flakeModule ];
 
@@ -35,6 +39,11 @@
 
       perSystem = { self', config, pkgs, lib, system, ... }:
         let
+          # devenv needs to know the project root for impure operations.
+          # The devenv-root input is overridden by .envrc to point to .devenv/devenv.root.
+          devenvRootFileContent = builtins.readFile devenv-root.outPath;
+          devenvRoot = pkgs.lib.strings.trim devenvRootFileContent;
+
           # Rust toolchain with WASM support
           # Pin to 1.94.0 — keep devenv git-hooks in sync via packageOverrides.
           rustToolchain = pkgs.rust-bin.stable."1.94.0".default.override {
@@ -330,6 +339,9 @@
               }
             );
           in {
+            devenv.root =
+              pkgs.lib.mkIf (devenvRoot != "") devenvRoot;
+
             cachix.pull = [ "fasttrackstudio" ];
 
             packages = with pkgs; [
@@ -471,6 +483,9 @@
               }
             );
           in {
+            devenv.root =
+              pkgs.lib.mkIf (devenvRoot != "") devenvRoot;
+
             cachix.pull = [ "fasttrackstudio" ];
 
             packages = with pkgs; [
