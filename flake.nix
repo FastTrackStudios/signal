@@ -29,6 +29,9 @@
       "https://devenv.cachix.org"
       "https://fasttrackstudio.cachix.org"
     ];
+    # devenv needs impure evaluation (builtins.getEnv for project root).
+    # This allows `nix develop` to work without --impure.
+    pure-eval = false;
   };
 
   outputs = { self, flake-parts, crane, devenv, devenv-root, nix2container, fts-flake, ... } @inputs:
@@ -40,9 +43,16 @@
       perSystem = { self', config, pkgs, lib, system, ... }:
         let
           # devenv needs to know the project root for impure operations.
-          # The devenv-root input is overridden by .envrc to point to .devenv/devenv.root.
-          devenvRootFileContent = builtins.readFile devenv-root.outPath;
-          devenvRoot = pkgs.lib.strings.trim devenvRootFileContent;
+          # When using direnv (.envrc), the devenv-root input is overridden to point
+          # to .devenv/devenv.root. For direct `nix develop --impure`, we fall back
+          # to $PWD (requires --impure).
+          devenvRootFromInput = let
+            content = builtins.readFile devenv-root.outPath;
+          in pkgs.lib.strings.trim content;
+          devenvRoot =
+            if devenvRootFromInput != ""
+            then devenvRootFromInput
+            else builtins.getEnv "PWD";
 
           # Rust toolchain with WASM support
           # Pin to 1.94.0 — keep devenv git-hooks in sync via packageOverrides.
@@ -77,7 +87,7 @@
           ++ lib.optionals pkgs.stdenv.isLinux (with pkgs; [
             alsa-lib alsa-lib.dev
             glib gtk3 libsoup_3 webkitgtk_4_1 xdotool
-            xorg.libX11 xorg.libXcursor xorg.libXrandr xorg.libXi xorg.libxcb
+            libx11 libxcursor libxrandr libxi libxcb
             libxkbcommon wayland libGL vulkan-loader
           ])
           ++ lib.optionals pkgs.stdenv.isDarwin (with pkgs; [
@@ -112,7 +122,7 @@
             [ fontconfig freetype openssl ]
             ++ lib.optionals pkgs.stdenv.isLinux [
               alsa-lib libGL vulkan-loader gtk3 glib
-              xorg.libX11 xorg.libxcb libxkbcommon wayland
+              libx11 libxcb libxkbcommon wayland
               webkitgtk_4_1 libsoup_3
             ]
           );
@@ -121,6 +131,7 @@
           _module.args.pkgs = import inputs.nixpkgs {
             inherit system;
             overlays = [ inputs.rust-overlay.overlays.default ];
+            config.allowUnfree = true;
           };
 
           formatter = pkgs.nixfmt-rfc-style;
