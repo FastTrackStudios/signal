@@ -16,12 +16,12 @@ Read these before implementing features or making architectural decisions:
 
 ### Crate Dependencies
 
-Internal crates (signal-proto, signal-live, signal-storage, signal-controller,
-signal-import, signal-daw-bridge, nam-manager) are **private**. Apps must depend
-only on the facade crate (`signal`). See `docs/crate-facade-pattern.md`.
+Domain crates (signal, session, sync) live in **sibling repos** and are consumed
+via path deps (local dev) or git deps (CI). Apps must depend only on the facade
+crates (`signal`, `session`, `sync`), never on internal crates like signal-proto.
 
-The same applies to other domain groups (daw, session, keyflow) — use the facade,
-not the internal crates.
+The same applies to other sibling domains (daw, keyflow) — use the facade,
+not the internal crates. See `docs/crate-facade-pattern.md`.
 
 ### Async & Concurrency
 
