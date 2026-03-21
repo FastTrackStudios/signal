@@ -12,6 +12,7 @@ members = [
     "crates/signal-proto",
     "crates/signal-storage",
     "crates/signal-ui",
+    "xtask",
 ]
 resolver = "2"
 
@@ -97,6 +98,7 @@ clap = { version = "4", features = ["derive"] }
 # daw-extension-runtime = { path = "../daw/crates/daw-extension-runtime" }
 # audio-controls = { path = "../daw/crates/audio-controls" }
 # reaper-test = { path = "../daw/crates/reaper-test" }
+# fts-devtools = { path = "../daw/crates/fts-devtools" }
 #
 # [patch."https://github.com/FastTrackStudios/input_actions.git"]
 # actions-proto = { path = "../input_actions/crates/actions-proto" }
