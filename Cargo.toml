@@ -1,0 +1,118 @@
+[workspace]
+members = [
+    "apps/signal-cli",
+    "crates/macromod",
+    "crates/nam-manager",
+    "crates/signal",
+    "crates/signal-controller",
+    "crates/signal-daw-bridge",
+    "crates/signal-extension",
+    "crates/signal-import",
+    "crates/signal-live",
+    "crates/signal-proto",
+    "crates/signal-storage",
+    "crates/signal-ui",
+]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+authors = ["FastTrack Studio"]
+license = "MIT OR Apache-2.0"
+
+[workspace.dependencies]
+# ── Facade crate ─────────────────────────────────────────────────────
+# The only public API surface for the signal domain.
+# Apps depend on `signal`; never on signal-proto, signal-live, etc.
+signal = { path = "crates/signal" }
+# App crate (binary + lib)
+signal-cli = { path = "apps/signal-cli" }
+# UI crate (Dioxus components with feature flags)
+signal-ui = { path = "crates/signal-ui", default-features = false }
+# NOTE: signal-proto, signal-controller, signal-live, signal-storage,
+# signal-import, signal-daw-bridge, nam-manager are INTERNAL.
+# Access them through the `signal` facade crate.
+
+# ── Local utility crates ─────────────────────────────────────────────
+macromod = { path = "crates/macromod" }
+
+# ── Facet reflection ─────────────────────────────────────────────────
+facet = { version = "0.44" }
+facet-styx = { version = "2.0" }
+
+# ── ROAM service framework (latest main) ─────────────────────────────
+roam = { git = "https://github.com/bearcove/roam.git", branch = "main" }
+
+# ── DAW facade crate (sibling repo — single public API surface) ──────
+daw = { git = "https://github.com/FastTrackStudios/daw.git", branch = "main" }
+daw-cli = { git = "https://github.com/FastTrackStudios/daw.git", branch = "main" }
+daw-extension-runtime = { git = "https://github.com/FastTrackStudios/daw.git", branch = "main" }
+# NOTE: daw-proto, daw-control, daw-control-sync, daw-reaper, daw-standalone,
+# dawfile-reaper are INTERNAL. Access them through the `daw` facade crate.
+
+# ── Shared infrastructure ────────────────────────────────────────────
+audio-controls = { git = "https://github.com/FastTrackStudios/daw.git", branch = "main" }
+reaper-test = { git = "https://github.com/FastTrackStudios/daw.git", branch = "main" }
+
+# ── Sibling repos ────────────────────────────────────────────────────
+actions-proto = { git = "https://github.com/FastTrackStudios/input_actions.git", branch = "main" }
+dock-dioxus = { git = "https://github.com/FastTrackStudios/dock-dioxus.git", branch = "main", default-features = false }
+dock-proto = { git = "https://github.com/FastTrackStudios/dock-dioxus.git", branch = "main" }
+
+# Utils from FastTrackStudio monorepo
+utils = { git = "https://github.com/FastTrackStudios/FastTrackStudio.git", branch = "main" }
+
+# ── UI ────────────────────────────────────────────────────────────────
+dioxus = "0.7.2"
+fts-ui = { git = "https://github.com/FastTrackStudios/fts-ui.git", branch = "main" }
+lumen-blocks = { git = "https://github.com/Leaf-Computer/lumen-blocks.git", tag = "v0.2.0" }
+
+# ── Async runtime ────────────────────────────────────────────────────
+tokio = { version = "1.48", features = ["full"] }
+futures = "0.3"
+
+# ── Serialization ────────────────────────────────────────────────────
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+thiserror = "2.0"
+
+# ── Observability ────────────────────────────────────────────────────
+tracing = { version = "0.1", features = ["std"] }
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+moire = { version = "1.0", features = ["diagnostics"] }
+
+# ── Utilities ────────────────────────────────────────────────────────
+eyre = "0.6"
+uuid = { version = "1", features = ["v4", "v5", "v7", "serde"] }
+clap = { version = "4", features = ["derive"] }
+
+# ── Local development overrides ──────────────────────────────────────
+# Uncomment the sections below to use local checkouts instead of GitHub.
+# This gives you instant rebuilds when iterating across repos.
+#
+# [patch."https://github.com/FastTrackStudios/daw.git"]
+# daw = { path = "../daw/crates/daw" }
+# daw-cli = { path = "../daw/apps/daw" }
+# daw-extension-runtime = { path = "../daw/crates/daw-extension-runtime" }
+# audio-controls = { path = "../daw/crates/audio-controls" }
+# reaper-test = { path = "../daw/crates/reaper-test" }
+#
+# [patch."https://github.com/FastTrackStudios/input_actions.git"]
+# actions-proto = { path = "../input_actions/crates/actions-proto" }
+#
+# [patch."https://github.com/FastTrackStudios/dock-dioxus.git"]
+# dock-dioxus = { path = "../dock-dioxus/crates/dock-dioxus" }
+# dock-proto = { path = "../dock-dioxus/crates/dock-proto" }
+#
+# [patch."https://github.com/FastTrackStudios/FastTrackStudio.git"]
+# utils = { path = "../FastTrackStudio/crates/shared/utils" }
+#
+# [patch."https://github.com/FastTrackStudios/fts-ui.git"]
+# fts-ui = { path = "../fts-ui/crates/fts-ui" }
+
+[workspace.lints.rust]
+dead_code = "allow"
+unused = "allow"
+
+[workspace.lints.clippy]
