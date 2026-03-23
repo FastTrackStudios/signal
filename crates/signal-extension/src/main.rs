@@ -8,12 +8,7 @@
 //!
 //! Placed in `UserPlugins/fts-extensions/` and hot-reloaded by daw-bridge.
 
-mod demo_profile;
-mod demo_rig;
-mod demo_setlist;
-mod place_switch;
-mod scene_midi;
-
+use signal_extension::{demo_profile, demo_rig, demo_setlist, macro_learn, place_switch, scene_midi};
 use daw::Daw;
 use daw_extension_runtime::GuestOptions;
 use eyre::Result;
@@ -21,6 +16,10 @@ use signal::actions::signal_actions;
 use tracing::{debug, error, info};
 
 fn main() -> Result<()> {
+    // Ensure this process dies when REAPER (parent) exits, even on SIGKILL.
+    // Belt-and-suspenders with spawn_dying_with_parent in daw-bridge.
+    ur_taking_me_with_you::die_with_parent();
+
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()),
@@ -163,6 +162,41 @@ async fn handle_action(daw: &Daw, command_name: &str) {
             if let Err(e) = place_switch::place_scene_switch(daw).await {
                 error!("[signal] Failed to place scene switch: {e:#}");
             }
+        }
+        cmd if cmd.ends_with("MACRO_ARM") => {
+            info!("[signal] Arming macro...");
+            if let Err(e) = macro_learn::handle_macro_arm(daw).await {
+                error!("[signal] Failed to arm macro: {e:#}");
+            }
+        }
+        cmd if cmd.ends_with("MACRO_DISARM") => {
+            info!("[signal] Disarming macro...");
+            if let Err(e) = macro_learn::handle_macro_disarm(daw).await {
+                error!("[signal] Failed to disarm macro: {e:#}");
+            }
+        }
+        cmd if cmd.ends_with("MACRO_SET_POINT") => {
+            info!("[signal] Setting macro curve point...");
+            if let Err(e) = macro_learn::handle_macro_set_point(daw).await {
+                error!("[signal] Failed to set macro point: {e:#}");
+            }
+        }
+        cmd if cmd.ends_with("MACRO_REMOVE_LAST_POINT") => {
+            info!("[signal] Removing last macro curve point...");
+            if let Err(e) = macro_learn::handle_macro_remove_last_point(daw).await {
+                error!("[signal] Failed to remove last point: {e:#}");
+            }
+        }
+        cmd if cmd.ends_with("MACRO_CLEAR") => {
+            info!("[signal] Clearing macro bindings...");
+            if let Err(e) = macro_learn::handle_macro_clear(daw).await {
+                error!("[signal] Failed to clear macro: {e:#}");
+            }
+        }
+        cmd if cmd.ends_with("MACRO_ADD") => {
+            info!("[signal] Adding macro knob...");
+            // TODO: Add a new macro knob to the active bank
+            debug!("[signal] MACRO_ADD not yet implemented");
         }
         _ => {
             // TODO: Dispatch to SignalController (rig/profile/preset operations)

@@ -91,15 +91,10 @@ async fn bridge_loop(ui_state: Arc<ControllerUiState>) {
             tracing::debug!("[signal-ctrl] poll_macro_config error: {e:#}");
         }
 
-        // Check for pending scene switch requests from the audio thread
-        let requested = ui_state
-            .requested_scene
-            .swap(-1, Ordering::Relaxed);
-        if requested > 0 {
-            if let Err(e) = switch_scene(&daw, &ui_state, requested).await {
-                tracing::warn!("[signal-ctrl] Scene switch error: {e:#}");
-            }
-        }
+        // Note: Scene switching is handled by the signal-extension process,
+        // which monitors transport position and mutes/unmutes sends.
+        // The controller plugin still detects MIDI notes (for future use)
+        // but the extension is the authoritative scene switcher.
 
         tokio::time::sleep(Duration::from_millis(50)).await;
     }
@@ -156,99 +151,6 @@ async fn poll_macro_config(
         return Ok(());
     }
 
-    Ok(())
-}
-
-/// Switch to a scene by muting/unmuting sends on the profile input track.
-///
-/// The profile structure is:
-///   Profile Folder (has fts_signal/scene_count ext_state)
-///     └─ Profile Input (has sends to each scene input)
-///     └─ Scene 1 Folder/
-///     └─ Scene 2 Folder/
-///     └─ ...
-///
-/// Scene switching mutes all sends except the one for the target scene.
-/// `scene_number` is 1-based.
-async fn switch_scene(
-    daw: &Daw,
-    ui_state: &ControllerUiState,
-    scene_number: i32,
-) -> eyre::Result<()> {
-    let project = daw.current_project().await?;
-    let tracks = project.tracks();
-    let all_tracks = tracks.all().await?;
-
-    // Find the profile folder track (has fts_signal/scene_count)
-    let mut profile_guid = None;
-    let mut scene_count = 0u32;
-
-    for track_info in &all_tracks {
-        let track = match tracks.by_guid(&track_info.guid).await? {
-            Some(t) => t,
-            None => continue,
-        };
-        if let Some(count_str) = track
-            .get_ext_state("fts_signal", "scene_count")
-            .await?
-        {
-            if let Ok(count) = count_str.parse::<u32>() {
-                scene_count = count;
-                profile_guid = Some(track_info.guid.clone());
-                break;
-            }
-        }
-    }
-
-    let profile_guid = profile_guid
-        .ok_or_else(|| eyre::eyre!("No profile folder found for scene switching"))?;
-
-    if scene_number < 1 || scene_number as u32 > scene_count {
-        return Err(eyre::eyre!(
-            "Scene {scene_number} out of range (1-{scene_count})"
-        ));
-    }
-
-    // Find the profile input track (first child of profile folder that isn't a scene folder)
-    // The profile input is the track whose sends we mute/unmute.
-    let mut input_track = None;
-    for track_info in &all_tracks {
-        if track_info.parent_guid.as_deref() == Some(&profile_guid)
-            && !track_info.name.starts_with("Scene ")
-        {
-            input_track = tracks.by_guid(&track_info.guid).await?;
-            break;
-        }
-    }
-
-    let input_track = input_track
-        .ok_or_else(|| eyre::eyre!("No profile input track found"))?;
-
-    // The input track has N sends, one per scene input.
-    // Mute all except the target scene (0-indexed send = scene_number - 1).
-    let sends = input_track.sends();
-    let all_sends = sends.all().await?;
-    let target_idx = (scene_number - 1) as u32;
-
-    for (i, _send_info) in all_sends.iter().enumerate() {
-        let send = match sends.by_index(i as u32).await? {
-            Some(s) => s,
-            None => continue,
-        };
-        if i as u32 == target_idx {
-            send.unmute().await?;
-        } else {
-            send.mute().await?;
-        }
-    }
-
-    ui_state
-        .active_scene
-        .store(scene_number, Ordering::Relaxed);
-
-    tracing::info!(
-        "[signal-ctrl] Switched to scene {scene_number}/{scene_count}"
-    );
     Ok(())
 }
 

@@ -72,7 +72,8 @@ fn install() -> Result<(), Box<dyn std::error::Error>> {
         return Err("Failed to bundle fts-signal-controller".into());
     }
 
-    // Symlink the .clap into REAPER's UserPlugins/FX/ for each REAPER install
+    // Symlink the .clap into REAPER's UserPlugins/FX/FTS/ for each REAPER install.
+    // daw-bridge eagerly loads all plugins in FX/FTS/ that export ReaperPluginEntry.
     let clap_file = "FTS Signal Controller.clap";
     let bundled = root.join("target/bundled").join(clap_file);
 
@@ -81,7 +82,7 @@ fn install() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     for reaper_dir in fts_devtools::reaper_dirs() {
-        let fx_dir = reaper_dir.join("UserPlugins/FX");
+        let fx_dir = reaper_dir.join("UserPlugins/FX/FTS");
         std::fs::create_dir_all(&fx_dir)?;
 
         let dest = fx_dir.join(clap_file);
@@ -106,7 +107,7 @@ fn uninstall() -> Result<(), Box<dyn std::error::Error>> {
     // Remove fts-signal-controller CLAP from all REAPER installs
     let clap_file = "FTS Signal Controller.clap";
     for reaper_dir in fts_devtools::reaper_dirs() {
-        let dest = reaper_dir.join("UserPlugins/FX").join(clap_file);
+        let dest = reaper_dir.join("UserPlugins/FX/FTS").join(clap_file);
         if dest.exists() || dest.is_symlink() {
             let _ = std::fs::remove_file(&dest).or_else(|_| std::fs::remove_dir_all(&dest));
             println!("Removed {}", dest.display());
@@ -159,12 +160,13 @@ fn reaper_test(
     let ext_src = workspace_root.join("target/debug/signal-extension");
     if ext_src.exists() {
         let ext_dst = fts_ext_dir.join("signal-extension");
-        std::fs::copy(&ext_src, &ext_dst)?;
+        // Remove old file/symlink first
+        let _ = std::fs::remove_file(&ext_dst);
+        // Symlink instead of copy — avoids "Text file busy" when REAPER holds the binary
         #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            std::fs::set_permissions(&ext_dst, std::fs::Permissions::from_mode(0o755))?;
-        }
+        std::os::unix::fs::symlink(&ext_src, &ext_dst)?;
+        #[cfg(not(unix))]
+        std::fs::copy(&ext_src, &ext_dst)?;
         println!("  Installed signal-extension -> {}", ext_dst.display());
     } else {
         return Err(format!(

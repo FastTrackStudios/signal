@@ -105,8 +105,11 @@ pub async fn load_demo_profile(daw: &Daw) -> Result<()> {
             layer.set_folder_depth(-1).await?; // close scene only
         }
 
-        // Send: profile input → scene input
-        profile_input.sends().add_to(scene_input.guid()).await?;
+        // Send: profile input → scene input (mute all except first)
+        let send = profile_input.sends().add_to(scene_input.guid()).await?;
+        if i > 0 {
+            send.mute().await?;
+        }
 
         // Send: scene input → layer
         scene_input.sends().add_to(layer.guid()).await?;
@@ -231,17 +234,28 @@ pub async fn add_layer_fx(layer: &TrackHandle, module_types: &[&str]) -> Result<
     Ok(())
 }
 
-/// Pick a color for each scene to visually distinguish them in REAPER.
+/// Pick a color for each scene/section to visually distinguish them in REAPER.
 pub fn scene_color(name: &str) -> u32 {
     match name {
-        "Clean" => 0x22C55E,   // green
-        "Crunch" => 0xEAB308,  // yellow
-        "Drive" => 0xEF4444,   // red
-        "Lead" => 0xF97316,    // orange
-        "Funk" => 0x8B5CF6,    // violet
-        "Ambient" => 0x06B6D4, // cyan
-        "Q-Tron" => 0xEC4899,  // pink
-        "Solo" => 0x3B82F6,    // blue
-        _ => 0x6B7280,         // gray
+        // Profile scenes
+        "Clean" => 0x22C55E,         // green
+        "Crunch" => 0xEAB308,        // yellow
+        "Drive" => 0xEF4444,         // red
+        "Lead" => 0xF97316,          // orange
+        "Funk" => 0x8B5CF6,          // violet
+        "Ambient" => 0x06B6D4,       // cyan
+        "Q-Tron" => 0xEC4899,        // pink
+        "Solo" => 0x3B82F6,          // blue
+        // Setlist sections
+        "Rhythm" => 0x84CC16,        // lime
+        "Edge" => 0xF43F5E,          // rose
+        "Djent" => 0xDC2626,         // red-dark
+        "Harmony Lead" => 0xFBBF24,  // amber
+        "Chug" => 0xB45309,          // amber-dark
+        "Filtered" => 0xA855F7,      // purple
+        "Dry Lead" => 0xFB923C,      // orange-light
+        "Dry Drive" => 0xF87171,     // red-light
+        "Default" => 0x9CA3AF,       // gray-light
+        _ => 0x6B7280,               // gray
     }
 }

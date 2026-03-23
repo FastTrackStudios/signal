@@ -11,7 +11,10 @@
 
 pub mod binding;
 pub mod curation;
+pub mod curve;
+pub mod daw_target;
 pub mod easing;
+pub mod learn;
 pub mod macro_bank;
 pub mod parameter;
 pub mod response;
@@ -24,7 +27,10 @@ pub mod target;
 
 pub use binding::MacroBinding;
 pub use curation::ParamCuration;
+pub use curve::{CurvePoint, MultiPointCurve};
+pub use daw_target::DawParamTarget;
 pub use easing::{lerp_eased, EasingCurve};
+pub use learn::{LearnState, PendingBinding};
 pub use macro_bank::{GroupSelector, MacroBank, MacroGroup, MacroKnob};
 pub use parameter::{BlockParameter, ParameterValue};
 pub use response::ResponseCurve;

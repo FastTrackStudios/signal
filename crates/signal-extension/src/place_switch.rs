@@ -136,7 +136,7 @@ async fn place_switch(daw: &Daw, level: SwitchLevel) -> Result<()> {
         SwitchLevel::Song => {
             // Walk up from selected track to find the song folder, then its parent (rig)
             let (song_index, song_name, rig_guid) =
-                find_song_and_rig(selected_info, &track_by_guid, &tracks).await?;
+                find_song_and_rig(selected_info, &track_by_guid, &tracks, &all_tracks).await?;
 
             let rig_track = tracks
                 .by_guid(&rig_guid)
@@ -210,10 +210,11 @@ fn find_scene_and_controller<'a>(
 /// Walk up the parent chain from the selected track to find:
 /// 1. The song folder (a folder track that is a child of a rig folder with scene_count)
 /// 2. The rig folder (the song folder's parent)
-async fn find_song_and_rig<'a>(
+async fn find_song_and_rig(
     selected: &daw::service::Track,
-    track_map: &std::collections::HashMap<&str, &'a daw::service::Track>,
+    track_map: &std::collections::HashMap<&str, &daw::service::Track>,
     tracks: &daw::Tracks,
+    all_tracks: &[daw::service::Track],
 ) -> Result<(usize, String, String)> {
     // Walk up the parent chain. We're looking for a folder track whose parent
     // has fts_signal/scene_count ext_state — that parent is the rig, and
@@ -235,7 +236,7 @@ async fn find_song_and_rig<'a>(
                             let index = find_sibling_index(
                                 &current.guid,
                                 parent_guid,
-                                track_map,
+                                all_tracks,
                             )?;
                             return Ok((index, current.name.clone(), parent_guid.clone()));
                         }
@@ -272,13 +273,14 @@ fn parse_scene_name(name: &str) -> Option<(usize, String)> {
 
 /// Find the 0-based index of a track among its siblings (children of the same parent).
 /// Only counts folder tracks (song/scene folders), skipping input/layer tracks.
+/// Uses the ordered track list (by track index) for deterministic ordering.
 fn find_sibling_index(
     target_guid: &str,
     parent_guid: &str,
-    tracks: &std::collections::HashMap<&str, &daw::service::Track>,
+    all_tracks: &[daw::service::Track],
 ) -> Result<usize> {
     let mut folder_index = 0usize;
-    for track in tracks.values() {
+    for track in all_tracks {
         if track.parent_guid.as_deref() == Some(parent_guid) && track.is_folder {
             if track.guid == target_guid {
                 return Ok(folder_index);

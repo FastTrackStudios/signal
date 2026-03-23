@@ -253,6 +253,50 @@ actions_proto::define_actions! {
             category: Session,
             group: "Place",
         }
+
+        // ── Macro Arm / Learn ───────────────────────────────────────────
+
+        MACRO_ARM = "macro_arm" {
+            name: "Signal - Macro Arm",
+            description: "Arm the next available macro for learning (touch FX params to bind them)",
+            category: Session,
+            group: "Macro",
+        }
+
+        MACRO_DISARM = "macro_disarm" {
+            name: "Signal - Macro Disarm",
+            description: "Disarm the current macro and finalize all learned bindings",
+            category: Session,
+            group: "Macro",
+        }
+
+        MACRO_SET_POINT = "macro_set_point" {
+            name: "Signal - Macro Set Point",
+            description: "Set a curve point: captures current macro knob position and last-touched param value",
+            category: Session,
+            group: "Macro",
+        }
+
+        MACRO_REMOVE_LAST_POINT = "macro_remove_last_point" {
+            name: "Signal - Macro Remove Last Point",
+            description: "Remove the last curve point added for the last-touched parameter",
+            category: Session,
+            group: "Macro",
+        }
+
+        MACRO_CLEAR = "macro_clear" {
+            name: "Signal - Macro Clear",
+            description: "Clear all pending bindings for the currently armed macro",
+            category: Session,
+            group: "Macro",
+        }
+
+        MACRO_ADD = "macro_add" {
+            name: "Signal - Add Macro",
+            description: "Add a new macro knob to the active bank",
+            category: Session,
+            group: "Macro",
+        }
     }
 }
 

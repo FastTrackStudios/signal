@@ -160,6 +160,33 @@
               doCheck = false;
             });
 
+            # Signal Extension — SHM guest process for REAPER integration
+            signal-extension = craneLib.buildPackage (commonArgs // {
+              pname = "signal-extension";
+              version = rev;
+              inherit cargoArtifacts;
+              cargoExtraArgs = "-p signal-extension";
+              doCheck = false;
+            });
+
+            # FTS Signal Controller — CLAP plugin bundle
+            # Uses nih_plug_xtask bundler (via cargo xtask bundle) to produce
+            # a proper .clap bundle: macOS = Contents/MacOS/ + Info.plist,
+            # Linux/Windows = renamed .so/.dll.
+            fts-signal-controller = craneLib.buildPackage (commonArgs // {
+              pname = "fts-signal-controller";
+              version = rev;
+              inherit cargoArtifacts;
+              buildPhaseCargoCommand = ''
+                cargo xtask bundle fts-signal-controller --release
+              '';
+              installPhaseCommand = ''
+                mkdir -p $out/lib/clap
+                cp -r target/bundled/"FTS Signal Controller.clap" $out/lib/clap/
+              '';
+              doCheck = false;
+            });
+
             default = self'.packages.signal-desktop;
           };
 

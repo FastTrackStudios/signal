@@ -35,7 +35,7 @@ use daw::{Daw, TrackHandle};
 use eyre::{Result, WrapErr};
 use tracing::info;
 
-use crate::demo_profile::{add_layer_fx, scene_color};
+use crate::demo_profile::scene_color;
 
 /// A song in the demo setlist.
 struct SongDef {
@@ -208,10 +208,9 @@ pub async fn load_demo_setlist(daw: &Daw) -> Result<()> {
         );
 
         // ── Song marker ───────────────────────────────────────────────
-        markers
-            .add(song_start_time, song.title)
-            .await
-            .wrap_err_with(|| format!("add marker for '{}'", song.title))?;
+        if let Err(e) = markers.add(song_start_time, song.title).await {
+            tracing::warn!("[demo-setlist] Failed to add marker for '{}': {e:#}", song.title);
+        }
 
         // ── Song folder ───────────────────────────────────────────────
         let song_folder = tracks.add(song.title, None).await?;
@@ -219,11 +218,13 @@ pub async fn load_demo_setlist(daw: &Daw) -> Result<()> {
         song_folder.set_color(song.color).await?;
 
         // Signal Controller on song folder — receives MIDI to switch sections
-        song_folder
+        if let Err(e) = song_folder
             .fx_chain()
             .add("CLAP: FTS Signal Controller (FastTrack Studio)")
             .await
-            .wrap_err_with(|| format!("add controller to '{}'", song.title))?;
+        {
+            tracing::warn!("[demo-setlist] Failed to add controller to '{}': {e:#}", song.title);
+        }
 
         // Store section count for section switching
         song_folder
@@ -240,7 +241,7 @@ pub async fn load_demo_setlist(daw: &Daw) -> Result<()> {
         // ── Build sections ────────────────────────────────────────────
         let mut section_inputs: Vec<TrackHandle> = Vec::new();
 
-        for (sec_idx, &(sec_name, module_types)) in song.sections.iter().enumerate() {
+        for (sec_idx, &(sec_name, _module_types)) in song.sections.iter().enumerate() {
             let is_last_section = sec_idx == section_count - 1;
 
             // Section folder
@@ -277,17 +278,27 @@ pub async fn load_demo_setlist(daw: &Daw) -> Result<()> {
             layer.set_folder_depth(depth).await?;
 
             // Send: section input → layer
-            sec_input.sends().add_to(layer.guid()).await?;
-
-            // Add FX chain to layer
-            add_layer_fx(&layer, module_types).await?;
+            if let Err(e) = sec_input.sends().add_to(layer.guid()).await {
+                tracing::warn!("[demo-setlist] Failed send sec_input→layer for '{sec_name}': {e:#}");
+            }
 
             section_inputs.push(sec_input);
         }
 
-        // Send: song input → each section input
-        for sec_input in &section_inputs {
-            song_input.sends().add_to(sec_input.guid()).await?;
+        // Send: song input → each section input (mute all except first)
+        for (i, sec_input) in section_inputs.iter().enumerate() {
+            match song_input.sends().add_to(sec_input.guid()).await {
+                Ok(send) => {
+                    if i > 0 {
+                        if let Err(e) = send.mute().await {
+                            tracing::warn!("[demo-setlist] Failed to mute send {i}: {e:#}");
+                        }
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!("[demo-setlist] Failed send song_input→sec_input: {e:#}");
+                }
+            }
         }
 
         // ── Section MIDI items (on the song folder) ───────────────────
@@ -307,16 +318,24 @@ pub async fn load_demo_setlist(daw: &Daw) -> Result<()> {
                 beats_per_bar,
             )];
 
-            let item = song_items
+            match song_items
                 .create_midi_item_with_notes(start, end, midi_notes)
                 .await
-                .wrap_err_with(|| {
-                    format!("create section MIDI item for '{sec_name}' in '{}'", song.title)
-                })?;
-
-            if let Some(item) = item {
-                item.set_color(Some(scene_color(sec_name))).await?;
-                item.active_take().set_name(sec_name).await?;
+            {
+                Ok(Some(item)) => {
+                    if let Err(e) = item.set_color(Some(scene_color(sec_name))).await {
+                        tracing::warn!("[demo-setlist] Failed to set color for '{sec_name}': {e:#}");
+                    }
+                    if let Err(e) = item.active_take().set_name(sec_name).await {
+                        tracing::warn!("[demo-setlist] Failed to set name for '{sec_name}': {e:#}");
+                    }
+                }
+                Ok(None) => {
+                    tracing::warn!("[demo-setlist] No MIDI item returned for '{sec_name}'");
+                }
+                Err(e) => {
+                    tracing::warn!("[demo-setlist] Failed MIDI item for '{sec_name}': {e:#}");
+                }
             }
 
             info!(
@@ -331,9 +350,20 @@ pub async fn load_demo_setlist(daw: &Daw) -> Result<()> {
         current_bar += section_count;
     }
 
-    // ── Rig input sends to all song inputs ────────────────────────────
-    for song_input in &song_inputs {
-        rig_input.sends().add_to(song_input.guid()).await?;
+    // ── Rig input sends to all song inputs (mute all except first) ─────
+    for (i, song_input) in song_inputs.iter().enumerate() {
+        match rig_input.sends().add_to(song_input.guid()).await {
+            Ok(send) => {
+                if i > 0 {
+                    if let Err(e) = send.mute().await {
+                        tracing::warn!("[demo-setlist] Failed to mute song send {i}: {e:#}");
+                    }
+                }
+            }
+            Err(e) => {
+                tracing::warn!("[demo-setlist] Failed send rig_input→song_input: {e:#}");
+            }
+        }
     }
 
     // ── Song-switching MIDI items (on the rig folder) ─────────────────
@@ -354,14 +384,20 @@ pub async fn load_demo_setlist(daw: &Daw) -> Result<()> {
             song_bars as f64 * beats_per_bar,
         )];
 
-        let item = rig_items
+        match rig_items
             .create_midi_item_with_notes(start, end, midi_notes)
             .await
-            .wrap_err_with(|| format!("create song MIDI item for '{}'", song.title))?;
-
-        if let Some(item) = item {
-            item.set_color(Some(song.color)).await?;
-            item.active_take().set_name(song.title).await?;
+        {
+            Ok(Some(item)) => {
+                let _ = item.set_color(Some(song.color)).await;
+                let _ = item.active_take().set_name(song.title).await;
+            }
+            Ok(None) => {
+                tracing::warn!("[demo-setlist] No MIDI item returned for song '{}'", song.title);
+            }
+            Err(e) => {
+                tracing::warn!("[demo-setlist] Failed song MIDI item for '{}': {e:#}", song.title);
+            }
         }
 
         info!(

@@ -34,10 +34,18 @@
 //! - Cross-track writes are routed via SHM to the target track's controller
 //! - Lock-free ring buffer for SHM → audio thread communication
 //! - No allocations in the audio callback
+//!
+//! # REAPER Bootstrap
+//!
+//! Exports `ReaperPluginEntry` for eager loading by the REAPER extension.
+//! This gives the plugin direct REAPER API access and registers a ~30Hz
+//! timer callback for scene switching (reading timeline MIDI items and
+//! muting/unmuting sends).
 
-pub mod editor;
 pub mod param_queue;
 pub mod plugin;
+pub mod reaper_bootstrap;
+pub mod scene_timer;
 pub mod shm_bridge;
 
 use fts_plugin_core::prelude::*;

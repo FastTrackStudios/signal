@@ -264,8 +264,6 @@ impl ControllerUiState {
 pub struct FtsSignalController {
     params: Arc<ControllerParams>,
     pub(crate) ui_state: Arc<ControllerUiState>,
-    editor_state: Arc<DioxusState>,
-
     /// Receives parameter writes from signal-extension via SHM.
     queue_consumer: ParamQueueConsumer,
     /// Producer handle — cloned to the SHM receiver task.
@@ -286,7 +284,6 @@ impl Default for FtsSignalController {
         Self {
             params,
             ui_state,
-            editor_state: fts_plugin_core::default_editor_state(),
             queue_consumer: consumer,
             queue_producer: producer,
             pending_writes: Vec::with_capacity(64),
@@ -333,14 +330,6 @@ impl Plugin for FtsSignalController {
 
     fn params(&self) -> Arc<dyn Params> {
         self.params.clone()
-    }
-
-    fn editor(&mut self, _async_executor: AsyncExecutor<Self>) -> Option<Box<dyn Editor>> {
-        create_dioxus_editor_with_state(
-            self.editor_state.clone(),
-            self.ui_state.clone(),
-            crate::editor::App,
-        )
     }
 
     fn initialize(

@@ -47,6 +47,7 @@ facet-styx = { version = "2.0" }
 
 # ── ROAM service framework (latest main) ─────────────────────────────
 vox = { git = "https://github.com/bearcove/vox.git", rev = "53bff48" }
+ur-taking-me-with-you = { git = "https://github.com/bearcove/vox.git", rev = "53bff48" }
 
 # ── DAW facade crate (sibling repo — single public API surface) ──────
 daw = { git = "https://github.com/FastTrackStudios/daw.git", branch = "main" }

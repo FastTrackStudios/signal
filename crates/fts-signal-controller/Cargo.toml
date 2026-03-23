@@ -15,12 +15,11 @@ signal-proto = { path = "../signal-proto" }
 
 # Plugin framework — nih_plug needed directly for derive macros (#[derive(Params)])
 nih_plug.workspace = true
-fts-plugin-core = { workspace = true, features = ["gui"] }
-audio-gui.workspace = true
+fts-plugin-core.workspace = true
 atomic_float.workspace = true
 
 # DAW access (wraps REAPER API — for TrackFX_SetParamNormalized etc.)
-daw.workspace = true
+daw = { workspace = true, features = ["sync", "reaper"] }
 daw-extension-runtime.workspace = true
 
 # Async runtime (background SHM connection task)
