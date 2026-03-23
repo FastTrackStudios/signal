@@ -1,0 +1,148 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag (e.g. v0.1.0). Leave empty for dev build.'
+        required: false
+
+permissions:
+  contents: write
+
+env:
+  NIXPKGS_ALLOW_UNFREE: 1
+
+jobs:
+  # ── macOS (Apple Silicon + Intel) ─────────────────────────────────
+  build-macos:
+    strategy:
+      matrix:
+        include:
+          - os: macos-14
+            system: aarch64-darwin
+            arch: arm64
+          - os: macos-13
+            system: x86_64-darwin
+            arch: x86_64
+
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 120
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: cachix/install-nix-action@v27
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+            access-tokens = github.com=${{ secrets.GH_PAT }}
+
+      - uses: cachix/cachix-action@v15
+        with:
+          name: fasttrackstudio
+          authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
+        continue-on-error: true
+
+      - name: Build FTS-Reaper wrapper packages
+        run: |
+          nix build .#packages.${{ matrix.system }}.fts-installer --accept-flake-config
+          nix build .#packages.${{ matrix.system }}.fasttrackstudio-desktop --accept-flake-config
+          nix build .#packages.${{ matrix.system }}.fasttrackstudio-web --accept-flake-config
+
+      - name: Create distribution DMG
+        run: nix run .#apps.${{ matrix.system }}.create-distribution-dmg --accept-flake-config
+
+      - name: Create installer DMG
+        run: nix run .#apps.${{ matrix.system }}.create-installer-dmg --accept-flake-config
+
+      - name: Rename artifacts with arch
+        run: |
+          for f in FastTrackStudio-*.dmg; do
+            mv "$f" "${f%.dmg}-${{ matrix.arch }}.dmg"
+          done
+          for f in FastTrackStudio-Installer-*.dmg; do
+            mv "$f" "${f%.dmg}-${{ matrix.arch }}.dmg" 2>/dev/null || true
+          done
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-${{ matrix.arch }}
+          path: '*.dmg'
+
+  # ── Linux (x86_64) ───────────────────────────────────────────────
+  build-linux:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: cachix/install-nix-action@v27
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+            access-tokens = github.com=${{ secrets.GH_PAT }}
+
+      - uses: cachix/cachix-action@v15
+        with:
+          name: fasttrackstudio
+          authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
+        continue-on-error: true
+
+      - name: Build installer (headless)
+        run: nix build .#fts-installer --accept-flake-config -o result-installer
+
+      - name: Build desktop app
+        run: nix build .#fasttrackstudio-desktop --accept-flake-config -o result-desktop
+
+      - name: Package Linux tarball
+        run: |
+          TAG="${GITHUB_REF_NAME:-dev}"
+          STAGING=$(mktemp -d)
+          mkdir -p "$STAGING/FastTrackStudio/bin"
+
+          # Installer
+          if [ -d result-installer/bin ]; then
+            cp result-installer/bin/* "$STAGING/FastTrackStudio/bin/"
+          fi
+
+          # Desktop app
+          if [ -d result-desktop/bin ]; then
+            cp result-desktop/bin/* "$STAGING/FastTrackStudio/bin/"
+          fi
+
+          tar czf "FastTrackStudio-${TAG}-linux-x86_64.tar.gz" -C "$STAGING" FastTrackStudio
+          rm -rf "$STAGING"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-x86_64
+          path: 'FastTrackStudio-*.tar.gz'
+
+  # ── Create GitHub Release ────────────────────────────────────────
+  release:
+    needs: [build-macos, build-linux]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+
+      - name: List artifacts
+        run: ls -lh *.dmg *.tar.gz 2>/dev/null || true
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          generate_release_notes: true
+          files: |
+            *.dmg
+            *.tar.gz
