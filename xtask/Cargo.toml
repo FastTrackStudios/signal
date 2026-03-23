@@ -6,3 +6,5 @@ publish = false
 
 [dependencies]
 fts-devtools = { git = "https://github.com/FastTrackStudios/daw.git", branch = "main" }
+nih_plug_xtask = { path = "../../FTS-Plugins/forks/nih-plug/nih_plug_xtask" }
+reaper-test = { workspace = true, features = ["runner"] }

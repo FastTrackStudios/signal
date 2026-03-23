@@ -8,7 +8,7 @@ authors.workspace = true
 [dependencies]
 signal-proto = { path = "../signal-proto" }
 signal-live = { path = "../signal-live" }
-roam.workspace = true
+vox.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 tokio = { workspace = true, features = ["sync"] }

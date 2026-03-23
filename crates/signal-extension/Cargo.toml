@@ -14,5 +14,6 @@ daw-extension-runtime.workspace = true
 signal.workspace = true
 tokio = { workspace = true, features = ["time", "net", "rt"] }
 eyre.workspace = true
+serde_json.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true

@@ -126,7 +126,7 @@ pub use signal_chain::*;
 // ─── Re-exports from services ──────────────────────────────────
 
 pub use services::{
-    BlockService, BrowserService, EngineService, LayerService, ProfileService, RackService,
-    ResolveService, RigService, SceneTemplateService, SetlistService, SignalServiceError,
-    SongService,
+    BlockService, BrowserService, EngineService, ExtensionFxState, ExtensionParamService,
+    LayerService, ParamWriteRequest, ProfileService, RackService, ResolveService, RigService,
+    SceneTemplateService, SetlistService, SignalServiceError, SongService,
 };

@@ -70,7 +70,7 @@ impl From<String> for SignalServiceError {
 
 // ─── Service traits ────────────────────────────────────────────
 
-#[roam::service]
+#[vox::service]
 pub trait BlockService {
     async fn get_block(&self, block_type: crate::BlockType) -> Result<Block, SignalServiceError>;
     async fn set_block(
@@ -113,7 +113,7 @@ pub trait BlockService {
     async fn delete_module_collection(&self, id: ModulePresetId) -> Result<(), SignalServiceError>;
 }
 
-#[roam::service]
+#[vox::service]
 pub trait LayerService {
     async fn list_layers(&self) -> Result<Vec<layer::Layer>, SignalServiceError>;
     async fn load_layer(
@@ -129,7 +129,7 @@ pub trait LayerService {
     ) -> Result<Option<layer::LayerSnapshot>, SignalServiceError>;
 }
 
-#[roam::service]
+#[vox::service]
 pub trait EngineService {
     async fn list_engines(&self) -> Result<Vec<engine::Engine>, SignalServiceError>;
     async fn load_engine(
@@ -145,7 +145,7 @@ pub trait EngineService {
     ) -> Result<Option<engine::EngineScene>, SignalServiceError>;
 }
 
-#[roam::service]
+#[vox::service]
 pub trait RigService {
     async fn list_rigs(&self) -> Result<Vec<crate::rig::Rig>, SignalServiceError>;
     async fn load_rig(
@@ -161,7 +161,7 @@ pub trait RigService {
     ) -> Result<Option<crate::rig::RigScene>, SignalServiceError>;
 }
 
-#[roam::service]
+#[vox::service]
 pub trait ProfileService {
     async fn list_profiles(&self) -> Result<Vec<profile::Profile>, SignalServiceError>;
     async fn load_profile(
@@ -177,7 +177,7 @@ pub trait ProfileService {
     ) -> Result<Option<profile::Patch>, SignalServiceError>;
 }
 
-#[roam::service]
+#[vox::service]
 pub trait SongService {
     async fn list_songs(&self) -> Result<Vec<song::Song>, SignalServiceError>;
     async fn load_song(&self, id: song::SongId) -> Result<Option<song::Song>, SignalServiceError>;
@@ -190,7 +190,7 @@ pub trait SongService {
     ) -> Result<Option<song::Section>, SignalServiceError>;
 }
 
-#[roam::service]
+#[vox::service]
 pub trait SetlistService {
     async fn list_setlists(&self) -> Result<Vec<setlist::Setlist>, SignalServiceError>;
     async fn load_setlist(
@@ -206,7 +206,7 @@ pub trait SetlistService {
     ) -> Result<Option<setlist::SetlistEntry>, SignalServiceError>;
 }
 
-#[roam::service]
+#[vox::service]
 pub trait BrowserService {
     async fn browser_index(&self) -> Result<tagging::BrowserIndex, SignalServiceError>;
     async fn browse(
@@ -215,7 +215,7 @@ pub trait BrowserService {
     ) -> Result<Vec<tagging::BrowserHit>, SignalServiceError>;
 }
 
-#[roam::service]
+#[vox::service]
 pub trait ResolveService {
     async fn resolve_target(
         &self,
@@ -223,7 +223,7 @@ pub trait ResolveService {
     ) -> Result<resolve::ResolvedGraph, resolve::ResolveError>;
 }
 
-#[roam::service]
+#[vox::service]
 pub trait SceneTemplateService {
     async fn list_scene_templates(
         &self,
@@ -246,10 +246,82 @@ pub trait SceneTemplateService {
     ) -> Result<(), SignalServiceError>;
 }
 
-#[roam::service]
+#[vox::service]
 pub trait RackService {
     async fn list_racks(&self) -> Result<Vec<rack::Rack>, SignalServiceError>;
     async fn load_rack(&self, id: rack::RackId) -> Result<Option<rack::Rack>, SignalServiceError>;
     async fn save_rack(&self, rack: rack::Rack) -> Result<(), SignalServiceError>;
     async fn delete_rack(&self, id: rack::RackId) -> Result<(), SignalServiceError>;
 }
+
+// ─── Extension ↔ Controller real-time parameter protocol ─────────
+
+/// Batch parameter write request for cross-track modulation.
+///
+/// The controller (or fts-signal-controller CLAP plugin) sends these to
+/// a track's signal-extension via SHM. The extension applies them from
+/// its own audio thread using `TrackFX_SetParamNormalized` (same-track safe).
+#[derive(Debug, Clone, Serialize, Deserialize, Facet)]
+#[repr(C)]
+pub struct ParamWriteRequest {
+    pub fx_index: u32,
+    pub param_index: u32,
+    pub value: f64,
+}
+
+/// Snapshot of an extension's current FX chain state.
+#[derive(Debug, Clone, Serialize, Deserialize, Facet)]
+#[repr(C)]
+pub struct ExtensionFxState {
+    /// Track GUID.
+    pub track_guid: String,
+    /// Number of FX on the track.
+    pub fx_count: u32,
+    /// Whether the extension is ready to accept parameter writes.
+    pub ready: bool,
+}
+
+/// Service implemented by each signal-extension instance (one per track).
+///
+/// The fts-signal-controller CLAP plugin and signal-desktop app use this
+/// to control FX parameters on remote tracks via SHM. Each extension only
+/// touches its own track's parameters — cross-track modulation is routed
+/// through this service rather than calling REAPER APIs across tracks.
+///
+/// # Real-time path
+///
+/// `set_param` and `set_params_batch` are designed for the real-time path.
+/// The extension picks these up in its `process()` callback and applies
+/// them via `TrackFX_SetParamNormalized` (same-track, audio-thread safe).
+///
+/// # Setup path
+///
+/// `apply_graph` and `setup_rig` handle rig construction: adding/removing
+/// FX, loading state chunks, setting initial parameters. These run on the
+/// main thread (not sample-accurate, but fine for setup operations).
+#[vox::service]
+pub trait ExtensionParamService {
+    /// Set a single FX parameter on this extension's track.
+    async fn set_param(
+        &self,
+        fx_index: u32,
+        param_index: u32,
+        value: f64,
+    ) -> Result<(), SignalServiceError>;
+
+    /// Set multiple FX parameters atomically (within one audio block).
+    async fn set_params_batch(
+        &self,
+        writes: Vec<ParamWriteRequest>,
+    ) -> Result<(), SignalServiceError>;
+
+    /// Apply a resolved graph to this extension's track (rig setup / scene switch).
+    async fn apply_graph(
+        &self,
+        graph: crate::resolve::ResolvedGraph,
+    ) -> Result<(), SignalServiceError>;
+
+    /// Report this extension's current FX chain state.
+    async fn report_fx_state(&self) -> Result<ExtensionFxState, SignalServiceError>;
+}
+

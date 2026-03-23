@@ -26,5 +26,5 @@ btca resources   # list all available resources
 | Resource | Repo | Description |
 |----------|------|-------------|
 | `facet` | facet-rs/facet | Rust reflection — shapes, derive macros, serialization |
-| `roam` | bearcove/roam | RPC service framework — service traits, streaming, SHM |
+| `vox` | bearcove/vox | RPC service framework — service traits, streaming, SHM |
 | `moire` | bearcove/moire | Instrumentation — task spawning, sync primitives |

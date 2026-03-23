@@ -27,7 +27,7 @@ Apps must depend only on `signal` (facade) or `signal-ui`, never on internal cra
 - Never hold std sync primitives across `.await`
 
 ### RPC Services
-- Service traits use `#[roam::service]`
+- Service traits use `#[vox::service]`
 - Max 4 params per method (Facet constraint)
 - Use `Tx<T>` / `Rx<T>` for streaming
 

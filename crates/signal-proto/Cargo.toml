@@ -11,7 +11,7 @@ macromod.workspace = true
 utils.workspace = true
 serde.workspace = true
 facet.workspace = true
-roam.workspace = true
+vox.workspace = true
 thiserror.workspace = true
 uuid.workspace = true
 

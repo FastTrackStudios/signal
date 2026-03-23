@@ -11,7 +11,7 @@ signal-storage = { path = "../signal-storage" }
 nam-manager = { path = "../nam-manager" }
 macromod.workspace = true
 daw.workspace = true
-roam.workspace = true
+vox.workspace = true
 eyre = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

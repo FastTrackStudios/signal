@@ -1,0 +1,13 @@
+[application]
+name = "Signal"
+
+[desktop]
+title = "Signal"
+
+[bundle]
+identifier = "com.fasttrackstudio.signal-desktop"
+publisher = "FastTrack Studio"
+name = "Signal"
+
+[bundle.macos]
+minimum_system_version = "13.0"

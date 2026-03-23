@@ -1,0 +1,22 @@
+[package]
+name = "signal-desktop"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[[bin]]
+name = "signal-desktop"
+path = "src/main.rs"
+
+[dependencies]
+signal.workspace = true
+signal-ui = { workspace = true, default-features = false, features = ["desktop"] }
+dioxus = { workspace = true, features = ["desktop"] }
+fts-ui.workspace = true
+dock-dioxus = { workspace = true, default-features = false, features = ["web"] }
+dock-proto.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+eyre.workspace = true

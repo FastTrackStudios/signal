@@ -22,3 +22,4 @@ dock-proto.workspace = true
 [features]
 default = ["web"]
 web = ["dock-dioxus/web"]
+desktop = ["dock-dioxus/web"]

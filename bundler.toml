@@ -1,0 +1,5 @@
+# Plugin metadata for nih_plug_xtask bundler.
+# See: https://github.com/robbert-vdh/nih-plug/blob/master/bundler.toml
+
+[fts-signal-controller]
+name = "FTS Signal Controller"

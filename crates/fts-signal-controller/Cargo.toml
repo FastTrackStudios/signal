@@ -1,0 +1,39 @@
+[package]
+name = "fts-signal-controller"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "CLAP plugin that manages signal chains on a REAPER track — rig setup, macro modulation, and cross-track parameter routing via SHM"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+
+[dependencies]
+# Signal domain
+signal-proto = { path = "../signal-proto" }
+
+# Plugin framework — nih_plug needed directly for derive macros (#[derive(Params)])
+nih_plug.workspace = true
+fts-plugin-core = { workspace = true, features = ["gui"] }
+audio-gui.workspace = true
+atomic_float.workspace = true
+
+# DAW access (wraps REAPER API — for TrackFX_SetParamNormalized etc.)
+daw.workspace = true
+daw-extension-runtime.workspace = true
+
+# Async runtime (background SHM connection task)
+tokio = { workspace = true, features = ["rt", "time"] }
+eyre.workspace = true
+
+# Concurrency
+crossbeam-channel.workspace = true
+
+# Observability
+tracing.workspace = true
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+
+# Serialization
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true

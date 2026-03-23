@@ -200,6 +200,59 @@ actions_proto::define_actions! {
             category: Session,
             group: "Variations",
         }
+
+        // ── Dev / Demo ─────────────────────────────────────────────
+
+        LOAD_DEMO_GUITAR_RIG = "dev.load_demo_guitar_rig" {
+            name: "Signal - Dev - Load Demo Guitar Rig",
+            description: "Create a demo guitar rig with tracks, stock plugins, and macro bindings",
+            category: Dev,
+            group: "Dev",
+        }
+
+        LOAD_DEMO_GUITAR_PROFILE = "dev.load_demo_guitar_profile" {
+            name: "Signal - Dev - Load Demo Guitar Profile",
+            description: "Create the All-Around guitar profile with 8 scene variations using stock plugins",
+            category: Dev,
+            group: "Dev",
+        }
+
+        GENERATE_SCENE_MIDI_ITEMS = "dev.generate_scene_midi_items" {
+            name: "Signal - Dev - Generate Scene MIDI Items",
+            description: "Generate colored MIDI items on the profile track for switching between scene variations",
+            category: Dev,
+            group: "Dev",
+        }
+
+        LOAD_DEMO_SETLIST = "dev.load_demo_setlist" {
+            name: "Signal - Dev - Load Demo Setlist",
+            description: "Create a demo setlist with 8 songs, each with sections and MIDI switching items",
+            category: Dev,
+            group: "Dev",
+        }
+
+        // ── Place Switch (edit cursor) ────────────────────────────────
+
+        PLACE_SECTION_SWITCH = "place_section_switch" {
+            name: "Signal - Place Section Switch",
+            description: "Place a section-switch MIDI item at the edit cursor for the selected track's scene",
+            category: Session,
+            group: "Place",
+        }
+
+        PLACE_SONG_SWITCH = "place_song_switch" {
+            name: "Signal - Place Song Switch",
+            description: "Place a song-switch MIDI item at the edit cursor for the selected track's song",
+            category: Session,
+            group: "Place",
+        }
+
+        PLACE_SCENE_SWITCH = "place_scene_switch" {
+            name: "Signal - Place Scene Switch",
+            description: "Place a scene-switch MIDI item at the edit cursor for the selected track's profile scene",
+            category: Session,
+            group: "Place",
+        }
     }
 }
 

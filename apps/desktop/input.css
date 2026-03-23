@@ -1,0 +1,41 @@
+@import "tailwindcss";
+@import "./fts-theme.css";
+
+/* Scan app source and UI crate dependencies for Tailwind class usage */
+@source "./src/**/*.rs";
+@source "../../crates/signal-ui/src/**/*.rs";
+@source "../../../../../.cargo/git/checkouts/fts-ui-*/*/crates/*/src/**/*.rs";
+@source "../../../../../.cargo/git/checkouts/lumen-blocks-*/*/blocks/src/**/*.rs";
+@source "../../../../../.cargo/git/checkouts/dock-dioxus-*/*/crates/*/src/**/*.rs";
+
+@layer base {
+  body {
+    @apply bg-background text-foreground text-[13px] font-sans antialiased;
+  }
+
+  /* Scrollbar styling */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: oklch(0.269 0 0);
+    border-radius: 3px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: oklch(0.35 0 0);
+  }
+
+  input[type="text"],
+  input[type="number"] {
+    @apply bg-secondary border border-border text-foreground rounded-md px-3 py-1.5 text-[13px] outline-none transition-all duration-150;
+    @apply focus:border-ring focus:ring-1 focus:ring-ring/30;
+  }
+
+  input[type="checkbox"] {
+    @apply w-3.5 h-3.5 accent-primary cursor-pointer;
+  }
+}
