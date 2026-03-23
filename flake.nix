@@ -86,6 +86,7 @@
           ])
           ++ lib.optionals pkgs.stdenv.isLinux (with pkgs; [
             alsa-lib alsa-lib.dev
+            avahi avahi.dev
             glib gtk3 libsoup_3 webkitgtk_4_1 xdotool
             libx11 libxcursor libxrandr libxi libxcb
             libxkbcommon wayland libGL vulkan-loader
@@ -452,18 +453,10 @@
               };
             };
 
-            git-hooks.hooks = {
-              rustfmt = {
-                enable = true;
-                packageOverrides.cargo = rustToolchain;
-                packageOverrides.rustfmt = rustToolchain;
-              };
-              clippy = {
-                enable = true;
-                packageOverrides.cargo = rustToolchain;
-                packageOverrides.clippy = rustToolchain;
-              };
-            };
+            # NOTE: git-hooks are managed by beads (core.hooksPath = .beads/hooks).
+            # Enabling devenv git-hooks here causes "Cowardly refusing to install
+            # hooks with core.hooksPath set" and blocks shell entry entirely.
+            # Formatting is enforced by the beads pre-commit hook instead.
 
             enterShell = ''
               [ -f .env ] && { set -a; source .env; set +a; }
