@@ -19,6 +19,7 @@
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
+use daw::file::RppSerialize;
 use reaper_test::reaper_test;
 use signal::ops::rig_importer::{ImportBlock, ImportChain, ImportModule};
 use signal_proto::plugin_block::{FxRole, TrackRole};

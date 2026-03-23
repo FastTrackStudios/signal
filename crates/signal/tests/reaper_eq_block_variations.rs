@@ -17,8 +17,7 @@ use signal::resolve::{
     LayerSource, ResolveTarget, ResolvedBlock, ResolvedEngine, ResolvedGraph, ResolvedLayer,
     ResolvedModule,
 };
-use signal::{seed_id, Block, BlockType};
-use signal_live::engine::DawPatchApplier;
+use signal::{seed_id, Block, BlockType, DawPatchApplier};
 
 /// REAPER's CLAP plugin identifier for FabFilter Pro-Q 4.
 const CLAP_PROQ4: &str = "CLAP: Pro-Q 4 (FabFilter)";
