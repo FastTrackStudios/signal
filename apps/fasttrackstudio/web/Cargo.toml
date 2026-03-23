@@ -43,8 +43,8 @@ zip = { version = "2.2", default-features = false, features = ["deflate"] }
 # Logging
 tracing = "0.1"
 
-# Roam context
-roam = { workspace = true }
+# Vox context
+vox = { workspace = true }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 # Override fontique to disable system feature (not available on WASM)
