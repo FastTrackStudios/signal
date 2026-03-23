@@ -29,7 +29,7 @@ jobs:
         run: nix build .#fts-installer --no-link
 
       - name: Build FTS Control app
-        run: nix build .#fts-control-desktop --no-link
+        run: nix build .#fasttrackstudio-desktop --no-link
 
       - name: Create installer DMG
         run: nix run .#create-installer-dmg

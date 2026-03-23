@@ -170,39 +170,18 @@
               doCheck = false;
             });
 
-            # FTS Control Web App (WASM)
-            fts-control-web = craneLib.buildPackage (commonArgs // {
-              pname = "fts-control-web";
+            # FastTrackStudio Web App (WASM)
+            fasttrackstudio-web = craneLib.buildPackage (commonArgs // {
+              pname = "fasttrackstudio-web";
               version = rev;
               inherit cargoArtifacts;
               buildPhaseCargoCommand = ''
-                cd apps/fts-control/web
+                cd apps/web
                 dx build --release --platform web
               '';
               installPhaseCommand = ''
                 mkdir -p $out/www
-                cp -r apps/fts-control/web/target/dx/fts-control-web/release/web/* $out/www/
-              '';
-              doCheck = false;
-            });
-
-            # FTS Control Desktop App
-            fts-control-desktop = craneLib.buildPackage (commonArgs // {
-              pname = "fts-control-desktop";
-              version = rev;
-              inherit cargoArtifacts;
-              buildPhaseCargoCommand = ''
-                cd apps/fts-control/desktop
-                dx build --release --platform desktop
-              '';
-              installPhaseCommand = ''
-                mkdir -p $out/Applications $out/bin
-                if [ -d "apps/fts-control/desktop/target/dx/fts-control-desktop/release/macos" ]; then
-                  cp -r apps/fts-control/desktop/target/dx/fts-control-desktop/release/macos/*.app $out/Applications/
-                  ln -s "$out/Applications/"*.app"/Contents/MacOS/"* $out/bin/fts-control-desktop
-                elif [ -f "target/release/fts-control-desktop" ]; then
-                  cp target/release/fts-control-desktop $out/bin/
-                fi
+                cp -r apps/web/target/dx/fasttrackstudio-web/release/web/* $out/www/
               '';
               doCheck = false;
             });
@@ -213,13 +192,13 @@
               version = rev;
               inherit cargoArtifacts;
               buildPhaseCargoCommand = ''
-                cd apps/fasttrackstudio/desktop
+                cd apps/desktop
                 dx build --release --platform desktop
               '';
               installPhaseCommand = ''
                 mkdir -p $out/Applications $out/bin
-                if [ -d "apps/fasttrackstudio/desktop/target/dx/fasttrackstudio-desktop/release/macos" ]; then
-                  cp -r apps/fasttrackstudio/desktop/target/dx/fasttrackstudio-desktop/release/macos/*.app $out/Applications/
+                if [ -d "apps/desktop/target/dx/fasttrackstudio-desktop/release/macos" ]; then
+                  cp -r apps/desktop/target/dx/fasttrackstudio-desktop/release/macos/*.app $out/Applications/
                   ln -s "$out/Applications/"*.app"/Contents/MacOS/"* $out/bin/fasttrackstudio-desktop
                 elif [ -f "target/release/fasttrackstudio-desktop" ]; then
                   cp target/release/fasttrackstudio-desktop $out/bin/
@@ -290,7 +269,7 @@
                 set -euo pipefail
 
                 INSTALLER_APP="${self'.packages.fts-installer}/Applications"
-                FTS_CONTROL_APP="${self'.packages.fts-control-desktop}/Applications"
+                FTS_CONTROL_APP="${self'.packages.fasttrackstudio-desktop}/Applications"
                 OUTPUT="FastTrackStudio-Installer-${rev}.dmg"
                 STAGING=$(mktemp -d)
 
@@ -408,7 +387,7 @@
                 ''}
 
                 # ── FTS Control ──
-                FTS_CONTROL_APP="${self'.packages.fts-control-desktop}/Applications"
+                FTS_CONTROL_APP="${self'.packages.fasttrackstudio-desktop}/Applications"
                 if [ -d "$FTS_CONTROL_APP" ]; then
                   echo "  Bundling FTS Control..."
                   cp -r "$FTS_CONTROL_APP"/*.app "$FTS_DIR/"
