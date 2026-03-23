@@ -68,10 +68,10 @@ dock-proto = { git = "https://github.com/FastTrackStudios/dock-dioxus.git", bran
 # Utils from FastTrackStudio monorepo
 utils = { git = "https://github.com/FastTrackStudios/FastTrackStudio.git", branch = "main" }
 
-# ── Plugin framework (FTS-Plugins repo — local path) ───────────────────
-nih_plug = { path = "../FTS-Plugins/forks/nih-plug" }
-fts-plugin-core = { path = "../FTS-Plugins/crates/fts-plugin-core", default-features = false }
-audio-gui = { path = "../FTS-Plugins/crates/audio-gui" }
+# ── Plugin framework ───────────────────────────────────────────────────
+nih_plug = { git = "https://github.com/FastTrackStudios/nih-plug.git", branch = "reaper-embed-ui" }
+fts-plugin-core = { git = "https://github.com/FastTrackStudios/FTS-Plugins.git", branch = "main", default-features = false }
+audio-gui = { git = "https://github.com/FastTrackStudios/FTS-Plugins.git", branch = "main" }
 atomic_float = "1"
 crossbeam-channel = "0.5"
 
@@ -103,12 +103,12 @@ clap = { version = "4", features = ["derive"] }
 # Uncomment the sections below to use local checkouts instead of GitHub.
 # This gives you instant rebuilds when iterating across repos.
 #
-[patch."https://github.com/FastTrackStudios/daw.git"]
-daw = { path = "../daw/crates/daw" }
-daw-cli = { path = "../daw/apps/daw" }
-daw-extension-runtime = { path = "../daw/crates/daw-extension-runtime" }
-audio-controls = { path = "../daw/crates/audio-controls" }
-reaper-test = { path = "../daw/crates/reaper-test" }
+# [patch."https://github.com/FastTrackStudios/daw.git"]
+# daw = { path = "../daw/crates/daw" }
+# daw-cli = { path = "../daw/apps/daw" }
+# daw-extension-runtime = { path = "../daw/crates/daw-extension-runtime" }
+# audio-controls = { path = "../daw/crates/audio-controls" }
+# reaper-test = { path = "../daw/crates/reaper-test" }
 # fts-devtools = { path = "../daw/crates/fts-devtools" }
 #
 # [patch."https://github.com/FastTrackStudios/input_actions.git"]
@@ -125,11 +125,9 @@ reaper-test = { path = "../daw/crates/reaper-test" }
 # fts-ui = { path = "../fts-ui/crates/fts-ui" }
 #
 # ── nih-plug unification ────────────────────────────────────────────────
-# fts-plugin-core's workspace resolves nih_plug from this git URL.
-# Redirect it to the same local fork we use, so there's only one nih_plug.
-[patch."https://github.com/FastTrackStudios/nih-plug.git"]
-nih_plug = { path = "../FTS-Plugins/forks/nih-plug" }
-nih_plug_dioxus = { path = "../FTS-Plugins/forks/nih-plug/nih_plug_dioxus" }
+# [patch."https://github.com/FastTrackStudios/nih-plug.git"]
+# nih_plug = { path = "../FTS-Plugins/forks/nih-plug" }
+# nih_plug_dioxus = { path = "../FTS-Plugins/forks/nih-plug/nih_plug_dioxus" }
 
 # ── Blitz patches (FTS fork with post-processing support) ──────────────
 # Required by nih_plug_dioxus / audio-gui for embedded plugin UIs.
@@ -146,8 +144,8 @@ blitz-traits = { git = "https://github.com/FastTrackStudios/blitz.git", rev = "a
 # moire: unify crates.io moire with the git rev that vox pulls in,
 # avoiding duplicate moire-runtime #[ctor] registrations that crash.
 # moire-trace-capture: tolerate broken frame-pointer chains (NixOS glibc).
-[patch."https://github.com/bearcove/moire"]
-moire-trace-capture = { path = "../forks/moire-trace-capture" }
+# [patch."https://github.com/bearcove/moire"]
+# moire-trace-capture = { path = "../forks/moire-trace-capture" }
 
 [patch.crates-io]
 # Blitz crates — FTS fork with post-processing support

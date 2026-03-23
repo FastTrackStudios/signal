@@ -5,11 +5,11 @@ version = 4
 [[package]]
 name = "actions-proto"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/input_actions.git?branch=main#ab7e3ecbb423aa9fdb73565396db1759f62a329d"
+source = "git+https://github.com/FastTrackStudios/input_actions.git?branch=main#44215fab7b97f078722b9205696bf8e495ac182d"
 dependencies = [
  "convert_case 0.6.0",
  "facet",
- "roam",
+ "vox",
 ]
 
 [[package]]
@@ -199,7 +199,7 @@ version = "1.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "40c48f72fd53cd289104fc64099abca73db4166ad86ea0b4341abe65af83dadc"
 dependencies = [
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -210,7 +210,7 @@ checksum = "291e6a250ff86cd4a820112fb8898808a366d8f9f58ce16d1f538353ad55747d"
 dependencies = [
  "anstyle",
  "once_cell_polyfill",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -386,6 +386,7 @@ dependencies = [
 [[package]]
 name = "audio-controls"
 version = "0.1.0"
+source = "git+https://github.com/FastTrackStudios/daw.git?branch=main#3db08ea70869aab2a6244e4855918f41014cfe26"
 dependencies = [
  "dioxus",
  "js-sys",
@@ -995,7 +996,7 @@ dependencies = [
 [[package]]
 name = "color-palette"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/dynamic-template.git?branch=main#3942238eeaa6532d43cf59686540c743c7d0c855"
+source = "git+https://github.com/FastTrackStudios/dynamic-template.git?branch=main#8a998db9c7c6d483d2b56623fb25dbb707d5e09f"
 dependencies = [
  "facet",
  "thiserror 2.0.18",
@@ -1031,7 +1032,7 @@ version = "3.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "faf9468729b8cbcea668e36183cb69d317348c2e08e994829fb56ebfdfbaac34"
 dependencies = [
- "windows-sys 0.48.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -1510,10 +1511,11 @@ checksum = "be1e0bca6c3637f992fc1cc7cbc52a78c1ef6db076dbf1059c4323d6a2048376"
 [[package]]
 name = "daw"
 version = "0.1.0"
+source = "git+https://github.com/FastTrackStudios/daw.git?branch=main#3db08ea70869aab2a6244e4855918f41014cfe26"
 dependencies = [
  "daw-control",
  "daw-control-sync",
- "daw-proto 0.1.0",
+ "daw-proto",
  "daw-reaper",
  "dawfile-reaper",
 ]
@@ -1521,6 +1523,7 @@ dependencies = [
 [[package]]
 name = "daw-cli"
 version = "0.1.0"
+source = "git+https://github.com/FastTrackStudios/daw.git?branch=main#3db08ea70869aab2a6244e4855918f41014cfe26"
 dependencies = [
  "clap",
  "daw",
@@ -1539,8 +1542,9 @@ dependencies = [
 [[package]]
 name = "daw-control"
 version = "0.1.0"
+source = "git+https://github.com/FastTrackStudios/daw.git?branch=main#3db08ea70869aab2a6244e4855918f41014cfe26"
 dependencies = [
- "daw-proto 0.1.0",
+ "daw-proto",
  "eyre",
  "facet",
  "futures",
@@ -1552,6 +1556,7 @@ dependencies = [
 [[package]]
 name = "daw-control-sync"
 version = "0.1.0"
+source = "git+https://github.com/FastTrackStudios/daw.git?branch=main#3db08ea70869aab2a6244e4855918f41014cfe26"
 dependencies = [
  "daw-control",
  "eyre",
@@ -1565,6 +1570,7 @@ dependencies = [
 [[package]]
 name = "daw-extension-runtime"
 version = "0.1.0"
+source = "git+https://github.com/FastTrackStudios/daw.git?branch=main#3db08ea70869aab2a6244e4855918f41014cfe26"
 dependencies = [
  "daw",
  "eyre",
@@ -1579,17 +1585,7 @@ dependencies = [
 [[package]]
 name = "daw-proto"
 version = "0.1.0"
-dependencies = [
- "actions-proto",
- "facet",
- "thiserror 2.0.18",
- "vox",
-]
-
-[[package]]
-name = "daw-proto"
-version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/daw.git?branch=main#7a9501619b3a64c11c0d6a17f3df6b75936d98fd"
+source = "git+https://github.com/FastTrackStudios/daw.git?branch=main#3db08ea70869aab2a6244e4855918f41014cfe26"
 dependencies = [
  "actions-proto",
  "facet",
@@ -1600,9 +1596,10 @@ dependencies = [
 [[package]]
 name = "daw-reaper"
 version = "0.1.0"
+source = "git+https://github.com/FastTrackStudios/daw.git?branch=main#3db08ea70869aab2a6244e4855918f41014cfe26"
 dependencies = [
  "camino",
- "daw-proto 0.1.0",
+ "daw-proto",
  "dawfile-reaper",
  "enumflags2",
  "keyflow",
@@ -1619,10 +1616,11 @@ dependencies = [
 [[package]]
 name = "dawfile-reaper"
 version = "0.1.0"
+source = "git+https://github.com/FastTrackStudios/daw.git?branch=main#3db08ea70869aab2a6244e4855918f41014cfe26"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
- "daw-proto 0.1.0",
+ "daw-proto",
  "libc",
  "nom 8.0.0",
  "rayon",
@@ -2216,7 +2214,7 @@ dependencies = [
  "libc",
  "option-ext",
  "redox_users",
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -2471,7 +2469,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -2557,16 +2555,6 @@ dependencies = [
 name = "facet-cbor"
 version = "0.2.0"
 source = "git+https://github.com/bearcove/vox.git?rev=53bff48#53bff486b71b828656ff17395f27e0cb631fe488"
-dependencies = [
- "facet",
- "facet-core",
- "facet-reflect",
-]
-
-[[package]]
-name = "facet-cbor"
-version = "7.3.0"
-source = "git+https://github.com/bearcove/roam.git?branch=main#e60a7785a666cecdf2ec76181120d01e62f7fbef"
 dependencies = [
  "facet",
  "facet-core",
@@ -3007,11 +2995,12 @@ checksum = "28dd6caf6059519a65843af8fe2a3ae298b14b80179855aeb4adc2c1934ee619"
 [[package]]
 name = "fts-devtools"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/daw.git?branch=main#32c1789057f220e8fd97ac4f20803387ff0760fa"
+source = "git+https://github.com/FastTrackStudios/daw.git?branch=main#3db08ea70869aab2a6244e4855918f41014cfe26"
 
 [[package]]
 name = "fts-plugin-core"
 version = "0.1.0"
+source = "git+https://github.com/FastTrackStudios/FTS-Plugins.git?branch=main#4d78acf286b38a3f592377fa9f7b709c51e00c7e"
 dependencies = [
  "anyhow",
  "atomic_float 1.1.0",
@@ -3281,8 +3270,8 @@ dependencies = [
  "libc",
  "log",
  "rustversion",
- "windows-link 0.1.3",
- "windows-result 0.3.4",
+ "windows-link 0.2.1",
+ "windows-result 0.4.1",
 ]
 
 [[package]]
@@ -4162,7 +4151,7 @@ dependencies = [
  "portable-atomic",
  "portable-atomic-util",
  "serde_core",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -4200,7 +4189,7 @@ dependencies = [
  "cesu8",
  "cfg-if",
  "combine",
- "jni-sys 0.3.0",
+ "jni-sys 0.3.1",
  "log",
  "thiserror 1.0.69",
  "walkdir",
@@ -4239,9 +4228,12 @@ dependencies = [
 
 [[package]]
 name = "jni-sys"
-version = "0.3.0"
+version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8eaf4bc02d17cbdd7ff4c7438cafcdf7fb9a4613313ad11b4f8fefe7d3fa0130"
+checksum = "41a652e1f9b6e0275df1f15b32661cf0d4b78d4d87ddec5e0c3c20f097433258"
+dependencies = [
+ "jni-sys 0.4.1",
+]
 
 [[package]]
 name = "jni-sys"
@@ -4290,7 +4282,7 @@ source = "git+https://github.com/FastTrackStudios/keyflow.git?branch=main#5cdd44
 dependencies = [
  "color-eyre",
  "colored",
- "daw-proto 0.1.0 (git+https://github.com/FastTrackStudios/daw.git?branch=main)",
+ "daw-proto",
  "derive_more 1.0.0",
  "engraver",
  "facet",
@@ -4309,7 +4301,7 @@ version = "0.1.0"
 source = "git+https://github.com/FastTrackStudios/keyflow.git?branch=main#5cdd4451d631aaf408038eabb38ac03d2b0f40e6"
 dependencies = [
  "color-palette",
- "daw-proto 0.1.0 (git+https://github.com/FastTrackStudios/daw.git?branch=main)",
+ "daw-proto",
  "facet",
  "helgoboss-midi",
  "music-catalog",
@@ -5049,6 +5041,7 @@ dependencies = [
 [[package]]
 name = "moire-trace-capture"
 version = "1.0.0"
+source = "git+https://github.com/bearcove/moire?rev=13eac79#13eac79c1b128282dd792a611319d0a1016ad15d"
 dependencies = [
  "libc",
  "moire-trace-types",
@@ -5132,7 +5125,7 @@ dependencies = [
 [[package]]
 name = "music-catalog"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/dynamic-template.git?branch=main#3942238eeaa6532d43cf59686540c743c7d0c855"
+source = "git+https://github.com/FastTrackStudios/dynamic-template.git?branch=main#8a998db9c7c6d483d2b56623fb25dbb707d5e09f"
 dependencies = [
  "color-palette",
 ]
@@ -5208,7 +5201,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c3f42e7bbe13d351b6bead8286a43aac9534b82bd3cc43e47037f012ebfd62d4"
 dependencies = [
  "bitflags 2.11.0",
- "jni-sys 0.3.0",
+ "jni-sys 0.3.1",
  "log",
  "ndk-sys",
  "num_enum 0.7.6",
@@ -5228,7 +5221,7 @@ version = "0.6.0+11769913"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ee6cda3051665f1fb8d9e08fc35c96d5a244fb1be711a03b71118828afc9a873"
 dependencies = [
- "jni-sys 0.3.0",
+ "jni-sys 0.3.1",
 ]
 
 [[package]]
@@ -5254,6 +5247,7 @@ dependencies = [
 [[package]]
 name = "nih_plug"
 version = "0.0.0"
+source = "git+https://github.com/FastTrackStudios/nih-plug.git?branch=reaper-embed-ui#1ca24ac82079c95063c4c5a5ea31f38dea34c133"
 dependencies = [
  "anyhow",
  "anymap3",
@@ -5283,6 +5277,7 @@ dependencies = [
 [[package]]
 name = "nih_plug_derive"
 version = "0.1.0"
+source = "git+https://github.com/FastTrackStudios/nih-plug.git?branch=reaper-embed-ui#1ca24ac82079c95063c4c5a5ea31f38dea34c133"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -5292,6 +5287,7 @@ dependencies = [
 [[package]]
 name = "nih_plug_xtask"
 version = "0.1.0"
+source = "git+https://github.com/FastTrackStudios/nih-plug.git?branch=reaper-embed-ui#1ca24ac82079c95063c4c5a5ea31f38dea34c133"
 dependencies = [
  "anyhow",
  "cargo_metadata",
@@ -5354,7 +5350,7 @@ version = "0.50.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7957b9740744892f114936ab4a57b3f487491bbeafaf8083688b16841a4240e5"
 dependencies = [
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -5711,6 +5707,15 @@ name = "ordered-float"
 version = "4.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7bb71e1b3fa6ca1c61f383464aaf2bb0e2f8e772a1f01d486832464de363b951"
+dependencies = [
+ "num-traits",
+]
+
+[[package]]
+name = "ordered-float"
+version = "5.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7f4779c6901a562440c3786d08192c6fbda7c1c2060edd10006b05ee35d10f2d"
 dependencies = [
  "num-traits",
 ]
@@ -6271,7 +6276,7 @@ version = "3.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e67ba7e9b2b56446f1d419b1d807906278ffa1a658a8a5d8a39dcb1f5a78614f"
 dependencies = [
- "toml_edit 0.25.5+spec-1.1.0",
+ "toml_edit 0.25.8+spec-1.1.0",
 ]
 
 [[package]]
@@ -6646,6 +6651,7 @@ dependencies = [
 [[package]]
 name = "reaper-launcher"
 version = "0.1.0"
+source = "git+https://github.com/FastTrackStudios/daw.git?branch=main#3db08ea70869aab2a6244e4855918f41014cfe26"
 dependencies = [
  "libc",
  "serde",
@@ -6689,6 +6695,7 @@ dependencies = [
 [[package]]
 name = "reaper-test"
 version = "0.1.0"
+source = "git+https://github.com/FastTrackStudios/daw.git?branch=main#3db08ea70869aab2a6244e4855918f41014cfe26"
 dependencies = [
  "daw",
  "eyre",
@@ -6704,6 +6711,7 @@ dependencies = [
 [[package]]
 name = "reaper-test-macro"
 version = "0.1.0"
+source = "git+https://github.com/FastTrackStudios/daw.git?branch=main#3db08ea70869aab2a6244e4855918f41014cfe26"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -6906,115 +6914,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "roam"
-version = "7.3.0"
-source = "git+https://github.com/bearcove/roam.git?branch=main#e60a7785a666cecdf2ec76181120d01e62f7fbef"
-dependencies = [
- "facet",
- "roam-core",
- "roam-postcard",
- "roam-service-macros",
- "roam-types",
- "tracing",
-]
-
-[[package]]
-name = "roam-core"
-version = "7.3.0"
-source = "git+https://github.com/bearcove/roam.git?branch=main#e60a7785a666cecdf2ec76181120d01e62f7fbef"
-dependencies = [
- "facet",
- "facet-cbor 7.3.0",
- "facet-core",
- "facet-error",
- "facet-reflect",
- "getrandom 0.3.4",
- "moire",
- "roam-postcard",
- "roam-types",
- "smallvec 1.15.1",
- "tokio",
- "tracing",
- "wasm-bindgen-futures",
- "zerocopy",
-]
-
-[[package]]
-name = "roam-macros-core"
-version = "7.3.0"
-source = "git+https://github.com/bearcove/roam.git?branch=main#e60a7785a666cecdf2ec76181120d01e62f7fbef"
-dependencies = [
- "facet-cargo-toml",
- "heck 0.5.0",
- "proc-macro2",
- "quote",
- "roam-macros-parse",
-]
-
-[[package]]
-name = "roam-macros-parse"
-version = "7.3.0"
-source = "git+https://github.com/bearcove/roam.git?branch=main#e60a7785a666cecdf2ec76181120d01e62f7fbef"
-dependencies = [
- "proc-macro2",
- "unsynn",
-]
-
-[[package]]
-name = "roam-postcard"
-version = "7.3.0"
-source = "git+https://github.com/bearcove/roam.git?branch=main#e60a7785a666cecdf2ec76181120d01e62f7fbef"
-dependencies = [
- "facet",
- "facet-core",
- "facet-reflect",
- "roam-schema",
-]
-
-[[package]]
-name = "roam-schema"
-version = "7.3.0"
-source = "git+https://github.com/bearcove/roam.git?branch=main#e60a7785a666cecdf2ec76181120d01e62f7fbef"
-dependencies = [
- "blake3",
- "facet",
- "facet-cbor 7.3.0",
- "facet-core",
- "indexmap",
-]
-
-[[package]]
-name = "roam-service-macros"
-version = "7.3.0"
-source = "git+https://github.com/bearcove/roam.git?branch=main#e60a7785a666cecdf2ec76181120d01e62f7fbef"
-dependencies = [
- "proc-macro2",
- "roam-macros-core",
-]
-
-[[package]]
-name = "roam-types"
-version = "7.3.0"
-source = "git+https://github.com/bearcove/roam.git?branch=main#e60a7785a666cecdf2ec76181120d01e62f7fbef"
-dependencies = [
- "bitflags 2.11.0",
- "blake3",
- "facet",
- "facet-cbor 7.3.0",
- "facet-core",
- "facet-path",
- "futures-channel",
- "heck 0.5.0",
- "indexmap",
- "moire",
- "roam-postcard",
- "roam-schema",
- "smallvec 1.15.1",
- "structstruck",
- "tokio",
-]
-
-[[package]]
 name = "rowan"
 version = "0.16.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7132,7 +7031,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -7315,7 +7214,7 @@ dependencies = [
  "bigdecimal",
  "chrono",
  "inherent",
- "ordered-float",
+ "ordered-float 4.6.0",
  "rust_decimal",
  "serde_json",
  "time",
@@ -7965,7 +7864,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3a766e1110788c36f4fa1c2b71b387a7815aa65f88ce0229841826633d93723e"
 dependencies = [
  "libc",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -8501,9 +8400,9 @@ dependencies = [
 
 [[package]]
 name = "tao"
-version = "0.34.6"
+version = "0.34.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6e06d52c379e63da659a483a958110bbde891695a0ecb53e48cc7786d5eda7bb"
+checksum = "9103edf55f2da3c82aea4c7fab7c4241032bfeea0e71fa557d98e00e7ce7cc20"
 dependencies = [
  "bitflags 2.11.0",
  "block2 0.6.2",
@@ -8571,7 +8470,7 @@ dependencies = [
  "getrandom 0.4.2",
  "once_cell",
  "rustix",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -8822,9 +8721,9 @@ dependencies = [
 
 [[package]]
 name = "toml_datetime"
-version = "1.0.1+spec-1.1.0"
+version = "1.1.0+spec-1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9b320e741db58cac564e26c607d3cc1fdc4a88fd36c879568c07856ed83ff3e9"
+checksum = "97251a7c317e03ad83774a8752a7e81fb6067740609f75ea2b585b569a59198f"
 dependencies = [
  "serde_core",
 ]
@@ -8857,21 +8756,21 @@ dependencies = [
 
 [[package]]
 name = "toml_edit"
-version = "0.25.5+spec-1.1.0"
+version = "0.25.8+spec-1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8ca1a40644a28bce036923f6a431df0b34236949d111cc07cb6dca830c9ef2e1"
+checksum = "16bff38f1d86c47f9ff0647e6838d7bb362522bdf44006c7068c2b1e606f1f3c"
 dependencies = [
  "indexmap",
- "toml_datetime 1.0.1+spec-1.1.0",
+ "toml_datetime 1.1.0+spec-1.1.0",
  "toml_parser",
  "winnow 1.0.0",
 ]
 
 [[package]]
 name = "toml_parser"
-version = "1.0.10+spec-1.1.0"
+version = "1.1.0+spec-1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7df25b4befd31c4816df190124375d5a20c6b6921e2cad937316de3fccd63420"
+checksum = "2334f11ee363607eb04df9b8fc8a13ca1715a72ba8662a26ac285c98aabb4011"
 dependencies = [
  "winnow 1.0.0",
 ]
@@ -9223,7 +9122,7 @@ checksum = "06abde3611657adf66d383f00b093d7faecc7fa57071cce2578660c9f1010821"
 [[package]]
 name = "utils"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/FastTrackStudio.git?branch=main#ffd32071542550116c371018f1cf876d742ca6e1"
+source = "git+https://github.com/FastTrackStudios/FastTrackStudio.git?branch=main#a425bc94248f9ebcbf0095f69d5aba4c1654eaa6"
 dependencies = [
  "facet",
  "serde",
@@ -9341,7 +9240,7 @@ version = "0.2.0"
 source = "git+https://github.com/bearcove/vox.git?rev=53bff48#53bff486b71b828656ff17395f27e0cb631fe488"
 dependencies = [
  "facet",
- "facet-cbor 0.2.0",
+ "facet-cbor",
  "facet-core",
  "facet-error",
  "facet-reflect",
@@ -9395,7 +9294,7 @@ source = "git+https://github.com/bearcove/vox.git?rev=53bff48#53bff486b71b828656
 dependencies = [
  "blake3",
  "facet",
- "facet-cbor 0.2.0",
+ "facet-cbor",
  "facet-core",
  "indexmap",
 ]
@@ -9444,7 +9343,7 @@ dependencies = [
  "bitflags 2.11.0",
  "blake3",
  "facet",
- "facet-cbor 0.2.0",
+ "facet-cbor",
  "facet-core",
  "facet-path",
  "futures-channel",
@@ -9943,7 +9842,7 @@ dependencies = [
  "ndk-sys",
  "objc",
  "once_cell",
- "ordered-float",
+ "ordered-float 5.1.0",
  "parking_lot",
  "portable-atomic",
  "portable-atomic-util",
@@ -10012,7 +9911,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.48.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -10957,8 +10856,39 @@ dependencies = [
 ]
 
 [[patch.unused]]
-name = "nih_plug_dioxus"
-version = "0.0.0"
+name = "blitz-dom"
+version = "0.2.2"
+source = "git+https://github.com/FastTrackStudios/blitz.git?rev=a72a6bd#a72a6bda786f2c5d9c7157b8f0dfe75e8b0a2c46"
+
+[[patch.unused]]
+name = "blitz-html"
+version = "0.2.0"
+source = "git+https://github.com/FastTrackStudios/blitz.git?rev=a72a6bd#a72a6bda786f2c5d9c7157b8f0dfe75e8b0a2c46"
+
+[[patch.unused]]
+name = "blitz-net"
+version = "0.2.1"
+source = "git+https://github.com/FastTrackStudios/blitz.git?rev=a72a6bd#a72a6bda786f2c5d9c7157b8f0dfe75e8b0a2c46"
+
+[[patch.unused]]
+name = "blitz-paint"
+version = "0.2.1"
+source = "git+https://github.com/FastTrackStudios/blitz.git?rev=a72a6bd#a72a6bda786f2c5d9c7157b8f0dfe75e8b0a2c46"
+
+[[patch.unused]]
+name = "blitz-traits"
+version = "0.2.0"
+source = "git+https://github.com/FastTrackStudios/blitz.git?rev=a72a6bd#a72a6bda786f2c5d9c7157b8f0dfe75e8b0a2c46"
+
+[[patch.unused]]
+name = "dioxus-native"
+version = "0.7.0"
+source = "git+https://github.com/FastTrackStudios/blitz.git?rev=a72a6bd#a72a6bda786f2c5d9c7157b8f0dfe75e8b0a2c46"
+
+[[patch.unused]]
+name = "dioxus-native-dom"
+version = "0.7.0"
+source = "git+https://github.com/FastTrackStudios/blitz.git?rev=a72a6bd#a72a6bda786f2c5d9c7157b8f0dfe75e8b0a2c46"
 
 [[patch.unused]]
 name = "anyrender"
@@ -11044,38 +10974,3 @@ source = "git+https://github.com/FastTrackStudios/blitz.git?rev=a72a6bd#a72a6bda
 name = "wgpu_context"
 version = "0.1.2"
 source = "git+https://github.com/FastTrackStudios/anyrender.git?rev=422b5d0#422b5d0b820dccda702c882fe3eee7ba8e958e77"
-
-[[patch.unused]]
-name = "blitz-dom"
-version = "0.2.2"
-source = "git+https://github.com/FastTrackStudios/blitz.git?rev=a72a6bd#a72a6bda786f2c5d9c7157b8f0dfe75e8b0a2c46"
-
-[[patch.unused]]
-name = "blitz-html"
-version = "0.2.0"
-source = "git+https://github.com/FastTrackStudios/blitz.git?rev=a72a6bd#a72a6bda786f2c5d9c7157b8f0dfe75e8b0a2c46"
-
-[[patch.unused]]
-name = "blitz-net"
-version = "0.2.1"
-source = "git+https://github.com/FastTrackStudios/blitz.git?rev=a72a6bd#a72a6bda786f2c5d9c7157b8f0dfe75e8b0a2c46"
-
-[[patch.unused]]
-name = "blitz-paint"
-version = "0.2.1"
-source = "git+https://github.com/FastTrackStudios/blitz.git?rev=a72a6bd#a72a6bda786f2c5d9c7157b8f0dfe75e8b0a2c46"
-
-[[patch.unused]]
-name = "blitz-traits"
-version = "0.2.0"
-source = "git+https://github.com/FastTrackStudios/blitz.git?rev=a72a6bd#a72a6bda786f2c5d9c7157b8f0dfe75e8b0a2c46"
-
-[[patch.unused]]
-name = "dioxus-native"
-version = "0.7.0"
-source = "git+https://github.com/FastTrackStudios/blitz.git?rev=a72a6bd#a72a6bda786f2c5d9c7157b8f0dfe75e8b0a2c46"
-
-[[patch.unused]]
-name = "dioxus-native-dom"
-version = "0.7.0"
-source = "git+https://github.com/FastTrackStudios/blitz.git?rev=a72a6bd#a72a6bda786f2c5d9c7157b8f0dfe75e8b0a2c46"
