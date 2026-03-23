@@ -24,6 +24,7 @@ utils.workspace = true
 
 [dev-dependencies]
 daw = { workspace = true, features = ["file"] }
+signal-extension = { path = "../signal-extension" }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 eyre.workspace = true
 reaper-test.workspace = true
