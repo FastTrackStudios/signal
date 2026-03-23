@@ -24,6 +24,11 @@
     signal.inputs.nixpkgs.follows = "nixpkgs";
     daw.url = "github:FastTrackStudios/daw";
     daw.inputs.nixpkgs.follows = "nixpkgs";
+    # WDL library — submodule of reaper-rs, needed for reaper-low C++ build
+    wdl = {
+      url = "github:justinfrankel/WDL";
+      flake = false;
+    };
   };
 
   nixConfig = {
@@ -40,7 +45,7 @@
     pure-eval = false;
   };
 
-  outputs = { self, flake-parts, crane, devenv, devenv-root, nix2container, fts-flake, sync, signal, daw, ... } @inputs:
+  outputs = { self, flake-parts, crane, devenv, devenv-root, nix2container, fts-flake, sync, signal, daw, wdl, ... } @inputs:
     flake-parts.lib.mkFlake { inherit inputs; } {
       imports = [ inputs.devenv.flakeModule ];
 
@@ -110,9 +115,26 @@
             tailwindcss_4
           ];
 
+          # Vendor cargo deps with WDL submodule injected into reaper-rs
+          cargoVendorDir = craneLib.vendorCargoDeps {
+            inherit src;
+            overrideVendorGitCheckout = ps: drv:
+              if lib.any (p: lib.hasInfix "reaper-rs" (p.source or "")) ps
+              then drv.overrideAttrs (old: {
+                postInstall = (old.postInstall or "") + ''
+                  for d in $out/reaper-low-*/; do
+                    if [ -d "$d/lib" ]; then
+                      cp -r ${wdl} "$d/lib/WDL"
+                    fi
+                  done
+                '';
+              })
+              else drv;
+          };
+
           # Common args for all crane builds
           commonArgs = {
-            inherit src buildInputs nativeBuildInputs;
+            inherit src buildInputs nativeBuildInputs cargoVendorDir;
             strictDeps = true;
             LIBCLANG_PATH = "${pkgs.llvmPackages.libclang.lib}/lib";
             OPENSSL_DIR = "${pkgs.openssl.dev}";
