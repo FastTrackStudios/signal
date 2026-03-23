@@ -18,6 +18,12 @@
     nix2container.inputs.nixpkgs.follows = "nixpkgs";
     mk-shell-bin.url = "github:rrbutani/nix-mk-shell-bin";
     fts-flake.url = "github:FastTrackStudios/fts-flake";
+    sync.url = "github:FastTrackStudios/sync";
+    sync.inputs.nixpkgs.follows = "nixpkgs";
+    signal.url = "github:FastTrackStudios/signal";
+    signal.inputs.nixpkgs.follows = "nixpkgs";
+    daw.url = "github:FastTrackStudios/daw";
+    daw.inputs.nixpkgs.follows = "nixpkgs";
   };
 
   nixConfig = {
@@ -34,7 +40,7 @@
     pure-eval = false;
   };
 
-  outputs = { self, flake-parts, crane, devenv, devenv-root, nix2container, fts-flake, ... } @inputs:
+  outputs = { self, flake-parts, crane, devenv, devenv-root, nix2container, fts-flake, sync, signal, daw, ... } @inputs:
     flake-parts.lib.mkFlake { inherit inputs; } {
       imports = [ inputs.devenv.flakeModule ];
 
@@ -307,6 +313,10 @@
           # ============================================================
           apps.create-distribution-dmg = let
             ftsWrapper = fts-flake.wrapperPackages.${system} or {};
+            syncExt = sync.packages.${system}.sync-extension or null;
+            signalExt = signal.packages.${system}.signal-extension or null;
+            signalClap = signal.packages.${system}.fts-signal-controller or null;
+            dawBridge = daw.packages.${system}.daw-bridge or null;
           in {
             type = "app";
             program = let
@@ -320,12 +330,14 @@
 
                 echo "Assembling FastTrackStudio distribution DMG..."
               '' + lib.optionalString pkgs.stdenv.isDarwin ''
-                # ── FastTrack REAPER (REAPER + SWS + ReaPack) ──
+                # ── FTS-Reaper (REAPER + SWS + ReaPack + extensions) ──
                 ${lib.optionalString (ftsWrapper ? reaper) ''
-                  echo "  Bundling FastTrack REAPER..."
-                  REAPER_APP="$FTS_DIR/FastTrack REAPER.app"
+                  echo "  Bundling FTS-Reaper..."
+                  REAPER_APP="$FTS_DIR/FTS-Reaper.app"
                   mkdir -p "$REAPER_APP/Contents/MacOS"
-                  mkdir -p "$REAPER_APP/Contents/Resources/FTS/UserPlugins"
+                  mkdir -p "$REAPER_APP/Contents/Resources/FTS/UserPlugins/fts-extensions"
+                  mkdir -p "$REAPER_APP/Contents/Resources/FTS/UserPlugins/FX/FTS"
+                  mkdir -p "$REAPER_APP/Contents/Resources/FTS/UserPlugins/daw-bridge"
                   mkdir -p "$REAPER_APP/Contents/Resources/FTS/Scripts"
 
                   cp -r ${ftsWrapper.reaper}/Applications/REAPER.app "$REAPER_APP/Contents/Resources/REAPER.app"
@@ -333,13 +345,36 @@
                   cp ${ftsWrapper.reapack}/UserPlugins/*.dylib "$REAPER_APP/Contents/Resources/FTS/UserPlugins/"
                   cp ${ftsWrapper.sws}/Scripts/*.py "$REAPER_APP/Contents/Resources/FTS/Scripts/" 2>/dev/null || true
 
+                  # SHM guest extensions (fts-extensions/)
+                  ${lib.optionalString (syncExt != null) ''
+                    cp ${syncExt}/bin/sync-extension "$REAPER_APP/Contents/Resources/FTS/UserPlugins/fts-extensions/"
+                    echo "  Bundled sync-extension"
+                  ''}
+
+                  ${lib.optionalString (signalExt != null) ''
+                    cp ${signalExt}/bin/signal-extension "$REAPER_APP/Contents/Resources/FTS/UserPlugins/fts-extensions/"
+                    echo "  Bundled signal-extension"
+                  ''}
+
+                  # CLAP plugins (UserPlugins/FX/FTS/)
+                  ${lib.optionalString (signalClap != null) ''
+                    cp -r ${signalClap}/lib/clap/"FTS Signal Controller.clap" "$REAPER_APP/Contents/Resources/FTS/UserPlugins/FX/FTS/"
+                    echo "  Bundled FTS Signal Controller CLAP plugin"
+                  ''}
+
+                  # DAW bridge (REAPER extension plugin)
+                  ${lib.optionalString (dawBridge != null) ''
+                    cp ${dawBridge}/lib/libreaper_daw_bridge.dylib "$REAPER_APP/Contents/Resources/FTS/UserPlugins/daw-bridge/"
+                    echo "  Bundled daw-bridge"
+                  ''}
+
                   # FTS icon
                   ${lib.optionalString (ftsWrapper ? icon) ''
                     cp ${ftsWrapper.icon}/fts-reaper.icns "$REAPER_APP/Contents/Resources/fts-reaper.icns"
                   ''}
 
                   # Launcher script
-                  cat > "$REAPER_APP/Contents/MacOS/FastTrack REAPER" << 'LAUNCHER'
+                  cat > "$REAPER_APP/Contents/MacOS/FTS-Reaper" << 'LAUNCHER'
                 #!/bin/bash
                 set -euo pipefail
                 APP_DIR="$(cd "$(dirname "$0")/.." && pwd)"
@@ -347,16 +382,28 @@
                 FTS_EXTENSIONS="$APP_DIR/Resources/FTS/UserPlugins"
                 FTS_SCRIPTS="$APP_DIR/Resources/FTS/Scripts"
                 CONFIG_DIR="$HOME/Library/Application Support/FastTrackStudio/Reaper"
-                mkdir -p "$CONFIG_DIR/UserPlugins" "$CONFIG_DIR/Scripts"
+                mkdir -p "$CONFIG_DIR/UserPlugins/fts-extensions" "$CONFIG_DIR/UserPlugins/FX/FTS" "$CONFIG_DIR/UserPlugins/daw-bridge" "$CONFIG_DIR/Scripts"
                 for dylib in "$FTS_EXTENSIONS"/*.dylib; do
                   [ -f "$dylib" ] && ln -sf "$dylib" "$CONFIG_DIR/UserPlugins/"
                 done
                 for script in "$FTS_SCRIPTS"/*.py; do
                   [ -f "$script" ] && ln -sf "$script" "$CONFIG_DIR/Scripts/"
                 done
+                # Link SHM guest extensions (sync, signal, session, etc.)
+                for ext in "$FTS_EXTENSIONS/fts-extensions"/*; do
+                  [ -f "$ext" ] && ln -sf "$ext" "$CONFIG_DIR/UserPlugins/fts-extensions/"
+                done
+                # Link CLAP plugins (FX/FTS/)
+                for clap in "$FTS_EXTENSIONS/FX/FTS"/*; do
+                  [ -e "$clap" ] && ln -sf "$clap" "$CONFIG_DIR/UserPlugins/FX/FTS/"
+                done
+                # Link daw-bridge
+                for lib in "$FTS_EXTENSIONS/daw-bridge"/*; do
+                  [ -f "$lib" ] && ln -sf "$lib" "$CONFIG_DIR/UserPlugins/daw-bridge/"
+                done
                 exec "$REAPER_BIN" -cfgfile "$CONFIG_DIR/reaper.ini" "$@"
                 LAUNCHER
-                  chmod +x "$REAPER_APP/Contents/MacOS/FastTrack REAPER"
+                  chmod +x "$REAPER_APP/Contents/MacOS/FTS-Reaper"
 
                   cat > "$REAPER_APP/Contents/Info.plist" << PLIST
                 <?xml version="1.0" encoding="UTF-8"?>
@@ -364,9 +411,9 @@
                 <plist version="1.0">
                 <dict>
                   <key>CFBundleName</key>
-                  <string>FastTrack REAPER</string>
+                  <string>FTS-Reaper</string>
                   <key>CFBundleDisplayName</key>
-                  <string>FastTrack REAPER</string>
+                  <string>FTS-Reaper</string>
                   <key>CFBundleIdentifier</key>
                   <string>com.fasttrackstudio.reaper</string>
                   <key>CFBundleVersion</key>
@@ -374,7 +421,7 @@
                   <key>CFBundleShortVersionString</key>
                   <string>${ftsWrapper.reaper.version}</string>
                   <key>CFBundleExecutable</key>
-                  <string>FastTrack REAPER</string>
+                  <string>FTS-Reaper</string>
                   <key>CFBundleIconFile</key>
                   <string>fts-reaper.icns</string>
                   <key>CFBundlePackageType</key>
@@ -386,11 +433,33 @@
                 PLIST
                 ''}
 
-                # ── FTS Control ──
-                FTS_CONTROL_APP="${self'.packages.fasttrackstudio-desktop}/Applications"
-                if [ -d "$FTS_CONTROL_APP" ]; then
-                  echo "  Bundling FTS Control..."
-                  cp -r "$FTS_CONTROL_APP"/*.app "$FTS_DIR/"
+                # ── FastTrackStudio Desktop (with embedded web app) ──
+                FTS_DESKTOP_APP="${self'.packages.fasttrackstudio-desktop}/Applications"
+                FTS_WEB_APP="${self'.packages.fasttrackstudio-web}/www"
+                if [ -d "$FTS_DESKTOP_APP" ]; then
+                  echo "  Bundling FastTrackStudio Desktop..."
+                  cp -r "$FTS_DESKTOP_APP"/*.app "$FTS_DIR/"
+
+                  # Find the .app we just copied
+                  FTS_APP=$(ls -d "$FTS_DIR"/*.app 2>/dev/null | grep -i fasttrack | grep -iv FTS-Reaper | grep -iv Installer | head -1)
+                  if [ -n "$FTS_APP" ] && [ -d "$FTS_WEB_APP" ]; then
+                    echo "  Embedding web app into desktop bundle..."
+                    mkdir -p "$FTS_APP/Contents/Resources/www"
+                    cp -r "$FTS_WEB_APP"/* "$FTS_APP/Contents/Resources/www/"
+
+                    # Wrap the original executable to set GATEWAY_WS_STATIC_DIR
+                    ORIGINAL_BIN=$(defaults read "$FTS_APP/Contents/Info.plist" CFBundleExecutable 2>/dev/null || basename "$FTS_APP" .app)
+                    if [ -f "$FTS_APP/Contents/MacOS/$ORIGINAL_BIN" ]; then
+                      mv "$FTS_APP/Contents/MacOS/$ORIGINAL_BIN" "$FTS_APP/Contents/MacOS/.''${ORIGINAL_BIN}-wrapped"
+                      cat > "$FTS_APP/Contents/MacOS/$ORIGINAL_BIN" << 'WRAPPER'
+#!/bin/bash
+APP_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+export GATEWAY_WS_STATIC_DIR="$APP_DIR/Resources/www"
+exec "$APP_DIR/MacOS/.$(basename "$0")-wrapped" "$@"
+WRAPPER
+                      chmod +x "$FTS_APP/Contents/MacOS/$ORIGINAL_BIN"
+                    fi
+                  fi
                 fi
 
                 # ── FTS Installer ──
