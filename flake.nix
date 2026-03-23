@@ -285,6 +285,7 @@
           apps.create-installer-dmg = {
             type = "app";
             program = let
+              ftsWrapper = fts-flake.wrapperPackages.${system} or {};
               script = pkgs.writeShellScript "create-installer-dmg" ''
                 set -euo pipefail
 
@@ -323,6 +324,123 @@
           };
 
           # ============================================================
+          # Apps — full distribution DMG (REAPER + extensions + FTS apps)
+          # ============================================================
+          apps.create-distribution-dmg = let
+            ftsWrapper = fts-flake.wrapperPackages.${system} or {};
+          in {
+            type = "app";
+            program = let
+              script = pkgs.writeShellScript "create-distribution-dmg" (''
+                set -euo pipefail
+
+                OUTPUT="FastTrackStudio-${rev}.dmg"
+                STAGING=$(mktemp -d)
+                FTS_DIR="$STAGING/FastTrackStudio"
+                mkdir -p "$FTS_DIR"
+
+                echo "Assembling FastTrackStudio distribution DMG..."
+              '' + lib.optionalString pkgs.stdenv.isDarwin ''
+                # ── FastTrack REAPER (REAPER + SWS + ReaPack) ──
+                ${lib.optionalString (ftsWrapper ? reaper) ''
+                  echo "  Bundling FastTrack REAPER..."
+                  REAPER_APP="$FTS_DIR/FastTrack REAPER.app"
+                  mkdir -p "$REAPER_APP/Contents/MacOS"
+                  mkdir -p "$REAPER_APP/Contents/Resources/FTS/UserPlugins"
+                  mkdir -p "$REAPER_APP/Contents/Resources/FTS/Scripts"
+
+                  cp -r ${ftsWrapper.reaper}/Applications/REAPER.app "$REAPER_APP/Contents/Resources/REAPER.app"
+                  cp ${ftsWrapper.sws}/UserPlugins/*.dylib "$REAPER_APP/Contents/Resources/FTS/UserPlugins/"
+                  cp ${ftsWrapper.reapack}/UserPlugins/*.dylib "$REAPER_APP/Contents/Resources/FTS/UserPlugins/"
+                  cp ${ftsWrapper.sws}/Scripts/*.py "$REAPER_APP/Contents/Resources/FTS/Scripts/" 2>/dev/null || true
+
+                  # FTS icon
+                  ${lib.optionalString (ftsWrapper ? icon) ''
+                    cp ${ftsWrapper.icon}/fts-reaper.icns "$REAPER_APP/Contents/Resources/fts-reaper.icns"
+                  ''}
+
+                  # Launcher script
+                  cat > "$REAPER_APP/Contents/MacOS/FastTrack REAPER" << 'LAUNCHER'
+                #!/bin/bash
+                set -euo pipefail
+                APP_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+                REAPER_BIN="$APP_DIR/Resources/REAPER.app/Contents/MacOS/REAPER"
+                FTS_EXTENSIONS="$APP_DIR/Resources/FTS/UserPlugins"
+                FTS_SCRIPTS="$APP_DIR/Resources/FTS/Scripts"
+                CONFIG_DIR="$HOME/Library/Application Support/FastTrackStudio/Reaper"
+                mkdir -p "$CONFIG_DIR/UserPlugins" "$CONFIG_DIR/Scripts"
+                for dylib in "$FTS_EXTENSIONS"/*.dylib; do
+                  [ -f "$dylib" ] && ln -sf "$dylib" "$CONFIG_DIR/UserPlugins/"
+                done
+                for script in "$FTS_SCRIPTS"/*.py; do
+                  [ -f "$script" ] && ln -sf "$script" "$CONFIG_DIR/Scripts/"
+                done
+                exec "$REAPER_BIN" -cfgfile "$CONFIG_DIR/reaper.ini" "$@"
+                LAUNCHER
+                  chmod +x "$REAPER_APP/Contents/MacOS/FastTrack REAPER"
+
+                  cat > "$REAPER_APP/Contents/Info.plist" << PLIST
+                <?xml version="1.0" encoding="UTF-8"?>
+                <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+                <plist version="1.0">
+                <dict>
+                  <key>CFBundleName</key>
+                  <string>FastTrack REAPER</string>
+                  <key>CFBundleDisplayName</key>
+                  <string>FastTrack REAPER</string>
+                  <key>CFBundleIdentifier</key>
+                  <string>com.fasttrackstudio.reaper</string>
+                  <key>CFBundleVersion</key>
+                  <string>${ftsWrapper.reaper.version}</string>
+                  <key>CFBundleShortVersionString</key>
+                  <string>${ftsWrapper.reaper.version}</string>
+                  <key>CFBundleExecutable</key>
+                  <string>FastTrack REAPER</string>
+                  <key>CFBundleIconFile</key>
+                  <string>fts-reaper.icns</string>
+                  <key>CFBundlePackageType</key>
+                  <string>APPL</string>
+                  <key>NSHighResolutionCapable</key>
+                  <true/>
+                </dict>
+                </plist>
+                PLIST
+                ''}
+
+                # ── FTS Control ──
+                FTS_CONTROL_APP="${self'.packages.fts-control-desktop}/Applications"
+                if [ -d "$FTS_CONTROL_APP" ]; then
+                  echo "  Bundling FTS Control..."
+                  cp -r "$FTS_CONTROL_APP"/*.app "$FTS_DIR/"
+                fi
+
+                # ── FTS Installer ──
+                INSTALLER_APP="${self'.packages.fts-installer}/Applications"
+                if [ -d "$INSTALLER_APP" ]; then
+                  echo "  Bundling FTS Installer..."
+                  cp -r "$INSTALLER_APP"/*.app "$FTS_DIR/"
+                fi
+
+                # ── Applications symlink for drag-to-install ──
+                ln -s /Applications "$STAGING/Applications"
+
+                # ── Create the DMG ──
+                hdiutil create -volname "FastTrackStudio ${rev}" \
+                  -srcfolder "$STAGING" \
+                  -ov -format UDZO \
+                  "$OUTPUT"
+
+                rm -rf "$STAGING"
+                echo "Created $OUTPUT ($(du -h "$OUTPUT" | cut -f1))"
+              '' + lib.optionalString pkgs.stdenv.isLinux ''
+                echo "Linux distribution packaging not yet implemented."
+                echo "Use 'nix build .#fts-test' or 'nix build .#fts-gui' for Linux."
+                exit 1
+              '');
+            in "${script}";
+          };
+
+          # ============================================================
           # Checks
           # ============================================================
           checks = {
@@ -350,6 +468,7 @@
                 cfg = fts-flake.presets.dev;
               }
             );
+            ftsWrapper = fts-flake.wrapperPackages.${system} or {};
           in {
             devenv.root =
               pkgs.lib.mkIf (devenvRoot != "") devenvRoot;
@@ -388,9 +507,11 @@
               FTS_REAPER_EXECUTABLE = "${ftsPkgs.reaper}/bin/reaper";
               FTS_REAPER_RESOURCES = "${ftsPkgs.reaper}/opt/REAPER";
             }
-            // lib.optionalAttrs pkgs.stdenv.isDarwin {
+            // lib.optionalAttrs pkgs.stdenv.isDarwin ({
               DYLD_LIBRARY_PATH = libPath;
-            };
+            } // lib.optionalAttrs (ftsWrapper ? reaper) {
+              FTS_REAPER_EXECUTABLE = "${ftsWrapper.reaper}/bin/reaper";
+            });
 
             scripts = {
               fts-check.exec = "cargo clippy --workspace -- -D warnings";
