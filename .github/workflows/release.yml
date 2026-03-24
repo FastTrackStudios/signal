@@ -1,0 +1,163 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to release (e.g. v0.1.0-alpha.1)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+env:
+  NIXPKGS_ALLOW_UNFREE: 1
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            system: x86_64-linux
+            suffix: x86_64-linux
+          - os: ubuntu-24.04-arm
+            system: aarch64-linux
+            suffix: aarch64-linux
+          - os: macos-latest
+            system: aarch64-darwin
+            suffix: aarch64-darwin
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Allow unprivileged user namespaces
+        if: runner.os == 'Linux'
+        run: |
+          if [ -f /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]; then
+            echo 0 | sudo tee /proc/sys/kernel/apparmor_restrict_unprivileged_userns
+          fi
+          sudo sysctl -w kernel.unprivileged_userns_clone=1 2>/dev/null || true
+
+      - uses: cachix/install-nix-action@v27
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+            accept-flake-config = true
+
+      - uses: cachix/cachix-action@v15
+        with:
+          name: fasttrackstudio
+          authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
+        continue-on-error: true
+
+      - name: Build signal-extension
+        run: nix build .#signal-extension --no-link --print-out-paths | tee /tmp/ext-path
+
+      - name: Build fts-signal-controller
+        run: nix build .#fts-signal-controller --no-link --print-out-paths | tee /tmp/ctrl-path
+
+      - name: Push to Cachix
+        run: |
+          cachix push fasttrackstudio $(cat /tmp/ext-path) || true
+          cachix push fasttrackstudio $(cat /tmp/ctrl-path) || true
+        continue-on-error: true
+
+      - name: Stage artifacts
+        run: |
+          EXT_STORE=$(cat /tmp/ext-path)
+          CTRL_STORE=$(cat /tmp/ctrl-path)
+          mkdir -p staging
+
+          # Signal extension binary
+          if [ -f "$EXT_STORE/bin/signal-extension" ]; then
+            cp -L "$EXT_STORE/bin/signal-extension" \
+              "staging/signal-extension-${{ matrix.suffix }}"
+          fi
+
+          # Signal controller CLAP plugin
+          for f in "$CTRL_STORE/lib/clap/"*; do
+            if [ -f "$f" ]; then
+              base=$(basename "$f")
+              cp -L "$f" "staging/${base%.clap}-${{ matrix.suffix }}.clap"
+            fi
+          done
+
+          ls -la staging/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.suffix }}
+          path: staging/
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determine tag
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "tag=${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Generate checksums
+        run: |
+          cd artifacts
+          sha256sum * > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Generate release notes
+        run: |
+          echo "## What's Changed" > RELEASE_NOTES.md
+          echo "" >> RELEASE_NOTES.md
+          PREV_TAG=$(git tag --sort=-v:refname | grep -v "^${{ steps.tag.outputs.tag }}$" | head -1 || true)
+          if [ -n "$PREV_TAG" ]; then
+            git log --pretty=format:"- %s (%h)" "${PREV_TAG}..HEAD" >> RELEASE_NOTES.md
+          else
+            git log --pretty=format:"- %s (%h)" -20 >> RELEASE_NOTES.md
+          fi
+          echo "" >> RELEASE_NOTES.md
+          echo "" >> RELEASE_NOTES.md
+          echo "## Artifacts" >> RELEASE_NOTES.md
+          echo "" >> RELEASE_NOTES.md
+          echo "| File | SHA256 |" >> RELEASE_NOTES.md
+          echo "|------|--------|" >> RELEASE_NOTES.md
+          while IFS='  ' read -r hash file; do
+            echo "| \`${file}\` | \`${hash:0:16}…\` |" >> RELEASE_NOTES.md
+          done < artifacts/SHA256SUMS.txt
+
+      - name: Determine prerelease
+        id: prerelease
+        run: |
+          TAG="${{ steps.tag.outputs.tag }}"
+          if echo "$TAG" | grep -qE '(alpha|beta|rc)'; then
+            echo "is_prerelease=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "is_prerelease=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.tag }}
+          name: ${{ steps.tag.outputs.tag }}
+          body_path: RELEASE_NOTES.md
+          draft: true
+          prerelease: ${{ steps.prerelease.outputs.is_prerelease }}
+          files: artifacts/*
