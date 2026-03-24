@@ -32,12 +32,37 @@ async fn add_signal_controller(track: &daw::TrackHandle) -> eyre::Result<daw::Fx
     Err(eyre::eyre!("FTS Signal Controller not available"))
 }
 
+/// Wait for signal-extension to be ready (it writes "ready" to ExtState on startup).
+async fn wait_for_signal_extension(ctx: &reaper_test::ReaperTestContext) -> eyre::Result<()> {
+    let ext = ctx.daw.ext_state();
+    let start = std::time::Instant::now();
+    loop {
+        if let Some(status) = ext.get("FTS_SIGNAL_EXT", "status").await? {
+            if status == "ready" {
+                return Ok(());
+            }
+        }
+        if start.elapsed() > Duration::from_secs(10) {
+            return Err(eyre::eyre!("Signal extension not ready after 10s"));
+        }
+        tokio::time::sleep(Duration::from_millis(200)).await;
+    }
+}
+
 /// Run a signal action by command name and wait for it to complete.
 async fn run_signal_action(ctx: &reaper_test::ReaperTestContext, action: &str) -> eyre::Result<()> {
+    // Make sure signal-extension is ready first
+    wait_for_signal_extension(ctx).await?;
+
     let project = ctx.project();
     let ok = project.run_command(action).await?;
     if !ok {
-        return Err(eyre::eyre!("Action not found: {action}"));
+        // Retry once after a short delay (action might still be registering)
+        tokio::time::sleep(Duration::from_millis(500)).await;
+        let ok = project.run_command(action).await?;
+        if !ok {
+            return Err(eyre::eyre!("Action not found: {action}"));
+        }
     }
     // Give the async action handler time to execute
     tokio::time::sleep(Duration::from_millis(500)).await;
@@ -317,6 +342,8 @@ async fn four_point_stage_macro(
 // Test: Demo setlist action creates expected track structure
 // ---------------------------------------------------------------------------
 
+// TODO: Demo setlist action creates tracks in current_project(), not in the
+// test's isolated project. Need project-scoped action execution.
 #[reaper_test(isolated)]
 async fn demo_setlist_action_creates_tracks(
     ctx: &reaper_test::ReaperTestContext,
@@ -327,8 +354,8 @@ async fn demo_setlist_action_creates_tracks(
     ctx.log("Running FTS_SIGNAL_DEV_LOAD_DEMO_SETLIST...");
     run_signal_action(ctx, "FTS_SIGNAL_DEV_LOAD_DEMO_SETLIST").await?;
 
-    // Give it time to create all tracks
-    tokio::time::sleep(Duration::from_secs(5)).await;
+    // Give it time to create all tracks (demo setlist creates many tracks sequentially)
+    tokio::time::sleep(Duration::from_secs(10)).await;
 
     // Verify tracks were created
     let project = ctx.project().clone();
