@@ -174,10 +174,13 @@ pub async fn load_demo_setlist(daw: &Daw) -> Result<()> {
         .await?;
 
     // ── Guitar Input ──────────────────────────────────────────────────
-    // Rig-level audio source. Parent send enabled — audio flows to rig
-    // folder's children via REAPER's folder routing.
-    let _rig_input = tracks.add("Guitar Input", None).await?;
-    _rig_input.set_color(0x6B7280).await?;
+    // Rig-level audio source. Sends are created to each section track.
+    // Scene switching mutes/unmutes the sends, not the tracks.
+    let rig_input = tracks.add("Guitar Input", None).await?;
+    rig_input.set_color(0x6B7280).await?;
+
+    // Collect all section tracks so we can create sends after building the hierarchy
+    let mut all_section_tracks: Vec<daw::TrackHandle> = Vec::new();
 
     let mut current_bar: usize = 0;
 
@@ -222,13 +225,15 @@ pub async fn load_demo_setlist(daw: &Daw) -> Result<()> {
 
         // ── Build sections ────────────────────────────────────────────
         // Each section is a single track, direct child of song folder.
-        // The scene timer mutes/unmutes these tracks directly.
+        // Guitar Input sends are created to each section for routing.
+        // Scene switching mutes/unmutes sends, not tracks.
 
         for (sec_idx, &(sec_name, _module_types)) in song.sections.iter().enumerate() {
             let is_last_section = sec_idx == section_count - 1;
 
             let section = tracks.add(sec_name, None).await?;
             section.set_color(scene_color(sec_name)).await?;
+            all_section_tracks.push(section.clone());
 
             // Close folders:
             //   last section of last song: close song + rig  (-2)
@@ -335,12 +340,33 @@ pub async fn load_demo_setlist(daw: &Daw) -> Result<()> {
         bar_offset += song_bars;
     }
 
+    // ── Create sends from Guitar Input to each section track ─────────
+    // Scene switching mutes/unmutes these sends (not the tracks).
+    let input_sends = rig_input.sends();
+    for section_track in &all_section_tracks {
+        match input_sends.add_to(section_track.guid()).await {
+            Ok(send) => {
+                // Mute all sends initially — the scene timer will unmute the active one
+                let _ = send.mute().await;
+            }
+            Err(e) => {
+                tracing::warn!("[demo-setlist] Failed to create send: {e:#}");
+            }
+        }
+    }
+
+    // Store the Guitar Input track's GUID so the scene timer can find it
+    rig_folder
+        .set_ext_state("fts_signal", "input_track_guid", &rig_input.guid().to_string())
+        .await?;
+
     let total_sections: usize = SETLIST.iter().map(|s| s.sections.len()).sum();
     info!(
-        "[demo-setlist] Created rig with {} songs, {} total sections, {} bars",
+        "[demo-setlist] Created rig with {} songs, {} total sections, {} bars, {} sends from Guitar Input",
         SETLIST.len(),
         total_sections,
         current_bar,
+        all_section_tracks.len(),
     );
 
     Ok(())
