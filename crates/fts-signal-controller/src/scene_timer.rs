@@ -83,22 +83,27 @@ pub fn poll() {
         let entry = ctrl.timeline.iter().find(|e| position >= e.start && position < e.end);
         let target_name = entry.map(|e| e.name.as_str()).unwrap_or("");
 
-        if target_name == ctrl.active_scene || target_name.is_empty() {
+        // Skip if nothing changed
+        if target_name == ctrl.active_scene {
             continue;
         }
 
         let old = ctrl.active_scene.clone();
         ctrl.active_scene = target_name.to_string();
 
-        // Find the send index for this scene name
-        if let Some(&target_send_idx) = ctrl.name_to_send_index.get(target_name) {
-            // Unmute the target send, mute all others
-            for (&ref name, &send_idx) in &ctrl.name_to_send_index {
-                let should_mute = send_idx != target_send_idx;
-                daw.set_send_muted(&ctrl.input_track_guid, send_idx, should_mute);
-                let _ = name; // used for iteration
+        if target_name.is_empty() {
+            // No active scene at this position — mute ALL sends for this controller
+            for (_, &send_idx) in &ctrl.name_to_send_index {
+                daw.set_send_muted(&ctrl.input_track_guid, send_idx, true);
             }
-
+            if !old.is_empty() {
+                info!("[scene-timer] '{}' → (none) — all sends muted (was '{}')", ctrl.name, old);
+            }
+        } else if let Some(&target_send_idx) = ctrl.name_to_send_index.get(target_name) {
+            // Active scene — unmute the target send, mute all others
+            for (_, &send_idx) in &ctrl.name_to_send_index {
+                daw.set_send_muted(&ctrl.input_track_guid, send_idx, send_idx != target_send_idx);
+            }
             info!(
                 "[scene-timer] '{}' → '{}' (send {}, was '{}')",
                 ctrl.name, target_name, target_send_idx, old,
@@ -203,7 +208,7 @@ fn scan_controllers(state: &mut SceneState) {
             controller_guid: track_info.guid.clone(),
             name: track_info.name.clone(),
             timeline,
-            active_scene: String::new(),
+            active_scene: "__uninitialized__".to_string(), // Forces first-tick apply
         });
     }
 
