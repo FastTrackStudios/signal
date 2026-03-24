@@ -49,24 +49,25 @@ async fn wait_for_signal_extension(ctx: &reaper_test::ReaperTestContext) -> eyre
     }
 }
 
-/// Run a signal action by command name and wait for it to complete.
+/// Run a signal action by command name, retrying until the action is registered.
 async fn run_signal_action(ctx: &reaper_test::ReaperTestContext, action: &str) -> eyre::Result<()> {
-    // Make sure signal-extension is ready first
     wait_for_signal_extension(ctx).await?;
 
     let project = ctx.project();
-    let ok = project.run_command(action).await?;
-    if !ok {
-        // Retry once after a short delay (action might still be registering)
-        tokio::time::sleep(Duration::from_millis(500)).await;
+    let start = std::time::Instant::now();
+    loop {
         let ok = project.run_command(action).await?;
-        if !ok {
-            return Err(eyre::eyre!("Action not found: {action}"));
+        if ok {
+            // Give the async action handler time to execute
+            tokio::time::sleep(Duration::from_millis(500)).await;
+            return Ok(());
         }
+        if start.elapsed() > Duration::from_secs(10) {
+            return Err(eyre::eyre!("Action not found after 10s: {action}"));
+        }
+        // Action not registered yet — wait and retry
+        tokio::time::sleep(Duration::from_millis(200)).await;
     }
-    // Give the async action handler time to execute
-    tokio::time::sleep(Duration::from_millis(500)).await;
-    Ok(())
 }
 
 /// Poll an FX parameter until it reaches the expected value.
@@ -342,10 +343,8 @@ async fn four_point_stage_macro(
 // Test: Demo setlist action creates expected track structure
 // ---------------------------------------------------------------------------
 
-// TODO: Demo setlist action creates tracks in current_project(), not in the
-// test's isolated project. Need project-scoped action execution.
 #[reaper_test(isolated)]
-async fn demo_setlist_action_creates_tracks(
+async fn z_demo_setlist_action_creates_tracks(
     ctx: &reaper_test::ReaperTestContext,
 ) -> eyre::Result<()> {
     ctx.log("=== DEMO SETLIST VIA ACTION ===");
@@ -414,19 +413,21 @@ async fn macro_set_min_max_via_actions(
     controller.param(0).set(0.5).await?;
     settle().await;
 
-    // 3. Set ReaComp Threshold to min position and touch it
+    // 3. Set ReaComp Threshold to min position and touch it (last_touched = threshold)
+    //    Note: no mapping config exists yet, so the timer won't override this value
     target_fx.param(threshold_idx).set(0.8).await?;
     settle().await;
 
-    // 4. Run Set Min action
+    // 4. Run Set Min action — captures threshold=0.8 at macro=0.0
     ctx.log("Running FTS_SIGNAL_MACRO_SET_MIN...");
     run_signal_action(ctx, "FTS_SIGNAL_MACRO_SET_MIN").await?;
 
-    // 5. Set Threshold to max position
+    // 5. Set Threshold to max position and touch it
     target_fx.param(threshold_idx).set(0.2).await?;
     settle().await;
 
-    // 6. Run Set Max action
+    // 6. Run Set Max action — captures threshold=0.2 at macro=1.0
+    //    The timer won't override because last_touched_fx is the threshold
     ctx.log("Running FTS_SIGNAL_MACRO_SET_MAX...");
     run_signal_action(ctx, "FTS_SIGNAL_MACRO_SET_MAX").await?;
 
