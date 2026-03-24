@@ -315,20 +315,33 @@ fn apply_macros(state: &mut MacroState) {
 
         info!("[macro-timer] Applying {} mappings (macro[0]={:.4})", ts.mappings.len(), macros[0]);
 
+        // Check last_touched_fx — don't override params the user is actively adjusting
+        let last_touched = daw::block_on(async {
+            daw.last_touched_fx().await.ok().flatten()
+        }).flatten();
+
         // Apply each mapping via Daw API
         for mapping in &ts.mappings {
             let source_idx = mapping.source_param as usize;
             if source_idx >= NUM_MACROS { continue; }
-            let source_val = macros[source_idx];
-            let target_val = mapping.mode.apply(source_val);
 
             let target_fx_idx = match &mapping.target_fx { FxRef::ByIndex(idx) => *idx };
             let param_idx = mapping.target_param_index;
+
+            // Skip if the user is currently touching this exact target param
+            if let Some(ref lt) = last_touched {
+                if lt.fx_index == target_fx_idx && lt.param_index == param_idx {
+                    // Don't fight the user — they're adjusting this param
+                    continue;
+                }
+            }
+
+            let source_val = macros[source_idx];
+            let target_val = mapping.mode.apply(source_val);
             let track_guid = ts.track_guid.clone();
 
             let _ = daw::block_on(async {
                 let project = daw.current_project().await.ok()?;
-                // ByIndex(0) means same track
                 let track = match &mapping.target_track {
                     TrackRef::ByIndex(0) => project.tracks().by_guid(&track_guid).await.ok()?,
                     TrackRef::ByIndex(idx) => {
