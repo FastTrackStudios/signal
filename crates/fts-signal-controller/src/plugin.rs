@@ -276,10 +276,16 @@ impl Plugin for FtsSignalController {
         }
 
         // Initialize DAW API — fully DAW-agnostic
-        if daw::init(context.raw_host_context()) {
+        let has_host = context.raw_host_context().is_some();
+        tracing::info!("{PLUGIN_NAME}: raw_host_context present: {has_host}");
+        let init_result = daw::init(context.raw_host_context());
+        tracing::info!("{PLUGIN_NAME}: daw::init result: {init_result}");
+        if init_result {
             daw::register_timer(crate::scene_timer::poll);
             daw::register_timer(crate::macro_timer::poll);
             tracing::info!("{PLUGIN_NAME}: DAW API initialized, timers registered");
+        } else {
+            tracing::warn!("{PLUGIN_NAME}: daw::init failed — timers NOT registered");
         }
 
         // Spawn background SHM bridge
