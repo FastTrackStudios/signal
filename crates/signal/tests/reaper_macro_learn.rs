@@ -411,30 +411,86 @@ async fn z_demo_setlist_action_creates_tracks(
     );
     ctx.log(&format!("input_track_guid stored correctly: {}", guitar_input.guid));
 
-    // ── Verify scene switching mutes sends (not tracks) ───────────────
-    // Wait for scene timer to initialize
+    // ── Verify scene switching mutes/unmutes sends correctly ────────────
+    // Wait for scene timer to initialize and do first scan
     tokio::time::sleep(Duration::from_secs(6)).await;
 
-    // Move transport to position 0 (first section of first song)
+    // The first song is "Belief" with sections Clean, Ambient, Rhythm.
+    // MIDI items are at bar 0=Clean, bar 1=Ambient, bar 2=Rhythm.
     let transport = project.transport();
-    transport.set_position(0.5).await?;
-    tokio::time::sleep(Duration::from_secs(1)).await;
+    let state = transport.get_state().await?;
+    let beats_per_bar = state.time_signature.numerator as f64;
+    let beat_duration = 60.0 / state.tempo.bpm;
+    let bar_duration = beat_duration * beats_per_bar;
 
-    // Check that section tracks are NOT muted (all should be unmuted)
+    // Get first song's section names
     let first_song = songs[0];
-    let section_tracks: Vec<_> = all_tracks.iter()
+    let section_names: Vec<String> = all_tracks.iter()
         .filter(|t| t.parent_guid.as_deref() == Some(&first_song.guid) && !t.is_folder)
+        .map(|t| t.name.clone())
         .collect();
+    ctx.log(&format!("First song '{}' sections: {:?}", first_song.name, section_names));
 
-    for sec in &section_tracks {
-        let sec_track = project.tracks().by_guid(&sec.guid).await?
-            .ok_or_else(|| eyre::eyre!("Section track not found"))?;
-        let muted = sec_track.is_muted().await?;
-        ctx.log(&format!("  Section '{}' muted={}", sec.name, muted));
-        assert!(!muted, "Section track '{}' should NOT be muted (sends control routing)", sec.name);
+    // Helper: get names of unmuted sends on Guitar Input
+    async fn get_unmuted_sends(project: &daw::Project, gi_guid: &str) -> eyre::Result<Vec<String>> {
+        let gi = project.tracks().by_guid(gi_guid).await?
+            .ok_or_else(|| eyre::eyre!("Guitar Input not found"))?;
+        let all_sends = gi.sends().all().await?;
+        let mut unmuted = Vec::new();
+        for (i, send) in all_sends.iter().enumerate() {
+            let route = gi.sends().by_index(i as u32).await?
+                .ok_or_else(|| eyre::eyre!("Send {i} not found"))?;
+            if !route.is_muted().await? {
+                let dest_name = send.dest_track_name.clone().unwrap_or_else(|| format!("send_{i}"));
+                unmuted.push(dest_name);
+            }
+        }
+        Ok(unmuted)
     }
 
-    ctx.log("=== PASS: Demo setlist with send-based routing ===");
+    // Position 0.5s → should be in first section (Clean)
+    transport.set_position(0.5).await?;
+    tokio::time::sleep(Duration::from_millis(500)).await;
+    let unmuted = get_unmuted_sends(&project, &guitar_input.guid).await?;
+    ctx.log(&format!("  pos=0.5s: unmuted = {:?}", unmuted));
+    assert!(
+        unmuted.iter().any(|n| n == "Clean"),
+        "At position 0.5s, 'Clean' send should be unmuted. Got: {:?}", unmuted
+    );
+
+    // Position at bar 1 + 0.5s → should be in second section (Ambient)
+    let ambient_pos = bar_duration + 0.5;
+    transport.set_position(ambient_pos).await?;
+    tokio::time::sleep(Duration::from_millis(500)).await;
+    let unmuted = get_unmuted_sends(&project, &guitar_input.guid).await?;
+    ctx.log(&format!("  pos={ambient_pos:.1}s: unmuted = {:?}", unmuted));
+    assert!(
+        unmuted.iter().any(|n| n == "Ambient"),
+        "At position {ambient_pos:.1}s, 'Ambient' send should be unmuted. Got: {:?}", unmuted
+    );
+
+    // Position at bar 2 + 0.5s → should be in third section (Rhythm)
+    let rhythm_pos = 2.0 * bar_duration + 0.5;
+    transport.set_position(rhythm_pos).await?;
+    tokio::time::sleep(Duration::from_millis(500)).await;
+    let unmuted = get_unmuted_sends(&project, &guitar_input.guid).await?;
+    ctx.log(&format!("  pos={rhythm_pos:.1}s: unmuted = {:?}", unmuted));
+    assert!(
+        unmuted.iter().any(|n| n == "Rhythm"),
+        "At position {rhythm_pos:.1}s, 'Rhythm' send should be unmuted. Got: {:?}", unmuted
+    );
+
+    // Verify section tracks are NOT muted (sends control routing, not track mute)
+    for sec in &section_names {
+        let sec_track = all_tracks.iter().find(|t| &t.name == sec && t.parent_guid.as_deref() == Some(&first_song.guid));
+        if let Some(st) = sec_track {
+            let track = project.tracks().by_guid(&st.guid).await?.unwrap();
+            let muted = track.is_muted().await?;
+            assert!(!muted, "Section track '{}' should NOT be muted", sec);
+        }
+    }
+
+    ctx.log("=== PASS: Demo setlist with send-based scene switching ===");
     Ok(())
 }
 

@@ -135,29 +135,48 @@ fn scan_controllers(state: &mut SceneState) {
             _ => continue,
         };
 
-        // Find the input track — either stored in P_EXT or first non-folder child
+        // Find the input track:
+        // 1. Check this folder's P_EXT for input_track_guid
+        // 2. Check parent folder's P_EXT (song folders inherit from rig folder)
+        // 3. Fallback: first non-folder child of parent
         let input_track_guid = daw
             .track_get_ext_state(&track_info.guid, SCENE_COUNT_SECTION, INPUT_TRACK_KEY)
             .filter(|s| !s.is_empty())
+            .or_else(|| {
+                // Check parent folder's P_EXT
+                let parent_guid = track_info.parent_guid.as_deref()?;
+                daw.track_get_ext_state(parent_guid, SCENE_COUNT_SECTION, INPUT_TRACK_KEY)
+                    .filter(|s| !s.is_empty())
+            })
             .unwrap_or_else(|| {
-                // Fallback: first non-folder child
+                // Fallback: first non-folder child of parent (or self)
+                let search_parent = track_info.parent_guid.as_deref().unwrap_or(&track_info.guid);
                 all_tracks.iter()
-                    .find(|t| t.parent_guid.as_deref() == Some(&*track_info.guid) && !t.is_folder)
+                    .find(|t| t.parent_guid.as_deref() == Some(search_parent) && !t.is_folder)
                     .map(|t| t.guid.clone())
                     .unwrap_or_default()
             });
 
         if input_track_guid.is_empty() { continue; }
 
-        // Build name → send index mapping by checking each send's destination
+        // Collect this controller's child track GUIDs (sections that belong to this song/rig)
+        let child_guids: Vec<&str> = all_tracks.iter()
+            .filter(|t| t.parent_guid.as_deref() == Some(&*track_info.guid) && !t.is_folder)
+            .map(|t| t.guid.as_str())
+            .collect();
+
+        // Build name → send index mapping by checking each send's destination.
+        // Only include sends whose destination is a child of THIS controller folder.
         let mut name_to_send_index = HashMap::new();
         let send_count = daw.send_count(&input_track_guid);
 
         for send_idx in 0..send_count {
             if let Some(dest_guid) = daw.send_dest_guid(&input_track_guid, send_idx) {
-                // Find the destination track's name
-                if let Some(dest_track) = all_tracks.iter().find(|t| t.guid == dest_guid) {
-                    name_to_send_index.insert(dest_track.name.clone(), send_idx);
+                // Only include if destination is a child of this controller
+                if child_guids.contains(&dest_guid.as_str()) {
+                    if let Some(dest_track) = all_tracks.iter().find(|t| t.guid == dest_guid) {
+                        name_to_send_index.insert(dest_track.name.clone(), send_idx);
+                    }
                 }
             }
         }

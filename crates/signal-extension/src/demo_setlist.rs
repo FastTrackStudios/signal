@@ -346,7 +346,7 @@ pub async fn load_demo_setlist(daw: &Daw) -> Result<()> {
     for section_track in &all_section_tracks {
         match input_sends.add_to(section_track.guid()).await {
             Ok(send) => {
-                // Mute all sends initially — the scene timer will unmute the active one
+                // Mute all sends by default — scene timer unmutes the active one
                 let _ = send.mute().await;
             }
             Err(e) => {
