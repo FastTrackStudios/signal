@@ -1365,11 +1365,11 @@
         "rust-overlay": "rust-overlay_4"
       },
       "locked": {
-        "lastModified": 1774291593,
-        "narHash": "sha256-VAK80FPcPBbILF4azDtPqtdqOGYc42MpfFTcLpw8MUQ=",
+        "lastModified": 1774386168,
+        "narHash": "sha256-bbAGwOICFAMj73PVo6bJyPfQObXr5Seuz5iQ6S0jlIk=",
         "owner": "FastTrackStudios",
         "repo": "daw",
-        "rev": "bbd220478ec0a16f4c986fc062a2a4e6092b67b3",
+        "rev": "153f47eb20346bd68e142744b461f1e4de5c9960",
         "type": "github"
       },
       "original": {
@@ -7547,11 +7547,11 @@
         "rust-overlay": "rust-overlay_16"
       },
       "locked": {
-        "lastModified": 1774290110,
-        "narHash": "sha256-UolpZvHLrkAcXytughYDMmNZGDTYYSCyFYpZHGv0mF8=",
+        "lastModified": 1774386180,
+        "narHash": "sha256-wUNYS1h741+kPb3MfSh9luNqAJxkgGoge2WMtU41V6E=",
         "owner": "FastTrackStudios",
         "repo": "sync",
-        "rev": "1f5ef1ba35fb364bf44509219daec278092e01d4",
+        "rev": "6d5477b56f10a7e23f29fa8f452a5f2e819013f1",
         "type": "github"
       },
       "original": {
