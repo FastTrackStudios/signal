@@ -382,7 +382,59 @@ async fn z_demo_setlist_action_creates_tracks(
     let songs: Vec<_> = all_tracks.iter().filter(|t| t.is_folder && t.parent_guid.is_some()).collect();
     assert!(!songs.is_empty(), "Should have at least one song folder");
 
-    ctx.log("=== PASS: Demo setlist created tracks ===");
+    // ── Verify sends from Guitar Input to section tracks ──────────────
+    let rig = rig.unwrap();
+    let guitar_input = all_tracks.iter().find(|t| t.name == "Guitar Input");
+    assert!(guitar_input.is_some(), "Should have Guitar Input track");
+    let guitar_input = guitar_input.unwrap();
+
+    let gi_track = project.tracks().by_guid(&guitar_input.guid).await?
+        .ok_or_else(|| eyre::eyre!("Guitar Input track not found by GUID"))?;
+    let sends = gi_track.sends().all().await?;
+    ctx.log(&format!("Guitar Input has {} sends", sends.len()));
+
+    // Should have at least 3 sends (Belief has 3 sections)
+    assert!(
+        sends.len() >= 3,
+        "Guitar Input should have at least 3 sends, got {}",
+        sends.len()
+    );
+
+    // Verify input_track_guid is stored in P_EXT
+    let rig_track = project.tracks().by_guid(&rig.guid).await?
+        .ok_or_else(|| eyre::eyre!("Rig folder not found"))?;
+    let stored_guid = rig_track.get_ext_state("fts_signal", "input_track_guid").await?;
+    assert!(stored_guid.is_some(), "Should have input_track_guid in P_EXT");
+    assert_eq!(
+        stored_guid.as_deref(), Some(guitar_input.guid.as_str()),
+        "Stored input GUID should match Guitar Input"
+    );
+    ctx.log(&format!("input_track_guid stored correctly: {}", guitar_input.guid));
+
+    // ── Verify scene switching mutes sends (not tracks) ───────────────
+    // Wait for scene timer to initialize
+    tokio::time::sleep(Duration::from_secs(6)).await;
+
+    // Move transport to position 0 (first section of first song)
+    let transport = project.transport();
+    transport.set_position(0.5).await?;
+    tokio::time::sleep(Duration::from_secs(1)).await;
+
+    // Check that section tracks are NOT muted (all should be unmuted)
+    let first_song = songs[0];
+    let section_tracks: Vec<_> = all_tracks.iter()
+        .filter(|t| t.parent_guid.as_deref() == Some(&first_song.guid) && !t.is_folder)
+        .collect();
+
+    for sec in &section_tracks {
+        let sec_track = project.tracks().by_guid(&sec.guid).await?
+            .ok_or_else(|| eyre::eyre!("Section track not found"))?;
+        let muted = sec_track.is_muted().await?;
+        ctx.log(&format!("  Section '{}' muted={}", sec.name, muted));
+        assert!(!muted, "Section track '{}' should NOT be muted (sends control routing)", sec.name);
+    }
+
+    ctx.log("=== PASS: Demo setlist with send-based routing ===");
     Ok(())
 }
 
