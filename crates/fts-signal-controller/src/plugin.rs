@@ -8,13 +8,9 @@ use std::sync::Arc;
 
 use atomic_float::AtomicF32;
 use fts_plugin_core::prelude::*;
-
-#[cfg(feature = "full")]
 use tracing_subscriber::{fmt, EnvFilter};
 
 use crate::param_queue::{self, ParamQueueConsumer, ParamQueueProducer};
-
-#[cfg(feature = "full")]
 use signal_proto::ParamWriteRequest;
 
 /// Base MIDI note for scene switching (C1 = note 36).
@@ -56,45 +52,6 @@ pub static MACRO_BANKS: &[MacroBank] = &[
             MacroSlotConfig { name: "Macro 6" },
             MacroSlotConfig { name: "Macro 7" },
             MacroSlotConfig { name: "Macro 8" },
-        ],
-    },
-    MacroBank {
-        name: "Guitar Amp",
-        slots: [
-            MacroSlotConfig { name: "Gain" },
-            MacroSlotConfig { name: "Bass" },
-            MacroSlotConfig { name: "Mid" },
-            MacroSlotConfig { name: "Treble" },
-            MacroSlotConfig { name: "Presence" },
-            MacroSlotConfig { name: "Master Vol" },
-            MacroSlotConfig { name: "Reverb" },
-            MacroSlotConfig { name: "Cab Mix" },
-        ],
-    },
-    MacroBank {
-        name: "Vocal Chain",
-        slots: [
-            MacroSlotConfig { name: "EQ Low Cut" },
-            MacroSlotConfig { name: "EQ Presence" },
-            MacroSlotConfig { name: "Comp Thresh" },
-            MacroSlotConfig { name: "Comp Ratio" },
-            MacroSlotConfig { name: "DeEsser" },
-            MacroSlotConfig { name: "Delay Send" },
-            MacroSlotConfig { name: "Reverb Send" },
-            MacroSlotConfig { name: "Output" },
-        ],
-    },
-    MacroBank {
-        name: "Synth Pad",
-        slots: [
-            MacroSlotConfig { name: "Cutoff" },
-            MacroSlotConfig { name: "Resonance" },
-            MacroSlotConfig { name: "Env Attack" },
-            MacroSlotConfig { name: "Env Release" },
-            MacroSlotConfig { name: "LFO Rate" },
-            MacroSlotConfig { name: "LFO Depth" },
-            MacroSlotConfig { name: "Chorus" },
-            MacroSlotConfig { name: "Reverb" },
         ],
     },
 ];
@@ -142,7 +99,6 @@ impl Default for ControllerParams {
 }
 
 impl ControllerParams {
-    /// Get an array of references to all macro params for iteration.
     pub fn macros(&self) -> [&FloatParam; NUM_MACROS] {
         [
             &self.macro_0, &self.macro_1, &self.macro_2, &self.macro_3,
@@ -150,12 +106,10 @@ impl ControllerParams {
         ]
     }
 
-    /// Apply a macro bank's display names to the parameters.
     pub fn apply_bank(&self, _bank: &MacroBank) {
         // TODO: Restore when fts-plugin-core re-adds set_display_name to FloatParam
     }
 
-    /// Clear all display name overrides (revert to defaults).
     pub fn clear_bank(&self) {
         // TODO: Restore when fts-plugin-core re-adds clear_display_name to FloatParam
     }
@@ -163,27 +117,16 @@ impl ControllerParams {
 
 // ── UI State ────────────────────────────────────────────────────────
 
-/// Shared state between the audio thread and the UI.
 pub struct ControllerUiState {
     pub params: Arc<ControllerParams>,
-    /// Currently active macro bank index.
     pub active_bank: AtomicU8,
-    /// Number of pending writes in the current process block (for status display).
     pub pending_write_count: AtomicU32,
-    /// Whether SHM connection to daw-bridge is active.
     pub shm_connected: AtomicU32,
-    /// Per-macro activity indicators (non-zero = recently changed).
     pub macro_activity: [AtomicF32; NUM_MACROS],
-    /// Per-macro labels from ext_state config (overrides bank labels).
     macro_labels: std::sync::RwLock<[String; NUM_MACROS]>,
-    /// Per-macro colors from ext_state config (hex strings like "#EF4444").
     macro_colors: std::sync::RwLock<[String; NUM_MACROS]>,
-    /// Whether ext_state config has been loaded (labels/colors are valid).
     pub config_loaded: std::sync::atomic::AtomicBool,
-    /// Requested scene index (1-based). Set by audio thread on MIDI note-on,
-    /// read by SHM bridge to switch sends. -1 = no pending request.
     pub requested_scene: AtomicI32,
-    /// Currently active scene index (1-based, 0 = none).
     pub active_scene: AtomicI32,
 }
 
@@ -203,21 +146,15 @@ impl ControllerUiState {
         }
     }
 
-    /// Helper: get macro param pointers as an array for iteration in the UI.
     pub fn macro_ptrs(&self) -> [ParamPtr; NUM_MACROS] {
         [
-            self.params.macro_0.as_ptr(),
-            self.params.macro_1.as_ptr(),
-            self.params.macro_2.as_ptr(),
-            self.params.macro_3.as_ptr(),
-            self.params.macro_4.as_ptr(),
-            self.params.macro_5.as_ptr(),
-            self.params.macro_6.as_ptr(),
-            self.params.macro_7.as_ptr(),
+            self.params.macro_0.as_ptr(), self.params.macro_1.as_ptr(),
+            self.params.macro_2.as_ptr(), self.params.macro_3.as_ptr(),
+            self.params.macro_4.as_ptr(), self.params.macro_5.as_ptr(),
+            self.params.macro_6.as_ptr(), self.params.macro_7.as_ptr(),
         ]
     }
 
-    /// Set a macro label from ext_state config.
     pub fn set_macro_label(&self, index: usize, label: &str) {
         if index < NUM_MACROS {
             if let Ok(mut labels) = self.macro_labels.write() {
@@ -226,7 +163,6 @@ impl ControllerUiState {
         }
     }
 
-    /// Set a macro color from ext_state config.
     pub fn set_macro_color(&self, index: usize, color: &str) {
         if index < NUM_MACROS {
             if let Ok(mut colors) = self.macro_colors.write() {
@@ -235,8 +171,6 @@ impl ControllerUiState {
         }
     }
 
-    /// Get macro labels. If ext_state config is loaded, returns those labels;
-    /// otherwise falls back to the active bank's labels.
     pub fn macro_labels(&self) -> Vec<String> {
         if self.config_loaded.load(Ordering::Relaxed) {
             if let Ok(labels) = self.macro_labels.read() {
@@ -248,7 +182,6 @@ impl ControllerUiState {
         bank.slots.iter().map(|s| s.name.to_string()).collect()
     }
 
-    /// Get macro colors from ext_state config (empty strings if not loaded).
     pub fn macro_colors(&self) -> Vec<String> {
         if let Ok(colors) = self.macro_colors.read() {
             colors.to_vec()
@@ -263,16 +196,9 @@ impl ControllerUiState {
 pub struct FtsSignalController {
     params: Arc<ControllerParams>,
     pub(crate) ui_state: Arc<ControllerUiState>,
-    /// Receives parameter writes from signal-extension via SHM.
     queue_consumer: ParamQueueConsumer,
-    /// Producer handle — cloned to the SHM receiver task.
     queue_producer: ParamQueueProducer,
-
-    /// Scratch buffer for draining the queue in process().
-    #[cfg(feature = "full")]
-    pending_writes: Vec<signal_proto::ParamWriteRequest>,
-
-    /// Previous macro values for change detection.
+    pending_writes: Vec<ParamWriteRequest>,
     prev_macros: [f32; NUM_MACROS],
 }
 
@@ -286,7 +212,6 @@ impl Default for FtsSignalController {
             ui_state,
             queue_consumer: consumer,
             queue_producer: producer,
-            #[cfg(feature = "full")]
             pending_writes: Vec::with_capacity(64),
             prev_macros: [f32::NAN; NUM_MACROS],
         }
@@ -294,22 +219,16 @@ impl Default for FtsSignalController {
 }
 
 impl FtsSignalController {
-    /// Get a clone of the producer for handing to the SHM receiver task.
     pub fn queue_producer(&self) -> ParamQueueProducer {
         self.queue_producer.clone()
     }
 
-    /// Read all 8 macro values into an array.
     fn read_macros(&self) -> [f32; NUM_MACROS] {
         [
-            self.params.macro_0.value(),
-            self.params.macro_1.value(),
-            self.params.macro_2.value(),
-            self.params.macro_3.value(),
-            self.params.macro_4.value(),
-            self.params.macro_5.value(),
-            self.params.macro_6.value(),
-            self.params.macro_7.value(),
+            self.params.macro_0.value(), self.params.macro_1.value(),
+            self.params.macro_2.value(), self.params.macro_3.value(),
+            self.params.macro_4.value(), self.params.macro_5.value(),
+            self.params.macro_6.value(), self.params.macro_7.value(),
         ]
     }
 }
@@ -337,33 +256,36 @@ impl Plugin for FtsSignalController {
         &mut self,
         _audio_io_layout: &AudioIOLayout,
         _buffer_config: &BufferConfig,
-        _context: &mut impl InitContext<Self>,
+        context: &mut impl InitContext<Self>,
     ) -> bool {
-        #[cfg(feature = "full")]
+        // Set up file-based logging
+        let log_path = "/tmp/fts-signal-controller.log";
+        if let Ok(file) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(log_path)
         {
-            // Set up file-based logging (once per process)
-            let log_path = "/tmp/fts-signal-controller.log";
-            if let Ok(file) = std::fs::OpenOptions::new()
-                .create(true)
-                .append(true)
-                .open(log_path)
-            {
-                let _ = fmt::Subscriber::builder()
-                    .with_env_filter(
-                        EnvFilter::try_from_default_env()
-                            .unwrap_or_else(|_| EnvFilter::new("fts_signal_controller=debug,warn")),
-                    )
-                    .with_writer(file)
-                    .with_ansi(false)
-                    .try_init();
-            }
-            tracing::info!("{PLUGIN_NAME}: initialized");
-
-            // Spawn background SHM bridge to read track ext_state
-            #[cfg(feature = "shm-bridge")]
-            crate::shm_bridge::spawn_bridge(self.ui_state.clone());
+            let _ = fmt::Subscriber::builder()
+                .with_env_filter(
+                    EnvFilter::try_from_default_env()
+                        .unwrap_or_else(|_| EnvFilter::new("fts_signal_controller=debug,warn")),
+                )
+                .with_writer(file)
+                .with_ansi(false)
+                .try_init();
         }
 
+        // Initialize DAW API via CLAP host extension — one line
+        if let Some(host) = daw::reaper::PluginHost::init(context.raw_host_context()) {
+            host.register_timer(crate::scene_timer::poll);
+            host.register_timer(crate::macro_timer::poll);
+            tracing::info!("{PLUGIN_NAME}: DAW API initialized, timers registered");
+        }
+
+        // Spawn background SHM bridge
+        crate::shm_bridge::spawn_bridge(self.ui_state.clone());
+
+        tracing::info!("{PLUGIN_NAME}: initialized");
         true
     }
 
@@ -374,32 +296,26 @@ impl Plugin for FtsSignalController {
         context: &mut impl ProcessContext<Self>,
     ) -> ProcessStatus {
         // ── 1. Drain SHM parameter writes ──────────────────────────
-        #[cfg(feature = "full")]
-        {
-            self.pending_writes.clear();
-            self.queue_consumer.drain(&mut self.pending_writes);
+        self.pending_writes.clear();
+        self.queue_consumer.drain(&mut self.pending_writes);
 
-            self.ui_state
-                .pending_write_count
-                .store(self.pending_writes.len() as u32, Ordering::Relaxed);
+        self.ui_state
+            .pending_write_count
+            .store(self.pending_writes.len() as u32, Ordering::Relaxed);
 
-            for write in &self.pending_writes {
-                // TODO: Call reaper TrackFX_SetParamNormalized for each write.
-                let _ = write;
-            }
+        for write in &self.pending_writes {
+            // TODO: Call reaper TrackFX_SetParamNormalized for each write.
+            let _ = write;
         }
 
         // ── 2. Process MIDI note events for scene switching ────────
         while let Some(event) = context.next_event() {
             if let NoteEvent::NoteOn { note, .. } = event {
-                // Check if this note is in the scene-switch range
                 if note >= SCENE_SWITCH_BASE_NOTE
                     && note < SCENE_SWITCH_BASE_NOTE + MAX_SCENES
                 {
                     let scene = (note - SCENE_SWITCH_BASE_NOTE + 1) as i32;
-                    self.ui_state
-                        .requested_scene
-                        .store(scene, Ordering::Relaxed);
+                    self.ui_state.requested_scene.store(scene, Ordering::Relaxed);
                 }
             }
         }

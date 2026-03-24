@@ -176,10 +176,12 @@ anyrender_vello_hybrid = { git = "https://github.com/FastTrackStudios/anyrender.
 anyrender_svg = { git = "https://github.com/FastTrackStudios/anyrender.git", rev = "422b5d0" }
 wgpu_context = { git = "https://github.com/FastTrackStudios/anyrender.git", rev = "422b5d0" }
 # moire: unify crates.io moire with the FTS fork (includes NixOS frame-pointer fix)
+# All crates must be listed to prevent duplicate moire-runtime #[ctor] crash.
 moire = { git = "https://github.com/FastTrackStudios/moire.git", rev = "663dbdc" }
 moire-macros-noop = { git = "https://github.com/FastTrackStudios/moire.git", rev = "663dbdc" }
 moire-runtime = { git = "https://github.com/FastTrackStudios/moire.git", rev = "663dbdc" }
 moire-tokio = { git = "https://github.com/FastTrackStudios/moire.git", rev = "663dbdc" }
+moire-trace-capture = { git = "https://github.com/FastTrackStudios/moire.git", rev = "663dbdc" }
 moire-trace-types = { git = "https://github.com/FastTrackStudios/moire.git", rev = "663dbdc" }
 moire-types = { git = "https://github.com/FastTrackStudios/moire.git", rev = "663dbdc" }
 moire-wasm = { git = "https://github.com/FastTrackStudios/moire.git", rev = "663dbdc" }

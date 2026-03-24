@@ -72,19 +72,8 @@ fn install() -> Result<(), Box<dyn std::error::Error>> {
         return Err("Failed to bundle fts-signal-controller".into());
     }
 
-    // Strip debug symbols from the bundled .clap — debug builds can be 500MB+
-    // which causes REAPER's CLAP scanner to fail.
     let clap_file = "FTS Signal Controller.clap";
     let bundled = root.join("target/bundled").join(clap_file);
-    if bundled.exists() {
-        let status = Command::new("strip")
-            .arg(&bundled)
-            .status();
-        match status {
-            Ok(s) if s.success() => println!("  Stripped debug symbols from {clap_file}"),
-            _ => eprintln!("  Warning: failed to strip {clap_file} (non-fatal)"),
-        }
-    }
 
     // Symlink the .clap into REAPER's UserPlugins/FX/FTS/ for each REAPER install.
     if !bundled.exists() {

@@ -9,29 +9,28 @@ description = "CLAP plugin that manages signal chains on a REAPER track — rig 
 [lib]
 crate-type = ["cdylib", "lib"]
 
-[features]
-default = ["full"]
-full = ["reaper-bootstrap", "reaper-init", "scene-timer", "macro-timer", "shm-bridge"]
-reaper-bootstrap = ["dep:daw", "dep:crossbeam-channel", "dep:serde", "dep:serde_json"]
-reaper-init = ["reaper-bootstrap", "dep:tracing-subscriber"]
-scene-timer = ["reaper-bootstrap"]
-macro-timer = ["reaper-bootstrap", "dep:serde", "dep:serde_json"]
-shm-bridge = ["dep:daw-extension-runtime", "dep:tokio", "dep:eyre", "dep:signal-proto", "dep:serde", "dep:serde_json"]
-
 [dependencies]
-# Plugin framework — always needed
+# Plugin framework
 nih_plug.workspace = true
 fts-plugin-core.workspace = true
 atomic_float.workspace = true
-tracing.workspace = true
 
-# Everything below is only needed with "full" feature
-signal-proto = { path = "../signal-proto", optional = true }
-daw = { workspace = true, features = ["sync", "reaper"], optional = true }
-daw-extension-runtime = { workspace = true, optional = true }
-tokio = { workspace = true, features = ["rt", "time"], optional = true }
-eyre = { workspace = true, optional = true }
-crossbeam-channel = { workspace = true, optional = true }
-tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"], optional = true }
-serde = { workspace = true, features = ["derive"], optional = true }
-serde_json = { workspace = true, optional = true }
+# DAW API — all REAPER access goes through this
+daw = { workspace = true, features = ["sync", "reaper"] }
+
+# SHM bridge for communication with signal-extension
+signal-proto = { path = "../signal-proto" }
+daw-extension-runtime.workspace = true
+tokio = { workspace = true, features = ["rt", "time"] }
+eyre.workspace = true
+
+# Concurrency
+crossbeam-channel.workspace = true
+
+# Observability
+tracing.workspace = true
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+
+# Serialization
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
