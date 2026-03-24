@@ -13,7 +13,7 @@ env:
 jobs:
   check:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
@@ -37,10 +37,6 @@ jobs:
           authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
         continue-on-error: true
 
-      - uses: Swatinem/rust-cache@v2
-        with:
-          cmd-format: nix develop --impure --command {0}
-
       - name: Run clippy
         run: nix develop --impure --command cargo clippy --workspace -- -D warnings
 
@@ -49,3 +45,42 @@ jobs:
 
       - name: Run tests
         run: nix develop --impure --command cargo nextest run --workspace
+
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: check
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Allow unprivileged user namespaces
+        run: |
+          if [ -f /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]; then
+            echo 0 | sudo tee /proc/sys/kernel/apparmor_restrict_unprivileged_userns
+          fi
+          sudo sysctl -w kernel.unprivileged_userns_clone=1 2>/dev/null || true
+
+      - uses: cachix/install-nix-action@v27
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+            accept-flake-config = true
+
+      - uses: cachix/cachix-action@v15
+        with:
+          name: fasttrackstudio
+          authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
+        continue-on-error: true
+
+      - name: Build signal-extension
+        run: nix build .#signal-extension --no-link --print-out-paths | tee /tmp/ext-path
+
+      - name: Build fts-signal-controller
+        run: nix build .#fts-signal-controller --no-link --print-out-paths | tee /tmp/ctrl-path
+
+      - name: Push to Cachix
+        run: |
+          cachix push fasttrackstudio $(cat /tmp/ext-path) || true
+          cachix push fasttrackstudio $(cat /tmp/ctrl-path) || true
+        continue-on-error: true
