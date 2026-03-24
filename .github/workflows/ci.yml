@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  NIXPKGS_ALLOW_UNFREE: 1
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Allow unprivileged user namespaces (bwrap needs this)
+        run: |
+          if [ -f /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]; then
+            echo 0 | sudo tee /proc/sys/kernel/apparmor_restrict_unprivileged_userns
+          fi
+          sudo sysctl -w kernel.unprivileged_userns_clone=1 2>/dev/null || true
+
+      - uses: cachix/install-nix-action@v27
+        with:
+          nix_path: nixpkgs=channel:nixos-unstable
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+            accept-flake-config = true
+
+      - uses: cachix/cachix-action@v15
+        with:
+          name: fasttrackstudio
+          authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
+        continue-on-error: true
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cmd-format: nix develop --impure --command {0}
+
+      - name: Run clippy
+        run: nix develop --impure --command cargo clippy --workspace -- -D warnings
+
+      - name: Check formatting
+        run: nix develop --impure --command cargo fmt --check
+
+      - name: Run tests
+        run: nix develop --impure --command cargo nextest run --workspace
