@@ -373,14 +373,13 @@ WRAPPER
           # Apps — installer DMG
           # ============================================================
           apps.create-installer-dmg = let
-            # Use builtins.tryEval to gracefully handle repos that fail to evaluate
-            tryPkg = pkg: let result = builtins.tryEval pkg; in if result.success then result.value else null;
-            sessionExt = tryPkg (session.packages.${system}.session-extension);
-            syncExt = tryPkg (sync.packages.${system}.sync-extension);
-            signalExt = tryPkg (signal.packages.${system}.signal-extension);
-            signalClap = tryPkg (signal.packages.${system}.fts-signal-controller);
-            dawBridge = tryPkg (daw.packages.${system}.daw-bridge);
-            reaper-launcher = tryPkg (daw.packages.${system}.reaper-launcher);
+            # TODO: re-enable once session/signal/sync flakes build on macOS
+            sessionExt = null;
+            syncExt = null;
+            signalExt = null;
+            signalClap = null;
+            dawBridge = daw.packages.${system}.daw-bridge or null;
+            reaper-launcher = daw.packages.${system}.reaper-launcher or null;
           in {
             type = "app";
             program = let
