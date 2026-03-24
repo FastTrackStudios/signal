@@ -1,22 +1,15 @@
-//! Timer-based macro mapping using the DAW API.
+//! Timer-based macro mapping using the sync DAW API.
 //!
-//! Runs at ~30Hz via `daw::register_timer`. Scans tracks for mapping
-//! config in P_EXT, reads macro values, and drives target FX params.
-//! Also tracks which macro knob was last touched for set_min/set_max.
-//!
-//! Uses only `daw::get()` / `daw::block_on()` — no direct reaper-rs.
+//! Runs at ~30Hz via `daw::register_timer`. Uses `daw::main_thread_daw()`
+//! for zero-overhead direct REAPER calls — no async, no RPC, no channels.
 
 use std::sync::Mutex;
 use tracing::{info, warn};
 
 use crate::plugin::NUM_MACROS;
 
-/// P_EXT key for mapping config.
 const MAPPING_CONFIG_KEY: &str = "FTS_MACROS";
 const MAPPING_CONFIG_SUBKEY: &str = "mapping_config";
-
-/// P_EXT key for macro knob values (JSON array of f32, length 8).
-const MACRO_VALUES_SUBKEY: &str = "macro_values";
 
 // ── Mapping types ─────────────────────────────────────────────────────
 
@@ -30,6 +23,7 @@ struct MappingConfig {
 #[derive(Debug, Clone, serde::Deserialize)]
 struct Mapping {
     source_param: u8,
+    #[allow(dead_code)]
     target_track: TrackRef,
     target_fx: FxRef,
     target_param_index: u32,
@@ -37,14 +31,10 @@ struct Mapping {
 }
 
 #[derive(Debug, Clone, serde::Deserialize)]
-enum TrackRef {
-    ByIndex(u32),
-}
+enum TrackRef { ByIndex(u32) }
 
 #[derive(Debug, Clone, serde::Deserialize)]
-enum FxRef {
-    ByIndex(u32),
-}
+enum FxRef { ByIndex(u32) }
 
 #[derive(Debug, Clone, serde::Deserialize)]
 enum MapMode {
@@ -55,10 +45,7 @@ enum MapMode {
 }
 
 #[derive(Debug, Clone, serde::Deserialize)]
-struct CurvePoint {
-    macro_value: f32,
-    param_value: f32,
-}
+struct CurvePoint { macro_value: f32, param_value: f32 }
 
 impl MapMode {
     fn apply(&self, source: f32) -> f32 {
@@ -92,7 +79,6 @@ impl MapMode {
 
 struct MacroTrackState {
     track_guid: String,
-    /// FX index of the signal controller on this track (for reading macro knob values).
     controller_fx_index: Option<u32>,
     mappings: Vec<Mapping>,
     config_json: String,
@@ -111,7 +97,7 @@ static STATE: Mutex<MacroState> = Mutex::new(MacroState {
     tick_count: 0,
 });
 
-/// Called at ~30Hz via `daw::register_timer`.
+/// Called at ~30Hz on REAPER's main thread.
 pub fn poll() {
     let Ok(mut state) = STATE.try_lock() else { return };
 
@@ -145,40 +131,23 @@ pub fn invalidate() {
 fn scan_tracks(state: &mut MacroState) {
     state.tracks.clear();
 
-    let Some(daw) = daw::get() else { return };
-    let Some(tracks) = daw::block_on(async {
-        let project = daw.current_project().await.ok()?;
-        let all = project.tracks().all().await.ok()?;
-        Some(all)
-    }) else { return };
-    let Some(tracks) = tracks else { return };
+    let Some(daw) = daw::main_thread_daw() else { return };
+    let tracks = daw.track_list();
 
     for track_info in &tracks {
-        let config_json = daw::block_on(async {
-            let daw = daw::get()?;
-            let project = daw.current_project().await.ok()?;
-            let track = project.tracks().by_guid(&track_info.guid).await.ok()??;
-            track.get_ext_state(MAPPING_CONFIG_KEY, MAPPING_CONFIG_SUBKEY).await.ok()?
-        });
-        let Some(Some(config_json)) = config_json else { continue };
-        if config_json.is_empty() { continue; }
+        let config_json = match daw.track_get_ext_state(&track_info.guid, MAPPING_CONFIG_KEY, MAPPING_CONFIG_SUBKEY) {
+            Some(json) if !json.is_empty() => json,
+            _ => continue,
+        };
 
         let mappings = parse_mappings(&config_json);
         if mappings.is_empty() { continue; }
 
         // Find the signal controller FX on this track
-        let controller_fx_index = daw::block_on(async {
-            let project = daw.current_project().await.ok()?;
-            let track = project.tracks().by_guid(&track_info.guid).await.ok()??;
-            let chain = track.fx_chain();
-            let fx_list = chain.all().await.ok()?;
-            for fx_info in &fx_list {
-                if fx_info.name.contains("Signal Controller") {
-                    return Some(fx_info.index);
-                }
-            }
-            None
-        }).flatten();
+        let controller_fx_index = daw.fx_list(&track_info.guid)
+            .iter()
+            .find(|fx| fx.name.contains("Signal Controller"))
+            .map(|fx| fx.index);
 
         info!(
             "[macro-timer] Track '{}': {} mappings, controller FX={:?}",
@@ -198,15 +167,11 @@ fn scan_tracks(state: &mut MacroState) {
 }
 
 fn refresh_configs(state: &mut MacroState) {
-    let Some(daw) = daw::get() else { return };
+    let Some(daw) = daw::main_thread_daw() else { return };
 
     for ts in &mut state.tracks {
-        let new_json = daw::block_on(async {
-            let project = daw.current_project().await.ok()?;
-            let track = project.tracks().by_guid(&ts.track_guid).await.ok()??;
-            track.get_ext_state(MAPPING_CONFIG_KEY, MAPPING_CONFIG_SUBKEY).await.ok()?
-        });
-        let new_json = new_json.flatten().unwrap_or_default();
+        let new_json = daw.track_get_ext_state(&ts.track_guid, MAPPING_CONFIG_KEY, MAPPING_CONFIG_SUBKEY)
+            .unwrap_or_default();
 
         if new_json != ts.config_json {
             ts.mappings = parse_mappings(&new_json);
@@ -215,31 +180,22 @@ fn refresh_configs(state: &mut MacroState) {
         }
     }
 
-    // Also pick up NEW tracks
-    let Some(daw) = daw::get() else { return };
-    let all_tracks = daw::block_on(async {
-        let project = daw.current_project().await.ok()?;
-        Some(project.tracks().all().await.ok()?)
-    });
-    let Some(Some(all_tracks)) = all_tracks else { return };
-
+    // Pick up NEW tracks
+    let all_tracks = daw.track_list();
     for track_info in &all_tracks {
-        if state.tracks.iter().any(|t| t.track_guid == track_info.guid) {
-            continue;
-        }
-        let config_json = daw::block_on(async {
-            let project = daw.current_project().await.ok()?;
-            let track = project.tracks().by_guid(&track_info.guid).await.ok()??;
-            track.get_ext_state(MAPPING_CONFIG_KEY, MAPPING_CONFIG_SUBKEY).await.ok()?
-        });
-        let Some(Some(config_json)) = config_json else { continue };
-        if config_json.is_empty() { continue; }
+        if state.tracks.iter().any(|t| t.track_guid == track_info.guid) { continue; }
+
+        let config_json = match daw.track_get_ext_state(&track_info.guid, MAPPING_CONFIG_KEY, MAPPING_CONFIG_SUBKEY) {
+            Some(json) if !json.is_empty() => json,
+            _ => continue,
+        };
         let mappings = parse_mappings(&config_json);
         if mappings.is_empty() { continue; }
+
         info!("[macro-timer] New track '{}': {} mappings", track_info.name, mappings.len());
         state.tracks.push(MacroTrackState {
             track_guid: track_info.guid.clone(),
-            controller_fx_index: None, // Will be found on next full scan
+            controller_fx_index: None,
             mappings,
             config_json,
             prev_macros: [f32::MIN; NUM_MACROS],
@@ -248,38 +204,23 @@ fn refresh_configs(state: &mut MacroState) {
 }
 
 fn apply_macros(state: &mut MacroState) {
-    let Some(daw) = daw::get() else { return };
+    let Some(daw) = daw::main_thread_daw() else { return };
 
     for ts in &mut state.tracks {
         if ts.mappings.is_empty() { continue; }
 
         // Read macro values from the signal controller's FX params
         let macros = if let Some(fx_idx) = ts.controller_fx_index {
-            daw::block_on(async {
-                let project = daw.current_project().await.ok()?;
-                let track = project.tracks().by_guid(&ts.track_guid).await.ok()??;
-                let fx = track.fx_chain().by_index(fx_idx).await.ok()??;
-                let mut values = [0.0f32; NUM_MACROS];
-                for i in 0..NUM_MACROS {
-                    values[i] = fx.param(i as u32).get().await.ok()? as f32;
+            let mut values = [0.0f32; NUM_MACROS];
+            for i in 0..NUM_MACROS {
+                if let Some(v) = daw.fx_param_get(&ts.track_guid, fx_idx, i as u32) {
+                    values[i] = v as f32;
                 }
-                Some(values)
-            })
+            }
+            values
         } else {
-            // Fallback: read from P_EXT (for tests that write values directly)
-            daw::block_on(async {
-                let project = daw.current_project().await.ok()?;
-                let track = project.tracks().by_guid(&ts.track_guid).await.ok()??;
-                let json = track.get_ext_state(MAPPING_CONFIG_KEY, MACRO_VALUES_SUBKEY).await.ok()??;
-                let arr: Vec<f32> = serde_json::from_str(&json).ok()?;
-                let mut values = [0.0f32; NUM_MACROS];
-                for (i, &v) in arr.iter().enumerate().take(NUM_MACROS) {
-                    values[i] = v;
-                }
-                Some(values)
-            })
+            [0.0f32; NUM_MACROS]
         };
-        let Some(Some(macros)) = macros else { continue };
 
         // Check for changes
         let mut changed = false;
@@ -291,7 +232,7 @@ fn apply_macros(state: &mut MacroState) {
         }
         if !changed { continue; }
 
-        // Track which macro changed the most → write to ExtState for set_min/set_max
+        // Track which macro changed the most
         if ts.controller_fx_index.is_some() {
             let mut best_idx = 0usize;
             let mut best_delta = 0.0f32;
@@ -303,24 +244,16 @@ fn apply_macros(state: &mut MacroState) {
                 }
             }
             if best_delta > 1e-3 {
-                let _ = daw::block_on(async {
-                    daw.ext_state()
-                        .set("FTS_SIGNAL", "last_macro_index", &best_idx.to_string(), false)
-                        .await
-                });
+                daw.ext_state_set("FTS_SIGNAL", "last_macro_index", &best_idx.to_string(), false);
             }
         }
 
         ts.prev_macros = macros;
 
-        info!("[macro-timer] Applying {} mappings (macro[0]={:.4})", ts.mappings.len(), macros[0]);
-
         // Check last_touched_fx — don't override params the user is actively adjusting
-        let last_touched = daw::block_on(async {
-            daw.last_touched_fx().await.ok().flatten()
-        }).flatten();
+        let last_touched = daw.last_touched_fx();
 
-        // Apply each mapping via Daw API
+        // Apply each mapping
         for mapping in &ts.mappings {
             let source_idx = mapping.source_param as usize;
             if source_idx >= NUM_MACROS { continue; }
@@ -328,56 +261,33 @@ fn apply_macros(state: &mut MacroState) {
             let target_fx_idx = match &mapping.target_fx { FxRef::ByIndex(idx) => *idx };
             let param_idx = mapping.target_param_index;
 
-            // Skip if the user is currently touching this exact target param
             if let Some(ref lt) = last_touched {
                 if lt.fx_index == target_fx_idx && lt.param_index == param_idx {
-                    // Don't fight the user — they're adjusting this param
                     continue;
                 }
             }
 
             let source_val = macros[source_idx];
             let target_val = mapping.mode.apply(source_val);
-            let track_guid = ts.track_guid.clone();
 
-            let _ = daw::block_on(async {
-                let project = daw.current_project().await.ok()?;
-                let track = match &mapping.target_track {
-                    TrackRef::ByIndex(0) => project.tracks().by_guid(&track_guid).await.ok()?,
-                    TrackRef::ByIndex(idx) => {
-                        let all = project.tracks().all().await.ok()?;
-                        let t = all.get(*idx as usize)?;
-                        project.tracks().by_guid(&t.guid).await.ok()?
-                    }
-                }?;
-                let fx = track.fx_chain().by_index(target_fx_idx).await.ok()??;
-                fx.param(param_idx).set(target_val as f64).await.ok()
-            });
+            daw.fx_param_set(&ts.track_guid, target_fx_idx, param_idx, target_val as f64);
         }
     }
 }
 
-/// Last console message displayed (for dedup).
 static LAST_CONSOLE_MSG: Mutex<String> = Mutex::new(String::new());
 
-/// Read console_log from global ext_state and display via Daw API.
 fn flush_console_log() {
-    let Some(daw) = daw::get() else { return };
+    let Some(daw) = daw::main_thread_daw() else { return };
 
-    let msg = daw::block_on(async {
-        daw.ext_state().get("FTS_SIGNAL", "console_log").await.ok()?
-    });
-    let Some(Some(msg)) = msg else { return };
+    let Some(msg) = daw.ext_state_get("FTS_SIGNAL", "console_log") else { return };
     if msg.is_empty() { return; }
 
     let mut last = LAST_CONSOLE_MSG.lock().unwrap();
     if msg == last.as_str() { return; }
     *last = msg.clone();
 
-    let display = format!("[Signal] {msg}\n");
-    let _ = daw::block_on(async {
-        daw.show_console_msg(&display).await
-    });
+    daw.show_console_msg(&format!("[Signal] {msg}\n"));
 }
 
 fn parse_mappings(json: &str) -> Vec<Mapping> {
