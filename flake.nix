@@ -369,10 +369,15 @@ WRAPPER
           # ============================================================
           # Apps — installer DMG
           # ============================================================
-          apps.create-installer-dmg = {
+          apps.create-installer-dmg = let
+            syncExt = sync.packages.${system}.sync-extension or null;
+            signalExt = signal.packages.${system}.signal-extension or null;
+            signalClap = signal.packages.${system}.fts-signal-controller or null;
+            dawBridge = daw.packages.${system}.daw-bridge or null;
+            reaper-launcher = daw.packages.${system}.reaper-launcher or null;
+          in {
             type = "app";
             program = let
-              ftsWrapper = fts-flake.wrapperPackages.${system} or {};
               script = pkgs.writeShellScript "create-installer-dmg" ''
                 set -euo pipefail
 
@@ -388,6 +393,41 @@ WRAPPER
                   echo "ERROR: FTS Installer app not found at $INSTALLER_APP"
                   exit 1
                 fi
+
+                # Find the .app we just copied
+                APP=$(ls -d "$STAGING"/*.app | head -1)
+                RESOURCES="$APP/Contents/Resources"
+                mkdir -p "$RESOURCES/fts-bundle/extensions" \
+                         "$RESOURCES/fts-bundle/fx" \
+                         "$RESOURCES/fts-bundle/daw-bridge"
+
+                # Bundle reaper-launcher
+                ${lib.optionalString (reaper-launcher != null) ''
+                  cp ${reaper-launcher}/bin/reaper-launcher "$RESOURCES/fts-bundle/"
+                  echo "  Bundled reaper-launcher"
+                ''}
+
+                # Bundle FTS extensions
+                ${lib.optionalString (syncExt != null) ''
+                  cp ${syncExt}/bin/sync-extension "$RESOURCES/fts-bundle/extensions/"
+                  echo "  Bundled sync-extension"
+                ''}
+                ${lib.optionalString (signalExt != null) ''
+                  cp ${signalExt}/bin/signal-extension "$RESOURCES/fts-bundle/extensions/"
+                  echo "  Bundled signal-extension"
+                ''}
+
+                # Bundle CLAP plugins
+                ${lib.optionalString (signalClap != null) ''
+                  cp -r ${signalClap}/lib/clap/"FTS Signal Controller.clap" "$RESOURCES/fts-bundle/fx/"
+                  echo "  Bundled FTS Signal Controller CLAP"
+                ''}
+
+                # Bundle daw-bridge
+                ${lib.optionalString (dawBridge != null) ''
+                  cp ${dawBridge}/lib/libreaper_daw_bridge.dylib "$RESOURCES/fts-bundle/daw-bridge/"
+                  echo "  Bundled daw-bridge"
+                ''}
 
                 # Create the DMG
                 hdiutil create -volname "FastTrackStudio Installer" \
