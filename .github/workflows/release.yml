@@ -60,12 +60,8 @@ jobs:
 
       - name: Rename artifacts with arch
         run: |
-          for f in FastTrackStudio-*.dmg; do
-            mv "$f" "${f%.dmg}-${{ matrix.arch }}.dmg"
-          done
-          for f in FastTrackStudio-Installer-*.dmg; do
-            mv "$f" "${f%.dmg}-${{ matrix.arch }}.dmg" 2>/dev/null || true
-          done
+          [ -f FastTrackStudio.dmg ] && mv FastTrackStudio.dmg "FastTrackStudio-${{ matrix.arch }}.dmg"
+          [ -f FastTrackStudio-Installer.dmg ] && mv FastTrackStudio-Installer.dmg "FastTrackStudio-Installer-${{ matrix.arch }}.dmg"
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -93,30 +89,14 @@ jobs:
           authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
         continue-on-error: true
 
-      - name: Build installer (headless)
-        run: nix build .#fts-installer --accept-flake-config -o result-installer
-
-      - name: Build desktop app
-        run: nix build .#fasttrackstudio-desktop --accept-flake-config -o result-desktop
+      - name: Build portable Linux bundle
+        run: nix build .#linux-bundle --accept-flake-config -o result-bundle
 
       - name: Package Linux tarball
         run: |
-          TAG="${GITHUB_REF_NAME:-dev}"
-          STAGING=$(mktemp -d)
-          mkdir -p "$STAGING/FastTrackStudio/bin"
-
-          # Installer
-          if [ -d result-installer/bin ]; then
-            cp result-installer/bin/* "$STAGING/FastTrackStudio/bin/"
-          fi
-
-          # Desktop app
-          if [ -d result-desktop/bin ]; then
-            cp result-desktop/bin/* "$STAGING/FastTrackStudio/bin/"
-          fi
-
-          tar czf "FastTrackStudio-${TAG}-linux-x86_64.tar.gz" -C "$STAGING" FastTrackStudio
-          rm -rf "$STAGING"
+          cp -rL result-bundle FastTrackStudio
+          tar czf "FastTrackStudio-linux-x86_64.tar.gz" FastTrackStudio
+          rm -rf FastTrackStudio
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4

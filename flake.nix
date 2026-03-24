@@ -85,6 +85,7 @@
               (craneLib.fileset.commonCargoSources ./.)
               (lib.fileset.fileFilter (f: f.hasExt "css") ./.)
               (lib.fileset.fileFilter (f: f.hasExt "ico") ./.)
+              (lib.fileset.fileFilter (f: f.hasExt "png") ./.)
               (lib.fileset.fileFilter (f: f.hasExt "svg") ./.)
               (lib.fileset.fileFilter (f: f.name == "Dioxus.toml") ./.)
               (lib.fileset.fileFilter (f: f.name == "tailwind-config.js") ./.)
@@ -107,12 +108,18 @@
             libiconv
           ]);
 
+          # Stub codesign for Nix sandbox builds — dx always tries to
+          # invoke codesign on macOS even with --codesign false.
+          fakeCodesign = pkgs.writeShellScriptBin "codesign" ''exec true'';
+
           nativeBuildInputs = with pkgs; [
             pkg-config
             rustPlatform.bindgenHook
             dioxus-cli
             wasm-bindgen-cli
             tailwindcss_4
+          ] ++ lib.optionals pkgs.stdenv.isDarwin [
+            fakeCodesign
           ];
 
           # Vendor cargo deps with WDL submodule injected into reaper-rs
@@ -123,9 +130,8 @@
               then drv.overrideAttrs (old: {
                 postInstall = (old.postInstall or "") + ''
                   for d in $out/reaper-low-*/; do
-                    if [ -d "$d/lib" ]; then
-                      cp -r ${wdl} "$d/lib/WDL"
-                    fi
+                    mkdir -p "$d/lib/WDL"
+                    cp -r ${wdl}/* "$d/lib/WDL/"
                   done
                 '';
               })
@@ -203,13 +209,15 @@
               pname = "fasttrackstudio-web";
               version = rev;
               inherit cargoArtifacts;
+              doNotPostBuildInstallCargoBinaries = true;
               buildPhaseCargoCommand = ''
                 cd apps/web
                 dx build --release --platform web
               '';
               installPhaseCommand = ''
+                cd "$NIX_BUILD_TOP/source"
                 mkdir -p $out/www
-                cp -r apps/web/target/dx/fasttrackstudio-web/release/web/* $out/www/
+                cp -r target/dx/fasttrackstudio-web/release/web/* $out/www/
               '';
               doCheck = false;
             });
@@ -219,15 +227,17 @@
               pname = "fasttrackstudio-desktop";
               version = rev;
               inherit cargoArtifacts;
+              doNotPostBuildInstallCargoBinaries = true;
               buildPhaseCargoCommand = ''
                 cd apps/desktop
                 dx build --release --platform desktop
               '';
               installPhaseCommand = ''
+                cd "$NIX_BUILD_TOP/source"
                 mkdir -p $out/Applications $out/bin
-                if [ -d "apps/desktop/target/dx/fasttrackstudio-desktop/release/macos" ]; then
-                  cp -r apps/desktop/target/dx/fasttrackstudio-desktop/release/macos/*.app $out/Applications/
-                  ln -s "$out/Applications/"*.app"/Contents/MacOS/"* $out/bin/fasttrackstudio-desktop
+                if [ -d "target/dx/fasttrackstudio-desktop/release/macos" ]; then
+                  cp -r target/dx/fasttrackstudio-desktop/release/macos/*.app $out/Applications/FastTrackStudio.app
+                  ln -s "$out/Applications/FastTrackStudio.app/Contents/MacOS/fasttrackstudio-desktop" $out/bin/fasttrackstudio-desktop
                 elif [ -f "target/release/fasttrackstudio-desktop" ]; then
                   cp target/release/fasttrackstudio-desktop $out/bin/
                 fi
@@ -267,14 +277,16 @@
               pname = "fts-installer";
               version = rev;
               inherit cargoArtifacts;
+              doNotPostBuildInstallCargoBinaries = true;
               buildPhaseCargoCommand = ''
                 cd apps/installer
                 dx build --release --platform desktop
               '';
               installPhaseCommand = ''
+                cd "$NIX_BUILD_TOP/source"
                 mkdir -p $out/Applications $out/bin
-                if [ -d "apps/installer/target/dx/fts-installer/release/macos" ]; then
-                  cp -r apps/installer/target/dx/fts-installer/release/macos/*.app $out/Applications/
+                if [ -d "target/dx/fts-installer/release/macos" ]; then
+                  cp -r target/dx/fts-installer/release/macos/*.app $out/Applications/
                   ln -s "$out/Applications/"*.app"/Contents/MacOS/"* $out/bin/fts-installer
                 elif [ -f "target/release/fts-installer" ]; then
                   cp target/release/fts-installer $out/bin/
@@ -284,6 +296,74 @@
             });
 
             default = self'.packages.test-extension;
+          } // lib.optionalAttrs pkgs.stdenv.isLinux {
+            # ── Portable Linux bundle ──────────────────────────────────
+            # Self-contained directory with wrapper scripts that invoke
+            # the bundled ld-linux, so it runs on any x86_64 Linux
+            # without Nix installed.
+            linux-bundle = pkgs.stdenv.mkDerivation {
+              pname = "FastTrackStudio";
+              version = rev;
+              dontUnpack = true;
+              nativeBuildInputs = [ pkgs.patchelf ];
+
+              buildPhase = ''
+                mkdir -p pkg/{bin/.unwrapped,lib}
+
+                # ── Collect binaries ──
+                for p in ${self'.packages.fts-installer} ${self'.packages.fasttrackstudio-desktop}; do
+                  if [ -d "$p/bin" ]; then
+                    for f in "$p"/bin/*; do
+                      [ -f "$f" ] && cp "$f" pkg/bin/.unwrapped/
+                    done
+                  fi
+                done
+
+                # ── Collect Nix-store shared libraries ──
+                collect_libs() {
+                  ldd "$1" 2>/dev/null | while IFS= read -r line; do
+                    lib_path=$(echo "$line" | sed -n 's|.*=> \(/nix/store/[^ ]*\).*|\1|p')
+                    [ -z "$lib_path" ] || [ ! -f "$lib_path" ] && continue
+                    name=$(basename "$lib_path")
+                    [ -f "pkg/lib/$name" ] && continue
+                    cp -L "$lib_path" "pkg/lib/$name"
+                  done
+                }
+
+                for bin in pkg/bin/.unwrapped/*; do collect_libs "$bin"; done
+                # Transitive deps — two extra passes
+                for lib in pkg/lib/*; do collect_libs "$lib"; done
+                for lib in pkg/lib/*; do collect_libs "$lib"; done
+
+                # ── Bundle the dynamic linker ──
+                INTERP=$(patchelf --print-interpreter pkg/bin/.unwrapped/* 2>/dev/null | head -1 || true)
+                if [ -n "$INTERP" ] && [ -f "$INTERP" ]; then
+                  INTERP_NAME=$(basename "$INTERP")
+                  cp -L "$INTERP" "pkg/lib/$INTERP_NAME"
+                else
+                  echo "WARNING: could not determine ELF interpreter" >&2
+                  INTERP_NAME="ld-linux-x86-64.so.2"
+                fi
+
+                # ── Create wrapper scripts ──
+                for bin in pkg/bin/.unwrapped/*; do
+                  name=$(basename "$bin")
+                  cat > "pkg/bin/$name" << WRAPPER
+#!/bin/bash
+DIR="\$(cd "\$(dirname "\$0")" && pwd)"
+exec "\$DIR/../lib/$INTERP_NAME" --library-path "\$DIR/../lib" "\$DIR/.unwrapped/$name" "\$@"
+WRAPPER
+                  chmod +x "pkg/bin/$name"
+                done
+              '';
+
+              installPhase = ''
+                mkdir -p $out
+                cp -r pkg/* $out/
+                cp ${./scripts/linux-install.sh} $out/install.sh
+                chmod +x $out/install.sh
+              '';
+            };
           };
 
           # ============================================================
@@ -297,13 +377,11 @@
                 set -euo pipefail
 
                 INSTALLER_APP="${self'.packages.fts-installer}/Applications"
-                FTS_CONTROL_APP="${self'.packages.fasttrackstudio-desktop}/Applications"
-                OUTPUT="FastTrackStudio-Installer-${rev}.dmg"
+                OUTPUT="FastTrackStudio-Installer.dmg"
                 STAGING=$(mktemp -d)
 
                 echo "Assembling installer DMG..."
 
-                # Copy installer app
                 if [ -d "$INSTALLER_APP" ]; then
                   cp -r "$INSTALLER_APP"/*.app "$STAGING/"
                 else
@@ -311,19 +389,13 @@
                   exit 1
                 fi
 
-                # Copy FTS Control app (installer will copy this into the install dir)
-                if [ -d "$FTS_CONTROL_APP" ]; then
-                  cp -r "$FTS_CONTROL_APP"/*.app "$STAGING/"
-                else
-                  echo "WARNING: FTS Control app not found, installer will skip that step"
-                fi
-
                 # Create the DMG
-                hdiutil create -volname "FastTrackStudio" \
+                hdiutil create -volname "FastTrackStudio Installer" \
                   -srcfolder "$STAGING" \
                   -ov -format UDZO \
                   "$OUTPUT"
 
+                chmod -R u+w "$STAGING" 2>/dev/null || true
                 rm -rf "$STAGING"
                 echo "Created $OUTPUT ($(du -h "$OUTPUT" | cut -f1))"
               '';
@@ -345,7 +417,7 @@
               script = pkgs.writeShellScript "create-distribution-dmg" (''
                 set -euo pipefail
 
-                OUTPUT="FastTrackStudio-${rev}.dmg"
+                OUTPUT="FastTrackStudio.dmg"
                 STAGING=$(mktemp -d)
                 FTS_DIR="$STAGING/FastTrackStudio"
                 mkdir -p "$FTS_DIR"
@@ -500,6 +572,7 @@ WRAPPER
                   -ov -format UDZO \
                   "$OUTPUT"
 
+                chmod -R u+w "$STAGING" 2>/dev/null || true
                 rm -rf "$STAGING"
                 echo "Created $OUTPUT ($(du -h "$OUTPUT" | cut -f1))"
               '' + lib.optionalString pkgs.stdenv.isLinux ''

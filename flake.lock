@@ -7155,7 +7155,8 @@
         "nixpkgs": "nixpkgs_18",
         "rust-overlay": "rust-overlay_8",
         "signal": "signal",
-        "sync": "sync"
+        "sync": "sync",
+        "wdl": "wdl"
       }
     },
     "rust-overlay": {
@@ -7832,6 +7833,22 @@
       "original": {
         "owner": "numtide",
         "repo": "treefmt-nix",
+        "type": "github"
+      }
+    },
+    "wdl": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1773847072,
+        "narHash": "sha256-sQMYIu0uJSjilkNqpTRT4k1xX0zNkPVu3ovRhQpaZsM=",
+        "owner": "justinfrankel",
+        "repo": "WDL",
+        "rev": "bff79dd6f85ab5b8467126a56be5d08bfe00d0dc",
+        "type": "github"
+      },
+      "original": {
+        "owner": "justinfrankel",
+        "repo": "WDL",
         "type": "github"
       }
     }
