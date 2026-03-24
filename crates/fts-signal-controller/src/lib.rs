@@ -1,7 +1,7 @@
 //! FTS Signal Controller — CLAP plugin for per-track signal chain control.
 //!
-//! Uses `daw::reaper::PluginHost` for REAPER API access via the CLAP host
-//! extension `cockos.reaper_extension`. No direct reaper-rs dependency.
+//! Uses `daw::init()` / `daw::get()` for DAW access — fully DAW-agnostic.
+//! No direct reaper-rs dependency.
 //!
 //! # Timer callbacks
 //!

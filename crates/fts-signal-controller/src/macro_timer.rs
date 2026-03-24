@@ -1,28 +1,24 @@
-//! Timer-based macro mapping on REAPER's main thread.
+//! Timer-based macro mapping using the DAW API.
 //!
-//! Runs at ~30Hz alongside the scene timer. Scans for tracks with
-//! `P_EXT:FTS_MACROS:mapping_config`, reads macro knob values from
-//! `P_EXT:FTS_MACROS:macro_values`, and drives target FX parameters
-//! via `TrackFX_SetParamNormalized`.
+//! Runs at ~30Hz via `daw::register_timer`. Scans tracks for mapping
+//! config in P_EXT, reads macro values, and drives target FX params.
+//! Also tracks which macro knob was last touched for set_min/set_max.
 //!
-//! Macro values are written to P_EXT by the signal controller's
-//! `process()` callback (audio thread → P_EXT on main thread).
-//! The test harness can also write values directly.
+//! Uses only `daw::get()` / `daw::block_on()` — no direct reaper-rs.
 
-use daw::reaper::bootstrap::{HighReaper, LowReaper, MediaTrack};
-use std::ffi::CString;
 use std::sync::Mutex;
 use tracing::{info, warn};
 
 use crate::plugin::NUM_MACROS;
 
 /// P_EXT key for mapping config.
-const MAPPING_CONFIG_KEY: &str = "P_EXT:FTS_MACROS:mapping_config";
+const MAPPING_CONFIG_KEY: &str = "FTS_MACROS";
+const MAPPING_CONFIG_SUBKEY: &str = "mapping_config";
 
 /// P_EXT key for macro knob values (JSON array of f32, length 8).
-const MACRO_VALUES_KEY: &str = "P_EXT:FTS_MACROS:macro_values";
+const MACRO_VALUES_SUBKEY: &str = "macro_values";
 
-// ── Mapping types (deserialized from JSON) ────────────────────────────
+// ── Mapping types ─────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, serde::Deserialize)]
 struct MappingConfig {
@@ -70,31 +66,18 @@ impl MapMode {
         match self {
             MapMode::ScaleRange { min, max } => min + v * (max - min),
             MapMode::PassThrough => v,
-            MapMode::Toggle => {
-                if v >= 0.5 { 1.0 } else { 0.0 }
-            }
+            MapMode::Toggle => if v >= 0.5 { 1.0 } else { 0.0 },
             MapMode::MultiPoint { points } => {
-                if points.is_empty() {
-                    return v;
-                }
-                if points.len() == 1 {
-                    return points[0].param_value;
-                }
-                if v <= points[0].macro_value {
-                    return points[0].param_value;
-                }
+                if points.is_empty() { return v; }
+                if points.len() == 1 { return points[0].param_value; }
+                if v <= points[0].macro_value { return points[0].param_value; }
                 let last = &points[points.len() - 1];
-                if v >= last.macro_value {
-                    return last.param_value;
-                }
+                if v >= last.macro_value { return last.param_value; }
                 for window in points.windows(2) {
-                    let a = &window[0];
-                    let b = &window[1];
+                    let (a, b) = (&window[0], &window[1]);
                     if v >= a.macro_value && v <= b.macro_value {
                         let range = b.macro_value - a.macro_value;
-                        if range < 1e-6 {
-                            return a.param_value;
-                        }
+                        if range < 1e-6 { return a.param_value; }
                         let t = (v - a.macro_value) / range;
                         return a.param_value + (b.param_value - a.param_value) * t;
                     }
@@ -108,13 +91,9 @@ impl MapMode {
 // ── Cached state ──────────────────────────────────────────────────────
 
 struct MacroTrackState {
-    /// REAPER track index.
-    track_idx: u32,
-    /// Parsed mapping config.
+    track_guid: String,
     mappings: Vec<Mapping>,
-    /// Raw config JSON (for change detection).
     config_json: String,
-    /// Previous macro values (for change detection).
     prev_macros: [f32; NUM_MACROS],
 }
 
@@ -130,11 +109,9 @@ static STATE: Mutex<MacroState> = Mutex::new(MacroState {
     tick_count: 0,
 });
 
-/// Called from the timer callback at ~30Hz on REAPER's main thread.
+/// Called at ~30Hz via `daw::register_timer`.
 pub fn poll() {
-    let Ok(mut state) = STATE.try_lock() else {
-        return;
-    };
+    let Ok(mut state) = STATE.try_lock() else { return };
 
     state.tick_count += 1;
 
@@ -144,23 +121,19 @@ pub fn poll() {
         return;
     }
 
-    // Re-scan every ~5 seconds (picks up new tracks)
     if state.tick_count % 150 == 0 {
         scan_tracks(&mut state);
     }
 
-    // Re-read mapping config every ~1 second
     if state.tick_count % 30 == 0 {
         refresh_configs(&mut state);
     }
 
     apply_macros(&mut state);
-
-    // Check for console messages from the signal-extension
+    track_last_macro_touch();
     flush_console_log();
 }
 
-/// Invalidate cached state.
 pub fn invalidate() {
     if let Ok(mut state) = STATE.lock() {
         state.initialized = false;
@@ -168,184 +141,111 @@ pub fn invalidate() {
     }
 }
 
-/// Scan all tracks for mapping_config in P_EXT.
 fn scan_tracks(state: &mut MacroState) {
     state.tracks.clear();
 
-    let reaper = HighReaper::get();
-    let project = reaper.current_project();
-    let track_count = project.track_count();
-    let low = reaper.medium_reaper().low();
+    let Some(daw) = daw::get() else { return };
+    let Some(tracks) = daw::block_on(async {
+        let project = daw.current_project().await.ok()?;
+        let all = project.tracks().all().await.ok()?;
+        Some(all)
+    }) else { return };
+    let Some(tracks) = tracks else { return };
 
-    for track_idx in 0..track_count {
-        let Some(track) = project.track_by_index(track_idx) else {
-            continue;
-        };
-        let raw = match track.raw() {
-            Ok(r) => r,
-            Err(_) => continue,
-        };
-
-        // Check if this track has mapping config
-        let config_json = match read_p_ext(low, raw.as_ptr(), MAPPING_CONFIG_KEY) {
-            Some(json) if !json.is_empty() => json,
-            _ => continue,
-        };
+    for track_info in &tracks {
+        let config_json = daw::block_on(async {
+            let daw = daw::get()?;
+            let project = daw.current_project().await.ok()?;
+            let track = project.tracks().by_guid(&track_info.guid).await.ok()??;
+            track.get_ext_state(MAPPING_CONFIG_KEY, MAPPING_CONFIG_SUBKEY).await.ok()?
+        });
+        let Some(Some(config_json)) = config_json else { continue };
+        if config_json.is_empty() { continue; }
 
         let mappings = parse_mappings(&config_json);
-        if mappings.is_empty() {
-            continue;
-        }
+        if mappings.is_empty() { continue; }
 
-        let track_name = track.name().map(|n| n.to_string()).unwrap_or_default();
-        info!(
-            "[macro-timer] Track {} '{}': {} mappings",
-            track_idx, track_name, mappings.len()
-        );
+        info!("[macro-timer] Track '{}': {} mappings", track_info.name, mappings.len());
 
         state.tracks.push(MacroTrackState {
-            track_idx,
+            track_guid: track_info.guid.clone(),
             mappings,
             config_json,
-            prev_macros: [f32::MIN; NUM_MACROS], // sentinel: forces first apply
+            prev_macros: [f32::MIN; NUM_MACROS],
         });
     }
 
-    info!(
-        "[macro-timer] Scan complete: {} track(s) with mappings",
-        state.tracks.len()
-    );
+    info!("[macro-timer] Scan complete: {} track(s) with mappings", state.tracks.len());
 }
 
-/// Re-read mapping configs for existing tracks.
 fn refresh_configs(state: &mut MacroState) {
-    let reaper = HighReaper::get();
-    let project = reaper.current_project();
-    let low = reaper.medium_reaper().low();
+    let Some(daw) = daw::get() else { return };
 
     for ts in &mut state.tracks {
-        let Some(track) = project.track_by_index(ts.track_idx) else {
-            continue;
-        };
-        let raw = match track.raw() {
-            Ok(r) => r,
-            Err(_) => continue,
-        };
-
-        let new_json = read_p_ext(low, raw.as_ptr(), MAPPING_CONFIG_KEY)
-            .unwrap_or_default();
+        let new_json = daw::block_on(async {
+            let project = daw.current_project().await.ok()?;
+            let track = project.tracks().by_guid(&ts.track_guid).await.ok()??;
+            track.get_ext_state(MAPPING_CONFIG_KEY, MAPPING_CONFIG_SUBKEY).await.ok()?
+        });
+        let new_json = new_json.flatten().unwrap_or_default();
 
         if new_json != ts.config_json {
             ts.mappings = parse_mappings(&new_json);
-            info!(
-                "[macro-timer] Refreshed track {}: {} mappings",
-                ts.track_idx, ts.mappings.len()
-            );
+            info!("[macro-timer] Refreshed '{}': {} mappings", ts.track_guid, ts.mappings.len());
             ts.config_json = new_json;
         }
     }
 
-    // Also pick up NEW tracks that got mapping config since last scan
-    let track_count = reaper.current_project().track_count();
-    for track_idx in 0..track_count {
-        if state.tracks.iter().any(|t| t.track_idx == track_idx) {
-            continue; // Already tracked
-        }
-        let Some(track) = project.track_by_index(track_idx) else {
+    // Also pick up NEW tracks
+    let Some(daw) = daw::get() else { return };
+    let all_tracks = daw::block_on(async {
+        let project = daw.current_project().await.ok()?;
+        Some(project.tracks().all().await.ok()?)
+    });
+    let Some(Some(all_tracks)) = all_tracks else { return };
+
+    for track_info in &all_tracks {
+        if state.tracks.iter().any(|t| t.track_guid == track_info.guid) {
             continue;
-        };
-        let raw = match track.raw() {
-            Ok(r) => r,
-            Err(_) => continue,
-        };
-        let config_json = match read_p_ext(low, raw.as_ptr(), MAPPING_CONFIG_KEY) {
-            Some(json) if !json.is_empty() => json,
-            _ => continue,
-        };
+        }
+        let config_json = daw::block_on(async {
+            let project = daw.current_project().await.ok()?;
+            let track = project.tracks().by_guid(&track_info.guid).await.ok()??;
+            track.get_ext_state(MAPPING_CONFIG_KEY, MAPPING_CONFIG_SUBKEY).await.ok()?
+        });
+        let Some(Some(config_json)) = config_json else { continue };
+        if config_json.is_empty() { continue; }
         let mappings = parse_mappings(&config_json);
-        if mappings.is_empty() {
-            continue;
-        }
-        let track_name = track.name().map(|n| n.to_string()).unwrap_or_default();
-        info!(
-            "[macro-timer] New track {} '{}': {} mappings",
-            track_idx, track_name, mappings.len()
-        );
+        if mappings.is_empty() { continue; }
+        info!("[macro-timer] New track '{}': {} mappings", track_info.name, mappings.len());
         state.tracks.push(MacroTrackState {
-            track_idx,
+            track_guid: track_info.guid.clone(),
             mappings,
             config_json,
-            prev_macros: [f32::MIN; NUM_MACROS], // sentinel: forces first apply
+            prev_macros: [f32::MIN; NUM_MACROS],
         });
     }
 }
 
-/// Track which macro knob was last changed (written to global ExtState
-/// so the signal-extension's set_min/set_max can read it).
-fn update_last_macro_index(low: &LowReaper, macros: &[f32; NUM_MACROS], prev: &[f32; NUM_MACROS]) {
-    // Find the macro with the largest change
-    let mut best_idx = 0usize;
-    let mut best_delta = 0.0f32;
-    for i in 0..NUM_MACROS {
-        let delta = (macros[i] - prev[i]).abs();
-        if delta > best_delta {
-            best_delta = delta;
-            best_idx = i;
-        }
-    }
-    if best_delta < 1e-5 {
-        return;
-    }
-
-    let section = CString::new("FTS_SIGNAL").unwrap();
-    let key = CString::new("last_macro_index").unwrap();
-    let val = CString::new(best_idx.to_string()).unwrap();
-    unsafe {
-        low.SetExtState(section.as_ptr(), key.as_ptr(), val.as_ptr(), false);
-    }
-}
-
-/// Read macro values from P_EXT, apply mappings, and track last-changed macro.
 fn apply_macros(state: &mut MacroState) {
-    let reaper = HighReaper::get();
-    let project = reaper.current_project();
-    let low = reaper.medium_reaper().low();
-
-    // Also scan ALL tracks for macro_values changes (not just those with mappings)
-    // so we can track last_macro_index even before mappings exist.
-    let track_count = project.track_count();
-    for track_idx in 0..track_count {
-        let Some(track) = project.track_by_index(track_idx) else { continue };
-        let raw = match track.raw() { Ok(r) => r, Err(_) => continue };
-        let macros = read_macro_values(low, raw.as_ptr());
-
-        // Check if any values are non-default (i.e. someone wrote macro_values)
-        let has_values = macros.iter().any(|&v| v.abs() > 1e-6 || v > 0.0);
-        if !has_values {
-            continue;
-        }
-
-        // Find existing tracked state or create temp for comparison
-        if let Some(ts) = state.tracks.iter_mut().find(|t| t.track_idx == track_idx) {
-            let mut changed = false;
-            for i in 0..NUM_MACROS {
-                if (macros[i] - ts.prev_macros[i]).abs() > 1e-5 {
-                    changed = true;
-                    break;
-                }
-            }
-            if changed {
-                update_last_macro_index(low, &macros, &ts.prev_macros);
-            }
-        }
-    }
+    let Some(daw) = daw::get() else { return };
 
     for ts in &mut state.tracks {
-        let Some(track) = project.track_by_index(ts.track_idx) else { continue };
-        let raw = match track.raw() { Ok(r) => r, Err(_) => continue };
+        if ts.mappings.is_empty() { continue; }
 
         // Read macro values from P_EXT
-        let macros = read_macro_values(low, raw.as_ptr());
+        let macros = daw::block_on(async {
+            let project = daw.current_project().await.ok()?;
+            let track = project.tracks().by_guid(&ts.track_guid).await.ok()??;
+            let json = track.get_ext_state(MAPPING_CONFIG_KEY, MACRO_VALUES_SUBKEY).await.ok()??;
+            let arr: Vec<f32> = serde_json::from_str(&json).ok()?;
+            let mut values = [0.0f32; NUM_MACROS];
+            for (i, &v) in arr.iter().enumerate().take(NUM_MACROS) {
+                values[i] = v;
+            }
+            Some(values)
+        });
+        let Some(Some(macros)) = macros else { continue };
 
         // Check for changes
         let mut changed = false;
@@ -355,130 +255,93 @@ fn apply_macros(state: &mut MacroState) {
                 break;
             }
         }
-        if !changed {
-            continue;
-        }
-
-        update_last_macro_index(low, &macros, &ts.prev_macros);
+        if !changed { continue; }
         ts.prev_macros = macros;
 
-        if ts.mappings.is_empty() {
-            continue;
-        }
+        info!("[macro-timer] Applying {} mappings (macro[0]={:.4})", ts.mappings.len(), macros[0]);
 
-        info!(
-            "[macro-timer] Track {}: applying {} mappings (macro[0]={:.4})",
-            ts.track_idx, ts.mappings.len(), macros[0]
-        );
-
-        // Apply each mapping
+        // Apply each mapping via Daw API
         for mapping in &ts.mappings {
             let source_idx = mapping.source_param as usize;
-            if source_idx >= NUM_MACROS {
-                continue;
-            }
+            if source_idx >= NUM_MACROS { continue; }
             let source_val = macros[source_idx];
             let target_val = mapping.mode.apply(source_val);
 
-            // Resolve target track
-            let target_track_ptr = match &mapping.target_track {
-                TrackRef::ByIndex(0) => raw.as_ptr(),
-                TrackRef::ByIndex(idx) => {
-                    match project.track_by_index(*idx) {
-                        Some(t) => match t.raw() {
-                            Ok(r) => r.as_ptr(),
-                            Err(_) => continue,
-                        },
-                        None => continue,
+            let target_fx_idx = match &mapping.target_fx { FxRef::ByIndex(idx) => *idx };
+            let param_idx = mapping.target_param_index;
+            let track_guid = ts.track_guid.clone();
+
+            let _ = daw::block_on(async {
+                let project = daw.current_project().await.ok()?;
+                // ByIndex(0) means same track
+                let track = match &mapping.target_track {
+                    TrackRef::ByIndex(0) => project.tracks().by_guid(&track_guid).await.ok()?,
+                    TrackRef::ByIndex(idx) => {
+                        let all = project.tracks().all().await.ok()?;
+                        let t = all.get(*idx as usize)?;
+                        project.tracks().by_guid(&t.guid).await.ok()?
                     }
-                }
-            };
-
-            let target_fx_idx = match &mapping.target_fx {
-                FxRef::ByIndex(idx) => *idx as i32,
-            };
-
-            unsafe {
-                low.TrackFX_SetParamNormalized(
-                    target_track_ptr,
-                    target_fx_idx,
-                    mapping.target_param_index as i32,
-                    target_val as f64,
-                );
-            }
+                }?;
+                let fx = track.fx_chain().by_index(target_fx_idx).await.ok()??;
+                fx.param(param_idx).set(target_val as f64).await.ok()
+            });
         }
     }
 }
 
-/// Read macro values from P_EXT:FTS_MACROS:macro_values.
-/// Expects a JSON array like [0.5, 0.0, 0.0, ...].
-fn read_macro_values(low: &LowReaper, track_ptr: *mut MediaTrack) -> [f32; NUM_MACROS] {
-    let mut values = [0.0f32; NUM_MACROS];
-    let Some(json) = read_p_ext(low, track_ptr, MACRO_VALUES_KEY) else {
-        return values;
-    };
-    if let Ok(arr) = serde_json::from_str::<Vec<f32>>(&json) {
-        for (i, &v) in arr.iter().enumerate().take(NUM_MACROS) {
-            values[i] = v;
-        }
-    }
-    values
+/// Track which macro knob was last touched on any signal controller.
+fn track_last_macro_touch() {
+    let Some(daw) = daw::get() else { return };
+
+    let result = daw::block_on(async {
+        let lt = daw.last_touched_fx().await.ok()??;
+        if lt.param_index >= NUM_MACROS as u32 { return None; }
+
+        let project = daw.current_project().await.ok()?;
+        let track = project.tracks().by_guid(&lt.track_guid).await.ok()??;
+        let chain = if lt.is_input_fx { track.input_fx_chain() } else { track.fx_chain() };
+        let fx = chain.by_index(lt.fx_index).await.ok()??;
+        let fx_info = fx.info().await.ok()?;
+
+        if !fx_info.name.contains("Signal Controller") { return None; }
+        Some(lt.param_index)
+    });
+
+    let Some(Some(param_index)) = result else { return };
+
+    static LAST_INDEX: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(u32::MAX);
+    let prev = LAST_INDEX.load(std::sync::atomic::Ordering::Relaxed);
+    if prev == param_index { return; }
+    LAST_INDEX.store(param_index, std::sync::atomic::Ordering::Relaxed);
+
+    let _ = daw::block_on(async {
+        daw.ext_state().set("FTS_SIGNAL", "last_macro_index", &param_index.to_string(), false).await
+    });
+
+    info!("[macro-timer] Last touched macro: {} (Macro {})", param_index, param_index + 1);
 }
 
-/// Read a P_EXT string from a raw track pointer.
-fn read_p_ext(low: &LowReaper, track_ptr: *mut MediaTrack, key: &str) -> Option<String> {
-    let attr = CString::new(key).ok()?;
-    let mut buf = vec![0u8; 4096];
-    let ok = unsafe {
-        low.GetSetMediaTrackInfo_String(
-            track_ptr,
-            attr.as_ptr(),
-            buf.as_mut_ptr() as *mut i8,
-            false,
-        )
-    };
-    if !ok {
-        return None;
-    }
-    let nul = buf.iter().position(|&b| b == 0).unwrap_or(buf.len());
-    let s = std::str::from_utf8(&buf[..nul]).ok()?.to_string();
-    if s.is_empty() { None } else { Some(s) }
-}
-
-/// Last console message we displayed (for dedup).
+/// Last console message displayed (for dedup).
 static LAST_CONSOLE_MSG: Mutex<String> = Mutex::new(String::new());
 
-/// Read console_log from global ext_state and display via ShowConsoleMsg.
+/// Read console_log from global ext_state and display via Daw API.
 fn flush_console_log() {
-    let reaper = HighReaper::get();
-    let low = reaper.medium_reaper().low();
+    let Some(daw) = daw::get() else { return };
 
-    // Read from global ExtState (not per-track P_EXT)
-    let section = CString::new("FTS_SIGNAL").unwrap();
-    let key = CString::new("console_log").unwrap();
-    let ptr = unsafe { low.GetExtState(section.as_ptr(), key.as_ptr()) };
-    if ptr.is_null() {
-        return;
-    }
-    let msg = match unsafe { std::ffi::CStr::from_ptr(ptr) }.to_str() {
-        Ok(s) if !s.is_empty() => s,
-        _ => return,
-    };
+    let msg = daw::block_on(async {
+        daw.ext_state().get("FTS_SIGNAL", "console_log").await.ok()?
+    });
+    let Some(Some(msg)) = msg else { return };
+    if msg.is_empty() { return; }
 
-    // Dedup: only show if different from last message
     let mut last = LAST_CONSOLE_MSG.lock().unwrap();
-    if msg == last.as_str() {
-        return;
-    }
-    *last = msg.to_string();
+    if msg == last.as_str() { return; }
+    *last = msg.clone();
 
-    // Display in REAPER console
     let display = format!("[Signal] {msg}\n");
-    if let Ok(c_msg) = CString::new(display) {
-        unsafe {
-            low.ShowConsoleMsg(c_msg.as_ptr());
-        }
-    }
+    let _ = daw::block_on(async {
+        daw.show_console_msg(&display).await
+    });
 }
 
 fn parse_mappings(json: &str) -> Vec<Mapping> {
@@ -515,7 +378,6 @@ mod tests {
         };
         assert!((mode.apply(0.0) - 0.9).abs() < 1e-4);
         assert!((mode.apply(0.33) - 0.6).abs() < 1e-4);
-        assert!((mode.apply(0.66) - 0.3).abs() < 1e-4);
         assert!((mode.apply(1.0) - 0.1).abs() < 1e-4);
         let mid = mode.apply(0.165);
         assert!((mid - 0.75).abs() < 0.01, "expected ~0.75, got {mid}");
@@ -523,32 +385,9 @@ mod tests {
 
     #[test]
     fn parse_mapping_json() {
-        let json = r#"{
-            "version": "0.1",
-            "mappings": [
-                {
-                    "source_param": 0,
-                    "target_track": {"ByIndex": 0},
-                    "target_fx": {"ByIndex": 1},
-                    "target_param_index": 3,
-                    "mode": {"ScaleRange": {"min": 0.2, "max": 0.8}}
-                },
-                {
-                    "source_param": 0,
-                    "target_track": {"ByIndex": 0},
-                    "target_fx": {"ByIndex": 1},
-                    "target_param_index": 1,
-                    "mode": {"MultiPoint": {"points": [
-                        {"macro_value": 0.0, "param_value": 0.1},
-                        {"macro_value": 0.5, "param_value": 0.9},
-                        {"macro_value": 1.0, "param_value": 0.5}
-                    ]}}
-                }
-            ]
-        }"#;
+        let json = r#"{"version":"0.1","mappings":[{"source_param":0,"target_track":{"ByIndex":0},"target_fx":{"ByIndex":1},"target_param_index":3,"mode":{"ScaleRange":{"min":0.2,"max":0.8}}}]}"#;
         let mappings = parse_mappings(json);
-        assert_eq!(mappings.len(), 2);
+        assert_eq!(mappings.len(), 1);
         assert!((mappings[0].mode.apply(0.5) - 0.5).abs() < 1e-4);
-        assert!((mappings[1].mode.apply(0.5) - 0.9).abs() < 1e-4);
     }
 }

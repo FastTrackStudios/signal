@@ -275,10 +275,10 @@ impl Plugin for FtsSignalController {
                 .try_init();
         }
 
-        // Initialize DAW API via CLAP host extension — one line
-        if let Some(host) = daw::reaper::PluginHost::init(context.raw_host_context()) {
-            host.register_timer(crate::scene_timer::poll);
-            host.register_timer(crate::macro_timer::poll);
+        // Initialize DAW API — fully DAW-agnostic
+        if daw::init(context.raw_host_context()) {
+            daw::register_timer(crate::scene_timer::poll);
+            daw::register_timer(crate::macro_timer::poll);
             tracing::info!("{PLUGIN_NAME}: DAW API initialized, timers registered");
         }
 
