@@ -164,7 +164,7 @@ pub async fn load_demo_setlist(daw: &Daw) -> Result<()> {
     // Signal Controller on rig folder — receives MIDI to switch songs
     rig_folder
         .fx_chain()
-        .add("CLAP: FTS Signal Controller (FastTrack Studio)")
+        .add("CLAP: FTS Signal Controller (FastTrackStudio)")
         .await
         .wrap_err("add Signal Controller to Guitar Rig")?;
 
@@ -209,7 +209,7 @@ pub async fn load_demo_setlist(daw: &Daw) -> Result<()> {
         // Signal Controller on song folder — receives MIDI to switch sections
         if let Err(e) = song_folder
             .fx_chain()
-            .add("CLAP: FTS Signal Controller (FastTrack Studio)")
+            .add("CLAP: FTS Signal Controller (FastTrackStudio)")
             .await
         {
             tracing::warn!("[demo-setlist] Failed to add controller to '{}': {e:#}", song.title);
