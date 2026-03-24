@@ -304,20 +304,9 @@ async fn add_signal_controller(track: &daw::TrackHandle) -> eyre::Result<daw::Fx
     Err(eyre::eyre!("FTS Signal Controller not available"))
 }
 
-/// Write macro knob values to track P_EXT for the macro_timer to read.
-async fn set_macro_value(track: &daw::TrackHandle, macro_idx: usize, value: f64) -> eyre::Result<()> {
-    // Read current values, update one, write back
-    let current = track.get_ext_state("FTS_MACROS", "macro_values").await?;
-    let mut values: Vec<f64> = match &current {
-        Some(json) => serde_json::from_str(json).unwrap_or_else(|_| vec![0.0; 8]),
-        None => vec![0.0; 8],
-    };
-    while values.len() < 8 {
-        values.push(0.0);
-    }
-    values[macro_idx] = value;
-    let json = serde_json::to_string(&values)?;
-    track.set_ext_state("FTS_MACROS", "macro_values", &json).await?;
+/// Set a macro knob value on the signal controller FX.
+async fn set_macro_value(controller_fx: &daw::FxHandle, macro_idx: usize, value: f64) -> eyre::Result<()> {
+    controller_fx.param(macro_idx as u32).set(value).await?;
     Ok(())
 }
 
@@ -337,7 +326,7 @@ async fn macro_assign_to_reacomp_via_ext_state(
 
     // 1. Create track with Signal Controller (FX 0) + ReaComp (FX 1)
     let track = project.tracks().add("Macro Assign Test", None).await?;
-    let _controller = add_signal_controller(&track).await?;
+    let controller = add_signal_controller(&track).await?;
     ctx.log("FX 0: Signal Controller loaded");
     let target_fx = track.fx_chain().add(REACOMP).await?;
     ctx.log("FX 1: ReaComp loaded");
@@ -392,7 +381,7 @@ async fn macro_assign_to_reacomp_via_ext_state(
     // 4. Set Macro 0 = 0.0 → Threshold ~0.8, Ratio ~0.1
     ctx.log("");
     ctx.log("--- Macro 0 = 0.0 ---");
-    set_macro_value(&track, 0, 0.0).await?;
+    set_macro_value(&controller, 0, 0.0).await?;
 
     let thresh_at_0 = poll_param(&target_fx, threshold_idx, 0.8, 0.05, poll_timeout, poll_interval).await?;
     let ratio_at_0 = poll_param(&target_fx, ratio_idx, 0.1, 0.05, poll_timeout, poll_interval).await?;
@@ -403,7 +392,7 @@ async fn macro_assign_to_reacomp_via_ext_state(
     // 5. Set Macro 0 = 1.0 → Threshold ~0.2, Ratio ~0.9
     ctx.log("");
     ctx.log("--- Macro 0 = 1.0 ---");
-    set_macro_value(&track, 0, 1.0).await?;
+    set_macro_value(&controller, 0, 1.0).await?;
 
     let thresh_at_1 = poll_param(&target_fx, threshold_idx, 0.2, 0.05, poll_timeout, poll_interval).await?;
     let ratio_at_1 = poll_param(&target_fx, ratio_idx, 0.9, 0.05, poll_timeout, poll_interval).await?;
@@ -432,7 +421,7 @@ async fn four_point_stage_macro(
 
     // 1. Create track with Signal Controller (FX 0) + ReaComp (FX 1)
     let track = project.tracks().add("Stage Macro Test", None).await?;
-    let _controller = add_signal_controller(&track).await?;
+    let controller = add_signal_controller(&track).await?;
     ctx.log("FX 0: Signal Controller loaded");
     let target_fx = track.fx_chain().add(REACOMP).await?;
     ctx.log("FX 1: ReaComp loaded");
@@ -501,7 +490,7 @@ async fn four_point_stage_macro(
         ctx.log("");
         ctx.log(&format!("--- Stage: {} (macro={:.2}) ---", stage.name, stage.macro_val));
 
-        set_macro_value(&track, 0, stage.macro_val).await?;
+        set_macro_value(&controller, 0, stage.macro_val).await?;
 
         let thresh = poll_param(&target_fx, threshold_idx, stage.expected_threshold, 0.06, poll_timeout, poll_interval).await?;
         let ratio = poll_param(&target_fx, ratio_idx, stage.expected_ratio, 0.06, poll_timeout, poll_interval).await?;
@@ -514,7 +503,7 @@ async fn four_point_stage_macro(
     // 5. Test interpolation between stages
     ctx.log("");
     ctx.log("--- Interpolation: midpoint between Clean and Crunch (macro=0.165) ---");
-    set_macro_value(&track, 0, 0.165).await?;
+    set_macro_value(&controller, 0, 0.165).await?;
 
     let thresh_mid = poll_param(&target_fx, threshold_idx, 0.75, 0.08, poll_timeout, poll_interval).await?;
     let ratio_mid = poll_param(&target_fx, ratio_idx, 0.175, 0.08, poll_timeout, poll_interval).await?;

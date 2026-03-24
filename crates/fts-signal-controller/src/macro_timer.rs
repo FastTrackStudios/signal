@@ -92,6 +92,8 @@ impl MapMode {
 
 struct MacroTrackState {
     track_guid: String,
+    /// FX index of the signal controller on this track (for reading macro knob values).
+    controller_fx_index: Option<u32>,
     mappings: Vec<Mapping>,
     config_json: String,
     prev_macros: [f32; NUM_MACROS],
@@ -130,7 +132,6 @@ pub fn poll() {
     }
 
     apply_macros(&mut state);
-    track_last_macro_touch();
     flush_console_log();
 }
 
@@ -165,10 +166,28 @@ fn scan_tracks(state: &mut MacroState) {
         let mappings = parse_mappings(&config_json);
         if mappings.is_empty() { continue; }
 
-        info!("[macro-timer] Track '{}': {} mappings", track_info.name, mappings.len());
+        // Find the signal controller FX on this track
+        let controller_fx_index = daw::block_on(async {
+            let project = daw.current_project().await.ok()?;
+            let track = project.tracks().by_guid(&track_info.guid).await.ok()??;
+            let chain = track.fx_chain();
+            let fx_list = chain.all().await.ok()?;
+            for fx_info in &fx_list {
+                if fx_info.name.contains("Signal Controller") {
+                    return Some(fx_info.index);
+                }
+            }
+            None
+        }).flatten();
+
+        info!(
+            "[macro-timer] Track '{}': {} mappings, controller FX={:?}",
+            track_info.name, mappings.len(), controller_fx_index
+        );
 
         state.tracks.push(MacroTrackState {
             track_guid: track_info.guid.clone(),
+            controller_fx_index,
             mappings,
             config_json,
             prev_macros: [f32::MIN; NUM_MACROS],
@@ -220,6 +239,7 @@ fn refresh_configs(state: &mut MacroState) {
         info!("[macro-timer] New track '{}': {} mappings", track_info.name, mappings.len());
         state.tracks.push(MacroTrackState {
             track_guid: track_info.guid.clone(),
+            controller_fx_index: None, // Will be found on next full scan
             mappings,
             config_json,
             prev_macros: [f32::MIN; NUM_MACROS],
@@ -233,18 +253,32 @@ fn apply_macros(state: &mut MacroState) {
     for ts in &mut state.tracks {
         if ts.mappings.is_empty() { continue; }
 
-        // Read macro values from P_EXT
-        let macros = daw::block_on(async {
-            let project = daw.current_project().await.ok()?;
-            let track = project.tracks().by_guid(&ts.track_guid).await.ok()??;
-            let json = track.get_ext_state(MAPPING_CONFIG_KEY, MACRO_VALUES_SUBKEY).await.ok()??;
-            let arr: Vec<f32> = serde_json::from_str(&json).ok()?;
-            let mut values = [0.0f32; NUM_MACROS];
-            for (i, &v) in arr.iter().enumerate().take(NUM_MACROS) {
-                values[i] = v;
-            }
-            Some(values)
-        });
+        // Read macro values from the signal controller's FX params
+        let macros = if let Some(fx_idx) = ts.controller_fx_index {
+            daw::block_on(async {
+                let project = daw.current_project().await.ok()?;
+                let track = project.tracks().by_guid(&ts.track_guid).await.ok()??;
+                let fx = track.fx_chain().by_index(fx_idx).await.ok()??;
+                let mut values = [0.0f32; NUM_MACROS];
+                for i in 0..NUM_MACROS {
+                    values[i] = fx.param(i as u32).get().await.ok()? as f32;
+                }
+                Some(values)
+            })
+        } else {
+            // Fallback: read from P_EXT (for tests that write values directly)
+            daw::block_on(async {
+                let project = daw.current_project().await.ok()?;
+                let track = project.tracks().by_guid(&ts.track_guid).await.ok()??;
+                let json = track.get_ext_state(MAPPING_CONFIG_KEY, MACRO_VALUES_SUBKEY).await.ok()??;
+                let arr: Vec<f32> = serde_json::from_str(&json).ok()?;
+                let mut values = [0.0f32; NUM_MACROS];
+                for (i, &v) in arr.iter().enumerate().take(NUM_MACROS) {
+                    values[i] = v;
+                }
+                Some(values)
+            })
+        };
         let Some(Some(macros)) = macros else { continue };
 
         // Check for changes
@@ -256,6 +290,27 @@ fn apply_macros(state: &mut MacroState) {
             }
         }
         if !changed { continue; }
+
+        // Track which macro changed the most → write to ExtState for set_min/set_max
+        if ts.controller_fx_index.is_some() {
+            let mut best_idx = 0usize;
+            let mut best_delta = 0.0f32;
+            for i in 0..NUM_MACROS {
+                let delta = (macros[i] - ts.prev_macros[i]).abs();
+                if delta > best_delta {
+                    best_delta = delta;
+                    best_idx = i;
+                }
+            }
+            if best_delta > 1e-3 {
+                let _ = daw::block_on(async {
+                    daw.ext_state()
+                        .set("FTS_SIGNAL", "last_macro_index", &best_idx.to_string(), false)
+                        .await
+                });
+            }
+        }
+
         ts.prev_macros = macros;
 
         info!("[macro-timer] Applying {} mappings (macro[0]={:.4})", ts.mappings.len(), macros[0]);
@@ -287,38 +342,6 @@ fn apply_macros(state: &mut MacroState) {
             });
         }
     }
-}
-
-/// Track which macro knob was last touched on any signal controller.
-fn track_last_macro_touch() {
-    let Some(daw) = daw::get() else { return };
-
-    let result = daw::block_on(async {
-        let lt = daw.last_touched_fx().await.ok()??;
-        if lt.param_index >= NUM_MACROS as u32 { return None; }
-
-        let project = daw.current_project().await.ok()?;
-        let track = project.tracks().by_guid(&lt.track_guid).await.ok()??;
-        let chain = if lt.is_input_fx { track.input_fx_chain() } else { track.fx_chain() };
-        let fx = chain.by_index(lt.fx_index).await.ok()??;
-        let fx_info = fx.info().await.ok()?;
-
-        if !fx_info.name.contains("Signal Controller") { return None; }
-        Some(lt.param_index)
-    });
-
-    let Some(Some(param_index)) = result else { return };
-
-    static LAST_INDEX: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(u32::MAX);
-    let prev = LAST_INDEX.load(std::sync::atomic::Ordering::Relaxed);
-    if prev == param_index { return; }
-    LAST_INDEX.store(param_index, std::sync::atomic::Ordering::Relaxed);
-
-    let _ = daw::block_on(async {
-        daw.ext_state().set("FTS_SIGNAL", "last_macro_index", &param_index.to_string(), false).await
-    });
-
-    info!("[macro-timer] Last touched macro: {} (Macro {})", param_index, param_index + 1);
 }
 
 /// Last console message displayed (for dedup).
