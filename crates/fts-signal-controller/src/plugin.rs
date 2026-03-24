@@ -282,9 +282,8 @@ impl Plugin for FtsSignalController {
         if daw::init(context.raw_host_context())
             && !TIMERS_REGISTERED.swap(true, std::sync::atomic::Ordering::Relaxed)
         {
-            daw::register_timer(crate::scene_timer::poll);
-            daw::register_timer(crate::macro_timer::poll);
-            tracing::info!("{PLUGIN_NAME}: DAW API initialized, timers registered");
+            daw::register_timer(signal_timer);
+            tracing::info!("{PLUGIN_NAME}: DAW API initialized, timer registered");
         }
 
         // Spawn background SHM bridge
@@ -343,6 +342,12 @@ impl Plugin for FtsSignalController {
 
         ProcessStatus::Normal
     }
+}
+
+/// Single consolidated timer — scene switching + macro mapping.
+fn signal_timer() {
+    crate::scene_timer::poll();
+    crate::macro_timer::poll();
 }
 
 impl ClapPlugin for FtsSignalController {
