@@ -448,36 +448,36 @@ async fn z_demo_setlist_action_creates_tracks(
         Ok(unmuted)
     }
 
-    // Position 0.5s → should be in first section (Clean)
+    // Position 0.5s → should be ONLY "Clean" unmuted
     transport.set_position(0.5).await?;
     tokio::time::sleep(Duration::from_millis(500)).await;
     let unmuted = get_unmuted_sends(&project, &guitar_input.guid).await?;
     ctx.log(&format!("  pos=0.5s: unmuted = {:?}", unmuted));
-    assert!(
-        unmuted.iter().any(|n| n == "Clean"),
-        "At position 0.5s, 'Clean' send should be unmuted. Got: {:?}", unmuted
+    assert_eq!(
+        unmuted, vec!["Clean"],
+        "At pos 0.5s, ONLY 'Clean' should be unmuted. Got: {:?}", unmuted
     );
 
-    // Position at bar 1 + 0.5s → should be in second section (Ambient)
+    // Position at bar 1 + 0.5s → should be ONLY "Ambient" unmuted
     let ambient_pos = bar_duration + 0.5;
     transport.set_position(ambient_pos).await?;
     tokio::time::sleep(Duration::from_millis(500)).await;
     let unmuted = get_unmuted_sends(&project, &guitar_input.guid).await?;
     ctx.log(&format!("  pos={ambient_pos:.1}s: unmuted = {:?}", unmuted));
-    assert!(
-        unmuted.iter().any(|n| n == "Ambient"),
-        "At position {ambient_pos:.1}s, 'Ambient' send should be unmuted. Got: {:?}", unmuted
+    assert_eq!(
+        unmuted, vec!["Ambient"],
+        "At pos {ambient_pos:.1}s, ONLY 'Ambient' should be unmuted. Got: {:?}", unmuted
     );
 
-    // Position at bar 2 + 0.5s → should be in third section (Rhythm)
+    // Position at bar 2 + 0.5s → should be ONLY "Rhythm" unmuted
     let rhythm_pos = 2.0 * bar_duration + 0.5;
     transport.set_position(rhythm_pos).await?;
     tokio::time::sleep(Duration::from_millis(500)).await;
     let unmuted = get_unmuted_sends(&project, &guitar_input.guid).await?;
     ctx.log(&format!("  pos={rhythm_pos:.1}s: unmuted = {:?}", unmuted));
-    assert!(
-        unmuted.iter().any(|n| n == "Rhythm"),
-        "At position {rhythm_pos:.1}s, 'Rhythm' send should be unmuted. Got: {:?}", unmuted
+    assert_eq!(
+        unmuted, vec!["Rhythm"],
+        "At pos {rhythm_pos:.1}s, ONLY 'Rhythm' should be unmuted. Got: {:?}", unmuted
     );
 
     // Verify section tracks are NOT muted (sends control routing, not track mute)
