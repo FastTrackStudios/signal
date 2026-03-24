@@ -294,6 +294,16 @@ async fn load_signal_controller_on_track(
 // Helper: write macro values to P_EXT (read by signal-controller's macro_timer)
 // ---------------------------------------------------------------------------
 
+/// Load signal controller on a track. Required for macro_timer to run.
+async fn add_signal_controller(track: &daw::TrackHandle) -> eyre::Result<daw::FxHandle> {
+    for name in SIGNAL_CONTROLLER_NAMES {
+        if let Ok(fx) = track.fx_chain().add(name).await {
+            return Ok(fx);
+        }
+    }
+    Err(eyre::eyre!("FTS Signal Controller not available"))
+}
+
 /// Write macro knob values to track P_EXT for the macro_timer to read.
 async fn set_macro_value(track: &daw::TrackHandle, macro_idx: usize, value: f64) -> eyre::Result<()> {
     // Read current values, update one, write back
@@ -322,14 +332,15 @@ async fn macro_assign_to_reacomp_via_ext_state(
     let project = ctx.project().clone();
 
     ctx.log("=== MACRO ASSIGN VIA SIGNAL CONTROLLER TIMER ===");
-    ctx.log("ReaComp (FX 0), macro values + mapping config via P_EXT");
-    ctx.log("The signal-controller's macro_timer reads P_EXT and drives FX params");
+    ctx.log("Signal Controller (FX 0) + ReaComp (FX 1), mapping via P_EXT");
     ctx.log("");
 
-    // 1. Create track with ReaComp (FX 0)
+    // 1. Create track with Signal Controller (FX 0) + ReaComp (FX 1)
     let track = project.tracks().add("Macro Assign Test", None).await?;
+    let _controller = add_signal_controller(&track).await?;
+    ctx.log("FX 0: Signal Controller loaded");
     let target_fx = track.fx_chain().add(REACOMP).await?;
-    ctx.log("FX 0: ReaComp loaded");
+    ctx.log("FX 1: ReaComp loaded");
 
     // 2. Discover Threshold and Ratio param indices
     let params = target_fx.parameters().await?;
@@ -347,21 +358,21 @@ async fn macro_assign_to_reacomp_via_ext_state(
     ctx.log(&format!("ReaComp: Threshold={}, Ratio={}", threshold_idx, ratio_idx));
 
     // 3. Store mapping config — Macro 0 drives Threshold (inverted) and Ratio (direct)
-    //    target_fx is ByIndex(0) since ReaComp is the only FX on this track
+    //    target_fx is ByIndex(1) since Signal Controller is FX 0, ReaComp is FX 1
     let mapping_json = serde_json::json!({
         "version": "0.1",
         "mappings": [
             {
                 "source_param": 0,
                 "target_track": {"ByIndex": 0},
-                "target_fx": {"ByIndex": 0},
+                "target_fx": {"ByIndex": 1},
                 "target_param_index": threshold_idx,
                 "mode": {"ScaleRange": {"min": 0.8, "max": 0.2}}
             },
             {
                 "source_param": 0,
                 "target_track": {"ByIndex": 0},
-                "target_fx": {"ByIndex": 0},
+                "target_fx": {"ByIndex": 1},
                 "target_param_index": ratio_idx,
                 "mode": {"ScaleRange": {"min": 0.1, "max": 0.9}}
             }
@@ -373,9 +384,9 @@ async fn macro_assign_to_reacomp_via_ext_state(
     ctx.log("Stored mapping config in track P_EXT");
 
     // Wait for macro timer to discover this track (~1s config refresh)
-    tokio::time::sleep(Duration::from_millis(1500)).await;
+    tokio::time::sleep(Duration::from_secs(3)).await;
 
-    let poll_timeout = Duration::from_secs(5);
+    let poll_timeout = Duration::from_secs(8);
     let poll_interval = Duration::from_millis(50);
 
     // 4. Set Macro 0 = 0.0 → Threshold ~0.8, Ratio ~0.1
@@ -419,10 +430,12 @@ async fn four_point_stage_macro(
     ctx.log("MultiPoint curve: Clean → Crunch → Drive → Lead");
     ctx.log("");
 
-    // 1. Create track with ReaComp (FX 0)
+    // 1. Create track with Signal Controller (FX 0) + ReaComp (FX 1)
     let track = project.tracks().add("Stage Macro Test", None).await?;
+    let _controller = add_signal_controller(&track).await?;
+    ctx.log("FX 0: Signal Controller loaded");
     let target_fx = track.fx_chain().add(REACOMP).await?;
-    ctx.log("FX 0: ReaComp loaded");
+    ctx.log("FX 1: ReaComp loaded");
 
     // 2. Discover ReaComp params
     let params = target_fx.parameters().await?;
@@ -433,14 +446,14 @@ async fn four_point_stage_macro(
 
     ctx.log(&format!("ReaComp: Threshold={}, Ratio={}", threshold_idx, ratio_idx));
 
-    // 3. Store MultiPoint mapping config
+    // 3. Store MultiPoint mapping config (Signal Controller=FX 0, ReaComp=FX 1)
     let mapping_json = serde_json::json!({
         "version": "0.1",
         "mappings": [
             {
                 "source_param": 0,
                 "target_track": {"ByIndex": 0},
-                "target_fx": {"ByIndex": 0},
+                "target_fx": {"ByIndex": 1},
                 "target_param_index": threshold_idx,
                 "mode": {"MultiPoint": {"points": [
                     {"macro_value": 0.0, "param_value": 0.9},
@@ -452,7 +465,7 @@ async fn four_point_stage_macro(
             {
                 "source_param": 0,
                 "target_track": {"ByIndex": 0},
-                "target_fx": {"ByIndex": 0},
+                "target_fx": {"ByIndex": 1},
                 "target_param_index": ratio_idx,
                 "mode": {"MultiPoint": {"points": [
                     {"macro_value": 0.0, "param_value": 0.05},
@@ -469,9 +482,9 @@ async fn four_point_stage_macro(
     ctx.log("Stored MultiPoint mapping config in track P_EXT");
 
     // Wait for macro timer to discover this track
-    tokio::time::sleep(Duration::from_millis(1500)).await;
+    tokio::time::sleep(Duration::from_secs(3)).await;
 
-    let poll_timeout = Duration::from_secs(5);
+    let poll_timeout = Duration::from_secs(8);
     let poll_interval = Duration::from_millis(50);
 
     // 4. Test each stage
