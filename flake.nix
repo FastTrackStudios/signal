@@ -18,6 +18,8 @@
     nix2container.inputs.nixpkgs.follows = "nixpkgs";
     mk-shell-bin.url = "github:rrbutani/nix-mk-shell-bin";
     fts-flake.url = "github:FastTrackStudios/fts-flake";
+    session.url = "github:FastTrackStudios/session";
+    session.inputs.nixpkgs.follows = "nixpkgs";
     sync.url = "github:FastTrackStudios/sync";
     sync.inputs.nixpkgs.follows = "nixpkgs";
     signal.url = "github:FastTrackStudios/signal";
@@ -45,7 +47,7 @@
     pure-eval = false;
   };
 
-  outputs = { self, flake-parts, crane, devenv, devenv-root, nix2container, fts-flake, sync, signal, daw, wdl, ... } @inputs:
+  outputs = { self, flake-parts, crane, devenv, devenv-root, nix2container, fts-flake, session, sync, signal, daw, wdl, ... } @inputs:
     flake-parts.lib.mkFlake { inherit inputs; } {
       imports = [ inputs.devenv.flakeModule ];
 
@@ -86,6 +88,7 @@
               (lib.fileset.fileFilter (f: f.hasExt "css") ./.)
               (lib.fileset.fileFilter (f: f.hasExt "ico") ./.)
               (lib.fileset.fileFilter (f: f.hasExt "png") ./.)
+              (lib.fileset.fileFilter (f: f.hasExt "ttf") ./.)
               (lib.fileset.fileFilter (f: f.hasExt "svg") ./.)
               (lib.fileset.fileFilter (f: f.name == "Dioxus.toml") ./.)
               (lib.fileset.fileFilter (f: f.name == "tailwind-config.js") ./.)
@@ -370,6 +373,7 @@ WRAPPER
           # Apps — installer DMG
           # ============================================================
           apps.create-installer-dmg = let
+            sessionExt = session.packages.${system}.session-extension or null;
             syncExt = sync.packages.${system}.sync-extension or null;
             signalExt = signal.packages.${system}.signal-extension or null;
             signalClap = signal.packages.${system}.fts-signal-controller or null;
@@ -408,6 +412,10 @@ WRAPPER
                 ''}
 
                 # Bundle FTS extensions
+                ${lib.optionalString (sessionExt != null) ''
+                  cp ${sessionExt}/bin/session-extension "$RESOURCES/fts-bundle/extensions/"
+                  echo "  Bundled session-extension"
+                ''}
                 ${lib.optionalString (syncExt != null) ''
                   cp ${syncExt}/bin/sync-extension "$RESOURCES/fts-bundle/extensions/"
                   echo "  Bundled sync-extension"
@@ -447,6 +455,7 @@ WRAPPER
           # ============================================================
           apps.create-distribution-dmg = let
             ftsWrapper = fts-flake.wrapperPackages.${system} or {};
+            sessionExt = session.packages.${system}.session-extension or null;
             syncExt = sync.packages.${system}.sync-extension or null;
             signalExt = signal.packages.${system}.signal-extension or null;
             signalClap = signal.packages.${system}.fts-signal-controller or null;
@@ -480,6 +489,11 @@ WRAPPER
                   cp ${ftsWrapper.sws}/Scripts/*.py "$REAPER_APP/Contents/Resources/FTS/Scripts/" 2>/dev/null || true
 
                   # SHM guest extensions (fts-extensions/)
+                  ${lib.optionalString (sessionExt != null) ''
+                    cp ${sessionExt}/bin/session-extension "$REAPER_APP/Contents/Resources/FTS/UserPlugins/fts-extensions/"
+                    echo "  Bundled session-extension"
+                  ''}
+
                   ${lib.optionalString (syncExt != null) ''
                     cp ${syncExt}/bin/sync-extension "$REAPER_APP/Contents/Resources/FTS/UserPlugins/fts-extensions/"
                     echo "  Bundled sync-extension"
