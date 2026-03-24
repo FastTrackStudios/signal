@@ -1,10 +1,16 @@
 //! Timer-based scene switching using the sync DAW API.
 //!
-//! Runs at ~30Hz via `daw::register_timer`. Reads the playhead position
-//! and named items on controller tracks to determine which scene should
-//! be active, then mutes/unmutes sends from the input track to section
-//! tracks (not the tracks themselves).
+//! Reads the playhead position and named MIDI items on controller tracks
+//! to determine which scene should be active. Switches scenes by muting/
+//! unmuting sends from the input track to section tracks.
+//!
+//! Scenes are matched by **name** — the MIDI item's take name must match
+//! the destination track's name. This means:
+//! - Adding a new track in a song folder automatically makes it available
+//! - Place switch actions create items with the section name
+//! - No manual index management needed
 
+use std::collections::HashMap;
 use std::sync::Mutex;
 use tracing::{info, warn};
 
@@ -15,20 +21,22 @@ const INPUT_TRACK_KEY: &str = "input_track_guid";
 struct TimelineEntry {
     start: f64,
     end: f64,
-    index: u8,
+    /// Section name (from MIDI item take name) — matched to track names.
     name: String,
 }
 
 struct ControllerCache {
     /// GUID of the input track that has sends to section tracks.
     input_track_guid: String,
-    /// Number of sends on the input track (one per section).
-    send_count: u32,
+    /// Map of section track name → send index on the input track.
+    /// Built by matching send destinations to child track names.
+    name_to_send_index: HashMap<String, u32>,
     #[allow(dead_code)]
     controller_guid: String,
     name: String,
     timeline: Vec<TimelineEntry>,
-    active_scene: i32,
+    /// Currently active scene name (empty = none).
+    active_scene: String,
 }
 
 struct SceneState {
@@ -71,23 +79,37 @@ pub fn poll() {
     let Some(position) = position else { return };
 
     for ctrl in &mut state.controllers {
+        // Find the timeline entry at the current position
         let entry = ctrl.timeline.iter().find(|e| position >= e.start && position < e.end);
-        let target = entry.map(|e| e.index as i32).unwrap_or(-1);
+        let target_name = entry.map(|e| e.name.as_str()).unwrap_or("");
 
-        if target == ctrl.active_scene || target < 0 { continue; }
+        if target_name == ctrl.active_scene || target_name.is_empty() {
+            continue;
+        }
 
-        let old = ctrl.active_scene;
-        ctrl.active_scene = target;
+        let old = ctrl.active_scene.clone();
+        ctrl.active_scene = target_name.to_string();
 
-        // Mute/unmute sends from the input track
-        apply_send_switch(&daw, &ctrl.input_track_guid, ctrl.send_count, target as u32);
+        // Find the send index for this scene name
+        if let Some(&target_send_idx) = ctrl.name_to_send_index.get(target_name) {
+            // Unmute the target send, mute all others
+            for (&ref name, &send_idx) in &ctrl.name_to_send_index {
+                let should_mute = send_idx != target_send_idx;
+                daw.set_send_muted(&ctrl.input_track_guid, send_idx, should_mute);
+                let _ = name; // used for iteration
+            }
 
-        let target_name = entry.map(|e| e.name.as_str()).unwrap_or("?");
-        info!(
-            "[scene-timer] '{}' → '{}' (scene {}, was {})",
-            ctrl.name, target_name, target + 1,
-            if old < 0 { "none".to_string() } else { (old + 1).to_string() }
-        );
+            info!(
+                "[scene-timer] '{}' → '{}' (send {}, was '{}')",
+                ctrl.name, target_name, target_send_idx, old,
+            );
+        } else {
+            warn!(
+                "[scene-timer] '{}': no send found for scene '{}'",
+                ctrl.name, target_name,
+            );
+            ctrl.active_scene = old;
+        }
     }
 }
 
@@ -108,53 +130,61 @@ fn scan_controllers(state: &mut SceneState) {
         if !track_info.is_folder { continue; }
 
         // Check for scene_count
-        let count_str = match daw.track_get_ext_state(&track_info.guid, SCENE_COUNT_SECTION, SCENE_COUNT_KEY) {
-            Some(s) if s.parse::<u32>().is_ok() => s,
+        match daw.track_get_ext_state(&track_info.guid, SCENE_COUNT_SECTION, SCENE_COUNT_KEY) {
+            Some(s) if s.parse::<u32>().is_ok() => {}
             _ => continue,
         };
-        let _ = count_str;
 
-        // Find the input track GUID (stored by demo_setlist)
-        let input_track_guid = match daw.track_get_ext_state(&track_info.guid, SCENE_COUNT_SECTION, INPUT_TRACK_KEY) {
-            Some(guid) if !guid.is_empty() => guid,
-            _ => {
-                // Fallback: find the first non-folder child (Guitar Input)
-                match all_tracks.iter().find(|t| {
-                    t.parent_guid.as_deref() == Some(&*track_info.guid) && !t.is_folder
-                }) {
-                    Some(input) => input.guid.clone(),
-                    None => continue,
+        // Find the input track — either stored in P_EXT or first non-folder child
+        let input_track_guid = daw
+            .track_get_ext_state(&track_info.guid, SCENE_COUNT_SECTION, INPUT_TRACK_KEY)
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| {
+                // Fallback: first non-folder child
+                all_tracks.iter()
+                    .find(|t| t.parent_guid.as_deref() == Some(&*track_info.guid) && !t.is_folder)
+                    .map(|t| t.guid.clone())
+                    .unwrap_or_default()
+            });
+
+        if input_track_guid.is_empty() { continue; }
+
+        // Build name → send index mapping by checking each send's destination
+        let mut name_to_send_index = HashMap::new();
+        let send_count = daw.send_count(&input_track_guid);
+
+        for send_idx in 0..send_count {
+            if let Some(dest_guid) = daw.send_dest_guid(&input_track_guid, send_idx) {
+                // Find the destination track's name
+                if let Some(dest_track) = all_tracks.iter().find(|t| t.guid == dest_guid) {
+                    name_to_send_index.insert(dest_track.name.clone(), send_idx);
                 }
             }
-        };
+        }
 
-        // Count sends on the input track
-        let send_count = daw.send_count(&input_track_guid);
-        if send_count == 0 {
-            // No sends — fall back to counting non-folder children
-            let child_count = all_tracks.iter()
-                .filter(|t| t.parent_guid.as_deref() == Some(&*track_info.guid) && !t.is_folder)
-                .count();
-            if child_count == 0 {
-                warn!("[scene-timer] No sends or children for '{}'", track_info.name);
-                continue;
-            }
+        if name_to_send_index.is_empty() {
+            warn!("[scene-timer] No named sends for '{}'", track_info.name);
+            continue;
         }
 
         let timeline = read_item_timeline(&daw, &track_info.guid);
 
         info!(
-            "[scene-timer] Controller '{}': input={}, {} sends, {} items",
-            track_info.name, input_track_guid, send_count, timeline.len()
+            "[scene-timer] Controller '{}': input={}, {} sends ({}), {} items",
+            track_info.name,
+            input_track_guid,
+            name_to_send_index.len(),
+            name_to_send_index.keys().cloned().collect::<Vec<_>>().join(", "),
+            timeline.len(),
         );
 
         state.controllers.push(ControllerCache {
             input_track_guid,
-            send_count,
+            name_to_send_index,
             controller_guid: track_info.guid.clone(),
             name: track_info.name.clone(),
             timeline,
-            active_scene: -1,
+            active_scene: String::new(),
         });
     }
 
@@ -168,22 +198,10 @@ fn read_item_timeline(daw: &daw::reaper::DawMainThread, track_guid: &str) -> Vec
         .map(|item| TimelineEntry {
             start: item.position,
             end: item.position + item.length,
-            index: 0,
             name: item.take_name,
         })
         .collect();
 
     timeline.sort_by(|a, b| a.start.partial_cmp(&b.start).unwrap());
-    for (i, entry) in timeline.iter_mut().enumerate() {
-        entry.index = i as u8;
-    }
     timeline
-}
-
-/// Mute all sends except the target scene's send.
-fn apply_send_switch(daw: &daw::reaper::DawMainThread, input_track_guid: &str, send_count: u32, target_scene: u32) {
-    for i in 0..send_count {
-        let should_mute = i != target_scene;
-        daw.set_send_muted(input_track_guid, i, should_mute);
-    }
 }
