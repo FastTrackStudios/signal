@@ -217,6 +217,8 @@ fn reaper_test(
             // FTS Macros plugin timer doesn't reliably pick up mapping config in test
             "compression_macro".into(),
             "multi_fx_macro".into(),
+            // Demo setlist action runs in current_project, not isolated test project
+            "demo_setlist_action".into(),
         ],
         test_binary,
     }];
