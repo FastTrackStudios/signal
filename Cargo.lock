@@ -386,7 +386,7 @@ dependencies = [
 [[package]]
 name = "audio-controls"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/daw.git?branch=main#3db08ea70869aab2a6244e4855918f41014cfe26"
+source = "git+https://github.com/FastTrackStudios/daw.git?branch=main#1791cf6500a65064927a8e65ce83d90ed6e6f0a6"
 dependencies = [
  "dioxus",
  "js-sys",
@@ -1032,7 +1032,7 @@ version = "3.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "faf9468729b8cbcea668e36183cb69d317348c2e08e994829fb56ebfdfbaac34"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.48.0",
 ]
 
 [[package]]
@@ -1511,7 +1511,7 @@ checksum = "be1e0bca6c3637f992fc1cc7cbc52a78c1ef6db076dbf1059c4323d6a2048376"
 [[package]]
 name = "daw"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/daw.git?branch=main#3db08ea70869aab2a6244e4855918f41014cfe26"
+source = "git+https://github.com/FastTrackStudios/daw.git?branch=main#1791cf6500a65064927a8e65ce83d90ed6e6f0a6"
 dependencies = [
  "daw-control",
  "daw-control-sync",
@@ -1523,7 +1523,7 @@ dependencies = [
 [[package]]
 name = "daw-cli"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/daw.git?branch=main#3db08ea70869aab2a6244e4855918f41014cfe26"
+source = "git+https://github.com/FastTrackStudios/daw.git?branch=main#1791cf6500a65064927a8e65ce83d90ed6e6f0a6"
 dependencies = [
  "clap",
  "daw",
@@ -1542,7 +1542,7 @@ dependencies = [
 [[package]]
 name = "daw-control"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/daw.git?branch=main#3db08ea70869aab2a6244e4855918f41014cfe26"
+source = "git+https://github.com/FastTrackStudios/daw.git?branch=main#1791cf6500a65064927a8e65ce83d90ed6e6f0a6"
 dependencies = [
  "daw-proto",
  "eyre",
@@ -1556,7 +1556,7 @@ dependencies = [
 [[package]]
 name = "daw-control-sync"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/daw.git?branch=main#3db08ea70869aab2a6244e4855918f41014cfe26"
+source = "git+https://github.com/FastTrackStudios/daw.git?branch=main#1791cf6500a65064927a8e65ce83d90ed6e6f0a6"
 dependencies = [
  "daw-control",
  "eyre",
@@ -1570,7 +1570,7 @@ dependencies = [
 [[package]]
 name = "daw-extension-runtime"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/daw.git?branch=main#3db08ea70869aab2a6244e4855918f41014cfe26"
+source = "git+https://github.com/FastTrackStudios/daw.git?branch=main#1791cf6500a65064927a8e65ce83d90ed6e6f0a6"
 dependencies = [
  "daw",
  "eyre",
@@ -1585,7 +1585,7 @@ dependencies = [
 [[package]]
 name = "daw-proto"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/daw.git?branch=main#3db08ea70869aab2a6244e4855918f41014cfe26"
+source = "git+https://github.com/FastTrackStudios/daw.git?branch=main#1791cf6500a65064927a8e65ce83d90ed6e6f0a6"
 dependencies = [
  "actions-proto",
  "facet",
@@ -1596,7 +1596,7 @@ dependencies = [
 [[package]]
 name = "daw-reaper"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/daw.git?branch=main#3db08ea70869aab2a6244e4855918f41014cfe26"
+source = "git+https://github.com/FastTrackStudios/daw.git?branch=main#1791cf6500a65064927a8e65ce83d90ed6e6f0a6"
 dependencies = [
  "camino",
  "daw-proto",
@@ -1616,7 +1616,7 @@ dependencies = [
 [[package]]
 name = "dawfile-reaper"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/daw.git?branch=main#3db08ea70869aab2a6244e4855918f41014cfe26"
+source = "git+https://github.com/FastTrackStudios/daw.git?branch=main#1791cf6500a65064927a8e65ce83d90ed6e6f0a6"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -2995,7 +2995,7 @@ checksum = "28dd6caf6059519a65843af8fe2a3ae298b14b80179855aeb4adc2c1934ee619"
 [[package]]
 name = "fts-devtools"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/daw.git?branch=main#3db08ea70869aab2a6244e4855918f41014cfe26"
+source = "git+https://github.com/FastTrackStudios/daw.git?branch=main#1791cf6500a65064927a8e65ce83d90ed6e6f0a6"
 
 [[package]]
 name = "fts-plugin-core"
@@ -4988,7 +4988,7 @@ dependencies = [
 [[package]]
 name = "moire"
 version = "1.0.0"
-source = "git+https://github.com/bearcove/moire?rev=13eac79#13eac79c1b128282dd792a611319d0a1016ad15d"
+source = "git+https://github.com/FastTrackStudios/moire.git?rev=663dbdc#663dbdc4458b8bb0443e838cd177e42d9181341f"
 dependencies = [
  "moire-macros",
  "moire-macros-noop",
@@ -4999,7 +4999,7 @@ dependencies = [
 [[package]]
 name = "moire-macros"
 version = "1.0.0"
-source = "git+https://github.com/bearcove/moire?rev=13eac79#13eac79c1b128282dd792a611319d0a1016ad15d"
+source = "git+https://github.com/FastTrackStudios/moire.git?rev=663dbdc#663dbdc4458b8bb0443e838cd177e42d9181341f"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -5009,12 +5009,12 @@ dependencies = [
 [[package]]
 name = "moire-macros-noop"
 version = "1.0.0"
-source = "git+https://github.com/bearcove/moire?rev=13eac79#13eac79c1b128282dd792a611319d0a1016ad15d"
+source = "git+https://github.com/FastTrackStudios/moire.git?rev=663dbdc#663dbdc4458b8bb0443e838cd177e42d9181341f"
 
 [[package]]
 name = "moire-runtime"
 version = "1.0.0"
-source = "git+https://github.com/bearcove/moire?rev=13eac79#13eac79c1b128282dd792a611319d0a1016ad15d"
+source = "git+https://github.com/FastTrackStudios/moire.git?rev=663dbdc#663dbdc4458b8bb0443e838cd177e42d9181341f"
 dependencies = [
  "ctor",
  "facet",
@@ -5030,7 +5030,7 @@ dependencies = [
 [[package]]
 name = "moire-tokio"
 version = "1.0.0"
-source = "git+https://github.com/bearcove/moire?rev=13eac79#13eac79c1b128282dd792a611319d0a1016ad15d"
+source = "git+https://github.com/FastTrackStudios/moire.git?rev=663dbdc#663dbdc4458b8bb0443e838cd177e42d9181341f"
 dependencies = [
  "moire-runtime",
  "moire-types",
@@ -5041,7 +5041,7 @@ dependencies = [
 [[package]]
 name = "moire-trace-capture"
 version = "1.0.0"
-source = "git+https://github.com/bearcove/moire?rev=13eac79#13eac79c1b128282dd792a611319d0a1016ad15d"
+source = "git+https://github.com/FastTrackStudios/moire.git?rev=663dbdc#663dbdc4458b8bb0443e838cd177e42d9181341f"
 dependencies = [
  "libc",
  "moire-trace-types",
@@ -5050,7 +5050,7 @@ dependencies = [
 [[package]]
 name = "moire-trace-types"
 version = "1.0.0"
-source = "git+https://github.com/bearcove/moire?rev=13eac79#13eac79c1b128282dd792a611319d0a1016ad15d"
+source = "git+https://github.com/FastTrackStudios/moire.git?rev=663dbdc#663dbdc4458b8bb0443e838cd177e42d9181341f"
 dependencies = [
  "facet",
 ]
@@ -5058,7 +5058,7 @@ dependencies = [
 [[package]]
 name = "moire-types"
 version = "1.0.0"
-source = "git+https://github.com/bearcove/moire?rev=13eac79#13eac79c1b128282dd792a611319d0a1016ad15d"
+source = "git+https://github.com/FastTrackStudios/moire.git?rev=663dbdc#663dbdc4458b8bb0443e838cd177e42d9181341f"
 dependencies = [
  "facet",
  "facet-value",
@@ -5068,7 +5068,7 @@ dependencies = [
 [[package]]
 name = "moire-wasm"
 version = "1.0.0"
-source = "git+https://github.com/bearcove/moire?rev=13eac79#13eac79c1b128282dd792a611319d0a1016ad15d"
+source = "git+https://github.com/FastTrackStudios/moire.git?rev=663dbdc#663dbdc4458b8bb0443e838cd177e42d9181341f"
 dependencies = [
  "async-channel",
  "async-lock",
@@ -5083,7 +5083,7 @@ dependencies = [
 [[package]]
 name = "moire-wire"
 version = "1.0.0"
-source = "git+https://github.com/bearcove/moire?rev=13eac79#13eac79c1b128282dd792a611319d0a1016ad15d"
+source = "git+https://github.com/FastTrackStudios/moire.git?rev=663dbdc#663dbdc4458b8bb0443e838cd177e42d9181341f"
 dependencies = [
  "facet",
  "facet-json",
@@ -5707,15 +5707,6 @@ name = "ordered-float"
 version = "4.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7bb71e1b3fa6ca1c61f383464aaf2bb0e2f8e772a1f01d486832464de363b951"
-dependencies = [
- "num-traits",
-]
-
-[[package]]
-name = "ordered-float"
-version = "5.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7f4779c6901a562440c3786d08192c6fbda7c1c2060edd10006b05ee35d10f2d"
 dependencies = [
  "num-traits",
 ]
@@ -6651,7 +6642,7 @@ dependencies = [
 [[package]]
 name = "reaper-launcher"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/daw.git?branch=main#3db08ea70869aab2a6244e4855918f41014cfe26"
+source = "git+https://github.com/FastTrackStudios/daw.git?branch=main#1791cf6500a65064927a8e65ce83d90ed6e6f0a6"
 dependencies = [
  "libc",
  "serde",
@@ -6695,7 +6686,7 @@ dependencies = [
 [[package]]
 name = "reaper-test"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/daw.git?branch=main#3db08ea70869aab2a6244e4855918f41014cfe26"
+source = "git+https://github.com/FastTrackStudios/daw.git?branch=main#1791cf6500a65064927a8e65ce83d90ed6e6f0a6"
 dependencies = [
  "daw",
  "eyre",
@@ -6711,7 +6702,7 @@ dependencies = [
 [[package]]
 name = "reaper-test-macro"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/daw.git?branch=main#3db08ea70869aab2a6244e4855918f41014cfe26"
+source = "git+https://github.com/FastTrackStudios/daw.git?branch=main#1791cf6500a65064927a8e65ce83d90ed6e6f0a6"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -7214,7 +7205,7 @@ dependencies = [
  "bigdecimal",
  "chrono",
  "inherent",
- "ordered-float 4.6.0",
+ "ordered-float",
  "rust_decimal",
  "serde_json",
  "time",
@@ -9842,7 +9833,7 @@ dependencies = [
  "ndk-sys",
  "objc",
  "once_cell",
- "ordered-float 5.1.0",
+ "ordered-float",
  "parking_lot",
  "portable-atomic",
  "portable-atomic-util",
@@ -9911,7 +9902,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.48.0",
 ]
 
 [[package]]
@@ -10856,41 +10847,6 @@ dependencies = [
 ]
 
 [[patch.unused]]
-name = "blitz-dom"
-version = "0.2.2"
-source = "git+https://github.com/FastTrackStudios/blitz.git?rev=a72a6bd#a72a6bda786f2c5d9c7157b8f0dfe75e8b0a2c46"
-
-[[patch.unused]]
-name = "blitz-html"
-version = "0.2.0"
-source = "git+https://github.com/FastTrackStudios/blitz.git?rev=a72a6bd#a72a6bda786f2c5d9c7157b8f0dfe75e8b0a2c46"
-
-[[patch.unused]]
-name = "blitz-net"
-version = "0.2.1"
-source = "git+https://github.com/FastTrackStudios/blitz.git?rev=a72a6bd#a72a6bda786f2c5d9c7157b8f0dfe75e8b0a2c46"
-
-[[patch.unused]]
-name = "blitz-paint"
-version = "0.2.1"
-source = "git+https://github.com/FastTrackStudios/blitz.git?rev=a72a6bd#a72a6bda786f2c5d9c7157b8f0dfe75e8b0a2c46"
-
-[[patch.unused]]
-name = "blitz-traits"
-version = "0.2.0"
-source = "git+https://github.com/FastTrackStudios/blitz.git?rev=a72a6bd#a72a6bda786f2c5d9c7157b8f0dfe75e8b0a2c46"
-
-[[patch.unused]]
-name = "dioxus-native"
-version = "0.7.0"
-source = "git+https://github.com/FastTrackStudios/blitz.git?rev=a72a6bd#a72a6bda786f2c5d9c7157b8f0dfe75e8b0a2c46"
-
-[[patch.unused]]
-name = "dioxus-native-dom"
-version = "0.7.0"
-source = "git+https://github.com/FastTrackStudios/blitz.git?rev=a72a6bd#a72a6bda786f2c5d9c7157b8f0dfe75e8b0a2c46"
-
-[[patch.unused]]
 name = "anyrender"
 version = "0.6.2"
 source = "git+https://github.com/FastTrackStudios/anyrender.git?rev=422b5d0#422b5d0b820dccda702c882fe3eee7ba8e958e77"
@@ -10974,3 +10930,38 @@ source = "git+https://github.com/FastTrackStudios/blitz.git?rev=a72a6bd#a72a6bda
 name = "wgpu_context"
 version = "0.1.2"
 source = "git+https://github.com/FastTrackStudios/anyrender.git?rev=422b5d0#422b5d0b820dccda702c882fe3eee7ba8e958e77"
+
+[[patch.unused]]
+name = "blitz-dom"
+version = "0.2.2"
+source = "git+https://github.com/FastTrackStudios/blitz.git?rev=a72a6bd#a72a6bda786f2c5d9c7157b8f0dfe75e8b0a2c46"
+
+[[patch.unused]]
+name = "blitz-html"
+version = "0.2.0"
+source = "git+https://github.com/FastTrackStudios/blitz.git?rev=a72a6bd#a72a6bda786f2c5d9c7157b8f0dfe75e8b0a2c46"
+
+[[patch.unused]]
+name = "blitz-net"
+version = "0.2.1"
+source = "git+https://github.com/FastTrackStudios/blitz.git?rev=a72a6bd#a72a6bda786f2c5d9c7157b8f0dfe75e8b0a2c46"
+
+[[patch.unused]]
+name = "blitz-paint"
+version = "0.2.1"
+source = "git+https://github.com/FastTrackStudios/blitz.git?rev=a72a6bd#a72a6bda786f2c5d9c7157b8f0dfe75e8b0a2c46"
+
+[[patch.unused]]
+name = "blitz-traits"
+version = "0.2.0"
+source = "git+https://github.com/FastTrackStudios/blitz.git?rev=a72a6bd#a72a6bda786f2c5d9c7157b8f0dfe75e8b0a2c46"
+
+[[patch.unused]]
+name = "dioxus-native"
+version = "0.7.0"
+source = "git+https://github.com/FastTrackStudios/blitz.git?rev=a72a6bd#a72a6bda786f2c5d9c7157b8f0dfe75e8b0a2c46"
+
+[[patch.unused]]
+name = "dioxus-native-dom"
+version = "0.7.0"
+source = "git+https://github.com/FastTrackStudios/blitz.git?rev=a72a6bd#a72a6bda786f2c5d9c7157b8f0dfe75e8b0a2c46"

@@ -156,16 +156,11 @@ async fn poll_macro_config(
 
 /// Apply parsed macro config to the UI state — update display names.
 fn apply_macro_config(ui_state: &ControllerUiState, config: &MacroConfig) {
-    let macros = ui_state.params.macros();
     for (i, entry) in config.macros.iter().enumerate() {
         if i >= NUM_MACROS {
             break;
         }
-        // set_display_name takes &'static str, so we need to leak the string.
-        // This is fine — macro configs change rarely and the leaked strings are small.
-        let name: &'static str = Box::leak(entry.label.clone().into_boxed_str());
-        macros[i].set_display_name(name);
-
+        // TODO: Restore set_display_name when fts-plugin-core re-adds it
         ui_state.set_macro_label(i, &entry.label);
         if !entry.color.is_empty() {
             ui_state.set_macro_color(i, &entry.color);

@@ -175,6 +175,18 @@ async fn handle_action(daw: &Daw, command_name: &str) {
                 error!("[signal] Failed to disarm macro: {e:#}");
             }
         }
+        cmd if cmd.ends_with("MACRO_SET_MIN") => {
+            info!("[signal] Setting macro min...");
+            if let Err(e) = macro_learn::handle_macro_set_min(daw).await {
+                error!("[signal] Failed to set macro min: {e:#}");
+            }
+        }
+        cmd if cmd.ends_with("MACRO_SET_MAX") => {
+            info!("[signal] Setting macro max...");
+            if let Err(e) = macro_learn::handle_macro_set_max(daw).await {
+                error!("[signal] Failed to set macro max: {e:#}");
+            }
+        }
         cmd if cmd.ends_with("MACRO_SET_POINT") => {
             info!("[signal] Setting macro curve point...");
             if let Err(e) = macro_learn::handle_macro_set_point(daw).await {

@@ -36,21 +36,13 @@ async fn wait_for_switch() {
 
 struct TestSetlist {
     rig_folder: daw::TrackHandle,
-    #[allow(dead_code)]
-    rig_input: daw::TrackHandle,
     belief_folder: daw::TrackHandle,
-    #[allow(dead_code)]
-    belief_input: daw::TrackHandle,
-    belief_scenes: Vec<(daw::TrackHandle, daw::TrackHandle, daw::TrackHandle)>,
-    belief_sends: Vec<daw::RouteHandle>,
+    /// Section tracks: Clean, Ambient, Rhythm (direct children of song folder)
+    belief_sections: Vec<daw::TrackHandle>,
     #[allow(dead_code)]
     vienna_folder: daw::TrackHandle,
-    vienna_input: daw::TrackHandle,
-    vienna_scenes: Vec<(daw::TrackHandle, daw::TrackHandle, daw::TrackHandle)>,
-    #[allow(dead_code)]
-    vienna_sends: Vec<daw::RouteHandle>,
-    #[allow(dead_code)]
-    rig_sends: Vec<daw::RouteHandle>,
+    /// Section tracks: Clean, Drive
+    vienna_sections: Vec<daw::TrackHandle>,
 }
 
 async fn build_test_setlist(tracks: &daw::Tracks) -> eyre::Result<TestSetlist> {
@@ -63,8 +55,8 @@ async fn build_test_setlist(tracks: &daw::Tracks) -> eyre::Result<TestSetlist> {
         .await?;
     settle().await;
 
-    let rig_input = tracks.add("Guitar Input", None).await?;
-    rig_input.set_parent_send(false).await?;
+    // Guitar Input — audio source, no special routing
+    let _rig_input = tracks.add("Guitar Input", None).await?;
     settle().await;
 
     // ── Song 1: Belief (3 sections) ─────────────────────────────────
@@ -76,40 +68,14 @@ async fn build_test_setlist(tracks: &daw::Tracks) -> eyre::Result<TestSetlist> {
         .await?;
     settle().await;
 
-    let belief_input = tracks.add("Belief Input", None).await?;
-    belief_input.set_parent_send(false).await?;
-    settle().await;
-
-    let mut belief_scenes = Vec::new();
-    let mut belief_sends = Vec::new();
+    let mut belief_sections = Vec::new();
     for (i, name) in ["Clean", "Ambient", "Rhythm"].iter().enumerate() {
-        let is_last_section = i == 2;
-
-        let scene_folder = tracks
-            .add(&format!("Scene {}: {name}", i + 1), None)
-            .await?;
-        scene_folder.set_folder_depth(1).await?;
+        let is_last = i == 2;
+        let section = tracks.add(name, None).await?;
+        let depth = if is_last { -1 } else { 0 };
+        section.set_folder_depth(depth).await?;
         settle().await;
-
-        let scene_input = tracks
-            .add(&format!("Belief Input: {name}"), None)
-            .await?;
-        scene_input.set_parent_send(false).await?;
-
-        let layer = tracks.add(&format!("[L] {name}"), None).await?;
-        let depth = if is_last_section { -2 } else { -1 };
-        layer.set_folder_depth(depth).await?;
-        settle().await;
-
-        scene_input.sends().add_to(layer.guid()).await?;
-
-        let send = belief_input.sends().add_to(scene_input.guid()).await?;
-        if i > 0 {
-            send.mute().await?;
-        }
-        belief_sends.push(send);
-
-        belief_scenes.push((scene_folder, scene_input, layer));
+        belief_sections.push(section);
     }
 
     // ── Song 2: Vienna (2 sections) ─────────────────────────────────
@@ -121,63 +87,22 @@ async fn build_test_setlist(tracks: &daw::Tracks) -> eyre::Result<TestSetlist> {
         .await?;
     settle().await;
 
-    let vienna_input = tracks.add("Vienna Input", None).await?;
-    vienna_input.set_parent_send(false).await?;
-    settle().await;
-
-    let mut vienna_scenes = Vec::new();
-    let mut vienna_sends = Vec::new();
+    let mut vienna_sections = Vec::new();
     for (i, name) in ["Clean", "Drive"].iter().enumerate() {
-        let is_last_section = i == 1;
-
-        let scene_folder = tracks
-            .add(&format!("Scene {}: {name}", i + 1), None)
-            .await?;
-        scene_folder.set_folder_depth(1).await?;
+        let is_last = i == 1;
+        let section = tracks.add(name, None).await?;
+        let depth = if is_last { -2 } else { 0 }; // close song + rig on last
+        section.set_folder_depth(depth).await?;
         settle().await;
-
-        let scene_input = tracks
-            .add(&format!("Vienna Input: {name}"), None)
-            .await?;
-        scene_input.set_parent_send(false).await?;
-
-        let layer = tracks.add(&format!("[L] {name}"), None).await?;
-        let depth = if is_last_section { -3 } else { -1 };
-        layer.set_folder_depth(depth).await?;
-        settle().await;
-
-        scene_input.sends().add_to(layer.guid()).await?;
-
-        let send = vienna_input.sends().add_to(scene_input.guid()).await?;
-        if i > 0 {
-            send.mute().await?;
-        }
-        vienna_sends.push(send);
-
-        vienna_scenes.push((scene_folder, scene_input, layer));
+        vienna_sections.push(section);
     }
-
-    // ── Rig-level sends (rig_input → song inputs) ───────────────────
-    let mut rig_sends = Vec::new();
-    let send_belief = rig_input.sends().add_to(belief_input.guid()).await?;
-    let send_vienna = rig_input.sends().add_to(vienna_input.guid()).await?;
-    send_vienna.mute().await?;
-    rig_sends.push(send_belief);
-    rig_sends.push(send_vienna);
-    settle().await;
 
     Ok(TestSetlist {
         rig_folder,
-        rig_input,
         belief_folder,
-        belief_input,
-        belief_scenes,
-        belief_sends,
+        belief_sections,
         vienna_folder,
-        vienna_input,
-        vienna_scenes,
-        vienna_sends,
-        rig_sends,
+        vienna_sections,
     })
 }
 
@@ -198,9 +123,9 @@ async fn place_section_switch_creates_named_item(
     transport.set_position(2.0).await?;
     settle().await;
 
-    // Select a track inside "Scene 2: Ambient" (the layer track)
-    let (_, _, ambient_layer) = &setlist.belief_scenes[1];
-    ambient_layer.select_exclusive().await?;
+    // Select the Ambient section track (direct child of Belief folder)
+    let ambient = &setlist.belief_sections[1];
+    ambient.select_exclusive().await?;
     settle().await;
 
     // Call place_section_switch
@@ -257,8 +182,8 @@ async fn place_song_switch_creates_named_item(
     transport.set_position(4.0).await?;
     settle().await;
 
-    // Select a track inside Vienna (Vienna Input — not a folder)
-    setlist.vienna_input.select_exclusive().await?;
+    // Select a track inside Vienna (first section track)
+    setlist.vienna_sections[0].select_exclusive().await?;
     settle().await;
 
     // Call place_song_switch
@@ -313,9 +238,9 @@ async fn place_scene_switch_creates_named_item(
     transport.set_position(6.0).await?;
     settle().await;
 
-    // Select a track inside "Scene 3: Rhythm" of Belief
-    let (_, _, rhythm_layer) = &setlist.belief_scenes[2];
-    rhythm_layer.select_exclusive().await?;
+    // Select the Rhythm section track of Belief
+    let rhythm = &setlist.belief_sections[2];
+    rhythm.select_exclusive().await?;
     settle().await;
 
     // Call place_scene_switch (same as section — walks up to Scene folder)
@@ -405,16 +330,16 @@ async fn placed_items_drive_scene_switching(
     wait_for_switch().await;
 
     assert!(
-        !setlist.belief_sends[0].is_muted().await?,
-        "Clean send should be unmuted at 0.0s"
+        !setlist.belief_sections[0].is_muted().await?,
+        "Clean track should be unmuted at 0.0s"
     );
     assert!(
-        setlist.belief_sends[1].is_muted().await?,
-        "Ambient send should be muted at 0.0s"
+        setlist.belief_sections[1].is_muted().await?,
+        "Ambient track should be muted at 0.0s"
     );
     assert!(
-        setlist.belief_sends[2].is_muted().await?,
-        "Rhythm send should be muted at 0.0s"
+        setlist.belief_sections[2].is_muted().await?,
+        "Rhythm track should be muted at 0.0s"
     );
 
     // ── Middle of Ambient (3.0s) ─────────────────────────────────────
@@ -423,16 +348,16 @@ async fn placed_items_drive_scene_switching(
     wait_for_switch().await;
 
     assert!(
-        setlist.belief_sends[0].is_muted().await?,
-        "Clean send should be muted at 3.0s"
+        setlist.belief_sections[0].is_muted().await?,
+        "Clean track should be muted at 3.0s"
     );
     assert!(
-        !setlist.belief_sends[1].is_muted().await?,
-        "Ambient send should be unmuted at 3.0s"
+        !setlist.belief_sections[1].is_muted().await?,
+        "Ambient track should be unmuted at 3.0s"
     );
     assert!(
-        setlist.belief_sends[2].is_muted().await?,
-        "Rhythm send should be muted at 3.0s"
+        setlist.belief_sections[2].is_muted().await?,
+        "Rhythm track should be muted at 3.0s"
     );
 
     // ── Middle of Rhythm (5.0s) ──────────────────────────────────────
@@ -441,16 +366,16 @@ async fn placed_items_drive_scene_switching(
     wait_for_switch().await;
 
     assert!(
-        setlist.belief_sends[0].is_muted().await?,
-        "Clean send should be muted at 5.0s"
+        setlist.belief_sections[0].is_muted().await?,
+        "Clean track should be muted at 5.0s"
     );
     assert!(
-        setlist.belief_sends[1].is_muted().await?,
-        "Ambient send should be muted at 5.0s"
+        setlist.belief_sections[1].is_muted().await?,
+        "Ambient track should be muted at 5.0s"
     );
     assert!(
-        !setlist.belief_sends[2].is_muted().await?,
-        "Rhythm send should be unmuted at 5.0s"
+        !setlist.belief_sections[2].is_muted().await?,
+        "Rhythm track should be unmuted at 5.0s"
     );
 
     // ── Seek back to Clean (0.5s) ────────────────────────────────────
@@ -459,16 +384,16 @@ async fn placed_items_drive_scene_switching(
     wait_for_switch().await;
 
     assert!(
-        !setlist.belief_sends[0].is_muted().await?,
-        "Clean send should be unmuted after seeking back"
+        !setlist.belief_sections[0].is_muted().await?,
+        "Clean track should be unmuted after seeking back"
     );
     assert!(
-        setlist.belief_sends[1].is_muted().await?,
-        "Ambient send should be muted after seeking back"
+        setlist.belief_sections[1].is_muted().await?,
+        "Ambient track should be muted after seeking back"
     );
     assert!(
-        setlist.belief_sends[2].is_muted().await?,
-        "Rhythm send should be muted after seeking back"
+        setlist.belief_sections[2].is_muted().await?,
+        "Rhythm track should be muted after seeking back"
     );
 
     ctx.log("placed_items_drive_scene_switching: PASS");

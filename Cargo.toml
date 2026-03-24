@@ -141,11 +141,18 @@ blitz-paint = { git = "https://github.com/FastTrackStudios/blitz.git", rev = "a7
 blitz-traits = { git = "https://github.com/FastTrackStudios/blitz.git", rev = "a72a6bd" }
 
 # ── Vendored patches ──────────────────────────────────────────────────
-# moire: unify crates.io moire with the git rev that vox pulls in,
-# avoiding duplicate moire-runtime #[ctor] registrations that crash.
-# moire-trace-capture: tolerate broken frame-pointer chains (NixOS glibc).
-# [patch."https://github.com/bearcove/moire"]
-# moire-trace-capture = { path = "../forks/moire-trace-capture" }
+# moire: FTS fork — tolerates broken frame-pointer chains on NixOS glibc.
+# All moire crates must point to the same fork rev to avoid type mismatches.
+[patch."https://github.com/bearcove/moire"]
+moire = { git = "https://github.com/FastTrackStudios/moire.git", rev = "663dbdc" }
+moire-macros-noop = { git = "https://github.com/FastTrackStudios/moire.git", rev = "663dbdc" }
+moire-runtime = { git = "https://github.com/FastTrackStudios/moire.git", rev = "663dbdc" }
+moire-tokio = { git = "https://github.com/FastTrackStudios/moire.git", rev = "663dbdc" }
+moire-trace-capture = { git = "https://github.com/FastTrackStudios/moire.git", rev = "663dbdc" }
+moire-trace-types = { git = "https://github.com/FastTrackStudios/moire.git", rev = "663dbdc" }
+moire-types = { git = "https://github.com/FastTrackStudios/moire.git", rev = "663dbdc" }
+moire-wasm = { git = "https://github.com/FastTrackStudios/moire.git", rev = "663dbdc" }
+moire-wire = { git = "https://github.com/FastTrackStudios/moire.git", rev = "663dbdc" }
 
 [patch.crates-io]
 # Blitz crates — FTS fork with post-processing support
@@ -168,15 +175,15 @@ anyrender_vello_cpu = { git = "https://github.com/FastTrackStudios/anyrender.git
 anyrender_vello_hybrid = { git = "https://github.com/FastTrackStudios/anyrender.git", rev = "422b5d0" }
 anyrender_svg = { git = "https://github.com/FastTrackStudios/anyrender.git", rev = "422b5d0" }
 wgpu_context = { git = "https://github.com/FastTrackStudios/anyrender.git", rev = "422b5d0" }
-# moire: unify crates.io moire with the git rev that vox pulls in
-moire = { git = "https://github.com/bearcove/moire", rev = "13eac79" }
-moire-macros-noop = { git = "https://github.com/bearcove/moire", rev = "13eac79" }
-moire-runtime = { git = "https://github.com/bearcove/moire", rev = "13eac79" }
-moire-tokio = { git = "https://github.com/bearcove/moire", rev = "13eac79" }
-moire-trace-types = { git = "https://github.com/bearcove/moire", rev = "13eac79" }
-moire-types = { git = "https://github.com/bearcove/moire", rev = "13eac79" }
-moire-wasm = { git = "https://github.com/bearcove/moire", rev = "13eac79" }
-moire-wire = { git = "https://github.com/bearcove/moire", rev = "13eac79" }
+# moire: unify crates.io moire with the FTS fork (includes NixOS frame-pointer fix)
+moire = { git = "https://github.com/FastTrackStudios/moire.git", rev = "663dbdc" }
+moire-macros-noop = { git = "https://github.com/FastTrackStudios/moire.git", rev = "663dbdc" }
+moire-runtime = { git = "https://github.com/FastTrackStudios/moire.git", rev = "663dbdc" }
+moire-tokio = { git = "https://github.com/FastTrackStudios/moire.git", rev = "663dbdc" }
+moire-trace-types = { git = "https://github.com/FastTrackStudios/moire.git", rev = "663dbdc" }
+moire-types = { git = "https://github.com/FastTrackStudios/moire.git", rev = "663dbdc" }
+moire-wasm = { git = "https://github.com/FastTrackStudios/moire.git", rev = "663dbdc" }
+moire-wire = { git = "https://github.com/FastTrackStudios/moire.git", rev = "663dbdc" }
 
 [workspace.lints.rust]
 dead_code = "allow"

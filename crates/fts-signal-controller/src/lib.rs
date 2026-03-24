@@ -42,10 +42,21 @@
 //! timer callback for scene switching (reading timeline MIDI items and
 //! muting/unmuting sends).
 
+// Gate each heavy module independently to bisect scan failures
+#[cfg(feature = "macro-timer")]
+pub mod macro_timer;
+#[cfg(feature = "full")]
 pub mod param_queue;
+#[cfg(not(feature = "full"))]
+pub mod param_queue_stub;
+#[cfg(not(feature = "full"))]
+pub use param_queue_stub as param_queue;
 pub mod plugin;
+#[cfg(feature = "reaper-init")]
 pub mod reaper_bootstrap;
+#[cfg(feature = "scene-timer")]
 pub mod scene_timer;
+#[cfg(feature = "shm-bridge")]
 pub mod shm_bridge;
 
 use fts_plugin_core::prelude::*;

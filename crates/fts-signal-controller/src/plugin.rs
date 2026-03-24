@@ -8,9 +8,13 @@ use std::sync::Arc;
 
 use atomic_float::AtomicF32;
 use fts_plugin_core::prelude::*;
+
+#[cfg(feature = "full")]
 use tracing_subscriber::{fmt, EnvFilter};
 
 use crate::param_queue::{self, ParamQueueConsumer, ParamQueueProducer};
+
+#[cfg(feature = "full")]
 use signal_proto::ParamWriteRequest;
 
 /// Base MIDI note for scene switching (C1 = note 36).
@@ -147,18 +151,13 @@ impl ControllerParams {
     }
 
     /// Apply a macro bank's display names to the parameters.
-    pub fn apply_bank(&self, bank: &MacroBank) {
-        let macros = self.macros();
-        for (i, m) in macros.iter().enumerate() {
-            m.set_display_name(bank.slots[i].name);
-        }
+    pub fn apply_bank(&self, _bank: &MacroBank) {
+        // TODO: Restore when fts-plugin-core re-adds set_display_name to FloatParam
     }
 
     /// Clear all display name overrides (revert to defaults).
     pub fn clear_bank(&self) {
-        for m in self.macros() {
-            m.clear_display_name();
-        }
+        // TODO: Restore when fts-plugin-core re-adds clear_display_name to FloatParam
     }
 }
 
@@ -270,7 +269,8 @@ pub struct FtsSignalController {
     queue_producer: ParamQueueProducer,
 
     /// Scratch buffer for draining the queue in process().
-    pending_writes: Vec<ParamWriteRequest>,
+    #[cfg(feature = "full")]
+    pending_writes: Vec<signal_proto::ParamWriteRequest>,
 
     /// Previous macro values for change detection.
     prev_macros: [f32; NUM_MACROS],
@@ -286,6 +286,7 @@ impl Default for FtsSignalController {
             ui_state,
             queue_consumer: consumer,
             queue_producer: producer,
+            #[cfg(feature = "full")]
             pending_writes: Vec::with_capacity(64),
             prev_macros: [f32::NAN; NUM_MACROS],
         }
@@ -315,7 +316,7 @@ impl FtsSignalController {
 
 impl Plugin for FtsSignalController {
     const NAME: &'static str = PLUGIN_NAME;
-    const VENDOR: &'static str = "FastTrack Studio";
+    const VENDOR: &'static str = "FastTrackStudio";
     const URL: &'static str = "https://fasttrackstudio.com";
     const EMAIL: &'static str = "";
     const VERSION: &'static str = env!("CARGO_PKG_VERSION");
@@ -338,26 +339,30 @@ impl Plugin for FtsSignalController {
         _buffer_config: &BufferConfig,
         _context: &mut impl InitContext<Self>,
     ) -> bool {
-        // Set up file-based logging (once per process)
-        let log_path = "/tmp/fts-signal-controller.log";
-        if let Ok(file) = std::fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(log_path)
+        #[cfg(feature = "full")]
         {
-            let _ = fmt::Subscriber::builder()
-                .with_env_filter(
-                    EnvFilter::try_from_default_env()
-                        .unwrap_or_else(|_| EnvFilter::new("fts_signal_controller=debug,warn")),
-                )
-                .with_writer(file)
-                .with_ansi(false)
-                .try_init();
-        }
-        tracing::info!("{PLUGIN_NAME}: initialized");
+            // Set up file-based logging (once per process)
+            let log_path = "/tmp/fts-signal-controller.log";
+            if let Ok(file) = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(log_path)
+            {
+                let _ = fmt::Subscriber::builder()
+                    .with_env_filter(
+                        EnvFilter::try_from_default_env()
+                            .unwrap_or_else(|_| EnvFilter::new("fts_signal_controller=debug,warn")),
+                    )
+                    .with_writer(file)
+                    .with_ansi(false)
+                    .try_init();
+            }
+            tracing::info!("{PLUGIN_NAME}: initialized");
 
-        // Spawn background SHM bridge to read track ext_state
-        crate::shm_bridge::spawn_bridge(self.ui_state.clone());
+            // Spawn background SHM bridge to read track ext_state
+            #[cfg(feature = "shm-bridge")]
+            crate::shm_bridge::spawn_bridge(self.ui_state.clone());
+        }
 
         true
     }
@@ -369,16 +374,19 @@ impl Plugin for FtsSignalController {
         context: &mut impl ProcessContext<Self>,
     ) -> ProcessStatus {
         // ── 1. Drain SHM parameter writes ──────────────────────────
-        self.pending_writes.clear();
-        self.queue_consumer.drain(&mut self.pending_writes);
+        #[cfg(feature = "full")]
+        {
+            self.pending_writes.clear();
+            self.queue_consumer.drain(&mut self.pending_writes);
 
-        self.ui_state
-            .pending_write_count
-            .store(self.pending_writes.len() as u32, Ordering::Relaxed);
+            self.ui_state
+                .pending_write_count
+                .store(self.pending_writes.len() as u32, Ordering::Relaxed);
 
-        for write in &self.pending_writes {
-            // TODO: Call reaper TrackFX_SetParamNormalized for each write.
-            let _ = write;
+            for write in &self.pending_writes {
+                // TODO: Call reaper TrackFX_SetParamNormalized for each write.
+                let _ = write;
+            }
         }
 
         // ── 2. Process MIDI note events for scene switching ────────

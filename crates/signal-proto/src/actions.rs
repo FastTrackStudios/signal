@@ -284,6 +284,20 @@ actions_proto::define_actions! {
             group: "Macro",
         }
 
+        MACRO_SET_MIN = "macro_set_min" {
+            name: "Signal - Macro Set Min",
+            description: "Set the minimum (macro=0) value for the last-touched parameter",
+            category: Session,
+            group: "Macro",
+        }
+
+        MACRO_SET_MAX = "macro_set_max" {
+            name: "Signal - Macro Set Max",
+            description: "Set the maximum (macro=1) value for the last-touched parameter",
+            category: Session,
+            group: "Macro",
+        }
+
         MACRO_CLEAR = "macro_clear" {
             name: "Signal - Macro Clear",
             description: "Clear all pending bindings for the currently armed macro",

@@ -9,12 +9,11 @@
 //!
 //! # Actions
 //!
-//! - **Place Section Switch**: selected track is inside a scene folder that's
-//!   inside a song folder → places item on the song folder
+//! - **Place Section Switch**: selected track is a section (direct child of
+//!   a song folder with `fts_signal/scene_count`) → places item on the song folder
 //! - **Place Song Switch**: selected track is inside a song folder that's
 //!   inside a rig folder → places item on the rig folder
-//! - **Place Scene Switch**: selected track is inside a scene folder that's
-//!   inside a profile folder → places item on the profile folder
+//! - **Place Scene Switch**: same as section switch
 
 use daw::Daw;
 use eyre::{Result, WrapErr};
@@ -27,9 +26,9 @@ const SWITCH_BASE_NOTE: u8 = 36;
 
 /// Place a section-switch MIDI item at the edit cursor.
 ///
-/// The selected track should be inside a scene folder (Scene N: Name)
-/// that's a child of a song/profile folder with `fts_signal/scene_count`.
-/// The MIDI item is placed on the song/profile folder.
+/// The selected track should be a section track (direct child of a song
+/// folder with `fts_signal/scene_count`). The MIDI item is placed on
+/// the song folder.
 pub async fn place_section_switch(daw: &Daw) -> Result<()> {
     place_switch(daw, SwitchLevel::Section).await
 }
@@ -44,21 +43,17 @@ pub async fn place_song_switch(daw: &Daw) -> Result<()> {
 }
 
 /// Place a scene-switch MIDI item at the edit cursor.
-///
-/// The selected track should be inside a scene folder (Scene N: Name)
-/// that's a child of a profile folder with `fts_signal/scene_count`.
-/// Same as section switch — both look for Scene N: parents.
+/// Same as section switch.
 pub async fn place_scene_switch(daw: &Daw) -> Result<()> {
     place_switch(daw, SwitchLevel::Scene).await
 }
 
 enum SwitchLevel {
-    /// Walk up to Scene folder → its parent (song/profile) gets the MIDI item
+    /// Selected track is a section — its parent (song/profile folder) gets the MIDI item
     Section,
-    /// Walk up to song folder (not a Scene folder, child of a folder with scene_count)
-    /// → its parent (rig) gets the MIDI item
+    /// Walk up to song folder → its parent (rig) gets the MIDI item
     Song,
-    /// Same as Section — walk up to Scene folder → its parent (profile) gets the item
+    /// Same as Section
     Scene,
 }
 
@@ -102,16 +97,18 @@ async fn place_switch(daw: &Daw, level: SwitchLevel) -> Result<()> {
 
     match level {
         SwitchLevel::Section | SwitchLevel::Scene => {
-            // Walk up from selected track to find the Scene folder
-            let (scene_index, scene_name, controller_guid) =
-                find_scene_and_controller(selected_info, &track_by_guid)?;
-
+            // Walk up from selected track to find a parent with scene_count.
+            // The selected track (or an ancestor) is the section; its parent
+            // with scene_count is the controller (song/profile folder).
+            let (section_index, section_name, controller_guid) =
+                find_section_and_controller(selected_info, &track_by_guid, &tracks, &all_tracks)
+                    .await?;
             let controller_track = tracks
                 .by_guid(&controller_guid)
                 .await?
                 .ok_or_else(|| eyre::eyre!("Controller track not found"))?;
 
-            let note = SWITCH_BASE_NOTE + scene_index as u8;
+            let note = SWITCH_BASE_NOTE + section_index as u8;
             let label = match level {
                 SwitchLevel::Section => "section",
                 SwitchLevel::Scene => "scene",
@@ -124,13 +121,13 @@ async fn place_switch(daw: &Daw, level: SwitchLevel) -> Result<()> {
                 bar_duration,
                 beats_per_bar,
                 note,
-                &scene_name,
+                &section_name,
             )
             .await?;
 
             info!(
                 "[place-switch] Placed {label} switch '{}' (note {note}) at {cursor_time:.2}s",
-                scene_name,
+                section_name,
             );
         }
         SwitchLevel::Song => {
@@ -170,24 +167,37 @@ async fn place_switch(daw: &Daw, level: SwitchLevel) -> Result<()> {
 }
 
 /// Walk up the parent chain from the selected track to find:
-/// 1. The Scene folder (named "Scene N: ...") → gives us the index and name
-/// 2. The Scene folder's parent → the controller track (song or profile folder)
-fn find_scene_and_controller<'a>(
+/// 1. A track whose parent has `fts_signal/scene_count` — that track is the section
+/// 2. The parent with scene_count — that's the controller (song/profile folder)
+///
+/// Returns (section_index, section_name, controller_guid).
+async fn find_section_and_controller(
     selected: &daw::service::Track,
-    tracks: &std::collections::HashMap<&str, &'a daw::service::Track>,
+    track_map: &std::collections::HashMap<&str, &daw::service::Track>,
+    tracks: &daw::Tracks,
+    all_tracks: &[daw::service::Track],
 ) -> Result<(usize, String, String)> {
-    // Start from the selected track and walk up
     let mut current = selected;
 
     loop {
-        // Check if current track is a Scene folder
-        if let Some((index, name)) = parse_scene_name(&current.name) {
-            // Found the scene folder — its parent is the controller
-            let parent_guid = current
-                .parent_guid
-                .as_deref()
-                .ok_or_else(|| eyre::eyre!("Scene folder '{}' has no parent", current.name))?;
-            return Ok((index, name, parent_guid.to_string()));
+        // Check if current track's parent has fts_signal/scene_count
+        if let Some(parent_guid) = &current.parent_guid {
+            let parent_handle = tracks.by_guid(parent_guid).await?;
+            if let Some(ref parent) = parent_handle {
+                if let Some(count_str) =
+                    parent.get_ext_state("fts_signal", "scene_count").await?
+                {
+                    if count_str.parse::<u32>().is_ok() {
+                        // Current track is the section, parent is the controller
+                        let index = find_section_index(
+                            &current.guid,
+                            parent_guid,
+                            all_tracks,
+                        )?;
+                        return Ok((index, current.name.clone(), parent_guid.clone()));
+                    }
+                }
+            }
         }
 
         // Walk up to parent
@@ -196,12 +206,12 @@ fn find_scene_and_controller<'a>(
             .as_deref()
             .ok_or_else(|| {
                 eyre::eyre!(
-                    "Could not find a Scene folder in parent chain of '{}'",
+                    "Could not find a section in parent chain of '{}'",
                     selected.name
                 )
             })?;
 
-        current = tracks
+        current = track_map
             .get(parent_guid)
             .ok_or_else(|| eyre::eyre!("Parent track {} not found", parent_guid))?;
     }
@@ -232,8 +242,8 @@ async fn find_song_and_rig(
                     {
                         if count_str.parse::<u32>().is_ok() {
                             // This folder's parent is the rig. Find our index
-                            // among siblings.
-                            let index = find_sibling_index(
+                            // among folder siblings (songs).
+                            let index = find_folder_child_index(
                                 &current.guid,
                                 parent_guid,
                                 all_tracks,
@@ -262,19 +272,29 @@ async fn find_song_and_rig(
     }
 }
 
-/// Parse "Scene N: Name" → (N-1, Name) where N-1 is 0-based index.
-fn parse_scene_name(name: &str) -> Option<(usize, String)> {
-    let rest = name.strip_prefix("Scene ")?;
-    let colon_pos = rest.find(": ")?;
-    let n: usize = rest[..colon_pos].parse().ok()?;
-    let scene_name = rest[colon_pos + 2..].to_string();
-    Some((n - 1, scene_name))
+/// Find the 0-based index of a non-folder track among all non-folder children
+/// of a parent. The scene timer mutes/unmutes non-folder children by index,
+/// so this matches the timer's child track ordering.
+fn find_section_index(
+    target_guid: &str,
+    parent_guid: &str,
+    all_tracks: &[daw::service::Track],
+) -> Result<usize> {
+    let mut section_index = 0usize;
+    for track in all_tracks {
+        if track.parent_guid.as_deref() == Some(parent_guid) && !track.is_folder {
+            if track.guid == target_guid {
+                return Ok(section_index);
+            }
+            section_index += 1;
+        }
+    }
+    Err(eyre::eyre!("Track not found among sections of parent {parent_guid}"))
 }
 
-/// Find the 0-based index of a track among its siblings (children of the same parent).
-/// Only counts folder tracks (song/scene folders), skipping input/layer tracks.
-/// Uses the ordered track list (by track index) for deterministic ordering.
-fn find_sibling_index(
+/// Find the 0-based index of a track among folder-only siblings of a parent.
+/// Used for song switching where only folder tracks (songs) count.
+fn find_folder_child_index(
     target_guid: &str,
     parent_guid: &str,
     all_tracks: &[daw::service::Track],
@@ -288,7 +308,7 @@ fn find_sibling_index(
             folder_index += 1;
         }
     }
-    Err(eyre::eyre!("Track not found among siblings of parent {parent_guid}"))
+    Err(eyre::eyre!("Track not found among folder siblings of parent {parent_guid}"))
 }
 
 /// Find a track's color by name.

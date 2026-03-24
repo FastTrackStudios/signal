@@ -3,11 +3,12 @@
 //! Runs at ~30Hz via the REAPER timer callback registered by
 //! `reaper_bootstrap`. Reads the playhead/cursor position and named
 //! items on controller tracks to determine which scene should be active,
-//! then mutes/unmutes sends on the input track.
+//! then mutes/unmutes child tracks directly.
 //!
 //! Items on controller tracks are ordered by position. Each item's take
 //! name identifies the scene/song being switched to. The item's sequential
-//! index (0-based) maps to the corresponding send on the input track.
+//! index (0-based) maps to the corresponding child track (non-folder
+//! children of the controller folder, in track order).
 //!
 //! Uses reaper-high API directly (no SHM, no async) since we're
 //! already on REAPER's main thread.
@@ -32,10 +33,9 @@ struct TimelineEntry {
 
 /// Cached controller track state.
 struct ControllerCache {
-    /// REAPER track index of the input track (first non-folder child).
-    input_track_idx: u32,
-    /// Number of sends on the input track (= number of scenes/songs).
-    send_count: u32,
+    /// REAPER track indices of non-folder child tracks (section/song tracks).
+    /// Index 0 = first scene, index 1 = second scene, etc.
+    child_track_indices: Vec<u32>,
     /// Name (for logging).
     name: String,
     /// Timeline of named items sorted by position.
@@ -107,8 +107,8 @@ pub fn poll() {
         let old = ctrl.active_scene;
         ctrl.active_scene = target;
 
-        // Apply send muting
-        if apply_send_switch(ctrl.input_track_idx, target as u32, ctrl.send_count) {
+        // Apply track muting — unmute the target child, mute all others
+        if apply_track_switch(&ctrl.child_track_indices, target as u32) {
             let target_name = entry.map(|e| e.name.as_str()).unwrap_or("?");
             info!(
                 "[scene-timer] '{}' → '{}' (scene {}, was {})",
@@ -173,8 +173,9 @@ fn scan_controllers(state: &mut SceneState) {
 
         let name = track.name().map(|n| n.to_string()).unwrap_or_default();
 
-        // Find input track: first non-folder child
-        let mut input_track_idx = None;
+        // Find all non-folder child tracks (section/song tracks).
+        // These are muted/unmuted directly for scene switching.
+        let mut child_track_indices = Vec::new();
         for child_idx in (track_idx + 1)..track_count {
             let Some(child) = project.track_by_index(child_idx) else {
                 break;
@@ -189,7 +190,6 @@ fn scan_controllers(state: &mut SceneState) {
                 unsafe { low.GetParentTrack(child_raw.as_ptr()) };
             if parent_ptr != raw.as_ptr() {
                 // Not our child — might have moved past our folder
-                // (tracks after folder close aren't children)
                 let child_depth = unsafe {
                     low.GetMediaTrackInfo_Value(child_raw.as_ptr(), c"I_FOLDERDEPTH".as_ptr())
                         as i32
@@ -205,48 +205,29 @@ fn scan_controllers(state: &mut SceneState) {
                 low.GetMediaTrackInfo_Value(child_raw.as_ptr(), c"I_FOLDERDEPTH".as_ptr()) as i32
             };
             if child_folder < 1 {
-                // First non-folder child = input track
-                input_track_idx = Some(child_idx);
-                break;
+                // Non-folder child = section/song track
+                child_track_indices.push(child_idx);
             }
         }
 
-        let Some(input_idx) = input_track_idx else {
-            warn!("[scene-timer] No input track for controller '{name}'");
+        if child_track_indices.is_empty() {
+            warn!("[scene-timer] No child tracks for controller '{name}'");
             continue;
-        };
-
-        // Count sends on input track
-        let Some(input_track) = project.track_by_index(input_idx) else {
-            continue;
-        };
-        let input_raw = match input_track.raw() {
-            Ok(r) => r,
-            Err(_) => continue,
-        };
-        let send_count = unsafe {
-            low.GetTrackNumSends(input_raw.as_ptr(), 0) as u32 // 0 = sends
-        };
+        }
 
         // Read named items on the controller track to build timeline
         let timeline = read_item_timeline(low, raw.as_ptr());
 
-        let input_name = input_track
-            .name()
-            .map(|n| n.to_string())
-            .unwrap_or_default();
         info!(
-            "[scene-timer] Controller '{}': {} scenes, {} sends, {} items, input='{}'",
+            "[scene-timer] Controller '{}': {} scenes, {} child tracks, {} items",
             name,
             scene_count,
-            send_count,
+            child_track_indices.len(),
             timeline.len(),
-            input_name,
         );
 
         state.controllers.push(ControllerCache {
-            input_track_idx: input_idx,
-            send_count,
+            child_track_indices,
             name,
             timeline,
             active_scene: -1, // unset — first poll will apply the correct scene
@@ -349,36 +330,33 @@ fn read_take_name(
         .to_string()
 }
 
-/// Mute all sends except the target on the input track. Returns true on success.
-fn apply_send_switch(input_track_idx: u32, target_scene: u32, send_count: u32) -> bool {
+/// Mute all child tracks except the target. Returns true on success.
+fn apply_track_switch(child_track_indices: &[u32], target_scene: u32) -> bool {
     let reaper = HighReaper::get();
     let project = reaper.current_project();
-
-    let Some(input_track) = project.track_by_index(input_track_idx) else {
-        return false;
-    };
-    let input_raw = match input_track.raw() {
-        Ok(r) => r,
-        Err(_) => return false,
-    };
-
     let low = reaper.medium_reaper().low();
 
-    for i in 0..send_count {
-        let mute_value = if i == target_scene { 0.0 } else { 1.0 };
+    for (i, &track_idx) in child_track_indices.iter().enumerate() {
+        let Some(track) = project.track_by_index(track_idx) else {
+            continue;
+        };
+        let track_raw = match track.raw() {
+            Ok(r) => r,
+            Err(_) => continue,
+        };
+
+        let mute = i as u32 != target_scene;
         let ok = unsafe {
-            low.SetTrackSendInfo_Value(
-                input_raw.as_ptr(),
-                0,            // 0 = sends
-                i as i32,
+            low.SetMediaTrackInfo_Value(
+                track_raw.as_ptr(),
                 c"B_MUTE".as_ptr(),
-                mute_value,
+                if mute { 1.0 } else { 0.0 },
             )
         };
         if !ok {
             debug!(
-                "[scene-timer] SetTrackSendInfo_Value failed: send {} mute={}",
-                i, mute_value
+                "[scene-timer] SetMediaTrackInfo_Value B_MUTE failed: track {} mute={}",
+                track_idx, mute
             );
         }
     }

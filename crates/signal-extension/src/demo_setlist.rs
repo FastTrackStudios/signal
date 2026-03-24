@@ -4,34 +4,26 @@
 //!
 //! ```text
 //! Guitar Rig/                              (rig folder — Signal Controller for song switching)
-//!   Guitar Input                           (rig input — sends to all song inputs)
-//!   Belief/                                (song folder — Signal Controller for section switching)
-//!     Belief Input                         (song input — sends to section inputs)
-//!     Scene 1: Clean/
-//!       Belief Input: Clean
-//!       [L] Clean
-//!     Scene 2: Ambient/
-//!       Belief Input: Ambient
-//!       [L] Ambient
-//!     Scene 3: Rhythm/
-//!       Belief Input: Rhythm
-//!       [L] Rhythm
+//!   Guitar Input                           (rig input — audio source)
+//!   Belief/                                (song folder — Signal Controller + MIDI items)
+//!     Clean                                (section track — receives from parent)
+//!     Ambient
+//!     Rhythm
 //!   Vienna/
-//!     Vienna Input
-//!     Scene 1: Clean/  ...
+//!     Clean
+//!     Crunch  ...
 //!   ...8 songs total
 //! ```
 //!
-//! The rig-level Signal Controller receives MIDI notes to switch between songs
-//! (muting/unmuting sends from Guitar Input to each song's input).
-//! Each song's Signal Controller receives MIDI notes to switch between its
-//! own sections (muting/unmuting sends from song input to section inputs).
+//! Each section is a single track (no sub-folder, no per-song input track).
+//! The scene timer mutes/unmutes child tracks directly based on MIDI items
+//! on the controller folder.
 //!
 //! MIDI items are placed sequentially: one bar per section within each song,
 //! songs laid out back-to-back. Song-level items go on the Guitar Rig folder,
 //! section-level items go on each song's folder.
 
-use daw::{Daw, TrackHandle};
+use daw::Daw;
 use eyre::{Result, WrapErr};
 use tracing::info;
 
@@ -182,14 +174,11 @@ pub async fn load_demo_setlist(daw: &Daw) -> Result<()> {
         .await?;
 
     // ── Guitar Input ──────────────────────────────────────────────────
-    // Rig-level input. Parent send disabled — routes via sends to each
-    // song's input track. Song switching mutes/unmutes these sends.
-    let rig_input = tracks.add("Guitar Input", None).await?;
-    rig_input.set_color(0x6B7280).await?;
-    rig_input.set_parent_send(false).await?;
+    // Rig-level audio source. Parent send enabled — audio flows to rig
+    // folder's children via REAPER's folder routing.
+    let _rig_input = tracks.add("Guitar Input", None).await?;
+    _rig_input.set_color(0x6B7280).await?;
 
-    // Collect song input tracks so we can create sends after all songs
-    let mut song_inputs: Vec<TrackHandle> = Vec::new();
     let mut current_bar: usize = 0;
 
     for (song_idx, song) in SETLIST.iter().enumerate() {
@@ -231,79 +220,31 @@ pub async fn load_demo_setlist(daw: &Daw) -> Result<()> {
             .set_ext_state("fts_signal", "scene_count", &section_count.to_string())
             .await?;
 
-        // ── Song input track ──────────────────────────────────────────
-        let song_input = tracks
-            .add(&format!("{} Input", song.title), None)
-            .await?;
-        song_input.set_color(0x6B7280).await?;
-        song_input.set_parent_send(false).await?;
-
         // ── Build sections ────────────────────────────────────────────
-        let mut section_inputs: Vec<TrackHandle> = Vec::new();
+        // Each section is a single track, direct child of song folder.
+        // The scene timer mutes/unmutes these tracks directly.
 
         for (sec_idx, &(sec_name, _module_types)) in song.sections.iter().enumerate() {
             let is_last_section = sec_idx == section_count - 1;
 
-            // Section folder
-            let sec_folder = tracks
-                .add(&format!("Scene {}: {sec_name}", sec_idx + 1), None)
-                .await?;
-            sec_folder.set_folder_depth(1).await?;
-            sec_folder.set_color(scene_color(sec_name)).await?;
-
-            // Section input
-            let sec_input = tracks
-                .add(&format!("{} Input: {sec_name}", song.title), None)
-                .await?;
-            sec_input.set_color(0x6B7280).await?;
-            sec_input.set_parent_send(false).await?;
-
-            // Layer track
-            let layer = tracks
-                .add(&format!("[L] {sec_name}"), None)
-                .await?;
-            layer.set_color(scene_color(sec_name)).await?;
+            let section = tracks.add(sec_name, None).await?;
+            section.set_color(scene_color(sec_name)).await?;
 
             // Close folders:
-            //   last section of last song: close section + song + rig  (-3)
-            //   last section of other song: close section + song       (-2)
-            //   other sections:             close section only         (-1)
+            //   last section of last song: close song + rig  (-2)
+            //   last section of other song: close song       (-1)
+            //   other sections:             normal child      (0)
             let depth = if is_last_section && is_last_song {
-                -3 // close section + song + rig
+                -2 // close song + rig
             } else if is_last_section {
-                -2 // close section + song
+                -1 // close song
             } else {
-                -1 // close section only
+                0 // normal child
             };
-            layer.set_folder_depth(depth).await?;
-
-            // Send: section input → layer
-            if let Err(e) = sec_input.sends().add_to(layer.guid()).await {
-                tracing::warn!("[demo-setlist] Failed send sec_input→layer for '{sec_name}': {e:#}");
-            }
-
-            section_inputs.push(sec_input);
-        }
-
-        // Send: song input → each section input (mute all except first)
-        for (i, sec_input) in section_inputs.iter().enumerate() {
-            match song_input.sends().add_to(sec_input.guid()).await {
-                Ok(send) => {
-                    if i > 0 {
-                        if let Err(e) = send.mute().await {
-                            tracing::warn!("[demo-setlist] Failed to mute send {i}: {e:#}");
-                        }
-                    }
-                }
-                Err(e) => {
-                    tracing::warn!("[demo-setlist] Failed send song_input→sec_input: {e:#}");
-                }
-            }
+            section.set_folder_depth(depth).await?;
         }
 
         // ── Section MIDI items (on the song folder) ───────────────────
-        // Each section gets a one-bar MIDI item with a note that the
-        // song's Signal Controller uses to switch sections.
         let song_items = song_folder.items();
         for (sec_idx, &(sec_name, _)) in song.sections.iter().enumerate() {
             let item_bar = song_start_bar + sec_idx;
@@ -346,24 +287,7 @@ pub async fn load_demo_setlist(daw: &Daw) -> Result<()> {
             );
         }
 
-        song_inputs.push(song_input);
         current_bar += section_count;
-    }
-
-    // ── Rig input sends to all song inputs (mute all except first) ─────
-    for (i, song_input) in song_inputs.iter().enumerate() {
-        match rig_input.sends().add_to(song_input.guid()).await {
-            Ok(send) => {
-                if i > 0 {
-                    if let Err(e) = send.mute().await {
-                        tracing::warn!("[demo-setlist] Failed to mute song send {i}: {e:#}");
-                    }
-                }
-            }
-            Err(e) => {
-                tracing::warn!("[demo-setlist] Failed send rig_input→song_input: {e:#}");
-            }
-        }
     }
 
     // ── Song-switching MIDI items (on the rig folder) ─────────────────
