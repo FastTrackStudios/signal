@@ -228,7 +228,7 @@ checksum = "170433209e817da6aae2c51aa0dd443009a613425dd041ebfb2492d1c4c11a25"
 [[package]]
 name = "anyrender"
 version = "0.7.0"
-source = "git+https://github.com/DioxusLabs/anyrender.git?branch=main#5f9acd2a1a5363f4bdd3dea0565ef56f092e4b30"
+source = "git+https://github.com/DioxusLabs/anyrender.git?branch=main#b0000e699bf6fa2e55935cdd2227314f7d732615"
 dependencies = [
  "kurbo 0.13.0",
  "peniko 0.6.0",
@@ -386,7 +386,7 @@ dependencies = [
 [[package]]
 name = "audio-controls"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/daw.git?branch=main#88069fe16b4642b226de2d7562d5b37835708641"
+source = "git+https://github.com/FastTrackStudios/daw.git?branch=main#ea856f15e1291da701f14c516a0f4c80089dc95b"
 dependencies = [
  "dioxus",
  "js-sys",
@@ -1032,7 +1032,7 @@ version = "3.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "faf9468729b8cbcea668e36183cb69d317348c2e08e994829fb56ebfdfbaac34"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.48.0",
 ]
 
 [[package]]
@@ -1511,7 +1511,7 @@ checksum = "be1e0bca6c3637f992fc1cc7cbc52a78c1ef6db076dbf1059c4323d6a2048376"
 [[package]]
 name = "daw"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/daw.git?branch=main#88069fe16b4642b226de2d7562d5b37835708641"
+source = "git+https://github.com/FastTrackStudios/daw.git?branch=main#ea856f15e1291da701f14c516a0f4c80089dc95b"
 dependencies = [
  "daw-control",
  "daw-control-sync",
@@ -1524,7 +1524,7 @@ dependencies = [
 [[package]]
 name = "daw-cli"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/daw.git?branch=main#88069fe16b4642b226de2d7562d5b37835708641"
+source = "git+https://github.com/FastTrackStudios/daw.git?branch=main#ea856f15e1291da701f14c516a0f4c80089dc95b"
 dependencies = [
  "clap",
  "daw",
@@ -1543,7 +1543,7 @@ dependencies = [
 [[package]]
 name = "daw-control"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/daw.git?branch=main#88069fe16b4642b226de2d7562d5b37835708641"
+source = "git+https://github.com/FastTrackStudios/daw.git?branch=main#ea856f15e1291da701f14c516a0f4c80089dc95b"
 dependencies = [
  "daw-proto",
  "eyre",
@@ -1557,7 +1557,7 @@ dependencies = [
 [[package]]
 name = "daw-control-sync"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/daw.git?branch=main#88069fe16b4642b226de2d7562d5b37835708641"
+source = "git+https://github.com/FastTrackStudios/daw.git?branch=main#ea856f15e1291da701f14c516a0f4c80089dc95b"
 dependencies = [
  "daw-control",
  "eyre",
@@ -1571,7 +1571,7 @@ dependencies = [
 [[package]]
 name = "daw-extension-runtime"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/daw.git?branch=main#88069fe16b4642b226de2d7562d5b37835708641"
+source = "git+https://github.com/FastTrackStudios/daw.git?branch=main#ea856f15e1291da701f14c516a0f4c80089dc95b"
 dependencies = [
  "daw",
  "eyre",
@@ -1586,7 +1586,7 @@ dependencies = [
 [[package]]
 name = "daw-proto"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/daw.git?branch=main#88069fe16b4642b226de2d7562d5b37835708641"
+source = "git+https://github.com/FastTrackStudios/daw.git?branch=main#ea856f15e1291da701f14c516a0f4c80089dc95b"
 dependencies = [
  "actions-proto",
  "facet",
@@ -1597,7 +1597,7 @@ dependencies = [
 [[package]]
 name = "daw-reaper"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/daw.git?branch=main#88069fe16b4642b226de2d7562d5b37835708641"
+source = "git+https://github.com/FastTrackStudios/daw.git?branch=main#ea856f15e1291da701f14c516a0f4c80089dc95b"
 dependencies = [
  "camino",
  "crossbeam-channel",
@@ -1620,7 +1620,7 @@ dependencies = [
 [[package]]
 name = "dawfile-reaper"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/daw.git?branch=main#88069fe16b4642b226de2d7562d5b37835708641"
+source = "git+https://github.com/FastTrackStudios/daw.git?branch=main#ea856f15e1291da701f14c516a0f4c80089dc95b"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -2999,7 +2999,7 @@ checksum = "28dd6caf6059519a65843af8fe2a3ae298b14b80179855aeb4adc2c1934ee619"
 [[package]]
 name = "fts-devtools"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/daw.git?branch=main#88069fe16b4642b226de2d7562d5b37835708641"
+source = "git+https://github.com/FastTrackStudios/daw.git?branch=main#ea856f15e1291da701f14c516a0f4c80089dc95b"
 
 [[package]]
 name = "fts-plugin-core"
@@ -6646,7 +6646,7 @@ dependencies = [
 [[package]]
 name = "reaper-launcher"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/daw.git?branch=main#88069fe16b4642b226de2d7562d5b37835708641"
+source = "git+https://github.com/FastTrackStudios/daw.git?branch=main#ea856f15e1291da701f14c516a0f4c80089dc95b"
 dependencies = [
  "libc",
  "serde",
@@ -6690,7 +6690,7 @@ dependencies = [
 [[package]]
 name = "reaper-test"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/daw.git?branch=main#88069fe16b4642b226de2d7562d5b37835708641"
+source = "git+https://github.com/FastTrackStudios/daw.git?branch=main#ea856f15e1291da701f14c516a0f4c80089dc95b"
 dependencies = [
  "daw",
  "eyre",
@@ -6706,7 +6706,7 @@ dependencies = [
 [[package]]
 name = "reaper-test-macro"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/daw.git?branch=main#88069fe16b4642b226de2d7562d5b37835708641"
+source = "git+https://github.com/FastTrackStudios/daw.git?branch=main#ea856f15e1291da701f14c516a0f4c80089dc95b"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -9906,7 +9906,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.48.0",
 ]
 
 [[package]]
