@@ -12,6 +12,9 @@ mod fixtures;
 
 use fixtures::*;
 use signal::{
+    Block, BlockParameter, BlockParameterOverride, DawParamValue, DawParameterSnapshot, EngineType,
+    Module, ModuleBlock, ModuleBlockSource, ModulePreset, ModulePresetId, ModuleSnapshot,
+    ModuleSnapshotId, MorphEngine, Preset, PresetId, SignalChain, SignalNode, Snapshot, SnapshotId,
     block::BlockType,
     engine::{Engine, EngineScene, LayerSelection},
     layer::{Layer, LayerSnapshot, ModuleRef},
@@ -24,12 +27,9 @@ use signal::{
     setlist::{Setlist, SetlistEntry},
     song::{Section, SectionSource, Song},
     traits::Collection,
-    Block, BlockParameter, BlockParameterOverride, DawParamValue, DawParameterSnapshot, EngineType,
-    Module, ModuleBlock, ModuleBlockSource, ModulePreset, ModulePresetId, ModuleSnapshot,
-    ModuleSnapshotId, MorphEngine, Preset, PresetId, SignalChain, SignalNode, Snapshot, SnapshotId,
 };
 use signal_live::engine::{
-    compute_diff, slot::InstanceHandle, ModuleTarget, ResolvedSlot, SlotDiff, SlotState,
+    ModuleTarget, ResolvedSlot, SlotDiff, SlotState, compute_diff, slot::InstanceHandle,
 };
 
 // ═════════════════════════════════════════════════════════════
@@ -351,16 +351,18 @@ async fn add_variant_to_module_collection() {
     let original_count = jm_pedals.snapshots().len();
 
     // Create a "Heavy" variant with different block sources
-    let heavy_module = Module::from_blocks(vec![ModuleBlock::new(
-        "boost",
-        "Boost",
-        BlockType::Boost,
-        ModuleBlockSource::PresetDefault {
-            preset_id: PresetId::from_uuid(seed_id("jm-justa-boost")),
-            saved_at_version: None,
-        },
-    )
-    .with_overrides(vec![BlockParameterOverride::new("level", 0.9)])]);
+    let heavy_module = Module::from_blocks(vec![
+        ModuleBlock::new(
+            "boost",
+            "Boost",
+            BlockType::Boost,
+            ModuleBlockSource::PresetDefault {
+                preset_id: PresetId::from_uuid(seed_id("jm-justa-boost")),
+                saved_at_version: None,
+            },
+        )
+        .with_overrides(vec![BlockParameterOverride::new("level", 0.9)]),
+    ]);
     let heavy_snap = ModuleSnapshot::new(seed_id("jm-pedals-heavy"), "Heavy", heavy_module);
 
     let mut updated = jm_pedals;
@@ -553,9 +555,9 @@ async fn layer_with_multiple_variants() {
     clean.module_refs = vec![ModuleRef::new(seed_id("jm-pedals"))];
 
     let mut crunch = LayerSnapshot::new(seed_id("multi-layer-crunch"), "Crunch");
-    crunch.module_refs =
-        vec![ModuleRef::new(seed_id("drive-full-stack"))
-            .with_variant(seed_id("drive-full-stack-push"))];
+    crunch.module_refs = vec![
+        ModuleRef::new(seed_id("drive-full-stack")).with_variant(seed_id("drive-full-stack-push")),
+    ];
 
     let mut lead = LayerSnapshot::new(seed_id("multi-layer-lead"), "Lead");
     lead.module_refs = vec![ModuleRef::new(seed_id("drive-full-stack"))];
@@ -619,14 +621,18 @@ async fn layer_snapshot_overrides_round_trip() {
         .expect("layer should exist");
 
     assert_eq!(loaded.variants[0].overrides.len(), 2);
-    assert!(loaded.variants[0].overrides[0]
-        .path
-        .as_str()
-        .contains("gain"));
-    assert!(loaded.variants[0].overrides[1]
-        .path
-        .as_str()
-        .contains("tone"));
+    assert!(
+        loaded.variants[0].overrides[0]
+            .path
+            .as_str()
+            .contains("gain")
+    );
+    assert!(
+        loaded.variants[0].overrides[1]
+            .path
+            .as_str()
+            .contains("tone")
+    );
 }
 
 // ═════════════════════════════════════════════════════════════

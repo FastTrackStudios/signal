@@ -146,7 +146,7 @@
               inherit cargoArtifacts;
               buildPhaseCargoCommand = ''
                 cd apps/desktop
-                dx build --release --platform desktop
+                dx build --release --platform desktop --no-default-features
               '';
               installPhaseCommand = ''
                 mkdir -p $out/Applications $out/bin
@@ -225,6 +225,7 @@
               cargo-watch
               cargo-nextest
               bacon
+              flac
             ]
             ++ buildInputs
             ++ nativeBuildInputs;
@@ -240,6 +241,9 @@
             // lib.optionalAttrs pkgs.stdenv.isLinux {
               LD_LIBRARY_PATH = libPath;
               XDG_DATA_DIRS = "${pkgs.gsettings-desktop-schemas}/share/gsettings-schemas/${pkgs.gsettings-desktop-schemas.name}:${pkgs.gtk3}/share/gsettings-schemas/${pkgs.gtk3.name}";
+              # WebKitGTK accelerated compositing fails on NixOS (GBM buffer error → white window).
+              # Disabling it forces software rendering. See: https://github.com/NixOS/nixpkgs/issues/32580
+              WEBKIT_DISABLE_COMPOSITING_MODE = "1";
             }
             // lib.optionalAttrs pkgs.stdenv.isDarwin {
               DYLD_LIBRARY_PATH = libPath;

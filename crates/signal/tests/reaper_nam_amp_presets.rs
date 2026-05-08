@@ -14,7 +14,7 @@ use reaper_test::reaper_test;
 use signal::{BlockType, ModuleType, Preset};
 use signal_live::daw_rig_builder::instantiate_rig;
 use signal_proto::rig_template::{EngineTemplate, LayerTemplate, RigTemplate};
-use signal_proto::{seed_id, ModulePresetId, PresetId};
+use signal_proto::{ModulePresetId, PresetId, seed_id};
 
 /// Ensure REAPER's audio engine is running.
 async fn ensure_audio(ctx: &reaper_test::ReaperTestContext) {

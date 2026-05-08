@@ -12,8 +12,8 @@ mod fixtures;
 
 use fixtures::*;
 use signal::{
-    block::BlockType, builder::RigBuilder, profile::PatchId, resolve::ResolveTarget, rig::RigType,
-    EngineType,
+    EngineType, block::BlockType, builder::RigBuilder, profile::PatchId, resolve::ResolveTarget,
+    rig::RigType,
 };
 
 // ═════════════════════════════════════════════════════════════
@@ -290,7 +290,7 @@ async fn staleness_detected_after_block_preset_update() {
 /// Verify that new modules built with the builder get version-stamped.
 #[tokio::test]
 async fn new_modules_get_version_stamped() {
-    use signal::{traits::Collection, ModuleBlockSource};
+    use signal::{ModuleBlockSource, traits::Collection};
 
     let built = RigBuilder::new("Version Stamp Test")
         .block_preset("Drive", BlockType::Drive, |bp| {

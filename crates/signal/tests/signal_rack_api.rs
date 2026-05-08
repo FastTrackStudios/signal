@@ -7,11 +7,11 @@
 //! All tests use `bootstrap_in_memory_controller_async()` — no REAPER dependency.
 
 use signal::{
-    bootstrap_in_memory_controller_async,
+    BlockType, bootstrap_in_memory_controller_async,
     fx_send::{FxSend, FxSendBus, FxSendBusId, FxSendCategory, FxSendId},
     rack::{Rack, RackId, RackSlot},
     rig::{Rig, RigId, RigScene},
-    seed_id, BlockType,
+    seed_id,
 };
 
 // ─── Helpers ─────────────────────────────────────────────────────

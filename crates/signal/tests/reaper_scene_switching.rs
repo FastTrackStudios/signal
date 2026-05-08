@@ -76,8 +76,14 @@ async fn scene_switching_named_items(ctx: &ReaperTestContext) -> eyre::Result<()
     settle().await;
 
     // Verify initial send state
-    assert!(!send_clean.is_muted().await?, "send_clean should start unmuted");
-    assert!(send_drive.is_muted().await?, "send_drive should start muted");
+    assert!(
+        !send_clean.is_muted().await?,
+        "send_clean should start unmuted"
+    );
+    assert!(
+        send_drive.is_muted().await?,
+        "send_drive should start muted"
+    );
     assert!(send_lead.is_muted().await?, "send_lead should start muted");
 
     // ── Set P_EXT on controller track ─────────────────────────────────
@@ -96,11 +102,7 @@ async fn scene_switching_named_items(ctx: &ReaperTestContext) -> eyre::Result<()
     let items = controller.items();
 
     let item_clean = items
-        .create_midi_item_with_notes(
-            0.0,
-            2.0,
-            vec![MidiNoteCreate::new(60, 100, 0.0, 960.0)],
-        )
+        .create_midi_item_with_notes(0.0, 2.0, vec![MidiNoteCreate::new(60, 100, 0.0, 960.0)])
         .await?;
     if let Some(ref item) = item_clean {
         item.active_take().set_name("Clean").await?;
@@ -108,11 +110,7 @@ async fn scene_switching_named_items(ctx: &ReaperTestContext) -> eyre::Result<()
     }
 
     let item_drive = items
-        .create_midi_item_with_notes(
-            2.0,
-            4.0,
-            vec![MidiNoteCreate::new(60, 100, 0.0, 960.0)],
-        )
+        .create_midi_item_with_notes(2.0, 4.0, vec![MidiNoteCreate::new(60, 100, 0.0, 960.0)])
         .await?;
     if let Some(ref item) = item_drive {
         item.active_take().set_name("Drive").await?;
@@ -120,11 +118,7 @@ async fn scene_switching_named_items(ctx: &ReaperTestContext) -> eyre::Result<()
     }
 
     let item_lead = items
-        .create_midi_item_with_notes(
-            4.0,
-            6.0,
-            vec![MidiNoteCreate::new(60, 100, 0.0, 960.0)],
-        )
+        .create_midi_item_with_notes(4.0, 6.0, vec![MidiNoteCreate::new(60, 100, 0.0, 960.0)])
         .await?;
     if let Some(ref item) = item_lead {
         item.active_take().set_name("Lead").await?;

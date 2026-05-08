@@ -21,8 +21,8 @@ use std::pin::Pin;
 use std::sync::Arc;
 
 use daw::{Project, TrackHandle};
-use signal_live::engine::rig_scene_applier::{RigSceneApplier, RigSceneApplyError};
 use signal_live::SignalLive;
+use signal_live::engine::rig_scene_applier::{RigSceneApplier, RigSceneApplyError};
 use signal_proto::rig::{Rig, RigSceneId};
 
 /// How long to wait before muting a demoted scene's rig folder, allowing

@@ -88,7 +88,11 @@ async fn poll_param_value(
         if start.elapsed() > timeout {
             return Err(eyre::eyre!(
                 "Timed out waiting for param {} to reach {:.4} (got {:.4}, tolerance {:.4}, waited {:?})",
-                param_idx, expected, actual, tolerance, timeout
+                param_idx,
+                expected,
+                actual,
+                tolerance,
+                timeout
             ));
         }
         tokio::time::sleep(POLL_INTERVAL).await;

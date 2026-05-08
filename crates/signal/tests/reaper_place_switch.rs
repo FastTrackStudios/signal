@@ -111,9 +111,7 @@ async fn build_test_setlist(tracks: &daw::Tracks) -> eyre::Result<TestSetlist> {
 // ---------------------------------------------------------------------------
 
 #[reaper_test(isolated)]
-async fn place_section_switch_creates_named_item(
-    ctx: &ReaperTestContext,
-) -> eyre::Result<()> {
+async fn place_section_switch_creates_named_item(ctx: &ReaperTestContext) -> eyre::Result<()> {
     let project = ctx.project().clone();
     let tracks = project.tracks();
     let transport = project.transport();
@@ -170,9 +168,7 @@ async fn place_section_switch_creates_named_item(
 // ---------------------------------------------------------------------------
 
 #[reaper_test(isolated)]
-async fn place_song_switch_creates_named_item(
-    ctx: &ReaperTestContext,
-) -> eyre::Result<()> {
+async fn place_song_switch_creates_named_item(ctx: &ReaperTestContext) -> eyre::Result<()> {
     let project = ctx.project().clone();
     let tracks = project.tracks();
     let transport = project.transport();
@@ -226,9 +222,7 @@ async fn place_song_switch_creates_named_item(
 // ---------------------------------------------------------------------------
 
 #[reaper_test(isolated)]
-async fn place_scene_switch_creates_named_item(
-    ctx: &ReaperTestContext,
-) -> eyre::Result<()> {
+async fn place_scene_switch_creates_named_item(ctx: &ReaperTestContext) -> eyre::Result<()> {
     let project = ctx.project().clone();
     let tracks = project.tracks();
     let transport = project.transport();
@@ -283,9 +277,7 @@ async fn place_scene_switch_creates_named_item(
 // ---------------------------------------------------------------------------
 
 #[reaper_test(isolated)]
-async fn placed_items_drive_scene_switching(
-    ctx: &ReaperTestContext,
-) -> eyre::Result<()> {
+async fn placed_items_drive_scene_switching(ctx: &ReaperTestContext) -> eyre::Result<()> {
     let project = ctx.project().clone();
     let tracks = project.tracks();
     let transport = project.transport();

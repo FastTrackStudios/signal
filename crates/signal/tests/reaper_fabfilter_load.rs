@@ -13,7 +13,7 @@ use futures::future::try_join_all;
 use reaper_test::reaper_test;
 use signal::BlockType;
 use signal_import::fabfilter::FabFilterImporter;
-use signal_import::{import_preset_id, IMPORT_NAMESPACE};
+use signal_import::{IMPORT_NAMESPACE, import_preset_id};
 use signal_proto::SnapshotId;
 use uuid::Uuid;
 

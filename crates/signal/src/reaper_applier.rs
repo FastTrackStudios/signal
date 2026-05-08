@@ -21,7 +21,7 @@ use std::sync::Arc;
 
 use daw::service::TrackRef;
 use daw::{Project, TrackHandle};
-use signal_live::engine::{graph_state_chunks, DawPatchApplier, DawStateChunk, PatchApplyError};
+use signal_live::engine::{DawPatchApplier, DawStateChunk, PatchApplyError, graph_state_chunks};
 use signal_proto::plugin_block::FxRole;
 use signal_proto::resolve::ResolvedGraph;
 

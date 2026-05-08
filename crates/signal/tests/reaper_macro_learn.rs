@@ -88,7 +88,9 @@ async fn poll_param(
         if start.elapsed() > timeout {
             return Err(eyre::eyre!(
                 "Timed out waiting for param {} to reach {:.4} (got {:.4})",
-                param_idx, expected, actual,
+                param_idx,
+                expected,
+                actual,
             ));
         }
         tokio::time::sleep(interval).await;
@@ -100,9 +102,7 @@ async fn poll_param(
 // ---------------------------------------------------------------------------
 
 #[reaper_test(isolated)]
-async fn load_signal_controller_on_track(
-    ctx: &reaper_test::ReaperTestContext,
-) -> eyre::Result<()> {
+async fn load_signal_controller_on_track(ctx: &reaper_test::ReaperTestContext) -> eyre::Result<()> {
     let project = ctx.project().clone();
     let track = project.tracks().add("Controller Load Test", None).await?;
 
@@ -136,13 +136,19 @@ async fn last_touched_fx_detects_reacomp_parameter(
     settle().await;
 
     let params = fx.parameters().await?;
-    let threshold_idx = params.iter().find(|p| p.name.to_lowercase().contains("thresh"))
-        .map(|p| p.index).ok_or_else(|| eyre::eyre!("Threshold not found"))?;
+    let threshold_idx = params
+        .iter()
+        .find(|p| p.name.to_lowercase().contains("thresh"))
+        .map(|p| p.index)
+        .ok_or_else(|| eyre::eyre!("Threshold not found"))?;
 
     fx.param(threshold_idx).set(0.3).await?;
     settle().await;
 
-    let lt = ctx.daw.last_touched_fx().await?
+    let lt = ctx
+        .daw
+        .last_touched_fx()
+        .await?
         .ok_or_else(|| eyre::eyre!("last_touched_fx returned None"))?;
 
     assert_eq!(lt.param_index, threshold_idx);
@@ -155,9 +161,7 @@ async fn last_touched_fx_detects_reacomp_parameter(
 // ---------------------------------------------------------------------------
 
 #[reaper_test(isolated)]
-async fn reacomp_param_set_and_readback(
-    ctx: &reaper_test::ReaperTestContext,
-) -> eyre::Result<()> {
+async fn reacomp_param_set_and_readback(ctx: &reaper_test::ReaperTestContext) -> eyre::Result<()> {
     let project = ctx.project().clone();
     let track = project.tracks().add("Param Readback", None).await?;
     let fx = track.fx_chain().add(REACOMP).await?;
@@ -174,7 +178,13 @@ async fn reacomp_param_set_and_readback(
 
     for (i, &expected) in test_values.iter().enumerate().take(count) {
         let actual = fx.param(params[i].index).get().await?;
-        assert!((actual - expected).abs() < 0.05, "Param '{}' should be ~{:.2}, got {:.4}", params[i].name, expected, actual);
+        assert!(
+            (actual - expected).abs() < 0.05,
+            "Param '{}' should be ~{:.2}, got {:.4}",
+            params[i].name,
+            expected,
+            actual
+        );
     }
 
     ctx.log("=== PASS: Parameter round-trip verified ===");
@@ -201,10 +211,16 @@ async fn macro_drives_reacomp_via_fx_params(
     ctx.log("FX 1: ReaComp loaded");
 
     let params = target_fx.parameters().await?;
-    let threshold_idx = params.iter().find(|p| p.name.to_lowercase().contains("thresh"))
-        .map(|p| p.index).ok_or_else(|| eyre::eyre!("Threshold not found"))?;
-    let ratio_idx = params.iter().find(|p| p.name.to_lowercase().contains("ratio"))
-        .map(|p| p.index).ok_or_else(|| eyre::eyre!("Ratio not found"))?;
+    let threshold_idx = params
+        .iter()
+        .find(|p| p.name.to_lowercase().contains("thresh"))
+        .map(|p| p.index)
+        .ok_or_else(|| eyre::eyre!("Threshold not found"))?;
+    let ratio_idx = params
+        .iter()
+        .find(|p| p.name.to_lowercase().contains("ratio"))
+        .map(|p| p.index)
+        .ok_or_else(|| eyre::eyre!("Ratio not found"))?;
 
     // 2. Store mapping config (Signal Controller=FX 0, ReaComp=FX 1)
     let mapping_json = serde_json::json!({
@@ -225,9 +241,12 @@ async fn macro_drives_reacomp_via_fx_params(
                 "mode": {"ScaleRange": {"min": 0.1, "max": 0.9}}
             }
         ]
-    }).to_string();
+    })
+    .to_string();
 
-    track.set_ext_state("FTS_MACROS", "mapping_config", &mapping_json).await?;
+    track
+        .set_ext_state("FTS_MACROS", "mapping_config", &mapping_json)
+        .await?;
     ctx.log("Stored mapping config");
 
     // Wait for timer to discover
@@ -240,16 +259,48 @@ async fn macro_drives_reacomp_via_fx_params(
     ctx.log("--- Macro 0 = 0.0 ---");
     controller.param(0).set(0.0).await?;
 
-    let t0 = poll_param(&target_fx, threshold_idx, 0.8, 0.05, poll_timeout, poll_interval).await?;
-    let r0 = poll_param(&target_fx, ratio_idx, 0.1, 0.05, poll_timeout, poll_interval).await?;
+    let t0 = poll_param(
+        &target_fx,
+        threshold_idx,
+        0.8,
+        0.05,
+        poll_timeout,
+        poll_interval,
+    )
+    .await?;
+    let r0 = poll_param(
+        &target_fx,
+        ratio_idx,
+        0.1,
+        0.05,
+        poll_timeout,
+        poll_interval,
+    )
+    .await?;
     ctx.log(&format!("  Threshold={:.4}, Ratio={:.4}", t0, r0));
 
     // 4. Set Macro 0 = 1.0 via FX param
     ctx.log("--- Macro 0 = 1.0 ---");
     controller.param(0).set(1.0).await?;
 
-    let t1 = poll_param(&target_fx, threshold_idx, 0.2, 0.05, poll_timeout, poll_interval).await?;
-    let r1 = poll_param(&target_fx, ratio_idx, 0.9, 0.05, poll_timeout, poll_interval).await?;
+    let t1 = poll_param(
+        &target_fx,
+        threshold_idx,
+        0.2,
+        0.05,
+        poll_timeout,
+        poll_interval,
+    )
+    .await?;
+    let r1 = poll_param(
+        &target_fx,
+        ratio_idx,
+        0.9,
+        0.05,
+        poll_timeout,
+        poll_interval,
+    )
+    .await?;
     ctx.log(&format!("  Threshold={:.4}, Ratio={:.4}", t1, r1));
 
     ctx.log("=== PASS: Macro drives ReaComp via FX params ===");
@@ -261,9 +312,7 @@ async fn macro_drives_reacomp_via_fx_params(
 // ---------------------------------------------------------------------------
 
 #[reaper_test(isolated)]
-async fn four_point_stage_macro(
-    ctx: &reaper_test::ReaperTestContext,
-) -> eyre::Result<()> {
+async fn four_point_stage_macro(ctx: &reaper_test::ReaperTestContext) -> eyre::Result<()> {
     let project = ctx.project().clone();
 
     ctx.log("=== 4-POINT STAGE MACRO ===");
@@ -273,10 +322,16 @@ async fn four_point_stage_macro(
     let target_fx = track.fx_chain().add(REACOMP).await?;
 
     let params = target_fx.parameters().await?;
-    let threshold_idx = params.iter().find(|p| p.name.to_lowercase().contains("thresh"))
-        .map(|p| p.index).ok_or_else(|| eyre::eyre!("Threshold not found"))?;
-    let ratio_idx = params.iter().find(|p| p.name.to_lowercase().contains("ratio"))
-        .map(|p| p.index).ok_or_else(|| eyre::eyre!("Ratio not found"))?;
+    let threshold_idx = params
+        .iter()
+        .find(|p| p.name.to_lowercase().contains("thresh"))
+        .map(|p| p.index)
+        .ok_or_else(|| eyre::eyre!("Threshold not found"))?;
+    let ratio_idx = params
+        .iter()
+        .find(|p| p.name.to_lowercase().contains("ratio"))
+        .map(|p| p.index)
+        .ok_or_else(|| eyre::eyre!("Ratio not found"))?;
 
     let mapping_json = serde_json::json!({
         "version": "0.1",
@@ -306,9 +361,12 @@ async fn four_point_stage_macro(
                 ]}}
             }
         ]
-    }).to_string();
+    })
+    .to_string();
 
-    track.set_ext_state("FTS_MACROS", "mapping_config", &mapping_json).await?;
+    track
+        .set_ext_state("FTS_MACROS", "mapping_config", &mapping_json)
+        .await?;
     tokio::time::sleep(Duration::from_secs(3)).await;
 
     let poll_timeout = Duration::from_secs(8);
@@ -324,15 +382,47 @@ async fn four_point_stage_macro(
     for (name, macro_val, exp_thresh, exp_ratio) in &stages {
         ctx.log(&format!("--- {name} (macro={macro_val:.2}) ---"));
         controller.param(0).set(*macro_val).await?;
-        let t = poll_param(&target_fx, threshold_idx, *exp_thresh, 0.06, poll_timeout, poll_interval).await?;
-        let r = poll_param(&target_fx, ratio_idx, *exp_ratio, 0.06, poll_timeout, poll_interval).await?;
+        let t = poll_param(
+            &target_fx,
+            threshold_idx,
+            *exp_thresh,
+            0.06,
+            poll_timeout,
+            poll_interval,
+        )
+        .await?;
+        let r = poll_param(
+            &target_fx,
+            ratio_idx,
+            *exp_ratio,
+            0.06,
+            poll_timeout,
+            poll_interval,
+        )
+        .await?;
         ctx.log(&format!("  Threshold={t:.4}, Ratio={r:.4}"));
     }
 
     // Interpolation
     controller.param(0).set(0.165).await?;
-    let t = poll_param(&target_fx, threshold_idx, 0.75, 0.08, poll_timeout, poll_interval).await?;
-    let r = poll_param(&target_fx, ratio_idx, 0.175, 0.08, poll_timeout, poll_interval).await?;
+    let t = poll_param(
+        &target_fx,
+        threshold_idx,
+        0.75,
+        0.08,
+        poll_timeout,
+        poll_interval,
+    )
+    .await?;
+    let r = poll_param(
+        &target_fx,
+        ratio_idx,
+        0.175,
+        0.08,
+        poll_timeout,
+        poll_interval,
+    )
+    .await?;
     ctx.log(&format!("Interpolation: Threshold={t:.4}, Ratio={r:.4}"));
 
     ctx.log("=== PASS: 4-point stage macro ===");
@@ -375,11 +465,16 @@ async fn z_demo_setlist_action_creates_tracks(
     );
 
     // Check for the rig folder
-    let rig = all_tracks.iter().find(|t| t.name.contains("Guitar Rig") || t.name.contains("Rig"));
+    let rig = all_tracks
+        .iter()
+        .find(|t| t.name.contains("Guitar Rig") || t.name.contains("Rig"));
     assert!(rig.is_some(), "Should have a Guitar Rig folder");
 
     // Check for at least one song folder
-    let songs: Vec<_> = all_tracks.iter().filter(|t| t.is_folder && t.parent_guid.is_some()).collect();
+    let songs: Vec<_> = all_tracks
+        .iter()
+        .filter(|t| t.is_folder && t.parent_guid.is_some())
+        .collect();
     assert!(!songs.is_empty(), "Should have at least one song folder");
 
     // ── Verify sends from Guitar Input to section tracks ──────────────
@@ -388,7 +483,10 @@ async fn z_demo_setlist_action_creates_tracks(
     assert!(guitar_input.is_some(), "Should have Guitar Input track");
     let guitar_input = guitar_input.unwrap();
 
-    let gi_track = project.tracks().by_guid(&guitar_input.guid).await?
+    let gi_track = project
+        .tracks()
+        .by_guid(&guitar_input.guid)
+        .await?
         .ok_or_else(|| eyre::eyre!("Guitar Input track not found by GUID"))?;
     let sends = gi_track.sends().all().await?;
     ctx.log(&format!("Guitar Input has {} sends", sends.len()));
@@ -401,15 +499,27 @@ async fn z_demo_setlist_action_creates_tracks(
     );
 
     // Verify input_track_guid is stored in P_EXT
-    let rig_track = project.tracks().by_guid(&rig.guid).await?
+    let rig_track = project
+        .tracks()
+        .by_guid(&rig.guid)
+        .await?
         .ok_or_else(|| eyre::eyre!("Rig folder not found"))?;
-    let stored_guid = rig_track.get_ext_state("fts_signal", "input_track_guid").await?;
-    assert!(stored_guid.is_some(), "Should have input_track_guid in P_EXT");
+    let stored_guid = rig_track
+        .get_ext_state("fts_signal", "input_track_guid")
+        .await?;
+    assert!(
+        stored_guid.is_some(),
+        "Should have input_track_guid in P_EXT"
+    );
     assert_eq!(
-        stored_guid.as_deref(), Some(guitar_input.guid.as_str()),
+        stored_guid.as_deref(),
+        Some(guitar_input.guid.as_str()),
         "Stored input GUID should match Guitar Input"
     );
-    ctx.log(&format!("input_track_guid stored correctly: {}", guitar_input.guid));
+    ctx.log(&format!(
+        "input_track_guid stored correctly: {}",
+        guitar_input.guid
+    ));
 
     // ── Verify scene switching mutes/unmutes sends correctly ────────────
     // Wait for scene timer to initialize and do first scan
@@ -425,23 +535,36 @@ async fn z_demo_setlist_action_creates_tracks(
 
     // Get first song's section names
     let first_song = songs[0];
-    let section_names: Vec<String> = all_tracks.iter()
+    let section_names: Vec<String> = all_tracks
+        .iter()
         .filter(|t| t.parent_guid.as_deref() == Some(&first_song.guid) && !t.is_folder)
         .map(|t| t.name.clone())
         .collect();
-    ctx.log(&format!("First song '{}' sections: {:?}", first_song.name, section_names));
+    ctx.log(&format!(
+        "First song '{}' sections: {:?}",
+        first_song.name, section_names
+    ));
 
     // Helper: get names of unmuted sends on Guitar Input
     async fn get_unmuted_sends(project: &daw::Project, gi_guid: &str) -> eyre::Result<Vec<String>> {
-        let gi = project.tracks().by_guid(gi_guid).await?
+        let gi = project
+            .tracks()
+            .by_guid(gi_guid)
+            .await?
             .ok_or_else(|| eyre::eyre!("Guitar Input not found"))?;
         let all_sends = gi.sends().all().await?;
         let mut unmuted = Vec::new();
         for (i, send) in all_sends.iter().enumerate() {
-            let route = gi.sends().by_index(i as u32).await?
+            let route = gi
+                .sends()
+                .by_index(i as u32)
+                .await?
                 .ok_or_else(|| eyre::eyre!("Send {i} not found"))?;
             if !route.is_muted().await? {
-                let dest_name = send.dest_track_name.clone().unwrap_or_else(|| format!("send_{i}"));
+                let dest_name = send
+                    .dest_track_name
+                    .clone()
+                    .unwrap_or_else(|| format!("send_{i}"));
                 unmuted.push(dest_name);
             }
         }
@@ -454,8 +577,10 @@ async fn z_demo_setlist_action_creates_tracks(
     let unmuted = get_unmuted_sends(&project, &guitar_input.guid).await?;
     ctx.log(&format!("  pos=0.5s: unmuted = {:?}", unmuted));
     assert_eq!(
-        unmuted, vec!["Clean"],
-        "At pos 0.5s, ONLY 'Clean' should be unmuted. Got: {:?}", unmuted
+        unmuted,
+        vec!["Clean"],
+        "At pos 0.5s, ONLY 'Clean' should be unmuted. Got: {:?}",
+        unmuted
     );
 
     // Position at bar 1 + 0.5s → should be ONLY "Ambient" unmuted
@@ -465,8 +590,10 @@ async fn z_demo_setlist_action_creates_tracks(
     let unmuted = get_unmuted_sends(&project, &guitar_input.guid).await?;
     ctx.log(&format!("  pos={ambient_pos:.1}s: unmuted = {:?}", unmuted));
     assert_eq!(
-        unmuted, vec!["Ambient"],
-        "At pos {ambient_pos:.1}s, ONLY 'Ambient' should be unmuted. Got: {:?}", unmuted
+        unmuted,
+        vec!["Ambient"],
+        "At pos {ambient_pos:.1}s, ONLY 'Ambient' should be unmuted. Got: {:?}",
+        unmuted
     );
 
     // Position at bar 2 + 0.5s → should be ONLY "Rhythm" unmuted
@@ -476,13 +603,17 @@ async fn z_demo_setlist_action_creates_tracks(
     let unmuted = get_unmuted_sends(&project, &guitar_input.guid).await?;
     ctx.log(&format!("  pos={rhythm_pos:.1}s: unmuted = {:?}", unmuted));
     assert_eq!(
-        unmuted, vec!["Rhythm"],
-        "At pos {rhythm_pos:.1}s, ONLY 'Rhythm' should be unmuted. Got: {:?}", unmuted
+        unmuted,
+        vec!["Rhythm"],
+        "At pos {rhythm_pos:.1}s, ONLY 'Rhythm' should be unmuted. Got: {:?}",
+        unmuted
     );
 
     // Verify section tracks are NOT muted (sends control routing, not track mute)
     for sec in &section_names {
-        let sec_track = all_tracks.iter().find(|t| &t.name == sec && t.parent_guid.as_deref() == Some(&first_song.guid));
+        let sec_track = all_tracks
+            .iter()
+            .find(|t| &t.name == sec && t.parent_guid.as_deref() == Some(&first_song.guid));
         if let Some(st) = sec_track {
             let track = project.tracks().by_guid(&st.guid).await?.unwrap();
             let muted = track.is_muted().await?;
@@ -499,9 +630,7 @@ async fn z_demo_setlist_action_creates_tracks(
 // ---------------------------------------------------------------------------
 
 #[reaper_test(isolated)]
-async fn macro_set_min_max_via_actions(
-    ctx: &reaper_test::ReaperTestContext,
-) -> eyre::Result<()> {
+async fn macro_set_min_max_via_actions(ctx: &reaper_test::ReaperTestContext) -> eyre::Result<()> {
     let project = ctx.project().clone();
 
     ctx.log("=== MACRO SET MIN/MAX VIA ACTIONS ===");
@@ -514,8 +643,11 @@ async fn macro_set_min_max_via_actions(
     ctx.log("ReaComp loaded");
 
     let params = target_fx.parameters().await?;
-    let threshold_idx = params.iter().find(|p| p.name.to_lowercase().contains("thresh"))
-        .map(|p| p.index).ok_or_else(|| eyre::eyre!("Threshold not found"))?;
+    let threshold_idx = params
+        .iter()
+        .find(|p| p.name.to_lowercase().contains("thresh"))
+        .map(|p| p.index)
+        .ok_or_else(|| eyre::eyre!("Threshold not found"))?;
 
     // 2. Move Macro 1 on signal controller (so timer writes last_macro_index=0)
     controller.param(0).set(0.5).await?;
@@ -541,12 +673,17 @@ async fn macro_set_min_max_via_actions(
 
     // 7. Verify mapping was saved to P_EXT
     let config = track.get_ext_state("FTS_MACROS", "mapping_config").await?;
-    ctx.log(&format!("Mapping config: {:?}", config.as_deref().map(|s| &s[..s.len().min(100)])));
+    ctx.log(&format!(
+        "Mapping config: {:?}",
+        config.as_deref().map(|s| &s[..s.len().min(100)])
+    ));
 
     assert!(config.is_some(), "Mapping config should be saved to P_EXT");
     let config_json = config.unwrap();
-    assert!(config_json.contains("ScaleRange") || config_json.contains("MultiPoint"),
-        "Config should have a mapping mode");
+    assert!(
+        config_json.contains("ScaleRange") || config_json.contains("MultiPoint"),
+        "Config should have a mapping mode"
+    );
 
     // 8. Now move the macro and verify the parameter responds
     ctx.log("Testing macro drives parameter...");
@@ -556,12 +693,32 @@ async fn macro_set_min_max_via_actions(
     let poll_timeout = Duration::from_secs(8);
     let poll_interval = Duration::from_millis(50);
 
-    let val_at_0 = poll_param(&target_fx, threshold_idx, 0.8, 0.1, poll_timeout, poll_interval).await?;
-    ctx.log(&format!("Macro=0.0 → Threshold={val_at_0:.4} (expect ~0.8)"));
+    let val_at_0 = poll_param(
+        &target_fx,
+        threshold_idx,
+        0.8,
+        0.1,
+        poll_timeout,
+        poll_interval,
+    )
+    .await?;
+    ctx.log(&format!(
+        "Macro=0.0 → Threshold={val_at_0:.4} (expect ~0.8)"
+    ));
 
     controller.param(0).set(1.0).await?;
-    let val_at_1 = poll_param(&target_fx, threshold_idx, 0.2, 0.1, poll_timeout, poll_interval).await?;
-    ctx.log(&format!("Macro=1.0 → Threshold={val_at_1:.4} (expect ~0.2)"));
+    let val_at_1 = poll_param(
+        &target_fx,
+        threshold_idx,
+        0.2,
+        0.1,
+        poll_timeout,
+        poll_interval,
+    )
+    .await?;
+    ctx.log(&format!(
+        "Macro=1.0 → Threshold={val_at_1:.4} (expect ~0.2)"
+    ));
 
     ctx.log("=== PASS: Macro set min/max via actions ===");
     Ok(())
