@@ -1,41 +1,25 @@
 @schema {id crate:tracey-config@1, cli tracey}
 
+# This repo is the user-facing FastTrackStudio application (desktop + web +
+# mobile) that connects to the REAPER-hosted fts-extensions over vox/roam.
+# The signal/session/sync domain crates and their specs live in sibling repos
+# (each with its own tracey config). The specs kept here describe the
+# domain behaviour the app surfaces; impls point at this repo's app + shared
+# crates that consume those domains.
+
 specs (
     {
         name signal
         include (docs/spec/signal/**/*.md)
         impls (
             {
-                name signal-proto
-                include (crates/signal/signal-proto/src/**/*.rs)
+                name app
+                include (apps/**/src/**/*.rs)
+                exclude (apps/tests/**)
             }
             {
-                name signal-storage
-                include (crates/signal/signal-storage/src/**/*.rs)
-            }
-            {
-                name signal-live
-                include (crates/signal/signal-live/src/**/*.rs)
-            }
-            {
-                name signal-controller
-                include (crates/signal/signal-controller/src/**/*.rs)
-            }
-            {
-                name signal-facade
-                include (crates/signal/signal/src/**/*.rs)
-            }
-            {
-                name signal-daw-bridge
-                include (crates/signal/signal-daw-bridge/src/**/*.rs)
-            }
-            {
-                name reaper-extension
-                include (apps/reaper-extension/src/**/*.rs)
-            }
-            {
-                name signal-tests
-                include (crates/signal/signal/tests/**/*.rs)
+                name shared
+                include (crates/shared/**/src/**/*.rs)
             }
         )
     }
@@ -44,28 +28,13 @@ specs (
         include (docs/spec/session/**/*.md)
         impls (
             {
-                name session-proto
-                include (crates/session/session-proto/src/**/*.rs)
+                name app
+                include (apps/**/src/**/*.rs)
+                exclude (apps/tests/**)
             }
             {
-                name session
-                include (crates/session/session/src/**/*.rs)
-            }
-            {
-                name session-cli
-                include (apps/session-cli/src/**/*.rs)
-            }
-            {
-                name reaper-extension
-                include (apps/reaper-extension/src/**/*.rs)
-            }
-            {
-                name dawfile-reaper
-                include (../daw/crates/dawfile-reaper/src/**/*.rs)
-            }
-            {
-                name dawfile-tests
-                include (../daw/crates/dawfile-reaper/tests/**/*.rs)
+                name shared
+                include (crates/shared/**/src/**/*.rs)
             }
         )
     }

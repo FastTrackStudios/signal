@@ -26,32 +26,31 @@ and file management.
 
 ## How It Works
 
-FastTrackStudio runs as a host process that orchestrates each domain as a
-separate cell, connected via the [Vox](https://github.com/bearcove/roam) RPC
-framework over shared memory. A WebSocket gateway exposes the same API to the
-network, so a browser on any device can control your session.
+The domain logic (Signal, Session, Sync, Keyflow) is hosted **inside REAPER**
+by [`fts-extensions`](https://github.com/FastTrackStudios/fts-extensions), which
+loads each domain as an in-process module and exposes them over the
+[Vox](https://github.com/bearcove/roam) RPC framework.
+
+**This repository is the user-facing application.** The desktop app discovers
+and connects to the REAPER-hosted `fts-extensions` over Vox, then re-exposes
+the same API through a WebSocket gateway so a browser or phone on the local
+network can control the session.
 
 ```
-┌──────────────────────────────────────────────┐
-│              FastTrackStudio Host             │
-│                                              │
-│  ┌──────────┐ ┌──────────┐ ┌──────────┐     │
-│  │ Signal   │ │ Session  │ │   Sync   │     │
-│  │  Chain   │ │ Setlist  │ │  Engine  │     │
-│  └────┬─────┘ └────┬─────┘ └────┬─────┘     │
-│       └─────────────┼────────────┘           │
-│              ┌──────┴──────┐                 │
-│              │  DAW Bridge │ ◄── REAPER      │
-│              └──────┬──────┘                 │
-│              ┌──────┴──────┐                 │
-│              │  Gateway WS │                 │
-│              └──────┬──────┘                 │
-└─────────────────────┼────────────────────────┘
-                      │
-         ┌────────────┼────────────┐
-         ▼            ▼            ▼
-     Desktop        Web        Mobile
-      App          App          App
+┌──────────────── REAPER ────────────────┐
+│  fts-extensions (in-process modules)    │
+│   Signal · Session · Sync · Keyflow     │
+│              ▲  Vox RPC                  │
+└──────────────┼──────────────────────────┘
+               │
+        ┌──────┴───────┐
+        │  Desktop App  │  (this repo)
+        │  + Gateway WS │
+        └──────┬───────┘
+        ┌──────┴──────┐
+        ▼             ▼
+       Web          Mobile
+       App           App
 ```
 
 ## Apps
@@ -73,8 +72,8 @@ nix develop        # or: direnv allow
 # Build
 cargo build
 
-# Run the host
-cargo run -p fasttrackstudio
+# Run the desktop app
+cargo run -p fasttrackstudio-desktop
 ```
 
 ## Development

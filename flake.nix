@@ -17,6 +17,13 @@
     nix2container.url = "github:nlewo/nix2container";
     nix2container.inputs.nixpkgs.follows = "nixpkgs";
     mk-shell-bin.url = "github:rrbutani/nix-mk-shell-bin";
+    # Shared Dioxus build/deploy conventions (toolchain pins, web OCI deploy
+    # helpers). This repo is the user-facing Dioxus app, so it follows the
+    # FastTrackStudio Dioxus flake. See docs and dioxus-flake README.
+    dioxus-flake.url = "github:FastTrackStudios/Dioxus-Flake";
+    dioxus-flake.inputs.nixpkgs.follows = "nixpkgs";
+    dioxus-flake.inputs.rust-overlay.follows = "rust-overlay";
+    dioxus-flake.inputs.crane.follows = "crane";
     fts-flake.url = "github:FastTrackStudios/fts-flake";
     session.url = "github:FastTrackStudios/session";
     session.inputs.nixpkgs.follows = "nixpkgs";
@@ -47,7 +54,7 @@
     pure-eval = false;
   };
 
-  outputs = { self, flake-parts, crane, devenv, devenv-root, nix2container, fts-flake, session, sync, signal, daw, wdl, ... } @inputs:
+  outputs = { self, flake-parts, crane, devenv, devenv-root, nix2container, dioxus-flake, fts-flake, session, sync, signal, daw, wdl, ... } @inputs:
     flake-parts.lib.mkFlake { inherit inputs; } {
       imports = [ inputs.devenv.flakeModule ];
 
@@ -95,10 +102,27 @@
             ];
           };
 
+          pkgConfigInputs = with pkgs; [
+            openssl.dev
+            fontconfig.dev
+            freetype.dev
+          ];
+
+          pkgConfigPath = lib.concatStringsSep ":" [
+            (lib.makeSearchPathOutput "dev" "lib/pkgconfig" pkgConfigInputs)
+            (lib.makeSearchPathOutput "dev" "share/pkgconfig" pkgConfigInputs)
+          ];
+
           # Build dependencies
           buildInputs = (with pkgs; [
-            openssl openssl.dev libiconv pkg-config fontconfig freetype cmake python3
+            openssl
+            libiconv
+            fontconfig
+            freetype
+            cmake
+            python3
           ])
+          ++ pkgConfigInputs
           ++ lib.optionals pkgs.stdenv.isLinux (with pkgs; [
             alsa-lib alsa-lib.dev
             avahi avahi.dev
@@ -180,33 +204,6 @@
           packages = {
             deps = cargoArtifacts;
 
-            # Host runtime library
-            host-runtime = craneLib.buildPackage (commonArgs // {
-              pname = "host-runtime";
-              version = rev;
-              inherit cargoArtifacts;
-              cargoExtraArgs = "-p host-runtime";
-              doCheck = false;
-            });
-
-            # Test extension host (uses daw-standalone)
-            test-extension = craneLib.buildPackage (commonArgs // {
-              pname = "test-extension";
-              version = rev;
-              inherit cargoArtifacts;
-              cargoExtraArgs = "-p test-extension";
-              doCheck = false;
-            });
-
-            # REAPER extension host (uses daw-reaper)
-            reaper-extension = craneLib.buildPackage (commonArgs // {
-              pname = "reaper-extension";
-              version = rev;
-              inherit cargoArtifacts;
-              cargoExtraArgs = "-p reaper-extension";
-              doCheck = false;
-            });
-
             # FastTrackStudio Web App (WASM)
             fasttrackstudio-web = craneLib.buildPackage (commonArgs // {
               pname = "fasttrackstudio-web";
@@ -248,33 +245,6 @@
               doCheck = false;
             });
 
-            # DAW Standalone cell
-            daw-standalone = craneLib.buildPackage (commonArgs // {
-              pname = "daw-standalone";
-              version = rev;
-              inherit cargoArtifacts;
-              cargoExtraArgs = "-p daw-standalone";
-              doCheck = false;
-            });
-
-            # Session cell
-            session = craneLib.buildPackage (commonArgs // {
-              pname = "session";
-              version = rev;
-              inherit cargoArtifacts;
-              cargoExtraArgs = "-p session";
-              doCheck = false;
-            });
-
-            # Gateway WebSocket cell
-            gateway-ws = craneLib.buildPackage (commonArgs // {
-              pname = "gateway-ws";
-              version = rev;
-              inherit cargoArtifacts;
-              cargoExtraArgs = "-p gateway-ws";
-              doCheck = false;
-            });
-
             # FTS Installer Desktop App
             fts-installer = craneLib.buildPackage (commonArgs // {
               pname = "fts-installer";
@@ -298,7 +268,7 @@
               doCheck = false;
             });
 
-            default = self'.packages.test-extension;
+            default = self'.packages.fasttrackstudio-desktop;
           } // lib.optionalAttrs pkgs.stdenv.isLinux {
             # ── Portable Linux bundle ──────────────────────────────────
             # Self-contained directory with wrapper scripts that invoke
@@ -695,6 +665,7 @@ WRAPPER
               LIBCLANG_PATH = "${pkgs.llvmPackages.libclang.lib}/lib";
               OPENSSL_DIR = "${pkgs.openssl.dev}";
               OPENSSL_LIB_DIR = "${pkgs.openssl.out}/lib";
+              PKG_CONFIG_PATH = pkgConfigPath;
               CC_wasm32_unknown_unknown = "${pkgs.llvmPackages_18.clang}/bin/clang";
               AR_wasm32_unknown_unknown = "${pkgs.llvmPackages_18.bintools}/bin/llvm-ar";
               RUST_SRC_PATH = "${rustToolchain}/lib/rustlib/src/rust/library";
@@ -826,6 +797,7 @@ WRAPPER
               LIBCLANG_PATH = "${pkgs.llvmPackages.libclang.lib}/lib";
               OPENSSL_DIR = "${pkgs.openssl.dev}";
               OPENSSL_LIB_DIR = "${pkgs.openssl.out}/lib";
+              PKG_CONFIG_PATH = pkgConfigPath;
               CC_wasm32_unknown_unknown = "${pkgs.llvmPackages_18.clang}/bin/clang";
               AR_wasm32_unknown_unknown = "${pkgs.llvmPackages_18.bintools}/bin/llvm-ar";
             }
