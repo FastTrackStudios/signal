@@ -694,6 +694,9 @@ WRAPPER
               WEBKIT_DISABLE_DMABUF_RENDERER = "1";
               WEBKIT_ENABLE_WEBGPU = "0";
               GTK_USE_PORTAL = "0";
+              # No AT-SPI accessibility bus on headless / minimal sessions;
+              # silences webkit's "Can't connect to a11y bus" warning.
+              NO_AT_BRIDGE = "1";
               FTS_REAPER_EXECUTABLE = "${ftsPkgs.reaper}/bin/reaper";
               FTS_REAPER_RESOURCES = "${ftsPkgs.reaper}/opt/REAPER";
             }
