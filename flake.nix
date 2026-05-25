@@ -9,17 +9,12 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
     crane.url = "github:ipetkov/crane";
-    devenv.url = "github:cachix/devenv";
-    devenv-root = {
-      url = "file+file:///dev/null";
-      flake = false;
-    };
     nix2container.url = "github:nlewo/nix2container";
     nix2container.inputs.nixpkgs.follows = "nixpkgs";
-    mk-shell-bin.url = "github:rrbutani/nix-mk-shell-bin";
-    # Shared Dioxus build/deploy conventions (toolchain pins, web OCI deploy
-    # helpers). This repo is the user-facing Dioxus app, so it follows the
-    # FastTrackStudio Dioxus flake. See docs and dioxus-flake README.
+    # Shared Dioxus dev environment + build conventions. This repo is the
+    # user-facing Dioxus app, so the dev shell layers on top of the
+    # FastTrackStudio Dioxus flake's shell (toolchain, dx, wasm-bindgen),
+    # the same way fts-ui / session do. See dioxus-flake README.
     dioxus-flake.url = "github:FastTrackStudios/Dioxus-Flake";
     dioxus-flake.inputs.nixpkgs.follows = "nixpkgs";
     dioxus-flake.inputs.rust-overlay.follows = "rust-overlay";
@@ -42,38 +37,19 @@
 
   nixConfig = {
     extra-trusted-public-keys = [
-      "devenv.cachix.org-1:w1cLUi8dv3hnoSPGAuibQv+f9TZLr6cv/Hm9XgU50cw="
       "fasttrackstudio.cachix.org-1:r7v7WXBeSZ7m5meL6w0wttnvsOltRvTpXeVNItcy9f4="
     ];
     extra-substituters = [
-      "https://devenv.cachix.org"
       "https://fasttrackstudio.cachix.org"
     ];
-    # devenv needs impure evaluation (builtins.getEnv for project root).
-    # This allows `nix develop` to work without --impure.
-    pure-eval = false;
   };
 
-  outputs = { self, flake-parts, crane, devenv, devenv-root, nix2container, dioxus-flake, fts-flake, session, sync, signal, daw, wdl, ... } @inputs:
+  outputs = { self, flake-parts, crane, nix2container, dioxus-flake, fts-flake, session, sync, signal, daw, wdl, ... } @inputs:
     flake-parts.lib.mkFlake { inherit inputs; } {
-      imports = [ inputs.devenv.flakeModule ];
-
       systems = [ "x86_64-linux" "x86_64-darwin" "aarch64-darwin" "aarch64-linux" ];
 
       perSystem = { self', config, pkgs, lib, system, ... }:
         let
-          # devenv needs to know the project root for impure operations.
-          # When using direnv (.envrc), the devenv-root input is overridden to point
-          # to .devenv/devenv.root. For direct `nix develop --impure`, we fall back
-          # to $PWD (requires --impure).
-          devenvRootFromInput = let
-            content = builtins.readFile devenv-root.outPath;
-          in pkgs.lib.strings.trim content;
-          devenvRoot =
-            if devenvRootFromInput != ""
-            then devenvRootFromInput
-            else builtins.getEnv "PWD";
-
           # Rust toolchain with WASM support
           # Pin to 1.94.0 — keep devenv git-hooks in sync via packageOverrides.
           rustToolchain = pkgs.rust-bin.stable."1.94.0".default.override {
@@ -126,7 +102,8 @@
           ++ lib.optionals pkgs.stdenv.isLinux (with pkgs; [
             alsa-lib alsa-lib.dev
             avahi avahi.dev
-            glib gtk3 libsoup_3 webkitgtk_4_1 xdotool
+            glib gtk3 gdk-pixbuf pango cairo atk
+            libsoup_3 webkitgtk_4_1 xdotool
             libx11 libxcursor libxrandr libxi libxcb
             libxkbcommon wayland libGL vulkan-loader
           ])
@@ -184,6 +161,7 @@
             [ fontconfig freetype openssl ]
             ++ lib.optionals pkgs.stdenv.isLinux [
               alsa-lib libGL vulkan-loader gtk3 glib
+              gdk-pixbuf pango cairo atk
               libx11 libxcb libxkbcommon wayland
               webkitgtk_4_1 libsoup_3
             ]
@@ -627,41 +605,27 @@ WRAPPER
           };
 
           # ============================================================
-          # Dev Shells (devenv-powered)
+          # Dev Shells — layered on the dioxus-flake shell (no devenv)
           # ============================================================
-          devenv.shells.default = let
+          # `inputsFrom` pulls the dioxus-flake shell's build inputs (rust
+          # toolchain, dx, wasm-bindgen, gtk/webkit) — but NOT its env vars or
+          # shellHook, so we re-declare those below (see fts-ui / session).
+          devShells = let
             ftsPkgs = lib.optionalAttrs pkgs.stdenv.isLinux (
               fts-flake.lib.mkFtsPackages {
                 inherit pkgs;
                 cfg = fts-flake.presets.dev;
               }
             );
+            ftsCi = lib.optionalAttrs pkgs.stdenv.isLinux (
+              fts-flake.lib.mkFtsPackages {
+                inherit pkgs;
+                cfg = fts-flake.presets.ci;
+              }
+            );
             ftsWrapper = fts-flake.wrapperPackages.${system} or {};
-          in {
-            devenv.root =
-              pkgs.lib.mkIf (devenvRoot != "") devenvRoot;
 
-            cachix.pull = [ "fasttrackstudio" ];
-
-            packages = with pkgs; [
-              rustToolchain
-              dioxus-cli
-              wasm-bindgen-cli
-              tailwindcss_4
-              cargo-watch
-              cargo-nextest
-              bacon
-              nodejs_22
-            ]
-            ++ buildInputs
-            ++ nativeBuildInputs
-            ++ lib.optionals pkgs.stdenv.isLinux [
-              ftsPkgs.fts-test
-              ftsPkgs.fts-gui
-              ftsPkgs.reaper-fhs
-            ];
-
-            env = {
+            commonEnv = {
               LIBCLANG_PATH = "${pkgs.llvmPackages.libclang.lib}/lib";
               OPENSSL_DIR = "${pkgs.openssl.dev}";
               OPENSSL_LIB_DIR = "${pkgs.openssl.out}/lib";
@@ -669,7 +633,56 @@ WRAPPER
               CC_wasm32_unknown_unknown = "${pkgs.llvmPackages_18.clang}/bin/clang";
               AR_wasm32_unknown_unknown = "${pkgs.llvmPackages_18.bintools}/bin/llvm-ar";
               RUST_SRC_PATH = "${rustToolchain}/lib/rustlib/src/rust/library";
+            };
+          in {
+            default = pkgs.mkShell ({
+              inputsFrom = [ dioxus-flake.devShells.${system}.default ];
+
+              packages = (with pkgs; [
+                rustToolchain
+                cargo-watch
+                cargo-nextest
+                bacon
+              ])
+              ++ buildInputs
+              ++ nativeBuildInputs
+              ++ lib.optionals pkgs.stdenv.isLinux [
+                ftsPkgs.fts-test
+                ftsPkgs.fts-gui
+                ftsPkgs.reaper-fhs
+              ];
+
+              # dioxus-flake's own shellHook (inherited via inputsFrom) pins
+              # dx and sets up LD_LIBRARY_PATH; we only add project aliases.
+              shellHook = ''
+                [ -f .env ] && { set -a; source .env; set +a; }
+                export PATH="$HOME/.cargo/bin:$PATH"
+
+                alias fts-build='cargo build --workspace'
+                alias fts-check='cargo clippy --workspace -- -D warnings'
+                alias fts-fmt='cargo fmt --all -- --check'
+                alias fts-unit-test='cargo nextest run --workspace'
+              '' + lib.optionalString pkgs.stdenv.isLinux ''
+                alias fts-reaper-test='cargo xtask reaper-test'
+              '' + ''
+                echo ""
+                echo "  FastTrackStudio dev shell (dioxus-flake)"
+                echo "  ────────────────────────────────────────"
+                echo "  fts-build        — cargo build --workspace"
+                echo "  fts-check        — clippy (warnings-as-errors)"
+                echo "  fts-fmt          — check formatting"
+                echo "  fts-unit-test    — cargo nextest run --workspace"
+              '' + lib.optionalString pkgs.stdenv.isLinux ''
+                echo "  fts-reaper-test  — REAPER integration tests"
+                echo "  fts-gui          — launch REAPER with GUI"
+              '' + ''
+                echo ""
+                echo "  Rust: $(rustc --version)"
+                echo "  dx:   $(dx --version 2>/dev/null || echo 'not available')"
+                echo ""
+              '';
             }
+            // commonEnv
             // lib.optionalAttrs pkgs.stdenv.isLinux {
               LD_LIBRARY_PATH = libPath;
               XDG_DATA_DIRS = "${pkgs.gsettings-desktop-schemas}/share/gsettings-schemas/${pkgs.gsettings-desktop-schemas.name}:${pkgs.gtk3}/share/gsettings-schemas/${pkgs.gtk3.name}";
@@ -680,132 +693,26 @@ WRAPPER
               DYLD_LIBRARY_PATH = libPath;
             } // lib.optionalAttrs (ftsWrapper ? reaper) {
               FTS_REAPER_EXECUTABLE = "${ftsWrapper.reaper}/bin/reaper";
-            });
+            }));
 
-            scripts = {
-              fts-check.exec = "cargo clippy --workspace -- -D warnings";
-              fts-check.description = "Run clippy with warnings-as-errors";
-
-              fts-fmt.exec = "cargo fmt --all -- --check";
-              fts-fmt.description = "Check formatting";
-
-              fts-unit-test.exec = "cargo nextest run --workspace";
-              fts-unit-test.description = "Run all unit tests";
-
-              fts-build.exec = "cargo build --workspace";
-              fts-build.description = "Build entire workspace";
+            ci = pkgs.mkShell ({
+              packages = (with pkgs; [
+                rustToolchain
+                cargo-nextest
+              ])
+              ++ buildInputs
+              ++ nativeBuildInputs
+              ++ lib.optionals pkgs.stdenv.isLinux [
+                ftsCi.fts-test
+                ftsCi.reaper-fhs
+              ];
             }
-            // lib.optionalAttrs pkgs.stdenv.isLinux {
-              fts-smoke.exec = ''
-                fts-test bash -c '
-                  "$FTS_REAPER_EXECUTABLE" -newinst -nosplash -ignoreerrors &
-                  RPID=$!
-                  sleep 3
-                  if kill -0 $RPID 2>/dev/null; then
-                    echo "REAPER running (PID $RPID) — smoke test passed"
-                    kill $RPID
-                  else
-                    echo "REAPER failed to start"
-                    exit 1
-                  fi
-                '
-              '';
-              fts-smoke.description = "REAPER headless smoke test";
-
-              fts-reaper-test.exec = "cargo xtask reaper-test \"$@\"";
-              fts-reaper-test.description = "Run REAPER integration tests (headless)";
-            };
-
-            claude.code = {
-              enable = true;
-              commands = {
-                build = ''
-                  Build the entire workspace
-
-                  ```bash
-                  fts-build
-                  ```
-                '';
-                check = ''
-                  Run clippy with warnings-as-errors
-
-                  ```bash
-                  fts-check
-                  ```
-                '';
-                test = ''
-                  Run all unit tests
-
-                  ```bash
-                  fts-unit-test
-                  ```
-                '';
-              };
-            };
-
-            # NOTE: git-hooks are managed by beads (core.hooksPath = .beads/hooks).
-            # Enabling devenv git-hooks here causes "Cowardly refusing to install
-            # hooks with core.hooksPath set" and blocks shell entry entirely.
-            # Formatting is enforced by the beads pre-commit hook instead.
-
-            enterShell = ''
-              [ -f .env ] && { set -a; source .env; set +a; }
-              echo ""
-              echo "  FastTrackStudio dev shell (devenv)"
-              echo "  ────────────────────────────────────────"
-              echo "  fts-build        — cargo build --workspace"
-              echo "  fts-check        — clippy (warnings-as-errors)"
-              echo "  fts-fmt          — check formatting"
-              echo "  fts-unit-test    — cargo nextest run --workspace"
-            '' + lib.optionalString pkgs.stdenv.isLinux ''
-              echo "  fts-smoke        — REAPER headless smoke test"
-              echo "  fts-reaper-test  — REAPER integration tests"
-              echo "  fts-gui          — launch REAPER with GUI"
-            '' + ''
-              echo ""
-              echo "  Rust: $(rustc --version)"
-              echo "  dx:   $(dx --version 2>/dev/null || echo 'not available')"
-              echo ""
-            '';
-          };
-
-          devenv.shells.ci = let
-            ftsCi = lib.optionalAttrs pkgs.stdenv.isLinux (
-              fts-flake.lib.mkFtsPackages {
-                inherit pkgs;
-                cfg = fts-flake.presets.ci;
-              }
-            );
-          in {
-            devenv.root =
-              pkgs.lib.mkIf (devenvRoot != "") devenvRoot;
-
-            cachix.pull = [ "fasttrackstudio" ];
-
-            packages = with pkgs; [
-              rustToolchain
-              cargo-nextest
-            ]
-            ++ buildInputs
-            ++ nativeBuildInputs
-            ++ lib.optionals pkgs.stdenv.isLinux [
-              ftsCi.fts-test
-              ftsCi.reaper-fhs
-            ];
-
-            env = {
-              LIBCLANG_PATH = "${pkgs.llvmPackages.libclang.lib}/lib";
-              OPENSSL_DIR = "${pkgs.openssl.dev}";
-              OPENSSL_LIB_DIR = "${pkgs.openssl.out}/lib";
-              PKG_CONFIG_PATH = pkgConfigPath;
-              CC_wasm32_unknown_unknown = "${pkgs.llvmPackages_18.clang}/bin/clang";
-              AR_wasm32_unknown_unknown = "${pkgs.llvmPackages_18.bintools}/bin/llvm-ar";
-            }
+            // commonEnv
             // lib.optionalAttrs pkgs.stdenv.isLinux {
               LD_LIBRARY_PATH = libPath;
               FTS_REAPER_EXECUTABLE = "${ftsCi.reaper}/bin/reaper";
               FTS_REAPER_RESOURCES = "${ftsCi.reaper}/opt/REAPER";
-            };
+            });
           };
         };
     };
