@@ -2268,6 +2268,7 @@
           "crane"
         ],
         "flake-parts": "flake-parts_7",
+        "nix2container": "nix2container_2",
         "nixpkgs": [
           "nixpkgs"
         ],
@@ -2276,11 +2277,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1777446465,
-        "narHash": "sha256-fvE6FsMwQbp6RpZgNCRwHfwFOeaNIzxylu9eC2EEi0w=",
+        "lastModified": 1779693192,
+        "narHash": "sha256-VtHtVbZaDy9FtOSYWsG53aAR0fpt7pjEs8D7QYRtFUU=",
         "owner": "FastTrackStudios",
         "repo": "Dioxus-Flake",
-        "rev": "c9396a14741351de9261afd591f44ccdf6bd470e",
+        "rev": "7ceee7af393a85f1d28f3497ee598ed97f5527ba",
         "type": "github"
       },
       "original": {
@@ -6012,6 +6013,27 @@
     "nix2container_2": {
       "inputs": {
         "nixpkgs": [
+          "dioxus-flake",
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1775487831,
+        "narHash": "sha256-2lguQpLPQaxpQCJjXhmEEAfabwsAhkP29Z7fgLzHARA=",
+        "owner": "nlewo",
+        "repo": "nix2container",
+        "rev": "76be9608a7f4d6c985d28b0e7be903ae2547df3e",
+        "type": "github"
+      },
+      "original": {
+        "owner": "nlewo",
+        "repo": "nix2container",
+        "type": "github"
+      }
+    },
+    "nix2container_3": {
+      "inputs": {
+        "nixpkgs": [
           "nixpkgs"
         ]
       },
@@ -6029,7 +6051,7 @@
         "type": "github"
       }
     },
-    "nix2container_3": {
+    "nix2container_4": {
       "inputs": {
         "nixpkgs": [
           "session",
@@ -6050,7 +6072,7 @@
         "type": "github"
       }
     },
-    "nix2container_4": {
+    "nix2container_5": {
       "inputs": {
         "nixpkgs": [
           "signal",
@@ -8244,7 +8266,7 @@
         "dioxus-flake": "dioxus-flake",
         "flake-parts": "flake-parts_8",
         "fts-flake": "fts-flake_2",
-        "nix2container": "nix2container_2",
+        "nix2container": "nix2container_3",
         "nixpkgs": "nixpkgs_14",
         "rust-overlay": "rust-overlay_7",
         "session": "session",
@@ -8676,7 +8698,7 @@
         "flake-parts": "flake-parts_15",
         "fts-flake": "fts-flake_3",
         "mk-shell-bin": "mk-shell-bin",
-        "nix2container": "nix2container_3",
+        "nix2container": "nix2container_4",
         "nixpkgs": [
           "nixpkgs"
         ],
@@ -8704,7 +8726,7 @@
         "flake-parts": "flake-parts_22",
         "fts-flake": "fts-flake_4",
         "mk-shell-bin": "mk-shell-bin_2",
-        "nix2container": "nix2container_4",
+        "nix2container": "nix2container_5",
         "nixpkgs": [
           "nixpkgs"
         ],
