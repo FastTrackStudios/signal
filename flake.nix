@@ -2,11 +2,11 @@
   description = "FastTrackStudio Session — session/project management domain";
 
   inputs = {
-    nixpkgs.url = "github:nixos/nixpkgs/nixpkgs-unstable";
+    dioxus-flake.url = "github:FastTrackStudios/Dioxus-Flake";
+    nixpkgs.follows = "dioxus-flake/nixpkgs";
     flake-parts.url = "github:hercules-ci/flake-parts";
     rust-overlay = {
-      url = "github:oxalica/rust-overlay";
-      inputs.nixpkgs.follows = "nixpkgs";
+      follows = "dioxus-flake/rust-overlay";
     };
     crane.url = "github:ipetkov/crane";
     devenv.url = "github:cachix/devenv";
@@ -32,7 +32,7 @@
     pure-eval = false;
   };
 
-  outputs = { self, flake-parts, crane, devenv, devenv-root, fts-flake, ... } @inputs:
+  outputs = { self, flake-parts, crane, devenv, devenv-root, fts-flake, dioxus-flake, ... } @inputs:
     flake-parts.lib.mkFlake { inherit inputs; } {
       imports = [ inputs.devenv.flakeModule ];
 
@@ -239,6 +239,12 @@
 
             enterShell = ''
               [ -f .env ] && { set -a; source .env; set +a; }
+              export PATH="$HOME/.cargo/bin:$PATH"
+              DX_VERSION=$(dx --version 2>/dev/null | grep -oE 'dioxus [0-9.]+' | awk '{print $2}' || echo "0")
+              if [ "$DX_VERSION" != "0.7.9" ]; then
+                echo "  Installing dx 0.7.9..."
+                cargo install dioxus-cli --locked --version "=0.7.9"
+              fi
               echo ""
               echo "  Session dev shell (devenv)"
               echo "  ────────────────────────────────────────"
