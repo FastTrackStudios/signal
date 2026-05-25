@@ -686,6 +686,14 @@ WRAPPER
             // lib.optionalAttrs pkgs.stdenv.isLinux {
               LD_LIBRARY_PATH = libPath;
               XDG_DATA_DIRS = "${pkgs.gsettings-desktop-schemas}/share/gsettings-schemas/${pkgs.gsettings-desktop-schemas.name}:${pkgs.gtk3}/share/gsettings-schemas/${pkgs.gtk3.name}";
+              # webkit2gtk GPU compositing fails to allocate GBM buffers on many
+              # NixOS GPU/driver combos ("Failed to create GBM buffer"). Match
+              # dioxus-flake's shell: force x11 + disable webkit GPU compositing.
+              GDK_BACKEND = "x11";
+              WEBKIT_DISABLE_COMPOSITING_MODE = "1";
+              WEBKIT_DISABLE_DMABUF_RENDERER = "1";
+              WEBKIT_ENABLE_WEBGPU = "0";
+              GTK_USE_PORTAL = "0";
               FTS_REAPER_EXECUTABLE = "${ftsPkgs.reaper}/bin/reaper";
               FTS_REAPER_RESOURCES = "${ftsPkgs.reaper}/opt/REAPER";
             }
