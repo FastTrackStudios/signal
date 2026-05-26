@@ -18,6 +18,10 @@
     nix2container.inputs.nixpkgs.follows = "nixpkgs";
     mk-shell-bin.url = "github:rrbutani/nix-mk-shell-bin";
     fts-flake.url = "github:FastTrackStudios/fts-flake";
+    # Shared FTS repo-hygiene hub: pinned capn/tracey + the `cargo xtask ci`
+    # battery, so session runs the same CI gate as every other FTS repo.
+    fts-repo.url = "git+https://git.starcommand.live/FastTrackStudios/fts-repo";
+    fts-repo.inputs.nixpkgs.follows = "nixpkgs";
   };
 
   nixConfig = {
@@ -32,7 +36,7 @@
     pure-eval = false;
   };
 
-  outputs = { self, flake-parts, crane, devenv, devenv-root, fts-flake, dioxus-flake, ... } @inputs:
+  outputs = { self, flake-parts, crane, devenv, devenv-root, fts-flake, fts-repo, dioxus-flake, ... } @inputs:
     flake-parts.lib.mkFlake { inherit inputs; } {
       imports = [ inputs.devenv.flakeModule ];
 
@@ -256,6 +260,21 @@
               echo "  dx:   $(dx --version 2>/dev/null || echo 'not available')"
               echo ""
             '';
+          };
+
+          # ── CI shell — `cargo xtask ci` ──────────────────────────────
+          # Slim shell carrying the build/system deps needed to COMPILE the
+          # workspace plus the shared FTS hygiene tooling (same pinned
+          # versions every FTS repo uses). Reuses the default devenv shell's
+          # environment via inputsFrom. CI runs:
+          #   nix develop .#ci --impure --command cargo xtask ci
+          # Self-contained CI shell from fts-repo (rustup honors
+          # rust-toolchain.toml + nextest/capn/tracey + blitz/GPU build deps).
+          # NOT inputsFrom the devenv default shell — that doesn't put cargo
+          # on PATH under `nix develop .#ci` (exec: cargo: not found).
+          devShells.ci = fts-repo.lib.mkDevShell {
+            inherit system;
+            extraPackages = pkgs: fts-repo.lib.ftsUiBuildInputs pkgs;
           };
         };
     };

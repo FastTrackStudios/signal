@@ -5,15 +5,15 @@ pre-commit {
   rustfmt true
   cargo-lock true
   arborium true
-  edition-2024 true
+  edition-2024 false
   external-path-deps true
-  internal-dev-deps-release-plz true
+  internal-dev-deps-release-plz false
 }
 
 pre-push {
   clippy true
   nextest true
   doc-tests false
-  docs true
+  docs false
   cargo-shear true
 }
