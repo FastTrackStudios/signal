@@ -268,19 +268,13 @@
           # versions every FTS repo uses). Reuses the default devenv shell's
           # environment via inputsFrom. CI runs:
           #   nix develop .#ci --impure --command cargo xtask ci
-          devShells.ci = pkgs.mkShell {
-            inputsFrom = [ config.devenv.shells.default ];
-            buildInputs = [
-              pkgs.cargo-nextest
-              pkgs.cargo-shear
-              pkgs.git-cliff
-              pkgs.just
-              fts-repo.packages.${system}.capn
-              fts-repo.packages.${system}.tracey
-            ]
-            # session pulls daw (reaper) + fts-ui, which compile blitz
-            # transitively — bring in the shared blitz/GPU build inputs.
-            ++ fts-repo.lib.ftsUiBuildInputs pkgs;
+          # Self-contained CI shell from fts-repo (rustup honors
+          # rust-toolchain.toml + nextest/capn/tracey + blitz/GPU build deps).
+          # NOT inputsFrom the devenv default shell — that doesn't put cargo
+          # on PATH under `nix develop .#ci` (exec: cargo: not found).
+          devShells.ci = fts-repo.lib.mkDevShell {
+            inherit system;
+            extraPackages = pkgs: fts-repo.lib.ftsUiBuildInputs pkgs;
           };
         };
     };
