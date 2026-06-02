@@ -102,7 +102,7 @@
           ++ lib.optionals pkgs.stdenv.isLinux (with pkgs; [
             alsa-lib alsa-lib.dev
             avahi avahi.dev
-            glib gtk3 gdk-pixbuf pango cairo atk
+            glib gtk3 gdk-pixbuf pango cairo atk harfbuzz
             libsoup_3 webkitgtk_4_1 xdotool
             libx11 libxcursor libxrandr libxi libxcb
             libxkbcommon wayland libGL vulkan-loader
