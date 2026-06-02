@@ -20,7 +20,7 @@
     fts-flake.url = "github:FastTrackStudios/fts-flake";
     # Shared FTS repo-hygiene hub: pinned capn/tracey + the `cargo xtask ci`
     # battery, so session runs the same CI gate as every other FTS repo.
-    fts-repo.url = "git+https://git.starcommand.live/FastTrackStudios/fts-repo";
+    fts-repo.url = "git+https://codeberg.org/FastTrackStudios/fts-repo";
     fts-repo.inputs.nixpkgs.follows = "nixpkgs";
   };
 

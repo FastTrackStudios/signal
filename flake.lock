@@ -518,11 +518,11 @@
         "rev": "532f2ca9898b148c388e61d1013e83c2faba3ff6",
         "revCount": 5,
         "type": "git",
-        "url": "https://git.starcommand.live/FastTrackStudios/fts-repo"
+        "url": "https://codeberg.org/FastTrackStudios/fts-repo"
       },
       "original": {
         "type": "git",
-        "url": "https://git.starcommand.live/FastTrackStudios/fts-repo"
+        "url": "https://codeberg.org/FastTrackStudios/fts-repo"
       }
     },
     "ghostty": {
