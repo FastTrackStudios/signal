@@ -8,7 +8,7 @@
 
 use std::time::Duration;
 
-use reaper_test::reaper_test;
+use daw::test::reaper_test;
 
 /// Verify that signal-extension connected and wrote its health beacon.
 ///
@@ -16,7 +16,7 @@ use reaper_test::reaper_test;
 /// `FTS_SIGNAL_EXT/pid = "<pid>"` on successful SHM connect.
 /// We poll for up to 10 seconds to give it time to start.
 #[reaper_test]
-async fn signal_extension_health(ctx: &reaper_test::ReaperTestContext) -> eyre::Result<()> {
+async fn signal_extension_health(ctx: &daw::test::ReaperTestContext) -> eyre::Result<()> {
     let ext = ctx.daw.ext_state();
 
     // Poll — the extension may still be connecting

@@ -11,7 +11,7 @@
 
 use std::time::Duration;
 
-use reaper_test::reaper_test;
+use daw::test::reaper_test;
 use signal::{BlockType, ModulePresetId, ModuleType, PresetId, seed_id};
 use signal_proto::plugin_block::TrackRole;
 
@@ -21,7 +21,7 @@ async fn settle() {
 }
 
 /// Ensure REAPER's audio engine is running (required for CLAP param changes).
-async fn ensure_audio(ctx: &reaper_test::ReaperTestContext) {
+async fn ensure_audio(ctx: &daw::test::ReaperTestContext) {
     if !ctx.daw.audio_engine().is_running().await.unwrap_or(false) {
         let _ = ctx.daw.audio_engine().init().await;
         tokio::time::sleep(Duration::from_millis(500)).await;
@@ -152,7 +152,7 @@ async fn signal_load_two_modules_to_track(ctx: &ReaperTestContext) -> eyre::Resu
 
     // Verify: first container is 3-Band with 3 children
     match &tree.nodes[0].kind {
-        daw::FxNodeKind::Container { name, children, .. } => {
+        daw::service::FxNodeKind::Container { name, children, .. } => {
             assert!(
                 name.contains("3-Band"),
                 "container 1 name should contain '3-Band', got '{name}'"
@@ -164,7 +164,7 @@ async fn signal_load_two_modules_to_track(ctx: &ReaperTestContext) -> eyre::Resu
 
     // Verify: second container is 4-Band Full with 4 children
     match &tree.nodes[1].kind {
-        daw::FxNodeKind::Container { name, children, .. } => {
+        daw::service::FxNodeKind::Container { name, children, .. } => {
             assert!(
                 name.contains("4-Band"),
                 "container 2 name should contain '4-Band', got '{name}'"
@@ -255,7 +255,7 @@ async fn signal_load_layer_to_track(ctx: &ReaperTestContext) -> eyre::Result<()>
 
     // Node 0: Module container [M] with 3 children (3-Band)
     match &tree.nodes[0].kind {
-        daw::FxNodeKind::Container { name, children, .. } => {
+        daw::service::FxNodeKind::Container { name, children, .. } => {
             assert!(
                 name.contains("[M]"),
                 "module container should have [M] prefix, got '{name}'"
@@ -271,7 +271,7 @@ async fn signal_load_layer_to_track(ctx: &ReaperTestContext) -> eyre::Result<()>
 
     // Node 1: Module container [M] with 4 children (4-Band)
     match &tree.nodes[1].kind {
-        daw::FxNodeKind::Container { name, children, .. } => {
+        daw::service::FxNodeKind::Container { name, children, .. } => {
             assert!(
                 name.contains("[M]"),
                 "module container should have [M] prefix, got '{name}'"
@@ -287,7 +287,7 @@ async fn signal_load_layer_to_track(ctx: &ReaperTestContext) -> eyre::Result<()>
 
     // Node 2: Standalone block [B] (leaf FX plugin)
     match &tree.nodes[2].kind {
-        daw::FxNodeKind::Plugin(fx) => {
+        daw::service::FxNodeKind::Plugin(fx) => {
             assert!(
                 fx.name.contains("[B]"),
                 "standalone block should have [B] prefix, got '{}'",

@@ -13,7 +13,7 @@
 use std::time::Duration;
 
 use daw::service::MidiNoteCreate;
-use reaper_test::reaper_test;
+use daw::test::reaper_test;
 
 /// Small sleep to let REAPER process changes.
 async fn settle() {
@@ -35,17 +35,17 @@ async fn wait_for_switch() {
 // ---------------------------------------------------------------------------
 
 struct TestSetlist {
-    rig_folder: daw::TrackHandle,
-    belief_folder: daw::TrackHandle,
+    rig_folder: daw::rpc::TrackHandle,
+    belief_folder: daw::rpc::TrackHandle,
     /// Section tracks: Clean, Ambient, Rhythm (direct children of song folder)
-    belief_sections: Vec<daw::TrackHandle>,
+    belief_sections: Vec<daw::rpc::TrackHandle>,
     #[allow(dead_code)]
-    vienna_folder: daw::TrackHandle,
+    vienna_folder: daw::rpc::TrackHandle,
     /// Section tracks: Clean, Drive
-    vienna_sections: Vec<daw::TrackHandle>,
+    vienna_sections: Vec<daw::rpc::TrackHandle>,
 }
 
-async fn build_test_setlist(tracks: &daw::Tracks) -> eyre::Result<TestSetlist> {
+async fn build_test_setlist(tracks: &daw::rpc::Tracks) -> eyre::Result<TestSetlist> {
     // ── Rig folder ──────────────────────────────────────────────────
     let rig_folder = tracks.add("Guitar Rig", None).await?;
     rig_folder.set_folder_depth(1).await?;

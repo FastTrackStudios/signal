@@ -45,6 +45,8 @@
 //! **Depended on by**: `signal-ui`, application crates (`fts-control-desktop`)
 
 #[cfg(feature = "daw")]
+mod daw_compat;
+#[cfg(feature = "daw")]
 pub mod reaper_applier;
 
 #[cfg(feature = "daw")]

@@ -14,7 +14,7 @@
 
 use std::time::{Duration, Instant};
 
-use reaper_test::reaper_test;
+use daw::test::reaper_test;
 
 const REACOMP: &str = "VST: ReaComp (Cockos)";
 const REAEQ: &str = "VST: ReaEQ (Cockos)";
@@ -73,7 +73,7 @@ fn build_mapping_json(
 }
 
 async fn poll_param_value(
-    fx: &daw::FxHandle,
+    fx: &daw::rpc::FxHandle,
     param_idx: u32,
     expected: f64,
     tolerance: f64,
@@ -113,9 +113,7 @@ fn find_param(params: &[daw::service::FxParameter], needle: &str) -> eyre::Resul
 // ---------------------------------------------------------------------------
 
 #[reaper_test(isolated)]
-async fn multi_fx_macro_drives_comp_and_eq(
-    ctx: &reaper_test::ReaperTestContext,
-) -> eyre::Result<()> {
+async fn multi_fx_macro_drives_comp_and_eq(ctx: &daw::test::ReaperTestContext) -> eyre::Result<()> {
     let project = ctx.project().clone();
 
     ctx.log("=== MULTI-FX MACRO TEST ===");

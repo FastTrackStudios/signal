@@ -19,8 +19,9 @@ use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
 
+use crate::daw_compat::TrackHandleCompat;
+use daw::rpc::{Project, TrackHandle};
 use daw::service::TrackRef;
-use daw::{Project, TrackHandle};
 use signal_live::engine::{DawPatchApplier, DawStateChunk, PatchApplyError, graph_state_chunks};
 use signal_proto::plugin_block::FxRole;
 use signal_proto::resolve::ResolvedGraph;

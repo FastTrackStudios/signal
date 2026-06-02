@@ -21,7 +21,7 @@
 
 use std::time::{Duration, Instant};
 
-use reaper_test::reaper_test;
+use daw::test::reaper_test;
 
 /// ReaComp plugin name in REAPER's FX browser.
 const REACOMP: &str = "VST: ReaComp (Cockos)";
@@ -70,7 +70,7 @@ fn build_mapping_json(threshold_param_idx: u32, ratio_param_idx: u32) -> String 
 /// Poll an FX parameter until it reaches the expected value (within tolerance), or timeout.
 /// Returns the actual value when matched.
 async fn poll_param_value(
-    fx: &daw::FxHandle,
+    fx: &daw::rpc::FxHandle,
     param_idx: u32,
     expected: f64,
     tolerance: f64,
@@ -102,7 +102,7 @@ async fn poll_param_value(
 
 #[reaper_test(isolated)]
 async fn compression_macro_drives_threshold_and_ratio(
-    ctx: &reaper_test::ReaperTestContext,
+    ctx: &daw::test::ReaperTestContext,
 ) -> eyre::Result<()> {
     let project = ctx.project().clone();
 

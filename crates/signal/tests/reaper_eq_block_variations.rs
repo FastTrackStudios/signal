@@ -11,7 +11,7 @@
 
 use std::time::Duration;
 
-use reaper_test::reaper_test;
+use daw::test::reaper_test;
 use signal::reaper_applier::ReaperPatchApplier;
 use signal::resolve::{
     LayerSource, ResolveTarget, ResolvedBlock, ResolvedEngine, ResolvedGraph, ResolvedLayer,
@@ -28,7 +28,7 @@ async fn settle() {
 }
 
 /// Ensure REAPER's audio engine is running (required for CLAP param changes).
-async fn ensure_audio(ctx: &reaper_test::ReaperTestContext) {
+async fn ensure_audio(ctx: &daw::test::ReaperTestContext) {
     if !ctx.daw.audio_engine().is_running().await.unwrap_or(false) {
         let _ = ctx.daw.audio_engine().init().await;
         tokio::time::sleep(Duration::from_millis(500)).await;

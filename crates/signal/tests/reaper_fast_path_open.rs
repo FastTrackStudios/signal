@@ -20,7 +20,7 @@ use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
 use daw::file::RppSerialize;
-use reaper_test::reaper_test;
+use daw::test::reaper_test;
 use signal::ops::rig_importer::{ImportBlock, ImportChain, ImportModule};
 use signal_proto::ModuleBlockSource;
 use signal_proto::plugin_block::{FxRole, TrackRole};
@@ -31,7 +31,7 @@ async fn settle() {
 }
 
 /// Ensure REAPER's audio engine is running.
-async fn ensure_audio(ctx: &reaper_test::ReaperTestContext) {
+async fn ensure_audio(ctx: &daw::test::ReaperTestContext) {
     if !ctx.daw.audio_engine().is_running().await.unwrap_or(false) {
         let _ = ctx.daw.audio_engine().init().await;
         tokio::time::sleep(Duration::from_millis(500)).await;
@@ -69,7 +69,7 @@ fn flatten_to_raw_blocks(nodes: &[daw::file::types::FxChainNode]) -> Vec<&str> {
 /// Walk the FX tree and randomize all continuous plugin parameters.
 ///
 /// Uses a seeded LCG for deterministic randomization.
-async fn randomize_all_fx(track: &daw::TrackHandle, seed: u64) -> eyre::Result<usize> {
+async fn randomize_all_fx(track: &daw::rpc::TrackHandle, seed: u64) -> eyre::Result<usize> {
     let tree = track.fx_chain().tree().await?;
     let mut count = 0usize;
     let mut state = seed;
@@ -80,7 +80,7 @@ async fn randomize_all_fx(track: &daw::TrackHandle, seed: u64) -> eyre::Result<u
         ((state >> 33) as f64) / (u32::MAX as f64)
     };
     for (_depth, node) in tree.iter_depth_first() {
-        if let daw::FxNodeKind::Plugin(fx) = &node.kind {
+        if let daw::service::FxNodeKind::Plugin(fx) = &node.kind {
             if let Some(handle) = track.fx_chain().by_index(fx.index).await? {
                 let params = handle.parameters().await?;
                 eprintln!(
@@ -121,7 +121,7 @@ async fn randomize_all_fx(track: &daw::TrackHandle, seed: u64) -> eyre::Result<u
 /// Capture the current FX state from the track chunk and save each plugin's
 /// raw_block as a named snapshot on its corresponding block preset.
 async fn save_variation(
-    track: &daw::TrackHandle,
+    track: &daw::rpc::TrackHandle,
     block_preset_ids: &[(signal_proto::PresetId, signal_proto::BlockType)],
     signal: &signal::SignalController,
     name: &str,
@@ -172,7 +172,7 @@ async fn save_variation(
 /// Fetch each snapshot's state_data and rebuild the track chunk with those
 /// raw_blocks, replacing the current FX state via a single `set_chunk` call.
 async fn apply_variation(
-    track: &daw::TrackHandle,
+    track: &daw::rpc::TrackHandle,
     variation: &[(
         signal_proto::SnapshotId,
         signal_proto::PresetId,
@@ -242,11 +242,11 @@ async fn apply_variation(
 /// Creates [R] rig → [E] engine → [L] layer tracks and injects the FXCHAIN
 /// built from block state data into the layer track.
 async fn fast_path_open(
-    project: &daw::Project,
+    project: &daw::rpc::Project,
     rig_name: &str,
     layer_name: &str,
     module_specs: &[(&str, &[Option<Vec<u8>>])], // (container_name, block_state_data[])
-) -> eyre::Result<daw::TrackHandle> {
+) -> eyre::Result<daw::rpc::TrackHandle> {
     let rig_name_display = TrackRole::Rig {
         name: rig_name.to_string(),
     }

@@ -10,8 +10,8 @@
 
 use std::time::Duration;
 
+use daw::test::reaper_test;
 use futures::future::join_all;
-use reaper_test::reaper_test;
 use signal::macro_bank::{MacroBank, MacroKnob};
 use signal::{Block, BlockParameter, MacroBinding};
 use signal_live::macro_setup;
@@ -71,7 +71,7 @@ fn build_reacomp_block_with_macros() -> Block {
 
 #[reaper_test(isolated)]
 async fn macro_setup_direct_reacomp_parameter_binding(
-    ctx: &reaper_test::ReaperTestContext,
+    ctx: &daw::test::ReaperTestContext,
 ) -> eyre::Result<()> {
     let project = ctx.project().clone();
 
@@ -301,7 +301,7 @@ async fn macro_setup_direct_reacomp_parameter_binding(
 // ---------------------------------------------------------------------------
 
 #[reaper_test(isolated)]
-async fn macro_setup_direct_multi_plugin(ctx: &reaper_test::ReaperTestContext) -> eyre::Result<()> {
+async fn macro_setup_direct_multi_plugin(ctx: &daw::test::ReaperTestContext) -> eyre::Result<()> {
     let project = ctx.project().clone();
 
     // Create track with two ReaComp instances
@@ -385,7 +385,7 @@ async fn macro_setup_direct_multi_plugin(ctx: &reaper_test::ReaperTestContext) -
 // ---------------------------------------------------------------------------
 
 #[reaper_test(isolated)]
-async fn macro_lfo_modulation_demo(ctx: &reaper_test::ReaperTestContext) -> eyre::Result<()> {
+async fn macro_lfo_modulation_demo(ctx: &daw::test::ReaperTestContext) -> eyre::Result<()> {
     let project = ctx.project().clone();
 
     // 1. Create track and add ReaComp
@@ -489,7 +489,7 @@ async fn macro_lfo_modulation_demo(ctx: &reaper_test::ReaperTestContext) -> eyre
 // ---------------------------------------------------------------------------
 
 #[reaper_test(isolated)]
-async fn enumerate_reaper_fx(ctx: &reaper_test::ReaperTestContext) -> eyre::Result<()> {
+async fn enumerate_reaper_fx(ctx: &daw::test::ReaperTestContext) -> eyre::Result<()> {
     let project = ctx.project().clone();
     let track = project.tracks().add("FX Enumeration", None).await?;
     settle().await;
@@ -538,7 +538,7 @@ async fn enumerate_reaper_fx(ctx: &reaper_test::ReaperTestContext) -> eyre::Resu
 // ---------------------------------------------------------------------------
 
 #[reaper_test(isolated)]
-async fn macro_lfo_multi_plugin_demo(ctx: &reaper_test::ReaperTestContext) -> eyre::Result<()> {
+async fn macro_lfo_multi_plugin_demo(ctx: &daw::test::ReaperTestContext) -> eyre::Result<()> {
     let project = ctx.project().clone();
 
     ctx.log("=== MULTI-PLUGIN LFO MODULATION DEMO ===");

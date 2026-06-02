@@ -8,7 +8,7 @@
 
 use std::time::Duration;
 
-use reaper_test::reaper_test;
+use daw::test::reaper_test;
 use signal_live::daw_rig_builder::{instantiate_rack, instantiate_rig};
 use signal_proto::rig_template::{RackTemplate, RigTemplate};
 
@@ -18,7 +18,7 @@ async fn settle() {
 }
 
 /// Ensure REAPER's audio engine is running.
-async fn ensure_audio(ctx: &reaper_test::ReaperTestContext) {
+async fn ensure_audio(ctx: &daw::test::ReaperTestContext) {
     if !ctx.daw.audio_engine().is_running().await.unwrap_or(false) {
         let _ = ctx.daw.audio_engine().init().await;
         tokio::time::sleep(Duration::from_millis(500)).await;

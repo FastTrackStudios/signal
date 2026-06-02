@@ -8,7 +8,7 @@
 
 use std::time::Duration;
 
-use reaper_test::reaper_test;
+use daw::test::reaper_test;
 
 const REACOMP: &str = "VST: ReaComp (Cockos)";
 
@@ -23,7 +23,7 @@ const SIGNAL_CONTROLLER_NAMES: &[&str] = &[
     "FTS Signal Controller",
 ];
 
-async fn add_signal_controller(track: &daw::TrackHandle) -> eyre::Result<daw::FxHandle> {
+async fn add_signal_controller(track: &daw::rpc::TrackHandle) -> eyre::Result<daw::rpc::FxHandle> {
     for name in SIGNAL_CONTROLLER_NAMES {
         if let Ok(fx) = track.fx_chain().add(name).await {
             return Ok(fx);
@@ -33,7 +33,7 @@ async fn add_signal_controller(track: &daw::TrackHandle) -> eyre::Result<daw::Fx
 }
 
 /// Wait for signal-extension to be ready (it writes "ready" to ExtState on startup).
-async fn wait_for_signal_extension(ctx: &reaper_test::ReaperTestContext) -> eyre::Result<()> {
+async fn wait_for_signal_extension(ctx: &daw::test::ReaperTestContext) -> eyre::Result<()> {
     let ext = ctx.daw.ext_state();
     let start = std::time::Instant::now();
     loop {
@@ -50,7 +50,7 @@ async fn wait_for_signal_extension(ctx: &reaper_test::ReaperTestContext) -> eyre
 }
 
 /// Run a signal action by command name, retrying until the action is registered.
-async fn run_signal_action(ctx: &reaper_test::ReaperTestContext, action: &str) -> eyre::Result<()> {
+async fn run_signal_action(ctx: &daw::test::ReaperTestContext, action: &str) -> eyre::Result<()> {
     wait_for_signal_extension(ctx).await?;
 
     let project = ctx.project();
@@ -72,7 +72,7 @@ async fn run_signal_action(ctx: &reaper_test::ReaperTestContext, action: &str) -
 
 /// Poll an FX parameter until it reaches the expected value.
 async fn poll_param(
-    fx: &daw::FxHandle,
+    fx: &daw::rpc::FxHandle,
     param_idx: u32,
     expected: f64,
     tolerance: f64,
@@ -102,7 +102,7 @@ async fn poll_param(
 // ---------------------------------------------------------------------------
 
 #[reaper_test(isolated)]
-async fn load_signal_controller_on_track(ctx: &reaper_test::ReaperTestContext) -> eyre::Result<()> {
+async fn load_signal_controller_on_track(ctx: &daw::test::ReaperTestContext) -> eyre::Result<()> {
     let project = ctx.project().clone();
     let track = project.tracks().add("Controller Load Test", None).await?;
 
@@ -128,7 +128,7 @@ async fn load_signal_controller_on_track(ctx: &reaper_test::ReaperTestContext) -
 
 #[reaper_test(isolated)]
 async fn last_touched_fx_detects_reacomp_parameter(
-    ctx: &reaper_test::ReaperTestContext,
+    ctx: &daw::test::ReaperTestContext,
 ) -> eyre::Result<()> {
     let project = ctx.project().clone();
     let track = project.tracks().add("Last Touched Test", None).await?;
@@ -161,7 +161,7 @@ async fn last_touched_fx_detects_reacomp_parameter(
 // ---------------------------------------------------------------------------
 
 #[reaper_test(isolated)]
-async fn reacomp_param_set_and_readback(ctx: &reaper_test::ReaperTestContext) -> eyre::Result<()> {
+async fn reacomp_param_set_and_readback(ctx: &daw::test::ReaperTestContext) -> eyre::Result<()> {
     let project = ctx.project().clone();
     let track = project.tracks().add("Param Readback", None).await?;
     let fx = track.fx_chain().add(REACOMP).await?;
@@ -197,7 +197,7 @@ async fn reacomp_param_set_and_readback(ctx: &reaper_test::ReaperTestContext) ->
 
 #[reaper_test(isolated)]
 async fn macro_drives_reacomp_via_fx_params(
-    ctx: &reaper_test::ReaperTestContext,
+    ctx: &daw::test::ReaperTestContext,
 ) -> eyre::Result<()> {
     let project = ctx.project().clone();
 
@@ -312,7 +312,7 @@ async fn macro_drives_reacomp_via_fx_params(
 // ---------------------------------------------------------------------------
 
 #[reaper_test(isolated)]
-async fn four_point_stage_macro(ctx: &reaper_test::ReaperTestContext) -> eyre::Result<()> {
+async fn four_point_stage_macro(ctx: &daw::test::ReaperTestContext) -> eyre::Result<()> {
     let project = ctx.project().clone();
 
     ctx.log("=== 4-POINT STAGE MACRO ===");
@@ -435,7 +435,7 @@ async fn four_point_stage_macro(ctx: &reaper_test::ReaperTestContext) -> eyre::R
 
 #[reaper_test(isolated)]
 async fn z_demo_setlist_action_creates_tracks(
-    ctx: &reaper_test::ReaperTestContext,
+    ctx: &daw::test::ReaperTestContext,
 ) -> eyre::Result<()> {
     ctx.log("=== DEMO SETLIST VIA ACTION ===");
 
@@ -546,7 +546,10 @@ async fn z_demo_setlist_action_creates_tracks(
     ));
 
     // Helper: get names of unmuted sends on Guitar Input
-    async fn get_unmuted_sends(project: &daw::Project, gi_guid: &str) -> eyre::Result<Vec<String>> {
+    async fn get_unmuted_sends(
+        project: &daw::rpc::Project,
+        gi_guid: &str,
+    ) -> eyre::Result<Vec<String>> {
         let gi = project
             .tracks()
             .by_guid(gi_guid)
@@ -630,7 +633,7 @@ async fn z_demo_setlist_action_creates_tracks(
 // ---------------------------------------------------------------------------
 
 #[reaper_test(isolated)]
-async fn macro_set_min_max_via_actions(ctx: &reaper_test::ReaperTestContext) -> eyre::Result<()> {
+async fn macro_set_min_max_via_actions(ctx: &daw::test::ReaperTestContext) -> eyre::Result<()> {
     let project = ctx.project().clone();
 
     ctx.log("=== MACRO SET MIN/MAX VIA ACTIONS ===");

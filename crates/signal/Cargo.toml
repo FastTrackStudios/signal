@@ -23,11 +23,10 @@ moire.workspace = true
 utils.workspace = true
 
 [dev-dependencies]
-daw = { workspace = true, features = ["file"] }
+daw = { workspace = true, features = ["file", "test-harness"] }
 signal-extension = { path = "../signal-extension" }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 eyre.workspace = true
-reaper-test.workspace = true
 uuid.workspace = true
 futures.workspace = true
 base64 = "0.22"

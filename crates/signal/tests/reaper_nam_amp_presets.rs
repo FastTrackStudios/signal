@@ -10,14 +10,14 @@
 
 use std::time::Instant;
 
-use reaper_test::reaper_test;
+use daw::test::reaper_test;
 use signal::{BlockType, ModuleType, Preset};
 use signal_live::daw_rig_builder::instantiate_rig;
 use signal_proto::rig_template::{EngineTemplate, LayerTemplate, RigTemplate};
 use signal_proto::{ModulePresetId, PresetId, seed_id};
 
 /// Ensure REAPER's audio engine is running.
-async fn ensure_audio(ctx: &reaper_test::ReaperTestContext) {
+async fn ensure_audio(ctx: &daw::test::ReaperTestContext) {
     if !ctx.daw.audio_engine().is_running().await.unwrap_or(false) {
         let _ = ctx.daw.audio_engine().init().await;
     }
