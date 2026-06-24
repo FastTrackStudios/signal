@@ -40,8 +40,12 @@ trait you can replace.
 8. **Velocity layers** + **dynamics crossfade** (e.g. CC1 morphs between sustain
    layers continuously — CSS, orchestral).
 9. **Round-robin** — cycle, random, with reset-on-silence; per-group RR state.
-10. **True legato** — transition samples + portamento, up/down direction, velocity-
-    dependent pre-delay, monophonic legato zones.
+10. **True legato** — recorded note→note transition samples, monophonic legato
+    zones, up/down direction, **with every timing parameter a curve over velocity
+    (and interval), not a constant**: different velocities select different
+    transition recordings *and* different portamento / pre-delay / crossfade times
+    (CSS: soft+slow = long expressive delay, hard+fast = tight short delay; bigger
+    leaps glide longer).
 11. **Release triggers** — release samples scaled by held duration (piano, plucks).
 12. **Sustain pedal (CC64)** + half-pedal, pedal-noise samples, **string/sympathetic
     resonance** (piano).
@@ -298,7 +302,7 @@ impl Performance<'_> {
 // These ship in the box; the model wires them from declarative config.
 KeyswitchRouter::from(&model.keyswitches)   // C-1→Sustain, C#-1→Staccato, …
 CcArticulation::new(Cc(58), ranges)         // CC58 picks articulation
-TrueLegato::new(Legato { pre_delay_by_vel, portamento_ms, .. })
+TrueLegato::new(legato_cfg)                 // reads the per-velocity Legato (§ below)
 RoundRobinReset::on_silence(Seconds(0.5))
 SustainPedal::new(Cc(64))                   // hold + half-pedal + pedal-noise group
 VelocityCurve::cubic(0.7)
@@ -311,6 +315,62 @@ let script = ScriptPipeline::new()
     .then(SustainPedal::new(Cc(64)))
     .then(MyCustomArp { /* impl PerformanceScript */ });
 ```
+
+### Legato, in depth — the marquee behavior (velocity-/interval-parameterized)
+
+CSS-style legato is the proof the model has enough depth. A fast move and a slow
+move use **different transition recordings AND different timings**; a wide leap
+glides longer than a step. None of that is a constant — every timing is a *curve*.
+The data captures it; the built-in `TrueLegato` script reads it; you never write
+legato code for a normal library.
+
+```rust
+/// Everything about an articulation's legato. Note every timing is a `VelCurve`,
+/// not an `f32` — that's what makes per-velocity portamento/transition timing
+/// possible (your CSS requirement).
+pub struct Legato {
+    /// Recorded note→note transition samples, keyed by direction + interval +
+    /// velocity-layer + mic. `None` = synthetic pitch-glide only (no recorded
+    /// bow/breath transitions). Different velocities pick different recordings.
+    pub transitions: Option<Box<dyn TransitionLayers>>,
+    /// Delay before the *target* note speaks — CSS "delayed legato". A curve:
+    /// soft/slow → longer delay (expressive), hard/fast → short (responsive).
+    pub pre_delay: VelCurve<Seconds>,
+    /// Pitch-glide time, by velocity, optionally scaled by leap size.
+    pub portamento: VelCurve<Seconds>,
+    /// Crossfade from the previous note's tail into the transition/target.
+    pub crossfade: VelCurve<Seconds>,
+    pub mode: LegatoMode,                 // Mono | PolyLegato
+}
+
+/// Pick the transition sample for one legato move — the role `ZoneLayers` plays
+/// for sustains, but over the *move* (from→to) rather than the held note. The
+/// velocity layer here is independent of the sustain dynamic layer.
+pub trait TransitionLayers: Send + Sync {
+    fn sample(&self, from: Note, to: Note, vel: Velocity, dir: Direction, mic: MicId)
+        -> Option<&SampleSlice>;
+    fn velocity_layers(&self) -> &[VelLayer];   // distinct transition recordings
+}
+
+/// A velocity → value curve, O(1) to sample on the audio thread. THIS is the type
+/// that lets "different velocities have different portamento / transition times."
+/// Build it from breakpoints, a closure, or a constant; optionally scale by the
+/// legato interval (leap size).
+pub struct VelCurve<T> { /* breakpoints + interpolation + optional interval scale */ }
+impl<T: Lerp + Copy> VelCurve<T> {
+    pub fn constant(v: T) -> Self;
+    pub fn breakpoints(points: impl IntoIterator<Item = (Velocity, T)>) -> Self;
+    pub fn from_fn(f: impl Fn(Velocity) -> T) -> Self;
+    pub fn scaled_by_interval(self, f: impl Fn(Interval) -> f32) -> Self;
+    pub fn at(&self, vel: Velocity, interval: Interval) -> T;     // realtime sample
+}
+```
+
+`TrueLegato` (built-in `PerformanceScript`): on a legato move it picks the
+transition recording via `transitions.sample(from,to,vel,dir,mic)`, waits
+`pre_delay.at(vel, interval)`, glides pitch over `portamento.at(vel, interval)`,
+and crossfades over `crossfade.at(vel, …)`. All three timings vary per note — no
+custom code.
 
 ---
 
@@ -452,9 +512,17 @@ let css = InstrumentModel::scan("…/CSS/Violins")
     .dynamics_on(Axis::Cc(Cc(1)))                       // p↔mf↔f morph
     .articulation("Sustain",  ks(C0))
     .articulation("Spiccato", ks(Cs0).round_robin(Cycle))
-    .articulation("Legato",   ks(D0).legato(Legato::true_(PreDelay::by_velocity, Portamento::ms(60))))
+    .articulation("Legato",   ks(D0).legato(Legato {
+        transitions: Some(css_bow_transitions),                     // recorded, per vel layer
+        pre_delay:  VelCurve::breakpoints([(20, ms(120)), (110, ms(20))]),  // delayed-legato
+        portamento: VelCurve::breakpoints([(20, ms(90)),  (100, ms(25))])   // slow glides, fast snaps
+                       .scaled_by_interval(|i| 1.0 + i.semitones() as f32 * 0.012),  // leaps glide longer
+        crossfade:  VelCurve::constant(ms(40)),
+        mode: LegatoMode::Mono,
+    }))
     .build()?;
-// CSS's famous delayed-legato = `PreDelay::by_velocity` + the TrueLegato script.
+// CSS's whole expressive legato — per-velocity transition recordings + per-velocity,
+// interval-scaled portamento/pre-delay — is data; `TrueLegato` reads it, no code.
 ```
 
 ### Piano (Keyscape-style) — many vel layers, release, pedal, resonance
