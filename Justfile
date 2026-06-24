@@ -68,8 +68,13 @@ drums: (rig "Drum Rig")
 # --release is REQUIRED for real-time: in debug the vendored NAM C++ core is
 # unoptimized (~10-50x slower), so model prewarm at startup crawls (looks hung)
 # and processing xruns. (pw-jack comes from the flake dev shell — `direnv reload`.)
-rig name:
-    pw-jack cargo run --release -p signal-sampler --features jack --example guitar_tui -- --rig "{{name}}"
+#
+# PIPEWIRE_LATENCY requests this quantum for the rig's nodes ON DEMAND: the
+# interface drops to it only while the rig runs, then idles back to the device
+# default — low latency for playing without forcing everyday audio to run hot.
+# Tune per-launch, e.g.: just rig "Guitar Rig" 256/48000  (or 64/48000 lower).
+rig name latency="128/48000":
+    PIPEWIRE_LATENCY={{latency}} pw-jack cargo run --release -p signal-sampler --features jack --example guitar_tui -- --rig "{{name}}"
 
 # List audio devices + channel counts (find your interface name)
 rig-devices:
