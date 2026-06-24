@@ -64,10 +64,12 @@ keys: (rig "Keys Rig")
 # Open the default drums rig (needs `just rig-setup "Drum Rig" ...` first)
 drums: (rig "Drum Rig")
 
-# Open a saved rig by name (TUI with input/output meters + patch switching)
-# (pw-jack comes from the flake dev shell — re-enter it / `direnv reload` if missing)
+# Open a saved rig by name (TUI with input/output meters + patch switching).
+# --release is REQUIRED for real-time: in debug the vendored NAM C++ core is
+# unoptimized (~10-50x slower), so model prewarm at startup crawls (looks hung)
+# and processing xruns. (pw-jack comes from the flake dev shell — `direnv reload`.)
 rig name:
-    pw-jack cargo run -p signal-sampler --features jack --example guitar_tui -- --rig "{{name}}"
+    pw-jack cargo run --release -p signal-sampler --features jack --example guitar_tui -- --rig "{{name}}"
 
 # List audio devices + channel counts (find your interface name)
 rig-devices:
