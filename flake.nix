@@ -56,6 +56,9 @@
           ])
           ++ lib.optionals pkgs.stdenv.isLinux (with pkgs; [
             alsa-lib alsa-lib.dev
+            # JACK headers/lib for cpal's `jack` feature (signal-sampler).
+            # At runtime, run under `pw-jack` to route through PipeWire.
+            libjack2
             glib gtk3 gdk-pixbuf pango cairo atk
             libsoup_3 webkitgtk_4_1 xdotool
             libx11 libxcursor libxrandr libxi libxcb
@@ -204,6 +207,12 @@
               cargo-nextest
               bacon
               flac
+            ]
+            ++ lib.optionals pkgs.stdenv.isLinux [
+              # pw-jack — run the live rigs through PipeWire's JACK shim.
+              pkgs.pipewire.jack
+              # jack_iodelay / jack_lsp — measure real round-trip latency.
+              pkgs.jack-example-tools
             ]
             ++ buildInputs
             ++ nativeBuildInputs;
