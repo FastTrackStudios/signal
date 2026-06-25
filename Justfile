@@ -74,7 +74,7 @@ drums: (rig "Drum Rig")
 # default — low latency for playing without forcing everyday audio to run hot.
 # Tune per-launch, e.g.: just rig "Guitar Rig" 256/48000  (or 64/48000 lower).
 rig name latency="128/48000":
-    PIPEWIRE_LATENCY={{latency}} pw-jack cargo run --release -p signal-sampler --features jack --example guitar_tui -- --rig "{{name}}"
+    PIPEWIRE_PROPS='{ application.name = FTS-Signal }' PIPEWIRE_LATENCY={{latency}} pw-jack cargo run --release -p signal-sampler --features jack --example guitar_tui -- --rig "{{name}}"
 
 # List audio devices + channel counts (find your interface name)
 rig-devices:
