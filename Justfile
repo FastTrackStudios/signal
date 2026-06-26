@@ -67,6 +67,15 @@ keys: (rig "Keys Rig")
 # Open the default drums rig (needs `just rig-setup "Drum Rig" ...` first)
 drums: (rig "Drum Rig")
 
+# Play Cinematic Studio Strings — 1st Violins from a MIDI keyboard (TUI).
+# Audio OUT on daw's engine; MIDI IN via daw-midi-io (all keyboards by default).
+# --release is REQUIRED for real-time (debug WAV decode + resampling xruns).
+# Args are positional: `just strings "/path/to/CSS"` overrides the install;
+# `just strings "" virtual` exposes a virtual MIDI port (connect to it in
+# qpwgraph). Switch articulation/mic live in the TUI (`[`/`]`, `,`/`.`).
+strings lib="" midi="all" artic="Leg" mic="Mix":
+    PIPEWIRE_PROPS='{ application.name = FTS-Signal }' cargo run --release -p signal-sampler --features pipewire --example strings_tui -- {{ if lib != "" { "--lib '" + lib + "'" } else { "" } }} --midi "{{midi}}" --artic "{{artic}}" --mic "{{mic}}"
+
 # Open a saved rig by name (TUI with input/output meters + patch switching).
 # --release is REQUIRED for real-time: in debug the vendored NAM C++ core is
 # unoptimized (~10-50x slower), so model prewarm at startup crawls (looks hung)
