@@ -48,12 +48,15 @@ release: tailwind
 
 # ── Live Rigs ──────────────────────────────────────────────────────────────
 # Open a live instrument rig: live input → FX chain (NAM amp / cab / plugins) →
-# output, routed through PipeWire via cpal's JACK backend (`pw-jack`). Patches
-# switch instantly. Each rig's interface / input channel / profile is remembered
-# in ~/.config/signal/rigs/<name>.styx. Set one up with `just rig-setup`.
+# output, routed through PipeWire via cpal's NATIVE PipeWire backend (no JACK
+# shim). daw picks the interface by name and targets it, so PipeWire maps its
+# capture channels to the rig in order — the configured input channel just works.
+# Patches switch instantly. Each rig's interface / input channel / profile is
+# remembered in ~/.config/signal/rigs/<name>.styx; pick them live with `s` in
+# the TUI, or seed one with `just rig-setup`.
 #
-# NOTE: needs `libjack2` on PKG_CONFIG_PATH — re-enter the nix dev shell
-# (`direnv reload`) after the flake change so `--features jack` builds.
+# NOTE: needs `libpipewire` on PKG_CONFIG_PATH — re-enter the nix dev shell
+# (`direnv reload`) after the flake change so `--features pipewire` builds.
 
 # Open the default guitar rig (Yamaha TF ch4 → NAM amps)
 guitar: (rig "Guitar Rig")
@@ -67,14 +70,14 @@ drums: (rig "Drum Rig")
 # Open a saved rig by name (TUI with input/output meters + patch switching).
 # --release is REQUIRED for real-time: in debug the vendored NAM C++ core is
 # unoptimized (~10-50x slower), so model prewarm at startup crawls (looks hung)
-# and processing xruns. (pw-jack comes from the flake dev shell — `direnv reload`.)
+# and processing xruns.
 #
-# PIPEWIRE_LATENCY requests this quantum for the rig's nodes ON DEMAND: the
-# interface drops to it only while the rig runs, then idles back to the device
-# default — low latency for playing without forcing everyday audio to run hot.
-# Tune per-launch, e.g.: just rig "Guitar Rig" 256/48000  (or 64/48000 lower).
-rig name latency="128/48000":
-    PIPEWIRE_PROPS='{ application.name = FTS-Signal }' PIPEWIRE_LATENCY={{latency}} pw-jack cargo run --release -p signal-sampler --features jack --example guitar_tui -- --rig "{{name}}"
+# PIPEWIRE_PROPS names the graph node FTS-Signal (so it's easy to spot in
+# qpwgraph). The rig requests its low-latency quantum natively from its buffer
+# size (set in the TUI with `[`/`]`), so no PIPEWIRE_LATENCY / pw-jack wrapper is
+# needed — daw drives the interface's quantum on demand while the rig runs.
+rig name:
+    PIPEWIRE_PROPS='{ application.name = FTS-Signal }' cargo run --release -p signal-sampler --features pipewire --example guitar_tui -- --rig "{{name}}"
 
 # List audio devices + channel counts (find your interface name)
 rig-devices:

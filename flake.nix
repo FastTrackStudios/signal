@@ -59,6 +59,10 @@
             # JACK headers/lib for cpal's `jack` feature (signal-sampler).
             # At runtime, run under `pw-jack` to route through PipeWire.
             libjack2
+            # libpipewire headers/lib for cpal's native `pipewire` feature —
+            # talks to PipeWire directly (no JACK shim). `.dev` carries the
+            # `libpipewire-0.3.pc` + headers that bindgen/pkg-config need.
+            pipewire pipewire.dev
             glib gtk3 gdk-pixbuf pango cairo atk
             libsoup_3 webkitgtk_4_1 xdotool
             libx11 libxcursor libxrandr libxi libxcb
