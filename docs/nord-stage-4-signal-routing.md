@@ -283,28 +283,48 @@ one block (p51/p52):
 - **Rotary** is a single global **Block**, always last; fed by per-layer `to_rotary`
   sends and the Organ routing; its Drive scales with the feeding layer's level. (p52)
 
-### Composition is a flexible tree (important)
+### Composition = a containment tree + a routing graph (two axes)
 
-The hierarchy `Block → Module → Layer → Engine → Preset` is the *vocabulary of
-levels*, **not** a rigid "each level only holds the one below it." Any container
-holds **any lower-level item plus leaf blocks**:
+Two orthogonal things were getting conflated. Separate them:
 
-- a **Module** holds Blocks *and* sub-Modules (e.g. the Delay module holds a Delay
-  block + a feedback-FX sub-module + a filter block);
-- a **Layer** holds Modules *and* standalone Blocks (its Synth voice modules + the
-  bare `Compressor` block + the FX modules);
-- an **Engine** holds Layers *and* Modules *and* Blocks (e.g. the Organ engine holds
-  its 2 Layers **plus** the one shared Organ-FX modules that sit above both layers);
-- a **Preset** holds Engines *and* the global Blocks (the single `Rotary`, any
-  global Delay/Comp/Reverb instances) that live above all engines.
+**Axis 1 — Containment (the folder tree).** A node is either a leaf **Block** or a
+**Module**: an *infinitely-nestable folder* that holds an ordered list of Blocks
+**and other Modules**, to any depth. A Module is "a Block Folder" — used both for a
+signal-chain segment (the Delay module = delay block + feedback-FX sub-module +
+filter block) and for pure grouping (wrap Mod1·Mod2·Delay·Amp/EQ·Comp·Reverb under
+one "FX" module). There is no "Layer inside a Layer" — when you want to group, you
+**nest Modules**, because grouping is semantically a Module, not a Layer.
 
-So the runtime node model is a heterogeneous tree: every node is either a leaf
-**Block** or a container holding an ordered mix of child containers and blocks.
-`Module`/`Layer`/`Engine` are *roles* a container plays, not separate rigid types —
-they label intent (an FX family, a voice lane, an instrument part) and where shared
-vs per-child processing sits. The shared Organ FX and the global Rotary/Delay are
-exactly the case the strict hierarchy couldn't express: processing that lives at the
-**engine** or **preset** level, above the layers.
+`Layer` / `Engine` / `Preset` are then just **Modules with a role tag** that adds
+mix/voice semantics:
+- **Module** — serial folder: signal flows through its children in order.
+- **Layer** — a *parallel* lane: its siblings run alongside it and **sum**. (The
+  only structurally special property: parallel-sum vs serial-flow.)
+- **Engine** — an instrument part (a group of Layers + shared Modules/Blocks).
+- **Preset** — the whole program (Engines + global Modules/Blocks).
+
+So: every container can hold any lower item + leaf blocks; Modules nest infinitely;
+the role tag picks serial-vs-parallel and labels intent. The FX chain is **nested
+Modules inside a Layer**, not a sub-Layer.
+
+**Axis 2 — Routing (the signal graph).** Containment says who *owns/groups* a node;
+it does **not** dictate signal flow beyond the default (serial within a Module, sum
+within a Layer). Real patches need **cross-tree sends** — and that's where your
+"cross-layer routing" lives:
+- **To Rotary** send: any layer → the single global `Rotary` block (p51).
+- **Shared Organ FX**: Organ Layers A *and* B both route into one FX module group
+  that sits at the **engine** level.
+- **Global Delay/Comp/Reverb**: every layer routes into one shared instance (p47).
+- **Morph / mod**: control-rate edges from `Envelope`/`Lfo`/`ModMatrix` to any
+  block param, anywhere in the tree.
+
+The processing core (`daw-audio-graph`) is already a node graph, so these are just
+**edges**: audio sends + control edges that can cross the containment tree freely.
+The tree groups and owns; the edges route. Cross-layer routing = an audio send edge
+from one layer's output into another node's input (a shared FX module or a bus) —
+no Layer-nesting required. This keeps grouping (folders) and routing (sends) clean
+and independent, and makes shared/global FX a routing fact, not a hierarchy
+exception.
 
 ### Master Clock (one tempo → 4 sync targets) — pp38–39
 
