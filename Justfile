@@ -61,8 +61,14 @@ release: tailwind
 # Open the default guitar rig (Yamaha TF ch4 → NAM amps)
 guitar: (rig "Guitar Rig")
 
-# Open the default keys rig (needs `just rig-setup "Keys Rig" ...` first)
-keys: (rig "Keys Rig")
+# Nord Stage-style keys rig — play a composition-tree preset (splits, velocity
+# crossfades, layers) from a MIDI keyboard + the computer keyboard. The TUI shows
+# the sections, keyboard split zones, velocity layers + output meter.
+#   just keys                      # the full "Nord Stage" preset
+#   just keys "Layering Demo"      # the split + velocity-crossfade demo
+#   just keys "Nord Stage" virtual # expose a virtual MIDI port
+keys preset="Nord Stage" midi="all":
+    PIPEWIRE_PROPS='{ application.name = FTS-Signal }' cargo run --release -p signal-sampler --features pipewire --example keys_tui -- --preset "{{preset}}" --midi "{{midi}}"
 
 # Open the default drums rig (needs `just rig-setup "Drum Rig" ...` first)
 drums: (rig "Drum Rig")
