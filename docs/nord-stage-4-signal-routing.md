@@ -20,7 +20,7 @@ Nord Program  ────────────────▶  Signal Rig Pr
   └─ Synth Section  (3 layers) ─▶  Synth Engine   → 3 Layers
                                     └ each Layer = sound-source Module
                                       → Filter/Amp Modules
-                                      → per-Layer FX Module
+                                      → FX Modules (Mod1·Mod2·Delay·Amp/EQ·Reverb) + Comp block
                                       → (modulated by Envelope/LFO/Morph blocks)
   + 1 shared Rotary  + Global Delay/Comp/Reverb  + Morphs ×3  + Layer Scenes ×2
 ```
@@ -44,7 +44,7 @@ native-DSP-implementation** task, not a "new domain types" task.
 | **Section** (Organ / Piano / Synth) | **Engine** | An instrument voice. Three engines per Keys rig. |
 | **Layer** (A/B, A/B/C) | **Layer** | A processing lane inside an engine. Organ 2, Keys 2, Synth 3. (p13) |
 | Sound source + filter + amp + mod | **Modules** of **Blocks** | e.g. an Oscillator Module, a Filter Module. |
-| Per-layer FX chain | **FX Module** | Mod1→Mod2→Delay→Amp/EQ→Comp→Reverb. |
+| Per-layer FX chain | **a sequence of FX Modules** | Mod1·Mod2·Delay·Amp/EQ·Reverb modules + Comp block (§6). |
 | Drawbars / Osc Ctrl / cutoff / … | **Block parameters** | Morphable params are modulation destinations. |
 | Envelopes / LFO / Vibrato / Arp | **Modulation Blocks** | Control-rate sources, routed via a ModMatrix. |
 | Morph (Wheel / A.T. / Ctrl Ped) | **Macro / ModMatrix sources** | 3 performance morph sources. |
@@ -189,7 +189,7 @@ edge type alongside the audio edges.
 Organ Layer A ─┐
                ├─▶  [Tonewheel source]            (model, 9 drawbars, V/C, percussion*)
 Organ Layer B ─┘        *percussion: B3 only
-   (summed)  ─▶  shared Organ FX Module  ─▶  Rotary  ─▶ out
+   (summed)  ─▶  shared Organ FX modules (§6)  ─▶  Rotary  ─▶ out
 ```
 
 - **Source block** `Tonewheel`: params `model {B3,B3Bass,Vox,Farfisa,Pipe1,Pipe2}`,
@@ -197,15 +197,17 @@ Organ Layer B ─┘        *percussion: B3 only
   2nd/3rd, level Normal/Soft, decay Slow/Fast, poly}`, `preset_mode` (preset vs
   drawbar-live), `swell`. Engine-level menu: `tonewheel_mode {Clean,V1,V2}`,
   `click_level {Normal,High}`, `trigger_point {High,Low}`.
-- **Both layers share ONE FX Module** — model the Organ engine's FX as a single
-  module fed by the A+B sum (the only engine where layers don't have private FX).
+- **Both layers share ONE FX chain** — the §6 FX modules live at the **engine**
+  level here (above both layers), fed by the A+B sum. This is the case the flexible
+  tree exists for: an engine holding Layers *and* the Modules above them. (Only
+  engine where layers don't have private FX.)
 - Organ routes to **Rotary** by default (organ's signature pairing).
 
 ### 5.2 Keys / Piano Engine (2 layers, private FX) — pp23–26
 
 ```
-Keys Layer A ─▶ [Sampler source]  → Piano params → Keys A FX → out
-Keys Layer B ─▶ [Sampler source]  → Piano params → Keys B FX → out
+Keys Layer A ─▶ [Sampler source] → Piano params → FX modules (§6) → out
+Keys Layer B ─▶ [Sampler source] → Piano params → FX modules (§6) → out
 ```
 
 - **Source block** `Sampler` (impl `Sample`, Nord Piano Library): `type
@@ -218,52 +220,91 @@ Keys Layer B ─▶ [Sampler source]  → Piano params → Keys B FX → out
   ±6 dB.
 - **String Resonance / Pedal Noise** are sample-engine features (extra sample
   layers + dynamic level), realized inside the `Sample` impl, gated by `size`.
-- Each Keys layer has its **own** FX Module.
+- Each Keys layer has its **own** sequence of FX modules (§6).
 
 ### 5.3 Synth Engine (3 layers, private FX) — pp27–36
 
+A Synth layer is the fullest case — a chain of voice Modules, then the FX Modules
+of §6:
+
 ```
-Synth Layer X ─▶  [Osc Module]  →  [Filter]  →  [Amp]  →  Synth X FX → out
-                     ▲   ▲           ▲           ▲
-                  OscEnv LFO     FilterEnv     AmpEnv     (ModMatrix control edges)
-                  Vibrato        KbdTrack      Velocity
-                  (+ Unison on the source, Arp/Gate on note input)
+Synth Layer X = [ Osc Module → Filter Module → Amp Module ]      (voice)
+              → [ Mod1 Mod → Mod2 Mod → Delay Mod → Amp/EQ Mod → Comp blk → Reverb Mod ]  (§6)
+              → fader → bus
+   voice control edges (ModMatrix):
+     OscEnv,Vibrato → Osc.ctrl/pitch | FilterEnv,LFO,KbdTrack → Filter.freq | AmpEnv,Velocity → Amp.gain
+     Arp/Gate → note events into the voice
 ```
 
 - **Osc Module** = one source block (`Oscillator` | `FmOperator` | `Wavetable` |
-  `Sampler`) selected by Synth Mode {Analog, Samples} + Type. Param `osc_ctrl`
+  `Sampler`) + `Unison` + the Osc `Envelope` + the `Lfo`(Vibrato). Param `osc_ctrl`
   (the single morphable shaper), plus type-specific (FM Partial/Pitch, sample
   Bright/dynamics).
-- **Filter** block: type {LP24,LP12,LPM,LP+HP,HP,BP}, Freq, Res, EnvAmt, Drive,
-  KbdTrack. (LP+HP: Res knob = HP cutoff.)
-- **Amp** block: final gain, shaped by AmpEnv + Velocity.
-- **Modulation blocks** (control-rate, via ModMatrix): `Envelope` ×3 (Osc, Filter,
-  Amp — each AD-R), `Lfo` ×1, `Lfo`(Vibrato, pitch), `Arpeggiator`, `Unison`.
-- **Voice mode** (engine/layer param): Poly | Mono | Legato; note priority Lo/Hi;
-  `glide` (Legato/Mono only).
-- Each Synth layer has its **own** FX Module.
+- **Filter Module** = `Filter` block {LP24,LP12,LPM,LP+HP,HP,BP; Freq,Res,EnvAmt,
+  Drive,KbdTrack} + the Filter `Envelope` (+ the shared `Lfo` when its dest = filter).
+  (LP+HP: Res knob = HP cutoff.)
+- **Amp Module** = `Amp` block (final gain) + the Amp `Envelope` + Velocity.
+- **Voice mode** (layer param): Poly | Mono | Legato; note priority Lo/Hi; `glide`
+  (Legato/Mono only). The `Arpeggiator` block gates note events into the layer.
+- Each Synth layer then has its **own** sequence of FX modules (§6).
 
 ---
 
-## 6. The FX Module (shared shape) and routing rules
+## 6. Layer FX — a sequence of Modules (not one module)
 
-Every FX instance is the **same ordered module** (p51/p52):
+The per-layer effects are **not** one "FX module" — each effect section is its own
+**Module**, because each is a *family* of swappable blocks (and several contain
+multiple blocks). A Module that holds a single fixed block collapses to a Block;
+only `Compressor` does. So a layer's FX tail is an ordered sequence of modules +
+one block (p51/p52):
 
 ```
-[in] → Mod1 → Mod2 → Delay → AmpSim/EQ(+LP24/HP24, Drive) → Compressor → Reverb
-     → (TO ROTARY send) ─────────────────────────────────────────────────────┐
-[per-layer audio also continues to the layer fader → bus]                     │
-                                                  Rotary (1 global, LAST) ◀────┘
+[in] → Mod1 Module → Mod2 Module → Delay Module → Amp/EQ Module → Comp (Block) → Reverb Module
+     → (TO ROTARY send) ──────────────────────────────────────────────────────────────────┐
+[layer audio also continues to the layer fader → bus]                                      │
+                                                            Rotary (1 global Block, LAST) ◀─┘
 ```
+
+| FX stage | Module / Block | Why | Holds |
+|---|---|---|---|
+| **Mod 1** | Module | a family — one mode active at a time | `Panner` \| `Trem` \| `RingModulator` \| `Wah`(A-Wah) \| `Wah` \| `Pump`, + Rate/Amount/Variation |
+| **Mod 2** | Module | a family | `Phaser` \| `Flanger` \| `Vibrato`(Vibe) \| `Chorus`(+Ensemble/Spin), + Variation |
+| **Delay** | Module | several blocks at once | `Delay` block **+** feedback-FX block {Ens,Vibe,Chor,Flam,Space} **+** feedback `Filter` {LP,HP,BP} |
+| **Amp/EQ** | Module | several blocks at once | `Amp`(model) **+** `Eq`(3-band) **+** `Filter`(LP24\|HP24) **+** Drive **+** To-Rotary send |
+| **Comp** | **Block** | one fixed block | `Compressor` {amount, fast} |
+| **Reverb** | Module | swappable algorithm + modes | reverb-algo block {Spring,Booth,Room,Stage,Hall,Cath} + Variation/Chorale + Bright/Dark |
 
 - **6 instances**: Keys A, Keys B, Synth A, Synth B, Synth C, Organ(A+B shared). (p47)
 - **Global mode** (Delay, Compressor, Reverb only): collapses the 6 per-layer
-  instances into ONE shared bus instance for that effect. Model as a per-effect
+  instances into ONE shared instance for that stage. Model as a per-stage
   `scope {PerLayer, Global}` flag. (p47)
 - **Group mode** (Piano & Synth): all layers in a section share the *same settings*
-  (still separate instances). Model as a `group {on}` flag per section/effect. (p47)
-- **Rotary** is a single global node, always last; fed by per-layer `to_rotary`
+  (still separate instances). Model as a `group {on}` flag per section/stage. (p47)
+- **Rotary** is a single global **Block**, always last; fed by per-layer `to_rotary`
   sends and the Organ routing; its Drive scales with the feeding layer's level. (p52)
+
+### Composition is a flexible tree (important)
+
+The hierarchy `Block → Module → Layer → Engine → Preset` is the *vocabulary of
+levels*, **not** a rigid "each level only holds the one below it." Any container
+holds **any lower-level item plus leaf blocks**:
+
+- a **Module** holds Blocks *and* sub-Modules (e.g. the Delay module holds a Delay
+  block + a feedback-FX sub-module + a filter block);
+- a **Layer** holds Modules *and* standalone Blocks (its Synth voice modules + the
+  bare `Compressor` block + the FX modules);
+- an **Engine** holds Layers *and* Modules *and* Blocks (e.g. the Organ engine holds
+  its 2 Layers **plus** the one shared Organ-FX modules that sit above both layers);
+- a **Preset** holds Engines *and* the global Blocks (the single `Rotary`, any
+  global Delay/Comp/Reverb instances) that live above all engines.
+
+So the runtime node model is a heterogeneous tree: every node is either a leaf
+**Block** or a container holding an ordered mix of child containers and blocks.
+`Module`/`Layer`/`Engine` are *roles* a container plays, not separate rigid types —
+they label intent (an FX family, a voice lane, an instrument part) and where shared
+vs per-child processing sits. The shared Organ FX and the global Rotary/Delay are
+exactly the case the strict hierarchy couldn't express: processing that lives at the
+**engine** or **preset** level, above the layers.
 
 ### Master Clock (one tempo → 4 sync targets) — pp38–39
 
