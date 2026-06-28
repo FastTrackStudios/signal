@@ -25,3 +25,12 @@ result-*
 .ralph-tui/tasks/
 .ship/
 .tracey/
+
+# CSS engine-matching test artifacts (large/binary/copyright — regenerable)
+/css_test*.wav
+/css_test*.mid
+/css_test_full_manifest.txt
+/our_*.wav
+/legato_cd.wav
+/css_manual.pdf
+/css_manual.txt
