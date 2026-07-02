@@ -168,10 +168,23 @@ calibrated: **freq → 15 Hz × 2^(9.55·v)** (knee sweep, keytracking off).
 ## 6. LFOs — 8 *(manual v3)*; sources up to LFO9 observed
 
 - [~] LFO engine: sine/tri/saw/square, free rate; LFO_SET rate+type
-      import onto the part's 8 LFO modulators (rate curve CALIBRATE).
-      **Tempo-sync, swing, phase, S&H, retrigger, delay/fade pending**
+      import onto the part's 8 LFO modulators. **Rate curve partially
+      probed on a live factory route (0.4642→3.4 Hz, 0.516→6.6 Hz,
+      0.55→8.0 Hz — entangled with 5 other routes; needs single-route
+      isolation to fit). Tempo-sync, swing, phase, S&H, retrigger,
+      delay/fade pending**
 
 ## 7. Mod Matrix — 48 slots *(manual v3)*; **60 sources / 591 targets observed**
+
+Harness findings (2026-07-02): factory routes RUN in our host (proved by
+mute A/B on a live route); LFO rate edits on a live route change the
+audio; but **flipping a row's source from "off" to a live source via
+state injection does NOT create a running route** — route activation
+involves state beyond the row attrs (candidates: the `lLFOP` 0→999
+registration seen in round-trips, or graph build at patch-load). Sweep
+tooling gotchas that cost a day: unanchored `rate` regex corrupts
+`pulserate`; source-muting/voice-soloing edits can silence the audible
+target entirely — always A/B against an untouched control.
 
 The single biggest unlock: nearly every imported patch's character lives
 here. Top observed sources: Wheel, LFO1–9, Velo, Random(±uni), ModEnv1–4,
