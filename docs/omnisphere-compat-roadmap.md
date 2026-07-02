@@ -87,12 +87,20 @@ comes from the official Omnisphere 3 Reference Guide (v3.0.2c).
       pending**
 - [ ] Which wavetables ship where — extract/recreate the 638 tables or map
       by name to fundsp/mi-plaits wavetables as approximations first
-- [ ] **Unison** — ≤8 voices, depth/detune/spread/octave/analog/scatter/drift
-- [ ] **Harmonia** — 4 extra oscillators (interval/level/pan/detune/wave)
-- [ ] **FM** — dedicated per-layer modulator osc (any wavetable)
-- [ ] **Ring Mod** (polyphonic, key-tracked)
-- [ ] **Dual Frequency Shifter** (v3 — serial/parallel pair, per-note)
-- [ ] **Waveshaper** (Crusher/Shaper/Reducer, polyphonic in-osc)
+- [~] **Unison** — ≤8 voices, symmetric cent detune, stereo width, 1/√n
+      comp; imported from UNI element / OSC uns* attrs. **Octave/analog/
+      scatter/drift + sample-mode unison pending**
+- [~] **Harmonia** — 4 sub-oscillators (interval/level/pan/waveform) from
+      the HARM element (smi/lvl/pan/wfm, hrmOn/hrmLv gates). **Per-voice
+      symmetry/sync + sample-mode pending**
+- [~] **FM** — per-note modulator osc, ratio + depth (OSC `fm`); sine
+      modulator today, **wavetable modulator (fmwf) pending**
+- [~] **Ring Mod** — key-tracked carrier, mix from OSC `am`; **carrier
+      wave/ratio import (amwf/amscl) pending**
+- [ ] **Dual Frequency Shifter** (v3 — DFS element decoded: on/parl/
+      mix/freq/pan/key/inv per shifter; DSP pending)
+- [x] **Waveshaper** — native Crusher/Shaper/Reducer block (drive/crush/
+      reduce/mix, runtime + build params) from the WAVESHAPER element
 - [ ] **Granular** — 8 grain voices/layer; Speed/Position/Intensity/WILD/
       Legacy modes *(manual)*
 
