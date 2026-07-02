@@ -141,15 +141,19 @@ Constant. Top targets: `A/B/C/D freq` (cutoff), `tune/tuneFine`, `atrm`
 (amp trem), `Harmmix`, `pdepth` (PWM), `mogrify`, `timbre`, `hrdsnc`, LFO
 rate/swing, envelope points (`A E1P0`), aux send (`irsendaux`), pan.
 
-- [~] Routes **imported** (source/target/depth strings preserved as params)
-- [ ] **Control-rate runtime** — evaluate sources per block, apply to
-      target params (same engine the Nord ModMatrix needs; design doc §2
-      of keys-rig-roadmap) — *do this once, both trees light up*
-- [ ] Source implementations: MIDI (wheel/velocity/aftertouch/bender/key),
-      LFOs, envelopes, random, constants, MPE per-note
-- [ ] Target resolution: name → block param path in the tree ("A freq" →
-      Layer A → Filters → Filter 1 cutoff)
-- [ ] lo/hi range, mute, damp (smoothing) per route
+- [x] Routes **imported** (source/target/depth strings preserved as params)
+- [x] **Control-rate runtime** — `ModEngine` in `node_render`: sources tick
+      once per block, writes `base + depth×value` to `(leaf, param)` targets
+      as parameter events; wired into Nord synth layers AND translated
+      Omnisphere routes ("A freq"/"A res" → layer filter cutoff/resonance)
+- [~] Source implementations: MIDI wheel/velocity/aftertouch/bender/CCn,
+      LFO (sine/tri/saw/square, free-rate), note-gated ADSR envelope —
+      **missing: Key, Alt, Bias, Random, Constant, MPE per-note; imported
+      LFO/env parameter values (defaults used today)**
+- [x] Target resolution: block display name + backend param name within the
+      route's subtree ("LPF UVI 3.cutoff")
+- [ ] lo/hi range, mute, damp (smoothing) per route; per-route base from
+      imported block params (base = param default today)
 
 ## 8. Arpeggiator — per Part, 32 steps
 
