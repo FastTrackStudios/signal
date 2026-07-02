@@ -37,8 +37,13 @@ comes from the official Omnisphere 3 Reference Guide (v3.0.2c).
 - [ ] Granular params
 - [ ] `AENVPARAMS` / `FENVPARAMS` — AHDSR values (a/h/d/sust/rels, vel
       sens, sync, trigger mode)
-- [ ] `AENV`/`FENV`/`MODENV` `<p>` children — **MSEG breakpoints** (the
-      Complex envelope: "hundreds of stages" *(manual)*)
+- [~] `AENV`/`FENV` `<p>` breakpoints **DECODED + CALIBRATED** against the
+      real engine: `l` = linear level, `t` = absolute time ×100 s, `s` = 18
+      terminal flag, `c` = curve (0.5 linear). The importer reads the
+      breakpoint list (PARAMS attrs are derived UI state the engine
+      ignores); 4-point → exact ADSR, longer lists → ADSR approximation.
+      **Full MSEG playback, curve-extreme mapping (needs a static patch),
+      MODENV lists pending**
 - [ ] `MOD_ENV2_2` groups (mod-env extended data)
 - [ ] `LFO_SET` — per-LFO type/rate/swing/sync/trigger/random (6 LFOs in v2
       patches; sources reference **LFO1–LFO9** in the wild)
