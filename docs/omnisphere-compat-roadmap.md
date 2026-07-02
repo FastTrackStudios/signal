@@ -42,8 +42,10 @@ comes from the official Omnisphere 3 Reference Guide (v3.0.2c).
       terminal flag, `c` = curve (0.5 linear). The importer reads the
       breakpoint list (PARAMS attrs are derived UI state the engine
       ignores); 4-point → exact ADSR, longer lists → ADSR approximation.
-      **Full MSEG playback, curve-extreme mapping (needs a static patch),
-      MODENV lists pending**
+      Curve law measured: `c` shapes the segment STARTING at its point;
+      0.5 = linear, c→0 = fast-start `(1−u)^k`, c→1 = hold-then-drop
+      `u^k`, k ≈ 1 + 9.5·|1−2c|. **Full MSEG playback + curve law in our
+      DSP, MODENV lists pending**
 - [ ] `MOD_ENV2_2` groups (mod-env extended data)
 - [ ] `LFO_SET` — per-LFO type/rate/swing/sync/trigger/random (6 LFOs in v2
       patches; sources reference **LFO1–LFO9** in the wild)
@@ -118,17 +120,20 @@ comes from the official Omnisphere 3 Reference Guide (v3.0.2c).
 
 ## 4. Filters — 70 types *(manual v3)*, **45 algorithm indices observed**
 
-The patch stores the algorithm as `type1`/`type2` (normalized index,
-0.02 steps → ~50-slot enum; 45 distinct values in the wild). `NameStr` is
-just the filter-section preset label.
+The patch stores the algorithm as `type1`/`type2` — a 50-slot enum at
+0.02 steps, now MEASURED per slot (see `TYPE1_TABLE`). Cutoff is
+calibrated: **freq → 15 Hz × 2^(9.55·v)** (knee sweep, keytracking off).
+`NameStr` is just the filter-section preset label.
 
 - [~] Native SVF cascade: LP/HP/BP/Notch at 1..8 poles (12 dB TPT
       sections, resonance on the first) — covers the Classic/Basic pole
       families; coarse mode+poles classified from the factory `NameStr`
       ("Classic LPF 4-pole" → LP 24 dB) until the type enum is decoded
-- [ ] **Decode the type enum** — map each `type1` value to its algorithm
-      (play a sweep per type in Omnisphere on voyager, or match NameStr
-      factory presets → type values across the 37k corpus)
+- [x] **Type enum DECODED** — all 50 `type1` slots fingerprinted through
+      the real engine (8-band Goertzel per slot): measured mode + pole
+      table drives the importer (`TYPE1_TABLE`); NameStr now only selects
+      the ladder character. Pole counts are lower bounds — a low-cutoff
+      refinement pass can sharpen them
 - [x] Pole-cascade family: 1..8-pole LP/HP/BP/Notch via SVF cascade
       (true ladder character models still pending below)
 - [~] Character models: a saturating 4-stage ladder engine (tanh input,
