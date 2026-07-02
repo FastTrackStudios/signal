@@ -61,8 +61,10 @@ comes from the official Omnisphere 3 Reference Guide (v3.0.2c).
 - [x] Part tree: Quadzone → 4 Layers → osc stack → dual filters → amp →
       layer rack; Common/Aux/Master racks; sends modeled
 - [x] Placeholder-safe render (structure plays today; placeholders = thru)
-- [ ] **Aux send summing** — `Container.sends` are modeled but the renderer
-      doesn't mix send buses yet (blocks Aux racks + `irsendaux` targets)
+- [x] **Aux send summing** — `SendTap`/`BusInject` render nodes: a node's
+      sends tap its output onto named buses; the target container/block
+      becomes a send/return (processes bus content, output sums onto the
+      pass-through main). Unity gain; per-send level + PRE/POST pending
 - [ ] Filter series/**parallel** routing at runtime (para flag imported)
 - [ ] Quadzone **Fader scan** (modulatable layer crossfade — needs mod
       matrix); Notes/Velo modes already map to `Zone`
