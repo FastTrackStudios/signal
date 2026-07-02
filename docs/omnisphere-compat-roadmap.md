@@ -80,10 +80,11 @@ comes from the official Omnisphere 3 Reference Guide (v3.0.2c).
       extracted sources indexed)
 - [ ] Sample mode fidelity: start offset (≤90 s), Timbre (crush/shift),
       Mogrify, reverse, layer thinning rules, release samples, pedal noise
-- [ ] **Synth mode** — wavetable oscillator, 638 morphing wavetables
-      *(manual)*; SHAPE sweep, Symmetry/PWM, Hard Sync, Phase, Analog,
-      **Drift** (v3) — *blocks every synth-mode patch (e.g. "1975
-      Attempt"); highest-leverage source gap*
+- [~] **Synth mode** — native morphing oscillator (sine→tri→saw→square,
+      PolyBLEP band-limited, `shape` param modulatable + build param);
+      synth-mode patches sound ("1975 Attempt" verified). **Real 638
+      wavetable spectra, Symmetry/PWM, Hard Sync, Phase, Analog, Drift
+      pending**
 - [ ] Which wavetables ship where — extract/recreate the 638 tables or map
       by name to fundsp/mi-plaits wavetables as approximations first
 - [ ] **Unison** — ≤8 voices, depth/detune/spread/octave/analog/scatter/drift
