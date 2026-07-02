@@ -152,6 +152,95 @@ Per `docs/sampler-trait-design.md:396`: in document mode the engine reports
 the *tradeoff* moves from latency to transition authenticity, which is the
 correct axis.
 
+## Mode policy: strict live low-latency by default
+
+Kontakt CSS carries a floor of ~60 ms even in its fastest mode, which rules
+out live playing. Ours must not. **Mode selection is automatic and strict:**
+
+- **Lookahead mode** — ONLY when the MIDI is known ahead of time: document +
+  transport playback in REAPER, or offline render. Full expressive legato,
+  scheduled prefires.
+- **Strict live mode** — everything else (live MIDI input, no document,
+  transport stopped). Zero added latency, no exceptions: fastest attack
+  zones, `low_latency` legato tables applied reactively, shorts fire
+  immediately with no pre-delay concept. Latency report = 0.
+
+No user toggle needed (though an override can exist): if the engine can see
+the future it plays beautifully; if it can't, it plays *now*. This is what
+makes sketching effortless — play in on the same patch you'll render with.
+
+## Auto-divisi
+
+Divisi assignment (simultaneous notes ranked top→bottom into monophonic
+lines; a held note never loses its line to a re-articulated lower note) is
+an algorithm, not data — ported and parity-tested in
+`keyflow-orchestra::assign_channels`. The engine plays mono lines
+statelessly and doesn't care who assigned them. Two front-ends, one
+feature:
+
+- **Explicit channels (import path)**: a document whose notes carry
+  meaningful MIDI channels (e.g. keyflow's mxl import) is respected as-is —
+  channel = line.
+- **Lookahead auto-divisi (document path)**: a document on a single channel
+  (or flagged `auto_divisi`) gets the full assignment algorithm in
+  `annotate()` — with the entire document visible, the held-note ranking is
+  exact, deterministic, and seed-independent (it's pure).
+- **Live auto-divisi (realtime path)**: incoming polyphonic MIDI is split
+  greedily into lines by the same ranking rule (top note → line 1, held
+  notes keep their line). Reactive by nature (no future knowledge),
+  deterministic given the same input stream.
+
+  **Live legato gating — the whole point is never having to switch between
+  legato and sustain patches while playing.** Live transitions are
+  conservative so chords can't confuse the allocator:
+  - **Simultaneity gate**: notes arriving within a small window
+    (`live_chord_window_ms`, default ~30 ms) are a chord — they fan out to
+    separate lines as fresh sustain attacks, never legato.
+  - **Interval gate**: a successive note continues an existing line as a
+    legato transition only if it is within `live_legato_interval_max`
+    semitones of that line's sounding note (default 2 = major 2nd; per-patch
+    in the styx spec) *and* the line's previous note overlaps or just
+    released. Anything wider is a fresh attack on a free line.
+  - Live transitions always use the `low_latency` tables (fast, and the
+    small-interval restriction is exactly where fast transitions sound
+    right).
+
+  Lookahead mode has **no such gates** — the document knows the actual
+  voice-leading, so full-range sampled transitions apply as written. Net
+  effect: play triads and stepwise melodies live on one patch, 90% of the
+  legato/sustain switching problem gone; the render is where wide sampled
+  legato lives.
+
+Line allocation must therefore not be hardwired to "MIDI channel": lines
+are engine entities; channel-mapping and auto-divisi are two allocators in
+front of them.
+
+## Channels: one engine, many mono lines
+
+In the Kontakt world each divisi/articulation MIDI channel needed its own
+sampler instance. Here the engine is ours: **one engine instance per track,
+one mono legato line per MIDI channel**. Each channel carries its own
+`LegatoState`/line cursor; the sample cache, voice pool, and RR hashing are
+shared. A channel is *who is playing* (divisi desk, solo, per-articulation
+lane), never a separate plugin. Phase 1's known gap (multi-channel documents
+folding into one line and falling back to the reactive path) is closed by
+this: the scheduler annotates and prefires per channel.
+
+## Stem-aware output buses (optional)
+
+Downstream mixing splits strings into **Longs** and **Shorts** stems
+(e.g. `Strings High Longs` / `Strings High Shorts`). Voices are tagged with
+an articulation class at spawn:
+
+- **Longs**: Sustain, Legato, Tremolo, releases of either
+- **Shorts**: Short articulations (staccato/staccatissimo/spiccato/pizz)
+
+Routing is a `class → output bus` map on the rig. **Default: every class →
+main stereo out** (no behavior change). Flipping the map renders classes
+into separate buses (`render_offline_buses` precedent) so stems can be
+routed independently and recombined later — sum of split buses must equal
+the main-out render bit-exactly (test).
+
 ## Determinism (hard requirement)
 
 **Same document + same parameters + same seed → byte-identical audio. No
