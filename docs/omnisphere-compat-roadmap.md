@@ -87,14 +87,16 @@ comes from the official Omnisphere 3 Reference Guide (v3.0.2c).
       pending**
 - [ ] Which wavetables ship where — extract/recreate the 638 tables or map
       by name to fundsp/mi-plaits wavetables as approximations first
-- [~] **Unison** — ≤8 voices, symmetric cent detune, stereo width, 1/√n
-      comp; imported from UNI element / OSC uns* attrs. **Octave/analog/
-      scatter/drift + sample-mode unison pending**
+- [x] **Unison** — ≤8 voices, symmetric cent detune, stereo width, 1/√n
+      comp, octave / analog-jitter / drift modes (UNI uoct/uanalg/udrft);
+      works in BOTH synth mode and sample mode (SampleEngine::set_unison
+      spawns detuned/panned voice copies at every zone trigger). Scatter
+      pending; normalized→cents scaling to calibrate
 - [~] **Harmonia** — 4 sub-oscillators (interval/level/pan/waveform) from
       the HARM element (smi/lvl/pan/wfm, hrmOn/hrmLv gates). **Per-voice
       symmetry/sync + sample-mode pending**
-- [~] **FM** — per-note modulator osc, ratio + depth (OSC `fm`); sine
-      modulator today, **wavetable modulator (fmwf) pending**
+- [x] **FM** — per-note modulator osc, ratio + depth (OSC `fm`), morphing
+      modulator waveform from `fmwf`
 - [~] **Ring Mod** — key-tracked carrier, mix from OSC `am`; **carrier
       wave/ratio import (amwf/amscl) pending**
 - [ ] **Dual Frequency Shifter** (v3 — DFS element decoded: on/parl/
@@ -131,8 +133,13 @@ just the filter-section preset label.
 
 - [~] Native ADSR exists (drives oscillator voices) — not yet wired to
       imported AHDSR values
-- [ ] AHDSR from `AENVPARAMS`/`FENVPARAMS` (attack/hold/decay/sustain/
-      release + velocity sensitivity, tempo sync, trigger modes)
+- [~] AHDSR from `AENVPARAMS`/`FENVPARAMS` — attack/decay/sustain/release
+      import + apply: synth voices get the full ADSR, sample voices get
+      attack/release (SampleEngine set_attack/release_frames; decay/sustain
+      need per-voice ADSR in the engine), the Filter Env modulator gets the
+      FENVPARAMS shape and the FILTER envdpth(+inv) becomes a live cutoff
+      route. **Hold, velocity sens, sync, trigger modes pending; the
+      normalized→seconds curve (cubic × 10 s) needs A/B calibration**
 - [ ] **MSEG Complex envelopes** — breakpoint lists from `<p>` children;
       curves (9 presets), looping, Chaos *(proto `MultisegEnvelopeParams`
       exists, DSP doesn't)*
