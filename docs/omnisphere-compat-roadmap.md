@@ -65,10 +65,11 @@ comes from the official Omnisphere 3 Reference Guide (v3.0.2c).
       sends tap its output onto named buses; the target container/block
       becomes a send/return (processes bus content, output sums onto the
       pass-through main). Unity gain; per-send level + PRE/POST pending
-- [ ] Filter series/**parallel** routing at runtime (para flag imported)
+- [x] Filter series/**parallel** routing at runtime (module combine)
 - [ ] Quadzone **Fader scan** (modulatable layer crossfade — needs mod
       matrix); Notes/Velo modes already map to `Zone`
-- [ ] Layer level/pan applied (imported as params, not applied)
+- [~] Container volumes (input_db/output_db) + bypass render (Gain node);
+      **imported layer level/pan → volume wiring pending**
 - [ ] Multi level: 8 Parts, part mixer (level/pan/output/4 sends), Live
       Mode + Stack Mode grids *(maps to Profile/Stack layer — see
       stacks design)*
@@ -112,21 +113,24 @@ The patch stores the algorithm as `type1`/`type2` (normalized index,
 0.02 steps → ~50-slot enum; 45 distinct values in the wild). `NameStr` is
 just the filter-section preset label.
 
-- [~] Native SVF exists (LP/HP/BP 12 dB) — covers "Basic 12db Lowpass",
-      "State Variable 12dB"-class types
+- [~] Native SVF cascade: LP/HP/BP/Notch at 1..8 poles (12 dB TPT
+      sections, resonance on the first) — covers the Classic/Basic pole
+      families; coarse mode+poles classified from the factory `NameStr`
+      ("Classic LPF 4-pole" → LP 24 dB) until the type enum is decoded
 - [ ] **Decode the type enum** — map each `type1` value to its algorithm
       (play a sweep per type in Omnisphere on voyager, or match NameStr
       factory presets → type values across the 37k corpus)
-- [ ] Pole-cascade ladder family: Classic LPF 1/2/3/4/6/8-pole
-      ("Classic LPF 4-pole" = 39k uses — #2 most-used filter)
+- [x] Pole-cascade family: 1..8-pole LP/HP/BP/Notch via SVF cascade
+      (true ladder character models still pending below)
 - [ ] Character models: Juicy, UVI 1–3, Power, Warm, Beefy, Sauce, OB
       (Oberheim), Jupiter, French, Brit, FATBOY, Metal Pipe±, Rich-and-
       Moogie 1–3 — each is LP/HP/BP/notch variant with its own saturation
 - [ ] Formant, Allpass, Notch, dual/stereo combos (Series Throaty LP12s,
       Parallel Widened LP12s, Dual Stereo Bandpass, Bandpass+Allpass…)
 - [ ] Component-modeled **filter saturation** (v3)
-- [ ] Dual-filter plumbing: per-filter freq/res/pan offsets, spread,
-      balance, series/parallel, per-filter env depth, keytracking (+invert)
+- [~] Dual-filter plumbing: Filter 2 builds from act2/freq2/res2; the
+      Filters module compiles SERIES or PARALLEL from `para`. **Pan/spread/
+      balance, per-filter env depth, keytracking pending**
 - [ ] Embedded per-layer `DIST` + `EQ12`/`EQ2` stages (post/pre flags)
 
 ## 5. Envelopes — 12 per Part (4 Amp + 4 Filter + 4 Mod) *(manual)*
@@ -147,9 +151,9 @@ just the filter-section preset label.
 
 ## 6. LFOs — 8 *(manual v3)*; sources up to LFO9 observed
 
-- [ ] LFO engine: waveform set, rate (free + tempo-sync), swing, phase,
-      random/sample-hold, retrigger modes, delay/fade — *(proto
-      `LfoParams` exists; fts-modulation has the base engine)*
+- [~] LFO engine: sine/tri/saw/square, free rate; LFO_SET rate+type
+      import onto the part's 8 LFO modulators (rate curve CALIBRATE).
+      **Tempo-sync, swing, phase, S&H, retrigger, delay/fade pending**
 
 ## 7. Mod Matrix — 48 slots *(manual v3)*; **60 sources / 591 targets observed**
 
@@ -166,9 +170,9 @@ rate/swing, envelope points (`A E1P0`), aux send (`irsendaux`), pan.
       as parameter events; wired into Nord synth layers AND translated
       Omnisphere routes ("A freq"/"A res" → layer filter cutoff/resonance)
 - [~] Source implementations: MIDI wheel/velocity/aftertouch/bender/CCn,
-      LFO (sine/tri/saw/square, free-rate), note-gated ADSR envelope —
-      **missing: Key, Alt, Bias, Random, Constant, MPE per-note; imported
-      LFO/env parameter values (defaults used today)**
+      Key (keytrack), Random (per-note S&H), Alt, Constant/Bias, LFOs
+      (4 waves, imported rate/type), envelopes (imported ADSR) —
+      **missing: MPE per-note, LFO tempo-sync**
 - [x] Target resolution: block display name + backend param name within the
       route's subtree ("LPF UVI 3.cutoff")
 - [ ] lo/hi range, mute, damp (smoothing) per route; per-route base from
