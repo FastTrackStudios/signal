@@ -103,8 +103,9 @@ comes from the official Omnisphere 3 Reference Guide (v3.0.2c).
       modulator waveform from `fmwf`
 - [~] **Ring Mod** — key-tracked carrier, mix from OSC `am`; **carrier
       wave/ratio import (amwf/amscl) pending**
-- [ ] **Dual Frequency Shifter** (v3 — DFS element decoded: on/parl/
-      mix/freq/pan/key/inv per shifter; DSP pending)
+- [x] **Dual Frequency Shifter** — true SSB shifter (Hilbert allpass
+      pair), two shifters serial/parallel, ±Hz + mix each, runtime params;
+      imported from the DFS element (freq scale ±2 kHz CALIBRATE)
 - [x] **Waveshaper** — native Crusher/Shaper/Reducer block (drive/crush/
       reduce/mix, runtime + build params) from the WAVESHAPER element
 - [ ] **Granular** — 8 grain voices/layer; Speed/Position/Intensity/WILD/
@@ -125,9 +126,11 @@ just the filter-section preset label.
       factory presets → type values across the 37k corpus)
 - [x] Pole-cascade family: 1..8-pole LP/HP/BP/Notch via SVF cascade
       (true ladder character models still pending below)
-- [ ] Character models: Juicy, UVI 1–3, Power, Warm, Beefy, Sauce, OB
-      (Oberheim), Jupiter, French, Brit, FATBOY, Metal Pipe±, Rich-and-
-      Moogie 1–3 — each is LP/HP/BP/notch variant with its own saturation
+- [~] Character models: a saturating 4-stage ladder engine (tanh input,
+      resonance feedback → self-osc) now backs the Juicy/Moogie/OB/Jupiter/
+      Sauce/Beefy/Warm/Power/FATBOY/French/Brit lowpass families (name-
+      classified). **Per-family voicing differences, UVI/Metal Pipe
+      colors, HP/BP character variants pending — needs A/B calibration**
 - [ ] Formant, Allpass, Notch, dual/stereo combos (Series Throaty LP12s,
       Parallel Widened LP12s, Dual Stereo Bandpass, Bandpass+Allpass…)
 - [ ] Component-modeled **filter saturation** (v3)
