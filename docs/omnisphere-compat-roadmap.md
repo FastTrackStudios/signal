@@ -50,7 +50,10 @@ comes from the official Omnisphere 3 Reference Guide (v3.0.2c).
 - [ ] `MULTISAMPLE` playback params — Layer0–3 vol/active, release vol,
       pedal level/FX, sample-round-robin xfade, timbre, reverse, thinning
 - [ ] `CustomData2` (opaque — identify)
-- [ ] `.mlt_omn` **Multi** import (8 Parts + mixer + 4 aux + master)
+- [~] `.mlt_omn` **Multi** import — SynthMaster/SynthSubEngine×8 parsed
+      via the part parser; parts sum in parallel with mixer level (0.75 ≈
+      unity, CALIBRATE) + mute→bypass; empty parts skipped. **Per-part
+      pan/output/aux sends, Live/Stack modes, master rack pending**
 - [ ] `.prs_omn` / Presets folder variants (FX-rack presets etc.)
 - [ ] User Tags index (voyager `Settings Library/User Tags`) → browser
 - [ ] Patch browser over the Settings Library (37k patches; lazy, indexed
@@ -180,10 +183,13 @@ rate/swing, envelope points (`A E1P0`), aux send (`irsendaux`), pan.
 
 ## 8. Arpeggiator — per Part, 32 steps
 
-- [ ] Step engine from `ARPSEQ2`/`SLICESEQSTEP` (begin/end ticks, slice,
-      velocity), clock/swing/latch, note patterns (19), step modifiers
-      (transpose/slide/chord/dividers/strums) *(manual)*, Groove Lock
-- [ ] MIDI-domain placement (before the engine, like the Nord Master Clock)
+- [~] Step engine (`ArpEngine`): up-pattern over held notes, per-step
+      velocity + gate from `ARPSEQ2`/`SLICESEQSTEP` (tick spacing → step
+      beats), tempo-clocked, phrase-start reset, rests. **Other patterns,
+      swing, latch, step modifiers, Groove Lock, per-part arps inside a
+      Multi pending**
+- [x] MIDI-domain placement — the root ModEngine rewrites the note stream
+      before rendering (CC/bend pass through)
 
 ## 9. FX units — **98 types observed** (93 internal *(manual v3)*)
 
