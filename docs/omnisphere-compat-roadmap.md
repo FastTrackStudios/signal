@@ -24,9 +24,10 @@ comes from the official Omnisphere 3 Reference Guide (v3.0.2c).
 - [x] FX rack *names* (layer `EFFRACK`, common `EFFRACK`, `AUXEFFRACK`)
 - [x] `MOD_MATRIX` route strings (source/target/depth)
 - [x] ARP on/off flag
-- [~] `FILTER` — NameStr/para/freq/res imported; **type1/type2 algorithm
-      enum, act1/act2, per-filter freq1/res1/pan1, spread, balance, env
-      depth, keytracking not yet applied**
+- [~] `FILTER` — NameStr/act/para/freq/res imported **and applied** (Filter 1
+      builds with the patch's cutoff/resonance; routes modulate around that
+      base); **type1/type2 algorithm enum, act1/act2, per-filter
+      freq1/res1/pan1, spread, balance, env depth, keytracking pending**
 - [~] `OSC` — level only; **kind (0=synth, 4=sample), tune/tuneFine/oct/semi,
       phase, symmetry (pwidth/pdepth), hard sync, drift, sample start,
       timbre/mogrify not yet applied**
