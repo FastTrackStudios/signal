@@ -278,18 +278,46 @@ renders reproducible, regressions bisectable, and A/B tests meaningful.
   hashes of the output buffers must be equal / consistent per the rules
   above. This test is permanent, not a development aid.
 
+## Deployment target: a self-sufficient CLAP on a REAPER track
+
+The production shape is a **CLAP plugin sitting on a REAPER track** (same
+`fts_plugin_core` skeleton as `fts-signal-controller`). The entire algorithm
+must function on exactly two inputs — nothing else:
+
+1. **Host transport** from the CLAP process context (playing, song position,
+   tempo — sample-accurate, free from REAPER).
+2. **The complete MIDI of its own track**, visible forwards AND backwards,
+   pulled by the plugin itself through the daw crate (`daw::get()` →
+   track/items/notes — the `fts-signal-controller::scene_timer` pattern:
+   identify own track, read the timeline ahead of the playhead).
+
+No extension-side push feeder, no DocumentService: the plugin **pulls its
+own document**. Off the audio thread it watches its track's items (content
+hash, same discipline as the offline path), rebuilds
+`TrackDocument`/`Schedule` on change, and swaps atomically at a block
+boundary. On the audio thread: transport playing + schedule present →
+Lookahead (prefires against the CLAP song position); otherwise StrictLive
+on the incoming live MIDI events. Live/document arbitration per the mode
+policy above.
+
 ## Phases
 
-1. **Schedule + offline proof**: `TrackDocument` → annotate → schedule →
-   `SamplerRig::render_offline_document()`. A/B against the current
-   `render_offline` + negative-delay input: document render must put
-   transition arrivals on the grid. (Reuses the spectral A/B harness.)
-2. **Transport into daw standalone** `process_block` + realtime scheduler;
-   KeysRig plays a document from its own transport.
-3. **DocumentService + REAPER feeder** (watch/hash loop → RPC); live/document
-   arbitration.
-4. **CLAP host path** (signal-sampler as a CLAP inside REAPER, transport from
-   host) — pairs with the parked `signal-daw` plan.
+1. ~~**Schedule + offline proof**~~ **DONE** (`ec08016`): document →
+   annotate → schedule → `render_offline_document`, determinism suite,
+   Going Home end-to-end.
+   1b. ~~**Lines / buses / modes / auto-divisi**~~ **DONE**
+   (`cd18003`..`f1d9c69`): per-line mono legato, Longs/Shorts buses,
+   automatic StrictLive/Lookahead policy, both divisi allocators.
+2. **CLAP shell + realtime transport scheduler**: signal-sampler as a CLAP
+   (fts_plugin_core), transport from the process context, schedule walker
+   emitting prefires against the live playhead; seek/loop/stop
+   discontinuity handling; StrictLive passthrough for live input.
+3. **Self-sourced document**: own-track identification, item/MIDI read via
+   daw crate, change watch + atomic schedule swap, live/document
+   arbitration, seed persisted in track ext state.
+4. **Stem bus → plugin outputs**: map ArticClass buses onto CLAP output
+   ports so REAPER can route Longs/Shorts stems independently (optional,
+   default main).
 
 ## Non-goals (for now)
 
