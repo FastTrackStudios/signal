@@ -308,10 +308,24 @@ policy above.
    1b. ~~**Lines / buses / modes / auto-divisi**~~ **DONE**
    (`cd18003`..`f1d9c69`): per-line mono legato, Longs/Shorts buses,
    automatic StrictLive/Lookahead policy, both divisi allocators.
-2. **CLAP shell + realtime transport scheduler**: signal-sampler as a CLAP
-   (fts_plugin_core), transport from the process context, schedule walker
-   emitting prefires against the live playhead; seek/loop/stop
-   discontinuity handling; StrictLive passthrough for live input.
+2. ~~**CLAP shell + realtime transport scheduler**~~ **DONE**:
+   `signal-sampler-clap` (fts_plugin_core skeleton) +
+   `signal_sampler::document_rt::RealtimeScheduler` — the offline walker
+   driven by the CLAP transport, bit-identical to `render_offline_document`
+   and block-size invariant (`signal-sampler-clap/tests/host_sim.rs`).
+   Discontinuities: panic + cursor binary-search; v1 mid-note sustains
+   restart at the next boundary (same as offline `start_frame`); a prefire
+   missed by a late start degrades to a note-on ON its destination tick
+   (counted, allowed in realtime only). Tempo policy: schedule frames come
+   from the document tempo map; the HOST playhead is trusted (REAPER is the
+   tempo authority) and a divergent host tempo logs one warning — the fix
+   is rebuilding the document (phase 3's watcher does it automatically).
+   Install: `cargo xtask install` (bundles + symlinks
+   `Signal Sampler.clap`). Patch: `$SIGNAL_SAMPLER_CLAP_PATCH` (.styx; dev
+   default CSS 1st Violins). Document (dev, pending phase 3):
+   `$SIGNAL_SAMPLER_CLAP_DOC` JSON, hot-reloaded through the
+   `set_document` seam. Live input is dropped while a schedule is playing
+   (overdub arbitration comes with phase 3).
 3. **Self-sourced document**: own-track identification, item/MIDI read via
    daw crate, change watch + atomic schedule swap, live/document
    arbitration, seed persisted in track ext state.
