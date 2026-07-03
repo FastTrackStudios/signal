@@ -112,9 +112,21 @@ Per block: `[playhead, playhead + block/sr)` window against the Schedule.
 - **Seek/loop/stop**: on discontinuity, kill pending prefires, re-locate the
   schedule cursor, and (like any sampler on seek) start mid-note sustains at
   the right phase or on next boundary (v1: next note boundary).
-- **Late start** (transport starts < delay_ms before a legato note): fall
-  back to the reactive path for that one note — same sound as live mode,
-  degrades gracefully.
+- **Playback-start invariance (supersedes the old "late start" fallback):**
+  starting playback at ANY position P must sound identical to the offline
+  render sliced at P — sample for sample. If P lands inside a legato
+  transition's window (prefire fired before P, arrival after), the engine
+  does not degrade to a fresh attack: it reconstructs the voice the full
+  render would have — same transition sample (recomputable because RR is a
+  pure hash of the note, not history), started mid-sample at offset
+  `P - prefire_frame`, envelopes/crossfades advanced to match. The same
+  reconstruction applies to sustains sounding at P and to release tails of
+  notes that ended within their ring-out window before P: a bounded
+  back-scan (`max_prefire_lead + max_release_tail`) finds every voice alive
+  at P and spawns it at its correct internal offset, and CC state is set to
+  its interpolated value at P. Consequence: WHERE you press play never
+  changes WHAT you hear — realtime from bar 17 == the bounce, at every
+  sample.
 - **Document edited during playback**: version bump swaps the schedule at
   the next block boundary (same glitch-free swap discipline as patches).
 
@@ -313,10 +325,17 @@ policy above.
    `signal_sampler::document_rt::RealtimeScheduler` — the offline walker
    driven by the CLAP transport, bit-identical to `render_offline_document`
    and block-size invariant (`signal-sampler-clap/tests/host_sim.rs`).
-   Discontinuities: panic + cursor binary-search; v1 mid-note sustains
-   restart at the next boundary (same as offline `start_frame`); a prefire
-   missed by a late start degrades to a note-on ON its destination tick
-   (counted, allowed in realtime only). Tempo policy: schedule frames come
+   **Playback-start invariance holds at every sample**: starting/seeking
+   to ANY position P — inside a transition window, mid-sustain, inside a
+   release tail — is the full render sliced at P, bit-exactly. Voices alive
+   across P are reconstructed by bounded deterministic replay
+   (`Schedule::reconstruction_start`: replay the activity span containing P
+   through the real render path, audio discarded — the only bit-exact
+   mechanism, since voice state is per-frame float accumulation). The
+   offline `start_frame` render uses the same semantics, so the invariant
+   is tested realtime-vs-offline-vs-full-slice. Replay cost is bounded by
+   the continuous activity span (audio-thread stall on seek; off-thread
+   reconstruction is a future optimization). Tempo policy: schedule frames come
    from the document tempo map; the HOST playhead is trusted (REAPER is the
    tempo authority) and a divergent host tempo logs one warning — the fix
    is rebuilding the document (phase 3's watcher does it automatically).
