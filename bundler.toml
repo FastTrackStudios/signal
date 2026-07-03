@@ -3,3 +3,6 @@
 
 [fts-signal-controller]
 name = "FTS Signal Controller"
+
+[signal-sampler-clap]
+name = "Signal Sampler"
