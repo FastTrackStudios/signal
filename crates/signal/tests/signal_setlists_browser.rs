@@ -18,6 +18,17 @@ use signal::{
     tagging::{BrowserMode, BrowserQuery},
 };
 
+/// Bootstrap an in-memory controller pre-seeded with the guitar profiles,
+/// megarig (tagged "guitar"), Worship profile (tagged "worship"), a song, and
+/// the "Worship Set" setlist. Shadows the glob-imported `fixtures::controller`.
+async fn controller() -> signal::Signal {
+    let signal = signal::bootstrap_in_memory_controller_async()
+        .await
+        .expect("failed to bootstrap in-memory controller");
+    fixtures::seed_guitar_profiles(&signal).await;
+    signal
+}
+
 // ─────────────────────────────────────────────────────────────
 //  Setlist tests
 // ─────────────────────────────────────────────────────────────

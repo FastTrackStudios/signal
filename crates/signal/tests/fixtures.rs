@@ -85,6 +85,7 @@ pub async fn save_built_rig(signal: &Signal, built: &BuiltRig) {
 use signal::block::BlockType;
 use signal::engine::{Engine, EngineId, EngineScene, LayerSelection};
 use signal::layer::{Layer, LayerId, LayerSnapshot, ModuleRef};
+use signal::metadata::Metadata;
 use signal::module_type::ModuleType;
 use signal::overrides::{NodePath, Override};
 use signal::rig::{EngineSelection, Rig, RigScene, RigType};
@@ -107,6 +108,545 @@ pub async fn seed_jm_megarig(signal: &Signal) {
     signal.layers().save(jm_layer()).await.unwrap();
     signal.engines().save(guitar_engine()).await.unwrap();
     signal.rigs().save(guitar_megarig()).await.unwrap();
+}
+
+/// Seed the full guitar library the higher-level tests expect: the JM megarig
+/// plus a "Worship" profile (Clean/Lead patches targeting the megarig), a song
+/// whose sections resolve, and a setlist referencing that song.
+///
+/// Everything targets the JM megarig (which fully resolves), so `resolve_target`
+/// succeeds for every patch/section. The old seed put the worship profile on a
+/// separate worship rig; here it targets the megarig so we only need one
+/// resolvable rig — the tests only assert the profile name, patch names/targets,
+/// and that the Clean patch drives amp gain low.
+pub async fn seed_guitar_library(signal: &Signal) {
+    use signal::profile::{Patch, Profile};
+    use signal::setlist::{Setlist, SetlistEntry};
+    use signal::song::{Section, Song};
+
+    seed_jm_megarig(signal).await;
+
+    let amp_gain = || {
+        NodePath::engine("guitar-engine")
+            .with_layer("guitar-layer-archetype-jm")
+            .with_block("amp")
+            .with_parameter("gain")
+    };
+
+    // ── "Worship" profile — 8 patches on the megarig ──
+    let clean = Patch::from_rig_scene(
+        seed_id("guitar-worship-clean"),
+        "Clean",
+        guitar_megarig_id(),
+        guitar_megarig_default_scene(),
+    )
+    .with_override(Override::set(amp_gain(), 0.18));
+    let mut worship = Profile::new(seed_id("guitar-worship-profile"), "Worship", clean);
+    worship.add_patch(
+        Patch::from_rig_scene(
+            seed_id("guitar-worship-crunch"),
+            "Crunch",
+            guitar_megarig_id(),
+            guitar_megarig_default_scene(),
+        )
+        .with_override(Override::set(amp_gain(), 0.48)),
+    );
+    worship.add_patch(
+        Patch::from_rig_scene(
+            seed_id("guitar-worship-drive"),
+            "Drive",
+            guitar_megarig_id(),
+            guitar_megarig_default_scene(),
+        )
+        .with_override(Override::set(amp_gain(), 0.60)),
+    );
+    worship.add_patch(
+        Patch::from_rig_scene(
+            seed_id("guitar-worship-lead"),
+            "Lead",
+            guitar_megarig_id(),
+            guitar_megarig_lead_scene(),
+        )
+        .with_override(Override::set(amp_gain(), 0.75)),
+    );
+    worship.add_patch(Patch::from_rig_scene(
+        seed_id("guitar-worship-ambient"),
+        "Ambient",
+        guitar_megarig_id(),
+        guitar_megarig_lead_scene(),
+    ));
+    worship.add_patch(Patch::from_rig_scene(
+        seed_id("guitar-worship-tremolo"),
+        "Tremolo",
+        guitar_megarig_id(),
+        guitar_megarig_default_scene(),
+    ));
+    worship.add_patch(Patch::from_rig_scene(
+        seed_id("guitar-worship-delay"),
+        "Delay",
+        guitar_megarig_id(),
+        guitar_megarig_default_scene(),
+    ));
+    worship.add_patch(
+        Patch::from_rig_scene(
+            seed_id("guitar-worship-solo"),
+            "Solo",
+            guitar_megarig_id(),
+            guitar_megarig_lead_scene(),
+        )
+        .with_override(Override::set(amp_gain(), 0.72))
+        // A second override on a *different* path (delay mix) so the Solo patch
+        // has strictly more effective overrides than the bare lead rig scene.
+        .with_override(Override::set(
+            NodePath::engine("guitar-engine")
+                .with_layer("guitar-layer-archetype-jm")
+                .with_block("dream-delay")
+                .with_parameter("mix"),
+            0.30,
+        )),
+    );
+    let worship = worship.with_metadata(
+        Metadata::new()
+            .with_tag("guitar")
+            .with_tag("worship")
+            .with_tag("setlist"),
+    );
+    signal.profiles().save(worship).await.unwrap();
+
+    // ── A song with resolvable sections (rig-scene + patch sourced) ──
+    let mut song = Song::new(
+        seed_id("guitar-worship-song"),
+        "Worship Set Opener",
+        Section::from_rig_scene(
+            seed_id("gws-intro"),
+            "Intro",
+            guitar_megarig_id(),
+            guitar_megarig_default_scene(),
+        ),
+    );
+    song.add_section(Section::from_patch(
+        seed_id("gws-verse"),
+        "Verse",
+        seed_id("guitar-worship-clean"),
+    ));
+    song.add_section(Section::from_rig_scene(
+        seed_id("gws-chorus"),
+        "Chorus",
+        guitar_megarig_id(),
+        guitar_megarig_lead_scene(),
+    ));
+    signal.songs().save(song).await.unwrap();
+
+    // ── A setlist referencing that song ──
+    //
+    // Named "Worship Set" with 2 entries; the first entry's id is
+    // `worship-set-worship-song` and its name matches the setlist name — the
+    // shape the setlists-browser tests assert on.
+    let mut setlist = Setlist::new(
+        seed_id("worship-set"),
+        "Worship Set",
+        SetlistEntry::new(
+            seed_id("worship-set-worship-song"),
+            "Worship Set",
+            seed_id("guitar-worship-song"),
+        ),
+    );
+    setlist.add_entry(SetlistEntry::new(
+        seed_id("worship-set-encore"),
+        "Encore",
+        seed_id("guitar-worship-song"),
+    ));
+    signal.setlists().save(setlist).await.unwrap();
+}
+
+/// Build one guitar patch targeting a megarig scene with an amp-gain override.
+fn megarig_patch(id: &str, name: &str, lead: bool, gain: f32) -> signal::profile::Patch {
+    use signal::profile::Patch;
+    let scene = if lead {
+        guitar_megarig_lead_scene()
+    } else {
+        guitar_megarig_default_scene()
+    };
+    Patch::from_rig_scene(seed_id(id), name, guitar_megarig_id(), scene).with_override(
+        Override::set(
+            NodePath::engine("guitar-engine")
+                .with_layer("guitar-layer-archetype-jm")
+                .with_block("amp")
+                .with_parameter("gain"),
+            gain,
+        ),
+    )
+}
+
+/// Seed the full set of guitar profiles the profile/song tests expect:
+/// Worship (default Clean), Blues (default Crunch), Rock (default Drive), and
+/// All-Around (default Clean, 8 named patches). Also seeds the megarig + song +
+/// setlist via [`seed_guitar_library`].
+///
+/// The old seed drew these from separate rigs / RfxChain block snapshots; here
+/// every patch targets the JM megarig so they all resolve, and the tests'
+/// assertions (patch counts, default-patch names, per-patch gain overrides,
+/// activate/resolve success) hold.
+pub async fn seed_guitar_profiles(signal: &Signal) {
+    use signal::profile::Profile;
+
+    seed_guitar_library(signal).await;
+
+    // ── Blues — default Crunch ──
+    let mut blues = Profile::new(
+        seed_id("guitar-blues-profile"),
+        "Blues",
+        megarig_patch("guitar-blues-clean", "Clean", false, 0.15),
+    );
+    blues.add_patch(megarig_patch("guitar-blues-crunch", "Crunch", false, 0.48));
+    blues.add_patch(megarig_patch("guitar-blues-drive", "Drive", false, 0.60));
+    blues.add_patch(megarig_patch("guitar-blues-lead", "Lead", true, 0.65));
+    blues.default_patch_id = seed_id("guitar-blues-crunch").into();
+    signal.profiles().save(blues).await.unwrap();
+
+    // ── Rock — default Drive, 8 patches for slot-remap coverage ──
+    let mut rock = Profile::new(
+        seed_id("guitar-rock-profile"),
+        "Rock",
+        megarig_patch("guitar-rock-clean", "Clean", false, 0.20),
+    );
+    rock.add_patch(megarig_patch("guitar-rock-crunch", "Crunch", false, 0.52));
+    rock.add_patch(megarig_patch("guitar-rock-drive", "Drive", false, 0.68));
+    rock.add_patch(megarig_patch("guitar-rock-lead", "Lead", true, 0.72));
+    rock.add_patch(megarig_patch("guitar-rock-ambient", "Ambient", false, 0.40));
+    rock.add_patch(megarig_patch("guitar-rock-phaser", "Phaser", false, 0.45));
+    rock.add_patch(megarig_patch("guitar-rock-dly-lead", "DLY Lead", true, 0.70));
+    rock.add_patch(megarig_patch("guitar-rock-solo", "Solo", true, 0.78));
+    rock.default_patch_id = seed_id("guitar-rock-drive").into();
+    signal.profiles().save(rock).await.unwrap();
+
+    // ── All-Around — default Clean, 8 named patches ──
+    let mut all_around = Profile::new(
+        seed_id("guitar-allaround-profile"),
+        "All-Around",
+        megarig_patch("guitar-allaround-clean", "Clean", false, 0.22),
+    );
+    all_around.add_patch(megarig_patch(
+        "guitar-allaround-crunch",
+        "Crunch",
+        false,
+        0.50,
+    ));
+    all_around.add_patch(megarig_patch("guitar-allaround-drive", "Drive", false, 0.62));
+    all_around.add_patch(megarig_patch("guitar-allaround-lead", "Lead", true, 0.75));
+    all_around.add_patch(megarig_patch("guitar-allaround-funk", "Funk", false, 0.30));
+    all_around.add_patch(megarig_patch(
+        "guitar-allaround-ambient",
+        "Ambient",
+        false,
+        0.35,
+    ));
+    all_around.add_patch(megarig_patch(
+        "guitar-allaround-qtron",
+        "Q-Tron",
+        false,
+        0.34,
+    ));
+    all_around.add_patch(megarig_patch("guitar-allaround-solo", "Solo", true, 0.72));
+    signal.profiles().save(all_around).await.unwrap();
+}
+
+// ─── Keys megarig fixture ───────────────────────────────────────
+//
+// A 4-engine Keys megarig (Keys / Synth / Organ / Pad) with the layer/scene
+// counts the keys tests assert, built so every scene fully resolves. Each layer
+// references a single shared module preset (`keys-mod` → block preset
+// `keys-tone`), which is enough for resolution to produce engines + layers.
+
+fn keys_block_preset() -> Preset {
+    Preset::new(
+        seed_id("keys-tone"),
+        "Keys Tone",
+        BlockType::Amp,
+        Snapshot::new(
+            seed_id("keys-tone-default"),
+            "Default",
+            Block::from_parameters(vec![
+                BlockParameter::new("brightness", "Brightness", 0.5),
+                BlockParameter::new("warmth", "Warmth", 0.6),
+            ]),
+        ),
+        vec![],
+    )
+}
+
+fn keys_module_preset() -> ModulePreset {
+    ModulePreset::new(
+        seed_id("keys-mod"),
+        "Keys Module",
+        ModuleType::Custom,
+        ModuleSnapshot::new(
+            seed_id("keys-mod-default"),
+            "Default",
+            Module::from_blocks(vec![ModuleBlock::new(
+                "tone",
+                "Keys Tone",
+                BlockType::Amp,
+                ModuleBlockSource::PresetDefault {
+                    preset_id: PresetId::from(seed_id("keys-tone")),
+                    saved_at_version: None,
+                },
+            )]),
+        ),
+        vec![],
+    )
+}
+
+fn keys_layer(layer_seed: &str, name: &str, etype: EngineType) -> Layer {
+    let snap = LayerSnapshot::new(seed_id(&format!("{layer_seed}-default")), "Default")
+        .with_module(ModuleRef::new(seed_id("keys-mod")));
+    Layer::new(seed_id(layer_seed), name, etype, snap)
+}
+
+fn keys_make_engine(
+    engine_seed: &str,
+    name: &str,
+    etype: EngineType,
+    layers: &[&str],
+    scenes: &[(&str, &str)],
+) -> Engine {
+    let layer_ids: Vec<LayerId> = layers.iter().map(|l| LayerId::from(seed_id(l))).collect();
+    let mk_scene = |scene_seed: &str, scene_name: &str| {
+        let mut s = EngineScene::new(seed_id(scene_seed), scene_name);
+        for l in layers {
+            s = s.with_layer(LayerSelection::new(
+                seed_id(l),
+                seed_id(&format!("{l}-default")),
+            ));
+        }
+        s
+    };
+    let (fs_seed, fs_name) = scenes[0];
+    let mut engine = Engine::new(
+        seed_id(engine_seed),
+        name,
+        etype,
+        layer_ids,
+        mk_scene(fs_seed, fs_name),
+    );
+    for (ss, sn) in &scenes[1..] {
+        engine.add_variant(mk_scene(ss, sn));
+    }
+    engine
+}
+
+fn keys_rig_scene(scene_seed: &str, scene_name: &str, keys_engine_scene: &str) -> RigScene {
+    RigScene::new(seed_id(scene_seed), scene_name)
+        .with_engine(EngineSelection::new(
+            seed_id("keys-engine"),
+            seed_id(keys_engine_scene),
+        ))
+        .with_engine(EngineSelection::new(
+            seed_id("synth-engine"),
+            seed_id("synth-engine-default"),
+        ))
+        .with_engine(EngineSelection::new(
+            seed_id("organ-engine"),
+            seed_id("organ-engine-default"),
+        ))
+        .with_engine(EngineSelection::new(
+            seed_id("pad-engine"),
+            seed_id("pad-engine-default"),
+        ))
+        .with_metadata(Metadata::new().with_tag("megarig").with_tag("keys"))
+}
+
+/// Build + persist the Keys megarig hierarchy (block/module preset → 9 layers →
+/// 4 engines → rig) plus the "Keys Feature" profile and "Feature-Demo Song".
+pub async fn seed_keys_megarig(signal: &Signal) {
+    use signal::profile::{Patch, Profile};
+    use signal::song::{Section, Song};
+
+    signal
+        .block_presets()
+        .save(keys_block_preset())
+        .await
+        .unwrap();
+    signal
+        .module_presets()
+        .save(keys_module_preset())
+        .await
+        .unwrap();
+
+    let layers = [
+        ("keys-layer-core", "Keys Core", EngineType::Keys),
+        ("keys-layer-space", "Keys Space", EngineType::Keys),
+        ("synth-layer-osc", "Synth Osc", EngineType::Synth),
+        ("synth-layer-motion", "Synth Motion", EngineType::Synth),
+        ("synth-layer-texture", "Synth Texture", EngineType::Synth),
+        ("organ-layer-body", "Organ Body", EngineType::Organ),
+        ("organ-layer-air", "Organ Air", EngineType::Organ),
+        ("pad-layer-foundation", "Pad Foundation", EngineType::Pad),
+        ("pad-layer-shimmer", "Pad Shimmer", EngineType::Pad),
+    ];
+    for (seed, name, etype) in layers {
+        signal
+            .layers()
+            .save(keys_layer(seed, name, etype))
+            .await
+            .unwrap();
+    }
+
+    // Engines: layer counts (2/3/2/2) and scene counts (2/2/1/1) are asserted.
+    signal
+        .engines()
+        .save(keys_make_engine(
+            "keys-engine",
+            "Keys Engine",
+            EngineType::Keys,
+            &["keys-layer-core", "keys-layer-space"],
+            &[
+                ("keys-engine-default", "Default"),
+                ("keys-engine-bright", "Bright"),
+            ],
+        ))
+        .await
+        .unwrap();
+    signal
+        .engines()
+        .save(keys_make_engine(
+            "synth-engine",
+            "Synth Engine",
+            EngineType::Synth,
+            &["synth-layer-osc", "synth-layer-motion", "synth-layer-texture"],
+            &[
+                ("synth-engine-default", "Default"),
+                ("synth-engine-scene-b", "Scene B"),
+            ],
+        ))
+        .await
+        .unwrap();
+    signal
+        .engines()
+        .save(keys_make_engine(
+            "organ-engine",
+            "Organ Engine",
+            EngineType::Organ,
+            &["organ-layer-body", "organ-layer-air"],
+            &[("organ-engine-default", "Default")],
+        ))
+        .await
+        .unwrap();
+    signal
+        .engines()
+        .save(keys_make_engine(
+            "pad-engine",
+            "Pad Engine",
+            EngineType::Pad,
+            &["pad-layer-foundation", "pad-layer-shimmer"],
+            &[("pad-engine-default", "Default")],
+        ))
+        .await
+        .unwrap();
+
+    // Rig: 4 engines, 4 scenes (Wide swaps the keys engine to its Bright scene).
+    let mut rig = Rig::new(
+        seed_id("keys-megarig"),
+        "MegaRig",
+        vec![
+            EngineId::from(seed_id("keys-engine")),
+            EngineId::from(seed_id("synth-engine")),
+            EngineId::from(seed_id("organ-engine")),
+            EngineId::from(seed_id("pad-engine")),
+        ],
+        keys_rig_scene("keys-megarig-default", "Default", "keys-engine-default"),
+    )
+    .with_rig_type(RigType::Keys)
+    .with_metadata(Metadata::new().with_tag("megarig").with_tag("keys"));
+    rig.add_variant(keys_rig_scene(
+        "keys-megarig-wide",
+        "Wide",
+        "keys-engine-bright",
+    ));
+    rig.add_variant(keys_rig_scene(
+        "keys-megarig-focus",
+        "Focus",
+        "keys-engine-default",
+    ));
+    rig.add_variant(keys_rig_scene(
+        "keys-megarig-air",
+        "Air",
+        "keys-engine-default",
+    ));
+    signal.rigs().save(rig).await.unwrap();
+
+    // "Keys Feature" profile — 4 patches, one per scene.
+    let keys_patch = |id: &str, name: &str, scene: &str| {
+        Patch::from_rig_scene(seed_id(id), name, seed_id("keys-megarig"), seed_id(scene))
+    };
+    let mut profile = Profile::new(
+        seed_id("keys-feature-profile"),
+        "Keys Feature",
+        keys_patch(
+            "keys-feature-foundation",
+            "Foundation",
+            "keys-megarig-default",
+        ),
+    );
+    profile.add_patch(keys_patch("keys-feature-wide", "Wide", "keys-megarig-wide"));
+    profile.add_patch(keys_patch(
+        "keys-feature-focus",
+        "Focus",
+        "keys-megarig-focus",
+    ));
+    profile.add_patch(keys_patch("keys-feature-air", "Air", "keys-megarig-air"));
+    signal.profiles().save(profile).await.unwrap();
+
+    // "Feature-Demo Song" — 4 sections, one per scene.
+    let mut song = Song::new(
+        seed_id("keys-feature-song"),
+        "Feature-Demo Song",
+        Section::from_rig_scene(
+            seed_id("kfs-intro"),
+            "Intro",
+            seed_id("keys-megarig"),
+            seed_id("keys-megarig-default"),
+        ),
+    );
+    song.add_section(Section::from_rig_scene(
+        seed_id("kfs-wide"),
+        "Wide",
+        seed_id("keys-megarig"),
+        seed_id("keys-megarig-wide"),
+    ));
+    song.add_section(Section::from_rig_scene(
+        seed_id("kfs-focus"),
+        "Focus",
+        seed_id("keys-megarig"),
+        seed_id("keys-megarig-focus"),
+    ));
+    song.add_section(Section::from_rig_scene(
+        seed_id("kfs-air"),
+        "Air",
+        seed_id("keys-megarig"),
+        seed_id("keys-megarig-air"),
+    ));
+    signal.songs().save(song).await.unwrap();
+
+    // A setlist containing the keys song, for the full setlist sweep.
+    use signal::setlist::{Setlist, SetlistEntry};
+    let setlist = Setlist::new(
+        seed_id("keys-feature-setlist"),
+        "Feature Set",
+        SetlistEntry::new(
+            seed_id("kfsl-1"),
+            "Feature-Demo Song",
+            seed_id("keys-feature-song"),
+        ),
+    );
+    signal.setlists().save(setlist).await.unwrap();
+}
+
+/// Seed both the guitar library (profiles/song/setlist) and the keys megarig —
+/// the union the cross-rig runtime tests need.
+pub async fn seed_everything(signal: &Signal) {
+    seed_guitar_profiles(signal).await;
+    seed_keys_megarig(signal).await;
 }
 
 // ── Block presets (one per virtual block) ──
@@ -974,18 +1514,16 @@ fn guitar_engine() -> Engine {
         ),
     );
 
-    let lead_scene = EngineScene::new(seed_id("guitar-engine-lead"), "Lead")
-        .with_layer(LayerSelection::new(
+    // No engine-scene override here: engine-scope overrides merge *after* patch
+    // overrides in resolution, so an amp-gain override at this level would clobber
+    // a patch's own amp-gain (e.g. the worship Solo patch's 0.72). The rig lead
+    // scene carries the scene-level override instead.
+    let lead_scene = EngineScene::new(seed_id("guitar-engine-lead"), "Lead").with_layer(
+        LayerSelection::new(
             seed_id("guitar-layer-archetype-jm"),
             seed_id("guitar-layer-archetype-jm-lead"),
-        ))
-        .with_override(Override::set(
-            NodePath::layer("guitar-layer-archetype-jm")
-                .with_module("jm-amp-module")
-                .with_block("amp")
-                .with_parameter("gain"),
-            0.75,
-        ));
+        ),
+    );
 
     let mut engine = Engine::new(
         seed_id("guitar-engine"),
@@ -1025,7 +1563,8 @@ fn guitar_megarig() -> Rig {
         vec![EngineId::from(seed_id("guitar-engine"))],
         default_scene,
     )
-    .with_rig_type(RigType::Guitar);
+    .with_rig_type(RigType::Guitar)
+    .with_metadata(Metadata::new().with_tag("megarig").with_tag("guitar"));
     rig.add_variant(lead_scene);
     rig
 }

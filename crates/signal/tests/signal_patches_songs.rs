@@ -21,6 +21,20 @@ use signal::{
     song::{Section, SectionId, SectionSource, Song, SongId},
 };
 
+/// Bootstrap an in-memory controller pre-seeded with the guitar profiles.
+///
+/// The static seed for rigs/profiles/layers/engines/songs was emptied, so this
+/// rebuilds the JM megarig + Worship/Blues/Rock/All-Around profiles + a song +
+/// setlist via [`fixtures::seed_guitar_profiles`] (build-your-own equivalent of
+/// the old seed). Shadows the glob-imported `fixtures::controller`.
+async fn controller() -> signal::Signal {
+    let signal = signal::bootstrap_in_memory_controller_async()
+        .await
+        .expect("failed to bootstrap in-memory controller");
+    fixtures::seed_guitar_profiles(&signal).await;
+    signal
+}
+
 // ─────────────────────────────────────────────────────────────
 //  Profile / Patch tests
 // ─────────────────────────────────────────────────────────────

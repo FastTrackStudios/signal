@@ -17,7 +17,17 @@
 
 mod fixtures;
 
-use fixtures::controller;
+/// Bootstrap an in-memory controller pre-seeded with both the guitar and keys
+/// megarigs (+ profiles, songs, setlists, module presets). The static seed was
+/// emptied, so the cross-rig runtime tests rebuild it via
+/// [`fixtures::seed_everything`].
+async fn controller() -> signal::Signal {
+    let signal = signal::bootstrap_in_memory_controller_async()
+        .await
+        .expect("failed to bootstrap in-memory controller");
+    fixtures::seed_everything(&signal).await;
+    signal
+}
 use signal::{
     DawParamValue, DawParameterSnapshot, EngineType, MorphEngine,
     engine::{Engine, EngineScene},

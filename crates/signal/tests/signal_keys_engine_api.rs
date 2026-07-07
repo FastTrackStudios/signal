@@ -30,6 +30,19 @@ use signal::{
     traits::Collection,
 };
 
+/// Bootstrap an in-memory controller pre-seeded with the Keys megarig.
+///
+/// The static seed for rigs/engines/layers/profiles/songs was emptied, so this
+/// rebuilds the 4-engine Keys megarig + "Keys Feature" profile + "Feature-Demo
+/// Song" via [`fixtures::seed_keys_megarig`]. Shadows `fixtures::controller`.
+async fn controller() -> signal::Signal {
+    let signal = signal::bootstrap_in_memory_controller_async()
+        .await
+        .expect("failed to bootstrap in-memory controller");
+    fixtures::seed_keys_megarig(&signal).await;
+    signal
+}
+
 // ═════════════════════════════════════════════════════════════
 //  Group A: Seeded Keys Rig Verification (4 tests)
 // ═════════════════════════════════════════════════════════════

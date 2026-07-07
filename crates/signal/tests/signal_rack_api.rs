@@ -6,6 +6,8 @@
 //!
 //! All tests use `bootstrap_in_memory_controller_async()` — no REAPER dependency.
 
+mod fixtures;
+
 use signal::{
     BlockType, bootstrap_in_memory_controller_async,
     fx_send::{FxSend, FxSendBus, FxSendBusId, FxSendCategory, FxSendId},
@@ -431,10 +433,12 @@ async fn c4_fx_send_mix_and_enabled_round_trip() {
 #[tokio::test]
 async fn d1_rack_referencing_seeded_guitar_rig() {
     let signal = bootstrap_in_memory_controller_async().await.unwrap();
+    // The static seed for rigs was emptied; build the guitar megarig instead.
+    fixtures::seed_jm_megarig(&signal).await;
 
-    // Verify the seeded rig exists
+    // Verify the rig exists
     let rig = signal.rigs().load(guitar_rig_id()).await.unwrap();
-    assert!(rig.is_some(), "guitar megarig should exist in seeds");
+    assert!(rig.is_some(), "guitar megarig should exist");
 
     let mut rack = Rack::new(seed_id("guitar-rack"), "Guitar Rack");
     rack.slots.push(RackSlot {

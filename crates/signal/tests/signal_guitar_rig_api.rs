@@ -32,6 +32,20 @@ use signal_live::engine::{
     ModuleTarget, ResolvedSlot, SlotDiff, SlotState, compute_diff, slot::InstanceHandle,
 };
 
+/// Bootstrap an in-memory controller pre-seeded with the guitar library.
+///
+/// The static seed for rigs/profiles/layers/engines/songs/setlists was emptied,
+/// so this rebuilds the JM megarig + a Worship profile + a song + a setlist via
+/// [`fixtures::seed_guitar_library`] (build-your-own equivalent of the old seed).
+/// Shadows the glob-imported `fixtures::controller` for this file only.
+async fn controller() -> signal::Signal {
+    let signal = signal::bootstrap_in_memory_controller_async()
+        .await
+        .expect("failed to bootstrap in-memory controller");
+    fixtures::seed_guitar_library(&signal).await;
+    signal
+}
+
 // ═════════════════════════════════════════════════════════════
 //  Group A: Block Collection CRUD
 // ═════════════════════════════════════════════════════════════
