@@ -37,4 +37,52 @@ specs (
             }
         )
     }
+    {
+        name keys
+        source_url https://codeberg.org/FastTrackStudios/signal
+        include (features/keys/spec/**/*.md)
+        impls (
+            {
+                name live
+                include (
+                    features/keys/src/**/*.rs
+                )
+                exclude (
+                    features/keys/**/target/**
+                )
+            }
+        )
+    }
+    {
+        name orchestra
+        source_url https://codeberg.org/FastTrackStudios/signal
+        include (features/orchestra/spec/**/*.md)
+        impls (
+            {
+                name live
+                include (
+                    features/orchestra/src/**/*.rs
+                )
+                exclude (
+                    features/orchestra/**/target/**
+                )
+            }
+        )
+    }
+    {
+        name drums
+        source_url https://codeberg.org/FastTrackStudios/signal
+        include (features/drums/spec/**/*.md)
+        impls (
+            {
+                name live
+                include (
+                    features/drums/src/**/*.rs
+                )
+                exclude (
+                    features/drums/**/target/**
+                )
+            }
+        )
+    }
 )
