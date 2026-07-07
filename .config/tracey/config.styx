@@ -21,4 +21,20 @@ specs (
             }
         )
     }
+    {
+        name guitar
+        source_url https://codeberg.org/FastTrackStudios/signal
+        include (features/guitar/spec/**/*.md)
+        impls (
+            {
+                name live
+                include (
+                    features/guitar/src/**/*.rs
+                )
+                exclude (
+                    features/guitar/**/target/**
+                )
+            }
+        )
+    }
 )

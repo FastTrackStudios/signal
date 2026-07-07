@@ -44,7 +44,6 @@
 //! # Ok::<(), eyre::Error>(())
 //! ```
 
-pub mod amp_engine;
 pub mod api;
 pub mod bank;
 pub mod block;
@@ -81,7 +80,6 @@ pub mod sampler_rig;
 pub mod spec;
 pub mod stats;
 
-pub use amp_engine::AmpEngine;
 pub use bank::{PreloadProfile, SamplerBank};
 pub use block::{BlockParams, BlockSpec, SamplerBlock};
 pub use convolver::Convolver;
