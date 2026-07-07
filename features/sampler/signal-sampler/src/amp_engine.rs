@@ -18,11 +18,9 @@
 
 use std::path::Path;
 
-use crate::api::rig::Profile;
-use crate::api::rig::block::amp_nam;
 use crate::rig::GuitarRig;
 use crate::rig_prefs::RigAudioPrefs;
-use crate::rig_profile::ProfileRig;
+use crate::rig_profile::{ProfileRig, RigPatch, RigProfile};
 
 /// A running amp: live duplex audio + at most one loaded NAM model.
 pub struct AmpEngine {
@@ -45,26 +43,21 @@ impl AmpEngine {
     }
 
     /// Load a `.nam` model as the single amp block, replacing any current one.
-    /// The swap installs a fresh one-patch profile (`level_match` normalises the
-    /// model's baked loudness so different amps sit at a consistent output).
+    /// Installs a fresh one-patch profile whose only block is the NAM amp. The
+    /// full model path is carried through directly (no id round-trip), so paths
+    /// with spaces/quotes resolve correctly.
     pub fn load_model(&mut self, path: impl AsRef<Path>) -> Result<(), String> {
-        let path = path.as_ref().to_path_buf();
-        let build_path = path.clone();
-        let profile = Profile::builder("Amp")
-            .patch("Amp", move |pb| {
-                pb.level_match()
-                    .chain(move |c| Ok(c.block(amp_nam(&build_path)?)))
-            })
-            .default("Amp")
-            .build()?;
-        self.rig
-            .load_profile(profile.to_rig_profile(), path.parent())?;
+        let path = path.as_ref();
+        let path_str = path.to_string_lossy().to_string();
+        let mut profile = RigProfile::new("Amp");
+        profile.patches.push(RigPatch::amp("Amp", &path_str));
+        self.rig.load_profile(profile, None)?;
         self.model_name = path
             .file_stem()
             .and_then(|s| s.to_str())
             .unwrap_or("amp")
             .to_string();
-        self.model_path = Some(path.display().to_string());
+        self.model_path = Some(path_str);
         Ok(())
     }
 
