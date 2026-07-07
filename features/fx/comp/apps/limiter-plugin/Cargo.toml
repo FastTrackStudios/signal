@@ -1,0 +1,17 @@
+[package]
+name = "limiter-plugin"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+edition.workspace = true
+description = "FTS Limiter — CLAP/VST3 audio plugin entry point"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+fts-plugin-core = { workspace = true }
+limiter-dsp = { path = "../../crates/limiter-dsp" }
+limiter-profiles = { path = "../../crates/limiter-profiles" }
+limiter-ui = { path = "../../crates/limiter-ui" }
+nih_plug = { workspace = true }

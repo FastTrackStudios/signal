@@ -35,6 +35,10 @@ signal-plugin-host = { workspace = true, features = ["clap-host"] }
 # vendored into the bindings crate's build.rs, so no system dep is needed.
 neural-amp-modeler = { workspace = true }
 
+# Built-in FX — PluginInstance wrappers over the vendored FX DSP cores
+# (features/fx/). Backs `BlockImpl::Native` for EQ / Compressor / … blocks.
+signal-fx = { workspace = true }
+
 # Audio I/O
 cpal        = { workspace = true }
 # Reusable audio I/O from daw — device enumeration + AudioIoPrefs used to drive

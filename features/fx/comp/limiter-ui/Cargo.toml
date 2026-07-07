@@ -1,0 +1,13 @@
+[package]
+name = "limiter-ui"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+edition.workspace = true
+description = "Limiter GUI — gain reduction meters, ceiling display, and profile theme rendering"
+
+[dependencies]
+audio-gui = { workspace = true }
+fts-plugin-core = { workspace = true }
+limiter-dsp = { path = "../limiter-dsp" }
+limiter-profiles = { path = "../limiter-profiles" }

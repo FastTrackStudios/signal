@@ -1,0 +1,17 @@
+[package]
+name = "chorus-plugin"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+edition.workspace = true
+description = "FTS Chorus — CLAP/VST3 chorus/flanger/vibrato plugin"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+fts-plugin-core = { workspace = true }
+chorus-dsp = { path = "../../crates/chorus-dsp" }
+fts-dsp = { workspace = true }
+atomic_float = { workspace = true }
+nih_plug = { workspace = true }

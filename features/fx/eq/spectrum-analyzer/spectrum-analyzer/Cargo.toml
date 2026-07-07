@@ -1,0 +1,26 @@
+[package]
+name = "spectrum-analyzer"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Spectrum analyzer feature facade for FTS-EQ"
+
+# Facade crate for the `spectrum-analyzer` feature.
+#
+# A consumer picks the slice they need via cargo features on this one dep:
+#
+#   dsp → the realtime analysis engine (default)
+#   ui  → vello painters + Dioxus settings panel (pulls dsp)
+#
+# The audio engine (eq-plugin, eq-standalone) depends on this with default
+# features (dsp only). The GUI (eq-ui) enables `ui`.
+
+[features]
+default = ["dsp"]
+dsp = ["dep:spectrum-analyzer-dsp"]
+ui = ["dsp", "dep:spectrum-analyzer-ui"]
+
+[dependencies]
+spectrum-analyzer-dsp = { workspace = true, optional = true }
+spectrum-analyzer-ui = { workspace = true, optional = true }

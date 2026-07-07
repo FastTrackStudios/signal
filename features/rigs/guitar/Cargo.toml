@@ -1,0 +1,11 @@
+[package]
+name = "signal-guitar"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+# The shared sampler core — GuitarRig / ProfileRig / RigProfile / RigBlock /
+# RigAudioPrefs. The guitar feature is a thin live-handle layer on top.
+signal-sampler.workspace = true

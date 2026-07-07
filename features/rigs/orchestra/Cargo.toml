@@ -1,0 +1,16 @@
+[package]
+name = "signal-orchestra"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+# The shared sampler engine implements the CSS articulation behaviour; orchestra
+# is the strings definition + spec + A/B tests on top.
+signal-sampler.workspace = true
+
+[dev-dependencies]
+signal-sampler = { workspace = true, features = ["pipewire"] }
+hound = "3.5"
+eyre.workspace = true

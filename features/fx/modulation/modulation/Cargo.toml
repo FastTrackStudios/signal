@@ -1,0 +1,16 @@
+[package]
+name = "modulation"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "modulation — facade over chorus/trem/wah DSP; UI + profiles opt-in."
+
+[features]
+default = []
+ui = []
+profiles = []
+
+[dependencies]
+chorus-dsp = { workspace = true }
+trem-dsp = { workspace = true }
+wah-dsp = { workspace = true }

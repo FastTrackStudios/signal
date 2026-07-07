@@ -1,0 +1,10 @@
+[package]
+name = "chorus-dsp"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Chorus/flanger DSP engine — modulated delay with stereo spread"
+
+[dependencies]
+audiocore-dsp = { workspace = true }

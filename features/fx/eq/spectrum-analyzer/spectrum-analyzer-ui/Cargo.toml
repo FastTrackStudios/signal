@@ -1,0 +1,19 @@
+[package]
+name = "spectrum-analyzer-ui"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Spectrum analyzer painters + settings panel for FTS-EQ"
+
+# Per-feature UI for the spectrum analyzer: vello painters (composited into the
+# EQ graph's scene) and a Dioxus settings panel. Depends on the same
+# nice-plug-dioxus / fts-ui stack as eq-ui so the `Scene` type and dioxus
+# prelude line up exactly.
+
+[dependencies]
+spectrum-analyzer-dsp = { workspace = true }
+nice-plug-dioxus = { workspace = true }
+audiocore-core = { workspace = true }
+fts-ui = { workspace = true }
+fts-ui-audio = { workspace = true }

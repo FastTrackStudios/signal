@@ -1,0 +1,16 @@
+[package]
+name = "signal-fx"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Built-in FX for signal — PluginInstance wrappers over the vendored FX DSP cores (eq-dsp, comp-dsp, …)."
+
+[dependencies]
+signal-plugin-host = { workspace = true }
+audiocore-dsp = { workspace = true }
+# FX facades (never the -dsp crates directly).
+eq = { workspace = true }
+comp = { workspace = true }
+reverb = { workspace = true }
+delay = { workspace = true }
+modulation = { workspace = true }

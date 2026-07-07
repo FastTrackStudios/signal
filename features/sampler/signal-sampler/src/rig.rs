@@ -77,7 +77,7 @@ const MAX_BLOCK: usize = FX_PREPARE_BLOCK as usize;
 /// chain's blocks (identity pass-throughs fill unused ones). Reserving a
 /// constant count keeps the project's `fx_chain` (guids) immutable, so patch
 /// switches never rebuild the renderer's snapshot — the swap is pure box-insert.
-const MAX_CHAIN_SLOTS: usize = 8;
+const MAX_CHAIN_SLOTS: usize = 16;
 
 /// Identifies a chain resident control-side. Assigned on install; opaque
 /// elsewhere.
@@ -836,12 +836,20 @@ pub(crate) fn build_block(
         let inst = crate::SamplerInstrument::new(engine);
         Ok((Box::new(inst), format!("{name} (sample)"), None, None))
     } else {
-        // Native implementation: built-in DSP for this block type isn't written
-        // yet (no `daw-builtin-fx`). Callers filter these out before install.
-        Err(format!(
-            "no built-in DSP for a Native {:?} block yet — give it a NAM/IR/plugin",
-            block.block_type
-        ))
+        // Native implementation: built-in DSP from the native registry
+        // (synth blocks + the built-in FX in `signal-fx`). `native_dsp_available`
+        // gates which block types resolve here; the rest are filtered before
+        // install with a helpful "give it a NAM/IR/plugin" message.
+        let mut inst = crate::native::build_native(block, sample_rate).ok_or_else(|| {
+            format!(
+                "no built-in DSP for a Native {:?} block yet — give it a NAM/IR/plugin",
+                block.block_type
+            )
+        })?;
+        inst.prepare(sample_rate as f64, FX_PREPARE_BLOCK)
+            .map_err(|e| format!("prepare native {:?}: {e}", block.block_type))?;
+        let dn = inst.descriptor().name;
+        Ok((inst, format!("{dn} (native)"), None, None))
     }
 }
 

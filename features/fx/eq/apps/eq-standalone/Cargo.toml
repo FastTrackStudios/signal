@@ -1,0 +1,42 @@
+[package]
+name = "eq-standalone"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+edition.workspace = true
+description = "FTS EQ — standalone Blitz-native iteration app (no DAW host required)"
+
+[[bin]]
+name = "eq-standalone"
+path = "src/main.rs"
+
+[dependencies]
+nice-plug = { workspace = true }
+nice-plug-dioxus = { workspace = true }
+audiocore-core = { workspace = true }
+eq-ui = { workspace = true }
+spectrum-analyzer = { workspace = true }
+atomic_float = { workspace = true }
+# Pulled directly so we can vendor a custom launch that captures the
+# winit EventLoopProxy + WindowId. Pinned to the SAME DioxusLabs/blitz revision
+# as nice-plug-dioxus (9ebd23a) so they share blitz/anyrender/vello types.
+dioxus-native = { git = "https://github.com/DioxusLabs/blitz.git", rev = "9ebd23a", features = ["prelude"] }
+blitz-shell = { git = "https://github.com/DioxusLabs/blitz.git", rev = "9ebd23a" }
+winit = "0.30"
+dioxus-core = "0.7"
+# `asset!` macro (from dioxus_native::prelude) expands to `::manganis::...`,
+# so the crate must be a direct dep at the bin's top-level path.
+manganis = "0.7"
+# `Signal` etc. used by `rsx!` body in the standalone shell.
+dioxus-signals = "0.7"
+# Live audio capture for the spectrum analyzer. cpal picks the platform backend
+# (ALSA/PipeWire/PulseAudio on Linux, CoreAudio on macOS, WASAPI on Windows);
+# the app appears as an input node you can patch the system-audio monitor into
+# (e.g. via qpwgraph on PipeWire) without touching the output path.
+cpal = "0.15"
+anyhow = { workspace = true }
+# Native PipeWire capture. Setting `stream.capture.sink = true` makes PipeWire
+# auto-connect our input stream to the default sink's monitor — so the analyzer
+# shows live system audio with no manual patchbay routing (the approach cava
+# uses). cpal stays as a fallback for non-PipeWire systems / `FTS_EQ_CAPTURE=cpal`.
+pipewire = "0.8"

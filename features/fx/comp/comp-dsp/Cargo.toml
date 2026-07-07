@@ -1,0 +1,9 @@
+[package]
+name = "comp-dsp"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "FTS compressor (ProC3-style) DSP"
+
+[dependencies]
+audiocore-dsp = { workspace = true }

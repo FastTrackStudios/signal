@@ -1,0 +1,296 @@
+//! ShimmerDelay — pitch-shifted delay for ethereal/ambient textures.
+//!
+//! Delay line with pitch shifter in the feedback path. Each repeat
+//! is shifted by `pitch_ratio`, creating cascading shimmer effects.
+//! Uses the same granular crossfade approach as PitchDelay.
+
+use audiocore_dsp::biquad::{Biquad, FilterType};
+use audiocore_dsp::delay_line::DelayLine;
+use audiocore_dsp::smoothing::ParamSmoother;
+
+/// Shimmer delay with pitch shifting in the feedback path.
+pub struct ShimmerDelay {
+    /// Delay time in milliseconds.
+    pub time_ms: f64,
+    /// Feedback amount (0.0–1.0).
+    pub feedback: f64,
+    /// Pitch ratio (0.5–4.0). 2.0 = octave up, 1.498 = fifth up.
+    pub pitch_ratio: f64,
+    /// Shimmer mix (0.0–1.0). Blend between pitched and unpitched feedback.
+    pub shimmer_mix: f64,
+    /// High-cut filter frequency in Hz (0 = disabled).
+    pub hicut_freq: f64,
+    /// Filter Q.
+    pub filter_q: f64,
+    /// Decay EQ tilt (-1.0 = darken repeats, 0 = neutral, +1.0 = brighten).
+    pub decay_tilt: f64,
+
+    decay_eq: Biquad,
+    delay: DelayLine,
+    hicut: Biquad,
+    feedback_sample: f64,
+    sample_rate: f64,
+    smoother: ParamSmoother,
+    // Granular pitch shifter state (dual read heads)
+    offset_a: f64,
+    offset_b: f64,
+    crossfade: f64,
+    grain_phase: bool,
+    /// Grain size in ms for pitch shifter (10–100). Larger = smoother.
+    pub grain_ms: f64,
+}
+
+impl ShimmerDelay {
+    const MAX_DELAY_S: f64 = 5.0;
+
+    pub fn new() -> Self {
+        Self {
+            time_ms: 250.0,
+            feedback: 0.4,
+            pitch_ratio: 2.0,
+            shimmer_mix: 0.5,
+            hicut_freq: 8000.0,
+            filter_q: 0.707,
+            decay_tilt: 0.0,
+            decay_eq: Biquad::new(),
+            delay: DelayLine::new(48000 * 5 + 1024),
+            hicut: Biquad::new(),
+            feedback_sample: 0.0,
+            sample_rate: 48000.0,
+            smoother: ParamSmoother::new(0.0),
+            offset_a: 0.0,
+            offset_b: 0.0,
+            crossfade: 1.0,
+            grain_phase: true,
+            grain_ms: 30.0,
+        }
+    }
+
+    pub fn update(&mut self, sample_rate: f64) {
+        self.sample_rate = sample_rate;
+        let max_len = (sample_rate * Self::MAX_DELAY_S) as usize + 1024;
+        if self.delay.len() < max_len {
+            self.delay = DelayLine::new(max_len);
+        }
+
+        if self.hicut_freq > 0.0 {
+            self.hicut.set(
+                FilterType::Lowpass,
+                self.hicut_freq,
+                self.filter_q,
+                sample_rate,
+            );
+        }
+
+        // Decay EQ: tilt filter in feedback path
+        if self.decay_tilt.abs() > 0.01 {
+            if self.decay_tilt < 0.0 {
+                let freq = 20000.0 * (1.0 + self.decay_tilt).max(0.05);
+                self.decay_eq
+                    .set(FilterType::Lowpass, freq, 0.707, sample_rate);
+            } else {
+                let freq = 20.0 + self.decay_tilt * 2000.0;
+                self.decay_eq
+                    .set(FilterType::Highpass, freq, 0.707, sample_rate);
+            }
+        }
+
+        self.smoother.set_time(0.15, sample_rate);
+        let target = self.time_ms * 0.001 * sample_rate;
+        if self.smoother.value() == 0.0 {
+            self.smoother.set_immediate(target);
+            self.offset_a = target;
+            self.offset_b = target;
+        }
+    }
+
+    pub fn tick(&mut self, input: f64, ch: usize) -> f64 {
+        let target_delay = self.time_ms * 0.001 * self.sample_rate;
+        self.smoother.set_target(target_delay);
+        let smooth_delay = self.smoother.tick();
+
+        let max_read = self.delay.len() as f64 - 4.0;
+
+        // === Normal (unpitched) read ===
+        let normal_output = self.delay.read_cubic(smooth_delay.clamp(1.0, max_read));
+
+        // === Pitched read (granular crossfade) ===
+        let grain_samples = (self.grain_ms * 0.001 * self.sample_rate).max(64.0);
+        let speed = self.pitch_ratio;
+
+        // Both read heads drift at pitch_ratio rate
+        self.offset_a += 1.0 - speed;
+        self.offset_b += 1.0 - speed;
+
+        // Clamp offsets
+        let clamp = |o: &mut f64, target: f64, grain: f64, max: f64| {
+            if *o < 1.0 || *o > max || (*o - target).abs() > grain {
+                *o = target;
+            }
+        };
+        clamp(&mut self.offset_a, smooth_delay, grain_samples, max_read);
+        clamp(&mut self.offset_b, smooth_delay, grain_samples, max_read);
+
+        let sample_a = self.delay.read_cubic(self.offset_a.clamp(1.0, max_read));
+        let sample_b = self.delay.read_cubic(self.offset_b.clamp(1.0, max_read));
+
+        // Crossfade between grains
+        let fade_rate = 1.0 / grain_samples;
+        if self.grain_phase {
+            self.crossfade = (self.crossfade + fade_rate).min(1.0);
+            if self.crossfade >= 1.0 && (self.offset_a - smooth_delay).abs() > grain_samples * 0.5 {
+                self.offset_b = smooth_delay;
+                self.grain_phase = false;
+            }
+        } else {
+            self.crossfade = (self.crossfade - fade_rate).max(0.0);
+            if self.crossfade <= 0.0 && (self.offset_b - smooth_delay).abs() > grain_samples * 0.5 {
+                self.offset_a = smooth_delay;
+                self.grain_phase = true;
+            }
+        }
+
+        let pitched_output = sample_a * self.crossfade + sample_b * (1.0 - self.crossfade);
+
+        // Blend pitched and unpitched output
+        let output = normal_output * (1.0 - self.shimmer_mix) + pitched_output * self.shimmer_mix;
+
+        // Feedback path: use the blended signal
+        let mut fb = output * self.feedback;
+
+        if self.hicut_freq > 0.0 {
+            fb = self.hicut.tick(fb, ch);
+        }
+
+        if self.decay_tilt.abs() > 0.01 {
+            fb = self.decay_eq.tick(fb, ch);
+        }
+
+        // Self-limiting feedback (from PitchDelay)
+        if fb.abs() > 0.001 {
+            fb = fb * (3.0 - fb.abs() * 2.0).max(0.0) / 3.0;
+        }
+        fb = fb.clamp(-1.5, 1.5);
+
+        self.delay.write(input + fb);
+        self.feedback_sample = fb;
+
+        output
+    }
+
+    pub fn last_feedback(&self) -> f64 {
+        self.feedback_sample
+    }
+
+    pub fn reset(&mut self) {
+        self.delay.clear();
+        self.hicut.reset();
+        self.decay_eq.reset();
+        self.feedback_sample = 0.0;
+        self.smoother.reset(0.0);
+        self.offset_a = 0.0;
+        self.offset_b = 0.0;
+        self.crossfade = 1.0;
+        self.grain_phase = true;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const SR: f64 = 48000.0;
+
+    #[test]
+    fn impulse_delayed() {
+        let mut d = ShimmerDelay::new();
+        d.time_ms = 100.0;
+        d.feedback = 0.0;
+        d.pitch_ratio = 1.0; // No pitch shift
+        d.shimmer_mix = 0.0;
+        d.update(SR);
+
+        let mut peak_pos = 0;
+        let mut peak_val = 0.0f64;
+
+        for i in 0..10000 {
+            let input = if i == 0 { 1.0 } else { 0.0 };
+            let out = d.tick(input, 0);
+            if out.abs() > peak_val {
+                peak_val = out.abs();
+                peak_pos = i;
+            }
+        }
+
+        assert!(
+            (peak_pos as i64 - 4800).unsigned_abs() < 10,
+            "Peak at {peak_pos}, expected near 4800"
+        );
+    }
+
+    #[test]
+    fn shimmer_changes_output() {
+        let mut d_dry = ShimmerDelay::new();
+        d_dry.time_ms = 100.0;
+        d_dry.feedback = 0.5;
+        d_dry.pitch_ratio = 1.0;
+        d_dry.shimmer_mix = 0.0;
+        d_dry.update(SR);
+
+        let mut d_shimmer = ShimmerDelay::new();
+        d_shimmer.time_ms = 100.0;
+        d_shimmer.feedback = 0.5;
+        d_shimmer.pitch_ratio = 2.0;
+        d_shimmer.shimmer_mix = 1.0;
+        d_shimmer.update(SR);
+
+        let mut diff = 0.0;
+        for i in 0..19200 {
+            let s = (std::f64::consts::PI * 2.0 * 440.0 * i as f64 / SR).sin() * 0.5;
+            let a = d_dry.tick(s, 0);
+            let b = d_shimmer.tick(s, 0);
+            diff += (a - b).abs();
+        }
+
+        assert!(diff > 0.1, "Shimmer should change output: diff={diff}");
+    }
+
+    #[test]
+    fn no_nan() {
+        let mut d = ShimmerDelay::new();
+        d.time_ms = 200.0;
+        d.feedback = 0.7;
+        d.pitch_ratio = 2.0;
+        d.shimmer_mix = 0.8;
+        d.hicut_freq = 6000.0;
+        d.update(SR);
+
+        for i in 0..96000 {
+            let input = (std::f64::consts::PI * 2.0 * 440.0 * i as f64 / SR).sin() * 0.5;
+            let out = d.tick(input, 0);
+            assert!(out.is_finite(), "NaN at sample {i}");
+        }
+    }
+
+    #[test]
+    fn feedback_self_limits() {
+        let mut d = ShimmerDelay::new();
+        d.time_ms = 50.0;
+        d.feedback = 0.99;
+        d.pitch_ratio = 2.0;
+        d.shimmer_mix = 1.0;
+        d.update(SR);
+
+        for _ in 0..480 {
+            d.tick(1.0, 0);
+        }
+
+        let mut max_out: f64 = 0.0;
+        for _ in 0..96000 {
+            let out = d.tick(0.0, 0);
+            max_out = max_out.max(out.abs());
+        }
+
+        assert!(max_out < 5.0, "Should self-limit: max={max_out}");
+    }
+}

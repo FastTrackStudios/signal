@@ -1,0 +1,12 @@
+[package]
+name = "eq-dsp"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "EQ filter design and biquad-cascade DSP for FTS-EQ"
+
+[dependencies]
+audiocore-dsp = { workspace = true }
+
+[dev-dependencies]
+

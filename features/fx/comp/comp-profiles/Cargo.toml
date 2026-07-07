@@ -1,0 +1,11 @@
+[package]
+name = "comp-profiles"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+edition.workspace = true
+description = "Compressor hardware profiles — UREI 1176, LA-2A, SSL bus parameter mappings"
+
+[dependencies]
+comp-dsp = { path = "../comp-dsp" }
+eq-profiles = { workspace = true }

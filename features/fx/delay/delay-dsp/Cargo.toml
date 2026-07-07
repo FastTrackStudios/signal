@@ -1,0 +1,11 @@
+[package]
+name = "delay-dsp"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+edition.workspace = true
+description = "Delay processing engine — tape / pitch / clean delays with eq-dsp feedback filters"
+
+[dependencies]
+audiocore-dsp = { workspace = true }
+eq-dsp = { workspace = true }

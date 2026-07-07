@@ -1,0 +1,11 @@
+[package]
+name = "limiter-profiles"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+edition.workspace = true
+description = "Limiter hardware profiles — L2-style and mastering limiter parameter mappings"
+
+[dependencies]
+limiter-dsp = { path = "../limiter-dsp" }
+eq-profiles = { workspace = true }

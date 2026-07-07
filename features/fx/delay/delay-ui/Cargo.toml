@@ -1,0 +1,13 @@
+[package]
+name = "delay-ui"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+edition.workspace = true
+description = "Delay GUI — tap tempo, feedback display, and profile theme rendering"
+
+[dependencies]
+audio-gui = { workspace = true }
+fts-plugin-core = { workspace = true }
+delay-dsp = { workspace = true }
+delay-profiles = { workspace = true }

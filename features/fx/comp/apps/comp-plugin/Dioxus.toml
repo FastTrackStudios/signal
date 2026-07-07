@@ -1,0 +1,6 @@
+[application]
+name = "comp-desktop"
+default_platform = "desktop"
+
+[desktop.app]
+filename = "comp-desktop"

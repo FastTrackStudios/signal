@@ -439,7 +439,29 @@ impl ProfileRig {
                 tracing::warn!(patch = %patch.name, "ProfileRig: patch has no blocks — skipping");
                 continue;
             }
-            match self.rig.install_chain(&blocks) {
+            // Stable, unique per-block ids (block name, deduped) so the UI can
+            // address each block (bypass toggle, param edits) individually —
+            // otherwise assetless native blocks all collapse to the id "block".
+            let mut seen: std::collections::HashMap<String, u32> = std::collections::HashMap::new();
+            let block_ids: Vec<String> = blocks
+                .iter()
+                .map(|b| {
+                    let base = if b.name.trim().is_empty() {
+                        format!("{:?}", b.block_type)
+                    } else {
+                        b.name.trim().to_string()
+                    };
+                    let n = seen.entry(base.clone()).or_insert(0);
+                    let id = if *n == 0 {
+                        base.clone()
+                    } else {
+                        format!("{base} {}", *n + 1)
+                    };
+                    *n += 1;
+                    id
+                })
+                .collect();
+            match self.rig.install_chain_with_ids(&blocks, &block_ids) {
                 Ok(id) => {
                     self.patch_ids.push(id);
                     loaded += 1;

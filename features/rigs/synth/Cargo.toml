@@ -1,0 +1,20 @@
+[package]
+name = "signal-synth"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+tracing.workspace = true
+# The shared sampler engine expresses the Omnisphere routing tree + render
+# nodes; synth is the Omnisphere definition + patch importer on top.
+signal-sampler.workspace = true
+# BlockType — the composition tree's block tagging schema.
+signal-proto.workspace = true
+
+[dev-dependencies]
+# The `#[ignore]`d machine-local render tests drive hosted-plugin note events.
+signal-plugin-host.workspace = true
+# `daw::service::MidiMessage` in those same render tests + the omni_state example.
+daw.workspace = true

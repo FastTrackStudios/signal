@@ -1,0 +1,11 @@
+[package]
+name = "wah-dsp"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Auto-wah DSP engine — envelope/pattern-driven resonant filter"
+
+[dependencies]
+audiocore-dsp = { workspace = true }
+fts-modulation = { workspace = true }

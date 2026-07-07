@@ -1,0 +1,15 @@
+[package]
+name = "spectrum-analyzer-dsp"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Realtime FFT spectrum-analysis engine for FTS-EQ (Pro-Q 4 parity)"
+
+[dependencies]
+realfft = "3"
+rtrb = "0.3"
+parking_lot = "0.12"
+once_cell = { workspace = true }
+
+[dev-dependencies]

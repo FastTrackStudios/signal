@@ -28,7 +28,90 @@ const REGISTRY: &[(BlockType, Ctor)] = &[
     (BlockType::Amp, build_amp),
     (BlockType::Waveshaper, build_waveshaper),
     (BlockType::Dfs, build_dfs),
+    // Built-in FX (features/fx/, wrapped in signal-fx).
+    (BlockType::Eq, build_eq),
+    (BlockType::Compressor, build_comp),
+    (BlockType::Reverb, build_reverb),
+    (BlockType::Delay, build_delay),
+    // Modulation — chorus/flanger/vibrato share chorus-dsp; tremolo is trem-dsp.
+    (BlockType::Chorus, build_chorus),
+    (BlockType::Flanger, build_flanger),
+    (BlockType::Vibrato, build_vibrato),
+    (BlockType::Trem, build_trem),
+    // No DSP yet — transparent placeholders so the block exists (bypassed).
+    (BlockType::Phaser, build_phaser),
+    (BlockType::Rotary, build_rotary),
 ];
+
+fn build_chorus(block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
+    let mut fx = signal_fx::NativeMod::chorus(sample_rate as f64);
+    apply_mod_params(block, &mut fx);
+    Box::new(fx)
+}
+fn build_flanger(block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
+    let mut fx = signal_fx::NativeMod::flanger(sample_rate as f64);
+    apply_mod_params(block, &mut fx);
+    Box::new(fx)
+}
+fn build_vibrato(block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
+    let mut fx = signal_fx::NativeMod::vibrato(sample_rate as f64);
+    apply_mod_params(block, &mut fx);
+    Box::new(fx)
+}
+fn apply_mod_params(block: &RigBlock, fx: &mut signal_fx::NativeMod) {
+    for name in ["mix", "depth", "rate"] {
+        if let Some(v) = block.param_f32(name) {
+            fx.set_named(name, v as f64);
+        }
+    }
+}
+fn build_trem(block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
+    let mut fx = signal_fx::NativeTrem::new(sample_rate as f64);
+    if let Some(v) = block.param_f32("depth") {
+        fx.set_named("depth", v as f64);
+    }
+    Box::new(fx)
+}
+fn build_phaser(_block: &RigBlock, _sample_rate: u32) -> Box<dyn PluginInstance> {
+    Box::new(signal_fx::NativePassthrough::new("Phaser"))
+}
+fn build_rotary(_block: &RigBlock, _sample_rate: u32) -> Box<dyn PluginInstance> {
+    Box::new(signal_fx::NativePassthrough::new("Rotary"))
+}
+
+fn build_eq(_block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
+    Box::new(signal_fx::NativeEq::new(sample_rate as f64))
+}
+
+fn build_comp(block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
+    let mut fx = signal_fx::NativeComp::new(sample_rate as f64);
+    for name in ["threshold", "ratio", "attack", "release"] {
+        if let Some(v) = block.param_f32(name) {
+            fx.set_named(name, v as f64);
+        }
+    }
+    Box::new(fx)
+}
+
+fn build_reverb(block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
+    let mut fx = signal_fx::NativeReverb::new(sample_rate as f64);
+    for name in ["mix", "decay", "size"] {
+        if let Some(v) = block.param_f32(name) {
+            fx.set_named(name, v as f64);
+        }
+    }
+    Box::new(fx)
+}
+
+fn build_delay(block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
+    let mut fx = signal_fx::NativeDelay::new(sample_rate as f64);
+    for name in ["mix", "time", "feedback"] {
+        if let Some(v) = block.param_f32(name) {
+            fx.set_named(name, v as f64);
+        }
+    }
+    Box::new(fx)
+}
 
 /// Block types whose built-in `Native` DSP is implemented today.
 pub fn native_dsp_available(block_type: BlockType) -> bool {

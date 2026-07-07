@@ -1,0 +1,10 @@
+[package]
+name = "signal-drums"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+# Drums are plain sample zones on the shared engine — no drum-specific DSP.
+signal-sampler.workspace = true
