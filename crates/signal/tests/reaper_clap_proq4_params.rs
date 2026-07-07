@@ -1,3 +1,4 @@
+#![cfg(feature = "daw")]
 //! REAPER integration test: CLAP FabFilter Pro-Q 4 parameter manipulation.
 //!
 //! Tests loading a CLAP Pro-Q 4 instance and exercising every parameter control
@@ -6,6 +7,7 @@
 //! Run with:
 //!   cargo xtask reaper-test reaper_clap_proq4_params
 
+use signal::daw_compat::TrackHandleCompat;
 use std::time::Duration;
 
 use daw::test::reaper_test;

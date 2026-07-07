@@ -1,3 +1,4 @@
+#![cfg(feature = "daw")]
 //! REAPER integration test: Load an EQ block and cycle through variations.
 //!
 //! Tests the end-to-end flow of:

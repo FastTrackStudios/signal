@@ -1,3 +1,4 @@
+#![cfg(feature = "daw")]
 //! REAPER integration test: Build Worship and Rock profiles with track template variations.
 //!
 //! Each profile gets a set of named variations saved as individual
@@ -6,6 +7,7 @@
 //! Run with:
 //!   cargo xtask reaper-test build_profiles
 
+use signal::daw_compat::TrackHandleCompat;
 use std::time::Duration;
 
 use daw::test::reaper_test;

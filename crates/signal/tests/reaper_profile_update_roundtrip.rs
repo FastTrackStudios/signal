@@ -1,3 +1,4 @@
+#![cfg(feature = "daw")]
 //! REAPER integration test: Build a layer, save, verify file content, save update.
 //!
 //! Validates that:
@@ -12,6 +13,7 @@
 //! Run with:
 //!   cargo xtask reaper-test profile_update_roundtrip
 
+use signal::daw_compat::TrackHandleCompat;
 use std::time::Duration;
 
 use daw::test::reaper_test;

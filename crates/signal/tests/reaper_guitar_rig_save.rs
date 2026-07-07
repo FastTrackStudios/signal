@@ -1,3 +1,4 @@
+#![cfg(feature = "daw")]
 //! REAPER integration test: Build a full guitar rig layer and save as track templates.
 //!
 //! Loads all modules from signal.db onto a single layer track in the standard
@@ -8,6 +9,7 @@
 //! Run with:
 //!   cargo xtask reaper-test guitar_rig_save
 
+use signal::daw_compat::TrackHandleCompat;
 use std::time::Duration;
 
 use daw::test::reaper_test;

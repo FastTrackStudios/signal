@@ -1,3 +1,4 @@
+#![cfg(feature = "daw")]
 //! REAPER integration test: Capture module presets as `.RfxChain` files.
 //!
 //! Loads each module preset from signal.db onto a REAPER track, captures

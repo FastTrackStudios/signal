@@ -1,3 +1,4 @@
+#![cfg(feature = "daw")]
 //! REAPER integration test: Save layers and rigs as `.RTrackTemplate` files.
 //!
 //! Builds a guitar layer (track with modules loaded), captures its track chunk,
@@ -7,6 +8,7 @@
 //! Run with:
 //!   cargo xtask reaper-test save_track_template
 
+use signal::daw_compat::TrackHandleCompat;
 use std::time::Duration;
 
 use daw::test::reaper_test;

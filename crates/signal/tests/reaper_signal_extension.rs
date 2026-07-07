@@ -1,3 +1,4 @@
+#![cfg(feature = "daw")]
 //! REAPER integration test for the signal-extension SHM guest.
 //!
 //! Verifies that the signal-extension binary was loaded by daw-bridge,

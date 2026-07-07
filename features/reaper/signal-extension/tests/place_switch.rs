@@ -10,6 +10,7 @@
 //! Run with:
 //!   cargo xtask reaper-test place_switch
 
+use signal::daw_compat::TrackHandleCompat;
 use std::time::Duration;
 
 use daw::service::MidiNoteCreate;
@@ -128,7 +129,7 @@ async fn place_section_switch_creates_named_item(ctx: &ReaperTestContext) -> eyr
 
     // Call place_section_switch
     ctx.log("Calling place_section_switch with Ambient layer selected...");
-    signal_extension::place_switch::place_section_switch(&ctx.daw).await?;
+    reaper_signal_extension::place_switch::place_section_switch(&ctx.daw).await?;
     settle().await;
 
     // Verify: an item was placed on the Belief folder (song controller)
@@ -184,7 +185,7 @@ async fn place_song_switch_creates_named_item(ctx: &ReaperTestContext) -> eyre::
 
     // Call place_song_switch
     ctx.log("Calling place_song_switch with Vienna Input selected...");
-    signal_extension::place_switch::place_song_switch(&ctx.daw).await?;
+    reaper_signal_extension::place_switch::place_song_switch(&ctx.daw).await?;
     settle().await;
 
     // Verify: an item was placed on the Rig folder (rig controller)
@@ -239,7 +240,7 @@ async fn place_scene_switch_creates_named_item(ctx: &ReaperTestContext) -> eyre:
 
     // Call place_scene_switch (same as section — walks up to Scene folder)
     ctx.log("Calling place_scene_switch with Rhythm layer selected...");
-    signal_extension::place_switch::place_scene_switch(&ctx.daw).await?;
+    reaper_signal_extension::place_switch::place_scene_switch(&ctx.daw).await?;
     settle().await;
 
     // Verify: an item was placed on the Belief folder

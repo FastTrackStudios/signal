@@ -1,3 +1,4 @@
+#![cfg(feature = "daw")]
 //! REAPER integration test: Scene switching via send muting.
 //!
 //! Verifies the fts-signal-controller's timer-based scene switching:
@@ -12,6 +13,7 @@
 //! Run with:
 //!   cargo xtask reaper-test scene_switching
 
+use signal::daw_compat::TrackHandleCompat;
 use std::time::Duration;
 
 use daw::service::MidiNoteCreate;

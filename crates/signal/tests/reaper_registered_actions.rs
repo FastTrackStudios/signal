@@ -1,3 +1,4 @@
+#![cfg(feature = "daw")]
 //! REAPER integration test for action registration.
 //!
 //! Verifies that all expected FTS actions are registered with REAPER's action

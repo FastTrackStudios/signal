@@ -1,3 +1,4 @@
+#![cfg(feature = "daw")]
 //! REAPER integration test: Compression macro — FTS Macros autonomously drives ReaComp.
 //!
 //! Tests the full macro pipeline end-to-end:
@@ -19,6 +20,7 @@
 //! Run with:
 //!   cargo xtask reaper-test compression_macro
 
+use signal::daw_compat::TrackHandleCompat;
 use std::time::{Duration, Instant};
 
 use daw::test::reaper_test;

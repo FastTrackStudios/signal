@@ -105,7 +105,7 @@ impl RigSceneManager {
         // Record-arm + input monitoring
         let _ = input_track.arm().await;
         let _ = input_track
-            .set_input_monitoring(daw::service::InputMonitoringMode::Normal)
+            .set_input_monitor(daw::service::InputMonitoringMode::Normal)
             .await;
 
         // Recover existing scene tracks from a previous session.

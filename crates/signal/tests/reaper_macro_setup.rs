@@ -1,3 +1,4 @@
+#![cfg(feature = "daw")]
 //! REAPER integration test: Direct Macro → FX Parameter API.
 //!
 //! Tests the new direct FX parameter binding system without JSFX/MIDI middleware.

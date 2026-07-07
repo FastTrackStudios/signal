@@ -1,3 +1,4 @@
+#![cfg(feature = "daw")]
 //! REAPER integration test: Batch-load a full guitar setlist from profile templates.
 //!
 //! Reads all needed .RTrackTemplate files upfront, then creates all tracks
@@ -6,6 +7,7 @@
 //! Run with:
 //!   cargo xtask reaper-test guitar_setlist
 
+use signal::daw_compat::TrackHandleCompat;
 use std::time::Duration;
 
 use daw::test::reaper_test;

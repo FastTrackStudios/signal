@@ -1,3 +1,4 @@
+#![cfg(feature = "daw")]
 //! REAPER integration tests for the macro system and demo setlist.
 //!
 //! Tests use REAPER actions (same as the user would) rather than
@@ -6,6 +7,7 @@
 //! Run with:
 //!   cargo xtask reaper-test reaper_macro_learn
 
+use signal::daw_compat::TrackHandleCompat;
 use std::time::Duration;
 
 use daw::test::reaper_test;

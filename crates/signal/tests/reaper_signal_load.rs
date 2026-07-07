@@ -1,3 +1,4 @@
+#![cfg(feature = "daw")]
 //! REAPER integration tests: Load block + module presets onto real DAW tracks.
 //!
 //! Tests the full resolve → add FX → apply params → rename pipeline against

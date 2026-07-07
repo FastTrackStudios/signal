@@ -1,3 +1,4 @@
+#![cfg(feature = "daw")]
 //! REAPER integration tests: Rig structure template instantiation.
 //!
 //! Tests that `RigTemplate` and `RackTemplate` produce correct REAPER track

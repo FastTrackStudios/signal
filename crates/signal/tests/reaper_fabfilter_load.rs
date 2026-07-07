@@ -1,3 +1,4 @@
+#![cfg(feature = "daw")]
 //! REAPER integration test: Load FabFilter presets onto a DAW track.
 //!
 //! Imports all FabFilter plugins into an in-memory signal controller, then loads

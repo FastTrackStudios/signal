@@ -9,7 +9,7 @@
 //! exists; we now use the in-process `ExtensionRuntime::new(context)`
 //! pattern shared with session-extension and sync-extension.
 
-mod daw_compat;
+pub mod daw_compat;
 pub mod demo_profile;
 pub mod demo_rig;
 pub mod demo_setlist;

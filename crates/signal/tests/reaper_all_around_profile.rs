@@ -1,3 +1,4 @@
+#![cfg(feature = "daw")]
 //! REAPER integration test: Build the "All-Around" profile with 8 track template variations.
 //!
 //! Each patch variant (Clean, Crunch, Drive, Lead, Funk, Ambient, Q-Tron, Solo)
@@ -15,6 +16,7 @@
 //! Run with:
 //!   cargo xtask reaper-test all_around_profile
 
+use signal::daw_compat::TrackHandleCompat;
 use std::time::Duration;
 
 use daw::test::reaper_test;

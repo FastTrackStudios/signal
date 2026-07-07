@@ -250,7 +250,7 @@ impl ReaperPatchApplier {
 
         // Enable input monitoring so we hear the guitar through the FX chain
         input_track
-            .set_input_monitoring(daw::service::InputMonitoringMode::Normal)
+            .set_input_monitor(daw::service::InputMonitoringMode::Normal)
             .await
             .map_err(|e| PatchApplyError::DawError(format!("set input monitoring: {e}")))?;
 

@@ -1,3 +1,4 @@
+#![cfg(feature = "daw")]
 //! REAPER integration test — verifies fts-macros CLAP plugin bootstrap.
 //!
 //! This test checks that the Helgobox-pattern eager loading works:

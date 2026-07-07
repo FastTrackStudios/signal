@@ -1,3 +1,4 @@
+#![cfg(feature = "daw")]
 //! REAPER integration test: Fast-path rig open + variation save/load.
 //!
 //! Uses stock REAPER plugins (ReaEQ, ReaComp, ReaDelay) — no seed data required.
@@ -16,6 +17,7 @@
 //! Run with:
 //!   cargo xtask reaper-test fast_path_variation
 
+use signal::daw_compat::TrackHandleCompat;
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 

@@ -1,3 +1,4 @@
+#![cfg(feature = "daw")]
 //! REAPER integration test: capture full live parameter lists for NDSP archetypes.
 //!
 //! Run with:

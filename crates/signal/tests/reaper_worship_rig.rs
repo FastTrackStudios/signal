@@ -1,3 +1,4 @@
+#![cfg(feature = "daw")]
 //! REAPER integration test: Full worship guitar rig load + scene verification.
 //!
 //! Bootstraps in-memory signal controller, loads the worship guitar rig onto

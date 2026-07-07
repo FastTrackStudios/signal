@@ -1,3 +1,4 @@
+#![cfg(feature = "daw")]
 //! REAPER integration test: Load a NAM model into the Neural Amp Modeler plugin
 //! via nam-manager's catalog and VST chunk rewriting.
 //!

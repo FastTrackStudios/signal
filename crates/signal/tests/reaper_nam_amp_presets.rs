@@ -1,3 +1,4 @@
+#![cfg(feature = "daw")]
 //! REAPER integration test: Load all NAM amp block presets (ML Sound Labs)
 //! into a single guitar rig engine, each amp as its own layer.
 //!

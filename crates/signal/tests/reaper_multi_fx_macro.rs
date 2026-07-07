@@ -1,3 +1,4 @@
+#![cfg(feature = "daw")]
 //! REAPER integration test: Single macro drives parameters across multiple plugins.
 //!
 //! Tests that one FTS Macros knob can simultaneously control:
@@ -12,6 +13,7 @@
 //! Run with:
 //!   cargo xtask reaper-test multi_fx_macro
 
+use signal::daw_compat::TrackHandleCompat;
 use std::time::{Duration, Instant};
 
 use daw::test::reaper_test;
