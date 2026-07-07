@@ -768,6 +768,23 @@ impl SamplerRig {
             .unwrap_or_default()
     }
 
+    /// Enable/disable an instrument's structured render trace — which files
+    /// play, when, loop points, gains, transitions. Enable BEFORE the render;
+    /// read back with [`render_trace`](Self::render_trace) after.
+    pub fn set_trace_enabled(&self, id: &str, enabled: bool) {
+        if let Ok(mut bank) = self.bank().lock() {
+            bank.set_trace_enabled(id, enabled);
+        }
+    }
+
+    /// The structured render trace for an instrument (frames are engine-local).
+    pub fn render_trace(&self, id: &str) -> crate::engine::RenderTrace {
+        self.bank()
+            .lock()
+            .map(|b| b.render_trace(id))
+            .unwrap_or_default()
+    }
+
     /// Document-mode legato prefire, addressed by instrument id — see
     /// [`SampleEngine::legato_prefire`](crate::engine::SampleEngine::legato_prefire).
     pub fn legato_prefire(&self, id: &str, note: u8, velocity: u8) {

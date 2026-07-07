@@ -1,14 +1,22 @@
 //! Render a test MIDI file through OUR engine offline → WAV, for A/B comparison
 //! against the real CSS render of the same file.
 //!
+//! Uses the DOCUMENT render path (`render_offline_document`) — the same
+//! click-free lookahead scheduler the pitch-check tests use — NOT the live /
+//! reactive path. The MIDI is converted to a `TrackDocument`: note-on/off pairs
+//! become notes, CCs pass through, and time is the seconds domain (tempo 60 BPM
+//! → 1 QN = 1 s) so event seconds map straight to QN.
+//!
 //! ```text
 //! cargo run --release -p signal-sampler --example render_css_test -- css_test.mid our_render.wav
 //! ```
 
+use std::collections::HashMap;
 use std::io::Write;
 use std::path::PathBuf;
 
 use signal_sampler::SamplerRig;
+use signal_sampler::document::{DocCc, DocNote, DocumentRenderOptions, TempoPoint, TrackDocument};
 
 const CSS_ROOT: &str =
     "/run/media/AudioHaven/Sampled/Orchestral/Cinematic Series/Cinematic Studio Strings";
@@ -111,15 +119,47 @@ fn write_wav(path: &str, samples: &[f32]) -> std::io::Result<()> {
     Ok(())
 }
 
-const CHUNK: usize = 2048; // frames per render call
-
-fn render_until(rig: &SamplerRig, out: &mut Vec<f32>, cur: &mut f64, t: f64) {
-    while *cur < t {
-        let frames = (((t - *cur) * SR as f64) as usize).clamp(1, CHUNK);
-        let mut buf = vec![0.0f32; frames * 2];
-        rig.render_offline(&mut buf).ok();
-        out.extend_from_slice(&buf);
-        *cur += frames as f64 / SR as f64;
+/// Convert parsed SMF channel events to a `TrackDocument` in the seconds
+/// domain (tempo 60 BPM → 1 QN = 1 s, so event seconds are QN directly).
+fn events_to_document(events: &[(f64, u8, u8, u8)]) -> TrackDocument {
+    let mut notes: Vec<DocNote> = Vec::new();
+    let mut ccs: Vec<DocCc> = Vec::new();
+    let mut active: HashMap<(u8, u8), (f64, u8)> = HashMap::new(); // (chan,pitch)->(start,vel)
+    for &(sec, status, d1, d2) in events {
+        let chan = status & 0x0F;
+        match status & 0xF0 {
+            0xB0 => ccs.push(DocCc { qn: sec, chan, cc: d1, val: d2 }),
+            0x90 if d2 > 0 => {
+                active.insert((chan, d1), (sec, d2));
+            }
+            0x90 | 0x80 => {
+                if let Some((start, vel)) = active.remove(&(chan, d1)) {
+                    notes.push(DocNote {
+                        start_qn: start,
+                        end_qn: sec.max(start + 0.01),
+                        chan,
+                        pitch: d1,
+                        vel,
+                    });
+                }
+            }
+            _ => {}
+        }
+    }
+    // Close any note left hanging at the end of the file.
+    let last = events.last().map(|e| e.0).unwrap_or(0.0) + 1.0;
+    for ((chan, pitch), (start, vel)) in active {
+        notes.push(DocNote { start_qn: start, end_qn: last, chan, pitch, vel });
+    }
+    notes.sort_by(|a, b| a.start_qn.total_cmp(&b.start_qn));
+    ccs.sort_by(|a, b| a.qn.total_cmp(&b.qn));
+    TrackDocument {
+        version: 1,
+        seed: 0x0C55_0DA1,
+        auto_divisi: false,
+        notes,
+        ccs,
+        tempo: vec![TempoPoint { qn: 0.0, bpm: 60.0 }],
     }
 }
 
@@ -149,36 +189,23 @@ fn main() -> eyre::Result<()> {
         "Mix",
     )?;
     rig.set_solo_mic(ID, Some("Mix".into()));
-    // CSS-parity harness: reproduce Kontakt's expressive reactive latency.
-    // The strict live policy (PlayMode::StrictLive) would otherwise force the
-    // low_latency tables regardless of the MIDI's CC58 "expressive" request.
-    rig.set_legato_mode(ID, true, true);
-    rig.set_articulation(ID, "Nonvib");
     // CSS-default envelope: fast attack (sustains start at the steady region) and
     // a ~0.4s release under the recorded NVrel/Vsusrel tail.
     rig.set_attack_ms(ID, 20);
     rig.set_release_ms(ID, 400);
 
-    let mut out: Vec<f32> = Vec::new();
-    let mut cur = 0.0f64;
+    // Render through the DOCUMENT path — same click-free scheduler as the
+    // pitch-check tests. Articulation / legato mode come from the MIDI's CC58.
+    let doc = events_to_document(&events);
+    let res = rig.render_offline_document(ID, &doc, &DocumentRenderOptions::default())?;
 
-    for (sec, status, d1, d2) in &events {
-        render_until(&rig, &mut out, &mut cur, *sec);
-        match status & 0xF0 {
-            0xB0 => rig.cc(ID, *d1, *d2),
-            0x90 if *d2 > 0 => {
-                rig.warm_note(ID, *d1);
-                rig.note_on(ID, *d1, *d2);
-            }
-            0x90 | 0x80 => rig.note_off(ID, *d1),
-            _ => {}
-        }
-    }
-    // Tail.
-    let tail = cur + 3.0;
-    render_until(&rig, &mut out, &mut cur, tail);
-
-    write_wav(&outp, &out)?;
-    println!("wrote {outp}  ({:.1}s)", out.len() as f64 / 2.0 / SR as f64);
+    write_wav(&outp, &res.audio)?;
+    println!(
+        "wrote {outp}  ({:.1}s, {} notes, {} transitions, {} reactive fallbacks)",
+        res.audio.len() as f64 / 2.0 / SR as f64,
+        res.note_count,
+        res.transitions.len(),
+        res.reactive_fallbacks,
+    );
     Ok(())
 }

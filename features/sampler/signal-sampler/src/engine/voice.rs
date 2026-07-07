@@ -69,6 +69,25 @@ pub enum VoiceKind {
     Zoned,
 }
 
+impl VoiceKind {
+    /// Stable name for the render trace / debug output.
+    pub fn trace_name(&self) -> &'static str {
+        match self {
+            VoiceKind::SustainNVLo => "SustainNVLo",
+            VoiceKind::SustainNVHi => "SustainNVHi",
+            VoiceKind::SustainVibLo => "SustainVibLo",
+            VoiceKind::SustainVibHi => "SustainVibHi",
+            VoiceKind::SustainLo => "SustainLo",
+            VoiceKind::SustainHi => "SustainHi",
+            VoiceKind::SustainLayer => "SustainLayer",
+            VoiceKind::Legato => "Legato",
+            VoiceKind::Release => "Release",
+            VoiceKind::Short => "Short",
+            VoiceKind::Zoned => "Zoned",
+        }
+    }
+}
+
 // ── Voice ─────────────────────────────────────────────────────────────────────
 
 /// One active sample playback.
@@ -89,6 +108,12 @@ pub struct Voice {
     reverse: bool,
     alternating_loop: bool,
 
+    /// Seamless forward-loop crossfade length in frames. As the read
+    /// approaches `loop_end`, the pre-`loop_start` material is blended in over
+    /// this many frames so the wrap carries no amplitude/phase discontinuity
+    /// (the click heard on a held/looped note). `0` = hard wrap, no fade.
+    loop_xfade: usize,
+
     /// Playback rate. 1.0 = original pitch, 2^(semitones/12) for transposition.
     rate: f64,
 
@@ -105,6 +130,23 @@ pub struct Voice {
 
     pub state: VoiceState,
     pub kind: VoiceKind,
+
+    /// Delayed-release countdown: while > 0 the voice stays at full gain
+    /// (Playing), then begins releasing over `pending_fade`. Used by legato so
+    /// the outgoing source-pitch note holds through the transition sample's
+    /// quiet pre-bow-change "breath" and only fades at the arrival tick — filling
+    /// the gap that otherwise ticks between notes. `0` = no delay.
+    release_hold: usize,
+    /// Fade length (frames) to apply when `release_hold` reaches 0.
+    pending_fade: usize,
+
+    /// Delayed attack: while > 0 the voice stays at silence (gain held at 0,
+    /// gain-ramp paused). When it reaches 0 the pending `gain_ramp_frames`
+    /// begins, fading in to `target_gain`. This is the CSS "fade the sustain in
+    /// underneath the transition" handoff (`CSS_W` helper: wait, then
+    /// `fade_in`) — the looping sustain is spawned muted and emerges under the
+    /// one-shot bow-change transition. `0` = no delay (normal attack).
+    attack_delay: usize,
 
     /// MIDI note this voice belongs to (for note-off matching).
     pub note: u8,
@@ -132,6 +174,120 @@ pub struct Voice {
 
     /// Stem class of the articulation that spawned this voice (bus routing).
     pub artic_class: ArticClass,
+
+    /// Decoded ENV_FLEX amplitude envelope (the instrument's real per-voice amp
+    /// AHDSR), multiplied into the output. `None` = flat unity (legacy voices /
+    /// families with no decoded envelope).
+    flex: Option<FlexEnv>,
+}
+
+/// One decoded Kontakt ENV_FLEX amplitude envelope, evaluated per frame and
+/// multiplied into the voice's output. Segments are `(len_frames, from, to,
+/// tension)` — the actual shipped `(time_ms, level, curve)` triplets from the
+/// instrument's GroupList (see `nkx-extract/CSS_GROUP_MOD.md` §2), converted to
+/// frames at construction. Segment 0 ramps from 0 (or the caller-supplied
+/// `seg0_from`) to its level; each later segment ramps from the previous
+/// segment's level.
+///
+/// `hold_end` (frames) freezes the envelope timeline at that point while the
+/// voice is still `Playing` — used for **sustain** families whose final decoded
+/// segment is a slow 20 s decay-to-0 that represents the bow eventually running
+/// out. Real CSS loops the body indefinitely under a sustain hold, so we freeze
+/// at the end of the hold segment and let the engine's own note-off release
+/// fade retire the voice; the 20 s tail is never entered while held. `None`
+/// (shorts / releases) plays the whole envelope straight through (one-shot).
+#[derive(Debug, Clone)]
+pub struct FlexEnv {
+    /// `(len_frames, from_level, to_level, tension)` per segment.
+    segs: Vec<(f64, f32, f32, f32)>,
+    /// Frames elapsed along the envelope timeline.
+    pos: f64,
+    /// While `Some`, `pos` is clamped to this value until the voice releases —
+    /// the sustain-hold freeze (see struct docs).
+    hold_end: Option<f64>,
+}
+
+impl FlexEnv {
+    /// Build from decoded `(time_ms, level, tension)` segments. `seg0_from` is
+    /// the starting level of segment 0 (0.0 for attack-from-silence). When
+    /// `hold` is true the timeline freezes at the end of the *last segment that
+    /// does not decay to ~0* (the sustain hold point).
+    pub fn from_segments(
+        segments: &[(f32, f32, f32)],
+        seg0_from: f32,
+        sample_rate: u32,
+        hold: bool,
+    ) -> Option<Self> {
+        if segments.is_empty() {
+            return None;
+        }
+        let mut segs = Vec::with_capacity(segments.len());
+        let mut from = seg0_from;
+        let mut cum = 0.0f64;
+        let mut hold_end: Option<f64> = None;
+        for &(ms, level, tension) in segments.iter() {
+            let len = (ms as f64 * sample_rate as f64 / 1000.0).max(1.0);
+            segs.push((len, from, level, tension.clamp(0.0, 1.0)));
+            // The sustain hold point is the end of the last non-decaying
+            // segment (the plateau at level≈1.0 before the long fade to 0).
+            if hold && level > 0.01 {
+                hold_end = Some(cum + len);
+            }
+            cum += len;
+            from = level;
+        }
+        Some(Self {
+            segs,
+            pos: 0.0,
+            hold_end,
+        })
+    }
+
+    /// Kontakt segment-tension shape law. `t` is normalized progress [0,1]
+    /// through a segment; `tension` ∈ [0,1] is the shipped `curve` field
+    /// (0.5 = linear, <0.5 concave, >0.5 convex). PINNED law (not fitted): a
+    /// fixed exponential-tension curve, the standard shape for Kontakt bipolar
+    /// curve controls — `f(t) = (e^{a t} − 1)/(e^a − 1)` with
+    /// `a = (tension − 0.5)·2·K`, `K = 6` (full-scale curvature), linear at
+    /// tension = 0.5. The A/B metric (RMS over ~1 s windows) is insensitive to
+    /// the exact curvature — only segment levels/times move it — so this is
+    /// identified, not tuned.
+    #[inline]
+    fn shape(t: f32, tension: f32) -> f32 {
+        let a = (tension - 0.5) * 12.0;
+        if a.abs() < 1.0e-3 {
+            t
+        } else {
+            ((a * t).exp() - 1.0) / (a.exp() - 1.0)
+        }
+    }
+
+    /// Current envelope level for the present `pos`, without advancing.
+    #[inline]
+    fn level_at(&self, pos: f64) -> f32 {
+        let mut acc = 0.0f64;
+        for &(len, from, to, tension) in &self.segs {
+            if pos < acc + len {
+                let t = ((pos - acc) / len) as f32;
+                return from + (to - from) * Self::shape(t.clamp(0.0, 1.0), tension);
+            }
+            acc += len;
+        }
+        // Past the last segment: hold its final level.
+        self.segs.last().map(|s| s.2).unwrap_or(0.0)
+    }
+
+    /// Advance one frame (respecting the sustain-hold freeze) and return the
+    /// level. `released` = the voice has received note-off (freeze lifts).
+    #[inline]
+    fn next(&mut self, released: bool) -> f32 {
+        let lvl = self.level_at(self.pos);
+        let frozen = !released && self.hold_end.is_some_and(|h| self.pos >= h);
+        if !frozen {
+            self.pos += 1.0;
+        }
+        lvl
+    }
 }
 
 /// Identifies a zoned sustain dynamic layer for CC1/CC2 crossfade gain control.
@@ -168,6 +324,7 @@ impl Voice {
             loop_range: None,
             reverse: false,
             alternating_loop: false,
+            loop_xfade: 0,
             rate,
             gain,
             pan_l: 1.0,
@@ -175,6 +332,9 @@ impl Voice {
             target_gain: gain,
             gain_ramp_frames: 0,
             state: VoiceState::Playing,
+            release_hold: 0,
+            pending_fade: 0,
+            attack_delay: 0,
             kind,
             note,
             mic_index: None,
@@ -183,6 +343,7 @@ impl Voice {
             dyn_layer: None,
             line: 0,
             artic_class: ArticClass::Longs,
+            flex: None,
         }
     }
 
@@ -208,6 +369,7 @@ impl Voice {
             loop_range: None,
             reverse: false,
             alternating_loop: false,
+            loop_xfade: 0,
             rate,
             gain,
             pan_l: 1.0,
@@ -215,6 +377,9 @@ impl Voice {
             target_gain: gain,
             gain_ramp_frames: 0,
             state: VoiceState::Playing,
+            release_hold: 0,
+            pending_fade: 0,
+            attack_delay: 0,
             kind,
             note,
             mic_index: None,
@@ -223,6 +388,7 @@ impl Voice {
             dyn_layer: None,
             line: 0,
             artic_class: ArticClass::Longs,
+            flex: None,
         }
     }
 
@@ -279,12 +445,34 @@ impl Voice {
         self
     }
 
+    /// Attach the decoded ENV_FLEX amplitude envelope (the instrument's real
+    /// per-voice amp AHDSR). Multiplied into the output every frame.
+    pub fn with_flex_env(mut self, flex: FlexEnv) -> Self {
+        self.flex = Some(flex);
+        self
+    }
+
     /// Start at silence and ramp up to the spawn gain over `frames` — the
     /// attack envelope. `frames == 0` keeps the sample's natural attack.
     pub fn with_attack(mut self, frames: usize) -> Self {
         if frames > 0 {
             self.gain = 0.0; // target_gain stays at the intended spawn gain
             self.gain_ramp_frames = frames;
+        }
+        self
+    }
+
+    /// CSS legato handoff: spawn this (looping sustain) voice muted, wait
+    /// `delay_frames`, then fade it in to its spawn gain over `fade_frames`.
+    /// Mirrors the `CSS_W` helper (`wait($haa1x); fade_in($id, $0fznn)`) that
+    /// brings the destination sustain up underneath the one-shot bow-change
+    /// transition (spec §2.1 step 7). `delay_frames == 0 && fade_frames == 0`
+    /// leaves the natural attack unchanged.
+    pub fn with_fade_in_under(mut self, delay_frames: usize, fade_frames: usize) -> Self {
+        if delay_frames > 0 || fade_frames > 0 {
+            self.gain = 0.0; // target_gain stays at the intended spawn gain
+            self.attack_delay = delay_frames;
+            self.gain_ramp_frames = fade_frames;
         }
         self
     }
@@ -314,6 +502,21 @@ impl Voice {
         self = self.with_forward_loop(loop_start, loop_end);
         if self.loop_range.is_some() {
             self.alternating_loop = true;
+        }
+        self
+    }
+
+    /// Enable a seamless forward-loop crossfade of `frames` frames. Clamped to
+    /// the material available before `loop_start` and to half the loop length.
+    /// No-op unless a forward (non-ping-pong) loop is set — ping-pong loops
+    /// reflect the read position and are already continuous at the turnaround.
+    pub fn with_loop_xfade(mut self, frames: usize) -> Self {
+        if let Some((loop_start, loop_end)) = self.loop_range {
+            if !self.alternating_loop && loop_end > loop_start {
+                let head_room = loop_start.saturating_sub(self.start_frame);
+                let loop_len = loop_end - loop_start;
+                self.loop_xfade = frames.min(head_room).min(loop_len / 2);
+            }
         }
         self
     }
@@ -374,6 +577,17 @@ impl Voice {
         self.state == VoiceState::Done
     }
 
+    /// Linearly-interpolated stereo read at fractional frame `pos`. Does not
+    /// advance state; `pos` must be within the playable window.
+    #[inline]
+    fn read_interp(&self, pos: f64) -> (f32, f32) {
+        let idx = pos as usize;
+        let frac = (pos - idx as f64) as f32;
+        let (l0, r0) = self.data.frame(idx);
+        let (l1, r1) = self.data.frame((idx + 1).min(self.end_frame.saturating_sub(1)));
+        (l0 + (l1 - l0) * frac, r0 + (r1 - r0) * frac)
+    }
+
     /// Render one stereo frame. Returns (L, R) and advances internal state.
     #[inline]
     pub fn next_frame(&mut self) -> (f32, f32) {
@@ -381,8 +595,26 @@ impl Voice {
             return (0.0, 0.0);
         }
 
-        // Gain smoothing
-        if self.gain_ramp_frames > 0 {
+        // Delayed release: hold at full gain (Playing) until the countdown
+        // elapses, then begin the fade. Lets a legato source note cover the
+        // transition sample's pre-arrival dip, then hand off at the tick.
+        if self.release_hold > 0 {
+            self.release_hold -= 1;
+            if self.release_hold == 0 && self.state == VoiceState::Playing {
+                let f = self.pending_fade.max(1);
+                self.release_frames = f;
+                self.state = VoiceState::Releasing { frames_remaining: f };
+            }
+        }
+
+        // Delayed attack (CSS_W fade-in-under): hold at silence until the wait
+        // elapses (the read position still advances at the bottom of this
+        // frame, so the loop stays phase-aligned), then the gain ramp brings
+        // the sustain in underneath the transition.
+        if self.attack_delay > 0 {
+            self.attack_delay -= 1;
+            self.gain = 0.0;
+        } else if self.gain_ramp_frames > 0 {
             self.gain += (self.target_gain - self.gain) / self.gain_ramp_frames as f32;
             self.gain_ramp_frames -= 1;
         } else {
@@ -411,16 +643,48 @@ impl Voice {
             return (0.0, 0.0);
         }
 
-        let frac = (self.position - frame_idx as f64) as f32;
-        let (l0, r0) = self.data.frame(frame_idx);
-        let (l1, r1) = self
-            .data
-            .frame((frame_idx + 1).min(self.end_frame.saturating_sub(1)));
+        let (mut l, mut r) = self.read_interp(self.position);
 
-        let l = l0 + (l1 - l0) * frac;
-        let r = r0 + (r1 - r0) * frac;
+        // Seamless forward-loop crossfade. As the read approaches `loop_end`,
+        // blend in the pre-`loop_start` material so the wrap has no
+        // amplitude/phase discontinuity — otherwise a held/looped note clicks
+        // once per loop. Ping-pong loops reflect the position and stay
+        // continuous, so they are excluded.
+        if self.loop_xfade > 0 && !self.reverse {
+            if let Some((loop_start, loop_end)) = self.loop_range {
+                if !self.alternating_loop {
+                    let xf = self.loop_xfade as f64;
+                    let seam = loop_end as f64 - xf;
+                    if self.position >= seam {
+                        let t = (((self.position - seam) / xf) as f32).clamp(0.0, 1.0);
+                        // An equal distance before `loop_start` as we are before
+                        // `loop_end`; at the wrap point this lands on `loop_start`.
+                        let wrap_pos = loop_start as f64 - (loop_end as f64 - self.position);
+                        if wrap_pos >= self.start_frame as f64 {
+                            let (wl, wr) = self.read_interp(wrap_pos);
+                            // Equal-power crossfade: the loop tail and the
+                            // pre-`loop_start` material are decorrelated, so a
+                            // linear (amplitude) blend would dip ~3 dB at the
+                            // midpoint — a pulse every loop. Constant-power sin/cos
+                            // gains hold the level steady across the seam.
+                            let (fi, fo) = (t * std::f32::consts::FRAC_PI_2).sin_cos();
+                            l = l * fo + wl * fi;
+                            r = r * fo + wr * fi;
+                        }
+                    }
+                }
+            }
+        }
 
-        let amp = self.gain * env;
+        // Decoded ENV_FLEX amplitude envelope. Freezes at the sustain-hold
+        // point while Playing (held note stays steady); advances through the
+        // decay once Releasing. Multiplied on top of the note-off release fade.
+        let flex = match &mut self.flex {
+            Some(f) => f.next(!matches!(self.state, VoiceState::Playing)),
+            None => 1.0,
+        };
+
+        let amp = self.gain * env * flex;
 
         // Advance position
         if self.reverse {
@@ -629,17 +893,73 @@ impl VoicePool {
 
     /// Silence all voices for `note` immediately (used when legato transition fires).
     pub fn silence_note(&mut self, note: u8, fade_frames: usize) {
-        self.silence_note_filtered(note, fade_frames, None);
+        self.silence_note_filtered(note, 0, fade_frames, None);
     }
 
     /// Line-scoped variant of [`silence_note`](Self::silence_note): a legato
     /// transition firing on one divisi line must not fade a unison note held
     /// by another line.
     pub fn silence_note_line(&mut self, line: u8, note: u8, fade_frames: usize) {
-        self.silence_note_filtered(note, fade_frames, Some(line));
+        self.silence_note_filtered(note, 0, fade_frames, Some(line));
     }
 
-    fn silence_note_filtered(&mut self, note: u8, fade_frames: usize, line: Option<u8>) {
+    /// Delayed line-scoped silence: hold the old note at full for `hold_frames`
+    /// (covering the transition sample's pre-arrival dip), then fade over
+    /// `fade_frames`. Fills the inter-note tick without a long source-pitch tail.
+    pub fn silence_note_line_after(
+        &mut self,
+        line: u8,
+        note: u8,
+        hold_frames: usize,
+        fade_frames: usize,
+    ) {
+        self.silence_note_filtered(note, hold_frames, fade_frames, Some(line));
+    }
+
+    /// CSS legato retire (spec §2.1 step 4): fade out the PREVIOUS pair on
+    /// `line` for `note` with the transition and sustain voices on SEPARATE
+    /// crossfade times (real persistent values `$fjtlu…`/`$tdjzq…`). Long
+    /// overlapping fades — the previous 30 ms single fade caused the inter-note
+    /// tick. `Legato` (transition) voices fade over `trans_fade`; sustain-layer
+    /// voices over `sus_fade`.
+    pub fn retire_note_line(
+        &mut self,
+        line: u8,
+        note: u8,
+        trans_fade: usize,
+        sus_fade: usize,
+    ) {
+        for v in &mut self.voices {
+            if v.note != note || v.line != line {
+                continue;
+            }
+            let fade = match v.kind {
+                VoiceKind::Legato => trans_fade,
+                VoiceKind::SustainNVLo
+                | VoiceKind::SustainNVHi
+                | VoiceKind::SustainVibLo
+                | VoiceKind::SustainVibHi
+                | VoiceKind::SustainLo
+                | VoiceKind::SustainHi
+                | VoiceKind::SustainLayer => sus_fade,
+                _ => continue,
+            };
+            let fade = fade.max(1);
+            v.ramp_gain(0.0, fade);
+            v.release_frames = fade;
+            v.state = VoiceState::Releasing {
+                frames_remaining: fade,
+            };
+        }
+    }
+
+    fn silence_note_filtered(
+        &mut self,
+        note: u8,
+        hold_frames: usize,
+        fade_frames: usize,
+        line: Option<u8>,
+    ) {
         for v in &mut self.voices {
             if v.note == note
                 && line.is_none_or(|l| v.line == l)
@@ -659,10 +979,18 @@ impl VoicePool {
                         | VoiceKind::Legato
                 )
             {
-                v.ramp_gain(0.0, fade_frames);
-                v.state = VoiceState::Releasing {
-                    frames_remaining: fade_frames,
-                };
+                if hold_frames > 0 {
+                    // Hold at full, then fade — the env (release_frames = fade)
+                    // carries the fade once the hold elapses.
+                    v.release_hold = hold_frames;
+                    v.pending_fade = fade_frames.max(1);
+                } else {
+                    v.ramp_gain(0.0, fade_frames);
+                    v.release_frames = fade_frames.max(1);
+                    v.state = VoiceState::Releasing {
+                        frames_remaining: fade_frames,
+                    };
+                }
             }
         }
     }
@@ -1098,5 +1426,92 @@ mod tests {
             let (l, r) = right.next_frame();
             l.abs() < 1e-6 && (r - 1.0).abs() < 1e-6
         });
+    }
+
+    // ── Anti-click / anti-pop regression guards ──────────────────────────────
+    //
+    // A click/pop is an abrupt inter-sample step far above what the waveform's
+    // own slope can produce. Two mechanisms prevent them, and these tests hold
+    // them in place:
+    //   * a short onset declick (`with_attack`) on legato / mid-sample voices —
+    //     without it every note change steps from silence to a non-zero sample;
+    //   * the forward-loop crossfade (`with_loop_xfade`) — without it a held
+    //     note clicks at every loop wrap.
+
+    /// Steady DC-offset stereo tone. Every sample is non-zero (offset by `dc`),
+    /// so starting playback mid-sample produces a hard onset step unless the
+    /// voice is declicked.
+    fn click_tone(sr: u32, n: usize, freq: f32, dc: f32, amp: f32) -> Arc<SampleData> {
+        let mut frames = Vec::with_capacity(n * 2);
+        for i in 0..n {
+            let t = i as f32 / sr as f32;
+            let s = amp * (core::f32::consts::TAU * freq * t).sin() + dc;
+            frames.push(s);
+            frames.push(s);
+        }
+        Arc::new(SampleData {
+            frames: Arc::new(frames),
+            channels: 2,
+            sample_rate: sr,
+            num_frames: n,
+        })
+    }
+
+    /// Largest absolute inter-sample jump of the mono-summed buffer, counting
+    /// the implicit pre-roll as silence so an onset step registers.
+    fn max_step(buf: &[f32]) -> f32 {
+        let mut prev = 0.0f32;
+        let mut mx = 0.0f32;
+        for c in buf.chunks(2) {
+            let s = 0.5 * (c[0] + c[1]);
+            mx = mx.max((s - prev).abs());
+            prev = s;
+        }
+        mx
+    }
+
+    #[test]
+    fn legato_onset_declick_removes_step() {
+        let sr = 48_000;
+        let data = click_tone(sr, sr as usize / 10, 220.0, 0.5, 0.4); // samples in [0.1, 0.9]
+        let declick = sr as usize * 6 / 1000; // 6 ms
+        // Start mid-sample, as a prefired legato transition does (start_offset).
+        let mut declicked = Voice::with_rate(Arc::clone(&data), 60, VoiceKind::Legato, 1.0, 1.0, 8)
+            .with_sample_window(1000, None)
+            .with_attack(declick);
+        let mut raw = Voice::with_rate(data, 60, VoiceKind::Legato, 1.0, 1.0, 8)
+            .with_sample_window(1000, None);
+        let mut a = vec![0.0f32; 512 * 2];
+        let mut b = vec![0.0f32; 512 * 2];
+        declicked.render_block(&mut a);
+        raw.render_block(&mut b);
+        // Control: without a declick the onset steps hard (≥ the DC floor).
+        assert!(max_step(&b) > 0.08, "control onset step too small: {}", max_step(&b));
+        // Declicked: no click — deltas stay near the waveform's own slope.
+        assert!(max_step(&a) < 0.02, "declicked legato onset clicked: {}", max_step(&a));
+    }
+
+    #[test]
+    fn forward_loop_crossfade_has_no_wrap_click() {
+        let sr = 48_000;
+        let n = sr as usize / 4;
+        // loop_start / loop_end land on different phases, so a hard modulo wrap
+        // would step; the crossfade must smooth it.
+        let data = click_tone(sr, n, 110.0, 0.0, 0.5);
+        let mut v = Voice::with_rate(data, 60, VoiceKind::SustainLayer, 1.0, 1.0, 1_000_000)
+            .with_forward_loop(2000, 6000)
+            .with_loop_xfade(sr as usize * 50 / 1000);
+        let mut out = vec![0.0f32; 30_000 * 2]; // several loop periods
+        v.render_block(&mut out);
+        let maxd = out
+            .chunks(2)
+            .map(|c| 0.5 * (c[0] + c[1]))
+            .collect::<Vec<_>>()
+            .windows(2)
+            .map(|w| (w[1] - w[0]).abs())
+            .fold(0.0f32, f32::max);
+        // The tone's own max slope is ~TAU*110/sr*0.5 ≈ 0.007; a wrap
+        // discontinuity would be ~0.5+. Generous bound, well clear of both.
+        assert!(maxd < 0.05, "loop wrap clicked: max delta {maxd}");
     }
 }

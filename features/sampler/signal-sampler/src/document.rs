@@ -345,6 +345,23 @@ impl CcState {
         }
         cur
     }
+
+    /// Last value at/before `qn` satisfying `pred`, skipping non-matching
+    /// events (e.g. the last CC58 that selected a legato *mode*, ignoring the
+    /// articulation / toggle keyswitches pressed since).
+    fn last_matching(&self, qn: f64, pred: impl Fn(u8) -> bool) -> Option<u8> {
+        let mut cur = None;
+        for &(q, v) in &self.events {
+            if q <= qn + EPS {
+                if pred(v) {
+                    cur = Some(v);
+                }
+            } else {
+                break;
+            }
+        }
+        cur
+    }
 }
 
 /// What the spec says a CC58 state plays. `None` label / no articulation
@@ -375,9 +392,16 @@ struct ANote {
     /// This note is reached by a legato transition (different-pitch overlap
     /// or same-pitch re-bow) → arrives via `LegatoPrefire`.
     legato_from: bool,
-    /// This note flows into a same-pitch re-bow → its note-off is dropped
-    /// (the transition into the next note replaces the release).
-    re_bow_to: bool,
+    /// Legato SPEED mode active at this note: `true` = Expressive (CC58 6-10),
+    /// `false` = Low Latency (CSS default / CC58 0-5). Selects the pre-delay
+    /// table for the prefire lead.
+    legato_expressive: bool,
+    /// This note flows into ANY legato transition (different-pitch move or
+    /// same-pitch re-bow) → its note-off is dropped. The scheduled transition
+    /// into the next note fades this voice out; emitting a note-off instead
+    /// races that prefire and can double the arrived voice (or spawn a spurious
+    /// mid-phrase release). Only genuine phrase-ends keep their note-off.
+    legato_to: bool,
 }
 
 impl ANote {
@@ -419,14 +443,29 @@ impl ANote {
 ///
 /// Timing inversion (this module's contribution):
 /// - legato-followed sustains → [`DocEvent::LegatoPrefire`] at
-///   `start − expressive.delay_for_velocity(vel)`
+///   `start − mode.delay_for_velocity(vel)`, where `mode` is the CC58-selected
+///   legato speed (Low Latency by default, Expressive on CC58 6-10)
 /// - shorts → note-on pre-rolled by `short_note_timing.pre_delay_ms`
 /// - marcato keyswitch state → no sampled pre-delay → no pull (mirror parity)
 pub fn annotate(doc: &TrackDocument, spec: &LibrarySpec, sample_rate: u32) -> Schedule {
-    let expressive = spec
-        .legato_engine
+    // Legato speed modes. CSS's DEFAULT is Low Latency (manual: "the easiest to
+    // use, and I recommend using this mode for most work"); Expressive is only
+    // active while a CC58 keyswitch selects it (0-5 = Low Latency, 6-10 =
+    // Expressive). We pick the delay table per note from the last legato-mode
+    // keyswitch, defaulting to Low Latency. `primary_mode` covers single-mode
+    // libraries (brass, etc.) that ship flat zones instead.
+    let low_latency = spec.legato_engine.as_ref().and_then(|le| le.low_latency.clone());
+    let expressive = spec.legato_engine.as_ref().and_then(|le| le.expressive.clone());
+    let primary = spec.legato_engine.as_ref().and_then(|le| le.primary_mode());
+    let ll_range = low_latency
         .as_ref()
-        .and_then(|le| le.expressive.clone().or_else(|| le.primary_mode()));
+        .and_then(|m| m.enabled_cc58_range.as_deref())
+        .and_then(crate::spec::parse_range);
+    let exp_range = expressive
+        .as_ref()
+        .and_then(|m| m.enabled_cc58_range.as_deref())
+        .and_then(crate::spec::parse_range);
+    let in_range = |r: Option<(u8, u8)>, v: u8| r.is_some_and(|(lo, hi)| v >= lo && v <= hi);
     let porta_vel_max = spec
         .legato_engine
         .as_ref()
@@ -453,7 +492,8 @@ pub fn annotate(doc: &TrackDocument, spec: &LibrarySpec, sample_rate: u32) -> Sc
             ks_val: None,
             kind: ArticulationKind::Sustain,
             legato_from: false,
-            re_bow_to: false,
+            legato_to: false,
+            legato_expressive: false,
         })
         .collect();
     let mut by_line: std::collections::BTreeMap<u8, Vec<usize>> = std::collections::BTreeMap::new();
@@ -476,6 +516,13 @@ pub fn annotate(doc: &TrackDocument, spec: &LibrarySpec, sample_rate: u32) -> Sc
                 !ks_is_legato_toggle(*v) && !ks_is_con_sord(*v)
             });
             notes[ni].kind = kind_for_ks(spec, notes[ni].ks_val);
+            // Legato speed mode from the last CC58 that selected one (0-5 Low
+            // Latency / 6-10 Expressive), ignoring articulation & toggle
+            // keyswitches pressed since. CSS default is Low Latency.
+            let mode_v = ks.last_matching(notes[ni].src.start_qn, |v| {
+                in_range(ll_range, v) || in_range(exp_range, v)
+            });
+            notes[ni].legato_expressive = mode_v.is_some_and(|v| in_range(exp_range, v));
         }
         for w in 0..list.len().saturating_sub(1) {
             let (ai, bi) = (list[w], list[w + 1]);
@@ -486,6 +533,7 @@ pub fn annotate(doc: &TrackDocument, spec: &LibrarySpec, sample_rate: u32) -> Sc
                 // different-pitch overlap = legato transition
                 if gap < -EPS {
                     notes[bi].legato_from = true;
+                    notes[ai].legato_to = true;
                 }
             } else if legato_capable
                 && !a.blocks_rebow()
@@ -497,7 +545,7 @@ pub fn annotate(doc: &TrackDocument, spec: &LibrarySpec, sample_rate: u32) -> Sc
                 // on a mono line an overlapping repeat can only be a re-bow;
                 // treating it as a break would leave the line sounding at
                 // the next note-on and push it down the reactive path.)
-                notes[ai].re_bow_to = true;
+                notes[ai].legato_to = true;
                 notes[bi].legato_from = true;
             }
         }
@@ -549,9 +597,11 @@ pub fn annotate(doc: &TrackDocument, spec: &LibrarySpec, sample_rate: u32) -> Sc
         // Previous trigger frame on this line — keeps the mono line's
         // trigger order strict even when a pre-roll would cross it.
         let mut prev_trigger: i64 = -1;
-        // Previous pitch on this line — a legato-followed note's prefire
-        // lead is the MEASURED lead-in of the transition sample for the
-        // actual `from → to` move (stored per zone by the CSS generator).
+        // Previous note-on frame on this line — the IOI clock for the
+        // Overlap-Delay (spec §2.1: legato delay is IOI-driven, not velocity).
+        let mut prev_start: Option<i64> = None;
+        // Previous note PITCH on this line — the legato `from` for the per-move
+        // measured-arrival lookup that sets the `$1fvjk` pre-bow lead.
         let mut prev_pitch: Option<u8> = None;
         for &ni in list {
             let n = &notes[ni];
@@ -589,13 +639,45 @@ pub fn annotate(doc: &TrackDocument, spec: &LibrarySpec, sample_rate: u32) -> Sc
                 // the tick, never through the reactive countdown.
                 legato_count += 1;
                 let vel = n.src.vel;
+                // CSS: the trigger→arrival delay is the VELOCITY-ZONE value
+                // (Expressive 333/250/100 ms; Low Latency 150/100), NOT the
+                // recorded swell length. Prefire by exactly that so the arrival
+                // lands on the grid; the engine truncates the sample's measured
+                // lead-in to this delay via `start_offset` (skips the surplus
+                // swell). Using the full measured lead instead made fast
+                // passages overlap — consecutive swells stacked into a doubled,
+                // "sudden" transition. Marcato and portamento (vel ≤ threshold)
+                // have no sampled pre-delay → zero lead, fire on the tick.
+                // Overlap-Delay is IOI-driven (spec §2.1): the delay follows the
+                // inter-onset interval — time since the previous note-on on the
+                // line — interpolated across the KSP thresholds, NOT the
+                // velocity zone. Marcato and portamento (vel ≤ threshold) have
+                // no sampled pre-delay → fire on the tick.
+                let _ = (&expressive, &low_latency, &primary, LEGATO_DELAY_FALLBACK_MS);
                 let lead_ms = if n.is_marcato() || (porta_vel_max > 0 && vel <= porta_vel_max) {
                     0
                 } else {
-                    prev_pitch
-                        .and_then(|from| spec.legato_lead_ms(from, n.src.pitch))
-                        .or_else(|| expressive.as_ref().and_then(|m| m.delay_for_velocity(vel)))
-                        .unwrap_or(LEGATO_DELAY_FALLBACK_MS)
+                    let ioi_frames = prev_start.map(|p| (start - p).max(0)).unwrap_or(0);
+                    let ioi_ms = crate::engine::frames_to_ms(ioi_frames as u64, sample_rate);
+                    // CSS `$1fvjk`: the transition sample starts `lt_start_offset_ms`
+                    // in (IOI-interpolated 177 → 117 ms). To land the destination
+                    // pitch on the tick with that offset applied, prefire by the
+                    // AUDIBLE pre-bow that still plays before the arrival =
+                    // (per-move measured arrival − $1fvjk). Fast lines → ~0 ms (fire
+                    // on the tick); slow lines → ~60 ms of bow-change lead-in. The
+                    // engine's `start_offset = arrival − lead·rate` then resolves to
+                    // exactly $1fvjk (see `spawn_transition_voice`). Libraries
+                    // without measured transitions keep the legacy Overlap-Delay
+                    // curve (`ioi_legato_delay_ms`).
+                    match prev_pitch.and_then(|from| spec.legato_lead_ms(from, n.src.pitch)) {
+                        Some(arrival_ms) => (arrival_ms as f32
+                            - crate::engine::lt_start_offset_ms(ioi_ms))
+                        .max(0.0)
+                        .round() as u32,
+                        None => {
+                            crate::engine::ioi_legato_delay_ms(ioi_ms, vel, n.legato_expressive)
+                        }
+                    }
                 };
                 let rr = stable_rr_slot(
                     doc.seed,
@@ -626,7 +708,6 @@ pub fn annotate(doc: &TrackDocument, spec: &LibrarySpec, sample_rate: u32) -> Sc
 
             let trigger_frame = trigger_frame.max(prev_trigger + 1).max(0);
             prev_trigger = trigger_frame;
-            prev_pitch = Some(n.src.pitch);
             // The prefire's lead is measured from its FINAL (clamped) trigger
             // frame, so `frame + lead == destination tick` holds exactly.
             let kind = if let DocEvent::LegatoPrefire { note, vel, rr, .. } = kind {
@@ -652,7 +733,7 @@ pub fn annotate(doc: &TrackDocument, spec: &LibrarySpec, sample_rate: u32) -> Sc
             // Note-off: dropped for re-bow sources — the transition into the
             // next same-pitch note replaces the release (fading this note is
             // `fire_legato`'s job, not a release tail's).
-            if !n.re_bow_to {
+            if !n.legato_to {
                 let rr = stable_rr_slot(
                     doc.seed,
                     n.src.start_qn,
@@ -670,6 +751,11 @@ pub fn annotate(doc: &TrackDocument, spec: &LibrarySpec, sample_rate: u32) -> Sc
                     },
                 ));
             }
+
+            // IOI clock: the next note on this line measures its Overlap-Delay
+            // from this note's (source) start.
+            prev_start = Some(start);
+            prev_pitch = Some(n.src.pitch);
         }
     }
 
@@ -1234,15 +1320,18 @@ keyswitch {
         let sched = annotate(&doc, &spec_with_legato(), SR);
         assert_eq!(sched.legato_count, 1);
 
-        // 120 BPM ⇒ QN 2.0 = 1.0 s = 48000 frames; vel 30 ⇒ 333 ms lead.
+        // 120 BPM ⇒ QN 2.0 = 1.0 s = 48000 frames. With the REAL O+D values
+        // (spec §2.1, corrected), a 1.0 s inter-onset gap yields ZERO added
+        // latency — the delay is non-zero only for soft+fast playing — so the
+        // prefire fires exactly ON the destination tick (lead 0).
         let tick = 48_000i64;
-        let lead = ms_to_frames_i64(333, SR);
         let prefire = sched
             .events
             .iter()
             .find(|e| matches!(e.kind, DocEvent::LegatoPrefire { .. }))
             .expect("second note arrives via prefire");
-        assert_eq!(prefire.frame as i64, tick - lead);
+        assert_eq!(prefire.frame as i64, tick);
+        assert!(matches!(prefire.kind, DocEvent::LegatoPrefire { lead: 0, .. }));
 
         // The first note is a plain note-on at frame 0; only one NoteOn total.
         let note_ons: Vec<_> = sched

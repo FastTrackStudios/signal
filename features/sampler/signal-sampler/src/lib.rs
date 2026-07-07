@@ -90,6 +90,7 @@ pub use document::{
 pub use document_rt::{BlockTransport, RealtimeScheduler};
 pub use engine::cache::SignalPcmPack;
 pub use engine::{ArticClass, LegatoFireEvent, LineId, PlayMode, SampleEngine};
+pub use engine::trace::{RenderTrace, TraceEvent, TraceKind, VoiceSpawn};
 pub use engine_spec::{BlockRef, EngineLayerSpec, EngineSpec, FxChainSlot, PortSpec, VoiceConfig};
 pub use instrument::SamplerInstrument;
 pub use keys_rig::{KeysInstrument, KeysRig};

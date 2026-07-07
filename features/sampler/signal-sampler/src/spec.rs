@@ -515,6 +515,24 @@ pub struct DynamicsSpec {
     /// Release-time multiplier at CC64=63. 0 means the engine default.
     #[facet(default)]
     pub half_pedal_max_release_multiplier: f32,
+    /// Enable the KSP-confirmed short-note VELOCITY → dynamic-LAYER selection
+    /// (the per-articulation `%g1qri` thresholds in `vel_thresholds`) instead of
+    /// an even velocity split. This is the `VeloIDX` band selection from
+    /// `script_1.ksp`; the short TYPE stays on CC1/CC58. ON for CSS (validated
+    /// against the reference render — timbre holds, the collapsed Staccato ladder
+    /// lands on the same recorded dynamics). See `SampleEngine::short_band`.
+    #[facet(default)]
+    pub enable_velocity_layers: bool,
+    /// Apply the decoded intra-band velocity→volume trim (`$arhiq`, the KSP
+    /// `%bcez1` per-band deltas in `vel_layer_db`) ON TOP of the layer selection.
+    /// OFF by default and OFF for CSS: the layer-selection math is validated, but
+    /// the currently-decoded `%bcez1` values over-attenuate vs the reference
+    /// render (they regress mean|level| ~0.6 dB / MATCH 38→31 on the A/B while
+    /// timbre holds), so `$arhiq` awaits re-derivation of the true `%bcez1`
+    /// magnitudes from the KSP persistent. `short_velocity_volume_db` still
+    /// computes the curve; this flag only gates whether it is applied.
+    #[facet(default)]
+    pub apply_short_velvol: bool,
 }
 
 /// One CC1 dynamic layer with its crossfade range.
@@ -563,6 +581,30 @@ pub struct ArticulationSpec {
     /// in the sample map for a given section.
     #[facet(default)]
     pub aliases: Vec<String>,
+
+    /// Short-note velocity-layer boundaries (CSS KSP `%g1qri`, the thresholds
+    /// AFTER the implicit floor of 1). A note's velocity picks the band it falls
+    /// in — `[t0,t1,…]` gives bands `[1,t0) [t0,t1) …`, plus a top band above the
+    /// last boundary < 127. Empty = fall back to the even velocity split.
+    #[facet(default)]
+    pub vel_thresholds: Vec<u8>,
+    /// Per-band intra-layer velocity→volume deltas in dB (CSS KSP `%bcez1`, the
+    /// recorded adjacent-layer level differences that `$arhiq` ramps across each
+    /// band so a note's level tracks velocity CONTINUOUSLY, not just the discrete
+    /// recorded layer). One entry per band; applied via the decoded KSP law
+    /// `dB = (band_top − vel)·delta / (band_span − 1)`.
+    #[facet(default)]
+    pub vel_layer_db: Vec<f32>,
+
+    /// Fixed pitch transpose (semitones) applied to every voice of this
+    /// articulation ON TOP OF the per-note `note − root_key` shift. Zone
+    /// selection still keys off the played note; only the playback rate moves.
+    /// CSS Harmonics need `-12`: the shipped natural-harmonic zones are mapped
+    /// an octave above the pitch CSS actually sounds (verified by the reference
+    /// render — key 67/G4 sounds G5 in CSS but G6 from the raw sample), so the
+    /// engine drops them an octave to match. Default 0 = no shift.
+    #[facet(default)]
+    pub transpose: i8,
 }
 
 /// High-level category for an articulation's playback behaviour.

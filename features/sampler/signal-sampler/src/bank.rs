@@ -742,6 +742,17 @@ impl SamplerBank {
             .unwrap_or_default()
     }
 
+    /// Enable/disable an instrument's structured render trace.
+    pub fn set_trace_enabled(&mut self, id: &str, enabled: bool) {
+        self.with_block(id, |b| b.set_trace_enabled(enabled));
+    }
+
+    /// The structured render trace for an instrument.
+    pub fn render_trace(&self, id: &str) -> crate::engine::RenderTrace {
+        self.read_block(id, |b| b.render_trace().clone())
+            .unwrap_or_default()
+    }
+
     /// An instrument engine's running render position in frames.
     pub fn engine_frames_rendered(&self, id: &str) -> Option<u64> {
         self.read_block(id, |b| b.frames_rendered())

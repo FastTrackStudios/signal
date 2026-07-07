@@ -326,6 +326,17 @@ impl SamplerBlock {
         self.engine.legato_fire_log()
     }
 
+    /// Enable/disable the structured render trace —
+    /// see [`SampleEngine::set_trace_enabled`].
+    pub fn set_trace_enabled(&mut self, enabled: bool) {
+        self.engine.set_trace_enabled(enabled);
+    }
+
+    /// The structured render trace — see [`SampleEngine::render_trace`].
+    pub fn render_trace(&self) -> &crate::engine::RenderTrace {
+        self.engine.render_trace()
+    }
+
     /// Running engine render position in frames —
     /// see [`SampleEngine::frames_rendered`].
     pub fn frames_rendered(&self) -> u64 {

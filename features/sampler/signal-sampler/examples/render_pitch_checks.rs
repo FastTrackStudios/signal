@@ -157,8 +157,10 @@ fn main() -> eyre::Result<()> {
     melodies.push((0, 2.0));
     melodies.extend(dmin);
 
-    // ── 3. Chromatic walkup, eighth notes, C4→C5, hold the octave ────────
+    // ── 3. Chromatic walk UP then DOWN, eighth notes, C4→C5→C4 ───────────
     let mut chroma: Vec<(u8, f64)> = (60u8..=72).map(|p| (p, 0.5)).collect();
+    // Back down C5→C4 (72 already sounded at the top; start from 71).
+    chroma.extend((60u8..=71).rev().map(|p| (p, 0.5)));
     chroma.last_mut().unwrap().1 = 4.0;
 
     let renders: [(&str, Vec<(u8, f64)>); 3] = [
@@ -183,19 +185,34 @@ fn main() -> eyre::Result<()> {
             version: 1,
             seed: SEED,
             auto_divisi: false,
-            // Medium dynamics so the CC1 layer blend is audible.
-            ccs: vec![DocCc {
-                qn: 0.0,
-                chan: 0,
-                cc: 1,
-                val: 84,
-            }],
+            // Medium dynamics so the CC1 layer blend is audible; CC2=0 forces
+            // non-vibrato (NVsus / NVLeg) so these tests carry no vibrato.
+            ccs: vec![
+                DocCc {
+                    qn: 0.0,
+                    chan: 0,
+                    cc: 1,
+                    val: 84,
+                },
+                DocCc {
+                    qn: 0.0,
+                    chan: 0,
+                    cc: 2,
+                    val: 0,
+                },
+            ],
             notes,
             tempo: vec![TempoPoint { qn: 0.0, bpm: BPM }],
         };
         let res = rig.render_offline_document(ID, &document, &opts)?;
         if res.reactive_fallbacks != 0 {
-            eyre::bail!("{stem}: {} reactive fallbacks", res.reactive_fallbacks);
+            // Audition render: a stray reactive fallback still produces a valid
+            // transition (fired via the live countdown path), just not prefired.
+            // Warn rather than abort so the WAV is still written.
+            eprintln!(
+                "    ! {stem}: {} reactive fallback(s) — transition fired live, not prefired",
+                res.reactive_fallbacks
+            );
         }
         let out = PathBuf::from(format!("target/{stem}.wav"));
         write_wav(&out, &res.audio)?;
