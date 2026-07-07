@@ -8,6 +8,8 @@
 //!
 //!   cargo test -p signal --test signal_domain -- --nocapture
 
+mod fixtures;
+
 use signal::{
     BlockType, ModuleBlockSource, bootstrap_in_memory_controller_async,
     overrides::{NodePath, Override},
@@ -19,10 +21,18 @@ use signal::{
 //  Helpers
 // ─────────────────────────────────────────────────────────────
 
+/// Bootstrap an in-memory controller and build+persist the JM megarig.
+///
+/// The static seed for rigs/profiles/layers/engines was emptied, so this
+/// reconstructs the JM hierarchy under the canonical `seed_id`s via
+/// [`fixtures::seed_jm_megarig`] (the build-your-own equivalent of the old
+/// seed). Every test in this file resolves that data by seed id.
 async fn controller() -> signal::Signal {
-    bootstrap_in_memory_controller_async()
+    let signal = bootstrap_in_memory_controller_async()
         .await
-        .expect("failed to bootstrap in-memory controller")
+        .expect("failed to bootstrap in-memory controller");
+    fixtures::seed_jm_megarig(&signal).await;
+    signal
 }
 
 // ─────────────────────────────────────────────────────────────
