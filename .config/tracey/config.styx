@@ -1,0 +1,24 @@
+@schema {id crate:tracey-config@1, cli tracey}
+
+specs (
+    {
+        name sampler
+        source_url https://codeberg.org/FastTrackStudios/signal
+        include (features/sampler/spec/**/*.md)
+        impls (
+            {
+                name live
+                include (
+                    features/sampler/signal-sampler/**/*.rs
+                )
+                exclude (
+                    features/sampler/**/target/**
+                    features/sampler/signal-sampler/examples/**
+                )
+                test_include (
+                    features/sampler/signal-sampler/tests/**/*.rs
+                )
+            }
+        )
+    }
+)

@@ -33,6 +33,7 @@ impl AmpEngine {
     /// Open the live duplex audio (guitar in → out) with no amp loaded yet —
     /// the signal passes through clean until [`load_model`](Self::load_model).
     /// Device / channel / sample-rate come from `prefs`.
+    // r[impl sampler.amp.clean-passthrough]
     pub fn open(prefs: &RigAudioPrefs) -> Result<Self, String> {
         let rig = GuitarRig::open(prefs).map_err(|e| e.to_string())?;
         Ok(Self {
@@ -46,6 +47,8 @@ impl AmpEngine {
     /// Installs a fresh one-patch profile whose only block is the NAM amp. The
     /// full model path is carried through directly (no id round-trip), so paths
     /// with spaces/quotes resolve correctly.
+    // r[impl sampler.amp.full-path]
+    // r[impl sampler.amp.single-patch]
     pub fn load_model(&mut self, path: impl AsRef<Path>) -> Result<(), String> {
         let path = path.as_ref();
         let path_str = path.to_string_lossy().to_string();
@@ -64,6 +67,7 @@ impl AmpEngine {
     /// The active patch's chain as [`RigBlock`]s — the amp/cab/FX blocks to
     /// render in the signal grid. Empty block names are filled with the model
     /// name so the grid always has a label. Empty if no model is loaded.
+    // r[impl sampler.amp.chain-blocks]
     pub fn active_blocks(&self) -> Vec<crate::rig::RigBlock> {
         let patch = self
             .rig
@@ -89,6 +93,7 @@ impl AmpEngine {
     }
 
     /// Peak input level (guitar reaching the rig), linear 0..~1.
+    // r[impl sampler.amp.live-meters]
     pub fn input_peak(&self) -> f32 {
         self.rig.rig().input_peak()
     }

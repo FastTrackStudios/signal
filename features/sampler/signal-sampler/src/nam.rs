@@ -78,6 +78,7 @@ impl NamProcessor {
     /// (modern format, v0.5+). Guitar models are usually 48 kHz; running the
     /// model at a different host rate shifts its voicing/pitch, so the rig
     /// uses this to warn (and, later, to resample).
+    // r[impl sampler.nam.expected-rate]
     pub fn expected_sample_rate(&self) -> Option<f64> {
         self.model.expected_sample_rate()
     }
@@ -103,6 +104,8 @@ impl NamProcessor {
     /// both channels. `input_gain` and `output_gain` apply pre/post the
     /// model so the user can match the NAM model's expected input level
     /// without recalibrating the entire chain.
+    // r[impl sampler.nam.mono-fold]
+    // r[impl sampler.nam.no-hot-alloc]
     pub fn process_interleaved(&mut self, inout: &mut [f32]) {
         let frames = inout.len() / 2;
         if frames == 0 {
@@ -190,6 +193,7 @@ impl PluginInstance for NamProcessor {
         0
     }
 
+    // r[impl sampler.nam.prepared-flag]
     fn prepare(&mut self, sample_rate: f64, block_size: u32) -> Result<(), PluginError> {
         self.reset(sample_rate, block_size as usize);
         self.prepared = true;
@@ -200,6 +204,7 @@ impl PluginInstance for NamProcessor {
         self.prepared
     }
 
+    // r[impl sampler.nam.planar-interleaved-parity]
     fn process_block(
         &mut self,
         in_l: &[f32],
@@ -258,6 +263,8 @@ mod tests {
     /// A known input through the `PluginInstance::process_block` planar path is
     /// non-silent and equals the interleaved path frame-for-frame — the two
     /// process routes agree (so the rig hears the same tone on daw's engine).
+    // r[verify sampler.nam.mono-fold]
+    // r[verify sampler.nam.planar-interleaved-parity]
     #[test]
     fn process_block_matches_process_interleaved() {
         let sr = 48_000.0;
@@ -297,6 +304,7 @@ mod tests {
     }
 
     /// `deactivate` clears the prepared flag; `prepare` restores it.
+    // r[verify sampler.nam.prepared-flag]
     #[test]
     fn prepare_deactivate_toggles_prepared() {
         let Ok(mut a) = NamProcessor::load(fixture("amp_a.nam"), 48_000.0, 64) else {
