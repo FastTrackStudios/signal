@@ -61,8 +61,6 @@ pub mod native;
 pub mod native_osc;
 pub mod node_render;
 pub mod nord;
-pub mod omni;
-pub mod omni_import;
 pub mod pack_rewrite;
 pub mod preset_registry;
 pub mod preset_spec;

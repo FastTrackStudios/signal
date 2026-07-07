@@ -85,4 +85,21 @@ specs (
             }
         )
     }
+    {
+        name synth
+        source_url https://codeberg.org/FastTrackStudios/signal
+        include (features/synth/spec/**/*.md)
+        impls (
+            {
+                name live
+                include (
+                    features/synth/src/**/*.rs
+                )
+                exclude (
+                    features/synth/**/target/**
+                    features/synth/examples/**
+                )
+            }
+        )
+    }
 )

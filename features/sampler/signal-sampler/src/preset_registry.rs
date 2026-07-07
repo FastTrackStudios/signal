@@ -50,12 +50,6 @@ impl PresetRegistry {
         if let Some(piano) = crate::nord::nord_stage_piano_preset() {
             r.register_code(piano);
         }
-        r.register_code(crate::omni::omnisphere_preset());
-        // Soundsource-realized variant — only on machines with the local
-        // Omnisphere extraction.
-        if let Some(omni) = crate::omni::omnisphere_soundsource_preset() {
-            r.register_code(omni);
-        }
         r.register_code(crate::nord::layering_demo());
         r
     }
