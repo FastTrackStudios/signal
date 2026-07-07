@@ -1583,7 +1583,7 @@ fn base64_decode(s: &str) -> Result<Vec<u8>, String> {
 
 /// Process-unique guid string — shared by [`GuitarRig`] and
 /// [`SamplerRig`](crate::sampler_rig::SamplerRig) for their project guids.
-pub(crate) fn uuid_string() -> String {
+pub fn uuid_string() -> String {
     uuid::new_v4_string()
 }
 
