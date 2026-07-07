@@ -70,7 +70,7 @@ pub fn keys_megarig_air_scene() -> RigSceneId {
 /// **Prefer `signal.save_built_rig(&built)` instead** — same logic, lives on the controller.
 #[deprecated(note = "use signal.save_built_rig(&built) instead")]
 pub async fn save_built_rig(signal: &Signal, built: &BuiltRig) {
-    signal.save_built_rig(built).await;
+    let _ = signal.save_built_rig(built).await;
 }
 
 // ─── JM ("Archetype: John Mayer X") megarig fixture ─────────────

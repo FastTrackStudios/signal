@@ -21,7 +21,7 @@ use signal::{
     module_type::ModuleType,
     overrides::{NodePath, Override},
     profile::{Patch, PatchTarget, Profile},
-    resolve::{ResolveTarget, ResolvedGraph},
+    resolve::ResolveTarget,
     rig::{EngineSelection, Rig, RigId, RigScene, RigSceneId},
     seed_id,
     setlist::{Setlist, SetlistEntry},

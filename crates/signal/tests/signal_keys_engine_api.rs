@@ -14,20 +14,14 @@ mod fixtures;
 
 use fixtures::*;
 use signal::{
-    Block, BlockParameter, EngineType, ModuleBlock, ModuleBlockSource, ModulePreset,
-    ModuleSnapshot, Preset, SignalChain, Snapshot,
-    block::BlockType,
+    EngineType,
     engine::{Engine, EngineScene, LayerSelection},
     layer::{BlockRef, Layer, LayerRef, LayerSnapshot, ModuleRef},
-    module_type::ModuleType,
     overrides::{NodeOverrideOp, NodePath, Override},
     profile::{Patch, PatchTarget, Profile},
-    resolve::{ResolveTarget, ResolvedGraph},
-    rig::{EngineSelection, Rig, RigId, RigScene, RigSceneId, RigType},
+    resolve::ResolveTarget,
+    rig::{EngineSelection, Rig, RigScene, RigType},
     seed_id,
-    setlist::{Setlist, SetlistEntry},
-    song::{Section, SectionSource, Song},
-    traits::Collection,
 };
 
 /// Bootstrap an in-memory controller pre-seeded with the Keys megarig.
@@ -766,7 +760,7 @@ async fn build_multi_engine_rig_from_scratch() {
 async fn reorder_engines_in_rig() {
     let signal = controller().await;
 
-    let mut rig = signal
+    let _rig = signal
         .rigs()
         .load(seed_id("removable-rig"))
         .await

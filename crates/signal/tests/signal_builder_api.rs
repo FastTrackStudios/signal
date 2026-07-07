@@ -299,7 +299,7 @@ async fn staleness_detected_after_block_preset_update() {
 /// Verify that new modules built with the builder get version-stamped.
 #[tokio::test]
 async fn new_modules_get_version_stamped() {
-    use signal::{ModuleBlockSource, traits::Collection};
+    use signal::ModuleBlockSource;
 
     let built = RigBuilder::new("Version Stamp Test")
         .block_preset("Drive", BlockType::Drive, |bp| {
@@ -342,7 +342,7 @@ async fn block_preset_update_increments_version() {
     let bp = &built.block_presets[0];
 
     // Load the default snapshot — should be version 1
-    let block_before = signal
+    let _block_before = signal
         .block_presets()
         .load_default(BlockType::Eq, bp.preset_id.clone())
         .await

@@ -20,9 +20,7 @@ pub mod scene_midi;
 use std::cell::OnceCell;
 use std::error::Error;
 
-use daw::RxExt;
 use daw::rpc::Daw;
-use daw::service::ActionEvent;
 use daw_extension_runtime::ExtensionRuntime;
 use fragile::Fragile;
 use reaper_low::PluginContext;
@@ -136,6 +134,7 @@ fn init_tracing() {
     let _ = tracing::subscriber::set_global_default(subscriber);
 }
 
+#[allow(dead_code)]
 async fn handle_action(daw: &Daw, command_name: &str) {
     info!("signal action triggered: {command_name}");
 

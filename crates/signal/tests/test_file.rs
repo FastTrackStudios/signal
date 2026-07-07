@@ -5,7 +5,7 @@ async fn reaper_test(ctx: &ReaperTestContext) -> Result<()> {
     let project = ctx.project();
 
     project.add_track("testing", None).await.unwrap();
-    let tracks = project.tracks().all().await.unwrap();
+    let _tracks = project.tracks().all().await.unwrap();
 
     Ok(())
 }

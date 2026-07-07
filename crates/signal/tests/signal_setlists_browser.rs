@@ -10,12 +10,12 @@ use signal::{
     engine::EngineId,
     overrides::{NodePath, Override},
     profile::{Patch, PatchId, PatchTarget, Profile, ProfileId},
-    rig::{EngineSelection, RigId, RigSceneId},
+    rig::{EngineSelection, RigSceneId},
     scene_template::SceneTemplate,
     seed_id,
     setlist::{Setlist, SetlistEntry, SetlistEntryId, SetlistId},
     song::{Section, SectionId, SectionSource, Song, SongId},
-    tagging::{BrowserMode, BrowserQuery},
+    tagging::BrowserQuery,
 };
 
 /// Bootstrap an in-memory controller pre-seeded with the guitar profiles,
