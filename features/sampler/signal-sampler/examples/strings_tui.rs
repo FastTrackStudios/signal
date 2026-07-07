@@ -29,7 +29,7 @@ use ratatui::layout::{Constraint, Layout};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Gauge, Paragraph};
-use signal_sampler::{MidiInputHandle, MidiMessage, MidiMonitor, MidiSelection, SamplerRig};
+use signal_sampler::{MidiEvent, MidiInputHandle, MidiMonitor, MidiSelection, SamplerRig};
 
 const INSTRUMENT_ID: &str = "strings_1v";
 
@@ -172,7 +172,7 @@ fn main() -> eyre::Result<()> {
     for port in SamplerRig::midi_input_ports() {
         midi_choices.push(MidiChoice {
             label: port.clone(),
-            sel: MidiSelection::Port(port),
+            sel: MidiSelection::NameContains(port),
         });
     }
     midi_choices.push(MidiChoice {
@@ -227,41 +227,46 @@ fn main() -> eyre::Result<()> {
 }
 
 /// One-line summary of a MIDI message for the monitor.
-fn fmt_midi(msg: &MidiMessage) -> String {
+fn fmt_midi(msg: &MidiEvent) -> String {
     match msg {
-        MidiMessage::NoteOn {
+        MidiEvent::NoteOn {
             channel,
-            note,
+            key,
             velocity,
         } => format!(
             "ch{:<2} NoteOn  {:<10} v{}",
-            channel + 1,
-            note_name(*note),
-            velocity
+            channel.number(),
+            note_name(key.get()),
+            velocity.get()
         ),
-        MidiMessage::NoteOff {
+        MidiEvent::NoteOff {
             channel,
-            note,
+            key,
             velocity,
         } => format!(
             "ch{:<2} NoteOff {:<10} v{}",
-            channel + 1,
-            note_name(*note),
-            velocity
+            channel.number(),
+            note_name(key.get()),
+            velocity.get()
         ),
-        MidiMessage::ControlChange {
+        MidiEvent::ControlChange {
             channel,
             controller,
             value,
-        } => format!("ch{:<2} CC{:<3}  = {}", channel + 1, controller, value),
-        MidiMessage::PitchBend { channel, value } => {
-            format!("ch{:<2} PitchBend {}", channel + 1, value)
+        } => format!(
+            "ch{:<2} CC{:<3}  = {}",
+            channel.number(),
+            controller.get(),
+            value.get()
+        ),
+        MidiEvent::PitchBend { channel, bend } => {
+            format!("ch{:<2} PitchBend {}", channel.number(), bend.offset())
         }
-        MidiMessage::ProgramChange { channel, program } => {
-            format!("ch{:<2} Program {}", channel + 1, program)
+        MidiEvent::ProgramChange { channel, program } => {
+            format!("ch{:<2} Program {}", channel.number(), program.get())
         }
-        MidiMessage::ChannelPressure { channel, pressure } => {
-            format!("ch{:<2} Aftertouch {}", channel + 1, pressure)
+        MidiEvent::ChannelPressure { channel, pressure } => {
+            format!("ch{:<2} Aftertouch {}", channel.number(), pressure.get())
         }
         other => format!("{other:?}"),
     }

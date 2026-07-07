@@ -127,14 +127,14 @@ impl ControlEnv {
     }
 
     fn advance(&mut self, events: &PluginEvents<'_>, frames: usize) -> f32 {
-        use daw::service::MidiMessage;
+        use midicore::MidiEvent;
         for ev in events.midi {
-            match ev.message {
-                MidiMessage::NoteOn { velocity, .. } if velocity > 0 => {
+            match &ev.message {
+                MidiEvent::NoteOn { velocity, .. } if velocity.get() > 0 => {
                     self.held += 1;
                     self.env.note_on();
                 }
-                MidiMessage::NoteOn { .. } | MidiMessage::NoteOff { .. } => {
+                MidiEvent::NoteOn { .. } | MidiEvent::NoteOff { .. } => {
                     self.held = self.held.saturating_sub(1);
                     if self.held == 0 {
                         self.env.note_off();
@@ -199,8 +199,8 @@ impl ControlSource for ControlLfo {
         if self.retrigger
             && events.midi.iter().any(|ev| {
                 matches!(
-                    ev.message,
-                    daw::service::MidiMessage::NoteOn { velocity, .. } if velocity > 0
+                    &ev.message,
+                    midicore::MidiEvent::NoteOn { velocity, .. } if velocity.get() > 0
                 )
             })
         {
@@ -239,46 +239,46 @@ impl MidiSource {
 
 impl ControlSource for MidiSource {
     fn tick(&mut self, events: &PluginEvents<'_>, _frames: usize, _tempo_bpm: f32) -> f32 {
-        use daw::service::MidiMessage;
+        use midicore::MidiEvent;
         let m = self.mode;
         let mut v = self.value;
         for ev in events.midi {
             match (m, &ev.message) {
                 (
                     MidiMod::Wheel,
-                    MidiMessage::ControlChange {
+                    MidiEvent::ControlChange {
                         controller, value, ..
                     },
-                ) if *controller == 1 => {
-                    v = *value as f32 / 127.0;
+                ) if controller.get() == 1 => {
+                    v = value.get() as f32 / 127.0;
                 }
                 (
                     MidiMod::Cc(n),
-                    MidiMessage::ControlChange {
+                    MidiEvent::ControlChange {
                         controller, value, ..
                     },
-                ) if *controller == n => {
-                    v = *value as f32 / 127.0;
+                ) if controller.get() == n => {
+                    v = value.get() as f32 / 127.0;
                 }
-                (MidiMod::Aftertouch, MidiMessage::ChannelPressure { pressure, .. }) => {
-                    v = *pressure as f32 / 127.0;
+                (MidiMod::Aftertouch, MidiEvent::ChannelPressure { pressure, .. }) => {
+                    v = pressure.get() as f32 / 127.0;
                 }
-                (MidiMod::Bender, MidiMessage::PitchBend { value, .. }) => {
+                (MidiMod::Bender, MidiEvent::PitchBend { bend, .. }) => {
                     // −8192..8191 → −1..+1.
-                    v = *value as f32 / 8192.0;
+                    v = bend.offset() as f32 / 8192.0;
                 }
-                (MidiMod::Velocity, MidiMessage::NoteOn { velocity, .. }) if *velocity > 0 => {
-                    v = *velocity as f32 / 127.0;
+                (MidiMod::Velocity, MidiEvent::NoteOn { velocity, .. }) if velocity.get() > 0 => {
+                    v = velocity.get() as f32 / 127.0;
                 }
-                (MidiMod::Key, MidiMessage::NoteOn { note, velocity, .. }) if *velocity > 0 => {
-                    v = *note as f32 / 127.0;
+                (MidiMod::Key, MidiEvent::NoteOn { key, velocity, .. }) if velocity.get() > 0 => {
+                    v = key.get() as f32 / 127.0;
                 }
-                (MidiMod::Random, MidiMessage::NoteOn { velocity, .. }) if *velocity > 0 => {
+                (MidiMod::Random, MidiEvent::NoteOn { velocity, .. }) if velocity.get() > 0 => {
                     // Redraw from a running hash of the previous value.
                     let bits = (v.to_bits() ^ 0x9E37_79B9).wrapping_mul(0xC2B2_AE35);
                     v = ((bits >> 8) as f32 / (u32::MAX >> 8) as f32) * 2.0 - 1.0;
                 }
-                (MidiMod::Alt, MidiMessage::NoteOn { velocity, .. }) if *velocity > 0 => {
+                (MidiMod::Alt, MidiEvent::NoteOn { velocity, .. }) if velocity.get() > 0 => {
                     v = if v > 0.5 { 0.0 } else { 1.0 };
                 }
                 _ => {}
@@ -361,7 +361,30 @@ impl ModSource {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use midicore::{Channel, ControllerNumber, ControllerValue, KeyNumber, MidiEvent, Velocity};
     use signal_plugin_host::PluginMidiEvent;
+
+    fn ev_note_on(note: u8, vel: u8) -> MidiEvent {
+        MidiEvent::NoteOn {
+            channel: Channel::new(0),
+            key: KeyNumber::new(note),
+            velocity: Velocity::new(vel),
+        }
+    }
+    fn ev_note_off(note: u8) -> MidiEvent {
+        MidiEvent::NoteOff {
+            channel: Channel::new(0),
+            key: KeyNumber::new(note),
+            velocity: Velocity::new(0),
+        }
+    }
+    fn ev_cc(controller: u8, value: u8) -> MidiEvent {
+        MidiEvent::ControlChange {
+            channel: Channel::new(0),
+            controller: ControllerNumber::new(controller),
+            value: ControllerValue::new(value),
+        }
+    }
 
     fn no_events() -> PluginEvents<'static> {
         PluginEvents {
@@ -392,7 +415,7 @@ mod tests {
         );
         let on = [PluginMidiEvent {
             offset: 0,
-            message: daw::service::MidiMessage::note_on(0, 60, 100),
+            message: ev_note_on(60, 100),
         }];
         let ev_on = PluginEvents {
             params: &[],
@@ -403,7 +426,7 @@ mod tests {
         assert!(v > 0.5, "gated envelope rises, v={v}");
         let off = [PluginMidiEvent {
             offset: 0,
-            message: daw::service::MidiMessage::note_off(0, 60, 0),
+            message: ev_note_off(60),
         }];
         let ev_off = PluginEvents {
             params: &[],
@@ -465,7 +488,7 @@ mod tests {
         src.tick_at(&no_events(), 12_000, 120.0);
         let on = [PluginMidiEvent {
             offset: 0,
-            message: daw::service::MidiMessage::note_on(0, 60, 100),
+            message: ev_note_on(60, 100),
         }];
         let ev = PluginEvents {
             params: &[],
@@ -481,11 +504,7 @@ mod tests {
         let mut src = ModSource::midi(MidiMod::Wheel);
         let cc = [PluginMidiEvent {
             offset: 0,
-            message: daw::service::MidiMessage::ControlChange {
-                channel: 0,
-                controller: 1,
-                value: 64,
-            },
+            message: ev_cc(1, 64),
         }];
         let ev = PluginEvents {
             params: &[],

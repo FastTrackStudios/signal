@@ -104,13 +104,22 @@ fn main() {
     let block = 512usize;
     let total_blocks = ((secs * 48_000.0) as usize / block).max(2);
     let off_block = total_blocks / 2;
+    use daw::service::{Channel, KeyNumber, MidiEvent, Velocity};
     let note_on = [PluginMidiEvent {
         offset: 0,
-        message: daw::service::MidiMessage::note_on(0, note, 100),
+        message: MidiEvent::NoteOn {
+            channel: Channel::new(0),
+            key: KeyNumber::new(note),
+            velocity: Velocity::new(100),
+        },
     }];
     let note_off = [PluginMidiEvent {
         offset: 0,
-        message: daw::service::MidiMessage::note_off(0, note, 0),
+        message: MidiEvent::NoteOff {
+            channel: Channel::new(0),
+            key: KeyNumber::new(note),
+            velocity: Velocity::new(0),
+        },
     }];
     let mut inter = vec![0.0f32; block * 2];
     let mut peak = 0.0f32;

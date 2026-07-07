@@ -10,6 +10,26 @@
 
 use signal_plugin_host::PluginMidiEvent;
 
+/// Build a channel-0 note-on `MidiEvent` from raw note/velocity.
+fn ev_note_on(note: u8, vel: u8) -> midicore::MidiEvent {
+    use midicore::{Channel, KeyNumber, MidiEvent, Velocity};
+    MidiEvent::NoteOn {
+        channel: Channel::new(0),
+        key: KeyNumber::new(note),
+        velocity: Velocity::new(vel),
+    }
+}
+
+/// Build a channel-0 note-off `MidiEvent` from a raw note.
+fn ev_note_off(note: u8) -> midicore::MidiEvent {
+    use midicore::{Channel, KeyNumber, MidiEvent, Velocity};
+    MidiEvent::NoteOff {
+        channel: Channel::new(0),
+        key: KeyNumber::new(note),
+        velocity: Velocity::new(0),
+    }
+}
+
 /// One programmed step.
 #[derive(Clone, Copy, Debug)]
 pub struct ArpStep {
@@ -76,11 +96,12 @@ impl ArpEngine {
         sample_rate: f32,
         tempo_bpm: f32,
     ) -> Vec<PluginMidiEvent> {
-        use daw::service::MidiMessage;
+        use midicore::MidiEvent;
         let mut out = Vec::new();
         for ev in events {
-            match ev.message {
-                MidiMessage::NoteOn { note, velocity, .. } if velocity > 0 => {
+            match &ev.message {
+                MidiEvent::NoteOn { key, velocity, .. } if velocity.get() > 0 => {
+                    let note = key.get();
                     if !self.held.contains(&note) {
                         let was_empty = self.held.is_empty();
                         self.held.push(note);
@@ -93,7 +114,8 @@ impl ArpEngine {
                         }
                     }
                 }
-                MidiMessage::NoteOn { note, .. } | MidiMessage::NoteOff { note, .. } => {
+                MidiEvent::NoteOn { key, .. } | MidiEvent::NoteOff { key, .. } => {
+                    let note = key.get();
                     self.held.retain(|&n| n != note);
                     if let Some(idx) = self.held.len().checked_sub(1) {
                         self.note_idx = self.note_idx.min(idx);
@@ -112,7 +134,7 @@ impl ArpEngine {
                     if off_at >= t {
                         out.push(PluginMidiEvent {
                             offset: off_at as u32,
-                            message: MidiMessage::note_off(0, note, 0),
+                            message: ev_note_off(note),
                         });
                         self.sounding = None;
                     }
@@ -127,7 +149,7 @@ impl ArpEngine {
                 if let Some((note, _)) = self.sounding.take() {
                     out.push(PluginMidiEvent {
                         offset: at as u32,
-                        message: MidiMessage::note_off(0, note, 0),
+                        message: ev_note_off(note),
                     });
                 }
                 let step = self.steps[self.step_idx % self.steps.len()];
@@ -135,7 +157,7 @@ impl ArpEngine {
                     let note = self.held[self.note_idx % self.held.len()];
                     out.push(PluginMidiEvent {
                         offset: at as u32,
-                        message: MidiMessage::note_on(0, note, step.velocity.max(1)),
+                        message: ev_note_on(note, step.velocity.max(1)),
                     });
                     self.sounding = Some((note, at + step_frames * step.gate.clamp(0.05, 1.0)));
                     self.note_idx = (self.note_idx + 1) % self.held.len().max(1);
@@ -165,7 +187,7 @@ impl ArpEngine {
             if let Some((note, _)) = self.sounding.take() {
                 out.push(PluginMidiEvent {
                     offset: frames.saturating_sub(1) as u32,
-                    message: MidiMessage::note_off(0, note, 0),
+                    message: ev_note_off(note),
                 });
             }
         }
@@ -177,12 +199,12 @@ impl ArpEngine {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use daw::service::MidiMessage;
+    use midicore::MidiEvent;
 
     fn note_on(note: u8) -> PluginMidiEvent {
         PluginMidiEvent {
             offset: 0,
-            message: MidiMessage::note_on(0, note, 100),
+            message: ev_note_on(note, 100),
         }
     }
 
@@ -199,7 +221,7 @@ mod tests {
         let ons: Vec<u8> = first
             .iter()
             .filter_map(|e| match e.message {
-                MidiMessage::NoteOn { note, .. } => Some(note),
+                MidiEvent::NoteOn { key, .. } => Some(key.get()),
                 _ => None,
             })
             .collect();
@@ -209,7 +231,7 @@ mod tests {
         for _ in 0..3 {
             let evs = arp.process(&[], 6_000, 48_000.0, 120.0);
             seen.extend(evs.iter().filter_map(|e| match e.message {
-                MidiMessage::NoteOn { note, .. } => Some(note),
+                MidiEvent::NoteOn { key, .. } => Some(key.get()),
                 _ => None,
             }));
         }
@@ -232,7 +254,7 @@ mod tests {
         // Gate 0.5 of a 6000-frame step → note-off near frame 3000.
         let off = evs
             .iter()
-            .find(|e| matches!(e.message, MidiMessage::NoteOff { .. }))
+            .find(|e| matches!(e.message, MidiEvent::NoteOff { .. }))
             .expect("gated note-off");
         assert!(
             (2_900..3_100).contains(&off.offset),
@@ -243,12 +265,12 @@ mod tests {
         // Releasing the key silences the arp.
         let release = [PluginMidiEvent {
             offset: 0,
-            message: MidiMessage::note_off(0, 60, 0),
+            message: ev_note_off(60),
         }];
         let evs = arp.process(&release, 6_000, 48_000.0, 120.0);
         assert!(
             !evs.iter()
-                .any(|e| matches!(e.message, MidiMessage::NoteOn { .. })),
+                .any(|e| matches!(e.message, MidiEvent::NoteOn { .. })),
             "no steps after release"
         );
     }
@@ -267,7 +289,7 @@ mod tests {
         let evs = arp.process(&[], 6_000, 48_000.0, 120.0); // step 2 = rest
         assert!(
             !evs.iter()
-                .any(|e| matches!(e.message, MidiMessage::NoteOn { .. })),
+                .any(|e| matches!(e.message, MidiEvent::NoteOn { .. })),
             "rest step emits no note"
         );
     }

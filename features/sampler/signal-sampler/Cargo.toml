@@ -40,9 +40,10 @@ cpal        = { workspace = true }
 # Reusable audio I/O from daw — device enumeration + AudioIoPrefs used to drive
 # daw's audio engine (which the live guitar rig now runs ON, see `rig.rs`).
 daw-audio-io = { workspace = true }
-# Hardware MIDI input from daw — the strings rig opens a keyboard (one/all/
-# virtual) and forwards notes into the bank track via daw's live-MIDI ring.
-daw-midi-io = { workspace = true }
+# Canonical MIDI vocabulary + midir OS backend — the strings rig opens a
+# keyboard (one/all/virtual) via `midicore::midir` and forwards decoded
+# `midicore::MidiEvent`s into the bank track through daw's live-MIDI ring.
+midicore = { workspace = true }
 # daw facade — the live guitar rig builds a tiny daw project (one input-armed
 # track) and drives daw's `AudioEngine` instead of its own cpal streams. The
 # `PluginInstance` trait (which NAM / cab-IR / hosted blocks implement) is also

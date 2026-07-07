@@ -115,10 +115,12 @@ pub use runtime::{
 };
 pub use sample_map::{SampleKey, SampleMap};
 pub use sampler_rig::{BusTrack, InstrumentTrack, MidiMonitor, SamplerRig};
-// Hardware MIDI input primitives live in daw (`daw-midi-io`); re-export the
-// selection + handle + message types so rig consumers (e.g. the strings TUI)
-// don't need a direct daw-midi-io dependency.
-pub use daw_midi_io::{MidiInput as MidiInputHandle, MidiMessage, MidiSelection};
+// Hardware MIDI input primitives live in `midicore` (the `midir` OS backend);
+// re-export the selector + handle + event types so rig consumers (e.g. the
+// strings TUI) don't need a direct midicore dependency.
+pub use midicore::MidiEvent;
+pub use midicore::PortSelector as MidiSelection;
+pub use midicore::midir::MidiInput as MidiInputHandle;
 pub use spec::LibrarySpec;
 pub use stats::AudioStatsSnapshot;
 

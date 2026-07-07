@@ -312,11 +312,11 @@ impl NativeWavetable {
         }
     }
 
-    fn apply_midi(&mut self, message: &daw::service::MidiMessage) {
-        use daw::service::MidiMessage;
-        match *message {
-            MidiMessage::NoteOn { note, velocity, .. } => self.note_on(note, velocity),
-            MidiMessage::NoteOff { note, .. } => self.note_off(note),
+    fn apply_midi(&mut self, message: &midicore::MidiEvent) {
+        use midicore::MidiEvent;
+        match message {
+            MidiEvent::NoteOn { key, velocity, .. } => self.note_on(key.get(), velocity.get()),
+            MidiEvent::NoteOff { key, .. } => self.note_off(key.get()),
             _ => {}
         }
     }
@@ -517,6 +517,15 @@ mod tests {
     use super::*;
     use signal_plugin_host::PluginMidiEvent;
 
+    fn ev_note_on(note: u8, vel: u8) -> midicore::MidiEvent {
+        use midicore::{Channel, KeyNumber, MidiEvent, Velocity};
+        MidiEvent::NoteOn {
+            channel: Channel::new(0),
+            key: KeyNumber::new(note),
+            velocity: Velocity::new(vel),
+        }
+    }
+
     fn render_cfg(cfg: SynthConfig, n: usize) -> (Vec<f32>, Vec<f32>) {
         let mut osc = NativeWavetable::new(48_000).with_config(cfg);
         osc.prepare(48_000.0, n as u32).unwrap();
@@ -524,7 +533,7 @@ mod tests {
         let (mut outl, mut outr) = (vec![0.0; n], vec![0.0; n]);
         let midi = [PluginMidiEvent {
             offset: 0,
-            message: daw::service::MidiMessage::note_on(0, 69, 100),
+            message: ev_note_on(69, 100),
         }];
         let ev = PluginEvents {
             params: &[],
@@ -682,7 +691,7 @@ mod tests {
         let (mut outl, mut outr) = (vec![0.0; 2_048], vec![0.0; 2_048]);
         let midi = [PluginMidiEvent {
             offset: 0,
-            message: daw::service::MidiMessage::note_on(0, 108, 100),
+            message: ev_note_on(108, 100),
         }];
         let ev = PluginEvents {
             params: &[],

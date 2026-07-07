@@ -62,29 +62,29 @@ impl SamplerInstrument {
     /// Apply one MIDI message to the engine. Channel is ignored — the
     /// engine is monotimbral. Split out so it can be unit-tested without
     /// driving a full [`process_block`](PluginInstance::process_block).
-    pub(crate) fn apply_midi(&mut self, message: &daw::service::MidiMessage) {
-        use daw::service::MidiMessage;
-        match *message {
-            MidiMessage::NoteOn { note, velocity, .. } => {
+    pub(crate) fn apply_midi(&mut self, message: &midicore::MidiEvent) {
+        use midicore::MidiEvent;
+        match message {
+            MidiEvent::NoteOn { key, velocity, .. } => {
                 // velocity 0 is a Note-Off by convention; `note_on` already
                 // routes vel-0 to `note_off`, so just forward.
-                self.engine.note_on(note, velocity);
+                self.engine.note_on(key.get(), velocity.get());
             }
-            MidiMessage::NoteOff { note, velocity, .. } => {
-                self.engine.note_off_with_velocity(note, velocity);
+            MidiEvent::NoteOff { key, velocity, .. } => {
+                self.engine.note_off_with_velocity(key.get(), velocity.get());
             }
-            MidiMessage::ControlChange {
+            MidiEvent::ControlChange {
                 controller, value, ..
             } => {
-                self.engine.cc(controller, value);
+                self.engine.cc(controller.get(), value.get());
             }
-            MidiMessage::ChannelPressure { pressure, .. } => {
-                self.engine.channel_aftertouch(pressure);
+            MidiEvent::ChannelPressure { pressure, .. } => {
+                self.engine.channel_aftertouch(pressure.get());
             }
-            MidiMessage::PolyPressure { note, pressure, .. } => {
-                self.engine.poly_aftertouch(note, pressure);
+            MidiEvent::PolyAftertouch { key, pressure, .. } => {
+                self.engine.poly_aftertouch(key.get(), pressure.get());
             }
-            // ProgramChange / PitchBend / SysEx / Raw: not handled by the
+            // ProgramChange / PitchBend / SysEx: not handled by the
             // sampler — ignored.
             _ => {}
         }
@@ -232,9 +232,14 @@ zones (
     }
 
     fn note_on_event(note: u8, velocity: u8) -> PluginMidiEvent {
+        use midicore::{Channel, KeyNumber, MidiEvent, Velocity};
         PluginMidiEvent {
             offset: 0,
-            message: daw::service::MidiMessage::note_on(0, note, velocity),
+            message: MidiEvent::NoteOn {
+                channel: Channel::new(0),
+                key: KeyNumber::new(note),
+                velocity: Velocity::new(velocity),
+            },
         }
     }
 
@@ -302,33 +307,48 @@ zones (
     /// velocity 0 is treated as a NoteOff.
     #[test]
     fn apply_midi_maps_every_handled_variant() {
-        use daw::service::MidiMessage;
+        use midicore::{
+            Channel, ControllerNumber, ControllerValue, KeyNumber, MidiEvent, PitchBend,
+            Pressure, ProgramNumber, Velocity,
+        };
+        let ch = Channel::new(0);
         let dir = std::env::temp_dir().join(format!("signal-sampler-map-{}", std::process::id()));
         std::fs::create_dir_all(&dir).expect("mkdir");
         let mut inst = SamplerInstrument::new(minimal_engine(&dir));
 
         // NoteOn allocates a voice…
-        inst.apply_midi(&MidiMessage::note_on(0, 64, 110));
+        inst.apply_midi(&MidiEvent::NoteOn {
+            channel: ch,
+            key: KeyNumber::new(64),
+            velocity: Velocity::new(110),
+        });
         assert!(inst.engine().active_voices() > 0);
 
         // CC / aftertouch must not panic and are accepted by the engine.
-        inst.apply_midi(&MidiMessage::control_change(0, 1, 90));
-        inst.apply_midi(&MidiMessage::ChannelPressure {
-            channel: 0,
-            pressure: 50,
+        inst.apply_midi(&MidiEvent::ControlChange {
+            channel: ch,
+            controller: ControllerNumber::new(1),
+            value: ControllerValue::new(90),
         });
-        inst.apply_midi(&MidiMessage::PolyPressure {
-            channel: 0,
-            note: 64,
-            pressure: 70,
+        inst.apply_midi(&MidiEvent::ChannelPressure {
+            channel: ch,
+            pressure: Pressure::new(50),
+        });
+        inst.apply_midi(&MidiEvent::PolyAftertouch {
+            channel: ch,
+            key: KeyNumber::new(64),
+            pressure: Pressure::new(70),
         });
 
         // Ignored variants are no-ops (must not panic).
-        inst.apply_midi(&MidiMessage::ProgramChange {
-            channel: 0,
-            program: 3,
+        inst.apply_midi(&MidiEvent::ProgramChange {
+            channel: ch,
+            program: ProgramNumber::new(3),
         });
-        inst.apply_midi(&MidiMessage::pitch_bend(0, 1000));
+        inst.apply_midi(&MidiEvent::PitchBend {
+            channel: ch,
+            bend: PitchBend::new((1000i32 + 8192).clamp(0, 16383) as u16),
+        });
 
         let _ = std::fs::remove_dir_all(&dir);
     }

@@ -117,11 +117,11 @@ impl NativeOscillator {
         }
     }
 
-    fn apply_midi(&mut self, message: &daw::service::MidiMessage) {
-        use daw::service::MidiMessage;
-        match *message {
-            MidiMessage::NoteOn { note, velocity, .. } => self.note_on(note, velocity),
-            MidiMessage::NoteOff { note, .. } => self.note_off(note),
+    fn apply_midi(&mut self, message: &midicore::MidiEvent) {
+        use midicore::MidiEvent;
+        match message {
+            MidiEvent::NoteOn { key, velocity, .. } => self.note_on(key.get(), velocity.get()),
+            MidiEvent::NoteOff { key, .. } => self.note_off(key.get()),
             _ => {}
         }
     }
@@ -214,9 +214,14 @@ mod tests {
     use signal_plugin_host::PluginMidiEvent;
 
     fn note_on(note: u8, vel: u8) -> PluginMidiEvent {
+        use midicore::{Channel, KeyNumber, MidiEvent, Velocity};
         PluginMidiEvent {
             offset: 0,
-            message: daw::service::MidiMessage::note_on(0, note, vel),
+            message: MidiEvent::NoteOn {
+                channel: Channel::new(0),
+                key: KeyNumber::new(note),
+                velocity: Velocity::new(vel),
+            },
         }
     }
 

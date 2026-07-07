@@ -229,33 +229,63 @@ impl PluginInstance for BankInstrument {
 /// Forward one daw MIDI message into the bank. Channel is honoured via the
 /// bank's `midi_message` routing (so `set_midi_channel` works); plain
 /// note/cc with no channel routing fall through to the bank's default id.
-fn apply_midi(bank: &mut SamplerBank, message: &daw::service::MidiMessage) {
-    use daw::service::MidiMessage;
-    match *message {
-        MidiMessage::NoteOn {
+fn apply_midi(bank: &mut SamplerBank, message: &midicore::MidiEvent) {
+    use midicore::MidiEvent;
+    match message {
+        MidiEvent::NoteOn {
             channel,
-            note,
+            key,
             velocity,
-        } => bank.midi_message(channel, 0x90, note, velocity),
-        MidiMessage::NoteOff {
+        } => bank.midi_message(channel.index(), 0x90, key.get(), velocity.get()),
+        MidiEvent::NoteOff {
             channel,
-            note,
+            key,
             velocity,
-        } => bank.midi_message(channel, 0x80, note, velocity),
-        MidiMessage::ControlChange {
+        } => bank.midi_message(channel.index(), 0x80, key.get(), velocity.get()),
+        MidiEvent::ControlChange {
             channel,
             controller,
             value,
-        } => bank.midi_message(channel, 0xB0, controller, value),
-        MidiMessage::ChannelPressure { channel, pressure } => {
-            bank.midi_message(channel, 0xD0, pressure, 0)
+        } => bank.midi_message(channel.index(), 0xB0, controller.get(), value.get()),
+        MidiEvent::ChannelPressure { channel, pressure } => {
+            bank.midi_message(channel.index(), 0xD0, pressure.get(), 0)
         }
-        MidiMessage::PolyPressure {
+        MidiEvent::PolyAftertouch {
             channel,
-            note,
+            key,
             pressure,
-        } => bank.midi_message(channel, 0xA0, note, pressure),
+        } => bank.midi_message(channel.index(), 0xA0, key.get(), pressure.get()),
         _ => {}
+    }
+}
+
+/// Build a `MidiEvent::NoteOn` from raw channel/note/velocity bytes.
+fn ev_note_on(ch: u8, note: u8, vel: u8) -> midicore::MidiEvent {
+    use midicore::{Channel, KeyNumber, MidiEvent, Velocity};
+    MidiEvent::NoteOn {
+        channel: Channel::new(ch),
+        key: KeyNumber::new(note),
+        velocity: Velocity::new(vel),
+    }
+}
+
+/// Build a `MidiEvent::NoteOff` from raw channel/note/velocity bytes.
+fn ev_note_off(ch: u8, note: u8, vel: u8) -> midicore::MidiEvent {
+    use midicore::{Channel, KeyNumber, MidiEvent, Velocity};
+    MidiEvent::NoteOff {
+        channel: Channel::new(ch),
+        key: KeyNumber::new(note),
+        velocity: Velocity::new(vel),
+    }
+}
+
+/// Build a `MidiEvent::ControlChange` from raw channel/controller/value bytes.
+fn ev_cc(ch: u8, controller: u8, value: u8) -> midicore::MidiEvent {
+    use midicore::{Channel, ControllerNumber, ControllerValue, MidiEvent};
+    MidiEvent::ControlChange {
+        channel: Channel::new(ch),
+        controller: ControllerNumber::new(controller),
+        value: ControllerValue::new(value),
     }
 }
 
@@ -304,12 +334,12 @@ pub struct MidiMonitor {
 #[derive(Default)]
 struct MidiMonitorInner {
     count: u64,
-    recent: std::collections::VecDeque<daw_midi_io::MidiMessage>,
+    recent: std::collections::VecDeque<midicore::MidiEvent>,
 }
 
 impl MidiMonitor {
     /// Record a message (tap from a MIDI input callback).
-    pub fn record(&self, msg: &daw_midi_io::MidiMessage) {
+    pub fn record(&self, msg: &midicore::MidiEvent) {
         if let Ok(mut g) = self.inner.lock() {
             g.count = g.count.saturating_add(1);
             if g.recent.len() >= MIDI_MONITOR_CAP {
@@ -325,7 +355,7 @@ impl MidiMonitor {
     }
 
     /// Snapshot of the most recent messages, oldest first.
-    pub fn recent(&self) -> Vec<daw_midi_io::MidiMessage> {
+    pub fn recent(&self) -> Vec<midicore::MidiEvent> {
         self.inner
             .lock()
             .map(|g| g.recent.iter().cloned().collect())
@@ -974,7 +1004,7 @@ impl SamplerRig {
     // its default instrument (per-instrument addressing uses the per-track API).
 
     /// The single MIDI entry point shared by live + offline.
-    fn dispatch(&self, msg: daw::service::MidiMessage) {
+    fn dispatch(&self, msg: midicore::MidiEvent) {
         if let Some((daw, track)) = self.bank_io() {
             daw.push_live_midi(&track, msg);
         } else if let Ok(mut bank) = self.bank().lock() {
@@ -983,45 +1013,47 @@ impl SamplerRig {
     }
 
     pub fn note_on(&self, _id: &str, note: u8, velocity: u8) {
-        self.dispatch(daw::service::MidiMessage::note_on(0, note, velocity));
+        self.dispatch(ev_note_on(0, note, velocity));
     }
 
     pub fn note_off(&self, _id: &str, note: u8) {
-        self.dispatch(daw::service::MidiMessage::note_off(0, note, 0));
+        self.dispatch(ev_note_off(0, note, 0));
     }
 
     pub fn note_off_with_velocity(&self, _id: &str, note: u8, velocity: u8) {
-        self.dispatch(daw::service::MidiMessage::note_off(0, note, velocity));
+        self.dispatch(ev_note_off(0, note, velocity));
     }
 
     pub fn cc(&self, _id: &str, controller: u8, value: u8) {
-        self.dispatch(daw::service::MidiMessage::control_change(
-            0, controller, value,
-        ));
+        self.dispatch(ev_cc(0, controller, value));
     }
 
     /// All Notes Off (CC 123) — release every held note.
     pub fn all_notes_off(&self, _id: &str) {
-        self.dispatch(daw::service::MidiMessage::control_change(0, 123, 0));
+        self.dispatch(ev_cc(0, 123, 0));
     }
 
     /// Panic — All Sound Off (CC 120): immediate silence.
     pub fn panic(&self, _id: &str) {
-        self.dispatch(daw::service::MidiMessage::control_change(0, 120, 0));
+        self.dispatch(ev_cc(0, 120, 0));
     }
 
     /// Dispatch a raw MIDI message (status + 2 data bytes) — same path as
     /// hardware MIDI. Channel is preserved (full fidelity).
     pub fn midi_message(&self, channel: u8, status: u8, data1: u8, data2: u8) {
+        use midicore::{Channel, MidiEvent, PitchBend, ProgramNumber};
         let msg = match status & 0xF0 {
-            0x90 if data2 > 0 => daw::service::MidiMessage::note_on(channel, data1, data2),
-            0x90 | 0x80 => daw::service::MidiMessage::note_off(channel, data1, data2),
-            0xB0 => daw::service::MidiMessage::control_change(channel, data1, data2),
-            0xC0 => daw::service::MidiMessage::program_change(channel, data1),
-            0xE0 => daw::service::MidiMessage::pitch_bend(
-                channel,
-                (((data2 as i16) << 7) | data1 as i16) - 8192,
-            ),
+            0x90 if data2 > 0 => ev_note_on(channel, data1, data2),
+            0x90 | 0x80 => ev_note_off(channel, data1, data2),
+            0xB0 => ev_cc(channel, data1, data2),
+            0xC0 => MidiEvent::ProgramChange {
+                channel: Channel::new(channel),
+                program: ProgramNumber::new(data1),
+            },
+            0xE0 => MidiEvent::PitchBend {
+                channel: Channel::new(channel),
+                bend: PitchBend::from_halves(midicore::U7::new(data1), midicore::U7::new(data2)),
+            },
             _ => return,
         };
         self.dispatch(msg);
@@ -1040,31 +1072,31 @@ impl SamplerRig {
     /// List available hardware MIDI input port names — for a device picker.
     /// All device enumeration lives in daw's `daw-midi-io`; signal only forwards.
     pub fn midi_input_ports() -> Vec<String> {
-        daw_midi_io::input_ports()
+        midicore::midir::input_ports()
     }
 
     /// Open a hardware MIDI keyboard and forward its events into this rig's bank
     /// track (live mode only). `selection` chooses one named device, **all**
     /// devices merged, or a REAPER-style **virtual** port.
     ///
-    /// The returned [`daw_midi_io::MidiInput`] owns the open connection(s) —
+    /// The returned [`midicore::midir::MidiInput`] owns the open connection(s) —
     /// hold it for as long as you want MIDI, drop it to stop. All MIDI primitive
-    /// logic (enumeration, selection, byte parsing) lives in daw; signal just
-    /// wires the daw source to daw's live-MIDI ring with full fidelity
+    /// logic (enumeration, selection, byte parsing) lives in `midicore`; signal
+    /// just wires the source to daw's live-MIDI ring with full fidelity
     /// (channel / velocity / pitch-bend preserved via `push_live_midi`).
     pub fn attach_midi(
         &self,
-        selection: daw_midi_io::MidiSelection,
-    ) -> eyre::Result<daw_midi_io::MidiInput> {
+        selection: midicore::PortSelector,
+    ) -> eyre::Result<midicore::midir::MidiInput> {
         let (daw, track) = match (self.inner.daw.as_ref(), self.inner.bank_track.as_ref()) {
             (Some(d), Some(t)) => (d.clone(), t.clone()),
             _ => eyre::bail!("attach_midi requires a live rig with a bank track (not offline)"),
         };
         let monitor = self.inner.midi_monitor.clone();
-        daw_midi_io::MidiInput::open(selection, move |msg| {
+        midicore::midir::MidiInput::open(selection, move |t: midicore::TimedEvent| {
             // Tap for the UI monitor, then forward full-fidelity to the engine.
-            monitor.record(&msg);
-            daw.push_live_midi(&track, msg);
+            monitor.record(&t.event);
+            daw.push_live_midi(&track, t.event);
         })
     }
 

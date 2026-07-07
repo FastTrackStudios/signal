@@ -513,21 +513,26 @@ impl RenderNode {
 /// the rest by the crossfade gain (velocity × gain), and pass everything else
 /// (NoteOff / CC / …) through unchanged so releases always land.
 fn filter_events_by_zone(zone: Zone, events: &PluginEvents<'_>) -> Vec<PluginMidiEvent> {
-    use daw::service::MidiMessage;
+    use midicore::{MidiEvent, Velocity};
     let mut out = Vec::with_capacity(events.midi.len());
     for ev in events.midi {
-        match ev.message {
-            MidiMessage::NoteOn {
+        match &ev.message {
+            MidiEvent::NoteOn {
                 channel,
-                note,
+                key,
                 velocity,
             } => {
-                let gain = zone.note_gain(note, velocity);
+                let (note, vel) = (key.get(), velocity.get());
+                let gain = zone.note_gain(note, vel);
                 if gain > 0.0 {
-                    let scaled = ((velocity as f32 * gain).round() as u8).clamp(1, 127);
+                    let scaled = ((vel as f32 * gain).round() as u8).clamp(1, 127);
                     out.push(PluginMidiEvent {
                         offset: ev.offset,
-                        message: MidiMessage::note_on(channel, note, scaled),
+                        message: MidiEvent::NoteOn {
+                            channel: *channel,
+                            key: *key,
+                            velocity: Velocity::new(scaled),
+                        },
                     });
                 }
             }
@@ -551,9 +556,14 @@ mod tests {
     use signal_proto::block::BlockType;
 
     fn note_on(note: u8, vel: u8) -> PluginMidiEvent {
+        use midicore::{Channel, KeyNumber, MidiEvent, Velocity};
         PluginMidiEvent {
             offset: 0,
-            message: daw::service::MidiMessage::note_on(0, note, vel),
+            message: MidiEvent::NoteOn {
+                channel: Channel::new(0),
+                key: KeyNumber::new(note),
+                velocity: Velocity::new(vel),
+            },
         }
     }
 
@@ -943,10 +953,10 @@ zones (
         // Wheel to max → cutoff floor → dark.
         let cc = [PluginMidiEvent {
             offset: 0,
-            message: daw::service::MidiMessage::ControlChange {
-                channel: 0,
-                controller: 1,
-                value: 127,
+            message: midicore::MidiEvent::ControlChange {
+                channel: midicore::Channel::new(0),
+                controller: midicore::ControllerNumber::new(1),
+                value: midicore::ControllerValue::new(127),
             },
         }];
         let ev = PluginEvents {
