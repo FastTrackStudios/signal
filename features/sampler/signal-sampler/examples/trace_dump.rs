@@ -52,9 +52,14 @@ fn line_notes(steps: &[(u8, f64)]) -> Vec<DocNote> {
 }
 
 fn main() -> eyre::Result<()> {
-    let which = std::env::args().nth(1).unwrap_or_else(|| "chromatic".into());
+    let which = std::env::args()
+        .nth(1)
+        .unwrap_or_else(|| "chromatic".into());
     let (bpm, steps): (f64, Vec<(u8, f64)>) = if which == "scale" {
-        let mut s: Vec<(u8, f64)> = [60u8, 62, 64, 65, 67, 69, 71, 72].iter().map(|&p| (p, 1.0)).collect();
+        let mut s: Vec<(u8, f64)> = [60u8, 62, 64, 65, 67, 69, 71, 72]
+            .iter()
+            .map(|&p| (p, 1.0))
+            .collect();
         s.extend([71u8, 69, 67, 65, 64, 62, 60].iter().map(|&p| (p, 1.0)));
         (90.0, s)
     } else {
@@ -69,7 +74,14 @@ fn main() -> eyre::Result<()> {
         eyre::bail!("CSS Violin 1 patch not found at {}", zones.display());
     }
     let rig = SamplerRig::new_offline_with_cache_budget(SR, Some(8 * 1024 * 1024 * 1024));
-    rig.load_instrument_with_config(ID, &PathBuf::from(CSS_CONFIG), &zones, &css_root, "1st Violins", "Mix")?;
+    rig.load_instrument_with_config(
+        ID,
+        &PathBuf::from(CSS_CONFIG),
+        &zones,
+        &css_root,
+        "1st Violins",
+        "Mix",
+    )?;
     rig.set_solo_mic(ID, Some("Mix".into()));
     rig.set_attack_ms(ID, 20);
     rig.set_release_ms(ID, 400);
@@ -80,8 +92,18 @@ fn main() -> eyre::Result<()> {
         seed: SEED,
         auto_divisi: false,
         ccs: vec![
-            DocCc { qn: 0.0, chan: 0, cc: 1, val: 84 },
-            DocCc { qn: 0.0, chan: 0, cc: 2, val: 0 },
+            DocCc {
+                qn: 0.0,
+                chan: 0,
+                cc: 1,
+                val: 84,
+            },
+            DocCc {
+                qn: 0.0,
+                chan: 0,
+                cc: 2,
+                val: 0,
+            },
         ],
         notes,
         tempo: vec![TempoPoint { qn: 0.0, bpm }],
@@ -99,10 +121,7 @@ fn main() -> eyre::Result<()> {
             TraceKind::VoiceSpawn(v) => {
                 let file = v.file.rsplit('/').next().unwrap_or(&v.file);
                 let looped = if v.loops() {
-                    format!(
-                        "loop {}..{} xf{}",
-                        v.loop_start, v.loop_end, v.loop_xfade
-                    )
+                    format!("loop {}..{} xf{}", v.loop_start, v.loop_end, v.loop_xfade)
                 } else {
                     "no-loop".into()
                 };
@@ -118,7 +137,11 @@ fn main() -> eyre::Result<()> {
                     looped,
                 );
             }
-            TraceKind::Transition { from, to, portamento } => {
+            TraceKind::Transition {
+                from,
+                to,
+                portamento,
+            } => {
                 println!(
                     "{:8.3}s  L{}  TRANS  {} → {}{}",
                     t(e.frame),

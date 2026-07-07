@@ -80,8 +80,18 @@ fn main() -> eyre::Result<()> {
             seed: SEED,
             auto_divisi: false,
             ccs: vec![
-                DocCc { qn: 0.0, chan: 0, cc: 1, val: cc1 },
-                DocCc { qn: 0.0, chan: 0, cc: 2, val: 0 },
+                DocCc {
+                    qn: 0.0,
+                    chan: 0,
+                    cc: 1,
+                    val: cc1,
+                },
+                DocCc {
+                    qn: 0.0,
+                    chan: 0,
+                    cc: 2,
+                    val: 0,
+                },
             ],
             notes: notes.clone(),
             tempo: vec![TempoPoint { qn: 0.0, bpm: BPM }],

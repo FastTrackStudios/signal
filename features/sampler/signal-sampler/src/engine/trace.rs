@@ -30,11 +30,7 @@ pub enum TraceKind {
     /// A note-off arrived for `note` (sustain fades; a release tail may follow).
     NoteOff { note: u8 },
     /// A legato transition fired: `from → to` (`from == to` = re-bow).
-    Transition {
-        from: u8,
-        to: u8,
-        portamento: bool,
-    },
+    Transition { from: u8, to: u8, portamento: bool },
 }
 
 /// Everything about a spawned voice needed to reason about it after the fact.

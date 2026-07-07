@@ -128,7 +128,12 @@ fn events_to_document(events: &[(f64, u8, u8, u8)]) -> TrackDocument {
     for &(sec, status, d1, d2) in events {
         let chan = status & 0x0F;
         match status & 0xF0 {
-            0xB0 => ccs.push(DocCc { qn: sec, chan, cc: d1, val: d2 }),
+            0xB0 => ccs.push(DocCc {
+                qn: sec,
+                chan,
+                cc: d1,
+                val: d2,
+            }),
             0x90 if d2 > 0 => {
                 active.insert((chan, d1), (sec, d2));
             }
@@ -149,7 +154,13 @@ fn events_to_document(events: &[(f64, u8, u8, u8)]) -> TrackDocument {
     // Close any note left hanging at the end of the file.
     let last = events.last().map(|e| e.0).unwrap_or(0.0) + 1.0;
     for ((chan, pitch), (start, vel)) in active {
-        notes.push(DocNote { start_qn: start, end_qn: last, chan, pitch, vel });
+        notes.push(DocNote {
+            start_qn: start,
+            end_qn: last,
+            chan,
+            pitch,
+            vel,
+        });
     }
     notes.sort_by(|a, b| a.start_qn.total_cmp(&b.start_qn));
     ccs.sort_by(|a, b| a.qn.total_cmp(&b.qn));

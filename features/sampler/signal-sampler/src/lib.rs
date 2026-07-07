@@ -44,6 +44,7 @@
 //! # Ok::<(), eyre::Error>(())
 //! ```
 
+pub mod amp_engine;
 pub mod api;
 pub mod bank;
 pub mod block;
@@ -80,6 +81,7 @@ pub mod sampler_rig;
 pub mod spec;
 pub mod stats;
 
+pub use amp_engine::AmpEngine;
 pub use bank::{PreloadProfile, SamplerBank};
 pub use block::{BlockParams, BlockSpec, SamplerBlock};
 pub use convolver::Convolver;
@@ -89,8 +91,8 @@ pub use document::{
 };
 pub use document_rt::{BlockTransport, RealtimeScheduler};
 pub use engine::cache::SignalPcmPack;
-pub use engine::{ArticClass, LegatoFireEvent, LineId, PlayMode, SampleEngine};
 pub use engine::trace::{RenderTrace, TraceEvent, TraceKind, VoiceSpawn};
+pub use engine::{ArticClass, LegatoFireEvent, LineId, PlayMode, SampleEngine};
 pub use engine_spec::{BlockRef, EngineLayerSpec, EngineSpec, FxChainSlot, PortSpec, VoiceConfig};
 pub use instrument::SamplerInstrument;
 pub use keys_rig::{KeysInstrument, KeysRig};

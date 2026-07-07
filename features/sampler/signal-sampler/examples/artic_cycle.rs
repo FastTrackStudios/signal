@@ -134,16 +134,17 @@ fn main() -> eyre::Result<()> {
     let mut broken = Vec::new();
     for (i, (ks, label, expect)) in ARTICS.iter().enumerate() {
         let base = i as f64 * SLOT_S;
-        let (a, b) = ((base * SR as f64) as u64, ((base + SLOT_S) * SR as f64) as u64);
+        let (a, b) = (
+            (base * SR as f64) as u64,
+            ((base + SLOT_S) * SR as f64) as u64,
+        );
         // Best (loudest) spawn whose articulation matches the expected tag.
         let hit = trace
             .events
             .iter()
             .filter(|e| e.frame >= a && e.frame < b)
             .filter_map(|e| match &e.kind {
-                TraceKind::VoiceSpawn(v)
-                    if v.gain > 0.01 && v.articulation.contains(expect) =>
-                {
+                TraceKind::VoiceSpawn(v) if v.gain > 0.01 && v.articulation.contains(expect) => {
                     Some((v.articulation.clone(), v.gain))
                 }
                 _ => None,
@@ -164,7 +165,10 @@ fn main() -> eyre::Result<()> {
     }
     println!();
     if broken.is_empty() {
-        println!("All {} articulations spawn the correct articulation. ✓", ARTICS.len());
+        println!(
+            "All {} articulations spawn the correct articulation. ✓",
+            ARTICS.len()
+        );
     } else {
         println!("BROKEN ({}): {}", broken.len(), broken.join(", "));
     }

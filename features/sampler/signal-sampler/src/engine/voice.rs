@@ -584,7 +584,9 @@ impl Voice {
         let idx = pos as usize;
         let frac = (pos - idx as f64) as f32;
         let (l0, r0) = self.data.frame(idx);
-        let (l1, r1) = self.data.frame((idx + 1).min(self.end_frame.saturating_sub(1)));
+        let (l1, r1) = self
+            .data
+            .frame((idx + 1).min(self.end_frame.saturating_sub(1)));
         (l0 + (l1 - l0) * frac, r0 + (r1 - r0) * frac)
     }
 
@@ -603,7 +605,9 @@ impl Voice {
             if self.release_hold == 0 && self.state == VoiceState::Playing {
                 let f = self.pending_fade.max(1);
                 self.release_frames = f;
-                self.state = VoiceState::Releasing { frames_remaining: f };
+                self.state = VoiceState::Releasing {
+                    frames_remaining: f,
+                };
             }
         }
 
@@ -922,13 +926,7 @@ impl VoicePool {
     /// overlapping fades — the previous 30 ms single fade caused the inter-note
     /// tick. `Legato` (transition) voices fade over `trans_fade`; sustain-layer
     /// voices over `sus_fade`.
-    pub fn retire_note_line(
-        &mut self,
-        line: u8,
-        note: u8,
-        trans_fade: usize,
-        sus_fade: usize,
-    ) {
+    pub fn retire_note_line(&mut self, line: u8, note: u8, trans_fade: usize, sus_fade: usize) {
         for v in &mut self.voices {
             if v.note != note || v.line != line {
                 continue;
@@ -1486,9 +1484,17 @@ mod tests {
         declicked.render_block(&mut a);
         raw.render_block(&mut b);
         // Control: without a declick the onset steps hard (≥ the DC floor).
-        assert!(max_step(&b) > 0.08, "control onset step too small: {}", max_step(&b));
+        assert!(
+            max_step(&b) > 0.08,
+            "control onset step too small: {}",
+            max_step(&b)
+        );
         // Declicked: no click — deltas stay near the waveform's own slope.
-        assert!(max_step(&a) < 0.02, "declicked legato onset clicked: {}", max_step(&a));
+        assert!(
+            max_step(&a) < 0.02,
+            "declicked legato onset clicked: {}",
+            max_step(&a)
+        );
     }
 
     #[test]

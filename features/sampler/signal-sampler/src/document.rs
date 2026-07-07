@@ -454,8 +454,14 @@ pub fn annotate(doc: &TrackDocument, spec: &LibrarySpec, sample_rate: u32) -> Sc
     // Expressive). We pick the delay table per note from the last legato-mode
     // keyswitch, defaulting to Low Latency. `primary_mode` covers single-mode
     // libraries (brass, etc.) that ship flat zones instead.
-    let low_latency = spec.legato_engine.as_ref().and_then(|le| le.low_latency.clone());
-    let expressive = spec.legato_engine.as_ref().and_then(|le| le.expressive.clone());
+    let low_latency = spec
+        .legato_engine
+        .as_ref()
+        .and_then(|le| le.low_latency.clone());
+    let expressive = spec
+        .legato_engine
+        .as_ref()
+        .and_then(|le| le.expressive.clone());
     let primary = spec.legato_engine.as_ref().and_then(|le| le.primary_mode());
     let ll_range = low_latency
         .as_ref()
@@ -653,7 +659,12 @@ pub fn annotate(doc: &TrackDocument, spec: &LibrarySpec, sample_rate: u32) -> Sc
                 // line — interpolated across the KSP thresholds, NOT the
                 // velocity zone. Marcato and portamento (vel ≤ threshold) have
                 // no sampled pre-delay → fire on the tick.
-                let _ = (&expressive, &low_latency, &primary, LEGATO_DELAY_FALLBACK_MS);
+                let _ = (
+                    &expressive,
+                    &low_latency,
+                    &primary,
+                    LEGATO_DELAY_FALLBACK_MS,
+                );
                 let lead_ms = if n.is_marcato() || (porta_vel_max > 0 && vel <= porta_vel_max) {
                     0
                 } else {
@@ -1331,7 +1342,10 @@ keyswitch {
             .find(|e| matches!(e.kind, DocEvent::LegatoPrefire { .. }))
             .expect("second note arrives via prefire");
         assert_eq!(prefire.frame as i64, tick);
-        assert!(matches!(prefire.kind, DocEvent::LegatoPrefire { lead: 0, .. }));
+        assert!(matches!(
+            prefire.kind,
+            DocEvent::LegatoPrefire { lead: 0, .. }
+        ));
 
         // The first note is a plain note-on at frame 0; only one NoteOn total.
         let note_ons: Vec<_> = sched

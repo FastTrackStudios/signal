@@ -43,7 +43,10 @@ struct Smf {
 }
 impl Smf {
     fn new() -> Self {
-        Self { ev: Vec::new(), seq: 0 }
+        Self {
+            ev: Vec::new(),
+            seq: 0,
+        }
     }
     fn raw(&mut self, sec: f64, bytes: Vec<u8>) {
         let t = (sec * TPS).round() as u32;
@@ -111,7 +114,12 @@ impl Gen {
         s.cc(0.0, 11, 127);
         s.cc(0.0, 2, 0);
         s.cc(0.0, 1, 64);
-        Gen { s, man: Vec::new(), t: 1.0, idx: 0 }
+        Gen {
+            s,
+            man: Vec::new(),
+            t: 1.0,
+            idx: 0,
+        }
     }
     fn setcc(&mut self, c: u8, v: u8) {
         self.s.cc(self.t, c, v);
@@ -125,7 +133,18 @@ impl Gen {
         self.idx += 1;
     }
     /// One isolated held/short note. `hold` = note length, `win` = analysis window.
-    fn shot(&mut self, cat: &str, desc: &str, ks: u8, pitch: u8, vel: u8, cc1: u8, cc2: u8, hold: f64, win: f64) {
+    fn shot(
+        &mut self,
+        cat: &str,
+        desc: &str,
+        ks: u8,
+        pitch: u8,
+        vel: u8,
+        cc1: u8,
+        cc2: u8,
+        hold: f64,
+        win: f64,
+    ) {
         self.setcc(58, ks);
         self.setcc(1, cc1);
         self.setcc(2, cc2);
@@ -154,24 +173,74 @@ fn main() -> std::io::Result<()> {
     let mut g = Gen::new();
 
     // 0. CALIB — loud reference sustain (segment 0, level anchor).
-    g.shot("CALIB", "sustain G4 ff nonvib", SUS, 67, 100, 110, 0, 4.0, 6.0);
+    g.shot(
+        "CALIB",
+        "sustain G4 ff nonvib",
+        SUS,
+        67,
+        100,
+        110,
+        0,
+        4.0,
+        6.0,
+    );
 
     // 1. SUSTAIN dynamics: G4 nonvib then vib, CC1 = 20/50/80/110.
     for &cc1 in &[20u8, 50, 80, 110] {
-        g.shot("SUS-DYN", &format!("G4 nonvib CC1={cc1}"), SUS, 67, 100, cc1, 0, 3.0, 4.0);
+        g.shot(
+            "SUS-DYN",
+            &format!("G4 nonvib CC1={cc1}"),
+            SUS,
+            67,
+            100,
+            cc1,
+            0,
+            3.0,
+            4.0,
+        );
     }
     for &cc1 in &[20u8, 50, 80, 110] {
-        g.shot("SUS-DYN", &format!("G4 vib CC1={cc1}"), SUS, 67, 100, cc1, 127, 3.0, 4.0);
+        g.shot(
+            "SUS-DYN",
+            &format!("G4 vib CC1={cc1}"),
+            SUS,
+            67,
+            100,
+            cc1,
+            127,
+            3.0,
+            4.0,
+        );
     }
     // 2. SUSTAIN pitch/range: C4, G4, C5, G5 at CC1=90 nonvib.
     for &(p, n) in &[(60u8, "C4"), (67, "G4"), (72, "C5"), (79, "G5")] {
-        g.shot("SUS-PITCH", &format!("{n} nonvib CC1=90"), SUS, p, 100, 90, 0, 3.0, 4.0);
+        g.shot(
+            "SUS-PITCH",
+            &format!("{n} nonvib CC1=90"),
+            SUS,
+            p,
+            100,
+            90,
+            0,
+            3.0,
+            4.0,
+        );
     }
 
     // 3. SHORTS: each articulation × vel 40/80/120 (RR reset each → RR0).
     for &(name, ks) in SHORTS {
         for &vel in &[40u8, 80, 120] {
-            g.shot("SHORT", &format!("{name} vel{vel}"), ks, 67, vel, 90, 0, 0.4, 1.3);
+            g.shot(
+                "SHORT",
+                &format!("{name} vel{vel}"),
+                ks,
+                67,
+                vel,
+                90,
+                0,
+                0.4,
+                1.3,
+            );
         }
     }
     // 4. SHORT round-robin: spiccato G4 vel100 ×8 after one reset (RR0..7 in order).
@@ -186,19 +255,45 @@ fn main() -> std::io::Result<()> {
 
     // 5. LONGS: tremolo, trills, harmonics (held).
     for &(name, ks) in LONGS {
-        g.shot("LONG", &format!("{name} G4 CC1=90"), ks, 67, 100, 90, 0, 3.0, 4.0);
+        g.shot(
+            "LONG",
+            &format!("{name} G4 CC1=90"),
+            ks,
+            67,
+            100,
+            90,
+            0,
+            3.0,
+            4.0,
+        );
     }
 
     // 6. LEGATO velocity zones: G4→A4, vel 20/50/80/110, LL then EX.
     for &(mode, ks) in &[("LL", LL_LEG), ("EX", EX_LEG)] {
         for &vel in &[20u8, 50, 80, 110] {
-            g.leg("LEG-VEL", &format!("{mode} G4->A4 vel{vel}"), ks, 67, 69, vel, 2.0);
+            g.leg(
+                "LEG-VEL",
+                &format!("{mode} G4->A4 vel{vel}"),
+                ks,
+                67,
+                69,
+                vel,
+                2.0,
+            );
         }
     }
     // 7. LEGATO intervals from G4 (vel85, LL), up 1/2/3/5/7/12, down 5.
     for &iv in &[1i8, 2, 3, 5, 7, 12, -5] {
         let b = (67 + iv as i16) as u8;
-        g.leg("LEG-INT", &format!("G4->{} ({:+}st)", b, iv), LL_LEG, 67, b, 85, 2.0);
+        g.leg(
+            "LEG-INT",
+            &format!("G4->{} ({:+}st)", b, iv),
+            LL_LEG,
+            67,
+            b,
+            85,
+            2.0,
+        );
     }
 
     let dur = g.t;

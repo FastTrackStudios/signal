@@ -169,7 +169,15 @@ fn main() -> eyre::Result<()> {
         "leaps",
         80.0,
         vec![
-            (60, q), (72, q), (60, q), (67, q), (79, q), (67, q), (55, q), (72, q), (60, 3.0),
+            (60, q),
+            (72, q),
+            (60, q),
+            (67, q),
+            (79, q),
+            (67, q),
+            (55, q),
+            (72, q),
+            (60, 3.0),
         ],
     ));
 
@@ -178,7 +186,14 @@ fn main() -> eyre::Result<()> {
         "repeats",
         100.0,
         vec![
-            (67, q), (67, q), (67, q), (67, q), (65, q), (65, q), (64, q), (64, 3.0),
+            (67, q),
+            (67, q),
+            (67, q),
+            (67, q),
+            (65, q),
+            (65, q),
+            (64, q),
+            (64, 3.0),
         ],
     ));
 
@@ -200,29 +215,47 @@ fn main() -> eyre::Result<()> {
             seed: SEED,
             auto_divisi: false,
             ccs: vec![
-                DocCc { qn: 0.0, chan: 0, cc: 1, val: 84 },
-                DocCc { qn: 0.0, chan: 0, cc: 2, val: 0 },
+                DocCc {
+                    qn: 0.0,
+                    chan: 0,
+                    cc: 1,
+                    val: 84,
+                },
+                DocCc {
+                    qn: 0.0,
+                    chan: 0,
+                    cc: 2,
+                    val: 0,
+                },
             ],
             notes: notes.clone(),
             tempo: vec![TempoPoint { qn: 0.0, bpm: *bpm }],
         };
         let res = rig.render_offline_document(ID, &doc, &opts)?;
         // Interleaved → mono.
-        let mono: Vec<f32> = res
-            .audio
-            .chunks(2)
-            .map(|c| 0.5 * (c[0] + c[1]))
-            .collect();
+        let mono: Vec<f32> = res.audio.chunks(2).map(|c| 0.5 * (c[0] + c[1])).collect();
 
         // Boundary marks: note onsets (first = attack, rest = transitions) and
         // phrase-end note-offs. Frames come straight from the notated grid.
         let mut marks: Vec<Mark> = Vec::new();
         for (i, n) in notes.iter().enumerate() {
-            let kind = if i == 0 { Kind::Onset } else { Kind::Transition };
+            let kind = if i == 0 {
+                Kind::Onset
+            } else {
+                Kind::Transition
+            };
             marks.push(Mark {
                 frame: qn_to_frame(*bpm, n.start_qn),
                 kind,
-                label: format!("{}→{}", if i == 0 { "on".into() } else { nm(notes[i - 1].pitch) }, nm(n.pitch)),
+                label: format!(
+                    "{}→{}",
+                    if i == 0 {
+                        "on".into()
+                    } else {
+                        nm(notes[i - 1].pitch)
+                    },
+                    nm(n.pitch)
+                ),
             });
         }
         // Phrase-end release: the final note's end.
@@ -302,7 +335,10 @@ fn main() -> eyre::Result<()> {
             res.audio.len() / 2 / SR as usize,
         );
         if res.reactive_fallbacks != 0 {
-            println!("   ! {} reactive fallback(s) — annotator missed an edge", res.reactive_fallbacks);
+            println!(
+                "   ! {} reactive fallback(s) — annotator missed an edge",
+                res.reactive_fallbacks
+            );
         }
         if fails.is_empty() {
             println!("   ✓ {} boundaries clean", marks.len());
@@ -315,7 +351,10 @@ fn main() -> eyre::Result<()> {
         total_fail += fails.len();
     }
 
-    println!("\n{} total boundary failures across the battery.", total_fail);
+    println!(
+        "\n{} total boundary failures across the battery.",
+        total_fail
+    );
     if total_fail > 0 {
         std::process::exit(1);
     }

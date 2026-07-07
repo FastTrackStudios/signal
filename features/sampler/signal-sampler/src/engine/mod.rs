@@ -1255,10 +1255,13 @@ impl SampleEngine {
         // only at note-on (from the note's velocity), so `effective_articulation`
         // above can't see it yet — warm EVERY possible resolution (Trills →
         // HTrills+WTrills, etc.) so the group's first note isn't cold-silent.
-        if let Some(kn) = self
-            .pending_cc58_group
-            .and_then(|gi| self.patch.spec.keyswitch.as_ref().and_then(|ks| ks.notes.get(gi)))
-        {
+        if let Some(kn) = self.pending_cc58_group.and_then(|gi| {
+            self.patch
+                .spec
+                .keyswitch
+                .as_ref()
+                .and_then(|ks| ks.notes.get(gi))
+        }) {
             for val in kn.vel_map.values() {
                 for tok in val.split('+').map(str::trim) {
                     if tok.is_empty() || tok.starts_with('@') {
@@ -1269,7 +1272,9 @@ impl SampleEngine {
                         .spec
                         .articulations
                         .iter()
-                        .find(|a| a.id.eq_ignore_ascii_case(tok) || a.label.eq_ignore_ascii_case(tok))
+                        .find(|a| {
+                            a.id.eq_ignore_ascii_case(tok) || a.label.eq_ignore_ascii_case(tok)
+                        })
                         .map(|a| a.id.clone())
                         .unwrap_or_else(|| tok.to_string());
                     warm_ids.push(id.clone());
@@ -2099,7 +2104,13 @@ impl SampleEngine {
     /// (`tune=1.00521` is a Cinematic Studio property, not a generic default).
     /// Other libraries stay at 0 so they are not detuned.
     fn master_tune_cents(&self) -> f64 {
-        if self.patch.spec.name.to_ascii_lowercase().contains("cinematic") {
+        if self
+            .patch
+            .spec
+            .name
+            .to_ascii_lowercase()
+            .contains("cinematic")
+        {
             CSS_MASTER_TUNE_CENTS
         } else {
             0.0
@@ -2184,7 +2195,11 @@ impl SampleEngine {
     /// match, else TOP-aligned (the extra softest recorded dynamics sit below the
     /// short's `%g1qri` floor — verified against the reference render, where the
     /// CC1=90-collapsed Staccato's vel 40/80/120 land on mp/f/fff, not pp/mp/f).
-    fn short_band(&self, artic: &crate::spec::ArticulationSpec, velocity: u8) -> Option<(usize, usize, i32, i32)> {
+    fn short_band(
+        &self,
+        artic: &crate::spec::ArticulationSpec,
+        velocity: u8,
+    ) -> Option<(usize, usize, i32, i32)> {
         if artic.dynamics.is_empty() {
             return None;
         }
@@ -3039,10 +3054,14 @@ impl SampleEngine {
                         100.0 * sus_hi as f32 / num_frames as f32,
                     );
                 }
-                voice = voice.with_forward_loop(sus_lo, sus_hi).with_loop_xfade(loop_xfade);
+                voice = voice
+                    .with_forward_loop(sus_lo, sus_hi)
+                    .with_loop_xfade(loop_xfade);
                 (sus_lo, sus_hi, loop_xfade)
             } else if legato_hold {
-                voice = voice.with_forward_loop(leg_lo, leg_hi).with_loop_xfade(loop_xfade);
+                voice = voice
+                    .with_forward_loop(leg_lo, leg_hi)
+                    .with_loop_xfade(loop_xfade);
                 (leg_lo, leg_hi, loop_xfade)
             } else {
                 (0, 0, 0)
@@ -4924,7 +4943,8 @@ fn css_short_makeup_db(artic_id: &str) -> f32 {
 /// indefinitely via the [`FlexEnv`] sustain-hold freeze. (mf layer ships a 20 ms
 /// attack vs 4 ms elsewhere — negligible under the $mmirg 198 ms CC_ATTACK
 /// bloom applied on top, so a single 4 ms table is used.)
-const FLEX_SUSTAIN: &[(f32, f32, f32)] = &[(4.0, 1.0, 0.505), (1000.0, 1.0, 0.9), (20000.0, 0.0, 0.05)];
+const FLEX_SUSTAIN: &[(f32, f32, f32)] =
+    &[(4.0, 1.0, 0.505), (1000.0, 1.0, 0.9), (20000.0, 0.0, 0.05)];
 /// Legato / NVlegato / legato-zero transition body.
 const FLEX_LEGATO: &[(f32, f32, f32)] = &[
     (80.0, 1.0, 0.499),
@@ -4951,39 +4971,49 @@ const FLEX_MARC_LEG: &[(f32, f32, f32)] = &[
     (342.0, 0.0, 0.75),
 ];
 /// Marcato-mod overlay.
-const FLEX_MARCATO_MOD: &[(f32, f32, f32)] =
-    &[(1.0, 1.0, 0.685), (1499.0, 1.0, 0.5), (104.0, 1.0, 0.45), (1000.0, 0.0, 0.63)];
+const FLEX_MARCATO_MOD: &[(f32, f32, f32)] = &[
+    (1.0, 1.0, 0.685),
+    (1499.0, 1.0, 0.5),
+    (104.0, 1.0, 0.45),
+    (1000.0, 0.0, 0.63),
+];
 /// Short family (spicc / staccatissimo / stacc / sfz / marcato / pizz / bartók /
 /// col legno): one-shot, plays to natural end shaped by the 8/604/7381 decay.
-const FLEX_SHORT: &[(f32, f32, f32)] = &[(8.0, 1.0, 0.505), (604.0, 1.0, 0.45), (7381.0, 0.0, 0.65)];
+const FLEX_SHORT: &[(f32, f32, f32)] =
+    &[(8.0, 1.0, 0.505), (604.0, 1.0, 0.45), (7381.0, 0.0, 0.65)];
 /// Release tails (rel *): 0 dB static group, shaped by this decoded envelope.
-const FLEX_RELEASE: &[(f32, f32, f32)] = &[(1.0, 0.986, 0.125), (4007.0, 1.0, 0.9), (1250.0, 0.0, 0.7)];
+const FLEX_RELEASE: &[(f32, f32, f32)] =
+    &[(1.0, 0.986, 0.125), (4007.0, 1.0, 0.9), (1250.0, 0.0, 0.7)];
 
 /// Select the decoded ENV_FLEX amplitude envelope for a voice from its
 /// articulation id + voice kind. Returns `None` for families with no decoded
 /// envelope (legacy / non-CSS libraries) — those keep flat unity.
-fn flex_env_for(artic_id: &str, kind: &VoiceKind, is_sustain_layer: bool, sample_rate: u32) -> Option<FlexEnv> {
+fn flex_env_for(
+    artic_id: &str,
+    kind: &VoiceKind,
+    is_sustain_layer: bool,
+    sample_rate: u32,
+) -> Option<FlexEnv> {
     let id = artic_id.to_ascii_lowercase();
-    let (segs, hold): (&[(f32, f32, f32)], bool) = if matches!(kind, VoiceKind::Release)
-        || id.contains("rel")
-    {
-        (FLEX_RELEASE, false)
-    } else if matches!(kind, VoiceKind::Short) {
-        (FLEX_SHORT, false)
-    } else if id.contains("port") {
-        (FLEX_PORTAMENTO, false)
-    } else if id.contains("marc") && id.contains("leg") {
-        (FLEX_MARC_LEG, false)
-    } else if id.contains("marcato") && id.contains("mod") {
-        (FLEX_MARCATO_MOD, false)
-    } else if matches!(kind, VoiceKind::Legato) || id.contains("legato") {
-        (FLEX_LEGATO, false)
-    } else if is_sustain_layer {
-        // vibsus / nonvib / trills / tremolo / harmonics — the held families.
-        (FLEX_SUSTAIN, true)
-    } else {
-        return None;
-    };
+    let (segs, hold): (&[(f32, f32, f32)], bool) =
+        if matches!(kind, VoiceKind::Release) || id.contains("rel") {
+            (FLEX_RELEASE, false)
+        } else if matches!(kind, VoiceKind::Short) {
+            (FLEX_SHORT, false)
+        } else if id.contains("port") {
+            (FLEX_PORTAMENTO, false)
+        } else if id.contains("marc") && id.contains("leg") {
+            (FLEX_MARC_LEG, false)
+        } else if id.contains("marcato") && id.contains("mod") {
+            (FLEX_MARCATO_MOD, false)
+        } else if matches!(kind, VoiceKind::Legato) || id.contains("legato") {
+            (FLEX_LEGATO, false)
+        } else if is_sustain_layer {
+            // vibsus / nonvib / trills / tremolo / harmonics — the held families.
+            (FLEX_SUSTAIN, true)
+        } else {
+            return None;
+        };
     FlexEnv::from_segments(segs, 0.0, sample_rate, hold)
 }
 
@@ -5053,12 +5083,20 @@ pub fn ioi_legato_delay_ms(ioi_ms: f32, velocity: u8, expressive: bool) -> u32 {
     let (thr, anc) = if expressive {
         (
             OD_EX_THR,
-            if vr == 1 { OD_EX_VR1_ANC } else { OD_EX_VR23_ANC },
+            if vr == 1 {
+                OD_EX_VR1_ANC
+            } else {
+                OD_EX_VR23_ANC
+            },
         )
     } else {
         (
             OD_LL_THR,
-            if vr == 1 { OD_LL_VR1_ANC } else { OD_LL_VR23_ANC },
+            if vr == 1 {
+                OD_LL_VR1_ANC
+            } else {
+                OD_LL_VR23_ANC
+            },
         )
     };
     interp_od(ioi_ms, thr, anc).round().max(0.0) as u32

@@ -80,8 +80,18 @@ fn main() -> eyre::Result<()> {
         auto_divisi: false,
         // CC1=84 medium dynamic; CC2=0 non-vibrato.
         ccs: vec![
-            DocCc { qn: 0.0, chan: 0, cc: 1, val: 84 },
-            DocCc { qn: 0.0, chan: 0, cc: 2, val: 0 },
+            DocCc {
+                qn: 0.0,
+                chan: 0,
+                cc: 1,
+                val: 84,
+            },
+            DocCc {
+                qn: 0.0,
+                chan: 0,
+                cc: 2,
+                val: 0,
+            },
         ],
         notes,
         tempo: vec![TempoPoint { qn: 0.0, bpm: BPM }],

@@ -103,7 +103,9 @@ fn write_wav(path: &str, samples: &[f32]) -> eyre::Result<()> {
 }
 
 fn main() -> eyre::Result<()> {
-    let inp = std::env::args().nth(1).unwrap_or_else(|| "css_test_full.mid".into());
+    let inp = std::env::args()
+        .nth(1)
+        .unwrap_or_else(|| "css_test_full.mid".into());
     let outp = std::env::args()
         .nth(2)
         .unwrap_or_else(|| "css_test_full_live.wav".into());

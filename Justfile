@@ -61,6 +61,13 @@ release: tailwind
 # Open the default guitar rig (Yamaha TF ch4 → NAM amps)
 guitar: (rig "Guitar Rig")
 
+# Signal Amp — standalone neural-amp modeler (Blitz/Dioxus window). Opens live
+# duplex audio (default input → out), auto-loads the VOX AC30 if present, and
+# lets you pick any .nam found in ~/Downloads. --release is REQUIRED: the NAM
+# C++ core is unoptimized in debug (~10-50x slower) and will xrun / stall.
+amp:
+    PIPEWIRE_PROPS='{ application.name = FTS-Signal-Amp }' cargo run --release -p signal-amp
+
 # Nord Stage-style keys rig — play a composition-tree preset (splits, velocity
 # crossfades, layers) from a MIDI keyboard + the computer keyboard. The TUI shows
 # the sections, keyboard split zones, velocity layers + output meter.
