@@ -61,6 +61,23 @@ impl AmpEngine {
         Ok(())
     }
 
+    /// The active patch's chain as [`RigBlock`]s — the amp/cab/FX blocks to
+    /// render in the signal grid. Empty block names are filled with the model
+    /// name so the grid always has a label. Empty if no model is loaded.
+    pub fn active_blocks(&self) -> Vec<crate::rig::RigBlock> {
+        let patch = self
+            .rig
+            .active_patch()
+            .or_else(|| self.rig.patches().first());
+        let mut blocks = patch.map(|p| p.chain.clone()).unwrap_or_default();
+        for b in &mut blocks {
+            if b.name.trim().is_empty() {
+                b.name = self.model_name.clone();
+            }
+        }
+        blocks
+    }
+
     /// Display name of the loaded model (filename stem), or the no-amp label.
     pub fn model_name(&self) -> &str {
         &self.model_name
