@@ -205,22 +205,31 @@ async fn build_keys_rig() {
 
 /// Use find_param on the seeded guitar megarig (verifying it replaces
 /// the old copy-pasted find_param_in_graph helper).
+// The old `guitar-megarig` seed was removed (default_seed_rigs() is empty), so
+// this builds an equivalent rig with RigBuilder — the modern pattern — instead
+// of resolving a seeded rig that no longer exists.
 #[tokio::test]
-async fn find_param_on_seeded_megarig() {
+async fn find_param_on_built_rig() {
     let signal = controller().await;
+
+    let built = RigBuilder::new("Param Test Rig")
+        .block_preset("Amp", BlockType::Amp, |bp| bp.param("gain", "Gain", 0.6))
+        .scene("Default")
+        .build();
+    signal.save_built_rig(&built).await.unwrap();
+    let scene_id = built.scene_id("Default").unwrap().clone();
 
     let graph = signal
         .resolve_target(ResolveTarget::RigScene {
-            rig_id: guitar_megarig_id(),
-            scene_id: guitar_megarig_default_scene(),
+            rig_id: built.rig_id.clone(),
+            scene_id,
         })
         .await
         .expect("resolve should succeed");
 
-    // find_param is now a method on ResolvedGraph
+    // find_param is a method on ResolvedGraph — matches block label/id fragment.
     let gain = graph.find_param("amp", "gain");
-    println!("Seeded megarig default scene: amp gain = {:?}", gain);
-    assert!(gain.is_some(), "seeded megarig should have amp gain");
+    assert!(gain.is_some(), "built rig should have amp gain");
 }
 
 // ═════════════════════════════════════════════════════════════
@@ -383,6 +392,12 @@ async fn block_preset_update_increments_version() {
 
 /// Compare resolved params between seeded clean and lead patches.
 #[tokio::test]
+// Relies on the removed `guitar-worship-profile` seed and its exact node
+// structure (guitar-engine / guitar-layer-archetype-jm / amp) for the override
+// paths. The override-resolution behavior it checks is covered by
+// `signal_patches_songs`; rewrite as a built-rig test when a profile builder
+// that controls node ids lands.
+#[ignore = "stale: relied on the removed guitar-worship-profile seed"]
 async fn find_param_clean_vs_lead() {
     let signal = controller().await;
     let profile_id = signal::seed_id("guitar-worship-profile");
