@@ -1,0 +1,40 @@
+[package]
+name = "signal-sampler-clap"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "CLAP instrument plugin hosting the signal-sampler engine on a REAPER track — document-mode lookahead playback driven by the host transport, StrictLive passthrough otherwise"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+
+[dependencies]
+# Plugin framework. `nice_plug` must be a DIRECT dep (not just via
+# `audiocore_core::prelude`) because `#[derive(Params)]` and `nice_export_clap!`
+# expand to absolute `::nice_plug::…` paths, so the crate has to be nameable here.
+nice-plug.workspace = true
+audiocore-core.workspace = true
+
+# The sampler engine + document scheduler
+signal-sampler.workspace = true
+
+# Lock-free Arc<Schedule> swap at block boundaries
+arc-swap = "1.7"
+
+# Patch config (.styx) parsing — same stack as signal-sampler's LibrarySpec
+facet.workspace = true
+facet-styx.workspace = true
+
+# Dev-only TrackDocument JSON intake (phase-3 seam)
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+
+# Observability
+tracing.workspace = true
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+
+eyre.workspace = true
+
+[dev-dependencies]
+hound = "3.5"

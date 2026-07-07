@@ -4,20 +4,35 @@ Signal is the signal chain / plugin management domain for FastTrackStudio.
 
 ## Architecture
 
-This repo follows the **crate facade pattern**:
-- `signal` — the facade crate, the only public API surface
-- `signal-proto` — protocol/domain types (internal)
-- `signal-controller` — controller logic (internal)
-- `signal-live` — live signal chain management (internal)
-- `signal-storage` — persistence layer (internal)
-- `signal-import` — import logic (internal)
-- `signal-daw-bridge` — DAW integration bridge (internal)
-- `signal-ui` — Dioxus UI components (public, feature-gated)
-- `signal-extension` — SHM guest process binary
-- `nam-manager` — NAM model management (internal)
-- `macromod` — macro module types (internal)
+This repo is being restructured into the **feature-slice layout** of
+[architect](https://codeberg.org/FastTrackStudios/architect) — crates are
+grouped under top-level `features/<name>/` folders. See `DESIGN.md` for the
+full target shape and the staged migration plan.
 
-Apps must depend only on `signal` (facade) or `signal-ui`, never on internal crates.
+```
+features/
+  signal/     # domain slice: signal-proto, signal-storage, signal-live,
+              #   signal-controller, signal-import, signal-daw-bridge,
+              #   signal (facade), signal-ui, signal-browser
+  sampler/    # signal-sampler, signal-sampler-clap
+  plugin-host/# signal-plugin-host
+  nam/        # nam-manager
+  macromod/   # macromod
+  reaper-integration/  # signal-extension, fts-signal-controller
+apps/         # cli · desktop · mobile · native · tui
+```
+
+The `signal` facade is still the only public API surface: apps depend only on
+`signal` (facade), `signal-ui`, or `signal-sampler`, never on the internal
+domain crates (`signal-proto`, `signal-controller`, `signal-live`,
+`signal-storage`, `signal-import`, `signal-daw-bridge`, `nam-manager`).
+
+**Dependency rule**: all intra-workspace deps are `x.workspace = true`; only
+the root `Cargo.toml` `[workspace.dependencies]` table carries paths.
+
+> The monolithic `features/signal/` slice is split by bounded context
+> (`tone` / `rig` / `perform`) and migrated onto `#[architect::Entity]` in
+> later phases — see `DESIGN.md`. `crates/signal-daw` remains parked.
 
 ## GUI Architecture
 
