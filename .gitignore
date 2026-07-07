@@ -34,3 +34,7 @@ result-*
 /legato_cd.wav
 /css_manual.pdf
 /css_manual.txt
+
+# session scratch (architect hygiene: no runtime/scratch in tree)
+/scratchpad/
+/css_ab*.wav
