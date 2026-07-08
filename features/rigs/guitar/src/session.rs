@@ -172,7 +172,9 @@ impl GuitarRigBackend {
                                 ..
                             }) = msg.to_event()
                             {
-                                events.push((u8::from(controller), u8::from(value)));
+                                let (cc, val) = (u8::from(controller), u8::from(value));
+                                tracing::debug!("midi cc {cc} = {val}");
+                                events.push((cc, val));
                             }
                             log.push(format!("{msg:?}"));
                             let len = log.len();
