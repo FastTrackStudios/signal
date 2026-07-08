@@ -21,7 +21,7 @@ pub mod prepared;
 pub mod transforms;
 
 pub use asset::{IrAsset, IrLoadError};
-pub use engine::{IrEngine, IrJob, IrResult};
+pub use engine::{ImpulseReshaper, IrEngine, IrJob, IrResult, ReshapeJob};
 pub use library::{IrEntry, IrLibrary};
 pub use prepared::{PreparedIr, PreparedIrPair};
 pub use transforms::{ChannelLayout, IrTransforms};

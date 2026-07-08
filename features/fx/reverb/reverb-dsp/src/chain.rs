@@ -4,13 +4,14 @@
 use audiocore_dsp::biquad::{Biquad, FilterType};
 use audiocore_dsp::delay_line::DelayLine;
 use audiocore_dsp::{AudioConfig, Processor};
-use crossbeam_channel::{Receiver, TryRecvError};
+use crossbeam_channel::{Receiver, Sender, TryRecvError};
 
 use crate::algorithm::{
-    AlgorithmParams, AlgorithmType, ConvolutionModParams, IrSlot, ReverbAlgorithm,
+    AlgorithmParams, AlgorithmType, ConvolutionModParams, ImpulseParams, IrSlot,
+    ReverbAlgorithm,
 };
 use crate::algorithms;
-use crate::ir::engine::ProcessedIr;
+use crate::ir::engine::{ProcessedIr, ReshapeJob};
 use crate::ir::prepared::PreparedIrPair;
 use audiocore_dsp::envelope::EnvelopeFollower;
 use audiocore_dsp::smoothing::ParamSmoother;
@@ -81,6 +82,15 @@ pub struct ReverbChain {
     /// inside the algorithm.
     pub conv_mod: ConvolutionModParams,
 
+    /// BigSky MX Impulse live shaping params (decay % / tail / attack /
+    /// stretch / direction / feedback). Only consumed by Convolution.
+    /// Shaping changes trigger a background re-preparation via the
+    /// sender attached with [`Self::set_reshape_sender`] (or
+    /// synchronously in tests via `Convolution::reprepare_now`).
+    /// Reset to defaults whenever a new IR loads (mix preserved),
+    /// mirroring the hardware.
+    pub impulse: ImpulseParams,
+
     // Global controls
     /// Pre-delay in milliseconds (0-500).
     pub predelay_ms: f64,
@@ -132,6 +142,11 @@ pub struct ReverbChain {
     /// just buffer moves. Preferred over `ir_swap_rx` when the plugin
     /// can do the precompute on a worker thread.
     prepared_ir_rx: Option<Receiver<PreparedIrPair>>,
+
+    /// Submission handle to an [`crate::ir::ImpulseReshaper`] worker.
+    /// When attached, dirty impulse shaping params are re-baked off
+    /// the audio thread and hot-swapped back via `prepared_ir_rx`.
+    reshape_tx: Option<Sender<ReshapeJob>>,
 
     sample_rate: f64,
 }
@@ -216,6 +231,7 @@ impl ReverbChain {
             },
             params: AlgorithmParams::default(),
             conv_mod: ConvolutionModParams::default(),
+            impulse: ImpulseParams::default(),
             predelay_ms: 0.0,
             mix: 0.5,
             width: 1.0,
@@ -236,6 +252,7 @@ impl ReverbChain {
             freeze: false,
             ir_swap_rx: None,
             prepared_ir_rx: None,
+            reshape_tx: None,
             sample_rate,
         }
     }
@@ -256,10 +273,45 @@ impl ReverbChain {
         self.prepared_ir_rx = Some(rx);
     }
 
+    /// Attach an [`crate::ir::ImpulseReshaper`]'s submission handle.
+    /// With this in place, changing `impulse` shaping params re-bakes
+    /// the IR on the worker and hot-swaps it back through the
+    /// prepared-IR receiver — nothing heavy touches the audio thread.
+    pub fn set_reshape_sender(&mut self, tx: Sender<ReshapeJob>) {
+        self.reshape_tx = Some(tx);
+    }
+
+    /// Submit reshape jobs for any dirty impulse slots. RT-safe: `Arc`
+    /// clones + a `Copy` transform set over a lock-free channel.
+    fn pump_reshapes(&mut self) {
+        let Some(tx) = self.reshape_tx.as_ref() else {
+            return;
+        };
+        for slot in [IrSlot::A, IrSlot::B] {
+            if let Some((left, right)) = self.algorithm.impulse_reshape_source(slot) {
+                let job = ReshapeJob {
+                    slot,
+                    left,
+                    right,
+                    transforms: crate::ir::IrTransforms::from_impulse(&self.impulse),
+                    sample_rate: self.sample_rate,
+                };
+                if tx.send(job).is_err() {
+                    self.reshape_tx = None;
+                    return;
+                }
+            }
+        }
+    }
+
     /// Synchronously load a stereo IR into the active algorithm.
     /// Returns `true` if the algorithm accepted it (i.e. Convolution).
     pub fn load_convolution_ir(&mut self, left: &[f64], right: &[f64]) -> bool {
-        self.algorithm.try_load_ir(left, right)
+        let ok = self.algorithm.try_load_ir(left, right);
+        if ok {
+            self.reset_impulse_after_load();
+        }
+        ok
     }
 
     /// Slot-addressed synchronous IR load (slot B feeds the morph's
@@ -270,7 +322,11 @@ impl ReverbChain {
         right: &[f64],
         slot: IrSlot,
     ) -> bool {
-        self.algorithm.try_load_ir_slot(left, right, slot)
+        let ok = self.algorithm.try_load_ir_slot(left, right, slot);
+        if ok {
+            self.reset_impulse_after_load();
+        }
+        ok
     }
 
     /// Synchronously swap in a pre-FFT'd IR pair. No FFT on the audio
@@ -363,6 +419,16 @@ impl ReverbChain {
         // Convolution mod options ride the automation path too (the
         // algorithm ramps its own smoothers). No-op outside Convolution.
         self.algorithm.set_conv_mod_params(&self.conv_mod, false);
+        // Impulse params: feedback ramps inside the algorithm; shaping
+        // changes mark slots dirty, picked up by pump_reshapes().
+        self.algorithm.set_impulse_params(&self.impulse, false);
+        self.pump_reshapes();
+    }
+
+    /// Synchronous load helpers reset the impulse params (new IR ⇒
+    /// defaults, per the MX manual). Mix is untouched.
+    fn reset_impulse_after_load(&mut self) {
+        self.impulse = ImpulseParams::default();
     }
 }
 
@@ -454,26 +520,35 @@ impl Processor for ReverbChain {
         self.algorithm.set_params(&p);
         // Reconfiguration point — convolution mod options snap.
         self.algorithm.set_conv_mod_params(&self.conv_mod, true);
+        self.algorithm.set_impulse_params(&self.impulse, true);
+        self.pump_reshapes();
     }
 
     fn process(&mut self, left: &mut [f64], right: &mut [f64]) {
         let n = left.len().min(right.len());
 
         // Prepared (pre-FFT'd) IRs — preferred path. No FFT cost here.
+        // Applied in arrival order: swaps are cheap (buffer moves) and
+        // the reshape worker already debounces bursts, so ordering
+        // beats last-one-wins when loads and reshapes interleave.
         if let Some(rx) = self.prepared_ir_rx.as_ref() {
-            let mut latest: Option<PreparedIrPair> = None;
             loop {
                 match rx.try_recv() {
-                    Ok(pair) => latest = Some(pair),
+                    Ok(pair) => {
+                        let slot = pair.slot;
+                        if pair.reshape {
+                            self.algorithm.swap_reshaped_ir(pair, slot);
+                        } else {
+                            self.algorithm.try_load_prepared_ir_slot(pair, slot);
+                            self.impulse = ImpulseParams::default();
+                        }
+                    }
                     Err(TryRecvError::Empty) => break,
                     Err(TryRecvError::Disconnected) => {
                         self.prepared_ir_rx = None;
                         break;
                     }
                 }
-            }
-            if let Some(pair) = latest {
-                self.algorithm.try_load_prepared_ir(pair);
             }
         }
 
@@ -497,8 +572,12 @@ impl Processor for ReverbChain {
                     }
                 }
             }
+            let mut loaded = false;
             for ir in [latest_a, latest_b].into_iter().flatten() {
-                self.algorithm.try_load_ir_slot(&ir.left, &ir.right, ir.slot);
+                loaded |= self.algorithm.try_load_ir_slot(&ir.left, &ir.right, ir.slot);
+            }
+            if loaded {
+                self.reset_impulse_after_load();
             }
         }
 

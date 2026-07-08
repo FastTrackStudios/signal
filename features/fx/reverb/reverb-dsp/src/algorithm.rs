@@ -226,6 +226,88 @@ impl Default for ConvolutionModParams {
     }
 }
 
+/// Tail shaping mode for the Impulse engine's Decay control.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ImpulseTail {
+    /// Decreasing ramp shortens the IR per the decay setting.
+    #[default]
+    Envelope,
+    /// Abrupt truncation at the decay point.
+    Gate,
+}
+
+/// Playback direction for the Impulse engine.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ImpulseDirection {
+    #[default]
+    Forward,
+    /// Backward reverb decay (riser) following the input.
+    Reverse,
+}
+
+/// BigSky MX "Impulse" engine live shaping parameters.
+///
+/// `decay`/`tail`/`attack`/`stretch`/`direction` re-derive the active
+/// partitioned IR from the stored original (background re-preparation —
+/// see `ir::engine::ImpulseReshaper`); `feedback` is runtime DSP
+/// (wet → pre-delay recirculation). Defaults are bit-transparent.
+///
+/// Per the MX manual, loading a new IR resets these to defaults
+/// (mix, which lives on the chain, is preserved).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ImpulseParams {
+    /// Fraction of the IR that plays back (0.01..1.0).
+    pub decay: f64,
+    /// How `decay` < 1.0 shortens the tail.
+    pub tail: ImpulseTail,
+    /// Onset softening (0 = full attack punch, 1 = slow fade-in).
+    pub attack: f64,
+    /// IR re-sample factor (0.25..4.0). 1.0 = as recorded; higher =
+    /// longer decay + darker (manual: "low settings reduce the decay,
+    /// higher settings for longer"), lower = shorter + brighter.
+    pub stretch: f64,
+    pub direction: ImpulseDirection,
+    /// Wet signal recirculated into the pre-delay (0..1). Character
+    /// depends on the pre-delay time (`ConvolutionModParams::predelay_ms`).
+    pub feedback: f64,
+}
+
+impl Default for ImpulseParams {
+    fn default() -> Self {
+        Self {
+            decay: 1.0,
+            tail: ImpulseTail::Envelope,
+            attack: 0.0,
+            stretch: 1.0,
+            direction: ImpulseDirection::Forward,
+            feedback: 0.0,
+        }
+    }
+}
+
+impl ImpulseParams {
+    /// The shaping subset (everything except `feedback`) — equality on
+    /// this tuple decides whether a re-preparation is needed.
+    pub fn shape_key(&self) -> (u64, ImpulseTail, u64, u64, ImpulseDirection) {
+        (
+            self.decay.clamp(0.01, 1.0).to_bits(),
+            self.tail,
+            self.attack.clamp(0.0, 1.0).to_bits(),
+            self.stretch.clamp(0.25, 4.0).to_bits(),
+            self.direction,
+        )
+    }
+
+    /// True when every shaping param is at its identity value (no
+    /// re-preparation needed, original IR plays untouched).
+    pub fn shape_is_identity(&self) -> bool {
+        self.decay >= 1.0 - 1e-9
+            && self.attack <= 1e-9
+            && (self.stretch - 1.0).abs() <= 1e-9
+            && self.direction == ImpulseDirection::Forward
+    }
+}
+
 /// Common interface for all reverb algorithms.
 ///
 /// Each algorithm processes one stereo sample pair at a time (tick-based),
@@ -286,6 +368,37 @@ pub trait ReverbAlgorithm: Send {
     /// Convolution; returns `true` if accepted.
     fn set_conv_mod_params(&mut self, params: &ConvolutionModParams, snap: bool) -> bool {
         let _ = (params, snap);
+        false
+    }
+
+    /// Push Impulse-engine shaping params. Runtime parts (feedback)
+    /// apply immediately; shaping parts mark the algorithm dirty for a
+    /// background re-preparation (see [`Self::impulse_reshape_source`]).
+    /// No-op outside Convolution; returns `true` if accepted.
+    fn set_impulse_params(&mut self, params: &ImpulseParams, snap: bool) -> bool {
+        let _ = (params, snap);
+        false
+    }
+
+    /// When the algorithm needs its IR re-shaped (shaping params changed
+    /// since the last applied preparation), returns the ORIGINAL IR for
+    /// the slot as cheap `Arc` clones (RT-safe — no allocation) and
+    /// clears the dirty flag for that slot. `None` = nothing to do or
+    /// original unavailable.
+    fn impulse_reshape_source(
+        &mut self,
+        slot: IrSlot,
+    ) -> Option<(std::sync::Arc<Vec<f64>>, std::sync::Arc<Vec<f64>>)> {
+        let _ = slot;
+        None
+    }
+
+    /// Swap in a re-shaped prepared IR (background-FFT'd). Unlike
+    /// [`Self::try_load_prepared_ir_slot`], this neither resets the
+    /// impulse params nor marks a user IR as loaded — it's the return
+    /// leg of the re-preparation pipeline. Returns `true` if accepted.
+    fn swap_reshaped_ir(&mut self, pair: crate::ir::PreparedIrPair, slot: IrSlot) -> bool {
+        let _ = (pair, slot);
         false
     }
 }

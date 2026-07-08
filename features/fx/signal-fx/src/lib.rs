@@ -274,6 +274,15 @@ const REVERB_PARAMS: &[ParamSpec] = &[
     ParamSpec { id: 8, name: "pan_b", min: -1.0, max: 1.0, default: 0.0 },
     ParamSpec { id: 9, name: "trem_rate", min: 0.1, max: 12.0, default: 4.0 },
     ParamSpec { id: 10, name: "trem_depth", min: 0.0, max: 1.0, default: 0.0 },
+    // BigSky MX Impulse live params (chain A; active with the
+    // Convolution algorithm). tail: 0 = Envelope, 1 = Gate;
+    // direction: 0 = Forward, 1 = Reverse.
+    ParamSpec { id: 11, name: "imp_decay", min: 0.01, max: 1.0, default: 1.0 },
+    ParamSpec { id: 12, name: "imp_tail", min: 0.0, max: 1.0, default: 0.0 },
+    ParamSpec { id: 13, name: "imp_attack", min: 0.0, max: 1.0, default: 0.0 },
+    ParamSpec { id: 14, name: "imp_stretch", min: 0.25, max: 4.0, default: 1.0 },
+    ParamSpec { id: 15, name: "imp_direction", min: 0.0, max: 1.0, default: 0.0 },
+    ParamSpec { id: 16, name: "imp_feedback", min: 0.0, max: 1.0, default: 0.0 },
 ];
 
 /// Native Reverb block — wraps [`reverb::DualReverb`] (two full chains +
@@ -345,6 +354,38 @@ impl NativeReverb {
             10 => {
                 self.rev.a.trem_depth = v.clamp(0.0, 1.0);
                 self.rev.b.trem_depth = v.clamp(0.0, 1.0);
+            }
+            11 => {
+                self.rev.a.impulse.decay = v.clamp(0.01, 1.0);
+                self.rev.a.update_params();
+            }
+            12 => {
+                self.rev.a.impulse.tail = if v >= 0.5 {
+                    reverb::ImpulseTail::Gate
+                } else {
+                    reverb::ImpulseTail::Envelope
+                };
+                self.rev.a.update_params();
+            }
+            13 => {
+                self.rev.a.impulse.attack = v.clamp(0.0, 1.0);
+                self.rev.a.update_params();
+            }
+            14 => {
+                self.rev.a.impulse.stretch = v.clamp(0.25, 4.0);
+                self.rev.a.update_params();
+            }
+            15 => {
+                self.rev.a.impulse.direction = if v >= 0.5 {
+                    reverb::ImpulseDirection::Reverse
+                } else {
+                    reverb::ImpulseDirection::Forward
+                };
+                self.rev.a.update_params();
+            }
+            16 => {
+                self.rev.a.impulse.feedback = v.clamp(0.0, 1.0);
+                self.rev.a.update_params();
             }
             _ => {}
         }
