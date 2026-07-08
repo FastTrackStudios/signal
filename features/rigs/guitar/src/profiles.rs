@@ -243,8 +243,15 @@ pub fn worship_def() -> ProfileDef {
             patch("Crunch", "AA Crunch"),
             with_ovr(
                 patch("Crunch Edge", "AA Crunch"),
-                // "Edge": gate off so every rattle rings.
-                vec![OverrideDef::bypass("Utility", "Gate", true)],
+                // "Edge": gate off so every rattle rings; dotted-8th tape
+                // delay, hotter and regenerating.
+                vec![
+                    OverrideDef::bypass("Utility", "Gate", true),
+                    time_param("DLY 1", "tap_div_l", 1.0),
+                    time_param("DLY 1", "tap_div_r", 1.0),
+                    time_param("DLY 1", "mix", 0.45),
+                    time_param("DLY 1", "feedback", 0.4),
+                ],
             ),
             // Drive
             patch("Drive", "AA Drive"),
@@ -259,7 +266,17 @@ pub fn worship_def() -> ProfileDef {
                 vec![time_param("VERB 1", "mix", 0.12)],
             ),
             // Ambient
-            patch("Ambient", "AC30 Clean"),
+            with_ovr(
+                patch("Ambient", "AC30 Clean"),
+                // Cloud verb, long and dark; delay a touch hotter.
+                vec![
+                    time_param("VERB 1", "algorithm", 4.0),
+                    time_param("VERB 1", "mix", 0.35),
+                    time_param("VERB 1", "decay", 0.63),
+                    time_param("VERB 1", "tone", -0.5),
+                    time_param("DLY 1", "mix", 0.25),
+                ],
+            ),
             with_ovr(
                 patch("Ambient Swells", "AC30 Clean"),
                 vec![
@@ -356,7 +373,7 @@ pub fn build_profile(def: &ProfileDef, dps: &[DrivePresetDef]) -> RigProfile {
             .with_block(off(BlockType::Vibrato, "Vibrato"))
             .with_block(off(BlockType::Rotary, "Rotary"))
             // Time module — subtle pair on, extreme pair bypassed.
-            .with_block(on_fx(BlockType::Delay, "DLY 1", &[("mix", "0.08"), ("time", "350"), ("feedback", "0.28"), ("tap_div_l", "0"), ("tap_div_r", "0")]))
+            .with_block(on_fx(BlockType::Delay, "DLY 1", &[("mix", "0.2"), ("style", "0"), ("time", "350"), ("feedback", "0.28"), ("tap_div_l", "0"), ("tap_div_r", "0")]))
             .with_block(off_fx(BlockType::Delay, "DLY 2", &[("mix", "0.10"), ("time", "600"), ("feedback", "0.62"), ("tap_div_l", "1"), ("tap_div_r", "1")]))
             .with_block(on_fx(BlockType::Reverb, "VERB 1", &[("mix", "0.08"), ("decay", "0.42"), ("size", "0.45")]))
             .with_block(off_fx(BlockType::Reverb, "VERB 2", &[("mix", "0.10"), ("decay", "0.85"), ("size", "0.92")]))

@@ -1841,6 +1841,11 @@ impl Rig for GuitarRigBackend {
     }
 
     fn tap_tempo(&self) {
+        // Tuner up? The tap-tempo switch doubles as its dismiss.
+        if *self.tuner_visible.lock().unwrap() {
+            Rig::toggle_tuner(self);
+            return;
+        }
         let now = std::time::Instant::now();
         let new_tempo = {
             let mut taps = self.taps.lock().unwrap();
