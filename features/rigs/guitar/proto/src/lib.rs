@@ -336,6 +336,10 @@ pub mod rig {
         /// Select a block preset's NAM option (e.g. a pedal's gain capture).
         /// Rebuilds the chains — an edit-time operation.
         fn set_block_option(&self, id: String, option: u32);
+        /// Record `seconds` of the live guitar input as the calibration DI
+        /// reference, then re-measure every NAM against it. Play
+        /// representatively while it runs.
+        fn capture_di_reference(&self, seconds: u32);
         /// Tap tempo.
         fn tap_tempo(&self);
         /// Toggle a block's bypass (by id).

@@ -538,7 +538,7 @@ fn DelayPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32) -> Element {
             for (di, b) in delays.iter().enumerate() {
                 {
                     let fb = param_v(b, "feedback", 0.3).clamp(0.0, 0.98);
-                    let mix = param_v(b, "mix", 0.08).clamp(0.02, 0.10) / 0.10;
+                    let mix = param_v(b, "mix", 0.08).clamp(0.02, 1.0);
                     let time_ms = param_v(b, "time", 350.0);
                     let f_l = div_factor(param_v(b, "tap_div_l", 0.0));
                     let f_r = div_factor(param_v(b, "tap_div_r", 0.0));
@@ -674,7 +674,7 @@ fn ReverbPanel(blocks: Vec<LiveBlock>) -> Element {
                 {
                     let decay = param_v(b, "decay", 0.4).clamp(0.02, 1.0);
                     let size = param_v(b, "size", 0.5);
-                    let mix = (param_v(b, "mix", 0.08).clamp(0.02, 0.10) / 0.10).max(0.15);
+                    let mix = param_v(b, "mix", 0.08).clamp(0.02, 1.0).max(0.15);
                     let md = param_v(b, "modulation", 0.2);
                     let color = VERB_COLORS[vi % 2];
                     let dim = b.bypassed;

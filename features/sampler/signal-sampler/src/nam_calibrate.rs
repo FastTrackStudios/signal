@@ -635,3 +635,40 @@ pub fn drive_compensation(model_path: &Path, sample_rate: f64, drive: f32) -> Op
     let out_db = entry.di_lufs - model_lufs;
     Some((in_db as f32, out_db as f32))
 }
+
+/// Install `samples` (mono, `sample_rate`) as the calibration DI reference
+/// and wipe both measurement caches so everything re-measures against it.
+/// The next calibration pass then reflects the player's own guitar.
+pub fn install_di_reference(samples: &[f32], sample_rate: u32) -> Result<(), String> {
+    if samples.len() < sample_rate as usize {
+        return Err("capture too short for a DI reference (need ≥ 1 s)".into());
+    }
+    let dir = calibration_dir();
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let spec = hound::WavSpec {
+        channels: 1,
+        sample_rate,
+        bits_per_sample: 32,
+        sample_format: hound::SampleFormat::Float,
+    };
+    let path = di_reference_path();
+    let mut writer = hound::WavWriter::create(&path, spec).map_err(|e| e.to_string())?;
+    for s in samples {
+        writer.write_sample(*s).map_err(|e| e.to_string())?;
+    }
+    writer.finalize().map_err(|e| e.to_string())?;
+    // Invalidate everything measured against the old DI.
+    let _ = std::fs::remove_file(dir.join("loudness-cache.styx"));
+    let _ = std::fs::remove_file(DriveCurveCache::path());
+    *drive_cache().lock().unwrap() = DriveCurveCache::default();
+    if let Some(ctx) = context().lock().unwrap().as_mut() {
+        ctx.di = DiReference::load_or_synthetic(sample_rate as f64);
+        ctx.cache = LoudnessCache::load();
+    }
+    tracing::info!(
+        "installed DI reference ({:.1} s) at {}",
+        samples.len() as f64 / sample_rate as f64,
+        path.display()
+    );
+    Ok(())
+}

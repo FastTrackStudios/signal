@@ -118,7 +118,17 @@ pub fn Knob(
     let accent = color.unwrap_or_else(|| ACCENT.to_string());
     let display = match fmt {
         Some(f) => f(value),
-        None => format!("{value:.1}"),
+        // Adaptive precision: fine params (mix, Q) need two decimals; big
+        // ones (ms, Hz) don't.
+        None => {
+            if value.abs() >= 100.0 {
+                format!("{value:.0}")
+            } else if value.abs() >= 10.0 {
+                format!("{value:.1}")
+            } else {
+                format!("{value:.2}")
+            }
+        }
     };
 
     let apply = move |norm: f64| {

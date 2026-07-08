@@ -534,6 +534,13 @@ struct InputMeterShared {
     /// tuner's pitch detection. Written once per block by the probe; read
     /// (cloned) by the control thread. Capacity is fixed at `TUNER_WINDOW`.
     samples: std::sync::Mutex<Vec<f32>>,
+    /// DI capture: while armed (`capture_remaining > 0`) the probe appends
+    /// every input sample here — the source for a *real* calibration DI
+    /// recorded from the player's own guitar.
+    capture: std::sync::Mutex<Vec<f32>>,
+    /// Samples still to capture (0 = disarmed). Relaxed atomics — the probe
+    /// is the only writer of `capture` while armed.
+    capture_remaining: std::sync::atomic::AtomicUsize,
 }
 
 /// Mono window the tuner runs autocorrelation over. At 48 kHz this covers
@@ -573,6 +580,45 @@ impl InputMeterShared {
     /// Snapshot the current tuner window (cloned for the control thread).
     fn snapshot_samples(&self) -> Vec<f32> {
         self.samples.lock().map(|b| b.clone()).unwrap_or_default()
+    }
+
+    fn arm_capture(&self, samples: usize) {
+        if let Ok(mut buf) = self.capture.lock() {
+            buf.clear();
+            buf.reserve(samples);
+        }
+        self.capture_remaining
+            .store(samples, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    fn push_capture(&self, mono: &[f32]) {
+        let remaining = self
+            .capture_remaining
+            .load(std::sync::atomic::Ordering::Relaxed);
+        if remaining == 0 {
+            return;
+        }
+        let take = remaining.min(mono.len());
+        if let Ok(mut buf) = self.capture.try_lock() {
+            buf.extend_from_slice(&mono[..take]);
+        }
+        self.capture_remaining
+            .store(remaining - take, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    fn capture_state(&self) -> (usize, usize) {
+        let remaining = self
+            .capture_remaining
+            .load(std::sync::atomic::Ordering::Relaxed);
+        let len = self.capture.lock().map(|b| b.len()).unwrap_or(0);
+        (len, remaining)
+    }
+
+    fn take_capture(&self) -> Vec<f32> {
+        self.capture
+            .lock()
+            .map(|mut b| std::mem::take(&mut *b))
+            .unwrap_or_default()
     }
 }
 
@@ -652,6 +698,7 @@ impl PluginInstance for InputProbe {
         self.shared.store(pk_l.max(pk_r));
         self.shared.store_lr(pk_l, pk_r);
         self.shared.push_samples(&self.mono);
+        self.shared.push_capture(&self.mono);
         Ok(())
     }
     fn deactivate(&mut self) {
@@ -1432,6 +1479,22 @@ impl GuitarRig {
     /// Per-channel input peaks (linear) — stereo metering.
     pub fn input_peak_lr(&self) -> (f32, f32) {
         self.input_meter.load_lr()
+    }
+
+    /// Arm a DI capture: the input probe records the next `samples` mono
+    /// input samples (for recording a real calibration DI reference).
+    pub fn arm_di_capture(&self, samples: usize) {
+        self.input_meter.arm_capture(samples);
+    }
+
+    /// `(captured_so_far, remaining)` of the armed DI capture.
+    pub fn di_capture_state(&self) -> (usize, usize) {
+        self.input_meter.capture_state()
+    }
+
+    /// Take the finished capture buffer (empties it).
+    pub fn take_di_capture(&self) -> Vec<f32> {
+        self.input_meter.take_capture()
     }
 
     /// A snapshot of the most-recent mono input samples (post-input-trim,

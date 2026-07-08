@@ -556,6 +556,10 @@ impl GuitarRigBackend {
                     if mgr.audio.output_device.is_empty() { "default" } else { &mgr.audio.output_device },
                 );
                 let mut prig = ProfileRig::new(g);
+                // One loudness authority: the per-block drive calibration
+                // (unity-loudness blocks). The old patch-level match would
+                // stack a second, different target on top.
+                prig.set_level_match(false);
                 let profile = build_profile(&self.profile_def.lock().unwrap());
                 match prig.load_profile(profile, None) {
                     Ok(()) => tracing::info!("profile loaded ({} patches)", prig.patches().len()),
@@ -706,7 +710,7 @@ fn param_specs(bt: BlockType) -> Vec<(String, f32, f32, f32)> {
         // panel drives): style, per-side tempo divisions, high-pass,
         // repeat dynamics (ducking), mix, feedback.
         BlockType::Delay => owned(&[
-            ("mix", 0.0, 0.10, 0.08),
+            ("mix", 0.0, 1.0, 0.08),
             ("time", 20.0, 2500.0, 350.0),
             ("feedback", 0.0, 0.95, 0.3),
             ("style", 0.0, 12.0, 1.0),
@@ -717,7 +721,7 @@ fn param_specs(bt: BlockType) -> Vec<(String, f32, f32, f32)> {
         ]),
         // Reverb surface — algorithm + mix/time/damping/tone/modulation.
         BlockType::Reverb => owned(&[
-            ("mix", 0.0, 0.10, 0.08),
+            ("mix", 0.0, 1.0, 0.08),
             ("decay", 0.0, 1.0, 0.4),
             ("size", 0.0, 1.0, 0.5),
             ("algorithm", 0.0, 14.0, 1.0),
@@ -1211,6 +1215,57 @@ impl Rig for GuitarRigBackend {
         self.apply_boost_to_block();
         self.apply_all_drives();
         self.publish_state();
+    }
+
+    fn capture_di_reference(&self, seconds: u32) {
+        let secs = seconds.clamp(5, 60) as usize;
+        let (sr, armed) = {
+            let guard = self.rig.lock().unwrap();
+            match guard.as_ref() {
+                Some(prig) => {
+                    let sr = prig.sample_rate() as usize;
+                    prig.rig().arm_di_capture(secs * sr);
+                    (sr, true)
+                }
+                None => (48_000, false),
+            }
+        };
+        if !armed {
+            tracing::warn!("DI capture: rig not running");
+            return;
+        }
+        tracing::info!("DI capture armed: play for {secs} s…");
+        let backend = self.clone();
+        std::thread::spawn(move || {
+            // Wait for the probe to fill the buffer (+1 s headroom).
+            for _ in 0..(secs + 2) * 10 {
+                std::thread::sleep(std::time::Duration::from_millis(100));
+                let done = {
+                    let guard = backend.rig.lock().unwrap();
+                    guard
+                        .as_ref()
+                        .map(|p| p.rig().di_capture_state().1 == 0)
+                        .unwrap_or(true)
+                };
+                if done {
+                    break;
+                }
+            }
+            let samples = {
+                let guard = backend.rig.lock().unwrap();
+                guard
+                    .as_ref()
+                    .map(|p| p.rig().take_di_capture())
+                    .unwrap_or_default()
+            };
+            match signal_sampler::nam_calibrate::install_di_reference(&samples, sr as u32) {
+                Ok(()) => {
+                    tracing::info!("DI captured — re-measuring the library");
+                    backend.spawn_drive_calibration();
+                }
+                Err(e) => tracing::warn!("DI capture failed: {e}"),
+            }
+        });
     }
 
     fn set_headphone(&self, volume: f32, self_mix: f32) {

@@ -20,7 +20,9 @@ use signal_plugin_host::{
 // ── Param helpers ──────────────────────────────────────────────────────────
 
 /// Hard cap on time-effect (reverb/delay) dry-wet mix for now (10%).
-const TIME_MIX_MAX: f64 = 0.10;
+/// Full wet/dry travel — the merged MX/reverb engines are pedal-parity, so
+/// the mix knob covers the whole range (defaults stay subtle).
+const TIME_MIX_MAX: f64 = 1.0;
 
 /// One controllable parameter: stable id, display name, range, default.
 struct ParamSpec {
@@ -454,7 +456,7 @@ impl PluginInstance for NativeComp {
 // ── Reverb ─────────────────────────────────────────────────────────────────
 
 const REVERB_PARAMS: &[ParamSpec] = &[
-    ParamSpec { id: 0, name: "mix", min: 0.0, max: 0.10, default: 0.08 },
+    ParamSpec { id: 0, name: "mix", min: 0.0, max: 1.0, default: 0.08 },
     ParamSpec { id: 1, name: "decay", min: 0.0, max: 1.0, default: 0.45 },
     ParamSpec { id: 2, name: "size", min: 0.0, max: 1.0, default: 0.5 },
     // Algorithm index (see reverb::AlgorithmType::ALL — Room, Hall, Plate,
@@ -599,7 +601,7 @@ impl PluginInstance for NativeReverb {
 // ── Delay ──────────────────────────────────────────────────────────────────
 
 const DELAY_PARAMS: &[ParamSpec] = &[
-    ParamSpec { id: 0, name: "mix", min: 0.0, max: 0.10, default: 0.08 },
+    ParamSpec { id: 0, name: "mix", min: 0.0, max: 1.0, default: 0.08 },
     ParamSpec { id: 1, name: "time", min: 20.0, max: 2500.0, default: 400.0 },
     ParamSpec { id: 2, name: "feedback", min: 0.0, max: 0.95, default: 0.30 },
     // TimeLine MX parity params (style index: see delay::DelayStyle).
@@ -628,7 +630,7 @@ const DELAY_PARAMS: &[ParamSpec] = &[
     ParamSpec { id: 18, name: "style_b", min: 0.0, max: 12.0, default: 1.0 },
     ParamSpec { id: 19, name: "time_b", min: 20.0, max: 2500.0, default: 300.0 },
     ParamSpec { id: 20, name: "feedback_b", min: 0.0, max: 0.95, default: 0.30 },
-    ParamSpec { id: 21, name: "mix_b", min: 0.0, max: 0.10, default: 0.08 },
+    ParamSpec { id: 21, name: "mix_b", min: 0.0, max: 1.0, default: 0.08 },
     // Spectral machine (grain_shape: 0 Soft/1 Swell/2 SoftPluck/
     // 3 Pluck/4 Bounce; direction: 0 Fwd/1 Rev/2 Both; density = n in
     // Synced(1/n); density_ms >= 6 switches to free 6-250 ms).

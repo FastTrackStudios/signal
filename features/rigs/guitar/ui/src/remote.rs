@@ -285,6 +285,22 @@ pub fn GuitarRigRemote() -> Element {
                     }
                 }
 
+                // Capture a real calibration DI from the live guitar —
+                // play for ~15 s after tapping; the library re-measures.
+                button {
+                    class: "flex items-center justify-center w-7 h-7 rounded-md border border-border text-muted-foreground hover:text-foreground text-[10px] font-bold",
+                    title: "Record 15 s of your guitar as the loudness-calibration reference",
+                    onclick: {
+                        let rig = rig.clone();
+                        move |_| {
+                            if let Some(r) = rig.clone() {
+                                spawn(async move { let _ = r.capture_di_reference(15).await; });
+                            }
+                        }
+                    },
+                    "DI"
+                }
+
                 crate::control::MidiMonitorButton {}
 
                 button {
