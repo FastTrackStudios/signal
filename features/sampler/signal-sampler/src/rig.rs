@@ -1056,6 +1056,13 @@ impl GuitarRig {
             output_device: output_name.unwrap_or("").to_string(),
             sample_rate: sample_rate.unwrap_or(0),
             buffer_size: buffer_size.unwrap_or(0),
+            phones_routing: false,
+            main_out_l: 0,
+            main_out_r: 0,
+            phones_out_l: 0,
+            phones_out_r: 0,
+            phones_mix_in_l: 0,
+            phones_mix_in_r: 0,
         })
     }
 
@@ -1179,6 +1186,13 @@ impl GuitarRig {
             output_device: prefs.output_device.clone(),
             sample_rate,
             buffer_size: prefs.buffer_size,
+            phones_routing: false,
+            main_out_l: 0,
+            main_out_r: 0,
+            phones_out_l: 0,
+            phones_out_r: 0,
+            phones_mix_in_l: 0,
+            phones_mix_in_r: 0,
         };
 
         Ok(Self {
@@ -1234,6 +1248,15 @@ impl GuitarRig {
     /// The prefs the rig actually opened with (resolved sample rate).
     pub fn prefs(&self) -> &RigAudioPrefs {
         &self.prefs
+    }
+
+    /// Live phones-bus levels (headphone volume + self-mix) — forwarded to
+    /// the duplex engine's lock-free bus for routed interfaces.
+    pub fn set_phones_levels(volume: f32, self_mix: f32) {
+        #[cfg(all(feature = "pipewire", target_os = "linux"))]
+        daw::standalone::audio_engine::PhonesBus::shared().set(volume, self_mix);
+        #[cfg(not(all(feature = "pipewire", target_os = "linux")))]
+        let _ = (volume, self_mix); // cpal fallback: no routed phones bus yet
     }
 
     /// Build an FX chain on **this** thread (loading every `.nam` / `.wav` /

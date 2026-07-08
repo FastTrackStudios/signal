@@ -31,6 +31,25 @@ pub struct RigAudioPrefs {
     /// Requested buffer size in frames. `0` = backend default.
     #[facet(default)]
     pub buffer_size: u32,
+    /// Interface output routing. Off = legacy stereo out on channels 1-2.
+    /// On (the live-rig interface convention): main out lands on 3-4, the
+    /// headphone bus on 1-2, and interface inputs 3-4 (an external monitor
+    /// mix) blend into the phones. Channel fields are 0-based; zeros mean
+    /// "use those conventions".
+    #[facet(default)]
+    pub phones_routing: bool,
+    #[facet(default)]
+    pub main_out_l: usize,
+    #[facet(default)]
+    pub main_out_r: usize,
+    #[facet(default)]
+    pub phones_out_l: usize,
+    #[facet(default)]
+    pub phones_out_r: usize,
+    #[facet(default)]
+    pub phones_mix_in_l: usize,
+    #[facet(default)]
+    pub phones_mix_in_r: usize,
 }
 
 impl Default for RigAudioPrefs {
@@ -41,6 +60,13 @@ impl Default for RigAudioPrefs {
             output_device: String::new(),
             sample_rate: 48_000,
             buffer_size: 256,
+            phones_routing: false,
+            main_out_l: 0,
+            main_out_r: 0,
+            phones_out_l: 0,
+            phones_out_r: 0,
+            phones_mix_in_l: 0,
+            phones_mix_in_r: 0,
         }
     }
 }
@@ -78,6 +104,15 @@ impl From<&RigAudioPrefs> for daw_audio_io::AudioIoPrefs {
             sample_rate: p.sample_rate,
             buffer_size: p.buffer_size,
             want_input: true,
+            phones_routing: p.phones_routing,
+            // Zeroed pairs fall back to the live-rig conventions:
+            // main → 3-4, phones → 1-2, monitor mix in → 3-4.
+            main_out_l: if p.phones_routing && p.main_out_l == 0 && p.main_out_r == 0 { 2 } else { p.main_out_l },
+            main_out_r: if p.phones_routing && p.main_out_l == 0 && p.main_out_r == 0 { 3 } else { p.main_out_r },
+            phones_out_l: p.phones_out_l,
+            phones_out_r: if p.phones_routing && p.phones_out_l == 0 && p.phones_out_r == 0 { 1 } else { p.phones_out_r },
+            phones_mix_in_l: if p.phones_routing && p.phones_mix_in_l == 0 && p.phones_mix_in_r == 0 { 2 } else { p.phones_mix_in_l },
+            phones_mix_in_r: if p.phones_routing && p.phones_mix_in_l == 0 && p.phones_mix_in_r == 0 { 3 } else { p.phones_mix_in_r },
         }
     }
 }

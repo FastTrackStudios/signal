@@ -1912,6 +1912,9 @@ impl Rig for GuitarRigBackend {
             let mut hp = self.headphone.lock().unwrap();
             hp.volume = volume.clamp(0.0, 1.0);
             hp.self_mix = self_mix.clamp(0.0, 1.0);
+            // Feed the engine's phones bus (routed interfaces blend the
+            // external monitor mix + self signal there, lock-free).
+            signal_sampler::rig::GuitarRig::set_phones_levels(hp.volume, hp.self_mix);
         }
         self.publish_state();
     }
