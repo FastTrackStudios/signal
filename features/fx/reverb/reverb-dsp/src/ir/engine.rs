@@ -181,6 +181,12 @@ impl IrEngine {
                     let pair = PreparedIrPair {
                         left: PreparedIr::build_with_planner(&ir.left, &mut planner),
                         right: PreparedIr::build_with_planner(&ir.right, &mut planner),
+                        slot: ir.slot,
+                        reshape: false,
+                        // Retain the transformed-but-unshaped IR so the
+                        // Impulse engine can re-shape without a disk
+                        // round-trip.
+                        raw: Some((Arc::new(ir.left), Arc::new(ir.right))),
                     };
                     if tx.send(pair).is_err() {
                         break;
@@ -204,6 +210,124 @@ impl Drop for IrEngine {
         // Drop the sender to wake the worker out of recv().
         // We swap in a dummy channel so the original sender is dropped.
         let (tx_dummy, _) = unbounded::<IrJob>();
+        let _ = std::mem::replace(&mut self.tx_jobs, tx_dummy);
+        if let Some(h) = self.worker.take() {
+            let _ = h.join();
+        }
+    }
+}
+
+/// Job for the Impulse-param re-preparation worker. `Arc` clones of
+/// the original IR keep submission allocation-free on the audio thread.
+#[derive(Clone)]
+pub struct ReshapeJob {
+    pub slot: IrSlot,
+    pub left: Arc<Vec<f64>>,
+    pub right: Arc<Vec<f64>>,
+    /// Full transform set to apply (the caller maps ImpulseParams onto
+    /// decay_frac / tail_gate / attack_frac / stretch / reverse).
+    pub transforms: IrTransforms,
+    pub sample_rate: f64,
+}
+
+/// Background worker that re-shapes an Impulse engine's IR when its
+/// live shaping params change: applies [`IrTransforms`] to the stored
+/// original, FFT-prepares the result, and delivers a
+/// [`PreparedIrPair`] (tagged `reshape: true`) for the audio thread to
+/// hot-swap via the chain's prepared-IR receiver.
+///
+/// Knob sweeps are debounced by draining the job queue and keeping
+/// only the newest job per slot before doing any work.
+pub struct ImpulseReshaper {
+    tx_jobs: Sender<ReshapeJob>,
+    stop: Arc<AtomicBool>,
+    worker: Option<JoinHandle<()>>,
+}
+
+impl ImpulseReshaper {
+    /// Spawn the worker. Feed the returned receiver into
+    /// [`crate::chain::ReverbChain::set_prepared_ir_receiver`] (or
+    /// merge it with the loader relay's channel upstream).
+    pub fn new() -> (Self, Receiver<PreparedIrPair>) {
+        let (tx_jobs, rx_jobs) = unbounded::<ReshapeJob>();
+        let (tx_out, rx_out) = unbounded::<PreparedIrPair>();
+        let stop = Arc::new(AtomicBool::new(false));
+        let stop_w = stop.clone();
+
+        let worker = thread::Builder::new()
+            .name("reverb-ir-reshape".into())
+            .spawn(move || {
+                let mut planner = RealFftPlanner::<f64>::new();
+                while !stop_w.load(Ordering::Relaxed) {
+                    // recv with a timeout so a stop request still wakes
+                    // us when a cloned sender (handed to the audio
+                    // thread via `sender()`) keeps the channel alive.
+                    let first = match rx_jobs.recv_timeout(std::time::Duration::from_millis(100)) {
+                        Ok(job) => job,
+                        Err(crossbeam_channel::RecvTimeoutError::Timeout) => continue,
+                        Err(crossbeam_channel::RecvTimeoutError::Disconnected) => break,
+                    };
+                    // Debounce: drain to the newest job per slot.
+                    let mut latest_a = None;
+                    let mut latest_b = None;
+                    match first.slot {
+                        IrSlot::A => latest_a = Some(first),
+                        IrSlot::B => latest_b = Some(first),
+                    }
+                    while let Ok(job) = rx_jobs.try_recv() {
+                        match job.slot {
+                            IrSlot::A => latest_a = Some(job),
+                            IrSlot::B => latest_b = Some(job),
+                        }
+                    }
+                    for job in [latest_a, latest_b].into_iter().flatten() {
+                        let asset = IrAsset::from_stereo(
+                            (*job.left).clone(),
+                            (*job.right).clone(),
+                            job.sample_rate,
+                        );
+                        let (l, r) = job.transforms.apply(&asset);
+                        let pair = PreparedIrPair {
+                            left: PreparedIr::build_with_planner(&l, &mut planner),
+                            right: PreparedIr::build_with_planner(&r, &mut planner),
+                            slot: job.slot,
+                            reshape: true,
+                            raw: None,
+                        };
+                        if tx_out.send(pair).is_err() {
+                            return;
+                        }
+                    }
+                }
+            })
+            .expect("failed to spawn ir reshape thread");
+
+        (
+            Self {
+                tx_jobs,
+                stop,
+                worker: Some(worker),
+            },
+            rx_out,
+        )
+    }
+
+    /// Submit a re-shape. RT-safe: the job is `Arc` clones + a `Copy`
+    /// transform set; the channel is lock-free.
+    pub fn submit(&self, job: ReshapeJob) -> Result<(), crossbeam_channel::SendError<ReshapeJob>> {
+        self.tx_jobs.send(job)
+    }
+
+    /// A cloneable submission handle for the audio-thread side.
+    pub fn sender(&self) -> Sender<ReshapeJob> {
+        self.tx_jobs.clone()
+    }
+}
+
+impl Drop for ImpulseReshaper {
+    fn drop(&mut self) {
+        self.stop.store(true, Ordering::Relaxed);
+        let (tx_dummy, _) = unbounded::<ReshapeJob>();
         let _ = std::mem::replace(&mut self.tx_jobs, tx_dummy);
         if let Some(h) = self.worker.take() {
             let _ = h.join();

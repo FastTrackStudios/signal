@@ -98,6 +98,16 @@ impl PreparedIr {
 pub struct PreparedIrPair {
     pub left: PreparedIr,
     pub right: PreparedIr,
+    /// Destination IR slot (dual-IR morph). Defaults to A.
+    pub slot: crate::algorithm::IrSlot,
+    /// True when this pair is the return leg of an Impulse-param
+    /// re-preparation — the receiver must swap WITHOUT resetting
+    /// impulse params or marking a user IR as loaded.
+    pub reshape: bool,
+    /// The un-shaped time-domain IR, carried along so the Impulse
+    /// engine can re-shape later without re-decoding from disk.
+    /// `Arc` so audio-thread clones are allocation-free.
+    pub raw: Option<(std::sync::Arc<Vec<f64>>, std::sync::Arc<Vec<f64>>)>,
 }
 
 impl PreparedIrPair {
@@ -105,15 +115,23 @@ impl PreparedIrPair {
         Self {
             left: PreparedIr::empty(),
             right: PreparedIr::empty(),
+            slot: crate::algorithm::IrSlot::A,
+            reshape: false,
+            raw: None,
         }
     }
 
     /// Build a stereo prepared IR using a single planner instance.
+    /// Slot A, not a reshape, no raw retention — use the field syntax
+    /// to override.
     pub fn build(left: &[f64], right: &[f64]) -> Self {
         let mut planner = RealFftPlanner::<f64>::new();
         Self {
             left: PreparedIr::build_with_planner(left, &mut planner),
             right: PreparedIr::build_with_planner(right, &mut planner),
+            slot: crate::algorithm::IrSlot::A,
+            reshape: false,
+            raw: None,
         }
     }
 }

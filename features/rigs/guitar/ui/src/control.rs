@@ -38,9 +38,13 @@ fn param_v(block: &LiveBlock, name: &str, dflt: f32) -> f32 {
 
 /// Approximate reverb tail (RT60, seconds) for a decay setting — the Hall
 /// algorithm's feedback law (g = 0.5 + 0.48·d) over an ~80 ms loop.
-fn decay_seconds_label(decay: f32) -> String {
+fn decay_t60_secs(decay: f32) -> f64 {
     let g = (0.5 + 0.48 * decay.clamp(0.0, 1.0) as f64).min(0.995);
-    let t60 = 0.08 * (0.001f64).ln() / g.ln();
+    0.08 * (0.001f64).ln() / g.ln()
+}
+
+fn decay_seconds_label(decay: f32) -> String {
+    let t60 = decay_t60_secs(decay);
     if t60 >= 20.0 {
         "20s+".to_string()
     } else if t60 >= 10.0 {
@@ -730,19 +734,38 @@ fn ReverbPanel(blocks: Vec<LiveBlock>) -> Element {
                     let color = VERB_COLORS[vi % 2];
                     let dim = b.bypassed;
                     let is_sel = sel() == vi;
-                    let tau = 0.08 + decay * size.max(0.1) * 0.9;
+                    // Real time axis (log, 0.1–20 s): the tail is the RT60
+                    // estimate rendered in dB (straight to −60 at t60), the
+                    // size opening the early bloom.
+                    let t60 = decay_t60_secs(decay) * (0.6 + 0.8 * size as f64);
+                    let x_of_t = |t: f64| -> f32 {
+                        let (t_min, t_max) = (0.1f64, 20.0f64);
+                        (4.0 + ((t.max(t_min) / t_min).ln() / (t_max / t_min).ln()).clamp(0.0, 1.0)
+                            * (W as f64 - 8.0)) as f32
+                    };
                     let mut top = String::from("M 4 28 ");
                     let mut bot = String::from("M 4 28 ");
-                    for px in 0..=80 {
-                        let t = px as f32 / 80.0;
-                        let wig = 1.0 + (t * 24.0).sin() * md * 0.18;
-                        let h = mix * (-t / tau).exp() * wig * 26.0;
-                        let x = 4.0 + t * (W - 8.0);
+                    for px in 0..=96 {
+                        let frac = px as f64 / 96.0;
+                        let t = 0.1 * (20.0f64 / 0.1).powf(frac);
+                        let wig = 1.0 + ((t * 12.0) as f32).sin() * md * 0.18;
+                        // dB-linear tail: 1 at t=0 → 0 at t60.
+                        let a = (1.0 - t / t60).max(0.0) as f32;
+                        let h = mix * a * wig * 26.0;
+                        let x = x_of_t(t);
                         top.push_str(&format!("L {x:.1} {:.1} ", 28.0 - h));
                         bot.push_str(&format!("L {x:.1} {:.1} ", 28.0 + h));
                     }
                     top.push_str("L 456 28 Z");
                     bot.push_str("L 456 28 Z");
+                    // Time markers along the tail scale.
+                    let markers: Vec<(f32, &'static str)> = [
+                        (0.5, ".5"), (1.0, "1"), (1.5, "1.5"), (2.0, "2"),
+                        (4.0, "4"), (6.0, "6"), (8.0, "8"), (16.0, "16"),
+                    ]
+                    .iter()
+                    .map(|(t, l)| (x_of_t(*t as f64), *l))
+                    .collect();
                     rsx! {
                         div {
                             key: "lane{vi}",
@@ -751,10 +774,21 @@ fn ReverbPanel(blocks: Vec<LiveBlock>) -> Element {
                             onclick: move |_| sel.set(vi),
                             svg { class: "w-full h-full", view_box: "0 0 460 56", preserve_aspect_ratio: "none",
                                 line { x1: "0", y1: "28", x2: "460", y2: "28", stroke: "#27272a", stroke_width: "1" }
+                                // Time scale: seconds gridlines + labels.
+                                for (mx, ml) in markers.iter() {
+                                    line { x1: "{mx:.1}", y1: "4", x2: "{mx:.1}", y2: "52",
+                                        stroke: "#ffffff", stroke_opacity: "0.06", stroke_width: "1" }
+                                    text { x: "{mx + 1.5:.1}", y: "52", fill: "#52525b", font_size: "7",
+                                        "{ml}" }
+                                }
                                 path { d: "{top}", fill: "{color}", fill_opacity: if dim { "0.08" } else { "0.25" },
                                     stroke: "{color}", stroke_opacity: if dim { "0.25" } else { "0.8" }, stroke_width: "1" }
                                 path { d: "{bot}", fill: "{color}", fill_opacity: if dim { "0.06" } else { "0.18" },
                                     stroke: "{color}", stroke_opacity: if dim { "0.2" } else { "0.55" }, stroke_width: "1" }
+                                // t60 tick: where the tail dies.
+                                line { x1: "{x_of_t(t60):.1}", y1: "10", x2: "{x_of_t(t60):.1}", y2: "46",
+                                    stroke: "{color}", stroke_opacity: if dim { "0.2" } else { "0.55" },
+                                    stroke_width: "1", stroke_dasharray: "2,2" }
                             }
                             div { class: "absolute top-0.5 left-1.5 flex items-baseline gap-1.5",
                                 span { style: "font-size:8px; font-weight:700; color:{color};", "{vi + 1}" }

@@ -9,6 +9,7 @@ description = "Reverb processing engine — plate, shimmer, hall/room algorithms
 [dependencies]
 audiocore-dsp = { workspace = true }
 crossbeam-channel = { workspace = true }
+pitch-dsp = { workspace = true }
 thiserror = { workspace = true }
 realfft = "3.4"
 symphonium = { version = "0.6", default-features = false, features = ["wav", "pcm", "fft-resampler"] }

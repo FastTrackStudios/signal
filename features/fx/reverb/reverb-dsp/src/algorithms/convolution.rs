@@ -39,11 +39,16 @@ use std::sync::Arc;
 use realfft::num_complex::Complex;
 use realfft::{ComplexToReal, RealFftPlanner, RealToComplex};
 
+use audiocore_dsp::dc_blocker::DcBlocker;
 use audiocore_dsp::envelope::EnvelopeFollower;
 use audiocore_dsp::smoothing::ParamSmoother;
 
-use crate::algorithm::{AlgorithmParams, ConvolutionModParams, IrSlot, ReverbAlgorithm};
+use crate::algorithm::{
+    AlgorithmParams, ConvolutionModParams, ImpulseParams, IrSlot, ReverbAlgorithm,
+};
 use crate::ir::prepared::{PreparedIr, PreparedIrPair, BLOCK, FFT_LEN, SPECTRUM_LEN};
+use crate::ir::transforms::IrTransforms;
+use crate::ir::IrAsset;
 use crate::primitives::modulated_allpass::ModulatedAllpass;
 use crate::primitives::modulated_delay::ModulatedDelay;
 use crate::primitives::one_pole::Lp1;
@@ -379,7 +384,31 @@ pub struct Convolution {
 
     // Option 3: morph gate state.
     b_engaged: bool,
+
+    // ── BigSky MX Impulse live params ─────────────────────────────────
+    impulse: ImpulseParams,
+    /// Shape actually baked into the active partitions, per slot.
+    applied_shape: [ImpulseParams; 2],
+    /// Slots whose partitions are stale vs `impulse`'s shaping params.
+    shape_dirty: [bool; 2],
+    /// Original (un-shaped) IRs per slot, kept for re-preparation.
+    originals: [Option<(Arc<Vec<f64>>, Arc<Vec<f64>>)>; 2],
+    /// Smoothed feedback amount (10 ms) + recirculation state.
+    fb_smoother: ParamSmoother,
+    fb_l: f64,
+    fb_r: f64,
+    fb_dc_l: DcBlocker,
+    fb_dc_r: DcBlocker,
 }
+
+#[inline]
+fn slot_idx(slot: IrSlot) -> usize {
+    match slot {
+        IrSlot::A => 0,
+        IrSlot::B => 1,
+    }
+}
+
 
 impl Convolution {
     pub fn new(sample_rate: f64) -> Self {
@@ -399,6 +428,10 @@ impl Convolution {
         let ir_r_b = synthesize_ir(sample_rate, 1.5, 0x0DDB17);
         conv_l_b.load_ir(&ir_l_b);
         conv_r_b.load_ir(&ir_r_b);
+        let originals = [
+            Some((Arc::new(ir_l), Arc::new(ir_r))),
+            Some((Arc::new(ir_l_b), Arc::new(ir_r_b))),
+        ];
 
         let mut env = EnvelopeFollower::new(0.0);
         env.set_times_ms(5.0, 200.0, sample_rate);
@@ -440,6 +473,20 @@ impl Convolution {
             damp_engaged: false,
             base_damp_cutoff: 2000.0 + (1.0 - 0.3) * 14000.0,
             b_engaged: false,
+            impulse: ImpulseParams::default(),
+            applied_shape: [ImpulseParams::default(); 2],
+            shape_dirty: [false; 2],
+            originals,
+            fb_smoother: {
+                let mut s = ParamSmoother::new(0.0);
+                s.set_time_ms(10.0, sample_rate);
+                s.set_epsilon(1e-5);
+                s
+            },
+            fb_l: 0.0,
+            fb_r: 0.0,
+            fb_dc_l: DcBlocker::new(),
+            fb_dc_r: DcBlocker::new(),
         }
     }
 
@@ -463,6 +510,9 @@ impl Convolution {
 
     /// Slot-addressed synchronous IR load (runs FFTs — background/setup
     /// use only).
+    ///
+    /// Per the BigSky MX manual, loading a new IR resets the Impulse
+    /// shaping params to defaults (the chain preserves mix).
     pub fn load_ir_stereo_slot(&mut self, ir_l: &[f64], ir_r: &[f64], slot: IrSlot) {
         let max = (self.sample_rate * MAX_IR_SECONDS) as usize;
         let cap_l = &ir_l[..ir_l.len().min(max)];
@@ -479,6 +529,19 @@ impl Convolution {
                 self.user_ir_loaded_b = true;
             }
         }
+        self.originals[slot_idx(slot)] =
+            Some((Arc::new(cap_l.to_vec()), Arc::new(cap_r.to_vec())));
+        self.on_new_r_loaded(slot);
+    }
+
+    /// New-IR bookkeeping: shaping params reset to defaults (manual
+    /// behavior), fresh partitions are the identity shape.
+    fn on_new_r_loaded(&mut self, slot: IrSlot) {
+        let fb = 0.0;
+        self.impulse = ImpulseParams::default();
+        self.fb_smoother.set_target(fb);
+        self.applied_shape[slot_idx(slot)] = ImpulseParams::default();
+        self.shape_dirty[slot_idx(slot)] = false;
     }
 
     /// Forget the user IRs (both slots) and resume synthetic-IR rebuilds
@@ -497,8 +560,16 @@ impl Convolution {
 
     /// Slot-addressed audio-thread-safe IR replacement. No allocations
     /// beyond the input-history resize (which only happens when the
-    /// partition count changes).
+    /// partition count changes). A `reshape`-tagged pair is routed to
+    /// [`Self::swap_reshaped`] (no param reset); a fresh load resets the
+    /// impulse shaping params per the MX manual and retains the raw IR
+    /// (when carried) as the re-shape original.
     pub fn swap_prepared_pair_slot(&mut self, pair: PreparedIrPair, slot: IrSlot) {
+        if pair.reshape {
+            self.swap_reshaped(pair, slot);
+            return;
+        }
+        let raw = pair.raw.clone();
         match slot {
             IrSlot::A => {
                 self.conv_l.swap_prepared(pair.left);
@@ -510,6 +581,80 @@ impl Convolution {
                 self.conv_r_b.swap_prepared(pair.right);
                 self.user_ir_loaded_b = true;
             }
+        }
+        if let Some(raw) = raw {
+            self.originals[slot_idx(slot)] = Some(raw);
+        } else {
+            // No raw retained (direct PreparedIrPair::build) — shaping
+            // can't re-derive from this load.
+            self.originals[slot_idx(slot)] = None;
+        }
+        self.on_new_r_loaded(slot);
+    }
+
+    /// Return leg of the re-preparation pipeline: swap partitions only,
+    /// leaving impulse params and user-IR flags untouched.
+    fn swap_reshaped(&mut self, pair: PreparedIrPair, slot: IrSlot) {
+        match slot {
+            IrSlot::A => {
+                self.conv_l.swap_prepared(pair.left);
+                self.conv_r.swap_prepared(pair.right);
+            }
+            IrSlot::B => {
+                self.conv_l_b.swap_prepared(pair.left);
+                self.conv_r_b.swap_prepared(pair.right);
+            }
+        }
+    }
+
+    /// Impulse shaping params currently targeted (not necessarily baked
+    /// into the partitions yet — re-preparation is asynchronous).
+    pub fn impulse_params(&self) -> ImpulseParams {
+        self.impulse
+    }
+
+    /// Push Impulse params. Feedback applies at the next tick (10 ms
+    /// smoothed; `snap` lands it instantly); shaping changes mark the
+    /// affected slots dirty for background re-preparation.
+    pub fn set_impulse(&mut self, p: &ImpulseParams, snap: bool) {
+        let fb = p.feedback.clamp(0.0, 1.0);
+        if snap {
+            self.fb_smoother.set_immediate(fb);
+        } else {
+            self.fb_smoother.set_target(fb);
+        }
+        let shape_changed_a = p.shape_key() != self.applied_shape[0].shape_key();
+        let shape_changed_b = p.shape_key() != self.applied_shape[1].shape_key();
+        self.impulse = *p;
+        self.shape_dirty[0] = shape_changed_a && self.originals[0].is_some();
+        self.shape_dirty[1] = shape_changed_b && self.originals[1].is_some();
+    }
+
+    /// Synchronous re-preparation for headless/test use. Applies the
+    /// current shaping params to both slots' originals and reloads the
+    /// partitions in place. Runs FFTs on the calling thread — NOT
+    /// RT-safe; real-time hosts use `ImpulseReshaper` instead.
+    pub fn reprepare_now(&mut self) {
+        for slot in [IrSlot::A, IrSlot::B] {
+            let idx = slot_idx(slot);
+            let Some((l, r)) = self.originals[idx].clone() else {
+                continue;
+            };
+            let t = IrTransforms::from_impulse(&self.impulse);
+            let asset = IrAsset::from_stereo((*l).clone(), (*r).clone(), self.sample_rate);
+            let (sl, sr) = t.apply(&asset);
+            match slot {
+                IrSlot::A => {
+                    self.conv_l.load_ir(&sl);
+                    self.conv_r.load_ir(&sr);
+                }
+                IrSlot::B => {
+                    self.conv_l_b.load_ir(&sl);
+                    self.conv_r_b.load_ir(&sr);
+                }
+            }
+            self.applied_shape[idx] = self.impulse;
+            self.shape_dirty[idx] = false;
         }
     }
 
@@ -546,12 +691,16 @@ impl Convolution {
             let ir_r = synthesize_ir(self.sample_rate, seconds, 0xBADBEEF);
             self.conv_l.load_ir(&ir_l);
             self.conv_r.load_ir(&ir_r);
+            self.originals[0] = Some((Arc::new(ir_l), Arc::new(ir_r)));
+            self.applied_shape[0] = ImpulseParams::default();
         }
         if !self.user_ir_loaded_b {
             let ir_l = synthesize_ir(self.sample_rate, seconds, 0x5EED0B);
             let ir_r = synthesize_ir(self.sample_rate, seconds, 0x0DDB17);
             self.conv_l_b.load_ir(&ir_l);
             self.conv_r_b.load_ir(&ir_r);
+            self.originals[1] = Some((Arc::new(ir_l), Arc::new(ir_r)));
+            self.applied_shape[1] = ImpulseParams::default();
         }
         self.ir_seconds = seconds;
     }
@@ -640,6 +789,10 @@ impl ReverbAlgorithm for Convolution {
         self.env.reset(0.0);
         self.lfo_phase = 0.0;
         self.ctrl_countdown = 0;
+        self.fb_l = 0.0;
+        self.fb_r = 0.0;
+        self.fb_dc_l.reset();
+        self.fb_dc_r.reset();
     }
 
     fn set_sample_rate(&mut self, sample_rate: f64) {
@@ -657,6 +810,12 @@ impl ReverbAlgorithm for Convolution {
         self.motion = Self::build_motion(sample_rate);
         self.env.set_times_ms(5.0, 200.0, sample_rate);
         self.sm.set_sample_rate(sample_rate);
+        self.fb_smoother.set_time_ms(10.0, sample_rate);
+        // Partitions were rebuilt from originals at identity shape; a
+        // non-identity shape needs re-baking.
+        if !self.impulse.shape_is_identity() {
+            self.shape_dirty = [self.originals[0].is_some(), self.originals[1].is_some()];
+        }
         // Reconfiguration point — land on the targets instantly.
         let p = self.mod_params;
         self.set_mod_params(&p, true);
@@ -712,6 +871,33 @@ impl ReverbAlgorithm for Convolution {
         true
     }
 
+    fn set_impulse_params(&mut self, params: &ImpulseParams, snap: bool) -> bool {
+        self.set_impulse(params, snap);
+        true
+    }
+
+    fn impulse_reshape_source(
+        &mut self,
+        slot: IrSlot,
+    ) -> Option<(Arc<Vec<f64>>, Arc<Vec<f64>>)> {
+        let idx = slot_idx(slot);
+        if !self.shape_dirty[idx] {
+            return None;
+        }
+        let src = self.originals[idx].clone()?;
+        // Optimistic: mark the current shape as applied so we don't
+        // resubmit every block. If the job is lost, the next param
+        // change re-dirties the slot.
+        self.applied_shape[idx] = self.impulse;
+        self.shape_dirty[idx] = false;
+        Some(src)
+    }
+
+    fn swap_reshaped_ir(&mut self, pair: PreparedIrPair, slot: IrSlot) -> bool {
+        self.swap_reshaped(pair, slot);
+        true
+    }
+
     #[inline]
     fn tick(&mut self, left: f64, right: f64) -> (f64, f64) {
         // ── Modulation bookkeeping ────────────────────────────────────
@@ -739,6 +925,23 @@ impl ReverbAlgorithm for Convolution {
             self.ctrl_countdown = CTRL_BLOCK;
         }
         self.ctrl_countdown -= 1;
+
+        // ── Impulse feedback: wet recirculated into the pre-delay ────
+        // (BigSky MX Impulse "Feedback" — character depends on the
+        // pre-delay time). DC-blocked and soft-clamped so fb = 1.0
+        // rings without running away; internal loop gain caps at 0.85.
+        let fb = self.fb_smoother.tick();
+        let (left, right) = if fb > GATE_EPS {
+            let g = fb * 0.85;
+            let inj_l = self.fb_dc_l.tick(self.fb_l) * g;
+            let inj_r = self.fb_dc_r.tick(self.fb_r) * g;
+            (
+                left + inj_l / (1.0 + inj_l.abs()),
+                right + inj_r / (1.0 + inj_r.abs()),
+            )
+        } else {
+            (left, right)
+        };
 
         // ── Option 2: modulatable predelay before the convolver ──────
         let (in_l, in_r) = if self.predelay_engaged {
@@ -836,6 +1039,11 @@ impl ReverbAlgorithm for Convolution {
         } else {
             (out_l, out_r)
         };
+
+        // Capture post-morph wet for the impulse feedback loop
+        // (pre-motion, per the recirculation point in the MX design).
+        self.fb_l = wet_l;
+        self.fb_r = wet_r;
 
         // ── Option 1: motion stage ────────────────────────────────────
         if self.motion_engaged {

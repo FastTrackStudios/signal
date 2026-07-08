@@ -459,22 +459,81 @@ const REVERB_PARAMS: &[ParamSpec] = &[
     ParamSpec { id: 0, name: "mix", min: 0.0, max: 1.0, default: 0.08 },
     ParamSpec { id: 1, name: "decay", min: 0.0, max: 1.0, default: 0.45 },
     ParamSpec { id: 2, name: "size", min: 0.0, max: 1.0, default: 0.5 },
-    // Algorithm index (see reverb::AlgorithmType::ALL — Room, Hall, Plate,
-    // Spring, Cloud, Bloom, Shimmer, Chorale, Magneto, NonLinear, Swell,
-    // Reflections, Velvet, FreeVerb, Convolution).
-    ParamSpec { id: 3, name: "algorithm", min: 0.0, max: 14.0, default: 1.0 },
-    ParamSpec { id: 4, name: "modulation", min: 0.0, max: 1.0, default: 0.2 },
+    // BigSky MX dual-reverb block: routing (0 Single / 1 Series 1>2 /
+    // 2 Series 2>1 / 3 Parallel / 4 Split / 5 Split Swap) + reverb B.
+    // Ids 0-2 keep addressing reverb A.
+    ParamSpec { id: 3, name: "routing", min: 0.0, max: 5.0, default: 0.0 },
+    ParamSpec { id: 4, name: "algo_b", min: 0.0, max: 14.0, default: 2.0 },
+    ParamSpec { id: 5, name: "decay_b", min: 0.0, max: 1.0, default: 0.45 },
+    ParamSpec { id: 6, name: "mix_b", min: 0.0, max: 0.10, default: 0.08 },
+    // Per-slot wet pan (-1..+1) and wet tremolo (shared A knob set).
+    ParamSpec { id: 7, name: "pan_a", min: -1.0, max: 1.0, default: 0.0 },
+    ParamSpec { id: 8, name: "pan_b", min: -1.0, max: 1.0, default: 0.0 },
+    ParamSpec { id: 9, name: "trem_rate", min: 0.1, max: 12.0, default: 4.0 },
+    ParamSpec { id: 10, name: "trem_depth", min: 0.0, max: 1.0, default: 0.0 },
+    // BigSky MX Impulse live params (chain A; active with the
+    // Convolution algorithm). tail: 0 = Envelope, 1 = Gate;
+    // direction: 0 = Forward, 1 = Reverse.
+    ParamSpec { id: 11, name: "imp_decay", min: 0.01, max: 1.0, default: 1.0 },
+    ParamSpec { id: 12, name: "imp_tail", min: 0.0, max: 1.0, default: 0.0 },
+    ParamSpec { id: 13, name: "imp_attack", min: 0.0, max: 1.0, default: 0.0 },
+    ParamSpec { id: 14, name: "imp_stretch", min: 0.25, max: 4.0, default: 1.0 },
+    ParamSpec { id: 15, name: "imp_direction", min: 0.0, max: 1.0, default: 0.0 },
+    ParamSpec { id: 16, name: "imp_feedback", min: 0.0, max: 1.0, default: 0.0 },
+    // BigSky MX Shimmer (chain A): two shift voices in semitones,
+    // shared amount, feedback mode (0 Input / 1 Regenerative /
+    // 2 Input+Regen). shim_voice2: 0 = single voice, 1 = dual.
+    ParamSpec { id: 17, name: "shim_shift1", min: -12.0, max: 12.0, default: 12.0 },
+    ParamSpec { id: 18, name: "shim_shift2", min: -12.0, max: 12.0, default: 7.0 },
+    ParamSpec { id: 19, name: "shim_voice2", min: 0.0, max: 1.0, default: 0.0 },
+    ParamSpec { id: 20, name: "shim_amount", min: 0.0, max: 1.0, default: 0.35 },
+    ParamSpec { id: 21, name: "shim_fb_mode", min: 0.0, max: 2.0, default: 1.0 },
+    // BigSky MX Magneto: taps alternate hard L/R.
+    ParamSpec { id: 22, name: "mag_ping_pong", min: 0.0, max: 1.0, default: 0.0 },
+    // BigSky MX NonLinear: Chop trem on the decay, explicit gate speed,
+    // separate Late reverb stage.
+    ParamSpec { id: 23, name: "nl_chop_rate", min: 0.1, max: 15.0, default: 4.0 },
+    ParamSpec { id: 24, name: "nl_chop_depth", min: 0.0, max: 1.0, default: 0.0 },
+    ParamSpec { id: 25, name: "nl_gate_speed", min: 0.0, max: 1.0, default: 1.0 },
+    ParamSpec { id: 26, name: "nl_late_speed", min: 0.0, max: 1.0, default: 0.5 },
+    ParamSpec { id: 27, name: "nl_late_decay", min: 0.0, max: 1.0, default: 0.5 },
+    ParamSpec { id: 28, name: "nl_late_level", min: 0.0, max: 1.0, default: 0.0 },
+    // BigSky MX input-analysis generators: Cloud Ensemble (pitch-tracked
+    // synthetic string layer), Bloom Harmonics (overtone generator on
+    // the trail), Chorale Choir level / Voice (0 Tenor / 1 Soprano) /
+    // Mod (per-voice randomization).
+    ParamSpec { id: 29, name: "cloud_ensemble", min: 0.0, max: 1.0, default: 0.0 },
+    ParamSpec { id: 30, name: "bloom_harmonics", min: 0.0, max: 1.0, default: 0.0 },
+    ParamSpec { id: 31, name: "cho_choir", min: 0.0, max: 1.0, default: 0.3 },
+    ParamSpec { id: 32, name: "cho_voice", min: 0.0, max: 1.0, default: 0.0 },
+    ParamSpec { id: 33, name: "cho_mod", min: 0.0, max: 1.0, default: 0.0 },
+    // BigSky MX voices + Hall extras + named-size select (chain A).
+    // voice: 0 MX / 1 Classic. hall_swell_type: 0 wet / 1 wet+dry.
+    // size_sel maps named sizes (Hall Concert/Arena, Room Studio/Club,
+    // else Small/Medium/Large) — applies when set.
+    ParamSpec { id: 34, name: "voice", min: 0.0, max: 1.0, default: 0.0 },
+    ParamSpec { id: 35, name: "hall_mid", min: -6.0, max: 6.0, default: 0.0 },
+    ParamSpec { id: 36, name: "hall_swell_rise", min: 0.0, max: 1.0, default: 0.0 },
+    ParamSpec { id: 37, name: "hall_swell_type", min: 0.0, max: 1.0, default: 0.0 },
+    ParamSpec { id: 38, name: "size_sel", min: 0.0, max: 2.0, default: 0.0 },
+    // Chain-A tone/space controls (kept from the control-surface work,
+    // renumbered above the MX block).
+    // Algorithm index (see reverb::AlgorithmType::ALL).
+    ParamSpec { id: 39, name: "algorithm", min: 0.0, max: 14.0, default: 1.0 },
+    ParamSpec { id: 40, name: "modulation", min: 0.0, max: 1.0, default: 0.2 },
     // High-frequency damping — the low-pass character control.
-    ParamSpec { id: 5, name: "damping", min: 0.0, max: 1.0, default: 0.3 },
+    ParamSpec { id: 41, name: "damping", min: 0.0, max: 1.0, default: 0.3 },
     // Tone tilt (−1 dark … +1 bright) — the high-pass-ish control.
-    ParamSpec { id: 6, name: "tone", min: -1.0, max: 1.0, default: 0.0 },
-    ParamSpec { id: 7, name: "predelay", min: 0.0, max: 200.0, default: 0.0 },
+    ParamSpec { id: 42, name: "tone", min: -1.0, max: 1.0, default: 0.0 },
+    ParamSpec { id: 43, name: "predelay", min: 0.0, max: 200.0, default: 0.0 },
 ];
 
-/// Native Reverb block — wraps [`reverb::ReverbChain`]. Defaults to a subtle
-/// Hall (low mix) so it sits under the tone rather than washing it out.
+/// Native Reverb block — wraps [`reverb::DualReverb`] (two full chains +
+/// BigSky MX dual routing; `Single` = chain A only, bit-compatible with
+/// the previous single-chain wrapper). Defaults to a subtle Hall (low
+/// mix) so it sits under the tone rather than washing it out.
 pub struct NativeReverb {
-    rev: reverb::ReverbChain,
+    rev: reverb::DualReverb,
     prepared: bool,
     scratch_l: Vec<f64>,
     scratch_r: Vec<f64>,
@@ -482,12 +541,18 @@ pub struct NativeReverb {
 
 impl NativeReverb {
     pub fn new(_sample_rate: f64) -> Self {
-        let mut rev = reverb::ReverbChain::new();
-        rev.set_algorithm(reverb::AlgorithmType::Hall);
-        rev.mix = 0.08;
-        rev.params.decay = 0.45;
-        rev.params.size = 0.5;
-        rev.update_params();
+        let mut rev = reverb::DualReverb::new();
+        rev.a.set_algorithm(reverb::AlgorithmType::Hall);
+        rev.a.mix = 0.08;
+        rev.a.params.decay = 0.45;
+        rev.a.params.size = 0.5;
+        rev.a.update_params();
+        // B seeds as a plate so engaging a dual routing is immediately
+        // audible before any params are set.
+        rev.b.set_algorithm(reverb::AlgorithmType::Plate);
+        rev.b.mix = 0.08;
+        rev.b.params.decay = 0.45;
+        rev.b.update_params();
         Self {
             rev,
             prepared: false,
@@ -497,39 +562,199 @@ impl NativeReverb {
     }
 
     fn set(&mut self, id: u32, v: f64) {
+        // Ids 0-2 address reverb A; 3+ are the dual-routing block.
         match id {
-            0 => self.rev.mix = v.min(TIME_MIX_MAX),
+            0 => self.rev.a.mix = v.min(TIME_MIX_MAX),
             1 => {
-                self.rev.params.decay = v;
-                self.rev.update_params();
+                self.rev.a.params.decay = v;
+                self.rev.a.update_params();
             }
             2 => {
-                self.rev.params.size = v;
-                self.rev.update_params();
+                self.rev.a.params.size = v;
+                self.rev.a.update_params();
             }
             3 => {
-                self.rev
-                    .set_algorithm(reverb::AlgorithmType::from_index(v.round().max(0.0) as usize));
-                self.rev.update_params();
+                self.rev.routing =
+                    reverb::DualRouting::from_index(v.round().max(0.0) as usize)
             }
-            4 => {
-                self.rev.params.modulation = v;
-                self.rev.update_params();
-            }
+            4 => self
+                .rev
+                .b
+                .set_algorithm(reverb::AlgorithmType::from_index(
+                    v.round().max(0.0) as usize,
+                )),
             5 => {
-                self.rev.params.damping = v;
-                self.rev.update_params();
+                self.rev.b.params.decay = v;
+                self.rev.b.update_params();
             }
-            6 => {
-                self.rev.params.tone = v;
-                self.rev.update_params();
+            6 => self.rev.b.mix = v.min(TIME_MIX_MAX),
+            7 => self.rev.a.pan = v.clamp(-1.0, 1.0),
+            8 => self.rev.b.pan = v.clamp(-1.0, 1.0),
+            9 => {
+                self.rev.a.trem_rate_hz = v;
+                self.rev.b.trem_rate_hz = v;
             }
-            7 => self.rev.predelay_ms = v,
+            10 => {
+                self.rev.a.trem_depth = v.clamp(0.0, 1.0);
+                self.rev.b.trem_depth = v.clamp(0.0, 1.0);
+            }
+            11 => {
+                self.rev.a.impulse.decay = v.clamp(0.01, 1.0);
+                self.rev.a.update_params();
+            }
+            12 => {
+                self.rev.a.impulse.tail = if v >= 0.5 {
+                    reverb::ImpulseTail::Gate
+                } else {
+                    reverb::ImpulseTail::Envelope
+                };
+                self.rev.a.update_params();
+            }
+            13 => {
+                self.rev.a.impulse.attack = v.clamp(0.0, 1.0);
+                self.rev.a.update_params();
+            }
+            14 => {
+                self.rev.a.impulse.stretch = v.clamp(0.25, 4.0);
+                self.rev.a.update_params();
+            }
+            15 => {
+                self.rev.a.impulse.direction = if v >= 0.5 {
+                    reverb::ImpulseDirection::Reverse
+                } else {
+                    reverb::ImpulseDirection::Forward
+                };
+                self.rev.a.update_params();
+            }
+            16 => {
+                self.rev.a.impulse.feedback = v.clamp(0.0, 1.0);
+                self.rev.a.update_params();
+            }
+            17 => {
+                self.rev.a.shimmer.shift1_semitones = Some(v.clamp(-12.0, 12.0));
+                self.rev.a.update_params();
+            }
+            18 => {
+                self.rev.a.shimmer.shift2_semitones = Some(v.clamp(-12.0, 12.0));
+                self.rev.a.update_params();
+            }
+            19 => {
+                self.rev.a.shimmer.voice2 = v >= 0.5;
+                self.rev.a.update_params();
+            }
+            20 => {
+                self.rev.a.shimmer.amount = Some(v.clamp(0.0, 1.0));
+                self.rev.a.update_params();
+            }
+            21 => {
+                self.rev.a.shimmer.feedback_mode =
+                    reverb::ShimmerFeedbackMode::from_index(v.round().max(0.0) as usize);
+                self.rev.a.update_params();
+            }
+            22 => {
+                self.rev.a.magneto.ping_pong = v >= 0.5;
+                self.rev.a.update_params();
+            }
+            23 => {
+                self.rev.a.nonlinear.chop_rate_hz = v.clamp(0.1, 15.0);
+                self.rev.a.update_params();
+            }
+            24 => {
+                self.rev.a.nonlinear.chop_depth = v.clamp(0.0, 1.0);
+                self.rev.a.update_params();
+            }
+            25 => {
+                self.rev.a.nonlinear.gate_speed = v.clamp(0.0, 1.0);
+                self.rev.a.update_params();
+            }
+            26 => {
+                self.rev.a.nonlinear.late_speed = v.clamp(0.0, 1.0);
+                self.rev.a.update_params();
+            }
+            27 => {
+                self.rev.a.nonlinear.late_decay = v.clamp(0.0, 1.0);
+                self.rev.a.update_params();
+            }
+            28 => {
+                self.rev.a.nonlinear.late_level = v.clamp(0.0, 1.0);
+                self.rev.a.update_params();
+            }
+            29 => {
+                self.rev.a.cloud.ensemble = v.clamp(0.0, 1.0);
+                self.rev.a.update_params();
+            }
+            30 => {
+                self.rev.a.bloom.harmonics = v.clamp(0.0, 1.0);
+                self.rev.a.update_params();
+            }
+            31 => {
+                self.rev.a.chorale.choir_level = Some(v.clamp(0.0, 1.0));
+                self.rev.a.update_params();
+            }
+            32 => {
+                self.rev.a.chorale.voice = if v >= 0.5 {
+                    reverb::ChoirVoice::Soprano
+                } else {
+                    reverb::ChoirVoice::Tenor
+                };
+                self.rev.a.update_params();
+            }
+            33 => {
+                self.rev.a.chorale.mod_amount = v.clamp(0.0, 1.0);
+                self.rev.a.update_params();
+            }
+            34 => {
+                self.rev.a.voice = if v >= 0.5 {
+                    reverb::ReverbVoice::Classic
+                } else {
+                    reverb::ReverbVoice::Mx
+                };
+                self.rev.a.update_params();
+            }
+            35 => {
+                self.rev.a.hall.mid_db = v.clamp(-6.0, 6.0);
+                self.rev.a.update_params();
+            }
+            36 => {
+                self.rev.a.hall.swell_rise = v.clamp(0.0, 1.0);
+                self.rev.a.update_params();
+            }
+            37 => {
+                self.rev.a.hall.swell_type = if v >= 0.5 {
+                    reverb::SwellType::WetPlusDry
+                } else {
+                    reverb::SwellType::Wet
+                };
+                self.rev.a.update_params();
+            }
+            38 => {
+                self.rev.a.set_size_index(v.round().max(0.0) as usize);
+            }
+            // Chain-A tone/space controls (39+ — see REVERB_PARAMS).
+            39 => {
+                self.rev
+                    .a
+                    .set_algorithm(reverb::AlgorithmType::from_index(v.round().max(0.0) as usize));
+                self.rev.a.update_params();
+            }
+            40 => {
+                self.rev.a.params.modulation = v;
+                self.rev.a.update_params();
+            }
+            41 => {
+                self.rev.a.params.damping = v;
+                self.rev.a.update_params();
+            }
+            42 => {
+                self.rev.a.params.tone = v;
+                self.rev.a.update_params();
+            }
+            43 => self.rev.a.predelay_ms = v,
             _ => {}
         }
     }
 
-    /// Apply a build-time parameter by name (see `REVERB_PARAMS`).
+    /// Apply a build-time parameter by name (see [`REVERB_PARAMS`]).
     pub fn set_named(&mut self, name: &str, value: f64) {
         if let Some(id) = param_id(REVERB_PARAMS, name) {
             self.set(id, value);
