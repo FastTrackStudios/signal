@@ -267,11 +267,76 @@ impl PluginInstance for NativeEq {
 
 // ── Compressor ─────────────────────────────────────────────────────────────
 
+/// Live compressor telemetry — the rolling waveform + GR the FTS-Comp
+/// editor shows. A single global ring: only the *active* chain's comp
+/// processes audio, so whichever instance is running owns the meters
+/// (multiband/per-instance telemetry comes with real per-block channels).
+pub mod comp_meter {
+    use core::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
+
+    /// Ring length — 960 slots at ~240 Hz ≈ a 4-second window (matches the
+    /// FTS-Comp editor).
+    pub const WAVE_LEN: usize = 960;
+    /// Samples between ring writes (~240 Hz at 48 kHz).
+    pub const WAVE_INTERVAL: usize = 200;
+    /// GR normalization for the ring (dB full scale).
+    pub const GR_FS_DB: f32 = 30.0;
+
+    static WAVE_IN: [AtomicU32; WAVE_LEN] = [const { AtomicU32::new(0) }; WAVE_LEN];
+    static WAVE_GR: [AtomicU32; WAVE_LEN] = [const { AtomicU32::new(0) }; WAVE_LEN];
+    static POS: AtomicUsize = AtomicUsize::new(0);
+    static GR_DB: AtomicU32 = AtomicU32::new(0);
+
+    pub(crate) fn push(input_peak: f32, gr_norm: f32) {
+        let pos = POS.load(Ordering::Relaxed) % WAVE_LEN;
+        WAVE_IN[pos].store(input_peak.to_bits(), Ordering::Relaxed);
+        WAVE_GR[pos].store(gr_norm.to_bits(), Ordering::Relaxed);
+        POS.store(pos + 1, Ordering::Relaxed);
+    }
+
+    pub(crate) fn set_gr_db(gr: f32) {
+        GR_DB.store(gr.to_bits(), Ordering::Relaxed);
+    }
+
+    /// Current gain reduction (dB, positive = reducing) — straight from the
+    /// DSP's detector.
+    pub fn gr_db() -> f32 {
+        f32::from_bits(GR_DB.load(Ordering::Relaxed))
+    }
+
+    /// Snapshot the ring in time order (oldest → newest), downsampled by
+    /// `stride`. Returns `(input_peaks 0..1, gr 0..1)`.
+    pub fn wave_snapshot(stride: usize) -> (Vec<f32>, Vec<f32>) {
+        let stride = stride.max(1);
+        let pos = POS.load(Ordering::Relaxed) % WAVE_LEN;
+        let mut input = Vec::with_capacity(WAVE_LEN / stride);
+        let mut gr = Vec::with_capacity(WAVE_LEN / stride);
+        let mut i = 0;
+        while i < WAVE_LEN {
+            // Peak within the stride window so transients survive.
+            let (mut pi, mut pg) = (0.0f32, 0.0f32);
+            for j in 0..stride.min(WAVE_LEN - i) {
+                let idx = (pos + i + j) % WAVE_LEN;
+                pi = pi.max(f32::from_bits(WAVE_IN[idx].load(Ordering::Relaxed)));
+                pg = pg.max(f32::from_bits(WAVE_GR[idx].load(Ordering::Relaxed)));
+            }
+            input.push(pi);
+            gr.push(pg);
+            i += stride;
+        }
+        (input, gr)
+    }
+}
+
 const COMP_PARAMS: &[ParamSpec] = &[
     ParamSpec { id: 0, name: "threshold", min: -60.0, max: 0.0, default: -18.0 },
     ParamSpec { id: 1, name: "ratio", min: 1.0, max: 20.0, default: 4.0 },
     ParamSpec { id: 2, name: "attack", min: 0.1, max: 200.0, default: 10.0 },
     ParamSpec { id: 3, name: "release", min: 5.0, max: 1000.0, default: 120.0 },
+    ParamSpec { id: 4, name: "knee", min: 0.0, max: 24.0, default: 6.0 },
+    ParamSpec { id: 5, name: "range", min: 0.0, max: 60.0, default: 60.0 },
+    ParamSpec { id: 6, name: "fold", min: 0.0, max: 1.0, default: 0.0 },
+    ParamSpec { id: 7, name: "style", min: 0.0, max: 4.0, default: 0.0 },
 ];
 
 /// Native Compressor block — wraps [`comp::ProC3Compressor`] (ProC3-style).
@@ -279,6 +344,10 @@ const COMP_PARAMS: &[ParamSpec] = &[
 pub struct NativeComp {
     comp: comp::ProC3Compressor,
     prepared: bool,
+    // Waveform decimation state (comp_meter ring).
+    wave_counter: usize,
+    wave_peak: f32,
+    wave_gr_peak: f32,
 }
 
 impl NativeComp {
@@ -288,7 +357,13 @@ impl NativeComp {
         comp.set_ratio(4.0);
         comp.set_attack_ms(10.0);
         comp.set_release_ms(120.0);
-        Self { comp, prepared: false }
+        Self {
+            comp,
+            prepared: false,
+            wave_counter: 0,
+            wave_peak: 0.0,
+            wave_gr_peak: 0.0,
+        }
     }
 
     fn set(&mut self, id: u32, v: f64) {
@@ -297,6 +372,10 @@ impl NativeComp {
             1 => self.comp.set_ratio(v),
             2 => self.comp.set_attack_ms(v),
             3 => self.comp.set_release_ms(v),
+            4 => self.comp.set_knee(v),
+            5 => self.comp.set_range_db(v),
+            6 => self.comp.set_fold(v),
+            7 => self.comp.set_style(v as i32),
             _ => {}
         }
     }
@@ -352,6 +431,18 @@ impl PluginInstance for NativeComp {
         for i in 0..n {
             out_l[i] = self.comp.process(in_l[i] as f64, 0) as f32;
             out_r[i] = self.comp.process(in_r[i] as f64, 1) as f32;
+            // Telemetry: rolling input peak + GR ring (see `comp_meter`).
+            let in_peak = in_l[i].abs().max(in_r[i].abs());
+            self.wave_peak = self.wave_peak.max(in_peak);
+            self.wave_counter += 1;
+            if self.wave_counter >= comp_meter::WAVE_INTERVAL {
+                let gr = self.comp.gain_reduction_db() as f32;
+                self.wave_gr_peak = gr / comp_meter::GR_FS_DB;
+                comp_meter::push(self.wave_peak.min(1.0), self.wave_gr_peak.clamp(0.0, 1.0));
+                comp_meter::set_gr_db(gr);
+                self.wave_counter = 0;
+                self.wave_peak = 0.0;
+            }
         }
         Ok(())
     }

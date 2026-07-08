@@ -291,6 +291,8 @@ pub fn GuitarRigRemote() -> Element {
                     }
                 }
 
+                crate::control::MidiMonitorButton {}
+
                 Button {
                     variant: if audio_open() { ButtonVariant::Secondary } else { ButtonVariant::Ghost },
                     on_click: move |_| audio_open.toggle(),
@@ -397,9 +399,6 @@ pub fn GuitarRigRemote() -> Element {
                                     crate::control::ControlView {
                                         model: perf_now.clone(),
                                         state,
-                                        on_prev_song,
-                                        on_next_song,
-                                        on_tap_tempo,
                                         on_open_tuner: Callback::new(move |_: ()| tuner_open.set(true)),
                                     }
                                 }

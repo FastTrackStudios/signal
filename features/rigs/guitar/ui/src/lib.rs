@@ -7,9 +7,11 @@
 //! `apps/web` shell.
 
 mod chain;
+mod comp_surface;
 mod control;
 mod eq_surface;
 mod grid;
+mod knob;
 mod icons;
 mod meters;
 mod perform;
@@ -19,7 +21,9 @@ mod sidebars;
 mod state;
 
 pub use chain::ChainStrip;
-pub use control::{ControlView, ZoomPanel};
+pub use comp_surface::CompSurface;
+pub use control::{ControlView, MidiMonitorButton, ZoomPanel};
+pub use knob::{Knob, KnobSize};
 pub use eq_surface::EqProSurface;
 pub use grid::RigGraph;
 pub use icons::module_icon;

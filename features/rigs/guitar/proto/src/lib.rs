@@ -69,9 +69,8 @@ pub struct RigStatus {
     pub output_peak: f32,
     /// Display name of the active patch, if any.
     pub active_patch: Option<String>,
-    /// Compressor gain reduction (dB, positive = reducing) — estimated from
-    /// the live input level and the comp curve until per-block telemetry
-    /// lands.
+    /// Compressor gain reduction (dB, positive = reducing) — real, from the
+    /// DSP's detector.
     pub comp_gr_db: f32,
 }
 
@@ -119,6 +118,8 @@ pub struct PerformanceModel {
     pub section_index: u32,
     /// Headphone-cue module state.
     pub headphone: HeadphoneState,
+    /// Master output trim (dB) — the FOH fader next to the output meter.
+    pub master_trim_db: f32,
     /// Monotonic state version — bumps on every mutation, including ones
     /// (patch repoints, preset edits) that don't change the fields above,
     /// so clients can refetch derived data (patches/presets) on change.
@@ -247,6 +248,9 @@ pub mod rig {
         /// Input spectrum, ~15 Hz: dB magnitudes (−90..0) over log-spaced
         /// bins 20 Hz–20 kHz.
         Spectrum(Vec<f32>),
+        /// Compressor rolling telemetry, ~15 Hz: `(input_peaks, gain_reduction)`
+        /// — both 0..1, oldest → newest, a ~4-second window.
+        CompWave(Vec<f32>, Vec<f32>),
     }
 
     #[architect::rpc]
@@ -298,6 +302,8 @@ pub mod rig {
         fn set_headphone(&self, volume: f32, self_mix: f32);
         /// Mute/unmute the main output (headphone cue survives).
         fn toggle_main_mute(&self);
+        /// Master output trim in dB (how loud the rig is for FOH).
+        fn set_master_trim(&self, db: f32);
         /// The most recent MIDI events seen by the core (newest last),
         /// formatted for the monitor.
         fn midi_recent(&self) -> Vec<String>;

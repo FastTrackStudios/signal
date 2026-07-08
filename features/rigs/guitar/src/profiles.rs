@@ -186,13 +186,25 @@ pub fn build_profile(def: &ProfileDef) -> RigProfile {
             // Volume pedal (clean gain, unity default) — the Control view's
             // left pedal drives it.
             .with_block(on_fx(BlockType::Volume, "Volume Pedal", &[("gain_db", "0")]))
-            // Full six-band pre-amp EQ (flat by default) — the Control
-            // view's EQ surface drives it.
-            .with_block(RigBlock::of_type(BlockType::Eq).named("Pre EQ"))
             .with_block(RigBlock::nam(path).named("Amp L"))
-            // Post-amp utility pair: noise gate + the Boost gain block the
-            // boost footswitch drives (0 dB until the pedal engages).
+            // Post-amp shaping, part of the Amp module: gate into the amp
+            // EQ — both dialed against the amp's character.
             .with_block(on_fx(BlockType::Gate, "Gate", &[("threshold", "-50")]))
+            // The amp EQ ships with the electric-guitar "magic frequencies"
+            // preset (eq-ui cheatsheet zones): low cut at 80 Hz, then flat
+            // named bells on body / character / honk / presence.
+            .with_block(on_fx(
+                BlockType::Eq,
+                "Amp EQ",
+                &[
+                    ("b1_used", "1"), ("b1_on", "1"), ("b1_freq", "80"), ("b1_shape", "3"),
+                    ("b2_used", "1"), ("b2_on", "1"), ("b2_freq", "212"),
+                    ("b3_used", "1"), ("b3_on", "1"), ("b3_freq", "560"),
+                    ("b4_used", "1"), ("b4_on", "1"), ("b4_freq", "1400"),
+                    ("b5_used", "1"), ("b5_on", "1"), ("b5_freq", "5500"),
+                ],
+            ))
+            // Boost gain block the footswitch drives (0 dB until engaged).
             .with_block(on_fx(BlockType::Volume, "Boost", &[("gain_db", "0")]))
             // Modulation + Motion modules — all off by default.
             .with_block(off(BlockType::Chorus, "Chorus"))

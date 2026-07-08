@@ -82,8 +82,8 @@ pub struct GuitarRigBackend {
     section_index: Arc<Mutex<usize>>,
     /// Headphone-cue module state (volume/self-mix staged; mute applied).
     headphone: Arc<Mutex<HeadphoneState>>,
-    /// Smoothed compressor gain-reduction estimate (dB, positive).
-    comp_gr: Arc<Mutex<f32>>,
+    /// Master output trim (dB) — applied with the patch base + mute.
+    master_trim: Arc<Mutex<f32>>,
     /// Recent MIDI events (formatted), newest last, capped.
     midi_log: Arc<Mutex<Vec<String>>>,
     /// Monotonic state version, bumped on every mutation (see
@@ -117,7 +117,7 @@ impl GuitarRigBackend {
             song_index: Arc::new(Mutex::new(0)),
             section_index: Arc::new(Mutex::new(0)),
             headphone: Arc::new(Mutex::new(HeadphoneState::default())),
-            comp_gr: Arc::new(Mutex::new(0.0)),
+            master_trim: Arc::new(Mutex::new(0.0)),
             midi_log: Arc::new(Mutex::new(Vec::new())),
             revision: Arc::new(Mutex::new(0)),
             events: PubSub::sliding(64),
@@ -157,11 +157,15 @@ impl GuitarRigBackend {
                 if status.running || was_running {
                     was_running = status.running;
                     backend.events.publish(RigEvent::Status(status));
-                    // Spectrum at half meter rate (~15 Hz).
+                    // Spectrum + comp telemetry at half meter rate (~15 Hz),
+                    // interleaved so each tick sends one payload.
                     if tick % 2 == 0 {
                         if let Some(bins) = backend.input_spectrum() {
                             backend.events.publish(RigEvent::Spectrum(bins));
                         }
+                    } else {
+                        let (wave_in, wave_gr) = signal_fx::comp_meter::wave_snapshot(3);
+                        backend.events.publish(RigEvent::CompWave(wave_in, wave_gr));
                     }
                 }
             }
@@ -181,46 +185,27 @@ impl GuitarRigBackend {
         Some(spectrum_bins(&samples[samples.len() - 2048..], rate, 48))
     }
 
-    /// Smoothed static-curve gain-reduction estimate for the Compressor
-    /// block: GR = input_db − curve(input_db), eased toward the target so
-    /// the meter breathes like a real detector. Replaced by per-block
-    /// telemetry when the engine grows it.
-    fn estimate_comp_gr(&self, in_db: f32) -> f32 {
-        let (thr, ratio) = {
-            let blocks = self.blocks.lock().unwrap();
-            let comp = blocks
-                .iter()
-                .find(|b| b.block_type == BlockType::Compressor && !b.bypassed);
-            match comp {
-                Some(c) => (
-                    c.params.iter().find(|p| p.name == "threshold").map(|p| p.value).unwrap_or(-18.0),
-                    c.params.iter().find(|p| p.name == "ratio").map(|p| p.value).unwrap_or(4.0).max(1.0),
-                ),
-                None => {
-                    *self.comp_gr.lock().unwrap() = 0.0;
-                    return 0.0;
-                }
-            }
-        };
-        let target = if in_db > thr {
-            (in_db - thr) * (1.0 - 1.0 / ratio)
-        } else {
-            0.0
-        };
-        let mut gr = self.comp_gr.lock().unwrap();
-        // Fast attack, slower release — meter ballistics.
-        let coeff = if target > *gr { 0.5 } else { 0.15 };
-        *gr += (target - *gr) * coeff;
-        *gr
+    /// Real gain reduction from the running compressor's detector (the
+    /// active chain's comp owns the global telemetry slot). Zero when no
+    /// live comp block exists or it's bypassed.
+    fn live_comp_gr(&self) -> f32 {
+        let has_comp = self
+            .blocks
+            .lock()
+            .map(|b| b.iter().any(|b| b.block_type == BlockType::Compressor && !b.bypassed))
+            .unwrap_or(false);
+        if has_comp { signal_fx::comp_meter::gr_db().max(0.0) } else { 0.0 }
     }
 
-    /// Re-apply the main-output trim: the patch's base trim, minus the mute.
+    /// Re-apply the main-output trim: patch base + master trim + mute.
     fn apply_main_mute(&self) {
         let mute = self.headphone.lock().unwrap().main_mute;
+        let trim = *self.master_trim.lock().unwrap();
         if let Ok(guard) = self.rig.lock() {
             if let Some(prig) = guard.as_ref() {
                 let base = prig.active_patch().map(|p| p.output_trim_db).unwrap_or(0.0);
-                prig.rig().set_output_trim_db(base + if mute { -96.0 } else { 0.0 });
+                prig.rig()
+                    .set_output_trim_db(base + trim + if mute { -96.0 } else { 0.0 });
             }
         }
     }
@@ -246,21 +231,31 @@ impl GuitarRigBackend {
             return;
         };
         let quarter_ms = 60_000.0 / bpm;
-        let delay_ids: Vec<String> = self
+        // (id, div_l) per delay — the note division scales the quarter.
+        let delay_ids: Vec<(String, f32)> = self
             .blocks
             .lock()
             .unwrap()
             .iter()
             .filter(|b| b.block_type == BlockType::Delay)
-            .map(|b| b.id.clone())
+            .map(|b| {
+                let div = b
+                    .params
+                    .iter()
+                    .find(|p| p.name == "div_l")
+                    .map(|p| p.value)
+                    .unwrap_or(4.0);
+                (b.id.clone(), div)
+            })
             .collect();
         if delay_ids.is_empty() {
             return;
         }
         if let Ok(guard) = self.rig.lock() {
             if let Some(prig) = guard.as_ref() {
-                for id in &delay_ids {
-                    prig.rig().set_active_block_param(id, "time", quarter_ms);
+                for (id, div) in &delay_ids {
+                    let ms = quarter_ms * div_factor(*div);
+                    prig.rig().set_active_block_param(id, "time", ms);
                 }
             }
         }
@@ -473,6 +468,10 @@ fn param_specs(bt: BlockType) -> Vec<(String, f32, f32, f32)> {
             ("ratio", 1.0, 20.0, 4.0),
             ("attack", 0.1, 200.0, 10.0),
             ("release", 5.0, 1000.0, 120.0),
+            ("knee", 0.0, 24.0, 6.0),
+            ("range", 0.0, 60.0, 60.0),
+            ("fold", 0.0, 1.0, 0.0),
+            ("style", 0.0, 4.0, 0.0),
         ]),
         BlockType::Gate => owned(&[
             ("threshold", -90.0, 0.0, -50.0),
@@ -480,15 +479,30 @@ fn param_specs(bt: BlockType) -> Vec<(String, f32, f32, f32)> {
             ("release", 5.0, 500.0, 120.0),
         ]),
         BlockType::Volume => owned(&[("gain_db", -24.0, 24.0, 0.0)]),
+        // Stereo delay surface. `div_l`/`div_r` are note divisions (see
+        // `div_factor`) that drive `time` from the tempo; hp/lp/duck/algo
+        // are staged for the stereo-algorithm engine (worktree) — the wire
+        // and UI are ready, the DSP applies them when it lands.
         BlockType::Delay => owned(&[
             ("mix", 0.0, 1.0, 0.08),
             ("time", 20.0, 1500.0, 350.0),
             ("feedback", 0.0, 0.95, 0.3),
+            ("div_l", 0.0, 7.0, 4.0),
+            ("div_r", 0.0, 7.0, 4.0),
+            ("hp", 20.0, 2000.0, 120.0),
+            ("lp", 1000.0, 20000.0, 8000.0),
+            ("duck", 0.0, 1.0, 0.0),
+            ("algo", 0.0, 3.0, 0.0),
         ]),
+        // Reverb surface — mix/time plus staged hp/lp/mod/algo.
         BlockType::Reverb => owned(&[
             ("mix", 0.0, 1.0, 0.08),
             ("decay", 0.0, 1.0, 0.4),
             ("size", 0.0, 1.0, 0.5),
+            ("hp", 20.0, 2000.0, 100.0),
+            ("lp", 1000.0, 20000.0, 9000.0),
+            ("mod", 0.0, 1.0, 0.2),
+            ("algo", 0.0, 3.0, 0.0),
         ]),
         BlockType::Chorus | BlockType::Flanger | BlockType::Vibrato => owned(&[
             ("mix", 0.0, 1.0, 0.4),
@@ -497,6 +511,21 @@ fn param_specs(bt: BlockType) -> Vec<(String, f32, f32, f32)> {
         ]),
         BlockType::Trem => owned(&[("depth", 0.0, 1.0, 0.5)]),
         _ => Vec::new(),
+    }
+}
+
+/// Note-division index → multiple of a quarter note. Order matches the UI's
+/// division labels: 1/1, 1/2., 1/2, 1/4., 1/4, 1/8., 1/8, 1/16.
+fn div_factor(idx: f32) -> f32 {
+    match idx as u32 {
+        0 => 4.0,
+        1 => 3.0,
+        2 => 2.0,
+        3 => 1.5,
+        5 => 0.75,
+        6 => 0.5,
+        7 => 0.25,
+        _ => 1.0, // 1/4
     }
 }
 
@@ -572,6 +601,7 @@ fn build_perf_model(prig: &ProfileRig, def: &ProfileDef) -> PerformanceModel {
         sections: Vec::new(),
         section_index: 0,
         headphone: HeadphoneState::default(),
+        master_trim_db: 0.0,
         revision: 0,
     }
 }
@@ -617,12 +647,13 @@ impl Rig for GuitarRigBackend {
         } else {
             -90.0
         };
+        let _ = in_db;
         RigStatus {
             running: true,
             input_peak,
             output_peak,
             active_patch,
-            comp_gr_db: self.estimate_comp_gr(in_db),
+            comp_gr_db: self.live_comp_gr(),
         }
     }
 
@@ -649,6 +680,7 @@ impl Rig for GuitarRigBackend {
         }
         m.section_index = *self.section_index.lock().unwrap() as u32;
         m.headphone = self.headphone.lock().unwrap().clone();
+        m.master_trim_db = *self.master_trim.lock().unwrap();
         m.revision = *self.revision.lock().unwrap();
         m
     }
@@ -892,6 +924,12 @@ impl Rig for GuitarRigBackend {
         self.publish_state();
     }
 
+    fn set_master_trim(&self, db: f32) {
+        *self.master_trim.lock().unwrap() = db.clamp(-24.0, 12.0);
+        self.apply_main_mute();
+        self.publish_state();
+    }
+
     fn midi_recent(&self) -> Vec<String> {
         self.midi_log.lock().unwrap().clone()
     }
@@ -1026,6 +1064,7 @@ impl Rig for GuitarRigBackend {
     }
 
     fn set_block_param(&self, id: String, param: String, value: f32) {
+        let mut retime_delay = false;
         if let Ok(mut blocks) = self.blocks.lock() {
             if let Some(b) = blocks.iter_mut().find(|b| b.id == id) {
                 if b.param_name.as_deref() == Some(param.as_str()) {
@@ -1034,7 +1073,12 @@ impl Rig for GuitarRigBackend {
                 if let Some(p) = b.params.iter_mut().find(|p| p.name == param) {
                     p.value = value;
                 }
+                retime_delay = b.block_type == BlockType::Delay && param.starts_with("div");
             }
+        }
+        if retime_delay {
+            // A note-division change re-times the delay from the tempo.
+            self.apply_tempo_to_delays();
         }
         if let Ok(guard) = self.rig.lock() {
             if let Some(prig) = guard.as_ref() {

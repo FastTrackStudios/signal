@@ -1600,12 +1600,25 @@ impl GuitarRig {
             None => {}
         }
 
-        // 2. Hosted plugin — resolve param name → slot index, then FxParams::set.
+        // 2. Hosted plugin — resolve param name → slot index + range, then
+        // FxParams::set. The FxParams contract is NORMALIZED 0..1 (the daw
+        // denormalizes via the param's range), while callers hand us plain
+        // values (dB, Hz, ms) — normalize here or a "+1 dB" boost lands as
+        // full-scale (+24 dB).
         let param_slot = self.daw.with_plugin_instance(&guid, |inst| {
-            inst.params().into_iter().position(|p| p.name == param_name)
+            inst.params()
+                .into_iter()
+                .enumerate()
+                .find(|(_, p)| p.name == param_name)
+                .map(|(i, p)| (i, p.min, p.max))
         });
-        let Some(Some(param_idx)) = param_slot else {
+        let Some(Some((param_idx, min, max))) = param_slot else {
             return false;
+        };
+        let normalized = if max > min {
+            ((value as f64 - min) / (max - min)).clamp(0.0, 1.0)
+        } else {
+            0.0
         };
         let fx_ctx = FxChainContext::track(self.track_guid.clone());
         <Standalone as FxParams>::set(
@@ -1613,7 +1626,7 @@ impl GuitarRig {
             fx_ctx,
             (slot + 1) as u32,
             param_idx as u32,
-            value as f64,
+            normalized,
         )
         .is_ok()
     }

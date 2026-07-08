@@ -13,6 +13,7 @@
 
 use dioxus::prelude::*;
 
+use eq_ui::cheatsheet::GUITAR_ELECTRIC;
 use eq_ui::eq_graph_interaction::{
     GraphMapper, drag_gain_for_shape, filter_type_for_position, nearest_band, wheel_q_for_shape,
 };
@@ -30,6 +31,16 @@ const MAX_FREQ: f64 = 30000.0;
 const DB_RANGE: f64 = 30.0;
 const SAMPLE_RATE: f64 = 48000.0;
 const HIT_RADIUS: f64 = 16.0;
+
+/// The electric-guitar "magic frequency" zone containing `freq`, if any —
+/// its role names the band node ("body / thickness", "honk", …).
+fn magic_label(freq: f32) -> Option<&'static str> {
+    GUITAR_ELECTRIC
+        .zones
+        .iter()
+        .find(|z| freq >= z.lo_hz && freq <= z.hi_hz)
+        .map(|z| z.role)
+}
 
 fn shape_index(s: EqBandShape) -> f32 {
     EqBandShape::all().iter().position(|x| *x == s).unwrap_or(0) as f32
@@ -142,7 +153,7 @@ pub fn EqProSurface(block: LiveBlock, spectrum: Vec<f32>) -> Element {
     let bands_for_wheel = bands.clone();
 
     rsx! {
-        div { class: "flex flex-col gap-1 h-full min-h-0",
+        div { class: "relative flex flex-col h-full min-h-0",
             svg {
                 class: "w-full flex-1 min-h-0 touch-none select-none",
                 view_box: "0 0 480 270",
@@ -319,14 +330,31 @@ pub fn EqProSurface(block: LiveBlock, spectrum: Vec<f32>) -> Element {
                                 text_anchor: "middle", pointer_events: "none",
                                 "{b.index + 1}"
                             }
+                            // Magic-frequency zone label above the node.
+                            if let Some(role) = magic_label(b.frequency) {
+                                text {
+                                    key: "l{b.index}",
+                                    x: "{cx:.1}",
+                                    y: "{(cy - 13.0).max(9.0):.1}",
+                                    fill: "{color}",
+                                    fill_opacity: "0.85",
+                                    font_size: "8",
+                                    text_anchor: "middle",
+                                    pointer_events: "none",
+                                    "{role}"
+                                }
+                            }
                         }
                     }
                 }
             }
 
-            // Selection rail: shape picker + enable + Q + delete. Empty
-            // selection → the hint.
-            div { class: "flex items-center gap-2 flex-shrink-0 min-h-[22px]",
+            // Selection rail overlays the graph bottom, only while a band
+            // is selected — the graph gets the full panel otherwise.
+            if sel_band.is_some() {
+                div {
+                    class: "absolute bottom-0 inset-x-0 z-10 flex items-center gap-2 px-2 py-1",
+                    style: "background: linear-gradient(to top, rgba(8,8,8,0.92), transparent);",
                 if let Some(b) = sel_band {
                     {
                         let i = b.index;
@@ -386,10 +414,7 @@ pub fn EqProSurface(block: LiveBlock, spectrum: Vec<f32>) -> Element {
                             }
                         }
                     }
-                } else {
-                    span { class: "text-[10px] text-muted-foreground italic",
-                        "double-click to add a band · drag nodes · wheel = Q"
-                    }
+                }
                 }
             }
         }

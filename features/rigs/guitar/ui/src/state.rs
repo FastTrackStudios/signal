@@ -27,6 +27,8 @@ pub struct RigViewState {
     pub comp_gr_db: Signal<f32>,
     /// Input spectrum (dB per log bin, 20 Hz–20 kHz), ~15 Hz.
     pub spectrum: Signal<Vec<f32>>,
+    /// Compressor rolling telemetry `(input 0..1, gr 0..1)`, oldest→newest.
+    pub comp_wave: Signal<(Vec<f32>, Vec<f32>)>,
     /// Live performance model (stacks, fx bypass, boost, tempo).
     pub perf: Signal<PerformanceModel>,
     /// The active patch's FX chain.
@@ -50,6 +52,7 @@ pub fn use_rig_state() -> RigViewState {
     let mut out_peak_db = use_signal(|| -90.0f32);
     let mut comp_gr_db = use_signal(|| 0.0f32);
     let mut spectrum = use_signal(Vec::<f32>::new);
+    let mut comp_wave = use_signal(|| (Vec::<f32>::new(), Vec::<f32>::new()));
     let mut perf = use_signal(PerformanceModel::default);
     let mut blocks = use_signal(Vec::<LiveBlock>::new);
     let mut active_patch = use_signal(|| None::<String>);
@@ -95,8 +98,8 @@ pub fn use_rig_state() -> RigViewState {
                 }
             },
             move |ev: RigEvent| {
-                let (mut running, mut in_level, mut out_level, mut in_peak_db, mut out_peak_db, mut comp_gr_db, mut spectrum, mut perf, mut blocks, mut active_patch) =
-                    (running, in_level, out_level, in_peak_db, out_peak_db, comp_gr_db, spectrum, perf, blocks, active_patch);
+                let (mut running, mut in_level, mut out_level, mut in_peak_db, mut out_peak_db, mut comp_gr_db, mut spectrum, mut comp_wave, mut perf, mut blocks, mut active_patch) =
+                    (running, in_level, out_level, in_peak_db, out_peak_db, comp_gr_db, spectrum, comp_wave, perf, blocks, active_patch);
                 match ev {
                     RigEvent::Status(s) => {
                         running.set(s.running);
@@ -110,6 +113,7 @@ pub fn use_rig_state() -> RigViewState {
                     RigEvent::Perf(p) => perf.set(p),
                     RigEvent::Chain(c) => blocks.set(c),
                     RigEvent::Spectrum(bins) => spectrum.set(bins),
+                    RigEvent::CompWave(i, g) => comp_wave.set((i, g)),
                 }
             },
         );
@@ -123,6 +127,7 @@ pub fn use_rig_state() -> RigViewState {
         out_peak_db,
         comp_gr_db,
         spectrum,
+        comp_wave,
         perf,
         blocks,
         active_patch,

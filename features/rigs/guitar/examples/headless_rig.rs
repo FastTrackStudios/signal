@@ -78,7 +78,7 @@ async fn main() {
                 n_chain += 1;
                 eprintln!("chain event: {} blocks", c.len());
             }
-            RigEvent::Spectrum(_) => {}
+            RigEvent::Spectrum(_) | RigEvent::CompWave(..) => {}
         });
     }
     eprintln!("events received: {n_status} status, {n_perf} perf, {n_chain} chain");
