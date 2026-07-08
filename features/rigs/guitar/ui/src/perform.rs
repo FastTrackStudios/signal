@@ -15,6 +15,7 @@ use dioxus::prelude::*;
 use dioxus::dioxus_core::Task;
 
 use signal_guitar_proto::rig::RigClient;
+use signal_guitar_proto::LiveBlock;
 use signal_guitar_proto::{PerfStack, PerformanceModel, TunerReading};
 
 /// How long a press must last to count as a hold (footswitch convention).
@@ -123,6 +124,33 @@ pub fn PerformGrid(
         }
     });
     let preset_list = presets.read().clone().unwrap_or_default();
+    // Pedal view: the active chain's toggleable FX as stomp switches.
+    let chain = use_resource({
+        let rig = rig.clone();
+        let rev = model.revision;
+        move || {
+            let _ = rev;
+            let rig = rig.clone();
+            async move {
+                match rig {
+                    Some(r) => r.chain().await.unwrap_or_default(),
+                    None => Vec::new(),
+                }
+            }
+        }
+    });
+    let chain_blocks = chain.read().clone().unwrap_or_default();
+    // The pedalboard: comp + drives + boost on the top row, time + mod on
+    // the bottom — matching the two-row switch layout.
+    let pedal_types = |b: &LiveBlock| {
+        use signal_proto::block::BlockType as B;
+        matches!(
+            b.block_type,
+            B::Compressor | B::Drive | B::Boost | B::Delay | B::Reverb
+                | B::Chorus | B::Flanger | B::Phaser | B::Trem | B::Vibrato | B::Rotary
+        )
+    };
+    let pedals: Vec<LiveBlock> = chain_blocks.iter().filter(|b| pedal_types(b)).cloned().collect();
     let set_mode = {
         let rig = rig.clone();
         move |m: u32| {
@@ -188,26 +216,65 @@ pub fn PerformGrid(
         }
 
         if mode == 0 {
-            // ── Preset mode: the pool, one tile per preset ──
+            // ── Pedal view: the active chain's FX as stomp switches; pick
+            // the base preset from the bar. Tap = bypass toggle (auto-saved
+            // into the patch like any live edit) ──
+            div { class: "flex items-center gap-2 flex-shrink-0",
+                span { class: "text-[10px] uppercase tracking-wider text-muted-foreground", "Preset" }
+                select {
+                    class: "bg-background border border-border rounded px-2 py-1 text-sm",
+                    onchange: {
+                        let rig = rig.clone();
+                        move |e: FormEvent| {
+                            if let (Some(r), Ok(i)) = (rig.clone(), e.value().parse::<u32>()) {
+                                spawn(async move { let _ = r.play_preset(i).await; });
+                            }
+                        }
+                    },
+                    for (i, p) in preset_list.iter().enumerate() {
+                        option { key: "{i}", value: "{i}", selected: p.active, "{p.name}" }
+                    }
+                }
+            }
             div { class: "grid grid-cols-5 auto-rows-fr gap-3 flex-1 min-h-0",
-                for (i, p) in preset_list.iter().enumerate() {
-                    button {
-                        key: "{i}",
-                        class: if p.active {
-                            "rounded-2xl border-4 border-white/80 bg-accent text-accent-foreground flex flex-col items-center justify-center gap-1 p-3"
-                        } else {
-                            "rounded-2xl border border-border bg-card hover:bg-accent/30 flex flex-col items-center justify-center gap-1 p-3"
-                        },
-                        onclick: {
-                            let rig = rig.clone();
-                            move |_| {
-                                if let Some(r) = rig.clone() {
-                                    spawn(async move { let _ = r.play_preset(i as u32).await; });
+                for b in pedals.iter() {
+                    {
+                        let on = !b.bypassed;
+                        let id = b.id.clone();
+                        let color = b.block_type.color().border.to_string();
+                        rsx! {
+                            button {
+                                key: "{b.id}",
+                                class: "rounded-2xl border flex flex-col items-center justify-center gap-2 p-3 transition-all duration-100",
+                                style: if on {
+                                    format!("border-color: {color}; background: color-mix(in srgb, {color} 22%, #0a0a0a); box-shadow: inset 0 0 40px color-mix(in srgb, {color} 12%, transparent);")
+                                } else {
+                                    "border-color: #27272a; background: #0f0f10; opacity: 0.75;".to_string()
+                                },
+                                onclick: {
+                                    let rig = rig.clone();
+                                    move |_| {
+                                        let id = id.clone();
+                                        if let Some(r) = rig.clone() {
+                                            spawn(async move { let _ = r.toggle_block_bypass(id).await; });
+                                        }
+                                    }
+                                },
+                                // Pedal LED.
+                                span {
+                                    class: "w-3 h-3 rounded-full",
+                                    style: if on {
+                                        format!("background-color: {color}; box-shadow: 0 0 8px {color};")
+                                    } else {
+                                        "background-color: #3f3f46;".to_string()
+                                    },
+                                }
+                                span { class: "text-base font-bold text-center leading-tight", "{b.name}" }
+                                if !b.preset.is_empty() {
+                                    span { class: "text-[10px] opacity-60 truncate max-w-full", "{b.preset}" }
                                 }
                             }
-                        },
-                        span { class: "text-lg font-bold text-center leading-tight", "{p.name}" }
-                        span { class: "text-[10px] font-mono opacity-60", "×{p.used_by}" }
+                        }
                     }
                 }
             }
