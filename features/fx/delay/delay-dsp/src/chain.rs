@@ -195,7 +195,10 @@ pub struct DelayChain {
     /// Freeze / infinite hold: repeats hold forever, loop input muted.
     pub freeze: bool,
     /// Repeat dynamics: the tail tapers off faster than exponential.
-    /// First-pass approximation on the wet output (not inside the loop).
+    /// Runs IN the regeneration loop via the engines' feedback trim, so
+    /// the first repeats are untouched and only the recirculation
+    /// accelerates its decay (TimeLine: "high-feedback tails cut off
+    /// more abruptly").
     pub repeat_dynamics: bool,
     /// Post-delay wet high-pass in Hz (0 = off, TimeLine range 20–900).
     pub high_pass_hz: f64,
@@ -205,8 +208,11 @@ pub struct DelayChain {
     /// Right line output pan. Default 1.0 (hard right).
     pub pan_r: f64,
     /// Duck GATE mode (TimeLine "Ducking Feedback"): while playing, the
-    /// wet path ducks fully so only the tail after you stop is heard.
-    /// First-pass approximation: acts on the wet output, not the regen.
+    /// REGENERATION is muted via the engines' feedback trim — repeats
+    /// recirculated during playing die, so after you stop only the last
+    /// note repeats. The normal sensitivity-controlled wet duck still
+    /// applies on top (matching the hardware, where GATE adds feedback
+    /// ducking to the standard duck).
     pub duck_gate: bool,
 
     // Internal
@@ -627,6 +633,43 @@ impl Processor for DelayChain {
             time_l = time_l.max(0.1);
             time_r = time_r.max(0.1);
 
+            // --- In-loop feedback trim (repeat dynamics + gate duck) ---
+            // Computed BEFORE the engines tick so the trim shapes this
+            // sample's recirculation. The ducker runs here (it only needs
+            // the dry input); its gain is reused for the wet duck below.
+            let duck_gain = if self.ducking_enabled {
+                let input_level = (dry_l.abs() + dry_r.abs()) * 0.5;
+                self.ducker.tick(input_level)
+            } else {
+                1.0
+            };
+            let mut fb_trim = 1.0;
+            if self.repeat_dynamics {
+                // Envelope of the wet tail (updated after the engines
+                // below; one sample of lag is inaudible). Below the knee
+                // the trim drops expansively, so a decaying tail sheds
+                // feedback progressively and cuts off instead of lingering.
+                // The FIRST repeat is untouched: it is written from the
+                // dry input, which the trim never scales.
+                const KNEE: f64 = 0.1;
+                let env = self.repeat_dyn_env.value();
+                if env < KNEE {
+                    fb_trim *= (env / KNEE).powf(0.75);
+                }
+            }
+            if self.ducking_enabled && self.duck_gate {
+                // GATE: the regeneration closes FULLY on input presence,
+                // independent of `amount` (TimeLine: "the Repeats knob is
+                // effectively set to minimum while you are playing").
+                // The follower's envelope is presence above threshold;
+                // anything past a small knee slams the loop shut, and its
+                // release curve reopens it smoothly when you stop.
+                const GATE_KNEE: f64 = 0.05;
+                fb_trim *= 1.0 - (self.ducker.envelope() / GATE_KNEE).clamp(0.0, 1.0);
+            }
+            self.delay_l.set_feedback_trim(fb_trim);
+            self.delay_r.set_feedback_trim(fb_trim);
+
             // Stereo-field styles (Drum / MultiTap / Spectral) run ONE
             // stereo engine on the mono sum — that's what makes per-head
             // / per-tap / per-grain pans meaningful ("patterns create a
@@ -694,35 +737,21 @@ impl Processor for DelayChain {
                 }
             }
 
-            // Ducking. GATE mode fully ducks the wet path while playing
-            // (first-pass approximation of TimeLine's feedback ducking —
-            // the tail after you stop playing is what comes through).
+            // Ducking on the wet output (sensitivity-controlled; the
+            // GATE-mode feedback muting already happened via the trim).
             if self.ducking_enabled {
-                let input_level = (dry_l.abs() + dry_r.abs()) * 0.5;
-                let duck_gain = self.ducker.tick(input_level);
-                let duck_gain = if self.duck_gate {
-                    // Normalize against the configured amount so the gate
-                    // fully closes regardless of the amount setting.
-                    let amt = self.ducker.amount.max(1e-6);
-                    ((duck_gain - (1.0 - amt)) / amt).clamp(0.0, 1.0)
-                } else {
-                    duck_gain
-                };
                 wet_l *= duck_gain;
                 wet_r *= duck_gain;
             }
 
-            // --- Repeat dynamics: taper the tail faster than exponential.
-            // Below the knee, the wet gain drops expansively (1.5 power),
-            // so quiet repeats trail off quickly instead of lingering. ---
+            // Track the loop level for the in-loop repeat-dynamics trim
+            // (applied on the NEXT sample's recirculation). The dry input
+            // is included so fresh playing keeps the loop open — only a
+            // decaying tail (quiet wet, no input) drops below the knee.
             if self.repeat_dynamics {
-                let env = self.repeat_dyn_env.tick((wet_l.abs() + wet_r.abs()) * 0.5);
-                const KNEE: f64 = 0.1;
-                if env < KNEE {
-                    let trim = (env / KNEE).powf(1.5);
-                    wet_l *= trim;
-                    wet_r *= trim;
-                }
+                let loop_level = ((wet_l.abs() + wet_r.abs()) * 0.5)
+                    .max((dry_l.abs() + dry_r.abs()) * 0.5);
+                self.repeat_dyn_env.tick(loop_level);
             }
 
             // --- Post-delay wet high-pass ---
@@ -1199,6 +1228,142 @@ mod tests {
             tapered < normal * 0.5,
             "repeat dynamics should taper the tail: {tapered} vs {normal}"
         );
+    }
+
+    /// Goertzel magnitude of `freq` over a window of `buf`.
+    fn goertzel(buf: &[f64], freq: f64) -> f64 {
+        let w = 2.0 * PI * freq / SR;
+        let coeff = 2.0 * w.cos();
+        let (mut s1, mut s2) = (0.0f64, 0.0f64);
+        for &x in buf {
+            let s0 = x + coeff * s1 - s2;
+            s2 = s1;
+            s1 = s0;
+        }
+        (s1 * s1 + s2 * s2 - coeff * s1 * s2).max(0.0).sqrt()
+    }
+
+    #[test]
+    fn repeat_dynamics_first_repeat_invariant() {
+        // In-loop dynamics must not touch the first repeat — that is
+        // what distinguishes it from the old wet-path taper.
+        let run = |rd: bool| -> (f64, f64) {
+            let mut c = make_chain();
+            c.set_style(DelayStyle::Clean);
+            c.delay_l.time_ms = 100.0;
+            c.delay_r.time_ms = 100.0;
+            c.delay_l.feedback = 0.7;
+            c.delay_r.feedback = 0.7;
+            c.mix = 1.0;
+            c.repeat_dynamics = rd;
+            c.update(config());
+            c.reset();
+
+            // Pre-roll: let the engine's internal time smoother settle
+            // so the burst hits a stationary delay (a freshly reset
+            // engine glides its read position for the first ~150 ms).
+            let mut pl = vec![0.0; 24000];
+            let mut pr = vec![0.0; 24000];
+            c.process(&mut pl, &mut pr);
+
+            let n = 96000; // 2 s
+            let mut l: Vec<f64> = (0..n).map(|i| if i < 200 { 0.8 } else { 0.0 }).collect();
+            let mut r = l.clone();
+            c.process(&mut l, &mut r);
+
+            // First repeat: 100 ms window. Late tail: after 1 s.
+            let first: f64 = l[4800..7200].iter().map(|x| x * x).sum();
+            let late: f64 = l[48000..].iter().map(|x| x * x).sum();
+            (first, late)
+        };
+
+        let (first_off, late_off) = run(false);
+        let (first_on, late_on) = run(true);
+        assert!(
+            (first_on - first_off).abs() < first_off * 0.01,
+            "first repeat must be unchanged: on={first_on} off={first_off}"
+        );
+        assert!(
+            late_on < late_off * 0.5,
+            "in-loop dynamics should taper the late tail: {late_on} vs {late_off}"
+        );
+    }
+
+    #[test]
+    fn duck_gate_kills_recirculation_only_last_note_repeats() {
+        // Note A (440 Hz, 20 ms) then note B (2093 Hz, 100–600 ms)
+        // covering A's first echo at 300 ms. GATE mutes the regeneration
+        // while B plays, so A's echo never recirculates — A's chain is
+        // DEAD at 900 ms even though playing has stopped. Without the
+        // gate, A recirculated silently (the wet duck only muted the
+        // output) and its history comes back at 900 ms. B, the last
+        // note, must keep regenerating after the stop in both cases.
+        // Frequency-tagged notes + Goertzel keep the events separable.
+        let run = |gate: bool| -> (f64, f64) {
+            let mut c = make_chain();
+            c.set_style(DelayStyle::Clean);
+            c.delay_l.time_ms = 300.0;
+            c.delay_r.time_ms = 300.0;
+            c.delay_l.feedback = 0.9;
+            c.delay_r.feedback = 0.9;
+            c.mix = 1.0;
+            c.ducking_enabled = true;
+            c.duck_gate = gate;
+            c.ducker.amount = 1.0;
+            c.ducker.threshold = 0.05;
+            c.ducker.release_ms = 100.0;
+            c.update(config());
+            c.reset();
+
+            // Pre-roll for the time smoother.
+            let mut pl = vec![0.0; 24000];
+            let mut pr = vec![0.0; 24000];
+            c.process(&mut pl, &mut pr);
+
+            let n = 96000; // 2 s
+            let mut l: Vec<f64> = (0..n)
+                .map(|i| {
+                    let t_ms = i as f64 * 1000.0 / SR;
+                    let t = i as f64 / SR;
+                    if t_ms < 20.0 {
+                        (2.0 * PI * 440.0 * t).sin() * 0.8
+                    } else if (100.0..600.0).contains(&t_ms) {
+                        (2.0 * PI * 2093.0 * t).sin() * 0.5
+                    } else {
+                        0.0
+                    }
+                })
+                .collect();
+            let mut r = l.clone();
+            c.process(&mut l, &mut r);
+
+            let window = |center_ms: f64| -> &[f64] {
+                let c0 = (center_ms * SR / 1000.0) as usize;
+                let h = (40.0 * SR / 1000.0) as usize;
+                &l[c0 - h..c0 + h]
+            };
+            // A's 3rd echo slot (900 ms): needs recirculation at 300
+            // and 600 ms — both while B was playing.
+            let a_history = goertzel(window(900.0), 440.0);
+            // B's post-stop regeneration (last-written content at
+            // 600 ms → echoes at 900/1200; 1200 needs feedback at
+            // 900 ms, well after the gate reopened).
+            let b_survivor = goertzel(window(1200.0), 2093.0);
+            (a_history, b_survivor)
+        };
+
+        let (a_off, b_off) = run(false);
+        let (a_on, b_on) = run(true);
+
+        assert!(
+            a_on < a_off * 0.1,
+            "gate must kill repeats recirculated while playing: on={a_on} off={a_off}"
+        );
+        assert!(
+            b_on > b_off * 0.2,
+            "last note's post-stop regeneration must survive: on={b_on} off={b_off}"
+        );
+        assert!(b_on > 1.0, "last note must audibly repeat: {b_on}");
     }
 
     #[test]

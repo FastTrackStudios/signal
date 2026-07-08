@@ -52,6 +52,32 @@ impl FilterLfoShape {
     pub fn is_one_shot(self) -> bool {
         matches!(self, Self::Down | Self::Up)
     }
+
+    /// Cyclic waveform value in [-1, 1] at `phase` (0..1). `sh` is the
+    /// current sample-and-hold value for `Random`. One-shot shapes
+    /// (`Down`/`Up`) are not cyclic and fall back to `SinePos` here —
+    /// callers with one-shot support (the filter LFO) handle them via
+    /// their own sweep phase.
+    fn cyclic_value(self, phase: f64, sh: f64) -> f64 {
+        match self {
+            FilterLfoShape::SinePos | FilterLfoShape::Down | FilterLfoShape::Up => {
+                (std::f64::consts::TAU * phase).cos()
+            }
+            FilterLfoShape::SineNeg => -(std::f64::consts::TAU * phase).cos(),
+            FilterLfoShape::TrianglePos => 1.0 - 4.0 * (phase - 0.5).abs(),
+            FilterLfoShape::TriangleNeg => 4.0 * (phase - 0.5).abs() - 1.0,
+            FilterLfoShape::SquarePos => {
+                if phase < 0.5 {
+                    1.0
+                } else {
+                    -1.0
+                }
+            }
+            FilterLfoShape::Saw => 1.0 - 2.0 * phase,
+            FilterLfoShape::Ramp => 2.0 * phase - 1.0,
+            FilterLfoShape::Random => sh,
+        }
+    }
 }
 
 /// Filter placement relative to the delay line.
@@ -123,6 +149,10 @@ pub struct FilterDelay {
     pub trem_depth: f64,
     /// Tremolo rate as a ratio of the delay time (like `lfo_speed`).
     pub trem_speed: f64,
+    /// Tremolo waveform. Cyclic shapes only (the MX gives trem its own
+    /// shape list without the attack-triggered one-shots); `Down`/`Up`
+    /// fall back to `SinePos`.
+    pub trem_shape: FilterLfoShape,
     /// Decay EQ tilt (shared engine param).
     pub decay_tilt: f64,
 
@@ -163,6 +193,7 @@ impl FilterDelay {
             location: FilterLocation::Post,
             trem_depth: 0.0,
             trem_speed: 4.0,
+            trem_shape: FilterLfoShape::SinePos,
             decay_tilt: 0.0,
             delay: DelayLine::new(48000 * 3 + 1024),
             svf: Svf::new(),
@@ -218,25 +249,11 @@ impl FilterDelay {
 
     /// LFO value in [-1, 1] for the current phase.
     fn lfo_value(&mut self) -> f64 {
-        let p = self.lfo_phase;
         match self.lfo_shape {
-            FilterLfoShape::SinePos => (std::f64::consts::TAU * p).cos(),
-            FilterLfoShape::SineNeg => -(std::f64::consts::TAU * p).cos(),
-            FilterLfoShape::TrianglePos => 1.0 - 4.0 * (p - 0.5).abs(),
-            FilterLfoShape::TriangleNeg => 4.0 * (p - 0.5).abs() - 1.0,
-            FilterLfoShape::SquarePos => {
-                if p < 0.5 {
-                    1.0
-                } else {
-                    -1.0
-                }
-            }
-            FilterLfoShape::Saw => 1.0 - 2.0 * p,
-            FilterLfoShape::Ramp => 2.0 * p - 1.0,
-            FilterLfoShape::Random => self.sh_value,
             // One-shots use one_shot_phase, driven per-attack in tick().
             FilterLfoShape::Down => 1.0 - 2.0 * self.one_shot_phase.min(1.0),
             FilterLfoShape::Up => 2.0 * self.one_shot_phase.min(1.0) - 1.0,
+            shape => shape.cyclic_value(self.lfo_phase, self.sh_value),
         }
     }
 
@@ -298,9 +315,10 @@ impl FilterDelay {
             output = self.svf.tick_lp(output);
         }
 
-        // Synced tremolo on the repeats.
+        // Synced tremolo on the repeats (own shape list, cyclic only).
         if self.trem_depth > 1e-4 {
-            let trem = 1.0 - self.trem_depth * (0.5 + 0.5 * (std::f64::consts::TAU * self.trem_phase).sin());
+            let wave = self.trem_shape.cyclic_value(self.trem_phase, self.sh_value);
+            let trem = 1.0 - self.trem_depth * (0.5 + 0.5 * wave);
             output *= trem;
         }
 
@@ -341,6 +359,43 @@ mod tests {
     use super::*;
 
     const SR: f64 = 48000.0;
+
+    #[test]
+    fn trem_shapes_produce_distinct_patterns() {
+        let run = |shape: FilterLfoShape| -> Vec<f64> {
+            let mut d = FilterDelay::new();
+            d.time_ms = 200.0;
+            d.feedback = 0.0;
+            d.depth = 0.0; // filter static; isolate the trem
+            d.trem_depth = 1.0;
+            d.trem_speed = 4.0;
+            d.trem_shape = shape;
+            d.update(SR);
+            let mut out = Vec::with_capacity(48000);
+            for i in 0..48000 {
+                let input = (std::f64::consts::TAU * 440.0 * i as f64 / SR).sin() * 0.5;
+                let v = d.tick(input, 0);
+                assert!(v.is_finite(), "{shape:?} NaN at {i}");
+                out.push(v);
+            }
+            out
+        };
+
+        let sine = run(FilterLfoShape::SinePos);
+        let square = run(FilterLfoShape::SquarePos);
+        // A square trem gates hard: its output must differ from the sine
+        // trem on the same signal.
+        let diff: f64 = sine
+            .iter()
+            .zip(square.iter())
+            .map(|(a, b)| (a - b).abs())
+            .sum();
+        assert!(diff > 10.0, "square vs sine trem should differ: {diff}");
+
+        // One-shot shapes fall back to a cyclic wave on the trem: valid
+        // output, no NaN (already asserted inside run()).
+        let _ = run(FilterLfoShape::Down);
+    }
 
     #[test]
     fn impulse_delayed() {

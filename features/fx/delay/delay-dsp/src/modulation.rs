@@ -323,6 +323,13 @@ impl DuckingFollower {
         (1.0 - env * self.amount).clamp(0.0, 1.0)
     }
 
+    /// Current follower envelope (level above threshold, smoothed).
+    /// Used by the chain's GATE-mode feedback ducking, which needs
+    /// input PRESENCE rather than the amplitude-scaled gain.
+    pub fn envelope(&self) -> f64 {
+        self.envelope.value()
+    }
+
     pub fn reset(&mut self) {
         self.envelope.reset(0.0);
     }

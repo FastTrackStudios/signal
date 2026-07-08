@@ -245,6 +245,15 @@ pub struct DelayEngine {
     /// slot only — style engines adopt it in their deep passes.
     pub voice: u8,
 
+    /// Per-sample feedback trim (0.0–1.0, default 1.0): multiplied into
+    /// the effective feedback at tick time. The chain drives this for
+    /// in-loop repeat dynamics and gate-mode feedback ducking. Styles
+    /// with multiple feedback points (tape heads, drum heads, multitap
+    /// taps) scale uniformly since all recirculation runs through the
+    /// engine's single `feedback` scaler. Freeze overrides the trim —
+    /// a held loop must not be eroded by ducking or repeat dynamics.
+    feedback_trim: f64,
+
     // ── Drum-specific ──────────────────────────────────────────────
     /// Playback head config. Drum only.
     pub drum_heads: [DrumHead; 4],
@@ -306,6 +315,8 @@ pub struct DelayEngine {
     pub filter_trem_depth: f64,
     /// Tremolo cycles per delay period. Filter only.
     pub filter_trem_speed: f64,
+    /// Tremolo waveform (cyclic shapes; one-shots fall back). Filter only.
+    pub filter_trem_shape: FilterLfoShape,
 }
 
 impl DelayEngine {
@@ -353,6 +364,7 @@ impl DelayEngine {
             wow_phase_offset: 0.0,
             frozen: false,
             voice: 0,
+            feedback_trim: 1.0,
             drum_heads: GOLDEN_HEADS.map(|position| DrumHead {
                 playback: HeadPlayback::Full,
                 position,
@@ -383,11 +395,31 @@ impl DelayEngine {
             filter_location: FilterLocation::Post,
             filter_trem_depth: 0.0,
             filter_trem_speed: 4.0,
+            filter_trem_shape: FilterLfoShape::SinePos,
         }
     }
 
     pub fn style(&self) -> DelayStyle {
         self.style
+    }
+
+    /// Set the per-sample feedback trim (see the field docs). Cheap —
+    /// call every sample; the trimmed value reaches the inner engine on
+    /// the next `tick`/`tick_at`.
+    #[inline]
+    pub fn set_feedback_trim(&mut self, trim: f64) {
+        self.feedback_trim = trim.clamp(0.0, 1.0);
+    }
+
+    /// Effective feedback for this tick: frozen pins to 1.0 (trim
+    /// ignored — hold means hold), otherwise `feedback × trim`.
+    #[inline]
+    fn eff_feedback(&self) -> f64 {
+        if self.frozen {
+            1.0
+        } else {
+            self.feedback * self.feedback_trim
+        }
     }
 
     /// Switch to a new delay style. Resets internal state.
@@ -586,6 +618,7 @@ impl DelayEngine {
                 d.location = self.filter_location;
                 d.trem_depth = self.filter_trem_depth;
                 d.trem_speed = self.filter_trem_speed;
+                d.trem_shape = self.filter_trem_shape;
                 d.decay_tilt = self_tilt;
                 d.update(sample_rate);
             }
@@ -594,20 +627,60 @@ impl DelayEngine {
 
     /// Process one sample.
     pub fn tick(&mut self, input: f64, ch: usize) -> f64 {
+        let fb = self.eff_feedback();
         match &mut self.inner {
-            EngineInner::Tape(d) => d.tick(input, ch),
-            EngineInner::Clean(d) => d.tick(input, ch),
-            EngineInner::Bbd(d) => d.tick(input, ch),
-            EngineInner::LoFi(d) => d.tick(input, ch),
-            EngineInner::Shimmer(d) => d.tick(input, ch),
-            EngineInner::Reverse(d) => d.tick(input, ch),
-            EngineInner::Pitch(d) => d.tick(input),
-            EngineInner::Rhythm(d) => d.tick(input, ch),
-            EngineInner::Drum(d) => d.tick(input, ch),
-            EngineInner::OilCan(d) => d.tick(input, ch),
-            EngineInner::MultiTap(d) => d.tick(input, ch),
-            EngineInner::Spectral(d) => d.tick(input, ch),
-            EngineInner::Filter(d) => d.tick(input, ch),
+            EngineInner::Tape(d) => {
+                d.feedback = fb;
+                d.tick(input, ch)
+            }
+            EngineInner::Clean(d) => {
+                d.feedback = fb;
+                d.tick(input, ch)
+            }
+            EngineInner::Bbd(d) => {
+                d.feedback = fb;
+                d.tick(input, ch)
+            }
+            EngineInner::LoFi(d) => {
+                d.feedback = fb;
+                d.tick(input, ch)
+            }
+            EngineInner::Shimmer(d) => {
+                d.feedback = fb;
+                d.tick(input, ch)
+            }
+            EngineInner::Reverse(d) => {
+                d.feedback = fb;
+                d.tick(input, ch)
+            }
+            EngineInner::Pitch(d) => {
+                d.feedback = fb;
+                d.tick(input)
+            }
+            EngineInner::Rhythm(d) => {
+                d.feedback = fb;
+                d.tick(input, ch)
+            }
+            EngineInner::Drum(d) => {
+                d.feedback = fb;
+                d.tick(input, ch)
+            }
+            EngineInner::OilCan(d) => {
+                d.feedback = fb;
+                d.tick(input, ch)
+            }
+            EngineInner::MultiTap(d) => {
+                d.feedback = fb;
+                d.tick(input, ch)
+            }
+            EngineInner::Spectral(d) => {
+                d.feedback = fb;
+                d.tick(input, ch)
+            }
+            EngineInner::Filter(d) => {
+                d.feedback = fb;
+                d.tick(input, ch)
+            }
         }
     }
 
@@ -617,57 +690,71 @@ impl DelayEngine {
     /// public `time_ms` parameter is not touched; each style's internal
     /// time smoother chases the value passed here.
     pub fn tick_at(&mut self, input: f64, ch: usize, time_ms: f64) -> f64 {
+        let fb = self.eff_feedback();
         match &mut self.inner {
             EngineInner::Tape(d) => {
                 d.time_ms = time_ms;
+                d.feedback = fb;
                 d.tick(input, ch)
             }
             EngineInner::Clean(d) => {
                 d.time_ms = time_ms;
+                d.feedback = fb;
                 d.tick(input, ch)
             }
             EngineInner::Bbd(d) => {
                 d.time_ms = time_ms;
+                d.feedback = fb;
                 d.tick(input, ch)
             }
             EngineInner::LoFi(d) => {
                 d.time_ms = time_ms;
+                d.feedback = fb;
                 d.tick(input, ch)
             }
             EngineInner::Shimmer(d) => {
                 d.time_ms = time_ms;
+                d.feedback = fb;
                 d.tick(input, ch)
             }
             EngineInner::Reverse(d) => {
                 d.time_ms = time_ms;
+                d.feedback = fb;
                 d.tick(input, ch)
             }
             EngineInner::Pitch(d) => {
                 d.time_ms = time_ms;
+                d.feedback = fb;
                 d.tick(input)
             }
             EngineInner::Rhythm(d) => {
                 d.time_ms = time_ms;
+                d.feedback = fb;
                 d.tick(input, ch)
             }
             EngineInner::Drum(d) => {
                 d.time_ms = time_ms.clamp(DrumDelay::MIN_TIME_MS, DrumDelay::MAX_TIME_MS);
+                d.feedback = fb;
                 d.tick(input, ch)
             }
             EngineInner::OilCan(d) => {
                 d.time_ms = time_ms.clamp(OilCanDelay::MIN_TIME_MS, OilCanDelay::MAX_TIME_MS);
+                d.feedback = fb;
                 d.tick(input, ch)
             }
             EngineInner::MultiTap(d) => {
                 d.time_ms = time_ms;
+                d.feedback = fb;
                 d.tick(input, ch)
             }
             EngineInner::Spectral(d) => {
                 d.time_ms = time_ms;
+                d.feedback = fb;
                 d.tick(input, ch)
             }
             EngineInner::Filter(d) => {
                 d.time_ms = time_ms;
+                d.feedback = fb;
                 d.tick(input, ch)
             }
         }
@@ -687,17 +774,21 @@ impl DelayEngine {
     /// (Drum / MultiTap / Spectral). Other styles fall back to their
     /// mono tick duplicated to both sides.
     pub fn tick_at_stereo(&mut self, input: f64, time_ms: f64) -> (f64, f64) {
+        let fb = self.eff_feedback();
         match &mut self.inner {
             EngineInner::Drum(d) => {
                 d.time_ms = time_ms.clamp(DrumDelay::MIN_TIME_MS, DrumDelay::MAX_TIME_MS);
+                d.feedback = fb;
                 d.tick_stereo(input)
             }
             EngineInner::MultiTap(d) => {
                 d.time_ms = time_ms;
+                d.feedback = fb;
                 d.tick_stereo(input)
             }
             EngineInner::Spectral(d) => {
                 d.time_ms = time_ms;
+                d.feedback = fb;
                 d.tick_stereo(input)
             }
             _ => {

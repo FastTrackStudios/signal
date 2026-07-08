@@ -107,6 +107,23 @@ pub struct Tap {
 }
 
 impl Tap {
+    /// Quantize this tap's position from a 1-based step number on the
+    /// given grid, mapping the full pattern (= the delay time) onto the
+    /// grid's total step count: 16th = 16 steps (4 beats × 4), Triplet
+    /// = 12 (4 × 3), Off = 256 free steps. DAW-style: step 1 is the
+    /// pattern start (position clamps to ≥ 1/256 so the tap stays a
+    /// real read), and TimeLine's "step 65 of 256 lands on beat 2"
+    /// holds: (65 − 1) / 256 = 0.25.
+    pub fn set_step(&mut self, step: u16, grid: TapGrid) {
+        let total: u16 = match grid {
+            TapGrid::Sixteenth => 16,
+            TapGrid::Triplet => 12,
+            TapGrid::Off => 256,
+        };
+        let s = step.clamp(1, total);
+        self.position = (f64::from(s - 1) / f64::from(total)).max(1.0 / 256.0);
+    }
+
     pub const fn off() -> Self {
         Self {
             enabled: false,
@@ -152,15 +169,144 @@ pub enum TapPreset {
 }
 
 impl TapPreset {
+    /// TimeLine v1 "Classic" pattern bank, 1–16, as tap layouts.
+    ///
+    /// Only pattern 1 (simple ping-pong) and pattern 16 (early-reflection
+    /// cluster) are documented; the rest are designed in the spirit of
+    /// the v1 manual's "rhythmic to ambient to percussive" span and each
+    /// interpretation is marked. Selecting a classic via
+    /// [`MultiTapDelay::apply_classic`] also sets the 16th grid and
+    /// `Input` feedback, matching the MX's auto-config on recall.
+    pub fn classic(n: u8) -> [Tap; MAX_TAPS] {
+        let mut taps = [Tap::off(); MAX_TAPS];
+        // Helper: enabled tap at (position, level, pan, repeats).
+        let t = |pos: f64, lvl: f64, pan: f64, rep: f64| -> Tap {
+            let mut t = Tap::at(pos, lvl);
+            t.pan = pan;
+            t.repeats = rep;
+            t
+        };
+        match n.clamp(1, 16) {
+            // 1: simple ping-pong (documented).
+            1 => {
+                taps[0] = t(0.5, 0.9, -1.0, 0.0);
+                taps[1] = t(1.0, 0.9, 1.0, 1.0);
+            }
+            // 2: quarter pulse, centered. // interpretation
+            2 => {
+                for (i, p) in [0.25, 0.5, 0.75, 1.0].iter().enumerate() {
+                    taps[i] = t(*p, 1.0 - i as f64 * 0.15, 0.0, if *p == 1.0 { 1.0 } else { 0.0 });
+                }
+            }
+            // 3: eighth-note drive, alternating narrow pans. // interpretation
+            3 => {
+                for i in 0..8 {
+                    let p = (i + 1) as f64 / 8.0;
+                    let pan = if i % 2 == 0 { -0.4 } else { 0.4 };
+                    taps[i] = t(p, 0.85 - i as f64 * 0.07, pan, if i == 7 { 1.0 } else { 0.0 });
+                }
+            }
+            // 4: dotted-eighth "U2" figure. // interpretation
+            4 => {
+                taps[0] = t(0.375, 0.9, -0.5, 0.0);
+                taps[1] = t(0.75, 0.7, 0.5, 0.0);
+                taps[2] = t(1.0, 1.0, 0.0, 1.0);
+            }
+            // 5: triplet feel across the field. // interpretation
+            5 => {
+                for (i, p) in [1.0 / 3.0, 2.0 / 3.0, 1.0].iter().enumerate() {
+                    let pan = [-0.7, 0.7, 0.0][i];
+                    taps[i] = t(*p, 0.9 - i as f64 * 0.1, pan, if i == 2 { 1.0 } else { 0.0 });
+                }
+            }
+            // 6: gallop (16th-16th-8th). // interpretation
+            6 => {
+                taps[0] = t(0.125, 0.7, -0.3, 0.0);
+                taps[1] = t(0.25, 0.7, 0.3, 0.0);
+                taps[2] = t(0.5, 0.9, 0.0, 0.0);
+                taps[3] = t(1.0, 0.8, 0.0, 1.0);
+            }
+            // 7: syncopated off-beats. // interpretation
+            7 => {
+                for (i, p) in [0.1875, 0.4375, 0.6875, 0.9375].iter().enumerate() {
+                    let pan = if i % 2 == 0 { -0.6 } else { 0.6 };
+                    taps[i] = t(*p, 0.8, pan, 0.0);
+                }
+                taps[4] = t(1.0, 0.4, 0.0, 1.0);
+            }
+            // 8: swung eighths (2:1). // interpretation
+            8 => {
+                for i in 0..4 {
+                    let beat = i as f64 * 0.25;
+                    taps[i * 2] = t((beat + 0.1667).min(1.0), 0.7, -0.5, 0.0);
+                    taps[i * 2 + 1] = t((beat + 0.25).min(1.0), 0.9, 0.5, if i == 3 { 1.0 } else { 0.0 });
+                }
+            }
+            // 9: sparse ambient pair, wide. // interpretation
+            9 => {
+                taps[0] = t(0.618, 0.8, -0.9, 0.0);
+                taps[1] = t(1.0, 0.8, 0.9, 1.0);
+            }
+            // 10: golden-ratio cascade (Echorec-ish). // interpretation
+            10 => {
+                for (i, p) in [0.146, 0.236, 0.382, 0.618, 1.0].iter().enumerate() {
+                    let pan = [-0.8, 0.5, -0.3, 0.7, 0.0][i];
+                    taps[i] = t(*p, 0.5 + 0.5 * p, pan, if *p == 1.0 { 1.0 } else { 0.0 });
+                }
+            }
+            // 11: accelerando bunching toward the beat. // interpretation
+            11 => {
+                for (i, p) in [0.5, 0.75, 0.875, 0.9375, 0.96875, 1.0].iter().enumerate() {
+                    taps[i] = t(*p, 0.5 + i as f64 * 0.1, (i as f64 - 2.5) * 0.3, if *p == 1.0 { 1.0 } else { 0.0 });
+                }
+            }
+            // 12: decelerando — mirror of 11. // interpretation
+            12 => {
+                for (i, p) in [0.03125, 0.0625, 0.125, 0.25, 0.5, 1.0].iter().enumerate() {
+                    taps[i] = t(*p, 1.0 - i as f64 * 0.08, (2.5 - i as f64) * 0.3, if *p == 1.0 { 1.0 } else { 0.0 });
+                }
+            }
+            // 13: pan sweep L→R across even 16ths. // interpretation
+            13 => {
+                for i in 0..8 {
+                    let p = (i + 1) as f64 / 8.0;
+                    let pan = -1.0 + i as f64 * (2.0 / 7.0);
+                    taps[i] = t(p, 0.75, pan, if i == 7 { 1.0 } else { 0.0 });
+                }
+            }
+            // 14: interleaved double ping-pong (wide/narrow). // interpretation
+            14 => {
+                taps[0] = t(0.25, 0.8, -1.0, 0.0);
+                taps[1] = t(0.5, 0.8, 1.0, 0.0);
+                taps[2] = t(0.75, 0.6, -0.4, 0.0);
+                taps[3] = t(1.0, 0.6, 0.4, 1.0);
+            }
+            // 15: percussive flam cluster + answer. // interpretation
+            15 => {
+                taps[0] = t(0.0625, 0.9, -0.2, 0.0);
+                taps[1] = t(0.09375, 0.7, 0.2, 0.0);
+                taps[2] = t(0.125, 0.5, 0.0, 0.0);
+                taps[3] = t(0.625, 0.8, -0.6, 0.0);
+                taps[4] = t(1.0, 0.8, 0.6, 1.0);
+            }
+            // 16: early-reflection cluster (documented: "a sort of
+            // 'early reflection' pattern").
+            _ => {
+                let positions = [0.06, 0.11, 0.17, 0.25, 0.36, 0.5, 0.71, 1.0];
+                for (i, p) in positions.iter().enumerate() {
+                    let pan = [(0.3), (-0.5), (0.7), (-0.2), (0.5), (-0.7), (0.2), (0.0)][i];
+                    taps[i] = t(*p, 0.9 - i as f64 * 0.09, pan, if *p == 1.0 { 1.0 } else { 0.0 });
+                }
+            }
+        }
+        taps
+    }
+
     pub fn taps(self) -> [Tap; MAX_TAPS] {
         let mut taps = [Tap::off(); MAX_TAPS];
         match self {
             TapPreset::Classic1PingPong => {
-                // Alternating L/R halves; pan takes effect in the deep pass.
-                taps[0] = Tap::at(0.5, 0.9);
-                taps[0].pan = -1.0;
-                taps[1] = Tap::at(1.0, 0.9);
-                taps[1].pan = 1.0;
+                return Self::classic(1);
             }
             TapPreset::Quarters => {
                 for (i, t) in [0.25, 0.5, 0.75, 1.0].iter().enumerate() {
@@ -263,6 +409,15 @@ impl MultiTapDelay {
 
     pub fn set_preset(&mut self, preset: TapPreset) {
         self.taps = preset.taps();
+    }
+
+    /// Recall Classic pattern 1–16, auto-setting the 16th grid and
+    /// `Input` feedback like the MX does ("they're all kind of baked
+    /// in there"). Call `update()` afterwards as with any tap edit.
+    pub fn apply_classic(&mut self, n: u8) {
+        self.taps = TapPreset::classic(n);
+        self.grid = TapGrid::Sixteenth;
+        self.feedback_mode = FeedbackMode::Input;
     }
 
     pub fn update(&mut self, sample_rate: f64) {
@@ -698,6 +853,78 @@ mod tests {
             .map(|(a, b)| (a - b).abs())
             .sum();
         assert!(diff_on > 1.0, "per-tap mod should move the tap: {diff_on}");
+    }
+
+    #[test]
+    fn set_step_quantizes_per_grid() {
+        let mut tap = Tap::at(1.0, 1.0);
+        // 256-step free grid: step 65 lands on beat 2 of 4 (walkthrough).
+        tap.set_step(65, TapGrid::Off);
+        assert!((tap.position - 0.25).abs() < 1e-12);
+        // 16th grid: step 5 = beat 2 downbeat.
+        tap.set_step(5, TapGrid::Sixteenth);
+        assert!((tap.position - 0.25).abs() < 1e-12);
+        // Triplet grid: step 4 = beat 2 downbeat (3 subdivisions/beat).
+        tap.set_step(4, TapGrid::Triplet);
+        assert!((tap.position - 0.25).abs() < 1e-12);
+        // Step 1 clamps to a real (tiny) read position, not zero.
+        tap.set_step(1, TapGrid::Off);
+        assert!(tap.position > 0.0 && tap.position <= 1.0 / 256.0 + 1e-12);
+        // Out-of-range steps clamp to the grid.
+        tap.set_step(999, TapGrid::Sixteenth);
+        assert!((tap.position - 15.0 / 16.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn classic_bank_all_16_distinct_and_audible() {
+        let mut layouts = Vec::new();
+        for n in 1..=16u8 {
+            let mut d = MultiTapDelay::new();
+            d.time_ms = 400.0;
+            d.feedback = 0.4;
+            d.apply_classic(n);
+            assert_eq!(d.grid, TapGrid::Sixteenth, "classic {n} sets 16th grid");
+            assert_eq!(d.feedback_mode, FeedbackMode::Input, "classic {n} sets Input fb");
+            d.update(SR);
+
+            let mut energy = 0.0;
+            for i in 0..48000 {
+                let input = if i < 50 { 0.8 } else { 0.0 };
+                let out = d.tick(input, 0);
+                assert!(out.is_finite(), "classic {n} NaN at {i}");
+                energy += out * out;
+            }
+            assert!(energy > 0.001, "classic {n} should produce output");
+
+            // Fingerprint: enabled tap positions + pans + levels (two
+            // patterns may share positions but differ in the field).
+            let fp: Vec<(i64, i64, i64)> = d
+                .taps
+                .iter()
+                .filter(|t| t.enabled)
+                .map(|t| {
+                    (
+                        (t.position * 1e6) as i64,
+                        (t.pan * 1e6) as i64,
+                        (t.level * 1e6) as i64,
+                    )
+                })
+                .collect();
+            assert!(!fp.is_empty(), "classic {n} has taps");
+            layouts.push(fp);
+        }
+        // All 16 pairwise distinct.
+        for i in 0..layouts.len() {
+            for j in (i + 1)..layouts.len() {
+                assert_ne!(
+                    layouts[i],
+                    layouts[j],
+                    "classic {} and {} must differ",
+                    i + 1,
+                    j + 1
+                );
+            }
+        }
     }
 
     #[test]
