@@ -874,6 +874,14 @@ const DELAY_PARAMS: &[ParamSpec] = &[
     ParamSpec { id: 32, name: "lofi_mix", min: 0.0, max: 1.0, default: 1.0 },
     ParamSpec { id: 33, name: "vinyl", min: 0.0, max: 1.0, default: 0.0 },
     ParamSpec { id: 34, name: "filter_shape", min: 0.0, max: 8.0, default: 0.0 },
+    // Per-line tap divisions + line pan (the rig's delay surface
+    // addresses these by name; id 7 "tap_div" still sets both lines at
+    // once). pan: one knob places BOTH lines (-1 hard L .. +1 hard R,
+    // 0 = centered); the engine's own default keeps the classic
+    // hard-L/R split until the param is touched.
+    ParamSpec { id: 35, name: "tap_div_l", min: 0.0, max: 7.0, default: 7.0 },
+    ParamSpec { id: 36, name: "tap_div_r", min: 0.0, max: 7.0, default: 7.0 },
+    ParamSpec { id: 37, name: "pan", min: -1.0, max: 1.0, default: 0.0 },
 ];
 
 /// Native Delay block — wraps [`delay::DualDelay`] (two full chains +
@@ -934,8 +942,13 @@ impl NativeDelay {
             }
             8 => a.high_pass_hz = v,
             9 => a.repeat_dynamics = v > 0.5,
-            26 => a.tap_div_l = delay::TapDivision::from_index(v.round().max(0.0) as usize),
-            27 => a.tap_div_r = delay::TapDivision::from_index(v.round().max(0.0) as usize),
+            35 => a.tap_div_l = delay::TapDivision::from_index(v.round().max(0.0) as usize),
+            36 => a.tap_div_r = delay::TapDivision::from_index(v.round().max(0.0) as usize),
+            37 => {
+                let p = v.clamp(-1.0, 1.0);
+                a.pan_l = p;
+                a.pan_r = p;
+            }
             10 => {
                 let voice = v.round().max(0.0) as u8;
                 a.delay_l.voice = voice;
@@ -1656,5 +1669,53 @@ impl PluginInstance for NativeGate {
     }
     fn deactivate(&mut self) {
         self.prepared = false;
+    }
+}
+
+#[cfg(test)]
+mod param_table_tests {
+    use super::*;
+
+    /// Duplicate ids silently shadow match arms in each block's `set()`
+    /// (a duplicated delay id once routed "spread" writes to a tap
+    /// division); duplicate names make `set_named` ambiguous.
+    #[test]
+    fn param_tables_have_unique_ids_and_names() {
+        for (label, table) in [
+            ("COMP_PARAMS", COMP_PARAMS),
+            ("REVERB_PARAMS", REVERB_PARAMS),
+            ("DELAY_PARAMS", DELAY_PARAMS),
+            ("MOD_PARAMS", MOD_PARAMS),
+            ("TREM_PARAMS", TREM_PARAMS),
+            ("GAIN_PARAMS", GAIN_PARAMS),
+            ("GATE_PARAMS", GATE_PARAMS),
+        ] {
+            let mut ids: Vec<u32> = table.iter().map(|p| p.id).collect();
+            ids.sort_unstable();
+            ids.dedup();
+            assert_eq!(ids.len(), table.len(), "{label}: duplicate param id");
+
+            let mut names: Vec<&str> = table.iter().map(|p| p.name).collect();
+            names.sort_unstable();
+            names.dedup();
+            assert_eq!(names.len(), table.len(), "{label}: duplicate param name");
+        }
+    }
+
+    /// The rig surfaces address these by name — they must resolve.
+    #[test]
+    fn rig_surface_names_resolve() {
+        for name in ["mix", "time", "feedback", "pan", "tap_div_l", "tap_div_r"] {
+            assert!(
+                param_id(DELAY_PARAMS, name).is_some(),
+                "delay param {name:?} missing from DELAY_PARAMS"
+            );
+        }
+        for name in ["mix", "decay", "size", "algorithm", "modulation", "damping", "tone"] {
+            assert!(
+                param_id(REVERB_PARAMS, name).is_some(),
+                "reverb param {name:?} missing from REVERB_PARAMS"
+            );
+        }
     }
 }
