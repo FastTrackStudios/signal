@@ -956,6 +956,8 @@ const DELAY_PARAMS: &[ParamSpec] = &[
 pub struct NativeDelay {
     dly: delay::DualDelay,
     prepared: bool,
+    sample_rate: f64,
+    block_size: usize,
     scratch_l: Vec<f64>,
     scratch_r: Vec<f64>,
 }
@@ -976,6 +978,8 @@ impl NativeDelay {
         dly.b.delay_l.time_ms = 300.0;
         dly.b.delay_r.time_ms = 300.0;
         Self {
+            sample_rate: 48000.0,
+            block_size: 512,
             dly,
             prepared: false,
             scratch_l: Vec::new(),
@@ -1179,6 +1183,8 @@ impl PluginInstance for NativeDelay {
         0
     }
     fn prepare(&mut self, sample_rate: f64, block_size: u32) -> Result<(), PluginError> {
+        self.sample_rate = sample_rate.max(1.0);
+        self.block_size = block_size.max(1) as usize;
         self.dly.update(AudioConfig {
             sample_rate: sample_rate.max(1.0),
             max_buffer_size: block_size.max(1) as usize,
@@ -1200,8 +1206,17 @@ impl PluginInstance for NativeDelay {
         out_r: &mut [f32],
         events: &PluginEvents<'_>,
     ) -> Result<(), PluginError> {
-        for &(id, value) in events.params {
-            self.set(id, value);
+        if !events.params.is_empty() {
+            for &(id, value) in events.params {
+                self.set(id, value);
+            }
+            // Param writes only set fields; tempo-synced times, style
+            // ranges, and head modes are derived in update() — re-run it
+            // or tap divisions and tap tempo silently do nothing.
+            self.dly.update(AudioConfig {
+                sample_rate: self.sample_rate,
+                max_buffer_size: self.block_size.max(1),
+            });
         }
         let dly = &mut self.dly;
         process_f64_inplace(
