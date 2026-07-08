@@ -88,6 +88,8 @@ pub struct GuitarRigBackend {
     drive_presets: Arc<Mutex<Vec<DrivePresetDef>>>,
     /// Fullscreen tuner overlay state (footswitch-driven, model-synced).
     tuner_visible: Arc<Mutex<bool>>,
+    /// Deferred profile save (live-edit auto-save marks; pump flushes).
+    library_dirty: Arc<std::sync::atomic::AtomicBool>,
     /// Headphone-cue module state (volume/self-mix staged; mute applied).
     headphone: Arc<Mutex<HeadphoneState>>,
     /// Master output trim (dB) — applied with the patch base + mute.
@@ -129,6 +131,7 @@ impl GuitarRigBackend {
             section_index: Arc::new(Mutex::new(0)),
             drive_presets: Arc::new(Mutex::new(lib.drive_presets)),
             tuner_visible: Arc::new(Mutex::new(false)),
+            library_dirty: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             headphone: Arc::new(Mutex::new(HeadphoneState::default())),
             master_trim: Arc::new(Mutex::new(0.0)),
             midi_log: Arc::new(Mutex::new(Vec::new())),
@@ -163,6 +166,16 @@ impl GuitarRigBackend {
             loop {
                 std::thread::sleep(METER_INTERVAL);
                 tick += 1;
+                // Flush pending auto-saves (live edits) about once a second.
+                if tick % 30 == 0
+                    && backend
+                        .library_dirty
+                        .swap(false, std::sync::atomic::Ordering::Relaxed)
+                {
+                    let def = backend.profile_def.lock().unwrap();
+                    RigLibrary::save_profile(&def);
+                    tracing::debug!("auto-saved live edits to profile.styx");
+                }
                 // Update the GR estimate + drain MIDI regardless of publish.
                 if let Some(stream) = &midi {
                     let mut events: Vec<(u8, u8)> = Vec::new();
@@ -304,6 +317,7 @@ impl GuitarRigBackend {
         }
         self.resync_blocks();
         self.apply_tempo_to_delays();
+        self.recall_patch_boost();
         self.apply_boost_to_block();
         self.apply_all_drives();
         self.publish_state();
@@ -528,6 +542,82 @@ impl GuitarRigBackend {
         }
     }
 
+    /// Record a live edit into the ACTIVE patch's overrides — dialing in a
+    /// sound on a stack auto-saves; returning to the patch restores exactly
+    /// what it sounded like. `param: None` records a bypass override.
+    fn record_patch_override(&self, block_id: &str, param: Option<&str>, value: f32) {
+        let block = {
+            let blocks = self.blocks.lock().unwrap();
+            blocks
+                .iter()
+                .find(|b| b.id == block_id)
+                .map(|b| (b.name.clone(), b.block_type))
+        };
+        let Some((block_name, bt)) = block else { return };
+        let active = {
+            let guard = self.rig.lock().unwrap();
+            guard
+                .as_ref()
+                .and_then(|prig| prig.active_patch().map(|p| p.name.clone()))
+        };
+        let Some(patch_name) = active else { return };
+        let module = format!("{:?}", bt.category());
+        {
+            let mut def = self.profile_def.lock().unwrap();
+            let Some(p) = def
+                .patches
+                .iter_mut()
+                .find(|p| p.name.eq_ignore_ascii_case(&patch_name))
+            else {
+                return;
+            };
+            let (param_name, op) = match param {
+                Some(n) => (n.to_string(), "set"),
+                None => (String::new(), "bypass"),
+            };
+            match p.overrides.iter_mut().find(|o| {
+                o.block.eq_ignore_ascii_case(&block_name) && o.op == op && o.param == param_name
+            }) {
+                Some(o) => o.value = value,
+                None => p.overrides.push(crate::profiles::OverrideDef {
+                    module,
+                    block: block_name,
+                    param: param_name,
+                    op: op.to_string(),
+                    value,
+                }),
+            }
+        }
+        // Debounced write: knob drags mark dirty; the meter pump flushes.
+        self.library_dirty
+            .store(true, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    /// Recall the active patch's boost setting (PatchDef.boost_db): a patch
+    /// like Lead carries its +3 dB engaged; 0 means boost off.
+    fn recall_patch_boost(&self) {
+        let active = {
+            let guard = self.rig.lock().unwrap();
+            guard
+                .as_ref()
+                .and_then(|prig| prig.active_patch().map(|p| p.name.clone()))
+        };
+        let Some(name) = active else { return };
+        let boost = self
+            .profile_def
+            .lock()
+            .unwrap()
+            .patches
+            .iter()
+            .find(|p| p.name.eq_ignore_ascii_case(&name))
+            .map(|p| p.boost_db)
+            .unwrap_or(0.0);
+        *self.boost_on.lock().unwrap() = boost != 0.0;
+        if boost != 0.0 {
+            *self.boost_level.lock().unwrap() = boost;
+        }
+    }
+
     /// Push the boost pedal level onto the active chain's "Boost" gain block
     /// (a `Volume` block). Re-applied after patch switches (activation
     /// reinstalls the configured 0 dB).
@@ -564,6 +654,7 @@ impl GuitarRigBackend {
         }
         self.resync_blocks();
         self.apply_tempo_to_delays();
+        self.recall_patch_boost();
         self.apply_boost_to_block();
         self.apply_all_drives();
         self.publish_state();
@@ -701,6 +792,7 @@ impl GuitarRigBackend {
         // and re-push any tapped tempo onto the fresh delays.
         self.resync_blocks();
         self.apply_tempo_to_delays();
+        self.recall_patch_boost();
         self.apply_boost_to_block();
         self.apply_all_drives();
         self.publish_state();
@@ -1227,6 +1319,7 @@ impl Rig for GuitarRigBackend {
         }
         self.resync_blocks();
         self.apply_tempo_to_delays();
+        self.recall_patch_boost();
         self.apply_boost_to_block();
         self.apply_all_drives();
         self.publish_state();
@@ -1306,6 +1399,7 @@ impl Rig for GuitarRigBackend {
         }
         self.resync_blocks();
         self.apply_tempo_to_delays();
+        self.recall_patch_boost();
         self.apply_boost_to_block();
         self.apply_all_drives();
         self.publish_state();
@@ -1375,6 +1469,7 @@ impl Rig for GuitarRigBackend {
         }
         self.resync_blocks();
         self.apply_tempo_to_delays();
+        self.recall_patch_boost();
         self.apply_boost_to_block();
         self.apply_all_drives();
         self.publish_state();
@@ -1426,6 +1521,8 @@ impl Rig for GuitarRigBackend {
             def.patches.push(crate::profiles::PatchDef {
                 name: name.clone(),
                 preset,
+                trim_db: 0.0,
+                boost_db: 0.0,
                 overrides: Vec::new(),
             });
             if let Some(st) = def.stacks.iter_mut().find(|s| s.name.eq_ignore_ascii_case(&stack)) {
@@ -1675,6 +1772,19 @@ impl Rig for GuitarRigBackend {
         self.publish_state();
     }
 
+    fn set_patch_trim(&self, patch: u32, db: f32) {
+        let rebuilt = {
+            let mut def = self.profile_def.lock().unwrap();
+            let Some(p) = def.patches.get_mut(patch as usize) else { return };
+            p.trim_db = db.clamp(-24.0, 24.0);
+            tracing::info!("patch '{}' trim {:+.1} dB", p.name, p.trim_db);
+            RigLibrary::save_profile(&def);
+            let dps = self.drive_presets.lock().unwrap();
+            build_profile(&def, &dps)
+        };
+        self.reload_rebuilt(rebuilt);
+    }
+
     fn toggle_tuner(&self) {
         let shown = {
             let mut t = self.tuner_visible.lock().unwrap();
@@ -1917,11 +2027,13 @@ impl Rig for GuitarRigBackend {
                     prig.rig().set_block_slot_bypass(&id, effective);
                 }
             }
+            self.record_patch_override(&id, None, if byp { 1.0 } else { 0.0 });
         }
         self.publish_state();
     }
 
     fn set_block_param(&self, id: String, param: String, value: f32) {
+        self.record_patch_override(&id, Some(&param), value);
         // Constant-loudness drive: on NAM board blocks the drive knob is
         // realised as a compensated input/output trim pair.
         if param == "drive" {

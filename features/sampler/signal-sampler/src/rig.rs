@@ -1374,10 +1374,15 @@ impl GuitarRig {
             Some(cid) => {
                 let chain = swap.chains.get_mut(&cid).expect("checked contains_key");
                 for (slot, guid) in chain_guids.iter().enumerate() {
-                    let new_box: Box<dyn PluginInstance> = match chain.boxes.get_mut(slot) {
+                    let mut new_box: Box<dyn PluginInstance> = match chain.boxes.get_mut(slot) {
                         Some(slot_box) if slot_box.is_some() => slot_box.take().unwrap(),
                         _ => Self::fresh_identity(sr),
                     };
+                    // Re-prepare on arm: clears delay lines and reverb tails
+                    // left from this chain's last activation — otherwise the
+                    // stale tail dumps out as a burst on the patch switch.
+                    // (Control thread, not the audio callback.)
+                    let _ = new_box.prepare(sr, FX_PREPARE_BLOCK);
                     drop(self.daw.insert_plugin_instance(guid.clone(), new_box));
                 }
                 swap.active = Some(cid);

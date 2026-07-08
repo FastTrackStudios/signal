@@ -120,6 +120,11 @@ pub fn drive_presets() -> Vec<DrivePresetDef> {
 pub struct PatchDef {
     pub name: String,
     pub preset: String,
+    /// Manual output trim (dB) on top of the loudness calibration —
+    /// patch-level levelling when the ears disagree with the meter.
+    pub trim_db: f32,
+    /// Boost level recalled with the patch (0 = boost off).
+    pub boost_db: f32,
     pub overrides: Vec<OverrideDef>,
 }
 
@@ -209,6 +214,8 @@ pub fn worship_def() -> ProfileDef {
     let patch = |name: &str, preset: &str| PatchDef {
         name: name.to_string(),
         preset: preset.to_string(),
+        trim_db: 0.0,
+        boost_db: 0.0,
         overrides: Vec::new(),
     };
     let with_ovr = |mut p: PatchDef, ovr: Vec<OverrideDef>| {
@@ -260,7 +267,11 @@ pub fn worship_def() -> ProfileDef {
                 vec![time_param("DLY 1", "mix", 0.12)],
             ),
             // Lead
-            patch("Lead", "Arena Lead"),
+            {
+                let mut p = patch("Lead", "Arena Lead");
+                p.boost_db = 3.0;
+                p
+            },
             with_ovr(
                 patch("Lead POG", "Arena Lead"),
                 vec![time_param("VERB 1", "mix", 0.12)],
@@ -388,6 +399,7 @@ pub fn build_profile(def: &ProfileDef, dps: &[DrivePresetDef]) -> RigProfile {
     let mut profile = RigProfile::new(&def.name);
     for p in &def.patches {
         let mut patch = amp(&p.name, nam_of(&p.preset));
+        patch.output_trim_db += p.trim_db;
         apply_overrides(&mut patch, &p.overrides);
         profile = profile.with_patch(patch);
     }
