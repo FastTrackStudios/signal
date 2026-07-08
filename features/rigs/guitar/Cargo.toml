@@ -19,6 +19,9 @@ architect = { workspace = true, features = ["vox"] }
 signal-proto.workspace = true
 # EQ band-param naming (EQ_BANDS × EQ_FIELDS) — one source of truth with the DSP.
 signal-fx.workspace = true
+# Styx-serializable rig definitions (the runtime library files).
+facet.workspace = true
+facet-styx.workspace = true
 # MIDI capture for the core's monitor (native only — the headless core).
 midicore.workspace = true
 tracing.workspace = true

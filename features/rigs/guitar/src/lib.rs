@@ -19,6 +19,7 @@
 
 use std::path::Path;
 
+pub mod library;
 pub mod profiles;
 pub mod session;
 

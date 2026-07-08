@@ -8,3 +8,6 @@
 pub mod chain;
 pub mod dynamics;
 pub mod tremolo;
+
+/// Re-export the modulator toolkit so wrappers can drive trigger modes.
+pub use fts_modulation;

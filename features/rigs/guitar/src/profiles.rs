@@ -2,8 +2,8 @@
 //! later. Moved out of the desktop app: profiles are rig domain data, not
 //! front-end concern.
 
+use facet::Facet;
 use signal_proto::block::BlockType;
-use signal_proto::overrides::{NodeOverrideOp, NodePath, NodePathSegment, Override};
 use signal_sampler::rig_profile::RigStack;
 use signal_sampler::{RigBlock, RigPatch, RigProfile};
 
@@ -41,7 +41,7 @@ fn off_fx(block_type: BlockType, name: &str, params: &[(&str, &str)]) -> RigBloc
 /// One preset in the pool — a complete amp tone (NAM capture). Patches
 /// *point at* presets; several patches can share one (scene/override
 /// differences layer on top later).
-#[derive(Clone)]
+#[derive(Clone, Debug, Facet)]
 pub struct PresetDef {
     pub name: String,
     pub nam: String,
@@ -49,7 +49,7 @@ pub struct PresetDef {
 
 /// One NAM option inside a drive block preset — pedals are commonly
 /// captured at several settings (gain stages, sides, channels).
-#[derive(Clone)]
+#[derive(Clone, Debug, Facet)]
 pub struct DriveOptionDef {
     pub name: String,
     pub nam: String,
@@ -57,7 +57,7 @@ pub struct DriveOptionDef {
 
 /// A **Drive Block Preset**: the thing a drive slot loads. Wraps one or
 /// more NAM captures of the pedal with a quick option switch.
-#[derive(Clone)]
+#[derive(Clone, Debug, Facet)]
 pub struct DrivePresetDef {
     pub name: String,
     pub options: Vec<DriveOptionDef>,
@@ -65,7 +65,7 @@ pub struct DrivePresetDef {
 
 /// A drive slot in the chain: which preset it runs and which of the
 /// preset's NAM options is selected.
-#[derive(Clone)]
+#[derive(Clone, Debug, Facet)]
 pub struct DriveSlotDef {
     /// Chain block name ("Drive 1", …).
     pub block: String,
@@ -116,11 +116,52 @@ pub fn drive_presets() -> Vec<DrivePresetDef> {
 /// One patch: a name in the profile + the preset it points at + the
 /// overrides that make it different from the preset (the domain's
 /// `Patch { target, overrides }` — see `signal_proto::overrides`).
-#[derive(Clone)]
+#[derive(Clone, Debug, Facet)]
 pub struct PatchDef {
     pub name: String,
     pub preset: String,
-    pub overrides: Vec<Override>,
+    pub overrides: Vec<OverrideDef>,
+}
+
+/// One patch-level override, flat and text-friendly: which module/block it
+/// touches, the op, and the value. Examples (styx):
+///
+/// ```text
+/// {module Time, block "VERB 1", param mix, op set, value 0.35}
+/// {module Time, block "DLY 2", param "", op bypass, value 0}   // 0 = engage
+/// ```
+///
+/// Ops: `set` writes `param` = `value`; `bypass` sets the block's bypass
+/// (value ≥ 0.5 = bypassed, < 0.5 = engaged).
+#[derive(Clone, Debug, Facet)]
+pub struct OverrideDef {
+    pub module: String,
+    pub block: String,
+    pub param: String,
+    pub op: String,
+    pub value: f32,
+}
+
+impl OverrideDef {
+    pub fn set(module: &str, block: &str, param: &str, value: f32) -> Self {
+        Self {
+            module: module.to_string(),
+            block: block.to_string(),
+            param: param.to_string(),
+            op: "set".to_string(),
+            value,
+        }
+    }
+
+    pub fn bypass(module: &str, block: &str, bypassed: bool) -> Self {
+        Self {
+            module: module.to_string(),
+            block: block.to_string(),
+            param: String::new(),
+            op: "bypass".to_string(),
+            value: if bypassed { 1.0 } else { 0.0 },
+        }
+    }
 }
 
 impl PatchDef {
@@ -129,12 +170,8 @@ impl PatchDef {
     pub fn override_modules(&self) -> Vec<String> {
         let mut out: Vec<String> = Vec::new();
         for ov in &self.overrides {
-            for seg in ov.path.segments() {
-                if let NodePathSegment::Module(m) = seg {
-                    if !out.iter().any(|x| x.eq_ignore_ascii_case(m)) {
-                        out.push(m.clone());
-                    }
-                }
+            if !ov.module.is_empty() && !out.iter().any(|x| x.eq_ignore_ascii_case(&ov.module)) {
+                out.push(ov.module.clone());
             }
         }
         out
@@ -143,14 +180,21 @@ impl PatchDef {
 
 /// The editable profile definition: the preset pool, the patches pointing
 /// into it, and the footswitch stacks grouping the patches.
-#[derive(Clone)]
+#[derive(Clone, Debug, Facet)]
 pub struct ProfileDef {
     /// Drive-slot assignments (block → drive preset + selected option).
     pub drives: Vec<DriveSlotDef>,
     pub name: String,
     pub presets: Vec<PresetDef>,
     pub patches: Vec<PatchDef>,
-    pub stacks: Vec<(String, Vec<String>)>,
+    pub stacks: Vec<StackDef>,
+}
+
+/// A footswitch stack: a name and its patch rotation.
+#[derive(Clone, Debug, Facet)]
+pub struct StackDef {
+    pub name: String,
+    pub patches: Vec<String>,
 }
 
 /// The Worship profile definition: a small preset pool, twelve patches
@@ -158,23 +202,20 @@ pub struct ProfileDef {
 /// carry their differences), five footswitch stacks.
 pub fn worship_def() -> ProfileDef {
     let preset = |name: &str, nam: String| PresetDef { name: name.to_string(), nam };
+    let stack = |name: &str, patches: &[&str]| StackDef {
+        name: name.to_string(),
+        patches: patches.iter().map(|p| p.to_string()).collect(),
+    };
     let patch = |name: &str, preset: &str| PatchDef {
         name: name.to_string(),
         preset: preset.to_string(),
         overrides: Vec::new(),
     };
-    let with_ovr = |mut p: PatchDef, ovr: Vec<Override>| {
+    let with_ovr = |mut p: PatchDef, ovr: Vec<OverrideDef>| {
         p.overrides = ovr;
         p
     };
-    // Override paths address module → block → parameter, exactly the
-    // domain's NodePath. Values are normalized 0–1 (ParameterValue clamps).
-    let time_param = |block: &str, param: &str, v: f32| {
-        Override::set(
-            NodePath::module("Time").with_block(block).with_parameter(param),
-            v,
-        )
-    };
+    let time_param = |block: &str, param: &str, v: f32| OverrideDef::set("Time", block, param, v);
     let drives = vec![
         DriveSlotDef { block: "Drive 1".to_string(), preset: "King of Tone".to_string(), option: 0 },
         DriveSlotDef { block: "Drive 2".to_string(), preset: "JHS Morning Glory".to_string(), option: 1 },
@@ -203,10 +244,7 @@ pub fn worship_def() -> ProfileDef {
             with_ovr(
                 patch("Crunch Edge", "AA Crunch"),
                 // "Edge": gate off so every rattle rings.
-                vec![Override::bypass(
-                    NodePath::module("Utility").with_block("Gate"),
-                    true,
-                )],
+                vec![OverrideDef::bypass("Utility", "Gate", true)],
             ),
             // Drive
             patch("Drive", "AA Drive"),
@@ -232,17 +270,17 @@ pub fn worship_def() -> ProfileDef {
             with_ovr(
                 patch("Ambient Delay Craze", "AC30 Clean"),
                 vec![
-                    Override::bypass(NodePath::module("Time").with_block("DLY 2"), false),
+                    OverrideDef::bypass("Time", "DLY 2", false),
                     time_param("DLY 2", "mix", 0.16),
                 ],
             ),
         ],
         stacks: vec![
-            ("Clean".to_string(), vec!["Clean".into(), "Clean Dry".into(), "Clean Verb".into()]),
-            ("Crunch".to_string(), vec!["Crunch".into(), "Crunch Edge".into()]),
-            ("Drive".to_string(), vec!["Drive".into(), "Drive Edge".into()]),
-            ("Lead".to_string(), vec!["Lead".into(), "Lead POG".into()]),
-            ("Ambient".to_string(), vec!["Ambient".into(), "Ambient Swells".into(), "Ambient Delay Craze".into()]),
+            stack("Clean", &["Clean", "Clean Dry", "Clean Verb"]),
+            stack("Crunch", &["Crunch", "Crunch Edge"]),
+            stack("Drive", &["Drive", "Drive Edge"]),
+            stack("Lead", &["Lead", "Lead POG"]),
+            stack("Ambient", &["Ambient", "Ambient Swells", "Ambient Delay Craze"]),
         ],
     }
 }
@@ -253,14 +291,13 @@ pub fn worship_def() -> ProfileDef {
 /// Build a drive slot's block: NAM-backed when the profile assigns a
 /// drive preset to it, a transparent placeholder otherwise. Off by
 /// default either way — the board engages them.
-fn drive_block(def: &ProfileDef, block: &str) -> RigBlock {
+fn drive_block(def: &ProfileDef, dps: &[DrivePresetDef], block: &str) -> RigBlock {
     let assigned = def
         .drives
         .iter()
         .find(|d| d.block.eq_ignore_ascii_case(block))
         .and_then(|d| {
-            drive_presets()
-                .into_iter()
+            dps.iter()
                 .find(|p| p.name.eq_ignore_ascii_case(&d.preset))
                 .and_then(|p| p.options.get(d.option).cloned())
         });
@@ -275,12 +312,12 @@ fn drive_block(def: &ProfileDef, block: &str) -> RigBlock {
     b
 }
 
-pub fn build_profile(def: &ProfileDef) -> RigProfile {
+pub fn build_profile(def: &ProfileDef, dps: &[DrivePresetDef]) -> RigProfile {
     // The standard full chain around one NAM capture — see the block-name
     // comments in the module docs (names match the guitar-rig-template slots).
     let amp = |name: &str, path: String| {
         RigPatch::new(name)
-            .with_block(RigBlock::of_type(BlockType::Compressor).named("Compressor"))
+            .with_block(on_fx(BlockType::Compressor, "Compressor", &[("threshold", "-40")]))
             // Volume pedal (clean gain, unity default) — the Control view's
             // left pedal drives it.
             .with_block(on_fx(BlockType::Volume, "Volume Pedal", &[("gain_db", "0")]))
@@ -288,9 +325,9 @@ pub fn build_profile(def: &ProfileDef) -> RigProfile {
             // engaged from the control surface (DSP lands with drive-dsp;
             // placeholders keep the blocks addressable + level-staged).
             .with_block(off_fx(BlockType::Boost, "Boost", &[("drive", "0.5")]))
-            .with_block(drive_block(def, "Drive 1"))
-            .with_block(drive_block(def, "Drive 2"))
-            .with_block(drive_block(def, "Drive 3"))
+            .with_block(drive_block(def, dps, "Drive 1"))
+            .with_block(drive_block(def, dps, "Drive 2"))
+            .with_block(drive_block(def, dps, "Drive 3"))
             .with_block(RigBlock::nam(path).named("Amp L"))
             // Post-amp shaping, part of the Amp module: gate into the amp
             // EQ — both dialed against the amp's character.
@@ -337,61 +374,48 @@ pub fn build_profile(def: &ProfileDef) -> RigProfile {
         apply_overrides(&mut patch, &p.overrides);
         profile = profile.with_patch(patch);
     }
-    for (name, patches) in &def.stacks {
-        profile = profile.with_stack(RigStack::new(name, patches.clone()));
+    for st in &def.stacks {
+        profile = profile.with_stack(RigStack::new(&st.name, st.patches.clone()));
     }
     profile
 }
 
-/// Apply a patch's overrides onto its built chain: block-addressed `Set`
-/// writes the param (normalized value as the block's build-time param) and
-/// `Bypass` flips the block's configured bypass. Module segments scope the
-/// path (and drive the UI badges); application resolves by block name.
-fn apply_overrides(patch: &mut RigPatch, overrides: &[Override]) {
+/// Apply a patch's overrides onto its built chain: `set` writes the param
+/// on the named block, `bypass` flips its configured bypass. Blocks resolve
+/// by name; the module field scopes the path (and drives the UI badges).
+fn apply_overrides(patch: &mut RigPatch, overrides: &[OverrideDef]) {
     for ov in overrides {
-        let block_name = ov.path.segments().iter().find_map(|s| match s {
-            NodePathSegment::Block(b) => Some(b.clone()),
-            _ => None,
-        });
-        let param_name = ov.path.segments().iter().find_map(|s| match s {
-            NodePathSegment::Parameter(p) => Some(p.clone()),
-            _ => None,
-        });
-        let Some(block_name) = block_name else { continue };
         let Some(block) = patch
             .chain
             .iter_mut()
-            .find(|b| b.name.eq_ignore_ascii_case(&block_name))
+            .find(|b| b.name.eq_ignore_ascii_case(&ov.block))
         else {
             continue;
         };
-        match &ov.op {
-            NodeOverrideOp::Set(v) => {
-                if let Some(param) = param_name {
-                    // Replace an existing build-time param or append one.
-                    match block.params.iter_mut().find(|p| p.name == param) {
-                        Some(p) => p.value = v.get().to_string(),
-                        None => block.params.push(signal_sampler::rig_node::Param {
-                            name: param,
-                            value: v.get().to_string(),
-                        }),
-                    }
+        match ov.op.to_ascii_lowercase().as_str() {
+            "set" if !ov.param.is_empty() => {
+                match block.params.iter_mut().find(|p| p.name == ov.param) {
+                    Some(p) => p.value = ov.value.to_string(),
+                    None => block.params.push(signal_sampler::rig_node::Param {
+                        name: ov.param.clone(),
+                        value: ov.value.to_string(),
+                    }),
                 }
             }
-            NodeOverrideOp::Bypass(b) => block.bypassed = *b,
-            _ => {} // ReplaceRef / Insert / Remove / Enable — later.
+            "bypass" => block.bypassed = ov.value >= 0.5,
+            other => tracing::warn!("override op '{other}' not understood (set|bypass)"),
         }
     }
 }
 
 /// The Worship runtime profile (kept for existing callers).
 pub fn worship_profile() -> RigProfile {
-    build_profile(&worship_def())
+    build_profile(&worship_def(), &drive_presets())
 }
 
 /// A song in the library: name plus its default key and tempo. Setlist
 /// entries reference songs and may override key/tempo per set.
-#[derive(Clone)]
+#[derive(Clone, Debug, Facet)]
 pub struct SongDef {
     pub name: String,
     /// Default key (e.g. "G", "C", "E", "A").
@@ -406,15 +430,17 @@ pub struct SongDef {
 
 /// One setlist entry: a song reference with optional per-set key/tempo
 /// overrides (the same song can sit in different keys on different sets).
-#[derive(Clone)]
+#[derive(Clone, Debug, Facet)]
 pub struct SetlistEntryDef {
     pub song: String,
-    pub key: Option<String>,
-    pub bpm: Option<u32>,
+    /// Per-set key override; empty = the song's default.
+    pub key: String,
+    /// Per-set tempo override; 0 = the song's default.
+    pub bpm: u32,
 }
 
 /// A named setlist (e.g. "XR Wednesday 7-8-26").
-#[derive(Clone)]
+#[derive(Clone, Debug, Facet)]
 pub struct SetlistDef {
     pub name: String,
     pub entries: Vec<SetlistEntryDef>,
@@ -444,7 +470,7 @@ pub fn song_library() -> Vec<SongDef> {
 /// The default setlists — XR + CYA, dated.
 pub fn default_setlists() -> Vec<SetlistDef> {
     fn entry(song: &str) -> SetlistEntryDef {
-        SetlistEntryDef { song: song.to_string(), key: None, bpm: None }
+        SetlistEntryDef { song: song.to_string(), key: String::new(), bpm: 0 }
     }
     vec![
         SetlistDef {

@@ -1240,7 +1240,6 @@ impl NativeMod {
             0 => self.ch.mix = v,
             1 => self.ch.depth = v,
             2 => self.ch.rate_hz = v,
-            _ => {}
             3 => {
                 use modulation::chorus::engine::EngineType;
                 self.ch.set_engine(match v.round().max(0.0) as u32 {
@@ -1251,6 +1250,7 @@ impl NativeMod {
                     _ => EngineType::Cubic,
                 });
             }
+            _ => {}
         }
     }
 
@@ -1349,6 +1349,12 @@ impl NativeTrem {
         let mut tr = TremChain::new();
         tr.set_mode(TremMode::Stereo);
         tr.set_depth(0.5);
+        // The chain defaults to transport-synced triggering, but the rig
+        // has no transport — the LFO would freeze. Free-run at 4 Hz.
+        tr.modulator.trigger.mode = modulation::trem::fts_modulation::trigger::TriggerMode::Free;
+        tr.modulator.trigger.sync_index = 0;
+        tr.modulator.trigger.rate_hz = 4.0;
+        tr.mix = 1.0;
         Self {
             tr,
             prepared: false,
@@ -1363,6 +1369,7 @@ impl NativeTrem {
             1 => self.tr.mix = v.clamp(0.0, 1.0),
             2 => {
                 // Free-running rate: force the trigger engine out of sync.
+                self.tr.modulator.trigger.mode = modulation::trem::fts_modulation::trigger::TriggerMode::Free;
                 self.tr.modulator.trigger.sync_index = 0;
                 self.tr.modulator.trigger.rate_hz = v.max(0.01);
             }

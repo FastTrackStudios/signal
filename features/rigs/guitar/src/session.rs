@@ -22,10 +22,8 @@ use signal_guitar_proto::{
 use signal_proto::block::BlockType;
 use signal_sampler::{DeviceInfo, GuitarRig, ProfileRig, RigBlock, RigManager};
 
-use crate::profiles::{
-    ProfileDef, SetlistDef, SongDef, build_profile, default_setlists, drive_presets, song_library,
-    worship_def,
-};
+use crate::library::RigLibrary;
+use crate::profiles::{DrivePresetDef, ProfileDef, SetlistDef, SongDef, build_profile};
 
 /// Rig whose audio prefs the settings service reads/writes (persisted to
 /// `<config>/signal/rigs/guitar-rig.styx` by `RigManager`).
@@ -86,6 +84,8 @@ pub struct GuitarRigBackend {
     setlist_index: Arc<Mutex<usize>>,
     song_index: Arc<Mutex<usize>>,
     section_index: Arc<Mutex<usize>>,
+    /// Drive block presets (NAM option sets) — library-backed.
+    drive_presets: Arc<Mutex<Vec<DrivePresetDef>>>,
     /// Headphone-cue module state (volume/self-mix staged; mute applied).
     headphone: Arc<Mutex<HeadphoneState>>,
     /// Master output trim (dB) — applied with the patch base + mute.
@@ -111,6 +111,7 @@ const METER_INTERVAL: std::time::Duration = std::time::Duration::from_millis(33)
 
 impl GuitarRigBackend {
     pub fn new() -> Self {
+        let lib = RigLibrary::load_or_bootstrap();
         let backend = Self {
             rig: Arc::new(Mutex::new(None)),
             boost_on: Arc::new(Mutex::new(false)),
@@ -118,12 +119,13 @@ impl GuitarRigBackend {
             blocks: Arc::new(Mutex::new(Vec::new())),
             tempo: Arc::new(Mutex::new(None)),
             taps: Arc::new(Mutex::new(TapTracker::default())),
-            profile_def: Arc::new(Mutex::new(worship_def())),
-            songs_lib: Arc::new(Mutex::new(song_library())),
-            setlists: Arc::new(Mutex::new(default_setlists())),
+            profile_def: Arc::new(Mutex::new(lib.profile)),
+            songs_lib: Arc::new(Mutex::new(lib.songs)),
+            setlists: Arc::new(Mutex::new(lib.setlists)),
             setlist_index: Arc::new(Mutex::new(0)),
             song_index: Arc::new(Mutex::new(0)),
             section_index: Arc::new(Mutex::new(0)),
+            drive_presets: Arc::new(Mutex::new(lib.drive_presets)),
             headphone: Arc::new(Mutex::new(HeadphoneState::default())),
             master_trim: Arc::new(Mutex::new(0.0)),
             midi_log: Arc::new(Mutex::new(Vec::new())),
@@ -204,6 +206,38 @@ impl GuitarRigBackend {
         if has_comp { signal_fx::comp_meter::gr_db().max(0.0) } else { 0.0 }
     }
 
+    /// Load a rebuilt profile into the live rig, restore the active patch,
+    /// and resync everything — the shared tail of every edit-time rebuild.
+    fn reload_rebuilt(&self, rebuilt: signal_sampler::rig_profile::RigProfile) {
+        let active = {
+            let guard = self.rig.lock().unwrap();
+            guard
+                .as_ref()
+                .and_then(|prig| prig.active_patch().map(|p| p.name.clone()))
+        };
+        if let Ok(mut guard) = self.rig.lock() {
+            if let Some(prig) = guard.as_mut() {
+                if let Err(e) = prig.load_profile(rebuilt, None) {
+                    tracing::error!("profile reload failed: {e}");
+                }
+                if let Some(name) = &active {
+                    let idx = prig
+                        .patches()
+                        .iter()
+                        .position(|p| p.name.eq_ignore_ascii_case(name));
+                    if let Some(idx) = idx {
+                        prig.activate(idx);
+                    }
+                }
+            }
+        }
+        self.resync_blocks();
+        self.apply_tempo_to_delays();
+        self.apply_boost_to_block();
+        self.apply_all_drives();
+        self.publish_state();
+    }
+
     /// The NAM capture behind a board block, if any: drive slots resolve
     /// through their drive preset; the amp resolves through the active
     /// patch's pool preset.
@@ -214,8 +248,9 @@ impl GuitarRigBackend {
             .iter()
             .find(|d| d.block.eq_ignore_ascii_case(block_name))
         {
-            return drive_presets()
-                .into_iter()
+            let dps = self.drive_presets.lock().unwrap();
+            return dps
+                .iter()
                 .find(|p| p.name.eq_ignore_ascii_case(&slot.preset))
                 .and_then(|p| p.options.get(slot.option).map(|o| o.nam.clone()));
         }
@@ -309,7 +344,7 @@ impl GuitarRigBackend {
                     .unwrap_or(48_000.0)
             };
             let mut paths: Vec<String> = Vec::new();
-            for p in drive_presets() {
+            for p in backend.drive_presets.lock().unwrap().iter() {
                 for o in &p.options {
                     paths.push(o.nam.clone());
                 }
@@ -463,12 +498,16 @@ impl GuitarRigBackend {
             .iter()
             .map(|e| {
                 let song = lib.iter().find(|s| s.name.eq_ignore_ascii_case(&e.song));
-                let key = e
-                    .key
-                    .clone()
-                    .or_else(|| song.map(|s| s.key.clone()))
-                    .unwrap_or_default();
-                let bpm = e.bpm.or_else(|| song.map(|s| s.bpm)).unwrap_or(120);
+                let key = if e.key.is_empty() {
+                    song.map(|s| s.key.clone()).unwrap_or_default()
+                } else {
+                    e.key.clone()
+                };
+                let bpm = if e.bpm == 0 {
+                    song.map(|s| s.bpm).unwrap_or(120)
+                } else {
+                    e.bpm
+                };
                 let stack = song.map(|s| s.stack).unwrap_or(0);
                 let sections = song.map(|s| s.sections.clone()).unwrap_or_default();
                 (e.song.clone(), key, bpm, stack, sections)
@@ -558,7 +597,11 @@ impl GuitarRigBackend {
                 // (unity-loudness blocks). The old patch-level match would
                 // stack a second, different target on top.
                 prig.set_level_match(false);
-                let profile = build_profile(&self.profile_def.lock().unwrap());
+                let profile = {
+                    let def = self.profile_def.lock().unwrap();
+                    let dps = self.drive_presets.lock().unwrap();
+                    build_profile(&def, &dps)
+                };
                 match prig.load_profile(profile, None) {
                     Ok(()) => tracing::info!("profile loaded ({} patches)", prig.patches().len()),
                     Err(e) => tracing::error!("profile load failed: {e}"),
@@ -622,8 +665,10 @@ impl GuitarRigBackend {
                                 .iter()
                                 .find(|d| d.block.eq_ignore_ascii_case(&name))
                                 .and_then(|d| {
-                                    drive_presets()
-                                        .into_iter()
+                                    self.drive_presets
+                                        .lock()
+                                        .unwrap()
+                                        .iter()
                                         .find(|p| p.name.eq_ignore_ascii_case(&d.preset))
                                         .map(|p| {
                                             (
@@ -681,7 +726,7 @@ fn param_specs(bt: BlockType) -> Vec<(String, f32, f32, f32)> {
             })
             .collect(),
         BlockType::Compressor => owned(&[
-            ("threshold", -60.0, 0.0, -18.0),
+            ("threshold", -60.0, 0.0, -40.0),
             ("ratio", 1.0, 20.0, 4.0),
             ("attack", 0.1, 200.0, 10.0),
             ("release", 5.0, 1000.0, 120.0),
@@ -998,6 +1043,7 @@ impl Rig for GuitarRigBackend {
             }
             let song = entries.remove(from);
             entries.insert(to, song);
+            RigLibrary::save_setlists(&setlists);
             // Keep the current-song pointer on the same song.
             let mut cur = self.song_index.lock().unwrap();
             if *cur == from {
@@ -1127,7 +1173,11 @@ impl Rig for GuitarRigBackend {
             };
             tracing::info!("patch '{}' → preset '{preset_name}'", p.name);
             p.preset = preset_name;
-            build_profile(&def)
+            RigLibrary::save_profile(&def);
+            {
+            let dps = self.drive_presets.lock().unwrap();
+            build_profile(&def, &dps)
+        }
         };
         // …then rebuild the live chains. A full reload (brief gap) — this is
         // an edit-time operation, and it keeps every patch preinstalled for
@@ -1183,7 +1233,10 @@ impl Rig for GuitarRigBackend {
             else {
                 return;
             };
-            let n_options = drive_presets()
+            let n_options = self
+                .drive_presets
+                .lock()
+                .unwrap()
                 .iter()
                 .find(|p| p.name.eq_ignore_ascii_case(&slot.preset))
                 .map(|p| p.options.len())
@@ -1193,7 +1246,11 @@ impl Rig for GuitarRigBackend {
             }
             slot.option = (option as usize).min(n_options - 1);
             tracing::info!("{} → {} option {}", slot.block, slot.preset, slot.option);
-            build_profile(&def)
+            RigLibrary::save_profile(&def);
+            {
+            let dps = self.drive_presets.lock().unwrap();
+            build_profile(&def, &dps)
+        }
         };
         let active = {
             let guard = self.rig.lock().unwrap();
@@ -1222,6 +1279,105 @@ impl Rig for GuitarRigBackend {
         self.apply_boost_to_block();
         self.apply_all_drives();
         self.publish_state();
+    }
+
+    fn add_preset(&self, name: String, nam_path: String) {
+        if !std::path::Path::new(&nam_path).exists() {
+            tracing::warn!("add_preset: {nam_path} does not exist");
+            return;
+        }
+        {
+            let mut def = self.profile_def.lock().unwrap();
+            if def.presets.iter().any(|p| p.name.eq_ignore_ascii_case(&name)) {
+                tracing::warn!("add_preset: '{name}' already exists");
+                return;
+            }
+            def.presets.push(crate::profiles::PresetDef { name: name.clone(), nam: nam_path });
+            RigLibrary::save_profile(&def);
+        }
+        tracing::info!("preset added: {name}");
+        self.spawn_drive_calibration();
+        self.publish_state();
+    }
+
+    fn add_stack(&self, name: String) {
+        {
+            let mut def = self.profile_def.lock().unwrap();
+            if def.stacks.iter().any(|s| s.name.eq_ignore_ascii_case(&name)) {
+                return;
+            }
+            def.stacks.push(crate::profiles::StackDef { name: name.clone(), patches: Vec::new() });
+            RigLibrary::save_profile(&def);
+        }
+        tracing::info!("stack added: {name}");
+        self.publish_state();
+    }
+
+    fn add_patch(&self, name: String, stack: String, preset: String) {
+        let rebuilt = {
+            let mut def = self.profile_def.lock().unwrap();
+            if def.patches.iter().any(|p| p.name.eq_ignore_ascii_case(&name)) {
+                tracing::warn!("add_patch: '{name}' already exists");
+                return;
+            }
+            if !def.presets.iter().any(|p| p.name.eq_ignore_ascii_case(&preset)) {
+                tracing::warn!("add_patch: preset '{preset}' not found");
+                return;
+            }
+            def.patches.push(crate::profiles::PatchDef {
+                name: name.clone(),
+                preset,
+                overrides: Vec::new(),
+            });
+            if let Some(st) = def.stacks.iter_mut().find(|s| s.name.eq_ignore_ascii_case(&stack)) {
+                st.patches.push(name.clone());
+            }
+            RigLibrary::save_profile(&def);
+            let dps = self.drive_presets.lock().unwrap();
+            build_profile(&def, &dps)
+        };
+        tracing::info!("patch added: {name}");
+        self.reload_rebuilt(rebuilt);
+    }
+
+    fn add_drive_preset(&self, name: String, nam_path: String) {
+        if !std::path::Path::new(&nam_path).exists() {
+            tracing::warn!("add_drive_preset: {nam_path} does not exist");
+            return;
+        }
+        {
+            let mut dps = self.drive_presets.lock().unwrap();
+            if dps.iter().any(|p| p.name.eq_ignore_ascii_case(&name)) {
+                return;
+            }
+            dps.push(crate::profiles::DrivePresetDef {
+                name: name.clone(),
+                options: vec![crate::profiles::DriveOptionDef {
+                    name: "Default".to_string(),
+                    nam: nam_path,
+                }],
+            });
+            RigLibrary::save_drive_presets(&dps);
+        }
+        tracing::info!("drive preset added: {name}");
+        self.spawn_drive_calibration();
+        self.publish_state();
+    }
+
+    fn reload_library(&self) {
+        tracing::info!("reloading rig library from {}", crate::library::rig_dir().display());
+        let lib = RigLibrary::load_or_bootstrap();
+        *self.profile_def.lock().unwrap() = lib.profile;
+        *self.drive_presets.lock().unwrap() = lib.drive_presets;
+        *self.songs_lib.lock().unwrap() = lib.songs;
+        *self.setlists.lock().unwrap() = lib.setlists;
+        let rebuilt = {
+            let def = self.profile_def.lock().unwrap();
+            let dps = self.drive_presets.lock().unwrap();
+            build_profile(&def, &dps)
+        };
+        self.reload_rebuilt(rebuilt);
+        self.spawn_drive_calibration();
     }
 
     fn capture_di_reference(&self, seconds: u32) {

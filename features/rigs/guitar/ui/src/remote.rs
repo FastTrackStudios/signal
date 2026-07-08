@@ -285,6 +285,22 @@ pub fn GuitarRigRemote() -> Element {
                     }
                 }
 
+                // Reload the styx rig library (external edits: text
+                // editor, LLM, git pull).
+                button {
+                    class: "flex items-center justify-center w-7 h-7 rounded-md border border-border text-muted-foreground hover:text-foreground text-sm",
+                    title: "Reload the rig library (styx files)",
+                    onclick: {
+                        let rig = rig.clone();
+                        move |_| {
+                            if let Some(r) = rig.clone() {
+                                spawn(async move { let _ = r.reload_library().await; });
+                            }
+                        }
+                    },
+                    "↻"
+                }
+
                 // Capture a real calibration DI from the live guitar —
                 // play for ~15 s after tapping; the library re-measures.
                 button {

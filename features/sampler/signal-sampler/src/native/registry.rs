@@ -63,7 +63,7 @@ fn build_vibrato(block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> 
     Box::new(fx)
 }
 fn apply_mod_params(block: &RigBlock, fx: &mut signal_fx::NativeMod) {
-    for name in ["mix", "depth", "rate"] {
+    for name in ["mix", "depth", "rate", "engine"] {
         if let Some(v) = block.param_f32(name) {
             fx.set_named(name, v as f64);
         }
@@ -71,8 +71,10 @@ fn apply_mod_params(block: &RigBlock, fx: &mut signal_fx::NativeMod) {
 }
 fn build_trem(block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
     let mut fx = signal_fx::NativeTrem::new(sample_rate as f64);
-    if let Some(v) = block.param_f32("depth") {
-        fx.set_named("depth", v as f64);
+    for name in ["depth", "mix", "rate", "mode"] {
+        if let Some(v) = block.param_f32(name) {
+            fx.set_named(name, v as f64);
+        }
     }
     Box::new(fx)
 }

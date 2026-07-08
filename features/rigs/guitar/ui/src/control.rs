@@ -1070,10 +1070,25 @@ fn ModGroupPanel(
                     _ => rsx! {},
                 }
             }
-            // LFO trace.
-            svg { class: "w-full flex-1 min-h-0", view_box: "0 0 200 52", preserve_aspect_ratio: "none",
-                line { x1: "0", y1: "26", x2: "200", y2: "26", stroke: "#27272a", stroke_width: "1" }
-                path { d: "{d}", fill: "none", stroke: "{color}", stroke_width: "1.5" }
+            // LFO trace — flat and labeled while the group is bypassed.
+            div { class: "relative flex-1 min-h-0",
+                svg { class: "w-full h-full", view_box: "0 0 200 52", preserve_aspect_ratio: "none",
+                    line { x1: "0", y1: "26", x2: "200", y2: "26", stroke: "#27272a", stroke_width: "1" }
+                    path {
+                        d: "{d}",
+                        fill: "none",
+                        stroke: "{color}",
+                        stroke_width: "1.5",
+                        opacity: if engaged { "1" } else { "0.35" },
+                    }
+                }
+                if !engaged {
+                    span {
+                        class: "absolute inset-0 flex items-center justify-center text-[9px] uppercase tracking-wider",
+                        style: "color: #52525b;",
+                        "bypassed"
+                    }
+                }
             }
             // Mix + Speed.
             div { class: "flex items-end justify-around px-1 pb-0.5 flex-shrink-0 gap-1",

@@ -340,6 +340,20 @@ pub mod rig {
         /// reference, then re-measure every NAM against it. Play
         /// representatively while it runs.
         fn capture_di_reference(&self, seconds: u32);
+        /// Add a pool preset from a `.nam` capture (runtime import) and
+        /// persist the library.
+        fn add_preset(&self, name: String, nam_path: String);
+        /// Add an empty footswitch stack.
+        fn add_stack(&self, name: String);
+        /// Add a patch pointing at `preset`, appended to `stack`'s
+        /// rotation. Rebuilds the chains.
+        fn add_patch(&self, name: String, stack: String, preset: String);
+        /// Create a drive block preset (single option) from a `.nam`
+        /// capture; add more options by editing drive-presets.styx.
+        fn add_drive_preset(&self, name: String, nam_path: String);
+        /// Re-read the styx library from disk and rebuild the live rig —
+        /// the hook for external edits (text editor, LLM, git).
+        fn reload_library(&self);
         /// Tap tempo.
         fn tap_tempo(&self);
         /// Toggle a block's bypass (by id).
