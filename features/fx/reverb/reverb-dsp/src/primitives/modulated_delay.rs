@@ -76,6 +76,14 @@ impl ModulatedDelay {
         output
     }
 
+    /// Write a sample without producing output. Lets a gated-off caller
+    /// keep the buffer warm so re-engaging reads real audio instead of
+    /// silence.
+    #[inline]
+    pub fn write_only(&mut self, input: f64) {
+        self.buffer.write(input);
+    }
+
     pub fn clear(&mut self) {
         self.buffer.clear();
     }

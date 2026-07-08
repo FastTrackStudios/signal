@@ -166,6 +166,66 @@ impl Default for AlgorithmParams {
     }
 }
 
+/// IR slot selector for dual-IR algorithms (Convolution's A/B morph).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum IrSlot {
+    #[default]
+    A,
+    B,
+}
+
+/// Convolution-specific modulation options. All depths default to 0,
+/// which is bit-transparent against the unmodulated convolution.
+///
+/// Three independent option groups:
+/// 1. **Motion** — post-convolution modulated-allpass stage
+///    (`motion_depth`/`motion_rate`).
+/// 2. **Mod sources** — a shared sine LFO (`lfo_rate`) on wet gain /
+///    predelay / damping, plus an input envelope follower ducking the
+///    wet (`duck_wet_depth`).
+/// 3. **Dual-IR morph** — equal-power crossfade between IR slots A and B
+///    (`morph`), optionally swept by the LFO (`morph_lfo_depth`).
+#[derive(Debug, Clone, Copy)]
+pub struct ConvolutionModParams {
+    /// Motion stage depth (0..1). 0 = hard bypass (no CPU).
+    pub motion_depth: f64,
+    /// Motion LFO base rate in Hz (0.1..2).
+    pub motion_rate: f64,
+    /// Shared modulation LFO rate in Hz (0.05..5).
+    pub lfo_rate: f64,
+    /// LFO → wet gain depth (-1..1 maps to ∓/±6 dB swing).
+    pub mod_wet_depth: f64,
+    /// LFO → predelay depth (-1..1 maps to ±20 ms swing).
+    pub mod_predelay_depth: f64,
+    /// LFO → damping-cutoff depth (-1..1 maps to ±2 octaves).
+    pub mod_damp_depth: f64,
+    /// Input envelope → wet gain reduction (0..1).
+    pub duck_wet_depth: f64,
+    /// Base predelay before the convolver, in ms (0..200).
+    pub predelay_ms: f64,
+    /// IR A/B morph position (0 = A only, 1 = B only).
+    pub morph: f64,
+    /// LFO sweep depth added to `morph` (0..1).
+    pub morph_lfo_depth: f64,
+}
+
+impl Default for ConvolutionModParams {
+    fn default() -> Self {
+        Self {
+            motion_depth: 0.0,
+            motion_rate: 0.5,
+            lfo_rate: 0.5,
+            mod_wet_depth: 0.0,
+            mod_predelay_depth: 0.0,
+            mod_damp_depth: 0.0,
+            duck_wet_depth: 0.0,
+            predelay_ms: 0.0,
+            morph: 0.0,
+            morph_lfo_depth: 0.0,
+        }
+    }
+}
+
 /// Common interface for all reverb algorithms.
 ///
 /// Each algorithm processes one stereo sample pair at a time (tick-based),
@@ -196,6 +256,36 @@ pub trait ReverbAlgorithm: Send {
 
     /// Whether this algorithm accepts impulse responses via [`Self::try_load_ir`].
     fn supports_ir_loading(&self) -> bool {
+        false
+    }
+
+    /// Slot-addressed IR load for dual-IR algorithms. Default: slot A
+    /// falls through to [`Self::try_load_ir`], slot B is rejected.
+    fn try_load_ir_slot(&mut self, left: &[f64], right: &[f64], slot: IrSlot) -> bool {
+        match slot {
+            IrSlot::A => self.try_load_ir(left, right),
+            IrSlot::B => false,
+        }
+    }
+
+    /// Slot-addressed prepared-IR swap. Default: slot A falls through to
+    /// [`Self::try_load_prepared_ir`], slot B is rejected.
+    fn try_load_prepared_ir_slot(
+        &mut self,
+        pair: crate::ir::PreparedIrPair,
+        slot: IrSlot,
+    ) -> bool {
+        match slot {
+            IrSlot::A => self.try_load_prepared_ir(pair),
+            IrSlot::B => false,
+        }
+    }
+
+    /// Push convolution modulation options. `snap` = land instantly
+    /// (preset load) instead of ramping (automation). No-op outside
+    /// Convolution; returns `true` if accepted.
+    fn set_conv_mod_params(&mut self, params: &ConvolutionModParams, snap: bool) -> bool {
+        let _ = (params, snap);
         false
     }
 }

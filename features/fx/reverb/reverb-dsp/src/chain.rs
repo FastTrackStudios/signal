@@ -6,7 +6,9 @@ use audiocore_dsp::delay_line::DelayLine;
 use audiocore_dsp::{AudioConfig, Processor};
 use crossbeam_channel::{Receiver, TryRecvError};
 
-use crate::algorithm::{AlgorithmParams, AlgorithmType, ReverbAlgorithm};
+use crate::algorithm::{
+    AlgorithmParams, AlgorithmType, ConvolutionModParams, IrSlot, ReverbAlgorithm,
+};
 use crate::algorithms;
 use crate::ir::engine::ProcessedIr;
 use crate::ir::prepared::PreparedIrPair;
@@ -67,6 +69,12 @@ pub struct ReverbChain {
 
     // Algorithm params
     pub params: AlgorithmParams,
+
+    /// Convolution modulation options (motion / mod sources / IR morph).
+    /// Only consumed while the Convolution algorithm is active; the
+    /// smoothing (ramp on `update_params`, snap on `update`) lives
+    /// inside the algorithm.
+    pub conv_mod: ConvolutionModParams,
 
     // Global controls
     /// Pre-delay in milliseconds (0-500).
@@ -180,6 +188,7 @@ impl ReverbChain {
                 s
             },
             params: AlgorithmParams::default(),
+            conv_mod: ConvolutionModParams::default(),
             predelay_ms: 0.0,
             mix: 0.5,
             width: 1.0,
@@ -223,10 +232,26 @@ impl ReverbChain {
         self.algorithm.try_load_ir(left, right)
     }
 
+    /// Slot-addressed synchronous IR load (slot B feeds the morph's
+    /// second convolver). Returns `true` if accepted.
+    pub fn load_convolution_ir_slot(
+        &mut self,
+        left: &[f64],
+        right: &[f64],
+        slot: IrSlot,
+    ) -> bool {
+        self.algorithm.try_load_ir_slot(left, right, slot)
+    }
+
     /// Synchronously swap in a pre-FFT'd IR pair. No FFT on the audio
     /// thread. Returns `true` if accepted.
     pub fn load_prepared_ir(&mut self, pair: PreparedIrPair) -> bool {
         self.algorithm.try_load_prepared_ir(pair)
+    }
+
+    /// Slot-addressed pre-FFT'd IR swap. Returns `true` if accepted.
+    pub fn load_prepared_ir_slot(&mut self, pair: PreparedIrPair, slot: IrSlot) -> bool {
+        self.algorithm.try_load_prepared_ir_slot(pair, slot)
     }
 
     /// Does the current algorithm accept IRs?
@@ -252,6 +277,8 @@ impl ReverbChain {
             self.decay_smoother.set_immediate(p.decay);
             self.damping_smoother.set_immediate(p.damping);
             self.algorithm.set_params(&p);
+            // Fresh algorithm — convolution mod options land instantly.
+            self.algorithm.set_conv_mod_params(&self.conv_mod, true);
         }
     }
 
@@ -303,6 +330,9 @@ impl ReverbChain {
         self.tilt_r.set_pivot(self.output_tilt_pivot);
         self.duck_env
             .set_times_ms(self.duck_attack_ms, self.duck_release_ms, self.sample_rate);
+        // Convolution mod options ride the automation path too (the
+        // algorithm ramps its own smoothers). No-op outside Convolution.
+        self.algorithm.set_conv_mod_params(&self.conv_mod, false);
     }
 }
 
@@ -387,6 +417,8 @@ impl Processor for ReverbChain {
 
         self.algorithm.set_sample_rate(config.sample_rate);
         self.algorithm.set_params(&p);
+        // Reconfiguration point — convolution mod options snap.
+        self.algorithm.set_conv_mod_params(&self.conv_mod, true);
     }
 
     fn process(&mut self, left: &mut [f64], right: &mut [f64]) {
@@ -410,14 +442,19 @@ impl Processor for ReverbChain {
             }
         }
 
-        // Drain pending raw f64 IRs — last-one-wins so back-to-back
-        // loads don't each trigger an FFT precompute. Latency is one
-        // audio block. This path DOES run FFTs on the audio thread.
+        // Drain pending raw f64 IRs — last-one-wins per slot so
+        // back-to-back loads don't each trigger an FFT precompute.
+        // Latency is one audio block. This path DOES run FFTs on the
+        // audio thread.
         if let Some(rx) = self.ir_swap_rx.as_ref() {
-            let mut latest: Option<ProcessedIr> = None;
+            let mut latest_a: Option<ProcessedIr> = None;
+            let mut latest_b: Option<ProcessedIr> = None;
             loop {
                 match rx.try_recv() {
-                    Ok(ir) => latest = Some(ir),
+                    Ok(ir) => match ir.slot {
+                        IrSlot::A => latest_a = Some(ir),
+                        IrSlot::B => latest_b = Some(ir),
+                    },
                     Err(TryRecvError::Empty) => break,
                     Err(TryRecvError::Disconnected) => {
                         self.ir_swap_rx = None;
@@ -425,8 +462,8 @@ impl Processor for ReverbChain {
                     }
                 }
             }
-            if let Some(ir) = latest {
-                self.algorithm.try_load_ir(&ir.left, &ir.right);
+            for ir in [latest_a, latest_b].into_iter().flatten() {
+                self.algorithm.try_load_ir_slot(&ir.left, &ir.right, ir.slot);
             }
         }
 
@@ -786,6 +823,7 @@ mod tests {
             sample_rate: SR,
             source_frames: 1000,
             source_channels: 2,
+            slot: IrSlot::A,
         })
         .unwrap();
 
