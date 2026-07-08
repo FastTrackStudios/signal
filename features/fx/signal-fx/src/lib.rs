@@ -790,6 +790,41 @@ impl NativeReverb {
             self.set(id, value);
         }
     }
+
+    /// Load a custom impulse response from a wav file into chain A's
+    /// convolution engine (switching it to the Convolution algorithm).
+    /// Mono files duplicate to both sides; samples normalize to f64.
+    pub fn load_ir_wav(&mut self, path: &str) -> bool {
+        let Ok(mut reader) = hound::WavReader::open(path) else {
+            return false;
+        };
+        let spec = reader.spec();
+        let to_f64: Vec<f64> = match spec.sample_format {
+            hound::SampleFormat::Float => {
+                reader.samples::<f32>().filter_map(Result::ok).map(|s| s as f64).collect()
+            }
+            hound::SampleFormat::Int => {
+                let scale = 1.0 / (1i64 << (spec.bits_per_sample - 1)) as f64;
+                reader.samples::<i32>().filter_map(Result::ok).map(|s| s as f64 * scale).collect()
+            }
+        };
+        if to_f64.is_empty() {
+            return false;
+        }
+        let (l, r): (Vec<f64>, Vec<f64>) = if spec.channels >= 2 {
+            let ch = spec.channels as usize;
+            (
+                to_f64.iter().step_by(ch).copied().collect(),
+                to_f64.iter().skip(1).step_by(ch).copied().collect(),
+            )
+        } else {
+            (to_f64.clone(), to_f64)
+        };
+        self.rev.a.set_algorithm(reverb::AlgorithmType::Convolution);
+        let ok = self.rev.a.load_convolution_ir(&l, &r);
+        self.rev.a.update_params();
+        ok
+    }
 }
 
 impl PluginInstance for NativeReverb {

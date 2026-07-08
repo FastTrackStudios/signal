@@ -6,6 +6,7 @@ license.workspace = true
 description = "Built-in FX for signal — PluginInstance wrappers over the vendored FX DSP cores (eq-dsp, comp-dsp, …)."
 
 [dependencies]
+hound = "3.5"
 signal-plugin-host = { workspace = true }
 audiocore-dsp = { workspace = true }
 # FX facades (never the -dsp crates directly).

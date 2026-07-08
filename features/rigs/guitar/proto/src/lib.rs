@@ -382,6 +382,9 @@ pub mod rig {
         /// Set the ACTIVE setlist entry's per-set overrides: empty key /
         /// zero bpm fall back to the song's defaults.
         fn set_setlist_entry(&self, entry: u32, key: String, bpm: u32);
+        /// Load a custom IR wav into a reverb block (Convolution engine);
+        /// auto-saves as a patch override.
+        fn set_block_ir(&self, id: String, path: String);
         /// Manual patch output trim (dB, on top of loudness calibration).
         fn set_patch_trim(&self, patch: u32, db: f32);
         /// Toggle the fullscreen tuner overlay on every remote.

@@ -585,6 +585,7 @@ impl GuitarRigBackend {
                     param: param_name,
                     op: op.to_string(),
                     value,
+                    text: String::new(),
                 }),
             }
         }
@@ -1770,6 +1771,49 @@ impl Rig for GuitarRigBackend {
             self.recall_song(entry as usize);
         }
         self.publish_state();
+    }
+
+    fn set_block_ir(&self, id: String, path: String) {
+        if !std::path::Path::new(&path).exists() {
+            tracing::warn!("set_block_ir: {path} does not exist");
+            return;
+        }
+        // Record as a set_text override on the active patch, then rebuild —
+        // the registry loads the IR at chain build time.
+        let block = {
+            let blocks = self.blocks.lock().unwrap();
+            blocks.iter().find(|b| b.id == id).map(|b| b.name.clone())
+        };
+        let active = {
+            let guard = self.rig.lock().unwrap();
+            guard
+                .as_ref()
+                .and_then(|prig| prig.active_patch().map(|p| p.name.clone()))
+        };
+        let (Some(block_name), Some(patch_name)) = (block, active) else { return };
+        let rebuilt = {
+            let mut def = self.profile_def.lock().unwrap();
+            let Some(p) = def
+                .patches
+                .iter_mut()
+                .find(|p| p.name.eq_ignore_ascii_case(&patch_name))
+            else {
+                return;
+            };
+            match p.overrides.iter_mut().find(|o| {
+                o.block.eq_ignore_ascii_case(&block_name) && o.op == "set_text" && o.param == "ir_path"
+            }) {
+                Some(o) => o.text = path.clone(),
+                None => p
+                    .overrides
+                    .push(crate::profiles::OverrideDef::set_text("Time", &block_name, "ir_path", &path)),
+            }
+            RigLibrary::save_profile(&def);
+            let dps = self.drive_presets.lock().unwrap();
+            build_profile(&def, &dps)
+        };
+        tracing::info!("{block_name}: custom IR {path}");
+        self.reload_rebuilt(rebuilt);
     }
 
     fn set_patch_trim(&self, patch: u32, db: f32) {

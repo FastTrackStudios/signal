@@ -138,6 +138,11 @@ fn build_reverb(block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
             fx.set_named(name, v as f64);
         }
     }
+    if let Some(path) = block.param_str("ir_path") {
+        if !path.is_empty() && !fx.load_ir_wav(&path) {
+            tracing::warn!("reverb IR failed to load: {path}");
+        }
+    }
     Box::new(fx)
 }
 

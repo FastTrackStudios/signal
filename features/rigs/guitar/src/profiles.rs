@@ -145,6 +145,8 @@ pub struct OverrideDef {
     pub param: String,
     pub op: String,
     pub value: f32,
+    /// String payload for `set_text` (e.g. an IR wav path); empty otherwise.
+    pub text: String,
 }
 
 impl OverrideDef {
@@ -155,6 +157,18 @@ impl OverrideDef {
             param: param.to_string(),
             op: "set".to_string(),
             value,
+            text: String::new(),
+        }
+    }
+
+    pub fn set_text(module: &str, block: &str, param: &str, text: &str) -> Self {
+        Self {
+            module: module.to_string(),
+            block: block.to_string(),
+            param: param.to_string(),
+            op: "set_text".to_string(),
+            value: 0.0,
+            text: text.to_string(),
         }
     }
 
@@ -165,6 +179,7 @@ impl OverrideDef {
             param: String::new(),
             op: "bypass".to_string(),
             value: if bypassed { 1.0 } else { 0.0 },
+            text: String::new(),
         }
     }
 }
@@ -428,6 +443,15 @@ fn apply_overrides(patch: &mut RigPatch, overrides: &[OverrideDef]) {
                     None => block.params.push(signal_sampler::rig_node::Param {
                         name: ov.param.clone(),
                         value: ov.value.to_string(),
+                    }),
+                }
+            }
+            "set_text" if !ov.param.is_empty() => {
+                match block.params.iter_mut().find(|p| p.name == ov.param) {
+                    Some(p) => p.value = ov.text.clone(),
+                    None => block.params.push(signal_sampler::rig_node::Param {
+                        name: ov.param.clone(),
+                        value: ov.text.clone(),
                     }),
                 }
             }

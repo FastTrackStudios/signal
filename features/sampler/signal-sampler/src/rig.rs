@@ -359,6 +359,11 @@ impl RigBlock {
         self
     }
 
+    /// A build-time parameter's raw string value, if present.
+    pub fn param_str(&self, name: &str) -> Option<String> {
+        self.params.iter().find(|p| p.name == name).map(|p| p.value.clone())
+    }
+
     /// A build-time parameter as `f32`, if present and numeric.
     pub fn param_f32(&self, name: &str) -> Option<f32> {
         self.params
