@@ -319,8 +319,8 @@ pub fn build_profile(def: &ProfileDef) -> RigProfile {
             .with_block(off(BlockType::Vibrato, "Vibrato"))
             .with_block(off(BlockType::Rotary, "Rotary"))
             // Time module — subtle pair on, extreme pair bypassed.
-            .with_block(on_fx(BlockType::Delay, "DLY 1", &[("mix", "0.08"), ("time", "350"), ("feedback", "0.28")]))
-            .with_block(off_fx(BlockType::Delay, "DLY 2", &[("mix", "0.10"), ("time", "600"), ("feedback", "0.62")]))
+            .with_block(on_fx(BlockType::Delay, "DLY 1", &[("mix", "0.08"), ("time", "350"), ("feedback", "0.28"), ("tap_div_l", "0"), ("tap_div_r", "0")]))
+            .with_block(off_fx(BlockType::Delay, "DLY 2", &[("mix", "0.10"), ("time", "600"), ("feedback", "0.62"), ("tap_div_l", "1"), ("tap_div_r", "1")]))
             .with_block(on_fx(BlockType::Reverb, "VERB 1", &[("mix", "0.08"), ("decay", "0.42"), ("size", "0.45")]))
             .with_block(off_fx(BlockType::Reverb, "VERB 2", &[("mix", "0.10"), ("decay", "0.85"), ("size", "0.92")]))
     };

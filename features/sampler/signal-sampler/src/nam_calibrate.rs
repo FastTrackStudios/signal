@@ -501,8 +501,14 @@ mod tests {
 /// Input-gain sweep (dB) behind drive 0..1. Index 4 (0 dB) = drive 50%.
 pub const DRIVE_SWEEP_DB: [f64; 9] = [-12.0, -9.0, -6.0, -3.0, 0.0, 3.0, 6.0, 9.0, 12.0];
 
-/// One model's drive calibration: output LUFS per sweep point + the DI's own
-/// loudness (the compensation target).
+/// Perceptual bias for harmonic density: LUFS alone under-weights how loud
+/// dense saturation *reads* — an equal-LUFS crunch sounds louder than a
+/// clean. Each sweep point's THD scales extra attenuation up to this many
+/// dB (√-compressed), so low-THD models sit relatively louder.
+pub const THD_BIAS_DB: f64 = 3.5;
+
+/// One model's drive calibration: output LUFS + THD per sweep point, plus
+/// the DI's own loudness (the compensation target).
 #[derive(Clone, Debug, Facet)]
 pub struct DriveCurveEntry {
     pub model_hash: String,
@@ -510,6 +516,9 @@ pub struct DriveCurveEntry {
     pub sample_rate: u32,
     pub di_lufs: f64,
     pub lufs: Vec<f64>,
+    /// THD ratio (harmonics 2–8 vs fundamental, 220 Hz probe) per sweep
+    /// point — the harmonic-density measure behind the loudness bias.
+    pub thd: Vec<f64>,
 }
 
 #[derive(Clone, Debug, Default, Facet)]
@@ -573,6 +582,54 @@ pub fn measure_drive_curve(model: &mut NamModel, di: &DiReference, max_block: us
         .collect()
 }
 
+/// Goertzel power of `freq` in `samples`.
+fn goertzel(samples: &[f64], sample_rate: f64, freq: f64) -> f64 {
+    let w = 2.0 * std::f64::consts::PI * freq / sample_rate;
+    let coeff = 2.0 * w.cos();
+    let (mut s0, mut s1, mut s2) = (0.0f64, 0.0f64, 0.0f64);
+    for &x in samples {
+        s0 = x + coeff * s1 - s2;
+        s2 = s1;
+        s1 = s0;
+    }
+    (s1 * s1 + s2 * s2 - coeff * s1 * s2) / (samples.len() as f64).powi(2)
+}
+
+/// THD ratio of `model` at `input_gain_db`: a 220 Hz sine probe (guitar-ish
+/// level), harmonics 2–8 vs the fundamental on the steady-state tail.
+pub fn measure_thd(model: &mut NamModel, sample_rate: f64, input_gain_db: f64) -> f64 {
+    const F0: f64 = 220.0;
+    const PROBE_SECS: f64 = 1.5;
+    let block = 512usize;
+    model.reset(sample_rate, block);
+    let n = (sample_rate * PROBE_SECS) as usize;
+    let amp = 0.1 * 10f64.powf(input_gain_db / 20.0);
+    let mut output = vec![0.0f64; n];
+    let mut inp = vec![0.0f64; block];
+    let mut out = vec![0.0f64; block];
+    let mut pos = 0usize;
+    while pos < n {
+        let m = block.min(n - pos);
+        for i in 0..m {
+            let t = (pos + i) as f64 / sample_rate;
+            inp[i] = amp * (2.0 * std::f64::consts::PI * F0 * t).sin();
+        }
+        model.process(&inp[..m], &mut out[..m]);
+        output[pos..pos + m].copy_from_slice(&out[..m]);
+        pos += m;
+    }
+    // Steady-state tail only (skip transients / model warmup).
+    let tail = &output[n / 3..];
+    let fund = goertzel(tail, sample_rate, F0);
+    if fund <= 1e-12 {
+        return 0.0;
+    }
+    let harm: f64 = (2..=8)
+        .map(|k| goertzel(tail, sample_rate, F0 * k as f64))
+        .sum();
+    (harm / fund).sqrt().min(2.0)
+}
+
 /// The cached drive curve for a model file, measuring on first sight (the
 /// "import-time test"). Returns `None` if the model can't be loaded/hashed.
 pub fn drive_curve(model_path: &Path, sample_rate: f64) -> Option<DriveCurveEntry> {
@@ -588,6 +645,10 @@ pub fn drive_curve(model_path: &Path, sample_rate: f64) -> Option<DriveCurveEntr
     tracing::info!(model = %model_path.display(), "NAM drive calibration: measuring sweep");
     let mut model = NamModel::load(model_path).ok()?;
     let lufs = measure_drive_curve(&mut model, &di, 512);
+    let thd = DRIVE_SWEEP_DB
+        .iter()
+        .map(|g| measure_thd(&mut model, sample_rate, *g))
+        .collect();
     let di_lufs = integrated_lufs(&di.samples, di.sample_rate);
     let entry = DriveCurveEntry {
         model_hash,
@@ -595,6 +656,7 @@ pub fn drive_curve(model_path: &Path, sample_rate: f64) -> Option<DriveCurveEntr
         sample_rate: sr_key,
         di_lufs,
         lufs,
+        thd,
     };
     let mut cache = drive_cache().lock().unwrap();
     // Re-check under the lock — a concurrent caller may have measured the
@@ -632,7 +694,15 @@ pub fn drive_compensation(model_path: &Path, sample_rate: f64, drive: f32) -> Op
     if !model_lufs.is_finite() || model_lufs <= FAILED_LUFS {
         return None;
     }
-    let out_db = entry.di_lufs - model_lufs;
+    // Harmonic-density bias: attenuate dense (high-THD) points a little —
+    // equal-LUFS saturation reads louder than clean to the ear.
+    let thd = if entry.thd.len() == n {
+        entry.thd[i0] * (1.0 - frac) + entry.thd[i1] * frac
+    } else {
+        0.0
+    };
+    let bias_db = THD_BIAS_DB * thd.clamp(0.0, 1.0).sqrt();
+    let out_db = entry.di_lufs - model_lufs - bias_db;
     Some((in_db as f32, out_db as f32))
 }
 

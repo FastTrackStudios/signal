@@ -99,6 +99,9 @@ pub fn EqProSurface(block: LiveBlock, spectrum: Vec<f32>) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
     let mut selected = use_signal(|| None::<usize>);
     let mut dragging = use_signal(|| None::<usize>);
+    // Svg client rect (origin_x, origin_y, w, h), cached at drag start so
+    // the shield can map global pointer coords into graph space.
+    let mut drag_rect = use_signal(|| None::<(f64, f64, f64, f64)>);
     let mut svg_el = use_signal(|| None::<std::rc::Rc<MountedData>>);
     // View vertical resolution: ±3 / ±6 / ±12 dB (default ±6).
     let mut range_db = use_signal(|| 6.0f64);
@@ -223,7 +226,16 @@ pub fn EqProSurface(block: LiveBlock, spectrum: Vec<f32>) -> Element {
                         let el = svg_el();
                         let bands = bands_for_down.clone();
                         spawn(async move {
+                            let Some(el2) = el.clone() else { return };
                             let Some((x, y)) = to_graph(coords, el).await else { return };
+                            if let Ok(rect) = el2.get_client_rect().await {
+                                drag_rect.set(Some((
+                                    rect.origin.x,
+                                    rect.origin.y,
+                                    rect.width(),
+                                    rect.height(),
+                                )));
+                            }
                             match nearest_band(&bands, mapper, x, y, HIT_RADIUS) {
                                 Some((i, _)) => {
                                     selected.set(Some(i));
@@ -234,32 +246,7 @@ pub fn EqProSurface(block: LiveBlock, spectrum: Vec<f32>) -> Element {
                         });
                     }
                 },
-                onpointermove: {
-                    let rig = rig.clone();
-                    let block_id = block.id.clone();
-                    move |e: PointerEvent| {
-                        let Some(i) = dragging() else { return };
-                        let shape = bands_for_move.get(i).map(|b| (b.shape, b.gain));
-                        let coords = e.element_coordinates();
-                        let el = svg_el();
-                        let (rig, block_id) = (rig.clone(), block_id.clone());
-                        spawn(async move {
-                            let Some((x, y)) = to_graph(coords, el).await else { return };
-                            let Some((shape, cur_gain)) = shape else { return };
-                            let freq = mapper.x_to_freq(x).clamp(MIN_FREQ, MAX_FREQ) as f32;
-                            let gain =
-                                drag_gain_for_shape(shape, cur_gain, mapper.y_to_db(y));
-                            if let Some(r) = rig {
-                                let n = format!("b{}_freq", i + 1);
-                                let _ = r.set_block_param(block_id.clone(), n, freq).await;
-                                let n = format!("b{}_gain", i + 1);
-                                let _ = r.set_block_param(block_id, n, gain).await;
-                            }
-                        });
-                    }
-                },
-                onpointerup: move |_| dragging.set(None),
-                onpointerleave: move |_| dragging.set(None),
+
                 // Q on the wheel — shape-aware steps (slope for cuts).
                 onwheel: {
                     let rig = rig.clone();
@@ -366,6 +353,40 @@ pub fn EqProSurface(block: LiveBlock, spectrum: Vec<f32>) -> Element {
                             }
                         }
                     }
+                }
+            }
+
+            // Drag shield: node drags keep tracking outside the graph.
+            if dragging().is_some() {
+                div {
+                    class: "fixed inset-0",
+                    style: "z-index: 1000; cursor: grabbing;",
+                    onpointermove: {
+                        let rig = rig.clone();
+                        let block_id = block.id.clone();
+                        move |e: PointerEvent| {
+                            let Some(i) = dragging() else { return };
+                            let Some((ox, oy, w_px, h_px)) = drag_rect() else { return };
+                            let shape = bands_for_move.get(i).map(|b| (b.shape, b.gain));
+                            let c = e.client_coordinates();
+                            let x = (c.x - ox) / w_px * gw;
+                            let y = (c.y - oy) / h_px * H;
+                            let (rig, block_id) = (rig.clone(), block_id.clone());
+                            spawn(async move {
+                                let Some((shape, cur_gain)) = shape else { return };
+                                let freq = mapper.x_to_freq(x).clamp(MIN_FREQ, MAX_FREQ) as f32;
+                                let gain =
+                                    drag_gain_for_shape(shape, cur_gain, mapper.y_to_db(y));
+                                if let Some(r) = rig {
+                                    let n = format!("b{}_freq", i + 1);
+                                    let _ = r.set_block_param(block_id.clone(), n, freq).await;
+                                    let n = format!("b{}_gain", i + 1);
+                                    let _ = r.set_block_param(block_id, n, gain).await;
+                                }
+                            });
+                        }
+                    },
+                    onpointerup: move |_| dragging.set(None),
                 }
             }
 

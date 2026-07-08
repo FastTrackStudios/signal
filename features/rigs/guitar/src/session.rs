@@ -718,6 +718,7 @@ fn param_specs(bt: BlockType) -> Vec<(String, f32, f32, f32)> {
             ("tap_div_r", 0.0, 7.0, 0.0),
             ("high_pass", 0.0, 900.0, 0.0),
             ("repeat_dyn", 0.0, 1.0, 0.0),
+            ("pan", -1.0, 1.0, 0.0),
         ]),
         // Reverb surface — algorithm + mix/time/damping/tone/modulation.
         BlockType::Reverb => owned(&[

@@ -121,7 +121,7 @@ pub fn CompSurface(
 ) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
     let mut svg_el = use_signal(|| None::<std::rc::Rc<MountedData>>);
-    let mut svg_size = use_signal(|| None::<(f64, f64)>);
+    let mut svg_rect = use_signal(|| None::<(f64, f64, f64)>); // (top, height, _)
     let mut dragging = use_signal(|| None::<CompDrag>);
     let (wave_in, wave_gr) = wave;
 
@@ -226,7 +226,7 @@ pub fn CompSurface(
                         spawn(async move {
                             let Some(el) = el else { return };
                             let Ok(rect) = el.get_client_rect().await else { return };
-                            svg_size.set(Some((rect.width(), rect.height())));
+                            svg_rect.set(Some((rect.origin.y, rect.height(), rect.width())));
                             let y = (coords.y / rect.height()) as f32 * H as f32;
                             let ty = db_to_y(thr as f64, H) as f32;
                             if (y - ty).abs() < 22.0 {
@@ -239,36 +239,7 @@ pub fn CompSurface(
                         });
                     }
                 },
-                onpointermove: {
-                    let rig = rig.clone();
-                    let id = block.id.clone();
-                    move |e: PointerEvent| {
-                        // Sync path: the rect was cached at pointerdown, so
-                        // moves never race the async hit-test.
-                        let Some(mode) = dragging() else { return };
-                        let Some((_, h)) = svg_size() else { return };
-                        let y = (e.element_coordinates().y / h) as f32 * H as f32;
-                        let Some(r) = rig.clone() else { return };
-                        let id = id.clone();
-                        match mode {
-                            CompDrag::Threshold => {
-                                let db = (-(y / H as f32) * RANGE_DB as f32).clamp(-60.0, 0.0);
-                                spawn(async move {
-                                    let _ = r.set_block_param(id, "threshold".into(), db).await;
-                                });
-                            }
-                            CompDrag::Ratio(y0, r0) => {
-                                // Drag down = more ratio (harder tilt).
-                                let ratio = (r0 * ((y - y0) / 60.0).exp2()).clamp(1.0, 20.0);
-                                spawn(async move {
-                                    let _ = r.set_block_param(id, "ratio".into(), ratio).await;
-                                });
-                            }
-                        }
-                    }
-                },
-                onpointerup: move |_| dragging.set(None),
-                onpointerleave: move |_| dragging.set(None),
+
                 defs {
                     // Input level — dark teal gradient (painter's stops).
                     linearGradient { id: "comp-in", x1: "0", y1: "0", x2: "0", y2: "1",
@@ -312,6 +283,42 @@ pub fn CompSurface(
                 // Transfer curve + input ball.
                 path { d: "{tc}", fill: "none", stroke: "rgba(180,210,140,0.71)", stroke_width: "2" }
                 circle { cx: "{ball.0:.1}", cy: "{ball.1:.1}", r: "3", fill: "rgba(255,255,255,0.78)" }
+            }
+
+            // Drag shield: threshold/ratio keep tracking outside the panel
+            // until release.
+            if dragging().is_some() {
+                div {
+                    class: "fixed inset-0",
+                    style: "z-index: 1000; cursor: ns-resize;",
+                    onpointermove: {
+                        let rig = rig.clone();
+                        let id = block.id.clone();
+                        move |e: PointerEvent| {
+                            let Some(mode) = dragging() else { return };
+                            let Some((top, h, _)) = svg_rect() else { return };
+                            let y = ((e.client_coordinates().y - top) / h) as f32 * H as f32;
+                            let Some(r) = rig.clone() else { return };
+                            let id = id.clone();
+                            match mode {
+                                CompDrag::Threshold => {
+                                    let db = (-(y / H as f32) * RANGE_DB as f32).clamp(-60.0, 0.0);
+                                    spawn(async move {
+                                        let _ = r.set_block_param(id, "threshold".into(), db).await;
+                                    });
+                                }
+                                CompDrag::Ratio(y0, r0) => {
+                                    // Drag down = more ratio (harder tilt).
+                                    let ratio = (r0 * ((y - y0) / 60.0).exp2()).clamp(1.0, 20.0);
+                                    spawn(async move {
+                                        let _ = r.set_block_param(id, "ratio".into(), ratio).await;
+                                    });
+                                }
+                            }
+                        }
+                    },
+                    onpointerup: move |_| dragging.set(None),
+                }
             }
 
             // GR readout, top right (real detector value).

@@ -141,7 +141,7 @@ fn build_reverb(block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
 
 fn build_delay(block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
     let mut fx = signal_fx::NativeDelay::new(sample_rate as f64);
-    for name in ["mix", "time", "feedback"] {
+    for name in ["mix", "time", "feedback", "pan", "tap_div_l", "tap_div_r"] {
         if let Some(v) = block.param_f32(name) {
             fx.set_named(name, v as f64);
         }

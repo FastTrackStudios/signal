@@ -36,6 +36,20 @@ fn param_v(block: &LiveBlock, name: &str, dflt: f32) -> f32 {
     param(block, name).map(|p| p.value).unwrap_or(dflt)
 }
 
+/// Approximate reverb tail (RT60, seconds) for a decay setting — the Hall
+/// algorithm's feedback law (g = 0.5 + 0.48·d) over an ~80 ms loop.
+fn decay_seconds_label(decay: f32) -> String {
+    let g = (0.5 + 0.48 * decay.clamp(0.0, 1.0) as f64).min(0.995);
+    let t60 = 0.08 * (0.001f64).ln() / g.ln();
+    if t60 >= 20.0 {
+        "20s+".to_string()
+    } else if t60 >= 10.0 {
+        format!("{t60:.0}s")
+    } else {
+        format!("{t60:.1}s")
+    }
+}
+
 /// Fire a param write without blocking the UI.
 fn send_param(rig: &Option<RigClient>, id: &str, name: &str, value: f32) {
     if let Some(r) = rig.clone() {
@@ -194,7 +208,8 @@ const VERB_ALGOS: [&str; 15] = [
 fn GatePanel(block: LiveBlock, in_db: f32, #[props(default)] expanded: bool) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
     let mut el = use_signal(|| None::<std::rc::Rc<MountedData>>);
-    let mut tracking = use_signal(|| false);
+    // (top_y, height) of the bar while dragging.
+    let mut tracking = use_signal(|| None::<(f64, f64)>);
 
     let thr = param_v(&block, "threshold", -50.0);
     let open = in_db >= thr && !block.bypassed;
@@ -215,15 +230,13 @@ fn GatePanel(block: LiveBlock, in_db: f32, #[props(default)] expanded: bool) -> 
     let set_thr = {
         let rig = rig.clone();
         let id = block.id.clone();
-        move |coords: dioxus::html::geometry::ElementPoint| {
-            let el = el();
+        move |frac: f32| {
             let (rig, id) = (rig.clone(), id.clone());
             spawn(async move {
-                let Some(el) = el else { return };
-                let Ok(rect) = el.get_client_rect().await else { return };
-                let frac = (1.0 - coords.y / rect.height()).clamp(0.0, 1.0) as f32;
                 if let Some(r) = rig {
-                    let _ = r.set_block_param(id, "threshold".into(), frac * 90.0 - 90.0).await;
+                    let _ = r
+                        .set_block_param(id, "threshold".into(), frac.clamp(0.0, 1.0) * 90.0 - 90.0)
+                        .await;
                 }
             });
         }
@@ -238,17 +251,18 @@ fn GatePanel(block: LiveBlock, in_db: f32, #[props(default)] expanded: bool) -> 
                 onpointerdown: {
                     let set_thr = set_thr.clone();
                     move |e: PointerEvent| {
-                        tracking.set(true);
-                        set_thr(e.element_coordinates());
+                        let y = e.client_coordinates().y;
+                        let el = el();
+                        let set_thr = set_thr.clone();
+                        spawn(async move {
+                            let Some(el) = el else { return };
+                            let Ok(rect) = el.get_client_rect().await else { return };
+                            let (top, h) = (rect.origin.y, rect.height());
+                            tracking.set(Some((top, h)));
+                            set_thr((1.0 - (y - top) / h) as f32);
+                        });
                     }
                 },
-                onpointermove: move |e: PointerEvent| {
-                    if tracking() {
-                        set_thr(e.element_coordinates());
-                    }
-                },
-                onpointerup: move |_| tracking.set(false),
-                onpointerleave: move |_| tracking.set(false),
                 // Input level.
                 div {
                     class: "absolute inset-x-0 bottom-0 transition-[height] duration-75",
@@ -266,6 +280,20 @@ fn GatePanel(block: LiveBlock, in_db: f32, #[props(default)] expanded: bool) -> 
                 div {
                     class: "absolute inset-x-0",
                     style: "bottom: {thr_pct}%; height: 2px; background-color: #eab308; box-shadow: 0 0 4px rgba(234,179,8,0.6);",
+                }
+            }
+            // Drag shield — threshold keeps following outside the bar.
+            if let Some((top, h)) = tracking() {
+                div {
+                    class: "fixed inset-0",
+                    style: "z-index: 1000; cursor: ns-resize;",
+                    onpointermove: {
+                        let set_thr = set_thr.clone();
+                        move |e: PointerEvent| {
+                            set_thr((1.0 - (e.client_coordinates().y - top) / h) as f32);
+                        }
+                    },
+                    onpointerup: move |_| tracking.set(None),
                 }
             }
             span { class: "text-[8px] font-mono text-muted-foreground flex-shrink-0",
@@ -303,7 +331,9 @@ fn GatePanel(block: LiveBlock, in_db: f32, #[props(default)] expanded: bool) -> 
     }
 }
 
-/// A slim vertical fader: drag to set, small readout below.
+/// A slim vertical fader: drag to set, small readout below. While a drag
+/// is live a fullscreen shield owns the pointer, so leaving the fader
+/// never drops the gesture.
 #[component]
 fn VFader(
     label: &'static str,
@@ -314,16 +344,9 @@ fn VFader(
     on_change: Callback<f32>,
 ) -> Element {
     let mut el = use_signal(|| None::<std::rc::Rc<MountedData>>);
-    let mut tracking = use_signal(|| false);
+    // (top_y, height) of the bar, cached at pointer-down; None = idle.
+    let mut tracking = use_signal(|| None::<(f64, f64)>);
     let pct = (value * 100.0).clamp(0.0, 100.0);
-    let set_from = move |coords: dioxus::html::geometry::ElementPoint| {
-        let el = el();
-        spawn(async move {
-            let Some(el) = el else { return };
-            let Ok(rect) = el.get_client_rect().await else { return };
-            on_change.call((1.0 - coords.y / rect.height()).clamp(0.0, 1.0) as f32);
-        });
-    };
     rsx! {
         // Fixed column width = the bar itself; labels overflow either side
         // without pushing the neighbouring meter away.
@@ -332,13 +355,31 @@ fn VFader(
             div {
                 class: "relative flex-1 w-2 bg-black/60 border border-border min-h-0 cursor-ns-resize touch-none",
                 onmounted: move |e| el.set(Some(e.data())),
-                onpointerdown: move |e: PointerEvent| { tracking.set(true); set_from(e.element_coordinates()); },
-                onpointermove: move |e: PointerEvent| { if tracking() { set_from(e.element_coordinates()); } },
-                onpointerup: move |_| tracking.set(false),
-                onpointerleave: move |_| tracking.set(false),
+                onpointerdown: move |e: PointerEvent| {
+                    let y = e.client_coordinates().y;
+                    let el = el();
+                    spawn(async move {
+                        let Some(el) = el else { return };
+                        let Ok(rect) = el.get_client_rect().await else { return };
+                        let (top, h) = (rect.origin.y, rect.height());
+                        tracking.set(Some((top, h)));
+                        on_change.call((1.0 - (y - top) / h).clamp(0.0, 1.0) as f32);
+                    });
+                },
                 div {
                     class: "absolute inset-x-0 h-2 border border-zinc-500",
                     style: "bottom: calc({pct}% - 4px); background-color: #3f3f46;",
+                }
+            }
+            if let Some((top, h)) = tracking() {
+                div {
+                    class: "fixed inset-0",
+                    style: "z-index: 1000; cursor: ns-resize;",
+                    onpointermove: move |e: PointerEvent| {
+                        let y = e.client_coordinates().y;
+                        on_change.call((1.0 - (y - top) / h).clamp(0.0, 1.0) as f32);
+                    },
+                    onpointerup: move |_| tracking.set(None),
                 }
             }
             span { class: "text-[8px] font-mono text-muted-foreground", "{readout}" }
@@ -491,7 +532,13 @@ fn ParamSelect(
 
 /// A small param knob shorthand.
 #[component]
-fn PKnob(block_id: String, name: &'static str, label: &'static str, p: BlockParam) -> Element {
+fn PKnob(
+    block_id: String,
+    name: &'static str,
+    label: &'static str,
+    p: BlockParam,
+    #[props(default)] fmt: Option<fn(f32) -> String>,
+) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
     rsx! {
         crate::knob::Knob {
@@ -500,6 +547,7 @@ fn PKnob(block_id: String, name: &'static str, label: &'static str, p: BlockPara
             min: p.min,
             max: p.max,
             size: crate::knob::KnobSize::Small,
+            fmt,
             on_change: Callback::new(move |v: f32| {
                 if let Some(r) = rig.clone() {
                     let (id, name) = (block_id.clone(), name.to_string());
@@ -641,6 +689,9 @@ fn DelayPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32) -> Element {
                 if let Some(p) = param(&cur, "feedback") {
                     PKnob { block_id: cur_id.clone(), name: "feedback", label: "FB", p }
                 }
+                if let Some(p) = param(&cur, "pan") {
+                    PKnob { block_id: cur_id.clone(), name: "pan", label: "Pan", p }
+                }
                 if let Some(p) = param(&cur, "mix") {
                     PKnob { block_id: cur_id.clone(), name: "mix", label: "Mix", p }
                 }
@@ -743,7 +794,16 @@ fn ReverbPanel(blocks: Vec<LiveBlock>) -> Element {
                     PKnob { block_id: cur_id.clone(), name: "mix", label: "Mix", p }
                 }
                 if let Some(p) = param(&cur, "decay") {
-                    PKnob { block_id: cur_id.clone(), name: "decay", label: "Time", p }
+                    PKnob {
+                        block_id: cur_id.clone(),
+                        name: "decay",
+                        label: "Time",
+                        p,
+                        // RT60 estimate from the Hall feedback law
+                        // (g = 0.5 + 0.48·d, ~80 ms loop) — a readable tail
+                        // length, not a lab measurement.
+                        fmt: Some(decay_seconds_label as fn(f32) -> String),
+                    }
                 }
                 if let Some(p) = param(&cur, "tone") {
                     PKnob { block_id: cur_id.clone(), name: "tone", label: "Tone", p }

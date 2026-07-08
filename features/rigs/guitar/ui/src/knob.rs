@@ -146,14 +146,6 @@ pub fn Knob(
                 onpointerdown: move |e: PointerEvent| {
                     drag.set(Some((e.client_coordinates().y, val)));
                 },
-                onpointermove: move |e: PointerEvent| {
-                    if let Some((y0, v0)) = drag() {
-                        let dy = y0 - e.client_coordinates().y;
-                        apply(v0 + dy / SENSITIVITY);
-                    }
-                },
-                onpointerup: move |_| drag.set(None),
-                onpointerleave: move |_| drag.set(None),
                 onwheel: move |e: WheelEvent| {
                     let step = if e.delta().strip_units().y < 0.0 { 0.02 } else { -0.02 };
                     apply(val + step);
@@ -210,6 +202,22 @@ pub fn Knob(
                         overflow: hidden; text-overflow: ellipsis; white-space: nowrap;",
                 "{label}"
             }
+            // Drag shield: while a drag is live, a fullscreen layer owns the
+            // pointer — moving off the knob no longer drops the gesture.
+            if drag().is_some() {
+                div {
+                    class: "fixed inset-0",
+                    style: "z-index: 1000; cursor: ns-resize;",
+                    onpointermove: move |e: PointerEvent| {
+                        if let Some((y0, v0)) = drag() {
+                            let dy = y0 - e.client_coordinates().y;
+                            apply(v0 + dy / SENSITIVITY);
+                        }
+                    },
+                    onpointerup: move |_| drag.set(None),
+                }
+            }
+
             span {
                 style: "font-family: ui-monospace, monospace; font-size: 10px; \
                         font-variant-numeric: tabular-nums; color: #e8e8ec; \
