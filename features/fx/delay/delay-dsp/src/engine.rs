@@ -327,6 +327,48 @@ impl DelayEngine {
         }
     }
 
+    /// Process one sample with a per-sample modulated delay time.
+    ///
+    /// Used by the chain for groove/feel/prime modulation. The engine's
+    /// public `time_ms` parameter is not touched; each style's internal
+    /// time smoother chases the value passed here.
+    pub fn tick_at(&mut self, input: f64, ch: usize, time_ms: f64) -> f64 {
+        match &mut self.inner {
+            EngineInner::Tape(d) => {
+                d.time_ms = time_ms;
+                d.tick(input, ch)
+            }
+            EngineInner::Clean(d) => {
+                d.time_ms = time_ms;
+                d.tick(input, ch)
+            }
+            EngineInner::Bbd(d) => {
+                d.time_ms = time_ms;
+                d.tick(input, ch)
+            }
+            EngineInner::LoFi(d) => {
+                d.time_ms = time_ms;
+                d.tick(input, ch)
+            }
+            EngineInner::Shimmer(d) => {
+                d.time_ms = time_ms;
+                d.tick(input, ch)
+            }
+            EngineInner::Reverse(d) => {
+                d.time_ms = time_ms;
+                d.tick(input, ch)
+            }
+            EngineInner::Pitch(d) => {
+                d.time_ms = time_ms;
+                d.tick(input)
+            }
+            EngineInner::Rhythm(d) => {
+                d.time_ms = time_ms;
+                d.tick(input, ch)
+            }
+        }
+    }
+
     /// Get the last feedback sample for ping-pong cross-feeding.
     pub fn last_feedback(&self) -> f64 {
         match &self.inner {

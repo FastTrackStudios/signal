@@ -7,6 +7,7 @@
 //! the same delay buffer with shared wow/flutter modulation.
 
 use audiocore_dsp::biquad::{Biquad, FilterType};
+use audiocore_dsp::dc_blocker::DcBlocker;
 use audiocore_dsp::delay_line::DelayLine;
 use audiocore_dsp::smoothing::ParamSmoother;
 use audiocore_dsp::soft_clip::sin_clip;
@@ -140,9 +141,17 @@ pub struct TapeDelay {
     flutter: Flutter,
     hicut: Biquad,
     locut: Biquad,
+    dc_blocker: DcBlocker,
     feedback_sample: f64,
     sample_rate: f64,
     smoother: ParamSmoother,
+    fb_smoother: ParamSmoother,
+    drive_smoother: ParamSmoother,
+    hicut_smoother: ParamSmoother,
+    locut_smoother: ParamSmoother,
+    /// Countdown to the next biquad coefficient refresh while a cutoff
+    /// smoother is still moving (refresh every 16 samples, not every one).
+    coeff_refresh: u32,
 }
 
 impl TapeDelay {
@@ -178,9 +187,15 @@ impl TapeDelay {
             flutter: Flutter::new(),
             hicut: Biquad::new(),
             locut: Biquad::new(),
+            dc_blocker: DcBlocker::new(),
             feedback_sample: 0.0,
             sample_rate: 48000.0,
             smoother: ParamSmoother::new(0.0),
+            fb_smoother: ParamSmoother::new(0.4),
+            drive_smoother: ParamSmoother::new(0.0),
+            hicut_smoother: ParamSmoother::new(8000.0),
+            locut_smoother: ParamSmoother::new(0.0),
+            coeff_refresh: 0,
         }
     }
 
@@ -228,10 +243,34 @@ impl TapeDelay {
         // Smooth delay time changes (~150ms time constant, from qdelay)
         self.smoother.set_time(0.15, sample_rate);
 
+        // Gain-ish params get a short 5ms smoothing to kill zipper noise
+        // on automation; cutoffs get 20ms with periodic coeff refresh.
+        self.fb_smoother.set_time_ms(5.0, sample_rate);
+        self.fb_smoother.set_epsilon(1e-4);
+        self.drive_smoother.set_time_ms(5.0, sample_rate);
+        self.drive_smoother.set_epsilon(1e-4);
+        self.hicut_smoother.set_time_ms(20.0, sample_rate);
+        self.hicut_smoother.set_epsilon(1.0);
+        self.locut_smoother.set_time_ms(20.0, sample_rate);
+        self.locut_smoother.set_epsilon(1.0);
+
+        self.dc_blocker.set_cutoff(10.0, sample_rate);
+
         let target = self.time_ms * 0.001 * sample_rate;
         if self.smoother.value() == 0.0 {
             self.smoother.set_immediate(target);
         }
+    }
+
+    /// Advance a cutoff smoother, treating 0 (= filter disabled) as a hard
+    /// switch rather than smoothing through the audible range.
+    fn smooth_cutoff(smoother: &mut ParamSmoother, target: f64) -> f64 {
+        if target <= 0.0 || smoother.value() <= 0.0 {
+            smoother.set_immediate(target.max(0.0));
+            return smoother.value();
+        }
+        smoother.set_target(target);
+        smoother.tick()
     }
 
     // r[impl delay.tape.tick]
@@ -255,6 +294,29 @@ impl TapeDelay {
         let target_delay = self.time_ms * 0.001 * self.sample_rate;
         self.smoother.set_target(target_delay);
         let smooth_delay = self.smoother.tick();
+
+        // Smooth gain-ish params per sample
+        self.fb_smoother.set_target(self.feedback);
+        let feedback = self.fb_smoother.tick();
+        self.drive_smoother.set_target(self.drive);
+        let drive = self.drive_smoother.tick();
+
+        // Smooth cutoffs; refresh biquad coefficients every 16 samples
+        // while still moving (full per-sample recompute is wasteful).
+        let hicut_now = Self::smooth_cutoff(&mut self.hicut_smoother, self.hicut_freq);
+        let locut_now = Self::smooth_cutoff(&mut self.locut_smoother, self.locut_freq);
+        if self.coeff_refresh == 0 {
+            if hicut_now > 0.0 && !self.hicut_smoother.is_settled() {
+                self.hicut
+                    .set(FilterType::Lowpass, hicut_now, self.filter_q, self.sample_rate);
+            }
+            if locut_now > 0.0 && !self.locut_smoother.is_settled() {
+                self.locut
+                    .set(FilterType::Highpass, locut_now, self.filter_q, self.sample_rate);
+            }
+            self.coeff_refresh = 16;
+        }
+        self.coeff_refresh -= 1;
 
         // Wow/flutter offset — shared across all heads (same tape transport)
         let wow_offset = self.wow.tick();
@@ -283,12 +345,12 @@ impl TapeDelay {
         }
 
         // Feedback path: combined output → filter → saturate → limit
-        let mut fb = output * self.feedback;
+        let mut fb = output * feedback;
 
-        if self.hicut_freq > 0.0 {
+        if hicut_now > 0.0 {
             fb = self.hicut.tick(fb, ch);
         }
-        if self.locut_freq > 0.0 {
+        if locut_now > 0.0 {
             fb = self.locut.tick(fb, ch);
         }
 
@@ -297,8 +359,8 @@ impl TapeDelay {
         }
 
         // Saturation in feedback path
-        if self.drive > 0.0 {
-            let drive_gain = 1.0 + self.drive * 3.0;
+        if drive > 0.0 {
+            let drive_gain = 1.0 + drive * 3.0;
             fb = match self.saturation_type {
                 SaturationType::Clean => {
                     // Just gain + soft limit
@@ -345,8 +407,9 @@ impl TapeDelay {
             };
         }
 
-        // Hard limit feedback to prevent runaway
-        fb = fb.clamp(-1.5, 1.5);
+        // Hard limit feedback to prevent runaway, then strip the DC that
+        // asymmetric saturation (Dirt/Pump) injects into the loop.
+        fb = self.dc_blocker.tick(fb.clamp(-1.5, 1.5));
 
         // Write input + feedback to delay line
         self.delay.write(input + fb);
@@ -366,8 +429,14 @@ impl TapeDelay {
         self.hicut.reset();
         self.locut.reset();
         self.decay_eq.reset();
+        self.dc_blocker.reset();
         self.feedback_sample = 0.0;
         self.smoother.reset(0.0);
+        self.fb_smoother.reset(self.feedback);
+        self.drive_smoother.reset(self.drive);
+        self.hicut_smoother.reset(self.hicut_freq);
+        self.locut_smoother.reset(self.locut_freq);
+        self.coeff_refresh = 0;
     }
 }
 
@@ -461,6 +530,36 @@ mod tests {
             let out = d.tick(input, 0);
             assert!(out.is_finite(), "NaN/Inf at sample {i}");
         }
+    }
+
+    #[test]
+    fn feedback_does_not_accumulate_dc() {
+        // A DC-offset input recirculating at high feedback would build up
+        // to offset/(1-fb) without a DC blocker in the loop.
+        let mut d = TapeDelay::new();
+        d.time_ms = 50.0;
+        d.feedback = 0.8;
+        d.drive = 0.6;
+        d.saturation_type = SaturationType::Dirt;
+        d.locut_freq = 0.0; // no highpass — the DC blocker must do the work
+        d.update(SR);
+
+        let mut sum = 0.0;
+        let mut count = 0usize;
+        for i in 0..96000 {
+            // 0.3 DC + quiet sine — deliberately asymmetric signal
+            let input = 0.3 + (2.0 * PI * 220.0 * i as f64 / SR).sin() * 0.2;
+            let out = d.tick(input, 0);
+            if i >= 48000 {
+                sum += out;
+                count += 1;
+            }
+        }
+        let mean = sum / count as f64;
+        assert!(
+            mean.abs() < 0.5,
+            "DC should not accumulate in feedback: mean={mean}"
+        );
     }
 
     #[test]

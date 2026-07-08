@@ -6,6 +6,10 @@
 
 use std::f64::consts::PI;
 
+use audiocore_dsp::delay_line::DelayLine;
+use audiocore_dsp::envelope::EnvelopeFollower;
+use audiocore_dsp::prng::XorShift32;
+
 /// Wobble/LFO waveform shapes for wow modulation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WobbleShape {
@@ -132,7 +136,7 @@ pub struct Wow {
     amp: f64,
     ou_state: f64,
     ou_decay: f64,
-    rng_state: u64,
+    rng: XorShift32,
     sh_value: f64,
     sh_triggered: bool,
 }
@@ -150,7 +154,7 @@ impl Wow {
             amp: 0.0,
             ou_state: 0.0,
             ou_decay: 0.999,
-            rng_state: 0xDEAD_BEEF_CAFE_1234,
+            rng: XorShift32::new(0xDEAD_BEEF),
             sh_value: 0.0,
             sh_triggered: false,
         }
@@ -158,7 +162,10 @@ impl Wow {
 
     pub fn set_sample_rate(&mut self, sr: f64) {
         self.sample_rate = sr;
+        // Max wow excursion: 1000ms of tape travel scaled to samples-per-ms,
+        // i.e. depth=1 sweeps up to ~1000 samples at 48kHz (from qdelay).
         self.amp = 1000.0 * 1000.0 / sr;
+        // OU mean-reversion with a 2-second time constant.
         self.ou_decay = (-1.0 / (2.0 * sr)).exp();
     }
 
@@ -221,6 +228,8 @@ impl Wow {
         self.amp * lfo * d2
     }
 
+    /// Approximate gaussian via Irwin-Hall: sum of 8 uniforms has variance
+    /// 8/12, so scale by 0.612 ≈ 1/sqrt(8/12) for unit variance.
     fn gaussian_noise(&mut self) -> f64 {
         let mut sum = 0.0;
         for _ in 0..8 {
@@ -229,11 +238,9 @@ impl Wow {
         (sum - 4.0) * 0.612
     }
 
+    /// Uniform sample in [0, 1) from the shared PRNG primitive.
     fn xorshift_uniform(&mut self) -> f64 {
-        self.rng_state ^= self.rng_state << 13;
-        self.rng_state ^= self.rng_state >> 7;
-        self.rng_state ^= self.rng_state << 17;
-        (self.rng_state as f64) / (u64::MAX as f64)
+        self.rng.next() as f64 / u32::MAX as f64
     }
 
     pub fn reset(&mut self) {
@@ -254,7 +261,7 @@ pub struct DuckingFollower {
     pub release_ms: f64,
     pub threshold: f64,
     pub amount: f64,
-    envelope: f64,
+    envelope: EnvelopeFollower,
     attack_coeff: f64,
     release_coeff: f64,
     release_fast_coeff: f64,
@@ -268,7 +275,7 @@ impl DuckingFollower {
             release_ms: 200.0,
             threshold: 0.0,
             amount: 0.0,
-            envelope: 0.0,
+            envelope: EnvelopeFollower::new(0.0),
             attack_coeff: 0.0,
             release_coeff: 0.0,
             release_fast_coeff: 0.0,
@@ -282,7 +289,9 @@ impl DuckingFollower {
     }
 
     pub fn update_coeffs(&mut self) {
-        // Target -14 dB convergence in the specified time
+        // qdelay convention: converge to -14 dB (0.2x) of a step within the
+        // specified time — not the usual 1/e time constant, so coefficients
+        // are computed here rather than via EnvelopeFollower::coeff.
         let target = 0.2_f64.ln();
         self.attack_coeff = (target / (self.attack_ms * 0.001 * self.sample_rate)).exp();
         self.release_coeff = (target / (self.release_ms * 0.001 * self.sample_rate)).exp();
@@ -299,27 +308,23 @@ impl DuckingFollower {
             0.0
         };
 
-        if level > self.envelope {
-            self.envelope = self.attack_coeff * self.envelope + (1.0 - self.attack_coeff) * level;
+        // Adaptive release: faster when the drop is large (prevents pumping).
+        let env = self.envelope.value();
+        let release = if level < env && env > 1e-10 {
+            let r = (env - level) / env;
+            self.release_coeff + r * r * (self.release_fast_coeff - self.release_coeff)
         } else {
-            // Adaptive release: faster when the drop is large
-            let ratio = if self.envelope > 1e-10 {
-                let r = (self.envelope - level) / self.envelope;
-                r * r
-            } else {
-                0.0
-            };
-            let coeff = self.release_coeff + ratio * (self.release_fast_coeff - self.release_coeff);
-            self.envelope = coeff * self.envelope + (1.0 - coeff) * level;
-        }
+            self.release_coeff
+        };
+        self.envelope.set_coeffs(self.attack_coeff, release);
+        let env = self.envelope.tick(level);
 
         // Convert envelope to duck gain
-        let duck = (1.0 - self.envelope * self.amount).clamp(0.0, 1.0);
-        duck
+        (1.0 - env * self.amount).clamp(0.0, 1.0)
     }
 
     pub fn reset(&mut self) {
-        self.envelope = 0.0;
+        self.envelope.reset(0.0);
     }
 }
 
@@ -335,9 +340,12 @@ pub struct Diffuser {
 }
 
 /// Single allpass filter with fractional delay.
+///
+/// Backed by the shared `DelayLine` with cubic interpolation — the delay
+/// is modulated by `size`, and linear interpolation there dulls the top
+/// end and steps audibly.
 struct AllpassFilter {
-    buffer: Vec<f64>,
-    write_pos: usize,
+    buffer: DelayLine,
     delay: f64,
     feedback: f64,
 }
@@ -345,34 +353,26 @@ struct AllpassFilter {
 impl AllpassFilter {
     fn new(max_samples: usize) -> Self {
         Self {
-            buffer: vec![0.0; max_samples + 2],
-            write_pos: 0,
+            buffer: DelayLine::new(max_samples + 8),
             delay: 1.0,
             feedback: 0.5,
         }
     }
 
     fn tick(&mut self, input: f64) -> f64 {
-        let len = self.buffer.len();
-        let int_delay = self.delay as usize;
-        let frac = self.delay - int_delay as f64;
-
-        // Linear interpolation read
-        let pos_a = (self.write_pos + len - int_delay) % len;
-        let pos_b = (self.write_pos + len - int_delay - 1) % len;
-        let delayed = self.buffer[pos_a] + frac * (self.buffer[pos_b] - self.buffer[pos_a]);
+        let max_read = self.buffer.len() as f64 - 4.0;
+        let delayed = self.buffer.read_cubic(self.delay.clamp(1.0, max_read));
 
         let output = -input * self.feedback + delayed;
         let write_val = input + delayed * self.feedback;
 
-        self.buffer[self.write_pos] = write_val;
-        self.write_pos = (self.write_pos + 1) % len;
+        self.buffer.write(write_val);
 
         output
     }
 
     fn reset(&mut self) {
-        self.buffer.fill(0.0);
+        self.buffer.clear();
     }
 }
 
@@ -405,7 +405,7 @@ impl Diffuser {
     }
 
     pub fn update(&mut self, sample_rate: f64, is_right: bool) {
-        let mps = sample_rate / 343.0;
+        let mps = sample_rate / 343.0; // Samples per meter (speed of sound)
         let base_distance = mps * 3.75;
         let delays = if is_right {
             DIFFUSE_DELAYS_R
@@ -415,6 +415,12 @@ impl Diffuser {
         let offset = 0.9 - 0.9 * self.size;
 
         for (i, ap) in self.allpasses.iter_mut().enumerate() {
+            // Grow the buffer only if a higher sample rate demands it
+            // (control path — never called from process()).
+            let needed = (base_distance * delays[i] * 2.0) as usize + 8;
+            if ap.buffer.len() < needed {
+                ap.buffer = DelayLine::new(needed);
+            }
             ap.delay = (base_distance * delays[i] * (1.0 - offset)).max(1.0);
             ap.feedback = self.smear.clamp(0.0, 0.9);
         }

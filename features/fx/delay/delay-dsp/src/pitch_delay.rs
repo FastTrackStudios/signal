@@ -5,8 +5,11 @@
 //! resets and a crossfade prevents clicks.
 
 use audiocore_dsp::biquad::{Biquad, FilterType};
+use audiocore_dsp::dc_blocker::DcBlocker;
 use audiocore_dsp::delay_line::DelayLine;
 use audiocore_dsp::smoothing::ParamSmoother;
+
+use crate::grain::GrainReader;
 
 // r[impl delay.pitch.shift]
 // r[impl delay.pitch.granular-crossfade]
@@ -27,13 +30,8 @@ pub struct PitchDelay {
 
     decay_eq: Biquad,
     delay: DelayLine,
-    /// Read offset for grain A (in samples behind write head).
-    offset_a: f64,
-    /// Read offset for grain B.
-    offset_b: f64,
-    /// Crossfade position (0=B primary, 1=A primary).
-    crossfade: f64,
-    grain_phase: bool,
+    grain: GrainReader,
+    dc_blocker: DcBlocker,
     feedback_sample: f64,
     sample_rate: f64,
     smoother: ParamSmoother,
@@ -52,10 +50,8 @@ impl PitchDelay {
             decay_tilt: 0.0,
             decay_eq: Biquad::new(),
             delay: DelayLine::new(buf_len),
-            offset_a: 0.0,
-            offset_b: 0.0,
-            crossfade: 1.0,
-            grain_phase: true,
+            grain: GrainReader::new(),
+            dc_blocker: DcBlocker::new(),
             feedback_sample: 0.0,
             sample_rate: 48000.0,
             smoother: ParamSmoother::new(0.0),
@@ -82,11 +78,11 @@ impl PitchDelay {
         }
 
         self.smoother.set_time(0.15, sample_rate);
+        self.dc_blocker.set_cutoff(10.0, sample_rate);
         let target = self.time_ms * 0.001 * sample_rate;
         if self.smoother.value() == 0.0 {
             self.smoother.set_immediate(target);
-            self.offset_a = target;
-            self.offset_b = target;
+            self.grain.seat(target);
         }
     }
 
@@ -99,45 +95,10 @@ impl PitchDelay {
         let smooth_delay = self.smoother.tick();
 
         let grain_samples = (self.grain_ms * 0.001 * self.sample_rate).max(64.0);
-        let max_offset = self.delay.len() as f64 - 4.0;
 
-        // Both read heads drift at `speed` rate
-        // At speed=1.0, offset stays constant (normal delay).
-        // At speed=2.0, offset decreases (reading faster = pitch up).
-        // At speed=0.5, offset increases (reading slower = pitch down).
-        self.offset_a += 1.0 - self.speed;
-        self.offset_b += 1.0 - self.speed;
-
-        // Clamp offsets
-        let clamp_offset = |o: &mut f64, target: f64, grain: f64, max: f64| {
-            if *o < 1.0 || *o > max || (*o - target).abs() > grain {
-                *o = target;
-            }
-        };
-        clamp_offset(&mut self.offset_a, smooth_delay, grain_samples, max_offset);
-        clamp_offset(&mut self.offset_b, smooth_delay, grain_samples, max_offset);
-
-        // Read from delay
-        let sample_a = self.delay.read_cubic(self.offset_a.clamp(1.0, max_offset));
-        let sample_b = self.delay.read_cubic(self.offset_b.clamp(1.0, max_offset));
-
-        // Manage crossfade between grains
-        let fade_rate = 1.0 / grain_samples;
-        if self.grain_phase {
-            self.crossfade = (self.crossfade + fade_rate).min(1.0);
-            if self.crossfade >= 1.0 && (self.offset_a - smooth_delay).abs() > grain_samples * 0.5 {
-                self.offset_b = smooth_delay;
-                self.grain_phase = false;
-            }
-        } else {
-            self.crossfade = (self.crossfade - fade_rate).max(0.0);
-            if self.crossfade <= 0.0 && (self.offset_b - smooth_delay).abs() > grain_samples * 0.5 {
-                self.offset_a = smooth_delay;
-                self.grain_phase = true;
-            }
-        }
-
-        let output = sample_a * self.crossfade + sample_b * (1.0 - self.crossfade);
+        let output = self
+            .grain
+            .tick(&self.delay, smooth_delay, grain_samples, self.speed);
 
         // Feedback with self-limiting
         let mut fb = output * self.feedback;
@@ -149,7 +110,9 @@ impl PitchDelay {
         } else {
             fb
         };
-        let clamped_fb = limited_fb.clamp(-1.5, 1.5);
+        // Grain crossfades + the nonlinear limiter can build a subsonic
+        // offset over many recirculations — block it inside the loop.
+        let clamped_fb = self.dc_blocker.tick(limited_fb.clamp(-1.5, 1.5));
 
         self.delay.write(input + clamped_fb);
         self.feedback_sample = clamped_fb;
@@ -164,10 +127,8 @@ impl PitchDelay {
     pub fn reset(&mut self) {
         self.delay.clear();
         self.decay_eq.reset();
-        self.offset_a = 0.0;
-        self.offset_b = 0.0;
-        self.crossfade = 1.0;
-        self.grain_phase = true;
+        self.grain.reset();
+        self.dc_blocker.reset();
         self.feedback_sample = 0.0;
         self.smoother.reset(0.0);
     }

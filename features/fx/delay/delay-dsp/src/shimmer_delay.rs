@@ -5,8 +5,11 @@
 //! Uses the same granular crossfade approach as PitchDelay.
 
 use audiocore_dsp::biquad::{Biquad, FilterType};
+use audiocore_dsp::dc_blocker::DcBlocker;
 use audiocore_dsp::delay_line::DelayLine;
 use audiocore_dsp::smoothing::ParamSmoother;
+
+use crate::grain::GrainReader;
 
 /// Shimmer delay with pitch shifting in the feedback path.
 pub struct ShimmerDelay {
@@ -28,14 +31,12 @@ pub struct ShimmerDelay {
     decay_eq: Biquad,
     delay: DelayLine,
     hicut: Biquad,
+    dc_blocker: DcBlocker,
     feedback_sample: f64,
     sample_rate: f64,
     smoother: ParamSmoother,
-    // Granular pitch shifter state (dual read heads)
-    offset_a: f64,
-    offset_b: f64,
-    crossfade: f64,
-    grain_phase: bool,
+    /// Granular pitch shifter (dual read heads, shared with PitchDelay).
+    grain: GrainReader,
     /// Grain size in ms for pitch shifter (10–100). Larger = smoother.
     pub grain_ms: f64,
 }
@@ -55,13 +56,11 @@ impl ShimmerDelay {
             decay_eq: Biquad::new(),
             delay: DelayLine::new(48000 * 5 + 1024),
             hicut: Biquad::new(),
+            dc_blocker: DcBlocker::new(),
             feedback_sample: 0.0,
             sample_rate: 48000.0,
             smoother: ParamSmoother::new(0.0),
-            offset_a: 0.0,
-            offset_b: 0.0,
-            crossfade: 1.0,
-            grain_phase: true,
+            grain: GrainReader::new(),
             grain_ms: 30.0,
         }
     }
@@ -96,11 +95,11 @@ impl ShimmerDelay {
         }
 
         self.smoother.set_time(0.15, sample_rate);
+        self.dc_blocker.set_cutoff(10.0, sample_rate);
         let target = self.time_ms * 0.001 * sample_rate;
         if self.smoother.value() == 0.0 {
             self.smoother.set_immediate(target);
-            self.offset_a = target;
-            self.offset_b = target;
+            self.grain.seat(target);
         }
     }
 
@@ -114,43 +113,11 @@ impl ShimmerDelay {
         // === Normal (unpitched) read ===
         let normal_output = self.delay.read_cubic(smooth_delay.clamp(1.0, max_read));
 
-        // === Pitched read (granular crossfade) ===
+        // === Pitched read (granular crossfade, shared GrainReader) ===
         let grain_samples = (self.grain_ms * 0.001 * self.sample_rate).max(64.0);
-        let speed = self.pitch_ratio;
-
-        // Both read heads drift at pitch_ratio rate
-        self.offset_a += 1.0 - speed;
-        self.offset_b += 1.0 - speed;
-
-        // Clamp offsets
-        let clamp = |o: &mut f64, target: f64, grain: f64, max: f64| {
-            if *o < 1.0 || *o > max || (*o - target).abs() > grain {
-                *o = target;
-            }
-        };
-        clamp(&mut self.offset_a, smooth_delay, grain_samples, max_read);
-        clamp(&mut self.offset_b, smooth_delay, grain_samples, max_read);
-
-        let sample_a = self.delay.read_cubic(self.offset_a.clamp(1.0, max_read));
-        let sample_b = self.delay.read_cubic(self.offset_b.clamp(1.0, max_read));
-
-        // Crossfade between grains
-        let fade_rate = 1.0 / grain_samples;
-        if self.grain_phase {
-            self.crossfade = (self.crossfade + fade_rate).min(1.0);
-            if self.crossfade >= 1.0 && (self.offset_a - smooth_delay).abs() > grain_samples * 0.5 {
-                self.offset_b = smooth_delay;
-                self.grain_phase = false;
-            }
-        } else {
-            self.crossfade = (self.crossfade - fade_rate).max(0.0);
-            if self.crossfade <= 0.0 && (self.offset_b - smooth_delay).abs() > grain_samples * 0.5 {
-                self.offset_a = smooth_delay;
-                self.grain_phase = true;
-            }
-        }
-
-        let pitched_output = sample_a * self.crossfade + sample_b * (1.0 - self.crossfade);
+        let pitched_output =
+            self.grain
+                .tick(&self.delay, smooth_delay, grain_samples, self.pitch_ratio);
 
         // Blend pitched and unpitched output
         let output = normal_output * (1.0 - self.shimmer_mix) + pitched_output * self.shimmer_mix;
@@ -170,7 +137,9 @@ impl ShimmerDelay {
         if fb.abs() > 0.001 {
             fb = fb * (3.0 - fb.abs() * 2.0).max(0.0) / 3.0;
         }
-        fb = fb.clamp(-1.5, 1.5);
+        // Pitch-shifted feedback is the classic DC/subsonic accumulator —
+        // block it inside the loop.
+        fb = self.dc_blocker.tick(fb.clamp(-1.5, 1.5));
 
         self.delay.write(input + fb);
         self.feedback_sample = fb;
@@ -186,12 +155,10 @@ impl ShimmerDelay {
         self.delay.clear();
         self.hicut.reset();
         self.decay_eq.reset();
+        self.dc_blocker.reset();
         self.feedback_sample = 0.0;
         self.smoother.reset(0.0);
-        self.offset_a = 0.0;
-        self.offset_b = 0.0;
-        self.crossfade = 1.0;
-        self.grain_phase = true;
+        self.grain.reset();
     }
 }
 

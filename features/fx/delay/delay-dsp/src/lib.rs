@@ -12,6 +12,7 @@ pub mod bbd_delay;
 pub mod chain;
 pub mod clean_delay;
 pub mod engine;
+mod grain;
 pub mod lofi_delay;
 pub mod modulation;
 pub mod pitch_delay;

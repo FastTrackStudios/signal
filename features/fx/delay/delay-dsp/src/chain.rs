@@ -1,6 +1,7 @@
 //! Delay chain — composes delay engines, ducking, and diffusion
 //! into a full stereo processor.
 
+use audiocore_dsp::dc_blocker::DcBlocker;
 use audiocore_dsp::delay_line::DelayLine;
 use audiocore_dsp::smoothing::ParamSmoother;
 use audiocore_dsp::{AudioConfig, Processor};
@@ -117,6 +118,18 @@ pub struct DelayChain {
     // LR offset internal state
     lr_offset_delay: DelayLine,
     lr_offset_smoother: ParamSmoother,
+
+    // Per-sample parameter smoothing (kills zipper noise on automation)
+    mix_smoother: ParamSmoother,
+    width_smoother: ParamSmoother,
+    input_level_smoother: ParamSmoother,
+    output_level_smoother: ParamSmoother,
+    pingpong_fb_smoother: ParamSmoother,
+
+    // The ping-pong cross-feed recirculates through both engines — strip
+    // DC inside that outer loop too.
+    pingpong_dc_l: DcBlocker,
+    pingpong_dc_r: DcBlocker,
 }
 
 impl DelayChain {
@@ -164,6 +177,15 @@ impl DelayChain {
             // 25ms at 48kHz = 1200 samples, add margin
             lr_offset_delay: DelayLine::new(2048),
             lr_offset_smoother: lr_smoother,
+
+            mix_smoother: ParamSmoother::new(0.5),
+            width_smoother: ParamSmoother::new(1.0),
+            input_level_smoother: ParamSmoother::new(1.0),
+            output_level_smoother: ParamSmoother::new(1.0),
+            pingpong_fb_smoother: ParamSmoother::new(0.5),
+
+            pingpong_dc_l: DcBlocker::new(),
+            pingpong_dc_r: DcBlocker::new(),
         }
     }
 
@@ -192,6 +214,14 @@ impl Processor for DelayChain {
 
         self.lr_offset_delay.clear();
         self.lr_offset_smoother.reset(self.lr_offset_ms);
+
+        self.mix_smoother.reset(self.mix);
+        self.width_smoother.reset(self.width);
+        self.input_level_smoother.reset(self.input_level);
+        self.output_level_smoother.reset(self.output_level);
+        self.pingpong_fb_smoother.reset(self.pingpong_feedback);
+        self.pingpong_dc_l.reset();
+        self.pingpong_dc_r.reset();
     }
 
     fn update(&mut self, config: AudioConfig) {
@@ -214,8 +244,8 @@ impl Processor for DelayChain {
         self.delay_l.update(config.sample_rate);
         self.delay_r.update(config.sample_rate);
 
-        self.diffuser_l = Diffuser::new(config.sample_rate, false);
-        self.diffuser_r = Diffuser::new(config.sample_rate, true);
+        // Diffuser::update resizes its buffers itself if the sample rate
+        // grew — no per-update reallocation.
         self.diffuser_l.size = self.diffusion_size;
         self.diffuser_l.smear = self.diffusion_smear;
         self.diffuser_r.size = self.diffusion_size;
@@ -225,6 +255,20 @@ impl Processor for DelayChain {
 
         self.ducker.set_sample_rate(config.sample_rate);
         self.ducker.update_coeffs();
+
+        // Per-sample smoothed params: ~5ms
+        for s in [
+            &mut self.mix_smoother,
+            &mut self.width_smoother,
+            &mut self.input_level_smoother,
+            &mut self.output_level_smoother,
+            &mut self.pingpong_fb_smoother,
+        ] {
+            s.set_time_ms(5.0, config.sample_rate);
+            s.set_epsilon(1e-4);
+        }
+        self.pingpong_dc_l.set_cutoff(10.0, config.sample_rate);
+        self.pingpong_dc_r.set_cutoff(10.0, config.sample_rate);
 
         // Update LR offset smoother and delay line
         self.lr_offset_smoother.set_time_ms(5.0, config.sample_rate);
@@ -245,17 +289,30 @@ impl Processor for DelayChain {
         let delay_time_samples_l = self.delay_l.time_ms * self.sample_rate / 1000.0;
         let delay_time_samples_r = self.delay_r.time_ms * self.sample_rate / 1000.0;
 
-        // Store original delay times so we can restore after process
-        let orig_time_l = self.delay_l.time_ms;
-        let orig_time_r = self.delay_r.time_ms;
+        // Base (user) delay times; per-sample modulation is passed via
+        // tick_at without touching the public params.
+        let base_time_l = self.delay_l.time_ms;
+        let base_time_r = self.delay_r.time_ms;
 
         for i in 0..n {
             let dry_l = left[i];
             let dry_r = right[i];
 
+            // --- Smoothed global params ---
+            self.mix_smoother.set_target(self.mix);
+            let mix = self.mix_smoother.tick();
+            self.width_smoother.set_target(self.width);
+            let width = self.width_smoother.tick();
+            self.input_level_smoother.set_target(self.input_level);
+            let input_level = self.input_level_smoother.tick();
+            self.output_level_smoother.set_target(self.output_level);
+            let output_level = self.output_level_smoother.tick();
+            self.pingpong_fb_smoother.set_target(self.pingpong_feedback);
+            let pingpong_feedback = self.pingpong_fb_smoother.tick();
+
             // --- Input level ---
-            let scaled_l = dry_l * self.input_level;
-            let scaled_r = dry_r * self.input_level;
+            let scaled_l = dry_l * input_level;
+            let scaled_r = dry_r * input_level;
 
             // --- Diffusion (loop mode: applied to input before delay) ---
             let (diff_in_l, diff_in_r) = if self.diffusion_in_loop && self.diffusion_enabled {
@@ -275,23 +332,23 @@ impl Processor for DelayChain {
                     (mono, mono)
                 }
                 StereoMode::PingPong => {
-                    // In ping-pong, we feed mono to L and cross-feed from outputs
+                    // In ping-pong, we feed mono to L and cross-feed from
+                    // outputs; DC-block the recirculating cross-feed.
                     let mono = (diff_in_l + diff_in_r) * 0.5;
-                    let fb_r = self.delay_r.last_feedback();
-                    let fb_l = self.delay_l.last_feedback();
-                    (
-                        mono + fb_r * self.pingpong_feedback,
-                        fb_l * self.pingpong_feedback,
-                    )
+                    let fb_r = self.pingpong_dc_r.tick(self.delay_r.last_feedback());
+                    let fb_l = self.pingpong_dc_l.tick(self.delay_l.last_feedback());
+                    (mono + fb_r * pingpong_feedback, fb_l * pingpong_feedback)
                 }
             };
 
             // --- Feel: offset delay time ---
             let feel_offset = self.feel * self.feel_max_ms;
-            let mut time_l = orig_time_l + feel_offset;
-            let mut time_r = orig_time_r + feel_offset;
+            let mut time_l = base_time_l + feel_offset;
+            let mut time_r = base_time_r + feel_offset;
 
             // --- Prime numbers: anti-resonance ---
+            // 0.13% detune pushes repeats off exact integer-ratio spacing
+            // so stacked delays don't comb-filter against each other.
             if self.prime_numbers {
                 time_l *= 1.0 + 0.0013;
                 time_r *= 1.0 + 0.0013;
@@ -313,12 +370,8 @@ impl Processor for DelayChain {
             time_l = time_l.max(0.1);
             time_r = time_r.max(0.1);
 
-            // Set modulated delay times
-            self.delay_l.time_ms = time_l;
-            self.delay_r.time_ms = time_r;
-
-            let mut wet_l = self.delay_l.tick(in_l, 0);
-            let mut wet_r = self.delay_r.tick(in_r, 1);
+            let mut wet_l = self.delay_l.tick_at(in_l, 0, time_l);
+            let mut wet_r = self.delay_r.tick_at(in_r, 1, time_r);
 
             // --- Diffusion (post mode: applied after delay output) ---
             if !self.diffusion_in_loop && self.diffusion_enabled {
@@ -372,36 +425,32 @@ impl Processor for DelayChain {
             }
 
             // --- LR offset: delay the R channel ---
-            if self.width > 0.001 {
+            if width > 0.001 {
                 self.lr_offset_smoother.set_target(self.lr_offset_ms);
                 let offset_ms = self.lr_offset_smoother.tick();
                 let offset_samples = offset_ms * self.sample_rate / 1000.0;
                 self.lr_offset_delay.write(wet_r);
                 if offset_samples > 0.5 {
-                    wet_r = self.lr_offset_delay.read_linear(offset_samples);
+                    wet_r = self.lr_offset_delay.read_cubic(offset_samples);
                 }
             }
 
             // Stereo width (mid-side)
-            if (self.width - 1.0).abs() > 0.001 {
+            if (width - 1.0).abs() > 0.001 {
                 let mid = (wet_l + wet_r) * 0.5;
                 let side = (wet_l - wet_r) * 0.5;
-                wet_l = mid + side * self.width;
-                wet_r = mid - side * self.width;
+                wet_l = mid + side * width;
+                wet_r = mid - side * width;
             }
 
             // --- Output level ---
-            wet_l *= self.output_level;
-            wet_r *= self.output_level;
+            wet_l *= output_level;
+            wet_r *= output_level;
 
             // Mix dry/wet
-            left[i] = dry_l * (1.0 - self.mix) + wet_l * self.mix;
-            right[i] = dry_r * (1.0 - self.mix) + wet_r * self.mix;
+            left[i] = dry_l * (1.0 - mix) + wet_l * mix;
+            right[i] = dry_r * (1.0 - mix) + wet_r * mix;
         }
-
-        // Restore original delay times
-        self.delay_l.time_ms = orig_time_l;
-        self.delay_r.time_ms = orig_time_r;
     }
 }
 
@@ -434,6 +483,7 @@ mod tests {
     fn dry_wet_mix() {
         let mut c = make_chain();
         c.mix = 0.0; // Fully dry
+        c.reset(); // Snap smoothers to the new params
 
         let mut l = vec![0.5; 512];
         let mut r = vec![0.5; 512];
@@ -441,6 +491,40 @@ mod tests {
 
         // Should be unchanged
         assert!((l[0] - 0.5).abs() < 1e-10);
+    }
+
+    #[test]
+    fn mix_change_is_smooth() {
+        let mut c = make_chain();
+        c.mix = 1.0;
+        c.reset();
+
+        // Steady dry signal, delay produces nothing yet (first 100ms)
+        let mut l = vec![0.8; 1024];
+        let mut r = vec![0.8; 1024];
+        c.process(&mut l, &mut r);
+
+        // Step mix hard from 1.0 to 0.0 mid-stream — output must ramp,
+        // not jump, sample to sample.
+        c.mix = 0.0;
+        let mut l2 = vec![0.8; 4096];
+        let mut r2 = vec![0.8; 4096];
+        c.process(&mut l2, &mut r2);
+
+        let mut prev = l[1023];
+        let mut max_jump: f64 = 0.0;
+        for &v in &l2 {
+            max_jump = max_jump.max((v - prev).abs());
+            prev = v;
+        }
+        // Unsoothed, the wet→dry step would jump by up to 0.8 in one
+        // sample; smoothed it moves in small increments.
+        assert!(
+            max_jump < 0.05,
+            "Mix step should be smoothed: max_jump={max_jump}"
+        );
+        // And it must actually settle to fully dry.
+        assert!((l2[4095] - 0.8).abs() < 1e-6, "Should settle dry: {}", l2[4095]);
     }
 
     #[test]

@@ -4,8 +4,7 @@ version.workspace = true
 authors.workspace = true
 license.workspace = true
 edition.workspace = true
-description = "Delay processing engine — tape / pitch / clean delays with eq-dsp feedback filters"
+description = "Delay processing engine — tape / pitch / clean delays"
 
 [dependencies]
 audiocore-dsp = { workspace = true }
-eq-dsp = { workspace = true }
