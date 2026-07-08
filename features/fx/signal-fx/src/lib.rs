@@ -308,23 +308,30 @@ pub mod comp_meter {
 
     /// Snapshot the ring in time order (oldest → newest), downsampled by
     /// `stride`. Returns `(input_peaks 0..1, gr 0..1)`.
+    ///
+    /// Downsample groups are anchored to **absolute ring slots** (not the
+    /// write position): a display column always summarises the same
+    /// samples until they scroll out, so the trace crawls smoothly instead
+    /// of shimmering as the head moves through a group.
     pub fn wave_snapshot(stride: usize) -> (Vec<f32>, Vec<f32>) {
         let stride = stride.max(1);
+        let n_groups = WAVE_LEN / stride;
         let pos = POS.load(Ordering::Relaxed) % WAVE_LEN;
-        let mut input = Vec::with_capacity(WAVE_LEN / stride);
-        let mut gr = Vec::with_capacity(WAVE_LEN / stride);
-        let mut i = 0;
-        while i < WAVE_LEN {
-            // Peak within the stride window so transients survive.
+        // First complete group after the write head (the head's own group
+        // mixes oldest and newest data — skip it).
+        let g0 = (pos / stride + 1) % n_groups;
+        let mut input = Vec::with_capacity(n_groups - 1);
+        let mut gr = Vec::with_capacity(n_groups - 1);
+        for k in 0..n_groups - 1 {
+            let g = (g0 + k) % n_groups;
             let (mut pi, mut pg) = (0.0f32, 0.0f32);
-            for j in 0..stride.min(WAVE_LEN - i) {
-                let idx = (pos + i + j) % WAVE_LEN;
+            for j in 0..stride {
+                let idx = g * stride + j;
                 pi = pi.max(f32::from_bits(WAVE_IN[idx].load(Ordering::Relaxed)));
                 pg = pg.max(f32::from_bits(WAVE_GR[idx].load(Ordering::Relaxed)));
             }
             input.push(pi);
             gr.push(pg);
-            i += stride;
         }
         (input, gr)
     }
@@ -1187,6 +1194,8 @@ const MOD_PARAMS: &[ParamSpec] = &[
     ParamSpec { id: 0, name: "mix", min: 0.0, max: 1.0, default: 0.4 },
     ParamSpec { id: 1, name: "depth", min: 0.0, max: 1.0, default: 0.4 },
     ParamSpec { id: 2, name: "rate", min: 0.05, max: 10.0, default: 1.0 },
+    // Engine (algorithm): 0 Cubic / 1 BBD / 2 Tape / 3 Orbit / 4 Juno.
+    ParamSpec { id: 3, name: "engine", min: 0.0, max: 4.0, default: 0.0 },
 ];
 
 /// Native modulation block — wraps [`ChorusChain`], selecting Chorus / Flanger /
@@ -1232,6 +1241,16 @@ impl NativeMod {
             1 => self.ch.depth = v,
             2 => self.ch.rate_hz = v,
             _ => {}
+            3 => {
+                use modulation::chorus::engine::EngineType;
+                self.ch.set_engine(match v.round().max(0.0) as u32 {
+                    1 => EngineType::Bbd,
+                    2 => EngineType::Tape,
+                    3 => EngineType::Orbit,
+                    4 => EngineType::Juno,
+                    _ => EngineType::Cubic,
+                });
+            }
         }
     }
 
@@ -1313,6 +1332,8 @@ const TREM_PARAMS: &[ParamSpec] = &[
     ParamSpec { id: 1, name: "mix", min: 0.0, max: 1.0, default: 1.0 },
     // Free-running LFO rate (the trigger engine's free mode).
     ParamSpec { id: 2, name: "rate", min: 0.05, max: 12.0, default: 4.0 },
+    // Mode (algorithm): 0 Mono / 1 Stereo / 2 Harmonic.
+    ParamSpec { id: 3, name: "mode", min: 0.0, max: 2.0, default: 1.0 },
 ];
 
 /// Native Tremolo block — wraps [`TremChain`] (amplitude modulation).
@@ -1345,6 +1366,11 @@ impl NativeTrem {
                 self.tr.modulator.trigger.sync_index = 0;
                 self.tr.modulator.trigger.rate_hz = v.max(0.01);
             }
+            3 => self.tr.set_mode(match v.round().max(0.0) as u32 {
+                0 => TremMode::Mono,
+                2 => TremMode::Harmonic,
+                _ => TremMode::Stereo,
+            }),
             _ => {}
         }
     }

@@ -734,11 +734,13 @@ fn param_specs(bt: BlockType) -> Vec<(String, f32, f32, f32)> {
             ("mix", 0.0, 1.0, 0.4),
             ("depth", 0.0, 1.0, 0.5),
             ("rate", 0.05, 10.0, 1.0),
+            ("engine", 0.0, 4.0, 0.0),
         ]),
         BlockType::Trem => owned(&[
             ("depth", 0.0, 1.0, 0.5),
             ("mix", 0.0, 1.0, 1.0),
             ("rate", 0.05, 12.0, 4.0),
+            ("mode", 0.0, 2.0, 1.0),
         ]),
         _ => Vec::new(),
     }

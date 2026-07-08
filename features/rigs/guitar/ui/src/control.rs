@@ -74,17 +74,34 @@ pub fn ZoomPanel(
     /// of `children` (e.g. the gate's expanded editor with attack/release).
     #[props(default)]
     zoomed_view: Option<Element>,
+    /// Bypass-all control shown beside the zoom icon: `Some(engaged)` +
+    /// `on_power` renders the power button.
+    #[props(default)]
+    power_on: Option<bool>,
+    #[props(default)]
+    on_power: Option<Callback<()>>,
 ) -> Element {
     let mut zoomed = use_signal(|| false);
     rsx! {
         div { class: "relative flex flex-col flex-1 border border-border bg-card min-h-0 overflow-hidden",
             div { class: "flex-1 min-h-0", {children.clone()} }
-            // Floating zoom control — no chrome, just the corner icon.
-            button {
-                class: "absolute top-1 right-1.5 z-20 text-muted-foreground/60 hover:text-foreground text-sm leading-none",
-                title: "{title}",
-                onclick: move |_| zoomed.set(true),
-                "⤢"
+            // Floating corner controls — power (bypass all) + zoom.
+            div { class: "absolute top-1 right-1.5 z-20 flex items-center gap-1.5",
+                if let (Some(on), Some(cb)) = (power_on, on_power) {
+                    button {
+                        class: "text-sm leading-none",
+                        style: if on { "color: #4ade80;" } else { "color: #52525b;" },
+                        title: if on { "Bypass all" } else { "Engage" },
+                        onclick: move |_| cb.call(()),
+                        "⏻"
+                    }
+                }
+                button {
+                    class: "text-muted-foreground/60 hover:text-foreground text-sm leading-none",
+                    title: "{title}",
+                    onclick: move |_| zoomed.set(true),
+                    "⤢"
+                }
             }
         }
         if zoomed() {
@@ -195,6 +212,11 @@ fn div_factor(idx: f32) -> f32 {
 }
 
 /// `delay::DelayStyle` order — the TimeLine MX machines.
+/// `chorus::EngineType` order — the modulation algorithms.
+const MOD_ENGINES: [&str; 5] = ["Cubic", "BBD", "Tape", "Orbit", "Juno"];
+/// `TremMode` order.
+const TREM_MODES: [&str; 3] = ["Mono", "Stereo", "Harmonic"];
+
 const DELAY_ALGOS: [&str; 13] = [
     "Tape", "Digital", "dBucket", "Lo-Fi", "Shimmer", "Reverse", "Ice",
     "Rhythm", "Drum", "Oil Can", "MultiTap", "Spectral", "Filter",
@@ -633,7 +655,23 @@ fn DelayPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32) -> Element {
                                     }
                                 }
                             }
-                            div { class: "absolute top-0.5 left-1.5 flex items-baseline gap-1.5",
+                            div { class: "absolute top-0.5 left-1.5 flex items-center gap-1.5",
+                                button {
+                                    style: if dim { "font-size:10px; line-height:1; color:#52525b;" } else { "font-size:10px; line-height:1; color:#4ade80;" },
+                                    title: if dim { "Engage" } else { "Bypass" },
+                                    onclick: {
+                                        let rig = rig.clone();
+                                        let id = b.id.clone();
+                                        move |e: MouseEvent| {
+                                            e.stop_propagation();
+                                            if let Some(r) = rig.clone() {
+                                                let id = id.clone();
+                                                spawn(async move { let _ = r.toggle_block_bypass(id).await; });
+                                            }
+                                        }
+                                    },
+                                    "⏻"
+                                }
                                 span { style: "font-size:8px; font-weight:700; color:{color};", "{di + 1}" }
                                 if dim {
                                     span { style: "font-size:8px; color:#52525b;", "bypassed" }
@@ -710,6 +748,7 @@ fn DelayPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32) -> Element {
 /// beneath.
 #[component]
 fn ReverbPanel(blocks: Vec<LiveBlock>) -> Element {
+    let rig = use_hook(try_consume_context::<RigClient>);
     let mut sel = use_signal(|| 0usize);
     const W: f32 = 460.0;
     let verbs: Vec<LiveBlock> = blocks
@@ -790,7 +829,23 @@ fn ReverbPanel(blocks: Vec<LiveBlock>) -> Element {
                                     stroke: "{color}", stroke_opacity: if dim { "0.2" } else { "0.55" },
                                     stroke_width: "1", stroke_dasharray: "2,2" }
                             }
-                            div { class: "absolute top-0.5 left-1.5 flex items-baseline gap-1.5",
+                            div { class: "absolute top-0.5 left-1.5 flex items-center gap-1.5",
+                                button {
+                                    style: if dim { "font-size:10px; line-height:1; color:#52525b;" } else { "font-size:10px; line-height:1; color:#4ade80;" },
+                                    title: if dim { "Engage" } else { "Bypass" },
+                                    onclick: {
+                                        let rig = rig.clone();
+                                        let id = b.id.clone();
+                                        move |e: MouseEvent| {
+                                            e.stop_propagation();
+                                            if let Some(r) = rig.clone() {
+                                                let id = id.clone();
+                                                spawn(async move { let _ = r.toggle_block_bypass(id).await; });
+                                            }
+                                        }
+                                    },
+                                    "⏻"
+                                }
                                 span { style: "font-size:8px; font-weight:700; color:{color};", "{vi + 1}" }
                                 if dim {
                                     span { style: "font-size:8px; color:#52525b;", "bypassed" }
@@ -935,6 +990,28 @@ fn ModGroupPanel(
         div { class: "flex flex-col h-full min-h-0", style: "background: #080808;",
             // Header: arrows rotate the engaged member.
             div { class: "flex items-center gap-1 px-1.5 pt-1 flex-shrink-0",
+                button {
+                    style: if engaged { "font-size:10px; line-height:1; color:#4ade80;" } else { "font-size:10px; line-height:1; color:#52525b;" },
+                    title: if engaged { "Bypass group" } else { "Engage" },
+                    onclick: {
+                        let rig = rig.clone();
+                        let members = members.clone();
+                        move |_| {
+                            let (rig, members) = (rig.clone(), members.clone());
+                            spawn(async move {
+                                let Some(r) = rig else { return };
+                                if engaged {
+                                    for m in &members {
+                                        let _ = r.set_block_bypass(m.id.clone(), true).await;
+                                    }
+                                } else {
+                                    let _ = r.set_block_bypass(members[shown].id.clone(), false).await;
+                                }
+                            });
+                        }
+                    },
+                    "⏻"
+                }
                 span { style: "font-size:8px; font-weight:600; text-transform:uppercase; color:#8a8a92;", "{title}" }
                 button {
                     class: "ml-auto w-4 h-4 rounded-sm border border-border text-[9px] text-muted-foreground hover:text-foreground leading-none",
@@ -968,6 +1045,29 @@ fn ModGroupPanel(
                     class: "w-4 h-4 rounded-sm border border-border text-[9px] text-muted-foreground hover:text-foreground leading-none",
                     onclick: move |_| rotate(1),
                     "›"
+                }
+                // Algorithm picker for the active member (chorus engines,
+                // trem modes; passthroughs have none yet).
+                match cur.block_type {
+                    BlockType::Chorus | BlockType::Flanger | BlockType::Vibrato => rsx! {
+                        AlgoPicker {
+                            block_id: cur.id.clone(),
+                            name: "engine",
+                            value: param_v(&cur, "engine", 0.0),
+                            options: MOD_ENGINES.to_vec(),
+                            accent: "#f472b6".to_string(),
+                        }
+                    },
+                    BlockType::Trem => rsx! {
+                        AlgoPicker {
+                            block_id: cur.id.clone(),
+                            name: "mode",
+                            value: param_v(&cur, "mode", 1.0),
+                            options: TREM_MODES.to_vec(),
+                            accent: "#f472b6".to_string(),
+                        }
+                    },
+                    _ => rsx! {},
                 }
             }
             // LFO trace.
@@ -1306,12 +1406,54 @@ pub fn ControlView(
                     // Time section: stereo delay + stereo reverb + modulation.
                     div { class: "flex gap-0 min-h-0 w-full", style: "flex: 1 1 0%; min-height: 150px;",
                         div { class: "min-h-0 h-full flex flex-col", style: "flex: 2 1 0%;",
-                            ZoomPanel { title: "Delay".to_string(),
+                            ZoomPanel {
+                                title: "Delay".to_string(),
+                                power_on: Some(blocks.iter().any(|b| b.block_type == BlockType::Delay && !b.bypassed)),
+                                on_power: Some(Callback::new({
+                                    let rig = rig.clone();
+                                    let blocks = blocks.clone();
+                                    move |_: ()| {
+                                        let ids: Vec<(String, bool)> = blocks
+                                            .iter()
+                                            .filter(|b| b.block_type == BlockType::Delay)
+                                            .map(|b| (b.id.clone(), b.bypassed))
+                                            .collect();
+                                        let any_on = ids.iter().any(|(_, byp)| !byp);
+                                        if let Some(r) = rig.clone() {
+                                            spawn(async move {
+                                                for (id, _) in ids {
+                                                    let _ = r.set_block_bypass(id, any_on).await;
+                                                }
+                                            });
+                                        }
+                                    }
+                                })),
                                 DelayPanel { blocks: blocks.clone(), tempo_bpm: model.tempo_bpm }
                             }
                         }
                         div { class: "min-h-0 h-full flex flex-col", style: "flex: 2 1 0%;",
-                            ZoomPanel { title: "Reverb".to_string(),
+                            ZoomPanel {
+                                title: "Reverb".to_string(),
+                                power_on: Some(blocks.iter().any(|b| b.block_type == BlockType::Reverb && !b.bypassed)),
+                                on_power: Some(Callback::new({
+                                    let rig = rig.clone();
+                                    let blocks = blocks.clone();
+                                    move |_: ()| {
+                                        let ids: Vec<(String, bool)> = blocks
+                                            .iter()
+                                            .filter(|b| b.block_type == BlockType::Reverb)
+                                            .map(|b| (b.id.clone(), b.bypassed))
+                                            .collect();
+                                        let any_on = ids.iter().any(|(_, byp)| !byp);
+                                        if let Some(r) = rig.clone() {
+                                            spawn(async move {
+                                                for (id, _) in ids {
+                                                    let _ = r.set_block_bypass(id, any_on).await;
+                                                }
+                                            });
+                                        }
+                                    }
+                                })),
                                 ReverbPanel { blocks: blocks.clone() }
                             }
                         }
