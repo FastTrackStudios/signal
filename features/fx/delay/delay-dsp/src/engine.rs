@@ -8,7 +8,7 @@ use crate::bbd_delay::BbdDelay;
 use crate::clean_delay::CleanDelay;
 use crate::drum_delay::{DrumDelay, DrumHead, HeadPlayback, GOLDEN_HEADS};
 use crate::filter_delay::{FilterDelay, FilterLfoShape, FilterLocation};
-use crate::lofi_delay::LoFiDelay;
+use crate::lofi_delay::{LoFiDelay, LoFiFilterShape};
 use crate::modulation::WobbleShape;
 use crate::multitap_delay::{FeedbackMode, MultiTapDelay, Tap, MAX_TAPS};
 use crate::oilcan_delay::{OilCanDelay, OilCanHeads};
@@ -150,7 +150,9 @@ pub struct DelayEngine {
     pub locut_freq: f64,
 
     // ── Tape-specific parameters ───────────────────────────────────
-    /// Saturation drive (0.0–1.0). Tape only.
+    /// Saturation drive (0.0–1.0). Tape (record level / bias per
+    /// voice) and LoFi (grit — saturation before the sample-rate
+    /// hold, so its harmonics alias at low rates).
     pub drive: f64,
     /// Wow depth (0.0–1.0). Tape only.
     pub wow_depth: f64,
@@ -202,6 +204,13 @@ pub struct DelayEngine {
     pub lofi_sr_div: f64,
     /// Noise floor injection (0.0–1.0). LoFi only.
     pub lofi_noise: f64,
+    /// Degraded↔clean blend on the delay line (TimeLine "LoFi Mix",
+    /// recirculates). LoFi only.
+    pub lofi_mix: f64,
+    /// dVinyl amount (0–0.5 dynamic, 0.5–1.0 static). LoFi only.
+    pub lofi_vinyl: f64,
+    /// Output device voicing (telephone/victrola/...). LoFi only.
+    pub lofi_filter_shape: LoFiFilterShape,
 
     // ── Shimmer-specific ───────────────────────────────────────────
     /// Pitch ratio (0.5–4.0). Shimmer only.
@@ -351,6 +360,9 @@ impl DelayEngine {
             lofi_bit_depth: 12.0,
             lofi_sr_div: 4.0,
             lofi_noise: 0.0,
+            lofi_mix: 1.0,
+            lofi_vinyl: 0.0,
+            lofi_filter_shape: LoFiFilterShape::Off,
             shimmer_pitch: 2.0,
             shimmer_mix: 0.5,
             reverse_crossfade: 0.1,
@@ -524,6 +536,10 @@ impl DelayEngine {
                 d.bit_depth = self.lofi_bit_depth;
                 d.sample_rate_div = self.lofi_sr_div;
                 d.noise = self.lofi_noise;
+                d.grit = self.drive;
+                d.lofi_mix = self.lofi_mix;
+                d.vinyl = self.lofi_vinyl;
+                d.filter_shape = self.lofi_filter_shape;
                 d.decay_tilt = self_tilt;
                 d.update(sample_rate);
             }

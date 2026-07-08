@@ -12,11 +12,16 @@
 //! across the delay time, Stretch = random per-grain time-stretch,
 //! Octave = random per-grain octave-up probability.
 //!
-//! First-pass quality notes: time-domain grains over one `DelayLine`
-//! with cubic reads — the MX processes in the frequency domain and has
-//! a spectral character even at neutral settings; that lands with the
-//! pitch-dsp deep pass. Bounce's randomized per-grain filter is
-//! approximated by a per-grain one-pole lowpass at a random cutoff.
+//! Deep-pass notes: grains are time-domain over one `DelayLine` with
+//! cubic reads (read-rate repitching measured clean enough — see the
+//! octave inharmonicity test). Octave/reverse grains cap their duration
+//! at spawn so every grain completes its full window (no truncation
+//! clicks). Bounce carries a randomized per-grain resonant peak
+//! (Biquad), per the spec. The regeneration path runs a light fixed
+//! phase-dispersion allpass pair + a gentle high shelf so repeats
+//! evolve tonally like the hardware's frequency-domain footprint.
+//! // interpretation: matches the described behavior; the MX itself
+//! // is FFT-based.
 
 use audiocore_dsp::biquad::{Biquad, FilterType};
 use audiocore_dsp::delay_line::DelayLine;
@@ -51,7 +56,7 @@ pub enum GrainDirection {
     Both,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 struct Grain {
     active: bool,
     /// Current read offset behind the write head, in samples.
@@ -67,14 +72,13 @@ struct Grain {
     /// Per-grain stereo pan (-1..1); applied by `tick_stereo`, scaled
     /// from `spread` at spawn (subtle scatter, ≤ ±0.6).
     pan: f64,
-    /// Bounce: per-grain one-pole lowpass state + coefficient (a1 = 0
-    /// disables).
-    lp_state: f64,
-    lp_a1: f64,
+    /// Bounce: randomized per-grain resonant peak (spec). `None` for
+    /// the other shapes.
+    filt: Option<Biquad>,
 }
 
 impl Grain {
-    const fn idle() -> Self {
+    fn idle() -> Self {
         Self {
             active: false,
             offset: 0.0,
@@ -83,8 +87,7 @@ impl Grain {
             dur: 1.0,
             gain: 0.0,
             pan: 0.0,
-            lp_state: 0.0,
-            lp_a1: 0.0,
+            filt: None,
         }
     }
 }
@@ -92,7 +95,8 @@ impl Grain {
 /// Grain-spawn density mode.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum DensityMode {
-    /// Grains per second.
+    /// Grains per second. TimeLine's free mode spans 6–250 ms per
+    /// grain, i.e. 4–166.7 Hz (clamped).
     FreeHz(f64),
     /// One grain per `fraction` of the delay time (1.0 = every full
     /// delay period, 1/32 = 32 grains per period). TimeLine's synced
@@ -128,6 +132,11 @@ pub struct SpectralDelay {
     spawn_countdown: f64,
     hicut: Biquad,
     decay_eq: Biquad,
+    // Fixed regeneration voicing: phase-dispersion allpass pair + a
+    // gentle high shelf, so repeats evolve like the MX's FFT footprint.
+    // interpretation — behavior match, not the hardware algorithm.
+    disp_state: [[f64; 2]; 2],
+    disp_shelf: Biquad,
     feedback_sample: f64,
     sample_rate: f64,
     smoother: ParamSmoother,
@@ -152,10 +161,12 @@ impl SpectralDelay {
             hicut_freq: 0.0,
             decay_tilt: 0.0,
             delay: DelayLine::new(48000 * 3 + 1024),
-            grains: [Grain::idle(); NUM_GRAINS],
+            grains: std::array::from_fn(|_| Grain::idle()),
             spawn_countdown: 0.0,
             hicut: Biquad::new(),
             decay_eq: Biquad::new(),
+            disp_state: [[0.0; 2]; 2],
+            disp_shelf: Biquad::new(),
             feedback_sample: 0.0,
             sample_rate: 48000.0,
             smoother: ParamSmoother::new(0.0),
@@ -193,11 +204,20 @@ impl SpectralDelay {
         if self.smoother.value() == 0.0 {
             self.smoother.set_immediate(target);
         }
+
+        // Fixed regen voicing: gentle -1.5 dB shelf above ~4 kHz.
+        self.disp_shelf.set(
+            FilterType::HighShelf { gain_db: -1.5 },
+            4000.0,
+            0.707,
+            sample_rate,
+        );
     }
 
     fn spawn_interval_samples(&self, delay_samples: f64) -> f64 {
         match self.density {
-            DensityMode::FreeHz(hz) => self.sample_rate / hz.clamp(0.5, 100.0),
+            // Free mode: 6–250 ms per grain (spec) = 4–166.7 Hz.
+            DensityMode::FreeHz(hz) => self.sample_rate / hz.clamp(4.0, 1000.0 / 6.0),
             DensityMode::Synced(fraction) => {
                 (delay_samples * fraction.clamp(1.0 / 32.0, 1.0)).max(64.0)
             }
@@ -228,21 +248,40 @@ impl SpectralDelay {
         let drift = if reverse { 1.0 + speed } else { 1.0 - speed };
 
         // Grains overlap 2×: duration = twice the spawn interval.
-        let dur = (interval * 2.0).clamp(256.0, delay_samples.max(512.0));
+        let mut dur = (interval * 2.0).clamp(256.0, delay_samples.max(512.0));
 
         // Spread: random placement across the delay time (0 = on-time).
         // A small jitter always applies so voices don't phase-lock.
         let jitter = self.rng.next_bipolar() * interval * 0.25;
         let placement = rand01(&mut self.rng) * self.spread * delay_samples * 0.9;
-        let offset = (delay_samples - placement + jitter).max(4.0);
+        let mut offset = (delay_samples - placement + jitter).max(4.0);
 
-        // Bounce: randomized per-grain lowpass (~800 Hz – 8 kHz).
-        let lp_a1 = if self.shape == GrainShape::Bounce {
-            let fc = 800.0 * (10.0f64).powf(rand01(&mut self.rng));
-            let x = (-std::f64::consts::TAU * fc / self.sample_rate).exp();
-            x
+        // Window completion: a grain dies early if its read head walks
+        // off either buffer edge mid-window (a truncated window is a
+        // click). Cap the duration so the full envelope always plays.
+        let max_read = self.delay.len() as f64 - 4.0;
+        if drift < 0.0 {
+            // Pitched-up grains walk toward the write head. Push the
+            // start point out if needed, then cap.
+            let min_offset = 8.0 + 256.0 * -drift;
+            offset = offset.max(min_offset).min(max_read);
+            dur = dur.min((offset - 8.0) / -drift);
+        } else if drift > 0.0 {
+            // Reverse/stretch grains walk toward the buffer tail.
+            dur = dur.min((max_read - offset).max(64.0) / drift);
+        }
+        let dur = dur.max(64.0);
+
+        // Bounce: randomized per-grain resonant peak (spec):
+        // 400 Hz – 4 kHz center, Q 2–5, +7 dB.
+        let filt = if self.shape == GrainShape::Bounce {
+            let fc = 400.0 * (10.0f64).powf(rand01(&mut self.rng));
+            let q = 2.0 + rand01(&mut self.rng) * 3.0;
+            let mut b = Biquad::new();
+            b.set(FilterType::Peak { gain_db: 7.0 }, fc, q, self.sample_rate);
+            Some(b)
         } else {
-            0.0
+            None
         };
 
         // Stereo scatter rides the spread param: on-grid clouds stay
@@ -257,8 +296,7 @@ impl SpectralDelay {
             dur,
             gain: 1.0,
             pan,
-            lp_state: 0.0,
-            lp_a1,
+            filt,
         };
     }
 
@@ -350,9 +388,8 @@ impl SpectralDelay {
             }
             let window = Self::window(shape, phase);
             let mut sample = self.delay.read_cubic(g.offset);
-            if g.lp_a1 > 0.0 {
-                g.lp_state = (1.0 - g.lp_a1) * sample + g.lp_a1 * g.lp_state;
-                sample = g.lp_state;
+            if let Some(filt) = g.filt.as_mut() {
+                sample = filt.tick(sample, 0);
             }
             let v = sample * window * g.gain;
             if stereo {
@@ -380,6 +417,22 @@ impl SpectralDelay {
             .delay
             .read_cubic(smooth_delay.clamp(1.0, max_read))
             * self.feedback;
+
+        // Spectral signature in the regen path: two first-order
+        // allpasses (phase dispersion) + a gentle high shelf, so
+        // repeats evolve tonally through regeneration like the MX's
+        // frequency-domain process. Fixed and light by design.
+        // interpretation: behavior match, not the FFT algorithm.
+        for (i, &a) in [0.35f64, 0.55].iter().enumerate() {
+            let st = &mut self.disp_state[i];
+            let x = fb;
+            let y = -a * x + st[0] + a * st[1];
+            st[0] = x;
+            st[1] = y;
+            fb = y;
+        }
+        fb = self.disp_shelf.tick(fb, ch);
+
         if self.hicut_freq > 0.0 {
             fb = self.hicut.tick(fb, ch);
         }
@@ -400,10 +453,12 @@ impl SpectralDelay {
 
     pub fn reset(&mut self) {
         self.delay.clear();
-        self.grains = [Grain::idle(); NUM_GRAINS];
+        self.grains = std::array::from_fn(|_| Grain::idle());
         self.spawn_countdown = 0.0;
         self.hicut.reset();
         self.decay_eq.reset();
+        self.disp_state = [[0.0; 2]; 2];
+        self.disp_shelf.reset();
         self.feedback_sample = 0.0;
         self.smoother.reset(0.0);
     }
@@ -530,6 +585,91 @@ mod tests {
         assert!(
             spread < on_time / 2,
             "spread=1 wet should arrive much earlier: {spread} vs {on_time}"
+        );
+    }
+
+    /// Goertzel energy at `freq`.
+    fn goertzel(signal: &[f64], freq: f64) -> f64 {
+        let w = std::f64::consts::TAU * freq / SR;
+        let coeff = 2.0 * w.cos();
+        let (mut s0, mut s1, mut s2) = (0.0, 0.0, 0.0);
+        for &x in signal {
+            s0 = x + coeff * s1 - s2;
+            s2 = s1;
+            s1 = s0;
+        }
+        (s1 * s1 + s2 * s2 - coeff * s1 * s2) / (signal.len() as f64).powi(2)
+    }
+
+    #[test]
+    fn octave_grains_complete_windows_cleanly() {
+        // 440 Hz in, all grains octave-up: 880 Hz must dominate over
+        // inharmonic probes. Truncated windows (the old bug) put
+        // broadband click energy at the probes.
+        let mut d = SpectralDelay::new();
+        d.time_ms = 400.0;
+        d.feedback = 0.0;
+        d.octave = 1.0;
+        d.density = DensityMode::Synced(1.0 / 8.0);
+        d.update(SR);
+
+        let mut out = Vec::with_capacity(96000);
+        for i in 0..144000 {
+            let input = (std::f64::consts::TAU * 440.0 * i as f64 / SR).sin() * 0.5;
+            let v = d.tick(input, 0);
+            if i >= 48000 {
+                out.push(v);
+            }
+        }
+        let target = goertzel(&out, 880.0);
+        let probes = [617.0, 1123.0, 1543.0, 2251.0];
+        let worst = probes
+            .iter()
+            .map(|&f| goertzel(&out, f))
+            .fold(0.0f64, f64::max);
+        assert!(
+            target > worst * 5.0,
+            "octave grains should be tonal at 880 Hz: target={target:.3e} worst_probe={worst:.3e}"
+        );
+    }
+
+    #[test]
+    fn regen_path_evolves_tone() {
+        // The fixed dispersion/shelf voicing must dull successive
+        // repeats: HF content of the 3rd repeat < 1st repeat.
+        let mut d = SpectralDelay::new();
+        d.time_ms = 300.0;
+        d.feedback = 0.7;
+        d.spread = 0.0;
+        d.density = DensityMode::Synced(1.0);
+        d.update(SR);
+
+        // Measure the recirculating signal itself (last_feedback) —
+        // that is the path the dispersion/shelf voicing shapes. The
+        // burst passes the feedback tap once per period.
+        let period = (0.3 * SR) as usize;
+        let mut pass1 = Vec::new();
+        let mut pass3 = Vec::new();
+        for i in 0..(period * 4) {
+            let input = if i < 480 {
+                (std::f64::consts::TAU * 6000.0 * i as f64 / SR).sin() * 0.8
+            } else {
+                0.0
+            };
+            d.tick(input, 0);
+            let fb = d.last_feedback();
+            if i >= period && i < period + 2400 {
+                pass1.push(fb);
+            } else if i >= period * 3 && i < period * 3 + 2400 {
+                pass3.push(fb);
+            }
+        }
+        let hf1 = goertzel(&pass1, 6000.0);
+        let hf3 = goertzel(&pass3, 6000.0);
+        assert!(hf1 > 1e-12, "first pass should carry the tone: {hf1:.3e}");
+        assert!(
+            hf3 < hf1 * 0.9,
+            "repeats should evolve (dull) through regen: pass1={hf1:.3e} pass3={hf3:.3e}"
         );
     }
 

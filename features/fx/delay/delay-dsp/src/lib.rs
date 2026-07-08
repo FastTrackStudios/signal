@@ -33,6 +33,7 @@ pub use engine::{DelayEngine, DelayStyle};
 pub use filter_delay::{FilterLfoShape, FilterLocation};
 pub use modulation::WobbleShape;
 pub use multitap_delay::{FeedbackMode, Tap, TapFilter, TapGrid, TapPreset, MAX_TAPS};
+pub use lofi_delay::LoFiFilterShape;
 pub use oilcan_delay::OilCanHeads;
 pub use spectral_delay::{DensityMode, GrainDirection, GrainShape};
 pub use bbd_delay::BbdVoice;

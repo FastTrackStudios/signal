@@ -406,6 +406,24 @@ const DELAY_PARAMS: &[ParamSpec] = &[
     ParamSpec { id: 19, name: "time_b", min: 20.0, max: 2500.0, default: 300.0 },
     ParamSpec { id: 20, name: "feedback_b", min: 0.0, max: 0.95, default: 0.30 },
     ParamSpec { id: 21, name: "mix_b", min: 0.0, max: 0.10, default: 0.08 },
+    // Spectral machine (grain_shape: 0 Soft/1 Swell/2 SoftPluck/
+    // 3 Pluck/4 Bounce; direction: 0 Fwd/1 Rev/2 Both; density = n in
+    // Synced(1/n); density_ms >= 6 switches to free 6-250 ms).
+    ParamSpec { id: 22, name: "grain_shape", min: 0.0, max: 4.0, default: 0.0 },
+    ParamSpec { id: 23, name: "direction", min: 0.0, max: 2.0, default: 0.0 },
+    ParamSpec { id: 24, name: "density", min: 1.0, max: 32.0, default: 8.0 },
+    ParamSpec { id: 25, name: "density_ms", min: 0.0, max: 250.0, default: 0.0 },
+    ParamSpec { id: 26, name: "spread", min: 0.0, max: 1.0, default: 0.0 },
+    ParamSpec { id: 27, name: "stretch", min: 0.0, max: 1.0, default: 0.0 },
+    ParamSpec { id: 28, name: "octave", min: 0.0, max: 1.0, default: 0.0 },
+    // Lo-Fi machine (filter_shape: 0 Off .. 8 Intercom; grit rides the
+    // shared "drive" engine field via id 29).
+    ParamSpec { id: 29, name: "grit", min: 0.0, max: 1.0, default: 0.0 },
+    ParamSpec { id: 30, name: "bit_depth", min: 4.0, max: 32.0, default: 12.0 },
+    ParamSpec { id: 31, name: "sr_div", min: 1.0, max: 64.0, default: 4.0 },
+    ParamSpec { id: 32, name: "lofi_mix", min: 0.0, max: 1.0, default: 1.0 },
+    ParamSpec { id: 33, name: "vinyl", min: 0.0, max: 1.0, default: 0.0 },
+    ParamSpec { id: 34, name: "filter_shape", min: 0.0, max: 8.0, default: 0.0 },
 ];
 
 /// Native Delay block — wraps [`delay::DualDelay`] (two full chains +
@@ -523,6 +541,78 @@ impl NativeDelay {
                 self.dly.b.delay_r.feedback = v;
             }
             21 => self.dly.b.mix = v.min(TIME_MIX_MAX),
+            22 => {
+                let shape = match v.round().max(0.0) as usize {
+                    1 => delay::GrainShape::Swell,
+                    2 => delay::GrainShape::SoftPluck,
+                    3 => delay::GrainShape::Pluck,
+                    4 => delay::GrainShape::Bounce,
+                    _ => delay::GrainShape::Soft,
+                };
+                a.delay_l.spectral_shape = shape;
+                a.delay_r.spectral_shape = shape;
+            }
+            23 => {
+                let dir = match v.round().max(0.0) as usize {
+                    1 => delay::GrainDirection::Reverse,
+                    2 => delay::GrainDirection::Both,
+                    _ => delay::GrainDirection::Forward,
+                };
+                a.delay_l.spectral_direction = dir;
+                a.delay_r.spectral_direction = dir;
+            }
+            24 => {
+                let n = v.clamp(1.0, 32.0);
+                let d = delay::DensityMode::Synced(1.0 / n);
+                a.delay_l.spectral_density = d;
+                a.delay_r.spectral_density = d;
+            }
+            25 => {
+                // >= 6 ms switches to free-running density; 0 returns
+                // to the synced default (set via id 24).
+                if v >= 6.0 {
+                    let d = delay::DensityMode::FreeHz(1000.0 / v);
+                    a.delay_l.spectral_density = d;
+                    a.delay_r.spectral_density = d;
+                }
+            }
+            26 => {
+                a.delay_l.spectral_spread = v;
+                a.delay_r.spectral_spread = v;
+            }
+            27 => {
+                a.delay_l.spectral_stretch = v;
+                a.delay_r.spectral_stretch = v;
+            }
+            28 => {
+                a.delay_l.spectral_octave = v;
+                a.delay_r.spectral_octave = v;
+            }
+            29 => {
+                a.delay_l.drive = v;
+                a.delay_r.drive = v;
+            }
+            30 => {
+                a.delay_l.lofi_bit_depth = v;
+                a.delay_r.lofi_bit_depth = v;
+            }
+            31 => {
+                a.delay_l.lofi_sr_div = v;
+                a.delay_r.lofi_sr_div = v;
+            }
+            32 => {
+                a.delay_l.lofi_mix = v;
+                a.delay_r.lofi_mix = v;
+            }
+            33 => {
+                a.delay_l.lofi_vinyl = v;
+                a.delay_r.lofi_vinyl = v;
+            }
+            34 => {
+                let shape = delay::LoFiFilterShape::from_index(v.round().max(0.0) as usize);
+                a.delay_l.lofi_filter_shape = shape;
+                a.delay_r.lofi_filter_shape = shape;
+            }
             _ => {}
         }
     }
