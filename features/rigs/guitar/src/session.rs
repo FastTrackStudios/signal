@@ -16,19 +16,38 @@ use architect::{HasDispatcher, Layer, LayerRouter, PubSub, Services, layers};
 use signal_guitar_proto::audio::AudioSettings;
 use signal_guitar_proto::rig::{Rig, RigEvent, RigStreamSource};
 use signal_guitar_proto::{
-    AudioDevice, AudioDevices, AudioPrefs, LiveBlock, PerfStack, PerformanceModel, RigStatus,
+    AudioDevice, AudioDevices, AudioPrefs, BlockParam, HeadphoneState, LiveBlock, PatchInfo,
+    PerfStack, PerformanceModel, PresetInfo, RigStatus, TunerReading,
 };
 use signal_proto::block::BlockType;
 use signal_sampler::{DeviceInfo, GuitarRig, ProfileRig, RigBlock, RigManager};
 
-use crate::profiles::worship_profile;
+use crate::profiles::{ProfileDef, SetlistSong, build_profile, worship_def, worship_setlist};
 
 /// Rig whose audio prefs the settings service reads/writes (persisted to
 /// `<config>/signal/rigs/guitar-rig.styx` by `RigManager`).
 const AUDIO_RIG_NAME: &str = "Guitar Rig";
 
-/// Extra output gain (dB) applied when the volume boost is engaged.
-const BOOST_DB: f32 = 6.0;
+/// The boost pedal's cycle: first press engages +1 dB, then each press
+/// advances — +2, +3, a −1 dB cut, and back around to +1.
+const BOOST_LEVELS: &[f32] = &[1.0, 2.0, 3.0, -1.0];
+
+/// Tempo shown before anyone taps.
+const DEFAULT_BPM: f32 = 120.0;
+
+/// Taps further apart than this start a new tap sequence instead of dragging
+/// the average toward crawl tempos.
+const TAP_RESET: std::time::Duration = std::time::Duration::from_millis(2500);
+
+/// How many recent tap intervals the tempo is averaged over.
+const TAP_WINDOW: usize = 4;
+
+/// Tap-tempo tracker: recent intervals + the last tap instant.
+#[derive(Default)]
+struct TapTracker {
+    last: Option<std::time::Instant>,
+    intervals: Vec<f32>,
+}
 
 /// Shared live rig (a [`ProfileRig`] wrapping the [`GuitarRig`]).
 type SharedRig = Arc<Mutex<Option<ProfileRig>>>;
@@ -41,11 +60,35 @@ type SharedRig = Arc<Mutex<Option<ProfileRig>>>;
 #[dispatch(CurrentThreadDispatcher)]
 pub struct GuitarRigBackend {
     rig: SharedRig,
-    /// Volume-boost engaged (adds output trim on top of the active patch).
-    boost: Arc<Mutex<bool>>,
+    /// Boost engaged (tap toggles; the level is remembered separately).
+    boost_on: Arc<Mutex<bool>>,
+    /// Boost pedal level in dB (hold rotates through [`BOOST_LEVELS`]).
+    boost_level: Arc<Mutex<f32>>,
     /// The active patch's live FX chain, mirrored for clients. Rebuilt whenever
     /// the active patch changes (the rig has no per-block bypass/param getters).
     blocks: Arc<Mutex<Vec<LiveBlock>>>,
+    /// Tapped tempo (BPM). `None` until the first complete tap sequence;
+    /// once set it survives patch switches (re-applied to delay blocks).
+    tempo: Arc<Mutex<Option<f32>>>,
+    /// Recent tap history feeding [`Rig::tap_tempo`].
+    taps: Arc<Mutex<TapTracker>>,
+    /// The editable profile definition (preset pool + patch pointers) —
+    /// the source the runtime profile is built from.
+    profile_def: Arc<Mutex<ProfileDef>>,
+    /// The setlist + the current song/section position. The list itself is
+    /// mutable (reorder) until setlists become service-driven entities.
+    setlist: Arc<Mutex<Vec<SetlistSong>>>,
+    song_index: Arc<Mutex<usize>>,
+    section_index: Arc<Mutex<usize>>,
+    /// Headphone-cue module state (volume/self-mix staged; mute applied).
+    headphone: Arc<Mutex<HeadphoneState>>,
+    /// Smoothed compressor gain-reduction estimate (dB, positive).
+    comp_gr: Arc<Mutex<f32>>,
+    /// Recent MIDI events (formatted), newest last, capped.
+    midi_log: Arc<Mutex<Vec<String>>>,
+    /// Monotonic state version, bumped on every mutation (see
+    /// `PerformanceModel::revision`).
+    revision: Arc<Mutex<u64>>,
     /// The `#[subscribe]` fan-out hub: every mutation publishes full-state
     /// [`RigEvent`]s here; the meter pump publishes `Status` at meter rate.
     events: PubSub<RigEvent>,
@@ -64,8 +107,19 @@ impl GuitarRigBackend {
     pub fn new() -> Self {
         let backend = Self {
             rig: Arc::new(Mutex::new(None)),
-            boost: Arc::new(Mutex::new(false)),
+            boost_on: Arc::new(Mutex::new(false)),
+            boost_level: Arc::new(Mutex::new(BOOST_LEVELS[0])),
             blocks: Arc::new(Mutex::new(Vec::new())),
+            tempo: Arc::new(Mutex::new(None)),
+            taps: Arc::new(Mutex::new(TapTracker::default())),
+            profile_def: Arc::new(Mutex::new(worship_def())),
+            setlist: Arc::new(Mutex::new(worship_setlist())),
+            song_index: Arc::new(Mutex::new(0)),
+            section_index: Arc::new(Mutex::new(0)),
+            headphone: Arc::new(Mutex::new(HeadphoneState::default())),
+            comp_gr: Arc::new(Mutex::new(0.0)),
+            midi_log: Arc::new(Mutex::new(Vec::new())),
+            revision: Arc::new(Mutex::new(0)),
             events: PubSub::sliding(64),
         };
         backend.spawn_meter_pump();
@@ -79,22 +133,198 @@ impl GuitarRigBackend {
     fn spawn_meter_pump(&self) {
         let backend = self.clone();
         std::thread::spawn(move || {
+            let midi = midicore::midir::MidiStream::open_all();
+            if midi.is_some() {
+                tracing::info!("rig core: MIDI capture active");
+            }
             let mut was_running = false;
+            let mut tick = 0u64;
             loop {
                 std::thread::sleep(METER_INTERVAL);
+                tick += 1;
+                // Update the GR estimate + drain MIDI regardless of publish.
+                if let Some(stream) = &midi {
+                    let mut log = backend.midi_log.lock().unwrap();
+                    for msg in stream.drain() {
+                        log.push(format!("{msg:?}"));
+                        let len = log.len();
+                        if len > 128 {
+                            log.drain(0..len - 128);
+                        }
+                    }
+                }
                 let status = Rig::status(&backend);
                 if status.running || was_running {
                     was_running = status.running;
                     backend.events.publish(RigEvent::Status(status));
+                    // Spectrum at half meter rate (~15 Hz).
+                    if tick % 2 == 0 {
+                        if let Some(bins) = backend.input_spectrum() {
+                            backend.events.publish(RigEvent::Spectrum(bins));
+                        }
+                    }
                 }
             }
         });
     }
 
+    /// Log-binned input spectrum (dB, −90..0) from the rig's pre-amp tap.
+    fn input_spectrum(&self) -> Option<Vec<f32>> {
+        let (samples, rate) = {
+            let guard = self.rig.lock().ok()?;
+            let prig = guard.as_ref()?;
+            (prig.input_samples(), prig.sample_rate() as f32)
+        };
+        if samples.len() < 2048 {
+            return None;
+        }
+        Some(spectrum_bins(&samples[samples.len() - 2048..], rate, 48))
+    }
+
+    /// Smoothed static-curve gain-reduction estimate for the Compressor
+    /// block: GR = input_db − curve(input_db), eased toward the target so
+    /// the meter breathes like a real detector. Replaced by per-block
+    /// telemetry when the engine grows it.
+    fn estimate_comp_gr(&self, in_db: f32) -> f32 {
+        let (thr, ratio) = {
+            let blocks = self.blocks.lock().unwrap();
+            let comp = blocks
+                .iter()
+                .find(|b| b.block_type == BlockType::Compressor && !b.bypassed);
+            match comp {
+                Some(c) => (
+                    c.params.iter().find(|p| p.name == "threshold").map(|p| p.value).unwrap_or(-18.0),
+                    c.params.iter().find(|p| p.name == "ratio").map(|p| p.value).unwrap_or(4.0).max(1.0),
+                ),
+                None => {
+                    *self.comp_gr.lock().unwrap() = 0.0;
+                    return 0.0;
+                }
+            }
+        };
+        let target = if in_db > thr {
+            (in_db - thr) * (1.0 - 1.0 / ratio)
+        } else {
+            0.0
+        };
+        let mut gr = self.comp_gr.lock().unwrap();
+        // Fast attack, slower release — meter ballistics.
+        let coeff = if target > *gr { 0.5 } else { 0.15 };
+        *gr += (target - *gr) * coeff;
+        *gr
+    }
+
+    /// Re-apply the main-output trim: the patch's base trim, minus the mute.
+    fn apply_main_mute(&self) {
+        let mute = self.headphone.lock().unwrap().main_mute;
+        if let Ok(guard) = self.rig.lock() {
+            if let Some(prig) = guard.as_ref() {
+                let base = prig.active_patch().map(|p| p.output_trim_db).unwrap_or(0.0);
+                prig.rig().set_output_trim_db(base + if mute { -96.0 } else { 0.0 });
+            }
+        }
+    }
+
     /// Publish the full perf model + chain — call after every mutation.
     fn publish_state(&self) {
+        *self.revision.lock().unwrap() += 1;
         self.events.publish(RigEvent::Perf(Rig::perf(self)));
         self.events.publish(RigEvent::Chain(Rig::chain(self)));
+    }
+
+    /// The tempo shown/used right now (tapped, or the default).
+    fn tempo_bpm(&self) -> f32 {
+        self.tempo.lock().unwrap().unwrap_or(DEFAULT_BPM)
+    }
+
+    /// Push the tapped tempo onto every delay block in the active chain
+    /// (quarter-note delay time in ms). Configured patch times apply until
+    /// the first tap; after that, taps own the delay time — including across
+    /// patch switches.
+    fn apply_tempo_to_delays(&self) {
+        let Some(bpm) = *self.tempo.lock().unwrap() else {
+            return;
+        };
+        let quarter_ms = 60_000.0 / bpm;
+        let delay_ids: Vec<String> = self
+            .blocks
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|b| b.block_type == BlockType::Delay)
+            .map(|b| b.id.clone())
+            .collect();
+        if delay_ids.is_empty() {
+            return;
+        }
+        if let Ok(guard) = self.rig.lock() {
+            if let Some(prig) = guard.as_ref() {
+                for id in &delay_ids {
+                    prig.rig().set_active_block_param(id, "time", quarter_ms);
+                }
+            }
+        }
+        tracing::info!("tap tempo: {bpm:.1} BPM → delay time {quarter_ms:.0} ms");
+    }
+
+    /// The boost currently applied (0.0 while disengaged).
+    fn current_boost_db(&self) -> f32 {
+        if *self.boost_on.lock().unwrap() {
+            *self.boost_level.lock().unwrap()
+        } else {
+            0.0
+        }
+    }
+
+    /// Push the boost pedal level onto the active chain's "Boost" gain block
+    /// (a `Volume` block). Re-applied after patch switches (activation
+    /// reinstalls the configured 0 dB).
+    fn apply_boost_to_block(&self) {
+        let db = self.current_boost_db();
+        let boost_ids: Vec<String> = self
+            .blocks
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|b| b.block_type == BlockType::Volume && b.name.eq_ignore_ascii_case("Boost"))
+            .map(|b| b.id.clone())
+            .collect();
+        if boost_ids.is_empty() {
+            return;
+        }
+        if let Ok(guard) = self.rig.lock() {
+            if let Some(prig) = guard.as_ref() {
+                for id in &boost_ids {
+                    prig.rig().set_active_block_param(id, "gain_db", db);
+                }
+            }
+        }
+    }
+
+    /// Activate a footswitch stack and re-sync everything that activation
+    /// resets: the block mirror + bypass defaults, the tapped tempo on the
+    /// fresh delays, and the boost gain block.
+    fn activate_stack_and_sync(&self, index: usize) {
+        if let Ok(mut guard) = self.rig.lock() {
+            if let Some(prig) = guard.as_mut() {
+                prig.activate_stack(index);
+            }
+        }
+        self.resync_blocks();
+        self.apply_tempo_to_delays();
+        self.apply_boost_to_block();
+        self.publish_state();
+    }
+
+    /// Recall setlist entry `idx`: activate its starting stack and rewind to
+    /// the first section.
+    fn recall_song(&self, idx: usize) {
+        let entry = self.setlist.lock().unwrap().get(idx).cloned();
+        if let Some(song) = entry {
+            *self.section_index.lock().unwrap() = 0;
+            tracing::info!("setlist → {} (stack {})", song.name, song.stack);
+            self.activate_stack_and_sync(song.stack);
+        }
     }
 
     /// Build the vox router serving this session's whole service surface.
@@ -141,8 +371,9 @@ impl GuitarRigBackend {
                     if mgr.audio.output_device.is_empty() { "default" } else { &mgr.audio.output_device },
                 );
                 let mut prig = ProfileRig::new(g);
-                match prig.load_profile(worship_profile(), None) {
-                    Ok(()) => tracing::info!("worship profile loaded ({} patches)", prig.patches().len()),
+                let profile = build_profile(&self.profile_def.lock().unwrap());
+                match prig.load_profile(profile, None) {
+                    Ok(()) => tracing::info!("profile loaded ({} patches)", prig.patches().len()),
                     Err(e) => tracing::error!("profile load failed: {e}"),
                 }
                 if let Ok(mut slot) = self.rig.lock() {
@@ -151,8 +382,11 @@ impl GuitarRigBackend {
             }
             Err(e) => tracing::error!("rig open failed: {e:#}"),
         }
-        // Mirror the (now active) patch's FX chain + apply bypass defaults.
+        // Mirror the (now active) patch's FX chain + apply bypass defaults,
+        // and re-push any tapped tempo onto the fresh delays.
         self.resync_blocks();
+        self.apply_tempo_to_delays();
+        self.apply_boost_to_block();
         self.publish_state();
     }
 
@@ -183,6 +417,15 @@ impl GuitarRigBackend {
                         } else {
                             block.name.clone()
                         };
+                        let params = param_specs(block.block_type)
+                            .iter()
+                            .map(|(pname, min, max, dflt)| BlockParam {
+                                name: pname.clone(),
+                                value: block.param_f32(pname).unwrap_or(*dflt),
+                                min: *min,
+                                max: *max,
+                            })
+                            .collect();
                         out.push(LiveBlock {
                             id: id.clone(),
                             block_type: block.block_type,
@@ -192,6 +435,7 @@ impl GuitarRigBackend {
                             param_value,
                             param_min,
                             param_max,
+                            params,
                         });
                     }
                 }
@@ -201,22 +445,71 @@ impl GuitarRigBackend {
     }
 }
 
+/// Every controllable param for a block type: `(name, min, max, default)` —
+/// mirrors the native DSP's param specs (signal-fx). The Control view's
+/// panels render from this; values come from the patch's build-time params
+/// (incl. overrides) and live edits.
+fn param_specs(bt: BlockType) -> Vec<(String, f32, f32, f32)> {
+    fn owned(t: &[(&str, f32, f32, f32)]) -> Vec<(String, f32, f32, f32)> {
+        t.iter().map(|(n, a, b, c)| (n.to_string(), *a, *b, *c)).collect()
+    }
+    match bt {
+        // The full FTS-EQ band set — one source of truth with the DSP.
+        BlockType::Eq => (0..signal_fx::EQ_BANDS * signal_fx::EQ_FIELDS)
+            .map(|i| {
+                let (band, field) = (i / signal_fx::EQ_FIELDS, i % signal_fx::EQ_FIELDS);
+                let (min, max, default) = match field {
+                    0 | 1 => (0.0, 1.0, 0.0),
+                    2 => (10.0, 30000.0, 1000.0),
+                    3 => (-30.0, 30.0, 0.0),
+                    4 => (0.025, 40.0, 0.707),
+                    _ => (0.0, 9.0, 0.0),
+                };
+                (signal_fx::eq_param_name(band, field), min, max, default)
+            })
+            .collect(),
+        BlockType::Compressor => owned(&[
+            ("threshold", -60.0, 0.0, -18.0),
+            ("ratio", 1.0, 20.0, 4.0),
+            ("attack", 0.1, 200.0, 10.0),
+            ("release", 5.0, 1000.0, 120.0),
+        ]),
+        BlockType::Gate => owned(&[
+            ("threshold", -90.0, 0.0, -50.0),
+            ("attack", 0.1, 50.0, 1.0),
+            ("release", 5.0, 500.0, 120.0),
+        ]),
+        BlockType::Volume => owned(&[("gain_db", -24.0, 24.0, 0.0)]),
+        BlockType::Delay => owned(&[
+            ("mix", 0.0, 1.0, 0.08),
+            ("time", 20.0, 1500.0, 350.0),
+            ("feedback", 0.0, 0.95, 0.3),
+        ]),
+        BlockType::Reverb => owned(&[
+            ("mix", 0.0, 1.0, 0.08),
+            ("decay", 0.0, 1.0, 0.4),
+            ("size", 0.0, 1.0, 0.5),
+        ]),
+        BlockType::Chorus | BlockType::Flanger | BlockType::Vibrato => owned(&[
+            ("mix", 0.0, 1.0, 0.4),
+            ("depth", 0.0, 1.0, 0.5),
+            ("rate", 0.0, 1.0, 0.3),
+        ]),
+        BlockType::Trem => owned(&[("depth", 0.0, 1.0, 0.5)]),
+        _ => Vec::new(),
+    }
+}
+
 /// The primary dialable param for a block type: `(name, min, max, default)`.
 fn primary_param(bt: BlockType) -> Option<(&'static str, f32, f32, f32)> {
     match bt {
         BlockType::Reverb | BlockType::Delay => Some(("mix", 0.0, 0.10, 0.08)),
         BlockType::Chorus | BlockType::Flanger | BlockType::Vibrato => Some(("mix", 0.0, 1.0, 0.4)),
         BlockType::Trem => Some(("depth", 0.0, 1.0, 0.5)),
+        BlockType::Volume => Some(("gain_db", -12.0, 12.0, 0.0)),
+        BlockType::Gate => Some(("threshold", -90.0, 0.0, -50.0)),
         _ => None,
     }
-}
-
-/// Re-apply the output trim = active patch base trim (+ boost if engaged). Call
-/// after any patch activation, since `activate` resets the trim per patch.
-fn apply_boost(prig: &ProfileRig, boost: bool) {
-    let base = prig.active_patch().map(|p| p.output_trim_db).unwrap_or(0.0);
-    prig.rig()
-        .set_output_trim_db(base + if boost { BOOST_DB } else { 0.0 });
 }
 
 /// Folder-relative display label for a patch: the folder default shows as
@@ -232,8 +525,9 @@ fn patch_display(stack_name: &str, patch_name: &str) -> String {
     }
 }
 
-/// Snapshot the performance model (folders + live cursor/active state).
-fn build_perf_model(prig: &ProfileRig) -> PerformanceModel {
+/// Snapshot the performance model (folders + live cursor/active state),
+/// decorated from the profile definition (preset pointers + override badges).
+fn build_perf_model(prig: &ProfileRig, def: &ProfileDef) -> PerformanceModel {
     let active_stack = prig.active_stack();
     let patches = prig.patches();
     let stacks = prig
@@ -249,6 +543,10 @@ fn build_perf_model(prig: &ProfileRig) -> PerformanceModel {
                 .position(|p| p.name.eq_ignore_ascii_case(&cur))
                 .map(|i| prig.is_patch_available(i))
                 .unwrap_or(false);
+            let patch_def = def
+                .patches
+                .iter()
+                .find(|p| p.name.eq_ignore_ascii_case(&cur));
             PerfStack {
                 name: st.name.clone(),
                 current_patch: patch_display(&st.name, &cur),
@@ -256,6 +554,10 @@ fn build_perf_model(prig: &ProfileRig) -> PerformanceModel {
                 patch_count: st.patches.len() as u32,
                 available,
                 is_active: active_stack == Some(si),
+                preset: patch_def.map(|p| p.preset.clone()).unwrap_or_default(),
+                override_modules: patch_def
+                    .map(|p| p.override_modules())
+                    .unwrap_or_default(),
             }
         })
         .collect();
@@ -263,8 +565,14 @@ fn build_perf_model(prig: &ProfileRig) -> PerformanceModel {
         profile_name: prig.profile_name().unwrap_or_default().to_string(),
         stacks,
         fx_bypass: prig.fx_bypass(),
-        boost: false, // overwritten by the service (boost lives outside prig)
+        boost_db: 0.0, // overwritten by the service (the pedal lives outside prig)
         tempo_bpm: 120,
+        songs: Vec::new(),   // filled in by the service (setlist lives outside prig)
+        song_index: 0,
+        sections: Vec::new(),
+        section_index: 0,
+        headphone: HeadphoneState::default(),
+        revision: 0,
     }
 }
 
@@ -295,25 +603,53 @@ impl Rig for GuitarRigBackend {
             Ok(g) => g,
             Err(_) => return RigStatus::default(),
         };
-        match guard.as_ref() {
-            Some(prig) => RigStatus {
-                running: true,
-                input_peak: prig.rig().input_peak(),
-                output_peak: prig.rig().output_peak(),
-                active_patch: prig.active_patch().map(|p| p.name.clone()),
-            },
-            None => RigStatus::default(),
+        let (input_peak, output_peak, active_patch) = match guard.as_ref() {
+            Some(prig) => (
+                prig.rig().input_peak(),
+                prig.rig().output_peak(),
+                prig.active_patch().map(|p| p.name.clone()),
+            ),
+            None => return RigStatus::default(),
+        };
+        drop(guard);
+        let in_db = if input_peak > 0.0 {
+            (20.0 * input_peak.log10()).max(-90.0)
+        } else {
+            -90.0
+        };
+        RigStatus {
+            running: true,
+            input_peak,
+            output_peak,
+            active_patch,
+            comp_gr_db: self.estimate_comp_gr(in_db),
         }
     }
 
     fn perf(&self) -> PerformanceModel {
-        let mut m = self
-            .rig
-            .lock()
-            .ok()
-            .and_then(|g| g.as_ref().map(build_perf_model))
-            .unwrap_or_default();
-        m.boost = *self.boost.lock().unwrap();
+        let mut m = {
+            let def = self.profile_def.lock().unwrap();
+            self.rig
+                .lock()
+                .ok()
+                .and_then(|g| g.as_ref().map(|prig| build_perf_model(prig, &def)))
+                .unwrap_or_default()
+        };
+        m.boost_db = self.current_boost_db();
+        m.tempo_bpm = self.tempo_bpm().round() as u32;
+        {
+            let setlist = self.setlist.lock().unwrap();
+            let song_idx = *self.song_index.lock().unwrap();
+            m.songs = setlist.iter().map(|s| s.name.clone()).collect();
+            m.song_index = song_idx as u32;
+            m.sections = setlist
+                .get(song_idx)
+                .map(|s| s.sections.clone())
+                .unwrap_or_default();
+        }
+        m.section_index = *self.section_index.lock().unwrap() as u32;
+        m.headphone = self.headphone.lock().unwrap().clone();
+        m.revision = *self.revision.lock().unwrap();
         m
     }
 
@@ -322,17 +658,242 @@ impl Rig for GuitarRigBackend {
     }
 
     fn press_stack(&self, index: u32) {
-        let boost = *self.boost.lock().unwrap();
-        if let Ok(mut guard) = self.rig.lock() {
-            if let Some(prig) = guard.as_mut() {
-                prig.activate_stack(index as usize);
-                apply_boost(prig, boost);
+        self.activate_stack_and_sync(index as usize);
+    }
+
+    fn next_song(&self) {
+        let last = self.setlist.lock().unwrap().len().saturating_sub(1);
+        let idx = {
+            let mut i = self.song_index.lock().unwrap();
+            *i = (*i + 1).min(last);
+            *i
+        };
+        self.recall_song(idx);
+    }
+
+    fn prev_song(&self) {
+        let idx = {
+            let mut i = self.song_index.lock().unwrap();
+            *i = i.saturating_sub(1);
+            *i
+        };
+        self.recall_song(idx);
+    }
+
+    fn select_song(&self, index: u32) {
+        let last = self.setlist.lock().unwrap().len().saturating_sub(1);
+        let idx = (index as usize).min(last);
+        *self.song_index.lock().unwrap() = idx;
+        self.recall_song(idx);
+    }
+
+    fn select_section(&self, index: u32) {
+        let (song_idx, last) = {
+            let i = *self.song_index.lock().unwrap();
+            let setlist = self.setlist.lock().unwrap();
+            let last = setlist.get(i).map(|s| s.sections.len().saturating_sub(1)).unwrap_or(0);
+            (i, last)
+        };
+        let idx = (index as usize).min(last);
+        *self.section_index.lock().unwrap() = idx;
+        tracing::info!("section → {idx} (song {song_idx})");
+        // Sections don't drive audio yet (scenes later) — publish so every
+        // remote follows the section highlight.
+        self.events.publish(RigEvent::Perf(Rig::perf(self)));
+    }
+
+    fn move_song(&self, from: u32, to: u32) {
+        {
+            let mut setlist = self.setlist.lock().unwrap();
+            let (from, to) = (from as usize, to as usize);
+            if from >= setlist.len() || to >= setlist.len() {
+                return;
+            }
+            let song = setlist.remove(from);
+            setlist.insert(to, song);
+            // Keep the current-song pointer on the same song.
+            let mut cur = self.song_index.lock().unwrap();
+            if *cur == from {
+                *cur = to;
+            } else if from < *cur && to >= *cur {
+                *cur -= 1;
+            } else if from > *cur && to <= *cur {
+                *cur += 1;
             }
         }
-        // Rebuild the block mirror + re-apply bypass defaults (drop the rig
-        // lock first — resync_blocks re-locks it).
+        self.events.publish(RigEvent::Perf(Rig::perf(self)));
+    }
+
+    fn patches(&self) -> Vec<PatchInfo> {
+        let guard = match self.rig.lock() {
+            Ok(g) => g,
+            Err(_) => return Vec::new(),
+        };
+        let Some(prig) = guard.as_ref() else {
+            return Vec::new();
+        };
+        let active = prig.active_patch().map(|p| p.name.clone());
+        let stacks = prig.stacks().to_vec();
+        prig.patches()
+            .iter()
+            .enumerate()
+            .map(|(i, p)| {
+                let stack_entry = stacks
+                    .iter()
+                    .find(|st| st.patches.iter().any(|n| n.eq_ignore_ascii_case(&p.name)));
+                let stack = stack_entry.map(|st| st.name.clone()).unwrap_or_default();
+                let default_in_stack = stack_entry
+                    .and_then(|st| st.patches.first())
+                    .map(|first| first.eq_ignore_ascii_case(&p.name))
+                    .unwrap_or(false);
+                let (preset, override_modules) = {
+                    let def = self.profile_def.lock().unwrap();
+                    def.patches
+                        .iter()
+                        .find(|d| d.name.eq_ignore_ascii_case(&p.name))
+                        .map(|d| (d.preset.clone(), d.override_modules()))
+                        .unwrap_or_default()
+                };
+                PatchInfo {
+                    preset,
+                    override_modules,
+                    default_in_stack,
+                    name: p.name.clone(),
+                    stack,
+                    available: prig.is_patch_available(i),
+                    active: active.as_deref() == Some(p.name.as_str()),
+                }
+            })
+            .collect()
+    }
+
+    fn select_patch(&self, index: u32) {
+        if let Ok(mut guard) = self.rig.lock() {
+            if let Some(prig) = guard.as_mut() {
+                // If the patch lives in a stack, jump that stack's rotation
+                // to it — the footswitch grid stays consistent with what's
+                // audible (one stack always lit). Loose patches activate
+                // directly.
+                let name = prig.patches().get(index as usize).map(|p| p.name.clone());
+                let in_stack = name.as_ref().and_then(|n| {
+                    prig.stacks().iter().enumerate().find_map(|(si, st)| {
+                        st.patches
+                            .iter()
+                            .position(|p| p.eq_ignore_ascii_case(n))
+                            .map(|pos| (si, pos))
+                    })
+                });
+                match in_stack {
+                    Some((stack, pos)) => {
+                        prig.activate_stack_at(stack, pos);
+                    }
+                    None => {
+                        prig.activate(index as usize);
+                    }
+                }
+            }
+        }
         self.resync_blocks();
+        self.apply_tempo_to_delays();
+        self.apply_boost_to_block();
         self.publish_state();
+    }
+
+    fn presets(&self) -> Vec<PresetInfo> {
+        let def = self.profile_def.lock().unwrap();
+        let active_patch = self
+            .rig
+            .lock()
+            .ok()
+            .and_then(|g| g.as_ref().and_then(|p| p.active_patch().map(|p| p.name.clone())));
+        let active_preset = active_patch.and_then(|ap| {
+            def.patches
+                .iter()
+                .find(|p| p.name.eq_ignore_ascii_case(&ap))
+                .map(|p| p.preset.clone())
+        });
+        def.presets
+            .iter()
+            .map(|preset| PresetInfo {
+                name: preset.name.clone(),
+                active: active_preset.as_deref() == Some(preset.name.as_str()),
+                used_by: def
+                    .patches
+                    .iter()
+                    .filter(|p| p.preset.eq_ignore_ascii_case(&preset.name))
+                    .count() as u32,
+            })
+            .collect()
+    }
+
+    fn set_patch_preset(&self, patch: u32, preset: u32) {
+        // Repoint in the definition…
+        let rebuilt = {
+            let mut def = self.profile_def.lock().unwrap();
+            let Some(preset_name) = def.presets.get(preset as usize).map(|p| p.name.clone())
+            else {
+                return;
+            };
+            let Some(p) = def.patches.get_mut(patch as usize) else {
+                return;
+            };
+            tracing::info!("patch '{}' → preset '{preset_name}'", p.name);
+            p.preset = preset_name;
+            build_profile(&def)
+        };
+        // …then rebuild the live chains. A full reload (brief gap) — this is
+        // an edit-time operation, and it keeps every patch preinstalled for
+        // gapless footswitching afterward.
+        let active = {
+            let guard = self.rig.lock().unwrap();
+            guard
+                .as_ref()
+                .and_then(|prig| prig.active_patch().map(|p| p.name.clone()))
+        };
+        if let Ok(mut guard) = self.rig.lock() {
+            if let Some(prig) = guard.as_mut() {
+                if let Err(e) = prig.load_profile(rebuilt, None) {
+                    tracing::error!("profile reload failed: {e}");
+                }
+                // Restore the patch that was live before the reload.
+                if let Some(name) = &active {
+                    let idx = prig
+                        .patches()
+                        .iter()
+                        .position(|p| p.name.eq_ignore_ascii_case(name));
+                    if let Some(idx) = idx {
+                        prig.activate(idx);
+                    }
+                }
+            }
+        }
+        self.resync_blocks();
+        self.apply_tempo_to_delays();
+        self.apply_boost_to_block();
+        self.publish_state();
+    }
+
+    fn set_headphone(&self, volume: f32, self_mix: f32) {
+        {
+            let mut hp = self.headphone.lock().unwrap();
+            hp.volume = volume.clamp(0.0, 1.0);
+            hp.self_mix = self_mix.clamp(0.0, 1.0);
+        }
+        self.publish_state();
+    }
+
+    fn toggle_main_mute(&self) {
+        {
+            let mut hp = self.headphone.lock().unwrap();
+            hp.main_mute = !hp.main_mute;
+            tracing::info!("main output: {}", if hp.main_mute { "MUTED" } else { "live" });
+        }
+        self.apply_main_mute();
+        self.publish_state();
+    }
+
+    fn midi_recent(&self) -> Vec<String> {
+        self.midi_log.lock().unwrap().clone()
     }
 
     fn toggle_fx(&self) {
@@ -346,22 +907,95 @@ impl Rig for GuitarRigBackend {
     }
 
     fn toggle_boost(&self) {
-        let boost = {
-            let mut b = self.boost.lock().unwrap();
+        let on = {
+            let mut b = self.boost_on.lock().unwrap();
             *b = !*b;
             *b
         };
-        if let Ok(guard) = self.rig.lock() {
-            if let Some(prig) = guard.as_ref() {
-                apply_boost(prig, boost);
+        self.apply_boost_to_block();
+        tracing::info!(
+            "boost pedal: {}",
+            if on {
+                format!("{:+.0} dB", *self.boost_level.lock().unwrap())
+            } else {
+                "off".to_string()
             }
-        }
-        tracing::info!("volume boost: {}", if boost { "ON" } else { "off" });
+        );
         self.publish_state();
     }
 
+    fn cycle_boost(&self) {
+        {
+            let mut on = self.boost_on.lock().unwrap();
+            let mut level = self.boost_level.lock().unwrap();
+            if *on {
+                // Already engaged: rotate to the next level.
+                let next = BOOST_LEVELS
+                    .iter()
+                    .position(|l| (*l - *level).abs() < 0.01)
+                    .map(|i| BOOST_LEVELS[(i + 1) % BOOST_LEVELS.len()])
+                    .unwrap_or(BOOST_LEVELS[0]);
+                *level = next;
+            } else {
+                // Engage at the remembered level.
+                *on = true;
+            }
+        }
+        self.apply_boost_to_block();
+        tracing::info!("boost pedal: {:+.0} dB", self.current_boost_db());
+        self.publish_state();
+    }
+
+    fn tuner(&self) -> TunerReading {
+        let (samples, rate) = match self.rig.lock() {
+            Ok(guard) => match guard.as_ref() {
+                Some(prig) => (prig.input_samples(), prig.sample_rate() as f32),
+                None => return TunerReading::default(),
+            },
+            Err(_) => return TunerReading::default(),
+        };
+        match detect_pitch(&samples, rate) {
+            Some(freq) => {
+                let (note, cents) = note_and_cents(freq);
+                TunerReading { active: true, freq_hz: freq, note, cents }
+            }
+            None => TunerReading::default(),
+        }
+    }
+
     fn tap_tempo(&self) {
-        tracing::info!("tap tempo (not yet wired to a delay block)");
+        let now = std::time::Instant::now();
+        let new_tempo = {
+            let mut taps = self.taps.lock().unwrap();
+            let interval = taps.last.map(|t| now - t);
+            taps.last = Some(now);
+            match interval {
+                // First tap, or a stale one — starts a new sequence.
+                None => {
+                    taps.intervals.clear();
+                    None
+                }
+                Some(dt) if dt > TAP_RESET => {
+                    taps.intervals.clear();
+                    None
+                }
+                Some(dt) => {
+                    taps.intervals.push(dt.as_secs_f32());
+                    if taps.intervals.len() > TAP_WINDOW {
+                        taps.intervals.remove(0);
+                    }
+                    let avg = taps.intervals.iter().sum::<f32>() / taps.intervals.len() as f32;
+                    // 40–300 BPM keeps stray double-taps from producing
+                    // nonsense tempos.
+                    Some((60.0 / avg).clamp(40.0, 300.0))
+                }
+            }
+        };
+        if let Some(bpm) = new_tempo {
+            *self.tempo.lock().unwrap() = Some(bpm);
+            self.apply_tempo_to_delays();
+            self.events.publish(RigEvent::Perf(Rig::perf(self)));
+        }
     }
 
     fn toggle_block_bypass(&self, id: String) {
@@ -369,13 +1003,22 @@ impl Rig for GuitarRigBackend {
             let mut blocks = self.blocks.lock().unwrap();
             blocks.iter_mut().find(|b| b.id == id).map(|b| {
                 b.bypassed = !b.bypassed;
-                b.bypassed
+                (b.bypassed, b.block_type)
             })
         };
-        if let Some(byp) = new_bypass {
-            if let Ok(guard) = self.rig.lock() {
-                if let Some(prig) = guard.as_ref() {
-                    prig.rig().set_block_slot_bypass(&id, byp);
+        if let Some((byp, bt)) = new_bypass {
+            if let Ok(mut guard) = self.rig.lock() {
+                if let Some(prig) = guard.as_mut() {
+                    // Persist into the patch config so FX-bypass cycles and
+                    // re-activation restore this toggle, not the build-time
+                    // default.
+                    prig.set_block_config_bypass(&id, byp);
+                    // While the global FX (time) bypass is engaged, un-bypassing
+                    // a time block only updates its configured state — the
+                    // engine slot stays muted until FX comes back.
+                    let is_time = bt.category() == signal_proto::block::BlockCategory::Time;
+                    let effective = byp || (is_time && prig.fx_bypass());
+                    prig.rig().set_block_slot_bypass(&id, effective);
                 }
             }
         }
@@ -385,7 +1028,12 @@ impl Rig for GuitarRigBackend {
     fn set_block_param(&self, id: String, param: String, value: f32) {
         if let Ok(mut blocks) = self.blocks.lock() {
             if let Some(b) = blocks.iter_mut().find(|b| b.id == id) {
-                b.param_value = value;
+                if b.param_name.as_deref() == Some(param.as_str()) {
+                    b.param_value = value;
+                }
+                if let Some(p) = b.params.iter_mut().find(|p| p.name == param) {
+                    p.value = value;
+                }
             }
         }
         if let Ok(guard) = self.rig.lock() {
@@ -445,4 +1093,154 @@ impl Services for GuitarRigBackend {
             signal_guitar_proto::audio::Service
         ]
     }
+}
+
+// ── Tuner pitch detection ────────────────────────────────────────────────────
+
+/// Detect the fundamental of `samples` (mono, `rate` Hz) via normalized
+/// autocorrelation over the guitar range (60–500 Hz), with an
+/// octave-error guard (prefer the shortest strong lag) and parabolic
+/// interpolation for sub-sample precision. `None` = too quiet / no lock.
+fn detect_pitch(samples: &[f32], rate: f32) -> Option<f32> {
+    let n = samples.len();
+    if n < 2048 || rate <= 0.0 {
+        return None;
+    }
+    let rms = (samples.iter().map(|s| s * s).sum::<f32>() / n as f32).sqrt();
+    if rms < 0.003 {
+        return None;
+    }
+    let mean = samples.iter().sum::<f32>() / n as f32;
+    let buf: Vec<f32> = samples.iter().map(|s| s - mean).collect();
+    let e0: f32 = buf.iter().map(|s| s * s).sum();
+    if e0 <= f32::EPSILON {
+        return None;
+    }
+
+    let min_lag = (rate / 500.0).floor().max(2.0) as usize;
+    let max_lag = ((rate / 60.0).ceil() as usize).min(n / 2);
+    let acf = |lag: usize| -> f32 {
+        let mut ac = 0.0f32;
+        for i in 0..(n - lag) {
+            ac += buf[i] * buf[i + lag];
+        }
+        ac / e0
+    };
+
+    let mut best_lag = 0usize;
+    let mut best = 0.0f32;
+    let mut norms = vec![0.0f32; max_lag + 2];
+    for lag in min_lag..max_lag {
+        let v = acf(lag);
+        norms[lag] = v;
+        if v > best {
+            best = v;
+            best_lag = lag;
+        }
+    }
+    if best < 0.5 || best_lag == 0 {
+        return None;
+    }
+    // Octave guard: the true period is the SHORTEST lag nearly as strong as
+    // the best (ACF peaks repeat at every multiple of the period).
+    let mut lag = best_lag;
+    for l in min_lag..best_lag {
+        // Only consider local peaks.
+        if norms[l] >= 0.85 * best && norms[l] >= norms[l - 1] && norms[l] >= norms[l + 1] {
+            lag = l;
+            break;
+        }
+    }
+    // Parabolic interpolation around the chosen lag.
+    let (ym1, y0, yp1) = (acf(lag - 1), norms[lag].max(acf(lag)), acf(lag + 1));
+    let denom = ym1 - 2.0 * y0 + yp1;
+    let delta = if denom.abs() > f32::EPSILON {
+        (0.5 * (ym1 - yp1) / denom).clamp(-0.5, 0.5)
+    } else {
+        0.0
+    };
+    Some(rate / (lag as f32 + delta))
+}
+
+/// Nearest note name (with octave) + distance in cents.
+fn note_and_cents(freq: f32) -> (String, f32) {
+    const NAMES: [&str; 12] = [
+        "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B",
+    ];
+    let midi = 69.0 + 12.0 * (freq / 440.0).log2();
+    let nearest = midi.round();
+    let cents = ((midi - nearest) * 100.0).clamp(-50.0, 50.0);
+    let n = nearest as i32;
+    let name = NAMES[(n.rem_euclid(12)) as usize];
+    let octave = n / 12 - 1;
+    (format!("{name}{octave}"), cents)
+}
+
+// ── Spectrum analysis ────────────────────────────────────────────────────────
+
+/// Hann-windowed radix-2 FFT → `bins` log-spaced magnitude bins (dB,
+/// −90..0) over 20 Hz–20 kHz. Small N (2048) at ~15 Hz on the control
+/// thread — no RT involvement.
+fn spectrum_bins(samples: &[f32], rate: f32, bins: usize) -> Vec<f32> {
+    let n = samples.len().next_power_of_two() / 2 * 2;
+    let n = n.min(samples.len());
+    // Hann window into complex buffer.
+    let mut re: Vec<f32> = (0..n)
+        .map(|i| {
+            let w = 0.5 - 0.5 * (2.0 * std::f32::consts::PI * i as f32 / n as f32).cos();
+            samples[i] * w
+        })
+        .collect();
+    let mut im = vec![0.0f32; n];
+    // Iterative radix-2 Cooley–Tukey.
+    let levels = n.trailing_zeros();
+    // Bit-reversal permutation.
+    for i in 0..n {
+        let j = (i as u32).reverse_bits() >> (32 - levels);
+        let j = j as usize;
+        if j > i {
+            re.swap(i, j);
+            im.swap(i, j);
+        }
+    }
+    let mut size = 2;
+    while size <= n {
+        let half = size / 2;
+        let step = -2.0 * std::f32::consts::PI / size as f32;
+        for start in (0..n).step_by(size) {
+            for k in 0..half {
+                let ang = step * k as f32;
+                let (wr, wi) = (ang.cos(), ang.sin());
+                let (i, j) = (start + k, start + k + half);
+                let (tr, ti) = (re[j] * wr - im[j] * wi, re[j] * wi + im[j] * wr);
+                re[j] = re[i] - tr;
+                im[j] = im[i] - ti;
+                re[i] += tr;
+                im[i] += ti;
+            }
+        }
+        size *= 2;
+    }
+    // Log-spaced bins 20 Hz .. 20 kHz, peak magnitude per bin.
+    let mut out = vec![-90.0f32; bins];
+    let hz_per = rate / n as f32;
+    for b in 0..bins {
+        let f0 = 20.0 * (1000.0f32).powf(b as f32 / bins as f32);
+        let f1 = 20.0 * (1000.0f32).powf((b + 1) as f32 / bins as f32);
+        let (k0, k1) = (
+            ((f0 / hz_per) as usize).clamp(1, n / 2 - 1),
+            ((f1 / hz_per) as usize).clamp(1, n / 2 - 1),
+        );
+        let mut peak = 0.0f32;
+        for k in k0..=k1 {
+            let mag = (re[k] * re[k] + im[k] * im[k]).sqrt() / (n as f32 / 4.0);
+            peak = peak.max(mag);
+        }
+        out[b] = if peak > 0.0 {
+            (20.0 * peak.log10()).clamp(-90.0, 0.0)
+        } else {
+            -90.0
+        };
+    }
+    out
 }

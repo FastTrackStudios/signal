@@ -4,23 +4,24 @@
 //! are kept isolated for tests and as a reference for any future SVG fallback.
 
 #![allow(dead_code)]
+#![allow(clippy::too_many_arguments)]
 
 use super::eq_graph_model::EqBand;
 use super::eq_graph_response::{calculate_band_response, calculate_combined_response};
 
 /// All EQ curve paths (combined and per-band).
 #[derive(Clone, Default, PartialEq)]
-struct AllEqCurves {
+pub struct AllEqCurves {
     /// Combined curve stroke path.
-    combined_stroke: String,
+    pub combined_stroke: String,
     /// Combined curve fill path.
-    combined_fill: String,
+    pub combined_fill: String,
     /// Per-band curves: Vec of (band_index, stroke_path, fill_path) for each active band.
-    band_curves: Vec<(usize, String, String)>,
+    pub band_curves: Vec<(usize, String, String)>,
 }
 
 #[allow(clippy::too_many_arguments)]
-fn generate_all_eq_curves(
+pub fn generate_all_eq_curves(
     bands: &[EqBand],
     sample_rate: f64,
     min_freq: f64,
@@ -127,7 +128,7 @@ where
 ///
 /// Returns (stroke_path, fill_path)
 #[allow(clippy::too_many_arguments)]
-fn generate_eq_curve_path(
+pub fn generate_eq_curve_path(
     bands: &[EqBand],
     sample_rate: f64,
     min_freq: f64,
@@ -168,7 +169,7 @@ fn generate_eq_curve_path(
     build_curve_paths(&frequencies, &response_db, freq_to_x, db_to_y, zero_y)
 }
 
-fn generate_grid_elements(
+pub fn generate_grid_elements(
     padding: f64,
     graph_width: f64,
     graph_height: f64,
@@ -223,7 +224,7 @@ fn generate_grid_elements(
     lines
 }
 
-fn generate_freq_labels(
+pub fn generate_freq_labels(
     padding: f64,
     graph_width: f64,
     height: f64,
@@ -262,7 +263,7 @@ fn generate_freq_labels(
     labels
 }
 
-fn generate_db_labels(padding: f64, graph_height: f64, db_range: f64) -> Vec<(f64, f64, String)> {
+pub fn generate_db_labels(padding: f64, graph_height: f64, db_range: f64) -> Vec<(f64, f64, String)> {
     let mut labels = Vec::new();
     let x = padding - 10.0;
 

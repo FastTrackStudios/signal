@@ -15,6 +15,9 @@ authors.workspace = true
 dioxus.workspace = true
 lumen-blocks.workspace = true
 signal-guitar-proto.workspace = true
+# The real FTS-EQ editor core (band model, response math, SVG generators,
+# interaction rules) — wasm-portable; see eq_surface.rs.
+eq-ui.workspace = true
 # BlockType — chain-strip coloring.
 signal-proto.workspace = true
 # The zoomable rig graph + the headless slot conversion (both wasm-clean).

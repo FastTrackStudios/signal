@@ -41,7 +41,10 @@ fn resolve_template(base: &[GridSlot], live: &[LiveBlock]) -> Vec<GridSlot> {
         let Some(slot_name) = slot.block_preset_name.clone() else {
             continue;
         };
-        if let Some(b) = live.iter().find(|b| b.name.eq_ignore_ascii_case(&slot_name)) {
+        if let Some(b) = live
+            .iter()
+            .find(|b| b.name.eq_ignore_ascii_case(&slot_name) && b.block_type == slot.block_type)
+        {
             slot.is_template = false;
             slot.bypassed = b.bypassed;
             slot.id = slot_uuid(&b.id);

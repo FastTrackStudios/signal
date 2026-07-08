@@ -5,6 +5,7 @@
 //! into it via [`spectrum_analyzer_dsp::Analyzer::set_settings`].
 
 use audiocore_core::prelude::*;
+use dioxus::prelude::*;
 use fts_ui::prelude::{SegmentedControl, SegmentedControlSize, Switch};
 
 use spectrum_analyzer_dsp::{AnalyzerSettings, Range, Resolution, Speed};

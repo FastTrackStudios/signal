@@ -78,6 +78,7 @@ async fn main() {
                 n_chain += 1;
                 eprintln!("chain event: {} blocks", c.len());
             }
+            RigEvent::Spectrum(_) => {}
         });
     }
     eprintln!("events received: {n_status} status, {n_perf} perf, {n_chain} chain");
@@ -85,7 +86,57 @@ async fn main() {
     assert!(n_perf > 0, "no perf events");
     assert!(n_chain > 0, "no chain events");
 
+    // Tap tempo: four taps ~400 ms apart → ~150 BPM, pushed to the delays.
+    for _ in 0..4 {
+        rig.tap_tempo().await.expect("tap");
+        tokio::time::sleep(std::time::Duration::from_millis(400)).await;
+    }
+    let perf = rig.perf().await.expect("perf");
+    eprintln!("tempo after taps: {} BPM", perf.tempo_bpm);
+    assert!(
+        (140..=160).contains(&perf.tempo_bpm),
+        "expected ~150 BPM, got {}",
+        perf.tempo_bpm
+    );
+
+    // Boost pedal: cycles +1 → +2 → +3 → −1 dB and wraps.
+    let chain = rig.chain().await.expect("chain");
+    assert!(
+        chain.iter().any(|b| b.name.eq_ignore_ascii_case("Boost")),
+        "chain should contain the Boost gain block"
+    );
+    assert!(
+        chain.iter().any(|b| b.name.eq_ignore_ascii_case("Gate")),
+        "chain should contain the post-amp Gate"
+    );
+    // Tap = on/off at the remembered level; hold (cycle) = rotate levels,
+    // engaging if off.
+    let boost_db = |perf: signal_guitar::proto::PerformanceModel| perf.boost_db;
+    rig.toggle_boost().await.expect("boost on");
+    assert_eq!(boost_db(rig.perf().await.unwrap()), 1.0, "tap engages at +1");
+    rig.toggle_boost().await.expect("boost off");
+    assert_eq!(boost_db(rig.perf().await.unwrap()), 0.0, "tap disengages");
+    rig.cycle_boost().await.expect("hold engages");
+    assert_eq!(boost_db(rig.perf().await.unwrap()), 1.0, "hold from off engages at remembered level");
+    for expected in [2.0f32, 3.0, -1.0, 1.0] {
+        rig.cycle_boost().await.expect("cycle boost");
+        let db = boost_db(rig.perf().await.unwrap());
+        assert!((db - expected).abs() < 0.01, "expected {expected} dB, got {db}");
+    }
+    rig.toggle_boost().await.expect("boost off");
+    eprintln!("boost tap/hold verified (on/off + rotate +1/+2/+3/−1)");
+
+    // Tuner: with no guitar signal it must report inactive, not garbage.
+    let t = rig.tuner().await.expect("tuner");
+    eprintln!("tuner (idle): active={} note={:?}", t.active, t.note);
+
+    // Global FX (time) bypass round-trip.
+    rig.toggle_fx().await.expect("fx off");
+    assert!(rig.perf().await.expect("perf").fx_bypass, "FX bypass should engage");
+    rig.toggle_fx().await.expect("fx on");
+    assert!(!rig.perf().await.expect("perf").fx_bypass, "FX bypass should release");
+
     subscription.abort(); // unsubscribe
     rig.stop().await.expect("stop");
-    eprintln!("OK — detached control + event stream verified");
+    eprintln!("OK — detached control + event stream + tap tempo + FX toggle verified");
 }

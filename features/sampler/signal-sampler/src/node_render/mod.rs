@@ -40,7 +40,7 @@ pub fn build_node_backend(block: &RigBlock, sample_rate: u32) -> Option<Box<dyn 
         build_block(block, sample_rate)
             .map_err(|e| tracing::warn!(error = %e, "node_render: backend build failed"))
             .ok()
-            .map(|(boxed, _, _, _)| boxed)
+            .map(|built| built.boxed)
     }
 }
 

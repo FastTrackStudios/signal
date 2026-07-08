@@ -12,15 +12,25 @@
 //! - [`params`]: nice_plug parameter tree + shared UI state
 //! - [`param_adapter`]: nice_plug `ParamPtr` → [`fts_ui_audio::ParamHandle`]
 
+// ── Portable core (compiles for wasm; the detached remotes build on it) ──
 pub mod cheatsheet;
-pub mod control_view;
-pub mod eq_graph;
 pub mod eq_graph_interaction;
 pub mod eq_graph_model;
-pub mod eq_graph_painter;
-pub mod eq_graph_popup;
 pub mod eq_graph_response;
 pub mod eq_graph_svg;
+
+// ── The Blitz/vello plugin editor ──
+#[cfg(feature = "native")]
+pub mod control_view;
+#[cfg(feature = "native")]
+pub mod eq_graph;
+#[cfg(feature = "native")]
+pub mod eq_graph_painter;
+#[cfg(feature = "native")]
+pub mod eq_graph_popup;
+#[cfg(feature = "native")]
 pub mod param_adapter;
+#[cfg(feature = "native")]
 pub mod params;
+#[cfg(feature = "native")]
 pub mod profile_view;

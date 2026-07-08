@@ -38,6 +38,8 @@ const REGISTRY: &[(BlockType, Ctor)] = &[
     (BlockType::Flanger, build_flanger),
     (BlockType::Vibrato, build_vibrato),
     (BlockType::Trem, build_trem),
+    (BlockType::Gate, build_gate),
+    (BlockType::Volume, build_volume),
     // No DSP yet — transparent placeholders so the block exists (bypassed).
     (BlockType::Phaser, build_phaser),
     (BlockType::Rotary, build_rotary),
@@ -72,6 +74,22 @@ fn build_trem(block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
     }
     Box::new(fx)
 }
+fn build_gate(block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
+    let mut fx = signal_fx::NativeGate::new(sample_rate as f64);
+    for name in ["threshold", "attack", "release"] {
+        if let Some(v) = block.param_f32(name) {
+            fx.set_named(name, v as f64);
+        }
+    }
+    Box::new(fx)
+}
+fn build_volume(block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
+    let mut fx = signal_fx::NativeGain::new(sample_rate as f64);
+    if let Some(v) = block.param_f32("gain_db") {
+        fx.set_named("gain_db", v as f64);
+    }
+    Box::new(fx)
+}
 fn build_phaser(_block: &RigBlock, _sample_rate: u32) -> Box<dyn PluginInstance> {
     Box::new(signal_fx::NativePassthrough::new("Phaser"))
 }
@@ -79,8 +97,18 @@ fn build_rotary(_block: &RigBlock, _sample_rate: u32) -> Box<dyn PluginInstance>
     Box::new(signal_fx::NativePassthrough::new("Rotary"))
 }
 
-fn build_eq(_block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
-    Box::new(signal_fx::NativeEq::new(sample_rate as f64))
+fn build_eq(block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
+    let mut fx = signal_fx::NativeEq::new(sample_rate as f64);
+    // Full band set: b{1..24}_{used,on,freq,gain,q,shape}.
+    for b in 0..signal_fx::EQ_BANDS {
+        for f in 0..signal_fx::EQ_FIELDS {
+            let name = signal_fx::eq_param_name(b, f);
+            if let Some(v) = block.param_f32(&name) {
+                fx.set_named(&name, v as f64);
+            }
+        }
+    }
+    Box::new(fx)
 }
 
 fn build_comp(block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {

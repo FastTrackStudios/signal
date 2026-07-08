@@ -12,6 +12,10 @@ description = "Spectrum analyzer painters + settings panel for FTS-EQ"
 # prelude line up exactly.
 
 [dependencies]
+# Direct dioxus dep: in the signal workspace audiocore-core is built without
+# its dioxus re-exports (default-features = false), so the prelude items
+# (Props/Callback/rsx) must come from dioxus itself.
+dioxus = { workspace = true }
 spectrum-analyzer-dsp = { workspace = true }
 nice-plug-dioxus = { workspace = true }
 audiocore-core = { workspace = true }

@@ -1,3 +1,4 @@
+#![cfg(feature = "native")]
 //! Scene-graph snapshot tests for the EQ graph painter.
 //!
 //! These run without a GPU — they only call [`paint_eq_graph_scene`] against

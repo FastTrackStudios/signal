@@ -69,6 +69,10 @@ pub struct RigStatus {
     pub output_peak: f32,
     /// Display name of the active patch, if any.
     pub active_patch: Option<String>,
+    /// Compressor gain reduction (dB, positive = reducing) — estimated from
+    /// the live input level and the comp curve until per-block telemetry
+    /// lands.
+    pub comp_gr_db: f32,
 }
 
 /// One footswitch stack (folder) in the performance grid — a named rotation
@@ -87,6 +91,10 @@ pub struct PerfStack {
     pub available: bool,
     /// Whether this stack holds the currently-active patch.
     pub is_active: bool,
+    /// The preset the current patch points at.
+    pub preset: String,
+    /// Module names the current patch overrides (badge icons).
+    pub override_modules: Vec<String>,
 }
 
 /// The live performance model: the active profile's footswitch stacks + the
@@ -97,10 +105,97 @@ pub struct PerformanceModel {
     pub stacks: Vec<PerfStack>,
     /// Global time/FX bypass engaged.
     pub fx_bypass: bool,
-    /// Volume boost engaged.
-    pub boost: bool,
+    /// Boost pedal level in dB (`0.0` = off; cycles +1 → +2 → +3 → −1).
+    pub boost_db: f32,
     /// Current tempo (BPM) — drives the tap-tempo blink.
     pub tempo_bpm: u32,
+    /// Setlist song names, in order.
+    pub songs: Vec<String>,
+    /// Index of the current song in [`songs`](Self::songs).
+    pub song_index: u32,
+    /// The current song's section names (Intro, V1, Chorus, …).
+    pub sections: Vec<String>,
+    /// Index of the current section.
+    pub section_index: u32,
+    /// Headphone-cue module state.
+    pub headphone: HeadphoneState,
+    /// Monotonic state version — bumps on every mutation, including ones
+    /// (patch repoints, preset edits) that don't change the fields above,
+    /// so clients can refetch derived data (patches/presets) on change.
+    pub revision: u64,
+}
+
+/// One patch in the loaded profile — the preset browser's row.
+#[derive(Clone, PartialEq, Debug, Facet)]
+pub struct PatchInfo {
+    /// Patch name (globally unique in the profile).
+    pub name: String,
+    /// The stack (footswitch folder) this patch belongs to, if any.
+    pub stack: String,
+    /// Chain preloaded and ready for gapless switching.
+    pub available: bool,
+    /// This is the active patch.
+    pub active: bool,
+    /// The preset this patch points at.
+    pub preset: String,
+    /// This patch is its stack's default (first in the rotation — where the
+    /// footswitch lands after a reset).
+    pub default_in_stack: bool,
+    /// Module names this patch overrides on its preset.
+    pub override_modules: Vec<String>,
+}
+
+/// One preset in the pool — a complete tone patches point at.
+#[derive(Clone, PartialEq, Debug, Facet)]
+pub struct PresetInfo {
+    pub name: String,
+    /// The active patch points at this preset.
+    pub active: bool,
+    /// How many patches point at it.
+    pub used_by: u32,
+}
+
+/// The headphone-cue module's state. The physical headphone bus lands with
+/// engine multi-out; until then volume/self-mix are staged state and
+/// `main_mute` is real (kills the main output, monitoring survives on the
+/// hardware direct path).
+#[derive(Clone, PartialEq, Debug, Facet)]
+pub struct HeadphoneState {
+    /// Headphone level (0–1).
+    pub volume: f32,
+    /// Your own guitar's level in your ears only (0–1).
+    pub self_mix: f32,
+    /// Main output muted (rehearse silently; headphones keep signal).
+    pub main_mute: bool,
+}
+
+impl Default for HeadphoneState {
+    fn default() -> Self {
+        Self { volume: 0.8, self_mix: 0.5, main_mute: false }
+    }
+}
+
+/// One tuner reading. `active: false` means no usable signal (too quiet /
+/// no periodicity) — the UI shows a listening state.
+#[derive(Clone, PartialEq, Debug, Default, Facet)]
+pub struct TunerReading {
+    /// Signal present and pitch locked.
+    pub active: bool,
+    /// Detected fundamental (Hz).
+    pub freq_hz: f32,
+    /// Nearest note name with octave, e.g. "E2", "A#3".
+    pub note: String,
+    /// Distance from the note in cents (−50..+50; negative = flat).
+    pub cents: f32,
+}
+
+/// One controllable parameter of a live block.
+#[derive(Clone, PartialEq, Debug, Facet)]
+pub struct BlockParam {
+    pub name: String,
+    pub value: f32,
+    pub min: f32,
+    pub max: f32,
 }
 
 /// One block in the live active-patch FX chain.
@@ -120,6 +215,8 @@ pub struct LiveBlock {
     pub param_value: f32,
     pub param_min: f32,
     pub param_max: f32,
+    /// The full controllable parameter set (the Control view's surface).
+    pub params: Vec<BlockParam>,
 }
 
 // ── Services ──────────────────────────────────────────────────────────────
@@ -132,7 +229,7 @@ pub mod rig {
     //! `RigStreamService`, with the `RigStreamSource` backend contract.
     use facet::Facet;
 
-    use super::{LiveBlock, PerformanceModel, RigStatus};
+    use super::{LiveBlock, PatchInfo, PerformanceModel, PresetInfo, RigStatus, TunerReading};
 
     /// One live rig change. Every variant carries **full state** (idempotent
     /// re-application), not a diff — a late or reconnecting subscriber is
@@ -147,6 +244,9 @@ pub mod rig {
         Perf(PerformanceModel),
         /// The active patch's FX chain changed (blocks/bypass/params).
         Chain(Vec<LiveBlock>),
+        /// Input spectrum, ~15 Hz: dB magnitudes (−90..0) over log-spaced
+        /// bins 20 Hz–20 kHz.
+        Spectrum(Vec<f32>),
     }
 
     #[architect::rpc]
@@ -166,8 +266,41 @@ pub mod rig {
         fn press_stack(&self, index: u32);
         /// Toggle the global time/FX bypass.
         fn toggle_fx(&self);
-        /// Toggle the volume boost.
+        /// Boost pedal tap: on/off at the remembered level (default +1 dB).
+        /// Drives the active chain's "Boost" gain block.
         fn toggle_boost(&self);
+        /// Boost pedal hold: rotate the level — +1 → +2 → +3 → −1 dB —
+        /// engaging the boost if it was off.
+        fn cycle_boost(&self);
+        /// Current tuner reading from the rig input (pre-amp).
+        fn tuner(&self) -> TunerReading;
+        /// Jump to the next song in the setlist (recalls its starting patch).
+        fn next_song(&self);
+        /// Jump to the previous song in the setlist.
+        fn prev_song(&self);
+        /// Jump straight to setlist entry `index`.
+        fn select_song(&self, index: u32);
+        /// Jump to section `index` of the current song.
+        fn select_section(&self, index: u32);
+        /// Move setlist entry `from` to position `to` (reorder).
+        fn move_song(&self, from: u32, to: u32);
+        /// Every patch in the loaded profile (the preset browser).
+        fn patches(&self) -> Vec<PatchInfo>;
+        /// Activate patch `index` directly (browser click), bypassing the
+        /// footswitch stacks.
+        fn select_patch(&self, index: u32);
+        /// The preset pool (what patches point at).
+        fn presets(&self) -> Vec<PresetInfo>;
+        /// Point patch `patch` at preset `preset` — rebuilds and reloads the
+        /// profile's chains (brief audio gap; an edit-time operation).
+        fn set_patch_preset(&self, patch: u32, preset: u32);
+        /// Set the headphone-cue module (volume + self mix, 0–1 each).
+        fn set_headphone(&self, volume: f32, self_mix: f32);
+        /// Mute/unmute the main output (headphone cue survives).
+        fn toggle_main_mute(&self);
+        /// The most recent MIDI events seen by the core (newest last),
+        /// formatted for the monitor.
+        fn midi_recent(&self) -> Vec<String>;
         /// Tap tempo.
         fn tap_tempo(&self);
         /// Toggle a block's bypass (by id).

@@ -17,6 +17,10 @@ signal-guitar-proto.workspace = true
 architect = { workspace = true, features = ["vox"] }
 # BlockType — primary-param mapping per block type.
 signal-proto.workspace = true
+# EQ band-param naming (EQ_BANDS × EQ_FIELDS) — one source of truth with the DSP.
+signal-fx.workspace = true
+# MIDI capture for the core's monitor (native only — the headless core).
+midicore.workspace = true
 tracing.workspace = true
 
 [dev-dependencies]

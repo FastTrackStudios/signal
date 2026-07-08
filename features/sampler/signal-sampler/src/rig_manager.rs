@@ -47,12 +47,21 @@ pub struct RigManager {
     /// profile (so a default Guitar Rig opens "Worship").
     #[facet(default)]
     pub library_profile: String,
-    /// Auto level-match patches from NAM loudness metadata.
-    #[facet(default)]
+    /// Auto level-match patches from measured NAM loudness (LUFS) so every amp,
+    /// clean or high-gain, is the same average volume. On by default.
+    #[facet(default = true)]
     pub level_match: bool,
     /// Target loudness (dB) when level-matching.
-    #[facet(default)]
+    #[facet(default = -18.0f32)]
     pub target_loudness_db: f32,
+    /// Feed each NAM model the analog input level (dBu) it was captured at
+    /// (authentic drive). Off by default — needs a correct interface value.
+    #[facet(default)]
+    pub calibrated_input: bool,
+    /// Interface input calibration: the analog level (dBu) that equals 0 dBFS at
+    /// the DI input. Used with the model's `input_level` for input staging.
+    #[facet(default = 12.0f32)]
+    pub input_calibration_dbu: f32,
 }
 
 impl Default for RigManager {
@@ -63,8 +72,10 @@ impl Default for RigManager {
             profile_path: String::new(),
             library_path: String::new(),
             library_profile: String::new(),
-            level_match: false,
+            level_match: true,
             target_loudness_db: -18.0,
+            calibrated_input: false,
+            input_calibration_dbu: 12.0,
         }
     }
 }
@@ -203,6 +214,8 @@ impl RigManager {
         let rig = GuitarRig::open(&self.audio)?;
         let mut prig = ProfileRig::new(rig);
         prig.set_target_loudness_db(self.target_loudness_db);
+        prig.set_input_calibration_dbu(self.input_calibration_dbu);
+        prig.set_calibrated_input(self.calibrated_input);
 
         // Prefer the library (resolves preset/scene references into chains),
         // unless the rig explicitly pins a legacy `profile_path` and makes no
@@ -233,6 +246,9 @@ impl RigManager {
         // Apply after load so it re-activates the default patch level-matched.
         prig.set_level_match(self.level_match);
         Ok(prig)
+        // NB: level-match uses each model's *measured* loudness from the DI
+        // calibration pass (see `nam_calibrate`), so the guarantee holds even
+        // for models without `loudness` metadata.
     }
 
     /// Update this manager's `audio` to the rig's actually-opened devices, so a
@@ -262,6 +278,8 @@ mod tests {
             library_profile: String::new(),
             level_match: true,
             target_loudness_db: -18.0,
+            calibrated_input: true,
+            input_calibration_dbu: 13.5,
         };
         let dir = std::env::temp_dir().join(format!("signal-rigmgr-{}", std::process::id()));
         let path = dir.join("guitar-rig.styx");
@@ -271,6 +289,8 @@ mod tests {
         assert_eq!(back.audio.input_device, "Yamaha TF");
         assert_eq!(back.audio.input_channel, 3);
         assert!(back.level_match);
+        assert!(back.calibrated_input);
+        assert_eq!(back.input_calibration_dbu, 13.5);
         assert_eq!(back.profile_path, "testing.styx");
         let _ = std::fs::remove_dir_all(&dir);
     }

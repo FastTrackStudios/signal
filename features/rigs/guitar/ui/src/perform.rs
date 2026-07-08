@@ -1,12 +1,24 @@
-//! Perform-mode footswitch grid — five colored folder tiles plus Tap Tempo,
-//! FX Toggle, and Volume Boost function switches. Purely presentational:
-//! state in via [`PerformanceModel`], actions out via `Callback` props.
+//! Perform mode — a 5×2 footswitch grid modeled on a 5-switch floor
+//! controller with hold-layers.
+//!
+//! Row 1 = the physical switches (1–5): four stack folders + Tap Tempo.
+//! Row 2 = each switch's HOLD function (6–10): Ambient (hold 1), FX Toggle
+//! (hold 2), Song — reserved (hold 3), Boost (hold 4), Tuner (hold 5).
+//! On boards with more switches, row 2 gets its own physical switches; the
+//! grid is the superset either way. Purely presentational: state in via
+//! [`PerformanceModel`], actions out via `Callback` props (the tuner overlay
+//! reads the `RigClient` from context to poll pitch).
 
 use std::time::Duration;
 
 use dioxus::prelude::*;
+use dioxus::dioxus_core::Task;
 
-use signal_guitar_proto::{PerfStack, PerformanceModel};
+use signal_guitar_proto::rig::RigClient;
+use signal_guitar_proto::{PerfStack, PerformanceModel, TunerReading};
+
+/// How long a press must last to count as a hold (footswitch convention).
+const HOLD_MS: u64 = 500;
 
 /// Tile background + text color for a folder (footswitch), by name. Also
 /// tints the header's active-patch lens, so "where you are in the set" reads
@@ -22,81 +34,319 @@ pub fn folder_color(name: &str) -> (&'static str, &'static str) {
     }
 }
 
-/// Perform-mode footswitch grid: a full-height 4×2 grid — five colored folder
-/// tiles (Clean/Crunch/Drive/Lead/Ambient) plus Tap Tempo, FX Toggle, and
-/// Volume Boost function switches.
+/// The physical switch number, pinned to a tile corner.
+#[component]
+fn SwitchNo(no: usize) -> Element {
+    rsx! {
+        span { class: "absolute top-1.5 left-2.5 text-[10px] font-mono opacity-40", "{no}" }
+    }
+}
+
+/// A footswitch-shaped button with the tap/hold split every switch shares:
+/// press-and-release fires `on_tap`; holding for [`HOLD_MS`] fires `on_hold`
+/// instead (release then does nothing). Pointer events, so it behaves the
+/// same with a mouse or a finger on a stage tablet. No `on_hold` → every
+/// press is a tap, however long.
+#[component]
+fn HoldButton(
+    class: String,
+    style: String,
+    on_tap: Callback<()>,
+    #[props(default)] on_hold: Option<Callback<()>>,
+    children: Element,
+) -> Element {
+    let mut hold_fired = use_signal(|| false);
+    let mut hold_task = use_signal(|| None::<Task>);
+    rsx! {
+        button {
+            class: "{class}",
+            style: "{style}",
+            onpointerdown: move |_| {
+                hold_fired.set(false);
+                if let Some(hold) = on_hold {
+                    let task = spawn(async move {
+                        architect::platform::sleep(Duration::from_millis(HOLD_MS)).await;
+                        hold_fired.set(true);
+                        hold.call(());
+                    });
+                    hold_task.set(Some(task));
+                }
+            },
+            onpointerup: move |_| {
+                if let Some(task) = hold_task.take() {
+                    task.cancel();
+                }
+                if !hold_fired() {
+                    on_tap.call(());
+                }
+            },
+            onpointerleave: move |_| {
+                // Dragging off the switch cancels the press entirely.
+                if let Some(task) = hold_task.take() {
+                    task.cancel();
+                }
+            },
+            {children}
+        }
+    }
+}
+
+/// Perform-mode footswitch grid — see the module docs for the layout.
 #[component]
 pub fn PerformGrid(
     model: PerformanceModel,
     on_press: Callback<usize>,
     on_toggle_fx: Callback<()>,
     on_toggle_boost: Callback<()>,
+    on_cycle_boost: Callback<()>,
     on_tap_tempo: Callback<()>,
+    on_prev_song: Callback<()>,
+    on_next_song: Callback<()>,
+    on_select_song: Callback<usize>,
 ) -> Element {
     let stacks = model.stacks;
-    let fx_sub = if model.fx_bypass { "Bypassed" } else { "Active" };
-    let boost_sub = if model.boost { "+6 dB" } else { "Off" };
+    let mut tuner_open = use_signal(|| false);
+    // The Song layer: switches 1/2 become Prev/Next, the middle shows the
+    // setlist for fast scrolling, switch 5 exits. Entered by holding 3 or
+    // tapping the Song tile.
+    let mut song_layer = use_signal(|| false);
+
+    let fx_sub = if model.fx_bypass { "Bypassed" } else { "On" };
+    let boost_sub = if model.boost_db == 0.0 {
+        "Off · hold: level".to_string()
+    } else if model.boost_db < 0.0 {
+        format!("−{} dB cut", -model.boost_db as i32)
+    } else {
+        format!("+{} dB", model.boost_db as i32)
+    };
+
+    // Each row-1 switch's HOLD action — the row-2 function directly below it
+    // (identical to the physical footswitch): 1→Ambient, 2→FX Toggle,
+    // 3→Song (reserved), 4→Boost on/off. 5→Tuner is wired on the tile.
+    let hold_actions: [Option<Callback<()>>; 4] = [
+        Some(Callback::new(move |_: ()| on_press.call(4))),
+        Some(Callback::new(move |_: ()| on_toggle_fx.call(()))),
+        Some(Callback::new(move |_: ()| song_layer.set(true))),
+        Some(Callback::new(move |_: ()| on_toggle_boost.call(()))),
+    ];
+
+    let current_song = model
+        .songs
+        .get(model.song_index as usize)
+        .cloned()
+        .unwrap_or_default();
+    let song_pos = format!("{}/{}", model.song_index + 1, model.songs.len().max(1));
+
     rsx! {
-        div { class: "grid grid-cols-4 grid-rows-2 gap-3 h-full",
-            // Folders (positions 1–5): Clean, Crunch, Drive, Lead, Ambient.
-            for i in 0..5usize {
-                if let Some(stack) = stacks.get(i).cloned() {
-                    StackTile { key: "s{i}", index: i, stack, on_press }
-                } else {
-                    div { key: "s{i}", class: "rounded-xl border-2 border-dashed border-border/30" }
+        // Hold layer ABOVE the main switches (a footswitch's hold function
+        // lives "up" from your toe) — a slim strip, ~1/8 the main row.
+        div {
+            class: "grid grid-cols-5 gap-3 h-full",
+            style: "grid-template-rows: minmax(44px, 1fr) minmax(0, 7fr);",
+
+            // ── Row A: the hold layer (switches 6–10), compact ──
+            // Switch 6 (hold 1): Ambient.
+            if let Some(stack) = stacks.get(4).cloned() {
+                StackTile { index: 4usize, switch_no: 6, stack, on_press, compact: true }
+            } else {
+                div { class: "relative rounded-lg border border-dashed border-border/30",
+                    SwitchNo { no: 6 }
                 }
             }
-            // Position 6: Tap Tempo (white, blinking at tempo).
-            TapTempoTile { tempo_bpm: model.tempo_bpm, on_tap: on_tap_tempo }
-            // Position 7: FX Toggle (pink).
+            // Switch 7 (hold 2): FX Toggle — lit while the Time FX are ON.
             FnTile {
                 title: "FX Toggle".to_string(),
                 subtitle: fx_sub.to_string(),
                 bg: "#ec4899".to_string(),
                 text: "#ffffff".to_string(),
-                active: model.fx_bypass,
+                active: !model.fx_bypass,
+                switch_no: 7,
+                compact: true,
                 onclick: on_toggle_fx,
             }
-            // Position 8: Volume Boost (white).
+            // Switch 8 (hold 3): the Song layer — setlist prev/next + fast
+            // scroll. Tap toggles the layer; the tile names where you are.
             FnTile {
-                title: "Boost".to_string(),
-                subtitle: boost_sub.to_string(),
-                bg: "#fafafa".to_string(),
-                text: "#0a0a0a".to_string(),
-                active: model.boost,
-                onclick: on_toggle_boost,
+                title: "Song".to_string(),
+                subtitle: format!("{song_pos} · {current_song}"),
+                bg: "#a78bfa".to_string(),
+                text: "#1e1b4b".to_string(),
+                active: song_layer(),
+                switch_no: 8,
+                compact: true,
+                onclick: Callback::new(move |_: ()| song_layer.toggle()),
             }
+            // Switch 9 (hold 4): Boost — tap on/off, hold rotates the level.
+            BoostTile {
+                subtitle: boost_sub,
+                active: model.boost_db != 0.0,
+                switch_no: 9,
+                on_toggle: on_toggle_boost,
+                on_cycle: on_cycle_boost,
+            }
+            // Switch 10 (hold 5): Tuner.
+            FnTile {
+                title: "Tuner".to_string(),
+                subtitle: String::new(),
+                bg: "#34d399".to_string(),
+                text: "#052e1b".to_string(),
+                active: tuner_open(),
+                switch_no: 10,
+                compact: true,
+                onclick: Callback::new(move |_: ()| tuner_open.set(true)),
+            }
+
+            // ── Row B: the Song layer (while active) or switches 1–5 ──
+            if song_layer() {
+                // Switch 1: previous song.
+                HoldButton {
+                    class: "relative flex flex-col items-center justify-center gap-1 rounded-xl h-full bg-card border border-border hover:bg-accent/40".to_string(),
+                    style: String::new(),
+                    on_tap: on_prev_song,
+                    SwitchNo { no: 1 }
+                    span { class: "text-3xl font-bold", "‹" }
+                    span { class: "text-xs text-muted-foreground", "Previous" }
+                }
+                // Switch 2: next song.
+                HoldButton {
+                    class: "relative flex flex-col items-center justify-center gap-1 rounded-xl h-full bg-card border border-border hover:bg-accent/40".to_string(),
+                    style: String::new(),
+                    on_tap: on_next_song,
+                    SwitchNo { no: 2 }
+                    span { class: "text-3xl font-bold", "›" }
+                    span { class: "text-xs text-muted-foreground", "Next" }
+                }
+                // The setlist, spanning the middle — current song highlighted,
+                // any entry jumps straight there.
+                div {
+                    class: "relative col-span-2 rounded-xl border border-border bg-card overflow-y-auto",
+                    div { class: "flex flex-col p-2 gap-1",
+                        for (i, song) in model.songs.iter().enumerate() {
+                            {
+                                let is_current = i == model.song_index as usize;
+                                let name = song.clone();
+                                rsx! {
+                                    button {
+                                        key: "{i}",
+                                        class: if is_current {
+                                            "flex items-center gap-2 rounded-md px-3 py-1.5 text-left text-sm font-bold bg-accent text-accent-foreground"
+                                        } else {
+                                            "flex items-center gap-2 rounded-md px-3 py-1.5 text-left text-sm text-muted-foreground hover:bg-accent/40"
+                                        },
+                                        onclick: move |_| on_select_song.call(i),
+                                        span { class: "font-mono text-[10px] opacity-60 w-4", "{i + 1}" }
+                                        span { class: "truncate", "{name}" }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                // Switch 5: back to the rig.
+                HoldButton {
+                    class: "relative flex flex-col items-center justify-center gap-1 rounded-xl h-full bg-card border border-border hover:bg-accent/40".to_string(),
+                    style: String::new(),
+                    on_tap: Callback::new(move |_: ()| song_layer.set(false)),
+                    SwitchNo { no: 5 }
+                    span { class: "text-xl font-bold", "Back" }
+                    span { class: "text-xs text-muted-foreground", "to the rig" }
+                }
+            } else {
+            for i in 0..4usize {
+                if let Some(stack) = stacks.get(i).cloned() {
+                    StackTile {
+                        key: "s{i}",
+                        index: i,
+                        switch_no: i + 1,
+                        stack,
+                        on_press,
+                        on_hold: hold_actions[i],
+                    }
+                } else {
+                    div { key: "s{i}", class: "relative rounded-xl border-2 border-dashed border-border/30",
+                        SwitchNo { no: i + 1 }
+                    }
+                }
+            }
+            // Switch 5: Tap Tempo (hold: tuner).
+            TapTempoTile {
+                tempo_bpm: model.tempo_bpm,
+                on_tap: on_tap_tempo,
+                on_hold: Callback::new(move |_: ()| tuner_open.set(true)),
+            }
+            }
+        }
+
+        if tuner_open() {
+            TunerOverlay { on_close: move |_| tuner_open.set(false) }
         }
     }
 }
 
-/// One colored footswitch folder tile.
+/// One colored footswitch folder tile. Tap = press the stack; hold (row 1)
+/// = the row-2 function beneath it.
 #[component]
-fn StackTile(index: usize, stack: PerfStack, on_press: Callback<usize>) -> Element {
+fn StackTile(
+    index: usize,
+    switch_no: usize,
+    stack: PerfStack,
+    on_press: Callback<usize>,
+    #[props(default)] on_hold: Option<Callback<()>>,
+    #[props(default)] compact: bool,
+) -> Element {
     let (bg, text) = folder_color(&stack.name);
     let state_cls = if stack.is_active {
-        "ring-4 ring-white/80 shadow-xl opacity-100"
+        "ring-2 ring-white/80 shadow-xl opacity-100"
     } else {
         "opacity-[0.22] saturate-50 hover:opacity-60"
     };
+    let layout_cls = if compact {
+        "relative flex items-center justify-center gap-2 rounded-lg"
+    } else {
+        "relative flex flex-col items-center justify-center gap-1 rounded-xl"
+    };
     rsx! {
-        button {
-            class: format!(
-                "relative flex flex-col items-center justify-center gap-1 rounded-xl transition-all h-full {state_cls}"
-            ),
-            style: "background-color: {bg}; color: {text};",
-            onclick: move |_| on_press.call(index),
+        HoldButton {
+            class: format!("{layout_cls} transition-all h-full {state_cls}"),
+            style: format!("background-color: {bg}; color: {text};"),
+            on_tap: Callback::new(move |_: ()| on_press.call(index)),
+            on_hold,
+            SwitchNo { no: switch_no }
             // Amber dot while the current patch is still loading.
             if !stack.available {
                 span { class: "absolute top-2 right-2 w-2.5 h-2.5 rounded-full",
                     style: "background-color: #fde047;" }
             }
-            span { class: "text-2xl font-bold tracking-wide", "{stack.name}" }
-            span { class: "text-sm font-semibold opacity-90", "{stack.current_patch}" }
+            span {
+                class: if compact { "text-sm font-bold tracking-wide" } else { "text-2xl font-bold tracking-wide" },
+                "{stack.name}"
+            }
+            span {
+                class: if compact { "text-[10px] font-semibold opacity-80" } else { "text-sm font-semibold opacity-90" },
+                "{stack.current_patch}"
+            }
+            // The preset this patch points at + which modules it overrides.
+            if !compact {
+                div { class: "flex items-center gap-1.5",
+                    span { class: "text-[10px] font-mono opacity-60", "{stack.preset}" }
+                    for m in stack.override_modules.iter() {
+                        span {
+                            key: "{m}",
+                            class: "text-[10px] opacity-80",
+                            title: "overrides {m}",
+                            {crate::icons::module_icon(m)}
+                        }
+                    }
+                }
+            } else if !stack.override_modules.is_empty() {
+                span { class: "text-[10px] opacity-70",
+                    {stack.override_modules.iter().map(|m| crate::icons::module_icon(m)).collect::<String>()}
+                }
+            }
             // Rotation dots — one per patch in the folder, current one lit.
             // Reads as "where the next press lands" without any counting.
             if stack.patch_count > 1 {
-                div { class: "flex items-center gap-1.5 mt-1",
+                div { class: if compact { "flex items-center gap-1" } else { "flex items-center gap-1.5 mt-1" },
                     for i in 0..stack.patch_count {
                         span {
                             key: "{i}",
@@ -113,7 +363,7 @@ fn StackTile(index: usize, stack: PerfStack, on_press: Callback<usize>) -> Eleme
     }
 }
 
-/// A function-switch tile (FX Toggle, Volume Boost).
+/// A function-switch tile (FX Toggle, Tuner).
 #[component]
 fn FnTile(
     title: String,
@@ -121,37 +371,89 @@ fn FnTile(
     bg: String,
     text: String,
     active: bool,
+    switch_no: usize,
+    #[props(default)] compact: bool,
     onclick: Callback<()>,
 ) -> Element {
     let state_cls = if active {
-        "ring-4 ring-white/80 shadow-xl opacity-100"
+        "ring-2 ring-white/80 shadow-xl opacity-100"
+    } else {
+        "opacity-[0.3] saturate-50 hover:opacity-70"
+    };
+    let layout_cls = if compact {
+        "relative flex items-center justify-center gap-2 rounded-lg"
+    } else {
+        "relative flex flex-col items-center justify-center gap-1 rounded-xl"
+    };
+    rsx! {
+        button {
+            class: format!("{layout_cls} transition-all h-full {state_cls}"),
+            style: "background-color: {bg}; color: {text};",
+            onclick: move |_| onclick.call(()),
+            SwitchNo { no: switch_no }
+            span {
+                class: if compact { "text-sm font-bold tracking-wide" } else { "text-xl font-bold tracking-wide" },
+                "{title}"
+            }
+            if !subtitle.is_empty() {
+                span {
+                    class: if compact { "text-[10px] opacity-80" } else { "text-xs opacity-80" },
+                    "{subtitle}"
+                }
+            }
+        }
+    }
+}
+
+/// The boost pedal tile: tap = on/off at the remembered level, hold =
+/// rotate the level (+1 → +2 → +3 → −1 dB). Mirrors the physical
+/// footswitch's tap/hold split.
+#[component]
+fn BoostTile(
+    subtitle: String,
+    active: bool,
+    switch_no: usize,
+    on_toggle: Callback<()>,
+    on_cycle: Callback<()>,
+) -> Element {
+    let state_cls = if active {
+        "ring-2 ring-white/80 shadow-xl opacity-100"
     } else {
         "opacity-[0.3] saturate-50 hover:opacity-70"
     };
     rsx! {
-        button {
+        HoldButton {
             class: format!(
-                "flex flex-col items-center justify-center gap-1 rounded-xl transition-all h-full {state_cls}"
+                "relative flex items-center justify-center gap-2 rounded-lg transition-all h-full {state_cls}"
             ),
-            style: "background-color: {bg}; color: {text};",
-            onclick: move |_| onclick.call(()),
-            span { class: "text-xl font-bold tracking-wide", "{title}" }
-            span { class: "text-xs opacity-80", "{subtitle}" }
+            style: "background-color: #fafafa; color: #0a0a0a;".to_string(),
+            on_tap: on_toggle,
+            on_hold: Some(on_cycle),
+            SwitchNo { no: switch_no }
+            span { class: "text-sm font-bold tracking-wide", "Boost" }
+            span { class: "text-[10px] opacity-80", "{subtitle}" }
         }
     }
 }
 
 /// Tap Tempo tile — muted like the other function tiles, with a ring around
 /// the block flashing at the current tempo (the tile *is* the metronome).
-/// The timer uses `architect::platform::sleep`, so it runs on tokio natively
-/// and browser timers on wasm.
+/// Tap = tempo tap; hold = open the tuner (footswitch 5's hold layer).
 #[component]
-fn TapTempoTile(tempo_bpm: u32, on_tap: Callback<()>) -> Element {
+fn TapTempoTile(tempo_bpm: u32, on_tap: Callback<()>, on_hold: Callback<()>) -> Element {
     let mut lit = use_signal(|| false);
+
+    // Props aren't reactive — mirror the tempo into a signal so the blink
+    // loop restarts the moment a tap changes it.
+    let mut bpm_sig = use_signal(|| tempo_bpm);
+    if bpm_sig() != tempo_bpm {
+        bpm_sig.set(tempo_bpm);
+    }
     // Flash the ring on the beat: on for the front edge, off for the rest.
-    use_future(move || async move {
+    // `use_resource` re-runs (dropping the old loop) when `bpm_sig` changes.
+    let _blink = use_resource(move || async move {
+        let bpm = bpm_sig().max(40) as u64;
         loop {
-            let bpm = tempo_bpm.max(40) as u64;
             let beat_ms = 60_000 / bpm;
             lit.set(true);
             architect::platform::sleep(Duration::from_millis((beat_ms / 4).max(60))).await;
@@ -165,12 +467,82 @@ fn TapTempoTile(tempo_bpm: u32, on_tap: Callback<()>) -> Element {
         "box-shadow: 0 0 0 3px transparent;"
     };
     rsx! {
-        button {
-            class: "relative flex flex-col items-center justify-center gap-1 rounded-xl h-full transition-shadow duration-100 opacity-90 hover:opacity-100",
-            style: "background-color: #27272a; color: #d4d4d8; {ring}",
-            onclick: move |_| on_tap.call(()),
+        HoldButton {
+            class: "relative flex flex-col items-center justify-center gap-1 rounded-xl h-full transition-shadow duration-100 opacity-90 hover:opacity-100".to_string(),
+            style: format!("background-color: #27272a; color: #d4d4d8; {ring}"),
+            on_tap,
+            on_hold: Some(on_hold),
+            SwitchNo { no: 5 }
             span { class: "text-lg font-bold tracking-wide", "Tap Tempo" }
             span { class: "text-[11px] text-zinc-500", "{tempo_bpm} BPM · hold: tuner" }
+        }
+    }
+}
+
+/// Full-screen tuner. Polls the rig's `tuner()` reading (~10 Hz) while
+/// open; click anywhere (or the footswitch again) to close.
+#[component]
+pub fn TunerOverlay(on_close: EventHandler<()>) -> Element {
+    let rig = use_hook(try_consume_context::<RigClient>);
+    let mut reading = use_signal(TunerReading::default);
+
+    {
+        let rig = rig.clone();
+        use_future(move || {
+            let rig = rig.clone();
+            async move {
+                let Some(rig) = rig else { return };
+                loop {
+                    if let Ok(r) = rig.tuner().await {
+                        reading.set(r);
+                    }
+                    architect::platform::sleep(Duration::from_millis(100)).await;
+                }
+            }
+        });
+    }
+
+    let r = reading();
+    // Needle position: −50..+50 cents → 0..100%.
+    let needle_pct = 50.0 + r.cents.clamp(-50.0, 50.0);
+    let in_tune = r.active && r.cents.abs() <= 5.0;
+    let needle_color = if in_tune { "#22c55e" } else { "#eab308" };
+
+    rsx! {
+        div {
+            class: "fixed inset-0 z-50 flex flex-col items-center justify-center gap-6 bg-black/90",
+            onclick: move |_| on_close.call(()),
+
+            span { class: "text-[10px] font-semibold uppercase tracking-[3px] text-muted-foreground",
+                "Tuner"
+            }
+            // The note, huge — the only thing that matters from stage distance.
+            span {
+                class: "text-[96px] font-bold leading-none",
+                style: if in_tune { "color: #22c55e;" } else if r.active { "color: #e4e4e7;" } else { "color: #3f3f46;" },
+                if r.active { "{r.note}" } else { "—" }
+            }
+            // Cents scale: center line = in tune, needle shows offset.
+            div { class: "relative w-[420px] max-w-[80vw] h-10",
+                // Scale line + center mark.
+                div { class: "absolute inset-x-0 top-1/2 h-px bg-zinc-700" }
+                div { class: "absolute left-1/2 top-1 bottom-1 w-px bg-zinc-500" }
+                // Needle.
+                if r.active {
+                    div {
+                        class: "absolute top-0 bottom-0 w-1 rounded transition-all duration-75",
+                        style: "left: {needle_pct}%; background-color: {needle_color};",
+                    }
+                }
+            }
+            span { class: "text-sm font-mono text-muted-foreground",
+                if r.active {
+                    {format!("{:+.0} cents · {:.1} Hz", r.cents, r.freq_hz)}
+                } else {
+                    "listening…"
+                }
+            }
+            span { class: "text-xs text-muted-foreground/60", "tap anywhere to close" }
         }
     }
 }

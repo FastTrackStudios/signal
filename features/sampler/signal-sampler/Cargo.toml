@@ -61,6 +61,9 @@ arc-swap    = "1.7"
 # restores a hosted CLAP/VST3 plugin's saved parameters.
 base64      = "0.22"
 hound       = "3.5"
+# Content-hash NAM models to key the loudness-calibration cache (matches
+# signal-nam's SHA-256 file identity).
+sha2        = "0.10"
 # FLAC decode for .signalpack samples. Primary path is symphonia (faster on
 # 24-bit); claxon is kept as a correctness fallback. See `load_flac_bytes`:
 # symphonia rejects our streams' short final block (STREAMINFO min<max read as

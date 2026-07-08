@@ -85,8 +85,35 @@ impl NamProcessor {
 
     /// Model loudness in dB (modern format), if present. Used to level-match
     /// models across a swap so "Clean" and "Lead" don't jump in volume.
+    ///
+    /// This is the model's *declared* loudness metadata — often missing or
+    /// inconsistent between models. Prefer [`measured_loudness`](Self::measured_loudness)
+    /// for the level-match guarantee; this is the fallback.
     pub fn loudness(&self) -> Option<f64> {
         self.model.loudness()
+    }
+
+    /// The analog input level (dBu) the model was captured at — the level that a
+    /// 0 dBFS signal represents at the modeled gear's input (`.nam` v0.10+).
+    /// Feeds input-staging calibration so the model gets the drive it expects.
+    pub fn input_level(&self) -> Option<f64> {
+        self.model.input_level()
+    }
+
+    /// The analog output level (dBu) at which the model's 0 dBFS was recorded
+    /// (`.nam` v0.10+). Informational here — uniform output volume is handled by
+    /// LUFS makeup, not by restoring the captured analog level.
+    pub fn output_level(&self) -> Option<f64> {
+        self.model.output_level()
+    }
+
+    /// Measure this model's integrated loudness (LUFS) by running the shared DI
+    /// reference through it, cache-first. Off the hot path. Re-resets the model
+    /// to `(self.sample_rate, max_block)` afterward so it stays live-ready.
+    /// Returns `None` if the model produced silence (no reliable measurement).
+    pub fn measured_loudness(&mut self, max_block: usize) -> Option<f64> {
+        let path = std::path::PathBuf::from(&self.model_path);
+        crate::nam_calibrate::measured_loudness(&mut self.model, &path, self.sample_rate, max_block)
     }
 
     /// Re-prepare the model at a new sample rate / block size. Resets

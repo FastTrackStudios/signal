@@ -494,11 +494,17 @@ pub struct SlotInfo {
     pub display_name: String,
     /// Per-block display names, in order.
     pub blocks: Vec<String>,
-    /// Loudness (dB) of the chain's first NAM block, if declared — used for
-    /// level-matching across patches.
+    /// Loudness (LUFS) of the chain's first NAM block — the measured value from
+    /// the DI calibration pass when available, else declared metadata. Used to
+    /// level-match patches to a common target loudness.
     pub primary_loudness: Option<f64>,
     /// Expected sample rate of the chain's first NAM block, if declared.
     pub primary_expected_sr: Option<f64>,
+    /// Captured analog input level (dBu) of the chain's first NAM block, if
+    /// declared — drives input-staging calibration.
+    pub primary_input_level_dbu: Option<f64>,
+    /// Captured analog output level (dBu) of the chain's first NAM block.
+    pub primary_output_level_dbu: Option<f64>,
 }
 
 /// An enumerated audio device — name, channel count, native sample rate.
@@ -705,11 +711,38 @@ pub fn native_dsp_available(block_type: BlockType) -> bool {
     crate::native::native_dsp_available(block_type)
 }
 
+/// A built, prepared chain block plus the level metadata the rig needs to
+/// level-match and input-stage it. Non-NAM blocks leave the NAM-only fields
+/// `None`.
+pub(crate) struct BuiltBlock {
+    pub boxed: Box<dyn PluginInstance>,
+    pub display_name: String,
+    /// Loudness (LUFS) used for level-matching: the **measured** value from the
+    /// DI calibration pass when available, else the model's declared metadata.
+    pub loudness: Option<f64>,
+    pub expected_sr: Option<f64>,
+    /// Captured analog input level (dBu) for input-staging calibration.
+    pub input_level_dbu: Option<f64>,
+    /// Captured analog output level (dBu). Informational.
+    pub output_level_dbu: Option<f64>,
+}
+
+impl BuiltBlock {
+    /// A block with no level metadata (cab IR / plugin / sample / native).
+    fn plain(boxed: Box<dyn PluginInstance>, display_name: String) -> Self {
+        Self {
+            boxed,
+            display_name,
+            loudness: None,
+            expected_sr: None,
+            input_level_dbu: None,
+            output_level_dbu: None,
+        }
+    }
+}
+
 /// Build a prepared box for one [`RigBlock`] at `sample_rate`.
-pub(crate) fn build_block(
-    block: &RigBlock,
-    sample_rate: u32,
-) -> Result<(Box<dyn PluginInstance>, String, Option<f64>, Option<f64>), String> {
+pub(crate) fn build_block(block: &RigBlock, sample_rate: u32) -> Result<BuiltBlock, String> {
     // Reject implementations that don't fit the block type (e.g. NAM on a Delay)
     // before touching a loader.
     block.validate()?;
@@ -727,14 +760,26 @@ pub(crate) fn build_block(
                 );
             }
         }
-        let loud = nam.loudness();
+        // Measure loudness ourselves (cache-first) so level-matching is reliable
+        // even when the model has no/incorrect `loudness` metadata; fall back to
+        // the declared value only if measurement produced silence.
+        let loud = nam.measured_loudness(MAX_BLOCK).or_else(|| nam.loudness());
         let exp_sr = nam.expected_sample_rate();
+        let input_level_dbu = nam.input_level();
+        let output_level_dbu = nam.output_level();
         let dn = nam.display_name.clone();
-        Ok((Box::new(nam), dn, loud, exp_sr))
+        Ok(BuiltBlock {
+            boxed: Box::new(nam),
+            display_name: dn,
+            loudness: loud,
+            expected_sr: exp_sr,
+            input_level_dbu,
+            output_level_dbu,
+        })
     } else if block.is_cab_ir() {
         let conv = Convolver::load(&block.ir)?;
         let dn = conv.display_name.clone();
-        Ok((Box::new(conv), format!("{dn} (cab)"), None, None))
+        Ok(BuiltBlock::plain(Box::new(conv), format!("{dn} (cab)")))
     } else if block.is_plugin() {
         // Hosted CLAP/VST3: go through daw's own plugin loader, which returns a
         // `Box<dyn PluginInstance>` ready to drop straight into the FX chain —
@@ -758,7 +803,7 @@ pub(crate) fn build_block(
             }
         }
         let dn = plugin.descriptor().name;
-        Ok((plugin, format!("{dn} (plugin)"), None, None))
+        Ok(BuiltBlock::plain(plugin, format!("{dn} (plugin)")))
     } else if block.is_sample() {
         // Sample library → SampleEngine wrapped as an instrument, same as the
         // sampler TUI's loading path (PlayerPatch::load + SampleEngine::new).
@@ -834,7 +879,7 @@ pub(crate) fn build_block(
             tracing::warn!(err = %err, "failed to spawn sample block preload thread");
         }
         let inst = crate::SamplerInstrument::new(engine);
-        Ok((Box::new(inst), format!("{name} (sample)"), None, None))
+        Ok(BuiltBlock::plain(Box::new(inst), format!("{name} (sample)")))
     } else {
         // Native implementation: built-in DSP from the native registry
         // (synth blocks + the built-in FX in `signal-fx`). `native_dsp_available`
@@ -849,7 +894,7 @@ pub(crate) fn build_block(
         inst.prepare(sample_rate as f64, FX_PREPARE_BLOCK)
             .map_err(|e| format!("prepare native {:?}: {e}", block.block_type))?;
         let dn = inst.descriptor().name;
-        Ok((inst, format!("{dn} (native)"), None, None))
+        Ok(BuiltBlock::plain(inst, format!("{dn} (native)")))
     }
 }
 
@@ -1153,21 +1198,29 @@ impl GuitarRig {
         let mut ids = Vec::with_capacity(blocks.len());
         let mut primary_loudness = None;
         let mut primary_expected_sr = None;
+        let mut primary_input_level_dbu = None;
+        let mut primary_output_level_dbu = None;
+        // The first NAM block in the chain is the amp — its levels drive
+        // per-patch level-match + input staging, even if its loudness is unknown.
+        let mut primary_captured = false;
 
         for (i, b) in blocks.iter().enumerate() {
-            let (boxed, name, loud, exp_sr) = build_block(b, self.sample_rate)?;
-            if primary_loudness.is_none() && loud.is_some() {
-                primary_loudness = loud;
-                primary_expected_sr = exp_sr;
+            let built = build_block(b, self.sample_rate)?;
+            if !primary_captured && b.is_nam() {
+                primary_captured = true;
+                primary_loudness = built.loudness;
+                primary_expected_sr = built.expected_sr;
+                primary_input_level_dbu = built.input_level_dbu;
+                primary_output_level_dbu = built.output_level_dbu;
             }
-            names.push(name);
+            names.push(built.display_name);
             ids.push(
                 block_ids
                     .get(i)
                     .cloned()
                     .unwrap_or_else(|| default_block_id(b.asset_path())),
             );
-            boxes.push(Some(boxed));
+            boxes.push(Some(built.boxed));
         }
 
         let id = self.next_id;
@@ -1178,6 +1231,8 @@ impl GuitarRig {
             blocks: names,
             primary_loudness,
             primary_expected_sr,
+            primary_input_level_dbu,
+            primary_output_level_dbu,
         };
         self.slots.push(info.clone());
         self.swap.lock().unwrap().chains.insert(
@@ -1689,13 +1744,14 @@ mod tests {
     fn build_block_nam_produces_audio() {
         let fixture =
             std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/assets/amp_a.nam");
-        let Ok((mut boxed, name, _loud, _sr)) = build_block(
+        let Ok(built) = build_block(
             &RigBlock::nam(fixture.to_string_lossy().to_string()),
             48_000,
         ) else {
             eprintln!("skip: amp_a.nam fixture failed to load");
             return;
         };
+        let (mut boxed, name) = (built.boxed, built.display_name);
         assert!(!name.is_empty());
         assert!(boxed.is_prepared());
         const N: usize = 128;

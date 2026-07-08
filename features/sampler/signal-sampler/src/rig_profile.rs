@@ -347,10 +347,18 @@ pub struct ProfileRig {
     /// Global "time bypass": when on, every time/fx block (the Time module) on
     /// the active patch is bypassed. Re-applied on each `activate`.
     fx_bypass: bool,
-    /// Auto level-match patches from NAM loudness metadata.
+    /// Auto level-match patches from measured NAM loudness (LUFS).
     level_match: bool,
     /// Target loudness (dB) patches normalize toward when level-matching.
     target_loudness_db: f32,
+    /// Feed each NAM model the analog input level (dBu) it was captured at, so
+    /// its drive/tone is authentic. Off by default — needs a correct interface
+    /// calibration value to help rather than hurt.
+    calibrated_input: bool,
+    /// The interface's input calibration: the analog level (dBu) that equals
+    /// 0 dBFS at the DI input. Used with each model's `input_level` to compute
+    /// the pre-model calibration gain.
+    input_calibration_dbu: f32,
 }
 
 impl ProfileRig {
@@ -362,8 +370,12 @@ impl ProfileRig {
             active: None,
             stack_pos: Vec::new(),
             fx_bypass: false,
-            level_match: false,
+            level_match: true,
             target_loudness_db: -18.0,
+            calibrated_input: false,
+            // 12.0 dBu ≈ 0 dBFS is a common interface reference; the user should
+            // set their measured value (see NAM's calibration tutorial).
+            input_calibration_dbu: 12.0,
         }
     }
 
@@ -391,6 +403,34 @@ impl ProfileRig {
         if let Some(i) = self.active {
             self.activate(i);
         }
+    }
+
+    /// Enable/disable calibrated input staging (feed each model its captured
+    /// dBu input level). Re-applies to the active patch immediately.
+    pub fn set_calibrated_input(&mut self, on: bool) {
+        self.calibrated_input = on;
+        if let Some(i) = self.active {
+            self.activate(i);
+        }
+    }
+
+    pub fn is_calibrated_input(&self) -> bool {
+        self.calibrated_input
+    }
+
+    /// Set the interface's input calibration: the analog level (dBu) that equals
+    /// 0 dBFS at the DI input. Re-applies when calibrated input is on.
+    pub fn set_input_calibration_dbu(&mut self, dbu: f32) {
+        self.input_calibration_dbu = dbu;
+        if self.calibrated_input {
+            if let Some(i) = self.active {
+                self.activate(i);
+            }
+        }
+    }
+
+    pub fn input_calibration_dbu(&self) -> f32 {
+        self.input_calibration_dbu
     }
 
     /// Load a profile: uninstall any previous chains, pre-install every patch's
@@ -523,13 +563,26 @@ impl ProfileRig {
             return false;
         }
 
+        let slot = self.rig.slot_info(id);
         let mut output_trim = patch.output_trim_db;
         if self.level_match {
-            if let Some(loud) = self.rig.slot_info(id).and_then(|s| s.primary_loudness) {
+            if let Some(loud) = slot.as_ref().and_then(|s| s.primary_loudness) {
+                // Measured LUFS → makeup toward the common target so every amp,
+                // clean or high-gain, lands at the same average volume.
                 output_trim += self.target_loudness_db - loud as f32;
             }
         }
-        self.rig.set_input_trim_db(patch.input_trim_db);
+        let mut input_trim = patch.input_trim_db;
+        if self.calibrated_input {
+            // Pre-model gain so the model sees the analog level it was captured
+            // at (authentic drive); orthogonal to the output level-match.
+            let model_in = slot.as_ref().and_then(|s| s.primary_input_level_dbu);
+            input_trim += crate::nam_calibrate::input_calibration_db(
+                model_in,
+                self.input_calibration_dbu as f64,
+            );
+        }
+        self.rig.set_input_trim_db(input_trim);
         self.rig.set_output_trim_db(output_trim);
         self.rig.set_active(Some(id));
         self.active = Some(index);
@@ -552,7 +605,11 @@ impl ProfileRig {
         let real = patch.chain.iter().filter(|b| b.has_backend());
         for (block, id) in real.zip(live_ids.iter()) {
             if block.is_time_fx() {
-                self.rig.set_block_slot_bypass(id, self.fx_bypass);
+                // Releasing the global bypass must not resurrect blocks the
+                // patch keeps bypassed by configuration (e.g. an "extreme"
+                // DLY 2 / VERB 2 pair) — OR with the block's own state.
+                self.rig
+                    .set_block_slot_bypass(id, self.fx_bypass || block.bypassed);
             }
         }
     }
@@ -640,6 +697,28 @@ impl ProfileRig {
             *slot = target_pos;
         }
         self.activate_named(&patches[target_pos])
+    }
+
+    /// Jump stack `stack_idx`'s rotation cursor straight to `pos` and
+    /// activate that patch — the "pick a patch from a browser" path, keeping
+    /// the footswitch state consistent with what's audible.
+    pub fn activate_stack_at(&mut self, stack_idx: usize, pos: usize) -> bool {
+        let patch_name = {
+            let Some(profile) = self.profile.as_ref() else {
+                return false;
+            };
+            let Some(stack) = profile.stacks.get(stack_idx) else {
+                return false;
+            };
+            let Some(name) = stack.patches.get(pos) else {
+                return false;
+            };
+            name.clone()
+        };
+        if let Some(slot) = self.stack_pos.get_mut(stack_idx) {
+            *slot = pos;
+        }
+        self.activate_named(&patch_name)
     }
 
     /// Activate a patch by name (case-insensitive).
@@ -738,6 +817,30 @@ impl ProfileRig {
     /// [`GuitarRig::set_block_slot_bypass`].
     pub fn set_block_bypass(&self, block_id: &str, on: bool) -> bool {
         self.rig.set_block_slot_bypass(block_id, on)
+    }
+
+    /// Update the *configured* bypass of the active patch's block addressed by
+    /// live slot id — so the global FX-bypass cycle ([`apply_fx_bypass`]) and
+    /// re-activation restore the user's runtime toggles, not the profile's
+    /// build-time defaults. Engine state is untouched; pair with
+    /// [`set_block_bypass`](Self::set_block_bypass).
+    pub fn set_block_config_bypass(&mut self, block_id: &str, on: bool) {
+        let Some(active) = self.active else { return };
+        let Some(pos) = self
+            .rig
+            .active_block_ids()
+            .iter()
+            .position(|i| i == block_id)
+        else {
+            return;
+        };
+        if let Some(profile) = &mut self.profile {
+            if let Some(patch) = profile.patches.get_mut(active) {
+                if let Some(block) = patch.chain.iter_mut().filter(|b| b.has_backend()).nth(pos) {
+                    block.bypassed = on;
+                }
+            }
+        }
     }
 
     /// Set a named param on the active patch's block `block_id`. See

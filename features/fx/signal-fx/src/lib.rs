@@ -80,11 +80,55 @@ fn process_f64_inplace(
 
 // ── EQ ───────────────────────────────────────────────────────────────────────
 
-/// Native EQ block — wraps [`eq::EqChain`]. Starts flat (no bands) and passes
-/// audio through transparently until bands are configured (band editing is a
-/// later step). No controllable params yet.
+/// Bands in the full EQ (matches eq-ui's `NUM_BANDS`).
+pub const EQ_BANDS: usize = 24;
+/// Per-band fields, in wire order: used, on, freq, gain, q, shape.
+pub const EQ_FIELDS: usize = 6;
+
+/// Shape indices, matching eq-ui's `EqBandShape` ordering: 0 Bell,
+/// 1 LowShelf, 2 HighShelf, 3 LowCut, 4 HighCut, 5 Notch, 6 BandPass,
+/// 7 TiltShelf, 8 FlatTilt, 9 AllPass.
+fn eq_shape_to_filter(shape: u32) -> eq::FilterType {
+    match shape {
+        1 => eq::FilterType::LowShelf,
+        2 => eq::FilterType::HighShelf,
+        3 => eq::FilterType::Highpass,
+        4 => eq::FilterType::Lowpass,
+        5 => eq::FilterType::Notch,
+        6 => eq::FilterType::Bandpass,
+        7 => eq::FilterType::TiltShelf,
+        8 => eq::FilterType::FlatTilt,
+        9 => eq::FilterType::Allpass,
+        _ => eq::FilterType::Peak,
+    }
+}
+
+/// Param name for `(band, field)` — `b{band+1}_{used|on|freq|gain|q|shape}`.
+pub fn eq_param_name(band: usize, field: usize) -> String {
+    let f = ["used", "on", "freq", "gain", "q", "shape"][field];
+    format!("b{}_{}", band + 1, f)
+}
+
+fn eq_param_id_of(name: &str) -> Option<u32> {
+    let rest = name.strip_prefix('b')?;
+    let (num, field) = rest.split_once('_')?;
+    let band: usize = num.parse().ok()?;
+    if band == 0 || band > EQ_BANDS {
+        return None;
+    }
+    let fidx = ["used", "on", "freq", "gain", "q", "shape"]
+        .iter()
+        .position(|f| *f == field)?;
+    Some(((band - 1) * EQ_FIELDS + fidx) as u32)
+}
+
+/// Native EQ block — the full FTS-EQ engine: 24 dynamic bands over
+/// [`eq::EqChain`]'s Pro-Q ZPK pipeline, each with used/on/freq/gain/Q/shape
+/// (all ten eq-ui shapes). Bands start unused → transparent passthrough.
 pub struct NativeEq {
     eq: eq::EqChain,
+    /// (used, on) per band — a band renders only when both are set.
+    state: [(bool, bool); EQ_BANDS],
     prepared: bool,
     scratch_l: Vec<f64>,
     scratch_r: Vec<f64>,
@@ -92,18 +136,57 @@ pub struct NativeEq {
 
 impl NativeEq {
     pub fn new(sample_rate: f64) -> Self {
-        let mut eq = eq::EqChain::new();
-        eq.set_sample_rate(sample_rate.max(1.0));
+        let sample_rate = sample_rate.max(1.0);
+        let mut chain = eq::EqChain::new();
+        chain.set_sample_rate(sample_rate);
+        for _ in 0..EQ_BANDS {
+            let idx = chain.add_band();
+            if let Some(band) = chain.band_mut(idx) {
+                band.enabled = false; // unused until claimed
+                band.freq_hz = 1000.0;
+                band.gain_db = 0.0;
+                band.q = 0.707;
+            }
+            chain.update_band(idx);
+        }
         Self {
-            eq,
+            eq: chain,
+            state: [(false, false); EQ_BANDS],
             prepared: false,
             scratch_l: Vec::new(),
             scratch_r: Vec::new(),
         }
     }
 
-    /// Apply a build-time parameter by name (no-op — EQ has no scalar params).
-    pub fn set_named(&mut self, _name: &str, _value: f64) {}
+    fn set(&mut self, id: u32, v: f64) {
+        let (band, field) = ((id as usize) / EQ_FIELDS, (id as usize) % EQ_FIELDS);
+        if band >= EQ_BANDS {
+            return;
+        }
+        match field {
+            0 => self.state[band].0 = v >= 0.5,
+            1 => self.state[band].1 = v >= 0.5,
+            _ => {}
+        }
+        let (used, on) = self.state[band];
+        if let Some(b) = self.eq.band_mut(band) {
+            match field {
+                0 | 1 => b.enabled = used && on,
+                2 => b.freq_hz = v.clamp(10.0, 30000.0),
+                3 => b.gain_db = v.clamp(-30.0, 30.0),
+                4 => b.q = v.clamp(0.025, 40.0),
+                _ => b.filter_type = eq_shape_to_filter(v as u32),
+            }
+        }
+        self.eq.update_band(band);
+    }
+
+    /// Apply a parameter by name (`b{i}_{used|on|freq|gain|q|shape}`).
+    pub fn set_named(&mut self, name: &str, value: f64) {
+        if let Some(id) = eq_param_id_of(name) {
+            self.set(id, value);
+        }
+    }
 }
 
 impl PluginInstance for NativeEq {
@@ -111,7 +194,25 @@ impl PluginInstance for NativeEq {
         descriptor("signal.fx.eq", "EQ")
     }
     fn params(&mut self) -> Vec<PluginParamInfo> {
-        Vec::new()
+        (0..EQ_BANDS * EQ_FIELDS)
+            .map(|i| {
+                let (band, field) = (i / EQ_FIELDS, i % EQ_FIELDS);
+                let (min, max, default) = match field {
+                    0 | 1 => (0.0, 1.0, 0.0),
+                    2 => (10.0, 30000.0, 1000.0),
+                    3 => (-30.0, 30.0, 0.0),
+                    4 => (0.025, 40.0, 0.707),
+                    _ => (0.0, 9.0, 0.0),
+                };
+                PluginParamInfo {
+                    id: i as u32,
+                    name: eq_param_name(band, field),
+                    min,
+                    max,
+                    default,
+                }
+            })
+            .collect()
     }
     fn param_value(&mut self, _id: u32) -> Option<f64> {
         None
@@ -142,8 +243,11 @@ impl PluginInstance for NativeEq {
         in_r: &[f32],
         out_l: &mut [f32],
         out_r: &mut [f32],
-        _events: &PluginEvents<'_>,
+        events: &PluginEvents<'_>,
     ) -> Result<(), PluginError> {
+        for &(id, value) in events.params {
+            self.set(id, value);
+        }
         let eq = &mut self.eq;
         process_f64_inplace(
             &mut self.scratch_l,
@@ -788,5 +892,222 @@ fn descriptor(id: &str, name: &str) -> PluginDescriptor {
         vendor: "FTS".into(),
         version: String::new(),
         format: PluginFormat::Synthetic,
+    }
+}
+
+// ── Gain (Volume / Boost utility) ──────────────────────────────────────────
+
+const GAIN_PARAMS: &[ParamSpec] = &[ParamSpec { id: 0, name: "gain_db", min: -24.0, max: 24.0, default: 0.0 }];
+
+/// Native gain block — a clean dB trim (the "Boost" utility). Gain changes
+/// glide over ~10 ms so footswitch boosts never click.
+pub struct NativeGain {
+    target: f64,
+    current: f64,
+    coeff: f64,
+    prepared: bool,
+}
+
+impl NativeGain {
+    pub fn new(_sample_rate: f64) -> Self {
+        Self { target: 1.0, current: 1.0, coeff: 0.0, prepared: false }
+    }
+
+    fn set(&mut self, id: u32, v: f64) {
+        if id == 0 {
+            self.target = 10f64.powf(v.clamp(-24.0, 24.0) / 20.0);
+        }
+    }
+
+    pub fn set_named(&mut self, name: &str, value: f64) {
+        if let Some(id) = param_id(GAIN_PARAMS, name) {
+            self.set(id, value);
+        }
+    }
+}
+
+impl PluginInstance for NativeGain {
+    fn descriptor(&self) -> PluginDescriptor {
+        descriptor("signal.fx.gain", "Gain")
+    }
+    fn params(&mut self) -> Vec<PluginParamInfo> {
+        param_infos(GAIN_PARAMS)
+    }
+    fn param_value(&mut self, _id: u32) -> Option<f64> {
+        None
+    }
+    fn value_to_text(&mut self, _id: u32, _value: f64) -> Option<String> {
+        None
+    }
+    fn text_to_value(&mut self, _id: u32, _text: &str) -> Option<f64> {
+        None
+    }
+    fn latency(&mut self) -> u32 {
+        0
+    }
+    fn prepare(&mut self, sample_rate: f64, _block_size: u32) -> Result<(), PluginError> {
+        // One-pole toward the target with a ~10 ms time constant.
+        self.coeff = (-1.0 / (0.010 * sample_rate.max(1.0))).exp();
+        self.current = self.target;
+        self.prepared = true;
+        Ok(())
+    }
+    fn is_prepared(&self) -> bool {
+        self.prepared
+    }
+    fn process_block(
+        &mut self,
+        in_l: &[f32],
+        in_r: &[f32],
+        out_l: &mut [f32],
+        out_r: &mut [f32],
+        events: &PluginEvents<'_>,
+    ) -> Result<(), PluginError> {
+        for &(id, value) in events.params {
+            self.set(id, value);
+        }
+        let (t, c) = (self.target, self.coeff);
+        let mut g = self.current;
+        for i in 0..out_l.len() {
+            g = t + (g - t) * c;
+            out_l[i] = in_l.get(i).copied().unwrap_or(0.0) * g as f32;
+            out_r[i] = in_r.get(i).copied().unwrap_or(0.0) * g as f32;
+        }
+        self.current = g;
+        Ok(())
+    }
+    fn deactivate(&mut self) {
+        self.prepared = false;
+    }
+}
+
+// ── Gate ────────────────────────────────────────────────────────────────────
+
+const GATE_PARAMS: &[ParamSpec] = &[
+    ParamSpec { id: 0, name: "threshold", min: -90.0, max: 0.0, default: -50.0 },
+    ParamSpec { id: 1, name: "attack", min: 0.1, max: 50.0, default: 1.0 },
+    ParamSpec { id: 2, name: "release", min: 5.0, max: 500.0, default: 120.0 },
+];
+
+/// Native noise gate — peak-follower downward gate. Opens fast (attack),
+/// closes smoothly (release); full mute below threshold.
+pub struct NativeGate {
+    threshold: f64,
+    attack_ms: f64,
+    release_ms: f64,
+    env: f64,
+    gain: f64,
+    attack_coeff: f64,
+    release_coeff: f64,
+    env_coeff: f64,
+    sample_rate: f64,
+    prepared: bool,
+}
+
+impl NativeGate {
+    pub fn new(sample_rate: f64) -> Self {
+        let mut g = Self {
+            threshold: 10f64.powf(-50.0 / 20.0),
+            attack_ms: 1.0,
+            release_ms: 120.0,
+            env: 0.0,
+            gain: 0.0,
+            attack_coeff: 0.0,
+            release_coeff: 0.0,
+            env_coeff: 0.0,
+            sample_rate: sample_rate.max(1.0),
+            prepared: false,
+        };
+        g.update_coeffs();
+        g
+    }
+
+    fn update_coeffs(&mut self) {
+        let sr = self.sample_rate;
+        self.attack_coeff = (-1.0 / (self.attack_ms.max(0.1) / 1000.0 * sr)).exp();
+        self.release_coeff = (-1.0 / (self.release_ms.max(5.0) / 1000.0 * sr)).exp();
+        // Envelope follower decay ~30 ms.
+        self.env_coeff = (-1.0 / (0.030 * sr)).exp();
+    }
+
+    fn set(&mut self, id: u32, v: f64) {
+        match id {
+            0 => self.threshold = 10f64.powf(v.clamp(-90.0, 0.0) / 20.0),
+            1 => {
+                self.attack_ms = v;
+                self.update_coeffs();
+            }
+            2 => {
+                self.release_ms = v;
+                self.update_coeffs();
+            }
+            _ => {}
+        }
+    }
+
+    pub fn set_named(&mut self, name: &str, value: f64) {
+        if let Some(id) = param_id(GATE_PARAMS, name) {
+            self.set(id, value);
+        }
+    }
+}
+
+impl PluginInstance for NativeGate {
+    fn descriptor(&self) -> PluginDescriptor {
+        descriptor("signal.fx.gate", "Gate")
+    }
+    fn params(&mut self) -> Vec<PluginParamInfo> {
+        param_infos(GATE_PARAMS)
+    }
+    fn param_value(&mut self, _id: u32) -> Option<f64> {
+        None
+    }
+    fn value_to_text(&mut self, _id: u32, _value: f64) -> Option<String> {
+        None
+    }
+    fn text_to_value(&mut self, _id: u32, _text: &str) -> Option<f64> {
+        None
+    }
+    fn latency(&mut self) -> u32 {
+        0
+    }
+    fn prepare(&mut self, sample_rate: f64, _block_size: u32) -> Result<(), PluginError> {
+        self.sample_rate = sample_rate.max(1.0);
+        self.update_coeffs();
+        self.env = 0.0;
+        self.gain = 0.0;
+        self.prepared = true;
+        Ok(())
+    }
+    fn is_prepared(&self) -> bool {
+        self.prepared
+    }
+    fn process_block(
+        &mut self,
+        in_l: &[f32],
+        in_r: &[f32],
+        out_l: &mut [f32],
+        out_r: &mut [f32],
+        events: &PluginEvents<'_>,
+    ) -> Result<(), PluginError> {
+        for &(id, value) in events.params {
+            self.set(id, value);
+        }
+        for i in 0..out_l.len() {
+            let l = in_l.get(i).copied().unwrap_or(0.0);
+            let r = in_r.get(i).copied().unwrap_or(0.0);
+            let peak = l.abs().max(r.abs()) as f64;
+            // Peak follower: instant rise, ~30 ms fall.
+            self.env = if peak > self.env { peak } else { peak + (self.env - peak) * self.env_coeff };
+            let target = if self.env >= self.threshold { 1.0 } else { 0.0 };
+            let coeff = if target > self.gain { self.attack_coeff } else { self.release_coeff };
+            self.gain = target + (self.gain - target) * coeff;
+            out_l[i] = l * self.gain as f32;
+            out_r[i] = r * self.gain as f32;
+        }
+        Ok(())
+    }
+    fn deactivate(&mut self) {
+        self.prepared = false;
     }
 }
