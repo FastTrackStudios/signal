@@ -120,6 +120,8 @@ pub struct PerformanceModel {
     /// All setlist names; [`setlist_index`](Self::setlist_index) is active.
     pub setlists: Vec<String>,
     pub setlist_index: u32,
+    /// The whole song library (defaults) — pick-lists for set building.
+    pub library_songs: Vec<SongSlot>,
     /// The current song's section names (Intro, V1, Chorus, …).
     pub sections: Vec<String>,
     /// Index of the current section.
@@ -354,6 +356,29 @@ pub mod rig {
         /// Re-read the styx library from disk and rebuild the live rig —
         /// the hook for external edits (text editor, LLM, git).
         fn reload_library(&self);
+        /// Rename a pool preset (patch pointers follow).
+        fn rename_preset(&self, old: String, new_name: String);
+        /// Delete a pool preset — refused while any patch points at it.
+        fn delete_preset(&self, name: String);
+        /// Rename a patch (stack rotations follow). Rebuilds.
+        fn rename_patch(&self, old: String, new_name: String);
+        /// Delete a patch (removed from every stack). Rebuilds.
+        fn delete_patch(&self, name: String);
+        /// Rename a stack.
+        fn rename_stack(&self, old: String, new_name: String);
+        /// Delete a stack (its patches stay in the pool).
+        fn delete_stack(&self, name: String);
+        /// Add a song to the library with default key + tempo.
+        fn add_song(&self, name: String, key: String, bpm: u32);
+        /// Create an empty setlist.
+        fn add_setlist(&self, name: String);
+        /// Append a song to a setlist by index.
+        fn add_setlist_entry(&self, setlist: u32, song: String);
+        /// Remove an entry from a setlist by indices.
+        fn remove_setlist_entry(&self, setlist: u32, entry: u32);
+        /// Set the ACTIVE setlist entry's per-set overrides: empty key /
+        /// zero bpm fall back to the song's defaults.
+        fn set_setlist_entry(&self, entry: u32, key: String, bpm: u32);
         /// Tap tempo.
         fn tap_tempo(&self);
         /// Toggle a block's bypass (by id).

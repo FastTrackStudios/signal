@@ -862,6 +862,7 @@ fn build_perf_model(prig: &ProfileRig, def: &ProfileDef) -> PerformanceModel {
         song_index: 0,
         setlists: Vec::new(),
         setlist_index: 0,
+        library_songs: Vec::new(),
         sections: Vec::new(),
         section_index: 0,
         headphone: HeadphoneState::default(),
@@ -956,6 +957,17 @@ impl Rig for GuitarRigBackend {
                 .unwrap_or_default();
             m.setlists = self.setlists.lock().unwrap().iter().map(|s| s.name.clone()).collect();
             m.setlist_index = *self.setlist_index.lock().unwrap() as u32;
+            m.library_songs = self
+                .songs_lib
+                .lock()
+                .unwrap()
+                .iter()
+                .map(|s| signal_guitar_proto::SongSlot {
+                    name: s.name.clone(),
+                    key: s.key.clone(),
+                    bpm: s.bpm,
+                })
+                .collect();
         }
         m.section_index = *self.section_index.lock().unwrap() as u32;
         m.headphone = self.headphone.lock().unwrap().clone();
@@ -1378,6 +1390,202 @@ impl Rig for GuitarRigBackend {
         };
         self.reload_rebuilt(rebuilt);
         self.spawn_drive_calibration();
+    }
+
+    fn rename_preset(&self, old: String, new_name: String) {
+        if new_name.trim().is_empty() {
+            return;
+        }
+        let rebuilt = {
+            let mut def = self.profile_def.lock().unwrap();
+            let Some(p) = def.presets.iter_mut().find(|p| p.name.eq_ignore_ascii_case(&old))
+            else {
+                return;
+            };
+            p.name = new_name.clone();
+            for patch in def.patches.iter_mut() {
+                if patch.preset.eq_ignore_ascii_case(&old) {
+                    patch.preset = new_name.clone();
+                }
+            }
+            RigLibrary::save_profile(&def);
+            let dps = self.drive_presets.lock().unwrap();
+            build_profile(&def, &dps)
+        };
+        tracing::info!("preset renamed: {old} → {new_name}");
+        self.reload_rebuilt(rebuilt);
+    }
+
+    fn delete_preset(&self, name: String) {
+        {
+            let mut def = self.profile_def.lock().unwrap();
+            if def.patches.iter().any(|p| p.preset.eq_ignore_ascii_case(&name)) {
+                tracing::warn!("delete_preset: '{name}' is in use by a patch — repoint first");
+                return;
+            }
+            def.presets.retain(|p| !p.name.eq_ignore_ascii_case(&name));
+            RigLibrary::save_profile(&def);
+        }
+        tracing::info!("preset deleted: {name}");
+        self.publish_state();
+    }
+
+    fn rename_patch(&self, old: String, new_name: String) {
+        if new_name.trim().is_empty() {
+            return;
+        }
+        let rebuilt = {
+            let mut def = self.profile_def.lock().unwrap();
+            let Some(p) = def.patches.iter_mut().find(|p| p.name.eq_ignore_ascii_case(&old))
+            else {
+                return;
+            };
+            p.name = new_name.clone();
+            for st in def.stacks.iter_mut() {
+                for slot in st.patches.iter_mut() {
+                    if slot.eq_ignore_ascii_case(&old) {
+                        *slot = new_name.clone();
+                    }
+                }
+            }
+            RigLibrary::save_profile(&def);
+            let dps = self.drive_presets.lock().unwrap();
+            build_profile(&def, &dps)
+        };
+        tracing::info!("patch renamed: {old} → {new_name}");
+        self.reload_rebuilt(rebuilt);
+    }
+
+    fn delete_patch(&self, name: String) {
+        let rebuilt = {
+            let mut def = self.profile_def.lock().unwrap();
+            let before = def.patches.len();
+            def.patches.retain(|p| !p.name.eq_ignore_ascii_case(&name));
+            if def.patches.len() == before {
+                return;
+            }
+            for st in def.stacks.iter_mut() {
+                st.patches.retain(|p| !p.eq_ignore_ascii_case(&name));
+            }
+            RigLibrary::save_profile(&def);
+            let dps = self.drive_presets.lock().unwrap();
+            build_profile(&def, &dps)
+        };
+        tracing::info!("patch deleted: {name}");
+        self.reload_rebuilt(rebuilt);
+    }
+
+    fn rename_stack(&self, old: String, new_name: String) {
+        if new_name.trim().is_empty() {
+            return;
+        }
+        {
+            let mut def = self.profile_def.lock().unwrap();
+            let Some(st) = def.stacks.iter_mut().find(|s| s.name.eq_ignore_ascii_case(&old))
+            else {
+                return;
+            };
+            st.name = new_name.clone();
+            RigLibrary::save_profile(&def);
+        }
+        tracing::info!("stack renamed: {old} → {new_name}");
+        self.publish_state();
+    }
+
+    fn delete_stack(&self, name: String) {
+        {
+            let mut def = self.profile_def.lock().unwrap();
+            def.stacks.retain(|s| !s.name.eq_ignore_ascii_case(&name));
+            RigLibrary::save_profile(&def);
+        }
+        tracing::info!("stack deleted: {name}");
+        self.publish_state();
+    }
+
+    fn add_song(&self, name: String, key: String, bpm: u32) {
+        if name.trim().is_empty() {
+            return;
+        }
+        {
+            let mut songs = self.songs_lib.lock().unwrap();
+            if songs.iter().any(|s| s.name.eq_ignore_ascii_case(&name)) {
+                return;
+            }
+            songs.push(SongDef {
+                name: name.clone(),
+                key: if key.is_empty() { "C".to_string() } else { key },
+                bpm: if bpm == 0 { 120 } else { bpm },
+                stack: 0,
+                sections: Vec::new(),
+            });
+            RigLibrary::save_songs(&songs);
+        }
+        tracing::info!("song added: {name}");
+        self.publish_state();
+    }
+
+    fn add_setlist(&self, name: String) {
+        if name.trim().is_empty() {
+            return;
+        }
+        {
+            let mut sets = self.setlists.lock().unwrap();
+            if sets.iter().any(|s| s.name.eq_ignore_ascii_case(&name)) {
+                return;
+            }
+            sets.push(SetlistDef { name: name.clone(), entries: Vec::new() });
+            RigLibrary::save_setlists(&sets);
+        }
+        tracing::info!("setlist added: {name}");
+        self.publish_state();
+    }
+
+    fn add_setlist_entry(&self, setlist: u32, song: String) {
+        {
+            let mut sets = self.setlists.lock().unwrap();
+            let Some(set) = sets.get_mut(setlist as usize) else { return };
+            set.entries.push(crate::profiles::SetlistEntryDef {
+                song: song.clone(),
+                key: String::new(),
+                bpm: 0,
+            });
+            RigLibrary::save_setlists(&sets);
+        }
+        tracing::info!("setlist {setlist}: added {song}");
+        self.publish_state();
+    }
+
+    fn remove_setlist_entry(&self, setlist: u32, entry: u32) {
+        {
+            let mut sets = self.setlists.lock().unwrap();
+            let Some(set) = sets.get_mut(setlist as usize) else { return };
+            if (entry as usize) < set.entries.len() {
+                set.entries.remove(entry as usize);
+            }
+            RigLibrary::save_setlists(&sets);
+        }
+        self.publish_state();
+    }
+
+    fn set_setlist_entry(&self, entry: u32, key: String, bpm: u32) {
+        {
+            let active = *self.setlist_index.lock().unwrap();
+            let mut sets = self.setlists.lock().unwrap();
+            let Some(e) = sets
+                .get_mut(active)
+                .and_then(|s| s.entries.get_mut(entry as usize))
+            else {
+                return;
+            };
+            e.key = key;
+            e.bpm = bpm;
+            RigLibrary::save_setlists(&sets);
+        }
+        // Re-recall if the edited entry is the current song (tempo change).
+        if *self.song_index.lock().unwrap() == entry as usize {
+            self.recall_song(entry as usize);
+        }
+        self.publish_state();
     }
 
     fn capture_di_reference(&self, seconds: u32) {
