@@ -8,13 +8,11 @@
 //! same building blocks.
 
 use dioxus::prelude::*;
-use lumen_blocks::components::button::{Button, ButtonVariant};
 
 use signal_guitar_proto::AudioPrefs;
 use signal_guitar_proto::audio::AudioSettingsClient;
 use signal_guitar_proto::rig::RigClient;
 
-use crate::meters::MeterPair;
 use crate::perform::PerformGrid;
 use crate::settings::{AudioSettingsBridge, AudioSettingsModal};
 use crate::state::use_rig_state;
@@ -198,84 +196,86 @@ pub fn GuitarRigRemote() -> Element {
         div { class: "flex flex-col h-full bg-background text-foreground",
             // Top bar
             header {
-                class: "flex items-center gap-2 px-3 py-2 border-b border-border bg-card",
+                class: "flex items-center gap-2 px-2 py-1.5 border-b border-border bg-card",
 
                 // Sidebar toggles bookend the bar: presets left, songs right.
-                Button {
-                    variant: if left_open() { ButtonVariant::Secondary } else { ButtonVariant::Ghost },
-                    is_icon_button: true,
-                    aria_label: "Toggle preset sidebar".to_string(),
-                    on_click: move |_| left_open.toggle(),
+                button {
+                    class: if left_open() {
+                        "flex items-center justify-center w-7 h-7 rounded-md bg-accent text-accent-foreground text-sm"
+                    } else {
+                        "flex items-center justify-center w-7 h-7 rounded-md border border-border text-muted-foreground hover:text-foreground text-sm"
+                    },
+                    title: "Preset sidebar",
+                    onclick: move |_| left_open.toggle(),
                     "☰"
                 }
 
-                // Status dot: pulsing green while audio runs, still red when not.
-                span {
-                    class: if running {
-                        "w-2.5 h-2.5 rounded-full ml-1 animate-pulse"
-                    } else {
-                        "w-2.5 h-2.5 rounded-full ml-1"
-                    },
-                    style: if running {
-                        "background-color: #22c55e;"
-                    } else {
-                        "background-color: #ef4444;"
-                    },
-                    title: if running { "audio running" } else { "audio stopped" },
-                }
-                div { class: "flex flex-col mr-2",
-                    span { class: "text-[10px] font-semibold uppercase tracking-[2px] text-muted-foreground",
-                        "Guitar Rig"
+                // Identity block: status dot + rig/profile stack.
+                div { class: "flex items-center gap-2 ml-1 mr-1",
+                    span {
+                        class: if running {
+                            "w-2 h-2 rounded-full animate-pulse flex-shrink-0"
+                        } else {
+                            "w-2 h-2 rounded-full flex-shrink-0"
+                        },
+                        style: if running {
+                            "background-color: #22c55e;"
+                        } else {
+                            "background-color: #ef4444;"
+                        },
+                        title: if running { "audio running" } else { "audio stopped" },
                     }
-                    span { class: "text-sm font-bold",
-                        if !profile.is_empty() { "{profile}" } else { "— no profile —" }
+                    div { class: "flex flex-col leading-none gap-0.5",
+                        span { class: "text-[9px] font-semibold uppercase tracking-[2px] text-muted-foreground",
+                            "Guitar Rig"
+                        }
+                        span { class: "text-sm font-bold leading-none",
+                            if !profile.is_empty() { "{profile}" } else { "— no profile —" }
+                        }
                     }
                 }
 
                 // Active-patch lens — tinted by the active stack's color.
                 div {
-                    class: "flex items-center rounded-full px-3 py-1 ml-1 shadow-inner",
+                    class: "flex items-center rounded-md px-2.5 py-1",
                     style: "background-color: {lens_bg}; color: {lens_fg};",
                     span { class: "text-xs font-bold tracking-wide whitespace-nowrap", "{lens_label}" }
                 }
 
-                // View switcher: Routing | Control | Perform | Setlist.
-                div { class: "flex items-center rounded-md border border-border overflow-hidden",
-                    Button {
-                        variant: if mode() == Mode::Routing { ButtonVariant::Secondary } else { ButtonVariant::Ghost },
-                        on_click: move |_| mode.set(Mode::Routing),
-                        "Routing"
-                    }
-                    Button {
-                        variant: if mode() == Mode::Control { ButtonVariant::Secondary } else { ButtonVariant::Ghost },
-                        on_click: move |_| mode.set(Mode::Control),
-                        "Control"
-                    }
-                    Button {
-                        variant: if mode() == Mode::Perform { ButtonVariant::Secondary } else { ButtonVariant::Ghost },
-                        on_click: move |_| mode.set(Mode::Perform),
-                        "Perform"
-                    }
-                    Button {
-                        variant: if mode() == Mode::Setlist { ButtonVariant::Secondary } else { ButtonVariant::Ghost },
-                        on_click: move |_| mode.set(Mode::Setlist),
-                        "Setlist"
+                // View switcher — one segmented control.
+                div { class: "flex items-center rounded-md border border-border bg-background/40 p-0.5 gap-0.5 ml-1",
+                    for (m, label) in [
+                        (Mode::Routing, "Routing"),
+                        (Mode::Control, "Control"),
+                        (Mode::Perform, "Perform"),
+                        (Mode::Setlist, "Setlist"),
+                    ] {
+                        button {
+                            key: "{label}",
+                            class: if mode() == m {
+                                "rounded px-2.5 py-1 text-xs font-semibold bg-accent text-accent-foreground"
+                            } else {
+                                "rounded px-2.5 py-1 text-xs text-muted-foreground hover:text-foreground"
+                            },
+                            onclick: move |_| mode.set(m),
+                            "{label}"
+                        }
                     }
                 }
 
                 div { class: "flex-1" }
 
-                // Global switch states — visible in every mode, not just Perform.
+                // Global switch states — visible in every mode.
                 if perf_now.fx_bypass {
                     span {
-                        class: "text-[10px] font-bold uppercase tracking-wider rounded px-1.5 py-0.5 mr-1",
+                        class: "text-[10px] font-bold uppercase tracking-wider rounded px-1.5 py-0.5",
                         style: "background-color: #ec4899; color: #ffffff;",
                         "FX off"
                     }
                 }
                 if perf_now.boost_db != 0.0 {
                     span {
-                        class: "text-[10px] font-bold uppercase tracking-wider rounded px-1.5 py-0.5 mr-1",
+                        class: "text-[10px] font-bold uppercase tracking-wider rounded px-1.5 py-0.5",
                         style: "background-color: #fafafa; color: #0a0a0a;",
                         if perf_now.boost_db < 0.0 {
                             "Cut −{-perf_now.boost_db as i32} dB"
@@ -285,24 +285,25 @@ pub fn GuitarRigRemote() -> Element {
                     }
                 }
 
-                if connected {
-                    div { class: "flex items-center gap-2 mr-2",
-                        MeterPair { input: state.in_level.cloned(), output: state.out_level.cloned() }
-                    }
-                }
-
                 crate::control::MidiMonitorButton {}
 
-                Button {
-                    variant: if audio_open() { ButtonVariant::Secondary } else { ButtonVariant::Ghost },
-                    on_click: move |_| audio_open.toggle(),
+                button {
+                    class: if audio_open() {
+                        "flex items-center justify-center h-7 px-2.5 rounded-md bg-accent text-accent-foreground text-xs font-semibold"
+                    } else {
+                        "flex items-center justify-center h-7 px-2.5 rounded-md border border-border text-muted-foreground hover:text-foreground text-xs font-semibold"
+                    },
+                    onclick: move |_| audio_open.toggle(),
                     "Audio"
                 }
-                Button {
-                    variant: if right_open() { ButtonVariant::Secondary } else { ButtonVariant::Ghost },
-                    is_icon_button: true,
-                    aria_label: "Toggle songs sidebar".to_string(),
-                    on_click: move |_| right_open.toggle(),
+                button {
+                    class: if right_open() {
+                        "flex items-center justify-center w-7 h-7 rounded-md bg-accent text-accent-foreground text-sm"
+                    } else {
+                        "flex items-center justify-center w-7 h-7 rounded-md border border-border text-muted-foreground hover:text-foreground text-sm"
+                    },
+                    title: "Songs sidebar",
+                    onclick: move |_| right_open.toggle(),
                     "♪"
                 }
             }

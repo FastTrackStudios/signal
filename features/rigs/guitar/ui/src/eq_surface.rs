@@ -24,11 +24,12 @@ use signal_guitar_proto::LiveBlock;
 use signal_guitar_proto::rig::RigClient;
 
 const NUM_BANDS: usize = 24;
-const W: f64 = 480.0;
-const H: f64 = 270.0; // 16:9
-const MIN_FREQ: f64 = 10.0;
-const MAX_FREQ: f64 = 30000.0;
-const DB_RANGE: f64 = 30.0;
+const H: f64 = 270.0; // viewBox height; width follows the panel's aspect
+const MIN_FREQ: f64 = 10.0; // "0 Hz" — log axis floor
+const MAX_FREQ: f64 = 22_050.0;
+
+/// Vertical resolution options (± dB) — a view feature, default ±6.
+const DB_RANGES: [f64; 3] = [3.0, 6.0, 12.0];
 const SAMPLE_RATE: f64 = 48000.0;
 const HIT_RADIUS: f64 = 16.0;
 
@@ -99,9 +100,17 @@ pub fn EqProSurface(block: LiveBlock, spectrum: Vec<f32>) -> Element {
     let mut selected = use_signal(|| None::<usize>);
     let mut dragging = use_signal(|| None::<usize>);
     let mut svg_el = use_signal(|| None::<std::rc::Rc<MountedData>>);
+    // View vertical resolution: ±3 / ±6 / ±12 dB (default ±6).
+    let mut range_db = use_signal(|| 6.0f64);
+    // The viewBox width follows the panel's real aspect so drawing units
+    // stay square (nodes are circles, no stretch) while the graph fills
+    // every horizontal pixel: 10 Hz at the far left, 22 kHz at the right.
+    let mut vb_w = use_signal(|| 480.0f64);
 
     let bands = bands_of(&block);
-    let mapper = GraphMapper::new(MIN_FREQ, MAX_FREQ, DB_RANGE, W, H, 0.0);
+    let db_range = range_db();
+    let w = vb_w();
+    let mapper = GraphMapper::new(MIN_FREQ, MAX_FREQ, db_range, w, H, 0.0);
 
     // Curves + grid + labels — straight from eq-ui's generators.
     let curves = generate_all_eq_curves(
@@ -109,14 +118,14 @@ pub fn EqProSurface(block: LiveBlock, spectrum: Vec<f32>) -> Element {
         SAMPLE_RATE,
         MIN_FREQ,
         MAX_FREQ,
-        DB_RANGE,
+        db_range,
         0.0,
-        W,
+        w,
         H,
         128,
     );
-    let grid = generate_grid_elements(0.0, W, H, MIN_FREQ, MAX_FREQ, DB_RANGE);
-    let freq_labels = generate_freq_labels(0.0, W, H, MIN_FREQ, MAX_FREQ);
+    let grid = generate_grid_elements(0.0, w, H, MIN_FREQ, MAX_FREQ, db_range);
+    let freq_labels = generate_freq_labels(0.0, w, H, MIN_FREQ, MAX_FREQ);
 
     // Input spectrum fill (20 Hz–20 kHz log bins → mapper space).
     let spec_poly = if spectrum.is_empty() {
@@ -135,13 +144,14 @@ pub fn EqProSurface(block: LiveBlock, spectrum: Vec<f32>) -> Element {
     };
 
     // Pointer → graph coordinates (svg is scaled; measure the element).
+    let gw = w;
     let to_graph = move |coords: dioxus::html::geometry::ElementPoint,
                          el: Option<std::rc::Rc<MountedData>>|
           -> std::pin::Pin<Box<dyn std::future::Future<Output = Option<(f64, f64)>>>> {
         Box::pin(async move {
             let el = el?;
             let rect = el.get_client_rect().await.ok()?;
-            Some((coords.x / rect.width() * W, coords.y / rect.height() * H))
+            Some((coords.x / rect.width() * gw, coords.y / rect.height() * H))
         })
     };
 
@@ -153,12 +163,22 @@ pub fn EqProSurface(block: LiveBlock, spectrum: Vec<f32>) -> Element {
     let bands_for_wheel = bands.clone();
 
     rsx! {
-        div { class: "relative flex flex-col h-full min-h-0",
+        div { class: "relative flex flex-col h-full w-full min-h-0",
             svg {
                 class: "w-full flex-1 min-h-0 touch-none select-none",
-                view_box: "0 0 480 270",
+                view_box: "0 0 {w:.0} 270",
                 preserve_aspect_ratio: "none",
-                onmounted: move |e| svg_el.set(Some(e.data())),
+                onmounted: move |e| {
+                    let data = e.data();
+                    svg_el.set(Some(data.clone()));
+                    spawn(async move {
+                        if let Ok(rect) = data.get_client_rect().await {
+                            if rect.height() > 1.0 {
+                                vb_w.set((H * rect.width() / rect.height()).max(120.0));
+                            }
+                        }
+                    });
+                },
 
                 // Add a band where the user double-clicks — shape inferred
                 // from position (eq-ui's rule).
@@ -176,7 +196,7 @@ pub fn EqProSurface(block: LiveBlock, spectrum: Vec<f32>) -> Element {
                             let Some(i) = free else { return };
                             let freq = mapper.x_to_freq(x).clamp(MIN_FREQ, MAX_FREQ);
                             let gain = mapper.y_to_db(y);
-                            let shape = filter_type_for_position(freq, gain, DB_RANGE);
+                            let shape = filter_type_for_position(freq, gain, db_range);
                             if let Some(r) = rig {
                                 let id = |f: &str| (block_id.clone(), format!("b{}_{f}", i + 1));
                                 let (bid, n) = id("freq");
@@ -345,6 +365,25 @@ pub fn EqProSurface(block: LiveBlock, spectrum: Vec<f32>) -> Element {
                                 }
                             }
                         }
+                    }
+                }
+            }
+
+            // Vertical-resolution selector (±3 / ±6 / ±12 dB), top-left.
+            div {
+                class: "absolute top-1 left-1 z-10 flex gap-0.5",
+                for r in DB_RANGES {
+                    button {
+                        class: if range_db() == r {
+                            "rounded-sm px-1 py-0 text-[8px] font-bold bg-accent text-accent-foreground"
+                        } else {
+                            "rounded-sm px-1 py-0 text-[8px] text-muted-foreground/70 hover:text-foreground border border-border/50"
+                        },
+                        onclick: move |e: MouseEvent| {
+                            e.stop_propagation();
+                            range_db.set(r);
+                        },
+                        {format!("±{}", r as u32)}
                     }
                 }
             }

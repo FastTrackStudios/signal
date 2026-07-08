@@ -372,7 +372,7 @@ pub fn MidiMonitorButton() -> Element {
     let seen = !entries.is_empty();
     rsx! {
         button {
-            class: "relative flex items-center justify-center w-8 h-8 rounded-md border border-border text-muted-foreground hover:text-foreground",
+            class: "relative flex items-center justify-center w-7 h-7 rounded-md border border-border text-muted-foreground hover:text-foreground",
             title: "MIDI monitor",
             onclick: move |_| open.set(true),
             span { class: "text-[10px] font-bold tracking-tight", "MIDI" }
