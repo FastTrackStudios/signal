@@ -86,6 +86,8 @@ pub struct GuitarRigBackend {
     section_index: Arc<Mutex<usize>>,
     /// Drive block presets (NAM option sets) — library-backed.
     drive_presets: Arc<Mutex<Vec<DrivePresetDef>>>,
+    /// Fullscreen tuner overlay state (footswitch-driven, model-synced).
+    tuner_visible: Arc<Mutex<bool>>,
     /// Headphone-cue module state (volume/self-mix staged; mute applied).
     headphone: Arc<Mutex<HeadphoneState>>,
     /// Master output trim (dB) — applied with the patch base + mute.
@@ -126,6 +128,7 @@ impl GuitarRigBackend {
             song_index: Arc::new(Mutex::new(0)),
             section_index: Arc::new(Mutex::new(0)),
             drive_presets: Arc::new(Mutex::new(lib.drive_presets)),
+            tuner_visible: Arc::new(Mutex::new(false)),
             headphone: Arc::new(Mutex::new(HeadphoneState::default())),
             master_trim: Arc::new(Mutex::new(0.0)),
             midi_log: Arc::new(Mutex::new(Vec::new())),
@@ -454,7 +457,7 @@ impl GuitarRigBackend {
             1 => Rig::toggle_fx(self),
             2 => Rig::next_song(self),
             3 => Rig::toggle_boost(self),
-            4 => tracing::info!("footswitch: tuner (UI-side — no core action)"),
+            4 => Rig::toggle_tuner(self),
             _ => {}
         }
     }
@@ -945,6 +948,7 @@ fn build_perf_model(prig: &ProfileRig, def: &ProfileDef) -> PerformanceModel {
         setlists: Vec::new(),
         setlist_index: 0,
         library_songs: Vec::new(),
+        tuner_visible: false,
         sections: Vec::new(),
         section_index: 0,
         headphone: HeadphoneState::default(),
@@ -1039,6 +1043,7 @@ impl Rig for GuitarRigBackend {
                 .unwrap_or_default();
             m.setlists = self.setlists.lock().unwrap().iter().map(|s| s.name.clone()).collect();
             m.setlist_index = *self.setlist_index.lock().unwrap() as u32;
+            m.tuner_visible = *self.tuner_visible.lock().unwrap();
             m.library_songs = self
                 .songs_lib
                 .lock()
@@ -1667,6 +1672,24 @@ impl Rig for GuitarRigBackend {
         if *self.song_index.lock().unwrap() == entry as usize {
             self.recall_song(entry as usize);
         }
+        self.publish_state();
+    }
+
+    fn toggle_tuner(&self) {
+        let shown = {
+            let mut t = self.tuner_visible.lock().unwrap();
+            *t = !*t;
+            *t
+        };
+        // Tuning is silent: mute the instrument INTO the chain (not the
+        // output) so delay/reverb trails ring out naturally underneath.
+        if let Ok(guard) = self.rig.lock() {
+            if let Some(prig) = guard.as_ref() {
+                prig.rig().set_input_mute(shown);
+            }
+        }
+        tracing::info!("tuner overlay {} (input {})", if shown { "shown" } else { "hidden" },
+            if shown { "muted" } else { "live" });
         self.publish_state();
     }
 

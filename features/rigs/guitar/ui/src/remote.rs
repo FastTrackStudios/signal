@@ -44,7 +44,6 @@ pub fn GuitarRigRemote() -> Element {
     let mut audio_open = use_signal(|| false);
     let mut left_open = use_signal(|| true);
     let mut right_open = use_signal(|| true);
-    let mut tuner_open = use_signal(|| false);
 
     // Device lists, fetched once over the settings service.
     let devices = use_resource({
@@ -492,8 +491,19 @@ pub fn GuitarRigRemote() -> Element {
             }
         }
 
-        if tuner_open() {
-            crate::perform::TunerOverlay { on_close: move |_| tuner_open.set(false) }
+        // Model-driven: the footswitch (hold tap-tempo), any remote, or
+        // the grid tile toggles it for everyone.
+        if perf_now.tuner_visible {
+            crate::perform::TunerOverlay {
+                on_close: {
+                    let rig = rig.clone();
+                    move |_| {
+                        if let Some(r) = rig.clone() {
+                            spawn(async move { let _ = r.toggle_tuner().await; });
+                        }
+                    }
+                },
+            }
         }
 
         // Audio settings modal

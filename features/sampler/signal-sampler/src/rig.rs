@@ -527,9 +527,9 @@ struct InputMeterShared {
     /// Per-channel peaks (linear, `f32` bits) — stereo metering.
     peak_l: AtomicU32,
     peak_r: AtomicU32,
-    /// When set, the probe writes silence (clean-DI bypass is handled by
-    /// swapping the chain out, but the probe still meters the live input).
-    _reserved: AtomicBool,
+    /// When set, the probe feeds silence into the chain (tuner engaged):
+    /// meters + tuner window still see the instrument, trails ring out.
+    input_muted: AtomicBool,
     /// Most-recent mono input samples (L+R averaged), newest-last, for the
     /// tuner's pitch detection. Written once per block by the probe; read
     /// (cloned) by the control thread. Capacity is fixed at `TUNER_WINDOW`.
@@ -683,14 +683,17 @@ impl PluginInstance for InputProbe {
         _events: &PluginEvents<'_>,
     ) -> Result<(), PluginError> {
         let frames = out_l.len().min(out_r.len()).min(in_l.len()).min(in_r.len());
+        let muted = self.shared.input_muted.load(Ordering::Relaxed);
         let (mut pk_l, mut pk_r) = (0.0f32, 0.0f32);
         // Reused mono scratch for the tuner window push (off the steady-state
         // alloc path after the first block).
         self.mono.clear();
         self.mono.reserve(frames);
         for i in 0..frames {
-            out_l[i] = in_l[i];
-            out_r[i] = in_r[i];
+            // Muted: the chain gets silence (trails keep ringing) while
+            // the meters and the tuner still see the instrument.
+            out_l[i] = if muted { 0.0 } else { in_l[i] };
+            out_r[i] = if muted { 0.0 } else { in_r[i] };
             pk_l = pk_l.max(in_l[i].abs());
             pk_r = pk_r.max(in_r[i].abs());
             self.mono.push((in_l[i] + in_r[i]) * 0.5);
@@ -1482,6 +1485,12 @@ impl GuitarRig {
     /// Per-channel input peaks (linear) — stereo metering.
     pub fn input_peak_lr(&self) -> (f32, f32) {
         self.input_meter.load_lr()
+    }
+
+    /// Mute the instrument into the chain (tuner engaged). Metering and
+    /// pitch detection keep running; effect tails ring out.
+    pub fn set_input_mute(&self, muted: bool) {
+        self.input_meter.input_muted.store(muted, Ordering::Relaxed);
     }
 
     /// Arm a DI capture: the input probe records the next `samples` mono

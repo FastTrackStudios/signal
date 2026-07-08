@@ -122,6 +122,9 @@ pub struct PerformanceModel {
     pub setlist_index: u32,
     /// The whole song library (defaults) — pick-lists for set building.
     pub library_songs: Vec<SongSlot>,
+    /// Fullscreen tuner overlay — model-driven so the footswitch (hold
+    /// tap-tempo) and every remote stay in sync.
+    pub tuner_visible: bool,
     /// The current song's section names (Intro, V1, Chorus, …).
     pub sections: Vec<String>,
     /// Index of the current section.
@@ -379,6 +382,8 @@ pub mod rig {
         /// Set the ACTIVE setlist entry's per-set overrides: empty key /
         /// zero bpm fall back to the song's defaults.
         fn set_setlist_entry(&self, entry: u32, key: String, bpm: u32);
+        /// Toggle the fullscreen tuner overlay on every remote.
+        fn toggle_tuner(&self);
         /// Tap tempo.
         fn tap_tempo(&self);
         /// Toggle a block's bypass (by id).

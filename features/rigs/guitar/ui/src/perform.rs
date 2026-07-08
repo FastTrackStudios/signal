@@ -105,7 +105,7 @@ pub fn PerformGrid(
     on_select_song: Callback<usize>,
 ) -> Element {
     let stacks = model.stacks;
-    let mut tuner_open = use_signal(|| false);
+    let rig = use_hook(try_consume_context::<RigClient>);
     // The Song layer: switches 1/2 become Prev/Next, the middle shows the
     // setlist for fast scrolling, switch 5 exits. Entered by holding 3 or
     // tapping the Song tile.
@@ -187,7 +187,14 @@ pub fn PerformGrid(
             // Switch 10 (hold 5): the live tuner, right in the tile.
             LiveTunerTile {
                 switch_no: 10,
-                onclick: Callback::new(move |_: ()| tuner_open.set(true)),
+                onclick: Callback::new({
+                    let rig = rig.clone();
+                    move |_: ()| {
+                        if let Some(r) = rig.clone() {
+                            spawn(async move { let _ = r.toggle_tuner().await; });
+                        }
+                    }
+                }),
             }
 
             // ── Row B: the Song layer (while active) or switches 1–5 ──
@@ -268,14 +275,18 @@ pub fn PerformGrid(
             TapTempoTile {
                 tempo_bpm: model.tempo_bpm,
                 on_tap: on_tap_tempo,
-                on_hold: Callback::new(move |_: ()| tuner_open.set(true)),
+                on_hold: Callback::new({
+                    let rig = rig.clone();
+                    move |_: ()| {
+                        if let Some(r) = rig.clone() {
+                            spawn(async move { let _ = r.toggle_tuner().await; });
+                        }
+                    }
+                }),
             }
             }
         }
 
-        if tuner_open() {
-            TunerOverlay { on_close: move |_| tuner_open.set(false) }
-        }
     }
 }
 
