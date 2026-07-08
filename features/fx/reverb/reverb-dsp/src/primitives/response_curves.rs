@@ -64,11 +64,11 @@ pub fn resp5oct(x: f64) -> f64 {
 
 /// Convert dB to linear gain.
 pub fn db2gain(db: f64) -> f64 {
-    10.0_f64.powf(db * 0.05)
+    audiocore_dsp::db::db_to_linear(db)
 }
 
 /// Convert linear gain to dB.
 #[allow(dead_code)]
 pub fn gain2db(gain: f64) -> f64 {
-    gain.log10() * 20.0
+    audiocore_dsp::db::linear_to_db(gain)
 }

@@ -19,6 +19,7 @@ use crate::algorithm::{AlgorithmParams, ReverbAlgorithm};
 use crate::primitives::allpass::Allpass;
 use crate::primitives::modulated_allpass::ModulatedAllpass;
 use crate::primitives::one_pole::Lp1;
+use audiocore_dsp::dc_blocker::DcBlocker;
 use audiocore_dsp::delay_line::DelayLine;
 
 /// Lexicon 224-style plate.
@@ -43,6 +44,9 @@ pub struct PlateLexicon {
     loop_b_delay2: DelayLine,
 
     // Parameters
+    // DC blockers on the loop cross-feeds.
+    dc_a: DcBlocker,
+    dc_b: DcBlocker,
     decay: f64,
     s: f64, // sample rate scale factor
     sample_rate: f64,
@@ -140,6 +144,8 @@ impl PlateLexicon {
             loop_b_damp1,
             loop_b_ap2,
             loop_b_delay2: DelayLine::new(lb_d2_len + 1),
+            dc_a: DcBlocker::new(),
+            dc_b: DcBlocker::new(),
             decay: 0.7,
             s,
             sample_rate,
@@ -150,6 +156,8 @@ impl PlateLexicon {
 impl ReverbAlgorithm for PlateLexicon {
     fn reset(&mut self) {
         self.bandwidth.reset();
+        self.dc_a.reset();
+        self.dc_b.reset();
         for d in &mut self.input_diffuser {
             d.reset();
         }
@@ -222,8 +230,8 @@ impl ReverbAlgorithm for PlateLexicon {
 
         // Read cross-feed from end of each loop
         let s = self.s;
-        let fb_a = self.loop_b_delay2.read((2999.0 * s) as usize);
-        let fb_b = self.loop_a_delay2.read((2833.0 * s) as usize);
+        let fb_a = self.dc_a.tick(self.loop_b_delay2.read((2999.0 * s) as usize));
+        let fb_b = self.dc_b.tick(self.loop_a_delay2.read((2833.0 * s) as usize));
 
         // --- Loop A ---
         // AP1 (modulated, negative feedback — characteristic Lexicon)

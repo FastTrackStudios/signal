@@ -1,27 +1,29 @@
 //! Modulated allpass filter.
 //!
 //! Ported from CloudSeedCore ModulatedAllpass.h (MIT, Ghost Note Audio).
-//! Fixed-size delay buffer with sinusoidal delay-time modulation.
-//! Modulation parameters update every 8 samples for efficiency.
+//! The LFO target updates every 8 samples (as in CloudSeed) but the
+//! fractional delay ramps per-sample between updates and the buffer is
+//! read with cubic interpolation — no more whole-sample stair-stepping.
 
 use std::f64::consts::PI;
 
-/// Buffer size: 100ms at 192kHz.
-const DELAY_BUFFER_SIZE: usize = 19200;
+use audiocore_dsp::delay_line::DelayLine;
+
+/// Default capacity: 100ms at 48kHz. Resized by `set_sample_rate`.
+const DEFAULT_SAMPLE_RATE: f64 = 48000.0;
 /// Modulation recalculation rate.
 const MOD_UPDATE_RATE: u64 = 8;
+/// Buffer length in seconds (100ms covers CloudSeed diffuser delays).
+const BUFFER_SECONDS: f64 = 0.1;
 
 pub struct ModulatedAllpass {
-    buffer: Vec<f64>,
-    index: usize,
+    buffer: DelayLine,
     samples_processed: u64,
 
     // Modulation state
     mod_phase: f64,
-    delay_a: usize,
-    delay_b: usize,
-    gain_a: f64,
-    gain_b: f64,
+    current_delay: f64,
+    delay_step: f64,
 
     // Parameters
     pub sample_delay: usize,
@@ -35,14 +37,11 @@ pub struct ModulatedAllpass {
 impl ModulatedAllpass {
     pub fn new() -> Self {
         let mut ap = Self {
-            buffer: vec![0.0; DELAY_BUFFER_SIZE],
-            index: DELAY_BUFFER_SIZE - 1,
+            buffer: DelayLine::new((DEFAULT_SAMPLE_RATE * BUFFER_SECONDS) as usize),
             samples_processed: 0,
             mod_phase: 0.31, // Arbitrary initial phase
-            delay_a: 0,
-            delay_b: 0,
-            gain_a: 0.0,
-            gain_b: 0.0,
+            current_delay: 100.0,
+            delay_step: 0.0,
             sample_delay: 100,
             feedback: 0.5,
             mod_amount: 0.0,
@@ -61,8 +60,20 @@ impl ModulatedAllpass {
         ap
     }
 
+    /// Resize the buffer for the actual sample rate. Allocates; call from
+    /// setup, never from the audio tick.
+    pub fn set_sample_rate(&mut self, sample_rate: f64) {
+        let len = ((sample_rate * BUFFER_SECONDS) as usize).max(256);
+        if len > self.buffer.len() {
+            self.buffer = DelayLine::new(len);
+        }
+        self.samples_processed = 0;
+        self.current_delay = self.sample_delay as f64;
+        self.delay_step = 0.0;
+    }
+
     pub fn clear(&mut self) {
-        self.buffer.fill(0.0);
+        self.buffer.clear();
     }
 
     #[inline]
@@ -76,23 +87,9 @@ impl ModulatedAllpass {
 
     #[inline]
     fn tick_no_mod(&mut self, input: f64) -> f64 {
-        let mut delayed_idx = self.index as isize - self.sample_delay as isize;
-        if delayed_idx < 0 {
-            delayed_idx += DELAY_BUFFER_SIZE as isize;
-        }
-
-        let buf_out = self.buffer[delayed_idx as usize];
-        let in_val = input + buf_out * self.feedback;
-        self.buffer[self.index] = in_val;
-        let output = buf_out - in_val * self.feedback;
-
-        self.index += 1;
-        if self.index >= DELAY_BUFFER_SIZE {
-            self.index -= DELAY_BUFFER_SIZE;
-        }
-        self.samples_processed += 1;
-
-        output
+        let delay = self.sample_delay.min(self.buffer.len() - 2).max(1);
+        let buf_out = self.buffer.read(delay);
+        self.allpass_step(input, buf_out)
     }
 
     #[inline]
@@ -102,35 +99,26 @@ impl ModulatedAllpass {
             self.samples_processed = 0;
         }
 
+        self.current_delay += self.delay_step;
+        let max_delay = (self.buffer.len() - 4) as f64;
+        let pos = self.current_delay.clamp(1.0, max_delay);
+
         let buf_out = if self.interpolation_enabled {
-            let mut idx_a = self.index as isize - self.delay_a as isize;
-            let mut idx_b = self.index as isize - self.delay_b as isize;
-            if idx_a < 0 {
-                idx_a += DELAY_BUFFER_SIZE as isize;
-            }
-            if idx_b < 0 {
-                idx_b += DELAY_BUFFER_SIZE as isize;
-            }
-            self.buffer[idx_a as usize] * self.gain_a + self.buffer[idx_b as usize] * self.gain_b
+            self.buffer.read_cubic(pos)
         } else {
-            let mut idx_a = self.index as isize - self.delay_a as isize;
-            if idx_a < 0 {
-                idx_a += DELAY_BUFFER_SIZE as isize;
-            }
-            self.buffer[idx_a as usize]
+            self.buffer.read(pos as usize)
         };
 
-        let in_val = input + buf_out * self.feedback;
-        self.buffer[self.index] = in_val;
-        let output = buf_out - in_val * self.feedback;
-
-        self.index += 1;
-        if self.index >= DELAY_BUFFER_SIZE {
-            self.index -= DELAY_BUFFER_SIZE;
-        }
         self.samples_processed += 1;
+        self.allpass_step(input, buf_out)
+    }
 
-        output
+    /// Shared Schroeder allpass update: write `input + fb`, output `delayed - fb * written`.
+    #[inline]
+    fn allpass_step(&mut self, input: f64, buf_out: f64) -> f64 {
+        let in_val = input + buf_out * self.feedback;
+        self.buffer.write(in_val);
+        buf_out - in_val * self.feedback
     }
 
     fn update_mod(&mut self) {
@@ -143,15 +131,10 @@ impl ModulatedAllpass {
 
         // Prevent modulation from taking delay negative
         let effective_mod = self.mod_amount.min((self.sample_delay as f64) - 1.0);
-        let total_delay = self.sample_delay as f64 + effective_mod * modulation;
-        let total_delay = total_delay.max(1.0);
+        let target = (self.sample_delay as f64 + effective_mod * modulation).max(1.0);
 
-        self.delay_a = total_delay as usize;
-        self.delay_b = self.delay_a + 1;
-
-        let partial = total_delay - self.delay_a as f64;
-        self.gain_a = 1.0 - partial;
-        self.gain_b = partial;
+        // Spread the move over the next update window.
+        self.delay_step = (target - self.current_delay) / MOD_UPDATE_RATE as f64;
     }
 
     /// Convenience: set feedback coefficient.
@@ -161,12 +144,12 @@ impl ModulatedAllpass {
 
     /// Convenience: set delay in samples.
     pub fn set_delay(&mut self, samples: f64) {
-        self.sample_delay = (samples as usize).min(DELAY_BUFFER_SIZE - 2).max(1);
+        self.sample_delay = (samples as usize).min(self.buffer.len() - 2).max(1);
     }
 
     /// Convenience: set delay in integer samples.
     pub fn set_delay_samples(&mut self, samples: usize) {
-        self.sample_delay = samples.min(DELAY_BUFFER_SIZE - 2).max(1);
+        self.sample_delay = samples.min(self.buffer.len() - 2).max(1);
     }
 
     /// Convenience: set modulation rate and depth.
@@ -186,5 +169,58 @@ impl ModulatedAllpass {
     pub fn reset(&mut self) {
         self.clear();
         self.samples_processed = 0;
+        self.current_delay = self.sample_delay as f64;
+        self.delay_step = 0.0;
+    }
+}
+
+impl Default for ModulatedAllpass {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn allpass_is_stable_and_finite() {
+        let mut ap = ModulatedAllpass::new();
+        ap.set_delay_samples(223);
+        ap.set_feedback(0.7);
+        ap.set_modulation(1.5, 30.0, 48000.0);
+
+        for i in 0..96000 {
+            let x = if i == 0 { 1.0 } else { 0.0 };
+            let y = ap.tick(x);
+            assert!(y.is_finite(), "NaN at {i}");
+            assert!(y.abs() < 10.0, "blowup at {i}: {y}");
+        }
+    }
+
+    #[test]
+    fn no_mod_path_matches_schroeder_impulse() {
+        let mut ap = ModulatedAllpass::new();
+        ap.modulation_enabled = false;
+        ap.set_delay_samples(50);
+        ap.set_feedback(0.5);
+
+        // First output of a unit impulse through a Schroeder allpass is -g.
+        let y0 = ap.tick(1.0);
+        assert!((y0 - (-0.5)).abs() < 1e-12, "direct path should be -g: {y0}");
+
+        // At the delay time, output is 1 - g^2.
+        let mut y_delay = 0.0;
+        for n in 1..=50 {
+            y_delay = ap.tick(0.0);
+            if n < 50 {
+                assert!(y_delay.abs() < 1e-12, "silent before delay, sample {n}");
+            }
+        }
+        assert!(
+            (y_delay - 0.75).abs() < 1e-12,
+            "1 - g^2 expected at delay time: {y_delay}"
+        );
     }
 }

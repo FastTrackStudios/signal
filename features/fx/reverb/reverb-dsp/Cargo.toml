@@ -8,7 +8,6 @@ description = "Reverb processing engine — plate, shimmer, hall/room algorithms
 
 [dependencies]
 audiocore-dsp = { workspace = true }
-eq-dsp = { workspace = true }
 crossbeam-channel = { workspace = true }
 thiserror = { workspace = true }
 realfft = "3.4"

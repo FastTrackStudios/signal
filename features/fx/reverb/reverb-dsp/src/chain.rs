@@ -10,7 +10,9 @@ use crate::algorithm::{AlgorithmParams, AlgorithmType, ReverbAlgorithm};
 use crate::algorithms;
 use crate::ir::engine::ProcessedIr;
 use crate::ir::prepared::PreparedIrPair;
-use crate::primitives::envelope_follower::EnvelopeFollower;
+use audiocore_dsp::envelope::EnvelopeFollower;
+use audiocore_dsp::smoothing::ParamSmoother;
+
 use crate::primitives::saturation::Saturator;
 use crate::primitives::tilt_eq::TiltEq;
 
@@ -47,6 +49,11 @@ pub struct ReverbChain {
     // Ducker (sidechain on dry input → gain reduction on wet)
     duck_env: EnvelopeFollower,
     duck_gain: f64, // smoothed gain reduction (1.0 = no duck, 0.0 = full duck)
+    duck_smooth: f64, // sample-rate-correct one-pole coeff for duck_gain
+
+    // Per-sample smoothing of the zipper-prone global controls.
+    mix_smoother: ParamSmoother,
+    width_smoother: ParamSmoother,
 
     // Algorithm params
     pub params: AlgorithmParams,
@@ -116,8 +123,21 @@ impl ReverbChain {
             output_lp: Biquad::new(),
             tilt_l: TiltEq::new(sample_rate),
             tilt_r: TiltEq::new(sample_rate),
-            duck_env: EnvelopeFollower::new(sample_rate),
+            duck_env: EnvelopeFollower::new(0.0),
             duck_gain: 1.0,
+            duck_smooth: EnvelopeFollower::coeff(0.001, sample_rate),
+            mix_smoother: {
+                let mut s = ParamSmoother::new(0.5);
+                s.set_time_ms(5.0, sample_rate);
+                s.set_epsilon(1e-4);
+                s
+            },
+            width_smoother: {
+                let mut s = ParamSmoother::new(1.0);
+                s.set_time_ms(5.0, sample_rate);
+                s.set_epsilon(1e-4);
+                s
+            },
             params: AlgorithmParams::default(),
             predelay_ms: 0.0,
             mix: 0.5,
@@ -224,7 +244,7 @@ impl ReverbChain {
         self.tilt_r.set_pivot(self.output_tilt_pivot);
         self.tilt_r.set_tilt_db(self.output_tilt_db);
         self.duck_env
-            .set_times(self.duck_attack_ms, self.duck_release_ms);
+            .set_times_ms(self.duck_attack_ms, self.duck_release_ms, self.sample_rate);
     }
 }
 
@@ -238,7 +258,7 @@ impl Processor for ReverbChain {
         self.output_lp.reset();
         self.tilt_l.reset();
         self.tilt_r.reset();
-        self.duck_env.reset();
+        self.duck_env.reset(0.0);
         self.duck_gain = 1.0;
     }
 
@@ -280,8 +300,17 @@ impl Processor for ReverbChain {
         self.tilt_r.set_pivot(self.output_tilt_pivot);
         self.tilt_r.set_tilt_db(self.output_tilt_db);
 
-        self.duck_env.set_sample_rate(config.sample_rate);
-        self.duck_env.set_times(self.duck_attack_ms, self.duck_release_ms);
+        self.duck_env
+            .set_times_ms(self.duck_attack_ms, self.duck_release_ms, config.sample_rate);
+        // ~1ms duck-gain smoothing, independent of sample rate (the old
+        // hard-coded 0.25 step made duck timing vary with the SR).
+        self.duck_smooth = EnvelopeFollower::coeff(0.001, config.sample_rate);
+        self.mix_smoother.set_time_ms(5.0, config.sample_rate);
+        self.width_smoother.set_time_ms(5.0, config.sample_rate);
+        // update() is a reconfiguration point, not an automation path —
+        // land on the new values instantly instead of ramping.
+        self.mix_smoother.set_immediate(self.mix);
+        self.width_smoother.set_immediate(self.width);
 
         self.sat_l.set_drive(self.saturation);
         self.sat_r.set_drive(self.saturation);
@@ -333,18 +362,23 @@ impl Processor for ReverbChain {
 
         self.predelay_samples = (self.predelay_ms * 0.001 * self.sample_rate) as usize;
         let duck_thresh = self.duck_threshold.max(1.0e-6);
+        self.mix_smoother.set_target(self.mix);
+        self.width_smoother.set_target(self.width);
 
         for i in 0..n {
             let dry_l = left[i];
             let dry_r = right[i];
+            let mix = self.mix_smoother.tick();
+            let width = self.width_smoother.tick();
 
-            // Sidechain envelope from dry sum
-            let env = self.duck_env.tick(dry_l + dry_r);
+            // Sidechain envelope from dry sum (rectified — the follower is
+            // domain-agnostic and needs |x|).
+            let env = self.duck_env.tick((dry_l + dry_r).abs());
             let over = (env / duck_thresh - 1.0).max(0.0);
             let target_duck = 1.0 - (over.min(1.0) * self.duck_amount);
             // 1-pole smooth toward target_duck (independent of attack/release
             // — env already shapes the rate).
-            self.duck_gain += (target_duck - self.duck_gain) * 0.25;
+            self.duck_gain = self.duck_smooth * (self.duck_gain - target_duck) + target_duck;
 
             // Input filtering
             let filt_l = self.input_lp.tick(self.input_hp.tick(dry_l, 0), 0);
@@ -383,10 +417,10 @@ impl Processor for ReverbChain {
             }
 
             // Width (mid-side)
-            let (mut final_l, mut final_r) = if (self.width - 1.0).abs() > 0.001 {
+            let (mut final_l, mut final_r) = if (width - 1.0).abs() > 0.001 {
                 let mid = (wet_l + wet_r) * 0.5;
                 let side = (wet_l - wet_r) * 0.5;
-                (mid + side * self.width, mid - side * self.width)
+                (mid + side * width, mid - side * width)
             } else {
                 (wet_l, wet_r)
             };
@@ -398,8 +432,8 @@ impl Processor for ReverbChain {
             }
 
             // Mix
-            left[i] = dry_l * (1.0 - self.mix) + final_l * self.mix;
-            right[i] = dry_r * (1.0 - self.mix) + final_r * self.mix;
+            left[i] = dry_l * (1.0 - mix) + final_l * mix;
+            right[i] = dry_r * (1.0 - mix) + final_r * mix;
         }
     }
 }

@@ -13,6 +13,8 @@
 //! actual sample rate at construction.
 
 use crate::algorithm::{AlgorithmParams, ReverbAlgorithm};
+use audiocore_dsp::dc_blocker::DcBlocker;
+use audiocore_dsp::denormal::flush;
 
 const STEREO_SPREAD: usize = 23;
 
@@ -57,7 +59,7 @@ impl LpComb {
     #[inline]
     fn tick(&mut self, input: f64) -> f64 {
         let out = self.buffer[self.idx];
-        self.filterstore = out * self.damp2 + self.filterstore * self.damp1;
+        self.filterstore = flush(out * self.damp2 + self.filterstore * self.damp1);
         self.buffer[self.idx] = input + self.filterstore * self.feedback;
         self.idx += 1;
         if self.idx >= self.buffer.len() {
@@ -100,6 +102,9 @@ impl AllpassF {
 }
 
 pub struct FreeVerb {
+    // DC blockers on the comb-bank input keep incoming offset
+    // out of the 16 recirculating loops.
+    dc_in: DcBlocker,
     combs_l: [LpComb; 8],
     combs_r: [LpComb; 8],
     allpass_l: [AllpassF; 4],
@@ -120,6 +125,7 @@ impl FreeVerb {
             AllpassF::new(((ALLPASS_TUNINGS[i] + STEREO_SPREAD) as f64 * scale) as usize)
         });
         Self {
+            dc_in: DcBlocker::new(),
             combs_l: comb_l,
             combs_r: comb_r,
             allpass_l: ap_l,
@@ -131,6 +137,7 @@ impl FreeVerb {
 
 impl ReverbAlgorithm for FreeVerb {
     fn reset(&mut self) {
+        self.dc_in.reset();
         for c in &mut self.combs_l { c.reset(); }
         for c in &mut self.combs_r { c.reset(); }
         for a in &mut self.allpass_l { a.reset(); }
@@ -156,7 +163,7 @@ impl ReverbAlgorithm for FreeVerb {
 
     #[inline]
     fn tick(&mut self, left: f64, right: f64) -> (f64, f64) {
-        let input = (left + right) * self.gain;
+        let input = self.dc_in.tick((left + right) * self.gain);
 
         let mut out_l = 0.0;
         let mut out_r = 0.0;

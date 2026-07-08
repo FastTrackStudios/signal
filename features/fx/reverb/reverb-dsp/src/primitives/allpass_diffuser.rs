@@ -61,6 +61,10 @@ impl AllpassDiffuser {
 
     pub fn set_sample_rate(&mut self, sr: f64) {
         self.sample_rate = sr;
+        for f in &mut self.filters {
+            f.set_sample_rate(sr);
+        }
+        self.update_delays();
         self.set_mod_rate(self.mod_rate);
     }
 

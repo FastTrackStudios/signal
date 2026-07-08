@@ -1,25 +1,28 @@
 //! Modulated delay line for pre-delay and late reverb lines.
 //!
 //! Ported from CloudSeedCore ModulatedDelay.h (MIT, Ghost Note Audio).
-//! Large buffer (2 seconds at 192kHz) with sinusoidal delay-time modulation.
-//! Modulation parameters update every 8 samples for efficiency.
+//! The LFO target is recomputed every 8 samples (as in CloudSeed) but the
+//! fractional read position ramps per-sample between updates and the buffer
+//! is read with cubic interpolation, so fast modulation stays smooth instead
+//! of stepping in whole samples.
 
 use std::f64::consts::PI;
 
-/// Buffer size: 2 seconds at 192kHz.
-const DELAY_BUFFER_SIZE: usize = 384000;
+use audiocore_dsp::delay_line::DelayLine;
+
+/// Default capacity: 2 seconds at 48kHz. Resized by `set_sample_rate`.
+const DEFAULT_SAMPLE_RATE: f64 = 48000.0;
 /// Modulation recalculation rate.
 const MOD_UPDATE_RATE: u64 = 8;
+/// Buffer length in seconds.
+const BUFFER_SECONDS: f64 = 2.0;
 
 pub struct ModulatedDelay {
-    buffer: Vec<f64>,
-    write_index: usize,
-    read_index_a: usize,
-    read_index_b: usize,
+    buffer: DelayLine,
     samples_processed: u64,
     mod_phase: f64,
-    gain_a: f64,
-    gain_b: f64,
+    current_delay: f64,
+    delay_step: f64,
     pub sample_delay: usize,
     pub mod_amount: f64,
     pub mod_rate: f64,
@@ -28,20 +31,29 @@ pub struct ModulatedDelay {
 impl ModulatedDelay {
     pub fn new() -> Self {
         let mut d = Self {
-            buffer: vec![0.0; DELAY_BUFFER_SIZE],
-            write_index: 0,
-            read_index_a: 0,
-            read_index_b: 0,
+            buffer: DelayLine::new((DEFAULT_SAMPLE_RATE * BUFFER_SECONDS) as usize),
             samples_processed: 0,
             mod_phase: 0.31,
-            gain_a: 0.0,
-            gain_b: 0.0,
+            current_delay: 100.0,
+            delay_step: 0.0,
             sample_delay: 100,
             mod_amount: 0.0,
             mod_rate: 0.0,
         };
         d.update();
         d
+    }
+
+    /// Resize the buffer for the actual sample rate. Allocates; call from
+    /// setup, never from the audio tick.
+    pub fn set_sample_rate(&mut self, sample_rate: f64) {
+        let len = (sample_rate * BUFFER_SECONDS) as usize;
+        if len > self.buffer.len() {
+            self.buffer = DelayLine::new(len);
+        }
+        self.samples_processed = 0;
+        self.current_delay = self.sample_delay as f64;
+        self.delay_step = 0.0;
     }
 
     #[inline]
@@ -51,25 +63,26 @@ impl ModulatedDelay {
             self.samples_processed = 0;
         }
 
-        self.buffer[self.write_index] = input;
-        let output = self.buffer[self.read_index_a] * self.gain_a
-            + self.buffer[self.read_index_b] * self.gain_b;
+        // Ramp the read position toward the LFO target computed in update().
+        self.current_delay += self.delay_step;
 
-        self.write_index = (self.write_index + 1) % DELAY_BUFFER_SIZE;
-        self.read_index_a = (self.read_index_a + 1) % DELAY_BUFFER_SIZE;
-        self.read_index_b = (self.read_index_b + 1) % DELAY_BUFFER_SIZE;
+        self.buffer.write(input);
+        let max_delay = (self.buffer.len() - 4) as f64;
+        let output = self.buffer.read_cubic(self.current_delay.clamp(1.0, max_delay));
+
         self.samples_processed += 1;
-
         output
     }
 
     pub fn clear(&mut self) {
-        self.buffer.fill(0.0);
+        self.buffer.clear();
     }
 
     pub fn reset(&mut self) {
         self.clear();
         self.samples_processed = 0;
+        self.current_delay = self.sample_delay as f64;
+        self.delay_step = 0.0;
     }
 
     fn update(&mut self) {
@@ -79,26 +92,83 @@ impl ModulatedDelay {
         }
 
         let modulation = (self.mod_phase * 2.0 * PI).sin();
-        let total_delay = self.sample_delay as f64 + self.mod_amount * modulation;
-        let total_delay = total_delay.max(1.0);
+        let target = (self.sample_delay as f64 + self.mod_amount * modulation).max(1.0);
 
-        let delay_a = total_delay as usize;
-        let delay_b = delay_a + 1;
+        // Spread the move over the next update window.
+        self.delay_step = (target - self.current_delay) / MOD_UPDATE_RATE as f64;
+    }
+}
 
-        let partial = total_delay - delay_a as f64;
-        self.gain_a = 1.0 - partial;
-        self.gain_b = partial;
+impl Default for ModulatedDelay {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
-        let wi = self.write_index as isize;
-        let mut ra = wi - delay_a as isize;
-        let mut rb = wi - delay_b as isize;
-        if ra < 0 {
-            ra += DELAY_BUFFER_SIZE as isize;
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn impulse_arrives_at_delay_time() {
+        let mut d = ModulatedDelay::new();
+        d.sample_delay = 100;
+        d.reset();
+
+        let mut arrival = None;
+        for n in 0..300 {
+            let x = if n == 0 { 1.0 } else { 0.0 };
+            let y = d.tick(x);
+            if y.abs() > 0.5 && arrival.is_none() {
+                arrival = Some(n);
+            }
         }
-        if rb < 0 {
-            rb += DELAY_BUFFER_SIZE as isize;
+        let n = arrival.expect("impulse should come out");
+        assert!(
+            (n as i64 - 100).unsigned_abs() <= 2,
+            "impulse should arrive near sample 100, got {n}"
+        );
+    }
+
+    #[test]
+    fn no_nan_under_fast_modulation() {
+        let mut d = ModulatedDelay::new();
+        d.sample_delay = 480;
+        d.mod_amount = 400.0; // heavy
+        d.mod_rate = 8.0 / 48000.0; // 8 Hz
+        d.reset();
+
+        for i in 0..96000 {
+            let x = ((i as f64) * 0.05).sin();
+            let y = d.tick(x);
+            assert!(y.is_finite(), "NaN at {i}");
+            assert!(y.abs() < 10.0, "blowup at {i}: {y}");
         }
-        self.read_index_a = ra as usize;
-        self.read_index_b = rb as usize;
+    }
+
+    #[test]
+    fn read_position_ramps_smoothly() {
+        // With modulation active, consecutive outputs of a pure tone should
+        // not exhibit single-sample jumps (the old 8-sample stair-step).
+        let mut d = ModulatedDelay::new();
+        d.sample_delay = 1000;
+        d.mod_amount = 50.0;
+        d.mod_rate = 2.0 / 48000.0;
+        d.reset();
+
+        let mut prev = 0.0;
+        let mut max_jump: f64 = 0.0;
+        for i in 0..48000 {
+            let x = (2.0 * PI * 220.0 * i as f64 / 48000.0).sin();
+            let y = d.tick(x);
+            if i > 2000 {
+                max_jump = max_jump.max((y - prev).abs());
+            }
+            prev = y;
+        }
+        // A 220 Hz tone moves at most ~0.029/sample; modulated read adds a
+        // little. The old stair-step implementation produced jumps several
+        // times larger at the 8-sample boundaries.
+        assert!(max_jump < 0.1, "output should be smooth, max jump {max_jump}");
     }
 }

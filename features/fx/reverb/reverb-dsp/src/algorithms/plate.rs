@@ -18,6 +18,7 @@ use crate::algorithm::{AlgorithmParams, ReverbAlgorithm};
 use crate::primitives::allpass::Allpass;
 use crate::primitives::modulated_allpass::ModulatedAllpass;
 use crate::primitives::one_pole::Lp1;
+use audiocore_dsp::dc_blocker::DcBlocker;
 use audiocore_dsp::delay_line::DelayLine;
 
 /// Dattorro plate reverb — complete published topology.
@@ -42,6 +43,10 @@ pub struct Plate {
     tank_b_delay2: DelayLine,     // delay_7 (3163 samples)
 
     // Parameters
+    // DC blockers on the tank cross-feeds — the recirculating
+    // figure-8 otherwise accumulates subsonic offset.
+    dc_a: DcBlocker,
+    dc_b: DcBlocker,
     decay: f64,
     decay_diffusion_1: f64,
     decay_diffusion_2: f64,
@@ -126,6 +131,8 @@ impl Plate {
             tank_b_damp,
             tank_b_ap2,
             tank_b_delay2: DelayLine::new(tb_d2_len + 1),
+            dc_a: DcBlocker::new(),
+            dc_b: DcBlocker::new(),
             decay: 0.7,
             decay_diffusion_1: 0.7,
             decay_diffusion_2: 0.5,
@@ -150,6 +157,8 @@ impl Plate {
 impl ReverbAlgorithm for Plate {
     fn reset(&mut self) {
         self.bandwidth.reset();
+        self.dc_a.reset();
+        self.dc_b.reset();
         for d in &mut self.input_diffuser {
             d.reset();
         }
@@ -221,8 +230,8 @@ impl ReverbAlgorithm for Plate {
         // ---- Read cross-feed from the END of each tank ----
         // Tank A feeds from end of tank_b_delay2, Tank B from end of tank_a_delay2
         let s = self.s;
-        let fb_a = self.tank_b_delay2.read((3163.0 * s) as usize);
-        let fb_b = self.tank_a_delay2.read((3720.0 * s) as usize);
+        let fb_a = self.dc_a.tick(self.tank_b_delay2.read((3163.0 * s) as usize));
+        let fb_b = self.dc_b.tick(self.tank_a_delay2.read((3720.0 * s) as usize));
 
         // ---- Tank A processing ----
         // decay_diffusion_1 AP (modulated)
