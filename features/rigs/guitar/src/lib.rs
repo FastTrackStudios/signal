@@ -19,6 +19,14 @@
 
 use std::path::Path;
 
+pub mod profiles;
+pub mod session;
+
+pub use session::GuitarRigBackend;
+// Re-export the wire contract so front-end/app crates get types + clients
+// from one place.
+pub use signal_guitar_proto as proto;
+
 use signal_sampler::GuitarRig;
 use signal_sampler::RigAudioPrefs;
 use signal_sampler::{ProfileRig, RigPatch, RigProfile};

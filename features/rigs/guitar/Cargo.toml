@@ -9,3 +9,20 @@ authors.workspace = true
 # The shared sampler core — GuitarRig / ProfileRig / RigProfile / RigBlock /
 # RigAudioPrefs. The guitar feature is a thin live-handle layer on top.
 signal-sampler.workspace = true
+
+# The wire contract this crate's headless backend implements (Rig +
+# AudioSettings services); front-ends consume the same crate's clients.
+signal-guitar-proto.workspace = true
+# Layer/Services composition + dispatchers for mounting the services.
+architect = { workspace = true, features = ["vox"] }
+# BlockType — primary-param mapping per block type.
+signal-proto.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+tracing-subscriber.workspace = true
+# headless_rig example: serve the backend on an in-process vox link and drive
+# it like a remote GUI would.
+architect = { workspace = true, features = ["vox", "local"] }
+vox.workspace = true
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "time"] }
