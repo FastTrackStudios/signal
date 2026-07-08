@@ -131,6 +131,7 @@ impl GuitarRigBackend {
             events: PubSub::sliding(64),
         };
         backend.spawn_meter_pump();
+        backend.spawn_drive_calibration();
         backend
     }
 
@@ -203,6 +204,144 @@ impl GuitarRigBackend {
             .map(|b| b.iter().any(|b| b.block_type == BlockType::Compressor && !b.bypassed))
             .unwrap_or(false);
         if has_comp { signal_fx::comp_meter::gr_db().max(0.0) } else { 0.0 }
+    }
+
+    /// The NAM capture behind a board block, if any: drive slots resolve
+    /// through their drive preset; the amp resolves through the active
+    /// patch's pool preset.
+    fn nam_path_for_block(&self, block_name: &str) -> Option<String> {
+        let def = self.profile_def.lock().unwrap();
+        if let Some(slot) = def
+            .drives
+            .iter()
+            .find(|d| d.block.eq_ignore_ascii_case(block_name))
+        {
+            return drive_presets()
+                .into_iter()
+                .find(|p| p.name.eq_ignore_ascii_case(&slot.preset))
+                .and_then(|p| p.options.get(slot.option).map(|o| o.nam.clone()));
+        }
+        if block_name.eq_ignore_ascii_case("Amp L") || block_name.eq_ignore_ascii_case("Amp R") {
+            let active = {
+                let guard = self.rig.lock().ok()?;
+                guard
+                    .as_ref()
+                    .and_then(|prig| prig.active_patch().map(|p| p.name.clone()))?
+            };
+            let preset = def
+                .patches
+                .iter()
+                .find(|p| p.name.eq_ignore_ascii_case(&active))
+                .map(|p| p.preset.clone())?;
+            return def
+                .presets
+                .iter()
+                .find(|p| p.name.eq_ignore_ascii_case(&preset))
+                .map(|p| p.nam.clone());
+        }
+        None
+    }
+
+    /// Realise a drive position on a NAM block at constant perceived level:
+    /// input trim pushes the capture, output trim compensates the measured
+    /// loudness back to unity (see `nam_calibrate::drive_compensation`).
+    fn apply_drive(&self, block_id: &str, block_name: &str, drive: f32) {
+        let Some(path) = self.nam_path_for_block(block_name) else {
+            return;
+        };
+        let sr = {
+            let guard = self.rig.lock().ok();
+            guard
+                .as_ref()
+                .and_then(|g| g.as_ref().map(|p| p.sample_rate() as f64))
+                .unwrap_or(48_000.0)
+        };
+        let Some((in_db, out_db)) =
+            signal_sampler::nam_calibrate::drive_compensation(std::path::Path::new(&path), sr, drive)
+        else {
+            tracing::warn!("drive compensation unavailable for {block_name} — leaving trims");
+            return;
+        };
+        if let Ok(guard) = self.rig.lock() {
+            if let Some(prig) = guard.as_ref() {
+                prig.rig().set_active_block_param(block_id, "input_trim", in_db);
+                prig.rig().set_active_block_param(block_id, "output_trim", out_db);
+            }
+        }
+        tracing::debug!("{block_name}: drive {drive:.2} → in {in_db:+.1} dB, out {out_db:+.1} dB");
+    }
+
+    /// Re-apply constant-loudness drive to every NAM board block of the
+    /// active chain (after activation / reload — cached, so cheap).
+    fn apply_all_drives(&self) {
+        let blocks: Vec<(String, String, f32)> = self
+            .blocks
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|b| {
+                matches!(b.block_type, BlockType::Drive | BlockType::Boost | BlockType::Amp)
+            })
+            .map(|b| {
+                let drive = b
+                    .params
+                    .iter()
+                    .find(|p| p.name == "drive")
+                    .map(|p| p.value)
+                    .unwrap_or(0.5);
+                (b.id.clone(), b.name.clone(), drive)
+            })
+            .collect();
+        for (id, name, drive) in blocks {
+            self.apply_drive(&id, &name, drive);
+        }
+    }
+
+    /// Pre-measure drive curves for every NAM the profile can reach (drive
+    /// preset options + the pool presets) — the import-time offline test.
+    /// Runs on its own thread; results land in the on-disk cache.
+    fn spawn_drive_calibration(&self) {
+        let backend = self.clone();
+        std::thread::spawn(move || {
+            let sr = {
+                let guard = backend.rig.lock().ok();
+                guard
+                    .as_ref()
+                    .and_then(|g| g.as_ref().map(|p| p.sample_rate() as f64))
+                    .unwrap_or(48_000.0)
+            };
+            let mut paths: Vec<String> = Vec::new();
+            for p in drive_presets() {
+                for o in &p.options {
+                    paths.push(o.nam.clone());
+                }
+            }
+            {
+                let def = backend.profile_def.lock().unwrap();
+                for p in &def.presets {
+                    paths.push(p.nam.clone());
+                }
+            }
+            for path in paths {
+                let t = std::time::Instant::now();
+                if signal_sampler::nam_calibrate::drive_curve(std::path::Path::new(&path), sr)
+                    .is_some()
+                    && t.elapsed().as_millis() > 50
+                {
+                    tracing::info!(
+                        "drive calibration: {} measured in {:.1}s",
+                        std::path::Path::new(&path)
+                            .file_stem()
+                            .and_then(|s| s.to_str())
+                            .unwrap_or("?"),
+                        t.elapsed().as_secs_f32()
+                    );
+                }
+            }
+            // With curves in cache, snap the live chain to compensated trims.
+            backend.apply_all_drives();
+            tracing::info!("drive calibration: complete");
+        });
     }
 
     /// Re-apply the main-output trim: patch base + master trim + mute.
@@ -308,6 +447,7 @@ impl GuitarRigBackend {
         self.resync_blocks();
         self.apply_tempo_to_delays();
         self.apply_boost_to_block();
+        self.apply_all_drives();
         self.publish_state();
     }
 
@@ -432,6 +572,7 @@ impl GuitarRigBackend {
         self.resync_blocks();
         self.apply_tempo_to_delays();
         self.apply_boost_to_block();
+        self.apply_all_drives();
         self.publish_state();
     }
 
@@ -557,6 +698,7 @@ fn param_specs(bt: BlockType) -> Vec<(String, f32, f32, f32)> {
         BlockType::Drive | BlockType::Boost => owned(&[("drive", 0.0, 1.0, 0.5)]),
         // NAM amp trims — input trim is "how hard the amp is pushed".
         BlockType::Amp => owned(&[
+            ("drive", 0.0, 1.0, 0.5),
             ("input_trim", -12.0, 12.0, 0.0),
             ("output_trim", -12.0, 12.0, 0.0),
         ]),
@@ -930,6 +1072,7 @@ impl Rig for GuitarRigBackend {
         self.resync_blocks();
         self.apply_tempo_to_delays();
         self.apply_boost_to_block();
+        self.apply_all_drives();
         self.publish_state();
     }
 
@@ -1004,6 +1147,7 @@ impl Rig for GuitarRigBackend {
         self.resync_blocks();
         self.apply_tempo_to_delays();
         self.apply_boost_to_block();
+        self.apply_all_drives();
         self.publish_state();
     }
 
@@ -1065,6 +1209,7 @@ impl Rig for GuitarRigBackend {
         self.resync_blocks();
         self.apply_tempo_to_delays();
         self.apply_boost_to_block();
+        self.apply_all_drives();
         self.publish_state();
     }
 
@@ -1227,6 +1372,22 @@ impl Rig for GuitarRigBackend {
     }
 
     fn set_block_param(&self, id: String, param: String, value: f32) {
+        // Constant-loudness drive: on NAM board blocks the drive knob is
+        // realised as a compensated input/output trim pair.
+        if param == "drive" {
+            let block = self
+                .blocks
+                .lock()
+                .unwrap()
+                .iter()
+                .find(|b| b.id == id)
+                .map(|b| (b.name.clone(), b.block_type));
+            if let Some((name, bt)) = block {
+                if matches!(bt, BlockType::Drive | BlockType::Boost | BlockType::Amp) {
+                    self.apply_drive(&id, &name, value);
+                }
+            }
+        }
         let mut retime_delay = false;
         if let Ok(mut blocks) = self.blocks.lock() {
             if let Some(b) = blocks.iter_mut().find(|b| b.id == id) {

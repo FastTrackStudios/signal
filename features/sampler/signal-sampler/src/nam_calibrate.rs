@@ -488,3 +488,150 @@ mod tests {
         assert_eq!(c.lookup("modelhash", "synthetic-v1", 48_000), Some(-10.0));
     }
 }
+
+// ── Drive curve: the constant-loudness saturation control ───────────────────
+//
+// Static NAM captures have no drive knob — pushing the *input* harder is how
+// saturation changes. The guarantee: sweeping drive 0→100% (input −12…+12 dB,
+// 50% = the capture at unity) NEVER changes perceived level, and neither does
+// engaging the block at all: for every sweep point we measure the model's
+// output LUFS on the DI and compensate the output so the block sits at the
+// DI's own loudness — a unity-loudness block, whatever the combination.
+
+/// Input-gain sweep (dB) behind drive 0..1. Index 4 (0 dB) = drive 50%.
+pub const DRIVE_SWEEP_DB: [f64; 9] = [-12.0, -9.0, -6.0, -3.0, 0.0, 3.0, 6.0, 9.0, 12.0];
+
+/// One model's drive calibration: output LUFS per sweep point + the DI's own
+/// loudness (the compensation target).
+#[derive(Clone, Debug, Facet)]
+pub struct DriveCurveEntry {
+    pub model_hash: String,
+    pub di_id: String,
+    pub sample_rate: u32,
+    pub di_lufs: f64,
+    pub lufs: Vec<f64>,
+}
+
+#[derive(Clone, Debug, Default, Facet)]
+struct DriveCurveCache {
+    entries: Vec<DriveCurveEntry>,
+}
+
+impl DriveCurveCache {
+    fn path() -> PathBuf {
+        calibration_dir().join("drive-cache.styx")
+    }
+    fn load() -> Self {
+        std::fs::read_to_string(Self::path())
+            .ok()
+            .and_then(|t| facet_styx::from_str(&t).ok())
+            .unwrap_or_default()
+    }
+    fn save(&self) {
+        let _ = std::fs::create_dir_all(calibration_dir());
+        if let Ok(t) = facet_styx::to_string(self) {
+            let _ = std::fs::write(Self::path(), t);
+        }
+    }
+    fn lookup(&self, hash: &str, di: &str, sr: u32) -> Option<&DriveCurveEntry> {
+        self.entries
+            .iter()
+            .find(|e| e.model_hash == hash && e.di_id == di && e.sample_rate == sr)
+    }
+}
+
+static DRIVE_CACHE: OnceLock<Mutex<DriveCurveCache>> = OnceLock::new();
+
+fn drive_cache() -> &'static Mutex<DriveCurveCache> {
+    DRIVE_CACHE.get_or_init(|| Mutex::new(DriveCurveCache::load()))
+}
+
+/// Measure `model`'s output LUFS at every sweep gain (offline — WaveNet over
+/// the DI window per point, so ~seconds per model; run once and cached).
+pub fn measure_drive_curve(model: &mut NamModel, di: &DiReference, max_block: usize) -> Vec<f64> {
+    let block = max_block.clamp(64, 8192);
+    DRIVE_SWEEP_DB
+        .iter()
+        .map(|gain_db| {
+            let gain = 10f64.powf(gain_db / 20.0);
+            model.reset(di.sample_rate, block);
+            let mut output = vec![0.0f64; di.samples.len()];
+            let mut scratch_in = vec![0.0f64; block];
+            let mut scratch_out = vec![0.0f64; block];
+            let mut pos = 0;
+            while pos < di.samples.len() {
+                let n = block.min(di.samples.len() - pos);
+                for i in 0..n {
+                    scratch_in[i] = di.samples[pos + i] * gain;
+                }
+                model.process(&scratch_in[..n], &mut scratch_out[..n]);
+                output[pos..pos + n].copy_from_slice(&scratch_out[..n]);
+                pos += n;
+            }
+            integrated_lufs(&output, di.sample_rate)
+        })
+        .collect()
+}
+
+/// The cached drive curve for a model file, measuring on first sight (the
+/// "import-time test"). Returns `None` if the model can't be loaded/hashed.
+pub fn drive_curve(model_path: &Path, sample_rate: f64) -> Option<DriveCurveEntry> {
+    let sr_key = sample_rate.round() as u32;
+    let model_hash = hash_file(model_path).ok()?;
+    let di = DiReference::load_or_synthetic(sample_rate);
+    {
+        let cache = drive_cache().lock().unwrap();
+        if let Some(e) = cache.lookup(&model_hash, &di.id, sr_key) {
+            return Some(e.clone());
+        }
+    }
+    tracing::info!(model = %model_path.display(), "NAM drive calibration: measuring sweep");
+    let mut model = NamModel::load(model_path).ok()?;
+    let lufs = measure_drive_curve(&mut model, &di, 512);
+    let di_lufs = integrated_lufs(&di.samples, di.sample_rate);
+    let entry = DriveCurveEntry {
+        model_hash,
+        di_id: di.id.clone(),
+        sample_rate: sr_key,
+        di_lufs,
+        lufs,
+    };
+    let mut cache = drive_cache().lock().unwrap();
+    // Re-check under the lock — a concurrent caller may have measured the
+    // same model while we were (the lock is dropped during measurement).
+    if cache
+        .lookup(&entry.model_hash, &entry.di_id, entry.sample_rate)
+        .is_none()
+    {
+        cache.entries.push(entry.clone());
+        cache.save();
+    }
+    Some(entry)
+}
+
+/// Map a drive position (0..1, 0.5 = the capture at unity input) to the
+/// `(input_trim_db, output_trim_db)` pair that realises it at **constant
+/// perceived level**: input pushes the nonlinearity, output compensates the
+/// measured loudness back to the DI's own — engaging the block or sweeping
+/// the knob never moves the volume.
+pub fn drive_compensation(model_path: &Path, sample_rate: f64, drive: f32) -> Option<(f32, f32)> {
+    let entry = drive_curve(model_path, sample_rate)?;
+    let lo = DRIVE_SWEEP_DB[0];
+    let hi = DRIVE_SWEEP_DB[DRIVE_SWEEP_DB.len() - 1];
+    let in_db = lo + (drive.clamp(0.0, 1.0) as f64) * (hi - lo);
+    // Linear interpolation over the sweep.
+    let n = entry.lufs.len().min(DRIVE_SWEEP_DB.len());
+    if n < 2 {
+        return None;
+    }
+    let step = (hi - lo) / (n as f64 - 1.0);
+    let t = ((in_db - lo) / step).clamp(0.0, n as f64 - 1.0);
+    let (i0, frac) = (t.floor() as usize, t.fract());
+    let i1 = (i0 + 1).min(n - 1);
+    let model_lufs = entry.lufs[i0] * (1.0 - frac) + entry.lufs[i1] * frac;
+    if !model_lufs.is_finite() || model_lufs <= FAILED_LUFS {
+        return None;
+    }
+    let out_db = entry.di_lufs - model_lufs;
+    Some((in_db as f32, out_db as f32))
+}

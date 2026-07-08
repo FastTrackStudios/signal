@@ -1042,13 +1042,12 @@ pub fn ControlView(
                         if let Some(amp) = amp_l {
                             DriveChunk {
                                 name: amp_preset.clone(),
-                                // Input trim −12..+12 dB → how hard the amp is
-                                // pushed; center = unity.
-                                level: (amp.params.iter().find(|p| p.name == "input_trim").map(|p| p.value).unwrap_or(0.0) + 12.0) / 24.0,
+                                // Constant-loudness drive: the bar pushes the
+                                // capture harder while calibration holds the
+                                // level; center = the capture at unity.
+                                level: amp.params.iter().find(|p| p.name == "drive").map(|p| p.value).unwrap_or(0.5),
                                 engaged: !amp.bypassed,
                                 block_id: Some(amp.id.clone()),
-                                param: "input_trim",
-                                range: (-12.0, 12.0),
                                 amp_style: true,
                             }
                         }
