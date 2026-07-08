@@ -6,7 +6,7 @@
 
 use crate::bbd_delay::BbdDelay;
 use crate::clean_delay::CleanDelay;
-use crate::drum_delay::{DrumDelay, DrumHead, GOLDEN_HEADS};
+use crate::drum_delay::{DrumDelay, DrumHead, HeadPlayback, GOLDEN_HEADS};
 use crate::filter_delay::{FilterDelay, FilterLfoShape, FilterLocation};
 use crate::lofi_delay::LoFiDelay;
 use crate::modulation::WobbleShape;
@@ -16,7 +16,7 @@ use crate::pitch_delay::PitchDelay;
 use crate::reverse_delay::ReverseDelay;
 use crate::rhythm_delay::RhythmDelay;
 use crate::shimmer_delay::ShimmerDelay;
-use crate::spectral_delay::{DensityMode, SpectralDelay};
+use crate::spectral_delay::{DensityMode, GrainDirection, GrainShape, SpectralDelay};
 use crate::tape_delay::{SaturationType, TapeDelay};
 
 /// Available delay styles.
@@ -218,6 +218,11 @@ pub struct DelayEngine {
     /// mutes the loop input while frozen.
     pub frozen: bool,
 
+    /// Machine voice selector (TimeLine MX: dTape MX/Classic, dBucket
+    /// MX/Classic, Digital 24/96 / ADM / 12-bit / Classic). Plumbing
+    /// slot only — style engines adopt it in their deep passes.
+    pub voice: u8,
+
     // ── Drum-specific ──────────────────────────────────────────────
     /// Playback head config. Drum only.
     pub drum_heads: [DrumHead; 4],
@@ -233,6 +238,8 @@ pub struct DelayEngine {
     pub oilcan_wobble: f64,
     /// Loop darkness cutoff in Hz. OilCan only.
     pub oilcan_tone: f64,
+    /// Rotation-speed randomization (time-domain dirt, 0.0-1.0). OilCan only.
+    pub oilcan_grit: f64,
 
     // ── MultiTap-specific ──────────────────────────────────────────
     /// User tap pattern. MultiTap only.
@@ -245,8 +252,12 @@ pub struct DelayEngine {
     pub spectral_stretch: f64,
     /// Octave-up blend (0.0–1.0). Spectral only.
     pub spectral_octave: f64,
-    /// Grain pan spread (0.0–1.0). Spectral only (parity, unused mono).
+    /// Random grain placement across the delay time (0.0–1.0). Spectral only.
     pub spectral_spread: f64,
+    /// Grain envelope shape. Spectral only.
+    pub spectral_shape: GrainShape,
+    /// Grain playback direction. Spectral only.
+    pub spectral_direction: GrainDirection,
 
     // ── Filter-specific ────────────────────────────────────────────
     /// LFO waveform. Filter only.
@@ -302,11 +313,11 @@ impl DelayEngine {
             wow_shape: WobbleShape::Sine,
             wow_phase_offset: 0.0,
             frozen: false,
+            voice: 0,
             drum_heads: GOLDEN_HEADS.map(|position| DrumHead {
-                enabled: true,
+                playback: HeadPlayback::Full,
                 position,
-                level: 0.7,
-                feedback: if position == 1.0 { 1.0 } else { 0.0 },
+                feedback: position == 1.0,
                 pan: 0.0,
             }),
             drum_lo_cut: 0.2,
@@ -314,11 +325,14 @@ impl DelayEngine {
             oilcan_heads: OilCanHeads::Long,
             oilcan_wobble: 0.6,
             oilcan_tone: 2500.0,
+            oilcan_grit: 0.1,
             multitap_taps: crate::multitap_delay::TapPreset::Quarters.taps(),
             spectral_density: DensityMode::Synced(1.0 / 8.0),
             spectral_stretch: 0.0,
             spectral_octave: 0.0,
             spectral_spread: 0.0,
+            spectral_shape: GrainShape::Soft,
+            spectral_direction: GrainDirection::Forward,
             filter_lfo_shape: FilterLfoShape::SinePos,
             filter_lfo_speed: 1.0,
             filter_depth: 0.5,
@@ -467,6 +481,7 @@ impl DelayEngine {
                 d.heads = self.oilcan_heads;
                 d.wobble = self.oilcan_wobble;
                 d.tone_hz = if self.frozen { 8000.0 } else { self.oilcan_tone };
+                d.grit = self.oilcan_grit;
                 d.decay_tilt = self_tilt;
                 d.update(sample_rate);
             }
@@ -487,6 +502,8 @@ impl DelayEngine {
                 d.stretch = self.spectral_stretch;
                 d.octave = self.spectral_octave;
                 d.spread = self.spectral_spread;
+                d.shape = self.spectral_shape;
+                d.direction = self.spectral_direction;
                 d.decay_tilt = self_tilt;
                 d.update(sample_rate);
             }

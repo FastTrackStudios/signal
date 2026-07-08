@@ -27,11 +27,11 @@ pub mod spectral_delay;
 pub mod tape_delay;
 
 pub use chain::{DelayChain, HeadMode, TapDivision};
-pub use drum_delay::{DrumHead, GOLDEN_HEADS, SILVER_HEADS};
+pub use drum_delay::{DrumHead, DrumSpacing, HeadPlayback, GOLDEN_HEADS, SILVER_HEADS};
 pub use engine::{DelayEngine, DelayStyle};
 pub use filter_delay::{FilterLfoShape, FilterLocation};
 pub use modulation::WobbleShape;
-pub use multitap_delay::{Tap, TapPreset, MAX_TAPS};
+pub use multitap_delay::{FeedbackMode, Tap, TapFilter, TapGrid, TapPreset, MAX_TAPS};
 pub use oilcan_delay::OilCanHeads;
-pub use spectral_delay::DensityMode;
+pub use spectral_delay::{DensityMode, GrainDirection, GrainShape};
 pub use tape_delay::SaturationType;

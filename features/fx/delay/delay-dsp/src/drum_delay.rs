@@ -15,24 +15,74 @@ use audiocore_dsp::delay_line::DelayLine;
 use audiocore_dsp::prng::XorShift32;
 use audiocore_dsp::smoothing::ParamSmoother;
 
-/// One playback head.
+/// Per-head playback routing: off, half level (−6 dB), or full.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum HeadPlayback {
+    Off,
+    Half,
+    #[default]
+    Full,
+}
+
+impl HeadPlayback {
+    #[inline]
+    pub fn gain(self) -> f64 {
+        match self {
+            HeadPlayback::Off => 0.0,
+            HeadPlayback::Half => 0.5, // −6 dB
+            HeadPlayback::Full => 1.0,
+        }
+    }
+}
+
+/// One playback head. Playback routing and feedback enable are
+/// independent (TimeLine MX): a head can feed back into the input while
+/// silent at the output.
 #[derive(Debug, Clone, Copy)]
 pub struct DrumHead {
-    pub enabled: bool,
+    /// Off / Half (−6 dB) / Full output routing.
+    pub playback: HeadPlayback,
     /// Head position as a fraction of the base delay time (0.0–1.0].
     pub position: f64,
-    /// Output level (0.0–1.0).
-    pub level: f64,
-    /// Contribution to the feedback sum (0.0–1.0).
-    pub feedback: f64,
+    /// Whether this head recirculates into the input (independent of
+    /// playback). Master `feedback` scales the sum of enabled heads.
+    pub feedback: bool,
     /// Stereo pan (-1.0–1.0). Stored for parity; applied in the deep pass.
     pub pan: f64,
 }
 
-/// Golden-ratio head spacing (1/φ³, 1/φ², 1/φ, 1) — Echorec-like.
+/// Head-spacing presets (TimeLine MX Drum "Spacing").
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum DrumSpacing {
+    /// 16th-note spacing: heads at even quarters of the delay time.
+    Even,
+    /// Triplet spacing.
+    Triplet,
+    /// Each head at 1.618x the previous head's delay — densest
+    /// non-overlapping repeats (Echorec-like).
+    #[default]
+    Golden,
+    /// Spacing shrinks toward the end — bunched-up cadence.
+    Silver,
+}
+
+impl DrumSpacing {
+    pub fn positions(self) -> [f64; 4] {
+        match self {
+            DrumSpacing::Even => [0.25, 0.5, 0.75, 1.0],
+            DrumSpacing::Triplet => [1.0 / 6.0, 1.0 / 3.0, 2.0 / 3.0, 1.0],
+            // 1/φ³, 1/φ², 1/φ, 1 — each head 1.618x the previous.
+            DrumSpacing::Golden => [0.236, 0.382, 0.618, 1.0],
+            // Geometric spacing shrinking toward the end (ratio 1/sqrt(2)).
+            DrumSpacing::Silver => [0.395, 0.674, 0.872, 1.0],
+        }
+    }
+}
+
+/// Golden-ratio head positions (kept for API compatibility).
 pub const GOLDEN_HEADS: [f64; 4] = [0.236, 0.382, 0.618, 1.0];
-/// Silver-ratio head spacing (1/δ³ …), tighter early cluster.
-pub const SILVER_HEADS: [f64; 4] = [0.071, 0.172, 0.414, 1.0];
+/// Silver head positions (kept for API compatibility).
+pub const SILVER_HEADS: [f64; 4] = [0.395, 0.674, 0.872, 1.0];
 
 pub struct DrumDelay {
     /// Base delay time in ms (clamped to 200–2000, TimeLine Drum range).
@@ -70,10 +120,11 @@ impl DrumDelay {
 
     pub fn new() -> Self {
         let heads = GOLDEN_HEADS.map(|position| DrumHead {
-            enabled: true,
+            playback: HeadPlayback::Full,
             position,
-            level: 0.7,
-            feedback: if position == 1.0 { 1.0 } else { 0.0 },
+            // Feedback from only the last head preserves stereo pan
+            // rotation (see spec); default matches.
+            feedback: position == 1.0,
             pan: 0.0,
         });
         Self {
@@ -97,8 +148,8 @@ impl DrumDelay {
     }
 
     /// Apply a spacing preset to the head positions (keeps other head params).
-    pub fn set_spacing(&mut self, spacing: [f64; 4]) {
-        for (head, pos) in self.heads.iter_mut().zip(spacing) {
+    pub fn set_spacing(&mut self, spacing: DrumSpacing) {
+        for (head, pos) in self.heads.iter_mut().zip(spacing.positions()) {
             head.position = pos;
         }
     }
@@ -158,13 +209,16 @@ impl DrumDelay {
         let mut output = 0.0;
         let mut fb_sum = 0.0;
         for head in &self.heads {
-            if !head.enabled {
+            let gain = head.playback.gain();
+            if gain == 0.0 && !head.feedback {
                 continue;
             }
             let pos = (smooth_delay * head.position * wobble_factor).clamp(1.0, max_read);
             let sample = self.delay.read_cubic(pos);
-            output += sample * head.level;
-            fb_sum += sample * head.feedback;
+            output += sample * gain;
+            if head.feedback {
+                fb_sum += sample;
+            }
         }
 
         let mut fb = fb_sum * self.feedback;

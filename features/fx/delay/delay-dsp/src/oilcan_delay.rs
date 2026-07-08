@@ -1,16 +1,25 @@
-//! OilCanDelay — murky electrostatic oil-can echo (Tel-Ray style).
+//! OilCanDelay — murky electrostatic oil-can echo (Tel-Ray/Adineko style).
 //!
-//! TimeLine MX "Oil Can" machine parity. Vintage oil-can units write the
-//! signal as an electrostatic charge on a rotating disc spinning through
-//! oil; the charge decays and the pickup heads wobble with the motor.
-//! The result: dark, watery, chorused echoes with heavy wow.
+//! Per spec/timeline-mx-reference.md: the defining behavior is the
+//! NO-ERASE head. The signal is written as electrostatic charge on a
+//! rotating oiled disc; old charge decays with a time constant while new
+//! signal is written over it. Consequences modeled here:
 //!
-//! First-pass: 200–800 ms delay line with Long/Short/Both head modes, an
-//! aggressive lowpass (~2.5 kHz) and soft saturation in the loop, dual
-//! LFO wobble (slow wow + fast flutter), and a little allpass splatter.
+//! - A GHOST echo recurs at the disc-rotation period even with repeats
+//!   at 0 — the residual charge passes the playback head every rotation.
+//! - The rotation period is LONGER than the first (record→playback head
+//!   distance) echo, so the cadence is off-kilter, never on the grid.
+//! - Long/Short selects the first-echo head distance only; the
+//!   rotation-period echo is identical for both.
+//! - Grit = rotation-speed randomization (time-domain dirt/jitter),
+//!   NOT amplitude saturation.
+//!
+//! Plus: very low bandwidth (murk LP), heavy dual-LFO wobble, light
+//! constant saturation, allpass regen splatter.
 
 use audiocore_dsp::biquad::{Biquad, FilterType};
 use audiocore_dsp::delay_line::DelayLine;
+use audiocore_dsp::prng::XorShift32;
 use audiocore_dsp::smoothing::ParamSmoother;
 use audiocore_dsp::soft_clip::sin_clip;
 
@@ -36,6 +45,10 @@ pub struct OilCanDelay {
     pub wobble: f64,
     /// Loop darkness: lowpass cutoff in Hz (default 2500, the murk).
     pub tone_hz: f64,
+    /// Rotation-speed randomization (0.0–1.0): time-domain jitter on the
+    /// read heads. This is TimeLine's Grit for Oil Can — dirt via speed
+    /// uncertainty, not saturation.
+    pub grit: f64,
     /// Decay EQ tilt (shared engine param).
     pub decay_tilt: f64,
 
@@ -50,13 +63,21 @@ pub struct OilCanDelay {
     smoother: ParamSmoother,
     wow_phase: f64,
     flutter_phase: f64,
+    /// Grit random-walk state (rotation-speed uncertainty).
+    grit_walk: f64,
+    rng: XorShift32,
 }
 
 impl OilCanDelay {
     pub const MIN_TIME_MS: f64 = 200.0;
     pub const MAX_TIME_MS: f64 = 800.0;
-    const MAX_DELAY_S: f64 = 1.2;
+    const MAX_DELAY_S: f64 = 1.6;
     const SHORT_RATIO: f64 = 0.55;
+    /// Disc-rotation period relative to the (long-head) first echo.
+    /// > 1.0: the ghost recurs later than the first echo (off-kilter).
+    const ROTATION_RATIO: f64 = 1.45;
+    /// Residual charge surviving one rotation (no-erase decay constant).
+    const CHARGE_RESIDUE: f64 = 0.4;
 
     pub fn new() -> Self {
         Self {
@@ -65,6 +86,7 @@ impl OilCanDelay {
             heads: OilCanHeads::Long,
             wobble: 0.6,
             tone_hz: 2500.0,
+            grit: 0.1,
             decay_tilt: 0.0,
             delay: DelayLine::new(48000 * 2),
             lp: Biquad::new(),
@@ -76,6 +98,8 @@ impl OilCanDelay {
             smoother: ParamSmoother::new(0.0),
             wow_phase: 0.0,
             flutter_phase: 0.25,
+            grit_walk: 0.0,
+            rng: XorShift32::new(0x011C_A4BE),
         }
     }
 
@@ -141,11 +165,23 @@ impl OilCanDelay {
         }
         let wow = (std::f64::consts::TAU * self.wow_phase).sin() * 0.012;
         let flutter = (std::f64::consts::TAU * self.flutter_phase).sin() * 0.0025;
-        let factor = 1.0 + (wow + flutter) * self.wobble;
+
+        // Grit: rotation-speed uncertainty as a bounded random walk —
+        // fast time-domain jitter, the electrostatic 'dirt'.
+        self.grit_walk += self.rng.next_bipolar() * 0.02;
+        self.grit_walk = self.grit_walk.clamp(-1.0, 1.0);
+        self.grit_walk *= 0.999;
+        let grit_jitter = self.grit_walk * self.grit * 0.004;
+
+        let factor = 1.0 + (wow + flutter) * self.wobble + grit_jitter;
 
         let max_read = self.delay.len() as f64 - 4.0;
         let long_pos = (smooth_delay * factor).clamp(1.0, max_read);
         let short_pos = (smooth_delay * Self::SHORT_RATIO * factor).clamp(1.0, max_read);
+        // Disc rotation: identical for both head modes, longer than the
+        // first echo.
+        let rotation_pos =
+            (smooth_delay * Self::ROTATION_RATIO * factor).clamp(1.0, max_read);
 
         let output = match self.heads {
             OilCanHeads::Long => self.delay.read_cubic(long_pos),
@@ -155,8 +191,12 @@ impl OilCanDelay {
             }
         };
 
-        // Loop: murk (LP) → soft saturation → splatter allpass → feedback.
-        let mut fb = output * self.feedback;
+        // No-erase ghost: residual charge recirculates at the rotation
+        // period regardless of the Repeats setting.
+        let ghost = self.delay.read_cubic(rotation_pos) * Self::CHARGE_RESIDUE;
+
+        // Loop: murk (LP) → light constant saturation → splatter allpass.
+        let mut fb = output * self.feedback + ghost;
         fb = self.lp.tick(fb, ch);
         fb = sin_clip(fb * 1.2) / 1.2;
         fb = self.splatter_tick(fb);
@@ -184,6 +224,7 @@ impl OilCanDelay {
         self.smoother.reset(0.0);
         self.wow_phase = 0.0;
         self.flutter_phase = 0.25;
+        self.grit_walk = 0.0;
     }
 }
 
@@ -241,11 +282,82 @@ mod tests {
     }
 
     #[test]
+    fn ghost_echo_at_rotation_period_with_zero_repeats() {
+        let mut d = OilCanDelay::new();
+        d.time_ms = 400.0;
+        d.feedback = 0.0; // Repeats fully off
+        d.wobble = 0.0;
+        d.grit = 0.0;
+        d.update(SR);
+
+        let mut out = vec![0.0f64; 96000];
+        for (i, o) in out.iter_mut().enumerate() {
+            let input = if i == 0 { 1.0 } else { 0.0 };
+            *o = d.tick(input, 0);
+        }
+        // First echo at 400 ms; ghost passes recur at 400*1.45 = 580 ms
+        // AFTER the first echo: 980 ms, then 1560 ms...
+        let energy_at = |ms: f64| -> f64 {
+            let c = (ms * SR / 1000.0) as usize;
+            out[c.saturating_sub(400)..(c + 400).min(out.len())]
+                .iter()
+                .map(|x| x * x)
+                .sum()
+        };
+        let first = energy_at(400.0);
+        let ghost = energy_at(980.0);
+        assert!(first > 1e-4, "first echo: {first}");
+        assert!(
+            ghost > first * 0.005,
+            "ghost echo should recur at rotation period with repeats=0: {ghost} vs {first}"
+        );
+    }
+
+    #[test]
+    fn ghost_period_identical_for_both_head_modes() {
+        // The rotation-period ghost time must not depend on head mode.
+        let run = |heads: OilCanHeads| -> usize {
+            let mut d = OilCanDelay::new();
+            d.time_ms = 400.0;
+            d.feedback = 0.0;
+            d.wobble = 0.0;
+            d.grit = 0.0;
+            d.heads = heads;
+            d.update(SR);
+            let mut out = vec![0.0f64; 96000];
+            for (i, o) in out.iter_mut().enumerate() {
+                let input = if i == 0 { 1.0 } else { 0.0 };
+                *o = d.tick(input, 0);
+            }
+            // Ghost of the WRITTEN residue appears at rotation period
+            // after the write: find the peak in a window around it.
+            let lo = (500.0 * SR / 1000.0) as usize;
+            let hi = (700.0 * SR / 1000.0) as usize;
+            lo + out[lo..hi]
+                .iter()
+                .enumerate()
+                .max_by(|(_, a), (_, b)| a.abs().partial_cmp(&b.abs()).unwrap())
+                .map(|(i, _)| i)
+                .unwrap()
+        };
+        let long_peak = run(OilCanHeads::Long) as i64;
+        let short_peak = run(OilCanHeads::Short) as i64;
+        // 580 ms rotation ghost read through the long head arrives at
+        // 580 ms into the long output; through the short head the FIRST
+        // echo differs but the rotation spacing is the same 580 ms.
+        assert!(
+            (long_peak - short_peak).abs() < 2400,
+            "rotation ghost spacing should match: {long_peak} vs {short_peak}"
+        );
+    }
+
+    #[test]
     fn no_nan_heavy_settings() {
         let mut d = OilCanDelay::new();
         d.time_ms = 250.0;
         d.feedback = 0.85;
         d.wobble = 1.0;
+        d.grit = 1.0;
         d.update(SR);
 
         for i in 0..96000 {

@@ -186,8 +186,11 @@ pub struct DelayChain {
     pub tap_div_l: TapDivision,
     /// Tap division for the right delay line (used when tempo is set).
     pub tap_div_r: TapDivision,
-    /// Swell: input-triggered wet fade-in time in seconds (0 = off,
-    /// TimeLine range 0.10–4.0).
+    /// Swell: input-triggered fade-in time in seconds (0 = off, TimeLine
+    /// range 0.10–4.0). Mix-dependent semantics (per the MX spec): at
+    /// mix < full the envelope rides the WET signal behind the dry; at
+    /// full wet it rides the dry signal INTO the delay (volume-pedal
+    /// swell emulation).
     pub swell_time_s: f64,
     /// Freeze / infinite hold: repeats hold forever, loop input muted.
     pub freeze: bool,
@@ -548,9 +551,15 @@ impl Processor for DelayChain {
                 1.0
             };
 
+            // Swell placement is mix-dependent (see field docs): full-wet
+            // presets swell the dry feeding the delay; otherwise the
+            // envelope is applied to the wet output below.
+            let swell_on_input = mix >= 0.99;
+            let input_swell = if swell_on_input { swell_gain } else { 1.0 };
+
             // --- Input level ---
-            let scaled_l = dry_l * input_level * swell_gain * live_gain;
-            let scaled_r = dry_r * input_level * swell_gain * live_gain;
+            let scaled_l = dry_l * input_level * input_swell * live_gain;
+            let scaled_r = dry_r * input_level * input_swell * live_gain;
 
             // --- Diffusion (loop mode: applied to input before delay) ---
             let (diff_in_l, diff_in_r) = if self.diffusion_in_loop && self.diffusion_enabled {
@@ -615,6 +624,12 @@ impl Processor for DelayChain {
             if !self.diffusion_in_loop && self.diffusion_enabled {
                 wet_l = self.diffuser_l.tick(wet_l);
                 wet_r = self.diffuser_r.tick(wet_r);
+            }
+
+            // --- Swell on the wet output (mix < full; see above) ---
+            if !swell_on_input {
+                wet_l *= swell_gain;
+                wet_r *= swell_gain;
             }
 
             // --- Accent: alternating repeat volume ---

@@ -6,11 +6,17 @@
 //! can be time-stretched (slower read speed), and blend in octave-up
 //! grains for a spectral halo.
 //!
-//! First-pass quality notes: dual-window grains over one `DelayLine`
-//! with cubic reads; a deep pass will adopt `pitch-dsp` (PSOLA /
-//! signalsmith-stretch) for cleaner octave shifting. Per-grain `spread`
-//! panning is stored for API parity but not applied — the engine is
-//! mono-per-channel inside `DelayChain`.
+//! Spec corrections applied (spec/timeline-mx-reference.md): grain
+//! Shape (Soft/Swell/SoftPluck/Pluck/Bounce), Direction (Forward/
+//! Reverse/Both = random per grain), Spread = random grain placement
+//! across the delay time, Stretch = random per-grain time-stretch,
+//! Octave = random per-grain octave-up probability.
+//!
+//! First-pass quality notes: time-domain grains over one `DelayLine`
+//! with cubic reads — the MX processes in the frequency domain and has
+//! a spectral character even at neutral settings; that lands with the
+//! pitch-dsp deep pass. Bounce's randomized per-grain filter is
+//! approximated by a per-grain one-pole lowpass at a random cutoff.
 
 use audiocore_dsp::biquad::{Biquad, FilterType};
 use audiocore_dsp::delay_line::DelayLine;
@@ -19,18 +25,49 @@ use audiocore_dsp::smoothing::ParamSmoother;
 
 const NUM_GRAINS: usize = 8;
 
+/// Grain envelope shape (TimeLine MX Spectral "Shape").
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum GrainShape {
+    /// Slow attack, slow release (Hann-like).
+    #[default]
+    Soft,
+    /// Slow attack, fast release.
+    Swell,
+    /// Fast attack, slow release.
+    SoftPluck,
+    /// Very fast attack.
+    Pluck,
+    /// Fast attack + randomized per-grain lowpass.
+    Bounce,
+}
+
+/// Grain playback direction (TimeLine MX Spectral "Direction").
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum GrainDirection {
+    #[default]
+    Forward,
+    Reverse,
+    /// Random per grain.
+    Both,
+}
+
 #[derive(Debug, Clone, Copy)]
 struct Grain {
     active: bool,
     /// Current read offset behind the write head, in samples.
     offset: f64,
-    /// Read-speed ratio: 1.0 = normal, 2.0 = octave up, <1.0 = stretched.
-    speed: f64,
+    /// Per-sample offset drift. 0 = normal pitch/direction; positive
+    /// drifts back in time (reverse/stretch), negative = pitched up.
+    drift: f64,
     /// Age in samples.
     age: f64,
     /// Duration in samples.
     dur: f64,
     gain: f64,
+    /// Bounce: per-grain one-pole lowpass state + coefficient (a1 = 0
+    /// disables).
+    lp_state: f64,
+    lp_a1: f64,
 }
 
 impl Grain {
@@ -38,10 +75,12 @@ impl Grain {
         Self {
             active: false,
             offset: 0.0,
-            speed: 1.0,
+            drift: 0.0,
             age: 0.0,
             dur: 1.0,
             gain: 0.0,
+            lp_state: 0.0,
+            lp_a1: 0.0,
         }
     }
 }
@@ -66,10 +105,15 @@ pub struct SpectralDelay {
     pub density: DensityMode,
     /// Stretch (0.0–1.0): grains read slower as this rises (down to 0.5×).
     pub stretch: f64,
-    /// Octave blend (0.0–1.0): fraction of grains that read at 2× (octave up).
+    /// Octave (0.0–1.0): probability of a random per-grain octave-up.
     pub octave: f64,
-    /// Per-grain random pan spread (0.0–1.0). Parity only; see module docs.
+    /// Spread (0.0–1.0): random grain placement across the delay time
+    /// (0 = every grain lands exactly on the delay time).
     pub spread: f64,
+    /// Grain envelope shape.
+    pub shape: GrainShape,
+    /// Grain playback direction.
+    pub direction: GrainDirection,
     /// High-cut in the feedback path (0 = off).
     pub hicut_freq: f64,
     /// Decay EQ tilt (shared engine param).
@@ -99,6 +143,8 @@ impl SpectralDelay {
             stretch: 0.0,
             octave: 0.0,
             spread: 0.0,
+            shape: GrainShape::Soft,
+            direction: GrainDirection::Forward,
             hicut_freq: 0.0,
             decay_tilt: 0.0,
             delay: DelayLine::new(48000 * 3 + 1024),
@@ -160,31 +206,98 @@ impl SpectralDelay {
             None => return, // all voices busy — skip, no stealing clicks
         };
 
-        // Octave blend: probabilistically read at 2× speed.
-        let r = (self.rng.next_bipolar() + 1.0) * 0.5;
-        let speed = if r < self.octave {
-            2.0
-        } else {
-            // Stretch slows the read down to 0.5× at full stretch.
-            1.0 - self.stretch * 0.5
+        let rand01 = |rng: &mut XorShift32| (rng.next_bipolar() + 1.0) * 0.5;
+
+        // Octave: random per-grain octave-up with probability `octave`.
+        let octave_up = rand01(&mut self.rng) < self.octave;
+        // Stretch: RANDOM per-grain time-stretch (0..stretch of half-speed).
+        let stretch_amt = rand01(&mut self.rng) * self.stretch;
+        let speed = if octave_up { 2.0 } else { 1.0 - stretch_amt * 0.5 };
+
+        // Direction: reverse grains drift backward through the buffer
+        // (offset grows by 1 + speed instead of shrinking).
+        let reverse = match self.direction {
+            GrainDirection::Forward => false,
+            GrainDirection::Reverse => true,
+            GrainDirection::Both => self.rng.next_bipolar() > 0.0,
         };
+        let drift = if reverse { 1.0 + speed } else { 1.0 - speed };
 
         // Grains overlap 2×: duration = twice the spawn interval.
         let dur = (interval * 2.0).clamp(256.0, delay_samples.max(512.0));
 
-        // Start reading around the delay time, slightly randomized so
-        // simultaneous grains don't phase-lock.
+        // Spread: random placement across the delay time (0 = on-time).
+        // A small jitter always applies so voices don't phase-lock.
         let jitter = self.rng.next_bipolar() * interval * 0.25;
-        let offset = (delay_samples + jitter).max(4.0);
+        let placement = rand01(&mut self.rng) * self.spread * delay_samples * 0.9;
+        let offset = (delay_samples - placement + jitter).max(4.0);
+
+        // Bounce: randomized per-grain lowpass (~800 Hz – 8 kHz).
+        let lp_a1 = if self.shape == GrainShape::Bounce {
+            let fc = 800.0 * (10.0f64).powf(rand01(&mut self.rng));
+            let x = (-std::f64::consts::TAU * fc / self.sample_rate).exp();
+            x
+        } else {
+            0.0
+        };
 
         self.grains[slot] = Grain {
             active: true,
             offset,
-            speed,
+            drift,
             age: 0.0,
             dur,
             gain: 1.0,
+            lp_state: 0.0,
+            lp_a1,
         };
+    }
+
+    /// Grain window for the active shape at `phase` in [0, 1).
+    #[inline]
+    fn window(shape: GrainShape, phase: f64) -> f64 {
+        match shape {
+            GrainShape::Soft => {
+                let w = (std::f64::consts::PI * phase).sin();
+                w * w
+            }
+            GrainShape::Swell => {
+                // Slow attack, fast release.
+                if phase < 0.8 {
+                    let p = phase / 0.8;
+                    p * p
+                } else {
+                    1.0 - (phase - 0.8) / 0.2
+                }
+            }
+            GrainShape::SoftPluck => {
+                // Fast attack, slow release.
+                if phase < 0.1 {
+                    phase / 0.1
+                } else {
+                    let p = 1.0 - (phase - 0.1) / 0.9;
+                    p * p
+                }
+            }
+            GrainShape::Pluck => {
+                // Very fast attack, exponential-ish release.
+                if phase < 0.02 {
+                    phase / 0.02
+                } else {
+                    let p = 1.0 - (phase - 0.02) / 0.98;
+                    p * p * p
+                }
+            }
+            GrainShape::Bounce => {
+                // Fast attack; the per-grain filter does the character.
+                if phase < 0.05 {
+                    phase / 0.05
+                } else {
+                    let p = 1.0 - (phase - 0.05) / 0.95;
+                    p * p
+                }
+            }
+        }
     }
 
     pub fn tick(&mut self, input: f64, ch: usize) -> f64 {
@@ -201,7 +314,8 @@ impl SpectralDelay {
             self.spawn_countdown = interval;
         }
 
-        // Sum grain voices. Hann window over each grain's lifetime.
+        // Sum grain voices with the selected shape window.
+        let shape = self.shape;
         let mut wet = 0.0;
         let mut active = 0u32;
         for g in &mut self.grains {
@@ -213,12 +327,15 @@ impl SpectralDelay {
                 g.active = false;
                 continue;
             }
-            let window = (std::f64::consts::PI * phase).sin();
-            let window = window * window;
-            wet += self.delay.read_cubic(g.offset) * window * g.gain;
+            let window = Self::window(shape, phase);
+            let mut sample = self.delay.read_cubic(g.offset);
+            if g.lp_a1 > 0.0 {
+                g.lp_state = (1.0 - g.lp_a1) * sample + g.lp_a1 * g.lp_state;
+                sample = g.lp_state;
+            }
+            wet += sample * window * g.gain;
 
-            // Speed ≠ 1 drifts the read head through the buffer.
-            g.offset += 1.0 - g.speed;
+            g.offset += g.drift;
             g.age += 1.0;
             active += 1;
         }
@@ -313,6 +430,77 @@ mod tests {
             assert!(out.is_finite(), "NaN at {i}");
             assert!(out.abs() < 8.0, "runaway at {i}: {out}");
         }
+    }
+
+    #[test]
+    fn all_shapes_and_directions_no_nan() {
+        for shape in [
+            GrainShape::Soft,
+            GrainShape::Swell,
+            GrainShape::SoftPluck,
+            GrainShape::Pluck,
+            GrainShape::Bounce,
+        ] {
+            for direction in [
+                GrainDirection::Forward,
+                GrainDirection::Reverse,
+                GrainDirection::Both,
+            ] {
+                let mut d = SpectralDelay::new();
+                d.time_ms = 250.0;
+                d.feedback = 0.5;
+                d.shape = shape;
+                d.direction = direction;
+                d.spread = 1.0;
+                d.stretch = 0.7;
+                d.octave = 0.5;
+                d.update(SR);
+
+                let mut energy = 0.0;
+                for i in 0..48000 {
+                    let input = if i < 200 { 0.8 } else { 0.0 };
+                    let out = d.tick(input, 0);
+                    assert!(out.is_finite(), "{shape:?}/{direction:?} NaN at {i}");
+                    energy += out * out;
+                }
+                assert!(
+                    energy > 1e-4,
+                    "{shape:?}/{direction:?} should produce output"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn spread_randomizes_grain_placement() {
+        // Continuous tone in: with spread=0 the first wet arrives near
+        // the 400 ms delay time; with spread=1 grains land across the
+        // whole span, so wet appears much earlier.
+        let first_wet = |spread: f64| -> usize {
+            let mut d = SpectralDelay::new();
+            d.time_ms = 400.0;
+            d.feedback = 0.0;
+            d.spread = spread;
+            d.density = DensityMode::Synced(1.0 / 16.0);
+            d.update(SR);
+            for i in 0..48000 {
+                let input = (std::f64::consts::TAU * 440.0 * i as f64 / SR).sin() * 0.5;
+                if d.tick(input, 0).abs() > 0.01 {
+                    return i;
+                }
+            }
+            48000
+        };
+        let on_time = first_wet(0.0);
+        let spread = first_wet(1.0);
+        assert!(
+            on_time > 12000,
+            "spread=0 wet should arrive near the delay time: {on_time}"
+        );
+        assert!(
+            spread < on_time / 2,
+            "spread=1 wet should arrive much earlier: {spread} vs {on_time}"
+        );
     }
 
     #[test]

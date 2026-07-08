@@ -14,7 +14,9 @@ use audiocore_dsp::smoothing::ParamSmoother;
 
 /// LFO waveform for the filter sweep. `+` shapes start at their peak,
 /// `-` shapes at their trough (TimeLine's polarity convention: where the
-/// sweep sits when repeats begin).
+/// sweep sits when repeats begin). `Down`/`Up` are ATTACK-TRIGGERED
+/// one-shot sweeps: once per detected input attack the filter sweeps
+/// down (or up) over one LFO period, then holds — not cyclical.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FilterLfoShape {
     SinePos,
@@ -25,10 +27,12 @@ pub enum FilterLfoShape {
     Saw,
     Ramp,
     Random,
+    Down,
+    Up,
 }
 
 impl FilterLfoShape {
-    pub const COUNT: usize = 8;
+    pub const COUNT: usize = 10;
 
     pub fn from_index(i: usize) -> Self {
         match i {
@@ -39,8 +43,14 @@ impl FilterLfoShape {
             4 => Self::SquarePos,
             5 => Self::Saw,
             6 => Self::Ramp,
-            _ => Self::Random,
+            7 => Self::Random,
+            8 => Self::Down,
+            _ => Self::Up,
         }
+    }
+
+    pub fn is_one_shot(self) -> bool {
+        matches!(self, Self::Down | Self::Up)
     }
 }
 
@@ -125,6 +135,11 @@ pub struct FilterDelay {
     lfo_phase: f64,
     trem_phase: f64,
     sh_value: f64,
+    /// One-shot sweep phase (Down/Up shapes): 0→1 per attack, then holds.
+    one_shot_phase: f64,
+    /// Attack detector for one-shot sweeps.
+    attack_env: audiocore_dsp::envelope::EnvelopeFollower,
+    attack_gate: bool,
     rng: XorShift32,
     // SVF coefficients refresh at control-block rate while sweeping.
     ctrl_countdown: u32,
@@ -158,6 +173,9 @@ impl FilterDelay {
             lfo_phase: 0.0,
             trem_phase: 0.0,
             sh_value: 0.0,
+            one_shot_phase: 1.0,
+            attack_env: audiocore_dsp::envelope::EnvelopeFollower::new(0.0),
+            attack_gate: false,
             rng: XorShift32::new(0xF117_E4),
             ctrl_countdown: 0,
         }
@@ -193,6 +211,9 @@ impl FilterDelay {
         if self.smoother.value() == 0.0 {
             self.smoother.set_immediate(target);
         }
+
+        // Attack detector for the one-shot Down/Up sweeps.
+        self.attack_env.set_times_ms(3.0, 150.0, sample_rate);
     }
 
     /// LFO value in [-1, 1] for the current phase.
@@ -213,6 +234,9 @@ impl FilterDelay {
             FilterLfoShape::Saw => 1.0 - 2.0 * p,
             FilterLfoShape::Ramp => 2.0 * p - 1.0,
             FilterLfoShape::Random => self.sh_value,
+            // One-shots use one_shot_phase, driven per-attack in tick().
+            FilterLfoShape::Down => 1.0 - 2.0 * self.one_shot_phase.min(1.0),
+            FilterLfoShape::Up => 2.0 * self.one_shot_phase.min(1.0) - 1.0,
         }
     }
 
@@ -228,6 +252,21 @@ impl FilterDelay {
         if self.lfo_phase >= 1.0 {
             self.lfo_phase -= 1.0;
             self.sh_value = self.rng.next_bipolar();
+        }
+
+        // One-shot Down/Up: detect input attacks and restart the sweep.
+        if self.lfo_shape.is_one_shot() {
+            let env = self.attack_env.tick(input.abs());
+            if env > 0.02 {
+                if !self.attack_gate {
+                    self.attack_gate = true;
+                    self.one_shot_phase = 0.0;
+                }
+            } else if env < 0.01 {
+                self.attack_gate = false;
+            }
+            // Sweep completes over one LFO period, then holds.
+            self.one_shot_phase = (self.one_shot_phase + lfo_inc).min(1.0);
         }
         let trem_inc = self.trem_speed / (delay_s * self.sample_rate).max(64.0);
         self.trem_phase += trem_inc;
@@ -290,6 +329,9 @@ impl FilterDelay {
         self.lfo_phase = 0.0;
         self.trem_phase = 0.0;
         self.sh_value = 0.0;
+        self.one_shot_phase = 1.0;
+        self.attack_env.reset(0.0);
+        self.attack_gate = false;
         self.ctrl_countdown = 0;
     }
 }
@@ -384,6 +426,38 @@ mod tests {
         assert!(
             max_env > min_env * 1.3,
             "tremolo should modulate repeats: min={min_env}, max={max_env}"
+        );
+    }
+
+    #[test]
+    fn one_shot_down_sweeps_once_per_attack() {
+        let mut d = FilterDelay::new();
+        d.time_ms = 200.0;
+        d.feedback = 0.0;
+        d.depth = 1.0;
+        d.center_hz = 1500.0;
+        d.q = 1.0;
+        d.lfo_shape = FilterLfoShape::Down;
+        d.lfo_speed = 2.0; // sweep completes in half the delay time
+        d.update(SR);
+
+        // Silence → the one-shot phase should hold (parked), then a
+        // burst restarts it: verify the sweep phase resets on attack.
+        for _ in 0..9600 {
+            d.tick(0.0, 0);
+        }
+        let parked = d.one_shot_phase;
+        assert!(parked >= 1.0, "sweep should be parked: {parked}");
+
+        // Attack: a loud burst.
+        for i in 0..480 {
+            let x = (std::f64::consts::TAU * 440.0 * i as f64 / SR).sin() * 0.8;
+            d.tick(x, 0);
+        }
+        assert!(
+            d.one_shot_phase < 1.0,
+            "attack should restart the one-shot sweep: {}",
+            d.one_shot_phase
         );
     }
 
