@@ -23,7 +23,8 @@ use signal_proto::block::BlockType;
 use signal_sampler::{DeviceInfo, GuitarRig, ProfileRig, RigBlock, RigManager};
 
 use crate::profiles::{
-    ProfileDef, SetlistDef, SongDef, build_profile, default_setlists, song_library, worship_def,
+    ProfileDef, SetlistDef, SongDef, build_profile, default_setlists, drive_presets, song_library,
+    worship_def,
 };
 
 /// Rig whose audio prefs the settings service reads/writes (persisted to
@@ -470,6 +471,27 @@ impl GuitarRigBackend {
                                 max: *max,
                             })
                             .collect();
+                        // Drive slots: surface the loaded drive preset and
+                        // its NAM options for the board's quick switch.
+                        let (preset, options, option) = {
+                            let def = self.profile_def.lock().unwrap();
+                            def.drives
+                                .iter()
+                                .find(|d| d.block.eq_ignore_ascii_case(&name))
+                                .and_then(|d| {
+                                    drive_presets()
+                                        .into_iter()
+                                        .find(|p| p.name.eq_ignore_ascii_case(&d.preset))
+                                        .map(|p| {
+                                            (
+                                                p.name.clone(),
+                                                p.options.iter().map(|o| o.name.clone()).collect(),
+                                                d.option as u32,
+                                            )
+                                        })
+                                })
+                                .unwrap_or_default()
+                        };
                         out.push(LiveBlock {
                             id: id.clone(),
                             block_type: block.block_type,
@@ -480,6 +502,9 @@ impl GuitarRigBackend {
                             param_min,
                             param_max,
                             params,
+                            preset,
+                            options,
+                            option,
                         });
                     }
                 }
@@ -965,6 +990,67 @@ impl Rig for GuitarRigBackend {
                     tracing::error!("profile reload failed: {e}");
                 }
                 // Restore the patch that was live before the reload.
+                if let Some(name) = &active {
+                    let idx = prig
+                        .patches()
+                        .iter()
+                        .position(|p| p.name.eq_ignore_ascii_case(name));
+                    if let Some(idx) = idx {
+                        prig.activate(idx);
+                    }
+                }
+            }
+        }
+        self.resync_blocks();
+        self.apply_tempo_to_delays();
+        self.apply_boost_to_block();
+        self.publish_state();
+    }
+
+    fn set_block_option(&self, id: String, option: u32) {
+        // The id addresses a live block; resolve its name, flip the option
+        // in the definition, rebuild + reload (edit-time gap, patches stay
+        // preinstalled for gapless switching afterward).
+        let block_name = self
+            .blocks
+            .lock()
+            .unwrap()
+            .iter()
+            .find(|b| b.id == id)
+            .map(|b| b.name.clone());
+        let Some(block_name) = block_name else { return };
+        let rebuilt = {
+            let mut def = self.profile_def.lock().unwrap();
+            let Some(slot) = def
+                .drives
+                .iter_mut()
+                .find(|d| d.block.eq_ignore_ascii_case(&block_name))
+            else {
+                return;
+            };
+            let n_options = drive_presets()
+                .iter()
+                .find(|p| p.name.eq_ignore_ascii_case(&slot.preset))
+                .map(|p| p.options.len())
+                .unwrap_or(0);
+            if n_options == 0 {
+                return;
+            }
+            slot.option = (option as usize).min(n_options - 1);
+            tracing::info!("{} → {} option {}", slot.block, slot.preset, slot.option);
+            build_profile(&def)
+        };
+        let active = {
+            let guard = self.rig.lock().unwrap();
+            guard
+                .as_ref()
+                .and_then(|prig| prig.active_patch().map(|p| p.name.clone()))
+        };
+        if let Ok(mut guard) = self.rig.lock() {
+            if let Some(prig) = guard.as_mut() {
+                if let Err(e) = prig.load_profile(rebuilt, None) {
+                    tracing::error!("profile reload failed: {e}");
+                }
                 if let Some(name) = &active {
                     let idx = prig
                         .patches()

@@ -839,6 +839,9 @@ fn DriveChunk(
     #[props(default = (0.0, 1.0))] range: (f32, f32),
     /// Amber accent for the amps instead of drive red.
     #[props(default)] amp_style: bool,
+    /// The block preset's NAM options + current selection (quick switch).
+    #[props(default)] options: Vec<String>,
+    #[props(default)] option: u32,
 ) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
     let mut el = use_signal(|| None::<std::rc::Rc<MountedData>>);
@@ -944,6 +947,28 @@ fn DriveChunk(
                     class: if engaged { "text-[10px] font-semibold truncate" } else { "text-[10px] truncate text-muted-foreground" },
                     "{name}"
                 }
+                // NAM option quick-switch (captures within the preset).
+                if options.len() > 1 {
+                    select {
+                        class: "ml-auto pointer-events-auto bg-transparent border border-border/60 rounded-sm text-[8px] px-0 py-0 text-muted-foreground flex-shrink-0", style: "max-width: 58px;",
+                        value: "{option}",
+                        onpointerdown: move |e: PointerEvent| e.stop_propagation(),
+                        onchange: {
+                            let rig = rig.clone();
+                            let block_id = block_id.clone();
+                            move |e: FormEvent| {
+                                if let (Some(r), Some(id), Ok(v)) =
+                                    (rig.clone(), block_id.clone(), e.value().parse::<u32>())
+                                {
+                                    spawn(async move { let _ = r.set_block_option(id, v).await; });
+                                }
+                            }
+                        },
+                        for (i, o) in options.iter().enumerate() {
+                            option { key: "{i}", value: "{i}", selected: i as u32 == option, "{o}" }
+                        }
+                    }
+                }
             }
         }
     }
@@ -1006,10 +1031,12 @@ pub fn ControlView(
                         for b in board.iter() {
                             DriveChunk {
                                 key: "{b.id}",
-                                name: b.name.clone(),
+                                name: if b.preset.is_empty() { b.name.clone() } else { b.preset.clone() },
                                 level: b.params.iter().find(|p| p.name == "drive").map(|p| p.value).unwrap_or(0.5),
                                 engaged: !b.bypassed,
                                 block_id: Some(b.id.clone()),
+                                options: b.options.clone(),
+                                option: b.option,
                             }
                         }
                         if let Some(amp) = amp_l {

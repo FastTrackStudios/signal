@@ -237,6 +237,11 @@ pub struct LiveBlock {
     pub param_max: f32,
     /// The full controllable parameter set (the Control view's surface).
     pub params: Vec<BlockParam>,
+    /// The block preset loaded in this slot (e.g. "JHS Morning Glory").
+    pub preset: String,
+    /// The preset's selectable options (NAM captures) + current selection.
+    pub options: Vec<String>,
+    pub option: u32,
 }
 
 // ── Services ──────────────────────────────────────────────────────────────
@@ -328,6 +333,9 @@ pub mod rig {
         fn midi_recent(&self) -> Vec<String>;
         /// Switch the active setlist (recalls its first song).
         fn select_setlist(&self, index: u32);
+        /// Select a block preset's NAM option (e.g. a pedal's gain capture).
+        /// Rebuilds the chains — an edit-time operation.
+        fn set_block_option(&self, id: String, option: u32);
         /// Tap tempo.
         fn tap_tempo(&self);
         /// Toggle a block's bypass (by id).

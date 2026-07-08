@@ -47,6 +47,72 @@ pub struct PresetDef {
     pub nam: String,
 }
 
+/// One NAM option inside a drive block preset — pedals are commonly
+/// captured at several settings (gain stages, sides, channels).
+#[derive(Clone)]
+pub struct DriveOptionDef {
+    pub name: String,
+    pub nam: String,
+}
+
+/// A **Drive Block Preset**: the thing a drive slot loads. Wraps one or
+/// more NAM captures of the pedal with a quick option switch.
+#[derive(Clone)]
+pub struct DrivePresetDef {
+    pub name: String,
+    pub options: Vec<DriveOptionDef>,
+}
+
+/// A drive slot in the chain: which preset it runs and which of the
+/// preset's NAM options is selected.
+#[derive(Clone)]
+pub struct DriveSlotDef {
+    /// Chain block name ("Drive 1", …).
+    pub block: String,
+    pub preset: String,
+    pub option: usize,
+}
+
+/// The drive block preset library.
+pub fn drive_presets() -> Vec<DrivePresetDef> {
+    let opt = |name: &str, nam: &str| DriveOptionDef {
+        name: name.to_string(),
+        nam: nam.to_string(),
+    };
+    vec![
+        DrivePresetDef {
+            name: "King of Tone".to_string(),
+            options: vec![
+                opt(
+                    "Both Sides",
+                    "/home/cody/Downloads/King of Tone/both-sides/King of Tone both sides.nam",
+                ),
+                opt(
+                    "Red = Boost",
+                    "/home/cody/Downloads/King of Tone/red-boost/King of Tone ver4 Red channel set to Boost.nam",
+                ),
+            ],
+        },
+        DrivePresetDef {
+            name: "JHS Morning Glory".to_string(),
+            options: vec![
+                opt(
+                    "Low Gain",
+                    "/home/cody/Downloads/JHS Morning Glory/JHS Morning Glory V4 - Low Gain Blue.nam",
+                ),
+                opt(
+                    "Medium Gain",
+                    "/home/cody/Downloads/JHS Morning Glory/JHS Morning Glory V4 - Medium Gain Blue.nam",
+                ),
+                opt(
+                    "High Gain",
+                    "/home/cody/Downloads/JHS Morning Glory/JHS Morning Glory V4 - High Gain Blue.nam",
+                ),
+            ],
+        },
+    ]
+}
+
 /// One patch: a name in the profile + the preset it points at + the
 /// overrides that make it different from the preset (the domain's
 /// `Patch { target, overrides }` — see `signal_proto::overrides`).
@@ -79,6 +145,8 @@ impl PatchDef {
 /// into it, and the footswitch stacks grouping the patches.
 #[derive(Clone)]
 pub struct ProfileDef {
+    /// Drive-slot assignments (block → drive preset + selected option).
+    pub drives: Vec<DriveSlotDef>,
     pub name: String,
     pub presets: Vec<PresetDef>,
     pub patches: Vec<PatchDef>,
@@ -107,7 +175,12 @@ pub fn worship_def() -> ProfileDef {
             v,
         )
     };
+    let drives = vec![
+        DriveSlotDef { block: "Drive 1".to_string(), preset: "King of Tone".to_string(), option: 0 },
+        DriveSlotDef { block: "Drive 2".to_string(), preset: "JHS Morning Glory".to_string(), option: 1 },
+    ];
     ProfileDef {
+        drives,
         name: "Worship".to_string(),
         presets: vec![
             preset("Fender Clean", format!("{FENDER_DIR}/Fender DRRI _ Clean _ SM57 + Royer R-121 + Room _ Full Rig.nam")),
@@ -177,6 +250,31 @@ pub fn worship_def() -> ProfileDef {
 /// Build the runtime [`RigProfile`] from a definition: every patch gets the
 /// standard chain (Comp → its preset's NAM → Gate/Boost → mod/motion →
 /// Time), so pointing a patch at a different preset swaps the amp capture.
+/// Build a drive slot's block: NAM-backed when the profile assigns a
+/// drive preset to it, a transparent placeholder otherwise. Off by
+/// default either way — the board engages them.
+fn drive_block(def: &ProfileDef, block: &str) -> RigBlock {
+    let assigned = def
+        .drives
+        .iter()
+        .find(|d| d.block.eq_ignore_ascii_case(block))
+        .and_then(|d| {
+            drive_presets()
+                .into_iter()
+                .find(|p| p.name.eq_ignore_ascii_case(&d.preset))
+                .and_then(|p| p.options.get(d.option).cloned())
+        });
+    let mut b = match assigned {
+        Some(opt) => RigBlock::of_type(BlockType::Drive)
+            .with_nam(opt.nam)
+            .with_param("drive", "0.5"),
+        None => RigBlock::of_type(BlockType::Drive).with_param("drive", "0.5"),
+    };
+    b = b.named(block);
+    b.bypassed = true;
+    b
+}
+
 pub fn build_profile(def: &ProfileDef) -> RigProfile {
     // The standard full chain around one NAM capture — see the block-name
     // comments in the module docs (names match the guitar-rig-template slots).
@@ -190,9 +288,9 @@ pub fn build_profile(def: &ProfileDef) -> RigProfile {
             // engaged from the control surface (DSP lands with drive-dsp;
             // placeholders keep the blocks addressable + level-staged).
             .with_block(off_fx(BlockType::Boost, "Boost", &[("drive", "0.5")]))
-            .with_block(off_fx(BlockType::Drive, "Drive 1", &[("drive", "0.5")]))
-            .with_block(off_fx(BlockType::Drive, "Drive 2", &[("drive", "0.5")]))
-            .with_block(off_fx(BlockType::Drive, "Drive 3", &[("drive", "0.5")]))
+            .with_block(drive_block(def, "Drive 1"))
+            .with_block(drive_block(def, "Drive 2"))
+            .with_block(drive_block(def, "Drive 3"))
             .with_block(RigBlock::nam(path).named("Amp L"))
             // Post-amp shaping, part of the Amp module: gate into the amp
             // EQ — both dialed against the amp's character.
