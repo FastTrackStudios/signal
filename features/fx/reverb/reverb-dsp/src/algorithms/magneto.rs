@@ -4,7 +4,7 @@
 //! machine where the echoes are progressively diffused, blurring
 //! the boundary between delay and reverb.
 
-use crate::algorithm::{AlgorithmParams, ReverbAlgorithm};
+use crate::algorithm::{AlgorithmParams, MagnetoParams, ReverbAlgorithm};
 use crate::primitives::allpass_diffuser::AllpassDiffuser;
 use crate::primitives::one_pole::Lp1;
 use audiocore_dsp::delay_line::DelayLine;
@@ -29,6 +29,9 @@ pub struct Magneto {
     fb_state_r: f64,
     // Tape saturation
     saturation: f64,
+    // BigSky MX Ping Pong: heads alternate hard L/R (odd heads left,
+    // even heads right) — width + center clarity.
+    ping_pong: bool,
     sample_rate: f64,
 }
 
@@ -57,6 +60,7 @@ impl Magneto {
             fb_state_l: 0.0,
             fb_state_r: 0.0,
             saturation: 0.3,
+            ping_pong: false,
             sample_rate,
         };
 
@@ -132,6 +136,11 @@ impl ReverbAlgorithm for Magneto {
         self.saturation = params.extra_a;
     }
 
+    fn set_magneto_params(&mut self, params: &MagnetoParams) -> bool {
+        self.ping_pong = params.ping_pong;
+        true
+    }
+
     #[inline]
     fn tick(&mut self, left: f64, right: f64) -> (f64, f64) {
         // Write input + feedback to tape
@@ -152,8 +161,20 @@ impl ReverbAlgorithm for Magneto {
             // Re-use same diffuser for R (slightly different phase from L input)
             let diff_r = self.head_diffusers[i].tick(raw_r);
 
-            out_l += diff_l * self.head_gains[i];
-            out_r += diff_r * self.head_gains[i];
+            if self.ping_pong {
+                // Alternate taps hard L/R: mono-sum the head, then pan
+                // it fully to one side (√2 keeps perceived level ≈ the
+                // centered dual-channel sum).
+                let mono = (diff_l + diff_r) * 0.5 * std::f64::consts::SQRT_2;
+                if i % 2 == 0 {
+                    out_l += mono * self.head_gains[i];
+                } else {
+                    out_r += mono * self.head_gains[i];
+                }
+            } else {
+                out_l += diff_l * self.head_gains[i];
+                out_r += diff_r * self.head_gains[i];
+            }
         }
 
         // Feedback from last head

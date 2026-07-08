@@ -8,7 +8,7 @@ use crossbeam_channel::{Receiver, Sender, TryRecvError};
 
 use crate::algorithm::{
     AlgorithmParams, AlgorithmType, ConvolutionModParams, ImpulseParams, IrSlot,
-    ReverbAlgorithm,
+    MagnetoParams, NonLinearParams, ReverbAlgorithm, ShimmerParams,
 };
 use crate::algorithms;
 use crate::ir::engine::{ProcessedIr, ReshapeJob};
@@ -90,6 +90,15 @@ pub struct ReverbChain {
     /// Reset to defaults whenever a new IR loads (mix preserved),
     /// mirroring the hardware.
     pub impulse: ImpulseParams,
+
+    /// BigSky MX Shimmer params (dual shift voices + feedback mode).
+    /// Only consumed by Shimmer; defaults are transparent.
+    pub shimmer: ShimmerParams,
+    /// BigSky MX Magneto params (ping pong). Only consumed by Magneto.
+    pub magneto: MagnetoParams,
+    /// BigSky MX NonLinear params (chop / gate speed / late stage).
+    /// Only consumed by NonLinear; defaults are transparent.
+    pub nonlinear: NonLinearParams,
 
     // Global controls
     /// Pre-delay in milliseconds (0-500).
@@ -232,6 +241,9 @@ impl ReverbChain {
             params: AlgorithmParams::default(),
             conv_mod: ConvolutionModParams::default(),
             impulse: ImpulseParams::default(),
+            shimmer: ShimmerParams::default(),
+            magneto: MagnetoParams::default(),
+            nonlinear: NonLinearParams::default(),
             predelay_ms: 0.0,
             mix: 0.5,
             width: 1.0,
@@ -365,6 +377,9 @@ impl ReverbChain {
             self.algorithm.set_params(&p);
             // Fresh algorithm — convolution mod options land instantly.
             self.algorithm.set_conv_mod_params(&self.conv_mod, true);
+            self.algorithm.set_shimmer_params(&self.shimmer);
+            self.algorithm.set_magneto_params(&self.magneto);
+            self.algorithm.set_nonlinear_params(&self.nonlinear);
         }
     }
 
@@ -423,6 +438,10 @@ impl ReverbChain {
         // changes mark slots dirty, picked up by pump_reshapes().
         self.algorithm.set_impulse_params(&self.impulse, false);
         self.pump_reshapes();
+        // Per-engine MX params — each is a no-op outside its algorithm.
+        self.algorithm.set_shimmer_params(&self.shimmer);
+        self.algorithm.set_magneto_params(&self.magneto);
+        self.algorithm.set_nonlinear_params(&self.nonlinear);
     }
 
     /// Synchronous load helpers reset the impulse params (new IR ⇒
@@ -522,6 +541,9 @@ impl Processor for ReverbChain {
         self.algorithm.set_conv_mod_params(&self.conv_mod, true);
         self.algorithm.set_impulse_params(&self.impulse, true);
         self.pump_reshapes();
+        self.algorithm.set_shimmer_params(&self.shimmer);
+        self.algorithm.set_magneto_params(&self.magneto);
+        self.algorithm.set_nonlinear_params(&self.nonlinear);
     }
 
     fn process(&mut self, left: &mut [f64], right: &mut [f64]) {

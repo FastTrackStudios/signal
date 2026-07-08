@@ -308,6 +308,95 @@ impl ImpulseParams {
     }
 }
 
+/// Where the Shimmer pitch voices take their signal from (BigSky MX
+/// Shimmer "Feedback" mode).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ShimmerFeedbackMode {
+    /// Voices are generated from the dry input only — a single shimmer
+    /// layer over the reverb, no octave laddering.
+    Input,
+    /// Voices are generated from the reverb output and recirculated
+    /// (shift inside the loop → runaway octave ladders). This is the
+    /// legacy behavior.
+    #[default]
+    Regenerative,
+    /// Both sources summed.
+    InputPlusRegen,
+}
+
+impl ShimmerFeedbackMode {
+    pub fn from_index(i: usize) -> Self {
+        match i {
+            0 => Self::Input,
+            2 => Self::InputPlusRegen,
+            _ => Self::Regenerative,
+        }
+    }
+}
+
+/// BigSky MX Shimmer engine params: two independent pitch voices +
+/// feedback-mode select. Defaults are bit-transparent against the
+/// legacy single-voice mapping (`extra_a` = amount, `extra_b` = coarse
+/// interval select).
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct ShimmerParams {
+    /// Voice 1 interval in semitones (-12..+12). `None` = keep the
+    /// legacy `extra_b` coarse mapping (octave up / fifth / octave dn).
+    pub shift1_semitones: Option<f64>,
+    /// Voice 2 interval in semitones (-12..+12). Only audible when
+    /// `voice2` is on.
+    pub shift2_semitones: Option<f64>,
+    /// Enable the second pitch voice.
+    pub voice2: bool,
+    /// Level of both shift voices (0..1). `None` = legacy `extra_a`
+    /// mapping.
+    pub amount: Option<f64>,
+    pub feedback_mode: ShimmerFeedbackMode,
+}
+
+/// BigSky MX Magneto engine params (beyond the shared set).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct MagnetoParams {
+    /// Taps alternate hard L/R (center clarity + width).
+    pub ping_pong: bool,
+}
+
+/// BigSky MX NonLinear engine params: Chop (amplitude mod on the decay),
+/// explicit gate speed, and the separate Late reverb stage. Defaults
+/// are transparent (chop depth 0, late level 0, gate speed 1.0 ≙ the
+/// legacy 90% hold point).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct NonLinearParams {
+    /// Chop LFO rate in Hz (0.1..15).
+    pub chop_rate_hz: f64,
+    /// Chop depth (0..1). 0 = off (transparent).
+    pub chop_depth: f64,
+    /// Gate hold fraction control (0..1) for the Gate shape: the gate
+    /// holds full level until `0.5 + 0.4 * gate_speed` of the envelope
+    /// window, then releases. 1.0 reproduces the legacy 0.9 hold.
+    pub gate_speed: f64,
+    /// Late-stage onset speed (0..1): 0 = slow swell (~500 ms),
+    /// 1 = immediate.
+    pub late_speed: f64,
+    /// Late-stage decay (0..1).
+    pub late_decay: f64,
+    /// Late-stage output level (0..1). 0 = stage off (no CPU).
+    pub late_level: f64,
+}
+
+impl Default for NonLinearParams {
+    fn default() -> Self {
+        Self {
+            chop_rate_hz: 4.0,
+            chop_depth: 0.0,
+            gate_speed: 1.0,
+            late_speed: 0.5,
+            late_decay: 0.5,
+            late_level: 0.0,
+        }
+    }
+}
+
 /// Common interface for all reverb algorithms.
 ///
 /// Each algorithm processes one stereo sample pair at a time (tick-based),
@@ -368,6 +457,27 @@ pub trait ReverbAlgorithm: Send {
     /// Convolution; returns `true` if accepted.
     fn set_conv_mod_params(&mut self, params: &ConvolutionModParams, snap: bool) -> bool {
         let _ = (params, snap);
+        false
+    }
+
+    /// Push Shimmer engine params. No-op outside Shimmer; returns
+    /// `true` if accepted.
+    fn set_shimmer_params(&mut self, params: &ShimmerParams) -> bool {
+        let _ = params;
+        false
+    }
+
+    /// Push Magneto engine params. No-op outside Magneto; returns
+    /// `true` if accepted.
+    fn set_magneto_params(&mut self, params: &MagnetoParams) -> bool {
+        let _ = params;
+        false
+    }
+
+    /// Push NonLinear engine params. No-op outside NonLinear; returns
+    /// `true` if accepted.
+    fn set_nonlinear_params(&mut self, params: &NonLinearParams) -> bool {
+        let _ = params;
         false
     }
 

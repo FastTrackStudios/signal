@@ -283,6 +283,24 @@ const REVERB_PARAMS: &[ParamSpec] = &[
     ParamSpec { id: 14, name: "imp_stretch", min: 0.25, max: 4.0, default: 1.0 },
     ParamSpec { id: 15, name: "imp_direction", min: 0.0, max: 1.0, default: 0.0 },
     ParamSpec { id: 16, name: "imp_feedback", min: 0.0, max: 1.0, default: 0.0 },
+    // BigSky MX Shimmer (chain A): two shift voices in semitones,
+    // shared amount, feedback mode (0 Input / 1 Regenerative /
+    // 2 Input+Regen). shim_voice2: 0 = single voice, 1 = dual.
+    ParamSpec { id: 17, name: "shim_shift1", min: -12.0, max: 12.0, default: 12.0 },
+    ParamSpec { id: 18, name: "shim_shift2", min: -12.0, max: 12.0, default: 7.0 },
+    ParamSpec { id: 19, name: "shim_voice2", min: 0.0, max: 1.0, default: 0.0 },
+    ParamSpec { id: 20, name: "shim_amount", min: 0.0, max: 1.0, default: 0.35 },
+    ParamSpec { id: 21, name: "shim_fb_mode", min: 0.0, max: 2.0, default: 1.0 },
+    // BigSky MX Magneto: taps alternate hard L/R.
+    ParamSpec { id: 22, name: "mag_ping_pong", min: 0.0, max: 1.0, default: 0.0 },
+    // BigSky MX NonLinear: Chop trem on the decay, explicit gate speed,
+    // separate Late reverb stage.
+    ParamSpec { id: 23, name: "nl_chop_rate", min: 0.1, max: 15.0, default: 4.0 },
+    ParamSpec { id: 24, name: "nl_chop_depth", min: 0.0, max: 1.0, default: 0.0 },
+    ParamSpec { id: 25, name: "nl_gate_speed", min: 0.0, max: 1.0, default: 1.0 },
+    ParamSpec { id: 26, name: "nl_late_speed", min: 0.0, max: 1.0, default: 0.5 },
+    ParamSpec { id: 27, name: "nl_late_decay", min: 0.0, max: 1.0, default: 0.5 },
+    ParamSpec { id: 28, name: "nl_late_level", min: 0.0, max: 1.0, default: 0.0 },
 ];
 
 /// Native Reverb block — wraps [`reverb::DualReverb`] (two full chains +
@@ -385,6 +403,55 @@ impl NativeReverb {
             }
             16 => {
                 self.rev.a.impulse.feedback = v.clamp(0.0, 1.0);
+                self.rev.a.update_params();
+            }
+            17 => {
+                self.rev.a.shimmer.shift1_semitones = Some(v.clamp(-12.0, 12.0));
+                self.rev.a.update_params();
+            }
+            18 => {
+                self.rev.a.shimmer.shift2_semitones = Some(v.clamp(-12.0, 12.0));
+                self.rev.a.update_params();
+            }
+            19 => {
+                self.rev.a.shimmer.voice2 = v >= 0.5;
+                self.rev.a.update_params();
+            }
+            20 => {
+                self.rev.a.shimmer.amount = Some(v.clamp(0.0, 1.0));
+                self.rev.a.update_params();
+            }
+            21 => {
+                self.rev.a.shimmer.feedback_mode =
+                    reverb::ShimmerFeedbackMode::from_index(v.round().max(0.0) as usize);
+                self.rev.a.update_params();
+            }
+            22 => {
+                self.rev.a.magneto.ping_pong = v >= 0.5;
+                self.rev.a.update_params();
+            }
+            23 => {
+                self.rev.a.nonlinear.chop_rate_hz = v.clamp(0.1, 15.0);
+                self.rev.a.update_params();
+            }
+            24 => {
+                self.rev.a.nonlinear.chop_depth = v.clamp(0.0, 1.0);
+                self.rev.a.update_params();
+            }
+            25 => {
+                self.rev.a.nonlinear.gate_speed = v.clamp(0.0, 1.0);
+                self.rev.a.update_params();
+            }
+            26 => {
+                self.rev.a.nonlinear.late_speed = v.clamp(0.0, 1.0);
+                self.rev.a.update_params();
+            }
+            27 => {
+                self.rev.a.nonlinear.late_decay = v.clamp(0.0, 1.0);
+                self.rev.a.update_params();
+            }
+            28 => {
+                self.rev.a.nonlinear.late_level = v.clamp(0.0, 1.0);
                 self.rev.a.update_params();
             }
             _ => {}
