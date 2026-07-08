@@ -310,6 +310,15 @@ const REVERB_PARAMS: &[ParamSpec] = &[
     ParamSpec { id: 31, name: "cho_choir", min: 0.0, max: 1.0, default: 0.3 },
     ParamSpec { id: 32, name: "cho_voice", min: 0.0, max: 1.0, default: 0.0 },
     ParamSpec { id: 33, name: "cho_mod", min: 0.0, max: 1.0, default: 0.0 },
+    // BigSky MX voices + Hall extras + named-size select (chain A).
+    // voice: 0 MX / 1 Classic. hall_swell_type: 0 wet / 1 wet+dry.
+    // size_sel maps named sizes (Hall Concert/Arena, Room Studio/Club,
+    // else Small/Medium/Large) — applies when set.
+    ParamSpec { id: 34, name: "voice", min: 0.0, max: 1.0, default: 0.0 },
+    ParamSpec { id: 35, name: "hall_mid", min: -6.0, max: 6.0, default: 0.0 },
+    ParamSpec { id: 36, name: "hall_swell_rise", min: 0.0, max: 1.0, default: 0.0 },
+    ParamSpec { id: 37, name: "hall_swell_type", min: 0.0, max: 1.0, default: 0.0 },
+    ParamSpec { id: 38, name: "size_sel", min: 0.0, max: 2.0, default: 0.0 },
 ];
 
 /// Native Reverb block — wraps [`reverb::DualReverb`] (two full chains +
@@ -486,6 +495,33 @@ impl NativeReverb {
             33 => {
                 self.rev.a.chorale.mod_amount = v.clamp(0.0, 1.0);
                 self.rev.a.update_params();
+            }
+            34 => {
+                self.rev.a.voice = if v >= 0.5 {
+                    reverb::ReverbVoice::Classic
+                } else {
+                    reverb::ReverbVoice::Mx
+                };
+                self.rev.a.update_params();
+            }
+            35 => {
+                self.rev.a.hall.mid_db = v.clamp(-6.0, 6.0);
+                self.rev.a.update_params();
+            }
+            36 => {
+                self.rev.a.hall.swell_rise = v.clamp(0.0, 1.0);
+                self.rev.a.update_params();
+            }
+            37 => {
+                self.rev.a.hall.swell_type = if v >= 0.5 {
+                    reverb::SwellType::WetPlusDry
+                } else {
+                    reverb::SwellType::Wet
+                };
+                self.rev.a.update_params();
+            }
+            38 => {
+                self.rev.a.set_size_index(v.round().max(0.0) as usize);
             }
             _ => {}
         }

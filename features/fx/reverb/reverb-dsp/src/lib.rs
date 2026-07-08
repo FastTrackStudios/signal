@@ -31,8 +31,9 @@ pub mod primitives;
 
 pub use algorithm::{
     AlgorithmParams, AlgorithmType, BloomParams, ChoirVoice, ChoraleParams, CloudParams,
-    ConvolutionModParams, ImpulseDirection, ImpulseParams, ImpulseTail, IrSlot, MagnetoParams,
-    NonLinearParams, ReverbAlgorithm, ShimmerFeedbackMode, ShimmerParams,
+    ConvolutionModParams, HallParams, ImpulseDirection, ImpulseParams, ImpulseTail, IrSlot,
+    MagnetoParams, NonLinearParams, ReverbAlgorithm, ReverbVoice, ShimmerFeedbackMode,
+    ShimmerParams, SwellType,
 };
 pub use chain::ReverbChain;
 pub use dual::{DualReverb, DualRouting};

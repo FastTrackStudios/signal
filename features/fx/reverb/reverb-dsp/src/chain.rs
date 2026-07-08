@@ -8,8 +8,8 @@ use crossbeam_channel::{Receiver, Sender, TryRecvError};
 
 use crate::algorithm::{
     AlgorithmParams, AlgorithmType, BloomParams, ChoraleParams, CloudParams,
-    ConvolutionModParams, ImpulseParams, IrSlot, MagnetoParams, NonLinearParams,
-    ReverbAlgorithm, ShimmerParams,
+    ConvolutionModParams, HallParams, ImpulseParams, IrSlot, MagnetoParams, NonLinearParams,
+    ReverbAlgorithm, ReverbVoice, ShimmerParams, SwellType,
 };
 use crate::algorithms;
 use crate::ir::engine::{ProcessedIr, ReshapeJob};
@@ -109,6 +109,13 @@ pub struct ReverbChain {
     /// BigSky MX Chorale params (Choir level / voice / mod
     /// randomization). Only consumed by Chorale; defaults transparent.
     pub chorale: ChoraleParams,
+    /// BigSky MX Voice select (MX / Classic). Plate/Spring toggle
+    /// between their two heritage variants; Hall/Room/Shimmer get a
+    /// Classic re-tune via `effective_params`. Default MX = transparent.
+    pub voice: ReverbVoice,
+    /// BigSky MX Hall params (Mid EQ + Swell). Applied on the chain's
+    /// wet bus while a Hall variant is active; defaults transparent.
+    pub hall: HallParams,
 
     // Global controls
     /// Pre-delay in milliseconds (0-500).
@@ -166,6 +173,16 @@ pub struct ReverbChain {
     /// When attached, dirty impulse shaping params are re-baked off
     /// the audio thread and hot-swapped back via `prepared_ir_rx`.
     reshape_tx: Option<Sender<ReshapeJob>>,
+
+    /// Voice value last applied to the variant pairing (Plate/Spring),
+    /// so an explicit `set_variant` isn't clobbered on every
+    /// `update_params`.
+    applied_voice: ReverbVoice,
+    /// Hall Mid EQ (wet-bus peak around 1 kHz; stereo via channel idx).
+    mid_eq: Biquad,
+    /// Hall Swell state: input envelope + the ramped swell gain.
+    swell_env: EnvelopeFollower,
+    swell_level: f64,
 
     sample_rate: f64,
 }
@@ -257,6 +274,8 @@ impl ReverbChain {
             cloud: CloudParams::default(),
             bloom: BloomParams::default(),
             chorale: ChoraleParams::default(),
+            voice: ReverbVoice::default(),
+            hall: HallParams::default(),
             predelay_ms: 0.0,
             mix: 0.5,
             width: 1.0,
@@ -278,6 +297,14 @@ impl ReverbChain {
             ir_swap_rx: None,
             prepared_ir_rx: None,
             reshape_tx: None,
+            applied_voice: ReverbVoice::default(),
+            mid_eq: Biquad::new(),
+            swell_env: {
+                let mut e = EnvelopeFollower::new(0.0);
+                e.set_times_ms(10.0, 600.0, sample_rate);
+                e
+            },
+            swell_level: 1.0,
             sample_rate,
         }
     }
@@ -418,7 +445,92 @@ impl ReverbChain {
         if self.freeze {
             p.decay = 1.0;
         }
+        // Classic voice re-tune for the engines without a second
+        // heritage implementation (Plate/Spring pair-map onto variants
+        // instead — see `apply_voice_pairing`).
+        // // interpretation: the manual describes Classic as slappier,
+        // punchier, with more resonant harmonic buildup — approximated
+        // as sparser diffusion, less tail motion, and a brighter-
+        // ringing high band.
+        if self.voice == ReverbVoice::Classic {
+            match self.algorithm_type {
+                AlgorithmType::Hall => {
+                    p.diffusion *= 0.85;
+                    p.high_decay_mult = (p.high_decay_mult * 1.15).min(2.0);
+                }
+                AlgorithmType::Room => {
+                    p.diffusion *= 0.7;
+                    p.modulation *= 0.7;
+                    p.high_decay_mult = (p.high_decay_mult * 1.2).min(2.0);
+                }
+                AlgorithmType::Shimmer => {
+                    p.diffusion *= 0.85;
+                    p.damping *= 0.8;
+                }
+                _ => {}
+            }
+        }
         p
+    }
+
+    /// Voice → variant pairing for the engines whose two heritages both
+    /// exist as implementations. Applied only when the voice actually
+    /// changes, so an explicit `set_variant` (e.g. Plate Progenitor)
+    /// isn't clobbered on every `update_params`.
+    fn apply_voice_pairing(&mut self) {
+        if self.voice == self.applied_voice {
+            return;
+        }
+        self.applied_voice = self.voice;
+        let variant = match (self.voice, self.algorithm_type) {
+            // Plate: MX rebuild = Dattorro, Classic = the Lexicon 224
+            // port. (Progenitor stays reachable via set_variant.)
+            (ReverbVoice::Mx, AlgorithmType::Plate) => Some(0),
+            (ReverbVoice::Classic, AlgorithmType::Plate) => Some(1),
+            // Spring: Vintage IS the classic heritage.
+            (ReverbVoice::Mx, AlgorithmType::Spring) => Some(0),
+            (ReverbVoice::Classic, AlgorithmType::Spring) => Some(1),
+            _ => None,
+        };
+        if let Some(v) = variant {
+            self.set_variant(v);
+        }
+    }
+
+    /// BigSky MX named-Size selector (see
+    /// [`AlgorithmType::size_names`]). Hall and Room sizes are distinct
+    /// tunings, so they map onto the existing variant system
+    /// (Hall: Concert/Arena; Room: Studio/Club ≈ Studio/Medium);
+    /// everything else steps `params.size`.
+    pub fn set_size_index(&mut self, idx: usize) {
+        match self.algorithm_type {
+            AlgorithmType::Hall => {
+                let v = [0usize, 2][idx.min(1)];
+                self.set_variant(v);
+            }
+            AlgorithmType::Room => {
+                let v = [2usize, 0][idx.min(1)];
+                self.set_variant(v);
+            }
+            _ => {
+                let steps = [0.3, 0.55, 0.8];
+                self.params.size = steps[idx.min(2)];
+                self.update_params();
+            }
+        }
+    }
+
+    /// Re-derive the Hall Mid EQ + Swell configuration from
+    /// `self.hall`. Cheap; called from both update paths.
+    fn configure_hall(&mut self) {
+        let mid = self.hall.mid_db.clamp(-6.0, 6.0);
+        self.mid_eq.set(
+            FilterType::Peak { gain_db: mid },
+            1000.0,
+            0.9,
+            self.sample_rate,
+        );
+        self.swell_env.set_times_ms(10.0, 600.0, self.sample_rate);
     }
 
     /// Update all algorithm parameters.
@@ -429,6 +541,8 @@ impl ReverbChain {
     /// diffusion, modulation, tone, ...) still applies immediately.
     /// For an instant snap (preset load), call `update()` instead.
     pub fn update_params(&mut self) {
+        self.apply_voice_pairing();
+        self.configure_hall();
         let mut p = self.effective_params();
         self.decay_smoother.set_target(p.decay);
         self.damping_smoother.set_target(p.damping);
@@ -479,11 +593,17 @@ impl Processor for ReverbChain {
         self.tilt_r.reset();
         self.duck_env.reset(0.0);
         self.duck_gain = 1.0;
+        self.mid_eq.reset();
+        self.swell_env.reset(0.0);
+        self.swell_level = if self.hall.swell_rise > 1e-9 { 0.0 } else { 1.0 };
         self.trem_phase = 0.0;
     }
 
     fn update(&mut self, config: AudioConfig) {
         self.sample_rate = config.sample_rate;
+        self.apply_voice_pairing();
+        self.configure_hall();
+        self.swell_level = if self.hall.swell_rise > 1e-9 { 0.0 } else { 1.0 };
 
         let max_predelay = (config.sample_rate * 0.5) as usize;
         self.predelay = DelayLine::new(max_predelay + 1);
@@ -624,6 +744,14 @@ impl Processor for ReverbChain {
 
         self.predelay_samples = (self.predelay_ms * 0.001 * self.sample_rate) as usize;
         let duck_thresh = self.duck_threshold.max(1.0e-6);
+
+        // Hall Mid EQ + Swell engage flags (chain-level Hall params).
+        let hall_active = self.algorithm_type == AlgorithmType::Hall;
+        let mid_on = hall_active && self.hall.mid_db.abs() > 0.01;
+        let swell_on = hall_active && self.hall.swell_rise > 1e-9;
+        // Rise 0..1 → 50 ms .. ~2 s swell.
+        let swell_rate = 1.0
+            / ((0.05 + self.hall.swell_rise.clamp(0.0, 1.0) * 2.0) * self.sample_rate.max(1.0));
         self.mix_smoother.set_target(self.mix);
         self.width_smoother.set_target(self.width);
         self.pan_smoother.set_target(self.pan);
@@ -675,6 +803,18 @@ impl Processor for ReverbChain {
                 // — env already shapes the rate).
                 self.duck_gain = self.duck_smooth * (self.duck_gain - target_duck) + target_duck;
 
+                // Hall Swell: gain builds behind each note (envelope
+                // logic borrowed from the Swell algorithm).
+                if swell_on {
+                    let env = self.swell_env.tick((dry_l + dry_r).abs());
+                    let target = (env * 4.0).min(1.0);
+                    if self.swell_level < target {
+                        self.swell_level = (self.swell_level + swell_rate).min(target);
+                    } else {
+                        self.swell_level = (self.swell_level - swell_rate * 0.5).max(0.0);
+                    }
+                }
+
                 // Input filtering
                 let filt_l = self.input_lp.tick(self.input_hp.tick(dry_l, 0), 0);
                 let filt_r = self.input_lp.tick(self.input_hp.tick(dry_r, 1), 1);
@@ -710,6 +850,13 @@ impl Processor for ReverbChain {
                 if self.tilt_smoother.value().abs() > 0.01 {
                     wet_l = self.tilt_l.tick(wet_l);
                     wet_r = self.tilt_r.tick(wet_r);
+                }
+
+                // Hall Mid EQ (~1 kHz peak on the wet bus; negative =
+                // the mid-scooped "space for the dry" curve).
+                if mid_on {
+                    wet_l = self.mid_eq.tick(wet_l, 0);
+                    wet_r = self.mid_eq.tick(wet_r, 1);
                 }
 
                 // Width (mid-side)
@@ -751,9 +898,22 @@ impl Processor for ReverbChain {
                     final_r *= self.duck_gain;
                 }
 
+                // Hall Swell, Wet type: shape the reverb only.
+                if swell_on && self.hall.swell_type == SwellType::Wet {
+                    final_l *= self.swell_level;
+                    final_r *= self.swell_level;
+                }
+
                 // Mix
                 left[i] = dry_l * (1.0 - mix) + final_l * mix;
                 right[i] = dry_r * (1.0 - mix) + final_r * mix;
+
+                // Hall Swell, Wet+Dry type: volume-pedal feel on the
+                // whole output.
+                if swell_on && self.hall.swell_type == SwellType::WetPlusDry {
+                    left[i] *= self.swell_level;
+                    right[i] *= self.swell_level;
+                }
             }
 
             block_start = block_end;

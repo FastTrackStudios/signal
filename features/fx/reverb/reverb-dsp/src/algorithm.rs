@@ -100,6 +100,18 @@ impl AlgorithmType {
         }
     }
 
+    /// BigSky MX named Size options for this engine (see
+    /// [`crate::chain::ReverbChain::set_size_index`]). Hall/Room sizes
+    /// map onto the variant system; everything else steps
+    /// `params.size`.
+    pub fn size_names(self) -> &'static [&'static str] {
+        match self {
+            Self::Hall => &["Concert", "Arena"],
+            Self::Room => &["Studio", "Club"],
+            _ => &["Small", "Medium", "Large"],
+        }
+    }
+
     /// Maximum variant count across all algorithm types.
     pub fn max_variant_count() -> usize {
         Self::ALL
@@ -447,6 +459,59 @@ pub struct ChoraleParams {
     /// distinct singers (decorrelated vibrato + formant drift).
     /// 0 = off (transparent).
     pub mod_amount: f64,
+}
+
+/// BigSky MX per-engine Voice select. MX = the current voicing
+/// (default, bit-transparent); Classic selects the counterpart
+/// heritage.
+///
+/// - Plate / Spring: pair-mapped onto the existing variant system
+///   (Plate: Dattorro ↔ Lexicon 224; Spring: Classic ↔ Vintage) —
+///   both implementations genuinely exist.
+/// - Hall / Room / Shimmer: `Classic` is a re-tune of the same
+///   algorithm (slappier, punchier, more resonant harmonic buildup —
+///   the manual's description), NOT a port of the original BigSky.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ReverbVoice {
+    #[default]
+    Mx,
+    Classic,
+}
+
+/// How the Hall Swell shapes the signal (BigSky MX "Swell Type").
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum SwellType {
+    /// Swell the reverb only — dry stays untouched.
+    #[default]
+    Wet,
+    /// Swell the whole output (volume-pedal feel).
+    WetPlusDry,
+}
+
+/// BigSky MX Hall engine params. Consumed at the CHAIN level (not the
+/// algorithm): the Mid EQ rides the wet output bus so it covers every
+/// hall variant, and the swell needs both wet and dry. Defaults are
+/// transparent.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct HallParams {
+    /// Mid-band cut/boost in dB around ~1 kHz on the wet (-6..+6).
+    /// Negative = the mid-scooped "space for the dry" EQ.
+    pub mid_db: f64,
+    /// Swell rise (0..1): 0 = off (transparent), higher = slower/longer
+    /// volume swell into each note (envelope logic borrowed from the
+    /// Swell algorithm).
+    pub swell_rise: f64,
+    pub swell_type: SwellType,
+}
+
+impl Default for HallParams {
+    fn default() -> Self {
+        Self {
+            mid_db: 0.0,
+            swell_rise: 0.0,
+            swell_type: SwellType::Wet,
+        }
+    }
 }
 
 /// Common interface for all reverb algorithms.

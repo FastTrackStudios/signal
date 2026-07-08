@@ -122,6 +122,8 @@ impl DualReverb {
         let cloud = src.cloud;
         let bloom = src.bloom;
         let chorale = src.chorale;
+        let voice = src.voice;
+        let hall = src.hall;
         let magneto = src.magneto;
         let nonlinear = src.nonlinear;
         let predelay_ms = src.predelay_ms;
@@ -149,6 +151,8 @@ impl DualReverb {
         dst.cloud = cloud;
         dst.bloom = bloom;
         dst.chorale = chorale;
+        dst.voice = voice;
+        dst.hall = hall;
         dst.magneto = magneto;
         dst.nonlinear = nonlinear;
         dst.predelay_ms = predelay_ms;
