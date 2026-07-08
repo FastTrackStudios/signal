@@ -330,6 +330,29 @@ pub mod comp_meter {
     }
 }
 
+/// Global DI sidechain — the rig's input probe publishes the clean guitar
+/// peak per block; the gate keys off it so gating stays tight regardless
+/// of what the tone (amp/EQ/drive) does to the signal it actually gates.
+pub mod sidechain {
+    use core::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+
+    static PEAK: AtomicU32 = AtomicU32::new(0);
+    static ENABLED: AtomicBool = AtomicBool::new(false);
+
+    /// Publish the current DI block peak (linear). Enables the sidechain.
+    pub fn set_peak(peak: f32) {
+        PEAK.store(peak.to_bits(), Ordering::Relaxed);
+        ENABLED.store(true, Ordering::Relaxed);
+    }
+
+    /// The DI peak, if a probe is publishing.
+    pub fn peak() -> Option<f32> {
+        ENABLED
+            .load(Ordering::Relaxed)
+            .then(|| f32::from_bits(PEAK.load(Ordering::Relaxed)))
+    }
+}
+
 const COMP_PARAMS: &[ParamSpec] = &[
     ParamSpec { id: 0, name: "threshold", min: -60.0, max: 0.0, default: -18.0 },
     ParamSpec { id: 1, name: "ratio", min: 1.0, max: 20.0, default: 4.0 },
@@ -1285,7 +1308,12 @@ impl PluginInstance for NativeMod {
 use modulation::trem::chain::TremChain;
 use modulation::trem::tremolo::TremMode;
 
-const TREM_PARAMS: &[ParamSpec] = &[ParamSpec { id: 0, name: "depth", min: 0.0, max: 1.0, default: 0.5 }];
+const TREM_PARAMS: &[ParamSpec] = &[
+    ParamSpec { id: 0, name: "depth", min: 0.0, max: 1.0, default: 0.5 },
+    ParamSpec { id: 1, name: "mix", min: 0.0, max: 1.0, default: 1.0 },
+    // Free-running LFO rate (the trigger engine's free mode).
+    ParamSpec { id: 2, name: "rate", min: 0.05, max: 12.0, default: 4.0 },
+];
 
 /// Native Tremolo block — wraps [`TremChain`] (amplitude modulation).
 pub struct NativeTrem {
@@ -1309,8 +1337,15 @@ impl NativeTrem {
     }
 
     fn set(&mut self, id: u32, v: f64) {
-        if id == 0 {
-            self.tr.set_depth(v);
+        match id {
+            0 => self.tr.set_depth(v),
+            1 => self.tr.mix = v.clamp(0.0, 1.0),
+            2 => {
+                // Free-running rate: force the trigger engine out of sync.
+                self.tr.modulator.trigger.sync_index = 0;
+                self.tr.modulator.trigger.rate_hz = v.max(0.01);
+            }
+            _ => {}
         }
     }
 
@@ -1653,10 +1688,14 @@ impl PluginInstance for NativeGate {
         for &(id, value) in events.params {
             self.set(id, value);
         }
+        // Detector source: the clean DI sidechain when the rig publishes
+        // one (post-amp placement, input-accurate gating), else the block's
+        // own input.
+        let di = sidechain::peak().map(|p| p as f64);
         for i in 0..out_l.len() {
             let l = in_l.get(i).copied().unwrap_or(0.0);
             let r = in_r.get(i).copied().unwrap_or(0.0);
-            let peak = l.abs().max(r.abs()) as f64;
+            let peak = di.unwrap_or_else(|| l.abs().max(r.abs()) as f64);
             // Peak follower: instant rise, ~30 ms fall.
             self.env = if peak > self.env { peak } else { peak + (self.env - peak) * self.env_coeff };
             let target = if self.env >= self.threshold { 1.0 } else { 0.0 };

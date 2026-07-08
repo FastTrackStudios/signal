@@ -29,8 +29,9 @@ enum CompDrag {
 
 const W: f64 = 360.0;
 const H: f64 = 360.0; // 1:1 — the comp widget is square
-/// Waveform dB range (matches the painter's `range_db`).
-const RANGE_DB: f64 = 36.0;
+/// Waveform dB range. 60 dB: this compressor lives on DI guitar, not line
+/// level — the −30 dB neighborhood sits mid-window where thresholds live.
+const RANGE_DB: f64 = 60.0;
 
 fn param(block: &LiveBlock, name: &str) -> Option<BlockParam> {
     block.params.iter().find(|p| p.name == name).cloned()

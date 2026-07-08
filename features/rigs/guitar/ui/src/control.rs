@@ -857,65 +857,173 @@ fn ReverbPanel(blocks: Vec<LiveBlock>) -> Element {
     }
 }
 
-/// Modulation visualizer: the active modulation block's LFO (rate × depth)
-/// over a two-second window. Dormant flat line when the module is bypassed.
+/// One modulation group (Modulation: chorus/phaser/flanger; Motion:
+/// trem/vibrato/rotary): arrows rotate which member is engaged (rarely
+/// more than one at a time), an LFO visualization of the active effect,
+/// and two intelligently-mapped knobs — Mix and Speed.
 #[component]
-fn ModViz(blocks: Vec<LiveBlock>) -> Element {
-    const W: f32 = 200.0;
-    let mods: Vec<LiveBlock> = blocks
+fn ModGroupPanel(
+    title: &'static str,
+    /// Member block types, in rotation order.
+    kinds: Vec<BlockType>,
+    blocks: Vec<LiveBlock>,
+    tempo_bpm: u32,
+    /// Speed as tempo divisions (Motion) instead of a Hz knob (Modulation).
+    #[props(default)] tempo_divisions: bool,
+) -> Element {
+    let rig = use_hook(try_consume_context::<RigClient>);
+    let members: Vec<LiveBlock> = kinds
         .iter()
-        .filter(|b| {
-            matches!(
-                b.block_type,
-                BlockType::Chorus | BlockType::Flanger | BlockType::Phaser
-                    | BlockType::Trem | BlockType::Vibrato | BlockType::Rotary
-            )
-        })
-        .cloned()
+        .filter_map(|k| blocks.iter().find(|b| b.block_type == *k).cloned())
         .collect();
-    let active = mods.iter().find(|b| !b.bypassed);
-    let (label, d) = match active {
-        Some(b) => {
-            let rate = param_v(b, "rate", 0.3);
-            let depth = param_v(b, "depth", 0.5).clamp(0.05, 1.0);
-            // rate 0..1 → 0.25..8 Hz over a 2 s window.
-            let hz = 0.25 + rate * 7.75;
-            let cycles = hz * 2.0;
-            let mut d = String::new();
-            for px in 0..=96 {
-                let t = px as f32 / 96.0;
-                let y = 40.0 - (t * cycles * std::f32::consts::TAU).sin() * depth * 30.0;
-                d.push_str(if px == 0 { "M " } else { "L " });
-                d.push_str(&format!("{:.1} {:.1} ", 6.0 + t * (W - 12.0), y));
-            }
-            (b.name.clone(), d)
+    if members.is_empty() {
+        return rsx! { span { class: "text-xs text-muted-foreground italic p-2", "No {title} blocks." } };
+    }
+    let active_idx = members.iter().position(|b| !b.bypassed);
+    let shown = active_idx.unwrap_or(0);
+    let cur = members[shown].clone();
+    let engaged = active_idx.is_some();
+
+    // Rotate: engage the target member, bypass its siblings.
+    let rotate = {
+        let rig = rig.clone();
+        let members = members.clone();
+        move |dir: i32| {
+            let n = members.len() as i32;
+            let next = (((shown as i32 + dir) % n) + n) % n;
+            let (rig, members) = (rig.clone(), members.clone());
+            spawn(async move {
+                let Some(r) = rig else { return };
+                for (i, m) in members.iter().enumerate() {
+                    let _ = r
+                        .set_block_bypass(m.id.clone(), i != next as usize)
+                        .await;
+                }
+            });
         }
-        None => (String::new(), format!("M 6 40 L {} 40", W - 6.0)),
     };
+
+    // LFO viz of the shown member.
+    let rate = param_v(&cur, "rate", 1.0);
+    let depth = param_v(&cur, "depth", 0.5).clamp(0.1, 1.0);
+    let mut d = String::new();
+    for px in 0..=96 {
+        let t = px as f32 / 96.0;
+        // Two seconds of LFO at the actual rate.
+        let y = 26.0 - (t * rate * 2.0 * std::f32::consts::TAU).sin() * depth * 18.0;
+        d.push_str(if px == 0 { "M " } else { "L " });
+        d.push_str(&format!("{:.1} {:.1} ", 4.0 + t * 192.0, y));
+    }
+    let color = if engaged { "#f472b6" } else { "#3f3f46" };
+
+    // Motion speed: current rate expressed as the nearest tempo division.
+    let quarter_hz = tempo_bpm.max(1) as f32 / 60.0;
+    let div_hz: Vec<f32> = [1.0f32, 0.75, 0.5, 1.0 / 3.0, 0.25, 0.618, 0.414]
+        .iter()
+        .map(|beats| quarter_hz / beats)
+        .collect();
+    let cur_div = div_hz
+        .iter()
+        .enumerate()
+        .min_by(|a, b| {
+            (a.1 - rate).abs().partial_cmp(&(b.1 - rate).abs()).unwrap()
+        })
+        .map(|(i, _)| i)
+        .unwrap_or(0);
+
     rsx! {
-        div { class: "relative flex flex-col h-full min-h-0", style: "background: #080808;",
-            svg { class: "w-full flex-1 min-h-0", view_box: "0 0 200 80", preserve_aspect_ratio: "none",
-                line { x1: "0", y1: "40", x2: "200", y2: "40", stroke: "#27272a", stroke_width: "1" }
-                path {
-                    d: "{d}",
-                    fill: "none",
-                    stroke: if active.is_some() { "#f472b6" } else { "#3f3f46" },
-                    stroke_width: "1.5",
+        div { class: "flex flex-col h-full min-h-0", style: "background: #080808;",
+            // Header: arrows rotate the engaged member.
+            div { class: "flex items-center gap-1 px-1.5 pt-1 flex-shrink-0",
+                span { style: "font-size:8px; font-weight:600; text-transform:uppercase; color:#8a8a92;", "{title}" }
+                button {
+                    class: "ml-auto w-4 h-4 rounded-sm border border-border text-[9px] text-muted-foreground hover:text-foreground leading-none",
+                    onclick: {
+                        let rotate = rotate.clone();
+                        move |_| rotate(-1)
+                    },
+                    "‹"
+                }
+                button {
+                    class: if engaged {
+                        "px-1.5 h-4 rounded-sm text-[9px] font-bold leading-none"
+                    } else {
+                        "px-1.5 h-4 rounded-sm text-[9px] text-muted-foreground border border-border leading-none"
+                    },
+                    style: if engaged { "background-color: #f472b6; color: #000;" } else { "" },
+                    // Tap the name to engage/bypass the shown member.
+                    onclick: {
+                        let rig = rig.clone();
+                        let id = cur.id.clone();
+                        move |_| {
+                            if let Some(r) = rig.clone() {
+                                let id = id.clone();
+                                spawn(async move { let _ = r.toggle_block_bypass(id).await; });
+                            }
+                        }
+                    },
+                    "{cur.name}"
+                }
+                button {
+                    class: "w-4 h-4 rounded-sm border border-border text-[9px] text-muted-foreground hover:text-foreground leading-none",
+                    onclick: move |_| rotate(1),
+                    "›"
                 }
             }
-            div { class: "absolute top-0.5 left-1.5 flex items-baseline gap-2",
-                span { style: "font-size:8px; font-weight:600; text-transform:uppercase; color:#8a8a92;", "Mod" }
-                if !label.is_empty() {
-                    span { style: "font-size:8px; color:#f472b6;", "{label}" }
-                } else {
-                    span { style: "font-size:8px; color:#52525b;", "none active" }
+            // LFO trace.
+            svg { class: "w-full flex-1 min-h-0", view_box: "0 0 200 52", preserve_aspect_ratio: "none",
+                line { x1: "0", y1: "26", x2: "200", y2: "26", stroke: "#27272a", stroke_width: "1" }
+                path { d: "{d}", fill: "none", stroke: "{color}", stroke_width: "1.5" }
+            }
+            // Mix + Speed.
+            div { class: "flex items-end justify-around px-1 pb-0.5 flex-shrink-0 gap-1",
+                if let Some(p) = param(&cur, "mix") {
+                    PKnob { block_id: cur.id.clone(), name: "mix", label: "Mix", p }
+                } else if let Some(p) = param(&cur, "depth") {
+                    PKnob { block_id: cur.id.clone(), name: "depth", label: "Mix", p }
+                }
+                if tempo_divisions {
+                    // Speed as a note division, mapped to Hz from the tempo.
+                    div { class: "flex flex-col gap-0.5",
+                        span { style: "font-size:8px; font-weight:600; text-transform:uppercase; color:#8a8a92;", "Speed" }
+                        select {
+                            class: "bg-transparent border border-border rounded-sm text-[10px] px-0.5 py-0",
+                            value: "{cur_div}",
+                            onchange: {
+                                let rig = rig.clone();
+                                let id = cur.id.clone();
+                                move |e: FormEvent| {
+                                    if let Ok(i) = e.value().parse::<usize>() {
+                                        let hz = div_hz.get(i).copied().unwrap_or(2.0);
+                                        if let Some(r) = rig.clone() {
+                                            let id = id.clone();
+                                            spawn(async move {
+                                                let _ = r.set_block_param(id, "rate".into(), hz).await;
+                                            });
+                                        }
+                                    }
+                                }
+                            },
+                            for (i, l) in ["1/4", "1/8.", "1/8", "1/4T", "1/16", "Golden", "Silver"].iter().enumerate() {
+                                option { key: "{i}", value: "{i}", selected: i == cur_div, "{l}" }
+                            }
+                        }
+                    }
+                } else if let Some(p) = param(&cur, "rate") {
+                    PKnob {
+                        block_id: cur.id.clone(),
+                        name: "rate",
+                        label: "Speed",
+                        p,
+                        fmt: Some((|v| format!("{v:.2}Hz")) as fn(f32) -> String),
+                    }
                 }
             }
         }
     }
 }
 
-// ── The drive board rail ───────────────────────────────────────────────────
+// ── The drive board rail ──// ── The drive board rail ───────────────────────────────────────────────────
 
 /// One drive-board chunk: the whole widget is a horizontal level fader —
 /// the red gradient fills with how hard the block is pushed (default
@@ -1207,9 +1315,23 @@ pub fn ControlView(
                                 ReverbPanel { blocks: blocks.clone() }
                             }
                         }
-                        div { class: "min-h-0 h-full flex flex-col", style: "flex: 1 1 0%;",
+                        div { class: "min-h-0 h-full flex flex-col gap-0", style: "flex: 1 1 0%;",
                             ZoomPanel { title: "Modulation".to_string(),
-                                ModViz { blocks: blocks.clone() }
+                                ModGroupPanel {
+                                    title: "Mod",
+                                    kinds: vec![BlockType::Chorus, BlockType::Phaser, BlockType::Flanger],
+                                    blocks: blocks.clone(),
+                                    tempo_bpm: model.tempo_bpm,
+                                }
+                            }
+                            ZoomPanel { title: "Motion".to_string(),
+                                ModGroupPanel {
+                                    title: "Motion",
+                                    kinds: vec![BlockType::Trem, BlockType::Vibrato, BlockType::Rotary],
+                                    blocks: blocks.clone(),
+                                    tempo_bpm: model.tempo_bpm,
+                                    tempo_divisions: true,
+                                }
                             }
                         }
                     }

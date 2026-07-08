@@ -344,6 +344,9 @@ pub mod rig {
         fn tap_tempo(&self);
         /// Toggle a block's bypass (by id).
         fn toggle_block_bypass(&self, id: String);
+        /// Set a block's bypass explicitly (the rotate controls need set,
+        /// not toggle, semantics).
+        fn set_block_bypass(&self, id: String, bypassed: bool);
         /// Set a block's primary param.
         fn set_block_param(&self, id: String, param: String, value: f32);
 

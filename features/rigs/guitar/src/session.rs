@@ -733,9 +733,13 @@ fn param_specs(bt: BlockType) -> Vec<(String, f32, f32, f32)> {
         BlockType::Chorus | BlockType::Flanger | BlockType::Vibrato => owned(&[
             ("mix", 0.0, 1.0, 0.4),
             ("depth", 0.0, 1.0, 0.5),
-            ("rate", 0.0, 1.0, 0.3),
+            ("rate", 0.05, 10.0, 1.0),
         ]),
-        BlockType::Trem => owned(&[("depth", 0.0, 1.0, 0.5)]),
+        BlockType::Trem => owned(&[
+            ("depth", 0.0, 1.0, 0.5),
+            ("mix", 0.0, 1.0, 1.0),
+            ("rate", 0.05, 12.0, 4.0),
+        ]),
         _ => Vec::new(),
     }
 }
@@ -1398,6 +1402,20 @@ impl Rig for GuitarRigBackend {
             self.apply_tempo_to_delays();
             self.events.publish(RigEvent::Perf(Rig::perf(self)));
         }
+    }
+
+    fn set_block_bypass(&self, id: String, bypassed: bool) {
+        let current = self
+            .blocks
+            .lock()
+            .unwrap()
+            .iter()
+            .find(|b| b.id == id)
+            .map(|b| b.bypassed);
+        if current == Some(bypassed) {
+            return;
+        }
+        Rig::toggle_block_bypass(self, id);
     }
 
     fn toggle_block_bypass(&self, id: String) {

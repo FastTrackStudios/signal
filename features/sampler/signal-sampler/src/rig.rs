@@ -697,6 +697,9 @@ impl PluginInstance for InputProbe {
         }
         self.shared.store(pk_l.max(pk_r));
         self.shared.store_lr(pk_l, pk_r);
+        // Feed the global DI sidechain — the gate keys off the clean guitar
+        // even though it sits post-amp in the chain.
+        signal_fx::sidechain::set_peak(pk_l.max(pk_r));
         self.shared.push_samples(&self.mono);
         self.shared.push_capture(&self.mono);
         Ok(())
