@@ -25,6 +25,7 @@
 pub mod algorithm;
 pub mod algorithms;
 pub mod chain;
+pub mod dual;
 pub mod ir;
 pub mod primitives;
 
@@ -32,3 +33,4 @@ pub use algorithm::{
     AlgorithmParams, AlgorithmType, ConvolutionModParams, IrSlot, ReverbAlgorithm,
 };
 pub use chain::ReverbChain;
+pub use dual::{DualReverb, DualRouting};

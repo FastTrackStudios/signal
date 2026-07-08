@@ -56,6 +56,11 @@ pub struct ReverbChain {
     // Per-sample smoothing of the zipper-prone global controls.
     mix_smoother: ParamSmoother,
     width_smoother: ParamSmoother,
+    pan_smoother: ParamSmoother,
+    trem_depth_smoother: ParamSmoother,
+
+    // Wet-tremolo oscillator phase (radians).
+    trem_phase: f64,
 
     // Coefficient-level params, ramped at sub-block rate (every
     // SMOOTH_BLOCK samples) so automation doesn't step filter/feedback
@@ -83,6 +88,15 @@ pub struct ReverbChain {
     pub mix: f64,
     /// Stereo width (0.0 = mono, 1.0 = normal, 2.0 = extra wide).
     pub width: f64,
+    /// Wet-output pan (-1 left .. +1 right, 0 = centered). Equal-power,
+    /// unity at center; a mid setting weights the field rather than
+    /// muting the far side (BigSky MX per-slot pan).
+    pub pan: f64,
+    /// Wet tremolo rate in Hz (Flint-style trem on the reverb output;
+    /// covers BigSky NonLinear Chop / TimeLine MX Reverb-machine trem).
+    pub trem_rate_hz: f64,
+    /// Wet tremolo depth (0 = off, 1 = full amplitude modulation).
+    pub trem_depth: f64,
     /// Input highpass frequency in Hz (20 = off).
     pub input_hp_freq: f64,
     /// Input lowpass frequency in Hz (20000 = off).
@@ -161,6 +175,19 @@ impl ReverbChain {
                 s.set_epsilon(1e-4);
                 s
             },
+            pan_smoother: {
+                let mut s = ParamSmoother::new(0.0);
+                s.set_time_ms(5.0, sample_rate);
+                s.set_epsilon(1e-4);
+                s
+            },
+            trem_depth_smoother: {
+                let mut s = ParamSmoother::new(0.0);
+                s.set_time_ms(10.0, sample_rate);
+                s.set_epsilon(1e-4);
+                s
+            },
+            trem_phase: 0.0,
             decay_smoother: {
                 // Matches AlgorithmParams::default().decay
                 let mut s = ParamSmoother::new(0.5);
@@ -192,6 +219,9 @@ impl ReverbChain {
             predelay_ms: 0.0,
             mix: 0.5,
             width: 1.0,
+            pan: 0.0,
+            trem_rate_hz: 4.0,
+            trem_depth: 0.0,
             input_hp_freq: 20.0,
             input_lp_freq: 20000.0,
             output_hp_freq: 20.0,
@@ -348,6 +378,7 @@ impl Processor for ReverbChain {
         self.tilt_r.reset();
         self.duck_env.reset(0.0);
         self.duck_gain = 1.0;
+        self.trem_phase = 0.0;
     }
 
     fn update(&mut self, config: AudioConfig) {
@@ -398,6 +429,8 @@ impl Processor for ReverbChain {
         self.duck_smooth = EnvelopeFollower::coeff(0.001, config.sample_rate);
         self.mix_smoother.set_time_ms(5.0, config.sample_rate);
         self.width_smoother.set_time_ms(5.0, config.sample_rate);
+        self.pan_smoother.set_time_ms(5.0, config.sample_rate);
+        self.trem_depth_smoother.set_time_ms(10.0, config.sample_rate);
         self.decay_smoother.set_time_ms(30.0, config.sample_rate);
         self.damping_smoother.set_time_ms(30.0, config.sample_rate);
         self.tilt_smoother.set_time_ms(30.0, config.sample_rate);
@@ -406,6 +439,8 @@ impl Processor for ReverbChain {
         // land on the new values instantly instead of ramping.
         self.mix_smoother.set_immediate(self.mix);
         self.width_smoother.set_immediate(self.width);
+        self.pan_smoother.set_immediate(self.pan);
+        self.trem_depth_smoother.set_immediate(self.trem_depth);
         let p = self.effective_params();
         self.decay_smoother.set_immediate(p.decay);
         self.damping_smoother.set_immediate(p.damping);
@@ -471,6 +506,10 @@ impl Processor for ReverbChain {
         let duck_thresh = self.duck_threshold.max(1.0e-6);
         self.mix_smoother.set_target(self.mix);
         self.width_smoother.set_target(self.width);
+        self.pan_smoother.set_target(self.pan);
+        self.trem_depth_smoother.set_target(self.trem_depth);
+        let trem_inc = 2.0 * std::f64::consts::PI * self.trem_rate_hz.clamp(0.1, 12.0)
+            / self.sample_rate;
 
         let mut block_start = 0;
         while block_start < n {
@@ -561,6 +600,30 @@ impl Processor for ReverbChain {
                 } else {
                     (wet_l, wet_r)
                 };
+
+                // Wet pan (equal-power, unity at center — same law as
+                // delay's pan_gains; a mid setting weights the field,
+                // leaving decay audible on the far side).
+                let pan = self.pan_smoother.tick();
+                if pan.abs() > 1e-6 {
+                    let theta = (pan.clamp(-1.0, 1.0) + 1.0) * std::f64::consts::FRAC_PI_4;
+                    final_l *= std::f64::consts::SQRT_2 * theta.cos();
+                    final_r *= std::f64::consts::SQRT_2 * theta.sin();
+                }
+
+                // Wet tremolo (sine, wet path only). Phase advances only
+                // while the ramped depth is non-zero, so depth 0 stays
+                // bit-identical and re-engaging starts at full gain.
+                let trem_depth = self.trem_depth_smoother.tick();
+                if trem_depth > 1e-6 {
+                    let g = 1.0 - trem_depth * 0.5 * (1.0 - self.trem_phase.cos());
+                    final_l *= g;
+                    final_r *= g;
+                    self.trem_phase += trem_inc;
+                    if self.trem_phase > 2.0 * std::f64::consts::PI {
+                        self.trem_phase -= 2.0 * std::f64::consts::PI;
+                    }
+                }
 
                 // Ducker
                 if self.duck_amount > 0.0 {
@@ -1035,6 +1098,131 @@ mod tests {
         assert!(
             low_cut < low_kept,
             "Lower low_decay_mult should reduce LF tail energy: kept={low_kept}, cut={low_cut}"
+        );
+    }
+
+    #[test]
+    fn pan_zero_is_bit_identical() {
+        let render = |pan: f64| -> Vec<f64> {
+            let mut c = ReverbChain::new();
+            c.mix = 1.0;
+            c.pan = pan;
+            c.update(config());
+            let mut l: Vec<f64> = (0..9600).map(|i| if i < 8 { 1.0 } else { 0.0 }).collect();
+            let mut r = l.clone();
+            c.process(&mut l, &mut r);
+            l
+        };
+        let base = render(0.0);
+        // Re-render with the field left at its default (never set).
+        let mut c = ReverbChain::new();
+        c.mix = 1.0;
+        c.update(config());
+        let mut l: Vec<f64> = (0..9600).map(|i| if i < 8 { 1.0 } else { 0.0 }).collect();
+        let mut r = l.clone();
+        c.process(&mut l, &mut r);
+        for (a, b) in base.iter().zip(l.iter()) {
+            assert!((a - b).abs() < 1e-15, "pan=0 must be bit-identical");
+        }
+    }
+
+    #[test]
+    fn pan_weights_field_but_keeps_far_side() {
+        // Mid-left pan: left louder than right, but the right still
+        // carries decay (weighted, not muted).
+        let mut c = ReverbChain::new();
+        c.set_algorithm(AlgorithmType::Hall);
+        c.mix = 1.0;
+        c.pan = -0.5;
+        c.update(config());
+        let n = 48000;
+        let mut l: Vec<f64> = (0..n).map(|i| if i < 8 { 1.0 } else { 0.0 }).collect();
+        let mut r = l.clone();
+        c.process(&mut l, &mut r);
+        let el: f64 = l.iter().map(|x| x * x).sum();
+        let er: f64 = r.iter().map(|x| x * x).sum();
+        assert!(el > er * 1.5, "left must be weighted: L={el}, R={er}");
+        assert!(
+            er > el * 0.05,
+            "right must still carry decay at mid pan: L={el}, R={er}"
+        );
+
+        // Full left: right side essentially gone.
+        let mut c2 = ReverbChain::new();
+        c2.set_algorithm(AlgorithmType::Hall);
+        c2.mix = 1.0;
+        c2.pan = -1.0;
+        c2.update(config());
+        let mut l2: Vec<f64> = (0..n).map(|i| if i < 8 { 1.0 } else { 0.0 }).collect();
+        let mut r2 = l2.clone();
+        c2.process(&mut l2, &mut r2);
+        let el2: f64 = l2.iter().map(|x| x * x).sum();
+        let er2: f64 = r2.iter().map(|x| x * x).sum();
+        assert!(
+            er2 < el2 * 1e-6,
+            "full-left pan should mute the right wet: L={el2}, R={er2}"
+        );
+    }
+
+    #[test]
+    fn trem_zero_is_bit_identical_and_dry_untouched() {
+        let render = |depth: f64, mix: f64| -> Vec<f64> {
+            let mut c = ReverbChain::new();
+            c.mix = mix;
+            c.trem_depth = depth;
+            c.trem_rate_hz = 6.0;
+            c.update(config());
+            let mut l: Vec<f64> = (0..9600)
+                .map(|i| (2.0 * PI * 220.0 * i as f64 / SR).sin() * 0.5)
+                .collect();
+            let mut r = l.clone();
+            c.process(&mut l, &mut r);
+            l
+        };
+        // depth 0 == default, bit-identical.
+        let off = render(0.0, 1.0);
+        let base = render(-0.0, 1.0);
+        for (a, b) in off.iter().zip(base.iter()) {
+            assert!((a - b).abs() < 1e-15);
+        }
+        // mix 0 (all dry): trem must not touch the output at all.
+        let dry_trem = render(1.0, 0.0);
+        let dry_plain = render(0.0, 0.0);
+        for (a, b) in dry_trem.iter().zip(dry_plain.iter()) {
+            assert!((a - b).abs() < 1e-12, "trem must be wet-only");
+        }
+    }
+
+    #[test]
+    fn trem_modulates_wet_at_set_rate() {
+        // Full-wet steady sine through a frozen-ish long hall: the wet
+        // envelope should dip periodically at ~4 Hz (12000 samples).
+        let mut c = ReverbChain::new();
+        c.set_algorithm(AlgorithmType::Hall);
+        c.mix = 1.0;
+        c.params.decay = 0.9;
+        c.trem_depth = 1.0;
+        c.trem_rate_hz = 4.0;
+        c.update(config());
+
+        let n = 96000;
+        let mut l: Vec<f64> = (0..n)
+            .map(|i| (2.0 * PI * 220.0 * i as f64 / SR).sin() * 0.5)
+            .collect();
+        let mut r = l.clone();
+        c.process(&mut l, &mut r);
+
+        // RMS in 1000-sample windows over the steady-state region.
+        let win = 1000;
+        let rms: Vec<f64> = (24000..n - win)
+            .step_by(win)
+            .map(|s| (l[s..s + win].iter().map(|x| x * x).sum::<f64>() / win as f64).sqrt())
+            .collect();
+        let max = rms.iter().cloned().fold(0.0f64, f64::max);
+        let min = rms.iter().cloned().fold(f64::MAX, f64::min);
+        assert!(
+            min < max * 0.6,
+            "trem at depth 1 should visibly modulate the wet envelope: min={min}, max={max}"
         );
     }
 

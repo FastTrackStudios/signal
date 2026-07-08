@@ -262,12 +262,26 @@ const REVERB_PARAMS: &[ParamSpec] = &[
     ParamSpec { id: 0, name: "mix", min: 0.0, max: 0.10, default: 0.08 },
     ParamSpec { id: 1, name: "decay", min: 0.0, max: 1.0, default: 0.45 },
     ParamSpec { id: 2, name: "size", min: 0.0, max: 1.0, default: 0.5 },
+    // BigSky MX dual-reverb block: routing (0 Single / 1 Series 1>2 /
+    // 2 Series 2>1 / 3 Parallel / 4 Split / 5 Split Swap) + reverb B.
+    // Ids 0-2 keep addressing reverb A.
+    ParamSpec { id: 3, name: "routing", min: 0.0, max: 5.0, default: 0.0 },
+    ParamSpec { id: 4, name: "algo_b", min: 0.0, max: 14.0, default: 2.0 },
+    ParamSpec { id: 5, name: "decay_b", min: 0.0, max: 1.0, default: 0.45 },
+    ParamSpec { id: 6, name: "mix_b", min: 0.0, max: 0.10, default: 0.08 },
+    // Per-slot wet pan (-1..+1) and wet tremolo (shared A knob set).
+    ParamSpec { id: 7, name: "pan_a", min: -1.0, max: 1.0, default: 0.0 },
+    ParamSpec { id: 8, name: "pan_b", min: -1.0, max: 1.0, default: 0.0 },
+    ParamSpec { id: 9, name: "trem_rate", min: 0.1, max: 12.0, default: 4.0 },
+    ParamSpec { id: 10, name: "trem_depth", min: 0.0, max: 1.0, default: 0.0 },
 ];
 
-/// Native Reverb block — wraps [`reverb::ReverbChain`]. Defaults to a subtle
-/// Hall (low mix) so it sits under the tone rather than washing it out.
+/// Native Reverb block — wraps [`reverb::DualReverb`] (two full chains +
+/// BigSky MX dual routing; `Single` = chain A only, bit-compatible with
+/// the previous single-chain wrapper). Defaults to a subtle Hall (low
+/// mix) so it sits under the tone rather than washing it out.
 pub struct NativeReverb {
-    rev: reverb::ReverbChain,
+    rev: reverb::DualReverb,
     prepared: bool,
     scratch_l: Vec<f64>,
     scratch_r: Vec<f64>,
@@ -275,12 +289,18 @@ pub struct NativeReverb {
 
 impl NativeReverb {
     pub fn new(_sample_rate: f64) -> Self {
-        let mut rev = reverb::ReverbChain::new();
-        rev.set_algorithm(reverb::AlgorithmType::Hall);
-        rev.mix = 0.08;
-        rev.params.decay = 0.45;
-        rev.params.size = 0.5;
-        rev.update_params();
+        let mut rev = reverb::DualReverb::new();
+        rev.a.set_algorithm(reverb::AlgorithmType::Hall);
+        rev.a.mix = 0.08;
+        rev.a.params.decay = 0.45;
+        rev.a.params.size = 0.5;
+        rev.a.update_params();
+        // B seeds as a plate so engaging a dual routing is immediately
+        // audible before any params are set.
+        rev.b.set_algorithm(reverb::AlgorithmType::Plate);
+        rev.b.mix = 0.08;
+        rev.b.params.decay = 0.45;
+        rev.b.update_params();
         Self {
             rev,
             prepared: false,
@@ -290,21 +310,47 @@ impl NativeReverb {
     }
 
     fn set(&mut self, id: u32, v: f64) {
+        // Ids 0-2 address reverb A; 3+ are the dual-routing block.
         match id {
-            0 => self.rev.mix = v.min(TIME_MIX_MAX),
+            0 => self.rev.a.mix = v.min(TIME_MIX_MAX),
             1 => {
-                self.rev.params.decay = v;
-                self.rev.update_params();
+                self.rev.a.params.decay = v;
+                self.rev.a.update_params();
             }
             2 => {
-                self.rev.params.size = v;
-                self.rev.update_params();
+                self.rev.a.params.size = v;
+                self.rev.a.update_params();
+            }
+            3 => {
+                self.rev.routing =
+                    reverb::DualRouting::from_index(v.round().max(0.0) as usize)
+            }
+            4 => self
+                .rev
+                .b
+                .set_algorithm(reverb::AlgorithmType::from_index(
+                    v.round().max(0.0) as usize,
+                )),
+            5 => {
+                self.rev.b.params.decay = v;
+                self.rev.b.update_params();
+            }
+            6 => self.rev.b.mix = v.min(TIME_MIX_MAX),
+            7 => self.rev.a.pan = v.clamp(-1.0, 1.0),
+            8 => self.rev.b.pan = v.clamp(-1.0, 1.0),
+            9 => {
+                self.rev.a.trem_rate_hz = v;
+                self.rev.b.trem_rate_hz = v;
+            }
+            10 => {
+                self.rev.a.trem_depth = v.clamp(0.0, 1.0);
+                self.rev.b.trem_depth = v.clamp(0.0, 1.0);
             }
             _ => {}
         }
     }
 
-    /// Apply a build-time parameter by name (`mix`/`decay`/`size`).
+    /// Apply a build-time parameter by name (see [`REVERB_PARAMS`]).
     pub fn set_named(&mut self, name: &str, value: f64) {
         if let Some(id) = param_id(REVERB_PARAMS, name) {
             self.set(id, value);
