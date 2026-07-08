@@ -3,7 +3,9 @@
 //! Each engine produces a single modulated delay voice. The chain
 //! creates multiple voices per channel for the full chorus effect.
 
+use audiocore_dsp::dc_blocker::DcBlocker;
 use audiocore_dsp::delay_line::DelayLine;
+use audiocore_dsp::denormal::flush;
 use std::f64::consts::PI;
 
 /// Chorus effect type — controls delay time ranges.
@@ -168,10 +170,13 @@ impl ChorusEngine for BbdVoice {
         let target_delay_ms = base_ms + depth_ms * lfo;
         let target_delay_s = (target_delay_ms * 0.001).max(0.0005);
         let clock_freq = self.num_stages as f64 / (2.0 * target_delay_s);
+        // Deliberately NOT audiocore's OnePoleLp: the cutoff tracks the BBD
+        // clock per-sample and this cheap sin() coefficient approximation is
+        // part of the voicing.
         let input_lp_coeff = (2.0 * PI * (clock_freq / 6.0) / self.sample_rate)
             .sin()
             .clamp(0.0, 0.99);
-        self.input_lp += (input - self.input_lp) * input_lp_coeff;
+        self.input_lp = flush(self.input_lp + (input - self.input_lp) * input_lp_coeff);
         let clock_inc = clock_freq / self.sample_rate;
         self.clock_phase += clock_inc;
         let mut output = self.prev_output;
@@ -192,7 +197,7 @@ impl ChorusEngine for BbdVoice {
         let output_lp_coeff = (2.0 * PI * output_cutoff / self.sample_rate)
             .sin()
             .clamp(0.0, 0.99);
-        self.output_lp += (held - self.output_lp) * output_lp_coeff;
+        self.output_lp = flush(self.output_lp + (held - self.output_lp) * output_lp_coeff);
         self.output_lp
     }
 
@@ -275,7 +280,7 @@ impl ChorusEngine for TapeVoice {
         let lp_coeff = (2.0 * PI * cutoff / self.sample_rate)
             .sin()
             .clamp(0.0, 0.99);
-        self.tone_lp += (delayed - self.tone_lp) * lp_coeff;
+        self.tone_lp = flush(self.tone_lp + (delayed - self.tone_lp) * lp_coeff);
         self.tone_lp
     }
 
@@ -368,40 +373,50 @@ impl ChorusEngine for OrbitVoice {
 
 /// Juno-style chorus: triangle LFO + allpass interpolation + DC blocking.
 /// Based on TAL-NoiseMaker / YKChorus (SpotlightKid, GPL-2.0).
+///
+/// Keeps first-order allpass interpolation (not cubic) on purpose — the
+/// allpass state `z1` is part of the original BBD-flavored character and
+/// feeds the feedback path.
 pub struct JunoVoice {
-    buffer: Vec<f64>,
-    write_pos: usize,
+    delay: DelayLine,
     buf_len: usize,
     lfo_phase: f64,
     lfo_sign: f64,
     phase_offset: f64,
     z1: f64,
     lp_state: f64,
-    dc_x1: f64,
-    dc_y1: f64,
+    dc: DcBlocker,
     sample_rate: f64,
 }
 
 impl JunoVoice {
     const DELAY_MS: f64 = 7.0;
     const LP_CUTOFF: f64 = 0.95;
-    const DC_COEFF: f64 = 0.995;
+    /// Original fixed DC-blocker pole (R = 0.995 at 48 kHz).
+    const DC_R: f64 = 0.995;
 
     pub fn new(phase_offset: f64) -> Self {
         let lfo_phase = phase_offset * 2.0 - 1.0;
-        Self {
-            buffer: vec![0.0; 2048],
-            write_pos: 0,
+        let mut voice = Self {
+            delay: DelayLine::new(2048),
             buf_len: 1024,
             lfo_phase,
             lfo_sign: if lfo_phase >= 0.0 { 1.0 } else { -1.0 },
             phase_offset,
             z1: 0.0,
             lp_state: 0.0,
-            dc_x1: 0.0,
-            dc_y1: 0.0,
+            dc: DcBlocker::new(),
             sample_rate: 48000.0,
-        }
+        };
+        voice.retune_dc();
+        voice
+    }
+
+    /// Keep the original pole R = 0.995 regardless of sample rate:
+    /// R = 1 - 2*pi*fc/sr  =>  fc = (1 - R) * sr / (2*pi).
+    fn retune_dc(&mut self) {
+        let fc = (1.0 - Self::DC_R) * self.sample_rate / (2.0 * PI);
+        self.dc.set_cutoff(fc, self.sample_rate);
     }
 
     #[inline]
@@ -424,9 +439,10 @@ impl ChorusEngine for JunoVoice {
         self.sample_rate = sample_rate;
         let delay_samples = (Self::DELAY_MS * sample_rate * 0.001).floor() as usize;
         self.buf_len = delay_samples * 2;
-        if self.buffer.len() < self.buf_len + 4 {
-            self.buffer.resize(self.buf_len + 4, 0.0);
+        if self.delay.len() < self.buf_len + 4 {
+            self.delay = DelayLine::new(self.buf_len + 4);
         }
+        self.retune_dc();
     }
 
     fn tick(
@@ -439,7 +455,7 @@ impl ChorusEngine for JunoVoice {
         effect_type: EffectType,
     ) -> f64 {
         let fb_sample = self.z1 * feedback;
-        self.buffer[self.write_pos] = input + fb_sample.clamp(-1.5, 1.5);
+        self.delay.write(input + fb_sample.clamp(-1.5, 1.5));
 
         let lfo = self.next_lfo(rate_hz);
 
@@ -454,39 +470,31 @@ impl ChorusEngine for JunoVoice {
         let int_offset = offset.floor() as usize;
         let frac = offset - offset.floor();
 
-        let read1 = (self.write_pos + self.buf_len - int_offset) % self.buf_len;
-        let read2 = (read1 + self.buf_len - 1) % self.buf_len;
-        let x0 = self.buffer[read1];
-        let x1 = self.buffer[read2];
+        // The just-written sample is 1 back from the write head, so an
+        // original ring offset of k maps to DelayLine::read(k + 1).
+        let x0 = self.delay.read(int_offset + 1);
+        let x1 = self.delay.read(int_offset + 2);
 
         // First-order allpass interpolation
         let coeff = 1.0 - frac;
-        let delayed = x1 + coeff * x0 - coeff * self.z1;
+        let delayed = flush(x1 + coeff * x0 - coeff * self.z1);
         self.z1 = delayed;
 
         // One-pole lowpass post-filter (color controls brightness)
         let cutoff_param = Self::LP_CUTOFF * (0.5 + color * 0.5);
         let p = (cutoff_param * 0.98).powi(4);
-        self.lp_state = (1.0 - p) * delayed + p * self.lp_state;
+        self.lp_state = flush((1.0 - p) * delayed + p * self.lp_state);
 
-        // DC blocking filter
-        let dc_out = self.lp_state - self.dc_x1 + Self::DC_COEFF * self.dc_y1;
-        self.dc_x1 = self.lp_state;
-        self.dc_y1 = dc_out;
-
-        self.write_pos = (self.write_pos + 1) % self.buf_len;
-        dc_out
+        self.dc.tick(self.lp_state)
     }
 
     fn reset(&mut self) {
-        self.buffer.fill(0.0);
-        self.write_pos = 0;
+        self.delay.clear();
         self.lfo_phase = self.phase_offset * 2.0 - 1.0;
         self.lfo_sign = if self.lfo_phase >= 0.0 { 1.0 } else { -1.0 };
         self.z1 = 0.0;
         self.lp_state = 0.0;
-        self.dc_x1 = 0.0;
-        self.dc_y1 = 0.0;
+        self.dc.reset();
     }
 }
 

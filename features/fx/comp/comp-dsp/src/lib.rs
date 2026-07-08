@@ -17,7 +17,7 @@ pub mod multiband;
 pub mod smoother;
 pub mod styles;
 
-pub use biquad::{design_highpass_biquad, design_lowpass_biquad, BiquadFilter};
+pub use biquad::{design_highpass_biquad, design_lowpass_biquad, Biquad};
 pub use chain::CompChain;
 pub use detector::Detector;
 pub use gain_curve::GainCurve;

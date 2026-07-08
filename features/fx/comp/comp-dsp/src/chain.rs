@@ -1,6 +1,6 @@
 //! Compressor chain — wrapper with lookahead delay and sidechain EQ.
 
-use crate::{design_highpass_biquad, design_lowpass_biquad, BiquadFilter, Detector};
+use crate::{design_highpass_biquad, design_lowpass_biquad, Biquad, Detector};
 use audiocore_dsp::AudioConfig;
 
 /// Complete compressor processing chain.
@@ -8,10 +8,10 @@ pub struct CompChain {
     pub comp: super::ProC3Compressor,
     pub sidechain_freq: f64,
     pub sidechain_lowpass_freq: f64,
-    sidechain_hpf_l: BiquadFilter,
-    sidechain_hpf_r: BiquadFilter,
-    sidechain_lpf_l: BiquadFilter,
-    sidechain_lpf_r: BiquadFilter,
+    sidechain_hpf_l: Biquad,
+    sidechain_hpf_r: Biquad,
+    sidechain_lpf_l: Biquad,
+    sidechain_lpf_r: Biquad,
     lookahead_ms: f64,
     pub lookahead_samples: usize,
     delay_l: Vec<f64>,
@@ -30,10 +30,10 @@ impl CompChain {
             comp: super::ProC3Compressor::new(48000.0),
             sidechain_freq: 0.0,
             sidechain_lowpass_freq: 0.0,
-            sidechain_hpf_l: BiquadFilter::new(),
-            sidechain_hpf_r: BiquadFilter::new(),
-            sidechain_lpf_l: BiquadFilter::new(),
-            sidechain_lpf_r: BiquadFilter::new(),
+            sidechain_hpf_l: Biquad::new(),
+            sidechain_hpf_r: Biquad::new(),
+            sidechain_lpf_l: Biquad::new(),
+            sidechain_lpf_r: Biquad::new(),
             lookahead_ms: 0.0,
             lookahead_samples: 0,
             delay_l: Vec::new(),
@@ -126,8 +126,8 @@ impl CompChain {
 
     fn rebuild_sidechain_filter(&mut self) {
         if self.sidechain_freq <= 20.0 {
-            self.sidechain_hpf_l = BiquadFilter::new();
-            self.sidechain_hpf_r = BiquadFilter::new();
+            self.sidechain_hpf_l = Biquad::new();
+            self.sidechain_hpf_r = Biquad::new();
         } else {
             let cutoff = (self.sidechain_freq / (self.sample_rate * 0.5)).clamp(0.001, 0.999);
             self.sidechain_hpf_l = design_highpass_biquad(cutoff);
@@ -135,8 +135,8 @@ impl CompChain {
         }
 
         if self.sidechain_lowpass_freq <= 20.0 {
-            self.sidechain_lpf_l = BiquadFilter::new();
-            self.sidechain_lpf_r = BiquadFilter::new();
+            self.sidechain_lpf_l = Biquad::new();
+            self.sidechain_lpf_r = Biquad::new();
         } else {
             let cutoff =
                 (self.sidechain_lowpass_freq / (self.sample_rate * 0.5)).clamp(0.001, 0.999);
@@ -194,13 +194,13 @@ impl CompChain {
         let mut key_r = right.abs();
 
         if self.sidechain_freq > 20.0 {
-            key_l = self.sidechain_hpf_l.process(left).abs();
-            key_r = self.sidechain_hpf_r.process(right).abs();
+            key_l = self.sidechain_hpf_l.tick(left, 0).abs();
+            key_r = self.sidechain_hpf_r.tick(right, 0).abs();
         }
 
         if self.sidechain_lowpass_freq > 20.0 {
-            key_l = self.sidechain_lpf_l.process(key_l).abs();
-            key_r = self.sidechain_lpf_r.process(key_r).abs();
+            key_l = self.sidechain_lpf_l.tick(key_l, 0).abs();
+            key_r = self.sidechain_lpf_r.tick(key_r, 0).abs();
         }
 
         (key_l, key_r)

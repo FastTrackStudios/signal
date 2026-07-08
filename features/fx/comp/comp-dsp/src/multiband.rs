@@ -15,7 +15,7 @@
 //!
 //! Bands are summed at the output for final reconstruction.
 
-use crate::biquad::BiquadFilter;
+use crate::biquad::Biquad;
 use crate::biquad::{design_highpass_biquad, design_lowpass_biquad};
 use crate::detector::Detector;
 use crate::gain_curve::GainCurve;
@@ -47,10 +47,10 @@ pub struct CompressionBand {
     sample_rate: f64,
 
     /// High-pass filter for band separation (Band 1 and 2)
-    hp_filter: Option<BiquadFilter>,
+    hp_filter: Option<Biquad>,
 
     /// Low-pass filter for band separation (Band 0 and 1)
-    lp_filter: Option<BiquadFilter>,
+    lp_filter: Option<Biquad>,
 }
 
 impl CompressionBand {
@@ -114,17 +114,17 @@ impl CompressionBand {
     }
 
     /// Apply band-specific filters to input audio
-    fn apply_band_filters(&mut self, input: f64) -> f64 {
+    fn apply_band_filters(&mut self, input: f64, channel: usize) -> f64 {
         let mut output = input;
 
         // Apply high-pass filter if present (Band 1 and 2)
         if let Some(ref mut hp) = self.hp_filter {
-            output = hp.process(output);
+            output = hp.tick(output, channel.min(1));
         }
 
         // Apply low-pass filter if present (Band 0 and 1)
         if let Some(ref mut lp) = self.lp_filter {
-            output = lp.process(output);
+            output = lp.tick(output, channel.min(1));
         }
 
         output
@@ -194,7 +194,7 @@ impl CompressionBand {
         self.update_band_filters(freq_low, freq_high);
 
         // Step 4: Apply band-specific frequency filtering to input
-        let band_audio = self.apply_band_filters(input);
+        let band_audio = self.apply_band_filters(input, channel);
 
         // Step 5: Detect level from band-filtered audio (not original)
         let band_level_db = self.detector.detect_level(band_audio.abs());
