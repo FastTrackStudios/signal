@@ -12,7 +12,7 @@ use crate::lofi_delay::LoFiDelay;
 use crate::modulation::WobbleShape;
 use crate::multitap_delay::{MultiTapDelay, Tap, MAX_TAPS};
 use crate::oilcan_delay::{OilCanDelay, OilCanHeads};
-use crate::pitch_delay::PitchDelay;
+use crate::pitch_delay::{IceInterval, IceSlice, PitchDelay};
 use crate::reverse_delay::ReverseDelay;
 use crate::rhythm_delay::RhythmDelay;
 use crate::shimmer_delay::ShimmerDelay;
@@ -213,9 +213,15 @@ pub struct DelayEngine {
     /// Crossfade overlap (0.0–0.5). Reverse only.
     pub reverse_crossfade: f64,
 
-    // ── Pitch-specific ─────────────────────────────────────────────
-    /// Playback speed ratio. Pitch only.
+    // ── Pitch-specific (TimeLine MX "Ice") ─────────────────────────
+    /// Playback speed ratio (used when `pitch_interval` is Free). Pitch only.
     pub pitch_speed: f64,
+    /// Musical interval; non-Free overrides `pitch_speed`. Pitch only.
+    pub pitch_interval: IceInterval,
+    /// Slice size (scales with delay time); None = free grain_ms. Pitch only.
+    pub pitch_slice: Option<IceSlice>,
+    /// Dry↔ice blend on the delay line, pre-feedback. Pitch only.
+    pub pitch_blend: f64,
 
     // ── Rhythm-specific ──────────────────────────────────────────
     /// Tap levels for rhythm mode (8 taps at 1x–8x base time).
@@ -330,6 +336,9 @@ impl DelayEngine {
             shimmer_mix: 0.5,
             reverse_crossfade: 0.1,
             pitch_speed: 1.0,
+            pitch_interval: IceInterval::Free,
+            pitch_slice: None,
+            pitch_blend: 1.0,
             rhythm_taps: [1.0, 0.7, 0.5, 0.35, 0.25, 0.18, 0.12, 0.08],
             decay_tilt: 0.0,
             wow_shape: WobbleShape::Sine,
@@ -496,6 +505,9 @@ impl DelayEngine {
                 d.time_ms = self.time_ms;
                 d.feedback = self_feedback;
                 d.speed = self.pitch_speed;
+                d.interval = self.pitch_interval;
+                d.slice = self.pitch_slice;
+                d.blend = self.pitch_blend;
                 d.decay_tilt = self_tilt;
                 d.update(sample_rate);
             }

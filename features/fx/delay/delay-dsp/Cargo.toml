@@ -8,3 +8,4 @@ description = "Delay processing engine — tape / pitch / clean delays"
 
 [dependencies]
 audiocore-dsp = { workspace = true }
+pitch-dsp = { workspace = true }

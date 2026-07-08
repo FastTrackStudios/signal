@@ -14,7 +14,6 @@ pub mod clean_delay;
 pub mod drum_delay;
 pub mod engine;
 pub mod filter_delay;
-mod grain;
 pub mod lofi_delay;
 pub mod modulation;
 pub mod multitap_delay;
@@ -35,4 +34,5 @@ pub use multitap_delay::{FeedbackMode, Tap, TapFilter, TapGrid, TapPreset, MAX_T
 pub use oilcan_delay::OilCanHeads;
 pub use spectral_delay::{DensityMode, GrainDirection, GrainShape};
 pub use bbd_delay::BbdVoice;
+pub use pitch_delay::{IceInterval, IceSlice};
 pub use tape_delay::{SaturationType, TapeSpeed, TapeVoice};

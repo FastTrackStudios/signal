@@ -393,6 +393,11 @@ const DELAY_PARAMS: &[ParamSpec] = &[
     ParamSpec { id: 11, name: "tape_age", min: 0.0, max: 1.0, default: 0.0 },
     ParamSpec { id: 12, name: "crinkle", min: 0.0, max: 1.0, default: 0.0 },
     ParamSpec { id: 13, name: "bucket_loss", min: 0.0, max: 1.0, default: 0.0 },
+    // Ice (Pitch style): MX interval menu index (30 = Free), slice
+    // (0 short / 1 medium / 2 long / 3 free grain), dry<->ice blend.
+    ParamSpec { id: 14, name: "interval", min: 0.0, max: 30.0, default: 30.0 },
+    ParamSpec { id: 15, name: "slice", min: 0.0, max: 3.0, default: 3.0 },
+    ParamSpec { id: 16, name: "blend", min: 0.0, max: 1.0, default: 1.0 },
 ];
 
 /// Native Delay block — wraps [`delay::DelayChain`]. Defaults to a subtle clean
@@ -462,13 +467,38 @@ impl NativeDelay {
                 self.dly.delay_l.bbd_bucket_loss = v;
                 self.dly.delay_r.bbd_bucket_loss = v;
             }
+            14 => {
+                let i = v.round().max(0.0) as usize;
+                let interval = if i >= delay::IceInterval::MENU_LEN {
+                    delay::IceInterval::Free
+                } else {
+                    delay::IceInterval::from_index(i)
+                };
+                self.dly.delay_l.pitch_interval = interval;
+                self.dly.delay_r.pitch_interval = interval;
+            }
+            15 => {
+                let slice = match v.round().max(0.0) as usize {
+                    0 => Some(delay::IceSlice::Short),
+                    1 => Some(delay::IceSlice::Medium),
+                    2 => Some(delay::IceSlice::Long),
+                    _ => None,
+                };
+                self.dly.delay_l.pitch_slice = slice;
+                self.dly.delay_r.pitch_slice = slice;
+            }
+            16 => {
+                self.dly.delay_l.pitch_blend = v;
+                self.dly.delay_r.pitch_blend = v;
+            }
             _ => {}
         }
     }
 
     /// Apply a build-time parameter by name (`mix`/`time`/`feedback`/
     /// `style`/`swell`/`freeze`/`tempo_bpm`/`tap_div`/`high_pass`/
-    /// `repeat_dyn`/`voice`/`tape_age`/`crinkle`/`bucket_loss`).
+    /// `repeat_dyn`/`voice`/`tape_age`/`crinkle`/`bucket_loss`/
+    /// `interval`/`slice`/`blend`).
     pub fn set_named(&mut self, name: &str, value: f64) {
         if let Some(id) = param_id(DELAY_PARAMS, name) {
             self.set(id, value);
