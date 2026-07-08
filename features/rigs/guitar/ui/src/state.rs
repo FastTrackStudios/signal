@@ -127,8 +127,43 @@ pub fn use_rig_state() -> RigViewState {
                     }
                     RigEvent::Perf(p) => perf.set(p),
                     RigEvent::Chain(c) => blocks.set(c),
-                    RigEvent::Spectrum(bins) => spectrum.set(bins),
-                    RigEvent::CompWave(i, g) => comp_wave.set((i, g)),
+                    RigEvent::Spectrum(bins) => {
+                        // Analyzer ballistics: instant attack, ~40 dB/s
+                        // decay, plus a light 3-tap frequency smooth — the
+                        // standard "looks right to a human" treatment.
+                        let prev = spectrum.peek().clone();
+                        let n = bins.len();
+                        let mut out = Vec::with_capacity(n);
+                        for i in 0..n {
+                            let (a, b, c) = (
+                                bins[i.saturating_sub(1)],
+                                bins[i],
+                                bins[(i + 1).min(n - 1)],
+                            );
+                            let fresh = (a + 2.0 * b + c) / 4.0;
+                            let fallen = prev
+                                .get(i)
+                                .copied()
+                                .unwrap_or(-90.0)
+                                - 1.3; // per frame at ~30 Hz ≈ 40 dB/s
+                            out.push(fresh.max(fallen).max(-90.0));
+                        }
+                        spectrum.set(out);
+                    }
+                    RigEvent::CompWave(i, g) => {
+                        // A soft 3-tap along time keeps the rolling traces
+                        // fluid without hiding transients.
+                        let smooth = |v: &[f32]| -> Vec<f32> {
+                            let n = v.len();
+                            (0..n)
+                                .map(|k| {
+                                    (v[k.saturating_sub(1)] + 2.0 * v[k] + v[(k + 1).min(n - 1)])
+                                        / 4.0
+                                })
+                                .collect()
+                        };
+                        comp_wave.set((smooth(&i), smooth(&g)));
+                    }
                 }
             },
         );

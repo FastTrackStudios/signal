@@ -491,7 +491,7 @@ fn LiveTunerTile(switch_no: usize, onclick: Callback<()>) -> Element {
                     if let Ok(r) = rig.tuner().await {
                         reading.set(r);
                     }
-                    architect::platform::sleep(std::time::Duration::from_millis(250)).await;
+                    architect::platform::sleep(std::time::Duration::from_millis(100)).await;
                 }
             }
         });
@@ -537,6 +537,8 @@ fn LiveTunerTile(switch_no: usize, onclick: Callback<()>) -> Element {
 pub fn TunerOverlay(on_close: EventHandler<()>) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
     let mut reading = use_signal(TunerReading::default);
+    // EMA-smoothed cents so the needle glides instead of jittering.
+    let mut smooth_cents = use_signal(|| 0.0f32);
 
     {
         let rig = rig.clone();
@@ -546,18 +548,23 @@ pub fn TunerOverlay(on_close: EventHandler<()>) -> Element {
                 let Some(rig) = rig else { return };
                 loop {
                     if let Ok(r) = rig.tuner().await {
+                        if r.active {
+                            let prev = *smooth_cents.peek();
+                            smooth_cents.set(prev + (r.cents - prev) * 0.35);
+                        }
                         reading.set(r);
                     }
-                    architect::platform::sleep(Duration::from_millis(100)).await;
+                    architect::platform::sleep(Duration::from_millis(60)).await;
                 }
             }
         });
     }
 
     let r = reading();
+    let cents = if r.active { smooth_cents() } else { 0.0 };
     // Needle position: −50..+50 cents → 0..100%.
-    let needle_pct = 50.0 + r.cents.clamp(-50.0, 50.0);
-    let in_tune = r.active && r.cents.abs() <= 5.0;
+    let needle_pct = 50.0 + cents.clamp(-50.0, 50.0);
+    let in_tune = r.active && cents.abs() <= 5.0;
     let needle_color = if in_tune { "#22c55e" } else { "#eab308" };
 
     rsx! {
@@ -574,6 +581,18 @@ pub fn TunerOverlay(on_close: EventHandler<()>) -> Element {
                 style: if in_tune { "color: #22c55e;" } else if r.active { "color: #e4e4e7;" } else { "color: #3f3f46;" },
                 if r.active { "{r.note}" } else { "—" }
             }
+            // Frequency + cents detail under the note.
+            div { class: "flex items-baseline gap-4 font-mono",
+                span { class: "text-xl text-muted-foreground",
+                    if r.active { {format!("{:.1} Hz", r.freq_hz)} } else { "—" }
+                }
+                span {
+                    class: "text-xl",
+                    style: if in_tune { "color: #22c55e;" } else { "color: #eab308;" },
+                    if r.active { {format!("{cents:+.1} ¢")} } else { "" }
+                }
+            }
+
             // Cents scale: center line = in tune, needle shows offset.
             div { class: "relative w-[420px] max-w-[80vw] h-10",
                 // Scale line + center mark.

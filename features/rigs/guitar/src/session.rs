@@ -166,16 +166,14 @@ impl GuitarRigBackend {
                 if status.running || was_running {
                     was_running = status.running;
                     backend.events.publish(RigEvent::Status(status));
-                    // Spectrum + comp telemetry at half meter rate (~15 Hz),
-                    // interleaved so each tick sends one payload.
-                    if tick % 2 == 0 {
-                        if let Some(bins) = backend.input_spectrum() {
-                            backend.events.publish(RigEvent::Spectrum(bins));
-                        }
-                    } else {
-                        let (wave_in, wave_gr) = signal_fx::comp_meter::wave_snapshot(3);
-                        backend.events.publish(RigEvent::CompWave(wave_in, wave_gr));
+                    // Spectrum + comp telemetry at full meter rate (~30 Hz)
+                    // — the surface stays alive to the hand.
+                    let _ = tick;
+                    if let Some(bins) = backend.input_spectrum() {
+                        backend.events.publish(RigEvent::Spectrum(bins));
                     }
+                    let (wave_in, wave_gr) = signal_fx::comp_meter::wave_snapshot(3);
+                    backend.events.publish(RigEvent::CompWave(wave_in, wave_gr));
                 }
             }
         });
@@ -191,7 +189,7 @@ impl GuitarRigBackend {
         if samples.len() < 2048 {
             return None;
         }
-        Some(spectrum_bins(&samples[samples.len() - 2048..], rate, 48))
+        Some(spectrum_bins(&samples[samples.len() - 2048..], rate, 96))
     }
 
     /// Real gain reduction from the running compressor's detector (the
@@ -720,7 +718,8 @@ fn param_specs(bt: BlockType) -> Vec<(String, f32, f32, f32)> {
             ("repeat_dyn", 0.0, 1.0, 0.0),
             ("pan", -1.0, 1.0, 0.0),
         ]),
-        // Reverb surface — algorithm + mix/time/damping/tone/modulation.
+        // Reverb surface — algorithm + mix/time/damping/tone/modulation +
+        // wet pan (MX chain-A pan).
         BlockType::Reverb => owned(&[
             ("mix", 0.0, 1.0, 0.08),
             ("decay", 0.0, 1.0, 0.4),
@@ -729,6 +728,7 @@ fn param_specs(bt: BlockType) -> Vec<(String, f32, f32, f32)> {
             ("modulation", 0.0, 1.0, 0.2),
             ("damping", 0.0, 1.0, 0.3),
             ("tone", -1.0, 1.0, 0.0),
+            ("pan_a", -1.0, 1.0, 0.0),
         ]),
         BlockType::Chorus | BlockType::Flanger | BlockType::Vibrato => owned(&[
             ("mix", 0.0, 1.0, 0.4),

@@ -848,6 +848,9 @@ fn ReverbPanel(blocks: Vec<LiveBlock>) -> Element {
                 if let Some(p) = param(&cur, "modulation") {
                     PKnob { block_id: cur_id.clone(), name: "modulation", label: "Mod", p }
                 }
+                if let Some(p) = param(&cur, "pan_a") {
+                    PKnob { block_id: cur_id.clone(), name: "pan_a", label: "Pan", p }
+                }
             }
 
         }
