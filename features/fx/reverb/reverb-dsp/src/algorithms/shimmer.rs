@@ -10,6 +10,7 @@ use crate::primitives::allpass_diffuser::AllpassDiffuser;
 use crate::primitives::fdn::{Fdn, MixMatrix};
 use crate::primitives::one_pole::Lp1;
 use audiocore_dsp::dc_blocker::DcBlocker;
+use audiocore_dsp::one_pole::OnePoleHp;
 use audiocore_dsp::grain_pitch::GrainPitchShifter;
 
 pub struct Shimmer {
@@ -31,6 +32,11 @@ pub struct Shimmer {
     // Feedback state
     fb_l: f64,
     fb_r: f64,
+    // Subsonic cleanup on the wet output — the grain-window amplitude
+    // modulation in the pitch loop leaves ~1.5% of IR energy below
+    // 20 Hz without it (IR-metric verified).
+    out_hp_l: OnePoleHp,
+    out_hp_r: OnePoleHp,
     // Shimmer amount (how much pitch-shifted signal feeds back)
     shimmer_amount: f64,
     decay: f64,
@@ -54,6 +60,8 @@ impl Shimmer {
             fb_dc_r: DcBlocker::new(),
             fb_l: 0.0,
             fb_r: 0.0,
+            out_hp_l: OnePoleHp::new(24.0, sample_rate),
+            out_hp_r: OnePoleHp::new(24.0, sample_rate),
             shimmer_amount: 0.5,
             decay: 0.8,
             sample_rate,
@@ -93,6 +101,8 @@ impl ReverbAlgorithm for Shimmer {
         self.fb_damp_r.reset();
         self.fb_dc_l.reset();
         self.fb_dc_r.reset();
+        self.out_hp_l.reset();
+        self.out_hp_r.reset();
         self.fb_l = 0.0;
         self.fb_r = 0.0;
     }
@@ -167,6 +177,6 @@ impl ReverbAlgorithm for Shimmer {
         self.fb_l = self.fb_damp_l.tick(self.fb_dc_l.tick(shifted_l));
         self.fb_r = self.fb_damp_r.tick(self.fb_dc_r.tick(shifted_r));
 
-        (wet_l, wet_r)
+        (self.out_hp_l.tick(wet_l), self.out_hp_r.tick(wet_r))
     }
 }

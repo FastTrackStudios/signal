@@ -97,6 +97,13 @@ impl Fdn {
         for d in &mut self.damping {
             d.set_freq(freq_hz, sample_rate);
         }
+        // Re-tune the in-loop DC blockers while we have the sample rate:
+        // a 10 Hz corner settles ~3x faster after the onset burst than
+        // the default ~4 Hz pole (less infrasonic relaxation drift in
+        // short-room IRs) and still sits below audibility.
+        for dc in &mut self.dc_blockers {
+            dc.set_cutoff(10.0, sample_rate);
+        }
     }
 
     /// Set the damping coefficient directly (0.0 = no damping, 1.0 = max).

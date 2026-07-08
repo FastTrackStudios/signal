@@ -68,8 +68,10 @@ impl Reflections {
             let d_l = (d as isize + lr_offset).max(1) as usize;
             let d_r = (d as isize - lr_offset).max(1) as usize;
 
-            // Alternating polarity for some reflections
-            let polarity = if i % 3 == 0 { -1.0 } else { 1.0 };
+            // Alternate polarity: an all-positive spike train has a net
+            // positive area = subsonic thump (6.5% of IR energy < 20 Hz
+            // before this + the second-order fix below).
+            let polarity = if i % 2 == 0 { -1.0 } else { 1.0 };
 
             taps_l.push(Tap {
                 delay_samples: d_l,
@@ -87,7 +89,9 @@ impl Reflections {
             let r = (rng.next() as f64) / (u32::MAX as f64);
             let delay = 400.0 + r * 2000.0;
             let d = (delay * scale * room_scale) as usize;
-            let gain = 0.15 * (0.97_f64).powi(i as i32);
+            // Alternate polarity here too — 32 same-sign taps summed to
+            // ~3x net DC area (the bulk of the subsonic energy).
+            let gain = 0.15 * (0.97_f64).powi(i as i32) * if i % 2 == 0 { 1.0 } else { -1.0 };
             let lr_offset = ((rng.next_bipolar()) * delay * 0.1 * scale) as isize;
 
             taps_l.push(Tap {
