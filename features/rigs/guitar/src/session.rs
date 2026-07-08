@@ -150,17 +150,83 @@ impl GuitarRigBackend {
             }
             let mut was_running = false;
             let mut tick = 0u64;
+            // MIDI footswitch state: CC 101–105 = switches 1–5 (tap on
+            // release, hold at 500 ms fires the hold-layer action); CC
+            // 106–110 = the hold-layer functions directly (manual mapping).
+            // Momentary switches repeat while held — edge-detect on value.
+            let mut sw_down: [Option<std::time::Instant>; 5] = [None; 5];
+            let mut sw_hold_fired = [false; 5];
+            let mut cc_down = [false; 10];
             loop {
                 std::thread::sleep(METER_INTERVAL);
                 tick += 1;
                 // Update the GR estimate + drain MIDI regardless of publish.
                 if let Some(stream) = &midi {
-                    let mut log = backend.midi_log.lock().unwrap();
-                    for msg in stream.drain() {
-                        log.push(format!("{msg:?}"));
-                        let len = log.len();
-                        if len > 128 {
-                            log.drain(0..len - 128);
+                    let mut events: Vec<(u8, u8)> = Vec::new();
+                    {
+                        let mut log = backend.midi_log.lock().unwrap();
+                        for msg in stream.drain() {
+                            if let Some(midicore::MidiEvent::ControlChange {
+                                controller,
+                                value,
+                                ..
+                            }) = msg.to_event()
+                            {
+                                events.push((u8::from(controller), u8::from(value)));
+                            }
+                            log.push(format!("{msg:?}"));
+                            let len = log.len();
+                            if len > 128 {
+                                log.drain(0..len - 128);
+                            }
+                        }
+                    }
+                    for (cc, val) in events {
+                        if !(101..=110).contains(&cc) {
+                            continue;
+                        }
+                        let idx = (cc - 101) as usize;
+                        let down = val > 0;
+                        if down == cc_down[idx] {
+                            continue; // momentary repeat — not an edge
+                        }
+                        cc_down[idx] = down;
+                        match cc {
+                            // Switches 1–5: tap on short release, hold-layer
+                            // action at 500 ms (mirrors the UI tiles).
+                            101..=105 => {
+                                let sw = idx;
+                                if down {
+                                    sw_down[sw] = Some(std::time::Instant::now());
+                                    sw_hold_fired[sw] = false;
+                                } else {
+                                    if !sw_hold_fired[sw] {
+                                        tracing::info!("footswitch {} tap", sw + 1);
+                                        match sw {
+                                            4 => Rig::tap_tempo(&backend),
+                                            s => Rig::press_stack(&backend, s as u32),
+                                        }
+                                    }
+                                    sw_down[sw] = None;
+                                }
+                            }
+                            // Switches 6–10 mapped directly.
+                            _ => {
+                                if down {
+                                    tracing::info!("footswitch {} (cc {cc})", idx + 1);
+                                    backend.hold_layer_action(idx - 5);
+                                }
+                            }
+                        }
+                    }
+                    // Holds: fire the hold-layer action at 500 ms.
+                    for sw in 0..5 {
+                        if let Some(t) = sw_down[sw] {
+                            if !sw_hold_fired[sw] && t.elapsed().as_millis() >= 500 {
+                                sw_hold_fired[sw] = true;
+                                tracing::info!("footswitch {} hold", sw + 1);
+                                backend.hold_layer_action(sw);
+                            }
                         }
                     }
                 }
@@ -375,6 +441,20 @@ impl GuitarRigBackend {
             backend.apply_all_drives();
             tracing::info!("drive calibration: complete");
         });
+    }
+
+    /// The hold-layer functions, by hold-layer slot (0-based): Ambient
+    /// stack, FX toggle, next song, boost toggle, tuner. Shared by held
+    /// footswitches 1–5 and the direct CC 106–110 mapping.
+    fn hold_layer_action(&self, slot: usize) {
+        match slot {
+            0 => Rig::press_stack(self, 4),
+            1 => Rig::toggle_fx(self),
+            2 => Rig::next_song(self),
+            3 => Rig::toggle_boost(self),
+            4 => tracing::info!("footswitch: tuner (UI-side — no core action)"),
+            _ => {}
+        }
     }
 
     /// Re-apply the main-output trim: patch base + master trim + mute.
