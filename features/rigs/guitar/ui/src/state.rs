@@ -23,6 +23,8 @@ pub struct RigViewState {
     pub in_peak_db: Signal<f32>,
     /// Raw output peak in dBFS (−90..0).
     pub out_peak_db: Signal<f32>,
+    /// Stereo peaks in dBFS: (in L, in R, out L, out R).
+    pub stereo_db: Signal<(f32, f32, f32, f32)>,
     /// Compressor gain reduction (dB, positive = reducing).
     pub comp_gr_db: Signal<f32>,
     /// Input spectrum (dB per log bin, 20 Hz–20 kHz), ~15 Hz.
@@ -50,6 +52,7 @@ pub fn use_rig_state() -> RigViewState {
     let mut out_level = use_signal(|| 0.0f64);
     let mut in_peak_db = use_signal(|| -90.0f32);
     let mut out_peak_db = use_signal(|| -90.0f32);
+    let mut stereo_db = use_signal(|| (-90.0f32, -90.0f32, -90.0f32, -90.0f32));
     let mut comp_gr_db = use_signal(|| 0.0f32);
     let mut spectrum = use_signal(Vec::<f32>::new);
     let mut comp_wave = use_signal(|| (Vec::<f32>::new(), Vec::<f32>::new()));
@@ -71,6 +74,12 @@ pub fn use_rig_state() -> RigViewState {
                     out_level.set(meter_level(s.output_peak));
                     in_peak_db.set(peak_db(s.input_peak));
                     out_peak_db.set(peak_db(s.output_peak));
+                    stereo_db.set((
+                        peak_db(s.input_peak_l),
+                        peak_db(s.input_peak_r),
+                        peak_db(s.output_peak_l),
+                        peak_db(s.output_peak_r),
+                    ));
                     comp_gr_db.set(s.comp_gr_db);
                     active_patch.set(s.active_patch);
                 }
@@ -98,8 +107,8 @@ pub fn use_rig_state() -> RigViewState {
                 }
             },
             move |ev: RigEvent| {
-                let (mut running, mut in_level, mut out_level, mut in_peak_db, mut out_peak_db, mut comp_gr_db, mut spectrum, mut comp_wave, mut perf, mut blocks, mut active_patch) =
-                    (running, in_level, out_level, in_peak_db, out_peak_db, comp_gr_db, spectrum, comp_wave, perf, blocks, active_patch);
+                let (mut running, mut in_level, mut out_level, mut in_peak_db, mut out_peak_db, mut stereo_db, mut comp_gr_db, mut spectrum, mut comp_wave, mut perf, mut blocks, mut active_patch) =
+                    (running, in_level, out_level, in_peak_db, out_peak_db, stereo_db, comp_gr_db, spectrum, comp_wave, perf, blocks, active_patch);
                 match ev {
                     RigEvent::Status(s) => {
                         running.set(s.running);
@@ -107,6 +116,12 @@ pub fn use_rig_state() -> RigViewState {
                         out_level.set(meter_level(s.output_peak));
                         in_peak_db.set(peak_db(s.input_peak));
                         out_peak_db.set(peak_db(s.output_peak));
+                        stereo_db.set((
+                            peak_db(s.input_peak_l),
+                            peak_db(s.input_peak_r),
+                            peak_db(s.output_peak_l),
+                            peak_db(s.output_peak_r),
+                        ));
                         comp_gr_db.set(s.comp_gr_db);
                         active_patch.set(s.active_patch);
                     }
@@ -125,6 +140,7 @@ pub fn use_rig_state() -> RigViewState {
         out_level,
         in_peak_db,
         out_peak_db,
+        stereo_db,
         comp_gr_db,
         spectrum,
         comp_wave,

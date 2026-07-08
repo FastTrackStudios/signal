@@ -49,7 +49,14 @@ fn send_param(rig: &Option<RigClient>, id: &str, name: &str, value: f32) {
 /// A quick-access module card that zooms to a full-screen editor. The same
 /// children render in both sizes — panels are written to scale.
 #[component]
-pub fn ZoomPanel(title: String, children: Element) -> Element {
+pub fn ZoomPanel(
+    title: String,
+    children: Element,
+    /// Fullscreen-only content — when set, the overlay renders this instead
+    /// of `children` (e.g. the gate's expanded editor with attack/release).
+    #[props(default)]
+    zoomed_view: Option<Element>,
+) -> Element {
     let mut zoomed = use_signal(|| false);
     rsx! {
         div { class: "relative flex flex-col flex-1 border border-border bg-card min-h-0 overflow-hidden",
@@ -69,7 +76,7 @@ pub fn ZoomPanel(title: String, children: Element) -> Element {
                     onclick: move |_| zoomed.set(false),
                     "✕"
                 }
-                div { class: "flex-1 min-h-0", {children} }
+                div { class: "flex-1 min-h-0", {zoomed_view.unwrap_or(children)} }
             }
         }
     }
@@ -112,42 +119,77 @@ fn ParamSlider(block_id: String, p: BlockParam, #[props(default)] fmt_hz: bool) 
     }
 }
 
-/// A vertical level meter with a dB readout.
+/// A stereo vertical meter: two flush bars (L/R) with a shared dB readout.
 #[component]
-fn VMeter(label: &'static str, level_db: f32, #[props(default)] muted: bool) -> Element {
-    let pct = ((level_db + 60.0) / 60.0 * 100.0).clamp(0.0, 100.0);
-    let color = if muted {
-        "#3f3f46"
-    } else if level_db > -6.0 {
-        "#ef4444"
-    } else if level_db > -18.0 {
-        "#eab308"
-    } else {
-        "#22c55e"
+fn StereoMeter(label: &'static str, l_db: f32, r_db: f32, #[props(default)] muted: bool) -> Element {
+    let bar = |db: f32| -> (f32, &'static str) {
+        let pct = ((db + 60.0) / 60.0 * 100.0).clamp(0.0, 100.0);
+        let color = if muted {
+            "#3f3f46"
+        } else if db > -6.0 {
+            "#ef4444"
+        } else if db > -18.0 {
+            "#eab308"
+        } else {
+            "#22c55e"
+        };
+        (pct, color)
     };
+    let (lp, lc) = bar(l_db);
+    let (rp, rc) = bar(r_db);
+    let max_db = l_db.max(r_db);
     rsx! {
-        div { class: "flex flex-col items-center gap-1 h-full min-h-0",
-            span { class: "text-[9px] font-semibold uppercase tracking-wider text-muted-foreground", "{label}" }
-            div { class: "relative flex-1 w-3 rounded bg-black/60 border border-border overflow-hidden min-h-0",
-                div {
-                    class: "absolute inset-x-0 bottom-0 transition-[height] duration-75",
-                    style: "height: {pct}%; background-color: {color};",
+        div { class: "flex flex-col items-center h-full min-h-0 w-full",
+            span { class: "text-[8px] font-semibold uppercase tracking-wider text-muted-foreground", "{label}" }
+            div { class: "flex flex-1 w-full min-h-0 bg-black/60 border border-border overflow-hidden",
+                div { class: "relative flex-1 h-full",
+                    div { class: "absolute inset-x-0 bottom-0 transition-[height] duration-75",
+                        style: "height: {lp}%; background-color: {lc};" }
+                }
+                div { class: "w-px bg-black" }
+                div { class: "relative flex-1 h-full",
+                    div { class: "absolute inset-x-0 bottom-0 transition-[height] duration-75",
+                        style: "height: {rp}%; background-color: {rc};" }
                 }
             }
             span { class: "text-[8px] font-mono text-muted-foreground",
-                if level_db <= -89.0 { "−∞" } else { {format!("{level_db:.0}")} }
+                if max_db <= -89.0 { "−∞" } else { {format!("{max_db:.0}")} }
             }
         }
     }
 }
 
-// ── Gate ────────────────────────────────────────────────────────────────────
+// ── Time-section constants ──────────────────────────────────────────────────
 
-/// The gate, tall and slim: a vertical level bar with the threshold line —
-/// drag anywhere on the bar to set the threshold. Attack/release knobs
-/// beneath.
+const DELAY_COLORS: [&str; 2] = ["#38bdf8", "#818cf8"];
+const VERB_COLORS: [&str; 2] = ["#2dd4bf", "#a78bfa"];
+
+/// Tempo-division labels — `delay::TapDivision` order (Quarter, dotted 8th,
+/// 8th, triplet, 16th, golden ratio, silver ratio, free-running).
+const DIV_LABELS: [&str; 8] = ["1/4", "1/8.", "1/8", "1/4T", "1/16", "Golden", "Silver", "Free"];
+
+/// Division → multiple of a quarter note, for the tap visualization
+/// (Free returns 0 → the caller falls back to the block's `time`).
+fn div_factor(idx: f32) -> f32 {
+    [1.0, 0.75, 0.5, 1.0 / 3.0, 0.25, 0.618, 0.414, 0.0][(idx as usize).min(7)]
+}
+
+/// `delay::DelayStyle` order — the TimeLine MX machines.
+const DELAY_ALGOS: [&str; 13] = [
+    "Tape", "Digital", "dBucket", "Lo-Fi", "Shimmer", "Reverse", "Ice",
+    "Rhythm", "Drum", "Oil Can", "MultiTap", "Spectral", "Filter",
+];
+/// `reverb::AlgorithmType::ALL` order.
+const VERB_ALGOS: [&str; 15] = [
+    "Room", "Hall", "Plate", "Spring", "Cloud", "Bloom", "Shimmer", "Chorale",
+    "Magneto", "NonLinear", "Swell", "Reflections", "Velvet", "FreeVerb", "Convolution",
+];
+
+/// The gate, tall and slim: the level bar with a draggable threshold and a
+/// live gain-reduction strip (red, from the top) so gating is visible the
+/// moment it happens. `expanded` (the zoomed view) adds attack/release.
 #[component]
-fn GatePanel(block: LiveBlock, in_db: f32) -> Element {
+fn GatePanel(block: LiveBlock, in_db: f32, #[props(default)] expanded: bool) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
     let mut el = use_signal(|| None::<std::rc::Rc<MountedData>>);
     let mut tracking = use_signal(|| false);
@@ -156,6 +198,17 @@ fn GatePanel(block: LiveBlock, in_db: f32) -> Element {
     let open = in_db >= thr && !block.bypassed;
     let level_pct = ((in_db + 90.0) / 90.0 * 100.0).clamp(0.0, 100.0);
     let thr_pct = ((thr + 90.0) / 90.0 * 100.0).clamp(0.0, 100.0);
+    // Gain reduction estimate while closed: how far the signal sits under
+    // the threshold (the gate attenuates toward silence). Red strip depth.
+    // Only indicate reduction when actual signal is being clamped — at the
+    // noise floor the gate is technically attenuating silence, which reads
+    // as a stuck red bar.
+    let gr_db = if open || block.bypassed || in_db < -75.0 {
+        0.0
+    } else {
+        (thr - in_db).clamp(0.0, 40.0)
+    };
+    let gr_pct = (gr_db / 40.0 * 100.0).clamp(0.0, 100.0);
 
     let set_thr = {
         let rig = rig.clone();
@@ -175,22 +228,10 @@ fn GatePanel(block: LiveBlock, in_db: f32) -> Element {
     };
 
     rsx! {
-        div { class: "flex flex-col items-center gap-1 h-full min-h-0 pt-4",
-            span {
-                class: "text-[9px] font-bold uppercase tracking-wider rounded px-1 py-0.5 flex-shrink-0",
-                style: if block.bypassed {
-                    "background-color: #3f3f46; color: #a1a1aa;"
-                } else if open {
-                    "background-color: #22c55e; color: #052e16;"
-                } else {
-                    "background-color: #27272a; color: #71717a;"
-                },
-                if block.bypassed { "Byp" } else if open { "Open" } else { "Closed" }
-            }
-            // The tall bar: level fill from the bottom, threshold marker on
-            // top — drag to move the threshold.
+        div { class: "flex flex-col items-center gap-1 h-full min-h-0 pt-4 pb-1",
+            // The bar: level from below, GR strip from above, threshold line.
             div {
-                class: "relative flex-1 w-6 rounded bg-black/60 border border-border overflow-hidden min-h-0 cursor-ns-resize touch-none",
+                class: "relative flex-1 w-full max-w-10 bg-black/60 border border-border overflow-hidden min-h-0 cursor-ns-resize touch-none",
                 onmounted: move |e| el.set(Some(e.data())),
                 onpointerdown: {
                     let set_thr = set_thr.clone();
@@ -206,37 +247,50 @@ fn GatePanel(block: LiveBlock, in_db: f32) -> Element {
                 },
                 onpointerup: move |_| tracking.set(false),
                 onpointerleave: move |_| tracking.set(false),
+                // Input level.
                 div {
                     class: "absolute inset-x-0 bottom-0 transition-[height] duration-75",
                     style: if open { "height: {level_pct}%; background-color: #22c55e;" }
                            else { "height: {level_pct}%; background-color: #52525b;" },
                 }
+                // Gain reduction — red from the top while the gate clamps.
+                if gr_pct > 0.5 {
+                    div {
+                        class: "absolute inset-x-0 top-0 transition-[height] duration-75",
+                        style: "height: {gr_pct}%; background-color: rgba(239,68,68,0.45);",
+                    }
+                }
+                // Threshold line (the draggable thing).
                 div {
-                    class: "absolute inset-x-0 h-0.5",
-                    style: "bottom: {thr_pct}%; background-color: #eab308;",
+                    class: "absolute inset-x-0",
+                    style: "bottom: {thr_pct}%; height: 2px; background-color: #eab308; box-shadow: 0 0 4px rgba(234,179,8,0.6);",
                 }
             }
-            span { class: "text-[8px] font-mono text-muted-foreground flex-shrink-0", "{thr:.0} dB" }
-            div { class: "flex flex-col gap-0.5 flex-shrink-0",
-                for name in ["attack", "release"] {
-                    if let Some(p) = param(&block, name) {
-                        {
-                            let rig = rig.clone();
-                            let id = block.id.clone();
-                            let pname = name.to_string();
-                            rsx! {
-                                crate::knob::Knob {
-                                    label: if name == "attack" { "Atk".to_string() } else { "Rel".to_string() },
-                                    value: p.value,
-                                    min: p.min,
-                                    max: p.max,
-                                    size: crate::knob::KnobSize::Small,
-                                    on_change: Callback::new(move |v: f32| {
-                                        if let Some(r) = rig.clone() {
-                                            let (id, pname) = (id.clone(), pname.clone());
-                                            spawn(async move { let _ = r.set_block_param(id, pname, v).await; });
-                                        }
-                                    }),
+            span { class: "text-[8px] font-mono text-muted-foreground flex-shrink-0",
+                if gr_db > 0.5 { {format!("−{gr_db:.0}")} } else { {format!("{thr:.0}")} }
+            }
+            if expanded {
+                div { class: "flex gap-3 flex-shrink-0",
+                    for name in ["attack", "release"] {
+                        if let Some(p) = param(&block, name) {
+                            {
+                                let rig = rig.clone();
+                                let id = block.id.clone();
+                                let pname = name.to_string();
+                                rsx! {
+                                    crate::knob::Knob {
+                                        label: if name == "attack" { "Attack".to_string() } else { "Release".to_string() },
+                                        value: p.value,
+                                        min: p.min,
+                                        max: p.max,
+                                        size: crate::knob::KnobSize::Medium,
+                                        on_change: Callback::new(move |v: f32| {
+                                            if let Some(r) = rig.clone() {
+                                                let (id, pname) = (id.clone(), pname.clone());
+                                                spawn(async move { let _ = r.set_block_param(id, pname, v).await; });
+                                            }
+                                        }),
+                                    }
                                 }
                             }
                         }
@@ -247,20 +301,160 @@ fn GatePanel(block: LiveBlock, in_db: f32) -> Element {
     }
 }
 
-// ── Time & modulation visualizers ──────────────────────────────────────────
-
-const DELAY_COLORS: [&str; 2] = ["#38bdf8", "#818cf8"];
-const VERB_COLORS: [&str; 2] = ["#2dd4bf", "#a78bfa"];
-
-/// Note-division labels — order matches the backend's `div_factor`.
-const DIV_LABELS: [&str; 8] = ["1/1", "1/2.", "1/2", "1/4.", "1/4", "1/8.", "1/8", "1/16"];
-
-fn div_factor(idx: f32) -> f32 {
-    [4.0, 3.0, 2.0, 1.5, 1.0, 0.75, 0.5, 0.25][(idx as usize).min(7)]
+/// A slim vertical fader: drag to set, small readout below.
+#[component]
+fn VFader(
+    label: &'static str,
+    /// Normalized position 0..1.
+    value: f32,
+    /// Readout text.
+    readout: String,
+    on_change: Callback<f32>,
+) -> Element {
+    let mut el = use_signal(|| None::<std::rc::Rc<MountedData>>);
+    let mut tracking = use_signal(|| false);
+    let pct = (value * 100.0).clamp(0.0, 100.0);
+    let set_from = move |coords: dioxus::html::geometry::ElementPoint| {
+        let el = el();
+        spawn(async move {
+            let Some(el) = el else { return };
+            let Ok(rect) = el.get_client_rect().await else { return };
+            on_change.call((1.0 - coords.y / rect.height()).clamp(0.0, 1.0) as f32);
+        });
+    };
+    rsx! {
+        div { class: "flex flex-col items-center h-full min-h-0",
+            span { class: "text-[8px] font-semibold uppercase tracking-wider text-muted-foreground", "{label}" }
+            div {
+                class: "relative flex-1 w-3 bg-black/60 border border-border min-h-0 cursor-ns-resize touch-none",
+                onmounted: move |e| el.set(Some(e.data())),
+                onpointerdown: move |e: PointerEvent| { tracking.set(true); set_from(e.element_coordinates()); },
+                onpointermove: move |e: PointerEvent| { if tracking() { set_from(e.element_coordinates()); } },
+                onpointerup: move |_| tracking.set(false),
+                onpointerleave: move |_| tracking.set(false),
+                div {
+                    class: "absolute inset-x-0 h-2 border border-zinc-500",
+                    style: "bottom: calc({pct}% - 4px); background-color: #3f3f46;",
+                }
+            }
+            span { class: "text-[8px] font-mono text-muted-foreground", "{readout}" }
+        }
+    }
 }
 
-const DELAY_ALGOS: [&str; 4] = ["Digital", "Tape", "Analog", "Diffuse"];
-const VERB_ALGOS: [&str; 4] = ["Hall", "Plate", "Room", "Shimmer"];
+/// MIDI monitor behind a header icon — system-wide, out of the surface.
+/// Shows a dot when events have been seen; click for the full log.
+#[component]
+pub fn MidiMonitorButton() -> Element {
+    let rig = use_hook(try_consume_context::<RigClient>);
+    let mut log = use_signal(Vec::<String>::new);
+    let mut open = use_signal(|| false);
+    {
+        let rig = rig.clone();
+        use_future(move || {
+            let rig = rig.clone();
+            async move {
+                let Some(rig) = rig else { return };
+                loop {
+                    if let Ok(l) = rig.midi_recent().await {
+                        log.set(l);
+                    }
+                    architect::platform::sleep(Duration::from_millis(800)).await;
+                }
+            }
+        });
+    }
+    let entries = log();
+    let seen = !entries.is_empty();
+    rsx! {
+        button {
+            class: "relative flex items-center justify-center w-8 h-8 rounded-md border border-border text-muted-foreground hover:text-foreground",
+            title: "MIDI monitor",
+            onclick: move |_| open.set(true),
+            span { class: "text-[10px] font-bold tracking-tight", "MIDI" }
+            if seen {
+                span { class: "absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-emerald-400" }
+            }
+        }
+        if open() {
+            div {
+                class: "fixed inset-0 z-50 flex flex-col bg-black/95 p-8",
+                onclick: move |_| open.set(false),
+                div { class: "flex items-center mb-4",
+                    span { class: "text-sm font-bold uppercase tracking-wider", "MIDI Monitor" }
+                    span { class: "ml-auto text-xs text-muted-foreground", "tap anywhere to close" }
+                }
+                div { class: "flex-1 overflow-y-auto font-mono text-xs flex flex-col-reverse gap-0.5",
+                    for (i, e) in entries.iter().enumerate().rev() {
+                        div { key: "{i}", class: "text-muted-foreground", "{e}" }
+                    }
+                    if entries.is_empty() {
+                        span { class: "italic", "listening — no MIDI events yet" }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Algorithm picker: the current algorithm reads as the module's title;
+/// clicking opens a dialog grid — room to grow as machines get added.
+#[component]
+fn AlgoPicker(
+    block_id: String,
+    name: &'static str,
+    value: f32,
+    options: Vec<&'static str>,
+    accent: String,
+) -> Element {
+    let rig = use_hook(try_consume_context::<RigClient>);
+    let mut open = use_signal(|| false);
+    let current = options
+        .get(value as usize)
+        .copied()
+        .unwrap_or(options.first().copied().unwrap_or("—"));
+    rsx! {
+        button {
+            class: "flex items-center gap-1 rounded-sm border border-border px-1.5 py-0.5 hover:bg-accent/30",
+            onclick: move |_| open.set(true),
+            span {
+                class: "text-[11px] font-bold tracking-wide",
+                style: "color: {accent};",
+                "{current}"
+            }
+            span { class: "text-[8px] text-muted-foreground", "▾" }
+        }
+        if open() {
+            div {
+                class: "fixed inset-0 z-50 flex items-center justify-center bg-black/80",
+                onclick: move |_| open.set(false),
+                div {
+                    class: "grid grid-cols-3 gap-1 p-3 rounded-lg border border-border bg-card max-w-md",
+                    for (i, o) in options.iter().enumerate() {
+                        {
+                            let rig = rig.clone();
+                            let block_id = block_id.clone();
+                            let is_cur = i == value as usize;
+                            let accent = accent.clone();
+                            rsx! {
+                                button {
+                                    key: "{i}",
+                                    class: if is_cur { "rounded px-3 py-2 text-xs font-bold" } else { "rounded px-3 py-2 text-xs text-muted-foreground border border-border hover:bg-accent/40" },
+                                    style: if is_cur { format!("background-color: {accent}; color: #000;") } else { String::new() },
+                                    onclick: move |_| {
+                                        send_param(&rig, &block_id, name, i as f32);
+                                        open.set(false);
+                                    },
+                                    "{o}"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
 
 /// A small labelled dropdown bound to an enum-style block param.
 #[component]
@@ -312,14 +506,13 @@ fn PKnob(block_id: String, name: &'static str, label: &'static str, p: BlockPara
     }
 }
 
-/// The stereo delay module: multitap visualization (left taps up, right taps
-/// down) driven by the live blocks' note divisions + tempo, with the full
-/// parameter surface — timing per side, HP/LP, ducking, mix, algorithm —
-/// per delay (1/2 selector).
+/// The stereo delay module, wide: one full-width visualizer per delay
+/// stacked (1 top, 2 bottom) — click a lane to select it — with the
+/// selected delay's controls in a strip beneath.
 #[component]
 fn DelayPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32) -> Element {
     let mut sel = use_signal(|| 0usize);
-    const W: f32 = 220.0;
+    const W: f32 = 460.0;
     let delays: Vec<LiveBlock> = blocks
         .iter()
         .filter(|b| b.block_type == BlockType::Delay)
@@ -329,125 +522,125 @@ fn DelayPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32) -> Element {
         return rsx! { span { class: "text-xs text-muted-foreground italic p-2", "No delays in the chain." } };
     }
     let quarter = 60_000.0 / tempo_bpm.max(1) as f32;
-    let win_ms = quarter * 8.0; // two bars of quarters
+    let win_ms = quarter * 8.0;
 
     let cur = delays[sel().min(delays.len() - 1)].clone();
     let cur_id = cur.id.clone();
 
     rsx! {
-        div { class: "flex h-full min-h-0", style: "background: #080808;",
-            // ── Stereo multitap viz ──
-            svg { class: "h-full min-h-0", style: "flex: 1 1 0%;", view_box: "0 0 220 100", preserve_aspect_ratio: "none",
-                line { x1: "0", y1: "50", x2: "220", y2: "50", stroke: "#3f3f46", stroke_width: "1" }
-                // Dry impulse through the middle.
-                rect { x: "5", y: "26", width: "2", height: "48", fill: "#e4e4e7", rx: "1" }
-                for (di, b) in delays.iter().enumerate() {
-                    {
-                        let fb = param_v(b, "feedback", 0.3).clamp(0.0, 0.98);
-                        let mix = param_v(b, "mix", 0.1).clamp(0.05, 1.0);
-                        let t_l = quarter * div_factor(param_v(b, "div_l", 4.0));
-                        let t_r = quarter * div_factor(param_v(b, "div_r", 4.0));
-                        let color = DELAY_COLORS[di % 2];
-                        let dim = b.bypassed;
-                        let stems = |side_t: f32, up: bool| -> Vec<(f32, f32, bool)> {
-                            let mut out = Vec::new();
-                            let (mut amp, mut t) = (mix, side_t);
-                            while t <= win_ms && amp > 0.015 && out.len() < 24 {
-                                out.push((t, amp, up));
-                                amp *= fb;
-                                t += side_t;
+        div { class: "flex flex-col h-full min-h-0", style: "background: #080808;",
+            // ── One lane per delay: full-width stereo multitap ──
+            for (di, b) in delays.iter().enumerate() {
+                {
+                    let fb = param_v(b, "feedback", 0.3).clamp(0.0, 0.98);
+                    let mix = param_v(b, "mix", 0.08).clamp(0.02, 0.10) / 0.10;
+                    let time_ms = param_v(b, "time", 350.0);
+                    let f_l = div_factor(param_v(b, "tap_div_l", 0.0));
+                    let f_r = div_factor(param_v(b, "tap_div_r", 0.0));
+                    let t_l = if f_l > 0.0 { quarter * f_l } else { time_ms };
+                    let t_r = if f_r > 0.0 { quarter * f_r } else { time_ms };
+                    let color = DELAY_COLORS[di % 2];
+                    let dim = b.bypassed;
+                    let is_sel = sel() == di;
+                    let stems = |side_t: f32, up: bool| -> Vec<(f32, f32, bool)> {
+                        let mut out = Vec::new();
+                        let (mut amp, mut t) = (mix, side_t);
+                        while t <= win_ms && amp > 0.015 && out.len() < 32 {
+                            out.push((t, amp, up));
+                            amp *= fb;
+                            t += side_t;
+                        }
+                        out
+                    };
+                    let mut taps = stems(t_l, true);
+                    taps.extend(stems(t_r, false));
+                    rsx! {
+                        div {
+                            key: "lane{di}",
+                            class: if is_sel { "relative flex-1 min-h-0 cursor-pointer" } else { "relative flex-1 min-h-0 cursor-pointer opacity-60 hover:opacity-90" },
+                            style: if is_sel { format!("order: {}; border-left: 2px solid {color}; background: {color}0a;", di * 2) } else { format!("order: {}; border-left: 2px solid transparent;", di * 2) },
+                            onclick: move |_| sel.set(di),
+                            svg { class: "w-full h-full", view_box: "0 0 460 56", preserve_aspect_ratio: "none",
+                                line { x1: "0", y1: "28", x2: "460", y2: "28", stroke: "#27272a", stroke_width: "1" }
+                                rect { x: "4", y: "14", width: "2", height: "28", fill: "#e4e4e7", rx: "1" }
+                                for (i, (t, amp, upv)) in taps.iter().enumerate() {
+                                    rect {
+                                        key: "{i}",
+                                        x: "{4.0 + t / win_ms * (W - 8.0):.1}",
+                                        y: if *upv { format!("{:.1}", 28.0 - amp * 26.0) } else { "28".to_string() },
+                                        width: "2",
+                                        height: "{amp * 26.0:.1}",
+                                        fill: "{color}",
+                                        fill_opacity: if dim { "0.25" } else { "0.9" },
+                                        rx: "1",
+                                    }
+                                }
                             }
-                            out
-                        };
-                        let mut taps = stems(t_l, true);
-                        taps.extend(stems(t_r, false));
-                        rsx! {
-                            for (i, (t, amp, up)) in taps.iter().enumerate() {
-                                rect {
-                                    key: "{di}-{i}",
-                                    x: "{5.0 + t / win_ms * (W - 10.0):.1}",
-                                    y: if *up { format!("{:.1}", 50.0 - amp * 44.0) } else { "50".to_string() },
-                                    width: "2",
-                                    height: "{amp * 44.0:.1}",
-                                    fill: "{color}",
-                                    fill_opacity: if dim { "0.18" } else { "0.85" },
-                                    rx: "1",
+                            div { class: "absolute top-0.5 left-1.5 flex items-baseline gap-1.5",
+                                span { style: "font-size:8px; font-weight:700; color:{color};", "{di + 1}" }
+                                span { style: "font-size:8px; color:#8a8a92;",
+                                    "{DELAY_ALGOS[param_v(b, \"style\", 1.0) as usize % 13]}"
+                                }
+                                if dim {
+                                    span { style: "font-size:8px; color:#52525b;", "bypassed" }
                                 }
                             }
                         }
                     }
                 }
-                text { x: "8", y: "12", fill: "#52525b", font_size: "8", "L" }
-                text { x: "8", y: "96", fill: "#52525b", font_size: "8", "R" }
             }
 
-            // ── Parameter surface for the selected delay ──
-            div { class: "flex flex-col gap-1 p-1.5 border-l border-border flex-shrink-0", style: "width: 210px;",
-                div { class: "flex items-center gap-1",
-                    span { style: "font-size:8px; font-weight:600; text-transform:uppercase; color:#8a8a92;", "Delay" }
-                    for i in 0..delays.len() {
-                        button {
-                            key: "{i}",
-                            class: if sel() == i { "w-4 h-4 rounded-sm text-[9px] font-bold" } else { "w-4 h-4 rounded-sm text-[9px] text-muted-foreground border border-border" },
-                            style: if sel() == i { format!("background-color: {}; color: #000;", DELAY_COLORS[i % 2]) } else { String::new() },
-                            onclick: move |_| sel.set(i),
-                            "{i + 1}"
-                        }
-                    }
-                    if cur.bypassed {
-                        span { class: "text-[8px] text-muted-foreground", "· bypassed" }
-                    }
-                    div { class: "ml-auto",
-                        ParamSelect {
-                            block_id: cur_id.clone(),
-                            name: "algo",
-                            label: "Algo",
-                            value: param_v(&cur, "algo", 0.0),
-                            options: DELAY_ALGOS.to_vec(),
-                        }
-                    }
+
+            // ── Controls for the selected delay ──
+            div { class: "flex items-end gap-1.5 px-1.5 py-1 border-y border-border flex-shrink-0", style: "order: 1;",
+                ParamSelect {
+                    block_id: cur_id.clone(),
+                    name: "tap_div_l",
+                    label: "Time L",
+                    value: param_v(&cur, "tap_div_l", 0.0),
+                    options: DIV_LABELS.to_vec(),
                 }
-                div { class: "flex gap-2",
-                    ParamSelect {
-                        block_id: cur_id.clone(),
-                        name: "div_l",
-                        label: "Time L",
-                        value: param_v(&cur, "div_l", 4.0),
-                        options: DIV_LABELS.to_vec(),
-                    }
-                    ParamSelect {
-                        block_id: cur_id.clone(),
-                        name: "div_r",
-                        label: "Time R",
-                        value: param_v(&cur, "div_r", 4.0),
-                        options: DIV_LABELS.to_vec(),
-                    }
+                ParamSelect {
+                    block_id: cur_id.clone(),
+                    name: "tap_div_r",
+                    label: "Time R",
+                    value: param_v(&cur, "tap_div_r", 0.0),
+                    options: DIV_LABELS.to_vec(),
                 }
-                div { class: "flex gap-1 justify-between",
-                    if let Some(p) = param(&cur, "hp") {
-                        PKnob { block_id: cur_id.clone(), name: "hp", label: "HP", p }
-                    }
-                    if let Some(p) = param(&cur, "lp") {
-                        PKnob { block_id: cur_id.clone(), name: "lp", label: "LP", p }
-                    }
-                    if let Some(p) = param(&cur, "duck") {
-                        PKnob { block_id: cur_id.clone(), name: "duck", label: "Duck", p }
-                    }
-                    if let Some(p) = param(&cur, "mix") {
-                        PKnob { block_id: cur_id.clone(), name: "mix", label: "Mix", p }
+                if let Some(p) = param(&cur, "high_pass") {
+                    PKnob { block_id: cur_id.clone(), name: "high_pass", label: "HP", p }
+                }
+                if let Some(p) = param(&cur, "repeat_dyn") {
+                    PKnob { block_id: cur_id.clone(), name: "repeat_dyn", label: "Duck", p }
+                }
+                if let Some(p) = param(&cur, "feedback") {
+                    PKnob { block_id: cur_id.clone(), name: "feedback", label: "FB", p }
+                }
+                if let Some(p) = param(&cur, "mix") {
+                    PKnob { block_id: cur_id.clone(), name: "mix", label: "Mix", p }
+                }
+                div { class: "ml-auto",
+                    AlgoPicker {
+                        block_id: cur_id.clone(),
+                        name: "style",
+                        value: param_v(&cur, "style", 1.0),
+                        options: DELAY_ALGOS.to_vec(),
+                        accent: DELAY_COLORS[sel().min(1)].to_string(),
                     }
                 }
             }
+
         }
     }
 }
 
-/// The stereo reverb module: mirrored decay tails per reverb plus the
-/// parameter surface — mix, time, HP/LP, modulation, algorithm.
+/// The stereo reverb module, wide: one full-width mirrored tail per reverb
+/// stacked — click a lane to select — with the selected reverb's controls
+/// beneath.
 #[component]
 fn ReverbPanel(blocks: Vec<LiveBlock>) -> Element {
     let mut sel = use_signal(|| 0usize);
-    const W: f32 = 220.0;
+    const W: f32 = 460.0;
     let verbs: Vec<LiveBlock> = blocks
         .iter()
         .filter(|b| b.block_type == BlockType::Reverb)
@@ -460,86 +653,85 @@ fn ReverbPanel(blocks: Vec<LiveBlock>) -> Element {
     let cur_id = cur.id.clone();
 
     rsx! {
-        div { class: "flex h-full min-h-0", style: "background: #080808;",
-            // ── Stereo tail viz (mirrored) ──
-            svg { class: "h-full min-h-0", style: "flex: 1 1 0%;", view_box: "0 0 220 100", preserve_aspect_ratio: "none",
-                line { x1: "0", y1: "50", x2: "220", y2: "50", stroke: "#3f3f46", stroke_width: "1" }
-                for (vi, b) in verbs.iter().enumerate() {
-                    {
-                        let decay = param_v(b, "decay", 0.4).clamp(0.02, 1.0);
-                        let size = param_v(b, "size", 0.5);
-                        let mix = param_v(b, "mix", 0.1).clamp(0.05, 1.0);
-                        let md = param_v(b, "mod", 0.2);
-                        let color = VERB_COLORS[vi % 2];
-                        let dim = b.bypassed;
-                        let tau = 0.08 + decay * size.max(0.1) * 0.9;
-                        // Mirrored tail with a little modulation wiggle.
-                        let mut top = String::from("M 5 50 ");
-                        let mut bot = String::from("M 5 50 ");
-                        for px in 0..=64 {
-                            let t = px as f32 / 64.0;
-                            let wig = 1.0 + (t * 24.0).sin() * md * 0.18;
-                            let h = mix * (-t / tau).exp() * wig * 44.0;
-                            let x = 5.0 + t * (W - 10.0);
-                            top.push_str(&format!("L {x:.1} {:.1} ", 50.0 - h));
-                            bot.push_str(&format!("L {x:.1} {:.1} ", 50.0 + h));
-                        }
-                        top.push_str("L 215 50 Z");
-                        bot.push_str("L 215 50 Z");
-                        rsx! {
-                            path { key: "t{vi}", d: "{top}", fill: "{color}", fill_opacity: if dim { "0.08" } else { "0.22" },
-                                stroke: "{color}", stroke_opacity: if dim { "0.2" } else { "0.75" }, stroke_width: "1" }
-                            path { key: "b{vi}", d: "{bot}", fill: "{color}", fill_opacity: if dim { "0.06" } else { "0.16" },
-                                stroke: "{color}", stroke_opacity: if dim { "0.15" } else { "0.5" }, stroke_width: "1" }
+        div { class: "flex flex-col h-full min-h-0", style: "background: #080808;",
+            for (vi, b) in verbs.iter().enumerate() {
+                {
+                    let decay = param_v(b, "decay", 0.4).clamp(0.02, 1.0);
+                    let size = param_v(b, "size", 0.5);
+                    let mix = (param_v(b, "mix", 0.08).clamp(0.02, 0.10) / 0.10).max(0.15);
+                    let md = param_v(b, "modulation", 0.2);
+                    let color = VERB_COLORS[vi % 2];
+                    let dim = b.bypassed;
+                    let is_sel = sel() == vi;
+                    let tau = 0.08 + decay * size.max(0.1) * 0.9;
+                    let mut top = String::from("M 4 28 ");
+                    let mut bot = String::from("M 4 28 ");
+                    for px in 0..=80 {
+                        let t = px as f32 / 80.0;
+                        let wig = 1.0 + (t * 24.0).sin() * md * 0.18;
+                        let h = mix * (-t / tau).exp() * wig * 26.0;
+                        let x = 4.0 + t * (W - 8.0);
+                        top.push_str(&format!("L {x:.1} {:.1} ", 28.0 - h));
+                        bot.push_str(&format!("L {x:.1} {:.1} ", 28.0 + h));
+                    }
+                    top.push_str("L 456 28 Z");
+                    bot.push_str("L 456 28 Z");
+                    rsx! {
+                        div {
+                            key: "lane{vi}",
+                            class: if is_sel { "relative flex-1 min-h-0 cursor-pointer" } else { "relative flex-1 min-h-0 cursor-pointer opacity-60 hover:opacity-90" },
+                            style: if is_sel { format!("order: {}; border-left: 2px solid {color}; background: {color}0a;", vi * 2) } else { format!("order: {}; border-left: 2px solid transparent;", vi * 2) },
+                            onclick: move |_| sel.set(vi),
+                            svg { class: "w-full h-full", view_box: "0 0 460 56", preserve_aspect_ratio: "none",
+                                line { x1: "0", y1: "28", x2: "460", y2: "28", stroke: "#27272a", stroke_width: "1" }
+                                path { d: "{top}", fill: "{color}", fill_opacity: if dim { "0.08" } else { "0.25" },
+                                    stroke: "{color}", stroke_opacity: if dim { "0.25" } else { "0.8" }, stroke_width: "1" }
+                                path { d: "{bot}", fill: "{color}", fill_opacity: if dim { "0.06" } else { "0.18" },
+                                    stroke: "{color}", stroke_opacity: if dim { "0.2" } else { "0.55" }, stroke_width: "1" }
+                            }
+                            div { class: "absolute top-0.5 left-1.5 flex items-baseline gap-1.5",
+                                span { style: "font-size:8px; font-weight:700; color:{color};", "{vi + 1}" }
+                                span { style: "font-size:8px; color:#8a8a92;",
+                                    "{VERB_ALGOS[param_v(b, \"algorithm\", 1.0) as usize % 15]}"
+                                }
+                                if dim {
+                                    span { style: "font-size:8px; color:#52525b;", "bypassed" }
+                                }
+                            }
                         }
                     }
                 }
             }
 
-            // ── Parameter surface for the selected reverb ──
-            div { class: "flex flex-col gap-1 p-1.5 border-l border-border flex-shrink-0", style: "width: 210px;",
-                div { class: "flex items-center gap-1",
-                    span { style: "font-size:8px; font-weight:600; text-transform:uppercase; color:#8a8a92;", "Reverb" }
-                    for i in 0..verbs.len() {
-                        button {
-                            key: "{i}",
-                            class: if sel() == i { "w-4 h-4 rounded-sm text-[9px] font-bold" } else { "w-4 h-4 rounded-sm text-[9px] text-muted-foreground border border-border" },
-                            style: if sel() == i { format!("background-color: {}; color: #000;", VERB_COLORS[i % 2]) } else { String::new() },
-                            onclick: move |_| sel.set(i),
-                            "{i + 1}"
-                        }
-                    }
-                    if cur.bypassed {
-                        span { class: "text-[8px] text-muted-foreground", "· bypassed" }
-                    }
-                    div { class: "ml-auto",
-                        ParamSelect {
-                            block_id: cur_id.clone(),
-                            name: "algo",
-                            label: "Algo",
-                            value: param_v(&cur, "algo", 0.0),
-                            options: VERB_ALGOS.to_vec(),
-                        }
-                    }
+
+            // ── Controls for the selected reverb ──
+            div { class: "flex items-end gap-1.5 px-1.5 py-1 border-y border-border flex-shrink-0", style: "order: 1;",
+                if let Some(p) = param(&cur, "mix") {
+                    PKnob { block_id: cur_id.clone(), name: "mix", label: "Mix", p }
                 }
-                div { class: "flex gap-1 justify-between",
-                    if let Some(p) = param(&cur, "mix") {
-                        PKnob { block_id: cur_id.clone(), name: "mix", label: "Mix", p }
-                    }
-                    if let Some(p) = param(&cur, "decay") {
-                        PKnob { block_id: cur_id.clone(), name: "decay", label: "Time", p }
-                    }
-                    if let Some(p) = param(&cur, "hp") {
-                        PKnob { block_id: cur_id.clone(), name: "hp", label: "HP", p }
-                    }
-                    if let Some(p) = param(&cur, "lp") {
-                        PKnob { block_id: cur_id.clone(), name: "lp", label: "LP", p }
-                    }
-                    if let Some(p) = param(&cur, "mod") {
-                        PKnob { block_id: cur_id.clone(), name: "mod", label: "Mod", p }
+                if let Some(p) = param(&cur, "decay") {
+                    PKnob { block_id: cur_id.clone(), name: "decay", label: "Time", p }
+                }
+                if let Some(p) = param(&cur, "tone") {
+                    PKnob { block_id: cur_id.clone(), name: "tone", label: "Tone", p }
+                }
+                if let Some(p) = param(&cur, "damping") {
+                    PKnob { block_id: cur_id.clone(), name: "damping", label: "Damp", p }
+                }
+                if let Some(p) = param(&cur, "modulation") {
+                    PKnob { block_id: cur_id.clone(), name: "modulation", label: "Mod", p }
+                }
+                div { class: "ml-auto",
+                    AlgoPicker {
+                        block_id: cur_id.clone(),
+                        name: "algorithm",
+                        value: param_v(&cur, "algorithm", 1.0),
+                        options: VERB_ALGOS.to_vec(),
+                        accent: VERB_COLORS[sel().min(1)].to_string(),
                     }
                 }
             }
+
         }
     }
 }
@@ -609,12 +801,12 @@ fn ModViz(blocks: Vec<LiveBlock>) -> Element {
 pub fn ControlView(
     model: PerformanceModel,
     state: RigViewState,
-    on_open_tuner: Callback<()>,
 ) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
     let blocks = state.blocks.cloned();
     let in_db = state.in_peak_db.cloned();
     let out_db = state.out_peak_db.cloned();
+    let (in_l, in_r, out_l, out_r) = state.stereo_db.cloned();
     let gr_db = state.comp_gr_db.cloned();
     let spectrum = state.spectrum.cloned();
     let comp_wave = state.comp_wave.cloned();
@@ -624,23 +816,20 @@ pub fn ControlView(
     let gate = find_block(&blocks, BlockType::Gate, "Gate");
 
     let hp = model.headphone.clone();
-    // Headphone meter: main signal scaled by phones volume (the physical bus
-    // lands with engine multi-out; the meter shows what it will carry).
-    let hp_db = out_db + 20.0 * hp.volume.max(0.001).log10();
-    let main_db = if hp.main_mute { -90.0 } else { out_db };
+    let _ = out_db;
 
 
     rsx! {
-        div { class: "flex gap-1 h-full min-h-0 overflow-hidden",
+        div { class: "flex gap-0.5 h-full min-h-0 overflow-hidden",
             // ── Input meter rail ──
-            div { class: "w-9 flex-shrink-0", VMeter { label: "In", level_db: in_db } }
+            div { class: "w-12 flex-shrink-0", StereoMeter { label: "In", l_db: in_l, r_db: in_r } }
 
             // ── Center surface ──
             div { class: "flex flex-col gap-1 flex-1 min-w-0 min-h-0",
                 // Main modules, in signal order: Compressor → Gate → Amp EQ,
                 // with the time section (Delay | Reverb) docked flush beneath.
                 div { class: "flex flex-col gap-0 min-h-0",
-                    div { class: "flex gap-0 min-h-0 w-full", style: "aspect-ratio: 25 / 9; max-height: 52%;",
+                    div { class: "flex gap-0 min-h-0 w-full", style: "aspect-ratio: 25 / 9; max-height: 56%;",
                         // Height-driven square: width follows the row height.
                         div { class: "min-h-0 h-full aspect-square flex flex-col flex-shrink-0",
                             ZoomPanel { title: "Compressor".to_string(),
@@ -658,7 +847,11 @@ pub fn ControlView(
                         }
                         // The gate, tall and slim — level vs threshold at a glance.
                         div { class: "min-h-0 h-full w-14 flex flex-col flex-shrink-0",
-                            ZoomPanel { title: "Gate".to_string(),
+                            ZoomPanel {
+                                title: "Gate".to_string(),
+                                zoomed_view: gate.clone().map(|g| rsx! {
+                                    GatePanel { block: g, in_db, expanded: true }
+                                }),
                                 if let Some(gate) = gate {
                                     GatePanel { block: gate, in_db }
                                 } else {
@@ -676,16 +869,21 @@ pub fn ControlView(
                             }
                         }
                     }
-                    // Time section: stereo delay + stereo reverb.
-                    div { class: "flex gap-0 min-h-0 w-full", style: "height: 128px;",
-                        div { class: "min-h-0 h-full flex flex-col", style: "flex: 1 1 0%;",
+                    // Time section: stereo delay + stereo reverb + modulation.
+                    div { class: "flex gap-0 min-h-0 w-full", style: "height: 168px;",
+                        div { class: "min-h-0 h-full flex flex-col", style: "flex: 2 1 0%;",
                             ZoomPanel { title: "Delay".to_string(),
                                 DelayPanel { blocks: blocks.clone(), tempo_bpm: model.tempo_bpm }
                             }
                         }
-                        div { class: "min-h-0 h-full flex flex-col", style: "flex: 1 1 0%;",
+                        div { class: "min-h-0 h-full flex flex-col", style: "flex: 2 1 0%;",
                             ZoomPanel { title: "Reverb".to_string(),
                                 ReverbPanel { blocks: blocks.clone() }
+                            }
+                        }
+                        div { class: "min-h-0 h-full flex flex-col", style: "flex: 1 1 0%;",
+                            ZoomPanel { title: "Modulation".to_string(),
+                                ModViz { blocks: blocks.clone() }
                             }
                         }
                     }
@@ -693,19 +891,6 @@ pub fn ControlView(
 
                 div { class: "flex-1 min-h-0" }
 
-                // Bottom rail: the modulation visualizer, rest open.
-                div { class: "flex gap-1 flex-shrink-0 items-end", style: "height: 96px;",
-                    div { class: "min-h-0 h-full flex flex-col w-72",
-                        ZoomPanel { title: "Modulation".to_string(),
-                            ModViz { blocks: blocks.clone() }
-                        }
-                    }
-                    div { class: "flex-1" }
-                }
-
-                // The tuner, gum-stick style: one short strip across the
-                // bottom — note left, needle bar center, cents right.
-                MiniTuner { on_open: on_open_tuner }
             }
 
             // ── Output rail: mute on top, then FOH trim + out meter,
@@ -729,7 +914,7 @@ pub fn ControlView(
                     },
                     if hp.main_mute { "Muted" } else { "Mute" }
                 }
-                div { class: "flex-1 min-h-0 w-full flex justify-center gap-1.5",
+                div { class: "flex-1 min-h-0 w-full flex justify-center gap-0",
                     VFader {
                         label: "Trim",
                         value: (model.master_trim_db + 24.0) / 36.0,
@@ -743,9 +928,14 @@ pub fn ControlView(
                             }
                         }),
                     }
-                    VMeter { label: "Out", level_db: main_db, muted: hp.main_mute }
+                    StereoMeter {
+                        label: "Out",
+                        l_db: if hp.main_mute { -90.0 } else { out_l },
+                        r_db: if hp.main_mute { -90.0 } else { out_r },
+                        muted: hp.main_mute,
+                    }
                 }
-                div { class: "flex-1 min-h-0 w-full flex justify-center gap-1.5",
+                div { class: "flex-1 min-h-0 w-full flex justify-center gap-0",
                     VFader {
                         label: "Mix",
                         value: hp.volume,
@@ -760,7 +950,11 @@ pub fn ControlView(
                             }
                         }),
                     }
-                    VMeter { label: "Phns", level_db: hp_db }
+                    StereoMeter {
+                        label: "Phns",
+                        l_db: out_l + 20.0 * hp.volume.max(0.001).log10(),
+                        r_db: out_r + 20.0 * hp.volume.max(0.001).log10(),
+                    }
                     VFader {
                         label: "Gtr",
                         value: hp.self_mix,

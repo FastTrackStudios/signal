@@ -72,6 +72,11 @@ pub struct RigStatus {
     /// Compressor gain reduction (dB, positive = reducing) — real, from the
     /// DSP's detector.
     pub comp_gr_db: f32,
+    /// Per-channel peaks (linear) — stereo metering.
+    pub input_peak_l: f32,
+    pub input_peak_r: f32,
+    pub output_peak_l: f32,
+    pub output_peak_r: f32,
 }
 
 /// One footswitch stack (folder) in the performance grid — a named rotation

@@ -17,6 +17,16 @@ use signal_guitar_proto::{BlockParam, LiveBlock};
 
 use crate::knob::{Knob, KnobSize};
 
+/// What a pointer drag on the display is editing.
+#[derive(Clone, Copy, PartialEq)]
+enum CompDrag {
+    /// Vertical drag on the threshold line.
+    Threshold,
+    /// Vertical drag on the transfer curve above the knee — tilts the slope
+    /// (ratio). Stores (start_y_graph, start_ratio).
+    Ratio(f32, f32),
+}
+
 const W: f64 = 360.0;
 const H: f64 = 360.0; // 1:1 — the comp widget is square
 /// Waveform dB range (matches the painter's `range_db`).
@@ -110,9 +120,13 @@ pub fn CompSurface(
     gr_db: f32,
 ) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
+    let mut svg_el = use_signal(|| None::<std::rc::Rc<MountedData>>);
+    let mut svg_size = use_signal(|| None::<(f64, f64)>);
+    let mut dragging = use_signal(|| None::<CompDrag>);
     let (wave_in, wave_gr) = wave;
 
     let threshold = param_v(&block, "threshold", -18.0);
+    let thr = threshold;
     let ratio = param_v(&block, "ratio", 4.0).max(1.0);
     let knee = param_v(&block, "knee", 6.0);
 
@@ -197,11 +211,64 @@ pub fn CompSurface(
         div { class: "relative flex flex-col h-full min-h-0 overflow-hidden",
             style: "background: #080808;",
 
-            // ── The rolling display (normal flow so the panel has height) ──
+            // ── The rolling display — grab the threshold line to move it;
+            // grab the transfer curve above the knee to tilt the ratio ──
             svg {
-                class: "w-full flex-1 min-h-0",
+                class: "w-full flex-1 min-h-0 touch-none select-none",
                 view_box: "0 0 360 360",
                 preserve_aspect_ratio: "none",
+                onmounted: move |e| svg_el.set(Some(e.data())),
+                onpointerdown: {
+                    let ratio0 = ratio;
+                    move |e: PointerEvent| {
+                        let coords = e.element_coordinates();
+                        let el = svg_el();
+                        spawn(async move {
+                            let Some(el) = el else { return };
+                            let Ok(rect) = el.get_client_rect().await else { return };
+                            svg_size.set(Some((rect.width(), rect.height())));
+                            let y = (coords.y / rect.height()) as f32 * H as f32;
+                            let ty = db_to_y(thr as f64, H) as f32;
+                            if (y - ty).abs() < 22.0 {
+                                dragging.set(Some(CompDrag::Threshold));
+                            } else if y < ty {
+                                // Above the threshold line = the compressed
+                                // region — drag tilts the slope.
+                                dragging.set(Some(CompDrag::Ratio(y, ratio0)));
+                            }
+                        });
+                    }
+                },
+                onpointermove: {
+                    let rig = rig.clone();
+                    let id = block.id.clone();
+                    move |e: PointerEvent| {
+                        // Sync path: the rect was cached at pointerdown, so
+                        // moves never race the async hit-test.
+                        let Some(mode) = dragging() else { return };
+                        let Some((_, h)) = svg_size() else { return };
+                        let y = (e.element_coordinates().y / h) as f32 * H as f32;
+                        let Some(r) = rig.clone() else { return };
+                        let id = id.clone();
+                        match mode {
+                            CompDrag::Threshold => {
+                                let db = (-(y / H as f32) * RANGE_DB as f32).clamp(-60.0, 0.0);
+                                spawn(async move {
+                                    let _ = r.set_block_param(id, "threshold".into(), db).await;
+                                });
+                            }
+                            CompDrag::Ratio(y0, r0) => {
+                                // Drag down = more ratio (harder tilt).
+                                let ratio = (r0 * ((y - y0) / 60.0).exp2()).clamp(1.0, 20.0);
+                                spawn(async move {
+                                    let _ = r.set_block_param(id, "ratio".into(), ratio).await;
+                                });
+                            }
+                        }
+                    }
+                },
+                onpointerup: move |_| dragging.set(None),
+                onpointerleave: move |_| dragging.set(None),
                 defs {
                     // Input level — dark teal gradient (painter's stops).
                     linearGradient { id: "comp-in", x1: "0", y1: "0", x2: "0", y2: "1",
@@ -234,9 +301,14 @@ pub fn CompSurface(
                     path { d: "{gr_edge}", fill: "none", stroke: "rgba(255,80,80,0.82)", stroke_width: "1.5" }
                 }
 
-                // Threshold line.
+                // Threshold line — the grabbable control.
                 line { x1: "0", y1: "{thresh_y:.1}", x2: "360", y2: "{thresh_y:.1}",
-                    stroke: "rgba(255,100,100,0.31)", stroke_width: "1", stroke_dasharray: "4,3" }
+                    stroke: "rgba(255,120,120,0.55)", stroke_width: "2", stroke_dasharray: "6,4" }
+                // Grab handle chip at the right end.
+                rect { x: "328", y: "{thresh_y - 7.0:.1}", width: "30", height: "14", rx: "3",
+                    fill: "rgba(255,120,120,0.15)", stroke: "rgba(255,120,120,0.5)", stroke_width: "1" }
+                text { x: "343", y: "{thresh_y + 3.5:.1}", fill: "#ff9c9c", font_size: "9",
+                    text_anchor: "middle", pointer_events: "none", "{thr:.0}" }
                 // Transfer curve + input ball.
                 path { d: "{tc}", fill: "none", stroke: "rgba(180,210,140,0.71)", stroke_width: "2" }
                 circle { cx: "{ball.0:.1}", cy: "{ball.1:.1}", r: "3", fill: "rgba(255,255,255,0.78)" }
@@ -250,19 +322,20 @@ pub fn CompSurface(
                 }
             }
 
-            // ── Knob overlay, bottom center (editor layout) ──
+            // ── Readouts + the two time knobs (threshold/ratio live on
+            // the display itself) ──
             div {
-                class: "absolute bottom-0 left-0 right-0 flex flex-col items-center",
-                style: "padding: 6px 0 8px 0; gap: 4px; \
-                        background: linear-gradient(to top, rgba(8,8,8,0.92), rgba(8,8,8,0.55) 70%, transparent);",
-
-                // Row 1 — primary knobs (editor uses Large in its 900px
-                // window; Medium keeps the same proportions at panel scale).
-                div { style: "display:flex; gap:10px;",
-                    {knob("threshold", "Threshold", KnobSize::Medium, Some(fmt_db))}
-                    {knob("ratio", "Ratio", KnobSize::Medium, Some(fmt_ratio))}
-                    {knob("attack", "Attack", KnobSize::Medium, Some(fmt_ms))}
-                    {knob("release", "Release", KnobSize::Medium, Some(fmt_ms))}
+                class: "absolute bottom-0 left-0 right-0 flex items-end px-2 py-1",
+                style: "background: linear-gradient(to top, rgba(8,8,8,0.9), transparent);",
+                div { class: "flex flex-col",
+                    span { style: "font-size:8px; color:#8a8a92; text-transform:uppercase;", "Thr · Ratio" }
+                    span { style: "font-family:ui-monospace,monospace; font-size:11px; color:#e8e8ec;",
+                        "{thr:.1} dB · {ratio:.1}:1"
+                    }
+                }
+                div { class: "ml-auto flex gap-2",
+                    {knob("attack", "Atk", KnobSize::Small, Some(fmt_ms))}
+                    {knob("release", "Rel", KnobSize::Small, Some(fmt_ms))}
                 }
             }
         }

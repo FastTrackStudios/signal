@@ -457,6 +457,16 @@ const REVERB_PARAMS: &[ParamSpec] = &[
     ParamSpec { id: 0, name: "mix", min: 0.0, max: 0.10, default: 0.08 },
     ParamSpec { id: 1, name: "decay", min: 0.0, max: 1.0, default: 0.45 },
     ParamSpec { id: 2, name: "size", min: 0.0, max: 1.0, default: 0.5 },
+    // Algorithm index (see reverb::AlgorithmType::ALL — Room, Hall, Plate,
+    // Spring, Cloud, Bloom, Shimmer, Chorale, Magneto, NonLinear, Swell,
+    // Reflections, Velvet, FreeVerb, Convolution).
+    ParamSpec { id: 3, name: "algorithm", min: 0.0, max: 14.0, default: 1.0 },
+    ParamSpec { id: 4, name: "modulation", min: 0.0, max: 1.0, default: 0.2 },
+    // High-frequency damping — the low-pass character control.
+    ParamSpec { id: 5, name: "damping", min: 0.0, max: 1.0, default: 0.3 },
+    // Tone tilt (−1 dark … +1 bright) — the high-pass-ish control.
+    ParamSpec { id: 6, name: "tone", min: -1.0, max: 1.0, default: 0.0 },
+    ParamSpec { id: 7, name: "predelay", min: 0.0, max: 200.0, default: 0.0 },
 ];
 
 /// Native Reverb block — wraps [`reverb::ReverbChain`]. Defaults to a subtle
@@ -495,11 +505,29 @@ impl NativeReverb {
                 self.rev.params.size = v;
                 self.rev.update_params();
             }
+            3 => {
+                self.rev
+                    .set_algorithm(reverb::AlgorithmType::from_index(v.round().max(0.0) as usize));
+                self.rev.update_params();
+            }
+            4 => {
+                self.rev.params.modulation = v;
+                self.rev.update_params();
+            }
+            5 => {
+                self.rev.params.damping = v;
+                self.rev.update_params();
+            }
+            6 => {
+                self.rev.params.tone = v;
+                self.rev.update_params();
+            }
+            7 => self.rev.predelay_ms = v,
             _ => {}
         }
     }
 
-    /// Apply a build-time parameter by name (`mix`/`decay`/`size`).
+    /// Apply a build-time parameter by name (see `REVERB_PARAMS`).
     pub fn set_named(&mut self, name: &str, value: f64) {
         if let Some(id) = param_id(REVERB_PARAMS, name) {
             self.set(id, value);
@@ -679,6 +707,8 @@ impl NativeDelay {
             }
             8 => a.high_pass_hz = v,
             9 => a.repeat_dynamics = v > 0.5,
+            26 => a.tap_div_l = delay::TapDivision::from_index(v.round().max(0.0) as usize),
+            27 => a.tap_div_r = delay::TapDivision::from_index(v.round().max(0.0) as usize),
             10 => {
                 let voice = v.round().max(0.0) as u8;
                 a.delay_l.voice = voice;

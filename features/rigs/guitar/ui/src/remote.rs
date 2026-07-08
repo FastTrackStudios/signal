@@ -399,7 +399,6 @@ pub fn GuitarRigRemote() -> Element {
                                     crate::control::ControlView {
                                         model: perf_now.clone(),
                                         state,
-                                        on_open_tuner: Callback::new(move |_: ()| tuner_open.set(true)),
                                     }
                                 }
                             }

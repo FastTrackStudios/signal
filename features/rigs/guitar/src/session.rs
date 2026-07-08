@@ -231,31 +231,23 @@ impl GuitarRigBackend {
             return;
         };
         let quarter_ms = 60_000.0 / bpm;
-        // (id, div_l) per delay — the note division scales the quarter.
-        let delay_ids: Vec<(String, f32)> = self
+        let delay_ids: Vec<String> = self
             .blocks
             .lock()
             .unwrap()
             .iter()
             .filter(|b| b.block_type == BlockType::Delay)
-            .map(|b| {
-                let div = b
-                    .params
-                    .iter()
-                    .find(|p| p.name == "div_l")
-                    .map(|p| p.value)
-                    .unwrap_or(4.0);
-                (b.id.clone(), div)
-            })
+            .map(|b| b.id.clone())
             .collect();
         if delay_ids.is_empty() {
             return;
         }
         if let Ok(guard) = self.rig.lock() {
             if let Some(prig) = guard.as_ref() {
-                for (id, div) in &delay_ids {
-                    let ms = quarter_ms * div_factor(*div);
-                    prig.rig().set_active_block_param(id, "time", ms);
+                for id in &delay_ids {
+                    // The MX engine tempo-syncs itself: with tempo set, each
+                    // side's tap division derives its own time.
+                    prig.rig().set_active_block_param(id, "tempo_bpm", bpm);
                 }
             }
         }
@@ -479,30 +471,28 @@ fn param_specs(bt: BlockType) -> Vec<(String, f32, f32, f32)> {
             ("release", 5.0, 500.0, 120.0),
         ]),
         BlockType::Volume => owned(&[("gain_db", -24.0, 24.0, 0.0)]),
-        // Stereo delay surface. `div_l`/`div_r` are note divisions (see
-        // `div_factor`) that drive `time` from the tempo; hp/lp/duck/algo
-        // are staged for the stereo-algorithm engine (worktree) — the wire
-        // and UI are ready, the DSP applies them when it lands.
+        // The TimeLine-MX delay surface (signal-fx DELAY_PARAMS subset the
+        // panel drives): style, per-side tempo divisions, high-pass,
+        // repeat dynamics (ducking), mix, feedback.
         BlockType::Delay => owned(&[
-            ("mix", 0.0, 1.0, 0.08),
-            ("time", 20.0, 1500.0, 350.0),
+            ("mix", 0.0, 0.10, 0.08),
+            ("time", 20.0, 2500.0, 350.0),
             ("feedback", 0.0, 0.95, 0.3),
-            ("div_l", 0.0, 7.0, 4.0),
-            ("div_r", 0.0, 7.0, 4.0),
-            ("hp", 20.0, 2000.0, 120.0),
-            ("lp", 1000.0, 20000.0, 8000.0),
-            ("duck", 0.0, 1.0, 0.0),
-            ("algo", 0.0, 3.0, 0.0),
+            ("style", 0.0, 12.0, 1.0),
+            ("tap_div_l", 0.0, 7.0, 0.0),
+            ("tap_div_r", 0.0, 7.0, 0.0),
+            ("high_pass", 0.0, 900.0, 0.0),
+            ("repeat_dyn", 0.0, 1.0, 0.0),
         ]),
-        // Reverb surface — mix/time plus staged hp/lp/mod/algo.
+        // Reverb surface — algorithm + mix/time/damping/tone/modulation.
         BlockType::Reverb => owned(&[
-            ("mix", 0.0, 1.0, 0.08),
+            ("mix", 0.0, 0.10, 0.08),
             ("decay", 0.0, 1.0, 0.4),
             ("size", 0.0, 1.0, 0.5),
-            ("hp", 20.0, 2000.0, 100.0),
-            ("lp", 1000.0, 20000.0, 9000.0),
-            ("mod", 0.0, 1.0, 0.2),
-            ("algo", 0.0, 3.0, 0.0),
+            ("algorithm", 0.0, 14.0, 1.0),
+            ("modulation", 0.0, 1.0, 0.2),
+            ("damping", 0.0, 1.0, 0.3),
+            ("tone", -1.0, 1.0, 0.0),
         ]),
         BlockType::Chorus | BlockType::Flanger | BlockType::Vibrato => owned(&[
             ("mix", 0.0, 1.0, 0.4),
@@ -511,21 +501,6 @@ fn param_specs(bt: BlockType) -> Vec<(String, f32, f32, f32)> {
         ]),
         BlockType::Trem => owned(&[("depth", 0.0, 1.0, 0.5)]),
         _ => Vec::new(),
-    }
-}
-
-/// Note-division index → multiple of a quarter note. Order matches the UI's
-/// division labels: 1/1, 1/2., 1/2, 1/4., 1/4, 1/8., 1/8, 1/16.
-fn div_factor(idx: f32) -> f32 {
-    match idx as u32 {
-        0 => 4.0,
-        1 => 3.0,
-        2 => 2.0,
-        3 => 1.5,
-        5 => 0.75,
-        6 => 0.5,
-        7 => 0.25,
-        _ => 1.0, // 1/4
     }
 }
 
@@ -633,10 +608,12 @@ impl Rig for GuitarRigBackend {
             Ok(g) => g,
             Err(_) => return RigStatus::default(),
         };
-        let (input_peak, output_peak, active_patch) = match guard.as_ref() {
+        let (input_peak, output_peak, in_lr, out_lr, active_patch) = match guard.as_ref() {
             Some(prig) => (
                 prig.rig().input_peak(),
                 prig.rig().output_peak(),
+                prig.rig().input_peak_lr(),
+                prig.rig().output_peak_lr(),
                 prig.active_patch().map(|p| p.name.clone()),
             ),
             None => return RigStatus::default(),
@@ -654,6 +631,10 @@ impl Rig for GuitarRigBackend {
             output_peak,
             active_patch,
             comp_gr_db: self.live_comp_gr(),
+            input_peak_l: in_lr.0,
+            input_peak_r: in_lr.1,
+            output_peak_l: out_lr.0,
+            output_peak_r: out_lr.1,
         }
     }
 
@@ -1073,7 +1054,7 @@ impl Rig for GuitarRigBackend {
                 if let Some(p) = b.params.iter_mut().find(|p| p.name == param) {
                     p.value = value;
                 }
-                retime_delay = b.block_type == BlockType::Delay && param.starts_with("div");
+                retime_delay = b.block_type == BlockType::Delay && param.starts_with("tap_div");
             }
         }
         if retime_delay {

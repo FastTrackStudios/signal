@@ -524,6 +524,9 @@ pub struct DeviceInfo {
 struct InputMeterShared {
     /// Latest block input peak (linear), as `f32` bits.
     peak: AtomicU32,
+    /// Per-channel peaks (linear, `f32` bits) — stereo metering.
+    peak_l: AtomicU32,
+    peak_r: AtomicU32,
     /// When set, the probe writes silence (clean-DI bypass is handled by
     /// swapping the chain out, but the probe still meters the live input).
     _reserved: AtomicBool,
@@ -541,6 +544,18 @@ const TUNER_WINDOW: usize = 4096;
 impl InputMeterShared {
     fn store(&self, peak: f32) {
         self.peak.store(peak.to_bits(), Ordering::Relaxed);
+    }
+
+    fn store_lr(&self, l: f32, r: f32) {
+        self.peak_l.store(l.to_bits(), Ordering::Relaxed);
+        self.peak_r.store(r.to_bits(), Ordering::Relaxed);
+    }
+
+    fn load_lr(&self) -> (f32, f32) {
+        (
+            f32::from_bits(self.peak_l.load(Ordering::Relaxed)),
+            f32::from_bits(self.peak_r.load(Ordering::Relaxed)),
+        )
     }
     fn load(&self) -> f32 {
         f32::from_bits(self.peak.load(Ordering::Relaxed))
@@ -622,7 +637,7 @@ impl PluginInstance for InputProbe {
         _events: &PluginEvents<'_>,
     ) -> Result<(), PluginError> {
         let frames = out_l.len().min(out_r.len()).min(in_l.len()).min(in_r.len());
-        let mut pk = 0.0f32;
+        let (mut pk_l, mut pk_r) = (0.0f32, 0.0f32);
         // Reused mono scratch for the tuner window push (off the steady-state
         // alloc path after the first block).
         self.mono.clear();
@@ -630,10 +645,12 @@ impl PluginInstance for InputProbe {
         for i in 0..frames {
             out_l[i] = in_l[i];
             out_r[i] = in_r[i];
-            pk = pk.max(in_l[i].abs()).max(in_r[i].abs());
+            pk_l = pk_l.max(in_l[i].abs());
+            pk_r = pk_r.max(in_r[i].abs());
             self.mono.push((in_l[i] + in_r[i]) * 0.5);
         }
-        self.shared.store(pk);
+        self.shared.store(pk_l.max(pk_r));
+        self.shared.store_lr(pk_l, pk_r);
         self.shared.push_samples(&self.mono);
         Ok(())
     }
@@ -1412,6 +1429,11 @@ impl GuitarRig {
         self.input_meter.load()
     }
 
+    /// Per-channel input peaks (linear) — stereo metering.
+    pub fn input_peak_lr(&self) -> (f32, f32) {
+        self.input_meter.load_lr()
+    }
+
     /// A snapshot of the most-recent mono input samples (post-input-trim,
     /// pre-amp), newest-last, for pitch detection (the tuner). Up to
     /// [`TUNER_WINDOW`] frames. Empty until the first block runs.
@@ -1425,6 +1447,14 @@ impl GuitarRig {
             .cell(0)
             .map(|c| c.peak(0).max(c.peak(1)))
             .unwrap_or(0.0)
+    }
+
+    /// Per-channel output peaks (linear) — stereo metering.
+    pub fn output_peak_lr(&self) -> (f32, f32) {
+        self.meters
+            .cell(0)
+            .map(|c| (c.peak(0), c.peak(1)))
+            .unwrap_or((0.0, 0.0))
     }
 
     /// Realtime xruns. The duplex engine has no input ring (input and output are

@@ -184,15 +184,9 @@ pub fn PerformGrid(
                 on_toggle: on_toggle_boost,
                 on_cycle: on_cycle_boost,
             }
-            // Switch 10 (hold 5): Tuner.
-            FnTile {
-                title: "Tuner".to_string(),
-                subtitle: String::new(),
-                bg: "#34d399".to_string(),
-                text: "#052e1b".to_string(),
-                active: tuner_open(),
+            // Switch 10 (hold 5): the live tuner, right in the tile.
+            LiveTunerTile {
                 switch_no: 10,
-                compact: true,
                 onclick: Callback::new(move |_: ()| tuner_open.set(true)),
             }
 
@@ -475,6 +469,62 @@ fn TapTempoTile(tempo_bpm: u32, on_tap: Callback<()>, on_hold: Callback<()>) -> 
             SwitchNo { no: 5 }
             span { class: "text-lg font-bold tracking-wide", "Tap Tempo" }
             span { class: "text-[11px] text-zinc-500", "{tempo_bpm} BPM · hold: tuner" }
+        }
+    }
+}
+
+/// The hold-layer tuner tile, live: polls the tuner while the grid is
+/// mounted and shows note + needle right in the slot; tap for fullscreen.
+#[component]
+fn LiveTunerTile(switch_no: usize, onclick: Callback<()>) -> Element {
+    let rig = use_hook(try_consume_context::<RigClient>);
+    let mut reading = use_signal(TunerReading::default);
+    {
+        let rig = rig.clone();
+        use_future(move || {
+            let rig = rig.clone();
+            async move {
+                let Some(rig) = rig else { return };
+                loop {
+                    if let Ok(r) = rig.tuner().await {
+                        reading.set(r);
+                    }
+                    architect::platform::sleep(std::time::Duration::from_millis(250)).await;
+                }
+            }
+        });
+    }
+    let r = reading();
+    let in_tune = r.active && r.cents.abs() <= 5.0;
+    let needle = 50.0 + r.cents.clamp(-50.0, 50.0);
+    rsx! {
+        button {
+            class: "relative flex items-center gap-2 rounded-lg px-2 text-left transition-all duration-100 min-h-0 overflow-hidden",
+            style: if in_tune {
+                "background-color: #14532d; border: 1px solid #22c55e;"
+            } else {
+                "background-color: #1c2e26; border: 1px solid #2a4438;"
+            },
+            onclick: move |_| onclick.call(()),
+            span { class: "absolute top-0.5 left-1.5 text-[10px] font-mono opacity-40", "{switch_no}" }
+            span {
+                class: "text-base font-bold w-7 text-center leading-none flex-shrink-0",
+                style: if in_tune { "color: #22c55e;" } else if r.active { "color: #e4e4e7;" } else { "color: #4b5563;" },
+                if r.active { "{r.note}" } else { "♪" }
+            }
+            div { class: "relative flex-1 h-3 min-w-0",
+                div { class: "absolute inset-x-0 top-1/2 h-px bg-white/20" }
+                div { class: "absolute left-1/2 top-0 bottom-0 w-px bg-white/40" }
+                if r.active {
+                    div {
+                        class: "absolute top-0 bottom-0 w-0.5 rounded transition-all duration-75",
+                        style: if in_tune { "left: {needle}%; background-color: #22c55e;" } else { "left: {needle}%; background-color: #eab308;" },
+                    }
+                }
+            }
+            if r.active {
+                span { class: "text-[9px] font-mono opacity-70 flex-shrink-0", {format!("{:+.0}", r.cents)} }
+            }
         }
     }
 }
