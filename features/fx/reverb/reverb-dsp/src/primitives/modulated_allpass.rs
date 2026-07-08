@@ -208,7 +208,10 @@ mod tests {
 
         // First output of a unit impulse through a Schroeder allpass is -g.
         let y0 = ap.tick(1.0);
-        assert!((y0 - (-0.5)).abs() < 1e-12, "direct path should be -g: {y0}");
+        assert!(
+            (y0 - (-0.5)).abs() < 1e-12,
+            "direct path should be -g: {y0}"
+        );
 
         // At the delay time, output is 1 - g^2.
         let mut y_delay = 0.0;

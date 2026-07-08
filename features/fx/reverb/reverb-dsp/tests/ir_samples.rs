@@ -32,7 +32,9 @@ fn ir_dir() -> PathBuf {
 
 fn list_wavs() -> Vec<PathBuf> {
     let dir = ir_dir();
-    let Ok(rd) = std::fs::read_dir(&dir) else { return Vec::new() };
+    let Ok(rd) = std::fs::read_dir(&dir) else {
+        return Vec::new();
+    };
     let mut out: Vec<PathBuf> = rd
         .filter_map(|e| e.ok().map(|e| e.path()))
         .filter(|p| p.extension().and_then(|e| e.to_str()) == Some("wav"))
@@ -45,7 +47,10 @@ fn list_wavs() -> Vec<PathBuf> {
 fn every_sample_ir_loads_and_transforms() {
     let wavs = list_wavs();
     if wavs.is_empty() {
-        eprintln!("skipping: no IRs in {:?} — run ./scripts/fetch_irs.sh", ir_dir());
+        eprintln!(
+            "skipping: no IRs in {:?} — run ./scripts/fetch_irs.sh",
+            ir_dir()
+        );
         return;
     }
     eprintln!("loading {} IR files from {:?}", wavs.len(), ir_dir());
@@ -57,10 +62,18 @@ fn every_sample_ir_loads_and_transforms() {
         assert!(asset.frames() > 0, "{:?} has 0 frames", path.file_name());
 
         let (l, r) = transforms.apply(&asset);
-        assert!(!l.is_empty() && !r.is_empty(), "{:?} transformed empty", path.file_name());
+        assert!(
+            !l.is_empty() && !r.is_empty(),
+            "{:?} transformed empty",
+            path.file_name()
+        );
 
         let pair = PreparedIrPair::build(&l, &r);
-        assert!(pair.left.num_partitions() > 0, "{:?} 0 partitions", path.file_name());
+        assert!(
+            pair.left.num_partitions() > 0,
+            "{:?} 0 partitions",
+            path.file_name()
+        );
     }
 }
 
@@ -82,7 +95,10 @@ fn engine_pipeline_hot_swaps_real_ir() {
     let mut chain = ReverbChain::new();
     chain.set_algorithm(AlgorithmType::Convolution);
     chain.mix = 1.0;
-    chain.update(AudioConfig { sample_rate: SR, max_buffer_size: 512 });
+    chain.update(AudioConfig {
+        sample_rate: SR,
+        max_buffer_size: 512,
+    });
 
     let engine = IrEngine::new();
     let rx = engine.spawn_prepared_relay();

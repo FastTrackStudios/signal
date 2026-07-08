@@ -230,8 +230,12 @@ impl ReverbAlgorithm for Plate {
         // ---- Read cross-feed from the END of each tank ----
         // Tank A feeds from end of tank_b_delay2, Tank B from end of tank_a_delay2
         let s = self.s;
-        let fb_a = self.dc_a.tick(self.tank_b_delay2.read((3163.0 * s) as usize));
-        let fb_b = self.dc_b.tick(self.tank_a_delay2.read((3720.0 * s) as usize));
+        let fb_a = self
+            .dc_a
+            .tick(self.tank_b_delay2.read((3163.0 * s) as usize));
+        let fb_b = self
+            .dc_b
+            .tick(self.tank_a_delay2.read((3720.0 * s) as usize));
 
         // ---- Tank A processing ----
         // decay_diffusion_1 AP (modulated)

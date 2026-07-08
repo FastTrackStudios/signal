@@ -14,8 +14,8 @@
 use crate::algorithm::{AlgorithmParams, ReverbAlgorithm};
 use crate::primitives::allpass_diffuser::AllpassDiffuser;
 use crate::primitives::one_pole::Lp1;
-use audiocore_dsp::delay_line::DelayLine;
 use audiocore_dsp::dc_blocker::DcBlocker;
+use audiocore_dsp::delay_line::DelayLine;
 
 /// Number of delay lines per channel.
 const NUM_LINES: usize = 4;
@@ -24,7 +24,6 @@ const NUM_LINES: usize = 4;
 /// These are the core delay times that define the spacing between bloom echoes.
 const BASE_DELAYS_L: [usize; NUM_LINES] = [1453, 2311, 3571, 4909];
 const BASE_DELAYS_R: [usize; NUM_LINES] = [1607, 2539, 3797, 5101];
-
 
 /// A single feedback delay voice with its own diffuser, damping, and modulation.
 struct BloomVoice {

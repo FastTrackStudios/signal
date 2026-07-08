@@ -57,7 +57,9 @@ fn visit(dir: &Path, out: &mut Vec<IrEntry>) -> std::io::Result<()> {
             let _ = visit(&path, out);
             continue;
         }
-        let Some(ext) = path.extension().and_then(|e| e.to_str()) else { continue };
+        let Some(ext) = path.extension().and_then(|e| e.to_str()) else {
+            continue;
+        };
         let ext_lc = ext.to_ascii_lowercase();
         if !SUPPORTED_EXTS.contains(&ext_lc.as_str()) {
             continue;
@@ -67,7 +69,11 @@ fn visit(dir: &Path, out: &mut Vec<IrEntry>) -> std::io::Result<()> {
             .and_then(|s| s.to_str())
             .unwrap_or("(unnamed)")
             .to_string();
-        out.push(IrEntry { path, name, format: ext_lc });
+        out.push(IrEntry {
+            path,
+            name,
+            format: ext_lc,
+        });
     }
     Ok(())
 }

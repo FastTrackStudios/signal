@@ -230,8 +230,12 @@ impl ReverbAlgorithm for PlateLexicon {
 
         // Read cross-feed from end of each loop
         let s = self.s;
-        let fb_a = self.dc_a.tick(self.loop_b_delay2.read((2999.0 * s) as usize));
-        let fb_b = self.dc_b.tick(self.loop_a_delay2.read((2833.0 * s) as usize));
+        let fb_a = self
+            .dc_a
+            .tick(self.loop_b_delay2.read((2999.0 * s) as usize));
+        let fb_b = self
+            .dc_b
+            .tick(self.loop_a_delay2.read((2833.0 * s) as usize));
 
         // --- Loop A ---
         // AP1 (modulated, negative feedback — characteristic Lexicon)

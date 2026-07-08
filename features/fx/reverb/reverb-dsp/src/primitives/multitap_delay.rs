@@ -125,7 +125,8 @@ impl MultitapDelay {
             // +1 because the read is relative to the write that just happened:
             // read(1) is the sample written this tick (offset 0 in the old code).
             let read_offset = (offset as usize).min(max_offset) + 1;
-            output += self.buffer.read(read_offset) * self.tap_gains[j] * decay_effective * total_gain;
+            output +=
+                self.buffer.read(read_offset) * self.tap_gains[j] * decay_effective * total_gain;
         }
 
         output
@@ -169,8 +170,14 @@ mod tests {
     fn manual_taps_arrive_on_time() {
         let mut mt = MultitapDelay::new(48000);
         mt.set_taps(&[
-            Tap { delay_samples: 100, gain: 0.5 },
-            Tap { delay_samples: 250, gain: 0.25 },
+            Tap {
+                delay_samples: 100,
+                gain: 0.5,
+            },
+            Tap {
+                delay_samples: 250,
+                gain: 0.25,
+            },
         ]);
 
         let mut hits = Vec::new();

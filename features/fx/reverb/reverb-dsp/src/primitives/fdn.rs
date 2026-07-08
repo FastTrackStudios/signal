@@ -227,6 +227,9 @@ mod tests {
             }
         }
         let mean: f64 = sum / count;
-        assert!(mean.abs() < 1e-4, "loop should hold no DC after input stops: {mean}");
+        assert!(
+            mean.abs() < 1e-4,
+            "loop should hold no DC after input stops: {mean}"
+        );
     }
 }

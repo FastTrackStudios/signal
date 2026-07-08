@@ -22,8 +22,8 @@
 use crate::algorithm::{AlgorithmParams, ReverbAlgorithm};
 use crate::primitives::one_pole::Lp1;
 use crate::primitives::spectral_delay::SpectralDelay;
-use audiocore_dsp::delay_line::DelayLine;
 use audiocore_dsp::dc_blocker::DcBlocker;
+use audiocore_dsp::delay_line::DelayLine;
 
 use std::f64::consts::PI;
 
@@ -72,7 +72,7 @@ impl SpringUnit {
             delay: DelayLine::new(max_delay + 1),
             delay_samples,
             damp,
-            dc_blocker: DcBlocker::with_cutoff(38.0, 48000.0),  // matches the old 0.995 pole
+            dc_blocker: DcBlocker::with_cutoff(38.0, 48000.0), // matches the old 0.995 pole
             loop_gain: 0.8,
             mod_phase: 0.0,
             mod_rate: mod_rate / sample_rate,
@@ -129,7 +129,6 @@ impl SpringUnit {
         dispersed
     }
 }
-
 
 /// Classic 2-spring reverb tank.
 pub struct Spring {

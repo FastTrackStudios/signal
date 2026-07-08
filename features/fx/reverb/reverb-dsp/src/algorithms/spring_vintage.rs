@@ -16,8 +16,8 @@
 use crate::algorithm::{AlgorithmParams, ReverbAlgorithm};
 use crate::primitives::one_pole::Lp1;
 use crate::primitives::spectral_delay::SpectralDelay;
-use audiocore_dsp::delay_line::DelayLine;
 use audiocore_dsp::dc_blocker::DcBlocker;
+use audiocore_dsp::delay_line::DelayLine;
 
 use std::f64::consts::PI;
 
@@ -61,7 +61,7 @@ impl VintageSpringUnit {
             delay: DelayLine::new(max_delay + 1),
             delay_samples,
             damp,
-            dc_blocker: DcBlocker::with_cutoff(38.0, 48000.0),  // matches the old 0.995 pole
+            dc_blocker: DcBlocker::with_cutoff(38.0, 48000.0), // matches the old 0.995 pole
             loop_gain: 0.82,
             mod_phase: initial_phase,
             mod_rate: mod_rate / sample_rate,
@@ -127,7 +127,6 @@ fn soft_clip(x: f64) -> f64 {
     // Smoother than hard clip, preserves zero crossing
     x / (1.0 + x.abs())
 }
-
 
 /// Vintage 3-spring reverb tank.
 pub struct SpringVintage {

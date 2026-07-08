@@ -68,7 +68,9 @@ impl ModulatedDelay {
 
         self.buffer.write(input);
         let max_delay = (self.buffer.len() - 4) as f64;
-        let output = self.buffer.read_cubic(self.current_delay.clamp(1.0, max_delay));
+        let output = self
+            .buffer
+            .read_cubic(self.current_delay.clamp(1.0, max_delay));
 
         self.samples_processed += 1;
         output
@@ -169,6 +171,9 @@ mod tests {
         // A 220 Hz tone moves at most ~0.029/sample; modulated read adds a
         // little. The old stair-step implementation produced jumps several
         // times larger at the 8-sample boundaries.
-        assert!(max_jump < 0.1, "output should be smooth, max jump {max_jump}");
+        assert!(
+            max_jump < 0.1,
+            "output should be smooth, max jump {max_jump}"
+        );
     }
 }

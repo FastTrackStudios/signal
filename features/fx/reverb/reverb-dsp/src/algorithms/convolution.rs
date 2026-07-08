@@ -92,7 +92,8 @@ impl PartitionedConv {
         // Resize history to match new partition count. Zero-fill so we
         // don't multiply stale frequency-domain data against the new IR.
         self.input_history.clear();
-        self.input_history.resize(n, vec![Complex::new(0.0, 0.0); SPECTRUM_LEN]);
+        self.input_history
+            .resize(n, vec![Complex::new(0.0, 0.0); SPECTRUM_LEN]);
         self.history_head = 0;
     }
 

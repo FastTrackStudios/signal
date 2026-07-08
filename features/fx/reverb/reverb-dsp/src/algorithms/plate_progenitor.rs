@@ -283,8 +283,12 @@ impl ReverbAlgorithm for PlateProgenitor {
         let s = self.s;
 
         // Cross-feed from end of each tank
-        let fb_a = self.dc_a.tick(self.tank_b_delay2.read((3467.0 * s) as usize));
-        let fb_b = self.dc_b.tick(self.tank_a_delay2.read((3823.0 * s) as usize));
+        let fb_a = self
+            .dc_a
+            .tick(self.tank_b_delay2.read((3467.0 * s) as usize));
+        let fb_b = self
+            .dc_b
+            .tick(self.tank_a_delay2.read((3823.0 * s) as usize));
 
         // ---- Tank A ----
         // AP1 (modulated) → AP2 → Delay1

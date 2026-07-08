@@ -104,11 +104,17 @@ mod tests {
         // +12 dB tilt: highs louder than flat, lows quieter than flat.
         let hi_tilted = tone_energy(12.0, 8000.0);
         let hi_flat = tone_energy(0.0, 8000.0);
-        assert!(hi_tilted > hi_flat * 1.5, "highs should be boosted: {hi_tilted} vs {hi_flat}");
+        assert!(
+            hi_tilted > hi_flat * 1.5,
+            "highs should be boosted: {hi_tilted} vs {hi_flat}"
+        );
 
         let lo_tilted = tone_energy(12.0, 100.0);
         let lo_flat = tone_energy(0.0, 100.0);
-        assert!(lo_tilted < lo_flat * 0.7, "lows should be cut: {lo_tilted} vs {lo_flat}");
+        assert!(
+            lo_tilted < lo_flat * 0.7,
+            "lows should be cut: {lo_tilted} vs {lo_flat}"
+        );
     }
 
     #[test]

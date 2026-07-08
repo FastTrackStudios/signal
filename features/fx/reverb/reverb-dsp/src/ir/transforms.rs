@@ -105,8 +105,12 @@ impl IrTransforms {
         // 6. Gain
         if (self.gain_db).abs() > 1e-6 {
             let g = 10f64.powf(self.gain_db / 20.0);
-            for s in &mut l { *s *= g; }
-            for s in &mut r { *s *= g; }
+            for s in &mut l {
+                *s *= g;
+            }
+            for s in &mut r {
+                *s *= g;
+            }
         }
 
         (l, r)
@@ -187,7 +191,10 @@ mod tests {
     #[test]
     fn reverse_flips_signal() {
         let ir = IrAsset::from_mono(vec![1.0, 0.0, 0.0, 0.0], 1000.0);
-        let t = IrTransforms { reverse: true, ..Default::default() };
+        let t = IrTransforms {
+            reverse: true,
+            ..Default::default()
+        };
         let (l, _r) = t.apply(&ir);
         assert!(l[3] > 0.9 && l[0].abs() < 1e-9);
     }
@@ -195,7 +202,10 @@ mod tests {
     #[test]
     fn predelay_inserts_silence() {
         let ir = IrAsset::from_mono(vec![1.0; 10], 1000.0);
-        let t = IrTransforms { predelay_s: 0.005, ..Default::default() };
+        let t = IrTransforms {
+            predelay_s: 0.005,
+            ..Default::default()
+        };
         let (l, _r) = t.apply(&ir);
         // 5ms @ 1kHz = 5 samples of silence prepended
         assert!(l[0..5].iter().all(|s| s.abs() < 1e-9));
@@ -205,7 +215,10 @@ mod tests {
     #[test]
     fn stretch_doubles_length() {
         let ir = IrAsset::from_mono(vec![1.0; 100], 1000.0);
-        let t = IrTransforms { stretch: 2.0, ..Default::default() };
+        let t = IrTransforms {
+            stretch: 2.0,
+            ..Default::default()
+        };
         let (l, _r) = t.apply(&ir);
         assert!(l.len() >= 195 && l.len() <= 200);
     }
@@ -213,7 +226,11 @@ mod tests {
     #[test]
     fn trim_shortens() {
         let ir = IrAsset::from_mono((0..100).map(|i| i as f64).collect(), 1000.0);
-        let t = IrTransforms { trim_start_s: 0.010, trim_end_s: 0.010, ..Default::default() };
+        let t = IrTransforms {
+            trim_start_s: 0.010,
+            trim_end_s: 0.010,
+            ..Default::default()
+        };
         let (l, _r) = t.apply(&ir);
         assert_eq!(l.len(), 80);
         assert!((l[0] - 10.0).abs() < 1e-9);

@@ -275,8 +275,18 @@ impl ReverbAlgorithm for RoomStudio {
         self.fdn_r.set_damping(damp_freq, self.sample_rate);
 
         // Multi-band decay
-        self.fdn_l.set_band_decay(params.band_crossover_hz, params.low_decay_mult, params.high_decay_mult, self.sample_rate);
-        self.fdn_r.set_band_decay(params.band_crossover_hz, params.low_decay_mult, params.high_decay_mult, self.sample_rate);
+        self.fdn_l.set_band_decay(
+            params.band_crossover_hz,
+            params.low_decay_mult,
+            params.high_decay_mult,
+            self.sample_rate,
+        );
+        self.fdn_r.set_band_decay(
+            params.band_crossover_hz,
+            params.low_decay_mult,
+            params.high_decay_mult,
+            self.sample_rate,
+        );
 
         // Bass trapping — extra_a controls bass tightness
         let bass_freq = 80.0 + params.extra_a * 300.0; // 80-380 Hz

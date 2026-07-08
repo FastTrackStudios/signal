@@ -116,11 +116,13 @@ impl FreeVerb {
     pub fn new(sample_rate: f64) -> Self {
         let _ = sample_rate;
         let scale = sample_rate / 44100.0;
-        let comb_l = std::array::from_fn(|i| LpComb::new((COMB_TUNINGS[i] as f64 * scale) as usize));
+        let comb_l =
+            std::array::from_fn(|i| LpComb::new((COMB_TUNINGS[i] as f64 * scale) as usize));
         let comb_r = std::array::from_fn(|i| {
             LpComb::new(((COMB_TUNINGS[i] + STEREO_SPREAD) as f64 * scale) as usize)
         });
-        let ap_l = std::array::from_fn(|i| AllpassF::new((ALLPASS_TUNINGS[i] as f64 * scale) as usize));
+        let ap_l =
+            std::array::from_fn(|i| AllpassF::new((ALLPASS_TUNINGS[i] as f64 * scale) as usize));
         let ap_r = std::array::from_fn(|i| {
             AllpassF::new(((ALLPASS_TUNINGS[i] + STEREO_SPREAD) as f64 * scale) as usize)
         });
@@ -138,10 +140,18 @@ impl FreeVerb {
 impl ReverbAlgorithm for FreeVerb {
     fn reset(&mut self) {
         self.dc_in.reset();
-        for c in &mut self.combs_l { c.reset(); }
-        for c in &mut self.combs_r { c.reset(); }
-        for a in &mut self.allpass_l { a.reset(); }
-        for a in &mut self.allpass_r { a.reset(); }
+        for c in &mut self.combs_l {
+            c.reset();
+        }
+        for c in &mut self.combs_r {
+            c.reset();
+        }
+        for a in &mut self.allpass_l {
+            a.reset();
+        }
+        for a in &mut self.allpass_r {
+            a.reset();
+        }
     }
 
     fn set_sample_rate(&mut self, sample_rate: f64) {
@@ -157,8 +167,14 @@ impl ReverbAlgorithm for FreeVerb {
         let decay_boost = 0.7 + params.decay * 0.29; // 0.7..0.99
 
         let feedback = room_size * decay_boost;
-        for c in &mut self.combs_l { c.set_feedback(feedback); c.set_damp(damp); }
-        for c in &mut self.combs_r { c.set_feedback(feedback); c.set_damp(damp); }
+        for c in &mut self.combs_l {
+            c.set_feedback(feedback);
+            c.set_damp(damp);
+        }
+        for c in &mut self.combs_r {
+            c.set_feedback(feedback);
+            c.set_damp(damp);
+        }
     }
 
     #[inline]

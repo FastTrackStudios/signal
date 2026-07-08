@@ -145,8 +145,10 @@ impl Velvet {
         let t60_samples = length_samples as f64;
         let density = DENSITY_HZ * (0.5 + self.diffusion * 1.5);
 
-        self.fir_l.rebuild(length_samples, density, t60_samples, 0xC0FFEE);
-        self.fir_r.rebuild(length_samples, density, t60_samples, 0xBADBEEF);
+        self.fir_l
+            .rebuild(length_samples, density, t60_samples, 0xC0FFEE);
+        self.fir_r
+            .rebuild(length_samples, density, t60_samples, 0xBADBEEF);
     }
 }
 

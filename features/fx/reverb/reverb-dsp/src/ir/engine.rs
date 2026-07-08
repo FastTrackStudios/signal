@@ -9,11 +9,11 @@
 //! caller (plugin, CLI, test) can drive it.
 
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::thread::{self, JoinHandle};
 
-use crossbeam_channel::{Receiver, Sender, TryRecvError, unbounded};
+use crossbeam_channel::{unbounded, Receiver, Sender, TryRecvError};
 
 use realfft::RealFftPlanner;
 
