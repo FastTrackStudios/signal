@@ -387,6 +387,12 @@ const DELAY_PARAMS: &[ParamSpec] = &[
     ParamSpec { id: 7, name: "tap_div", min: 0.0, max: 7.0, default: 7.0 },
     ParamSpec { id: 8, name: "high_pass", min: 0.0, max: 900.0, default: 0.0 },
     ParamSpec { id: 9, name: "repeat_dyn", min: 0.0, max: 1.0, default: 0.0 },
+    // Machine voice (0 = MX, 1 = Classic; Digital deep pass adds more).
+    ParamSpec { id: 10, name: "voice", min: 0.0, max: 3.0, default: 0.0 },
+    // dTape / dBucket character macros.
+    ParamSpec { id: 11, name: "tape_age", min: 0.0, max: 1.0, default: 0.0 },
+    ParamSpec { id: 12, name: "crinkle", min: 0.0, max: 1.0, default: 0.0 },
+    ParamSpec { id: 13, name: "bucket_loss", min: 0.0, max: 1.0, default: 0.0 },
 ];
 
 /// Native Delay block — wraps [`delay::DelayChain`]. Defaults to a subtle clean
@@ -439,12 +445,30 @@ impl NativeDelay {
             }
             8 => self.dly.high_pass_hz = v,
             9 => self.dly.repeat_dynamics = v > 0.5,
+            10 => {
+                let voice = v.round().max(0.0) as u8;
+                self.dly.delay_l.voice = voice;
+                self.dly.delay_r.voice = voice;
+            }
+            11 => {
+                self.dly.delay_l.tape_age = v;
+                self.dly.delay_r.tape_age = v;
+            }
+            12 => {
+                self.dly.delay_l.crinkle = v;
+                self.dly.delay_r.crinkle = v;
+            }
+            13 => {
+                self.dly.delay_l.bbd_bucket_loss = v;
+                self.dly.delay_r.bbd_bucket_loss = v;
+            }
             _ => {}
         }
     }
 
     /// Apply a build-time parameter by name (`mix`/`time`/`feedback`/
-    /// `style`/`swell`/`freeze`/`tempo_bpm`/`tap_div`/`high_pass`/`repeat_dyn`).
+    /// `style`/`swell`/`freeze`/`tempo_bpm`/`tap_div`/`high_pass`/
+    /// `repeat_dyn`/`voice`/`tape_age`/`crinkle`/`bucket_loss`).
     pub fn set_named(&mut self, name: &str, value: f64) {
         if let Some(id) = param_id(DELAY_PARAMS, name) {
             self.set(id, value);

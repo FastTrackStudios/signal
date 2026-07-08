@@ -34,4 +34,5 @@ pub use modulation::WobbleShape;
 pub use multitap_delay::{FeedbackMode, Tap, TapFilter, TapGrid, TapPreset, MAX_TAPS};
 pub use oilcan_delay::OilCanHeads;
 pub use spectral_delay::{DensityMode, GrainDirection, GrainShape};
-pub use tape_delay::SaturationType;
+pub use bbd_delay::BbdVoice;
+pub use tape_delay::{SaturationType, TapeSpeed, TapeVoice};

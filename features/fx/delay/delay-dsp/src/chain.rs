@@ -426,6 +426,14 @@ impl Processor for DelayChain {
         self.delay_l.frozen = self.freeze;
         self.delay_r.frozen = self.freeze;
 
+        // BBD stereo spread: quadrature clock LFO on the right engine so
+        // any modulation depth widens the wet image (dBucket MX behavior:
+        // no mod = dual-mono wet, mod > 0 = stereo).
+        if self.delay_l.style() == DelayStyle::Bbd {
+            self.delay_l.bbd_phase_offset = 0.0;
+            self.delay_r.bbd_phase_offset = 0.25;
+        }
+
         self.delay_l.update(config.sample_rate);
         self.delay_r.update(config.sample_rate);
 

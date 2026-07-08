@@ -17,7 +17,8 @@ use crate::reverse_delay::ReverseDelay;
 use crate::rhythm_delay::RhythmDelay;
 use crate::shimmer_delay::ShimmerDelay;
 use crate::spectral_delay::{DensityMode, GrainDirection, GrainShape, SpectralDelay};
-use crate::tape_delay::{SaturationType, TapeDelay};
+use crate::bbd_delay::BbdVoice;
+use crate::tape_delay::{SaturationType, TapeDelay, TapeSpeed, TapeVoice};
 
 /// Available delay styles.
 ///
@@ -169,6 +170,16 @@ pub struct DelayEngine {
     pub head2_enabled: bool,
     pub head3_enabled: bool,
 
+    // ── dTape parity (Tape only) ───────────────────────────────────
+    /// Tape age (0.0 = fresh, 1.0 = old dull tape). Tape only.
+    pub tape_age: f64,
+    /// Tape crinkle: dropout/warp artifacts (0.0–1.0). Tape only.
+    pub crinkle: f64,
+    /// Transport speed (Fast = hi-fi, half wow/flutter/crinkle). Tape only.
+    pub tape_speed: TapeSpeed,
+    /// Low-end contour: in-loop HP 0.0=full lows → 1.0≈400 Hz. Tape only.
+    pub low_contour: f64,
+
     // ── BBD-specific ───────────────────────────────────────────────
     /// LFO modulation depth (0.0–1.0). BBD only.
     pub bbd_mod_depth: f64,
@@ -178,6 +189,11 @@ pub struct DelayEngine {
     pub bbd_tone: f64,
     /// Clock jitter amount (0.0–1.0). BBD only.
     pub bbd_clock_jitter: f64,
+    /// Bucket loss: charge-transfer degradation (0.0–1.0). BBD only.
+    pub bbd_bucket_loss: f64,
+    /// LFO phase offset for stereo spread (set by the chain on the R
+    /// engine so modulation widens the image). BBD only.
+    pub bbd_phase_offset: f64,
 
     // ── LoFi-specific ──────────────────────────────────────────────
     /// Bit depth for quantization (4–32). LoFi only.
@@ -297,10 +313,16 @@ impl DelayEngine {
             head1_enabled: true,
             head2_enabled: false,
             head3_enabled: false,
+            tape_age: 0.0,
+            crinkle: 0.0,
+            tape_speed: TapeSpeed::Normal,
+            low_contour: 0.0,
             bbd_mod_depth: 0.3,
             bbd_mod_rate: 1.0,
             bbd_tone: 4000.0,
             bbd_clock_jitter: 0.3,
+            bbd_bucket_loss: 0.0,
+            bbd_phase_offset: 0.0,
             lofi_bit_depth: 12.0,
             lofi_sr_div: 4.0,
             lofi_noise: 0.0,
@@ -402,6 +424,17 @@ impl DelayEngine {
                 d.decay_tilt = self_tilt;
                 d.wow_shape = self.wow_shape;
                 d.wow_phase_offset = self.wow_phase_offset;
+                d.voice = if self.voice == 1 {
+                    TapeVoice::Classic
+                } else {
+                    TapeVoice::Mx
+                };
+                d.tape_age = self.tape_age;
+                // Freeze also stops the tape damage so held repeats loop
+                // cleanly instead of eroding.
+                d.crinkle = if self.frozen { 0.0 } else { self.crinkle };
+                d.tape_speed = self.tape_speed;
+                d.low_contour = if self.frozen { 0.0 } else { self.low_contour };
                 d.update(sample_rate);
             }
             EngineInner::Clean(d) => {
@@ -417,8 +450,17 @@ impl DelayEngine {
                 d.feedback = self_feedback;
                 d.mod_depth = self.bbd_mod_depth;
                 d.mod_rate = self.bbd_mod_rate;
-                d.tone = self.bbd_tone;
+                // Freeze bypasses the loop tone filter and charge loss so
+                // held repeats do not decay.
+                d.tone = if self.frozen { 20_000.0 } else { self.bbd_tone };
                 d.clock_jitter = self.bbd_clock_jitter;
+                d.bucket_loss = if self.frozen { 0.0 } else { self.bbd_bucket_loss };
+                d.lfo_phase_offset = self.bbd_phase_offset;
+                d.voice = if self.voice == 1 {
+                    BbdVoice::Classic
+                } else {
+                    BbdVoice::Mx
+                };
                 d.decay_tilt = self_tilt;
                 d.update(sample_rate);
             }

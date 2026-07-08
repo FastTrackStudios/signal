@@ -9,10 +9,38 @@
 use audiocore_dsp::biquad::{Biquad, FilterType};
 use audiocore_dsp::dc_blocker::DcBlocker;
 use audiocore_dsp::delay_line::DelayLine;
+use audiocore_dsp::one_pole::OnePoleHp;
+use audiocore_dsp::prng::XorShift32;
 use audiocore_dsp::smoothing::ParamSmoother;
 use audiocore_dsp::soft_clip::sin_clip;
 
 use crate::modulation::{Flutter, WobbleShape, Wow};
+
+/// dTape voice (TimeLine MX).
+///
+/// Selects how the `drive` knob hits the tape:
+/// - `Mx` (EC-1 lineage): drive = record level — gain into the saturation
+///   stage with output makeup, so repeats get punchier as they saturate.
+/// - `Classic` (TimeLine v1): drive = tape bias — bias eats headroom, the
+///   saturation ceiling drops with drive. More distortion, no input punch.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum TapeVoice {
+    #[default]
+    Mx,
+    Classic,
+}
+
+/// Tape transport speed (TimeLine MX dTape).
+///
+/// `Fast` = higher fidelity: wider playback-head bandwidth and half the
+/// effective wow/flutter/crinkle for the same knob settings. `Normal` =
+/// the warmer stock character.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum TapeSpeed {
+    #[default]
+    Normal,
+    Fast,
+}
 
 /// Saturation character types.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -134,6 +162,21 @@ pub struct TapeDelay {
     /// Wobble phase offset (0.0–1.0) for L/R sync control.
     pub wow_phase_offset: f64,
 
+    // ── dTape parity (TimeLine MX) ─────────────────────────────────
+    /// Voice: how `drive` hits the tape (Mx = record level, Classic = bias).
+    pub voice: TapeVoice,
+    /// Tape age (0.0 = fresh full bandwidth, 1.0 = old dull tape ~2 kHz).
+    /// Playback-path HF loss, independent of the in-loop `hicut_freq`.
+    pub tape_age: f64,
+    /// Tape crinkle (0.0–1.0): sparse random dropouts + tiny time warps.
+    /// Event rate/severity scale with the knob and track `tape_speed`.
+    pub crinkle: f64,
+    /// Transport speed: Fast = wider bandwidth, half the wow/flutter/crinkle.
+    pub tape_speed: TapeSpeed,
+    /// Low-end contour (0.0 = full low-end, 1.0 = aggressive in-loop
+    /// high-pass ~400 Hz). Major tape-voicing factor.
+    pub low_contour: f64,
+
     // Internal state
     decay_eq: Biquad,
     delay: DelayLine,
@@ -142,6 +185,19 @@ pub struct TapeDelay {
     hicut: Biquad,
     locut: Biquad,
     dc_blocker: DcBlocker,
+    /// Playback-path tape-age lowpass.
+    age_filter: Biquad,
+    /// In-loop low-contour highpass.
+    contour_hp: OnePoleHp,
+    // Crinkle event state: countdown to next event, remaining event
+    // duration, event targets, and ~2 ms smoothed dip/warp values.
+    crinkle_rng: XorShift32,
+    crinkle_wait: u32,
+    crinkle_dur: u32,
+    crinkle_dip_target: f64,
+    crinkle_warp_target: f64,
+    crinkle_dip: f64,
+    crinkle_warp: f64,
     feedback_sample: f64,
     sample_rate: f64,
     smoother: ParamSmoother,
@@ -181,6 +237,11 @@ impl TapeDelay {
             decay_tilt: 0.0,
             wow_shape: WobbleShape::Sine,
             wow_phase_offset: 0.0,
+            voice: TapeVoice::Mx,
+            tape_age: 0.0,
+            crinkle: 0.0,
+            tape_speed: TapeSpeed::Normal,
+            low_contour: 0.0,
             decay_eq: Biquad::new(),
             delay: DelayLine::new(48000 * 5 + 1024),
             wow: Wow::new(),
@@ -188,6 +249,15 @@ impl TapeDelay {
             hicut: Biquad::new(),
             locut: Biquad::new(),
             dc_blocker: DcBlocker::new(),
+            age_filter: Biquad::new(),
+            contour_hp: OnePoleHp::new(20.0, 48000.0),
+            crinkle_rng: XorShift32::new(0x7A9E_C41B),
+            crinkle_wait: 0,
+            crinkle_dur: 0,
+            crinkle_dip_target: 1.0,
+            crinkle_warp_target: 0.0,
+            crinkle_dip: 1.0,
+            crinkle_warp: 0.0,
             feedback_sample: 0.0,
             sample_rate: 48000.0,
             smoother: ParamSmoother::new(0.0),
@@ -240,6 +310,25 @@ impl TapeDelay {
             }
         }
 
+        // Tape age: playback-path HF loss, exponential 18 kHz -> ~2.2 kHz.
+        // Fast transport keeps ~25% more bandwidth at the same age.
+        if self.tape_age > 0.005 {
+            let speed_bw = match self.tape_speed {
+                TapeSpeed::Fast => 1.25,
+                TapeSpeed::Normal => 1.0,
+            };
+            let cutoff = (18_000.0 * (2_200.0f64 / 18_000.0).powf(self.tape_age) * speed_bw)
+                .min(sample_rate * 0.45);
+            self.age_filter
+                .set(FilterType::Lowpass, cutoff, 0.707, sample_rate);
+        }
+
+        // Low-end contour: progressive in-loop high-pass, off -> ~420 Hz.
+        if self.low_contour > 0.005 {
+            let hp = 20.0 + self.low_contour.powf(1.5) * 400.0;
+            self.contour_hp.set_cutoff(hp, sample_rate);
+        }
+
         // Smooth delay time changes (~150ms time constant, from qdelay)
         self.smoother.set_time(0.15, sample_rate);
 
@@ -281,13 +370,20 @@ impl TapeDelay {
     /// wow/flutter modulation (physically correct — same tape transport).
     /// Feedback is derived from the combined output.
     pub fn tick(&mut self, input: f64, ch: usize) -> f64 {
+        // Fast transport = higher fidelity: half the mechanical instability
+        // (wow/flutter/crinkle) for the same knob settings.
+        let speed_scale = match self.tape_speed {
+            TapeSpeed::Fast => 0.5,
+            TapeSpeed::Normal => 1.0,
+        };
+
         // Update modulation parameters
-        self.wow.depth = self.wow_depth;
+        self.wow.depth = self.wow_depth * speed_scale;
         self.wow.rate = self.wow_rate;
         self.wow.drift = self.wow_drift;
         self.wow.shape = self.wow_shape;
         self.wow.phase_offset = self.wow_phase_offset;
-        self.flutter.depth = self.flutter_depth;
+        self.flutter.depth = self.flutter_depth * speed_scale;
         self.flutter.rate = self.flutter_rate;
 
         // Smooth delay time (base time for all heads)
@@ -318,10 +414,48 @@ impl TapeDelay {
         }
         self.coeff_refresh -= 1;
 
+        // Crinkle: sparse tape-damage events. Each event briefly dips the
+        // playback level and warps the read position; both targets are
+        // smoothed with a ~2 ms one-pole so the artifact crackles rather
+        // than clicks. Event rate tracks the knob and the transport speed.
+        if self.crinkle > 0.001 {
+            if self.crinkle_dur > 0 {
+                self.crinkle_dur -= 1;
+                if self.crinkle_dur == 0 {
+                    self.crinkle_dip_target = 1.0;
+                    self.crinkle_warp_target = 0.0;
+                }
+            } else if self.crinkle_wait == 0 {
+                // Schedule: 0.5..~10 events/s at full crinkle, halved on Fast.
+                let rate_hz = (0.5 + self.crinkle * 9.0) * speed_scale;
+                let mean_interval = self.sample_rate / rate_hz;
+                let u = (self.crinkle_rng.next_bipolar() + 1.0) * 0.5;
+                self.crinkle_wait = (mean_interval * (0.5 + u)) as u32;
+                // Event: 1–5 ms, severity scales with the knob.
+                let dur_u = (self.crinkle_rng.next_bipolar() + 1.0) * 0.5;
+                self.crinkle_dur = (self.sample_rate * (0.001 + dur_u * 0.004)) as u32;
+                let sev_u = (self.crinkle_rng.next_bipolar() + 1.0) * 0.5;
+                let severity = self.crinkle * (0.3 + 0.7 * sev_u);
+                self.crinkle_dip_target = 1.0 - severity * 0.85;
+                self.crinkle_warp_target =
+                    severity * 25.0 * self.crinkle_rng.next_bipolar().signum() * speed_scale;
+            } else {
+                self.crinkle_wait -= 1;
+            }
+        } else {
+            self.crinkle_dip_target = 1.0;
+            self.crinkle_warp_target = 0.0;
+            self.crinkle_dur = 0;
+        }
+        // ~2 ms smoothing at 48 kHz.
+        let crinkle_a = 1.0 - (-1.0 / (0.002 * self.sample_rate)).exp();
+        self.crinkle_dip += crinkle_a * (self.crinkle_dip_target - self.crinkle_dip);
+        self.crinkle_warp += crinkle_a * (self.crinkle_warp_target - self.crinkle_warp);
+
         // Wow/flutter offset — shared across all heads (same tape transport)
         let wow_offset = self.wow.tick();
         let flutter_offset = self.flutter.tick();
-        let mod_offset = wow_offset + flutter_offset;
+        let mod_offset = wow_offset + flutter_offset + self.crinkle_warp;
         let max_read = self.delay.len() as f64 - 4.0;
 
         let mut output = 0.0;
@@ -344,6 +478,16 @@ impl TapeDelay {
             output += self.delay.read_cubic(head3_delay) * self.head3_level;
         }
 
+        // Playback-path degradation: crinkle level dip + tape-age HF loss.
+        // Both sit on the head output so they recirculate through feedback
+        // like a real transport (each generation gets duller/crackier).
+        if self.crinkle > 0.001 || self.crinkle_dip < 0.9999 {
+            output *= self.crinkle_dip;
+        }
+        if self.tape_age > 0.005 {
+            output = self.age_filter.tick(output, ch);
+        }
+
         // Feedback path: combined output → filter → saturate → limit
         let mut fb = output * feedback;
 
@@ -358,31 +502,48 @@ impl TapeDelay {
             fb = self.decay_eq.tick(fb, ch);
         }
 
-        // Saturation in feedback path
+        // Low-end contour: in-loop high-pass, progressively thins the
+        // repeats' low end each generation.
+        if self.low_contour > 0.005 {
+            fb = self.contour_hp.tick(fb);
+        }
+
+        // Saturation in feedback path. The voice decides how `drive`
+        // reaches the tape:
+        //   Mx      — record level: gain INTO the shaper, makeup after.
+        //             Same ceiling, hotter signal = punchy saturated repeats.
+        //   Classic — tape bias: the ceiling itself drops with drive
+        //             (bias eats headroom). More distortion at the same
+        //             loudness, none of the record-level punch.
         if drive > 0.0 {
-            let drive_gain = 1.0 + drive * 3.0;
-            fb = match self.saturation_type {
+            let (pre, post) = match self.voice {
+                TapeVoice::Mx => (1.0 + drive * 4.0, 1.0 / (1.0 + drive * 1.2)),
+                TapeVoice::Classic => {
+                    let headroom = 1.0 - drive * 0.65;
+                    (1.0 / headroom, headroom)
+                }
+            };
+            let x = fb * pre;
+            let shaped = match self.saturation_type {
                 SaturationType::Clean => {
                     // Just gain + soft limit
-                    (fb * drive_gain).clamp(-1.0, 1.0)
+                    x.clamp(-1.0, 1.0)
                 }
                 SaturationType::Tape => {
                     // Sin clip — HF compression + warmth
-                    sin_clip(fb * drive_gain)
+                    sin_clip(x)
                 }
                 SaturationType::Warm => {
                     // Tanh — smooth even-harmonic warmth
-                    (fb * drive_gain).tanh()
+                    x.tanh()
                 }
                 SaturationType::Dirt => {
                     // Asymmetric cubic — odd harmonic grit
-                    let x = fb * drive_gain;
                     let y = x - x * x * x / 3.0;
                     y.clamp(-1.0, 1.0)
                 }
                 SaturationType::Pump => {
                     // Hard compression with gain reduction
-                    let x = fb * drive_gain;
                     let level = x.abs();
                     if level > 0.5 {
                         let reduction = 0.5 + (level - 0.5) * 0.2;
@@ -393,11 +554,11 @@ impl TapeDelay {
                 }
                 SaturationType::HardLimit => {
                     // Brickwall
-                    (fb * drive_gain).clamp(-1.0, 1.0)
+                    x.clamp(-1.0, 1.0)
                 }
                 SaturationType::SoftLimit => {
                     // Gentle polynomial limiting
-                    let x = (fb * drive_gain).clamp(-2.0, 2.0);
+                    let x = x.clamp(-2.0, 2.0);
                     if x.abs() > 1.0 {
                         x.signum() * (1.0 - 0.25 * (2.0 - x.abs()).powi(2))
                     } else {
@@ -405,6 +566,7 @@ impl TapeDelay {
                     }
                 }
             };
+            fb = shaped * post;
         }
 
         // Hard limit feedback to prevent runaway, then strip the DC that
@@ -430,6 +592,14 @@ impl TapeDelay {
         self.locut.reset();
         self.decay_eq.reset();
         self.dc_blocker.reset();
+        self.age_filter.reset();
+        self.contour_hp.reset();
+        self.crinkle_wait = 0;
+        self.crinkle_dur = 0;
+        self.crinkle_dip_target = 1.0;
+        self.crinkle_warp_target = 0.0;
+        self.crinkle_dip = 1.0;
+        self.crinkle_warp = 0.0;
         self.feedback_sample = 0.0;
         self.smoother.reset(0.0);
         self.fb_smoother.reset(self.feedback);
@@ -779,5 +949,223 @@ mod tests {
             assert!(out.is_finite(), "NaN/Inf at sample {i}");
             assert!(out.abs() < 10.0, "Runaway at sample {i}: {out}");
         }
+    }
+}
+
+#[cfg(test)]
+mod dtape_parity_tests {
+    use super::*;
+    use std::f64::consts::TAU;
+
+    const SR: f64 = 48000.0;
+
+    /// Render the first repeat of a burst through a configured delay and
+    /// return (rms, peak) of the repeat window.
+    fn first_repeat(cfg: impl Fn(&mut TapeDelay)) -> (f64, f64) {
+        let mut d = TapeDelay::new();
+        d.time_ms = 100.0;
+        d.feedback = 0.9; // hot loop so the saturator works
+        d.drive = 0.7;
+        d.hicut_freq = 0.0;
+        cfg(&mut d);
+        d.update(SR);
+
+        // 20 ms 220 Hz burst at moderate level.
+        for i in 0..960 {
+            d.tick((TAU * 220.0 * i as f64 / SR).sin() * 0.5, 0);
+        }
+        // Collect the 3rd repeat (300 ms in) where loop shaping compounds.
+        let mut rms = 0.0;
+        let mut peak = 0.0f64;
+        let mut n = 0.0;
+        for i in 960..20000 {
+            let out = d.tick(0.0, 0);
+            if (14400..15400).contains(&i) {
+                rms += out * out;
+                peak = peak.max(out.abs());
+                n += 1.0;
+            }
+        }
+        ((rms / n).sqrt(), peak)
+    }
+
+    /// Mx (record level) pushes gain into the shaper with makeup, Classic
+    /// (bias) drops the ceiling instead — at the same drive the two voices
+    /// must produce measurably different repeats.
+    #[test]
+    fn voices_produce_different_repeats() {
+        let (mx_rms, mx_peak) = first_repeat(|d| d.voice = TapeVoice::Mx);
+        let (cl_rms, cl_peak) = first_repeat(|d| d.voice = TapeVoice::Classic);
+        assert!(mx_rms.is_finite() && cl_rms.is_finite());
+        let rms_ratio = mx_rms / cl_rms.max(1e-12);
+        assert!(
+            (rms_ratio - 1.0).abs() > 0.10,
+            "voices should differ audibly: mx_rms={mx_rms:.4} classic_rms={cl_rms:.4} \
+             (peaks {mx_peak:.4}/{cl_peak:.4})"
+        );
+        // Classic's ceiling drops with drive, so its repeats sit lower.
+        assert!(
+            cl_peak < mx_peak,
+            "bias voice should not out-punch record-level voice: \
+             classic={cl_peak:.4}, mx={mx_peak:.4}"
+        );
+    }
+
+    /// Tape age rolls off HF on the playback path.
+    #[test]
+    fn tape_age_darkens_playback() {
+        let hf = |age: f64| -> f64 {
+            let mut d = TapeDelay::new();
+            d.time_ms = 100.0;
+            d.feedback = 0.0;
+            d.hicut_freq = 0.0;
+            d.tape_age = age;
+            d.update(SR);
+            let mut energy = 0.0;
+            for i in 0..15000 {
+                let s = (TAU * 8000.0 * i as f64 / SR).sin() * 0.5;
+                let out = d.tick(s, 0);
+                if i > 5000 {
+                    energy += out * out;
+                }
+            }
+            energy
+        };
+        let fresh = hf(0.0);
+        let old = hf(1.0);
+        assert!(
+            old < fresh * 0.3,
+            "age=1 should heavily cut 8 kHz: fresh={fresh:.3}, old={old:.3}"
+        );
+    }
+
+    /// Crinkle produces amplitude dropouts in an otherwise steady wet tone.
+    #[test]
+    fn crinkle_causes_dropouts() {
+        let min_envelope = |crinkle: f64| -> f64 {
+            let mut d = TapeDelay::new();
+            d.time_ms = 60.0;
+            d.feedback = 0.0;
+            d.hicut_freq = 0.0;
+            d.crinkle = crinkle;
+            d.update(SR);
+            // Steady tone; peak-hold envelope with a 10 ms release. A
+            // dropout pulls the envelope down faster than the natural
+            // inter-cycle ripple of the sine ever can.
+            let release = (-1.0 / (0.010 * SR)).exp();
+            let mut env = 0.0f64;
+            let mut min_env = f64::MAX;
+            for i in 0..96000 {
+                let s = (TAU * 440.0 * i as f64 / SR).sin() * 0.5;
+                let out = d.tick(s, 0);
+                env = out.abs().max(env * release);
+                if i > 9600 {
+                    min_env = min_env.min(env);
+                }
+            }
+            min_env
+        };
+        let clean = min_envelope(0.0);
+        let cranky = min_envelope(1.0);
+        assert!(
+            cranky < clean * 0.85,
+            "crinkle should dip the envelope: clean={clean:.3}, crinkle={cranky:.3}"
+        );
+    }
+
+    /// Fast transport halves the wow excursion: with identical wow settings
+    /// the Fast output deviates less from an unmodulated reference.
+    #[test]
+    fn fast_speed_reduces_wobble() {
+        let deviation = |speed: TapeSpeed| -> f64 {
+            let render = |wow: f64, speed: TapeSpeed| -> Vec<f64> {
+                let mut d = TapeDelay::new();
+                d.time_ms = 100.0;
+                d.feedback = 0.0;
+                d.hicut_freq = 0.0;
+                d.wow_depth = wow;
+                d.wow_rate = 2.0;
+                d.wow_drift = 0.0;
+                d.tape_speed = speed;
+                d.update(SR);
+                (0..48000)
+                    .map(|i| d.tick((TAU * 440.0 * i as f64 / SR).sin() * 0.5, 0))
+                    .collect()
+            };
+            let dry = render(0.0, speed);
+            let wet = render(0.6, speed);
+            dry.iter().zip(&wet).map(|(a, b)| (a - b).abs()).sum()
+        };
+        let normal = deviation(TapeSpeed::Normal);
+        let fast = deviation(TapeSpeed::Fast);
+        assert!(
+            fast < normal * 0.75,
+            "Fast should wobble less: normal={normal:.1}, fast={fast:.1}"
+        );
+    }
+
+    /// Low contour thins the repeats' low end progressively per generation.
+    /// Uses an isolated burst (no steady-state overlap, whose phase-shift
+    /// interference would confound an energy measure) and inspects the
+    /// 3rd repeat, where the in-loop HP has been applied twice.
+    #[test]
+    fn low_contour_thins_lows() {
+        let repeat3_energy = |contour: f64| -> f64 {
+            let mut d = TapeDelay::new();
+            d.time_ms = 100.0;
+            d.feedback = 0.8;
+            d.hicut_freq = 0.0;
+            d.low_contour = contour;
+            d.update(SR);
+            // 30 ms 80 Hz burst.
+            let mut energy = 0.0;
+            for i in 0..24000 {
+                let s = if i < 1440 {
+                    (TAU * 80.0 * i as f64 / SR).sin() * 0.5
+                } else {
+                    0.0
+                };
+                let out = d.tick(s, 0);
+                // 3rd repeat: 300 ms = 14400, window covers the burst.
+                if (14400..16000).contains(&i) {
+                    energy += out * out;
+                }
+            }
+            energy
+        };
+        let full = repeat3_energy(0.0);
+        let thin = repeat3_energy(1.0);
+        assert!(
+            thin < full * 0.5,
+            "contour should thin 80 Hz repeats: full={full:.2}, thin={thin:.2}"
+        );
+    }
+
+    /// Self-limiting repeats: max feedback + max drive for 10 s stays
+    /// bounded and finite — saturation absorbs the runaway.
+    #[test]
+    fn max_repeats_self_limit() {
+        let mut d = TapeDelay::new();
+        d.time_ms = 120.0;
+        d.feedback = 1.0;
+        d.drive = 1.0;
+        d.saturation_type = SaturationType::Tape;
+        d.update(SR);
+
+        let mut peak = 0.0f64;
+        for i in 0..(SR as usize * 10) {
+            let input = if i < 4800 {
+                (TAU * 330.0 * i as f64 / SR).sin() * 0.8
+            } else {
+                0.0
+            };
+            let out = d.tick(input, 0);
+            assert!(out.is_finite(), "NaN at {i}");
+            peak = peak.max(out.abs());
+        }
+        assert!(
+            peak < 4.0,
+            "10 s at unity feedback must stay bounded: peak={peak:.2}"
+        );
     }
 }
