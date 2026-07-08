@@ -646,6 +646,43 @@ impl ProfileRig {
     }
 
     /// The rotation cursor (index into the stack's patch list) for `stack_idx`.
+    /// Reset every stack's rotation cursor to its first patch.
+    pub fn reset_stack_positions(&mut self) {
+        for p in self.stack_pos.iter_mut() {
+            *p = 0;
+        }
+    }
+
+    /// Point a stack's rotation cursor at a named patch WITHOUT activating —
+    /// the next press (or activation) of that stack lands there. Song-level
+    /// switch tuning. No-op when the stack or patch isn't found.
+    pub fn point_stack_at(&mut self, stack: &str, patch: &str) -> bool {
+        let Some(profile) = self.profile.as_ref() else {
+            return false;
+        };
+        let Some((si, st)) = profile
+            .stacks
+            .iter()
+            .enumerate()
+            .find(|(_, st)| st.name.eq_ignore_ascii_case(stack))
+        else {
+            return false;
+        };
+        let Some(pos) = st
+            .patches
+            .iter()
+            .position(|p| p.eq_ignore_ascii_case(patch))
+        else {
+            return false;
+        };
+        if let Some(slot) = self.stack_pos.get_mut(si) {
+            *slot = pos;
+            true
+        } else {
+            false
+        }
+    }
+
     pub fn stack_position(&self, stack_idx: usize) -> usize {
         self.stack_pos.get(stack_idx).copied().unwrap_or(0)
     }

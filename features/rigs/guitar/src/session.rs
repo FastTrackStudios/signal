@@ -83,7 +83,7 @@ pub struct GuitarRigBackend {
     setlists: Arc<Mutex<Vec<SetlistDef>>>,
     setlist_index: Arc<Mutex<usize>>,
     song_index: Arc<Mutex<usize>>,
-    section_index: Arc<Mutex<usize>>,
+    part_index: Arc<Mutex<usize>>,
     /// Drive block presets (NAM option sets) — library-backed.
     drive_presets: Arc<Mutex<Vec<DrivePresetDef>>>,
     /// Fullscreen tuner overlay state (footswitch-driven, model-synced).
@@ -130,7 +130,7 @@ impl GuitarRigBackend {
             setlists: Arc::new(Mutex::new(lib.setlists)),
             setlist_index: Arc::new(Mutex::new(0)),
             song_index: Arc::new(Mutex::new(0)),
-            section_index: Arc::new(Mutex::new(0)),
+            part_index: Arc::new(Mutex::new(0)),
             drive_presets: Arc::new(Mutex::new(lib.drive_presets)),
             tuner_visible: Arc::new(Mutex::new(false)),
             library_dirty: Arc::new(std::sync::atomic::AtomicBool::new(false)),
@@ -694,8 +694,8 @@ impl GuitarRigBackend {
                     e.bpm
                 };
                 let stack = song.map(|s| s.stack).unwrap_or(0);
-                let sections = song.map(|s| s.sections.clone()).unwrap_or_default();
-                (e.song.clone(), key, bpm, stack, sections)
+                let parts = song.map(|s| s.parts.clone()).unwrap_or_default();
+                (e.song.clone(), key, bpm, stack, parts)
             })
             .collect()
     }
@@ -705,10 +705,29 @@ impl GuitarRigBackend {
     fn recall_song(&self, idx: usize) {
         let entry = self.resolved_setlist().get(idx).cloned();
         if let Some((name, key, bpm, stack, _)) = entry {
-            *self.section_index.lock().unwrap() = 0;
+            *self.part_index.lock().unwrap() = 0;
             *self.tempo.lock().unwrap() = Some(bpm as f32);
             tracing::info!("setlist → {name} ({key} · {bpm} BPM, stack {stack})");
             self.apply_tempo_to_delays();
+            // Song switch tuning: reset every stack cursor, then point the
+            // song's overridden stacks at their landing patches — the
+            // switches are dialed for the song before anything activates.
+            let defaults = self
+                .songs_lib
+                .lock()
+                .unwrap()
+                .iter()
+                .find(|s| s.name.eq_ignore_ascii_case(&name))
+                .map(|s| s.stack_defaults.clone())
+                .unwrap_or_default();
+            if let Ok(mut guard) = self.rig.lock() {
+                if let Some(prig) = guard.as_mut() {
+                    prig.reset_stack_positions();
+                    for d in &defaults {
+                        prig.point_stack_at(&d.stack, &d.patch);
+                    }
+                }
+            }
             // Recall activates the song's stack only when it isn't already
             // the active one — a press on the active stack would *rotate*
             // it (FM9 semantics), silently changing the patch.
@@ -1050,8 +1069,8 @@ fn build_perf_model(prig: &ProfileRig, def: &ProfileDef) -> PerformanceModel {
         setlist_index: 0,
         library_songs: Vec::new(),
         tuner_visible: false,
-        sections: Vec::new(),
-        section_index: 0,
+        parts: Vec::new(),
+        part_index: 0,
         headphone: HeadphoneState::default(),
         master_trim_db: 0.0,
         revision: 0,
@@ -1138,9 +1157,9 @@ impl Rig for GuitarRigBackend {
                 })
                 .collect();
             m.song_index = song_idx as u32;
-            m.sections = resolved
+            m.parts = resolved
                 .get(song_idx)
-                .map(|(_, _, _, _, sections)| sections.clone())
+                .map(|(_, _, _, _, parts)| parts.clone())
                 .unwrap_or_default();
             m.setlists = self.setlists.lock().unwrap().iter().map(|s| s.name.clone()).collect();
             m.setlist_index = *self.setlist_index.lock().unwrap() as u32;
@@ -1157,7 +1176,7 @@ impl Rig for GuitarRigBackend {
                 })
                 .collect();
         }
-        m.section_index = *self.section_index.lock().unwrap() as u32;
+        m.part_index = *self.part_index.lock().unwrap() as u32;
         m.headphone = self.headphone.lock().unwrap().clone();
         m.master_trim_db = *self.master_trim.lock().unwrap();
         m.revision = *self.revision.lock().unwrap();
@@ -1198,19 +1217,19 @@ impl Rig for GuitarRigBackend {
         self.recall_song(idx);
     }
 
-    fn select_section(&self, index: u32) {
+    fn select_part(&self, index: u32) {
         let (song_idx, last) = {
             let i = *self.song_index.lock().unwrap();
             let last = self
                 .resolved_setlist()
                 .get(i)
-                .map(|(_, _, _, _, sections)| sections.len().saturating_sub(1))
+                .map(|(_, _, _, _, parts)| parts.len().saturating_sub(1))
                 .unwrap_or(0);
             (i, last)
         };
         let idx = (index as usize).min(last);
-        *self.section_index.lock().unwrap() = idx;
-        tracing::info!("section → {idx} (song {song_idx})");
+        *self.part_index.lock().unwrap() = idx;
+        tracing::info!("part → {idx} (song {song_idx})");
         // Sections don't drive audio yet (scenes later) — publish so every
         // remote follows the section highlight.
         self.events.publish(RigEvent::Perf(Rig::perf(self)));
@@ -1710,7 +1729,8 @@ impl Rig for GuitarRigBackend {
                 key: if key.is_empty() { "C".to_string() } else { key },
                 bpm: if bpm == 0 { 120 } else { bpm },
                 stack: 0,
-                sections: Vec::new(),
+                parts: Vec::new(),
+                stack_defaults: Vec::new(),
             });
             RigLibrary::save_songs(&songs);
         }

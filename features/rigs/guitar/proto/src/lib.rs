@@ -126,9 +126,9 @@ pub struct PerformanceModel {
     /// tap-tempo) and every remote stay in sync.
     pub tuner_visible: bool,
     /// The current song's section names (Intro, V1, Chorus, …).
-    pub sections: Vec<String>,
+    pub parts: Vec<String>,
     /// Index of the current section.
-    pub section_index: u32,
+    pub part_index: u32,
     /// Headphone-cue module state.
     pub headphone: HeadphoneState,
     /// Master output trim (dB) — the FOH fader next to the output meter.
@@ -314,7 +314,7 @@ pub mod rig {
         /// Jump straight to setlist entry `index`.
         fn select_song(&self, index: u32);
         /// Jump to section `index` of the current song.
-        fn select_section(&self, index: u32);
+        fn select_part(&self, index: u32);
         /// Move setlist entry `from` to position `to` (reorder).
         fn move_song(&self, from: u32, to: u32);
         /// Every patch in the loaded profile (the preset browser).

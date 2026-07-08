@@ -414,13 +414,13 @@ pub fn GuitarRigRemote() -> Element {
                             }
                             div { class: "flex flex-col rounded-xl border border-border bg-card min-h-0 overflow-hidden",
                                 div { class: "px-3 py-2 border-b border-border",
-                                    span { class: "text-[10px] font-semibold uppercase tracking-wider text-muted-foreground", "Song Sections" }
+                                    span { class: "text-[10px] font-semibold uppercase tracking-wider text-muted-foreground", "Song Parts" }
                                 }
                                 div { class: "p-3 grid grid-cols-2 gap-2 content-start overflow-y-auto",
-                                    for (i, section) in perf_now.sections.iter().enumerate() {
+                                    for (i, part) in perf_now.parts.iter().enumerate() {
                                         {
-                                            let name = section.clone();
-                                            let is_current = i == perf_now.section_index as usize;
+                                            let name = part.clone();
+                                            let is_current = i == perf_now.part_index as usize;
                                             let rig2 = rig.clone();
                                             rsx! {
                                                 button {
@@ -432,7 +432,7 @@ pub fn GuitarRigRemote() -> Element {
                                                     },
                                                     onclick: move |_| {
                                                         if let Some(r) = rig2.clone() {
-                                                            spawn(async move { let _ = r.select_section(i as u32).await; });
+                                                            spawn(async move { let _ = r.select_part(i as u32).await; });
                                                         }
                                                     },
                                                     "{name}"

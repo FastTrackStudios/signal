@@ -494,13 +494,13 @@ pub fn RightSidebar(model: PerformanceModel) -> Element {
     rsx! {
         aside { class: "w-64 flex-shrink-0 flex flex-col border-l border-border bg-card min-h-0",
             // ── Song sections ──
-            PanelLabel { label: "Song Sections" }
+            PanelLabel { label: "Song Parts" }
             div { class: "px-3 pt-2 text-sm font-bold truncate flex-shrink-0", "{current_song}" }
             div { class: "grid grid-cols-2 gap-1.5 p-2 flex-shrink-0",
-                for (i, section) in model.sections.iter().enumerate() {
+                for (i, part) in model.parts.iter().enumerate() {
                     {
-                        let name = section.clone();
-                        let is_current = i == model.section_index as usize;
+                        let name = part.clone();
+                        let is_current = i == model.part_index as usize;
                         rsx! {
                             button {
                                 key: "{i}",
@@ -513,7 +513,7 @@ pub fn RightSidebar(model: PerformanceModel) -> Element {
                                     let rig = rig.clone();
                                     move |_| {
                                         if let Some(r) = rig.clone() {
-                                            spawn(async move { let _ = r.select_section(i as u32).await; });
+                                            spawn(async move { let _ = r.select_part(i as u32).await; });
                                         }
                                     }
                                 },

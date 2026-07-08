@@ -478,7 +478,19 @@ pub struct SongDef {
     /// The stack (footswitch folder) the song opens on.
     pub stack: usize,
     /// Section names, in order (empty until section maps come back).
-    pub sections: Vec<String>,
+    /// Named song parts (Verse / Chorus / Bridge…), selectable live.
+    pub parts: Vec<String>,
+    /// Per-song switch tuning: each entry re-points a stack's landing
+    /// patch while this song is up (e.g. Clean → "Clean Verb"), so the
+    /// footswitches are dialed for the song. Cursors reset on recall.
+    pub stack_defaults: Vec<StackDefaultDef>,
+}
+
+/// One song-level stack override: which patch a stack lands on.
+#[derive(Clone, Debug, Facet)]
+pub struct StackDefaultDef {
+    pub stack: String,
+    pub patch: String,
 }
 
 /// One setlist entry: a song reference with optional per-set key/tempo
@@ -507,7 +519,8 @@ pub fn song_library() -> Vec<SongDef> {
             key: key.to_string(),
             bpm,
             stack: 0, // open on Clean; per-song stacks come with song editing
-            sections: Vec::new(),
+            parts: Vec::new(),
+            stack_defaults: Vec::new(),
         }
     }
     vec![
