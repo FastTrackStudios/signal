@@ -5,14 +5,21 @@
 //! per-tap filter (9 types) + cutoff, and per-tap mod amount. Master
 //! Time/Repeats scale the whole pattern relative to per-tap settings.
 //!
-//! First-pass deviations (documented for the deep pass):
-//! - `FeedbackMode::Parallel` (8 fully independent lines) is stored but
-//!   processed like `Input` — true parallel needs 8 delay lines.
-//! - Per-tap `pan` and `mod_amount` are stored for API parity but not
-//!   applied (mono-per-channel engine; no per-tap modulation yet).
+//! Topology: `FeedbackMode::Input` recirculates the per-tap feedback sum
+//! into the ONE shared line; `FeedbackMode::Parallel` runs 8 fully
+//! independent lines, each recirculating only itself (allocated in
+//! `update()` when the mode is selected). [`MultiTapDelay::tick_stereo`]
+//! applies per-tap equal-power pan and per-tap `mod_amount` (scales the
+//! shared mod LFO's excursion on that tap's read position).
+//!
+//! Remaining deviations (documented for later passes):
 //! - `TapGrid` quantization is metadata for editors; positions here are
 //!   free fractions of the pattern length.
 //! - The Classic bank carries 6 patterns, not all 16 v1 patterns yet.
+//! - In Parallel mode the global hicut/locut shape the line INPUT (per
+//!   line-loop filtering would need 8× filter state); decay tilt is
+//!   skipped. Per-tap filters run inside each line's own loop, so
+//!   filtered repeats self-darken authentically in both modes.
 
 use audiocore_dsp::biquad::{Biquad, FilterType};
 use audiocore_dsp::delay_line::DelayLine;
@@ -75,7 +82,6 @@ pub enum FeedbackMode {
     #[default]
     Input,
     /// 8 independent delay lines, summed, no interaction.
-    /// First pass: stored but processed like `Input` (deep pass).
     Parallel,
 }
 
@@ -95,7 +101,8 @@ pub struct Tap {
     pub filter: TapFilter,
     /// Per-tap filter cutoff in Hz.
     pub cutoff: f64,
-    /// Per-tap modulation amount (0.0–1.0). Parity slot; unused first pass.
+    /// Per-tap modulation amount (0.0–1.0): scales the shared mod LFO's
+    /// excursion on this tap's read position.
     pub mod_amount: f64,
 }
 
@@ -204,8 +211,16 @@ pub struct MultiTapDelay {
     pub locut_freq: f64,
     /// Decay EQ tilt (shared engine param).
     pub decay_tilt: f64,
+    /// Shared tap-modulation LFO rate in Hz.
+    pub mod_rate_hz: f64,
+    /// Shared tap-modulation depth (0.0–1.0); per-tap `mod_amount`
+    /// scales it per tap. Max excursion ≈ 4 ms.
+    pub mod_depth: f64,
 
     delay: DelayLine,
+    /// Independent per-tap lines for `FeedbackMode::Parallel`; empty
+    /// until that mode is selected (allocated in `update()`).
+    parallel_lines: Vec<DelayLine>,
     tap_filters: [Biquad; MAX_TAPS],
     hicut: Biquad,
     locut: Biquad,
@@ -213,6 +228,7 @@ pub struct MultiTapDelay {
     feedback_sample: f64,
     sample_rate: f64,
     smoother: ParamSmoother,
+    mod_phase: f64,
 }
 
 impl MultiTapDelay {
@@ -230,7 +246,10 @@ impl MultiTapDelay {
             hicut_freq: 0.0,
             locut_freq: 0.0,
             decay_tilt: 0.0,
+            mod_rate_hz: 0.5,
+            mod_depth: 0.0,
             delay: DelayLine::new(48000 * 3 + 1024),
+            parallel_lines: Vec::new(),
             tap_filters: std::array::from_fn(|_| Biquad::new()),
             hicut: Biquad::new(),
             locut: Biquad::new(),
@@ -238,6 +257,7 @@ impl MultiTapDelay {
             feedback_sample: 0.0,
             sample_rate: 48000.0,
             smoother: ParamSmoother::new(0.0),
+            mod_phase: 0.0,
         }
     }
 
@@ -252,6 +272,18 @@ impl MultiTapDelay {
         let max_len = (sample_rate * Self::MAX_DELAY_S) as usize + 1024;
         if self.delay.len() < max_len {
             self.delay = DelayLine::new(max_len);
+        }
+
+        // Parallel mode: allocate/grow the 8 independent lines here so
+        // the tick path never allocates.
+        if self.feedback_mode == FeedbackMode::Parallel {
+            if self.parallel_lines.len() < MAX_TAPS {
+                self.parallel_lines = (0..MAX_TAPS).map(|_| DelayLine::new(max_len)).collect();
+            } else if self.parallel_lines[0].len() < max_len {
+                for line in &mut self.parallel_lines {
+                    *line = DelayLine::new(max_len);
+                }
+            }
         }
 
         for (tap, bq) in self.taps.iter().zip(self.tap_filters.iter_mut()) {
@@ -285,24 +317,83 @@ impl MultiTapDelay {
         }
     }
 
-    pub fn tick(&mut self, input: f64, ch: usize) -> f64 {
+    /// Advance the time smoother + shared mod LFO phase; returns the
+    /// smoothed delay in samples.
+    #[inline]
+    fn advance_clock(&mut self) -> f64 {
         let target_delay = self.time_ms * 0.001 * self.sample_rate;
         self.smoother.set_target(target_delay);
         let smooth_delay = self.smoother.tick();
-        let max_read = self.delay.len() as f64 - 4.0;
+        self.mod_phase += self.mod_rate_hz.clamp(0.01, 20.0) / self.sample_rate;
+        if self.mod_phase >= 1.0 {
+            self.mod_phase -= 1.0;
+        }
+        smooth_delay
+    }
 
-        let mut output = 0.0;
+    /// Read position for tap `i`, including per-tap modulation
+    /// (`mod_amount` scales the shared LFO; per-tap phase offsets
+    /// decorrelate the taps; excursion capped at ~4 ms).
+    #[inline]
+    fn tap_pos(&self, tap: &Tap, i: usize, smooth_delay: f64, max_read: f64) -> f64 {
+        let mut pos = smooth_delay * tap.position;
+        let amt = self.mod_depth * tap.mod_amount;
+        if amt > 0.0 {
+            let ph = (self.mod_phase + i as f64 * 0.125).fract();
+            let lfo = (std::f64::consts::TAU * ph).sin();
+            let excursion = (self.sample_rate * 0.004).min(pos * 0.02);
+            pos += lfo * amt * excursion;
+        }
+        pos.clamp(1.0, max_read)
+    }
+
+    /// True whenever the independent-lines topology is running
+    /// (Parallel selected AND lines allocated by `update()`).
+    #[inline]
+    fn parallel_active(&self) -> bool {
+        self.feedback_mode == FeedbackMode::Parallel && !self.parallel_lines.is_empty()
+    }
+
+    pub fn tick(&mut self, input: f64, ch: usize) -> f64 {
+        let (l, r) = self.tick_inner(input, ch, false);
+        // Mono: pans ignored; tick_inner returns the plain sum in `l`.
+        debug_assert_eq!(r, 0.0);
+        l
+    }
+
+    /// Stereo tick: per-tap equal-power pan (unity at center).
+    pub fn tick_stereo(&mut self, input: f64) -> (f64, f64) {
+        self.tick_inner(input, 0, true)
+    }
+
+    fn tick_inner(&mut self, input: f64, ch: usize, stereo: bool) -> (f64, f64) {
+        let smooth_delay = self.advance_clock();
+
+        if self.parallel_active() {
+            return self.tick_parallel(input, ch, stereo, smooth_delay);
+        }
+
+        let max_read = self.delay.len() as f64 - 4.0;
+        let mut out_l = 0.0;
+        let mut out_r = 0.0;
         let mut fb_sum = 0.0;
-        for (i, tap) in self.taps.iter().enumerate() {
+        for i in 0..MAX_TAPS {
+            let tap = self.taps[i];
             if !tap.enabled {
                 continue;
             }
-            let pos = (smooth_delay * tap.position).clamp(1.0, max_read);
+            let pos = self.tap_pos(&tap, i, smooth_delay, max_read);
             let mut sample = self.delay.read_cubic(pos);
             if tap.filter != TapFilter::Off {
                 sample = self.tap_filters[i].tick(sample, ch);
             }
-            output += sample * tap.level;
+            if stereo {
+                let (gl, gr) = crate::pan_gains(tap.pan);
+                out_l += sample * tap.level * gl;
+                out_r += sample * tap.level * gr;
+            } else {
+                out_l += sample * tap.level;
+            }
             // Per-tap repeats: this tap's (filtered) signal recirculates.
             fb_sum += sample * tap.repeats;
         }
@@ -322,7 +413,54 @@ impl MultiTapDelay {
         self.delay.write(input + fb);
         self.feedback_sample = fb;
 
-        output
+        (out_l, out_r)
+    }
+
+    /// Parallel topology: each tap is an independent line recirculating
+    /// only itself (per-tap filter inside its own loop, so filtered
+    /// repeats self-darken). Global hicut/locut shape the line input;
+    /// decay tilt is skipped in this mode (see module docs).
+    fn tick_parallel(&mut self, input: f64, ch: usize, stereo: bool, smooth_delay: f64) -> (f64, f64) {
+        let max_read = self.parallel_lines[0].len() as f64 - 4.0;
+
+        let mut line_input = input;
+        if self.hicut_freq > 0.0 {
+            line_input = self.hicut.tick(line_input, ch);
+        }
+        if self.locut_freq > 0.0 {
+            line_input = self.locut.tick(line_input, ch);
+        }
+
+        let mut out_l = 0.0;
+        let mut out_r = 0.0;
+        let mut fb_avg = 0.0;
+        for i in 0..MAX_TAPS {
+            let tap = self.taps[i];
+            if !tap.enabled {
+                // Keep disabled lines primed so enabling a tap later
+                // plays history instead of silence.
+                self.parallel_lines[i].write(line_input);
+                continue;
+            }
+            let pos = self.tap_pos(&tap, i, smooth_delay, max_read);
+            let mut sample = self.parallel_lines[i].read_cubic(pos);
+            if tap.filter != TapFilter::Off {
+                sample = self.tap_filters[i].tick(sample, ch);
+            }
+            if stereo {
+                let (gl, gr) = crate::pan_gains(tap.pan);
+                out_l += sample * tap.level * gl;
+                out_r += sample * tap.level * gr;
+            } else {
+                out_l += sample * tap.level;
+            }
+            let fb = (sample * tap.repeats * self.feedback).clamp(-1.5, 1.5);
+            self.parallel_lines[i].write(line_input + fb);
+            fb_avg += fb;
+        }
+        self.feedback_sample = fb_avg / MAX_TAPS as f64;
+
+        (out_l, out_r)
     }
 
     pub fn last_feedback(&self) -> f64 {
@@ -331,6 +469,9 @@ impl MultiTapDelay {
 
     pub fn reset(&mut self) {
         self.delay.clear();
+        for line in &mut self.parallel_lines {
+            line.clear();
+        }
         for bq in &mut self.tap_filters {
             bq.reset();
         }
@@ -339,6 +480,7 @@ impl MultiTapDelay {
         self.decay_eq.reset();
         self.feedback_sample = 0.0;
         self.smoother.reset(0.0);
+        self.mod_phase = 0.0;
     }
 }
 
@@ -442,6 +584,120 @@ mod tests {
             dark < open * 0.2,
             "500 Hz per-tap LP should kill a 5 kHz tap: {dark} vs {open}"
         );
+    }
+
+    #[test]
+    fn parallel_mode_isolates_tap_lines() {
+        // Tap A: 120 ms, full self-repeats, SILENT (level 0).
+        // Tap B: 400 ms, no repeats, audible.
+        // Input mode: A's recirculation reaches the shared line, so B
+        // re-emits it at 120+400 = 520 ms. Parallel: B's line never sees
+        // A's feedback — output is the single 400 ms event only.
+        let run = |mode: FeedbackMode| -> (f64, f64) {
+            let mut d = MultiTapDelay::new();
+            d.time_ms = 400.0;
+            d.feedback = 1.0;
+            d.feedback_mode = mode;
+            d.taps = [Tap::off(); MAX_TAPS];
+            d.taps[0] = Tap::at(0.3, 0.0); // silent recirculator
+            d.taps[0].repeats = 1.0;
+            d.taps[0].enabled = true;
+            d.taps[1] = Tap::at(1.0, 1.0); // audible, no repeats
+            d.taps[1].repeats = 0.0;
+            d.update(SR);
+
+            let mut out = vec![0.0f64; 48000];
+            for (i, o) in out.iter_mut().enumerate() {
+                let input = if i == 0 { 1.0 } else { 0.0 };
+                *o = d.tick(input, 0);
+            }
+            let window = |ms: f64| -> f64 {
+                let c = (ms * SR / 1000.0) as usize;
+                out[c - 480..c + 480].iter().map(|x| x * x).sum()
+            };
+            (window(400.0), window(520.0))
+        };
+
+        let (input_400, input_520) = run(FeedbackMode::Input);
+        let (par_400, par_520) = run(FeedbackMode::Parallel);
+
+        assert!(input_400 > 0.1 && par_400 > 0.1, "both modes emit the 400 ms tap");
+        assert!(
+            input_520 > 0.01,
+            "Input mode: A's recirculation must reach B: {input_520}"
+        );
+        assert!(
+            par_520 < input_520 * 1e-4,
+            "Parallel mode: no cross-pollination: {par_520} vs {input_520}"
+        );
+    }
+
+    #[test]
+    fn parallel_taps_repeat_at_their_own_period() {
+        let mut d = MultiTapDelay::new();
+        d.time_ms = 400.0;
+        d.feedback = 0.9;
+        d.feedback_mode = FeedbackMode::Parallel;
+        d.taps = [Tap::off(); MAX_TAPS];
+        d.taps[0] = Tap::at(0.5, 1.0); // 200 ms line, self-repeating
+        d.taps[0].repeats = 1.0;
+        d.update(SR);
+
+        let mut out = vec![0.0f64; 48000];
+        for (i, o) in out.iter_mut().enumerate() {
+            let input = if i == 0 { 1.0 } else { 0.0 };
+            *o = d.tick(input, 0);
+        }
+        let window = |ms: f64| -> f64 {
+            let c = (ms * SR / 1000.0) as usize;
+            out[c - 240..c + 240].iter().map(|x| x * x).sum()
+        };
+        // Self-recirculation at its own 200 ms period.
+        assert!(window(200.0) > 0.1);
+        assert!(window(400.0) > 0.05);
+        assert!(window(600.0) > 0.01);
+    }
+
+    #[test]
+    fn per_tap_mod_wobbles_only_marked_taps() {
+        let run = |mod_amount: f64| -> Vec<f64> {
+            let mut d = MultiTapDelay::new();
+            d.time_ms = 300.0;
+            d.feedback = 0.0;
+            d.mod_depth = 1.0;
+            d.mod_rate_hz = 3.0;
+            d.taps = [Tap::off(); MAX_TAPS];
+            d.taps[0] = Tap::at(1.0, 1.0);
+            d.taps[0].mod_amount = mod_amount;
+            d.update(SR);
+
+            let mut out = vec![0.0f64; 48000];
+            for (i, o) in out.iter_mut().enumerate() {
+                let input = (std::f64::consts::TAU * 880.0 * i as f64 / SR).sin() * 0.5;
+                *o = d.tick(input, 0);
+                assert!(o.is_finite());
+            }
+            out
+        };
+
+        let still = run(0.0);
+        let still2 = run(0.0);
+        let wobbled = run(1.0);
+
+        // Deterministic with mod off…
+        let diff_off: f64 = still
+            .iter()
+            .zip(still2.iter())
+            .map(|(a, b)| (a - b).abs())
+            .sum();
+        assert!(diff_off < 1e-12, "mod_amount 0 must be deterministic");
+        // …and audibly different with per-tap mod engaged.
+        let diff_on: f64 = still
+            .iter()
+            .zip(wobbled.iter())
+            .map(|(a, b)| (a - b).abs())
+            .sum();
+        assert!(diff_on > 1.0, "per-tap mod should move the tap: {diff_on}");
     }
 
     #[test]

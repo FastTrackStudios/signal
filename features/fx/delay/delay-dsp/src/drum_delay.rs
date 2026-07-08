@@ -5,10 +5,10 @@
 //! level, feedback contribution, and pan. Default spacing follows the
 //! golden ratio, like the Echorec's magnetic drum head layout.
 //!
-//! First-pass implementation: heads read one shared `DelayLine`; a slow
-//! random wobble models drum-motor irregularity. Per-head `pan` is
-//! stored for API parity but not applied — the engine is mono-per-channel
-//! inside `DelayChain`; stereo head placement lands with the deep pass.
+//! Heads read one shared `DelayLine`; a slow random wobble models
+//! drum-motor irregularity. [`DrumDelay::tick_stereo`] places each head
+//! in the stereo field per its `pan` (the chain routes Drum through one
+//! stereo engine); the mono [`DrumDelay::tick`] ignores pan.
 
 use audiocore_dsp::biquad::{Biquad, FilterType};
 use audiocore_dsp::delay_line::DelayLine;
@@ -189,7 +189,10 @@ impl DrumDelay {
         }
     }
 
-    pub fn tick(&mut self, input: f64, ch: usize) -> f64 {
+    /// Advance the time smoother + motor wobble; returns the smoothed
+    /// delay length in samples including the wobble factor.
+    #[inline]
+    fn advance_clock(&mut self) -> f64 {
         let target_delay = self.time_ms * 0.001 * self.sample_rate;
         self.smoother.set_target(target_delay);
         let smooth_delay = self.smoother.tick();
@@ -202,25 +205,12 @@ impl DrumDelay {
             self.wobble_target = self.rng.next_bipolar();
         }
         self.wobble_current += (self.wobble_target - self.wobble_current) * 0.0005;
-        let wobble_factor = 1.0 + self.wobble_current * self.wobble * 0.003;
+        smooth_delay * (1.0 + self.wobble_current * self.wobble * 0.003)
+    }
 
-        let max_read = self.delay.len() as f64 - 4.0;
-
-        let mut output = 0.0;
-        let mut fb_sum = 0.0;
-        for head in &self.heads {
-            let gain = head.playback.gain();
-            if gain == 0.0 && !head.feedback {
-                continue;
-            }
-            let pos = (smooth_delay * head.position * wobble_factor).clamp(1.0, max_read);
-            let sample = self.delay.read_cubic(pos);
-            output += sample * gain;
-            if head.feedback {
-                fb_sum += sample;
-            }
-        }
-
+    /// Filter + clamp the feedback sum and write the delay line.
+    #[inline]
+    fn recirculate(&mut self, input: f64, fb_sum: f64, ch: usize) {
         let mut fb = fb_sum * self.feedback;
         if self.lo_cut > 0.01 {
             fb = self.lo_cut_filter.tick(fb, ch);
@@ -232,8 +222,63 @@ impl DrumDelay {
 
         self.delay.write(input + fb);
         self.feedback_sample = fb;
+    }
 
+    pub fn tick(&mut self, input: f64, ch: usize) -> f64 {
+        let wobbled_delay = self.advance_clock();
+        let max_read = self.delay.len() as f64 - 4.0;
+
+        let mut output = 0.0;
+        let mut fb_sum = 0.0;
+        for head in &self.heads {
+            let gain = head.playback.gain();
+            if gain == 0.0 && !head.feedback {
+                continue;
+            }
+            let pos = (wobbled_delay * head.position).clamp(1.0, max_read);
+            let sample = self.delay.read_cubic(pos);
+            output += sample * gain;
+            if head.feedback {
+                fb_sum += sample;
+            }
+        }
+
+        self.recirculate(input, fb_sum, ch);
         output
+    }
+
+    /// Stereo tick: each head's playback lands in the stereo field per
+    /// its `pan` (equal-power, unity at center). Feedback is mono and
+    /// identical to [`Self::tick`] — this is what makes the spec's
+    /// emergent behavior fall out: feedback from an early head fills
+    /// every later head simultaneously and the image collapses to
+    /// center, while last-head-only feedback preserves the rotation.
+    pub fn tick_stereo(&mut self, input: f64) -> (f64, f64) {
+        let wobbled_delay = self.advance_clock();
+        let max_read = self.delay.len() as f64 - 4.0;
+
+        let mut out_l = 0.0;
+        let mut out_r = 0.0;
+        let mut fb_sum = 0.0;
+        for head in &self.heads {
+            let gain = head.playback.gain();
+            if gain == 0.0 && !head.feedback {
+                continue;
+            }
+            let pos = (wobbled_delay * head.position).clamp(1.0, max_read);
+            let sample = self.delay.read_cubic(pos);
+            if gain > 0.0 {
+                let (gl, gr) = crate::pan_gains(head.pan);
+                out_l += sample * gain * gl;
+                out_r += sample * gain * gr;
+            }
+            if head.feedback {
+                fb_sum += sample;
+            }
+        }
+
+        self.recirculate(input, fb_sum, 0);
+        (out_l, out_r)
     }
 
     pub fn last_feedback(&self) -> f64 {

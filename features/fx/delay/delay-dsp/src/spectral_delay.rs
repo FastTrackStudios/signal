@@ -64,6 +64,9 @@ struct Grain {
     /// Duration in samples.
     dur: f64,
     gain: f64,
+    /// Per-grain stereo pan (-1..1); applied by `tick_stereo`, scaled
+    /// from `spread` at spawn (subtle scatter, ≤ ±0.6).
+    pan: f64,
     /// Bounce: per-grain one-pole lowpass state + coefficient (a1 = 0
     /// disables).
     lp_state: f64,
@@ -79,6 +82,7 @@ impl Grain {
             age: 0.0,
             dur: 1.0,
             gain: 0.0,
+            pan: 0.0,
             lp_state: 0.0,
             lp_a1: 0.0,
         }
@@ -241,6 +245,10 @@ impl SpectralDelay {
             0.0
         };
 
+        // Stereo scatter rides the spread param: on-grid clouds stay
+        // centered, scattered clouds open up (subtle, ≤ ±0.6).
+        let pan = self.rng.next_bipolar() * 0.6 * self.spread;
+
         self.grains[slot] = Grain {
             active: true,
             offset,
@@ -248,6 +256,7 @@ impl SpectralDelay {
             age: 0.0,
             dur,
             gain: 1.0,
+            pan,
             lp_state: 0.0,
             lp_a1,
         };
@@ -301,6 +310,17 @@ impl SpectralDelay {
     }
 
     pub fn tick(&mut self, input: f64, ch: usize) -> f64 {
+        self.tick_inner(input, ch, false).0
+    }
+
+    /// Stereo tick: each grain lands in the stereo field per its
+    /// spawn-time random pan (scaled by `spread`). Feedback stays a
+    /// mono plain tap, identical to [`Self::tick`].
+    pub fn tick_stereo(&mut self, input: f64) -> (f64, f64) {
+        self.tick_inner(input, 0, true)
+    }
+
+    fn tick_inner(&mut self, input: f64, ch: usize, stereo: bool) -> (f64, f64) {
         let target_delay = self.time_ms * 0.001 * self.sample_rate;
         self.smoother.set_target(target_delay);
         let smooth_delay = self.smoother.tick();
@@ -316,7 +336,8 @@ impl SpectralDelay {
 
         // Sum grain voices with the selected shape window.
         let shape = self.shape;
-        let mut wet = 0.0;
+        let mut wet_l = 0.0;
+        let mut wet_r = 0.0;
         let mut active = 0u32;
         for g in &mut self.grains {
             if !g.active {
@@ -333,7 +354,14 @@ impl SpectralDelay {
                 g.lp_state = (1.0 - g.lp_a1) * sample + g.lp_a1 * g.lp_state;
                 sample = g.lp_state;
             }
-            wet += sample * window * g.gain;
+            let v = sample * window * g.gain;
+            if stereo {
+                let (gl, gr) = crate::pan_gains(g.pan);
+                wet_l += v * gl;
+                wet_r += v * gr;
+            } else {
+                wet_l += v;
+            }
 
             g.offset += g.drift;
             g.age += 1.0;
@@ -341,7 +369,9 @@ impl SpectralDelay {
         }
         // Overlap normalization: ~2 grains sound at once by design.
         if active > 2 {
-            wet /= (active as f64 / 2.0).sqrt();
+            let norm = (active as f64 / 2.0).sqrt();
+            wet_l /= norm;
+            wet_r /= norm;
         }
 
         // Feedback from a plain (non-granular) tap so regeneration stays
@@ -361,7 +391,7 @@ impl SpectralDelay {
         self.delay.write(input + fb);
         self.feedback_sample = fb;
 
-        wet
+        (wet_l, wet_r)
     }
 
     pub fn last_feedback(&self) -> f64 {

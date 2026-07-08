@@ -521,6 +521,8 @@ impl Processor for DelayChain {
             0.0
         };
 
+        let stereo_field = self.delay_l.is_stereo_field_style();
+
         for i in 0..n {
             let dry_l = left[i];
             let dry_r = right[i];
@@ -625,8 +627,23 @@ impl Processor for DelayChain {
             time_l = time_l.max(0.1);
             time_r = time_r.max(0.1);
 
-            let mut wet_l = self.delay_l.tick_at(in_l, 0, time_l);
-            let mut wet_r = self.delay_r.tick_at(in_r, 1, time_r);
+            // Stereo-field styles (Drum / MultiTap / Spectral) run ONE
+            // stereo engine on the mono sum — that's what makes per-head
+            // / per-tap / per-grain pans meaningful ("patterns create a
+            // stereo field when using both L and R outputs, sum to mono
+            // when R unplugged"). StereoMode routing (incl. PingPong
+            // cross-feed) is bypassed for these styles: their stereo
+            // image comes from the element pans. Other styles keep the
+            // classic two-mono-engine topology untouched.
+            let (mut wet_l, mut wet_r) = if stereo_field {
+                let mono_in = (in_l + in_r) * 0.5;
+                self.delay_l.tick_at_stereo(mono_in, time_l)
+            } else {
+                (
+                    self.delay_l.tick_at(in_l, 0, time_l),
+                    self.delay_r.tick_at(in_r, 1, time_r),
+                )
+            };
 
             // --- Diffusion (post mode: applied after delay output) ---
             if !self.diffusion_in_loop && self.diffusion_enabled {
@@ -715,7 +732,9 @@ impl Processor for DelayChain {
             }
 
             // --- LR offset: delay the R channel ---
-            if width > 0.001 {
+            // Skipped for stereo-field styles: their L/R relationship IS
+            // the head/tap/grain panning; a fixed R shift would smear it.
+            if width > 0.001 && !stereo_field {
                 self.lr_offset_smoother.set_target(self.lr_offset_ms);
                 let offset_ms = self.lr_offset_smoother.tick();
                 let offset_samples = offset_ms * self.sample_rate / 1000.0;
@@ -1211,6 +1230,132 @@ mod tests {
                 assert!(v.is_finite(), "{style:?} NaN at {i}");
             }
         }
+    }
+
+    #[test]
+    fn drum_pan_rotation_emerges_from_feedback_topology() {
+        use crate::drum_delay::HeadPlayback;
+
+        // Even spacing, hard-alternating pans L/R/L/R.
+        let run = |fb_heads: [bool; 4]| -> (f64, f64) {
+            let mut c = DelayChain::new();
+            c.set_style(DelayStyle::Drum);
+            c.delay_l.time_ms = 400.0;
+            c.delay_r.time_ms = 400.0;
+            c.delay_l.feedback = 0.8;
+            c.mix = 1.0;
+            c.width = 1.0;
+            for (i, (pos, pan)) in [(0.25, -1.0), (0.5, 1.0), (0.75, -1.0), (1.0, 1.0)]
+                .iter()
+                .enumerate()
+            {
+                c.delay_l.drum_heads[i].position = *pos;
+                c.delay_l.drum_heads[i].pan = *pan;
+                c.delay_l.drum_heads[i].playback = HeadPlayback::Full;
+                c.delay_l.drum_heads[i].feedback = fb_heads[i];
+            }
+            c.delay_l.drum_wobble = 0.0;
+            c.delay_l.drum_lo_cut = 0.0;
+            c.update(config());
+
+            let n = 48000;
+            let mut l: Vec<f64> = (0..n).map(|i| if i == 0 { 1.0 } else { 0.0 }).collect();
+            let mut r = vec![0.0; n];
+            // Feed L only; drum is mono-summed inside.
+            c.process(&mut l, &mut r);
+
+            // Second-pass window of head 1 (pan hard L): 400+100 = 500 ms.
+            let cnt = (500.0 * SR / 1000.0) as usize;
+            let h = (30.0 * SR / 1000.0) as usize;
+            let le: f64 = l[cnt - h..cnt + h].iter().map(|x| x * x).sum();
+            let re: f64 = r[cnt - h..cnt + h].iter().map(|x| x * x).sum();
+            (le, re)
+        };
+
+        // Feedback from ONLY the last head: the recirculated pattern
+        // re-excites the heads one at a time — head 1's second-pass
+        // window stays hard-left lateralized.
+        let (le, re) = run([false, false, false, true]);
+        let lateral_last = (le - re).abs() / (le + re).max(1e-12);
+        assert!(
+            lateral_last > 0.8,
+            "last-head fb should preserve the pan rotation: L={le} R={re}"
+        );
+
+        // Feedback from ALL heads: by the second pass every head has
+        // signal simultaneously — the image collapses toward center.
+        let (le2, re2) = run([true, true, true, true]);
+        let lateral_all = (le2 - re2).abs() / (le2 + re2).max(1e-12);
+        assert!(
+            lateral_all < lateral_last * 0.6,
+            "all-head fb should collapse the image: last={lateral_last:.3} all={lateral_all:.3}"
+        );
+    }
+
+    #[test]
+    fn stereo_field_styles_center_pan_sums_like_mono() {
+        // Pan-neutral Drum config: L and R outputs must be identical
+        // (each head contributes unity to both sides at pan = 0).
+        let mut c = DelayChain::new();
+        c.set_style(DelayStyle::Drum);
+        c.delay_l.time_ms = 300.0;
+        c.delay_r.time_ms = 300.0;
+        c.delay_l.feedback = 0.5;
+        c.delay_l.drum_wobble = 0.0;
+        c.mix = 1.0;
+        c.update(config());
+
+        let n = 48000;
+        let mut l: Vec<f64> = (0..n).map(|i| if i < 50 { 0.8 } else { 0.0 }).collect();
+        let mut r = l.clone();
+        c.process(&mut l, &mut r);
+
+        let energy: f64 = l.iter().map(|x| x * x).sum();
+        assert!(energy > 0.001, "should produce output");
+        for (i, (a, b)) in l.iter().zip(r.iter()).enumerate() {
+            assert!(
+                (a - b).abs() < 1e-9,
+                "pan-neutral stereo field must be dual-mono at {i}: {a} vs {b}"
+            );
+        }
+    }
+
+    #[test]
+    fn multitap_pans_land_on_their_sides() {
+        use crate::multitap_delay::Tap;
+
+        let mut c = DelayChain::new();
+        c.set_style(DelayStyle::MultiTap);
+        c.delay_l.time_ms = 400.0;
+        c.delay_r.time_ms = 400.0;
+        c.delay_l.feedback = 0.0;
+        let mut taps = [Tap::off(); crate::multitap_delay::MAX_TAPS];
+        taps[0] = Tap::at(0.5, 1.0); // 200 ms
+        taps[0].pan = -1.0;
+        taps[1] = Tap::at(1.0, 1.0); // 400 ms
+        taps[1].pan = 1.0;
+        c.delay_l.multitap_taps = taps;
+        c.mix = 1.0;
+        c.update(config());
+
+        let n = 24000;
+        let mut l: Vec<f64> = (0..n).map(|i| if i == 0 { 1.0 } else { 0.0 }).collect();
+        let mut r = vec![0.0; n];
+        c.process(&mut l, &mut r);
+
+        let window = |buf: &[f64], ms: f64| -> f64 {
+            let cidx = (ms * SR / 1000.0) as usize;
+            let h = 480;
+            buf[cidx - h..cidx + h].iter().map(|x| x * x).sum()
+        };
+        let l_tap1 = window(&l, 200.0);
+        let r_tap1 = window(&r, 200.0);
+        let l_tap2 = window(&l, 400.0);
+        let r_tap2 = window(&r, 400.0);
+        assert!(l_tap1 > 0.1, "hard-L tap on L: {l_tap1}");
+        assert!(r_tap2 > 0.1, "hard-R tap on R: {r_tap2}");
+        assert!(r_tap1 < l_tap1 * 1e-6, "hard-L tap must not bleed: {r_tap1}");
+        assert!(l_tap2 < r_tap2 * 1e-6, "hard-R tap must not bleed: {l_tap2}");
     }
 
     #[test]

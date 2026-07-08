@@ -10,7 +10,7 @@ use crate::drum_delay::{DrumDelay, DrumHead, HeadPlayback, GOLDEN_HEADS};
 use crate::filter_delay::{FilterDelay, FilterLfoShape, FilterLocation};
 use crate::lofi_delay::LoFiDelay;
 use crate::modulation::WobbleShape;
-use crate::multitap_delay::{MultiTapDelay, Tap, MAX_TAPS};
+use crate::multitap_delay::{FeedbackMode, MultiTapDelay, Tap, MAX_TAPS};
 use crate::oilcan_delay::{OilCanDelay, OilCanHeads};
 use crate::pitch_delay::{IceInterval, IceSlice, PitchDelay};
 use crate::reverse_delay::ReverseDelay;
@@ -266,6 +266,14 @@ pub struct DelayEngine {
     // ── MultiTap-specific ──────────────────────────────────────────
     /// User tap pattern. MultiTap only.
     pub multitap_taps: [Tap; MAX_TAPS],
+    /// Feedback topology (Input = shared line, Parallel = 8 independent
+    /// lines). MultiTap only.
+    pub multitap_feedback_mode: FeedbackMode,
+    /// Shared tap-mod LFO rate in Hz. MultiTap only.
+    pub multitap_mod_rate_hz: f64,
+    /// Shared tap-mod depth (0.0–1.0), scaled per tap by `mod_amount`.
+    /// MultiTap only.
+    pub multitap_mod_depth: f64,
 
     // ── Spectral-specific ──────────────────────────────────────────
     /// Grain density. Spectral only.
@@ -358,6 +366,9 @@ impl DelayEngine {
             oilcan_tone: 2500.0,
             oilcan_grit: 0.1,
             multitap_taps: crate::multitap_delay::TapPreset::Quarters.taps(),
+            multitap_feedback_mode: FeedbackMode::Input,
+            multitap_mod_rate_hz: 0.5,
+            multitap_mod_depth: 0.0,
             spectral_density: DensityMode::Synced(1.0 / 8.0),
             spectral_stretch: 0.0,
             spectral_octave: 0.0,
@@ -545,6 +556,9 @@ impl DelayEngine {
                 d.hicut_freq = self_hicut;
                 d.locut_freq = self_locut;
                 d.taps = self.multitap_taps;
+                d.feedback_mode = self.multitap_feedback_mode;
+                d.mod_rate_hz = self.multitap_mod_rate_hz;
+                d.mod_depth = self.multitap_mod_depth;
                 d.decay_tilt = self_tilt;
                 d.update(sample_rate);
             }
@@ -655,6 +669,40 @@ impl DelayEngine {
             EngineInner::Filter(d) => {
                 d.time_ms = time_ms;
                 d.tick(input, ch)
+            }
+        }
+    }
+
+    /// True for the head/tap/grain machines whose stereo image comes
+    /// from per-element pans. The chain routes these through ONE
+    /// stereo engine (mono-summed input) instead of two mono engines.
+    pub fn is_stereo_field_style(&self) -> bool {
+        matches!(
+            self.style,
+            DelayStyle::Drum | DelayStyle::MultiTap | DelayStyle::Spectral
+        )
+    }
+
+    /// Stereo variant of [`Self::tick_at`] for the stereo-field styles
+    /// (Drum / MultiTap / Spectral). Other styles fall back to their
+    /// mono tick duplicated to both sides.
+    pub fn tick_at_stereo(&mut self, input: f64, time_ms: f64) -> (f64, f64) {
+        match &mut self.inner {
+            EngineInner::Drum(d) => {
+                d.time_ms = time_ms.clamp(DrumDelay::MIN_TIME_MS, DrumDelay::MAX_TIME_MS);
+                d.tick_stereo(input)
+            }
+            EngineInner::MultiTap(d) => {
+                d.time_ms = time_ms;
+                d.tick_stereo(input)
+            }
+            EngineInner::Spectral(d) => {
+                d.time_ms = time_ms;
+                d.tick_stereo(input)
+            }
+            _ => {
+                let s = self.tick_at(input, 0, time_ms);
+                (s, s)
             }
         }
     }

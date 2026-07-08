@@ -12,6 +12,7 @@ pub mod bbd_delay;
 pub mod chain;
 pub mod clean_delay;
 pub mod drum_delay;
+pub mod dual;
 pub mod engine;
 pub mod filter_delay;
 pub mod lofi_delay;
@@ -26,6 +27,7 @@ pub mod spectral_delay;
 pub mod tape_delay;
 
 pub use chain::{DelayChain, HeadMode, TapDivision};
+pub use dual::{DualDelay, DualRouting};
 pub use drum_delay::{DrumHead, DrumSpacing, HeadPlayback, GOLDEN_HEADS, SILVER_HEADS};
 pub use engine::{DelayEngine, DelayStyle};
 pub use filter_delay::{FilterLfoShape, FilterLocation};
@@ -36,3 +38,17 @@ pub use spectral_delay::{DensityMode, GrainDirection, GrainShape};
 pub use bbd_delay::BbdVoice;
 pub use pitch_delay::{IceInterval, IceSlice};
 pub use tape_delay::{SaturationType, TapeSpeed, TapeVoice};
+
+/// Equal-power pan gains, normalized so a centered source contributes
+/// unity to BOTH sides — this keeps the head/tap engines' default
+/// (pan = 0) output bit-identical to the old dual-mono routing.
+/// Hard pans put the full-power (+3 dB) signal on one side, standard
+/// for constant-power laws with a 0 dB center.
+#[inline]
+pub(crate) fn pan_gains(pan: f64) -> (f64, f64) {
+    let theta = (pan.clamp(-1.0, 1.0) + 1.0) * std::f64::consts::FRAC_PI_4;
+    (
+        std::f64::consts::SQRT_2 * theta.cos(),
+        std::f64::consts::SQRT_2 * theta.sin(),
+    )
+}
