@@ -11,7 +11,7 @@
 //! The 8 AlgorithmParams are mapped to CloudSeed's 45 internal parameters
 //! using the original ScaleParam() response curves.
 
-use crate::algorithm::{AlgorithmParams, ReverbAlgorithm};
+use crate::algorithm::{AlgorithmParams, CloudParams, ReverbAlgorithm};
 use crate::primitives::allpass_diffuser::AllpassDiffuser;
 use crate::primitives::lcg_random::random_buffer_cross_seed;
 use crate::primitives::modulated_delay::ModulatedDelay;
@@ -530,15 +530,117 @@ impl CloudChannel {
     }
 }
 
+/// Pitch-tracked synthetic string/pad layer (BigSky MX Cloud
+/// "Ensemble", from Cloudburst).
+///
+/// // interpretation: the hardware analyzes the input and synthesizes
+/// // a string-ensemble layer that feeds the reverb. We track pitch
+/// // with a PLL, run a small bank of detuned sawtooths at the tracked
+/// // frequency (unison ×3 + octave ×2), shape them with a slow-attack
+/// // envelope follower, and low-pass the sum into a pad.
+struct Ensemble {
+    pll: pitch_dsp::pll::PllTracker,
+    /// Saw phases: 3 unison-detuned + 2 octave-up voices.
+    phases: [f64; 5],
+    /// Slow detune LFO phases (one per voice).
+    lfo_phases: [f64; 5],
+    /// Slow attack/release level (one-pole).
+    level: f64,
+    /// Pad low-pass.
+    lp: crate::primitives::one_pole::Lp1,
+    sample_rate: f64,
+}
+
+/// (freq ratio, detune cents amplitude, voice gain) per ensemble voice.
+const ENSEMBLE_VOICES: [(f64, f64, f64); 5] = [
+    (1.0, 6.0, 1.0),
+    (1.0, -8.0, 0.85),
+    (1.0, 11.0, 0.85),
+    (2.0, -5.0, 0.45),
+    (2.0, 9.0, 0.4),
+];
+
+impl Ensemble {
+    fn new(sample_rate: f64) -> Self {
+        let mut pll = pitch_dsp::pll::PllTracker::new();
+        pll.update(sample_rate);
+        let mut lp = crate::primitives::one_pole::Lp1::new();
+        lp.set_freq(2500.0, sample_rate);
+        Self {
+            pll,
+            phases: [0.0, 0.21, 0.47, 0.68, 0.91],
+            lfo_phases: [0.0, 0.2, 0.4, 0.6, 0.8],
+            level: 0.0,
+            lp,
+            sample_rate,
+        }
+    }
+
+    fn reset(&mut self) {
+        self.pll.reset();
+        self.level = 0.0;
+        self.lp.reset();
+    }
+
+    fn set_sample_rate(&mut self, sample_rate: f64) {
+        *self = Self::new(sample_rate);
+    }
+
+    /// Track `input` (mono) and return the ensemble layer sample.
+    #[inline]
+    fn tick(&mut self, input: f64) -> f64 {
+        // Track pitch (the PLL's own audio output is unused).
+        let _ = self.pll.tick(input);
+        let freq = self.pll.frequency();
+        let env = self.pll.envelope_value().min(1.0);
+
+        // Slow swell: ~200 ms attack, ~400 ms release — the layer fades
+        // in behind the note instead of doubling its attack.
+        let coeff = if env > self.level {
+            1.0 - (-1.0 / (0.2 * self.sample_rate)).exp()
+        } else {
+            1.0 - (-1.0 / (0.4 * self.sample_rate)).exp()
+        };
+        self.level += (env - self.level) * coeff;
+        if self.level < 1e-6 {
+            return 0.0;
+        }
+
+        let mut sum = 0.0;
+        for (i, (ratio, cents, gain)) in ENSEMBLE_VOICES.iter().enumerate() {
+            // Slow per-voice detune wobble (0.15..0.45 Hz).
+            let lfo_rate = 0.15 + i as f64 * 0.07;
+            self.lfo_phases[i] += lfo_rate / self.sample_rate;
+            if self.lfo_phases[i] >= 1.0 {
+                self.lfo_phases[i] -= 1.0;
+            }
+            let wobble = (self.lfo_phases[i] * std::f64::consts::TAU).sin();
+            let detune = 2f64.powf((cents + wobble * 4.0) / 1200.0);
+            let f = (freq * ratio * detune).min(self.sample_rate * 0.45);
+
+            self.phases[i] += f / self.sample_rate;
+            self.phases[i] -= self.phases[i].floor();
+            // Sawtooth — filtered below into a string-ish pad.
+            sum += (2.0 * self.phases[i] - 1.0) * gain;
+        }
+
+        self.lp.tick(sum * 0.45 * self.level)
+    }
+}
+
 /// Cloud reverb — stereo CloudSeed engine.
 ///
 /// Exact port of CloudSeedCore's ReverbController:
 /// two independent ReverbChannels with input crossfeed mixing
-/// and per-channel cross-seed decorrelation.
+/// and per-channel cross-seed decorrelation. The BigSky MX "Ensemble"
+/// layer (pitch-tracked synthetic strings) is additive on the input
+/// and coexists with Diffusion.
 pub struct Cloud {
     left: CloudChannel,
     right: CloudChannel,
     raw_params: [f64; param::COUNT],
+    ensemble: Ensemble,
+    ensemble_level: f64,
     sample_rate: f64,
 }
 
@@ -548,6 +650,8 @@ impl Cloud {
             left: CloudChannel::new(sample_rate, false),
             right: CloudChannel::new(sample_rate, true),
             raw_params: [0.0; param::COUNT],
+            ensemble: Ensemble::new(sample_rate),
+            ensemble_level: 0.0,
             sample_rate,
         };
 
@@ -603,12 +707,14 @@ impl ReverbAlgorithm for Cloud {
     fn reset(&mut self) {
         self.left.clear();
         self.right.clear();
+        self.ensemble.reset();
     }
 
     fn set_sample_rate(&mut self, sample_rate: f64) {
         self.sample_rate = sample_rate;
         self.left.set_sample_rate(sample_rate);
         self.right.set_sample_rate(sample_rate);
+        self.ensemble.set_sample_rate(sample_rate);
     }
 
     fn set_params(&mut self, params: &AlgorithmParams) {
@@ -688,8 +794,21 @@ impl ReverbAlgorithm for Cloud {
         self.set_raw_param(param::LATE_OUT, 1.0);
     }
 
+    fn set_cloud_params(&mut self, params: &CloudParams) -> bool {
+        self.ensemble_level = params.ensemble.clamp(0.0, 1.0);
+        true
+    }
+
     #[inline]
     fn tick(&mut self, left: f64, right: f64) -> (f64, f64) {
+        // Ensemble layer rides the reverb input (Diffusion untouched).
+        let (left, right) = if self.ensemble_level > 1e-9 {
+            let ens = self.ensemble.tick((left + right) * 0.5) * self.ensemble_level;
+            (left + ens, right + ens)
+        } else {
+            (left, right)
+        };
+
         // CloudSeed ReverbController input crossfeed mixing
         let input_mix = scale_param(self.raw_params[param::INPUT_MIX], param::INPUT_MIX);
         let cm = input_mix * 0.5;

@@ -397,6 +397,58 @@ impl Default for NonLinearParams {
     }
 }
 
+/// BigSky MX Cloud engine params (beyond the shared set).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct CloudParams {
+    /// Ensemble level (0..1): a pitch-tracked synthetic string/pad
+    /// layer blended into the reverb input (Cloudburst-style). 0 = off
+    /// (transparent, no CPU). Coexists with Diffusion.
+    pub ensemble: f64,
+}
+
+impl Default for CloudParams {
+    fn default() -> Self {
+        Self { ensemble: 0.0 }
+    }
+}
+
+/// BigSky MX Bloom engine params (beyond the shared set).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct BloomParams {
+    /// Harmonics level (0..1): filter-bank overtone generator
+    /// (octave-up partials, POG-style) fed into the trail. 0 = off
+    /// (transparent, no CPU).
+    pub harmonics: f64,
+}
+
+impl Default for BloomParams {
+    fn default() -> Self {
+        Self { harmonics: 0.0 }
+    }
+}
+
+/// Chorale choir range (BigSky MX "Choir Voice").
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ChoirVoice {
+    /// Lower range — the legacy voicing.
+    #[default]
+    Tenor,
+    /// Higher range: formant centers shifted up.
+    Soprano,
+}
+
+/// BigSky MX Chorale engine params (beyond the shared set).
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct ChoraleParams {
+    /// Choir voice level (0..1). `None` = legacy `extra_a` mapping.
+    pub choir_level: Option<f64>,
+    pub voice: ChoirVoice,
+    /// Per-voice pitch/timbre randomization (0..1): more mod = more
+    /// distinct singers (decorrelated vibrato + formant drift).
+    /// 0 = off (transparent).
+    pub mod_amount: f64,
+}
+
 /// Common interface for all reverb algorithms.
 ///
 /// Each algorithm processes one stereo sample pair at a time (tick-based),
@@ -477,6 +529,27 @@ pub trait ReverbAlgorithm: Send {
     /// Push NonLinear engine params. No-op outside NonLinear; returns
     /// `true` if accepted.
     fn set_nonlinear_params(&mut self, params: &NonLinearParams) -> bool {
+        let _ = params;
+        false
+    }
+
+    /// Push Cloud engine params. No-op outside Cloud; returns `true`
+    /// if accepted.
+    fn set_cloud_params(&mut self, params: &CloudParams) -> bool {
+        let _ = params;
+        false
+    }
+
+    /// Push Bloom engine params. No-op outside Bloom; returns `true`
+    /// if accepted.
+    fn set_bloom_params(&mut self, params: &BloomParams) -> bool {
+        let _ = params;
+        false
+    }
+
+    /// Push Chorale engine params. No-op outside Chorale; returns
+    /// `true` if accepted.
+    fn set_chorale_params(&mut self, params: &ChoraleParams) -> bool {
         let _ = params;
         false
     }

@@ -7,8 +7,9 @@ use audiocore_dsp::{AudioConfig, Processor};
 use crossbeam_channel::{Receiver, Sender, TryRecvError};
 
 use crate::algorithm::{
-    AlgorithmParams, AlgorithmType, ConvolutionModParams, ImpulseParams, IrSlot,
-    MagnetoParams, NonLinearParams, ReverbAlgorithm, ShimmerParams,
+    AlgorithmParams, AlgorithmType, BloomParams, ChoraleParams, CloudParams,
+    ConvolutionModParams, ImpulseParams, IrSlot, MagnetoParams, NonLinearParams,
+    ReverbAlgorithm, ShimmerParams,
 };
 use crate::algorithms;
 use crate::ir::engine::{ProcessedIr, ReshapeJob};
@@ -99,6 +100,15 @@ pub struct ReverbChain {
     /// BigSky MX NonLinear params (chop / gate speed / late stage).
     /// Only consumed by NonLinear; defaults are transparent.
     pub nonlinear: NonLinearParams,
+    /// BigSky MX Cloud params (Ensemble). Only consumed by Cloud;
+    /// default is transparent.
+    pub cloud: CloudParams,
+    /// BigSky MX Bloom params (Harmonics). Only consumed by Bloom;
+    /// default is transparent.
+    pub bloom: BloomParams,
+    /// BigSky MX Chorale params (Choir level / voice / mod
+    /// randomization). Only consumed by Chorale; defaults transparent.
+    pub chorale: ChoraleParams,
 
     // Global controls
     /// Pre-delay in milliseconds (0-500).
@@ -244,6 +254,9 @@ impl ReverbChain {
             shimmer: ShimmerParams::default(),
             magneto: MagnetoParams::default(),
             nonlinear: NonLinearParams::default(),
+            cloud: CloudParams::default(),
+            bloom: BloomParams::default(),
+            chorale: ChoraleParams::default(),
             predelay_ms: 0.0,
             mix: 0.5,
             width: 1.0,
@@ -442,6 +455,9 @@ impl ReverbChain {
         self.algorithm.set_shimmer_params(&self.shimmer);
         self.algorithm.set_magneto_params(&self.magneto);
         self.algorithm.set_nonlinear_params(&self.nonlinear);
+        self.algorithm.set_cloud_params(&self.cloud);
+        self.algorithm.set_bloom_params(&self.bloom);
+        self.algorithm.set_chorale_params(&self.chorale);
     }
 
     /// Synchronous load helpers reset the impulse params (new IR ⇒
@@ -544,6 +560,9 @@ impl Processor for ReverbChain {
         self.algorithm.set_shimmer_params(&self.shimmer);
         self.algorithm.set_magneto_params(&self.magneto);
         self.algorithm.set_nonlinear_params(&self.nonlinear);
+        self.algorithm.set_cloud_params(&self.cloud);
+        self.algorithm.set_bloom_params(&self.bloom);
+        self.algorithm.set_chorale_params(&self.chorale);
     }
 
     fn process(&mut self, left: &mut [f64], right: &mut [f64]) {

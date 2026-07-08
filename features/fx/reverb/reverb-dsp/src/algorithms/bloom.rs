@@ -11,7 +11,8 @@
 //! - Diffusers in feedback paths mean each echo pass gets progressively smeared
 //! - Longer feedback = more bloom time
 
-use crate::algorithm::{AlgorithmParams, ReverbAlgorithm};
+use crate::algorithm::{AlgorithmParams, BloomParams, ReverbAlgorithm};
+use pitch_dsp::pog::{OctaveShift, PolyOctave};
 use crate::primitives::allpass_diffuser::AllpassDiffuser;
 use crate::primitives::one_pole::Lp1;
 use audiocore_dsp::dc_blocker::DcBlocker;
@@ -89,6 +90,14 @@ pub struct Bloom {
     size_scale: f64,
     stereo_width: f64,
 
+    /// BigSky MX "Harmonics": POG filter-bank overtone generator fed
+    /// into the trail (octave + double-octave partials — the POG bank
+    /// resynthesizes octaves; a true fifth isn't available, noted as
+    /// the closest honest match). Level-gated: 0 = no tick, no CPU.
+    harmonics_level: f64,
+    pog_up1: PolyOctave,
+    pog_up2: PolyOctave,
+
     sample_rate: f64,
 }
 
@@ -121,6 +130,15 @@ impl Bloom {
         tone_lp_l.set_freq(12000.0, sample_rate);
         tone_lp_r.set_freq(12000.0, sample_rate);
 
+        let mut pog_up1 = PolyOctave::new();
+        pog_up1.shift = OctaveShift::Up1;
+        pog_up1.mix = 1.0;
+        pog_up1.update(sample_rate);
+        let mut pog_up2 = PolyOctave::new();
+        pog_up2.shift = OctaveShift::Up2;
+        pog_up2.mix = 1.0;
+        pog_up2.update(sample_rate);
+
         Self {
             input_diffuser_l,
             input_diffuser_r,
@@ -133,6 +151,9 @@ impl Bloom {
             decay_gain: 0.7,
             size_scale: 1.0,
             stereo_width: 0.5,
+            harmonics_level: 0.0,
+            pog_up1,
+            pog_up2,
             sample_rate,
         }
     }
@@ -170,11 +191,14 @@ impl ReverbAlgorithm for Bloom {
         self.fb_r = [0.0; NUM_LINES];
         self.tone_lp_l.reset();
         self.tone_lp_r.reset();
+        self.pog_up1.reset();
+        self.pog_up2.reset();
     }
 
     fn set_sample_rate(&mut self, sample_rate: f64) {
-        self.sample_rate = sample_rate;
+        let harmonics = self.harmonics_level;
         *self = Self::new(sample_rate);
+        self.harmonics_level = harmonics;
     }
 
     fn set_params(&mut self, params: &AlgorithmParams) {
@@ -251,11 +275,34 @@ impl ReverbAlgorithm for Bloom {
         self.stereo_width = params.extra_b;
     }
 
+    fn set_bloom_params(&mut self, params: &BloomParams) -> bool {
+        self.harmonics_level = params.harmonics.clamp(0.0, 1.0);
+        true
+    }
+
     #[inline]
     fn tick(&mut self, left: f64, right: f64) -> (f64, f64) {
         // === Step 1: Input diffusion ===
-        let diffused_l = self.input_diffuser_l.tick(left);
-        let diffused_r = self.input_diffuser_r.tick(right);
+        let mut diffused_l = self.input_diffuser_l.tick(left);
+        let mut diffused_r = self.input_diffuser_r.tick(right);
+
+        // === Step 1.5: Harmonics — overtone partials into the trail ===
+        // The POG bank analyzes the diffused input and injects octave
+        // partials alongside it, so the overtones bloom through the
+        // same feedback network as the fundamental.
+        let h = self.harmonics_level;
+        if h > 1e-9 {
+            let mono = (diffused_l + diffused_r) * 0.5;
+            let mut over = self.pog_up1.tick(mono);
+            // The second octave fades in over the top half of the knob.
+            let up2_amt = ((h - 0.5) * 2.0).max(0.0);
+            if up2_amt > 0.0 {
+                over += self.pog_up2.tick(mono) * up2_amt * 0.6;
+            }
+            let inject = over * h * 0.9;
+            diffused_l += inject;
+            diffused_r += inject;
+        }
 
         // === Step 2: Read feedback from delay lines ===
         // Apply internal cross-coupling between voices for density

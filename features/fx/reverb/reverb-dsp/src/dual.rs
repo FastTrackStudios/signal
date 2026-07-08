@@ -119,6 +119,9 @@ impl DualReverb {
         let params = src.params;
         let conv_mod = src.conv_mod;
         let shimmer = src.shimmer;
+        let cloud = src.cloud;
+        let bloom = src.bloom;
+        let chorale = src.chorale;
         let magneto = src.magneto;
         let nonlinear = src.nonlinear;
         let predelay_ms = src.predelay_ms;
@@ -143,6 +146,9 @@ impl DualReverb {
         dst.params = params;
         dst.conv_mod = conv_mod;
         dst.shimmer = shimmer;
+        dst.cloud = cloud;
+        dst.bloom = bloom;
+        dst.chorale = chorale;
         dst.magneto = magneto;
         dst.nonlinear = nonlinear;
         dst.predelay_ms = predelay_ms;

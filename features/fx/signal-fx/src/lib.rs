@@ -301,6 +301,15 @@ const REVERB_PARAMS: &[ParamSpec] = &[
     ParamSpec { id: 26, name: "nl_late_speed", min: 0.0, max: 1.0, default: 0.5 },
     ParamSpec { id: 27, name: "nl_late_decay", min: 0.0, max: 1.0, default: 0.5 },
     ParamSpec { id: 28, name: "nl_late_level", min: 0.0, max: 1.0, default: 0.0 },
+    // BigSky MX input-analysis generators: Cloud Ensemble (pitch-tracked
+    // synthetic string layer), Bloom Harmonics (overtone generator on
+    // the trail), Chorale Choir level / Voice (0 Tenor / 1 Soprano) /
+    // Mod (per-voice randomization).
+    ParamSpec { id: 29, name: "cloud_ensemble", min: 0.0, max: 1.0, default: 0.0 },
+    ParamSpec { id: 30, name: "bloom_harmonics", min: 0.0, max: 1.0, default: 0.0 },
+    ParamSpec { id: 31, name: "cho_choir", min: 0.0, max: 1.0, default: 0.3 },
+    ParamSpec { id: 32, name: "cho_voice", min: 0.0, max: 1.0, default: 0.0 },
+    ParamSpec { id: 33, name: "cho_mod", min: 0.0, max: 1.0, default: 0.0 },
 ];
 
 /// Native Reverb block — wraps [`reverb::DualReverb`] (two full chains +
@@ -452,6 +461,30 @@ impl NativeReverb {
             }
             28 => {
                 self.rev.a.nonlinear.late_level = v.clamp(0.0, 1.0);
+                self.rev.a.update_params();
+            }
+            29 => {
+                self.rev.a.cloud.ensemble = v.clamp(0.0, 1.0);
+                self.rev.a.update_params();
+            }
+            30 => {
+                self.rev.a.bloom.harmonics = v.clamp(0.0, 1.0);
+                self.rev.a.update_params();
+            }
+            31 => {
+                self.rev.a.chorale.choir_level = Some(v.clamp(0.0, 1.0));
+                self.rev.a.update_params();
+            }
+            32 => {
+                self.rev.a.chorale.voice = if v >= 0.5 {
+                    reverb::ChoirVoice::Soprano
+                } else {
+                    reverb::ChoirVoice::Tenor
+                };
+                self.rev.a.update_params();
+            }
+            33 => {
+                self.rev.a.chorale.mod_amount = v.clamp(0.0, 1.0);
                 self.rev.a.update_params();
             }
             _ => {}
