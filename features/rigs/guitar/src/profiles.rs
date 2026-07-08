@@ -544,3 +544,26 @@ pub fn default_setlists() -> Vec<SetlistDef> {
         },
     ]
 }
+
+/// MIDI footswitch mapping — `midi.styx`. `tap_ccs` are the five gesture
+/// switches in order (stacks 1–4 + tap tempo; hold = the hold layer);
+/// `direct` maps extra CCs straight onto hold-layer slots
+/// (0 Ambient / 1 FX toggle / 2 next song / 3 boost / 4 tuner).
+#[derive(Clone, Debug, Facet)]
+pub struct MidiMapDef {
+    pub tap_ccs: Vec<u32>,
+    pub direct: Vec<DirectCcDef>,
+}
+
+#[derive(Clone, Debug, Facet)]
+pub struct DirectCcDef {
+    pub cc: u32,
+    pub slot: u32,
+}
+
+pub fn default_midi_map() -> MidiMapDef {
+    MidiMapDef {
+        tap_ccs: vec![101, 102, 103, 104, 105],
+        direct: (0..5).map(|i| DirectCcDef { cc: 106 + i, slot: i }).collect(),
+    }
+}

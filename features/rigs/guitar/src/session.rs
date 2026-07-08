@@ -90,6 +90,8 @@ pub struct GuitarRigBackend {
     tuner_visible: Arc<Mutex<bool>>,
     /// Deferred profile save (live-edit auto-save marks; pump flushes).
     library_dirty: Arc<std::sync::atomic::AtomicBool>,
+    /// Footswitch CC mapping (midi.styx — remappable).
+    midi_map: Arc<Mutex<crate::profiles::MidiMapDef>>,
     /// Headphone-cue module state (volume/self-mix staged; mute applied).
     headphone: Arc<Mutex<HeadphoneState>>,
     /// Master output trim (dB) — applied with the patch base + mute.
@@ -132,6 +134,7 @@ impl GuitarRigBackend {
             drive_presets: Arc::new(Mutex::new(lib.drive_presets)),
             tuner_visible: Arc::new(Mutex::new(false)),
             library_dirty: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            midi_map: Arc::new(Mutex::new(lib.midi_map)),
             headphone: Arc::new(Mutex::new(HeadphoneState::default())),
             master_trim: Arc::new(Mutex::new(0.0)),
             midi_log: Arc::new(Mutex::new(Vec::new())),
@@ -200,20 +203,24 @@ impl GuitarRigBackend {
                         }
                     }
                     for (cc, val) in events {
-                        if !(101..=110).contains(&cc) {
+                        // Remappable mapping (midi.styx): gesture switches
+                        // (tap/hold) + direct hold-layer slots.
+                        let map = backend.midi_map.lock().unwrap().clone();
+                        let gesture = map.tap_ccs.iter().position(|c| *c == cc as u32);
+                        let direct = map.direct.iter().find(|d| d.cc == cc as u32).map(|d| d.slot);
+                        let Some(idx) = gesture.or_else(|| direct.map(|s| s as usize + 5)) else {
                             continue;
-                        }
-                        let idx = (cc - 101) as usize;
+                        };
+                        let idx = idx.min(cc_down.len() - 1);
                         let down = val > 0;
                         if down == cc_down[idx] {
                             continue; // momentary repeat — not an edge
                         }
                         cc_down[idx] = down;
-                        match cc {
-                            // Switches 1–5: tap on short release, hold-layer
-                            // action at 500 ms (mirrors the UI tiles).
-                            101..=105 => {
-                                let sw = idx;
+                        match gesture {
+                            // Gesture switches: tap on short release,
+                            // hold-layer action at 500 ms (mirrors the UI).
+                            Some(sw) if sw < 5 => {
                                 if down {
                                     sw_down[sw] = Some(std::time::Instant::now());
                                     sw_hold_fired[sw] = false;
@@ -228,11 +235,12 @@ impl GuitarRigBackend {
                                     sw_down[sw] = None;
                                 }
                             }
-                            // Switches 6–10 mapped directly.
                             _ => {
                                 if down {
-                                    tracing::info!("footswitch {} (cc {cc})", idx + 1);
-                                    backend.hold_layer_action(idx - 5);
+                                    if let Some(slot) = direct {
+                                        tracing::info!("footswitch direct cc {cc} → slot {slot}");
+                                        backend.hold_layer_action(slot as usize);
+                                    }
                                 }
                             }
                         }
@@ -1568,6 +1576,7 @@ impl Rig for GuitarRigBackend {
         *self.drive_presets.lock().unwrap() = lib.drive_presets;
         *self.songs_lib.lock().unwrap() = lib.songs;
         *self.setlists.lock().unwrap() = lib.setlists;
+        *self.midi_map.lock().unwrap() = lib.midi_map;
         let rebuilt = {
             let def = self.profile_def.lock().unwrap();
             let dps = self.drive_presets.lock().unwrap();

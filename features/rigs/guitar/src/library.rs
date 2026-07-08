@@ -20,8 +20,8 @@ use std::path::PathBuf;
 use facet::Facet;
 
 use crate::profiles::{
-    DrivePresetDef, ProfileDef, SetlistDef, SongDef, default_setlists, drive_presets,
-    song_library, worship_def,
+    DrivePresetDef, MidiMapDef, ProfileDef, SetlistDef, SongDef, default_midi_map,
+    default_setlists, drive_presets, song_library, worship_def,
 };
 
 /// The library directory (`SIGNAL_RIG_DIR` overrides).
@@ -57,6 +57,7 @@ pub struct RigLibrary {
     pub drive_presets: Vec<DrivePresetDef>,
     pub songs: Vec<SongDef>,
     pub setlists: Vec<SetlistDef>,
+    pub midi_map: MidiMapDef,
 }
 
 fn read<T: for<'a> Facet<'a>>(file: &str) -> Option<T> {
@@ -117,7 +118,12 @@ impl RigLibrary {
                 write("setlists.styx", &SetlistLib { setlists: setlists.clone() });
                 setlists
             });
-        Self { profile, drive_presets, songs, setlists }
+        let midi_map = read::<MidiMapDef>("midi.styx").unwrap_or_else(|| {
+            let map = default_midi_map();
+            write("midi.styx", &map);
+            map
+        });
+        Self { profile, drive_presets, songs, setlists, midi_map }
     }
 
     pub fn save_profile(profile: &ProfileDef) {
