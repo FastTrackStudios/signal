@@ -1,8 +1,11 @@
 //! Delay chain — composes delay engines, ducking, and diffusion
 //! into a full stereo processor.
 
+use audiocore_dsp::biquad::{Biquad, FilterType};
 use audiocore_dsp::dc_blocker::DcBlocker;
 use audiocore_dsp::delay_line::DelayLine;
+use audiocore_dsp::envelope::EnvelopeFollower;
+use audiocore_dsp::note_sync::NoteValue;
 use audiocore_dsp::smoothing::ParamSmoother;
 use audiocore_dsp::{AudioConfig, Processor};
 
@@ -40,10 +43,87 @@ pub enum HeadMode {
     Mode4,
 }
 
+/// Tempo-sync tap division (TimeLine MX set, plus Free).
+///
+/// `GoldenRatio` and `SilverRatio` divide the quarter note by φ (≈1.618)
+/// and δ (≈2.414) respectively — repeats that never land on the grid,
+/// TimeLine MX's signature anti-rhythmic divisions.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TapDivision {
+    Quarter,
+    DottedEighth,
+    Eighth,
+    Triplet,
+    Sixteenth,
+    GoldenRatio,
+    SilverRatio,
+    /// Ignore tempo; use the engine's `time_ms` directly.
+    Free,
+}
+
+impl TapDivision {
+    pub const COUNT: usize = 8;
+
+    pub fn from_index(i: usize) -> Self {
+        match i {
+            0 => Self::Quarter,
+            1 => Self::DottedEighth,
+            2 => Self::Eighth,
+            3 => Self::Triplet,
+            4 => Self::Sixteenth,
+            5 => Self::GoldenRatio,
+            6 => Self::SilverRatio,
+            _ => Self::Free,
+        }
+    }
+
+    pub fn to_index(self) -> usize {
+        match self {
+            Self::Quarter => 0,
+            Self::DottedEighth => 1,
+            Self::Eighth => 2,
+            Self::Triplet => 3,
+            Self::Sixteenth => 4,
+            Self::GoldenRatio => 5,
+            Self::SilverRatio => 6,
+            Self::Free => 7,
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Quarter => "1/4",
+            Self::DottedEighth => "1/8.",
+            Self::Eighth => "1/8",
+            Self::Triplet => "1/8T",
+            Self::Sixteenth => "1/16",
+            Self::GoldenRatio => "GR",
+            Self::SilverRatio => "SR",
+            Self::Free => "Free",
+        }
+    }
+
+    /// Delay time in ms at the given tempo; `None` for `Free`.
+    pub fn to_ms(self, bpm: f64) -> Option<f64> {
+        let quarter = NoteValue::Quarter.to_ms(bpm);
+        match self {
+            Self::Quarter => Some(quarter),
+            Self::DottedEighth => Some(NoteValue::DottedEighth.to_ms(bpm)),
+            Self::Eighth => Some(NoteValue::Eighth.to_ms(bpm)),
+            Self::Triplet => Some(NoteValue::TripletEighth.to_ms(bpm)),
+            Self::Sixteenth => Some(NoteValue::Sixteenth.to_ms(bpm)),
+            Self::GoldenRatio => Some(quarter / 1.618_033_988_749_895),
+            Self::SilverRatio => Some(quarter / 2.414_213_562_373_095),
+            Self::Free => None,
+        }
+    }
+}
+
 /// Full stereo delay processing chain.
 ///
-/// Signal flow: Input → InputLevel → Diffusion(loop) → Stereo Routing →
-/// Engine → Diffusion(post) → Accent → Duck → LR Offset → Width → OutputLevel → Mix
+/// Signal flow: Input → Swell → InputLevel → Diffusion(loop) → Stereo Routing →
+/// Engine → Diffusion(post) → Accent → Duck → RepeatDyn → HighPass →
+/// LR Offset → Width → Pan → OutputLevel → Mix
 pub struct DelayChain {
     // Delay engines
     pub delay_l: DelayEngine,
@@ -99,6 +179,33 @@ pub struct DelayChain {
     /// Output level: scales the wet signal before mixing (0.0–2.0, default 1.0).
     pub output_level: f64,
 
+    // --- TimeLine MX common parameters ---
+    /// Host tempo in BPM. `None` = no sync; engines use `time_ms`.
+    pub tempo_bpm: Option<f64>,
+    /// Tap division for the left delay line (used when tempo is set).
+    pub tap_div_l: TapDivision,
+    /// Tap division for the right delay line (used when tempo is set).
+    pub tap_div_r: TapDivision,
+    /// Swell: input-triggered wet fade-in time in seconds (0 = off,
+    /// TimeLine range 0.10–4.0).
+    pub swell_time_s: f64,
+    /// Freeze / infinite hold: repeats hold forever, loop input muted.
+    pub freeze: bool,
+    /// Repeat dynamics: the tail tapers off faster than exponential.
+    /// First-pass approximation on the wet output (not inside the loop).
+    pub repeat_dynamics: bool,
+    /// Post-delay wet high-pass in Hz (0 = off, TimeLine range 20–900).
+    pub high_pass_hz: f64,
+    /// Left line output pan (-1.0 hard left … 1.0 hard right).
+    /// Default -1.0 preserves the classic hard-L routing.
+    pub pan_l: f64,
+    /// Right line output pan. Default 1.0 (hard right).
+    pub pan_r: f64,
+    /// Duck GATE mode (TimeLine "Ducking Feedback"): while playing, the
+    /// wet path ducks fully so only the tail after you stop is heard.
+    /// First-pass approximation: acts on the wet output, not the regen.
+    pub duck_gate: bool,
+
     // Internal
     diffuser_l: Diffuser,
     diffuser_r: Diffuser,
@@ -130,6 +237,25 @@ pub struct DelayChain {
     // DC inside that outer loop too.
     pingpong_dc_l: DcBlocker,
     pingpong_dc_r: DcBlocker,
+
+    // --- TimeLine MX common-param internals ---
+    /// Tempo-derived effective delay times (ms), computed in `update()`.
+    eff_time_l: f64,
+    eff_time_r: f64,
+    /// Freeze engage/disengage ramp (0 = live, 1 = frozen), ~30 ms.
+    freeze_smoother: ParamSmoother,
+    /// Swell trigger detector on the dry input.
+    swell_env: EnvelopeFollower,
+    swell_gate_open: bool,
+    /// Swell ramp 0..1, restarted on each detected note onset.
+    swell_ramp: f64,
+    /// Repeat-dynamics envelope on the wet signal.
+    repeat_dyn_env: EnvelopeFollower,
+    /// Post-delay wet high-pass.
+    hp_l: Biquad,
+    hp_r: Biquad,
+    pan_l_smoother: ParamSmoother,
+    pan_r_smoother: ParamSmoother,
 }
 
 impl DelayChain {
@@ -161,6 +287,17 @@ impl DelayChain {
             input_level: 1.0,
             output_level: 1.0,
 
+            tempo_bpm: None,
+            tap_div_l: TapDivision::Free,
+            tap_div_r: TapDivision::Free,
+            swell_time_s: 0.0,
+            freeze: false,
+            repeat_dynamics: false,
+            high_pass_hz: 0.0,
+            pan_l: -1.0,
+            pan_r: 1.0,
+            duck_gate: false,
+
             diffuser_l: Diffuser::new(48000.0, false),
             diffuser_r: Diffuser::new(48000.0, true),
             ducker: DuckingFollower::new(),
@@ -186,6 +323,18 @@ impl DelayChain {
 
             pingpong_dc_l: DcBlocker::new(),
             pingpong_dc_r: DcBlocker::new(),
+
+            eff_time_l: 250.0,
+            eff_time_r: 250.0,
+            freeze_smoother: ParamSmoother::new(0.0),
+            swell_env: EnvelopeFollower::new(0.0),
+            swell_gate_open: false,
+            swell_ramp: 1.0,
+            repeat_dyn_env: EnvelopeFollower::new(0.0),
+            hp_l: Biquad::new(),
+            hp_r: Biquad::new(),
+            pan_l_smoother: ParamSmoother::new(-1.0),
+            pan_r_smoother: ParamSmoother::new(1.0),
         }
     }
 
@@ -222,6 +371,17 @@ impl Processor for DelayChain {
         self.pingpong_fb_smoother.reset(self.pingpong_feedback);
         self.pingpong_dc_l.reset();
         self.pingpong_dc_r.reset();
+
+        self.freeze_smoother
+            .reset(if self.freeze { 1.0 } else { 0.0 });
+        self.swell_env.reset(0.0);
+        self.swell_gate_open = false;
+        self.swell_ramp = if self.swell_time_s > 0.0 { 0.0 } else { 1.0 };
+        self.repeat_dyn_env.reset(0.0);
+        self.hp_l.reset();
+        self.hp_r.reset();
+        self.pan_l_smoother.reset(self.pan_l);
+        self.pan_r_smoother.reset(self.pan_r);
     }
 
     fn update(&mut self, config: AudioConfig) {
@@ -241,8 +401,57 @@ impl Processor for DelayChain {
         self.delay_r.head2_enabled = h2;
         self.delay_r.head3_enabled = h3;
 
+        // Tempo sync: derive effective delay times, clamped to each
+        // style's valid range (TimeLine MX per-machine time ranges).
+        let tempo = self.tempo_bpm;
+        let synced = |div: TapDivision, fallback: f64| -> f64 {
+            match tempo {
+                Some(bpm) => div.to_ms(bpm).unwrap_or(fallback),
+                None => fallback,
+            }
+        };
+        let (min_l, max_l) = self.delay_l.style().time_range_ms();
+        let (min_r, max_r) = self.delay_r.style().time_range_ms();
+        self.eff_time_l = synced(self.tap_div_l, self.delay_l.time_ms).clamp(min_l, max_l);
+        self.eff_time_r = synced(self.tap_div_r, self.delay_r.time_ms).clamp(min_r, max_r);
+        // Sync owns the time param (like tap tempo latching a knob): the
+        // engines' internal smoothers seed from time_ms on first update.
+        self.delay_l.time_ms = self.eff_time_l;
+        self.delay_r.time_ms = self.eff_time_r;
+
+        // Freeze: engines pin feedback and bypass loop filters.
+        self.delay_l.frozen = self.freeze;
+        self.delay_r.frozen = self.freeze;
+
         self.delay_l.update(config.sample_rate);
         self.delay_r.update(config.sample_rate);
+
+        // Post-delay wet high-pass.
+        if self.high_pass_hz > 0.0 {
+            let hz = self.high_pass_hz.clamp(20.0, 900.0);
+            self.hp_l
+                .set(FilterType::Highpass, hz, 0.707, config.sample_rate);
+            self.hp_r
+                .set(FilterType::Highpass, hz, 0.707, config.sample_rate);
+        }
+
+        // Freeze ramp ~30 ms (click-free engage, mirrors reverb freeze).
+        self.freeze_smoother.set_time_ms(30.0, config.sample_rate);
+        self.freeze_smoother
+            .set_target(if self.freeze { 1.0 } else { 0.0 });
+
+        // Swell trigger detector: fast attack, moderate release.
+        self.swell_env
+            .set_times_ms(5.0, 200.0, config.sample_rate);
+
+        // Repeat-dynamics envelope: track the wet tail level.
+        self.repeat_dyn_env
+            .set_times_ms(10.0, 300.0, config.sample_rate);
+
+        for s in [&mut self.pan_l_smoother, &mut self.pan_r_smoother] {
+            s.set_time_ms(5.0, config.sample_rate);
+            s.set_epsilon(1e-4);
+        }
 
         // Diffuser::update resizes its buffers itself if the sample rate
         // grew — no per-update reallocation.
@@ -285,14 +494,21 @@ impl Processor for DelayChain {
     fn process(&mut self, left: &mut [f64], right: &mut [f64]) {
         let n = left.len().min(right.len());
 
-        // Cache delay times in samples for accent/groove phase tracking
-        let delay_time_samples_l = self.delay_l.time_ms * self.sample_rate / 1000.0;
-        let delay_time_samples_r = self.delay_r.time_ms * self.sample_rate / 1000.0;
+        // Cache delay times in samples for accent/groove phase tracking.
+        // Effective times include tempo sync + style range clamps.
+        let delay_time_samples_l = self.eff_time_l * self.sample_rate / 1000.0;
+        let delay_time_samples_r = self.eff_time_r * self.sample_rate / 1000.0;
 
-        // Base (user) delay times; per-sample modulation is passed via
+        // Base delay times; per-sample modulation is passed via
         // tick_at without touching the public params.
-        let base_time_l = self.delay_l.time_ms;
-        let base_time_r = self.delay_r.time_ms;
+        let base_time_l = self.eff_time_l;
+        let base_time_r = self.eff_time_r;
+
+        let swell_inc = if self.swell_time_s > 0.0 {
+            1.0 / (self.swell_time_s.clamp(0.10, 4.0) * self.sample_rate)
+        } else {
+            0.0
+        };
 
         for i in 0..n {
             let dry_l = left[i];
@@ -310,9 +526,31 @@ impl Processor for DelayChain {
             self.pingpong_fb_smoother.set_target(self.pingpong_feedback);
             let pingpong_feedback = self.pingpong_fb_smoother.tick();
 
+            // --- Freeze: mute the loop input while frozen (ramped) ---
+            let freeze_amt = self.freeze_smoother.tick();
+            let live_gain = 1.0 - freeze_amt;
+
+            // --- Swell: input-triggered fade-in on the wet input ---
+            let swell_gain = if swell_inc > 0.0 {
+                let env = self.swell_env.tick((dry_l.abs() + dry_r.abs()) * 0.5);
+                if env > 0.02 {
+                    if !self.swell_gate_open {
+                        // New note onset: restart the ramp.
+                        self.swell_gate_open = true;
+                        self.swell_ramp = 0.0;
+                    }
+                } else if env < 0.01 {
+                    self.swell_gate_open = false;
+                }
+                self.swell_ramp = (self.swell_ramp + swell_inc).min(1.0);
+                self.swell_ramp * self.swell_ramp
+            } else {
+                1.0
+            };
+
             // --- Input level ---
-            let scaled_l = dry_l * input_level;
-            let scaled_r = dry_r * input_level;
+            let scaled_l = dry_l * input_level * swell_gain * live_gain;
+            let scaled_r = dry_r * input_level * swell_gain * live_gain;
 
             // --- Diffusion (loop mode: applied to input before delay) ---
             let (diff_in_l, diff_in_r) = if self.diffusion_in_loop && self.diffusion_enabled {
@@ -416,12 +654,41 @@ impl Processor for DelayChain {
                 }
             }
 
-            // Ducking
+            // Ducking. GATE mode fully ducks the wet path while playing
+            // (first-pass approximation of TimeLine's feedback ducking —
+            // the tail after you stop playing is what comes through).
             if self.ducking_enabled {
                 let input_level = (dry_l.abs() + dry_r.abs()) * 0.5;
                 let duck_gain = self.ducker.tick(input_level);
+                let duck_gain = if self.duck_gate {
+                    // Normalize against the configured amount so the gate
+                    // fully closes regardless of the amount setting.
+                    let amt = self.ducker.amount.max(1e-6);
+                    ((duck_gain - (1.0 - amt)) / amt).clamp(0.0, 1.0)
+                } else {
+                    duck_gain
+                };
                 wet_l *= duck_gain;
                 wet_r *= duck_gain;
+            }
+
+            // --- Repeat dynamics: taper the tail faster than exponential.
+            // Below the knee, the wet gain drops expansively (1.5 power),
+            // so quiet repeats trail off quickly instead of lingering. ---
+            if self.repeat_dynamics {
+                let env = self.repeat_dyn_env.tick((wet_l.abs() + wet_r.abs()) * 0.5);
+                const KNEE: f64 = 0.1;
+                if env < KNEE {
+                    let trim = (env / KNEE).powf(1.5);
+                    wet_l *= trim;
+                    wet_r *= trim;
+                }
+            }
+
+            // --- Post-delay wet high-pass ---
+            if self.high_pass_hz > 0.0 {
+                wet_l = self.hp_l.tick(wet_l, 0);
+                wet_r = self.hp_r.tick(wet_r, 1);
             }
 
             // --- LR offset: delay the R channel ---
@@ -441,6 +708,21 @@ impl Processor for DelayChain {
                 let side = (wet_l - wet_r) * 0.5;
                 wet_l = mid + side * width;
                 wet_r = mid - side * width;
+            }
+
+            // --- Per-line pan (equal power). Defaults (-1, +1) are the
+            // classic hard-L/hard-R identity routing. ---
+            self.pan_l_smoother.set_target(self.pan_l);
+            self.pan_r_smoother.set_target(self.pan_r);
+            let pl = self.pan_l_smoother.tick();
+            let pr = self.pan_r_smoother.tick();
+            if (pl + 1.0).abs() > 1e-4 || (pr - 1.0).abs() > 1e-4 {
+                let al = (pl + 1.0) * std::f64::consts::FRAC_PI_4;
+                let ar = (pr + 1.0) * std::f64::consts::FRAC_PI_4;
+                let new_l = wet_l * al.cos() + wet_r * ar.cos();
+                let new_r = wet_l * al.sin() + wet_r * ar.sin();
+                wet_l = new_l;
+                wet_r = new_r;
             }
 
             // --- Output level ---
@@ -531,12 +813,13 @@ mod tests {
     fn stereo_mode_works() {
         let mut c = make_chain();
         c.stereo_mode = StereoMode::Mono;
-        c.delay_l.time_ms = 50.0;
-        c.delay_r.time_ms = 50.0;
+        // 80 ms: inside every style's valid time range (min is 60 ms).
+        c.delay_l.time_ms = 80.0;
+        c.delay_r.time_ms = 80.0;
         c.update(config());
 
         // Send signal only to left
-        let n = 9600;
+        let n = 19200;
         let mut l: Vec<f64> = (0..n).map(|i| if i < 100 { 1.0 } else { 0.0 }).collect();
         let mut r = vec![0.0; n];
 
@@ -649,12 +932,12 @@ mod tests {
     #[test]
     fn width_control() {
         let mut c = make_chain();
-        c.delay_l.time_ms = 50.0;
-        c.delay_r.time_ms = 75.0; // Different times for L/R
+        c.delay_l.time_ms = 80.0;
+        c.delay_r.time_ms = 120.0; // Different times for L/R
         c.width = 2.0; // Extra wide
         c.update(config());
 
-        let n = 9600;
+        let n = 19200;
         let mut l: Vec<f64> = (0..n)
             .map(|i| (2.0 * PI * 440.0 * i as f64 / SR).sin() * 0.5)
             .collect();
@@ -701,6 +984,209 @@ mod tests {
                 "{:?} style should produce output in chain: energy={energy}",
                 style
             );
+        }
+    }
+
+    #[test]
+    fn tap_division_math() {
+        // 120 BPM: quarter = 500 ms.
+        assert!((TapDivision::Quarter.to_ms(120.0).unwrap() - 500.0).abs() < 1e-9);
+        assert!((TapDivision::DottedEighth.to_ms(120.0).unwrap() - 375.0).abs() < 1e-9);
+        assert!((TapDivision::Eighth.to_ms(120.0).unwrap() - 250.0).abs() < 1e-9);
+        assert!((TapDivision::Triplet.to_ms(120.0).unwrap() - 500.0 / 3.0).abs() < 1e-9);
+        assert!((TapDivision::Sixteenth.to_ms(120.0).unwrap() - 125.0).abs() < 1e-9);
+        // Golden/Silver: quarter divided by φ / δ.
+        assert!((TapDivision::GoldenRatio.to_ms(120.0).unwrap() - 309.016_994).abs() < 1e-3);
+        assert!((TapDivision::SilverRatio.to_ms(120.0).unwrap() - 207.106_781).abs() < 1e-3);
+        assert!(TapDivision::Free.to_ms(120.0).is_none());
+
+        for i in 0..TapDivision::COUNT {
+            assert_eq!(TapDivision::from_index(i).to_index(), i);
+        }
+    }
+
+    #[test]
+    fn tempo_sync_sets_delay_time() {
+        let mut c = make_chain();
+        c.set_style(DelayStyle::Clean);
+        c.delay_l.time_ms = 999.0; // Should be ignored when synced
+        c.delay_r.time_ms = 999.0;
+        c.tempo_bpm = Some(120.0);
+        c.tap_div_l = TapDivision::Eighth; // 250 ms
+        c.tap_div_r = TapDivision::Eighth;
+        c.mix = 1.0;
+        c.update(config());
+
+        let n = 24000; // 500 ms
+        let mut l: Vec<f64> = (0..n).map(|i| if i == 0 { 1.0 } else { 0.0 }).collect();
+        let mut r = l.clone();
+        c.process(&mut l, &mut r);
+
+        let expected = (250.0 * SR / 1000.0) as usize;
+        let peak = l
+            .iter()
+            .enumerate()
+            .skip(1000)
+            .max_by(|(_, a), (_, b)| a.abs().partial_cmp(&b.abs()).unwrap())
+            .map(|(i, _)| i)
+            .unwrap();
+        assert!(
+            (peak as i64 - expected as i64).unsigned_abs() < 480,
+            "synced repeat at {peak}, expected near {expected}"
+        );
+    }
+
+    #[test]
+    fn freeze_holds_energy_and_disengages() {
+        let mut c = make_chain();
+        c.set_style(DelayStyle::Clean);
+        c.delay_l.time_ms = 100.0;
+        c.delay_r.time_ms = 100.0;
+        c.delay_l.feedback = 0.5;
+        c.delay_r.feedback = 0.5;
+        c.mix = 1.0;
+        c.update(config());
+        c.reset();
+
+        // Feed a burst, then freeze.
+        let n = 4800;
+        let mut l: Vec<f64> = (0..n).map(|i| if i < 200 { 0.8 } else { 0.0 }).collect();
+        let mut r = l.clone();
+        c.process(&mut l, &mut r);
+
+        c.freeze = true;
+        c.update(config());
+
+        // 5 seconds frozen: energy per delay period should stay flat.
+        let mut energy_first = 0.0;
+        let mut energy_last = 0.0;
+        let period = 4800; // 100 ms
+        for block in 0..50 {
+            let mut fl = vec![0.0; period];
+            let mut fr = vec![0.0; period];
+            c.process(&mut fl, &mut fr);
+            let e: f64 = fl.iter().map(|x| x * x).sum();
+            if block == 2 {
+                energy_first = e;
+            }
+            if block == 49 {
+                energy_last = e;
+            }
+            for &v in &fl {
+                assert!(v.is_finite());
+            }
+        }
+        assert!(energy_first > 1e-6, "frozen loop should hold audio");
+        let db = 10.0 * (energy_last / energy_first).log10();
+        assert!(
+            db.abs() < 0.5,
+            "freeze should hold level: drift {db:.2} dB over ~5 s"
+        );
+
+        // Disengage: tail must decay again.
+        c.freeze = false;
+        c.update(config());
+        let mut tail_energy = 0.0;
+        for _ in 0..50 {
+            let mut fl = vec![0.0; period];
+            let mut fr = vec![0.0; period];
+            c.process(&mut fl, &mut fr);
+            tail_energy = fl.iter().map(|x| x * x).sum();
+        }
+        assert!(
+            tail_energy < energy_last * 0.01,
+            "tail should decay after unfreeze: {tail_energy} vs {energy_last}"
+        );
+    }
+
+    #[test]
+    fn swell_ramps_wet_in() {
+        let run = |swell: f64| -> f64 {
+            let mut c = make_chain();
+            c.set_style(DelayStyle::Clean);
+            c.delay_l.time_ms = 100.0;
+            c.delay_r.time_ms = 100.0;
+            c.mix = 1.0;
+            c.swell_time_s = swell;
+            c.update(config());
+            c.reset();
+
+            // Steady tone; measure early wet energy (first repeat).
+            let n = 12000; // 250 ms
+            let mut l: Vec<f64> = (0..n)
+                .map(|i| (2.0 * PI * 440.0 * i as f64 / SR).sin() * 0.5)
+                .collect();
+            let mut r = l.clone();
+            c.process(&mut l, &mut r);
+            // Window just after the delay time.
+            l[4800..7200].iter().map(|x| x * x).sum()
+        };
+
+        let no_swell = run(0.0);
+        let with_swell = run(2.0);
+        assert!(
+            with_swell < no_swell * 0.25,
+            "2 s swell should suppress the early wet: {with_swell} vs {no_swell}"
+        );
+    }
+
+    #[test]
+    fn repeat_dynamics_shortens_tail() {
+        let run = |rd: bool| -> f64 {
+            let mut c = make_chain();
+            c.set_style(DelayStyle::Clean);
+            c.delay_l.time_ms = 100.0;
+            c.delay_r.time_ms = 100.0;
+            c.delay_l.feedback = 0.7;
+            c.delay_r.feedback = 0.7;
+            c.mix = 1.0;
+            c.repeat_dynamics = rd;
+            c.update(config());
+
+            let n = 96000; // 2 s
+            let mut l: Vec<f64> = (0..n).map(|i| if i < 200 { 0.8 } else { 0.0 }).collect();
+            let mut r = l.clone();
+            c.process(&mut l, &mut r);
+            // Late-tail energy.
+            l[48000..].iter().map(|x| x * x).sum()
+        };
+
+        let normal = run(false);
+        let tapered = run(true);
+        assert!(
+            tapered < normal * 0.5,
+            "repeat dynamics should taper the tail: {tapered} vs {normal}"
+        );
+    }
+
+    #[test]
+    fn new_styles_work_in_chain() {
+        for style in [
+            DelayStyle::Drum,
+            DelayStyle::OilCan,
+            DelayStyle::MultiTap,
+            DelayStyle::Spectral,
+            DelayStyle::Filter,
+        ] {
+            let mut c = DelayChain::new();
+            c.set_style(style);
+            c.delay_l.time_ms = 300.0;
+            c.delay_r.time_ms = 300.0;
+            c.delay_l.feedback = 0.4;
+            c.delay_r.feedback = 0.4;
+            c.mix = 1.0;
+            c.update(config());
+
+            let n = 96000;
+            let mut l: Vec<f64> = (0..n).map(|s| if s < 200 { 0.8 } else { 0.0 }).collect();
+            let mut r = l.clone();
+            c.process(&mut l, &mut r);
+
+            let energy: f64 = l.iter().map(|x| x * x).sum();
+            assert!(energy > 0.001, "{style:?} should produce output in chain");
+            for (i, &v) in l.iter().enumerate() {
+                assert!(v.is_finite(), "{style:?} NaN at {i}");
+            }
         }
     }
 

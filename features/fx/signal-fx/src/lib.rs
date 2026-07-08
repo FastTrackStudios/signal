@@ -377,8 +377,16 @@ impl PluginInstance for NativeReverb {
 
 const DELAY_PARAMS: &[ParamSpec] = &[
     ParamSpec { id: 0, name: "mix", min: 0.0, max: 0.10, default: 0.08 },
-    ParamSpec { id: 1, name: "time", min: 20.0, max: 2000.0, default: 400.0 },
+    ParamSpec { id: 1, name: "time", min: 20.0, max: 2500.0, default: 400.0 },
     ParamSpec { id: 2, name: "feedback", min: 0.0, max: 0.95, default: 0.30 },
+    // TimeLine MX parity params (style index: see delay::DelayStyle).
+    ParamSpec { id: 3, name: "style", min: 0.0, max: 12.0, default: 1.0 },
+    ParamSpec { id: 4, name: "swell", min: 0.0, max: 4.0, default: 0.0 },
+    ParamSpec { id: 5, name: "freeze", min: 0.0, max: 1.0, default: 0.0 },
+    ParamSpec { id: 6, name: "tempo_bpm", min: 0.0, max: 300.0, default: 0.0 },
+    ParamSpec { id: 7, name: "tap_div", min: 0.0, max: 7.0, default: 7.0 },
+    ParamSpec { id: 8, name: "high_pass", min: 0.0, max: 900.0, default: 0.0 },
+    ParamSpec { id: 9, name: "repeat_dyn", min: 0.0, max: 1.0, default: 0.0 },
 ];
 
 /// Native Delay block — wraps [`delay::DelayChain`]. Defaults to a subtle clean
@@ -418,11 +426,25 @@ impl NativeDelay {
                 self.dly.delay_l.feedback = v;
                 self.dly.delay_r.feedback = v;
             }
+            3 => self
+                .dly
+                .set_style(delay::DelayStyle::from_index(v.round().max(0.0) as usize)),
+            4 => self.dly.swell_time_s = v,
+            5 => self.dly.freeze = v > 0.5,
+            6 => self.dly.tempo_bpm = if v > 0.0 { Some(v) } else { None },
+            7 => {
+                let div = delay::TapDivision::from_index(v.round().max(0.0) as usize);
+                self.dly.tap_div_l = div;
+                self.dly.tap_div_r = div;
+            }
+            8 => self.dly.high_pass_hz = v,
+            9 => self.dly.repeat_dynamics = v > 0.5,
             _ => {}
         }
     }
 
-    /// Apply a build-time parameter by name (`mix`/`time`/`feedback`).
+    /// Apply a build-time parameter by name (`mix`/`time`/`feedback`/
+    /// `style`/`swell`/`freeze`/`tempo_bpm`/`tap_div`/`high_pass`/`repeat_dyn`).
     pub fn set_named(&mut self, name: &str, value: f64) {
         if let Some(id) = param_id(DELAY_PARAMS, name) {
             self.set(id, value);

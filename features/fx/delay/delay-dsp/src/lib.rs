@@ -11,17 +11,27 @@
 pub mod bbd_delay;
 pub mod chain;
 pub mod clean_delay;
+pub mod drum_delay;
 pub mod engine;
+pub mod filter_delay;
 mod grain;
 pub mod lofi_delay;
 pub mod modulation;
+pub mod multitap_delay;
+pub mod oilcan_delay;
 pub mod pitch_delay;
 pub mod reverse_delay;
 pub mod rhythm_delay;
 pub mod shimmer_delay;
+pub mod spectral_delay;
 pub mod tape_delay;
 
-pub use chain::{DelayChain, HeadMode};
+pub use chain::{DelayChain, HeadMode, TapDivision};
+pub use drum_delay::{DrumHead, GOLDEN_HEADS, SILVER_HEADS};
 pub use engine::{DelayEngine, DelayStyle};
+pub use filter_delay::{FilterLfoShape, FilterLocation};
 pub use modulation::WobbleShape;
+pub use multitap_delay::{Tap, TapPreset, MAX_TAPS};
+pub use oilcan_delay::OilCanHeads;
+pub use spectral_delay::DensityMode;
 pub use tape_delay::SaturationType;
