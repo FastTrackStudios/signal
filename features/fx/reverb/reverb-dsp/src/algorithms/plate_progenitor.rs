@@ -18,6 +18,7 @@ use crate::algorithm::{AlgorithmParams, ReverbAlgorithm};
 use crate::primitives::allpass::Allpass;
 use crate::primitives::modulated_allpass::ModulatedAllpass;
 use crate::primitives::one_pole::Lp1;
+use audiocore_dsp::dc_blocker::DcBlocker;
 use audiocore_dsp::delay_line::DelayLine;
 
 pub struct PlateProgenitor {
@@ -46,6 +47,9 @@ pub struct PlateProgenitor {
     tank_b_ap4: Allpass,
     tank_b_delay2: DelayLine,
 
+    // DC blockers on the loop cross-feeds.
+    dc_a: DcBlocker,
+    dc_b: DcBlocker,
     decay: f64,
     bass_mult: f64, // Bass decay multiplier
     s: f64,
@@ -173,6 +177,8 @@ impl PlateProgenitor {
             tank_b_ap3,
             tank_b_ap4,
             tank_b_delay2: DelayLine::new(tb_d2_len + 1),
+            dc_a: DcBlocker::new(),
+            dc_b: DcBlocker::new(),
             decay: 0.7,
             bass_mult: 1.0,
             s,
@@ -184,6 +190,8 @@ impl PlateProgenitor {
 impl ReverbAlgorithm for PlateProgenitor {
     fn reset(&mut self) {
         self.bandwidth.reset();
+        self.dc_a.reset();
+        self.dc_b.reset();
         for d in &mut self.input_diffuser {
             d.reset();
         }
@@ -275,8 +283,12 @@ impl ReverbAlgorithm for PlateProgenitor {
         let s = self.s;
 
         // Cross-feed from end of each tank
-        let fb_a = self.tank_b_delay2.read((3467.0 * s) as usize);
-        let fb_b = self.tank_a_delay2.read((3823.0 * s) as usize);
+        let fb_a = self
+            .dc_a
+            .tick(self.tank_b_delay2.read((3467.0 * s) as usize));
+        let fb_b = self
+            .dc_b
+            .tick(self.tank_a_delay2.read((3823.0 * s) as usize));
 
         // ---- Tank A ----
         // AP1 (modulated) → AP2 → Delay1

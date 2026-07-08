@@ -193,6 +193,28 @@ impl RoomStudio {
                 gain: 0.13,
             },
         ];
+        // Alternate tap polarity (Moorer-style): all-positive spike trains
+        // carry a net-positive area = subsonic thump in the IR spectrum.
+        // Alternating signs keeps timing/level, zeroes the DC lobe.
+        let mut taps_l = taps_l;
+        let mut taps_r = taps_r;
+        // Greedy sign balance: flip each tap against the running sum so
+        // the net area stays near zero (plain alternation leaves ~0.4 of
+        // residual area because the gains decay).
+        let mut sum = 0.0;
+        for t in taps_l.iter_mut() {
+            if sum > 0.0 {
+                t.gain = -t.gain;
+            }
+            sum += t.gain;
+        }
+        sum = 0.0;
+        for t in taps_r.iter_mut() {
+            if sum > 0.0 {
+                t.gain = -t.gain;
+            }
+            sum += t.gain;
+        }
         self.er_l.set_taps(&taps_l);
         self.er_r.set_taps(&taps_r);
     }
@@ -275,8 +297,18 @@ impl ReverbAlgorithm for RoomStudio {
         self.fdn_r.set_damping(damp_freq, self.sample_rate);
 
         // Multi-band decay
-        self.fdn_l.set_band_decay(params.band_crossover_hz, params.low_decay_mult, params.high_decay_mult, self.sample_rate);
-        self.fdn_r.set_band_decay(params.band_crossover_hz, params.low_decay_mult, params.high_decay_mult, self.sample_rate);
+        self.fdn_l.set_band_decay(
+            params.band_crossover_hz,
+            params.low_decay_mult,
+            params.high_decay_mult,
+            self.sample_rate,
+        );
+        self.fdn_r.set_band_decay(
+            params.band_crossover_hz,
+            params.low_decay_mult,
+            params.high_decay_mult,
+            self.sample_rate,
+        );
 
         // Bass trapping — extra_a controls bass tightness
         let bass_freq = 80.0 + params.extra_a * 300.0; // 80-380 Hz

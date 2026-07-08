@@ -30,6 +30,15 @@ impl Allpass {
         self.feedback = g;
     }
 
+    /// Read the internal delay buffer at an arbitrary tap point.
+    ///
+    /// Dattorro's plate (1997, Table 2) taps the tank allpasses mid-buffer
+    /// for its output matrix; this exposes that without changing state.
+    #[inline]
+    pub fn tap(&self, delay_samples: usize) -> f64 {
+        self.delay.read(delay_samples.min(self.delay_samples))
+    }
+
     #[inline]
     pub fn tick(&mut self, input: f64) -> f64 {
         let delayed = self.delay.read(self.delay_samples);

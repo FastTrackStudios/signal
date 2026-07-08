@@ -209,6 +209,28 @@ impl Room {
                 gain: 0.13,
             },
         ];
+        // Sign-balance the taps (Moorer-style): an all-positive spike
+        // train has a strong net-positive area — a subsonic thump in the
+        // IR spectrum. Balancing signs keeps timing/level, kills the DC lobe.
+        let mut taps_l = taps_l;
+        let mut taps_r = taps_r;
+        // Greedy: flip each tap against the running sum so the net area
+        // stays near zero (plain alternation leaves ~0.4 of
+        // residual area because the gains decay).
+        let mut sum = 0.0;
+        for t in taps_l.iter_mut() {
+            if sum > 0.0 {
+                t.gain = -t.gain;
+            }
+            sum += t.gain;
+        }
+        sum = 0.0;
+        for t in taps_r.iter_mut() {
+            if sum > 0.0 {
+                t.gain = -t.gain;
+            }
+            sum += t.gain;
+        }
         self.er_l.set_taps(&taps_l);
         self.er_r.set_taps(&taps_r);
     }

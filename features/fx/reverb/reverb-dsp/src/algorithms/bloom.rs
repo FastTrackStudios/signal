@@ -14,6 +14,7 @@
 use crate::algorithm::{AlgorithmParams, ReverbAlgorithm};
 use crate::primitives::allpass_diffuser::AllpassDiffuser;
 use crate::primitives::one_pole::Lp1;
+use audiocore_dsp::dc_blocker::DcBlocker;
 use audiocore_dsp::delay_line::DelayLine;
 
 /// Number of delay lines per channel.
@@ -23,35 +24,6 @@ const NUM_LINES: usize = 4;
 /// These are the core delay times that define the spacing between bloom echoes.
 const BASE_DELAYS_L: [usize; NUM_LINES] = [1453, 2311, 3571, 4909];
 const BASE_DELAYS_R: [usize; NUM_LINES] = [1607, 2539, 3797, 5101];
-
-/// DC blocker: y[n] = x[n] - x[n-1] + R * y[n-1], R close to 1.
-struct DcBlocker {
-    x1: f64,
-    y1: f64,
-    r: f64,
-}
-
-impl DcBlocker {
-    fn new() -> Self {
-        Self {
-            x1: 0.0,
-            y1: 0.0,
-            r: 0.9995,
-        }
-    }
-
-    #[inline]
-    fn tick(&mut self, x: f64) -> f64 {
-        self.y1 = x - self.x1 + self.r * self.y1;
-        self.x1 = x;
-        self.y1
-    }
-
-    fn reset(&mut self) {
-        self.x1 = 0.0;
-        self.y1 = 0.0;
-    }
-}
 
 /// A single feedback delay voice with its own diffuser, damping, and modulation.
 struct BloomVoice {

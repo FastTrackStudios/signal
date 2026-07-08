@@ -4,6 +4,9 @@
 //! Signal flow: input + feedback → ModulatedDelay → [AllpassDiffuser]
 //! → [Biquad LowShelf] → [Biquad HighShelf] → [Lp1 Cutoff] → feedback buffer → output.
 
+use audiocore_dsp::dc_blocker::DcBlocker;
+use audiocore_dsp::denormal::flush;
+
 use super::allpass_diffuser::AllpassDiffuser;
 use super::biquad::{Biquad, FilterType};
 use super::modulated_delay::ModulatedDelay;
@@ -15,6 +18,7 @@ pub struct ReverbLine {
     low_shelf: Biquad,
     high_shelf: Biquad,
     low_pass: Lp1,
+    dc_blocker: DcBlocker,
     feedback_value: f64,
     feedback_coeff: f64,
     pub diffuser_enabled: bool,
@@ -50,6 +54,7 @@ impl ReverbLine {
             low_shelf,
             high_shelf,
             low_pass,
+            dc_blocker: DcBlocker::new(),
             feedback_value: 0.0,
             feedback_coeff: 0.0,
             diffuser_enabled: false,
@@ -61,6 +66,7 @@ impl ReverbLine {
     }
 
     pub fn set_sample_rate(&mut self, sr: f64) {
+        self.delay.set_sample_rate(sr);
         self.diffuser.set_sample_rate(sr);
         self.low_pass.set_sample_rate(sr);
         self.low_shelf.set_sample_rate(sr);
@@ -164,7 +170,8 @@ impl ReverbLine {
             x = self.low_pass.tick(x);
         }
 
-        self.feedback_value = x;
+        // DC-block and denormal-flush the recirculating value.
+        self.feedback_value = flush(self.dc_blocker.tick(x));
 
         if self.tap_post_diffuser {
             output_post
@@ -183,6 +190,7 @@ impl ReverbLine {
         self.low_shelf.clear();
         self.high_shelf.clear();
         self.low_pass.reset();
+        self.dc_blocker.reset();
         self.feedback_value = 0.0;
     }
 

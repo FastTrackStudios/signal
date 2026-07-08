@@ -3,7 +3,9 @@
 //! N parallel delay lines mixed through a unitary feedback matrix
 //! (Householder or Hadamard) with per-line damping filters.
 
+use audiocore_dsp::dc_blocker::DcBlocker;
 use audiocore_dsp::delay_line::DelayLine;
+use audiocore_dsp::denormal::flush;
 
 use super::householder;
 use super::one_pole::Lp1;
@@ -20,6 +22,7 @@ pub struct Fdn {
     delays: Vec<DelayLine>,
     delay_samples: Vec<usize>,
     damping: Vec<Lp1>,
+    dc_blockers: Vec<DcBlocker>,
     feedback: Vec<f64>, // Per-line state (output of delay -> matrix input)
     decay_gain: f64,    // Overall decay multiplier
     mix_matrix: MixMatrix,
@@ -43,6 +46,7 @@ impl Fdn {
             .collect();
         let delay_samples = delay_lengths.to_vec();
         let damping = (0..n).map(|_| Lp1::new()).collect();
+        let dc_blockers = (0..n).map(|_| DcBlocker::new()).collect();
         let band_split = (0..n).map(|_| Lp1::new()).collect();
         let feedback = vec![0.0; n];
 
@@ -50,6 +54,7 @@ impl Fdn {
             delays,
             delay_samples,
             damping,
+            dc_blockers,
             feedback,
             decay_gain: 0.85,
             mix_matrix: matrix,
@@ -91,6 +96,13 @@ impl Fdn {
     pub fn set_damping(&mut self, freq_hz: f64, sample_rate: f64) {
         for d in &mut self.damping {
             d.set_freq(freq_hz, sample_rate);
+        }
+        // Re-tune the in-loop DC blockers while we have the sample rate:
+        // a 10 Hz corner settles ~3x faster after the onset burst than
+        // the default ~4 Hz pole (less infrasonic relaxation drift in
+        // short-room IRs) and still sits below audibility.
+        for dc in &mut self.dc_blockers {
+            dc.set_cutoff(10.0, sample_rate);
         }
     }
 
@@ -143,7 +155,11 @@ impl Fdn {
                 let high = sig - low;
                 sig = low * self.low_decay_mult + high * self.high_decay_mult;
             }
-            self.delays[i].write(input + sig);
+            // Block DC in the recirculating path — long tails otherwise
+            // accumulate subsonic offset (worst with pitch-shifted or
+            // saturated feedback around the FDN).
+            sig = self.dc_blockers[i].tick(sig);
+            self.delays[i].write(flush(input + sig));
         }
 
         output
@@ -159,6 +175,68 @@ impl Fdn {
         for b in &mut self.band_split {
             b.reset();
         }
+        for dc in &mut self.dc_blockers {
+            dc.reset();
+        }
         self.feedback.fill(0.0);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const LENGTHS: [usize; 4] = [1049, 1327, 1559, 1801];
+
+    #[test]
+    fn impulse_decays_to_silence() {
+        let mut fdn = Fdn::new(&LENGTHS, MixMatrix::Householder);
+        fdn.set_decay(0.8);
+        fdn.set_damping(6000.0, 48000.0);
+
+        let mut late = 0.0f64;
+        for n in 0..480_000 {
+            let x = if n == 0 { 1.0 } else { 0.0 };
+            let y = fdn.tick(x);
+            assert!(y.is_finite(), "NaN at {n}");
+            if n > 400_000 {
+                late = late.max(y.abs());
+            }
+        }
+        assert!(late < 1e-6, "10s tail should have decayed: {late}");
+    }
+
+    #[test]
+    fn dc_input_does_not_accumulate() {
+        // Constant DC into a high-feedback FDN: without the in-loop DC
+        // blockers the tail integrates toward a large offset. With them
+        // the output must stay bounded and near-zero-mean.
+        let mut fdn = Fdn::new(&LENGTHS, MixMatrix::Householder);
+        fdn.set_decay(0.98);
+
+        for n in 0..240_000 {
+            let y = fdn.tick(0.5);
+            assert!(y.is_finite());
+            // Direct-path DC (input reaches the output tap of every line)
+            // is expected; unblocked feedback accumulation is not.
+            assert!(y.abs() < 10.0, "output blew up at {n}: {y}");
+        }
+
+        // Once input stops, no offset may remain stored in the loop.
+        let mut sum = 0.0;
+        let mut count = 0.0;
+        for n in 0..480_000 {
+            let y = fdn.tick(0.0);
+            assert!(y.is_finite());
+            if n > 240_000 {
+                sum += y;
+                count += 1.0;
+            }
+        }
+        let mean: f64 = sum / count;
+        assert!(
+            mean.abs() < 1e-4,
+            "loop should hold no DC after input stops: {mean}"
+        );
     }
 }

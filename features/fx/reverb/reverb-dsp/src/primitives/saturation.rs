@@ -12,7 +12,11 @@ pub struct Saturator {
 
 impl Saturator {
     pub fn new() -> Self {
-        Self { drive: 0.0, drive_gain: 1.0, makeup: 1.0 }
+        Self {
+            drive: 0.0,
+            drive_gain: 1.0,
+            makeup: 1.0,
+        }
     }
 
     /// 0.0 = clean, 1.0 = heavy. Internal: pre-gain 1x..8x.
@@ -23,7 +27,9 @@ impl Saturator {
         self.makeup = 1.0 / self.drive_gain.sqrt();
     }
 
-    pub fn drive(&self) -> f64 { self.drive }
+    pub fn drive(&self) -> f64 {
+        self.drive
+    }
 
     #[inline]
     pub fn tick(&self, input: f64) -> f64 {
@@ -35,5 +41,7 @@ impl Saturator {
 }
 
 impl Default for Saturator {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }

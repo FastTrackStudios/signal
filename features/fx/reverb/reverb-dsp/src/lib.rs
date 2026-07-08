@@ -28,5 +28,7 @@ pub mod chain;
 pub mod ir;
 pub mod primitives;
 
-pub use algorithm::{AlgorithmParams, AlgorithmType, ReverbAlgorithm};
+pub use algorithm::{
+    AlgorithmParams, AlgorithmType, ConvolutionModParams, IrSlot, ReverbAlgorithm,
+};
 pub use chain::ReverbChain;

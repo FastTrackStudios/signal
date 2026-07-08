@@ -18,6 +18,7 @@ use crate::algorithm::{AlgorithmParams, ReverbAlgorithm};
 use crate::primitives::allpass::Allpass;
 use crate::primitives::modulated_allpass::ModulatedAllpass;
 use crate::primitives::one_pole::Lp1;
+use audiocore_dsp::dc_blocker::DcBlocker;
 use audiocore_dsp::delay_line::DelayLine;
 
 /// Dattorro plate reverb — complete published topology.
@@ -42,6 +43,10 @@ pub struct Plate {
     tank_b_delay2: DelayLine,     // delay_7 (3163 samples)
 
     // Parameters
+    // DC blockers on the tank cross-feeds — the recirculating
+    // figure-8 otherwise accumulates subsonic offset.
+    dc_a: DcBlocker,
+    dc_b: DcBlocker,
     decay: f64,
     decay_diffusion_1: f64,
     decay_diffusion_2: f64,
@@ -126,6 +131,8 @@ impl Plate {
             tank_b_damp,
             tank_b_ap2,
             tank_b_delay2: DelayLine::new(tb_d2_len + 1),
+            dc_a: DcBlocker::new(),
+            dc_b: DcBlocker::new(),
             decay: 0.7,
             decay_diffusion_1: 0.7,
             decay_diffusion_2: 0.5,
@@ -150,6 +157,8 @@ impl Plate {
 impl ReverbAlgorithm for Plate {
     fn reset(&mut self) {
         self.bandwidth.reset();
+        self.dc_a.reset();
+        self.dc_b.reset();
         for d in &mut self.input_diffuser {
             d.reset();
         }
@@ -221,8 +230,12 @@ impl ReverbAlgorithm for Plate {
         // ---- Read cross-feed from the END of each tank ----
         // Tank A feeds from end of tank_b_delay2, Tank B from end of tank_a_delay2
         let s = self.s;
-        let fb_a = self.tank_b_delay2.read((3163.0 * s) as usize);
-        let fb_b = self.tank_a_delay2.read((3720.0 * s) as usize);
+        let fb_a = self
+            .dc_a
+            .tick(self.tank_b_delay2.read((3163.0 * s) as usize));
+        let fb_b = self
+            .dc_b
+            .tick(self.tank_a_delay2.read((3720.0 * s) as usize));
 
         // ---- Tank A processing ----
         // decay_diffusion_1 AP (modulated)
@@ -245,40 +258,37 @@ impl ReverbAlgorithm for Plate {
         let b_ap2_out = self.tank_b_ap2.tick(b_damped);
         self.tank_b_delay2.write(b_ap2_out);
 
-        // ---- 7-tap output per channel (Dattorro Figure 1) ----
+        // ---- 7-tap output per channel — Dattorro 1997, Table 2 ----
         //
-        // Left output taps:
-        //   +delay_4[266]  +delay_4[2974]  -tank_b_ap2[1913]
-        //   +delay_7[1996] -delay_4[1990]  -tank_a_ap2[187]
-        //   -delay_5[1066]
+        //   yL = a[266] + a[2974] - b[1913] + c[1996]
+        //      - d[1990] - e[187]  - f[1066]
+        //   yR = d[353] + d[3627] - e[1228] + f[2673]
+        //      - a[2111] - b[335]  - c[121]
         //
-        // We can't tap inside the Allpass struct directly, so we tap from
-        // the delay lines adjacent to where the AP outputs feed.
-        // For AP taps we use the delay line that the AP feeds into,
-        // offset by the AP delay length.
-        //
-        // Simplified but correct: tap from all four delay lines.
-        let out_l = self.tank_a_delay1.read((266.0 * s) as usize)
-            + self.tank_a_delay1.read((2974.0 * s) as usize)
+        // where a = delay_6 (tank B delay 1), b = AP 2656 (tank B ap2,
+        // tapped mid-buffer), c = delay_7 (tank B delay 2), d = delay_4
+        // (tank A delay 1), e = AP 1800 (tank A ap2), f = delay_5
+        // (tank A delay 2). Earlier revisions approximated the allpass
+        // taps with adjacent delay lines and had drifted tank/sign
+        // assignments; Allpass::tap restores the published matrix.
+        let out_l = self.tank_b_delay1.read((266.0 * s) as usize)
+            + self.tank_b_delay1.read((2974.0 * s) as usize)
+            - self.tank_b_ap2.tap((1913.0 * s) as usize)
             + self.tank_b_delay2.read((1996.0 * s) as usize)
             - self.tank_a_delay1.read((1990.0 * s) as usize)
-            - self.tank_a_delay2.read((1066.0 * s) as usize)
-            - self.tank_b_delay1.read((1913.0 * s) as usize)
-            - self.tank_a_delay2.read((187.0 * s) as usize);
+            - self.tank_a_ap2.tap((187.0 * s) as usize)
+            - self.tank_a_delay2.read((1066.0 * s) as usize);
 
-        // Right output taps:
-        //   +delay_6[353]  +delay_6[3627]  +delay_5[1228]
-        //   -delay_6[2111] -delay_7[121]   -tank_a_ap2[2111→delay taps]
-        //   -tank_b_ap2[335→delay taps]
-        let out_r = self.tank_b_delay1.read((353.0 * s) as usize)
-            + self.tank_b_delay1.read((3627.0 * s) as usize)
-            + self.tank_a_delay2.read((1228.0 * s) as usize)
+        let out_r = self.tank_a_delay1.read((353.0 * s) as usize)
+            + self.tank_a_delay1.read((3627.0 * s) as usize)
+            - self.tank_a_ap2.tap((1228.0 * s) as usize)
+            + self.tank_a_delay2.read((2673.0 * s) as usize)
             - self.tank_b_delay1.read((2111.0 * s) as usize)
-            - self.tank_b_delay2.read((121.0 * s) as usize)
-            - self.tank_a_delay1.read((2111.0 * s) as usize)
-            - self.tank_b_delay2.read((335.0 * s) as usize);
+            - self.tank_b_ap2.tap((335.0 * s) as usize)
+            - self.tank_b_delay2.read((121.0 * s) as usize);
 
-        // Scale output (7 taps → normalize)
+        // Paper output scale is 0.6; 0.25 preserves this port's level
+        // relative to the other algorithms (chain-level normalization).
         (out_l * 0.25, out_r * 0.25)
     }
 }

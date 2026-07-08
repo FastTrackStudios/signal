@@ -8,8 +8,10 @@ use crate::algorithm::{AlgorithmParams, ReverbAlgorithm};
 use crate::primitives::allpass_diffuser::AllpassDiffuser;
 use crate::primitives::fdn::{Fdn, MixMatrix};
 use crate::primitives::one_pole::Lp1;
-use crate::primitives::pitch_shift::PitchShifter;
 use audiocore_dsp::biquad::{Biquad, FilterType};
+use audiocore_dsp::dc_blocker::DcBlocker;
+use audiocore_dsp::one_pole::OnePoleHp;
+use audiocore_dsp::grain_pitch::GrainPitchShifter;
 
 /// Vowel formant frequencies for "ah", "ee", "oh", "oo"
 const VOWEL_FORMANTS: [[f64; 3]; 4] = [
@@ -26,15 +28,24 @@ pub struct Chorale {
     diffuser_l: AllpassDiffuser,
     diffuser_r: AllpassDiffuser,
     // Pitch shifter
-    shifter_l: PitchShifter,
-    shifter_r: PitchShifter,
+    shifter_l: GrainPitchShifter,
+    shifter_r: GrainPitchShifter,
     // Formant filter bank (3 resonant peaks per channel)
     formants_l: [Biquad; 3],
     formants_r: [Biquad; 3],
-    // Feedback
-    fb_damp: Lp1,
+    // Feedback — per-channel damping (a shared filter would smear L/R
+    // state together) and DC blocking on the pitch-shifted loop.
+    fb_damp_l: Lp1,
+    fb_damp_r: Lp1,
+    fb_dc_l: DcBlocker,
+    fb_dc_r: DcBlocker,
     fb_l: f64,
     fb_r: f64,
+    // Subsonic cleanup on the wet output — the grain-window amplitude
+    // modulation in the pitch loop leaves ~1.5% of IR energy below
+    // 20 Hz without it (IR-metric verified).
+    out_hp_l: OnePoleHp,
+    out_hp_r: OnePoleHp,
     chorale_amount: f64,
     vowel_mix: f64, // 0.0 = "ah", 1.0 = "oo"
     sample_rate: f64,
@@ -49,13 +60,18 @@ impl Chorale {
             fdn_r: Self::make_fdn(sample_rate, true),
             diffuser_l: AllpassDiffuser::with_defaults(sample_rate, 0.7),
             diffuser_r: AllpassDiffuser::with_defaults(sample_rate, 0.7),
-            shifter_l: PitchShifter::new(grain),
-            shifter_r: PitchShifter::new(grain),
+            shifter_l: GrainPitchShifter::new(grain),
+            shifter_r: GrainPitchShifter::new(grain),
             formants_l: [Biquad::new(), Biquad::new(), Biquad::new()],
             formants_r: [Biquad::new(), Biquad::new(), Biquad::new()],
-            fb_damp: Lp1::new(),
+            fb_damp_l: Lp1::new(),
+            fb_damp_r: Lp1::new(),
+            fb_dc_l: DcBlocker::new(),
+            fb_dc_r: DcBlocker::new(),
             fb_l: 0.0,
             fb_r: 0.0,
+            out_hp_l: OnePoleHp::new(24.0, sample_rate),
+            out_hp_r: OnePoleHp::new(24.0, sample_rate),
             chorale_amount: 0.5,
             vowel_mix: 0.0,
             sample_rate,
@@ -65,7 +81,8 @@ impl Chorale {
         chorale.shifter_r.set_speed(2.0);
         chorale.shifter_l.set_grain_ms(60.0, sample_rate);
         chorale.shifter_r.set_grain_ms(60.0, sample_rate);
-        chorale.fb_damp.set_freq(5000.0, sample_rate);
+        chorale.fb_damp_l.set_freq(5000.0, sample_rate);
+        chorale.fb_damp_r.set_freq(5000.0, sample_rate);
         chorale.set_vowel(0.0, sample_rate);
 
         chorale
@@ -91,8 +108,12 @@ impl Chorale {
 
         for i in 0..3 {
             let freq = VOWEL_FORMANTS[lo][i] * (1.0 - frac) + VOWEL_FORMANTS[hi][i] * frac;
-            let gain_db = 12.0;
-            let q = 5.0;
+            // +12 dB / Q 5 peaks inside the feedback loop pushed loop gain
+            // near unity at the formant centers — a 33 dB isolated tail
+            // mode (metallic ringing). 8 dB / Q 3 keeps the vowel color
+            // with the mode down (IR-metric verified).
+            let gain_db = 8.0;
+            let q = 3.0;
             self.formants_l[i].set(FilterType::Peak { gain_db }, freq, q, sample_rate);
             self.formants_r[i].set(FilterType::Peak { gain_db }, freq, q, sample_rate);
         }
@@ -113,7 +134,12 @@ impl ReverbAlgorithm for Chorale {
         for f in &mut self.formants_r {
             f.reset();
         }
-        self.fb_damp.reset();
+        self.fb_damp_l.reset();
+        self.fb_damp_r.reset();
+        self.fb_dc_l.reset();
+        self.fb_dc_r.reset();
+        self.out_hp_l.reset();
+        self.out_hp_r.reset();
         self.fb_l = 0.0;
         self.fb_r = 0.0;
     }
@@ -181,10 +207,10 @@ impl ReverbAlgorithm for Chorale {
             vocal_r = f.tick(vocal_r, 1);
         }
 
-        // Damp and store feedback
-        self.fb_l = self.fb_damp.tick(vocal_l);
-        self.fb_r = self.fb_damp.tick(vocal_r);
+        // Block DC, damp, and store feedback
+        self.fb_l = self.fb_damp_l.tick(self.fb_dc_l.tick(vocal_l));
+        self.fb_r = self.fb_damp_r.tick(self.fb_dc_r.tick(vocal_r));
 
-        (wet_l, wet_r)
+        (self.out_hp_l.tick(wet_l), self.out_hp_r.tick(wet_r))
     }
 }

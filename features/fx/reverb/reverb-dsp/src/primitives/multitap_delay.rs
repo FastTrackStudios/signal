@@ -4,12 +4,17 @@
 //! Supports both manual tap placement and CloudSeed's randomized
 //! tap distribution with phase-randomized gains and exponential decay.
 
+use audiocore_dsp::db::db_to_linear;
+use audiocore_dsp::delay_line::DelayLine;
+
 use super::lcg_random::random_buffer_cross_seed;
 
 /// Maximum number of taps.
 pub const MAX_TAPS: usize = 256;
-/// Buffer size: 2 seconds at 192kHz.
-const DELAY_BUFFER_SIZE: usize = 384000;
+/// Default capacity: 2 seconds at 48kHz. Resized by `set_sample_rate`.
+const DEFAULT_SAMPLE_RATE: f64 = 48000.0;
+/// Buffer length in seconds.
+const BUFFER_SECONDS: f64 = 2.0;
 
 /// A single tap with delay time (in samples) and gain.
 #[derive(Clone, Copy)]
@@ -19,8 +24,7 @@ pub struct Tap {
 }
 
 pub struct MultitapDelay {
-    buffer: Vec<f64>,
-    write_idx: usize,
+    buffer: DelayLine,
     tap_gains: [f64; MAX_TAPS],
     tap_positions: [f64; MAX_TAPS],
     seed_values: Vec<f64>,
@@ -32,10 +36,10 @@ pub struct MultitapDelay {
 }
 
 impl MultitapDelay {
-    pub fn new(_max_delay: usize) -> Self {
+    pub fn new(max_delay: usize) -> Self {
+        let default_len = (DEFAULT_SAMPLE_RATE * BUFFER_SECONDS) as usize;
         let mut mt = Self {
-            buffer: vec![0.0; DELAY_BUFFER_SIZE],
-            write_idx: 0,
+            buffer: DelayLine::new((max_delay + 2).max(default_len)),
             tap_gains: [0.0; MAX_TAPS],
             tap_positions: [0.0; MAX_TAPS],
             seed_values: Vec::new(),
@@ -47,6 +51,15 @@ impl MultitapDelay {
         };
         mt.update_seeds();
         mt
+    }
+
+    /// Resize the buffer for the actual sample rate. Allocates; call from
+    /// setup, never from the audio tick.
+    pub fn set_sample_rate(&mut self, sample_rate: f64) {
+        let len = (sample_rate * BUFFER_SECONDS) as usize;
+        if len > self.buffer.len() {
+            self.buffer = DelayLine::new(len);
+        }
     }
 
     pub fn set_seed(&mut self, seed: u64) {
@@ -101,29 +114,26 @@ impl MultitapDelay {
         let length_scaler = self.length_samples / self.count.max(1) as f64;
         let total_gain = 3.0 / (1.0 + self.count as f64).sqrt() * (1.0 + self.decay * 2.0);
 
-        self.buffer[self.write_idx] = input;
+        self.buffer.write(input);
+        let max_offset = self.buffer.len() - 2;
         let mut output = 0.0;
 
         for j in 0..self.count {
             let offset = self.tap_positions[j] * length_scaler;
             let decay_effective =
                 (-offset / self.length_samples * 3.3).exp() * self.decay + (1.0 - self.decay);
-            let offset_int = (offset as usize).min(DELAY_BUFFER_SIZE - 1);
-            let read_idx = self.write_idx as isize - offset_int as isize;
-            let read_idx = if read_idx < 0 {
-                (read_idx + DELAY_BUFFER_SIZE as isize) as usize
-            } else {
-                read_idx as usize
-            };
-            output += self.buffer[read_idx] * self.tap_gains[j] * decay_effective * total_gain;
+            // +1 because the read is relative to the write that just happened:
+            // read(1) is the sample written this tick (offset 0 in the old code).
+            let read_offset = (offset as usize).min(max_offset) + 1;
+            output +=
+                self.buffer.read(read_offset) * self.tap_gains[j] * decay_effective * total_gain;
         }
 
-        self.write_idx = (self.write_idx + 1) % DELAY_BUFFER_SIZE;
         output
     }
 
     pub fn clear(&mut self) {
-        self.buffer.fill(0.0);
+        self.buffer.clear();
     }
 
     pub fn reset(&mut self) {
@@ -138,7 +148,7 @@ impl MultitapDelay {
                 let phase = if self.seed_values[s] < 0.5 { 1.0 } else { -1.0 };
                 s += 1;
                 let r = self.seed_values[s];
-                self.tap_gains[i] = db2gain(-20.0 + r * 20.0) * phase;
+                self.tap_gains[i] = db_to_linear(-20.0 + r * 20.0) * phase;
                 s += 1;
                 self.tap_positions[i] = i as f64 + self.seed_values[s];
                 s += 1;
@@ -152,6 +162,46 @@ impl MultitapDelay {
     }
 }
 
-fn db2gain(db: f64) -> f64 {
-    10.0_f64.powf(db * 0.05)
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn manual_taps_arrive_on_time() {
+        let mut mt = MultitapDelay::new(48000);
+        mt.set_taps(&[
+            Tap {
+                delay_samples: 100,
+                gain: 0.5,
+            },
+            Tap {
+                delay_samples: 250,
+                gain: 0.25,
+            },
+        ]);
+
+        let mut hits = Vec::new();
+        for n in 0..400 {
+            let x = if n == 0 { 1.0 } else { 0.0 };
+            let y = mt.tick(x);
+            if y.abs() > 1e-6 {
+                hits.push((n, y));
+            }
+        }
+        assert_eq!(hits.len(), 2, "two taps expected: {hits:?}");
+        assert_eq!(hits[0].0, 100, "first tap timing");
+        assert_eq!(hits[1].0, 250, "second tap timing");
+        // total_gain scaling applies on top of the raw tap gain.
+        assert!(hits[0].1 > hits[1].1, "earlier tap should be louder");
+    }
+
+    #[test]
+    fn no_nan() {
+        let mut mt = MultitapDelay::new(48000);
+        mt.set_random_taps(64, 24000, 0.8, 1234);
+        for i in 0..48000 {
+            let y = mt.tick(((i as f64) * 0.1).sin());
+            assert!(y.is_finite());
+        }
+    }
 }

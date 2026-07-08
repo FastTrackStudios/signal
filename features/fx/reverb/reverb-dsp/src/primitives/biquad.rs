@@ -202,9 +202,11 @@ impl Biquad {
 
     #[inline]
     pub fn tick(&mut self, x: f64) -> f64 {
-        self.y = self.b0 * x + self.b1 * self.x1 + self.b2 * self.x2
-            - self.a1 * self.y1
-            - self.a2 * self.y2;
+        self.y = audiocore_dsp::denormal::flush(
+            self.b0 * x + self.b1 * self.x1 + self.b2 * self.x2
+                - self.a1 * self.y1
+                - self.a2 * self.y2,
+        );
         self.x2 = self.x1;
         self.y2 = self.y1;
         self.x1 = x;

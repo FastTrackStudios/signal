@@ -2,11 +2,18 @@
 //!
 //! Delay line with pitch shifter in the feedback path. Each repeat
 //! is shifted by `pitch_ratio`, creating cascading shimmer effects.
-//! Uses the same granular crossfade approach as PitchDelay.
+//! The pitched path runs through pitch-dsp's `WsolaShifter`
+//! (waveform-aligned splices) — measured ~50x less inharmonic energy
+//! than the dual-grain granular approach on tonal material, which is
+//! exactly what a recirculating shimmer stack needs. The tap is read
+//! `latency()` samples early so pitched and unpitched paths stay
+//! time-aligned.
 
 use audiocore_dsp::biquad::{Biquad, FilterType};
+use audiocore_dsp::dc_blocker::DcBlocker;
 use audiocore_dsp::delay_line::DelayLine;
 use audiocore_dsp::smoothing::ParamSmoother;
+use pitch_dsp::wsola::WsolaShifter;
 
 /// Shimmer delay with pitch shifting in the feedback path.
 pub struct ShimmerDelay {
@@ -28,14 +35,14 @@ pub struct ShimmerDelay {
     decay_eq: Biquad,
     delay: DelayLine,
     hicut: Biquad,
+    dc_blocker: DcBlocker,
     feedback_sample: f64,
     sample_rate: f64,
     smoother: ParamSmoother,
-    // Granular pitch shifter state (dual read heads)
-    offset_a: f64,
-    offset_b: f64,
-    crossfade: f64,
-    grain_phase: bool,
+    /// WSOLA pitch shifter (pitch-dsp) for the pitched feedback path.
+    shifter: WsolaShifter,
+    /// Shifter latency in samples (constant, speed-independent).
+    shifter_latency: f64,
     /// Grain size in ms for pitch shifter (10–100). Larger = smoother.
     pub grain_ms: f64,
 }
@@ -44,6 +51,8 @@ impl ShimmerDelay {
     const MAX_DELAY_S: f64 = 5.0;
 
     pub fn new() -> Self {
+        let mut shifter = WsolaShifter::new();
+        shifter.mix = 1.0;
         Self {
             time_ms: 250.0,
             feedback: 0.4,
@@ -55,13 +64,12 @@ impl ShimmerDelay {
             decay_eq: Biquad::new(),
             delay: DelayLine::new(48000 * 5 + 1024),
             hicut: Biquad::new(),
+            dc_blocker: DcBlocker::new(),
             feedback_sample: 0.0,
             sample_rate: 48000.0,
             smoother: ParamSmoother::new(0.0),
-            offset_a: 0.0,
-            offset_b: 0.0,
-            crossfade: 1.0,
-            grain_phase: true,
+            shifter,
+            shifter_latency: 1024.0,
             grain_ms: 30.0,
         }
     }
@@ -95,12 +103,23 @@ impl ShimmerDelay {
             }
         }
 
+        // WSOLA grain: derived from grain_ms but bounded — the splice
+        // correlation search cost grows with grain size. Reconfigure only
+        // on real change (update resets the shifter pipeline).
+        let base_grain = ((self.grain_ms * 0.001 * 48000.0) as usize).clamp(256, 2048);
+        if base_grain != self.shifter.base_grain_size
+            || (sample_rate - self.sample_rate).abs() > 1e-9
+        {
+            self.shifter.base_grain_size = base_grain;
+            self.shifter.update(sample_rate);
+            self.shifter_latency = self.shifter.latency() as f64;
+        }
+
         self.smoother.set_time(0.15, sample_rate);
+        self.dc_blocker.set_cutoff(10.0, sample_rate);
         let target = self.time_ms * 0.001 * sample_rate;
         if self.smoother.value() == 0.0 {
             self.smoother.set_immediate(target);
-            self.offset_a = target;
-            self.offset_b = target;
         }
     }
 
@@ -114,43 +133,13 @@ impl ShimmerDelay {
         // === Normal (unpitched) read ===
         let normal_output = self.delay.read_cubic(smooth_delay.clamp(1.0, max_read));
 
-        // === Pitched read (granular crossfade) ===
-        let grain_samples = (self.grain_ms * 0.001 * self.sample_rate).max(64.0);
-        let speed = self.pitch_ratio;
-
-        // Both read heads drift at pitch_ratio rate
-        self.offset_a += 1.0 - speed;
-        self.offset_b += 1.0 - speed;
-
-        // Clamp offsets
-        let clamp = |o: &mut f64, target: f64, grain: f64, max: f64| {
-            if *o < 1.0 || *o > max || (*o - target).abs() > grain {
-                *o = target;
-            }
-        };
-        clamp(&mut self.offset_a, smooth_delay, grain_samples, max_read);
-        clamp(&mut self.offset_b, smooth_delay, grain_samples, max_read);
-
-        let sample_a = self.delay.read_cubic(self.offset_a.clamp(1.0, max_read));
-        let sample_b = self.delay.read_cubic(self.offset_b.clamp(1.0, max_read));
-
-        // Crossfade between grains
-        let fade_rate = 1.0 / grain_samples;
-        if self.grain_phase {
-            self.crossfade = (self.crossfade + fade_rate).min(1.0);
-            if self.crossfade >= 1.0 && (self.offset_a - smooth_delay).abs() > grain_samples * 0.5 {
-                self.offset_b = smooth_delay;
-                self.grain_phase = false;
-            }
-        } else {
-            self.crossfade = (self.crossfade - fade_rate).max(0.0);
-            if self.crossfade <= 0.0 && (self.offset_b - smooth_delay).abs() > grain_samples * 0.5 {
-                self.offset_a = smooth_delay;
-                self.grain_phase = true;
-            }
-        }
-
-        let pitched_output = sample_a * self.crossfade + sample_b * (1.0 - self.crossfade);
+        // === Pitched read: tap `latency()` early (WSOLA latency is
+        // constant and speed-independent), so both paths land at the
+        // delay time.
+        let tap_delay = (smooth_delay - self.shifter_latency).clamp(1.0, max_read);
+        let tap = self.delay.read_cubic(tap_delay);
+        self.shifter.speed = self.pitch_ratio;
+        let pitched_output = self.shifter.tick(tap);
 
         // Blend pitched and unpitched output
         let output = normal_output * (1.0 - self.shimmer_mix) + pitched_output * self.shimmer_mix;
@@ -170,7 +159,9 @@ impl ShimmerDelay {
         if fb.abs() > 0.001 {
             fb = fb * (3.0 - fb.abs() * 2.0).max(0.0) / 3.0;
         }
-        fb = fb.clamp(-1.5, 1.5);
+        // Pitch-shifted feedback is the classic DC/subsonic accumulator —
+        // block it inside the loop.
+        fb = self.dc_blocker.tick(fb.clamp(-1.5, 1.5));
 
         self.delay.write(input + fb);
         self.feedback_sample = fb;
@@ -186,12 +177,10 @@ impl ShimmerDelay {
         self.delay.clear();
         self.hicut.reset();
         self.decay_eq.reset();
+        self.dc_blocker.reset();
         self.feedback_sample = 0.0;
         self.smoother.reset(0.0);
-        self.offset_a = 0.0;
-        self.offset_b = 0.0;
-        self.crossfade = 1.0;
-        self.grain_phase = true;
+        self.shifter.reset();
     }
 }
 

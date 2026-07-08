@@ -144,9 +144,9 @@ impl WahFilter {
             let s = &mut self.states[ch][stage];
 
             // Chamberlin SVF topology
-            s.low += self.f_coeff * s.band;
+            s.low = audiocore_dsp::denormal::flush(s.low + self.f_coeff * s.band);
             s.high = smp - s.low - self.q_coeff * s.band;
-            s.band += self.f_coeff * s.high;
+            s.band = audiocore_dsp::denormal::flush(s.band + self.f_coeff * s.high);
 
             // Mix LP/BP/HP
             smp = lp_gain * s.low + bp_gain * s.band + hp_gain * s.high;

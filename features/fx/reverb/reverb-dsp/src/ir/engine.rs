@@ -9,17 +9,18 @@
 //! caller (plugin, CLI, test) can drive it.
 
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::thread::{self, JoinHandle};
 
-use crossbeam_channel::{Receiver, Sender, TryRecvError, unbounded};
+use crossbeam_channel::{unbounded, Receiver, Sender, TryRecvError};
 
 use realfft::RealFftPlanner;
 
 use super::asset::{IrAsset, IrLoadError};
 use super::prepared::{PreparedIr, PreparedIrPair};
 use super::transforms::IrTransforms;
+use crate::algorithm::IrSlot;
 
 /// Job submitted to the loader.
 #[derive(Debug, Clone)]
@@ -30,6 +31,8 @@ pub struct IrJob {
     pub path: PathBuf,
     pub target_sample_rate: f64,
     pub transforms: IrTransforms,
+    /// Destination IR slot (A = main, B = the morph target).
+    pub slot: IrSlot,
 }
 
 /// Result the loader produces.
@@ -50,6 +53,8 @@ pub struct ProcessedIr {
     /// count even after the IR has been transformed.
     pub source_frames: usize,
     pub source_channels: usize,
+    /// Destination IR slot, carried through from [`IrJob::slot`].
+    pub slot: IrSlot,
 }
 
 pub struct IrEngine {
@@ -102,7 +107,7 @@ impl IrEngine {
         self.rx_results.try_recv()
     }
 
-    /// Convenience for the most common case: just submit a path.
+    /// Convenience for the most common case: just submit a path (slot A).
     pub fn submit_path<P: AsRef<Path>>(
         &self,
         id: u64,
@@ -110,11 +115,25 @@ impl IrEngine {
         target_sample_rate: f64,
         transforms: IrTransforms,
     ) -> Result<(), crossbeam_channel::SendError<IrJob>> {
+        self.submit_path_slot(id, path, target_sample_rate, transforms, IrSlot::A)
+    }
+
+    /// Submit a path load destined for a specific IR slot (B feeds the
+    /// convolution morph's second convolver).
+    pub fn submit_path_slot<P: AsRef<Path>>(
+        &self,
+        id: u64,
+        path: P,
+        target_sample_rate: f64,
+        transforms: IrTransforms,
+        slot: IrSlot,
+    ) -> Result<(), crossbeam_channel::SendError<IrJob>> {
         self.submit(IrJob {
             id,
             path: path.as_ref().to_path_buf(),
             target_sample_rate,
             transforms,
+            slot,
         })
     }
 
@@ -203,5 +222,6 @@ fn process_job(job: &IrJob) -> Result<ProcessedIr, IrLoadError> {
         sample_rate: job.target_sample_rate,
         source_frames,
         source_channels,
+        slot: job.slot,
     })
 }

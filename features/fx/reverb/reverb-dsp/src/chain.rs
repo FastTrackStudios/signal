@@ -1,16 +1,20 @@
 //! Reverb chain — top-level processor with algorithm dispatch,
 //! pre/post processing, mix, width, freeze, output EQ, ducker, saturation.
 
-use crossbeam_channel::{Receiver, TryRecvError};
 use audiocore_dsp::biquad::{Biquad, FilterType};
 use audiocore_dsp::delay_line::DelayLine;
 use audiocore_dsp::{AudioConfig, Processor};
+use crossbeam_channel::{Receiver, TryRecvError};
 
-use crate::algorithm::{AlgorithmParams, AlgorithmType, ReverbAlgorithm};
+use crate::algorithm::{
+    AlgorithmParams, AlgorithmType, ConvolutionModParams, IrSlot, ReverbAlgorithm,
+};
 use crate::algorithms;
 use crate::ir::engine::ProcessedIr;
 use crate::ir::prepared::PreparedIrPair;
-use crate::primitives::envelope_follower::EnvelopeFollower;
+use audiocore_dsp::envelope::EnvelopeFollower;
+use audiocore_dsp::smoothing::ParamSmoother;
+
 use crate::primitives::saturation::Saturator;
 use crate::primitives::tilt_eq::TiltEq;
 
@@ -46,10 +50,31 @@ pub struct ReverbChain {
 
     // Ducker (sidechain on dry input → gain reduction on wet)
     duck_env: EnvelopeFollower,
-    duck_gain: f64, // smoothed gain reduction (1.0 = no duck, 0.0 = full duck)
+    duck_gain: f64,   // smoothed gain reduction (1.0 = no duck, 0.0 = full duck)
+    duck_smooth: f64, // sample-rate-correct one-pole coeff for duck_gain
+
+    // Per-sample smoothing of the zipper-prone global controls.
+    mix_smoother: ParamSmoother,
+    width_smoother: ParamSmoother,
+
+    // Coefficient-level params, ramped at sub-block rate (every
+    // SMOOTH_BLOCK samples) so automation doesn't step filter/feedback
+    // coefficients audibly. decay/damping re-enter the algorithm via
+    // set_params (allocation-free for every algorithm); tilt/saturation
+    // re-tune the output stage.
+    decay_smoother: ParamSmoother,
+    damping_smoother: ParamSmoother,
+    tilt_smoother: ParamSmoother,
+    sat_smoother: ParamSmoother,
 
     // Algorithm params
     pub params: AlgorithmParams,
+
+    /// Convolution modulation options (motion / mod sources / IR morph).
+    /// Only consumed while the Convolution algorithm is active; the
+    /// smoothing (ramp on `update_params`, snap on `update`) lives
+    /// inside the algorithm.
+    pub conv_mod: ConvolutionModParams,
 
     // Global controls
     /// Pre-delay in milliseconds (0-500).
@@ -97,6 +122,11 @@ pub struct ReverbChain {
     sample_rate: f64,
 }
 
+/// Sub-block length for coefficient-level parameter ramping. Smoothers
+/// advance per-sample; coefficients are refreshed at this granularity
+/// (0.67 ms at 48 kHz) while a ramp is in motion.
+const SMOOTH_BLOCK: usize = 32;
+
 impl ReverbChain {
     pub fn new() -> Self {
         let sample_rate = 48000.0;
@@ -116,9 +146,49 @@ impl ReverbChain {
             output_lp: Biquad::new(),
             tilt_l: TiltEq::new(sample_rate),
             tilt_r: TiltEq::new(sample_rate),
-            duck_env: EnvelopeFollower::new(sample_rate),
+            duck_env: EnvelopeFollower::new(0.0),
             duck_gain: 1.0,
+            duck_smooth: EnvelopeFollower::coeff(0.001, sample_rate),
+            mix_smoother: {
+                let mut s = ParamSmoother::new(0.5);
+                s.set_time_ms(5.0, sample_rate);
+                s.set_epsilon(1e-4);
+                s
+            },
+            width_smoother: {
+                let mut s = ParamSmoother::new(1.0);
+                s.set_time_ms(5.0, sample_rate);
+                s.set_epsilon(1e-4);
+                s
+            },
+            decay_smoother: {
+                // Matches AlgorithmParams::default().decay
+                let mut s = ParamSmoother::new(0.5);
+                s.set_time_ms(30.0, sample_rate);
+                s.set_epsilon(1e-4);
+                s
+            },
+            damping_smoother: {
+                // Matches AlgorithmParams::default().damping
+                let mut s = ParamSmoother::new(0.3);
+                s.set_time_ms(30.0, sample_rate);
+                s.set_epsilon(1e-4);
+                s
+            },
+            tilt_smoother: {
+                let mut s = ParamSmoother::new(0.0);
+                s.set_time_ms(30.0, sample_rate);
+                s.set_epsilon(1e-3);
+                s
+            },
+            sat_smoother: {
+                let mut s = ParamSmoother::new(0.0);
+                s.set_time_ms(10.0, sample_rate);
+                s.set_epsilon(1e-4);
+                s
+            },
             params: AlgorithmParams::default(),
+            conv_mod: ConvolutionModParams::default(),
             predelay_ms: 0.0,
             mix: 0.5,
             width: 1.0,
@@ -162,10 +232,26 @@ impl ReverbChain {
         self.algorithm.try_load_ir(left, right)
     }
 
+    /// Slot-addressed synchronous IR load (slot B feeds the morph's
+    /// second convolver). Returns `true` if accepted.
+    pub fn load_convolution_ir_slot(
+        &mut self,
+        left: &[f64],
+        right: &[f64],
+        slot: IrSlot,
+    ) -> bool {
+        self.algorithm.try_load_ir_slot(left, right, slot)
+    }
+
     /// Synchronously swap in a pre-FFT'd IR pair. No FFT on the audio
     /// thread. Returns `true` if accepted.
     pub fn load_prepared_ir(&mut self, pair: PreparedIrPair) -> bool {
         self.algorithm.try_load_prepared_ir(pair)
+    }
+
+    /// Slot-addressed pre-FFT'd IR swap. Returns `true` if accepted.
+    pub fn load_prepared_ir_slot(&mut self, pair: PreparedIrPair, slot: IrSlot) -> bool {
+        self.algorithm.try_load_prepared_ir_slot(pair, slot)
     }
 
     /// Does the current algorithm accept IRs?
@@ -185,7 +271,14 @@ impl ReverbChain {
             self.algorithm_type = algo;
             self.variant = variant;
             self.algorithm = algorithms::create(algo, variant, self.sample_rate);
-            self.algorithm.set_params(&self.effective_params());
+            // Fresh algorithm state — land on the target params directly
+            // instead of ramping from wherever the old algorithm was.
+            let p = self.effective_params();
+            self.decay_smoother.set_immediate(p.decay);
+            self.damping_smoother.set_immediate(p.damping);
+            self.algorithm.set_params(&p);
+            // Fresh algorithm — convolution mod options land instantly.
+            self.algorithm.set_conv_mod_params(&self.conv_mod, true);
         }
     }
 
@@ -215,16 +308,31 @@ impl ReverbChain {
     }
 
     /// Update all algorithm parameters.
+    ///
+    /// This is the automation path: decay, damping, tilt, and saturation
+    /// become smoother *targets* and ramp inside `process` (30/30/30/10 ms)
+    /// instead of stepping coefficients instantly. Everything else (size,
+    /// diffusion, modulation, tone, ...) still applies immediately.
+    /// For an instant snap (preset load), call `update()` instead.
     pub fn update_params(&mut self) {
-        self.algorithm.set_params(&self.effective_params());
-        self.sat_l.set_drive(self.saturation);
-        self.sat_r.set_drive(self.saturation);
+        let mut p = self.effective_params();
+        self.decay_smoother.set_target(p.decay);
+        self.damping_smoother.set_target(p.damping);
+        // Push non-smoothed params now, holding decay/damping at their
+        // current ramp position so this call never steps them.
+        p.decay = self.decay_smoother.value();
+        p.damping = self.damping_smoother.value();
+        self.algorithm.set_params(&p);
+
+        self.sat_smoother.set_target(self.saturation);
+        self.tilt_smoother.set_target(self.output_tilt_db);
         self.tilt_l.set_pivot(self.output_tilt_pivot);
-        self.tilt_l.set_tilt_db(self.output_tilt_db);
         self.tilt_r.set_pivot(self.output_tilt_pivot);
-        self.tilt_r.set_tilt_db(self.output_tilt_db);
         self.duck_env
-            .set_times(self.duck_attack_ms, self.duck_release_ms);
+            .set_times_ms(self.duck_attack_ms, self.duck_release_ms, self.sample_rate);
+        // Convolution mod options ride the automation path too (the
+        // algorithm ramps its own smoothers). No-op outside Convolution.
+        self.algorithm.set_conv_mod_params(&self.conv_mod, false);
     }
 }
 
@@ -238,7 +346,7 @@ impl Processor for ReverbChain {
         self.output_lp.reset();
         self.tilt_l.reset();
         self.tilt_r.reset();
-        self.duck_env.reset();
+        self.duck_env.reset(0.0);
         self.duck_gain = 1.0;
     }
 
@@ -280,14 +388,37 @@ impl Processor for ReverbChain {
         self.tilt_r.set_pivot(self.output_tilt_pivot);
         self.tilt_r.set_tilt_db(self.output_tilt_db);
 
-        self.duck_env.set_sample_rate(config.sample_rate);
-        self.duck_env.set_times(self.duck_attack_ms, self.duck_release_ms);
+        self.duck_env.set_times_ms(
+            self.duck_attack_ms,
+            self.duck_release_ms,
+            config.sample_rate,
+        );
+        // ~1ms duck-gain smoothing, independent of sample rate (the old
+        // hard-coded 0.25 step made duck timing vary with the SR).
+        self.duck_smooth = EnvelopeFollower::coeff(0.001, config.sample_rate);
+        self.mix_smoother.set_time_ms(5.0, config.sample_rate);
+        self.width_smoother.set_time_ms(5.0, config.sample_rate);
+        self.decay_smoother.set_time_ms(30.0, config.sample_rate);
+        self.damping_smoother.set_time_ms(30.0, config.sample_rate);
+        self.tilt_smoother.set_time_ms(30.0, config.sample_rate);
+        self.sat_smoother.set_time_ms(10.0, config.sample_rate);
+        // update() is a reconfiguration point, not an automation path —
+        // land on the new values instantly instead of ramping.
+        self.mix_smoother.set_immediate(self.mix);
+        self.width_smoother.set_immediate(self.width);
+        let p = self.effective_params();
+        self.decay_smoother.set_immediate(p.decay);
+        self.damping_smoother.set_immediate(p.damping);
+        self.tilt_smoother.set_immediate(self.output_tilt_db);
+        self.sat_smoother.set_immediate(self.saturation);
 
         self.sat_l.set_drive(self.saturation);
         self.sat_r.set_drive(self.saturation);
 
         self.algorithm.set_sample_rate(config.sample_rate);
-        self.algorithm.set_params(&self.effective_params());
+        self.algorithm.set_params(&p);
+        // Reconfiguration point — convolution mod options snap.
+        self.algorithm.set_conv_mod_params(&self.conv_mod, true);
     }
 
     fn process(&mut self, left: &mut [f64], right: &mut [f64]) {
@@ -311,14 +442,19 @@ impl Processor for ReverbChain {
             }
         }
 
-        // Drain pending raw f64 IRs — last-one-wins so back-to-back
-        // loads don't each trigger an FFT precompute. Latency is one
-        // audio block. This path DOES run FFTs on the audio thread.
+        // Drain pending raw f64 IRs — last-one-wins per slot so
+        // back-to-back loads don't each trigger an FFT precompute.
+        // Latency is one audio block. This path DOES run FFTs on the
+        // audio thread.
         if let Some(rx) = self.ir_swap_rx.as_ref() {
-            let mut latest: Option<ProcessedIr> = None;
+            let mut latest_a: Option<ProcessedIr> = None;
+            let mut latest_b: Option<ProcessedIr> = None;
             loop {
                 match rx.try_recv() {
-                    Ok(ir) => latest = Some(ir),
+                    Ok(ir) => match ir.slot {
+                        IrSlot::A => latest_a = Some(ir),
+                        IrSlot::B => latest_b = Some(ir),
+                    },
                     Err(TryRecvError::Empty) => break,
                     Err(TryRecvError::Disconnected) => {
                         self.ir_swap_rx = None;
@@ -326,80 +462,118 @@ impl Processor for ReverbChain {
                     }
                 }
             }
-            if let Some(ir) = latest {
-                self.algorithm.try_load_ir(&ir.left, &ir.right);
+            for ir in [latest_a, latest_b].into_iter().flatten() {
+                self.algorithm.try_load_ir_slot(&ir.left, &ir.right, ir.slot);
             }
         }
 
         self.predelay_samples = (self.predelay_ms * 0.001 * self.sample_rate) as usize;
         let duck_thresh = self.duck_threshold.max(1.0e-6);
+        self.mix_smoother.set_target(self.mix);
+        self.width_smoother.set_target(self.width);
 
-        for i in 0..n {
-            let dry_l = left[i];
-            let dry_r = right[i];
+        let mut block_start = 0;
+        while block_start < n {
+            let block_end = (block_start + SMOOTH_BLOCK).min(n);
 
-            // Sidechain envelope from dry sum
-            let env = self.duck_env.tick(dry_l + dry_r);
-            let over = (env / duck_thresh - 1.0).max(0.0);
-            let target_duck = 1.0 - (over.min(1.0) * self.duck_amount);
-            // 1-pole smooth toward target_duck (independent of attack/release
-            // — env already shapes the rate).
-            self.duck_gain += (target_duck - self.duck_gain) * 0.25;
-
-            // Input filtering
-            let filt_l = self.input_lp.tick(self.input_hp.tick(dry_l, 0), 0);
-            let filt_r = self.input_lp.tick(self.input_hp.tick(dry_r, 1), 1);
-
-            // Freeze: kill input to algorithm but keep feedback running
-            let (alg_in_l, alg_in_r) = if self.freeze {
-                (0.0, 0.0)
-            } else if self.predelay_samples > 0 {
-                self.predelay.write(filt_l);
-                let delayed = self.predelay.read(self.predelay_samples);
-                (delayed, filt_r)
-            } else {
-                (filt_l, filt_r)
-            };
-
-            // Algorithm
-            let (mut wet_l, mut wet_r) = self.algorithm.tick(alg_in_l, alg_in_r);
-
-            // Wet saturation
-            if self.saturation > 0.0 {
-                wet_l = self.sat_l.tick(wet_l);
-                wet_r = self.sat_r.tick(wet_r);
+            // Refresh coefficient-level params only while a ramp is in
+            // motion; settled smoothers cost one comparison per sub-block.
+            if !self.decay_smoother.is_settled() || !self.damping_smoother.is_settled() {
+                let mut p = self.effective_params();
+                p.decay = self.decay_smoother.value();
+                p.damping = self.damping_smoother.value();
+                self.algorithm.set_params(&p);
+            }
+            if !self.tilt_smoother.is_settled() {
+                let tilt = self.tilt_smoother.value();
+                self.tilt_l.set_tilt_db(tilt);
+                self.tilt_r.set_tilt_db(tilt);
+            }
+            if !self.sat_smoother.is_settled() {
+                let drive = self.sat_smoother.value();
+                self.sat_l.set_drive(drive);
+                self.sat_r.set_drive(drive);
             }
 
-            // Output band-shaping
-            wet_l = self.output_hp.tick(wet_l, 0);
-            wet_l = self.output_lp.tick(wet_l, 0);
-            wet_r = self.output_hp.tick(wet_r, 1);
-            wet_r = self.output_lp.tick(wet_r, 1);
+            for i in block_start..block_end {
+                // Advance the coefficient ramps per-sample so their rate is
+                // independent of buffer/sub-block size.
+                self.decay_smoother.tick();
+                self.damping_smoother.tick();
+                self.tilt_smoother.tick();
+                self.sat_smoother.tick();
+                let dry_l = left[i];
+                let dry_r = right[i];
+                let mix = self.mix_smoother.tick();
+                let width = self.width_smoother.tick();
 
-            // Tilt EQ
-            if self.output_tilt_db.abs() > 0.01 {
-                wet_l = self.tilt_l.tick(wet_l);
-                wet_r = self.tilt_r.tick(wet_r);
+                // Sidechain envelope from dry sum (rectified — the follower is
+                // domain-agnostic and needs |x|).
+                let env = self.duck_env.tick((dry_l + dry_r).abs());
+                let over = (env / duck_thresh - 1.0).max(0.0);
+                let target_duck = 1.0 - (over.min(1.0) * self.duck_amount);
+                // 1-pole smooth toward target_duck (independent of attack/release
+                // — env already shapes the rate).
+                self.duck_gain = self.duck_smooth * (self.duck_gain - target_duck) + target_duck;
+
+                // Input filtering
+                let filt_l = self.input_lp.tick(self.input_hp.tick(dry_l, 0), 0);
+                let filt_r = self.input_lp.tick(self.input_hp.tick(dry_r, 1), 1);
+
+                // Freeze: kill input to algorithm but keep feedback running
+                let (alg_in_l, alg_in_r) = if self.freeze {
+                    (0.0, 0.0)
+                } else if self.predelay_samples > 0 {
+                    self.predelay.write(filt_l);
+                    let delayed = self.predelay.read(self.predelay_samples);
+                    (delayed, filt_r)
+                } else {
+                    (filt_l, filt_r)
+                };
+
+                // Algorithm
+                let (mut wet_l, mut wet_r) = self.algorithm.tick(alg_in_l, alg_in_r);
+
+                // Wet saturation (gate on the ramped drive, not the raw param,
+                // so a saturation fade-out stays engaged until it lands on 0)
+                if self.sat_l.drive() > 0.0 {
+                    wet_l = self.sat_l.tick(wet_l);
+                    wet_r = self.sat_r.tick(wet_r);
+                }
+
+                // Output band-shaping
+                wet_l = self.output_hp.tick(wet_l, 0);
+                wet_l = self.output_lp.tick(wet_l, 0);
+                wet_r = self.output_hp.tick(wet_r, 1);
+                wet_r = self.output_lp.tick(wet_r, 1);
+
+                // Tilt EQ (gate on the ramped tilt for the same reason)
+                if self.tilt_smoother.value().abs() > 0.01 {
+                    wet_l = self.tilt_l.tick(wet_l);
+                    wet_r = self.tilt_r.tick(wet_r);
+                }
+
+                // Width (mid-side)
+                let (mut final_l, mut final_r) = if (width - 1.0).abs() > 0.001 {
+                    let mid = (wet_l + wet_r) * 0.5;
+                    let side = (wet_l - wet_r) * 0.5;
+                    (mid + side * width, mid - side * width)
+                } else {
+                    (wet_l, wet_r)
+                };
+
+                // Ducker
+                if self.duck_amount > 0.0 {
+                    final_l *= self.duck_gain;
+                    final_r *= self.duck_gain;
+                }
+
+                // Mix
+                left[i] = dry_l * (1.0 - mix) + final_l * mix;
+                right[i] = dry_r * (1.0 - mix) + final_r * mix;
             }
 
-            // Width (mid-side)
-            let (mut final_l, mut final_r) = if (self.width - 1.0).abs() > 0.001 {
-                let mid = (wet_l + wet_r) * 0.5;
-                let side = (wet_l - wet_r) * 0.5;
-                (mid + side * self.width, mid - side * self.width)
-            } else {
-                (wet_l, wet_r)
-            };
-
-            // Ducker
-            if self.duck_amount > 0.0 {
-                final_l *= self.duck_gain;
-                final_r *= self.duck_gain;
-            }
-
-            // Mix
-            left[i] = dry_l * (1.0 - self.mix) + final_l * self.mix;
-            right[i] = dry_r * (1.0 - self.mix) + final_r * self.mix;
+            block_start = block_end;
         }
     }
 }
@@ -649,6 +823,7 @@ mod tests {
             sample_rate: SR,
             source_frames: 1000,
             source_channels: 2,
+            slot: IrSlot::A,
         })
         .unwrap();
 
@@ -713,6 +888,124 @@ mod tests {
 
         c.set_algorithm(AlgorithmType::Convolution);
         assert!(c.algorithm_supports_ir());
+    }
+
+    /// Max adjacent-sample delta over a slice — a proxy for clicks.
+    fn max_step(x: &[f64]) -> f64 {
+        x.windows(2)
+            .map(|w| (w[1] - w[0]).abs())
+            .fold(0.0, f64::max)
+    }
+
+    /// Drive a chain with a steady sine, step `mutate` mid-stream via
+    /// update_params, and assert the post-step region has no adjacent-
+    /// sample jump grossly larger than the pre-step region's natural
+    /// slope (i.e. the ramp, not the step, reaches the audio).
+    fn assert_step_click_free(
+        freq: f64,
+        setup: impl Fn(&mut ReverbChain),
+        mutate: impl Fn(&mut ReverbChain),
+    ) {
+        let mut c = ReverbChain::new();
+        c.set_algorithm(AlgorithmType::Hall);
+        c.mix = 1.0;
+        setup(&mut c);
+        c.update(config());
+
+        let n = 9600;
+        let sine = |off: usize| -> Vec<f64> {
+            (0..n)
+                .map(|i| (2.0 * PI * freq * (off + i) as f64 / SR).sin() * 0.5)
+                .collect()
+        };
+
+        let mut l1 = sine(0);
+        let mut r1 = l1.clone();
+        c.process(&mut l1, &mut r1);
+        // Natural signal slope, measured after the reverb has built up.
+        let before = max_step(&l1[4800..]);
+
+        mutate(&mut c);
+        c.update_params();
+
+        let mut l2 = sine(n);
+        let mut r2 = l2.clone();
+        c.process(&mut l2, &mut r2);
+        // The 30 ms ramp lives inside the first ~1440 samples + margin.
+        let after = max_step(&l2[..2400]);
+
+        for &v in l2.iter() {
+            assert!(v.is_finite());
+        }
+        assert!(
+            after < before * 3.0 + 0.02,
+            "param step should be ramped, not stepped: before={before}, after={after}"
+        );
+    }
+
+    #[test]
+    fn decay_damping_automation_click_free() {
+        assert_step_click_free(
+            200.0,
+            |c| {
+                c.params.decay = 0.2;
+                c.params.damping = 0.8;
+            },
+            |c| {
+                c.params.decay = 0.95;
+                c.params.damping = 0.05;
+            },
+        );
+    }
+
+    #[test]
+    fn saturation_automation_click_free() {
+        assert_step_click_free(200.0, |_| {}, |c| c.saturation = 1.0);
+    }
+
+    #[test]
+    fn tilt_automation_click_free() {
+        assert_step_click_free(
+            2000.0,
+            |c| c.output_tilt_db = -12.0,
+            |c| c.output_tilt_db = 12.0,
+        );
+    }
+
+    #[test]
+    fn decay_ramp_reaches_target() {
+        // After stepping decay up, the new decay must actually take
+        // effect (ramp completes): the tail outlives the old setting.
+        let tail_energy = |decay: f64, automate: bool| -> f64 {
+            let mut c = ReverbChain::new();
+            c.set_algorithm(AlgorithmType::Hall);
+            c.mix = 1.0;
+            c.params.decay = if automate { 0.2 } else { decay };
+            c.update(config());
+            if automate {
+                c.params.decay = decay;
+                c.update_params(); // ramped path
+            }
+            let n = (SR as usize) * 2;
+            let mut l: Vec<f64> = (0..n)
+                .map(|i| {
+                    if i < 4800 {
+                        (2.0 * PI * 300.0 * i as f64 / SR).sin() * 0.5
+                    } else {
+                        0.0
+                    }
+                })
+                .collect();
+            let mut r = l.clone();
+            c.process(&mut l, &mut r);
+            l[(n - 9600)..].iter().map(|x| x * x).sum::<f64>()
+        };
+        let automated = tail_energy(0.95, true);
+        let short = tail_energy(0.2, false);
+        assert!(
+            automated > short * 10.0,
+            "ramped decay change must reach the algorithm: automated={automated}, short={short}"
+        );
     }
 
     #[test]

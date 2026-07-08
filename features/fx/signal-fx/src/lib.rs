@@ -572,14 +572,61 @@ impl PluginInstance for NativeReverb {
 
 const DELAY_PARAMS: &[ParamSpec] = &[
     ParamSpec { id: 0, name: "mix", min: 0.0, max: 0.10, default: 0.08 },
-    ParamSpec { id: 1, name: "time", min: 20.0, max: 2000.0, default: 400.0 },
+    ParamSpec { id: 1, name: "time", min: 20.0, max: 2500.0, default: 400.0 },
     ParamSpec { id: 2, name: "feedback", min: 0.0, max: 0.95, default: 0.30 },
+    // TimeLine MX parity params (style index: see delay::DelayStyle).
+    ParamSpec { id: 3, name: "style", min: 0.0, max: 12.0, default: 1.0 },
+    ParamSpec { id: 4, name: "swell", min: 0.0, max: 4.0, default: 0.0 },
+    ParamSpec { id: 5, name: "freeze", min: 0.0, max: 1.0, default: 0.0 },
+    ParamSpec { id: 6, name: "tempo_bpm", min: 0.0, max: 300.0, default: 0.0 },
+    ParamSpec { id: 7, name: "tap_div", min: 0.0, max: 7.0, default: 7.0 },
+    ParamSpec { id: 8, name: "high_pass", min: 0.0, max: 900.0, default: 0.0 },
+    ParamSpec { id: 9, name: "repeat_dyn", min: 0.0, max: 1.0, default: 0.0 },
+    // Machine voice (0 = MX, 1 = Classic; Digital deep pass adds more).
+    ParamSpec { id: 10, name: "voice", min: 0.0, max: 3.0, default: 0.0 },
+    // dTape / dBucket character macros.
+    ParamSpec { id: 11, name: "tape_age", min: 0.0, max: 1.0, default: 0.0 },
+    ParamSpec { id: 12, name: "crinkle", min: 0.0, max: 1.0, default: 0.0 },
+    ParamSpec { id: 13, name: "bucket_loss", min: 0.0, max: 1.0, default: 0.0 },
+    // Ice (Pitch style): MX interval menu index (30 = Free), slice
+    // (0 short / 1 medium / 2 long / 3 free grain), dry<->ice blend.
+    ParamSpec { id: 14, name: "interval", min: 0.0, max: 30.0, default: 30.0 },
+    ParamSpec { id: 15, name: "slice", min: 0.0, max: 3.0, default: 3.0 },
+    ParamSpec { id: 16, name: "blend", min: 0.0, max: 1.0, default: 1.0 },
+    // Dual 1+2 (TimeLine MX): routing (0 Single / 1 Series 1>2 /
+    // 2 Series 2>1 / 3 Parallel / 4 Split / 5 Split Swap) + delay B.
+    // Ids 0-16 keep addressing delay A.
+    ParamSpec { id: 17, name: "routing", min: 0.0, max: 5.0, default: 0.0 },
+    ParamSpec { id: 18, name: "style_b", min: 0.0, max: 12.0, default: 1.0 },
+    ParamSpec { id: 19, name: "time_b", min: 20.0, max: 2500.0, default: 300.0 },
+    ParamSpec { id: 20, name: "feedback_b", min: 0.0, max: 0.95, default: 0.30 },
+    ParamSpec { id: 21, name: "mix_b", min: 0.0, max: 0.10, default: 0.08 },
+    // Spectral machine (grain_shape: 0 Soft/1 Swell/2 SoftPluck/
+    // 3 Pluck/4 Bounce; direction: 0 Fwd/1 Rev/2 Both; density = n in
+    // Synced(1/n); density_ms >= 6 switches to free 6-250 ms).
+    ParamSpec { id: 22, name: "grain_shape", min: 0.0, max: 4.0, default: 0.0 },
+    ParamSpec { id: 23, name: "direction", min: 0.0, max: 2.0, default: 0.0 },
+    ParamSpec { id: 24, name: "density", min: 1.0, max: 32.0, default: 8.0 },
+    ParamSpec { id: 25, name: "density_ms", min: 0.0, max: 250.0, default: 0.0 },
+    ParamSpec { id: 26, name: "spread", min: 0.0, max: 1.0, default: 0.0 },
+    ParamSpec { id: 27, name: "stretch", min: 0.0, max: 1.0, default: 0.0 },
+    ParamSpec { id: 28, name: "octave", min: 0.0, max: 1.0, default: 0.0 },
+    // Lo-Fi machine (filter_shape: 0 Off .. 8 Intercom; grit rides the
+    // shared "drive" engine field via id 29).
+    ParamSpec { id: 29, name: "grit", min: 0.0, max: 1.0, default: 0.0 },
+    ParamSpec { id: 30, name: "bit_depth", min: 4.0, max: 32.0, default: 12.0 },
+    ParamSpec { id: 31, name: "sr_div", min: 1.0, max: 64.0, default: 4.0 },
+    ParamSpec { id: 32, name: "lofi_mix", min: 0.0, max: 1.0, default: 1.0 },
+    ParamSpec { id: 33, name: "vinyl", min: 0.0, max: 1.0, default: 0.0 },
+    ParamSpec { id: 34, name: "filter_shape", min: 0.0, max: 8.0, default: 0.0 },
 ];
 
-/// Native Delay block — wraps [`delay::DelayChain`]. Defaults to a subtle clean
+/// Native Delay block — wraps [`delay::DualDelay`] (two full chains +
+/// TimeLine MX 1+2 routing; `Single` = chain A only, bit-compatible with
+/// the previous single-chain wrapper). Defaults to a subtle clean
 /// quarter-note-ish delay with modest feedback.
 pub struct NativeDelay {
-    dly: delay::DelayChain,
+    dly: delay::DualDelay,
     prepared: bool,
     scratch_l: Vec<f64>,
     scratch_r: Vec<f64>,
@@ -587,13 +634,19 @@ pub struct NativeDelay {
 
 impl NativeDelay {
     pub fn new(_sample_rate: f64) -> Self {
-        let mut dly = delay::DelayChain::new();
-        dly.set_style(delay::DelayStyle::Clean);
-        dly.mix = 0.08;
-        dly.delay_l.time_ms = 400.0;
-        dly.delay_r.time_ms = 400.0;
-        dly.delay_l.feedback = 0.30;
-        dly.delay_r.feedback = 0.30;
+        let mut dly = delay::DualDelay::new();
+        for chain in [&mut dly.a, &mut dly.b] {
+            chain.set_style(delay::DelayStyle::Clean);
+            chain.mix = 0.08;
+            chain.delay_l.time_ms = 400.0;
+            chain.delay_r.time_ms = 400.0;
+            chain.delay_l.feedback = 0.30;
+            chain.delay_r.feedback = 0.30;
+        }
+        // B seeds slightly shorter so engaging a dual routing is
+        // immediately audible before any params are set.
+        dly.b.delay_l.time_ms = 300.0;
+        dly.b.delay_r.time_ms = 300.0;
         Self {
             dly,
             prepared: false,
@@ -603,21 +656,167 @@ impl NativeDelay {
     }
 
     fn set(&mut self, id: u32, v: f64) {
+        // Ids 0-16 address delay A; 17+ are the dual-routing block.
+        let a = &mut self.dly.a;
         match id {
-            0 => self.dly.mix = v.min(TIME_MIX_MAX),
+            0 => a.mix = v.min(TIME_MIX_MAX),
             1 => {
-                self.dly.delay_l.time_ms = v;
-                self.dly.delay_r.time_ms = v;
+                a.delay_l.time_ms = v;
+                a.delay_r.time_ms = v;
             }
             2 => {
-                self.dly.delay_l.feedback = v;
-                self.dly.delay_r.feedback = v;
+                a.delay_l.feedback = v;
+                a.delay_r.feedback = v;
+            }
+            3 => a.set_style(delay::DelayStyle::from_index(v.round().max(0.0) as usize)),
+            4 => a.swell_time_s = v,
+            5 => a.freeze = v > 0.5,
+            6 => a.tempo_bpm = if v > 0.0 { Some(v) } else { None },
+            7 => {
+                let div = delay::TapDivision::from_index(v.round().max(0.0) as usize);
+                a.tap_div_l = div;
+                a.tap_div_r = div;
+            }
+            8 => a.high_pass_hz = v,
+            9 => a.repeat_dynamics = v > 0.5,
+            10 => {
+                let voice = v.round().max(0.0) as u8;
+                a.delay_l.voice = voice;
+                a.delay_r.voice = voice;
+            }
+            11 => {
+                a.delay_l.tape_age = v;
+                a.delay_r.tape_age = v;
+            }
+            12 => {
+                a.delay_l.crinkle = v;
+                a.delay_r.crinkle = v;
+            }
+            13 => {
+                a.delay_l.bbd_bucket_loss = v;
+                a.delay_r.bbd_bucket_loss = v;
+            }
+            14 => {
+                let i = v.round().max(0.0) as usize;
+                let interval = if i >= delay::IceInterval::MENU_LEN {
+                    delay::IceInterval::Free
+                } else {
+                    delay::IceInterval::from_index(i)
+                };
+                a.delay_l.pitch_interval = interval;
+                a.delay_r.pitch_interval = interval;
+            }
+            15 => {
+                let slice = match v.round().max(0.0) as usize {
+                    0 => Some(delay::IceSlice::Short),
+                    1 => Some(delay::IceSlice::Medium),
+                    2 => Some(delay::IceSlice::Long),
+                    _ => None,
+                };
+                a.delay_l.pitch_slice = slice;
+                a.delay_r.pitch_slice = slice;
+            }
+            16 => {
+                a.delay_l.pitch_blend = v;
+                a.delay_r.pitch_blend = v;
+            }
+            17 => {
+                self.dly.routing = delay::DualRouting::from_index(v.round().max(0.0) as usize)
+            }
+            18 => self
+                .dly
+                .b
+                .set_style(delay::DelayStyle::from_index(v.round().max(0.0) as usize)),
+            19 => {
+                self.dly.b.delay_l.time_ms = v;
+                self.dly.b.delay_r.time_ms = v;
+            }
+            20 => {
+                self.dly.b.delay_l.feedback = v;
+                self.dly.b.delay_r.feedback = v;
+            }
+            21 => self.dly.b.mix = v.min(TIME_MIX_MAX),
+            22 => {
+                let shape = match v.round().max(0.0) as usize {
+                    1 => delay::GrainShape::Swell,
+                    2 => delay::GrainShape::SoftPluck,
+                    3 => delay::GrainShape::Pluck,
+                    4 => delay::GrainShape::Bounce,
+                    _ => delay::GrainShape::Soft,
+                };
+                a.delay_l.spectral_shape = shape;
+                a.delay_r.spectral_shape = shape;
+            }
+            23 => {
+                let dir = match v.round().max(0.0) as usize {
+                    1 => delay::GrainDirection::Reverse,
+                    2 => delay::GrainDirection::Both,
+                    _ => delay::GrainDirection::Forward,
+                };
+                a.delay_l.spectral_direction = dir;
+                a.delay_r.spectral_direction = dir;
+            }
+            24 => {
+                let n = v.clamp(1.0, 32.0);
+                let d = delay::DensityMode::Synced(1.0 / n);
+                a.delay_l.spectral_density = d;
+                a.delay_r.spectral_density = d;
+            }
+            25 => {
+                // >= 6 ms switches to free-running density; 0 returns
+                // to the synced default (set via id 24).
+                if v >= 6.0 {
+                    let d = delay::DensityMode::FreeHz(1000.0 / v);
+                    a.delay_l.spectral_density = d;
+                    a.delay_r.spectral_density = d;
+                }
+            }
+            26 => {
+                a.delay_l.spectral_spread = v;
+                a.delay_r.spectral_spread = v;
+            }
+            27 => {
+                a.delay_l.spectral_stretch = v;
+                a.delay_r.spectral_stretch = v;
+            }
+            28 => {
+                a.delay_l.spectral_octave = v;
+                a.delay_r.spectral_octave = v;
+            }
+            29 => {
+                a.delay_l.drive = v;
+                a.delay_r.drive = v;
+            }
+            30 => {
+                a.delay_l.lofi_bit_depth = v;
+                a.delay_r.lofi_bit_depth = v;
+            }
+            31 => {
+                a.delay_l.lofi_sr_div = v;
+                a.delay_r.lofi_sr_div = v;
+            }
+            32 => {
+                a.delay_l.lofi_mix = v;
+                a.delay_r.lofi_mix = v;
+            }
+            33 => {
+                a.delay_l.lofi_vinyl = v;
+                a.delay_r.lofi_vinyl = v;
+            }
+            34 => {
+                let shape = delay::LoFiFilterShape::from_index(v.round().max(0.0) as usize);
+                a.delay_l.lofi_filter_shape = shape;
+                a.delay_r.lofi_filter_shape = shape;
             }
             _ => {}
         }
     }
 
-    /// Apply a build-time parameter by name (`mix`/`time`/`feedback`).
+    /// Apply a build-time parameter by name (`mix`/`time`/`feedback`/
+    /// `style`/`swell`/`freeze`/`tempo_bpm`/`tap_div`/`high_pass`/
+    /// `repeat_dyn`/`voice`/`tape_age`/`crinkle`/`bucket_loss`/
+    /// `interval`/`slice`/`blend`, plus the dual block: `routing`/
+    /// `style_b`/`time_b`/`feedback_b`/`mix_b`).
     pub fn set_named(&mut self, name: &str, value: f64) {
         if let Some(id) = param_id(DELAY_PARAMS, name) {
             self.set(id, value);
