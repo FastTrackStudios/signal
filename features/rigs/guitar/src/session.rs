@@ -88,6 +88,8 @@ pub struct GuitarRigBackend {
     drive_presets: Arc<Mutex<Vec<DrivePresetDef>>>,
     /// Fullscreen tuner overlay state (footswitch-driven, model-synced).
     tuner_visible: Arc<Mutex<bool>>,
+    /// Perform-grid mode (0 Preset / 1 Profile / 2 Setlist).
+    perform_mode: Arc<Mutex<u32>>,
     /// Deferred profile save (live-edit auto-save marks; pump flushes).
     library_dirty: Arc<std::sync::atomic::AtomicBool>,
     /// Footswitch CC mapping (midi.styx — remappable).
@@ -133,6 +135,7 @@ impl GuitarRigBackend {
             part_index: Arc::new(Mutex::new(0)),
             drive_presets: Arc::new(Mutex::new(lib.drive_presets)),
             tuner_visible: Arc::new(Mutex::new(false)),
+            perform_mode: Arc::new(Mutex::new(1)),
             library_dirty: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             midi_map: Arc::new(Mutex::new(lib.midi_map)),
             headphone: Arc::new(Mutex::new(HeadphoneState::default())),
@@ -1069,6 +1072,7 @@ fn build_perf_model(prig: &ProfileRig, def: &ProfileDef) -> PerformanceModel {
         setlist_index: 0,
         library_songs: Vec::new(),
         tuner_visible: false,
+        perform_mode: 1,
         parts: Vec::new(),
         part_index: 0,
         headphone: HeadphoneState::default(),
@@ -1164,6 +1168,7 @@ impl Rig for GuitarRigBackend {
             m.setlists = self.setlists.lock().unwrap().iter().map(|s| s.name.clone()).collect();
             m.setlist_index = *self.setlist_index.lock().unwrap() as u32;
             m.tuner_visible = *self.tuner_visible.lock().unwrap();
+            m.perform_mode = *self.perform_mode.lock().unwrap();
             m.library_songs = self
                 .songs_lib
                 .lock()
@@ -1856,6 +1861,45 @@ impl Rig for GuitarRigBackend {
             build_profile(&def, &dps)
         };
         self.reload_rebuilt(rebuilt);
+    }
+
+    fn set_perform_mode(&self, mode: u32) {
+        *self.perform_mode.lock().unwrap() = mode.min(2);
+        tracing::info!(
+            "perform mode → {}",
+            ["preset", "profile", "setlist"][mode.min(2) as usize]
+        );
+        self.publish_state();
+    }
+
+    fn play_preset(&self, index: u32) {
+        // Resolve the pool preset → its first patch → activate directly.
+        let preset_name = {
+            let def = self.profile_def.lock().unwrap();
+            def.presets.get(index as usize).map(|p| p.name.clone())
+        };
+        let Some(preset_name) = preset_name else { return };
+        let patch_idx = {
+            let def = self.profile_def.lock().unwrap();
+            def.patches
+                .iter()
+                .position(|p| p.preset.eq_ignore_ascii_case(&preset_name))
+        };
+        let Some(idx) = patch_idx else {
+            tracing::warn!("play_preset: no patch uses '{preset_name}'");
+            return;
+        };
+        if let Ok(mut guard) = self.rig.lock() {
+            if let Some(prig) = guard.as_mut() {
+                prig.activate(idx);
+            }
+        }
+        tracing::info!("preset mode → {preset_name}");
+        self.resync_blocks();
+        self.apply_tempo_to_delays();
+        self.recall_patch_boost();
+        self.apply_boost_to_block();
+        self.publish_state();
     }
 
     fn toggle_tuner(&self) {

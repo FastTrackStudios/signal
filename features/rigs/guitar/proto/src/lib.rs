@@ -125,6 +125,9 @@ pub struct PerformanceModel {
     /// Fullscreen tuner overlay — model-driven so the footswitch (hold
     /// tap-tempo) and every remote stay in sync.
     pub tuner_visible: bool,
+    /// Perform-grid mode: 0 Preset (browse the pool), 1 Profile (stacks),
+    /// 2 Setlist (song-adaptive: parts + stacks).
+    pub perform_mode: u32,
     /// The current song's section names (Intro, V1, Chorus, …).
     pub parts: Vec<String>,
     /// Index of the current section.
@@ -389,6 +392,11 @@ pub mod rig {
         fn set_patch_trim(&self, patch: u32, db: f32);
         /// Toggle the fullscreen tuner overlay on every remote.
         fn toggle_tuner(&self);
+        /// Perform-grid mode (0 Preset / 1 Profile / 2 Setlist), synced.
+        fn set_perform_mode(&self, mode: u32);
+        /// Preset mode: play pool preset `index` directly (activates its
+        /// first patch, no stack rotation).
+        fn play_preset(&self, index: u32);
         /// Tap tempo.
         fn tap_tempo(&self);
         /// Toggle a block's bypass (by id).

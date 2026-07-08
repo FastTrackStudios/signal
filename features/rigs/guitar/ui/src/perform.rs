@@ -106,6 +106,31 @@ pub fn PerformGrid(
 ) -> Element {
     let stacks = model.stacks;
     let rig = use_hook(try_consume_context::<RigClient>);
+    let mode = model.perform_mode;
+    // Preset mode browses the pool — fetch it whenever the model moves.
+    let presets = use_resource({
+        let rig = rig.clone();
+        let rev = model.revision;
+        move || {
+            let _ = rev;
+            let rig = rig.clone();
+            async move {
+                match rig {
+                    Some(r) => r.presets().await.unwrap_or_default(),
+                    None => Vec::new(),
+                }
+            }
+        }
+    });
+    let preset_list = presets.read().clone().unwrap_or_default();
+    let set_mode = {
+        let rig = rig.clone();
+        move |m: u32| {
+            if let Some(r) = rig.clone() {
+                spawn(async move { let _ = r.set_perform_mode(m).await; });
+            }
+        }
+    };
     // The Song layer: switches 1/2 become Prev/Next, the middle shows the
     // setlist for fast scrolling, switch 5 exits. Entered by holding 3 or
     // tapping the Song tile.
@@ -138,15 +163,84 @@ pub fn PerformGrid(
     let song_pos = format!("{}/{}", model.song_index + 1, model.songs.len().max(1));
 
     rsx! {
+        div { class: "flex flex-col h-full min-h-0 gap-2",
+        // Mode switcher: Preset (pool browsing) · Profile (stacks) ·
+        // Setlist (song-adaptive parts + stacks).
+        div { class: "flex items-center gap-1 flex-shrink-0",
+            for (m, label) in [(0u32, "Preset"), (1, "Profile"), (2, "Setlist")] {
+                button {
+                    key: "{m}",
+                    class: if mode == m {
+                        "px-3 py-1 rounded-md text-xs font-bold bg-accent text-accent-foreground"
+                    } else {
+                        "px-3 py-1 rounded-md text-xs text-muted-foreground border border-border hover:bg-accent/40"
+                    },
+                    onclick: {
+                        let set_mode = set_mode.clone();
+                        move |_| set_mode(m)
+                    },
+                    "{label}"
+                }
+            }
+            if mode == 2 {
+                span { class: "ml-2 text-xs text-muted-foreground truncate", "{current_song} · {song_pos}" }
+            }
+        }
+
+        if mode == 0 {
+            // ── Preset mode: the pool, one tile per preset ──
+            div { class: "grid grid-cols-5 auto-rows-fr gap-3 flex-1 min-h-0",
+                for (i, p) in preset_list.iter().enumerate() {
+                    button {
+                        key: "{i}",
+                        class: if p.active {
+                            "rounded-2xl border-4 border-white/80 bg-accent text-accent-foreground flex flex-col items-center justify-center gap-1 p-3"
+                        } else {
+                            "rounded-2xl border border-border bg-card hover:bg-accent/30 flex flex-col items-center justify-center gap-1 p-3"
+                        },
+                        onclick: {
+                            let rig = rig.clone();
+                            move |_| {
+                                if let Some(r) = rig.clone() {
+                                    spawn(async move { let _ = r.play_preset(i as u32).await; });
+                                }
+                            }
+                        },
+                        span { class: "text-lg font-bold text-center leading-tight", "{p.name}" }
+                        span { class: "text-[10px] font-mono opacity-60", "×{p.used_by}" }
+                    }
+                }
+            }
+        } else {
         // Hold layer ABOVE the main switches (a footswitch's hold function
         // lives "up" from your toe) — a slim strip, ~1/8 the main row.
         div {
-            class: "grid grid-cols-5 gap-3 h-full",
+            class: "grid grid-cols-5 gap-3 flex-1 min-h-0",
             style: "grid-template-rows: minmax(44px, 1fr) minmax(0, 7fr);",
 
-            // ── Row A: the hold layer (switches 6–10), compact ──
-            // Switch 6 (hold 1): Ambient.
-            if let Some(stack) = stacks.get(4).cloned() {
+            // ── Row A: setlist mode shows the song's parts; otherwise the
+            // hold layer (switches 6–10), compact ──
+            if mode == 2 && !model.parts.is_empty() {
+                for (i, part) in model.parts.iter().enumerate() {
+                    button {
+                        key: "part-{i}",
+                        class: if i == model.part_index as usize {
+                            "rounded-lg px-2 text-sm font-bold bg-accent text-accent-foreground min-h-0"
+                        } else {
+                            "rounded-lg px-2 text-sm text-muted-foreground border border-border hover:bg-accent/40 min-h-0"
+                        },
+                        onclick: {
+                            let rig = rig.clone();
+                            move |_| {
+                                if let Some(r) = rig.clone() {
+                                    spawn(async move { let _ = r.select_part(i as u32).await; });
+                                }
+                            }
+                        },
+                        "{part}"
+                    }
+                }
+            } else if let Some(stack) = stacks.get(4).cloned() {
                 StackTile { index: 4usize, switch_no: 6, stack, on_press, compact: true }
             } else {
                 div { class: "relative rounded-lg border border-dashed border-border/30",
@@ -286,7 +380,8 @@ pub fn PerformGrid(
             }
             }
         }
-
+        }
+        }
     }
 }
 
