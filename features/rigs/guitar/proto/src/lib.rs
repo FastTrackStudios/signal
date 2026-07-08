@@ -114,9 +114,12 @@ pub struct PerformanceModel {
     /// Current tempo (BPM) — drives the tap-tempo blink.
     pub tempo_bpm: u32,
     /// Setlist song names, in order.
-    pub songs: Vec<String>,
+    pub songs: Vec<SongSlot>,
     /// Index of the current song in [`songs`](Self::songs).
     pub song_index: u32,
+    /// All setlist names; [`setlist_index`](Self::setlist_index) is active.
+    pub setlists: Vec<String>,
+    pub setlist_index: u32,
     /// The current song's section names (Intro, V1, Chorus, …).
     pub sections: Vec<String>,
     /// Index of the current section.
@@ -159,6 +162,17 @@ pub struct PresetInfo {
     pub active: bool,
     /// How many patches point at it.
     pub used_by: u32,
+}
+
+/// One song slot in the active setlist — key/tempo already resolved
+/// (per-set override or the song's default).
+#[derive(Clone, PartialEq, Debug, Default, Facet)]
+pub struct SongSlot {
+    pub name: String,
+    /// Key for this set (e.g. "G").
+    pub key: String,
+    /// Tempo for this set.
+    pub bpm: u32,
 }
 
 /// The headphone-cue module's state. The physical headphone bus lands with
@@ -312,6 +326,8 @@ pub mod rig {
         /// The most recent MIDI events seen by the core (newest last),
         /// formatted for the monitor.
         fn midi_recent(&self) -> Vec<String>;
+        /// Switch the active setlist (recalls its first song).
+        fn select_setlist(&self, index: u32);
         /// Tap tempo.
         fn tap_tempo(&self);
         /// Toggle a block's bypass (by id).

@@ -133,7 +133,7 @@ pub fn PerformGrid(
     let current_song = model
         .songs
         .get(model.song_index as usize)
-        .cloned()
+        .map(|s| s.name.clone())
         .unwrap_or_default();
     let song_pos = format!("{}/{}", model.song_index + 1, model.songs.len().max(1));
 
@@ -218,7 +218,8 @@ pub fn PerformGrid(
                         for (i, song) in model.songs.iter().enumerate() {
                             {
                                 let is_current = i == model.song_index as usize;
-                                let name = song.clone();
+                                let name = song.name.clone();
+                                let meta = format!("{} · {}", song.key, song.bpm);
                                 rsx! {
                                     button {
                                         key: "{i}",
@@ -230,6 +231,7 @@ pub fn PerformGrid(
                                         onclick: move |_| on_select_song.call(i),
                                         span { class: "font-mono text-[10px] opacity-60 w-4", "{i + 1}" }
                                         span { class: "truncate", "{name}" }
+                                        span { class: "ml-auto font-mono text-[10px] opacity-60 flex-shrink-0", "{meta}" }
                                     }
                                 }
                             }

@@ -22,7 +22,9 @@ use signal_guitar_proto::{
 use signal_proto::block::BlockType;
 use signal_sampler::{DeviceInfo, GuitarRig, ProfileRig, RigBlock, RigManager};
 
-use crate::profiles::{ProfileDef, SetlistSong, build_profile, worship_def, worship_setlist};
+use crate::profiles::{
+    ProfileDef, SetlistDef, SongDef, build_profile, default_setlists, song_library, worship_def,
+};
 
 /// Rig whose audio prefs the settings service reads/writes (persisted to
 /// `<config>/signal/rigs/guitar-rig.styx` by `RigManager`).
@@ -75,9 +77,12 @@ pub struct GuitarRigBackend {
     /// The editable profile definition (preset pool + patch pointers) —
     /// the source the runtime profile is built from.
     profile_def: Arc<Mutex<ProfileDef>>,
-    /// The setlist + the current song/section position. The list itself is
-    /// mutable (reorder) until setlists become service-driven entities.
-    setlist: Arc<Mutex<Vec<SetlistSong>>>,
+    /// The song library (defaults) + the setlists (per-set overrides), the
+    /// active setlist, and the current song/section position. Mutable until
+    /// these become service-driven entities.
+    songs_lib: Arc<Mutex<Vec<SongDef>>>,
+    setlists: Arc<Mutex<Vec<SetlistDef>>>,
+    setlist_index: Arc<Mutex<usize>>,
     song_index: Arc<Mutex<usize>>,
     section_index: Arc<Mutex<usize>>,
     /// Headphone-cue module state (volume/self-mix staged; mute applied).
@@ -113,7 +118,9 @@ impl GuitarRigBackend {
             tempo: Arc::new(Mutex::new(None)),
             taps: Arc::new(Mutex::new(TapTracker::default())),
             profile_def: Arc::new(Mutex::new(worship_def())),
-            setlist: Arc::new(Mutex::new(worship_setlist())),
+            songs_lib: Arc::new(Mutex::new(song_library())),
+            setlists: Arc::new(Mutex::new(default_setlists())),
+            setlist_index: Arc::new(Mutex::new(0)),
             song_index: Arc::new(Mutex::new(0)),
             section_index: Arc::new(Mutex::new(0)),
             headphone: Arc::new(Mutex::new(HeadphoneState::default())),
@@ -303,14 +310,64 @@ impl GuitarRigBackend {
         self.publish_state();
     }
 
-    /// Recall setlist entry `idx`: activate its starting stack and rewind to
-    /// the first section.
+    /// The active setlist's entries, resolved against the song library:
+    /// `(name, key, bpm, stack, sections)` per slot — per-set overrides win
+    /// over the song's defaults.
+    fn resolved_setlist(&self) -> Vec<(String, String, u32, usize, Vec<String>)> {
+        let lib = self.songs_lib.lock().unwrap();
+        let setlists = self.setlists.lock().unwrap();
+        let idx = *self.setlist_index.lock().unwrap();
+        let Some(set) = setlists.get(idx) else {
+            return Vec::new();
+        };
+        set.entries
+            .iter()
+            .map(|e| {
+                let song = lib.iter().find(|s| s.name.eq_ignore_ascii_case(&e.song));
+                let key = e
+                    .key
+                    .clone()
+                    .or_else(|| song.map(|s| s.key.clone()))
+                    .unwrap_or_default();
+                let bpm = e.bpm.or_else(|| song.map(|s| s.bpm)).unwrap_or(120);
+                let stack = song.map(|s| s.stack).unwrap_or(0);
+                let sections = song.map(|s| s.sections.clone()).unwrap_or_default();
+                (e.song.clone(), key, bpm, stack, sections)
+            })
+            .collect()
+    }
+
+    /// Recall setlist entry `idx`: activate its stack, set the song's tempo
+    /// (which re-times the delays), and rewind to the first section.
     fn recall_song(&self, idx: usize) {
-        let entry = self.setlist.lock().unwrap().get(idx).cloned();
-        if let Some(song) = entry {
+        let entry = self.resolved_setlist().get(idx).cloned();
+        if let Some((name, key, bpm, stack, _)) = entry {
             *self.section_index.lock().unwrap() = 0;
-            tracing::info!("setlist → {} (stack {})", song.name, song.stack);
-            self.activate_stack_and_sync(song.stack);
+            *self.tempo.lock().unwrap() = Some(bpm as f32);
+            tracing::info!("setlist → {name} ({key} · {bpm} BPM, stack {stack})");
+            self.apply_tempo_to_delays();
+            // Recall activates the song's stack only when it isn't already
+            // the active one — a press on the active stack would *rotate*
+            // it (FM9 semantics), silently changing the patch.
+            let already_active = self
+                .rig
+                .lock()
+                .ok()
+                .and_then(|g| {
+                    g.as_ref().map(|prig| {
+                        prig.stacks().get(stack).is_some_and(|st| {
+                            st.patches.iter().any(|p| {
+                                prig.active_patch().is_some_and(|a| a.name.eq_ignore_ascii_case(p))
+                            })
+                        })
+                    })
+                })
+                .unwrap_or(false);
+            if already_active {
+                self.publish_state();
+            } else {
+                self.activate_stack_and_sync(stack);
+            }
         }
     }
 
@@ -471,6 +528,13 @@ fn param_specs(bt: BlockType) -> Vec<(String, f32, f32, f32)> {
             ("release", 5.0, 500.0, 120.0),
         ]),
         BlockType::Volume => owned(&[("gain_db", -24.0, 24.0, 0.0)]),
+        // Level-matched single drive control (DSP lands with drive-dsp).
+        BlockType::Drive | BlockType::Boost => owned(&[("drive", 0.0, 1.0, 0.5)]),
+        // NAM amp trims — input trim is "how hard the amp is pushed".
+        BlockType::Amp => owned(&[
+            ("input_trim", -12.0, 12.0, 0.0),
+            ("output_trim", -12.0, 12.0, 0.0),
+        ]),
         // The TimeLine-MX delay surface (signal-fx DELAY_PARAMS subset the
         // panel drives): style, per-side tempo divisions, high-pass,
         // repeat dynamics (ducking), mix, feedback.
@@ -573,6 +637,8 @@ fn build_perf_model(prig: &ProfileRig, def: &ProfileDef) -> PerformanceModel {
         tempo_bpm: 120,
         songs: Vec::new(),   // filled in by the service (setlist lives outside prig)
         song_index: 0,
+        setlists: Vec::new(),
+        setlist_index: 0,
         sections: Vec::new(),
         section_index: 0,
         headphone: HeadphoneState::default(),
@@ -650,14 +716,23 @@ impl Rig for GuitarRigBackend {
         m.boost_db = self.current_boost_db();
         m.tempo_bpm = self.tempo_bpm().round() as u32;
         {
-            let setlist = self.setlist.lock().unwrap();
+            let resolved = self.resolved_setlist();
             let song_idx = *self.song_index.lock().unwrap();
-            m.songs = setlist.iter().map(|s| s.name.clone()).collect();
+            m.songs = resolved
+                .iter()
+                .map(|(name, key, bpm, _, _)| signal_guitar_proto::SongSlot {
+                    name: name.clone(),
+                    key: key.clone(),
+                    bpm: *bpm,
+                })
+                .collect();
             m.song_index = song_idx as u32;
-            m.sections = setlist
+            m.sections = resolved
                 .get(song_idx)
-                .map(|s| s.sections.clone())
+                .map(|(_, _, _, _, sections)| sections.clone())
                 .unwrap_or_default();
+            m.setlists = self.setlists.lock().unwrap().iter().map(|s| s.name.clone()).collect();
+            m.setlist_index = *self.setlist_index.lock().unwrap() as u32;
         }
         m.section_index = *self.section_index.lock().unwrap() as u32;
         m.headphone = self.headphone.lock().unwrap().clone();
@@ -675,7 +750,7 @@ impl Rig for GuitarRigBackend {
     }
 
     fn next_song(&self) {
-        let last = self.setlist.lock().unwrap().len().saturating_sub(1);
+        let last = self.resolved_setlist().len().saturating_sub(1);
         let idx = {
             let mut i = self.song_index.lock().unwrap();
             *i = (*i + 1).min(last);
@@ -694,7 +769,7 @@ impl Rig for GuitarRigBackend {
     }
 
     fn select_song(&self, index: u32) {
-        let last = self.setlist.lock().unwrap().len().saturating_sub(1);
+        let last = self.resolved_setlist().len().saturating_sub(1);
         let idx = (index as usize).min(last);
         *self.song_index.lock().unwrap() = idx;
         self.recall_song(idx);
@@ -703,8 +778,11 @@ impl Rig for GuitarRigBackend {
     fn select_section(&self, index: u32) {
         let (song_idx, last) = {
             let i = *self.song_index.lock().unwrap();
-            let setlist = self.setlist.lock().unwrap();
-            let last = setlist.get(i).map(|s| s.sections.len().saturating_sub(1)).unwrap_or(0);
+            let last = self
+                .resolved_setlist()
+                .get(i)
+                .map(|(_, _, _, _, sections)| sections.len().saturating_sub(1))
+                .unwrap_or(0);
             (i, last)
         };
         let idx = (index as usize).min(last);
@@ -715,15 +793,33 @@ impl Rig for GuitarRigBackend {
         self.events.publish(RigEvent::Perf(Rig::perf(self)));
     }
 
+    fn select_setlist(&self, index: u32) {
+        {
+            let mut idx = self.setlist_index.lock().unwrap();
+            let last = self.setlists.lock().unwrap().len().saturating_sub(1);
+            *idx = (index as usize).min(last);
+        }
+        *self.song_index.lock().unwrap() = 0;
+        tracing::info!(
+            "setlist switched → {}",
+            self.setlists.lock().unwrap()[*self.setlist_index.lock().unwrap()].name
+        );
+        self.recall_song(0);
+        self.publish_state();
+    }
+
     fn move_song(&self, from: u32, to: u32) {
         {
-            let mut setlist = self.setlist.lock().unwrap();
+            let mut setlists = self.setlists.lock().unwrap();
+            let active = *self.setlist_index.lock().unwrap();
+            let Some(set) = setlists.get_mut(active) else { return };
+            let entries = &mut set.entries;
             let (from, to) = (from as usize, to as usize);
-            if from >= setlist.len() || to >= setlist.len() {
+            if from >= entries.len() || to >= entries.len() {
                 return;
             }
-            let song = setlist.remove(from);
-            setlist.insert(to, song);
+            let song = entries.remove(from);
+            entries.insert(to, song);
             // Keep the current-song pointer on the same song.
             let mut cur = self.song_index.lock().unwrap();
             if *cur == from {

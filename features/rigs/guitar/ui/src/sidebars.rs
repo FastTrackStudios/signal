@@ -218,7 +218,7 @@ pub fn RightSidebar(model: PerformanceModel) -> Element {
     let current_song = model
         .songs
         .get(model.song_index as usize)
-        .cloned()
+        .map(|s| s.name.clone())
         .unwrap_or_default();
 
     rsx! {
@@ -256,10 +256,37 @@ pub fn RightSidebar(model: PerformanceModel) -> Element {
 
             // ── Setlist management ──
             PanelLabel { label: "Setlist" }
+            // Which set: XR / CYA / … — switching recalls its first song.
+            div { class: "flex gap-1 px-2 pt-1 flex-wrap",
+                for (si, set) in model.setlists.iter().enumerate() {
+                    {
+                        let set = set.clone();
+                        let active = si == model.setlist_index as usize;
+                        let rig = rig.clone();
+                        rsx! {
+                            button {
+                                key: "{si}",
+                                class: if active {
+                                    "rounded px-1.5 py-0.5 text-[10px] font-bold bg-accent text-accent-foreground"
+                                } else {
+                                    "rounded px-1.5 py-0.5 text-[10px] text-muted-foreground border border-border hover:bg-accent/40"
+                                },
+                                onclick: move |_| {
+                                    if let Some(r) = rig.clone() {
+                                        spawn(async move { let _ = r.select_setlist(si as u32).await; });
+                                    }
+                                },
+                                "{set}"
+                            }
+                        }
+                    }
+                }
+            }
             div { class: "flex-1 overflow-y-auto min-h-0 p-2 flex flex-col gap-0.5",
                 for (i, song) in model.songs.iter().enumerate() {
                     {
-                        let name = song.clone();
+                        let name = song.name.clone();
+                        let meta = format!("{} · {}", song.key, song.bpm);
                         let is_current = i == model.song_index as usize;
                         let count = model.songs.len();
                         rsx! {
@@ -282,6 +309,7 @@ pub fn RightSidebar(model: PerformanceModel) -> Element {
                                     },
                                     span { class: "font-mono text-[10px] opacity-60 w-4 flex-shrink-0", "{i + 1}" }
                                     span { class: if is_current { "truncate font-bold" } else { "truncate" }, "{name}" }
+                                    span { class: "ml-auto font-mono text-[9px] opacity-60 flex-shrink-0", "{meta}" }
                                 }
                                 // Reorder — visible on hover so the list stays calm.
                                 div { class: "flex flex-col opacity-0 group-hover:opacity-100 flex-shrink-0",

@@ -186,6 +186,13 @@ pub fn build_profile(def: &ProfileDef) -> RigProfile {
             // Volume pedal (clean gain, unity default) — the Control view's
             // left pedal drives it.
             .with_block(on_fx(BlockType::Volume, "Volume Pedal", &[("gain_db", "0")]))
+            // The drive board — four pedals into the amp, all off until
+            // engaged from the control surface (DSP lands with drive-dsp;
+            // placeholders keep the blocks addressable + level-staged).
+            .with_block(off_fx(BlockType::Boost, "Boost", &[("drive", "0.5")]))
+            .with_block(off_fx(BlockType::Drive, "Drive 1", &[("drive", "0.5")]))
+            .with_block(off_fx(BlockType::Drive, "Drive 2", &[("drive", "0.5")]))
+            .with_block(off_fx(BlockType::Drive, "Drive 3", &[("drive", "0.5")]))
             .with_block(RigBlock::nam(path).named("Amp L"))
             // Post-amp shaping, part of the Amp module: gate into the amp
             // EQ — both dialed against the amp's character.
@@ -284,34 +291,79 @@ pub fn worship_profile() -> RigProfile {
     build_profile(&worship_def())
 }
 
-/// One setlist entry: the song, its starting stack, and its section map.
+/// A song in the library: name plus its default key and tempo. Setlist
+/// entries reference songs and may override key/tempo per set.
 #[derive(Clone)]
-pub struct SetlistSong {
+pub struct SongDef {
     pub name: String,
-    /// The stack (footswitch folder) whose current patch the song opens on.
+    /// Default key (e.g. "G", "C", "E", "A").
+    pub key: String,
+    /// Default tempo.
+    pub bpm: u32,
+    /// The stack (footswitch folder) the song opens on.
     pub stack: usize,
-    /// Section names, in order (Intro, V1, Chorus, …).
+    /// Section names, in order (empty until section maps come back).
     pub sections: Vec<String>,
 }
 
-/// The demo worship setlist — hardcoded next to the profile until setlists
-/// become entities driven over the Setlist service.
-pub fn worship_setlist() -> Vec<SetlistSong> {
-    fn song(name: &str, stack: usize, sections: &[&str]) -> SetlistSong {
-        SetlistSong {
+/// One setlist entry: a song reference with optional per-set key/tempo
+/// overrides (the same song can sit in different keys on different sets).
+#[derive(Clone)]
+pub struct SetlistEntryDef {
+    pub song: String,
+    pub key: Option<String>,
+    pub bpm: Option<u32>,
+}
+
+/// A named setlist (e.g. "XR Wednesday 7-8-26").
+#[derive(Clone)]
+pub struct SetlistDef {
+    pub name: String,
+    pub entries: Vec<SetlistEntryDef>,
+}
+
+/// The song library — defaults live here; sets override per entry.
+pub fn song_library() -> Vec<SongDef> {
+    fn song(name: &str, key: &str, bpm: u32) -> SongDef {
+        SongDef {
             name: name.to_string(),
-            stack,
-            sections: sections.iter().map(|s| s.to_string()).collect(),
+            key: key.to_string(),
+            bpm,
+            stack: 0, // open on Clean; per-song stacks come with song editing
+            sections: Vec::new(),
         }
     }
     vec![
-        song("Great Are You Lord", 0, &["Intro", "V1", "Chorus", "V2", "Chorus", "Bridge", "Outro"]),
-        song("What A Beautiful Name", 1, &["Intro", "V1", "Chorus 1", "V2", "Chorus 2", "Bridge", "Outro"]),
-        song("Graves Into Gardens", 2, &["Intro", "V1", "Chorus", "V2", "Bridge", "Vamp", "Outro"]),
-        song("How Great Thou Art", 0, &["Intro", "V1", "Chorus", "V2", "V3", "Outro"]),
-        song("See A Victory", 3, &["Intro", "V1", "Chorus", "V2", "Bridge", "Outro"]),
-        song("Goodness Of God", 4, &["Intro", "V1", "Chorus", "V2", "Bridge", "Outro"]),
-        song("Firm Foundation", 1, &["Intro", "V1", "Chorus", "V2", "Bridge", "Vamp"]),
-        song("Praise", 2, &["Intro", "V1", "Chorus", "V2", "Bridge", "Outro"]),
+        song("What a God", "G", 79),
+        song("No Other Name", "G", 74),
+        song("Owe You Praise", "C", 122),
+        song("WASHED", "E", 139),
+        song("Who Else", "A", 68),
+        song("Build My Life / With Everything", "A", 70),
+    ]
+}
+
+/// The default setlists — XR + CYA, dated.
+pub fn default_setlists() -> Vec<SetlistDef> {
+    fn entry(song: &str) -> SetlistEntryDef {
+        SetlistEntryDef { song: song.to_string(), key: None, bpm: None }
+    }
+    vec![
+        SetlistDef {
+            name: "XR Wednesday 7-8-26".to_string(),
+            entries: vec![
+                entry("What a God"),
+                entry("No Other Name"),
+                entry("Owe You Praise"),
+            ],
+        },
+        SetlistDef {
+            name: "CYA 7-9-26".to_string(),
+            entries: vec![
+                entry("WASHED"),
+                entry("Who Else"),
+                entry("Build My Life / With Everything"),
+            ],
+        },
     ]
 }

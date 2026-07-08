@@ -141,13 +141,15 @@ fn StereoMeter(label: &'static str, l_db: f32, r_db: f32, #[props(default)] mute
     rsx! {
         div { class: "flex flex-col items-center h-full min-h-0 w-full",
             span { class: "text-[8px] font-semibold uppercase tracking-wider text-muted-foreground", "{label}" }
-            div { class: "flex flex-1 w-full min-h-0 bg-black/60 border border-border overflow-hidden",
-                div { class: "relative flex-1 h-full",
+            // Two thin bars — the pair reads as one meter's width.
+            div { class: "flex flex-1 min-h-0 bg-black/60 border border-border overflow-hidden",
+                style: "width: 17px;",
+                div { class: "relative h-full", style: "width: 8px;",
                     div { class: "absolute inset-x-0 bottom-0 transition-[height] duration-75",
                         style: "height: {lp}%; background-color: {lc};" }
                 }
-                div { class: "w-px bg-black" }
-                div { class: "relative flex-1 h-full",
+                div { class: "w-px bg-black h-full" }
+                div { class: "relative h-full", style: "width: 8px;",
                     div { class: "absolute inset-x-0 bottom-0 transition-[height] duration-75",
                         style: "height: {rp}%; background-color: {rc};" }
                 }
@@ -323,10 +325,12 @@ fn VFader(
         });
     };
     rsx! {
-        div { class: "flex flex-col items-center h-full min-h-0",
-            span { class: "text-[8px] font-semibold uppercase tracking-wider text-muted-foreground", "{label}" }
+        // Fixed column width = the bar itself; labels overflow either side
+        // without pushing the neighbouring meter away.
+        div { class: "flex flex-col items-center h-full min-h-0 min-w-0 flex-shrink-0", style: "width: 9px;",
+            span { class: "text-[7px] font-semibold uppercase text-muted-foreground whitespace-nowrap", "{label}" }
             div {
-                class: "relative flex-1 w-3 bg-black/60 border border-border min-h-0 cursor-ns-resize touch-none",
+                class: "relative flex-1 w-2 bg-black/60 border border-border min-h-0 cursor-ns-resize touch-none",
                 onmounted: move |e| el.set(Some(e.data())),
                 onpointerdown: move |e: PointerEvent| { tracking.set(true); set_from(e.element_coordinates()); },
                 onpointermove: move |e: PointerEvent| { if tracking() { set_from(e.element_coordinates()); } },
@@ -511,6 +515,7 @@ fn PKnob(block_id: String, name: &'static str, label: &'static str, p: BlockPara
 /// selected delay's controls in a strip beneath.
 #[component]
 fn DelayPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32) -> Element {
+    let rig = use_hook(try_consume_context::<RigClient>);
     let mut sel = use_signal(|| 0usize);
     const W: f32 = 460.0;
     let delays: Vec<LiveBlock> = blocks
@@ -578,11 +583,44 @@ fn DelayPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32) -> Element {
                             }
                             div { class: "absolute top-0.5 left-1.5 flex items-baseline gap-1.5",
                                 span { style: "font-size:8px; font-weight:700; color:{color};", "{di + 1}" }
-                                span { style: "font-size:8px; color:#8a8a92;",
-                                    "{DELAY_ALGOS[param_v(b, \"style\", 1.0) as usize % 13]}"
-                                }
                                 if dim {
                                     span { style: "font-size:8px; color:#52525b;", "bypassed" }
+                                }
+                            }
+                            // Per-lane machine + timing, embedded at the
+                            // lane's right edge.
+                            div {
+                                class: "absolute right-0 inset-y-0 flex items-center gap-1 pr-1 pl-3",
+                                style: "background: linear-gradient(to left, rgba(8,8,8,0.95) 65%, transparent);",
+                                onclick: move |e: MouseEvent| e.stop_propagation(),
+                                // One timing division per delay (drives
+                                // both sides).
+                                {
+                                    let rig = rig.clone();
+                                    let id = b.id.clone();
+                                    let div = param_v(b, "tap_div_l", 0.0);
+                                    rsx! {
+                                        select {
+                                            class: "bg-transparent border border-border rounded-sm text-[10px] px-0.5 py-0",
+                                            value: "{div as usize}",
+                                            onchange: move |e: FormEvent| {
+                                                if let Ok(v) = e.value().parse::<usize>() {
+                                                    send_param(&rig, &id, "tap_div_l", v as f32);
+                                                    send_param(&rig, &id, "tap_div_r", v as f32);
+                                                }
+                                            },
+                                            for (i, o) in DIV_LABELS.iter().enumerate() {
+                                                option { key: "{i}", value: "{i}", selected: i == div as usize, "{o}" }
+                                            }
+                                        }
+                                    }
+                                }
+                                AlgoPicker {
+                                    block_id: b.id.clone(),
+                                    name: "style",
+                                    value: param_v(b, "style", 1.0),
+                                    options: DELAY_ALGOS.to_vec(),
+                                    accent: color.to_string(),
                                 }
                             }
                         }
@@ -591,22 +629,9 @@ fn DelayPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32) -> Element {
             }
 
 
-            // ── Controls for the selected delay ──
-            div { class: "flex items-end gap-1.5 px-1.5 py-1 border-y border-border flex-shrink-0", style: "order: 1;",
-                ParamSelect {
-                    block_id: cur_id.clone(),
-                    name: "tap_div_l",
-                    label: "Time L",
-                    value: param_v(&cur, "tap_div_l", 0.0),
-                    options: DIV_LABELS.to_vec(),
-                }
-                ParamSelect {
-                    block_id: cur_id.clone(),
-                    name: "tap_div_r",
-                    label: "Time R",
-                    value: param_v(&cur, "tap_div_r", 0.0),
-                    options: DIV_LABELS.to_vec(),
-                }
+            // ── Knobs for the selected delay (machine + timing live on
+            // the lanes) ──
+            div { class: "flex items-end justify-around gap-1.5 px-1.5 py-1 border-y border-border flex-shrink-0", style: "order: 1;",
                 if let Some(p) = param(&cur, "high_pass") {
                     PKnob { block_id: cur_id.clone(), name: "high_pass", label: "HP", p }
                 }
@@ -618,15 +643,6 @@ fn DelayPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32) -> Element {
                 }
                 if let Some(p) = param(&cur, "mix") {
                     PKnob { block_id: cur_id.clone(), name: "mix", label: "Mix", p }
-                }
-                div { class: "ml-auto",
-                    AlgoPicker {
-                        block_id: cur_id.clone(),
-                        name: "style",
-                        value: param_v(&cur, "style", 1.0),
-                        options: DELAY_ALGOS.to_vec(),
-                        accent: DELAY_COLORS[sel().min(1)].to_string(),
-                    }
                 }
             }
 
@@ -691,11 +707,28 @@ fn ReverbPanel(blocks: Vec<LiveBlock>) -> Element {
                             }
                             div { class: "absolute top-0.5 left-1.5 flex items-baseline gap-1.5",
                                 span { style: "font-size:8px; font-weight:700; color:{color};", "{vi + 1}" }
-                                span { style: "font-size:8px; color:#8a8a92;",
-                                    "{VERB_ALGOS[param_v(b, \"algorithm\", 1.0) as usize % 15]}"
-                                }
                                 if dim {
                                     span { style: "font-size:8px; color:#52525b;", "bypassed" }
+                                }
+                            }
+                            // Per-lane algorithm + decay-time readout at the
+                            // lane's right edge (the knob lives in the strip).
+                            div {
+                                class: "absolute right-0 inset-y-0 flex items-center gap-1.5 pr-1 pl-3",
+                                style: "background: linear-gradient(to left, rgba(8,8,8,0.95) 65%, transparent);",
+                                onclick: move |e: MouseEvent| e.stop_propagation(),
+                                div { class: "flex flex-col items-end",
+                                    span { style: "font-size:7px; text-transform:uppercase; color:#8a8a92;", "Time" }
+                                    span { style: "font-family:ui-monospace,monospace; font-size:10px; color:{color};",
+                                        {format!("{:.2}", param_v(b, "decay", 0.4))}
+                                    }
+                                }
+                                AlgoPicker {
+                                    block_id: b.id.clone(),
+                                    name: "algorithm",
+                                    value: param_v(b, "algorithm", 1.0),
+                                    options: VERB_ALGOS.to_vec(),
+                                    accent: color.to_string(),
                                 }
                             }
                         }
@@ -704,8 +737,8 @@ fn ReverbPanel(blocks: Vec<LiveBlock>) -> Element {
             }
 
 
-            // ── Controls for the selected reverb ──
-            div { class: "flex items-end gap-1.5 px-1.5 py-1 border-y border-border flex-shrink-0", style: "order: 1;",
+            // ── Knobs for the selected reverb (algorithm lives on the lanes) ──
+            div { class: "flex items-end justify-around gap-1.5 px-1.5 py-1 border-y border-border flex-shrink-0", style: "order: 1;",
                 if let Some(p) = param(&cur, "mix") {
                     PKnob { block_id: cur_id.clone(), name: "mix", label: "Mix", p }
                 }
@@ -720,15 +753,6 @@ fn ReverbPanel(blocks: Vec<LiveBlock>) -> Element {
                 }
                 if let Some(p) = param(&cur, "modulation") {
                     PKnob { block_id: cur_id.clone(), name: "modulation", label: "Mod", p }
-                }
-                div { class: "ml-auto",
-                    AlgoPicker {
-                        block_id: cur_id.clone(),
-                        name: "algorithm",
-                        value: param_v(&cur, "algorithm", 1.0),
-                        options: VERB_ALGOS.to_vec(),
-                        accent: VERB_COLORS[sel().min(1)].to_string(),
-                    }
                 }
             }
 
@@ -794,6 +818,137 @@ fn ModViz(blocks: Vec<LiveBlock>) -> Element {
     }
 }
 
+// ── The drive board rail ───────────────────────────────────────────────────
+
+/// One drive-board chunk: the whole widget is a horizontal level fader —
+/// the red gradient fills with how hard the block is pushed (default
+/// center). Tap toggles the pedal; drag sets the level. Shows the block's
+/// preset name and its engaged state.
+#[component]
+fn DriveChunk(
+    /// Display name (the block preset).
+    name: String,
+    /// Level 0..1 (drive amount / how hard the amp is pushed).
+    level: f32,
+    engaged: bool,
+    /// None → an empty slot (e.g. Amp R until dual-amp lands).
+    #[props(default)] block_id: Option<String>,
+    /// The wire param the bar writes.
+    #[props(default = "drive")] param: &'static str,
+    /// Map bar position 0..1 → param value.
+    #[props(default = (0.0, 1.0))] range: (f32, f32),
+    /// Amber accent for the amps instead of drive red.
+    #[props(default)] amp_style: bool,
+) -> Element {
+    let rig = use_hook(try_consume_context::<RigClient>);
+    let mut el = use_signal(|| None::<std::rc::Rc<MountedData>>);
+    // (start_x, moved) while a pointer is down — a motionless release is a
+    // tap (bypass toggle), movement is a level drag.
+    let mut gesture = use_signal(|| None::<(f64, bool)>);
+
+    let pct = (level * 100.0).clamp(0.0, 100.0);
+    let (c_hi, c_lo) = if amp_style {
+        ("rgba(245,158,11,0.30)", "rgba(245,158,11,0.05)")
+    } else {
+        ("rgba(220,60,50,0.32)", "rgba(220,60,50,0.06)")
+    };
+    let empty = block_id.is_none();
+
+    let set_level = {
+        let rig = rig.clone();
+        let block_id = block_id.clone();
+        move |coords: dioxus::html::geometry::ElementPoint| {
+            let el = el();
+            let (rig, block_id) = (rig.clone(), block_id.clone());
+            spawn(async move {
+                let Some(el) = el else { return };
+                let Ok(rect) = el.get_client_rect().await else { return };
+                let frac = (coords.x / rect.width()).clamp(0.0, 1.0) as f32;
+                if let (Some(r), Some(id)) = (rig, block_id) {
+                    let v = range.0 + frac * (range.1 - range.0);
+                    let _ = r.set_block_param(id, param.to_string(), v).await;
+                }
+            });
+        }
+    };
+
+    rsx! {
+        div {
+            class: if empty {
+                "relative flex-1 min-w-0 border border-dashed border-border/40 overflow-hidden select-none"
+            } else {
+                "relative flex-1 min-w-0 border border-border overflow-hidden cursor-ew-resize touch-none select-none"
+            },
+            style: "background: #0a0a0a;",
+            onmounted: move |e| el.set(Some(e.data())),
+            onpointerdown: move |e: PointerEvent| {
+                if !empty {
+                    gesture.set(Some((e.client_coordinates().x, false)));
+                }
+            },
+            onpointermove: {
+                let set_level = set_level.clone();
+                move |e: PointerEvent| {
+                    if let Some((x0, moved)) = gesture() {
+                        let dx = (e.client_coordinates().x - x0).abs();
+                        if moved || dx > 4.0 {
+                            gesture.set(Some((x0, true)));
+                            set_level(e.element_coordinates());
+                        }
+                    }
+                }
+            },
+            onpointerup: {
+                let rig = rig.clone();
+                let block_id = block_id.clone();
+                move |_| {
+                    if let Some((_, moved)) = gesture() {
+                        if !moved {
+                            // A tap: toggle the pedal.
+                            if let (Some(r), Some(id)) = (rig.clone(), block_id.clone()) {
+                                spawn(async move { let _ = r.toggle_block_bypass(id).await; });
+                            }
+                        }
+                    }
+                    gesture.set(None);
+                }
+            },
+            onpointerleave: move |_| gesture.set(None),
+
+            // The level fill — a subtle gradient, more push = more fill.
+            if !empty {
+                div {
+                    class: "absolute inset-y-0 left-0",
+                    style: if engaged {
+                        "width: {pct}%; background: linear-gradient(to right, {c_lo}, {c_hi});"
+                    } else {
+                        "width: {pct}%; background: linear-gradient(to right, rgba(120,120,125,0.05), rgba(120,120,125,0.14));"
+                    },
+                }
+                // Center detent tick.
+                div { class: "absolute top-0 bottom-0 w-px", style: "left: 50%; background: rgba(255,255,255,0.08);" }
+            }
+
+            div { class: "relative flex items-center gap-1.5 h-full px-2 pointer-events-none",
+                span {
+                    class: "w-1.5 h-1.5 rounded-full flex-shrink-0",
+                    style: if empty {
+                        "background-color: #27272a;"
+                    } else if engaged {
+                        if amp_style { "background-color: #f59e0b;" } else { "background-color: #ef4444;" }
+                    } else {
+                        "background-color: #3f3f46;"
+                    },
+                }
+                span {
+                    class: if engaged { "text-[10px] font-semibold truncate" } else { "text-[10px] truncate text-muted-foreground" },
+                    "{name}"
+                }
+            }
+        }
+    }
+}
+
 // ── The Control view ────────────────────────────────────────────────────────
 
 /// The guitar instrument panel — see the module docs for the layout.
@@ -812,6 +967,22 @@ pub fn ControlView(
     let comp_wave = state.comp_wave.cloned();
 
     let eq = find_block(&blocks, BlockType::Eq, "Amp EQ");
+    // The drive board: Boost + the three drives, plus the amps.
+    let board: Vec<LiveBlock> = blocks
+        .iter()
+        .filter(|b| matches!(b.block_type, BlockType::Boost | BlockType::Drive))
+        .cloned()
+        .collect();
+    let amp_l = blocks.iter().find(|b| b.block_type == BlockType::Amp && b.name.eq_ignore_ascii_case("Amp L")).cloned();
+    // The amp chunk shows the active patch's preset (the pool preset the
+    // patch points at), not the raw block name.
+    let amp_preset = model
+        .stacks
+        .iter()
+        .find(|st| st.is_active)
+        .map(|st| st.preset.clone())
+        .filter(|p| !p.is_empty())
+        .unwrap_or_else(|| "Amp L".to_string());
     let comp = find_block(&blocks, BlockType::Compressor, "Compressor");
     let gate = find_block(&blocks, BlockType::Gate, "Gate");
 
@@ -820,15 +991,47 @@ pub fn ControlView(
 
 
     rsx! {
-        div { class: "flex gap-0.5 h-full min-h-0 overflow-hidden",
+        div { class: "flex gap-0 h-full min-h-0 overflow-hidden",
             // ── Input meter rail ──
-            div { class: "w-12 flex-shrink-0", StereoMeter { label: "In", l_db: in_l, r_db: in_r } }
+            div { class: "w-6 flex-shrink-0", StereoMeter { label: "In", l_db: in_l, r_db: in_r } }
 
             // ── Center surface ──
             div { class: "flex flex-col gap-1 flex-1 min-w-0 min-h-0",
                 // Main modules, in signal order: Compressor → Gate → Amp EQ,
                 // with the time section (Delay | Reverb) docked flush beneath.
                 div { class: "flex flex-col gap-0 min-h-0",
+                    // ── The drive board: 4 drives + 2 amps, one sliver each.
+                    // The whole chunk is the drive-level fader. ──
+                    div { class: "flex gap-0 flex-shrink-0", style: "height: 34px;",
+                        for b in board.iter() {
+                            DriveChunk {
+                                key: "{b.id}",
+                                name: b.name.clone(),
+                                level: b.params.iter().find(|p| p.name == "drive").map(|p| p.value).unwrap_or(0.5),
+                                engaged: !b.bypassed,
+                                block_id: Some(b.id.clone()),
+                            }
+                        }
+                        if let Some(amp) = amp_l {
+                            DriveChunk {
+                                name: amp_preset.clone(),
+                                // Input trim −12..+12 dB → how hard the amp is
+                                // pushed; center = unity.
+                                level: (amp.params.iter().find(|p| p.name == "input_trim").map(|p| p.value).unwrap_or(0.0) + 12.0) / 24.0,
+                                engaged: !amp.bypassed,
+                                block_id: Some(amp.id.clone()),
+                                param: "input_trim",
+                                range: (-12.0, 12.0),
+                                amp_style: true,
+                            }
+                        }
+                        DriveChunk {
+                            name: "Amp R".to_string(),
+                            level: 0.5,
+                            engaged: false,
+                            amp_style: true,
+                        }
+                    }
                     div { class: "flex gap-0 min-h-0 w-full", style: "aspect-ratio: 25 / 9; max-height: 56%;",
                         // Height-driven square: width follows the row height.
                         div { class: "min-h-0 h-full aspect-square flex flex-col flex-shrink-0",
@@ -870,7 +1073,7 @@ pub fn ControlView(
                         }
                     }
                     // Time section: stereo delay + stereo reverb + modulation.
-                    div { class: "flex gap-0 min-h-0 w-full", style: "height: 168px;",
+                    div { class: "flex gap-0 min-h-0 w-full", style: "flex: 1 1 0%; min-height: 150px;",
                         div { class: "min-h-0 h-full flex flex-col", style: "flex: 2 1 0%;",
                             ZoomPanel { title: "Delay".to_string(),
                                 DelayPanel { blocks: blocks.clone(), tempo_bpm: model.tempo_bpm }
@@ -889,19 +1092,19 @@ pub fn ControlView(
                     }
                 }
 
-                div { class: "flex-1 min-h-0" }
 
             }
 
             // ── Output rail: mute on top, then FOH trim + out meter,
             // then the phones group — mix fader | phones meter | guitar
             // (self) fader.
-            div { class: "w-24 flex-shrink-0 flex flex-col items-center gap-1 min-h-0",
+            div {
+                style: "width: 46px; flex-shrink: 0; display: flex; flex-direction: column; align-items: center; gap: 2px; min-height: 0;",
                 button {
                     class: if hp.main_mute {
-                        "w-12 rounded-md px-1 py-1 text-[9px] font-bold uppercase ring-2 ring-red-500"
+                        "w-9 rounded px-0.5 py-0.5 text-[8px] font-bold uppercase ring-2 ring-red-500"
                     } else {
-                        "w-12 rounded-md px-1 py-1 text-[9px] font-bold uppercase border border-border text-muted-foreground hover:text-foreground"
+                        "w-9 rounded px-0.5 py-0.5 text-[8px] font-bold uppercase border border-border text-muted-foreground hover:text-foreground"
                     },
                     style: if hp.main_mute { "background-color: #ef4444; color: #fff;" } else { "" },
                     onclick: {
@@ -914,7 +1117,7 @@ pub fn ControlView(
                     },
                     if hp.main_mute { "Muted" } else { "Mute" }
                 }
-                div { class: "flex-1 min-h-0 w-full flex justify-center gap-0",
+                div { style: "flex: 1 1 0%; min-height: 0; width: 100%; display: flex; justify-content: center;",
                     VFader {
                         label: "Trim",
                         value: (model.master_trim_db + 24.0) / 36.0,
@@ -935,7 +1138,7 @@ pub fn ControlView(
                         muted: hp.main_mute,
                     }
                 }
-                div { class: "flex-1 min-h-0 w-full flex justify-center gap-0",
+                div { style: "flex: 1 1 0%; min-height: 0; width: 100%; display: flex; justify-content: center;",
                     VFader {
                         label: "Mix",
                         value: hp.volume,

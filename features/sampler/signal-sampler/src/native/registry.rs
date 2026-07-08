@@ -43,6 +43,8 @@ const REGISTRY: &[(BlockType, Ctor)] = &[
     // No DSP yet — transparent placeholders so the block exists (bypassed).
     (BlockType::Phaser, build_phaser),
     (BlockType::Rotary, build_rotary),
+    (BlockType::Boost, build_boost_pedal),
+    (BlockType::Drive, build_drive),
 ];
 
 fn build_chorus(block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
@@ -95,6 +97,12 @@ fn build_phaser(_block: &RigBlock, _sample_rate: u32) -> Box<dyn PluginInstance>
 }
 fn build_rotary(_block: &RigBlock, _sample_rate: u32) -> Box<dyn PluginInstance> {
     Box::new(signal_fx::NativePassthrough::new("Rotary"))
+}
+fn build_boost_pedal(_block: &RigBlock, _sample_rate: u32) -> Box<dyn PluginInstance> {
+    Box::new(signal_fx::NativePassthrough::new("Boost"))
+}
+fn build_drive(_block: &RigBlock, _sample_rate: u32) -> Box<dyn PluginInstance> {
+    Box::new(signal_fx::NativePassthrough::new("Drive"))
 }
 
 fn build_eq(block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {

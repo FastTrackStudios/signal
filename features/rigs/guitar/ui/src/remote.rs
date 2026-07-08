@@ -330,13 +330,37 @@ pub fn GuitarRigRemote() -> Element {
                         // Full-page set management: songs left, sections right.
                         div { class: "grid grid-cols-2 gap-4 h-full min-h-0",
                             div { class: "flex flex-col rounded-xl border border-border bg-card min-h-0 overflow-hidden",
-                                div { class: "px-3 py-2 border-b border-border",
-                                    span { class: "text-[10px] font-semibold uppercase tracking-wider text-muted-foreground", "Setlist" }
+                                div { class: "flex items-center gap-1 px-3 py-2 border-b border-border",
+                                    span { class: "text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mr-2", "Setlist" }
+                                    for (si, set) in perf_now.setlists.iter().enumerate() {
+                                        {
+                                            let set = set.clone();
+                                            let active = si == perf_now.setlist_index as usize;
+                                            let rig2 = rig.clone();
+                                            rsx! {
+                                                button {
+                                                    key: "{si}",
+                                                    class: if active {
+                                                        "rounded px-2 py-0.5 text-xs font-bold bg-accent text-accent-foreground"
+                                                    } else {
+                                                        "rounded px-2 py-0.5 text-xs text-muted-foreground border border-border hover:bg-accent/40"
+                                                    },
+                                                    onclick: move |_| {
+                                                        if let Some(r) = rig2.clone() {
+                                                            spawn(async move { let _ = r.select_setlist(si as u32).await; });
+                                                        }
+                                                    },
+                                                    "{set}"
+                                                }
+                                            }
+                                        }
+                                    }
                                 }
                                 div { class: "flex-1 overflow-y-auto p-2 flex flex-col gap-1",
                                     for (i, song) in perf_now.songs.iter().enumerate() {
                                         {
-                                            let name = song.clone();
+                                            let name = song.name.clone();
+                                            let meta = format!("{} · {} bpm", song.key, song.bpm);
                                             let is_current = i == perf_now.song_index as usize;
                                             rsx! {
                                                 button {
@@ -349,6 +373,7 @@ pub fn GuitarRigRemote() -> Element {
                                                     onclick: move |_| on_select_song.call(i),
                                                     span { class: "font-mono text-xs opacity-60 w-5", "{i + 1}" }
                                                     span { class: "truncate", "{name}" }
+                                                    span { class: "ml-auto font-mono text-xs opacity-70 flex-shrink-0", "{meta}" }
                                                 }
                                             }
                                         }

@@ -77,7 +77,7 @@ const MAX_BLOCK: usize = FX_PREPARE_BLOCK as usize;
 /// chain's blocks (identity pass-throughs fill unused ones). Reserving a
 /// constant count keeps the project's `fx_chain` (guids) immutable, so patch
 /// switches never rebuild the renderer's snapshot — the swap is pure box-insert.
-const MAX_CHAIN_SLOTS: usize = 16;
+const MAX_CHAIN_SLOTS: usize = 24;
 
 /// Identifies a chain resident control-side. Assigned on install; opaque
 /// elsewhere.
