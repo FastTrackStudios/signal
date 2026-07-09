@@ -87,7 +87,7 @@ walkdir     = "2"
 [dev-dependencies]
 tracing-subscriber = { workspace = true }
 # TUI for the live guitar-rig example (input/output meters + patch switching).
-ratatui = "0.29"
+ratatui = "0.30"
 # dup2 — redirect stray stderr to a log while the rig TUI owns the terminal.
 libc = "0.2"
 # MusicXML → score-time notes/CCs for the document-mode example ONLY
