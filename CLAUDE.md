@@ -23,7 +23,6 @@ apps/      fasttrackstudio (THE app: signal / session / full / tts),
            site (fts-site — fasttrackstudio.app website, dioxus web),
            docs-site (docs.fasttrackstudio.app — dodeca + kf docs, NOT a
            cargo member; `just docs-build` / `just docs-serve`)
-attic/     parked code (dead apps, legacy shells) — excluded, never built
 docs/      cross-domain guides (facet, styx, tracey, spec/)
 ```
 
@@ -155,7 +154,6 @@ native, WASM/AudioWorklet, and embedded `no_std`:
 1. ~~Root workspace: merge domain workspaces into one root Cargo.toml.~~
    DONE — all waves complete; apps/fasttrackstudio, FastTrackStudio and
    Plugins dissolved in the finale wave (legacy remnants parked in
-   `attic/fasttrackstudio-legacy` + `attic/fx-apps`).
 2. Feature-gate heavy backends (reaper, standalone-audio) so cold builds
    only compile what's used.
 3. ~~Retire `FastTrackStudio/apps/*`.~~ DONE — the legacy app is parked;

@@ -17,7 +17,6 @@ libs/       UI + infra — fts-ui, fts-story, dock, nice-plug, utils,
 apps/       fasttrackstudio (THE app — feature-configured, one binary),
             rigd (headless rig daemon), signal-web (browser remote),
             daw-cli, keyflow-cli, installer
-attic/      parked code — excluded from the workspace, never built
 docs/       cross-domain guides + specs
 ```
 
