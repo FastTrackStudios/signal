@@ -1,0 +1,156 @@
+0	Input Gain	0.500000
+1	Output Gain	0.500000
+2	Gate Active	1.000000
+3	Gate Threshold	0.030208
+4	Transpose	0.500000
+5	Doubler Active	1.000000
+6	Doubler Spread	0.235294
+7	Active Wah Comp Section	1.000000
+8	Wah Active	0.000000
+9	Wah Position	1.000000
+10	Compressor Compression	0.685000
+11	Compressor Level	0.298000
+12	Compressor Active	0.000000
+13	Active Pre FX Section	1.000000
+14	Overdrive Tone	0.686000
+15	Overdrive Drive	0.951000
+16	Overdrive Level	0.490000
+17	Overdrive Active	0.000000
+18	Phaser Mode	0.000000
+19	Phaser Rate	0.353000
+20	Phaser Active	0.000000
+21	Chorus Mode	0.000000
+22	Chorus Rate	0.500000
+23	Chorus Depth	0.500000
+24	Chorus Level	1.000000
+25	Chorus Active	0.000000
+26	Flanger Rate	0.500000
+27	Flanger Depth	0.500000
+28	Flanger Range	0.500000
+29	Flanger Feedback	0.500000
+30	Flanger Active	0.000000
+31	Active Amp Section	1.000000
+32	Amp Type	1.000000
+33	Piezo Amp Body	0.650000
+34	Piezo Amp Air	0.000000
+35	Piezo Amp Bass	0.390000
+36	Piezo Amp Middle	0.670000
+37	Piezo Amp Treble	0.690000
+38	Piezo Amp Presence	0.750000
+39	Piezo Amp Output	0.515377
+40	Clean Amp Gain	0.490000
+41	Clean Amp Bright	1.000000
+42	Clean Amp Bass	0.470000
+43	Clean Amp Middle	0.360000
+44	Clean Amp Treble	0.530000
+45	Clean Amp Presence	0.730000
+46	Clean Amp Master	0.500000
+47	Clean Amp Output	0.406446
+48	Rhythm Amp Gain	0.760000
+49	Rhythm Amp Bite	0.000000
+50	Rhythm Amp Tight	0.460000
+51	Rhythm Amp Bass	0.540000
+52	Rhythm Amp Middle	0.230000
+53	Rhythm Amp Mid Boost	0.000000
+54	Rhythm Amp Treble	0.670000
+55	Rhythm Amp Presence	0.700000
+56	Rhythm Amp Master	0.580000
+57	Rhythm Amp Output	0.316082
+58	Lead Amp Gain	0.830000
+59	Lead Amp Bass	0.130000
+60	Lead Amp Middle	0.400000
+61	Lead Amp Soar	1.000000
+62	Lead Amp Treble	0.760000
+63	Lead Amp Presence	0.690000
+64	Lead Amp Master	0.500000
+65	Lead Amp Output	0.370590
+66	Active Cab Section	1.000000
+67	Cab L Active	1.000000
+68	Cab Mic L Type	0.333333
+69	Cab L Position	0.000000
+70	Cab L Distance	0.000000
+71	Cab L Level	0.636880
+72	Cab L Pan	0.500000
+73	Cab L Phase	0.000000
+74	Room L Active	0.000000
+75	Room L Level	0.000000
+76	Room L Distance	1.000000
+77	Cab R Active	1.000000
+78	Cab Mic R Type	0.833333
+79	Cab R Position	0.000000
+80	Cab R Distance	0.000000
+81	Cab R Level	0.499999
+82	Cab R Pan	0.500000
+83	Cab R Phase	0.000000
+84	Room R Active	0.000000
+85	Room R Level	0.000000
+86	Room R Distance	0.500000
+87	Active EQ Section	1.000000
+88	Clean EQ Active	1.000000
+89	Clean EQ HPF	0.000000
+90	Clean EQ Lo Freq	0.500000
+91	Clean EQ Lo-Mid Freq	0.500000
+92	Clean EQ Hi-Mid Freq	0.500000
+93	Clean EQ Hi Freq	0.500000
+94	Clean EQ LPF	1.000000
+95	Clean EQ Lo Gain	0.500000
+96	Clean EQ Lo-Mid Gain	0.500000
+97	Clean EQ Hi-Mid Gain	0.500000
+98	Clean EQ Hi Gain	0.500000
+99	Rhythm EQ Active	1.000000
+100	Rhythm EQ HPF	0.000000
+101	Rhythm EQ Lo Freq	0.519000
+102	Rhythm EQ Lo-Mid Freq	0.532000
+103	Rhythm EQ Hi-Mid Freq	0.812000
+104	Rhythm EQ Hi Freq	0.802000
+105	Rhythm EQ LPF	1.000000
+106	Rhythm EQ Lo Gain	0.554167
+107	Rhythm EQ Lo-Mid Gain	0.379167
+108	Rhythm EQ Hi-Mid Gain	0.525000
+109	Rhythm EQ Hi Gain	0.437500
+110	Lead EQ Active	1.000000
+111	Lead EQ HPF	0.000000
+112	Lead EQ Lo Freq	0.613000
+113	Lead EQ Lo-Mid Freq	0.500000
+114	Lead EQ Hi-Mid Freq	0.500000
+115	Lead EQ Hi Freq	0.500000
+116	Lead EQ LPF	1.000000
+117	Lead EQ Lo Gain	0.562500
+118	Lead EQ Lo-Mid Gain	0.500000
+119	Lead EQ Hi-Mid Gain	0.500000
+120	Lead EQ Hi Gain	0.500000
+121	Active Volume Section	1.000000
+122	Volume Mid Point	0.298597
+123	Volume Gain	1.000000
+124	Active Post FX Section	1.000000
+125	Chorus 2 Mix	0.600000
+126	Chorus 2 Mode	0.000000
+127	Chorus 2 Rate	0.500000
+128	Chorus 2 Depth	0.500000
+129	Chorus 2 Active	0.000000
+130	Delay Mix	0.430000
+131	Delay Sync	0.000000
+132	Delay Mode	1.000000
+133	Delay Feedback	0.320000
+134	Delay Low Cut	0.000000
+135	Delay Time L	0.207953
+136	Delay Sync Note L	0.650000
+137	Delay Crossfeed	0.000000
+138	Delay Time R	0.247725
+139	Delay Sync Note R	0.700000
+140	Delay High Cut	0.541697
+141	Delay Crystals	0.000000
+142	Delay Tape	0.290000
+143	Delay Modulation	0.000000
+144	Delay Tempo	0.475000
+145	Delay Active	1.000000
+146	Reverb Mix	0.140000
+147	Reverb Shimmer	0.000000
+148	Reverb Pre-Delay	0.289000
+149	Reverb Decay	0.500000
+150	Reverb Low Cut	0.066154
+151	Reverb High Cut	1.000000
+152	Reverb Active	0.000000
+153	Preset Previous	0.000000
+154	Preset Next	0.000000
+155	Bypass	0.000000

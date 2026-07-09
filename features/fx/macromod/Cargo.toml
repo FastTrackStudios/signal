@@ -1,0 +1,13 @@
+[package]
+name = "signal-macromod"
+version.workspace = true
+edition = "2021"          # kept on 2021 — pre-move signal workspace edition; migrate deliberately
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+facet.workspace = true
+
+[dev-dependencies]

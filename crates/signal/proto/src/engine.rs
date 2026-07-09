@@ -1,0 +1,233 @@
+//! Engine domain — containers for layers with scene-style variants.
+//!
+//! An [`Engine`] groups one or more Layers. [`EngineScene`] selects which
+//! layer variant to use for each layer, forming a "scene" of the engine.
+
+use facet::Facet;
+use serde::{Deserialize, Serialize};
+
+use crate::EngineType;
+use crate::fx_send::FxSend;
+use crate::layer::{LayerId, LayerSnapshotId};
+use crate::metadata::Metadata;
+use crate::override_policy::{OverridePolicyError, ScenePolicy, validate_overrides};
+use crate::overrides::Override;
+
+// ─── IDs ────────────────────────────────────────────────────────
+
+crate::impl_collection! {
+    /// Identifies an Engine collection.
+    collection_id: EngineId,
+
+    /// Identifies a specific Engine variant (scene).
+    variant_id: EngineSceneId,
+
+    variant EngineScene {
+        id: EngineSceneId,
+        overrides: Override,
+        default_named: |name| Self::new(EngineSceneId::new(), name),
+    }
+
+    collection Engine {
+        variant_type: EngineScene,
+        variants_field: variants,
+        default_id_field: default_variant_id,
+    }
+}
+
+// ─── Layer selection ────────────────────────────────────────────
+
+/// Which variant to use for a specific layer within an engine scene.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Facet)]
+pub struct LayerSelection {
+    pub layer_id: LayerId,
+    pub variant_id: LayerSnapshotId,
+}
+
+impl LayerSelection {
+    pub fn new(layer_id: impl Into<LayerId>, variant_id: impl Into<LayerSnapshotId>) -> Self {
+        Self {
+            layer_id: layer_id.into(),
+            variant_id: variant_id.into(),
+        }
+    }
+}
+
+// ─── EngineScene ──────────────────────────────────────────────
+
+/// A scene-style variant for an Engine — selects layer variants and overrides.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Facet)]
+pub struct EngineScene {
+    pub id: EngineSceneId,
+    pub name: String,
+    pub layer_selections: Vec<LayerSelection>,
+    pub overrides: Vec<Override>,
+    pub metadata: Metadata,
+}
+
+impl EngineScene {
+    pub fn new(id: impl Into<EngineSceneId>, name: impl Into<String>) -> Self {
+        Self {
+            id: id.into(),
+            name: name.into(),
+            layer_selections: Vec::new(),
+            overrides: Vec::new(),
+            metadata: Metadata::new(),
+        }
+    }
+
+    #[must_use]
+    pub fn with_layer(mut self, selection: LayerSelection) -> Self {
+        self.layer_selections.push(selection);
+        self
+    }
+
+    #[must_use]
+    pub fn with_override(mut self, ov: Override) -> Self {
+        self.overrides.push(ov);
+        self
+    }
+
+    #[must_use]
+    pub fn with_metadata(mut self, metadata: Metadata) -> Self {
+        self.metadata = metadata;
+        self
+    }
+
+    pub fn validate_overrides(&self) -> Result<(), OverridePolicyError> {
+        validate_overrides::<ScenePolicy>(&self.overrides)
+    }
+
+    /// Clone this scene with a new ID and name.
+    pub fn duplicate(&self, new_id: impl Into<EngineSceneId>, new_name: impl Into<String>) -> Self {
+        let mut dup = self.clone();
+        dup.id = new_id.into();
+        dup.name = new_name.into();
+        dup
+    }
+}
+
+// ─── Engine ─────────────────────────────────────────────────────
+
+/// An Engine collection — groups layers and provides scene-style variants.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Facet)]
+pub struct Engine {
+    pub id: EngineId,
+    pub name: String,
+    pub engine_type: EngineType,
+    pub layer_ids: Vec<LayerId>,
+    pub default_variant_id: EngineSceneId,
+    pub variants: Vec<EngineScene>,
+    /// FX sends owned by this engine (reverb, delay, etc.).
+    #[serde(default)]
+    pub fx_sends: Vec<FxSend>,
+    /// DAW track reference for this engine's input track (GUID or name).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub input_track_ref: Option<String>,
+    /// Macro knob bank for engine-level control of layer parameters.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub macro_bank: Option<signal_macromod::MacroBank>,
+    /// Modulation routing for engine-level macro parameters.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub modulation: Option<signal_macromod::ModulationRouteSet>,
+    pub metadata: Metadata,
+}
+
+impl Engine {
+    pub fn new(
+        id: impl Into<EngineId>,
+        name: impl Into<String>,
+        engine_type: EngineType,
+        layer_ids: Vec<LayerId>,
+        default_variant: EngineScene,
+    ) -> Self {
+        let default_variant_id = default_variant.id.clone();
+        Self {
+            id: id.into(),
+            name: name.into(),
+            engine_type,
+            layer_ids,
+            default_variant_id,
+            variants: vec![default_variant],
+            fx_sends: Vec::new(),
+            input_track_ref: None,
+            macro_bank: None,
+            modulation: None,
+            metadata: Metadata::new(),
+        }
+    }
+
+    pub fn add_variant(&mut self, variant: EngineScene) {
+        self.variants.push(variant);
+    }
+
+    pub fn variant_mut(&mut self, id: &EngineSceneId) -> Option<&mut EngineScene> {
+        self.variants.iter_mut().find(|v| &v.id == id)
+    }
+
+    pub fn remove_variant(&mut self, id: &EngineSceneId) -> Option<EngineScene> {
+        let pos = self.variants.iter().position(|v| &v.id == id)?;
+        Some(self.variants.remove(pos))
+    }
+
+    pub fn default_variant(&self) -> Option<&EngineScene> {
+        self.variants
+            .iter()
+            .find(|v| v.id == self.default_variant_id)
+    }
+
+    pub fn variant(&self, id: &EngineSceneId) -> Option<&EngineScene> {
+        self.variants.iter().find(|v| &v.id == id)
+    }
+
+    pub fn is_layer_type_compatible(&self, layer_type: EngineType) -> bool {
+        self.engine_type == layer_type
+    }
+
+    #[must_use]
+    pub fn with_fx_send(mut self, send: FxSend) -> Self {
+        self.fx_sends.push(send);
+        self
+    }
+
+    #[must_use]
+    pub fn with_input_track(mut self, track_ref: impl Into<String>) -> Self {
+        self.input_track_ref = Some(track_ref.into());
+        self
+    }
+
+    #[must_use]
+    pub fn with_metadata(mut self, metadata: Metadata) -> Self {
+        self.metadata = metadata;
+        self
+    }
+}
+
+// Trait impls (Variant, DefaultVariant, Collection, HasMetadata) are generated
+// by the `impl_collection!` macro invocation at the top of this file.
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_engine_creation() {
+        let layer_id = LayerId::new();
+        let variant = EngineScene::new(EngineSceneId::new(), "Default Scene").with_layer(
+            LayerSelection::new(layer_id.clone(), LayerSnapshotId::new()),
+        );
+
+        let engine = Engine::new(
+            EngineId::new(),
+            "Guitar Engine",
+            EngineType::Guitar,
+            vec![layer_id],
+            variant,
+        );
+
+        assert_eq!(engine.name, "Guitar Engine");
+        assert_eq!(engine.engine_type, EngineType::Guitar);
+        assert_eq!(engine.layer_ids.len(), 1);
+        assert!(engine.default_variant().is_some());
+    }
+}

@@ -1,0 +1,11 @@
+[package]
+name = "trem-dsp"
+version.workspace = true
+edition = "2021"          # kept on 2021 — pre-move signal workspace edition; migrate deliberately
+authors.workspace = true
+license.workspace = true
+description = "Tremolo DSP engine — amplitude modulation with pattern/LFO control"
+
+[dependencies]
+audiocore-dsp = { workspace = true }
+fts-modulation = { workspace = true }

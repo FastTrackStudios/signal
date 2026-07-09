@@ -1,0 +1,29 @@
+[package]
+name = "signal-guitar-ui"
+version.workspace = true
+edition = "2021"          # kept on 2021 — pre-move signal workspace edition; migrate deliberately
+license.workspace = true
+authors.workspace = true
+
+# Guitar-rig Dioxus components — the feature-scoped, wasm-clean UI half of
+# the detachable GUI. Everything here renders purely from the wire contract
+# (`signal-guitar-proto`) via the generated vox clients; no audio backend, no
+# signal domain, no platform I/O. Consumed by signal-ui (desktop) and
+# apps/web (browser) alike.
+
+[dependencies]
+dioxus.workspace = true
+lumen-blocks.workspace = true
+signal-guitar-proto.workspace = true
+session-ui.workspace = true
+# The real FTS-EQ editor core (band model, response math, SVG generators,
+# interaction rules) — wasm-portable; see eq_surface.rs.
+eq-ui.workspace = true
+# BlockType — chain-strip coloring.
+signal-proto.workspace = true
+# The zoomable rig graph + the headless slot conversion (both wasm-clean).
+signal-grid.workspace = true
+signal-grid-ui.workspace = true
+uuid = { version = "1", features = ["v4"] }
+# use_stream (atom+vox) + the portable sleep (platform: tokio native / gloo wasm).
+architect = { workspace = true, features = ["atom", "vox", "platform"] }

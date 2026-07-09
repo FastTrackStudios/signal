@@ -1,0 +1,27 @@
+[package]
+name = "signal-keys"
+version.workspace = true
+edition = "2021"          # kept on 2021 — pre-move signal workspace edition; migrate deliberately
+license.workspace = true
+authors.workspace = true
+
+[features]
+pipewire = ["signal-sampler/pipewire"]
+
+[dependencies]
+# Shared sampler core — the keys rig composes the engine's node-render tree,
+# nord presets, and rig system. Keys is a thin instrument handle on top.
+signal-sampler.workspace = true
+daw.workspace = true
+daw-audio-io = { workspace = true, features = ["monitor"] }
+midicore = { workspace = true, features = ["vox", "midir"] }
+signal-plugin-host.workspace = true
+tracing.workspace = true
+eyre.workspace = true
+
+[dev-dependencies]
+ratatui = "0.30"
+libc = "0.2"
+tracing-subscriber.workspace = true
+# The keys_tui example's `--omni` flag imports an Omnisphere patch via synth.
+signal-synth.workspace = true

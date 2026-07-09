@@ -1,0 +1,39 @@
+[package]
+name = "signal-reaper-controller"
+version.workspace = true
+edition = "2021"          # kept on 2021 — pre-move signal workspace edition; migrate deliberately
+license.workspace = true
+authors.workspace = true
+description = "CLAP plugin that manages signal chains on a REAPER track — rig setup, macro modulation, and cross-track parameter routing via SHM"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+
+[dependencies]
+# Plugin framework
+# Plugin framework. `nice_plug` must be a DIRECT dep (not just via
+# `audiocore_core::prelude`) because `#[derive(Params)]` and `nice_export_clap!`
+# expand to absolute `::nice_plug::…` paths, so the crate has to be nameable here.
+nice-plug.workspace = true
+audiocore-core.workspace = true
+atomic_float.workspace = true
+
+# DAW API — all REAPER access goes through this
+daw = { workspace = true, features = ["reaper"] }
+
+# SHM bridge for communication with signal-extension
+signal-proto.workspace = true
+daw-extension-runtime.workspace = true
+tokio = { workspace = true, features = ["rt", "time"] }
+eyre.workspace = true
+
+# Concurrency
+crossbeam-channel.workspace = true
+
+# Observability
+tracing.workspace = true
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+
+# Serialization
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true

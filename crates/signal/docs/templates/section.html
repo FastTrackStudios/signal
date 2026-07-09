@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+
+{% block site_name %}Signal{% endblock %}
+{% block nav_title %}Signal{% endblock %}
+{% block brand_letter %}S{% endblock %}
+{% block github_url %}https://github.com/FastTrackStudios/signal{% endblock %}
+
+{% block content %}
+<div class="content">
+    {% if page %}{{ page.content | safe }}{% else %}{{ section.content | safe }}{% endif %}
+</div>
+{% endblock %}

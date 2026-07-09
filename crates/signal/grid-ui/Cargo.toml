@@ -1,0 +1,23 @@
+[package]
+name = "signal-grid-ui"
+version.workspace = true
+edition = "2021"          # kept on 2021 — pre-move signal workspace edition; migrate deliberately
+license.workspace = true
+authors.workspace = true
+
+# The zoomable/pannable rig graph (DynamicGridView + RigGridPanel +
+# inspector), extracted from signal-ui as a wasm-clean crate: pure CSS
+# transforms + Dioxus events, proto-layer types only. Mounts identically in
+# the desktop shell and the browser remote.
+
+[dependencies]
+dioxus.workspace = true
+uuid = { version = "1", features = ["v4"] }
+signal-proto.workspace = true
+signal-grid.workspace = true
+fts-ui.workspace = true
+lumen-blocks.workspace = true
+audio-controls.workspace = true
+# Portable timing (`platform::sleep`): tokio native / browser timers on wasm.
+architect = { workspace = true, features = ["platform"] }
+tracing.workspace = true

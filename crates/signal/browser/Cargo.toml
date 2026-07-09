@@ -1,0 +1,17 @@
+[package]
+name = "signal-browser"
+version.workspace = true
+edition = "2021"          # kept on 2021 — pre-move signal workspace edition; migrate deliberately
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+signal.workspace = true
+signal-grid.workspace = true
+signal-sampler.workspace = true
+uuid = { version = "1", features = ["v4"] }
+walkdir = "2"
+rayon = "1"
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }

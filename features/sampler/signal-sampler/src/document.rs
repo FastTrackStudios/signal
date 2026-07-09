@@ -1,0 +1,1438 @@
+//! Document mode — lookahead playback for the sampler (phase 1: offline).
+//!
+//! A [`TrackDocument`] is the full note/CC content of one track in musical
+//! time (quarter notes) plus its tempo map. [`annotate`] turns it into a
+//! [`Schedule`] of engine events in **absolute frames from the document
+//! epoch**, inverting the classic legato-latency problem: every
+//! legato-followed note is triggered `delay_ms` (the spec's expressive
+//! velocity→delay curve) *before* its tick via
+//! [`LegatoPrefire`](DocEvent::LegatoPrefire), so the transition's audible
+//! arrival lands exactly on the grid — no negative track delay, no mirrored
+//! timing copy. Short notes are pre-rolled by the spec's
+//! `short_note_timing.pre_delay_ms` the same way.
+//!
+//! See `docs/plan/document-mode.md` for the full design, including the hard
+//! **determinism** requirement this module implements: same document + same
+//! parameters + same seed → byte-identical audio. Every stochastic choice
+//! (round-robin) is a pure hash of `(seed, note identity, purpose)` — never a
+//! mutable counter — so playback is position-independent (starting mid-piece
+//! picks the same RR slot for every note) and edit-stable (inserting a note
+//! re-rolls only that note).
+//!
+//! The articulation / legato-edge / re-bow inference rules are ported from —
+//! and must stay in parity with — `keyflow-orchestra/src/mirror.rs`
+//! (`mirror_part`, tested against the CSS reference engine in keyflow's
+//! `tests/mirror_parity.rs`). That crate stays independent for phase 1;
+//! TODO: unify the inference into one shared crate once document mode
+//! stabilises.
+
+use crate::engine::{ArticClass, LineId};
+use crate::spec::{ArticulationKind, LibrarySpec};
+
+const EPS: f64 = 1e-6;
+
+/// Same-pitch abutment tolerance (QN) under which two connectable notes read
+/// as a re-bow. Mirrors keyflow's `Config::break_gap_qn` default (1/64) used
+/// as `gap.abs() <= break_gap_qn * 2` — i.e. gaps up to ~1/32 QN connect.
+const BREAK_GAP_QN: f64 = 1.0 / 64.0;
+
+/// Engine fallback when the spec has no matching velocity zone (matches
+/// `SampleEngine::legato_timing`).
+const LEGATO_DELAY_FALLBACK_MS: u32 = 100;
+
+/// Auto-divisi hand-off window (QN): a same-channel note ending within this
+/// of another note's onset reads as a legato hand-off (the line's previous
+/// note letting go), not as a note held above it. ¼ QN comfortably covers
+/// performed / generated legato overlaps while staying far below any real
+/// held-note duration.
+const DIVISI_HANDOFF_QN: f64 = 0.25;
+
+// ── Document types ────────────────────────────────────────────────────────────
+
+/// One tempo point: piecewise-constant BPM from `qn` onward.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct TempoPoint {
+    pub qn: f64,
+    pub bpm: f64,
+}
+
+/// One note in the document (QN domain, 0-based channel).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct DocNote {
+    pub start_qn: f64,
+    pub end_qn: f64,
+    pub chan: u8,
+    pub pitch: u8,
+    pub vel: u8,
+}
+
+/// One CC event in the document (QN domain, 0-based channel).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct DocCc {
+    pub qn: f64,
+    pub chan: u8,
+    pub cc: u8,
+    pub val: u8,
+}
+
+/// The full MIDI document of one track, given to the sampler ahead of time
+/// (ARA-style) so it can *anticipate* instead of being compensated.
+#[derive(Debug, Clone, Default)]
+pub struct TrackDocument {
+    /// Monotonic version; replaced wholesale on change (documents are small).
+    pub version: u64,
+    /// Determinism seed — all stochastic choices (RR) hash from this.
+    /// Persisted with the project; re-roll to get a new "take".
+    pub seed: u64,
+    pub notes: Vec<DocNote>,
+    pub ccs: Vec<DocCc>,
+    /// Tempo map (piecewise-constant BPM). Empty ⇒ 120 BPM.
+    pub tempo: Vec<TempoPoint>,
+    /// Lookahead auto-divisi (see `docs/plan/document-mode.md`,
+    /// "Auto-divisi"): when true, `annotate` ranks simultaneous same-channel
+    /// notes top→bottom into monophonic engine lines BEFORE legato/re-bow
+    /// inference — for documents whose channels don't already encode voice
+    /// separation (e.g. a chordal part on one channel). Pure function of the
+    /// document: deterministic and seed-independent. When false (default),
+    /// channels are respected as-is: channel N → line N.
+    pub auto_divisi: bool,
+}
+
+impl Default for TempoPoint {
+    fn default() -> Self {
+        Self {
+            qn: 0.0,
+            bpm: 120.0,
+        }
+    }
+}
+
+// ── Time conversion ───────────────────────────────────────────────────────────
+
+/// Seconds from the document epoch (QN 0) to `qn`, integrating the
+/// piecewise-constant tempo map. Before the first point, the first point's
+/// BPM applies; an empty map means 120 BPM.
+pub fn qn_to_sec(tempo: &[TempoPoint], qn: f64) -> f64 {
+    let mut bpm = tempo.first().map(|t| t.bpm).unwrap_or(120.0);
+    let mut sec = 0.0;
+    let mut cur_qn = 0.0;
+    for t in tempo {
+        if t.qn >= qn {
+            break;
+        }
+        if t.qn > cur_qn {
+            sec += (t.qn - cur_qn) * 60.0 / bpm;
+            cur_qn = t.qn;
+        }
+        bpm = t.bpm;
+    }
+    sec + (qn - cur_qn) * 60.0 / bpm
+}
+
+/// Absolute frame (from the document epoch) for a QN position.
+pub fn qn_to_frame(tempo: &[TempoPoint], qn: f64, sample_rate: u32) -> i64 {
+    (qn_to_sec(tempo, qn) * sample_rate as f64).round() as i64
+}
+
+fn ms_to_frames_i64(ms: u32, sample_rate: u32) -> i64 {
+    (ms as i64 * sample_rate as i64) / 1000
+}
+
+// ── Deterministic round-robin ─────────────────────────────────────────────────
+
+/// What an RR slot is being drawn for. Part of the hash so a note's body,
+/// transition, and release each get an independent (but stable) slot.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u64)]
+pub enum RrPurpose {
+    /// The note's body trigger (sustain layers / short one-shot).
+    Body = 1,
+    /// The legato transition into the note.
+    Transition = 2,
+    /// The recorded release tail at note-off.
+    Release = 3,
+}
+
+/// splitmix64 finalizer — a FIXED, documented mix function. Do NOT replace
+/// with `std::hash::DefaultHasher` (unstable across Rust releases): rendered
+/// projects must reproduce byte-identically forever.
+fn splitmix64(mut x: u64) -> u64 {
+    x = x.wrapping_add(0x9E37_79B9_7F4A_7C15);
+    let mut z = x;
+    z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+    z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+    z ^ (z >> 31)
+}
+
+/// Number of abstract RR positions the stable hash draws from. The engine
+/// reduces the pinned slot modulo the actual RR-group size at trigger time
+/// (`select_zone_rr_slot` / `find_layer_zone`), so any group size divides in.
+pub const RR_SLOT_SPACE: u32 = 4096;
+
+/// The document-mode round-robin choice: a pure function of the seed and the
+/// note's identity — **no mutable counter**. Consequences (per the design
+/// doc's "Determinism"): position independence (starting playback at bar 17
+/// gives every note the same RR as playing from the top) and edit stability
+/// (inserting a note re-rolls only that note).
+pub fn stable_rr_slot(seed: u64, start_qn: f64, pitch: u8, chan: u8, purpose: RrPurpose) -> u32 {
+    let mut h = seed;
+    for v in [
+        start_qn.to_bits(),
+        pitch as u64,
+        chan as u64,
+        purpose as u64,
+    ] {
+        h = splitmix64(h ^ v);
+    }
+    (h % RR_SLOT_SPACE as u64) as u32
+}
+
+// ── Schedule ──────────────────────────────────────────────────────────────────
+
+/// One engine action in the schedule.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum DocEvent {
+    /// Plain note-on (first-of-phrase sustains, shorts — shorts arrive
+    /// pre-rolled by `short_note_timing.pre_delay_ms`).
+    NoteOn { note: u8, vel: u8, rr: u32 },
+    /// Note-off (fires the release tail; `rr` pins its round-robin).
+    NoteOff { note: u8, rr: u32 },
+    /// CC pass-through.
+    Cc { cc: u8, val: u8 },
+    /// Fire the legato transition into `note` NOW — scheduled `delay_ms`
+    /// before the note's tick so the arrival lands on the grid. Emitted
+    /// INSTEAD of a `NoteOn` for legato-followed notes. `lead` is the frame
+    /// distance to the destination tick (`tick = frame + lead`), kept for
+    /// diagnostics/analysis of the schedule.
+    LegatoPrefire {
+        note: u8,
+        vel: u8,
+        rr: u32,
+        lead: u32,
+    },
+}
+
+/// One scheduled event at an absolute frame from the document epoch.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ScheduledEvent {
+    pub frame: u64,
+    /// Engine mono line ([`LineId`], truncated) this event dispatches to.
+    /// The line allocator runs at annotation time: channel→line identity by
+    /// default, or the auto-divisi ranking when
+    /// [`TrackDocument::auto_divisi`] is set.
+    pub line: u8,
+    pub kind: DocEvent,
+}
+
+/// Annotated, frame-domain schedule for one document + library spec.
+#[derive(Debug, Clone, Default)]
+pub struct Schedule {
+    pub sample_rate: u32,
+    /// Sorted by `(frame, dispatch priority)`.
+    pub events: Vec<ScheduledEvent>,
+    /// Frame of the last event.
+    pub end_frame: u64,
+    /// The document's seed (carried through for render reports).
+    pub seed: u64,
+    pub note_count: usize,
+    /// Notes that will arrive via `LegatoPrefire`.
+    pub legato_count: usize,
+    /// Notes pre-rolled as shorts.
+    pub short_count: usize,
+    /// Largest [`DocEvent::LegatoPrefire::lead`] in the schedule (frames).
+    pub max_prefire_lead: u64,
+    /// The document's tempo map (copied through) so the realtime scheduler
+    /// can compare it against the host-reported tempo. Empty ⇒ 120 BPM.
+    pub tempo: Vec<TempoPoint>,
+    /// Merged engine-activity spans `(first_trigger, last_ring_out)`,
+    /// sorted: the union of every note's `[trigger_frame, note_off +
+    /// RECONSTRUCT_TAIL]`. Between spans the engine is provably quiescent.
+    /// Used by [`Schedule::reconstruction_start`] to bound the deterministic
+    /// replay that makes playback start-position invariant (see
+    /// "Playback-start invariance" in `docs/plan/document-mode.md`).
+    pub busy: Vec<(u64, u64)>,
+}
+
+impl Schedule {
+    /// Where voice reconstruction must REPLAY from for a playback start at
+    /// frame `p`: the beginning of the continuous activity span containing
+    /// `p`, or `p` itself when the engine is quiescent there.
+    ///
+    /// Replaying the schedule from this frame — through the real render
+    /// path, output discarded — reconstructs every voice the full render
+    /// would have alive at `p` (transition voices mid-window, sustains
+    /// mid-sample, release tails mid-ring) with BIT-EXACT state. Replay is
+    /// the only mechanism that can be exact: per-voice state (fractional
+    /// playback `position += rate`, recursive gain-ramp updates, loop-wrap
+    /// arithmetic) is accumulated per rendered frame, and float
+    /// accumulation is only reproducible by performing the identical
+    /// accumulation — a closed-form "advance envelope to offset n" would
+    /// round differently. The window is bounded by the span length: chained
+    /// legato is replayed from its phrase start (a transition's identity
+    /// depends on the line's sounding note, so the chain context must be
+    /// rebuilt, not just the straddling voice).
+    pub fn reconstruction_start(&self, p: u64) -> u64 {
+        let i = self.busy.partition_point(|s| s.0 <= p);
+        if i > 0 {
+            let (start, end) = self.busy[i - 1];
+            if p < end {
+                return start;
+            }
+        }
+        p
+    }
+}
+
+/// Conservative bound (seconds) on how long a note keeps voices alive after
+/// its note-off: release envelope + recorded release-sample tails + legato
+/// fade-outs. Overestimating only widens (merges) activity spans — replay
+/// gets longer but stays exact; underestimating would silently drop a
+/// still-ringing tail from reconstruction. 6 s comfortably exceeds any
+/// release sample in the supported libraries.
+pub const RECONSTRUCT_TAIL_SEC: f64 = 6.0;
+
+// ── Annotation (ported from keyflow-orchestra mirror.rs — keep in parity) ─────
+
+/// CC58 band classification, ported verbatim from
+/// `keyflow-orchestra/src/mirror.rs` (the parity source — tested against the
+/// CSS reference engine there). Only these bands affect timing decisions.
+fn ks_is_marcato(val: u8) -> bool {
+    (66..=75).contains(&val) // marcato + marcato-with-overlay bands
+}
+
+fn ks_is_legato_toggle(val: u8) -> bool {
+    (76..=85).contains(&val) // legato on / legato off
+}
+
+fn ks_is_con_sord(val: u8) -> bool {
+    (86..=95).contains(&val) // con sordino on / off
+}
+
+/// Short-articulation bands (spiccato/staccatissimo/staccato/sfz/pizzicato)
+/// plus tremolo — none of these connect, so a same-pitch abutment between
+/// them is a break, not a re-bow. Marcato deliberately does NOT block
+/// (fast-run tails flowing into held notes re-bow). Parity: `mirror.rs`.
+fn ks_blocks_rebow(val: u8) -> bool {
+    (11..=35).contains(&val) || (56..=60).contains(&val)
+}
+
+/// Per-channel step timeline of a CC's value (port of mirror.rs `CcState`).
+struct CcState {
+    /// (qn, val) sorted by qn.
+    events: Vec<(f64, u8)>,
+}
+
+impl CcState {
+    fn new(ccs: &[DocCc], chan: u8, cc: u8) -> Self {
+        let mut events: Vec<(f64, u8)> = ccs
+            .iter()
+            .filter(|e| e.chan == chan && e.cc == cc)
+            .map(|e| (e.qn, e.val))
+            .collect();
+        events.sort_by(|a, b| a.0.total_cmp(&b.0));
+        Self { events }
+    }
+
+    /// Last value at or before `qn` (None if no event yet).
+    fn at(&self, qn: f64) -> Option<u8> {
+        let mut cur = None;
+        for &(q, v) in &self.events {
+            if q <= qn + EPS {
+                cur = Some(v);
+            } else {
+                break;
+            }
+        }
+        cur
+    }
+
+    /// Last value at/before `qn` satisfying `pred`, skipping non-matching
+    /// events (e.g. the last CC58 that selected a legato *mode*, ignoring the
+    /// articulation / toggle keyswitches pressed since).
+    fn last_matching(&self, qn: f64, pred: impl Fn(u8) -> bool) -> Option<u8> {
+        let mut cur = None;
+        for &(q, v) in &self.events {
+            if q <= qn + EPS {
+                if pred(v) {
+                    cur = Some(v);
+                }
+            } else {
+                break;
+            }
+        }
+        cur
+    }
+}
+
+/// What the spec says a CC58 state plays. `None` label / no articulation
+/// match (mode switches, bare state) ⇒ the engine's default long
+/// articulation, i.e. sustain-like.
+fn kind_for_ks(spec: &LibrarySpec, ks_val: Option<u8>) -> ArticulationKind {
+    let Some(val) = ks_val else {
+        return ArticulationKind::Sustain;
+    };
+    let Some(label) = spec.keyswitch.as_ref().and_then(|ks| ks.cc58_function(val)) else {
+        return ArticulationKind::Sustain;
+    };
+    spec.articulations
+        .iter()
+        .find(|a| a.id == label || a.label == label)
+        .map(|a| a.kind.clone())
+        .unwrap_or(ArticulationKind::Sustain)
+}
+
+/// Working copy of a note through annotation.
+struct ANote {
+    src: DocNote,
+    /// CC58 state at note-on (articulation identity) — filtered of
+    /// legato-toggle / sordino presses, which are state, not articulation
+    /// (parity: mirror.rs `MNote::ks_val`).
+    ks_val: Option<u8>,
+    kind: ArticulationKind,
+    /// This note is reached by a legato transition (different-pitch overlap
+    /// or same-pitch re-bow) → arrives via `LegatoPrefire`.
+    legato_from: bool,
+    /// Legato SPEED mode active at this note: `true` = Expressive (CC58 6-10),
+    /// `false` = Low Latency (CSS default / CC58 0-5). Selects the pre-delay
+    /// table for the prefire lead.
+    legato_expressive: bool,
+    /// This note flows into ANY legato transition (different-pitch move or
+    /// same-pitch re-bow) → its note-off is dropped. The scheduled transition
+    /// into the next note fades this voice out; emitting a note-off instead
+    /// races that prefire and can double the arrived voice (or spawn a spurious
+    /// mid-phrase release). Only genuine phrase-ends keep their note-off.
+    legato_to: bool,
+}
+
+impl ANote {
+    /// Parity: mirror.rs `MNote::blocks_rebow` (no notation hints here —
+    /// the document is MIDI-domain only).
+    fn blocks_rebow(&self) -> bool {
+        self.ks_val.map(ks_blocks_rebow).unwrap_or(false)
+    }
+
+    fn is_marcato(&self) -> bool {
+        self.ks_val.map(ks_is_marcato).unwrap_or(false)
+    }
+
+    fn is_sustain_like(&self) -> bool {
+        matches!(
+            self.kind,
+            ArticulationKind::Sustain | ArticulationKind::Looped | ArticulationKind::Trill
+        )
+    }
+
+    fn is_short(&self) -> bool {
+        matches!(
+            self.kind,
+            ArticulationKind::Short | ArticulationKind::OneShot
+        )
+    }
+}
+
+/// Annotate a document against a library spec into a frame-domain
+/// [`Schedule`].
+///
+/// Inference (ported from `keyflow-orchestra/src/mirror.rs::mirror_part`,
+/// stage 1 — keep in parity):
+/// - **articulation** = CC58 keyswitch state at each note-on
+/// - **legato edge** = different-pitch overlap with the previous note on the
+///   same channel
+/// - **re-bow** = same-pitch abutment (gap ≤ ~1/32 QN) between connectable
+///   (sustain-family) notes
+///
+/// Timing inversion (this module's contribution):
+/// - legato-followed sustains → [`DocEvent::LegatoPrefire`] at
+///   `start − mode.delay_for_velocity(vel)`, where `mode` is the CC58-selected
+///   legato speed (Low Latency by default, Expressive on CC58 6-10)
+/// - shorts → note-on pre-rolled by `short_note_timing.pre_delay_ms`
+/// - marcato keyswitch state → no sampled pre-delay → no pull (mirror parity)
+pub fn annotate(doc: &TrackDocument, spec: &LibrarySpec, sample_rate: u32) -> Schedule {
+    // Legato speed modes. CSS's DEFAULT is Low Latency (manual: "the easiest to
+    // use, and I recommend using this mode for most work"); Expressive is only
+    // active while a CC58 keyswitch selects it (0-5 = Low Latency, 6-10 =
+    // Expressive). We pick the delay table per note from the last legato-mode
+    // keyswitch, defaulting to Low Latency. `primary_mode` covers single-mode
+    // libraries (brass, etc.) that ship flat zones instead.
+    let low_latency = spec
+        .legato_engine
+        .as_ref()
+        .and_then(|le| le.low_latency.clone());
+    let expressive = spec
+        .legato_engine
+        .as_ref()
+        .and_then(|le| le.expressive.clone());
+    let primary = spec.legato_engine.as_ref().and_then(|le| le.primary_mode());
+    let ll_range = low_latency
+        .as_ref()
+        .and_then(|m| m.enabled_cc58_range.as_deref())
+        .and_then(crate::spec::parse_range);
+    let exp_range = expressive
+        .as_ref()
+        .and_then(|m| m.enabled_cc58_range.as_deref())
+        .and_then(crate::spec::parse_range);
+    let in_range = |r: Option<(u8, u8)>, v: u8| r.is_some_and(|(lo, hi)| v >= lo && v <= hi);
+    let porta_vel_max = spec
+        .legato_engine
+        .as_ref()
+        .and_then(|le| le.portamento.as_ref())
+        .map(|p| p.trigger_vel_max)
+        .unwrap_or(0);
+    let short_pre_frames = spec
+        .short_note_timing
+        .as_ref()
+        .map(|s| ms_to_frames_i64(s.pre_delay_ms, sample_rate))
+        .unwrap_or(0);
+    let legato_capable = spec.legato_engine.is_some();
+
+    // Line allocation FIRST (channel→line identity, or the auto-divisi
+    // ranking), so all inference below runs per assigned mono line.
+    let (line_of, chan_blocks) = assign_lines(doc);
+
+    // Working notes grouped per LINE, sorted by source start.
+    let mut notes: Vec<ANote> = doc
+        .notes
+        .iter()
+        .map(|&src| ANote {
+            src,
+            ks_val: None,
+            kind: ArticulationKind::Sustain,
+            legato_from: false,
+            legato_to: false,
+            legato_expressive: false,
+        })
+        .collect();
+    let mut by_line: std::collections::BTreeMap<u8, Vec<usize>> = std::collections::BTreeMap::new();
+    for i in 0..notes.len() {
+        by_line.entry(line_of[i]).or_default().push(i);
+    }
+    for list in by_line.values_mut() {
+        list.sort_by(|&a, &b| notes[a].src.start_qn.total_cmp(&notes[b].src.start_qn));
+    }
+
+    // Stage 1 — articulation state + legato/re-bow edges (mirror.rs parity),
+    // per line. Keyswitch state comes from the line's SOURCE channel (every
+    // note in a line shares one source channel under both allocators).
+    for list in by_line.values() {
+        let ch = notes[list[0]].src.chan;
+        let ks = CcState::new(&doc.ccs, ch, 58);
+        for &ni in list {
+            notes[ni].ks_val = ks.at(notes[ni].src.start_qn).filter(|v| {
+                // legato-toggle / sordino presses are state, not articulation
+                !ks_is_legato_toggle(*v) && !ks_is_con_sord(*v)
+            });
+            notes[ni].kind = kind_for_ks(spec, notes[ni].ks_val);
+            // Legato speed mode from the last CC58 that selected one (0-5 Low
+            // Latency / 6-10 Expressive), ignoring articulation & toggle
+            // keyswitches pressed since. CSS default is Low Latency.
+            let mode_v = ks.last_matching(notes[ni].src.start_qn, |v| {
+                in_range(ll_range, v) || in_range(exp_range, v)
+            });
+            notes[ni].legato_expressive = mode_v.is_some_and(|v| in_range(exp_range, v));
+        }
+        for w in 0..list.len().saturating_sub(1) {
+            let (ai, bi) = (list[w], list[w + 1]);
+            let a = &notes[ai];
+            let b = &notes[bi];
+            let gap = b.src.start_qn - a.src.end_qn;
+            if a.src.pitch != b.src.pitch {
+                // different-pitch overlap = legato transition
+                if gap < -EPS {
+                    notes[bi].legato_from = true;
+                    notes[ai].legato_to = true;
+                }
+            } else if legato_capable
+                && !a.blocks_rebow()
+                && !b.blocks_rebow()
+                && gap <= BREAK_GAP_QN * 2.0 + EPS
+            {
+                // Same-pitch abutment OR overlap between sustains = re-bow.
+                // (Overlaps deeper than the abutment window still connect —
+                // on a mono line an overlapping repeat can only be a re-bow;
+                // treating it as a break would leave the line sounding at
+                // the next note-on and push it down the reactive path.)
+                notes[ai].legato_to = true;
+                notes[bi].legato_from = true;
+            }
+        }
+    }
+
+    // Stage 2 — schedule emission with the timing inversion.
+    let mut events: Vec<(u64, u8, u8, DocEvent)> = Vec::new(); // (frame, prio, line, ev)
+    let mut legato_count = 0usize;
+    let mut short_count = 0usize;
+
+    for e in &doc.ccs {
+        // CC64 (sustain pedal) is dropped from the schedule: its note-off
+        // DEFERRAL semantics contradict a fully scheduled document (every
+        // note-off is already explicit, and same-pitch re-bows are inferred
+        // structurally above). Keyflow/CSS use CC64 pulses as a re-bow
+        // accent hint; forwarding them would hold the mono line open and
+        // push later note-ons down the reactive path.
+        if e.cc == 64 {
+            continue;
+        }
+        let frame = qn_to_frame(&doc.tempo, e.qn, sample_rate).max(0) as u64;
+        // A CC event addresses its source channel's whole line block: under
+        // auto-divisi one channel fans out into several lines, and its CC1
+        // expression lane must drive ALL of them (CC58/mode CCs are
+        // engine-global at dispatch, so replication is harmless there).
+        let (base, width) = chan_blocks
+            .get(&e.chan)
+            .copied()
+            .unwrap_or((line_capped(e.chan), 1));
+        for line in base..base.saturating_add(width.max(1)) {
+            events.push((
+                frame,
+                0,
+                line,
+                DocEvent::Cc {
+                    cc: e.cc,
+                    val: e.val,
+                },
+            ));
+        }
+    }
+
+    // Per-note engine-activity spans (trigger → ring-out) for the
+    // reconstruction map, merged below.
+    let tail_frames = (RECONSTRUCT_TAIL_SEC * sample_rate as f64).round() as u64;
+    let mut spans: Vec<(u64, u64)> = Vec::with_capacity(doc.notes.len());
+
+    for (&line, list) in &by_line {
+        // Previous trigger frame on this line — keeps the mono line's
+        // trigger order strict even when a pre-roll would cross it.
+        let mut prev_trigger: i64 = -1;
+        // Previous note-on frame on this line — the IOI clock for the
+        // Overlap-Delay (spec §2.1: legato delay is IOI-driven, not velocity).
+        let mut prev_start: Option<i64> = None;
+        // Previous note PITCH on this line — the legato `from` for the per-move
+        // measured-arrival lookup that sets the `$1fvjk` pre-bow lead.
+        let mut prev_pitch: Option<u8> = None;
+        for &ni in list {
+            let n = &notes[ni];
+            let start = qn_to_frame(&doc.tempo, n.src.start_qn, sample_rate);
+            let end = qn_to_frame(&doc.tempo, n.src.end_qn, sample_rate);
+            let body_rr = stable_rr_slot(
+                doc.seed,
+                n.src.start_qn,
+                n.src.pitch,
+                n.src.chan,
+                RrPurpose::Body,
+            );
+
+            let (trigger_frame, kind) = if n.is_short() {
+                // Shorts: recorded pre-roll before the rhythmic peak.
+                short_count += 1;
+                (
+                    start - short_pre_frames,
+                    DocEvent::NoteOn {
+                        note: n.src.pitch,
+                        vel: n.src.vel,
+                        rr: body_rr,
+                    },
+                )
+            } else if n.legato_from && n.is_sustain_like() && legato_capable {
+                // THE INVERSION: fire the transition early so the arrival
+                // lands on the tick. The lead is the MEASURED lead-in of the
+                // transition sample for this `from → to` move (per-zone
+                // `lead_in_ms`, written by the CSS generator; 0 for a
+                // same-pitch re-bow — Legzero has no lead-in), falling back
+                // to the spec's expressive velocity curve for libraries
+                // without measured zones. Portamento (vel ≤ threshold) and
+                // marcato (no sampled pre-delay — mirror parity: "no pull")
+                // prefire with ZERO lead: the transition fires exactly on
+                // the tick, never through the reactive countdown.
+                legato_count += 1;
+                let vel = n.src.vel;
+                // CSS: the trigger→arrival delay is the VELOCITY-ZONE value
+                // (Expressive 333/250/100 ms; Low Latency 150/100), NOT the
+                // recorded swell length. Prefire by exactly that so the arrival
+                // lands on the grid; the engine truncates the sample's measured
+                // lead-in to this delay via `start_offset` (skips the surplus
+                // swell). Using the full measured lead instead made fast
+                // passages overlap — consecutive swells stacked into a doubled,
+                // "sudden" transition. Marcato and portamento (vel ≤ threshold)
+                // have no sampled pre-delay → zero lead, fire on the tick.
+                // Overlap-Delay is IOI-driven (spec §2.1): the delay follows the
+                // inter-onset interval — time since the previous note-on on the
+                // line — interpolated across the KSP thresholds, NOT the
+                // velocity zone. Marcato and portamento (vel ≤ threshold) have
+                // no sampled pre-delay → fire on the tick.
+                let _ = (
+                    &expressive,
+                    &low_latency,
+                    &primary,
+                    LEGATO_DELAY_FALLBACK_MS,
+                );
+                let lead_ms = if n.is_marcato() || (porta_vel_max > 0 && vel <= porta_vel_max) {
+                    0
+                } else {
+                    let ioi_frames = prev_start.map(|p| (start - p).max(0)).unwrap_or(0);
+                    let ioi_ms = crate::engine::frames_to_ms(ioi_frames as u64, sample_rate);
+                    // CSS `$1fvjk`: the transition sample starts `lt_start_offset_ms`
+                    // in (IOI-interpolated 177 → 117 ms). To land the destination
+                    // pitch on the tick with that offset applied, prefire by the
+                    // AUDIBLE pre-bow that still plays before the arrival =
+                    // (per-move measured arrival − $1fvjk). Fast lines → ~0 ms (fire
+                    // on the tick); slow lines → ~60 ms of bow-change lead-in. The
+                    // engine's `start_offset = arrival − lead·rate` then resolves to
+                    // exactly $1fvjk (see `spawn_transition_voice`). Libraries
+                    // without measured transitions keep the legacy Overlap-Delay
+                    // curve (`ioi_legato_delay_ms`).
+                    match prev_pitch.and_then(|from| spec.legato_lead_ms(from, n.src.pitch)) {
+                        Some(arrival_ms) => (arrival_ms as f32
+                            - crate::engine::lt_start_offset_ms(ioi_ms))
+                        .max(0.0)
+                        .round() as u32,
+                        None => {
+                            crate::engine::ioi_legato_delay_ms(ioi_ms, vel, n.legato_expressive)
+                        }
+                    }
+                };
+                let rr = stable_rr_slot(
+                    doc.seed,
+                    n.src.start_qn,
+                    n.src.pitch,
+                    n.src.chan,
+                    RrPurpose::Transition,
+                );
+                (
+                    start - ms_to_frames_i64(lead_ms, sample_rate),
+                    DocEvent::LegatoPrefire {
+                        note: n.src.pitch,
+                        vel,
+                        rr,
+                        lead: 0, // filled in below, after the mono-order clamp
+                    },
+                )
+            } else {
+                (
+                    start,
+                    DocEvent::NoteOn {
+                        note: n.src.pitch,
+                        vel: n.src.vel,
+                        rr: body_rr,
+                    },
+                )
+            };
+
+            let trigger_frame = trigger_frame.max(prev_trigger + 1).max(0);
+            prev_trigger = trigger_frame;
+            // The prefire's lead is measured from its FINAL (clamped) trigger
+            // frame, so `frame + lead == destination tick` holds exactly.
+            let kind = if let DocEvent::LegatoPrefire { note, vel, rr, .. } = kind {
+                DocEvent::LegatoPrefire {
+                    note,
+                    vel,
+                    rr,
+                    lead: (start - trigger_frame).max(0) as u32,
+                }
+            } else {
+                kind
+            };
+            let prio = match kind {
+                DocEvent::LegatoPrefire { .. } => 2,
+                _ => 3,
+            };
+            events.push((trigger_frame as u64, prio, line, kind));
+            spans.push((
+                trigger_frame as u64,
+                end.max(trigger_frame + 1).max(0) as u64 + tail_frames,
+            ));
+
+            // Note-off: dropped for re-bow sources — the transition into the
+            // next same-pitch note replaces the release (fading this note is
+            // `fire_legato`'s job, not a release tail's).
+            if !n.legato_to {
+                let rr = stable_rr_slot(
+                    doc.seed,
+                    n.src.start_qn,
+                    n.src.pitch,
+                    n.src.chan,
+                    RrPurpose::Release,
+                );
+                events.push((
+                    end.max(trigger_frame + 1).max(0) as u64,
+                    1,
+                    line,
+                    DocEvent::NoteOff {
+                        note: n.src.pitch,
+                        rr,
+                    },
+                ));
+            }
+
+            // IOI clock: the next note on this line measures its Overlap-Delay
+            // from this note's (source) start.
+            prev_start = Some(start);
+            prev_pitch = Some(n.src.pitch);
+        }
+    }
+
+    // Cc(0) < NoteOff(1) < LegatoPrefire(2) < NoteOn(3) at equal frames, so
+    // keyswitch state lands before the notes it governs and releases precede
+    // re-triggers. Vec::sort_by is stable → equal keys keep emission order.
+    events.sort_by(|a, b| a.0.cmp(&b.0).then_with(|| a.1.cmp(&b.1)));
+
+    let end_frame = events.last().map(|e| e.0).unwrap_or(0);
+    let max_prefire_lead = events
+        .iter()
+        .filter_map(|(_, _, _, kind)| match kind {
+            DocEvent::LegatoPrefire { lead, .. } => Some(*lead as u64),
+            _ => None,
+        })
+        .max()
+        .unwrap_or(0);
+    Schedule {
+        sample_rate,
+        events: events
+            .into_iter()
+            .map(|(frame, _prio, line, kind)| ScheduledEvent { frame, line, kind })
+            .collect(),
+        end_frame,
+        seed: doc.seed,
+        note_count: doc.notes.len(),
+        legato_count,
+        short_count,
+        max_prefire_lead,
+        tempo: doc.tempo.clone(),
+        busy: merge_spans(spans),
+    }
+}
+
+/// Merge overlapping/adjacent activity spans into a sorted disjoint set.
+fn merge_spans(mut spans: Vec<(u64, u64)>) -> Vec<(u64, u64)> {
+    spans.sort_unstable();
+    let mut merged: Vec<(u64, u64)> = Vec::with_capacity(spans.len());
+    for (a, b) in spans {
+        match merged.last_mut() {
+            Some((_, end)) if a <= *end => *end = (*end).max(b),
+            _ => merged.push((a, b)),
+        }
+    }
+    merged
+}
+
+// ── Line allocation ───────────────────────────────────────────────────────────
+
+/// The channel→line allocator (import path): a document whose notes carry
+/// meaningful MIDI channels (e.g. keyflow's divisi export) maps channel N →
+/// engine line N. Lines are first-class engine entities, NOT channels —
+/// this is merely the first of several allocators in front of the line pool
+/// (lookahead auto-divisi in `annotate` and live greedy auto-divisi assign
+/// [`LineId`]s from note ranking instead; see `docs/plan/document-mode.md`,
+/// "Auto-divisi").
+pub fn line_for_chan(chan: u8) -> LineId {
+    chan as LineId
+}
+
+/// `line_for_chan`, clamped into the engine's line pool as a u8.
+fn line_capped(chan: u8) -> u8 {
+    line_for_chan(chan).min(crate::engine::MAX_LINES - 1) as u8
+}
+
+/// Per-note engine-line assignment, plus each source channel's line block
+/// `(base, width)` — CC events replicate across their channel's block so a
+/// channel's expression lane drives every line allocated from it.
+///
+/// Without `auto_divisi`: channel N → line N (blocks of width 1).
+///
+/// With `auto_divisi`: the lookahead allocator — a port of
+/// keyflow-orchestra's `assign_channels`
+/// (`crates/keyflow-orchestra/src/engine/mod.rs`, parity-tested there
+/// against the CSS reference engine). Each note's rank = 1 + how many
+/// same-channel notes are actually SOUNDING at its onset with a higher
+/// pitch (ties: earlier onset wins) — a held top note never loses its line
+/// to a re-articulated lower note. Rank 1 = top → first line of the
+/// channel's block; channels get disjoint blocks in ascending order. Pure
+/// function of the document: deterministic and seed-independent.
+fn assign_lines(doc: &TrackDocument) -> (Vec<u8>, std::collections::BTreeMap<u8, (u8, u8)>) {
+    use std::collections::BTreeMap;
+    let notes = &doc.notes;
+    let max_line = (crate::engine::MAX_LINES - 1) as u32;
+
+    if !doc.auto_divisi {
+        let mut blocks: BTreeMap<u8, (u8, u8)> = BTreeMap::new();
+        for n in notes {
+            blocks.insert(n.chan, (line_capped(n.chan), 1));
+        }
+        for e in &doc.ccs {
+            blocks.entry(e.chan).or_insert((line_capped(e.chan), 1));
+        }
+        return (notes.iter().map(|n| line_capped(n.chan)).collect(), blocks);
+    }
+
+    let mut chans: Vec<u8> = notes.iter().map(|n| n.chan).collect();
+    chans.extend(doc.ccs.iter().map(|e| e.chan));
+    chans.sort_unstable();
+    chans.dedup();
+
+    let ranks: Vec<u32> = (0..notes.len())
+        .map(|i| {
+            let n = &notes[i];
+            let mut rank = 1u32;
+            for (j, m) in notes.iter().enumerate() {
+                if j != i
+                    && m.chan == n.chan
+                    && m.start_qn <= n.start_qn + EPS
+                    // "Sounding at n's onset". One deviation from the
+                    // notation-domain original (which sees abutting notes):
+                    // documents are performance-domain, so legato pairs
+                    // OVERLAP — a note that ends within the hand-off window
+                    // after n starts is n's line-predecessor letting go, not
+                    // a held note above it, and must not displace n's rank
+                    // (otherwise every descending legato step would hop
+                    // lines).
+                    && m.end_qn > n.start_qn + DIVISI_HANDOFF_QN
+                    && (m.pitch > n.pitch
+                        || (m.pitch == n.pitch && m.start_qn < n.start_qn - EPS))
+                {
+                    rank += 1;
+                }
+            }
+            rank
+        })
+        .collect();
+
+    let mut width: BTreeMap<u8, u32> = chans.iter().map(|&c| (c, 1)).collect();
+    for (i, n) in notes.iter().enumerate() {
+        let w = width.get_mut(&n.chan).expect("chan registered");
+        *w = (*w).max(ranks[i]);
+    }
+
+    let mut blocks: BTreeMap<u8, (u8, u8)> = BTreeMap::new();
+    let mut base = 0u32;
+    for &c in &chans {
+        let w = width[&c];
+        let b = base.min(max_line);
+        let w_capped = w.min(max_line + 1 - b).max(1);
+        blocks.insert(c, (b as u8, w_capped as u8));
+        base += w;
+    }
+
+    let line_of = notes
+        .iter()
+        .enumerate()
+        .map(|(i, n)| {
+            let (b, _) = blocks[&n.chan];
+            (b as u32 + ranks[i] - 1).min(max_line) as u8
+        })
+        .collect();
+    (line_of, blocks)
+}
+
+// ── Offline schedule playback ─────────────────────────────────────────────────
+
+/// Options for [`render_schedule`] /
+/// [`SamplerRig::render_offline_document`](crate::SamplerRig::render_offline_document).
+#[derive(Debug, Clone)]
+pub struct DocumentRenderOptions {
+    /// Render chunk size (frames). Chunking is deterministic (it depends only
+    /// on the schedule), so this affects performance, not output.
+    pub block_frames: usize,
+    /// Extra tail rendered after the last event (release/reverb ring-out).
+    pub tail_sec: f64,
+    /// Start the render at this absolute frame. **Playback-start
+    /// invariance**: the output is the FULL render sliced at this frame,
+    /// bit-exactly — voices alive across it (sustains mid-sample, legato
+    /// transitions mid-window, release tails mid-ring) are reconstructed by
+    /// deterministic replay from [`Schedule::reconstruction_start`].
+    pub start_frame: u64,
+}
+
+impl Default for DocumentRenderOptions {
+    fn default() -> Self {
+        Self {
+            block_frames: 512,
+            tail_sec: 3.0,
+            start_frame: 0,
+        }
+    }
+}
+
+/// Result of one offline document render.
+#[derive(Debug, Clone, Default)]
+pub struct DocumentRenderResult {
+    /// Interleaved stereo audio, starting at `start_frame`.
+    pub audio: Vec<f32>,
+    pub sample_rate: u32,
+    pub start_frame: u64,
+    pub seed: u64,
+    pub note_count: usize,
+    /// Legato transitions actually fired by the engine, with frames relative
+    /// to `start_frame`.
+    pub transitions: Vec<crate::engine::LegatoFireEvent>,
+    /// REACTIVE legato-path triggers observed during playback. The schedule
+    /// prefires every transition, so this must be 0 — anything else means an
+    /// edge the annotator missed degraded to live-mode (late) timing.
+    pub reactive_fallbacks: u64,
+    /// Trigger events replayed (audio discarded) before `start_frame` to
+    /// reconstruct the voices alive across it.
+    pub reconstructed_events: u64,
+}
+
+/// Result of one offline document render split into articulation-class
+/// output buses (stems), keyed by bus id.
+#[derive(Debug, Clone, Default)]
+pub struct DocumentBusRenderResult {
+    /// Interleaved stereo audio per bus, starting at `start_frame`. With the
+    /// default `all → main` routing there is a single `"main"` bus whose
+    /// audio is bit-identical to [`render_schedule`]'s.
+    pub buses: std::collections::BTreeMap<String, Vec<f32>>,
+    pub sample_rate: u32,
+    pub start_frame: u64,
+    pub seed: u64,
+    pub note_count: usize,
+    pub transitions: Vec<crate::engine::LegatoFireEvent>,
+    pub reactive_fallbacks: u64,
+    /// Trigger events replayed (audio discarded) before `start_frame` to
+    /// reconstruct the voices alive across it.
+    pub reconstructed_events: u64,
+}
+
+/// Dispatch one scheduled event into the bank — the single translation from
+/// [`DocEvent`] to engine calls, shared verbatim by the offline walker
+/// (below) and the realtime scheduler ([`crate::document_rt`]). The
+/// determinism guarantee between them is exactly this parity.
+pub(crate) fn dispatch_event(bank: &mut crate::bank::SamplerBank, id: &str, ev: &ScheduledEvent) {
+    let line = ev.line as LineId;
+    match ev.kind {
+        DocEvent::Cc { cc, val } => {
+            bank.cc_instrument_line(id, line, cc, val);
+            // Document mode owns the legato mode: a low-latency CC58
+            // press (0–5) must not demote the expressive curve the
+            // schedule's prefire leads were computed from.
+            if cc == 58 && val <= 5 {
+                bank.set_legato_mode(id, true, true);
+            }
+        }
+        DocEvent::NoteOn { note, vel, rr } => {
+            bank.set_forced_rr(id, Some(rr));
+            bank.note_on_instrument_line(id, line, note, vel);
+        }
+        DocEvent::NoteOff { note, rr } => {
+            bank.set_forced_rr(id, Some(rr));
+            bank.note_off_instrument_line(id, line, note);
+        }
+        DocEvent::LegatoPrefire {
+            note,
+            vel,
+            rr,
+            lead,
+        } => {
+            bank.set_forced_rr(id, Some(rr));
+            // The lead (frames to the destination tick) rides along so the
+            // engine can align the sample's measured lead-in to it exactly.
+            bank.legato_prefire_line_lead(id, line, note, vel, u64::from(lead));
+        }
+    }
+}
+
+/// True for events that spawn/steer voices (counted as reconstruction work
+/// when replayed before the start frame).
+pub(crate) fn is_trigger(ev: &ScheduledEvent) -> bool {
+    matches!(
+        ev.kind,
+        DocEvent::NoteOn { .. } | DocEvent::NoteOff { .. } | DocEvent::LegatoPrefire { .. }
+    )
+}
+
+/// Shared schedule walker: resets playback state, dispatches every event at
+/// its exact frame (chunks split at event boundaries, so placement is
+/// sample-accurate regardless of `block_frames`), pins round-robin per event
+/// via the forced-RR path, and harvests the fire log + reactive counter.
+/// `render_chunk(bank, frames, discard)` renders exactly `frames` frames;
+/// `discard == true` chunks are reconstruction warm-up (advance the engine,
+/// throw the audio away).
+///
+/// **Playback-start invariance** (`opts.start_frame > 0`): events before the
+/// activity span containing the start are dispatched state-only (CC
+/// pre-roll — their voices are provably dead); from the span start
+/// ([`Schedule::reconstruction_start`]) the walk replays normally with
+/// discarded audio, so every voice alive across `start_frame` carries the
+/// exact accumulated state of the full render. Output then begins at
+/// `start_frame` as a bit-exact slice of the full render.
+///
+/// Events carry their engine mono line from annotation time (the allocator
+/// — channel→line identity or auto-divisi ranking — ran in [`annotate`]);
+/// each divisi line runs its own prefired legato.
+fn walk_schedule(
+    bank: &mut crate::bank::SamplerBank,
+    id: &str,
+    schedule: &Schedule,
+    opts: &DocumentRenderOptions,
+    mut render_chunk: impl FnMut(&mut crate::bank::SamplerBank, usize, bool),
+) -> (Vec<crate::engine::LegatoFireEvent>, u64, u64) {
+    // Reset playback state; document mode always plays the full expressive
+    // legato (the whole point is that latency no longer costs anything).
+    // set_legato_mode(.., expressive: true) also flips the engine into
+    // PlayMode::Lookahead — the automatic mode policy: Lookahead ONLY while
+    // the MIDI is known ahead of time, i.e. for the duration of this walk.
+    bank.panic(id);
+    bank.set_legato_mode(id, true, true);
+    bank.set_legato_fire_log_enabled(id, true);
+
+    let tail_frames = (opts.tail_sec * schedule.sample_rate as f64).round() as u64;
+    let end_frame = schedule.end_frame + tail_frames;
+    let recon_from = schedule.reconstruction_start(opts.start_frame);
+    let mut cursor = recon_from;
+    let mut reconstructed_events = 0u64;
+    let base_engine_frame = engine_frames_rendered(bank, id);
+
+    let mut render_until =
+        |bank: &mut crate::bank::SamplerBank, cursor: &mut u64, target: u64, discard: bool| {
+            while *cursor < target {
+                let frames = ((target - *cursor) as usize).min(opts.block_frames.max(1));
+                render_chunk(bank, frames, discard);
+                *cursor += frames as u64;
+            }
+        };
+
+    for ev in &schedule.events {
+        if ev.frame < recon_from {
+            // Provably-quiescent past: voices are gone, but controller state
+            // (CC1/CC2 dynamics, CC58 keyswitch) persists — pre-roll it.
+            if matches!(ev.kind, DocEvent::Cc { .. }) {
+                dispatch_event(bank, id, ev);
+            }
+            continue;
+        }
+        if ev.frame < opts.start_frame {
+            // Reconstruction replay: advance the engine through the span
+            // (audio discarded) so voices alive across start_frame carry
+            // their exact accumulated state.
+            render_until(bank, &mut cursor, ev.frame, true);
+            if is_trigger(ev) {
+                reconstructed_events += 1;
+            }
+            dispatch_event(bank, id, ev);
+            continue;
+        }
+        // Audible window: finish any warm-up up to start_frame, then render
+        // for real up to the event.
+        render_until(bank, &mut cursor, opts.start_frame, true);
+        render_until(bank, &mut cursor, ev.frame, false);
+        dispatch_event(bank, id, ev);
+    }
+    // Flush any remaining warm-up (start_frame past the last event)…
+    render_until(bank, &mut cursor, opts.start_frame.min(end_frame), true);
+    // …then render the audible window.
+    render_until(bank, &mut cursor, end_frame, false);
+    bank.set_forced_rr(id, None);
+
+    let reactive_fallbacks = bank.reactive_legato_fires(id);
+    // Fire log frames are engine-relative; re-base to document frames (the
+    // engine started rendering at `recon_from`) and report only fires inside
+    // the audible window.
+    let transitions = bank
+        .legato_fire_log(id)
+        .into_iter()
+        .map(|mut e| {
+            e.frame = (e.frame - base_engine_frame) + recon_from;
+            e
+        })
+        .filter(|e| e.frame >= opts.start_frame)
+        .collect();
+    bank.set_legato_fire_log_enabled(id, false);
+    // The document has been played out — live dispatch resumes under the
+    // strict zero-latency policy (see PlayMode).
+    bank.set_play_mode(id, crate::engine::PlayMode::StrictLive);
+    (transitions, reactive_fallbacks, reconstructed_events)
+}
+
+/// Walk a [`Schedule`] through a bank instrument, rendering block-sized
+/// chunks that split at every event's exact frame — events therefore land
+/// sample-accurately regardless of `block_frames`. Round-robin is pinned per
+/// event via the forced-RR path; the engine never consults a mutable counter.
+pub fn render_schedule(
+    bank: &mut crate::bank::SamplerBank,
+    id: &str,
+    schedule: &Schedule,
+    opts: &DocumentRenderOptions,
+) -> DocumentRenderResult {
+    let mut audio: Vec<f32> = Vec::new();
+    let mut buf: Vec<f32> = Vec::new();
+    let (transitions, reactive_fallbacks, reconstructed_events) =
+        walk_schedule(bank, id, schedule, opts, |bank, frames, discard| {
+            buf.clear();
+            buf.resize(frames * 2, 0.0);
+            bank.render(&mut buf);
+            if !discard {
+                audio.extend_from_slice(&buf);
+            }
+        });
+
+    DocumentRenderResult {
+        audio,
+        sample_rate: schedule.sample_rate,
+        start_frame: opts.start_frame,
+        seed: schedule.seed,
+        note_count: schedule.note_count,
+        transitions,
+        reactive_fallbacks,
+        reconstructed_events,
+    }
+}
+
+/// [`render_schedule`], split into articulation-class output buses per
+/// `routing` (class → bus id). Buses are rendered in ONE pass with the same
+/// voice iteration order as the plain render, so:
+/// - default routing (every class → `"main"`) is bit-identical to
+///   [`render_schedule`], and
+/// - with split routing, each voice lands wholly in its class's bus and the
+///   buses sum back to the main render.
+///
+/// Unlike [`render_schedule`] (which renders the whole bank mix), this
+/// renders instrument `id` alone — identical audio when it is the only
+/// loaded instrument, which is the document-render arrangement.
+pub fn render_schedule_buses(
+    bank: &mut crate::bank::SamplerBank,
+    id: &str,
+    schedule: &Schedule,
+    opts: &DocumentRenderOptions,
+    routing: &std::collections::BTreeMap<ArticClass, String>,
+) -> DocumentBusRenderResult {
+    let bus_of = |class: ArticClass| -> String {
+        routing
+            .get(&class)
+            .cloned()
+            .unwrap_or_else(|| "main".to_string())
+    };
+    let longs_bus = bus_of(ArticClass::Longs);
+    let shorts_bus = bus_of(ArticClass::Shorts);
+    let mut names: Vec<String> = vec![longs_bus.clone(), shorts_bus.clone()];
+    names.sort();
+    names.dedup();
+    let route_longs = names.iter().position(|n| *n == longs_bus).unwrap_or(0);
+    let route_shorts = names.iter().position(|n| *n == shorts_bus).unwrap_or(0);
+
+    let mut buses: Vec<Vec<f32>> = names.iter().map(|_| Vec::new()).collect();
+    let mut chunk: Vec<Vec<f32>> = names.iter().map(|_| Vec::new()).collect();
+    let (transitions, reactive_fallbacks, reconstructed_events) =
+        walk_schedule(bank, id, schedule, opts, |bank, frames, discard| {
+            for c in chunk.iter_mut() {
+                c.clear();
+                c.resize(frames * 2, 0.0);
+            }
+            bank.render_instrument_routed_buses(id, &mut chunk, route_longs, route_shorts);
+            if !discard {
+                for (bus, c) in buses.iter_mut().zip(chunk.iter()) {
+                    bus.extend_from_slice(c);
+                }
+            }
+        });
+
+    DocumentBusRenderResult {
+        buses: names.into_iter().zip(buses).collect(),
+        sample_rate: schedule.sample_rate,
+        start_frame: opts.start_frame,
+        seed: schedule.seed,
+        note_count: schedule.note_count,
+        transitions,
+        reactive_fallbacks,
+        reconstructed_events,
+    }
+}
+
+fn engine_frames_rendered(bank: &crate::bank::SamplerBank, id: &str) -> u64 {
+    bank.engine_frames_rendered(id).unwrap_or(0)
+}
+
+// ── Tests ─────────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn spec_with_legato() -> LibrarySpec {
+        LibrarySpec::from_styx(
+            r#"
+name DocTest
+articulations (
+    { id Sus,  label Sustain,  kind @Sustain, rr 1 }
+    { id Leg,  label Legato,   kind @Legato,  rr 4, directional true }
+    { id Stac, label Staccato, kind @Short,   rr 4 }
+)
+legato_engine {
+    expressive {
+        zones (
+            {vel_range (0 64),    label slow, delay_ms 333}
+            {vel_range (65 127),  label fast, delay_ms 100}
+        )
+    }
+    portamento { trigger_vel_max 10, volume_controller CC5 }
+}
+short_note_timing { pre_delay_ms 60 }
+keyswitch {
+    cc58_map {
+        0-5   "Sustain: Low Latency Legato"
+        21-25 Staccato
+    }
+}
+"#,
+        )
+        .expect("parse test spec")
+    }
+
+    fn note(start_qn: f64, end_qn: f64, pitch: u8, vel: u8) -> DocNote {
+        DocNote {
+            start_qn,
+            end_qn,
+            chan: 0,
+            pitch,
+            vel,
+        }
+    }
+
+    const SR: u32 = 48_000;
+
+    #[test]
+    fn qn_to_sec_integrates_tempo_map() {
+        let tempo = vec![
+            TempoPoint {
+                qn: 0.0,
+                bpm: 120.0,
+            },
+            TempoPoint { qn: 4.0, bpm: 60.0 },
+        ];
+        assert!((qn_to_sec(&tempo, 0.0) - 0.0).abs() < 1e-12);
+        assert!((qn_to_sec(&tempo, 4.0) - 2.0).abs() < 1e-12);
+        assert!((qn_to_sec(&tempo, 6.0) - 4.0).abs() < 1e-12);
+        // empty map = 120 BPM
+        assert!((qn_to_sec(&[], 2.0) - 1.0).abs() < 1e-12);
+    }
+
+    /// Golden values — this hash is FROZEN (rendered projects must reproduce
+    /// forever). If this test fails, the hash function changed: revert it.
+    #[test]
+    fn stable_rr_slot_is_frozen() {
+        let a = stable_rr_slot(42, 1.5, 62, 0, RrPurpose::Body);
+        let b = stable_rr_slot(42, 1.5, 62, 0, RrPurpose::Transition);
+        let c = stable_rr_slot(43, 1.5, 62, 0, RrPurpose::Body);
+        // Distinct across purpose and seed…
+        assert_ne!(a, b);
+        assert_ne!(a, c);
+        // …and identical across calls / positions (pure function).
+        assert_eq!(a, stable_rr_slot(42, 1.5, 62, 0, RrPurpose::Body));
+        // Frozen golden values (computed once at introduction).
+        assert_eq!(a, 3847);
+        assert_eq!(b, 3851);
+        assert_eq!(c, 488);
+    }
+
+    #[test]
+    fn legato_followed_note_becomes_prefire_with_expressive_lead() {
+        let doc = TrackDocument {
+            seed: 7,
+            notes: vec![note(0.0, 2.1, 60, 90), note(2.0, 4.0, 62, 30)],
+            ..Default::default()
+        };
+        let sched = annotate(&doc, &spec_with_legato(), SR);
+        assert_eq!(sched.legato_count, 1);
+
+        // 120 BPM ⇒ QN 2.0 = 1.0 s = 48000 frames. With the REAL O+D values
+        // (spec §2.1, corrected), a 1.0 s inter-onset gap yields ZERO added
+        // latency — the delay is non-zero only for soft+fast playing — so the
+        // prefire fires exactly ON the destination tick (lead 0).
+        let tick = 48_000i64;
+        let prefire = sched
+            .events
+            .iter()
+            .find(|e| matches!(e.kind, DocEvent::LegatoPrefire { .. }))
+            .expect("second note arrives via prefire");
+        assert_eq!(prefire.frame as i64, tick);
+        assert!(matches!(
+            prefire.kind,
+            DocEvent::LegatoPrefire { lead: 0, .. }
+        ));
+
+        // The first note is a plain note-on at frame 0; only one NoteOn total.
+        let note_ons: Vec<_> = sched
+            .events
+            .iter()
+            .filter(|e| matches!(e.kind, DocEvent::NoteOn { .. }))
+            .collect();
+        assert_eq!(note_ons.len(), 1);
+        assert_eq!(note_ons[0].frame, 0);
+    }
+
+    #[test]
+    fn rebow_drops_source_note_off_and_prefires_target() {
+        let doc = TrackDocument {
+            seed: 7,
+            // Same pitch, abutting within 1/32 QN ⇒ re-bow.
+            notes: vec![note(0.0, 2.0, 60, 90), note(2.01, 4.0, 60, 90)],
+            ..Default::default()
+        };
+        let sched = annotate(&doc, &spec_with_legato(), SR);
+        assert_eq!(sched.legato_count, 1, "re-bow target arrives via prefire");
+        let offs: Vec<_> = sched
+            .events
+            .iter()
+            .filter(|e| matches!(e.kind, DocEvent::NoteOff { .. }))
+            .collect();
+        assert_eq!(offs.len(), 1, "re-bow source's note-off is dropped");
+    }
+
+    #[test]
+    fn shorts_preroll_and_do_not_prefire() {
+        let doc = TrackDocument {
+            seed: 7,
+            // CC58 = 23 (Staccato band) before both notes.
+            ccs: vec![DocCc {
+                qn: 0.0,
+                chan: 0,
+                cc: 58,
+                val: 23,
+            }],
+            // Overlapping shorts must NOT read as legato.
+            notes: vec![note(1.0, 2.1, 60, 90), note(2.0, 3.0, 62, 90)],
+            ..Default::default()
+        };
+        let sched = annotate(&doc, &spec_with_legato(), SR);
+        assert_eq!(sched.short_count, 2);
+        assert_eq!(sched.legato_count, 0);
+        // QN 1.0 = 24000 frames, minus 60 ms (2880 frames) pre-roll.
+        let first_on = sched
+            .events
+            .iter()
+            .find(|e| matches!(e.kind, DocEvent::NoteOn { .. }))
+            .expect("note-on");
+        assert_eq!(first_on.frame, 24_000 - 2_880);
+    }
+
+    #[test]
+    fn same_pitch_break_beyond_gap_is_not_rebow() {
+        let doc = TrackDocument {
+            seed: 7,
+            notes: vec![note(0.0, 1.0, 60, 90), note(1.5, 2.0, 60, 90)],
+            ..Default::default()
+        };
+        let sched = annotate(&doc, &spec_with_legato(), SR);
+        assert_eq!(sched.legato_count, 0);
+    }
+
+    #[test]
+    fn annotation_is_deterministic() {
+        let doc = TrackDocument {
+            seed: 99,
+            notes: vec![
+                note(0.0, 2.1, 60, 90),
+                note(2.0, 4.0, 62, 30),
+                note(4.0, 5.0, 64, 110),
+            ],
+            ccs: vec![DocCc {
+                qn: 3.9,
+                chan: 0,
+                cc: 1,
+                val: 80,
+            }],
+            ..Default::default()
+        };
+        let spec = spec_with_legato();
+        let a = annotate(&doc, &spec, SR);
+        let b = annotate(&doc, &spec, SR);
+        assert_eq!(a.events, b.events);
+    }
+}

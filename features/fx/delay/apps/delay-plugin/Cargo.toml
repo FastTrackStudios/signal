@@ -1,0 +1,20 @@
+[package]
+name = "delay-plugin"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+edition = "2021"          # kept on 2021 — pre-move signal workspace edition; migrate deliberately
+description = "FTS Delay — CLAP/VST3 audio plugin entry point"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+
+[dependencies]
+fts-plugin-core = { workspace = true }
+delay-dsp = { workspace = true }
+delay-profiles = { workspace = true }
+delay-ui = { workspace = true }
+audio-gui = { workspace = true }
+atomic_float = { workspace = true }
+fts-dsp = { workspace = true }
+nih_plug = { workspace = true }

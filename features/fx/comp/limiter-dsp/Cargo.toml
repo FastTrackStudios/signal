@@ -1,0 +1,10 @@
+[package]
+name = "limiter-dsp"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+edition = "2021"          # kept on 2021 — pre-move signal workspace edition; migrate deliberately
+description = "Limiter processing engine — multi-stage clipper, waveshaper, mu-law, and slew-rate limiters"
+
+[dependencies]
+fts-dsp = { workspace = true }

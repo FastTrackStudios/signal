@@ -1,0 +1,13 @@
+[package]
+name = "comp-ui"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+edition = "2021"          # kept on 2021 — pre-move signal workspace edition; migrate deliberately
+description = "Compressor GUI — transfer curve, gain reduction meters, and profile theme rendering"
+
+[dependencies]
+audio-gui = { workspace = true }
+fts-plugin-core = { workspace = true }
+comp-dsp = { path = "../comp-dsp" }
+comp-profiles = { path = "../comp-profiles" }

@@ -1,0 +1,320 @@
+//! Live runtime services for the signal domain.
+//!
+//! This crate is the runtime bridge between `signal-proto` service traits and
+//! `signal-storage` repository implementations. The central type, [`SignalLive`],
+//! is generic over all repository traits so tests can inject in-memory repos
+//! while production code uses the default `*RepoLive` types.
+//!
+//! # Architecture position
+//!
+//! ```text
+//! signal-proto + signal-storage + nam-manager
+//!                    |
+//!                    v
+//!              signal-live (this crate)
+//!                    |
+//!                    v
+//!            signal-controller
+//! ```
+//!
+//! **Depends on**: `signal-proto`, `signal-storage`, `nam-manager`, `macromod`,
+//! `daw`, `daw-control`, `daw-proto`
+//!
+//! **Depended on by**: `signal-controller`, `signal` (facade)
+//!
+//! # Service trait mapping
+//!
+//! Maps service traits onto storage repos:
+//! - `BlockService` -> `BlockRepo` + `ModuleRepo`
+//! - `LayerService` -> `LayerRepo`
+//! - `EngineService` -> `EngineRepo`
+//! - `RigService` -> `RigRepo`
+//! - `ProfileService` -> `ProfileRepo`
+//! - `SongService` -> `SongRepo`
+//!
+//! # Key types
+//!
+//! - [`SignalLive`] -- the generic live service implementing all `signal-proto` service traits
+//! - [`ServiceCache`] -- in-memory read cache for list queries
+//! - DAW integration: `DawPatchApplier`, `RigSceneApplier`, `MorphEngine`
+//! - Macro system: [`MacroRecorder`], `MacroSetup`, `MacroRegistry`
+//!
+//! # Collection / Variant Mapping
+//!
+//! This service operates on *collection* and *variant* concepts:
+//! - **Block collections** (`Preset`) group related block-parameter variants (`Snapshot`).
+//! - **Module collections** (`ModulePreset`) group multi-block composition variants (`ModuleSnapshot`).
+//! - **Layer collections** (`Layer`) group processing-lane variants (`LayerSnapshot`).
+//! - **Engine collections** (`Engine`) group scene variants (`EngineScene`).
+//! - **Rig presets** (`Rig`) group rig scene variants (`RigScene`).
+//! - **Profiles** (`Profile`) group patch variants (`Patch`).
+//! - **Songs** (`Song`) group section variants (`Section`).
+//!
+//! When a block variant is loaded (via `load_block_preset` / `load_block_preset_snapshot`), the
+//! service applies a **side-effect**: the resolved block state is persisted as
+//! the current active block.  This deterministic "load = apply" contract ensures
+//! the active block always reflects the last loaded variant.
+//!
+//! # Macro System
+//!
+//! Real-time parameter automation via hierarchical macro knobs:
+//! - **macro_setup**: Resolve abstract bindings to concrete FX parameters
+//! - **macro_registry**: Global thread-safe binding store
+//! - **macro_recorder**: Real-time knob movement recording
+//! - **macro_system**: Architecture overview and integration patterns
+//!
+//! See `macro_integration_guide.md` for complete integration documentation.
+
+pub mod daw_block_ops;
+pub mod daw_rig_builder;
+pub mod daw_rig_ops;
+pub mod engine;
+pub mod macro_bridge;
+pub mod macro_constants;
+pub mod macro_error;
+pub mod macro_recorder;
+pub mod macro_registry;
+pub mod macro_setup;
+pub mod macro_system;
+pub mod macro_templates;
+
+// Re-export macromod types for unified macro system
+pub use signal_macromod::{
+    binding::MacroBinding,
+    easing::EasingCurve,
+    macro_bank::{GroupSelector, MacroBank, MacroGroup, MacroKnob},
+    parameter::BlockParameter as MacromodBlockParameter,
+    response::ResponseCurve,
+    routing::{ModulationRoute, ModulationRouteSet},
+    runtime::{ModulationProcessor, TickContext},
+    sources::{
+        EnvelopeConfig, EnvelopeMode, FollowerConfig, FollowerInput, LfoConfig, LfoWaveform,
+        ModulationSource, RandomConfig, RetriggerMode, TempoDiv,
+    },
+    target::{ModulationTarget, ParamTarget},
+};
+
+// Re-export recorder types
+pub use macro_recorder::{MacroRecord, MacroRecorder};
+
+mod block_service;
+mod browser_service;
+mod engine_service;
+mod layer_service;
+mod profile_service;
+mod rack_service;
+mod resolve_service;
+mod rig_service;
+mod scene_template_service;
+mod setlist_service;
+mod song_service;
+
+#[cfg(test)]
+mod tests;
+
+use moire::sync::RwLock;
+use signal_proto::{
+    ALL_BLOCK_TYPES, Block, BlockParameterOverride, BlockService, BlockType, BrowserService,
+    EngineService, LayerService, ModuleBlockSource, ModulePreset, ModulePresetId, ModuleSnapshot,
+    ModuleSnapshotId, Preset, PresetId, ProfileService, RackService, ResolveService, RigService,
+    SceneTemplateService, SetlistService, SignalServiceError, Snapshot, SnapshotId, SongService,
+    engine::{Engine, EngineId, EngineScene, EngineSceneId},
+    layer::{Layer, LayerId, LayerSnapshot, LayerSnapshotId},
+    override_policy::{FreePolicy, ScenePolicy, SnapshotPolicy, validate_overrides},
+    overrides::{NodeOverrideOp, NodePathSegment},
+    profile::{Patch, PatchId, PatchTarget, Profile, ProfileId},
+    rack::{Rack, RackId},
+    resolve::{
+        LayerSource, ResolveError, ResolveTarget, ResolvedBlock, ResolvedEngine, ResolvedGraph,
+        ResolvedLayer, ResolvedModule,
+    },
+    rig::{Rig, RigId, RigScene, RigSceneId},
+    scene_template::{SceneTemplate, SceneTemplateId},
+    setlist::{Setlist, SetlistEntry, SetlistEntryId, SetlistId},
+    song::{Section, SectionId, Song, SongId},
+    tagging::{
+        BrowserEntityKind, BrowserEntry, BrowserHit, BrowserIndex, BrowserNodeId, BrowserQuery,
+        StructuredTag, TagCategory, TagSet, TagWeights, infer_tags_from_name,
+    },
+};
+use signal_storage::{
+    BlockRepo, BlockRepoLive, DatabaseConnection, EngineRepo, EngineRepoLive, LayerRepo,
+    LayerRepoLive, ModuleRepo, ModuleRepoLive, ProfileRepo, ProfileRepoLive, RackRepo,
+    RackRepoLive, RigRepo, RigRepoLive, SceneTemplateRepo, SceneTemplateRepoLive, SetlistRepo,
+    SetlistRepoLive, SongRepo, SongRepoLive,
+};
+use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
+
+// region: --- ServiceCache
+
+/// In-memory read cache for list queries. Populated on first access, invalidated
+/// on writes. All fields are `Option` — `None` means "not yet cached".
+pub(crate) struct ServiceCache {
+    pub(crate) block_collections: HashMap<BlockType, Vec<Preset>>,
+    pub(crate) module_collections: Option<Vec<ModulePreset>>,
+    pub(crate) layers: Option<Vec<Layer>>,
+    pub(crate) engines: Option<Vec<Engine>>,
+    pub(crate) rigs: Option<Vec<Rig>>,
+    pub(crate) racks: Option<Vec<Rack>>,
+}
+
+impl ServiceCache {
+    fn new() -> Self {
+        Self {
+            block_collections: HashMap::new(),
+            module_collections: None,
+            layers: None,
+            engines: None,
+            rigs: None,
+            racks: None,
+        }
+    }
+}
+
+// endregion: --- ServiceCache
+
+// region: --- SignalLive
+
+/// Live service bridging RPC traits to storage repos.
+///
+/// Generic over all seven repo traits so tests can inject in-memory repos.
+/// Default type parameters enable the common case without specifying concrete types.
+pub struct SignalLive<
+    B = BlockRepoLive,
+    M = ModuleRepoLive,
+    L = LayerRepoLive,
+    E = EngineRepoLive,
+    R = RigRepoLive,
+    P = ProfileRepoLive,
+    So = SongRepoLive,
+    Se = SetlistRepoLive,
+    St = SceneTemplateRepoLive,
+    Ra = RackRepoLive,
+> where
+    B: BlockRepo + 'static,
+    M: ModuleRepo + 'static,
+    L: LayerRepo + 'static,
+    E: EngineRepo + 'static,
+    R: RigRepo + 'static,
+    P: ProfileRepo + 'static,
+    So: SongRepo + 'static,
+    Se: SetlistRepo + 'static,
+    St: SceneTemplateRepo + 'static,
+    Ra: RackRepo + 'static,
+{
+    pub(crate) block_repo: Arc<B>,
+    pub(crate) module_repo: Arc<M>,
+    pub(crate) layer_repo: Arc<L>,
+    pub(crate) engine_repo: Arc<E>,
+    pub(crate) rig_repo: Arc<R>,
+    pub(crate) profile_repo: Arc<P>,
+    pub(crate) song_repo: Arc<So>,
+    pub(crate) setlist_repo: Arc<Se>,
+    pub(crate) scene_template_repo: Arc<St>,
+    pub(crate) rack_repo: Arc<Ra>,
+    pub(crate) cache: Arc<RwLock<ServiceCache>>,
+}
+
+impl<B, M, L, E, R, P, So, Se, St, Ra> Clone for SignalLive<B, M, L, E, R, P, So, Se, St, Ra>
+where
+    B: BlockRepo + 'static,
+    M: ModuleRepo + 'static,
+    L: LayerRepo + 'static,
+    E: EngineRepo + 'static,
+    R: RigRepo + 'static,
+    P: ProfileRepo + 'static,
+    So: SongRepo + 'static,
+    Se: SetlistRepo + 'static,
+    St: SceneTemplateRepo + 'static,
+    Ra: RackRepo + 'static,
+{
+    fn clone(&self) -> Self {
+        Self {
+            block_repo: self.block_repo.clone(),
+            module_repo: self.module_repo.clone(),
+            layer_repo: self.layer_repo.clone(),
+            engine_repo: self.engine_repo.clone(),
+            rig_repo: self.rig_repo.clone(),
+            profile_repo: self.profile_repo.clone(),
+            song_repo: self.song_repo.clone(),
+            setlist_repo: self.setlist_repo.clone(),
+            scene_template_repo: self.scene_template_repo.clone(),
+            rack_repo: self.rack_repo.clone(),
+            cache: self.cache.clone(),
+        }
+    }
+}
+
+impl<B, M, L, E, R, P, So, Se, St, Ra> SignalLive<B, M, L, E, R, P, So, Se, St, Ra>
+where
+    B: BlockRepo + 'static,
+    M: ModuleRepo + 'static,
+    L: LayerRepo + 'static,
+    E: EngineRepo + 'static,
+    R: RigRepo + 'static,
+    P: ProfileRepo + 'static,
+    So: SongRepo + 'static,
+    Se: SetlistRepo + 'static,
+    St: SceneTemplateRepo + 'static,
+    Ra: RackRepo + 'static,
+{
+    pub fn new(
+        block_repo: Arc<B>,
+        module_repo: Arc<M>,
+        layer_repo: Arc<L>,
+        engine_repo: Arc<E>,
+        rig_repo: Arc<R>,
+        profile_repo: Arc<P>,
+        song_repo: Arc<So>,
+        setlist_repo: Arc<Se>,
+        scene_template_repo: Arc<St>,
+        rack_repo: Arc<Ra>,
+    ) -> Self {
+        Self {
+            block_repo,
+            module_repo,
+            layer_repo,
+            engine_repo,
+            rig_repo,
+            profile_repo,
+            song_repo,
+            setlist_repo,
+            scene_template_repo,
+            rack_repo,
+            cache: Arc::new(RwLock::new("signal.service_cache", ServiceCache::new())),
+        }
+    }
+}
+
+impl
+    SignalLive<
+        BlockRepoLive,
+        ModuleRepoLive,
+        LayerRepoLive,
+        EngineRepoLive,
+        RigRepoLive,
+        ProfileRepoLive,
+        SongRepoLive,
+        SetlistRepoLive,
+        SceneTemplateRepoLive,
+        RackRepoLive,
+    >
+{
+    pub fn from_db(db: DatabaseConnection) -> Self {
+        Self::new(
+            Arc::new(BlockRepoLive::new(db.clone())),
+            Arc::new(ModuleRepoLive::new(db.clone())),
+            Arc::new(LayerRepoLive::new(db.clone())),
+            Arc::new(EngineRepoLive::new(db.clone())),
+            Arc::new(RigRepoLive::new(db.clone())),
+            Arc::new(ProfileRepoLive::new(db.clone())),
+            Arc::new(SongRepoLive::new(db.clone())),
+            Arc::new(SetlistRepoLive::new(db.clone())),
+            Arc::new(SceneTemplateRepoLive::new(db.clone())),
+            Arc::new(RackRepoLive::new(db)),
+        )
+    }
+}
+
+// endregion: --- SignalLive

@@ -1,0 +1,10 @@
+[package]
+name = "signal-daw-bridge"
+version.workspace = true
+edition = "2021"          # kept on 2021 — pre-move signal workspace edition; migrate deliberately
+
+[dependencies]
+daw.workspace = true
+signal-proto.workspace = true
+signal-import.workspace = true
+serde = { workspace = true, features = ["derive"] }

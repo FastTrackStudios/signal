@@ -1,0 +1,10 @@
+[package]
+name = "signal-drums"
+version.workspace = true
+edition = "2021"          # kept on 2021 — pre-move signal workspace edition; migrate deliberately
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+# Drums are plain sample zones on the shared engine — no drum-specific DSP.
+signal-sampler.workspace = true
