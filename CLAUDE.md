@@ -57,6 +57,33 @@ Live rig: `signal/target/debug/signal-rigd` (ws://:4040/vox), web remote
 built with `cd signal/apps/web && dx build --platform web`, config in
 `~/.config/signal/rig/*.styx`.
 
+## Active modernization queue
+
+1. **daw streams**: convert the five Tx-parameter subscriptions
+   (track / tempo_map / event_bus / marker / region — all
+   `subscribe(project: ProjectContext, tx)`) to `#[subscribe]` streams.
+   Design: events carry their `ProjectContext` (most already embed
+   project ids), subscribers filter client-side; per-service PubSub hub
+   on each backend (daw-standalone + daw-reaper), pumps replacing the
+   per-subscriber spawn loops — exactly the session SetlistService
+   conversion. ~29 subscriber call sites in daw-control/consumers.
+2. **fasttrackstudio app = daw-standalone player**: embed
+   daw-standalone (bootstrap + audio features) + the session domain
+   in-process so the live setlist is DATA the app can PLAY — transport
+   over the setlist without REAPER. session facade already dev-deps
+   this combination (memory-link bootstrap) — promote it to the app.
+3. **FTS-Guide → session feature**: port
+   legacy FTS-Plugins/apps/fts-guide (~3k lines: click_player,
+   count_player, guide_player, trigger_scheduler, count-in
+   calculator/pattern) into `session/features/guide` as a portable
+   engine (drop the REAPER cdylib shell; drive it from song sections +
+   tempo map). Click + guide tracks become session data.
+4. **TTS in the guide**: bearcove/cbx (`chatterbox-rs` — local ONNX
+   Chatterbox TTS, lib + CLI). Embed as an optional session feature to
+   speak section names / notes into the guide bus ("Chorus in 2…").
+   Pre-render section cues to wav at setlist-build time (TTS is not
+   realtime-safe); cache by text hash next to the styx library.
+
 ## Phase 2 (in progress, do opportunistically)
 
 1. Root workspace: merge domain workspaces into one root Cargo.toml —
