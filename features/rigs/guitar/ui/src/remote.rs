@@ -475,16 +475,12 @@ pub fn GuitarRigRemote() -> Element {
                                 if mode() == Mode::Routing {
                                     crate::grid::RigGraph { blocks: blocks() }
                                 } else if mode() == Mode::Session {
-                                    // Integration layer: the session domain's
-                                    // performance view (songs, sections,
-                                    // charts/chords) lands here once session
-                                    // aligns to the fleet's facet/vox pins —
-                                    // see apps/web/src/session_client.rs.
-                                    div { class: "flex flex-col items-center justify-center h-full gap-2 rounded-xl border border-border bg-card",
-                                        span { class: "text-lg font-bold text-muted-foreground", "Session" }
-                                        span { class: "text-xs text-muted-foreground",
-                                            "Session-engine performance view (songs · charts · chords) — pending the session repo's facet/vox alignment."
-                                        }
+                                    // The session domain's performance view —
+                                    // songs, sections, charts + chords — fed
+                                    // by the standalone session engine (the
+                                    // web shell owns the :3030 stream).
+                                    div { class: "h-full min-h-0 overflow-hidden rounded-xl border border-border bg-card",
+                                        session_ui::PerformanceLayout {}
                                     }
                                 } else {
                                     crate::control::ControlView {
