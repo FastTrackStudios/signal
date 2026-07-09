@@ -148,6 +148,21 @@ async fn bootstrap(engine_rt: tokio::runtime::Handle) -> eyre::Result<SessionEng
         .map_err(|e| eyre::eyre!("build_from_open_projects: {e:?}"))?;
     tracing::info!("setlist built from standalone project");
 
+    // Dev/verification affordance: FTS_AUTOPLAY=1 starts the transport
+    // immediately after the setlist is built (e.g. for headless-ish
+    // audio smoke runs).
+    if std::env::var("FTS_AUTOPLAY").map(|v| v == "1").unwrap_or(false) {
+        // Demo stamping leaves the edit cursor at the timeline end —
+        // rewind to the first song's first measure before rolling.
+        if let Err(e) = client.goto_measure(0, 0).await {
+            tracing::warn!("FTS_AUTOPLAY rewind failed: {e:?}");
+        }
+        match client.play().await {
+            Ok(_) => tracing::info!("FTS_AUTOPLAY=1: transport started"),
+            Err(e) => tracing::warn!("FTS_AUTOPLAY play failed: {e:?}"),
+        }
+    }
+
     // 5. Audio — graceful. cpal streams are !Send, so the engine lives
     //    on its own parked thread. On failure the soft clock is
     //    re-enabled and the transport runs silently.
@@ -174,8 +189,12 @@ fn spawn_audio_thread(standalone: Standalone, guid: String, rt: tokio::runtime::
             // spawns the per-project soft clock task.
             let _rt_guard = rt.enter();
             match standalone.attach_audio_engine(&guid) {
-                Ok(_engine) => {
+                Ok(engine) => {
                     tracing::info!("audio engine attached (default cpal output)");
+                    // Guide (click / count-in / section cues): built at the
+                    // device rate and mixed into the output via the aux
+                    // post-render hook.
+                    crate::guide::install(&engine);
                     // The cpal stream lives on this thread; park forever.
                     loop {
                         std::thread::park();

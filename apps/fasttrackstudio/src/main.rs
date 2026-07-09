@@ -16,6 +16,8 @@
 use dioxus::prelude::*;
 
 #[cfg(feature = "session")]
+mod guide;
+#[cfg(feature = "session")]
 mod session_engine;
 #[cfg(feature = "session")]
 mod session_view;

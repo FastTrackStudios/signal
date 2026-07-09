@@ -31,6 +31,7 @@ session = [
     "dep:session-ui",
     "dep:keyflow",
     "dep:session",
+    "dep:session-guide",
     "dep:daw",
     "dep:daw-standalone",
     "dep:architect",
@@ -38,6 +39,16 @@ session = [
     "dep:tokio",
     "dep:eyre",
 ]
+# Spoken section-name cues via local Chatterbox TTS (session-guide/tts,
+# ONNX Runtime). Even with this feature compiled in, models are NEVER
+# downloaded implicitly at startup: TTS activates only when the env var
+# FTS_TTS=1 is set AND a reference voice wav exists at
+# ~/.config/fts/tts-voice.wav (Chatterbox is voice-cloning). Cues are
+# pre-rendered at schedule-build time and cached in
+# ~/.config/fts/tts-cache/ (cached cues keep loading even without this
+# feature). Without the feature — or on any synthesis failure — section
+# cues fall back to the canned/synthesized guide samples.
+tts = ["session", "session-guide/tts"]
 
 [dependencies]
 dioxus = { version = "=0.7.9", features = ["desktop", "launch"] }
@@ -52,6 +63,9 @@ signal-guitar-ui = { path = "../../signal/features/rigs/guitar/ui", optional = t
 session = { path = "../../session/crates/session", optional = true }
 session-proto = { path = "../../session/crates/session-proto", optional = true }
 session-ui = { path = "../../session/crates/session-ui", default-features = false, features = ["desktop"], optional = true }
+# Guide engine: click / count-in / section cues rendered into the audio
+# output through daw-standalone's aux post-render hook.
+session-guide = { path = "../../session/features/guide", optional = true }
 keyflow = { path = "../../keyflow/crates/keyflow", optional = true }
 
 # DAW domain — facade (daw::get / init_from_parts / LayerRouter) + the

@@ -37,16 +37,69 @@ pub fn SessionEventBridge() -> Element {
             Err(e) => tracing::warn!("initial setlist snapshot failed: {e:?}"),
         }
 
+        // Guide schedule bootstrap: the demo transport starts on song 0,
+        // so hand it to the guide before any ActiveIndices arrive.
+        let mut songs: Vec<session_proto::Song> = Vec::new();
+        let mut guide_song: Option<usize> = None;
+        if let Ok(setlist) = engine.client.setlist().await {
+            songs = setlist.songs.clone();
+            feed_guide(&songs, &mut guide_song, Some(0));
+        }
+
         // Live updates: SetlistChanged / SongHydrated / ActiveIndices /
         // 60Hz TransportUpdate — folded into the global signals on the
-        // UI scheduler.
+        // UI scheduler. The guide schedule tracks the active song.
         while let Ok(Some(ev)) = rx.recv().await {
-            session_ui::apply_setlist_event(ev.get());
+            let ev = ev.get();
+            match ev {
+                session::SetlistEvent::SetlistChanged(setlist) => {
+                    songs = setlist.songs.clone();
+                    let idx = guide_song.take();
+                    feed_guide(&songs, &mut guide_song, Some(idx.unwrap_or(0)));
+                }
+                session::SetlistEvent::SongHydrated { index, song, .. } => {
+                    if let Some(slot) = songs.get_mut(*index) {
+                        *slot = song.clone();
+                    }
+                    // Re-feed if the hydrated song is the scheduled one.
+                    if guide_song == Some(*index) {
+                        guide_song = None;
+                        feed_guide(&songs, &mut guide_song, Some(*index));
+                    }
+                }
+                session::SetlistEvent::SongEntered { index, song, .. } => {
+                    if let Some(slot) = songs.get_mut(*index) {
+                        *slot = song.clone();
+                    }
+                    feed_guide(&songs, &mut guide_song, Some(*index));
+                }
+                session::SetlistEvent::ActiveIndicesChanged(indices) => {
+                    feed_guide(&songs, &mut guide_song, indices.song_index);
+                }
+                _ => {}
+            }
+            session_ui::apply_setlist_event(ev);
         }
         tracing::warn!("setlist event stream ended");
     });
 
     rsx! {}
+}
+
+/// Hand `songs[index]` to the guide engine when it differs from the song
+/// already scheduled. Cheap here (the rebuild runs on a worker thread).
+fn feed_guide(
+    songs: &[session_proto::Song],
+    scheduled: &mut Option<usize>,
+    index: Option<usize>,
+) {
+    let Some(index) = index else { return };
+    if *scheduled == Some(index) {
+        return;
+    }
+    let Some(song) = songs.get(index) else { return };
+    *scheduled = Some(index);
+    crate::guide::set_current_song(song.clone());
 }
 
 /// The Session workspace: transport strip over the performance layout.
@@ -79,6 +132,7 @@ pub fn SessionWorkspace() -> Element {
 /// daw-standalone transport service.
 #[component]
 fn TransportStrip() -> Element {
+    let mut guide_on = use_signal(crate::guide::is_enabled);
     let indices = ACTIVE_INDICES.read();
     let song_index = indices.song_index;
     let section_index = indices.section_index;
@@ -161,6 +215,23 @@ fn TransportStrip() -> Element {
                     });
                 },
                 "▶|"
+            }
+
+            // Guide (click / count-in / cues) toggle — flips the shared
+            // guide state the aux audio hook reads.
+            button {
+                style: if guide_on() {
+                    "padding: 6px 14px; border-radius: 6px; background: #14532d; color: #bbf7d0; border: 1px solid #166534; font-size: 13px; font-weight: 600; cursor: pointer;"
+                } else {
+                    btn
+                },
+                title: "Guide: click, count-in and section cues",
+                onclick: move |_| {
+                    let on = !guide_on();
+                    crate::guide::set_enabled(on);
+                    guide_on.set(on);
+                },
+                "Guide"
             }
 
             // Current song / section
