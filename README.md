@@ -29,7 +29,7 @@ Build everything from the root:
 
 ```bash
 cargo check --workspace --exclude vox-discover
-cargo build -p signal-rigd          # headless live rig
+cargo build -p signal-engine        # headless live rig (the signal engine)
 cargo build -p fasttrackstudio      # THE app
 ```
 

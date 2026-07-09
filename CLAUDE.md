@@ -55,7 +55,7 @@ Everything builds from the repo root (one workspace):
 
 ```bash
 cargo check --workspace --exclude vox-discover   # the whole tree
-cargo build -p signal-rigd                       # the headless rig daemon
+cargo build -p signal-engine                     # the signal engine (headless rig core)
 cargo build -p fasttrackstudio                   # THE app (signal/session/full/tts)
 cargo check -p signal-web --target wasm32-unknown-unknown  # browser remote
 ```
@@ -64,26 +64,26 @@ Dev shell: `nix develop` (or direnv `use flake`) — root `flake.nix`
 carries the FTS 1.94 toolchain pin, `dx`, wasm target, tailwindcss, and
 the native headers (alsa, pipewire, jack, avahi for vox-discover).
 
-Live rig: `cargo build -p signal-rigd` from the repo root →
-`target/debug/signal-rigd` (ws://:4040/vox); web remote built with
+Live rig: `cargo build -p signal-engine` from the repo root →
+`target/debug/signal-engine` (ws://:4040/vox); web remote built with
 `cd apps/signal-web && dx build --platform web`, config in
 `~/.config/signal/rig/*.styx`. (The PREVIOUS deployment ran from
 `signal/target/debug/signal-rigd` — that gitignored target/ dir is left
-in place so a running rigd keeps its binary.)
+in place so a running engine keeps its binary.)
 
 ## Signal domain rules (from the dissolved signal/CLAUDE.md)
 
 Signal is the signal-chain / plugin-management domain: `crates/signal/*`
 (facade `signal` + proto/ui/live/storage/controller/import/browser/grid/
 grid-ui/daw-bridge), `features/{fx,rigs,sampler,nam,plugin-host}`,
-`features/reaper/signal-*`, `apps/rigd`, `apps/signal-web`. The `signal`
+`features/reaper/signal-*`, `apps/signal-engine`, `apps/signal-web`. The `signal`
 facade is the only public API surface: apps depend on `signal`,
 `signal-ui`, or `signal-sampler`, never on the internal domain crates.
 Docs: `crates/signal/docs/` (DESIGN.md, DOMAIN.md).
 
 **Detachable GUI (STRICT)**: the rig core is 100% headless; every GUI is
 a vox remote via architect (`signal-guitar-proto` is the wire contract;
-`apps/rigd` serves the router; browser/desktop/tablet UIs are clients).
+`apps/signal-engine` serves the router; browser/desktop/tablet UIs are clients).
 
 **GUI rendering** — signal UI must render identically standalone, as a
 VST3/CLAP plugin, and embedded in REAPER, so all contexts share one
