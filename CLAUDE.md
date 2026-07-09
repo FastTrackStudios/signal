@@ -57,6 +57,7 @@ Everything builds from the repo root (one workspace):
 cargo check --workspace --exclude vox-discover   # the whole tree
 cargo build -p signal-engine                     # the signal engine (headless rig core)
 cargo build -p fasttrackstudio                   # THE app (signal/session/full/tts)
+cargo build -p fts-cli                           # the unified `fts` CLI (fts daw / fts kf / fts signal engine / fts status)
 cargo check -p signal-web --target wasm32-unknown-unknown  # browser remote
 ```
 
