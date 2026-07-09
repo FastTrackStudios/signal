@@ -105,12 +105,12 @@ features/signal/
 1. ~~`#[subscribe]` event streams~~ — **done**: `RigEvent` stream replaces
    polling (see Events above). Later refinement: move meter capture onto
    `architect::rt::rt_channel` drained from the pump thread.
-2. ~~`apps/web`~~ — **done**: `apps/rigd` (`signal-rigd`) serves the same
+2. ~~`apps/web`~~ — **done**: `apps/signal-engine` (`signal-engine`, formerly `signal-rigd`) serves the same
    router at `ws://<host>:4040/vox` (axum_ws); `apps/web` (`signal-web`,
    dioxus wasm) mounts `GuitarRigRemote` from the new feature-scoped
    `features/rigs/guitar/ui/` crate (`signal-guitar-ui` — wasm-clean rig
    components + `use_rig_state`, shared with the desktop shell). Run:
-   `cargo run -p signal-rigd` then `cd apps/web && dx serve --platform web`.
+   `cargo run -p signal-engine` then `cd apps/web && dx serve --platform web`.
    The Edit mode mounts the real graph (`signal-guitar-ui::RigGraph` →
    `signal_grid_ui::RigGridPanel`) with the live chain resolved onto the
    guitar-rig template canvas; param edits round-trip over the Rig service.
