@@ -1,0 +1,40 @@
+[package]
+name = "fasttrackstudio"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+authors = ["FastTrackStudio"]
+
+# THE app. One binary, feature-configured for how you're working:
+#
+#   --features signal    the live guitar rig (control surface, perform grid)
+#   --features session   setlists, songs, charts + chords (keyflow), daw sync
+#   --features full      both — combined live usage (default)
+#
+# Chart writing (keyflow), setlist creation, and daw integration are
+# session-side; the rig is signal-side; the shell (navigation, palette,
+# theming) is shared. Each domain stays a headless engine + vox services —
+# this app is a remote over all of them, exactly like the web remotes.
+
+[features]
+default = ["full"]
+full = ["signal", "session"]
+signal = ["dep:signal-guitar-proto", "dep:signal-guitar-ui"]
+session = ["dep:session-proto", "dep:session-ui", "dep:keyflow"]
+
+[dependencies]
+dioxus = { version = "=0.7.9", features = ["desktop", "launch"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Signal domain (the rig)
+signal-guitar-proto = { path = "../../signal/features/rigs/guitar/proto", optional = true }
+signal-guitar-ui = { path = "../../signal/features/rigs/guitar/ui", optional = true }
+
+# Session domain (setlists / charts / daw)
+session-proto = { path = "../../session/crates/session-proto", optional = true }
+session-ui = { path = "../../session/crates/session-ui", default-features = false, optional = true }
+keyflow = { path = "../../keyflow/crates/keyflow", optional = true }
+
+[workspace]
+# Standalone workspace until phase 2 merges the domain workspaces.
