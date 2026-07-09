@@ -630,8 +630,35 @@ impl InputMeterShared {
 /// A unity pass-through [`PluginInstance`] that records the input peak it sees.
 /// Sits at slot 0 of the rig track so the UI gets an input meter (daw's renderer
 /// only meters the post-fader *output* per track). Pure copy + max — cheap.
+/// Load a mono f32 loop from a wav for the fake-DI debug input
+/// (`SIGNAL_FAKE_DI=/path/to.wav`) — screenshots and demos with the meters
+/// alive, no instrument plugged in.
+fn load_fake_di() -> Option<Vec<f32>> {
+    let path = std::env::var("SIGNAL_FAKE_DI").ok().filter(|p| !p.is_empty())?;
+    let mut reader = hound::WavReader::open(&path)
+        .map_err(|e| tracing::warn!("fake DI: {path}: {e}"))
+        .ok()?;
+    let spec = reader.spec();
+    let samples: Vec<f32> = match spec.sample_format {
+        hound::SampleFormat::Float => reader.samples::<f32>().filter_map(Result::ok).collect(),
+        hound::SampleFormat::Int => {
+            let scale = 1.0 / (1i64 << (spec.bits_per_sample - 1)) as f32;
+            reader.samples::<i32>().filter_map(Result::ok).map(|s| s as f32 * scale).collect()
+        }
+    };
+    let ch = spec.channels.max(1) as usize;
+    let mono: Vec<f32> = samples.chunks(ch).map(|f| f.iter().sum::<f32>() / ch as f32).collect();
+    (!mono.is_empty()).then(|| {
+        tracing::info!("fake DI active: {path} ({:.1}s loop)", mono.len() as f32 / 48_000.0);
+        mono
+    })
+}
+
 struct InputProbe {
     shared: Arc<InputMeterShared>,
+    /// Fake-DI loop + cursor (debug input; None in normal operation).
+    fake: Option<Vec<f32>>,
+    fake_pos: usize,
     prepared: bool,
     /// Per-block mono scratch (reused) for the tuner window push.
     mono: Vec<f32>,
@@ -643,6 +670,8 @@ impl InputProbe {
             shared,
             prepared: true,
             mono: Vec::with_capacity(MAX_BLOCK),
+            fake: load_fake_di(),
+            fake_pos: 0,
         }
     }
 }
@@ -695,13 +724,22 @@ impl PluginInstance for InputProbe {
         self.mono.clear();
         self.mono.reserve(frames);
         for i in 0..frames {
+            // Fake-DI debug loop replaces the live input when armed.
+            let (src_l, src_r) = match &self.fake {
+                Some(w) => {
+                    let v = w[self.fake_pos];
+                    self.fake_pos = (self.fake_pos + 1) % w.len();
+                    (v, v)
+                }
+                None => (in_l[i], in_r[i]),
+            };
             // Muted: the chain gets silence (trails keep ringing) while
             // the meters and the tuner still see the instrument.
-            out_l[i] = if muted { 0.0 } else { in_l[i] };
-            out_r[i] = if muted { 0.0 } else { in_r[i] };
-            pk_l = pk_l.max(in_l[i].abs());
-            pk_r = pk_r.max(in_r[i].abs());
-            self.mono.push((in_l[i] + in_r[i]) * 0.5);
+            out_l[i] = if muted { 0.0 } else { src_l };
+            out_r[i] = if muted { 0.0 } else { src_r };
+            pk_l = pk_l.max(src_l.abs());
+            pk_r = pk_r.max(src_r.abs());
+            self.mono.push((src_l + src_r) * 0.5);
         }
         self.shared.store(pk_l.max(pk_r));
         self.shared.store_lr(pk_l, pk_r);
