@@ -1,27 +1,27 @@
 # FastTrackStudio — Monorepo Instructions
 
-One tree for the whole stack. Domains keep their own workspaces
-(phase 1); every intra-stack dependency is a **path dep** — never add a
-git dep on anything that lives in this tree.
+One tree, ONE root Cargo workspace (~160 members), one lockfile, one
+`target/`, one flake. Every intra-stack dependency is declared once in
+root `[workspace.dependencies]` as a **path dep** and consumed as
+`x.workspace = true` — never add a git dep on anything that lives in
+this tree. See LAYOUT.md for the full map.
 
 ## Layout
 
 ```
-crates/signal/ signal domain core (facade+proto+ui+live+storage+...)
-features/fx|rigs|sampler|nam|plugin-host/  signal capabilities (built-in
-               FX, live rigs, sampler engine, NAM models, plugin hosting)
-apps/rigd  apps/signal-web   headless rig daemon + its browser remote
-daw/           engine core, audio-io, proto, standalone, reaper backend
-session/       setlists, songs, charts — session domain + gateway
-keyflow/       chart/keys analysis + writing (+ engraver)
-midicore/      MIDI facade (device I/O, canonical MidiEvent)
-input_actions/ actions / keybindings / input framework
-Plugins/FTS-Audiocore/  shared DSP + gui primitives
-FastTrackStudio/        shared utils + the LEGACY app (superseded)
-FTS-Plugins/forks/      fts-plug (nice-plug, nice-plug-dioxus)
-fts-ui/  fts-story/  dock-dioxus/   UI component + story libraries
-neural-amp-modeler-rs/  NAM binding (C++ core vendored, no submodule)
-apps/fasttrackstudio/   THE unified app (features: signal / session / full)
+crates/    domain cores — daw, session, keyflow, signal (facade+proto+
+           ui+live+storage+...), midicore, input, audiocore
+features/  capabilities — audio, sync, dawfile, reaper, standalone,
+           surfaces, daw-ui, guide, engraver, dynamic-template,
+           fx (built-in FX), rigs, sampler, nam, plugin-host
+libs/      UI + infra libraries — fts-ui, fts-story, dock, nice-plug,
+           utils, vox-discover, installer-core, neural-amp-modeler,
+           monarchy, devtools, moire-trace-capture
+apps/      fasttrackstudio (THE app: signal / session / full / tts),
+           rigd (headless rig daemon), signal-web (browser remote),
+           daw-cli, keyflow-cli, installer
+attic/     parked code (dead apps, legacy shells) — excluded, never built
+docs/      cross-domain guides (facet, styx, tracey, spec/)
 ```
 
 **architect stays external** at `../architect` (consumed like a
@@ -48,13 +48,18 @@ sibling checkout).
 
 ## Build
 
-Per-domain, from the domain dir (each is its own workspace for now):
+Everything builds from the repo root (one workspace):
 
 ```bash
-cargo check --workspace --exclude vox-discover   # the root workspace (rig, daw, session, ...)
+cargo check --workspace --exclude vox-discover   # the whole tree
 cargo build -p signal-rigd                       # the headless rig daemon
-cd apps/fasttrackstudio && cargo check           # the unified app
+cargo build -p fasttrackstudio                   # THE app (signal/session/full/tts)
+cargo check -p signal-web --target wasm32-unknown-unknown  # browser remote
 ```
+
+Dev shell: `nix develop` (or direnv `use flake`) — root `flake.nix`
+carries the FTS 1.94 toolchain pin, `dx`, wasm target, tailwindcss, and
+the native headers (alsa, pipewire, jack, avahi for vox-discover).
 
 Live rig: `cargo build -p signal-rigd` from the repo root →
 `target/debug/signal-rigd` (ws://:4040/vox); web remote built with
@@ -138,16 +143,25 @@ native, WASM/AudioWorklet, and embedded `no_std`:
    Pre-render section cues to wav at setlist-build time (TTS is not
    realtime-safe); cache by text hash next to the styx library.
 
-## Phase 2 (in progress, do opportunistically)
+## Phase 2
 
-1. Root workspace: merge domain workspaces into one root Cargo.toml —
-   single lockfile, shared `target/`, one `[workspace.dependencies]`.
-   DONE through wave 4 (libs, audiocore/midicore/input, daw, session,
-   keyflow, signal); remaining: apps/fasttrackstudio, FastTrackStudio,
-   Plugins.
+1. ~~Root workspace: merge domain workspaces into one root Cargo.toml.~~
+   DONE — all waves complete; apps/fasttrackstudio, FastTrackStudio and
+   Plugins dissolved in the finale wave (legacy remnants parked in
+   `attic/fasttrackstudio-legacy` + `attic/fx-apps`).
 2. Feature-gate heavy backends (reaper, standalone-audio) so cold builds
    only compile what's used.
-3. Retire `FastTrackStudio/apps/*` (old app; hand-rolled vox) in favor
-   of `apps/fasttrackstudio`.
-4. Root flake.nix (adopt signal's — it already pins the shared
-   dioxus-flake toolchain).
+3. ~~Retire `FastTrackStudio/apps/*`.~~ DONE — the legacy app is parked;
+   `apps/installer` (fts-installer) survived as a root member.
+4. ~~Root flake.nix.~~ DONE — adopted signal's flake at the root
+   (dioxus-flake toolchain, rust 1.94 + wasm, avahi/pipewire/jack shells).
+
+### Dedup queue (from LAYOUT.md, after the merge)
+
+- keyflow-midi → thin adapters over crates/midicore (delete crate)
+- keyflow-daw-analysis's daw types → daw-proto only
+- audio-controls (vendored) → fold into features/daw-ui or delete after
+  signal-ui migrates off it
+- signal-audio remnants, duplicate wav/resampler helpers → libs/utils
+  or audiocore-dsp
+- three CLIs → one `fts` CLI in apps/ (subcommands)
