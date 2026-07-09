@@ -1,0 +1,20 @@
+@import "tailwindcss";
+@import "../../../../fts-ui/crates/showcase/assets/fts-theme.css";
+
+/* Scan paths are relative to THIS file (the source).
+ * apps/eq-standalone/ → ../../crates is FTS-EQ/crates;
+ * ../../../../fts-ui is the sibling fts-ui repo at the workspace root. */
+@source "./src/**/*.{rs,html,css}";
+@source "../../crates/eq-ui/src/**/*.rs";
+@source "../../../../fts-ui/crates/fts-ui/src/**/*.rs";
+@source "../../../../fts-ui/crates/fts-ui-audio/src/**/*.rs";
+
+@layer base {
+    html {
+        color-scheme: dark;
+    }
+    body {
+        background: var(--background);
+        color: var(--foreground);
+    }
+}

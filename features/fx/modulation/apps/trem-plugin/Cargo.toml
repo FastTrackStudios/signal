@@ -1,0 +1,18 @@
+[package]
+name = "trem-plugin"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+edition = "2021"          # kept on 2021 — pre-move signal workspace edition; migrate deliberately
+description = "FTS Trem — CLAP/VST3 tremolo/auto-gate plugin"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+fts-plugin-core = { workspace = true }
+trem-dsp = { path = "../../crates/trem-dsp" }
+fts-dsp = { workspace = true }
+fts-modulation = { workspace = true }
+atomic_float = { workspace = true }
+nih_plug = { workspace = true }

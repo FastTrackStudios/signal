@@ -1,0 +1,24 @@
+[package]
+name = "signal-plugin-host"
+version.workspace = true
+edition = "2021"          # kept on 2021 — pre-move signal workspace edition; migrate deliberately
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+# Format-agnostic plugin host trait + CLAP/VST3 backends, reached through
+# the `daw` facade (re-exported under `daw::plugin`). Backend features are
+# passthroughs to daw — consumers pick the ones they need.
+daw = { workspace = true, features = ["standalone", "standalone-audio"] }
+
+[dev-dependencies]
+# WAV capture for the load_plugin example (A/B render harness).
+hound = "3.5"
+
+[features]
+default = ["clap-host"]
+clap-host = ["daw/clap-host"]
+vst3-host = ["daw/vst3-host"]
+
+[lints]
+workspace = true

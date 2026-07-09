@@ -1,0 +1,53 @@
+[package]
+name = "eq-ui"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+edition = "2021"          # kept on 2021 — pre-move signal workspace edition; migrate deliberately
+description = "EQ GUI — control view (spectrum + nodes) and profile theme rendering"
+
+[features]
+# Core-only by default in the signal workspace (wasm remotes). The plugin
+# builds enable `native` for the vello/nice-plug editor.
+default = []
+# The Blitz/vello plugin editor: control view, painter, nice-plug param
+# tree. Off → only the portable core (graph model / response math / SVG
+# path generation / interaction helpers) compiles — wasm-safe, used by the
+# detached remotes.
+native = [
+    "dep:nice-plug",
+    "dep:nice-plug-dioxus",
+    "dep:audiocore-core",
+    "dep:fts-ui",
+    "dep:eq-profiles",
+    "dep:futures-timer",
+    "dep:atomic_float",
+    "spectrum-analyzer/ui",
+]
+# Tests that need a real GPU adapter (`render_screenshot`). Off by default
+# so headless CI can run `cargo test -p eq-ui` without a Vulkan-capable
+# runner; opt in with `--features gpu-tests` locally.
+gpu-tests = []
+
+[dependencies]
+audiocore-core = { workspace = true, optional = true }
+fts-ui = { workspace = true, optional = true }
+fts-ui-audio = { workspace = true }
+nice-plug = { workspace = true, optional = true }
+nice-plug-dioxus = { workspace = true, optional = true }
+atomic_float = { workspace = true, optional = true }
+parking_lot = "0.12"
+eq-profiles = { path = "../eq-profiles", optional = true }
+spectrum-analyzer = { workspace = true }
+# 60Hz redraw tick driver. We use futures-timer (not tokio::time) because
+# dioxus_native doesn't bring up a tokio runtime by default, so
+# tokio::time::sleep panics silently inside use_future. futures-timer's
+# Delay uses its own dedicated timer thread and works on any executor —
+# including dioxus's built-in task scheduler.
+futures-timer = { version = "3", optional = true }
+
+[dev-dependencies]
+pollster = "0.4"
+# Only the render_smoke GPU test uses wgpu directly; keep it in lockstep with
+# nice-plug-dioxus's wgpu (29) so vello's render_to_texture types line up.
+wgpu = "29"

@@ -1,0 +1,40 @@
+[package]
+name = "signal-ui"
+version.workspace = true
+edition = "2021"          # kept on 2021 — pre-move signal workspace edition; migrate deliberately
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+dioxus.workspace = true
+fts-ui.workspace = true
+lumen-blocks.workspace = true
+signal.workspace = true
+signal-browser.workspace = true
+# The guitar-rig wire contract (types + vox service clients) — the detachable
+# GUI boundary. wasm-clean; NOT the audio backend.
+signal-guitar-proto.workspace = true
+# Feature-scoped rig components (perform grid, meters, settings modal, chain
+# strip) — shared verbatim with the browser remote (apps/web).
+signal-guitar-ui.workspace = true
+# The extracted zoomable rig graph (wasm-clean) — re-exported under the old paths.
+signal-grid-ui.workspace = true
+# `use_stream` (atom + vox): subscribe components to `#[subscribe]` event
+# streams instead of polling.
+architect = { workspace = true, features = ["atom", "vox"] }
+midicore = { workspace = true, features = ["vox", "midir"] }
+signal-controller.workspace = true
+signal-daw-bridge.workspace = true
+uuid = { version = "1", features = ["v4"] }
+tokio = { workspace = true }
+tracing.workspace = true
+audio-controls.workspace = true
+dock-dioxus = { workspace = true, default-features = false }
+dock-proto.workspace = true
+audiocore-gui.workspace = true
+nice-plug-dioxus.workspace = true
+
+[features]
+default = ["web"]
+web = ["dock-dioxus/web"]
+desktop = ["dock-dioxus/web"]

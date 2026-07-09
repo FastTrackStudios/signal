@@ -1,0 +1,11 @@
+[package]
+name = "wah-dsp"
+version.workspace = true
+edition = "2021"          # kept on 2021 — pre-move signal workspace edition; migrate deliberately
+authors.workspace = true
+license.workspace = true
+description = "Auto-wah DSP engine — envelope/pattern-driven resonant filter"
+
+[dependencies]
+audiocore-dsp = { workspace = true }
+fts-modulation = { workspace = true }

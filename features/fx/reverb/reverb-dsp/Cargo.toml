@@ -1,0 +1,15 @@
+[package]
+name = "reverb-dsp"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+edition = "2021"          # kept on 2021 — pre-move signal workspace edition; migrate deliberately
+description = "Reverb processing engine — plate, shimmer, hall/room algorithms with input/output EQ"
+
+[dependencies]
+audiocore-dsp = { workspace = true }
+crossbeam-channel = { workspace = true }
+pitch-dsp = { workspace = true }
+thiserror = { workspace = true }
+realfft = "3.4"
+symphonium = { version = "0.6", default-features = false, features = ["wav", "pcm", "fft-resampler"] }

@@ -1,0 +1,17 @@
+[package]
+name = "delay"
+version.workspace = true
+edition = "2021"          # kept on 2021 — pre-move signal workspace edition; migrate deliberately
+license.workspace = true
+description = "delay — facade over delay-dsp; plugin UI + preset profiles are opt-in features."
+
+[features]
+default = []
+# Opt-in plugin UI and preset profiles. Wired once the plugin shell
+# (nice-plug / fts-ui) is brought into the workspace; declared now so the
+# facade shape is stable and consumers can `features = ["ui"]`.
+ui = []
+profiles = []
+
+[dependencies]
+delay-dsp = { workspace = true }

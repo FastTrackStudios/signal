@@ -56,8 +56,8 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 # Signal domain (the rig)
-signal-guitar-proto = { path = "../../signal/features/rigs/guitar/proto", optional = true }
-signal-guitar-ui = { path = "../../signal/features/rigs/guitar/ui", optional = true }
+signal-guitar-proto = { path = "../../features/rigs/guitar/proto", optional = true }
+signal-guitar-ui = { path = "../../features/rigs/guitar/ui", optional = true }
 
 # Session domain (setlists / charts / daw) — embedded in-process.
 session = { path = "../../crates/session/session", optional = true }

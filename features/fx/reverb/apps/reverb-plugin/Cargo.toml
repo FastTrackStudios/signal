@@ -1,0 +1,18 @@
+[package]
+name = "reverb-plugin"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+edition = "2021"          # kept on 2021 — pre-move signal workspace edition; migrate deliberately
+description = "FTS Reverb — CLAP/VST3 audio plugin entry point"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+fts-dsp = { workspace = true }
+fts-plugin-core = { workspace = true }
+reverb-dsp = { path = "../../crates/reverb-dsp" }
+reverb-profiles = { path = "../../crates/reverb-profiles" }
+reverb-ui = { path = "../../crates/reverb-ui" }
+nih_plug = { workspace = true }

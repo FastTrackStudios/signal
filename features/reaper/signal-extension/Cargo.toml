@@ -1,0 +1,33 @@
+[package]
+name = "signal-extension"
+version.workspace = true
+edition = "2021"          # kept on 2021 — pre-move signal workspace edition; migrate deliberately
+description = "Signal domain in-process REAPER extension (cdylib)"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+name = "reaper_signal_extension"
+path = "src/lib.rs"
+
+[dependencies]
+daw = { workspace = true, features = ["reaper"] }
+daw-extension-runtime.workspace = true
+signal-macromod.workspace = true
+signal.workspace = true
+fragile = "2"
+# Codeberg reaper-rs — must match daw's source (codeberg, same branch) so the
+# graph has ONE reaper_low instance. (Was starcommand.live → two copies → type
+# mismatch in `daw[reaper]` + this crate's reaper_low.)
+reaper-low = { git = "https://codeberg.org/FastTrackStudios/reaper-rs.git", branch = "feat/reaper-763-ruler-lanes" }
+reaper-macros = { git = "https://codeberg.org/FastTrackStudios/reaper-rs.git", branch = "feat/reaper-763-ruler-lanes" }
+tokio = { workspace = true, features = ["time", "net", "rt"] }
+eyre.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+
+[dev-dependencies]
+signal = { workspace = true, features = ["daw"] }
+daw = { workspace = true, features = ["file", "test-harness"] }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+eyre.workspace = true

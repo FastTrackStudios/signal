@@ -1,0 +1,9 @@
+[package]
+name = "comp-dsp"
+version.workspace = true
+edition = "2021"          # kept on 2021 — pre-move signal workspace edition; migrate deliberately
+license.workspace = true
+description = "FTS compressor (ProC3-style) DSP"
+
+[dependencies]
+audiocore-dsp = { workspace = true }

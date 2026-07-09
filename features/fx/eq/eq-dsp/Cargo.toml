@@ -1,0 +1,12 @@
+[package]
+name = "eq-dsp"
+version.workspace = true
+edition = "2021"          # kept on 2021 — pre-move signal workspace edition; migrate deliberately
+license.workspace = true
+description = "EQ filter design and biquad-cascade DSP for FTS-EQ"
+
+[dependencies]
+audiocore-dsp = { workspace = true }
+
+[dev-dependencies]
+

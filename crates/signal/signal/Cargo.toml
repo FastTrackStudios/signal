@@ -1,0 +1,33 @@
+[package]
+name = "signal"
+version.workspace = true
+edition = "2021"          # kept on 2021 — pre-move signal workspace edition; migrate deliberately
+license.workspace = true
+authors.workspace = true
+
+[features]
+default = []
+daw = ["dep:daw"]
+
+[dependencies]
+signal-controller.workspace = true
+signal-daw-bridge.workspace = true
+signal-import.workspace = true
+signal-live.workspace = true
+signal-proto.workspace = true
+signal-storage.workspace = true
+signal-nam.workspace = true
+daw = { workspace = true, optional = true }
+tokio.workspace = true
+moire.workspace = true
+utils.workspace = true
+
+[dev-dependencies]
+daw = { workspace = true, features = ["file", "test-harness"] }
+signal-extension.workspace = true
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+eyre.workspace = true
+uuid.workspace = true
+futures.workspace = true
+base64 = "0.22"
+serde_json.workspace = true

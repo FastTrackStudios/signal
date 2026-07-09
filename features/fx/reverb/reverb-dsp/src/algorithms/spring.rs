@@ -1,0 +1,277 @@
+//! Classic spring reverb — Välimäki/Parker/Abel parametric model.
+//!
+//! Based on "Parametric Spring Reverberation Effect" (JAES, 2010) and
+//! "Efficient Dispersion Generation Structures" (EURASIP, 2011).
+//!
+//! Models a 2-spring Accutronics-style tank with:
+//!   - Spectral delay filter (stretched allpass cascade) for dispersion chirp
+//!   - Feedback delay loop with modulated delay for echo smearing
+//!   - Lowpass in feedback for frequency-dependent decay
+//!   - Parallel springs with different lengths/chirp for stereo width
+//!
+//! Signal flow per spring:
+//!   Input → (+) → [Spectral Delay Filter] → Output tap
+//!            ↑                              ↓
+//!            +-- [× gain] ← [LP] ← [Modulated Delay] ←+
+//!
+//! The spectral delay filter creates frequency-dependent group delay:
+//! low frequencies arrive first, highs arrive later → characteristic chirp.
+//! Each trip around the feedback loop applies dispersion again, making
+//! successive echoes progressively more "chirpy" and diffuse.
+
+use crate::algorithm::{AlgorithmParams, ReverbAlgorithm};
+use crate::primitives::one_pole::Lp1;
+use crate::primitives::spectral_delay::SpectralDelay;
+use audiocore_dsp::dc_blocker::DcBlocker;
+use audiocore_dsp::delay_line::DelayLine;
+
+use std::f64::consts::PI;
+
+/// One physical spring with dispersion + feedback loop.
+struct SpringUnit {
+    /// Spectral delay filter — the chirp generator.
+    dispersion: SpectralDelay,
+    /// Feedback delay line (echo spacing).
+    delay: DelayLine,
+    delay_samples: usize,
+    /// Lowpass in feedback path (frequency-dependent decay).
+    damp: Lp1,
+    /// DC blocker to prevent DC buildup in feedback loop.
+    dc_blocker: DcBlocker,
+    /// Feedback loop gain.
+    loop_gain: f64,
+    /// Delay modulation state (correlated noise for echo smearing).
+    mod_phase: f64,
+    mod_rate: f64,
+    mod_depth: f64,
+    /// Feedback state.
+    feedback: f64,
+}
+
+impl SpringUnit {
+    fn new(
+        sample_rate: f64,
+        delay_ms: f64,
+        max_delay_ms: f64,
+        num_sections: usize,
+        stretch: usize,
+        ap_coeff: f64,
+        damp_freq: f64,
+        mod_rate: f64,
+        mod_depth: f64,
+    ) -> Self {
+        let delay_samples = (sample_rate * delay_ms * 0.001) as usize;
+        // Allocate for maximum possible delay + modulation headroom
+        let max_delay = (sample_rate * max_delay_ms * 0.001) as usize + 32;
+
+        let mut damp = Lp1::new();
+        damp.set_freq(damp_freq, sample_rate);
+
+        Self {
+            dispersion: SpectralDelay::new(num_sections, stretch, ap_coeff),
+            delay: DelayLine::new(max_delay + 1),
+            delay_samples,
+            damp,
+            dc_blocker: DcBlocker::with_cutoff(38.0, 48000.0), // matches the old 0.995 pole
+            loop_gain: 0.8,
+            mod_phase: 0.0,
+            mod_rate: mod_rate / sample_rate,
+            mod_depth,
+            feedback: 0.0,
+        }
+    }
+
+    fn reset(&mut self) {
+        self.dispersion.reset();
+        self.delay.clear();
+        self.damp.reset();
+        self.dc_blocker.reset();
+        self.feedback = 0.0;
+        self.mod_phase = 0.0;
+    }
+
+    #[inline]
+    fn tick(&mut self, input: f64) -> f64 {
+        // Mix input with feedback from delay loop
+        let x = input + self.feedback;
+
+        // Spectral delay filter — creates the chirp
+        let dispersed = self.dispersion.tick(x);
+
+        // Write to feedback delay line
+        self.delay.write(dispersed);
+
+        // Modulated read from delay line (smears successive echoes)
+        self.mod_phase += self.mod_rate;
+        if self.mod_phase > 1.0 {
+            self.mod_phase -= 1.0;
+        }
+        let mod_offset = (self.mod_phase * 2.0 * PI).sin() * self.mod_depth;
+        let read_pos = self.delay_samples as f64 + mod_offset;
+        let read_int = read_pos as usize;
+        let frac = read_pos - read_int as f64;
+
+        // Linear interpolation between two delay line samples
+        let s0 = self.delay.read(read_int);
+        let s1 = self.delay.read(read_int + 1);
+        let delayed = s0 + (s1 - s0) * frac;
+
+        // Frequency-dependent decay (lowpass in feedback)
+        let damped = self.damp.tick(delayed);
+
+        // DC blocker prevents runaway DC in the loop
+        let clean = self.dc_blocker.tick(damped);
+
+        // Store feedback for next sample
+        self.feedback = clean * self.loop_gain;
+
+        // Output is the dispersed signal
+        dispersed
+    }
+}
+
+/// Classic 2-spring reverb tank.
+pub struct Spring {
+    spring_a: SpringUnit,
+    spring_b: SpringUnit,
+    /// Input lowpass (band-limiting before springs).
+    input_lp: Lp1,
+    /// Output tone control.
+    tone_lp: Lp1,
+    sample_rate: f64,
+}
+
+impl Spring {
+    pub fn new(sample_rate: f64) -> Self {
+        // Maximum delay for any parameter setting:
+        // delay_a_max = 20 + 35 = 55ms, delay_b_max = 55 * 1.38 = 75.9ms
+        // mod_depth_max = 7 samples + headroom
+        let max_delay_ms = 80.0; // Covers all parameter combinations
+
+        // Spring A: shorter, brighter, moderate chirp
+        // ~80 sections × stretch 4 = equivalent to ~320 unit-delay allpasses
+        let spring_a = SpringUnit::new(
+            sample_rate,
+            30.0, // 30ms echo delay
+            max_delay_ms,
+            80,     // allpass sections
+            4,      // stretch factor
+            0.55,   // allpass coefficient (moderate chirp)
+            5000.0, // damping LP freq
+            0.7,    // mod rate Hz
+            3.0,    // mod depth samples
+        );
+
+        // Spring B: longer, darker, stronger chirp
+        // Slightly detuned for stereo decorrelation
+        let spring_b = SpringUnit::new(
+            sample_rate,
+            42.0, // 42ms echo delay (different from A)
+            max_delay_ms,
+            100,    // more sections (chirpier)
+            4,      // stretch factor
+            0.58,   // slightly different coefficient
+            4000.0, // darker damping
+            0.5,    // different mod rate
+            3.5,    // slightly more mod
+        );
+
+        let mut input_lp = Lp1::new();
+        input_lp.set_freq(8000.0, sample_rate);
+        let mut tone_lp = Lp1::new();
+        tone_lp.set_freq(6000.0, sample_rate);
+
+        Self {
+            spring_a,
+            spring_b,
+            input_lp,
+            tone_lp,
+            sample_rate,
+        }
+    }
+}
+
+impl ReverbAlgorithm for Spring {
+    fn reset(&mut self) {
+        self.spring_a.reset();
+        self.spring_b.reset();
+        self.input_lp.reset();
+        self.tone_lp.reset();
+    }
+
+    fn set_sample_rate(&mut self, sample_rate: f64) {
+        *self = Self::new(sample_rate);
+    }
+
+    fn set_params(&mut self, params: &AlgorithmParams) {
+        // Decay → loop gain (dwell control)
+        // 0.0 → short splashy decay, 1.0 → long sustain
+        let gain = 0.5 + params.decay * 0.45; // 0.5 to 0.95
+        self.spring_a.loop_gain = gain;
+        self.spring_b.loop_gain = gain;
+
+        // Size → echo delay length (spring physical length)
+        let delay_a = 20.0 + params.size * 35.0; // 20ms to 55ms
+        let delay_b = delay_a * 1.38; // Spring B is ~38% longer
+        self.spring_a.delay_samples = (self.sample_rate * delay_a * 0.001) as usize;
+        self.spring_b.delay_samples = (self.sample_rate * delay_b * 0.001) as usize;
+
+        // Diffusion → allpass coefficient (chirp intensity / "drip" amount)
+        // Low diffusion = mild chirp, high = aggressive drippy chirp
+        let ap_a = 0.35 + params.diffusion * 0.35; // 0.35 to 0.70
+        let ap_b = ap_a + 0.03; // Spring B slightly chirpier
+        self.spring_a.dispersion.coefficient = ap_a;
+        self.spring_b.dispersion.coefficient = ap_b;
+
+        // Also adjust number of active sections with diffusion
+        let sections_a = 40 + (params.diffusion * 80.0) as usize; // 40 to 120
+        let sections_b = 50 + (params.diffusion * 100.0) as usize; // 50 to 150
+        self.spring_a.dispersion.active_sections = sections_a;
+        self.spring_b.dispersion.active_sections = sections_b;
+
+        // Damping → feedback LP frequency
+        let damp_a = 2000.0 + (1.0 - params.damping) * 8000.0; // 2k to 10k
+        let damp_b = damp_a * 0.8; // Spring B always darker
+        self.spring_a.damp.set_freq(damp_a, self.sample_rate);
+        self.spring_b.damp.set_freq(damp_b, self.sample_rate);
+
+        // Modulation → delay modulation depth (echo smearing)
+        let mod_depth = 1.0 + params.modulation * 6.0; // 1 to 7 samples
+        self.spring_a.mod_depth = mod_depth;
+        self.spring_b.mod_depth = mod_depth * 1.2;
+
+        // Tone → output LP
+        let tone_freq = 3000.0 + (1.0 + params.tone) * 0.5 * 9000.0; // 3k to 12k
+        self.tone_lp.set_freq(tone_freq, self.sample_rate);
+
+        // Input bandwidth
+        let input_freq = 4000.0 + (1.0 + params.tone) * 0.5 * 8000.0;
+        self.input_lp.set_freq(input_freq, self.sample_rate);
+
+        // Extra A → spring tension (adjusts mod rate — tighter = less flutter)
+        let mod_rate_a = 0.3 + (1.0 - params.extra_a) * 1.5; // 0.3 to 1.8 Hz
+        let mod_rate_b = mod_rate_a * 0.7;
+        self.spring_a.mod_rate = mod_rate_a / self.sample_rate;
+        self.spring_b.mod_rate = mod_rate_b / self.sample_rate;
+    }
+
+    #[inline]
+    fn tick(&mut self, left: f64, right: f64) -> (f64, f64) {
+        let mono = (left + right) * 0.5;
+        let input = self.input_lp.tick(mono);
+
+        // Process both springs
+        let a_out = self.spring_a.tick(input);
+        let b_out = self.spring_b.tick(input);
+
+        // Pan springs for stereo: A mostly left, B mostly right
+        let out_l = a_out * 0.65 + b_out * 0.35;
+        let out_r = a_out * 0.35 + b_out * 0.65;
+
+        // Output tone filtering
+        let final_l = self.tone_lp.tick(out_l);
+        let final_r = self.tone_lp.tick(out_r);
+
+        (final_l, final_r)
+    }
+}

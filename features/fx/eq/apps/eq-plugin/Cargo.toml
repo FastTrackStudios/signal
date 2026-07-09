@@ -1,0 +1,19 @@
+[package]
+name = "eq-plugin"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+edition = "2021"          # kept on 2021 — pre-move signal workspace edition; migrate deliberately
+description = "FTS EQ — CLAP/VST3 audio plugin entry point"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+
+[dependencies]
+audiocore-core = { workspace = true }
+eq-dsp = { path = "../../crates/eq-dsp" }
+eq-profiles = { path = "../../crates/eq-profiles" }
+eq-ui = { path = "../../crates/eq-ui" }
+audiocore-dsp = { workspace = true }
+nice-plug = { workspace = true }
+spectrum-analyzer = { workspace = true }

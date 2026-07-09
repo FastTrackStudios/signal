@@ -1,0 +1,19 @@
+[package]
+name = "signal-proto"
+version.workspace = true
+edition = "2021"          # kept on 2021 — pre-move signal workspace edition; migrate deliberately
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+actions-proto.workspace = true
+signal-macromod.workspace = true
+utils.workspace = true
+serde.workspace = true
+facet.workspace = true
+vox.workspace = true
+thiserror.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true

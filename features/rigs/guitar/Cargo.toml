@@ -1,0 +1,35 @@
+[package]
+name = "signal-guitar"
+version.workspace = true
+edition = "2021"          # kept on 2021 — pre-move signal workspace edition; migrate deliberately
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+# The shared sampler core — GuitarRig / ProfileRig / RigProfile / RigBlock /
+# RigAudioPrefs. The guitar feature is a thin live-handle layer on top.
+signal-sampler.workspace = true
+
+# The wire contract this crate's headless backend implements (Rig +
+# AudioSettings services); front-ends consume the same crate's clients.
+signal-guitar-proto.workspace = true
+# Layer/Services composition + dispatchers for mounting the services.
+architect = { workspace = true, features = ["vox"] }
+# BlockType — primary-param mapping per block type.
+signal-proto.workspace = true
+# EQ band-param naming (EQ_BANDS × EQ_FIELDS) — one source of truth with the DSP.
+signal-fx.workspace = true
+# Styx-serializable rig definitions (the runtime library files).
+facet.workspace = true
+facet-styx.workspace = true
+# MIDI capture for the core's monitor (native only — the headless core).
+midicore = { workspace = true, features = ["vox", "midir"] }
+tracing.workspace = true
+
+[dev-dependencies]
+tracing-subscriber.workspace = true
+# headless_rig example: serve the backend on an in-process vox link and drive
+# it like a remote GUI would.
+architect = { workspace = true, features = ["vox", "local"] }
+vox.workspace = true
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "time"] }
