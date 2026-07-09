@@ -19,7 +19,10 @@ libs/      UI + infra libraries — fts-ui, fts-story, dock, nice-plug,
            monarchy, devtools, moire-trace-capture
 apps/      fasttrackstudio (THE app: signal / session / full / tts),
            rigd (headless rig daemon), signal-web (browser remote),
-           daw-cli, keyflow-cli, installer
+           daw-cli, keyflow-cli, installer,
+           site (fts-site — fasttrackstudio.app website, dioxus web),
+           docs-site (docs.fasttrackstudio.app — dodeca + kf docs, NOT a
+           cargo member; `just docs-build` / `just docs-serve`)
 attic/     parked code (dead apps, legacy shells) — excluded, never built
 docs/      cross-domain guides (facet, styx, tracey, spec/)
 ```
