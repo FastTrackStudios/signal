@@ -13,14 +13,31 @@ authors = ["FastTrackStudio"]
 #
 # Chart writing (keyflow), setlist creation, and daw integration are
 # session-side; the rig is signal-side; the shell (navigation, palette,
-# theming) is shared. Each domain stays a headless engine + vox services —
-# this app is a remote over all of them, exactly like the web remotes.
+# theming) is shared. The signal domain stays a headless engine reached
+# over vox (this app is a remote, like the web remotes). The session
+# domain is embedded IN-PROCESS: a daw-standalone backend (memory-link
+# bootstrap) makes the setlist DATA the app can PLAY — transport over
+# songs/sections without REAPER.
 
 [features]
 default = ["full"]
 full = ["signal", "session"]
-signal = ["dep:signal-guitar-proto", "dep:signal-guitar-ui"]
-session = ["dep:session-proto", "dep:session-ui", "dep:keyflow"]
+# signal also force-enables session-ui/desktop: signal-guitar-ui pulls
+# session-ui (default-features off), which only compiles with its dioxus
+# renderer feature on (dock-dioxus needs "web" for its prelude).
+signal = ["dep:signal-guitar-proto", "dep:signal-guitar-ui", "dep:session-ui"]
+session = [
+    "dep:session-proto",
+    "dep:session-ui",
+    "dep:keyflow",
+    "dep:session",
+    "dep:daw",
+    "dep:daw-standalone",
+    "dep:architect",
+    "dep:vox",
+    "dep:tokio",
+    "dep:eyre",
+]
 
 [dependencies]
 dioxus = { version = "=0.7.9", features = ["desktop", "launch"] }
@@ -31,10 +48,65 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 signal-guitar-proto = { path = "../../signal/features/rigs/guitar/proto", optional = true }
 signal-guitar-ui = { path = "../../signal/features/rigs/guitar/ui", optional = true }
 
-# Session domain (setlists / charts / daw)
+# Session domain (setlists / charts / daw) — embedded in-process.
+session = { path = "../../session/crates/session", optional = true }
 session-proto = { path = "../../session/crates/session-proto", optional = true }
-session-ui = { path = "../../session/crates/session-ui", default-features = false, optional = true }
+session-ui = { path = "../../session/crates/session-ui", default-features = false, features = ["desktop"], optional = true }
 keyflow = { path = "../../keyflow/crates/keyflow", optional = true }
+
+# DAW domain — facade (daw::get / init_from_parts / LayerRouter) + the
+# standalone backend that plays the setlist without REAPER. "audio" is
+# required by daw-standalone's unconditional `sync` module (same
+# workaround session's dev-deps carry) and drives real cpal output.
+daw = { path = "../../daw/crates/daw", optional = true }
+daw-standalone = { path = "../../daw/features/standalone/daw-standalone", features = ["bootstrap", "audio"], optional = true }
+
+# Service framework — same sources as the daw/session workspaces so the
+# whole graph shares one architect + one vox.
+architect = { git = "https://codeberg.org/FastTrackStudios/architect.git", branch = "main", features = ["vox", "local"], optional = true }
+vox = { version = "0.10.0-rc.5", default-features = false, features = ["runtime"], optional = true }
+
+tokio = { version = "1.48", features = ["rt-multi-thread", "sync", "time", "macros"], optional = true }
+eyre = { version = "0.6", optional = true }
 
 [workspace]
 # Standalone workspace until phase 2 merges the domain workspaces.
+
+# ── Patches (mirroring the session workspace) ─────────────────────────
+# dynamic-template.git (external, pulled via the session facade) still
+# references daw.git; fold its daw crates onto this tree so one daw
+# instance exists graph-wide.
+[patch."https://codeberg.org/FastTrackStudios/daw.git"]
+daw = { path = "../../daw/crates/daw" }
+daw-proto = { path = "../../daw/crates/daw-proto" }
+daw-module = { path = "../../daw/crates/daw-module" }
+# The stale daw.git rev also carries daw-control/daw-reaper; left on git
+# they compile the OLD Tx-subscription API against the NEW path
+# daw-proto (stream modernization) and break — fold them in too.
+daw-control = { path = "../../daw/crates/daw-control" }
+daw-reaper = { path = "../../daw/features/backends/reaper/daw-reaper" }
+
+# moire: FTS fork — tolerates broken frame-pointer chains on NixOS glibc.
+# All moire crates must point to the same fork rev to avoid duplicate
+# moire-runtime #[ctor] registrations that crash. Aligned with daw/session.
+[patch."https://github.com/bearcove/moire"]
+moire = { git = "https://codeberg.org/FastTrackStudios/moire.git", rev = "7a2f1dc" }
+moire-macros-noop = { git = "https://codeberg.org/FastTrackStudios/moire.git", rev = "7a2f1dc" }
+moire-runtime = { git = "https://codeberg.org/FastTrackStudios/moire.git", rev = "7a2f1dc" }
+moire-tokio = { git = "https://codeberg.org/FastTrackStudios/moire.git", rev = "7a2f1dc" }
+moire-trace-capture = { git = "https://codeberg.org/FastTrackStudios/moire.git", rev = "7a2f1dc" }
+moire-trace-types = { git = "https://codeberg.org/FastTrackStudios/moire.git", rev = "7a2f1dc" }
+moire-types = { git = "https://codeberg.org/FastTrackStudios/moire.git", rev = "7a2f1dc" }
+moire-wasm = { git = "https://codeberg.org/FastTrackStudios/moire.git", rev = "7a2f1dc" }
+moire-wire = { git = "https://codeberg.org/FastTrackStudios/moire.git", rev = "7a2f1dc" }
+
+[patch.crates-io]
+moire = { git = "https://codeberg.org/FastTrackStudios/moire.git", rev = "7a2f1dc" }
+moire-macros-noop = { git = "https://codeberg.org/FastTrackStudios/moire.git", rev = "7a2f1dc" }
+moire-runtime = { git = "https://codeberg.org/FastTrackStudios/moire.git", rev = "7a2f1dc" }
+moire-tokio = { git = "https://codeberg.org/FastTrackStudios/moire.git", rev = "7a2f1dc" }
+moire-trace-capture = { git = "https://codeberg.org/FastTrackStudios/moire.git", rev = "7a2f1dc" }
+moire-trace-types = { git = "https://codeberg.org/FastTrackStudios/moire.git", rev = "7a2f1dc" }
+moire-types = { git = "https://codeberg.org/FastTrackStudios/moire.git", rev = "7a2f1dc" }
+moire-wasm = { git = "https://codeberg.org/FastTrackStudios/moire.git", rev = "7a2f1dc" }
+moire-wire = { git = "https://codeberg.org/FastTrackStudios/moire.git", rev = "7a2f1dc" }

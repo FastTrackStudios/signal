@@ -15,13 +15,28 @@
 
 use dioxus::prelude::*;
 
+#[cfg(feature = "session")]
+mod session_engine;
+#[cfg(feature = "session")]
+mod session_view;
+
 fn main() {
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "info".into()),
+                .unwrap_or_else(|_| "info,vox_core=warn,schema_deser=off".into()),
         )
         .init();
+
+    // Session: bring up the in-process engine (standalone daw + setlist
+    // service + demo setlist) before the UI. Failure is non-fatal — the
+    // Session workspace shows an offline notice.
+    #[cfg(feature = "session")]
+    match session_engine::bootstrap_blocking() {
+        Ok(()) => tracing::info!("session engine ready (in-process daw-standalone)"),
+        Err(e) => tracing::error!("session engine failed to start: {e:?}"),
+    }
+
     dioxus::launch(App);
 }
 
@@ -55,6 +70,7 @@ fn App() -> Element {
     let mut current = use_signal(|| spaces.first().map(|(w, _)| *w));
 
     rsx! {
+        SessionChrome {}
         div {
             style: "display: flex; flex-direction: column; height: 100vh; background: #0a0a0a; color: #e4e4e7; font-family: sans-serif;",
             // Workspace bar — the app-level switcher (domain views own
@@ -74,7 +90,7 @@ fn App() -> Element {
                     }
                 }
             }
-            main { style: "flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center;",
+            main { style: "flex: 1; min-height: 0; display: flex;",
                 match current() {
                     #[cfg(feature = "signal")]
                     Some(Workspace::Rig) => rsx! {
@@ -84,9 +100,10 @@ fn App() -> Element {
                     },
                     #[cfg(feature = "session")]
                     Some(Workspace::Session) => rsx! {
-                        // Mount point: session-ui performance layout fed by
-                        // the session engine's setlist stream.
-                        Placeholder { title: "Session", body: "session-ui PerformanceLayout mounts here — setlists, songs, live charts from the session engine (:3030)." }
+                        // The setlist player: session-ui's performance
+                        // layout + transport strip over the in-process
+                        // daw-standalone engine.
+                        session_view::SessionWorkspace {}
                     },
                     #[cfg(feature = "session")]
                     Some(Workspace::Charts) => rsx! {
@@ -102,10 +119,28 @@ fn App() -> Element {
     }
 }
 
+/// App-level chrome the session feature contributes: the compiled
+/// Tailwind sheet session-ui's components style themselves with, and
+/// the always-mounted event bridge (hub → global signals).
+#[cfg(feature = "session")]
+#[component]
+fn SessionChrome() -> Element {
+    rsx! {
+        document::Stylesheet { href: asset!("/assets/tailwind.css") }
+        session_view::SessionEventBridge {}
+    }
+}
+
+#[cfg(not(feature = "session"))]
+#[component]
+fn SessionChrome() -> Element {
+    rsx! {}
+}
+
 #[component]
 fn Placeholder(title: &'static str, body: &'static str) -> Element {
     rsx! {
-        div { style: "display: flex; flex-direction: column; align-items: center; gap: 8px; max-width: 480px; text-align: center;",
+        div { style: "display: flex; flex-direction: column; align-items: center; gap: 8px; max-width: 480px; text-align: center; margin: auto;",
             span { style: "font-size: 20px; font-weight: 700;", "{title}" }
             span { style: "font-size: 13px; color: #a1a1aa;", "{body}" }
         }
