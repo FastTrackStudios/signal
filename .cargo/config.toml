@@ -2,3 +2,9 @@
 # intact frame-pointer chains for trace capture on NixOS glibc.
 [build]
 rustflags = ["-C", "force-frame-pointers=yes"]
+
+# Carried over from the dissolved session/keyflow workspaces: git deps and
+# patched git sources fetch via the git CLI so SSH / credentials work the
+# same way `git` does outside cargo.
+[net]
+git-fetch-with-cli = true

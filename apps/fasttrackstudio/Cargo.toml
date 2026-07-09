@@ -60,13 +60,13 @@ signal-guitar-proto = { path = "../../signal/features/rigs/guitar/proto", option
 signal-guitar-ui = { path = "../../signal/features/rigs/guitar/ui", optional = true }
 
 # Session domain (setlists / charts / daw) — embedded in-process.
-session = { path = "../../session/crates/session", optional = true }
-session-proto = { path = "../../session/crates/session-proto", optional = true }
-session-ui = { path = "../../session/crates/session-ui", default-features = false, features = ["desktop"], optional = true }
+session = { path = "../../crates/session/session", optional = true }
+session-proto = { path = "../../crates/session/proto", optional = true }
+session-ui = { path = "../../crates/session/ui", default-features = false, features = ["desktop"], optional = true }
 # Guide engine: click / count-in / section cues rendered into the audio
 # output through daw-standalone's aux post-render hook.
-session-guide = { path = "../../session/features/guide", optional = true }
-keyflow = { path = "../../keyflow/crates/keyflow", optional = true }
+session-guide = { path = "../../features/guide", optional = true }
+keyflow = { path = "../../crates/keyflow/keyflow", optional = true }
 
 # DAW domain — facade (daw::get / init_from_parts / LayerRouter) + the
 # standalone backend that plays the setlist without REAPER. "audio" is
