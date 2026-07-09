@@ -273,6 +273,27 @@ pub fn PerformGrid(
                                 if !b.preset.is_empty() {
                                     span { class: "text-[10px] opacity-60 truncate max-w-full", "{b.preset}" }
                                 }
+                                // Editing surface: block presets with NAM
+                                // options get a picker right on the pedal.
+                                if !b.options.is_empty() {
+                                    select {
+                                        class: "bg-background/80 border border-border rounded px-1 py-0.5 text-[10px] max-w-full",
+                                        onclick: move |e: MouseEvent| e.stop_propagation(),
+                                        onchange: {
+                                            let rig = rig.clone();
+                                            let id = b.id.clone();
+                                            move |e: FormEvent| {
+                                                if let (Some(r), Ok(i)) = (rig.clone(), e.value().parse::<u32>()) {
+                                                    let id = id.clone();
+                                                    spawn(async move { let _ = r.set_block_option(id, i).await; });
+                                                }
+                                            }
+                                        },
+                                        for (i, opt) in b.options.iter().enumerate() {
+                                            option { key: "{i}", value: "{i}", selected: i as u32 == b.option, "{opt}" }
+                                        }
+                                    }
+                                }
                             }
                         }
                     }

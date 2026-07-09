@@ -388,6 +388,9 @@ pub mod rig {
         /// Load a custom IR wav into a reverb block (Convolution engine);
         /// auto-saves as a patch override.
         fn set_block_ir(&self, id: String, path: String);
+        /// Re-point a pool preset at a different `.nam` capture (preset
+        /// editing); persists and rebuilds every patch using it.
+        fn set_preset_nam(&self, index: u32, nam_path: String);
         /// Manual patch output trim (dB, on top of loudness calibration).
         fn set_patch_trim(&self, patch: u32, db: f32);
         /// Toggle the fullscreen tuner overlay on every remote.

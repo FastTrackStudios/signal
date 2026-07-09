@@ -1850,6 +1850,24 @@ impl Rig for GuitarRigBackend {
         self.reload_rebuilt(rebuilt);
     }
 
+    fn set_preset_nam(&self, index: u32, nam_path: String) {
+        if !std::path::Path::new(&nam_path).exists() {
+            tracing::warn!("set_preset_nam: {nam_path} does not exist");
+            return;
+        }
+        let rebuilt = {
+            let mut def = self.profile_def.lock().unwrap();
+            let Some(p) = def.presets.get_mut(index as usize) else { return };
+            tracing::info!("preset '{}' → {nam_path}", p.name);
+            p.nam = nam_path;
+            RigLibrary::save_profile(&def);
+            let dps = self.drive_presets.lock().unwrap();
+            build_profile(&def, &dps)
+        };
+        self.reload_rebuilt(rebuilt);
+        self.spawn_drive_calibration();
+    }
+
     fn set_patch_trim(&self, patch: u32, db: f32) {
         let rebuilt = {
             let mut def = self.profile_def.lock().unwrap();
