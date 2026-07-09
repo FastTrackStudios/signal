@@ -259,7 +259,6 @@ pub fn GuitarRigRemote() -> Element {
                             onclick: {
                                 let rig = rig.clone();
                                 move |_| {
-                                    mode.set(Mode::Perform);
                                     if let Some(r) = rig.clone() {
                                         spawn(async move { let _ = r.set_perform_mode(pm).await; });
                                     }
@@ -373,122 +372,23 @@ pub fn GuitarRigRemote() -> Element {
                 }
                 div { class: "flex-1 min-w-0 min-h-0 overflow-hidden p-4",
                 if let Some((on_press, on_toggle_fx, on_toggle_boost, on_cycle_boost, on_tap_tempo, on_prev_song, on_next_song, on_select_song)) = controls {
-                    if mode() == Mode::Perform {
-                        PerformGrid {
-                            model: perf(),
-                            on_press,
-                            on_toggle_fx,
-                            on_toggle_boost,
-                            on_cycle_boost,
-                            on_tap_tempo,
-                            on_prev_song,
-                            on_next_song,
-                            on_select_song,
-                        }
-                    } else if mode() == Mode::Session {
-                        // Integration layer — DAW sync, external control,
-                        // show automation. Landing page for now.
-                        div { class: "flex flex-col items-center justify-center h-full gap-2",
-                            span { class: "text-lg font-bold text-muted-foreground", "Session" }
-                            span { class: "text-xs text-muted-foreground",
-                                "The integration layer — DAW sync, show control, and external automation land here."
-                            }
-                        }
-                    } else if false {
-                        // (retired full-page set view — management lives in
-                        // the Setlist mode sidebar now)
-                        div { class: "grid grid-cols-2 gap-4 h-full min-h-0",
-                            div { class: "flex flex-col rounded-xl border border-border bg-card min-h-0 overflow-hidden",
-                                div { class: "flex items-center gap-1 px-3 py-2 border-b border-border",
-                                    span { class: "text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mr-2", "Setlist" }
-                                    for (si, set) in perf_now.setlists.iter().enumerate() {
-                                        {
-                                            let set = set.clone();
-                                            let active = si == perf_now.setlist_index as usize;
-                                            let rig2 = rig.clone();
-                                            rsx! {
-                                                button {
-                                                    key: "{si}",
-                                                    class: if active {
-                                                        "rounded px-2 py-0.5 text-xs font-bold bg-accent text-accent-foreground"
-                                                    } else {
-                                                        "rounded px-2 py-0.5 text-xs text-muted-foreground border border-border hover:bg-accent/40"
-                                                    },
-                                                    onclick: move |_| {
-                                                        if let Some(r) = rig2.clone() {
-                                                            spawn(async move { let _ = r.select_setlist(si as u32).await; });
-                                                        }
-                                                    },
-                                                    "{set}"
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                                div { class: "flex-1 overflow-y-auto p-2 flex flex-col gap-1",
-                                    for (i, song) in perf_now.songs.iter().enumerate() {
-                                        {
-                                            let name = song.name.clone();
-                                            let meta = format!("{} · {} bpm", song.key, song.bpm);
-                                            let is_current = i == perf_now.song_index as usize;
-                                            rsx! {
-                                                button {
-                                                    key: "{i}",
-                                                    class: if is_current {
-                                                        "flex items-center gap-3 rounded-md px-3 py-2 text-left text-base font-bold bg-accent text-accent-foreground"
-                                                    } else {
-                                                        "flex items-center gap-3 rounded-md px-3 py-2 text-left text-base text-muted-foreground hover:bg-accent/40"
-                                                    },
-                                                    onclick: move |_| on_select_song.call(i),
-                                                    span { class: "font-mono text-xs opacity-60 w-5", "{i + 1}" }
-                                                    span { class: "truncate", "{name}" }
-                                                    span { class: "ml-auto font-mono text-xs opacity-70 flex-shrink-0", "{meta}" }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                            div { class: "flex flex-col rounded-xl border border-border bg-card min-h-0 overflow-hidden",
-                                div { class: "px-3 py-2 border-b border-border",
-                                    span { class: "text-[10px] font-semibold uppercase tracking-wider text-muted-foreground", "Song Parts" }
-                                }
-                                div { class: "p-3 grid grid-cols-2 gap-2 content-start overflow-y-auto",
-                                    for (i, part) in perf_now.parts.iter().enumerate() {
-                                        {
-                                            let name = part.clone();
-                                            let is_current = i == perf_now.part_index as usize;
-                                            let rig2 = rig.clone();
-                                            rsx! {
-                                                button {
-                                                    key: "{i}",
-                                                    class: if is_current {
-                                                        "rounded-md px-3 py-4 text-sm font-bold bg-accent text-accent-foreground"
-                                                    } else {
-                                                        "rounded-md px-3 py-4 text-sm text-muted-foreground border border-border hover:bg-accent/40"
-                                                    },
-                                                    onclick: move |_| {
-                                                        if let Some(r) = rig2.clone() {
-                                                            spawn(async move { let _ = r.select_part(i as u32).await; });
-                                                        }
-                                                    },
-                                                    "{name}"
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    } else {
-                        // Routing & Control share the layout: the page on top
-                        // (~2/3), the live footswitch surface docked beneath.
+                        // Routing / Control / Session share the layout: the
+                        // page on top (~2/3), the switch grid docked beneath.
                         div { class: "flex flex-col gap-3 h-full min-h-0 overflow-hidden",
                             div {
                                 class: "min-h-0 flex flex-col overflow-hidden",
                                 style: "flex: 2 1 0%;",
                                 if mode() == Mode::Routing {
                                     crate::grid::RigGraph { blocks: blocks() }
+                                } else if mode() == Mode::Session {
+                                    // Integration layer — DAW sync, external
+                                    // control, show automation. Landing page.
+                                    div { class: "flex flex-col items-center justify-center h-full gap-2 rounded-xl border border-border bg-card",
+                                        span { class: "text-lg font-bold text-muted-foreground", "Session" }
+                                        span { class: "text-xs text-muted-foreground",
+                                            "The integration layer — DAW sync, show control, and external automation land here."
+                                        }
+                                    }
                                 } else {
                                     crate::control::ControlView {
                                         model: perf_now.clone(),
@@ -515,7 +415,6 @@ pub fn GuitarRigRemote() -> Element {
                                 }
                             }
                         }
-                    }
                 } else {
                     div { class: "flex items-center justify-center h-full",
                         span { class: "text-sm text-muted-foreground italic", "Connecting to rig…" }
