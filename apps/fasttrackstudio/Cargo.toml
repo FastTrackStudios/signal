@@ -86,19 +86,9 @@ eyre = { version = "0.6", optional = true }
 [workspace]
 # Standalone workspace until phase 2 merges the domain workspaces.
 
-# ── Patches (mirroring the session workspace) ─────────────────────────
-# dynamic-template.git (external, pulled via the session facade) still
-# references daw.git; fold its daw crates onto this tree so one daw
-# instance exists graph-wide.
-[patch."https://codeberg.org/FastTrackStudios/daw.git"]
-daw = { path = "../../crates/daw/daw" }
-daw-proto = { path = "../../crates/daw/proto" }
-daw-module = { path = "../../crates/daw/module" }
-# The stale daw.git rev also carries daw-control/daw-reaper; left on git
-# they compile the OLD Tx-subscription API against the NEW path
-# daw-proto (stream modernization) and break — fold them in too.
-daw-control = { path = "../../crates/daw/control" }
-daw-reaper = { path = "../../features/reaper/daw-reaper" }
+# NOTE: the old daw.git patch block is gone — dynamic-template (the only
+# dep that referenced the dead daw.git repo) is subtree-imported into the
+# root workspace at features/dynamic-template/ and uses the in-tree daw.
 
 # moire: FTS fork — tolerates broken frame-pointer chains on NixOS glibc.
 # All moire crates must point to the same fork rev to avoid duplicate
