@@ -339,16 +339,29 @@ pub fn EqProSurface(block: LiveBlock, spectrum: Vec<f32>) -> Element {
                             }
                             // Magic-frequency zone label above the node.
                             if let Some(role) = magic_label(b.frequency) {
+                                // Fixed top lane — labels never collide with
+                                // the curve; a hairline ties label to node.
                                 text {
                                     key: "l{b.index}",
                                     x: "{cx:.1}",
-                                    y: "{(cy - 13.0).max(9.0):.1}",
+                                    y: "10",
                                     fill: "{color}",
-                                    fill_opacity: "0.85",
-                                    font_size: "8",
+                                    fill_opacity: "0.7",
+                                    font_size: "7",
                                     text_anchor: "middle",
                                     pointer_events: "none",
                                     "{role}"
+                                }
+                                line {
+                                    key: "ll{b.index}",
+                                    x1: "{cx:.1}",
+                                    y1: "13",
+                                    x2: "{cx:.1}",
+                                    y2: "{(cy - 8.0).max(14.0):.1}",
+                                    stroke: "{color}",
+                                    stroke_opacity: "0.15",
+                                    stroke_width: "0.5",
+                                    pointer_events: "none",
                                 }
                             }
                         }

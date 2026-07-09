@@ -727,7 +727,8 @@ fn DelayPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32) -> Element {
 
             // ── Knobs for the selected delay (machine + timing live on
             // the lanes) ──
-            div { class: "flex items-end justify-around gap-1.5 px-1.5 py-1 border-y border-border flex-shrink-0", style: "order: 1;",
+            div { class: "flex items-end justify-around gap-1.5 px-1.5 py-1 border-y border-border flex-shrink-0",
+                style: if cur.bypassed { "order: 1; opacity: 0.4;" } else { "order: 1;" },
                 if let Some(p) = param(&cur, "high_pass") {
                     PKnob { block_id: cur_id.clone(), name: "high_pass", label: "HP", p }
                 }
@@ -884,7 +885,8 @@ fn ReverbPanel(blocks: Vec<LiveBlock>) -> Element {
 
 
             // ── Knobs for the selected reverb (algorithm lives on the lanes) ──
-            div { class: "flex items-end justify-around gap-1.5 px-1.5 py-1 border-y border-border flex-shrink-0", style: "order: 1;",
+            div { class: "flex items-end justify-around gap-1.5 px-1.5 py-1 border-y border-border flex-shrink-0",
+                style: if cur.bypassed { "order: 1; opacity: 0.4;" } else { "order: 1;" },
                 if let Some(p) = param(&cur, "mix") {
                     PKnob { block_id: cur_id.clone(), name: "mix", label: "Mix", p }
                 }
@@ -1278,7 +1280,7 @@ fn DriveChunk(
                 // NAM option quick-switch (captures within the preset).
                 if options.len() > 1 {
                     select {
-                        class: "ml-auto pointer-events-auto bg-transparent border border-border/60 rounded-sm text-[8px] px-0 py-0 text-muted-foreground flex-shrink-0", style: "max-width: 58px;",
+                        class: "ml-auto pointer-events-auto bg-background/60 border border-border/60 rounded-sm text-[8px] px-0.5 text-muted-foreground flex-shrink-0", style: "max-width: 84px; height: 14px;",
                         value: "{option}",
                         onpointerdown: move |e: PointerEvent| e.stop_propagation(),
                         onchange: {
