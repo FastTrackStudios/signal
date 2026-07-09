@@ -1420,6 +1420,25 @@ pub fn ControlView(
                     }
                     // Time section: stereo delay + stereo reverb + modulation.
                     div { class: "flex gap-0 min-h-0 w-full", style: "flex: 1 1 0%; min-height: 150px;",
+                        div { class: "min-h-0 h-full flex flex-col gap-0", style: "flex: 1 1 0%;",
+                            ZoomPanel { title: "Modulation".to_string(),
+                                ModGroupPanel {
+                                    title: "Mod",
+                                    kinds: vec![BlockType::Chorus, BlockType::Phaser, BlockType::Flanger],
+                                    blocks: blocks.clone(),
+                                    tempo_bpm: model.tempo_bpm,
+                                }
+                            }
+                            ZoomPanel { title: "Motion".to_string(),
+                                ModGroupPanel {
+                                    title: "Motion",
+                                    kinds: vec![BlockType::Trem, BlockType::Vibrato, BlockType::Rotary],
+                                    blocks: blocks.clone(),
+                                    tempo_bpm: model.tempo_bpm,
+                                    tempo_divisions: true,
+                                }
+                            }
+                        }
                         div { class: "min-h-0 h-full flex flex-col", style: "flex: 2 1 0%;",
                             ZoomPanel {
                                 title: "Delay".to_string(),
@@ -1470,25 +1489,6 @@ pub fn ControlView(
                                     }
                                 })),
                                 ReverbPanel { blocks: blocks.clone() }
-                            }
-                        }
-                        div { class: "min-h-0 h-full flex flex-col gap-0", style: "flex: 1 1 0%;",
-                            ZoomPanel { title: "Modulation".to_string(),
-                                ModGroupPanel {
-                                    title: "Mod",
-                                    kinds: vec![BlockType::Chorus, BlockType::Phaser, BlockType::Flanger],
-                                    blocks: blocks.clone(),
-                                    tempo_bpm: model.tempo_bpm,
-                                }
-                            }
-                            ZoomPanel { title: "Motion".to_string(),
-                                ModGroupPanel {
-                                    title: "Motion",
-                                    kinds: vec![BlockType::Trem, BlockType::Vibrato, BlockType::Rotary],
-                                    blocks: blocks.clone(),
-                                    tempo_bpm: model.tempo_bpm,
-                                    tempo_divisions: true,
-                                }
                             }
                         }
                     }
