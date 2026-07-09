@@ -16,6 +16,9 @@ use signal_guitar_proto::rig::RigClient;
 #[derive(Clone, PartialEq)]
 pub enum Effect {
     /// Fire-and-forget service call.
+    SelectStack(u32),
+    NextSong,
+    PrevSong,
     SelectPatch(u32),
     PlayPreset(u32),
     SelectSong(u32),
@@ -176,67 +179,7 @@ pub fn CommandPalette(
                 return false; // stay open for the argument
             }
             let Some(r) = rig.clone() else { return true };
-            let arg = arg.unwrap_or_default();
-            spawn(async move {
-                match effect {
-                    Effect::SelectPatch(i) => drop(r.select_patch(i).await),
-                    Effect::PlayPreset(i) => drop(r.play_preset(i).await),
-                    Effect::SelectSong(i) => drop(r.select_song(i).await),
-                    Effect::SelectSetlist(i) => drop(r.select_setlist(i).await),
-                    Effect::AddSongToSet(name) => {
-                        // Append to whichever setlist is active.
-                        if let Ok(m) = r.perf().await {
-                            drop(r.add_setlist_entry(m.setlist_index, name).await);
-                        }
-                    }
-                    Effect::ToggleFx => drop(r.toggle_fx().await),
-                    Effect::ToggleBoost => drop(r.toggle_boost().await),
-                    Effect::ToggleTuner => drop(r.toggle_tuner().await),
-                    Effect::ToggleMute => drop(r.toggle_main_mute().await),
-                    Effect::TapTempo => drop(r.tap_tempo().await),
-                    Effect::ReloadLibrary => drop(r.reload_library().await),
-                    Effect::SetMode(m) => drop(r.set_perform_mode(m).await),
-                    Effect::NewSong => {
-                        // "Name @ G 74" → key/bpm; plain name = defaults.
-                        let (name, key, bpm) = match arg.split_once('@') {
-                            Some((n, kb)) => {
-                                let mut it = kb.split_whitespace();
-                                let key = it.next().unwrap_or("").to_string();
-                                let bpm = it.next().and_then(|b| b.parse().ok()).unwrap_or(0);
-                                (n.trim().to_string(), key, bpm)
-                            }
-                            None => (arg.trim().to_string(), String::new(), 0),
-                        };
-                        drop(r.add_song(name, key, bpm).await);
-                    }
-                    Effect::NewSetlist => drop(r.add_setlist(arg.trim().to_string()).await),
-                    Effect::NewStack => drop(r.add_stack(arg.trim().to_string()).await),
-                    Effect::NewPatch => {
-                        // Land on the active stack + active preset.
-                        if let (Ok(m), Ok(presets)) = (r.perf().await, r.presets().await) {
-                            let stack = m
-                                .stacks
-                                .iter()
-                                .find(|s| s.is_active)
-                                .map(|s| s.name.clone())
-                                .unwrap_or_default();
-                            let preset = presets
-                                .iter()
-                                .find(|p| p.active)
-                                .map(|p| p.name.clone())
-                                .unwrap_or_default();
-                            drop(r.add_patch(arg.trim().to_string(), stack, preset).await);
-                        }
-                    }
-                    Effect::ImportPreset => {
-                        let name = std::path::Path::new(arg.trim())
-                            .file_stem()
-                            .map(|s| s.to_string_lossy().to_string())
-                            .unwrap_or_else(|| "Imported".to_string());
-                        drop(r.add_preset(name, arg.trim().to_string()).await);
-                    }
-                }
-            });
+            execute(r, effect, arg.unwrap_or_default());
             true
         }
     };
@@ -330,4 +273,99 @@ pub fn CommandPalette(
             }
         }
     }
+}
+
+/// Run an effect against the rig — shared by the palette and the keymap.
+pub fn execute(r: RigClient, effect: Effect, arg: String) {
+    spawn(async move {
+                match effect {
+                    Effect::SelectStack(i) => drop(r.press_stack(i).await),
+                    Effect::NextSong => drop(r.next_song().await),
+                    Effect::PrevSong => drop(r.prev_song().await),
+                    Effect::SelectPatch(i) => drop(r.select_patch(i).await),
+                    Effect::PlayPreset(i) => drop(r.play_preset(i).await),
+                    Effect::SelectSong(i) => drop(r.select_song(i).await),
+                    Effect::SelectSetlist(i) => drop(r.select_setlist(i).await),
+                    Effect::AddSongToSet(name) => {
+                        // Append to whichever setlist is active.
+                        if let Ok(m) = r.perf().await {
+                            drop(r.add_setlist_entry(m.setlist_index, name).await);
+                        }
+                    }
+                    Effect::ToggleFx => drop(r.toggle_fx().await),
+                    Effect::ToggleBoost => drop(r.toggle_boost().await),
+                    Effect::ToggleTuner => drop(r.toggle_tuner().await),
+                    Effect::ToggleMute => drop(r.toggle_main_mute().await),
+                    Effect::TapTempo => drop(r.tap_tempo().await),
+                    Effect::ReloadLibrary => drop(r.reload_library().await),
+                    Effect::SetMode(m) => drop(r.set_perform_mode(m).await),
+                    Effect::NewSong => {
+                        // "Name @ G 74" → key/bpm; plain name = defaults.
+                        let (name, key, bpm) = match arg.split_once('@') {
+                            Some((n, kb)) => {
+                                let mut it = kb.split_whitespace();
+                                let key = it.next().unwrap_or("").to_string();
+                                let bpm = it.next().and_then(|b| b.parse().ok()).unwrap_or(0);
+                                (n.trim().to_string(), key, bpm)
+                            }
+                            None => (arg.trim().to_string(), String::new(), 0),
+                        };
+                        drop(r.add_song(name, key, bpm).await);
+                    }
+                    Effect::NewSetlist => drop(r.add_setlist(arg.trim().to_string()).await),
+                    Effect::NewStack => drop(r.add_stack(arg.trim().to_string()).await),
+                    Effect::NewPatch => {
+                        // Land on the active stack + active preset.
+                        if let (Ok(m), Ok(presets)) = (r.perf().await, r.presets().await) {
+                            let stack = m
+                                .stacks
+                                .iter()
+                                .find(|s| s.is_active)
+                                .map(|s| s.name.clone())
+                                .unwrap_or_default();
+                            let preset = presets
+                                .iter()
+                                .find(|p| p.active)
+                                .map(|p| p.name.clone())
+                                .unwrap_or_default();
+                            drop(r.add_patch(arg.trim().to_string(), stack, preset).await);
+                        }
+                    }
+                    Effect::ImportPreset => {
+                        let name = std::path::Path::new(arg.trim())
+                            .file_stem()
+                            .map(|s| s.to_string_lossy().to_string())
+                            .unwrap_or_else(|| "Imported".to_string());
+                        drop(r.add_preset(name, arg.trim().to_string()).await);
+                    }
+                }
+    });
+}
+
+/// Parse a keymap action string ("stack:0", "toggle_fx", "song:next",
+/// "mode:profile", "patch:3", …) into an executable effect.
+pub fn effect_from_action(action: &str) -> Option<Effect> {
+    let (verb, arg) = match action.split_once(':') {
+        Some((v, a)) => (v, a),
+        None => (action, ""),
+    };
+    Some(match (verb, arg) {
+        ("stack", n) => Effect::SelectStack(n.parse().ok()?),
+        ("patch", n) => Effect::SelectPatch(n.parse().ok()?),
+        ("preset", n) => Effect::PlayPreset(n.parse().ok()?),
+        ("song", "next") => Effect::NextSong,
+        ("song", "prev") => Effect::PrevSong,
+        ("song", n) => Effect::SelectSong(n.parse().ok()?),
+        ("setlist", n) => Effect::SelectSetlist(n.parse().ok()?),
+        ("mode", "pedals") => Effect::SetMode(0),
+        ("mode", "profile") => Effect::SetMode(1),
+        ("mode", "setlist") => Effect::SetMode(2),
+        ("toggle_fx", _) => Effect::ToggleFx,
+        ("boost", _) => Effect::ToggleBoost,
+        ("tuner", _) => Effect::ToggleTuner,
+        ("mute", _) => Effect::ToggleMute,
+        ("tap", _) => Effect::TapTempo,
+        ("reload", _) => Effect::ReloadLibrary,
+        _ => return None,
+    })
 }

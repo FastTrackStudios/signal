@@ -94,6 +94,8 @@ pub struct GuitarRigBackend {
     library_dirty: Arc<std::sync::atomic::AtomicBool>,
     /// Footswitch CC mapping (midi.styx — remappable).
     midi_map: Arc<Mutex<crate::profiles::MidiMapDef>>,
+    /// Keyboard bindings (keymap.styx).
+    keymap: Arc<Mutex<Vec<crate::profiles::KeyBindingDef>>>,
     /// Headphone-cue module state (volume/self-mix staged; mute applied).
     headphone: Arc<Mutex<HeadphoneState>>,
     /// Master output trim (dB) — applied with the patch base + mute.
@@ -138,6 +140,7 @@ impl GuitarRigBackend {
             perform_mode: Arc::new(Mutex::new(1)),
             library_dirty: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             midi_map: Arc::new(Mutex::new(lib.midi_map)),
+            keymap: Arc::new(Mutex::new(lib.keymap)),
             headphone: Arc::new(Mutex::new(HeadphoneState::default())),
             master_trim: Arc::new(Mutex::new(0.0)),
             midi_log: Arc::new(Mutex::new(Vec::new())),
@@ -1073,6 +1076,7 @@ fn build_perf_model(prig: &ProfileRig, def: &ProfileDef) -> PerformanceModel {
         library_songs: Vec::new(),
         tuner_visible: false,
         perform_mode: 1,
+        key_bindings: Vec::new(),
         parts: Vec::new(),
         part_index: 0,
         headphone: HeadphoneState::default(),
@@ -1169,6 +1173,16 @@ impl Rig for GuitarRigBackend {
             m.setlist_index = *self.setlist_index.lock().unwrap() as u32;
             m.tuner_visible = *self.tuner_visible.lock().unwrap();
             m.perform_mode = *self.perform_mode.lock().unwrap();
+            m.key_bindings = self
+                .keymap
+                .lock()
+                .unwrap()
+                .iter()
+                .map(|b| signal_guitar_proto::KeyBinding {
+                    keys: b.keys.clone(),
+                    action: b.action.clone(),
+                })
+                .collect();
             m.library_songs = self
                 .songs_lib
                 .lock()
@@ -1601,6 +1615,7 @@ impl Rig for GuitarRigBackend {
         *self.songs_lib.lock().unwrap() = lib.songs;
         *self.setlists.lock().unwrap() = lib.setlists;
         *self.midi_map.lock().unwrap() = lib.midi_map;
+        *self.keymap.lock().unwrap() = lib.keymap;
         let rebuilt = {
             let def = self.profile_def.lock().unwrap();
             let dps = self.drive_presets.lock().unwrap();

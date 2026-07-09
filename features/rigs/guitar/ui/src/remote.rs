@@ -221,9 +221,12 @@ pub fn GuitarRigRemote() -> Element {
                     let _ = e.data().set_focus(true).await;
                 });
             },
-            // Cmd/Ctrl+P: the command palette.
+            // Cmd/Ctrl+P: the command palette. Everything else: the
+            // keymap (keymap.styx) — "ctrl+1" strings → rig actions.
             onkeydown: {
                 let mut palette_open = palette_open;
+                let rig = rig.clone();
+                let bindings = perf_now.key_bindings.clone();
                 move |e: KeyboardEvent| {
                     let mods = e.modifiers();
                     if e.key() == Key::Character("p".to_string())
@@ -231,6 +234,45 @@ pub fn GuitarRigRemote() -> Element {
                     {
                         e.prevent_default();
                         palette_open.toggle();
+                        return;
+                    }
+                    if palette_open() {
+                        return; // the palette owns the keyboard while open
+                    }
+                    // Normalize the pressed combo to "ctrl+shift+x" form.
+                    let key_name = match e.key() {
+                        Key::Character(c) => if c == " " { "space".to_string() } else { c.to_lowercase() },
+                        Key::ArrowLeft => "arrowleft".into(),
+                        Key::ArrowRight => "arrowright".into(),
+                        Key::ArrowUp => "arrowup".into(),
+                        Key::ArrowDown => "arrowdown".into(),
+                        Key::Enter | Key::Escape | Key::Tab => return,
+                        k => format!("{k:?}").to_lowercase(),
+                    };
+                    let mut combo = String::new();
+                    if mods.ctrl() {
+                        combo.push_str("ctrl+");
+                    }
+                    if mods.meta() {
+                        combo.push_str("meta+");
+                    }
+                    if mods.alt() {
+                        combo.push_str("alt+");
+                    }
+                    if mods.shift() {
+                        combo.push_str("shift+");
+                    }
+                    combo.push_str(&key_name);
+                    let hit = bindings.iter().find(|b| {
+                        // meta and ctrl are interchangeable (mac ⌘ = ctrl).
+                        b.keys.eq_ignore_ascii_case(&combo)
+                            || b.keys.replace("ctrl+", "meta+").eq_ignore_ascii_case(&combo)
+                    });
+                    if let (Some(b), Some(r)) = (hit, rig.clone()) {
+                        if let Some(effect) = crate::palette::effect_from_action(&b.action) {
+                            e.prevent_default();
+                            crate::palette::execute(r, effect, String::new());
+                        }
                     }
                 }
             },

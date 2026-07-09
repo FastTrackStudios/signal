@@ -580,3 +580,37 @@ pub fn default_midi_map() -> MidiMapDef {
         direct: (0..5).map(|i| DirectCcDef { cc: 106 + i, slot: i }).collect(),
     }
 }
+
+/// One keyboard binding — `keys` is "ctrl+1" / "meta+shift+t" style
+/// (modifiers ctrl/meta/shift/alt + a key name), `action` uses the rig
+/// action vocabulary: stack:N, patch:N, preset:N, song:next|prev|N,
+/// setlist:N, mode:pedals|profile|setlist, toggle_fx, boost, tuner,
+/// mute, tap, reload.
+#[derive(Clone, Debug, Facet)]
+pub struct KeyBindingDef {
+    pub keys: String,
+    pub action: String,
+}
+
+pub fn default_keymap() -> Vec<KeyBindingDef> {
+    let b = |keys: &str, action: &str| KeyBindingDef {
+        keys: keys.to_string(),
+        action: action.to_string(),
+    };
+    vec![
+        // Stacks mirror the footswitches on ctrl+1..5.
+        b("ctrl+1", "stack:0"),
+        b("ctrl+2", "stack:1"),
+        b("ctrl+3", "stack:2"),
+        b("ctrl+4", "stack:3"),
+        b("ctrl+5", "stack:4"),
+        b("ctrl+arrowright", "song:next"),
+        b("ctrl+arrowleft", "song:prev"),
+        b("ctrl+f", "toggle_fx"),
+        b("ctrl+b", "boost"),
+        b("ctrl+t", "tuner"),
+        b("ctrl+m", "mute"),
+        b("ctrl+space", "tap"),
+        b("ctrl+r", "reload"),
+    ]
+}

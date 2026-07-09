@@ -20,8 +20,9 @@ use std::path::PathBuf;
 use facet::Facet;
 
 use crate::profiles::{
-    DrivePresetDef, MidiMapDef, ProfileDef, SetlistDef, SongDef, default_midi_map,
-    default_setlists, drive_presets, song_library, worship_def,
+    DrivePresetDef, KeyBindingDef, MidiMapDef, ProfileDef, SetlistDef, SongDef,
+    default_keymap, default_midi_map, default_setlists, drive_presets, song_library,
+    worship_def,
 };
 
 /// The library directory (`SIGNAL_RIG_DIR` overrides).
@@ -50,6 +51,11 @@ pub struct SetlistLib {
     pub setlists: Vec<SetlistDef>,
 }
 
+#[derive(Clone, Debug, Facet)]
+pub struct KeymapLib {
+    pub bindings: Vec<KeyBindingDef>,
+}
+
 /// Everything loaded from the rig directory.
 #[derive(Clone, Debug)]
 pub struct RigLibrary {
@@ -58,6 +64,7 @@ pub struct RigLibrary {
     pub songs: Vec<SongDef>,
     pub setlists: Vec<SetlistDef>,
     pub midi_map: MidiMapDef,
+    pub keymap: Vec<KeyBindingDef>,
 }
 
 fn read<T: for<'a> Facet<'a>>(file: &str) -> Option<T> {
@@ -123,7 +130,12 @@ impl RigLibrary {
             write("midi.styx", &map);
             map
         });
-        Self { profile, drive_presets, songs, setlists, midi_map }
+        let keymap = read::<KeymapLib>("keymap.styx").map(|k| k.bindings).unwrap_or_else(|| {
+            let bindings = default_keymap();
+            write("keymap.styx", &KeymapLib { bindings: bindings.clone() });
+            bindings
+        });
+        Self { profile, drive_presets, songs, setlists, midi_map, keymap }
     }
 
     pub fn save_profile(profile: &ProfileDef) {

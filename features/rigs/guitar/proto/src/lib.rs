@@ -79,6 +79,13 @@ pub struct RigStatus {
     pub output_peak_r: f32,
 }
 
+/// One keyboard binding for the remotes to interpret.
+#[derive(Debug, Default, Clone, PartialEq, Facet)]
+pub struct KeyBinding {
+    pub keys: String,
+    pub action: String,
+}
+
 /// One footswitch stack (folder) in the performance grid — a named rotation
 /// of patches plus its live cursor/active state.
 #[derive(Clone, PartialEq, Debug, Facet)]
@@ -128,6 +135,9 @@ pub struct PerformanceModel {
     /// Perform-grid mode: 0 Preset (browse the pool), 1 Profile (stacks),
     /// 2 Setlist (song-adaptive: parts + stacks).
     pub perform_mode: u32,
+    /// Keyboard bindings (keymap.styx) — "ctrl+1"-style keys → rig action
+    /// strings, interpreted by every remote.
+    pub key_bindings: Vec<KeyBinding>,
     /// The current song's section names (Intro, V1, Chorus, …).
     pub parts: Vec<String>,
     /// Index of the current section.
