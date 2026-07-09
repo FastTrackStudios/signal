@@ -72,8 +72,8 @@ keyflow = { path = "../../keyflow/crates/keyflow", optional = true }
 # standalone backend that plays the setlist without REAPER. "audio" is
 # required by daw-standalone's unconditional `sync` module (same
 # workaround session's dev-deps carry) and drives real cpal output.
-daw = { path = "../../daw/crates/daw", optional = true }
-daw-standalone = { path = "../../daw/features/standalone/daw-standalone", features = ["bootstrap", "audio"], optional = true }
+daw = { path = "../../crates/daw/daw", optional = true }
+daw-standalone = { path = "../../features/standalone/daw-standalone", features = ["bootstrap", "audio"], optional = true }
 
 # Service framework — same sources as the daw/session workspaces so the
 # whole graph shares one architect + one vox.
@@ -91,14 +91,14 @@ eyre = { version = "0.6", optional = true }
 # references daw.git; fold its daw crates onto this tree so one daw
 # instance exists graph-wide.
 [patch."https://codeberg.org/FastTrackStudios/daw.git"]
-daw = { path = "../../daw/crates/daw" }
-daw-proto = { path = "../../daw/crates/daw-proto" }
-daw-module = { path = "../../daw/crates/daw-module" }
+daw = { path = "../../crates/daw/daw" }
+daw-proto = { path = "../../crates/daw/proto" }
+daw-module = { path = "../../crates/daw/module" }
 # The stale daw.git rev also carries daw-control/daw-reaper; left on git
 # they compile the OLD Tx-subscription API against the NEW path
 # daw-proto (stream modernization) and break — fold them in too.
-daw-control = { path = "../../daw/crates/daw-control" }
-daw-reaper = { path = "../../daw/features/backends/reaper/daw-reaper" }
+daw-control = { path = "../../crates/daw/control" }
+daw-reaper = { path = "../../features/reaper/daw-reaper" }
 
 # moire: FTS fork — tolerates broken frame-pointer chains on NixOS glibc.
 # All moire crates must point to the same fork rev to avoid duplicate
