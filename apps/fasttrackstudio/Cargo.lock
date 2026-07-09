@@ -12,16 +12,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "actions-proto"
-version = "0.1.0"
-source = "git+https://codeberg.org/FastTrackStudios/input_actions.git?branch=main#724ef8e34115fcde1e60e047ea364d56008e269a"
-dependencies = [
- "convert_case 0.6.0",
- "facet 0.50.0-rc.5",
- "vox",
-]
-
-[[package]]
 name = "addr2line"
 version = "0.25.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1275,7 +1265,6 @@ dependencies = [
 [[package]]
 name = "color-palette"
 version = "0.1.0"
-source = "git+https://codeberg.org/FastTrackStudios/dynamic-template.git?branch=main#5536a425e6560ca756f191137e6505fb1fb1739e"
 dependencies = [
  "facet 0.50.0-rc.5",
  "thiserror 2.0.18",
@@ -2005,7 +1994,7 @@ dependencies = [
 name = "daw-proto"
 version = "0.1.0"
 dependencies = [
- "actions-proto 0.1.0",
+ "actions-proto",
  "architect 0.1.0 (git+https://codeberg.org/FastTrackStudios/architect.git?branch=main)",
  "facet 0.50.0-rc.5",
  "futures",
@@ -2982,7 +2971,6 @@ checksum = "92773504d58c093f6de2459af4af33faa518c13451eb8f2b5698ed3d36e7c813"
 [[package]]
 name = "dynamic-template"
 version = "0.1.0"
-source = "git+https://codeberg.org/FastTrackStudios/dynamic-template.git?branch=main#5536a425e6560ca756f191137e6505fb1fb1739e"
 dependencies = [
  "anyhow",
  "architect 0.1.0 (git+https://codeberg.org/FastTrackStudios/architect.git?branch=main)",
@@ -3005,9 +2993,8 @@ dependencies = [
 [[package]]
 name = "dynamic-template-proto"
 version = "0.1.0"
-source = "git+https://codeberg.org/FastTrackStudios/dynamic-template.git?branch=main#5536a425e6560ca756f191137e6505fb1fb1739e"
 dependencies = [
- "actions-proto 0.1.0 (git+https://codeberg.org/FastTrackStudios/input_actions.git?branch=main)",
+ "actions-proto",
  "daw-proto",
  "facet 0.50.0-rc.5",
  "thiserror 2.0.18",
@@ -3053,7 +3040,7 @@ dependencies = [
 
 [[package]]
 name = "engraver-proto"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "anyrender",
  "bitflags 2.13.0",
@@ -5237,7 +5224,7 @@ dependencies = [
 
 [[package]]
 name = "keyflow"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "color-eyre",
  "colored",
@@ -5257,11 +5244,11 @@ dependencies = [
 
 [[package]]
 name = "keyflow-chordpro"
-version = "0.0.1"
+version = "0.1.0"
 
 [[package]]
 name = "keyflow-daw-analysis"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "architect 0.1.0 (git+https://codeberg.org/FastTrackStudios/architect.git?branch=main)",
  "daw",
@@ -5274,7 +5261,7 @@ dependencies = [
 
 [[package]]
 name = "keyflow-midi"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "keyflow-proto",
  "keyflow-text",
@@ -5300,7 +5287,7 @@ dependencies = [
 
 [[package]]
 name = "keyflow-syntax"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "facet 0.50.0-rc.5",
  "serde",
@@ -5309,7 +5296,7 @@ dependencies = [
 
 [[package]]
 name = "keyflow-text"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "keyflow-chordpro",
  "keyflow-proto",
@@ -6148,7 +6135,6 @@ dependencies = [
 [[package]]
 name = "monarchy"
 version = "0.1.0"
-source = "git+https://codeberg.org/FastTrackStudios/monarchy.git?branch=main#9268a0736aa0d3d00ad5f455e4d1dbee9620ae48"
 dependencies = [
  "facet 0.50.0-rc.5",
  "monarchy_derive",
@@ -6161,7 +6147,6 @@ dependencies = [
 [[package]]
 name = "monarchy_derive"
 version = "0.1.0"
-source = "git+https://codeberg.org/FastTrackStudios/monarchy.git?branch=main#9268a0736aa0d3d00ad5f455e4d1dbee9620ae48"
 dependencies = [
  "convert_case 0.6.0",
  "proc-macro2",
@@ -6225,7 +6210,6 @@ dependencies = [
 [[package]]
 name = "music-catalog"
 version = "0.1.0"
-source = "git+https://codeberg.org/FastTrackStudios/dynamic-template.git?branch=main#5536a425e6560ca756f191137e6505fb1fb1739e"
 dependencies = [
  "color-palette",
 ]
@@ -8796,7 +8780,7 @@ dependencies = [
 name = "session"
 version = "0.1.0"
 dependencies = [
- "actions-proto 0.1.0",
+ "actions-proto",
  "architect 0.1.0 (git+https://codeberg.org/FastTrackStudios/architect.git?branch=main)",
  "chrono",
  "daw",
@@ -8839,7 +8823,7 @@ dependencies = [
 name = "session-proto"
 version = "0.1.0"
 dependencies = [
- "actions-proto 0.1.0",
+ "actions-proto",
  "architect 0.1.0 (git+https://codeberg.org/FastTrackStudios/architect.git?branch=main)",
  "daw-proto",
  "eyre",
@@ -9005,7 +8989,7 @@ dependencies = [
 name = "signal-proto"
 version = "0.1.0"
 dependencies = [
- "actions-proto 0.1.0",
+ "actions-proto",
  "facet 0.50.0-rc.5",
  "serde",
  "signal-macromod",
