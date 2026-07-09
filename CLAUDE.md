@@ -7,7 +7,10 @@ git dep on anything that lives in this tree.
 ## Layout
 
 ```
-signal/        live guitar rig (chains, NAM, perform surfaces, rigd)
+crates/signal/ signal domain core (facade+proto+ui+live+storage+...)
+features/fx|rigs|sampler|nam|plugin-host/  signal capabilities (built-in
+               FX, live rigs, sampler engine, NAM models, plugin hosting)
+apps/rigd  apps/signal-web   headless rig daemon + its browser remote
 daw/           engine core, audio-io, proto, standalone, reaper backend
 session/       setlists, songs, charts — session domain + gateway
 keyflow/       chart/keys analysis + writing (+ engraver)
@@ -48,14 +51,65 @@ sibling checkout).
 Per-domain, from the domain dir (each is its own workspace for now):
 
 ```bash
-cd signal  && cargo check --workspace     # rig
-cd session && cargo check --workspace     # session domain
-cd apps/fasttrackstudio && cargo check    # the unified app
+cargo check --workspace --exclude vox-discover   # the root workspace (rig, daw, session, ...)
+cargo build -p signal-rigd                       # the headless rig daemon
+cd apps/fasttrackstudio && cargo check           # the unified app
 ```
 
-Live rig: `signal/target/debug/signal-rigd` (ws://:4040/vox), web remote
-built with `cd signal/apps/web && dx build --platform web`, config in
-`~/.config/signal/rig/*.styx`.
+Live rig: `cargo build -p signal-rigd` from the repo root →
+`target/debug/signal-rigd` (ws://:4040/vox); web remote built with
+`cd apps/signal-web && dx build --platform web`, config in
+`~/.config/signal/rig/*.styx`. (The PREVIOUS deployment ran from
+`signal/target/debug/signal-rigd` — that gitignored target/ dir is left
+in place so a running rigd keeps its binary.)
+
+## Signal domain rules (from the dissolved signal/CLAUDE.md)
+
+Signal is the signal-chain / plugin-management domain: `crates/signal/*`
+(facade `signal` + proto/ui/live/storage/controller/import/browser/grid/
+grid-ui/daw-bridge), `features/{fx,rigs,sampler,nam,plugin-host}`,
+`features/reaper/signal-*`, `apps/rigd`, `apps/signal-web`. The `signal`
+facade is the only public API surface: apps depend on `signal`,
+`signal-ui`, or `signal-sampler`, never on the internal domain crates.
+Docs: `crates/signal/docs/` (DESIGN.md, DOMAIN.md).
+
+**Detachable GUI (STRICT)**: the rig core is 100% headless; every GUI is
+a vox remote via architect (`signal-guitar-proto` is the wire contract;
+`apps/rigd` serves the router; browser/desktop/tablet UIs are clients).
+
+**GUI rendering** — signal UI must render identically standalone, as a
+VST3/CLAP plugin, and embedded in REAPER, so all contexts share one
+pipeline: `nice-plug-dioxus` → Blitz (Vello + wgpu) → baseview:
+
+- Never `dioxus::desktop::LaunchBuilder` (WebKit/WRY breaks VST parity);
+  standalone windows use `nice_plug_dioxus::open_standalone_with_state`.
+- **Inline styles only in signal UI crates** — Blitz does not load
+  external CSS files reliably. Inline `style="..."` or embed CSS as a
+  static string via `document::Style { {CSS_STR} }`; never
+  `document::Stylesheet { href: ... }`, no Tailwind `asset!()` calls
+  (embed via `include_str!()`).
+- Components must render correctly without Tailwind — explicit style
+  values for layout-critical properties; Tailwind classes are additive
+  only (built via `just tailwind` → `apps/signal-web/assets/tailwind.css`).
+- Root `App` components take no props (context via `use_context_provider`)
+  so the same component works standalone and as a plugin editor.
+
+**Platform targets** — processing-core crates (`daw-audio-graph`,
+signal DSP cores in `features/fx/*-dsp`, sampler engine) must support
+native, WASM/AudioWorklet, and embedded `no_std`:
+
+- `#![no_std]` + `alloc` compatible; gate unavoidable `std` behind an
+  additive `std` feature.
+- No heap allocation on the hot path — pre-allocate at `reset()`;
+  `process()` never calls `Vec::push`/`Box::new`.
+- No threads — the graph is driven synchronously by whichever callback
+  owns it. No `moire::task::spawn` inside processing crates.
+- No platform I/O in processing crates — `cpal`/`web-sys`/MIDI drivers
+  live only in adapter crates (rigd, signal-web, future embedded).
+- Keep the `AudioNode: Send` bound.
+
+**RPC**: service traits use `#[architect::rpc]`; max 4 params per method
+(Facet constraint); `Tx<T>`/`Rx<T>` for streaming.
 
 ## Active modernization queue
 
@@ -88,7 +142,9 @@ built with `cd signal/apps/web && dx build --platform web`, config in
 
 1. Root workspace: merge domain workspaces into one root Cargo.toml —
    single lockfile, shared `target/`, one `[workspace.dependencies]`.
-   Start from the leaves (audiocore → midicore → input → daw → …).
+   DONE through wave 4 (libs, audiocore/midicore/input, daw, session,
+   keyflow, signal); remaining: apps/fasttrackstudio, FastTrackStudio,
+   Plugins.
 2. Feature-gate heavy backends (reaper, standalone-audio) so cold builds
    only compile what's used.
 3. Retire `FastTrackStudio/apps/*` (old app; hand-rolled vox) in favor
