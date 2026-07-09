@@ -24,10 +24,11 @@ enum Mode {
     Routing,
     /// Play & shape it: the control surface (default).
     Control,
-    /// Full-screen footswitch grid.
+    /// Full-screen footswitch grid (Preset/Profile/Setlist select this
+    /// view AND the grid's perform mode).
     Perform,
-    /// The set: songs + sections, full page.
-    Setlist,
+    /// Integration layer (DAW sync, external control) — landing here.
+    Session,
 }
 
 /// The remote rig UI. Prop-less: everything arrives via context
@@ -241,13 +242,36 @@ pub fn GuitarRigRemote() -> Element {
                     span { class: "text-xs font-bold tracking-wide whitespace-nowrap", "{lens_label}" }
                 }
 
-                // View switcher — one segmented control.
+                // Play group: Preset / Profile / Setlist — jumps to the
+                // perform grid in that mode (synced to every remote).
+                div { class: "flex items-center rounded-md border border-border bg-background/40 p-0.5 gap-0.5 ml-1",
+                    for (pm, label) in [(0u32, "Preset"), (1, "Profile"), (2, "Setlist")] {
+                        button {
+                            key: "{label}",
+                            class: if mode() == Mode::Perform && perf_now.perform_mode == pm {
+                                "rounded px-2.5 py-1 text-xs font-semibold bg-accent text-accent-foreground"
+                            } else {
+                                "rounded px-2.5 py-1 text-xs text-muted-foreground hover:text-foreground"
+                            },
+                            onclick: {
+                                let rig = rig.clone();
+                                move |_| {
+                                    mode.set(Mode::Perform);
+                                    if let Some(r) = rig.clone() {
+                                        spawn(async move { let _ = r.set_perform_mode(pm).await; });
+                                    }
+                                }
+                            },
+                            "{label}"
+                        }
+                    }
+                }
+                // Work group: Routing / Control / Session.
                 div { class: "flex items-center rounded-md border border-border bg-background/40 p-0.5 gap-0.5 ml-1",
                     for (m, label) in [
                         (Mode::Routing, "Routing"),
                         (Mode::Control, "Control"),
-                        (Mode::Perform, "Perform"),
-                        (Mode::Setlist, "Setlist"),
+                        (Mode::Session, "Session"),
                     ] {
                         button {
                             key: "{label}",
@@ -358,8 +382,18 @@ pub fn GuitarRigRemote() -> Element {
                             on_next_song,
                             on_select_song,
                         }
-                    } else if mode() == Mode::Setlist {
-                        // Full-page set management: songs left, sections right.
+                    } else if mode() == Mode::Session {
+                        // Integration layer — DAW sync, external control,
+                        // show automation. Landing page for now.
+                        div { class: "flex flex-col items-center justify-center h-full gap-2",
+                            span { class: "text-lg font-bold text-muted-foreground", "Session" }
+                            span { class: "text-xs text-muted-foreground",
+                                "The integration layer — DAW sync, show control, and external automation land here."
+                            }
+                        }
+                    } else if false {
+                        // (retired full-page set view — management lives in
+                        // the Setlist mode sidebar now)
                         div { class: "grid grid-cols-2 gap-4 h-full min-h-0",
                             div { class: "flex flex-col rounded-xl border border-border bg-card min-h-0 overflow-hidden",
                                 div { class: "flex items-center gap-1 px-3 py-2 border-b border-border",

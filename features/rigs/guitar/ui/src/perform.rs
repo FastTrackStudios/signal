@@ -192,26 +192,9 @@ pub fn PerformGrid(
 
     rsx! {
         div { class: "flex flex-col h-full min-h-0 gap-2",
-        // Mode switcher: Preset (pool browsing) · Profile (stacks) ·
-        // Setlist (song-adaptive parts + stacks).
-        div { class: "flex items-center gap-1 flex-shrink-0",
-            for (m, label) in [(0u32, "Preset"), (1, "Profile"), (2, "Setlist")] {
-                button {
-                    key: "{m}",
-                    class: if mode == m {
-                        "px-3 py-1 rounded-md text-xs font-bold bg-accent text-accent-foreground"
-                    } else {
-                        "px-3 py-1 rounded-md text-xs text-muted-foreground border border-border hover:bg-accent/40"
-                    },
-                    onclick: {
-                        let set_mode = set_mode.clone();
-                        move |_| set_mode(m)
-                    },
-                    "{label}"
-                }
-            }
-            if mode == 2 {
-                span { class: "ml-2 text-xs text-muted-foreground truncate", "{current_song} · {song_pos}" }
+        if mode == 2 {
+            div { class: "flex items-center gap-2 flex-shrink-0",
+                span { class: "text-xs text-muted-foreground truncate", "{current_song} · {song_pos}" }
             }
         }
 
