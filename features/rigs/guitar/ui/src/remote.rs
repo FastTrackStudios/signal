@@ -475,12 +475,15 @@ pub fn GuitarRigRemote() -> Element {
                                 if mode() == Mode::Routing {
                                     crate::grid::RigGraph { blocks: blocks() }
                                 } else if mode() == Mode::Session {
-                                    // Integration layer — DAW sync, external
-                                    // control, show automation. Landing page.
+                                    // Integration layer: the session domain's
+                                    // performance view (songs, sections,
+                                    // charts/chords) lands here once session
+                                    // aligns to the fleet's facet/vox pins —
+                                    // see apps/web/src/session_client.rs.
                                     div { class: "flex flex-col items-center justify-center h-full gap-2 rounded-xl border border-border bg-card",
                                         span { class: "text-lg font-bold text-muted-foreground", "Session" }
                                         span { class: "text-xs text-muted-foreground",
-                                            "The integration layer — DAW sync, show control, and external automation land here."
+                                            "Session-engine performance view (songs · charts · chords) — pending the session repo's facet/vox alignment."
                                         }
                                     }
                                 } else {
