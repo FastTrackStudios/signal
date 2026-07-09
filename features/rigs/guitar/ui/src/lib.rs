@@ -14,6 +14,7 @@ mod grid;
 mod knob;
 mod icons;
 mod meters;
+mod palette;
 mod perform;
 mod remote;
 mod settings;

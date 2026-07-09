@@ -272,6 +272,7 @@ mod tests {
                 output_device: String::new(),
                 sample_rate: 48_000,
                 buffer_size: 256,
+                ..Default::default()
             },
             profile_path: "testing.styx".into(),
             library_path: String::new(),

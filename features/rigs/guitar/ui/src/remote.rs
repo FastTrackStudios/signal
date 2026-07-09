@@ -44,6 +44,7 @@ pub fn GuitarRigRemote() -> Element {
     let mut mode = use_signal(|| Mode::Control);
     let mut audio_open = use_signal(|| false);
     let mut left_open = use_signal(|| true);
+    let palette_open = use_signal(|| false);
     let mut right_open = use_signal(|| true);
 
     // Device lists, fetched once over the settings service.
@@ -211,7 +212,29 @@ pub fn GuitarRigRemote() -> Element {
     });
 
     rsx! {
-        div { class: "flex flex-col h-full bg-background text-foreground",
+        div {
+            class: "flex flex-col h-full bg-background text-foreground outline-none",
+            tabindex: "0",
+            // Grab focus on mount so Cmd/Ctrl+P works before any click.
+            onmounted: move |e| {
+                spawn(async move {
+                    let _ = e.data().set_focus(true).await;
+                });
+            },
+            // Cmd/Ctrl+P: the command palette.
+            onkeydown: {
+                let mut palette_open = palette_open;
+                move |e: KeyboardEvent| {
+                    let mods = e.modifiers();
+                    if e.key() == Key::Character("p".to_string())
+                        && (mods.ctrl() || mods.meta())
+                    {
+                        e.prevent_default();
+                        palette_open.toggle();
+                    }
+                }
+            },
+            crate::palette::CommandPalette { model: perf_now.clone(), open: palette_open }
             // Top bar
             header {
                 class: "flex items-center gap-2 px-2 py-1.5 border-b border-border bg-card",
@@ -326,6 +349,17 @@ pub fn GuitarRigRemote() -> Element {
                             "Boost +{perf_now.boost_db as i32} dB"
                         }
                     }
+                }
+
+                // Command palette (also Cmd/Ctrl+P).
+                button {
+                    class: "flex items-center justify-center h-7 px-2 rounded-md border border-border text-muted-foreground hover:text-foreground text-[10px] font-mono",
+                    title: "Command palette",
+                    onclick: {
+                        let mut palette_open = palette_open;
+                        move |_| palette_open.toggle()
+                    },
+                    "⌘P"
                 }
 
                 // Reload the styx rig library (external edits: text
