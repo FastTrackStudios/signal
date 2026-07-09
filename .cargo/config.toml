@@ -1,0 +1,4 @@
+# Carried over from the dissolved daw/ workspace: the moire fork needs
+# intact frame-pointer chains for trace capture on NixOS glibc.
+[build]
+rustflags = ["-C", "force-frame-pointers=yes"]
