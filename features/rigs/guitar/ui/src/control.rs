@@ -175,7 +175,7 @@ fn StereoMeter(label: &'static str, l_db: f32, r_db: f32, #[props(default)] mute
     let max_db = l_db.max(r_db);
     rsx! {
         div { class: "flex flex-col items-center h-full min-h-0 w-full",
-            span { class: "text-[8px] font-semibold uppercase tracking-wider text-muted-foreground", "{label}" }
+            span { class: "text-[6px] font-semibold uppercase text-muted-foreground whitespace-nowrap", style: "letter-spacing: 0.2px;", "{label}" }
             // Two thin bars — the pair reads as one meter's width.
             div { class: "flex flex-1 min-h-0 bg-black/60 border border-border overflow-hidden",
                 style: "width: 17px;",
@@ -189,7 +189,7 @@ fn StereoMeter(label: &'static str, l_db: f32, r_db: f32, #[props(default)] mute
                         style: "height: {rp}%; background-color: {rc};" }
                 }
             }
-            span { class: "text-[8px] font-mono text-muted-foreground",
+            span { class: "text-[6px] font-mono text-muted-foreground",
                 if max_db <= -89.0 { "−∞" } else { {format!("{max_db:.0}")} }
             }
         }
@@ -376,8 +376,10 @@ fn VFader(
     rsx! {
         // Fixed column width = the bar itself; labels overflow either side
         // without pushing the neighbouring meter away.
-        div { class: "flex flex-col items-center h-full min-h-0 min-w-0 flex-shrink-0", style: "width: 9px;",
-            span { class: "text-[7px] font-semibold uppercase text-muted-foreground whitespace-nowrap", "{label}" }
+        div { class: "flex flex-col items-center h-full min-h-0 min-w-0 flex-shrink-0", style: "width: 15px;",
+            // Top lane stays empty (meter labels own it) — fader labels
+            // stack under the bar with the readout.
+            span { class: "text-[6px]", style: "visibility: hidden;", "·" }
             div {
                 class: "relative flex-1 w-2 bg-black/60 border border-border min-h-0 cursor-ns-resize touch-none",
                 onmounted: move |e| el.set(Some(e.data())),
@@ -408,7 +410,8 @@ fn VFader(
                     onpointerup: move |_| tracking.set(None),
                 }
             }
-            span { class: "text-[8px] font-mono text-muted-foreground", "{readout}" }
+            span { class: "text-[6px] font-semibold uppercase text-muted-foreground whitespace-nowrap", style: "letter-spacing: 0.2px;", "{label}" }
+            span { class: "text-[6px] font-mono text-muted-foreground whitespace-nowrap", "{readout}" }
         }
     }
 }
@@ -564,6 +567,8 @@ fn PKnob(
     label: &'static str,
     p: BlockParam,
     #[props(default)] fmt: Option<fn(f32) -> String>,
+    /// Strip-embedded: tiny body, no numeric readout.
+    #[props(default)] tiny: bool,
 ) -> Element {
     let rig = use_hook(try_consume_context::<RigClient>);
     rsx! {
@@ -572,7 +577,8 @@ fn PKnob(
             value: p.value,
             min: p.min,
             max: p.max,
-            size: crate::knob::KnobSize::Small,
+            hide_value: tiny,
+            size: if tiny { crate::knob::KnobSize::Tiny } else { crate::knob::KnobSize::Small },
             fmt,
             on_change: Callback::new(move |v: f32| {
                 if let Some(r) = rig.clone() {
@@ -1071,7 +1077,7 @@ fn ModGroupPanel(
                 }
             }
             // LFO trace — flat and labeled while the group is bypassed.
-            div { class: "relative flex-1 min-h-0",
+            div { class: "relative flex-1", style: "min-height: 14px;",
                 svg { class: "w-full h-full", view_box: "0 0 200 52", preserve_aspect_ratio: "none",
                     line { x1: "0", y1: "26", x2: "200", y2: "26", stroke: "#27272a", stroke_width: "1" }
                     path {
@@ -1084,8 +1090,8 @@ fn ModGroupPanel(
                 }
                 if !engaged {
                     span {
-                        class: "absolute inset-0 flex items-center justify-center text-[9px] uppercase tracking-wider",
-                        style: "color: #52525b;",
+                        class: "absolute inset-0 flex items-center justify-center text-[8px] uppercase tracking-[2px]",
+                        style: "color: #3f3f46;",
                         "bypassed"
                     }
                 }
@@ -1093,16 +1099,17 @@ fn ModGroupPanel(
             // Mix + Speed.
             div { class: "flex items-end justify-around px-1 pb-0.5 flex-shrink-0 gap-1",
                 if let Some(p) = param(&cur, "mix") {
-                    PKnob { block_id: cur.id.clone(), name: "mix", label: "Mix", p }
+                    PKnob { block_id: cur.id.clone(), name: "mix", label: "Mix", p, tiny: true }
                 } else if let Some(p) = param(&cur, "depth") {
-                    PKnob { block_id: cur.id.clone(), name: "depth", label: "Mix", p }
+                    PKnob { block_id: cur.id.clone(), name: "depth", label: "Mix", p, tiny: true }
                 }
                 if tempo_divisions {
                     // Speed as a note division, mapped to Hz from the tempo.
                     div { class: "flex flex-col gap-0.5",
                         span { style: "font-size:8px; font-weight:600; text-transform:uppercase; color:#8a8a92;", "Speed" }
                         select {
-                            class: "bg-transparent border border-border rounded-sm text-[10px] px-0.5 py-0",
+                            class: "bg-background border border-border rounded-sm text-[9px] px-0.5",
+                            style: "height: 16px; line-height: 1;",
                             value: "{cur_div}",
                             onchange: {
                                 let rig = rig.clone();
@@ -1130,6 +1137,7 @@ fn ModGroupPanel(
                         name: "rate",
                         label: "Speed",
                         p,
+                        tiny: true,
                         fmt: Some((|v| format!("{v:.2}Hz")) as fn(f32) -> String),
                     }
                 }
@@ -1501,7 +1509,7 @@ pub fn ControlView(
             // then the phones group — mix fader | phones meter | guitar
             // (self) fader.
             div {
-                style: "width: 46px; flex-shrink: 0; display: flex; flex-direction: column; align-items: center; gap: 2px; min-height: 0;",
+                style: "width: 58px; flex-shrink: 0; display: flex; flex-direction: column; align-items: center; gap: 3px; min-height: 0; padding: 0 2px;",
                 button {
                     class: if hp.main_mute {
                         "w-9 rounded px-0.5 py-0.5 text-[8px] font-bold uppercase ring-2 ring-red-500"
@@ -1519,7 +1527,7 @@ pub fn ControlView(
                     },
                     if hp.main_mute { "Muted" } else { "Mute" }
                 }
-                div { style: "flex: 1 1 0%; min-height: 0; width: 100%; display: flex; justify-content: center;",
+                div { style: "flex: 1 1 0%; min-height: 0; width: 100%; display: flex; justify-content: center; gap: 3px;",
                     VFader {
                         label: "Trim",
                         value: (model.master_trim_db + 24.0) / 36.0,
@@ -1540,7 +1548,7 @@ pub fn ControlView(
                         muted: hp.main_mute,
                     }
                 }
-                div { style: "flex: 1 1 0%; min-height: 0; width: 100%; display: flex; justify-content: center;",
+                div { style: "flex: 1 1 0%; min-height: 0; width: 100%; display: flex; justify-content: center; gap: 3px;",
                     VFader {
                         label: "Mix",
                         value: hp.volume,

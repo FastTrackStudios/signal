@@ -241,6 +241,9 @@ pub fn LeftSidebar(model: PerformanceModel) -> Element {
                             }
                                 }
                             }
+                            if patches.is_empty() {
+                                span { class: "ml-6 text-[10px] italic text-muted-foreground/50", "empty — + patch" }
+                            }
                             // Variations: everything after the main, shown
                             // without the stack-name prefix.
                             for (i, p) in patches.iter().skip(1) {

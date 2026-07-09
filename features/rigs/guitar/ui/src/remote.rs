@@ -122,7 +122,25 @@ pub fn GuitarRigRemote() -> Element {
         .map(|s| crate::perform::folder_color(&s.name))
         .unwrap_or(("#27272a", "#e4e4e7"));
     let lens_label = match active_stack {
-        Some(s) => format!("{} · {}", s.name.to_uppercase(), s.current_patch),
+        Some(s) => {
+            // Folder-as-main naming: the stack IS the sound; variations
+            // show their short name ("CLEAN · Verb", plain "CLEAN" on main).
+            let patch = &s.current_patch;
+            let lower = patch.to_lowercase();
+            let sl = s.name.to_lowercase();
+            let short = if lower == sl || lower == format!("{sl} default") || patch == "Default" {
+                String::new()
+            } else if lower.starts_with(&sl) && patch.len() > s.name.len() {
+                patch[s.name.len()..].trim().to_string()
+            } else {
+                patch.clone()
+            };
+            if short.is_empty() {
+                s.name.to_uppercase()
+            } else {
+                format!("{} · {}", s.name.to_uppercase(), short)
+            }
+        }
         None => state
             .active_patch
             .cloned()

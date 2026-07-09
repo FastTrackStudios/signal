@@ -494,9 +494,13 @@ fn StackTile(
                 class: if compact { "text-sm font-bold tracking-wide" } else { "text-2xl font-bold tracking-wide" },
                 "{stack.name}"
             }
-            span {
-                class: if compact { "text-[10px] font-semibold opacity-80" } else { "text-sm font-semibold opacity-90" },
-                "{stack.current_patch}"
+            // Folder-as-main: the stack name IS the main sound — only
+            // variations get a sub-label.
+            if stack.current_patch != "Default" && !stack.current_patch.eq_ignore_ascii_case(&stack.name) {
+                span {
+                    class: if compact { "text-[10px] font-semibold opacity-80" } else { "text-sm font-semibold opacity-90" },
+                    "{stack.current_patch}"
+                }
             }
             // The preset this patch points at + which modules it overrides.
             if !compact {

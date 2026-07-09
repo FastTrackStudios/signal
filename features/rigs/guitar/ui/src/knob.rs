@@ -11,6 +11,8 @@ use dioxus::prelude::*;
 /// Knob display size — audio-gui's diameters.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub enum KnobSize {
+    /// Strip-embedded: 24 px, pairs with hidden value readouts.
+    Tiny,
     Small,
     #[default]
     Medium,
@@ -20,6 +22,7 @@ pub enum KnobSize {
 impl KnobSize {
     fn diameter(self) -> f64 {
         match self {
+            Self::Tiny => 24.0,
             Self::Small => 32.0,
             Self::Medium => 48.0,
             Self::Large => 64.0,
@@ -27,6 +30,7 @@ impl KnobSize {
     }
     fn body_diameter(self) -> f64 {
         match self {
+            Self::Tiny => 15.0,
             Self::Small => 20.0,
             Self::Medium => 30.0,
             Self::Large => 42.0,
@@ -34,6 +38,7 @@ impl KnobSize {
     }
     fn arc_stroke(self) -> f64 {
         match self {
+            Self::Tiny => 2.5,
             Self::Small => 3.0,
             Self::Medium => 3.5,
             Self::Large => 4.0,
@@ -41,6 +46,7 @@ impl KnobSize {
     }
     fn track_stroke(self) -> f64 {
         match self {
+            Self::Tiny => 2.0,
             Self::Small => 2.5,
             Self::Medium => 3.0,
             Self::Large => 3.5,
@@ -86,6 +92,8 @@ pub fn Knob(
     max: f32,
     on_change: Callback<f32>,
     #[props(default)] size: KnobSize,
+    /// Hide the numeric readout (tight strips show label only).
+    #[props(default)] hide_value: bool,
     /// Value formatter override (default `{:.1}`).
     #[props(default)] fmt: Option<fn(f32) -> String>,
     /// Accent color override.
@@ -218,11 +226,13 @@ pub fn Knob(
                 }
             }
 
-            span {
-                style: "font-family: ui-monospace, monospace; font-size: 10px; \
-                        font-variant-numeric: tabular-nums; color: #e8e8ec; \
-                        min-width: 36px; text-align: center;",
-                "{display}"
+            if !hide_value {
+                span {
+                    style: "font-family: ui-monospace, monospace; font-size: 10px; \
+                            font-variant-numeric: tabular-nums; color: #e8e8ec; \
+                            min-width: 36px; text-align: center;",
+                    "{display}"
+                }
             }
         }
     }
