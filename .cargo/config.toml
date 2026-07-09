@@ -3,3 +3,8 @@ xtask = "run --package xtask --"
 
 [net]
 git-fetch-with-cli = true
+
+# getrandom 0.3 on wasm needs the js backend selected via cfg (paired
+# with the crate's "wasm_js" feature in consumers).
+[target.wasm32-unknown-unknown]
+rustflags = ['--cfg', 'getrandom_backend="wasm_js"']
