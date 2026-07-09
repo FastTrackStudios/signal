@@ -201,6 +201,13 @@ pub fn CommandPalette(
                     placeholder: prompt.unwrap_or("Type a command, patch, song…"),
                     value: "{query}",
                     autofocus: true,
+                    // autofocus is ignored on dynamically-inserted nodes —
+                    // grab focus explicitly every time the palette mounts.
+                    onmounted: move |e| {
+                        spawn(async move {
+                            let _ = e.data().set_focus(true).await;
+                        });
+                    },
                     oninput: move |e| {
                         query.set(e.value());
                         cursor.set(0);
