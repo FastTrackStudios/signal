@@ -195,11 +195,34 @@ pub fn LeftSidebar(model: PerformanceModel) -> Element {
                         let (dot, _) = folder_color(stack_name);
                         let stack_label = stack_name.clone();
                         rsx! {
-                            div { class: "group flex items-center gap-2 pl-4 pr-2 pt-2 pb-0.5",
+                            {
+                                // The folder IS the stack's main patch —
+                                // clickable, default, no "Clean Clean" names.
+                                let main = patches.first().cloned();
+                                let main_active = main.as_ref().map(|(_, p)| p.active).unwrap_or(false);
+                                let main_idx = main.as_ref().map(|(i, _)| *i);
+                                let main_preset = main.as_ref().map(|(_, p)| p.preset.clone()).unwrap_or_default();
+                                rsx! {
+                            div {
+                                class: if main_active {
+                                    "group flex items-center gap-2 pl-2 pr-2 pt-2 pb-0.5 rounded-md bg-accent text-accent-foreground cursor-pointer"
+                                } else {
+                                    "group flex items-center gap-2 pl-2 pr-2 pt-2 pb-0.5 rounded-md cursor-pointer hover:bg-accent/30"
+                                },
+                                onclick: {
+                                    let rig = rig.clone();
+                                    move |_| {
+                                        if let (Some(r), Some(i)) = (rig.clone(), main_idx) {
+                                            selected_patch.set(Some(i));
+                                            spawn(async move { let _ = r.select_patch(i as u32).await; });
+                                        }
+                                    }
+                                },
                                 span { class: "w-2 h-2 rounded-full flex-shrink-0", style: "background-color: {dot};" }
-                                span { class: "text-[10px] font-semibold uppercase tracking-wider text-muted-foreground",
+                                span { class: "text-xs font-bold uppercase tracking-wider",
                                     "{stack_label}"
                                 }
+                                span { class: "ml-auto text-[9px] font-mono opacity-50 truncate max-w-[80px]", "{main_preset}" }
                                 span {
                                     class: "ml-auto text-[10px] opacity-0 group-hover:opacity-60 hover:!opacity-100 cursor-pointer",
                                     title: "Delete stack (patches stay)",
@@ -216,10 +239,23 @@ pub fn LeftSidebar(model: PerformanceModel) -> Element {
                                     "✕"
                                 }
                             }
-                            for (i, p) in patches.iter() {
+                                }
+                            }
+                            // Variations: everything after the main, shown
+                            // without the stack-name prefix.
+                            for (i, p) in patches.iter().skip(1) {
                                 {
                                     let i = *i;
                                     let name = p.name.clone();
+                                    let display = {
+                                        let lower = p.name.to_lowercase();
+                                        let sl = stack_name.to_lowercase();
+                                        if lower.starts_with(&sl) && p.name.len() > stack_name.len() {
+                                            p.name[stack_name.len()..].trim().to_string()
+                                        } else {
+                                            p.name.clone()
+                                        }
+                                    };
                                     let preset = p.preset.clone();
                                     let is_default = p.default_in_stack;
                                     let is_sel = selected_patch() == Some(i);
@@ -276,7 +312,7 @@ pub fn LeftSidebar(model: PerformanceModel) -> Element {
                                                             renaming.set(Some(("patch".to_string(), name.clone())));
                                                         }
                                                     },
-                                                    "{name}"
+                                                    "{display}"
                                                 }
                                             }
                                             // The stack's default — where the
