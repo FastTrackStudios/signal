@@ -485,7 +485,8 @@ pub fn GuitarRigRemote() -> Element {
                     }
                 }
                 }
-                if right_open() {
+                // The setlist/parts sidebar only matters in Setlist mode.
+                if right_open() && perf_now.perform_mode == 2 {
                     crate::sidebars::RightSidebar { model: perf_now.clone() }
                 }
             }
