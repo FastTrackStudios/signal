@@ -63,6 +63,32 @@ rig-devices:
 rig-setup name *args:
     cargo run -p signal-sampler --example guitar_rig -- --rig "{{name}}" {{args}} --write-config
 
+# ── Website (apps/site → fasttrackstudio.app) ───────────────────────────
+
+# Dev server for the website (dioxus, live reload)
+site-serve:
+    cd apps/site && dx serve --platform web
+
+# Production web build of the website
+site-build:
+    cd apps/site && dx build --platform web --release
+
+# ── Docs site (apps/docs-site → docs.fasttrackstudio.app) ───────────────
+# kf docs (kf-block → SVG pre-render) + dodeca (`ddc`). See
+# apps/docs-site/README.md.
+
+# Build the unified docs site → apps/docs-site/output
+docs-build:
+    apps/docs-site/build.sh
+
+# Docs dev loop — kf-block watcher + ddc live reload on :8080
+docs-serve:
+    apps/docs-site/serve.sh
+
+# Build + deploy the docs site to fly.io (app: fts-docs)
+docs-deploy:
+    apps/docs-site/deploy.sh
+
 # ── Build ────────────────────────────────────────────────────────────────
 
 # Check the whole workspace compiles
