@@ -248,7 +248,10 @@ pub fn GuitarRigRemote() -> Element {
                     for (pm, label) in [(0u32, "Preset"), (1, "Profile"), (2, "Setlist")] {
                         button {
                             key: "{label}",
-                            class: if mode() == Mode::Perform && perf_now.perform_mode == pm {
+                            // The play mode is always one of the three —
+                            // highlight it regardless of which work view is
+                            // up (brighter when the grid itself is showing).
+                            class: if perf_now.perform_mode == pm {
                                 "rounded px-2.5 py-1 text-xs font-semibold bg-accent text-accent-foreground"
                             } else {
                                 "rounded px-2.5 py-1 text-xs text-muted-foreground hover:text-foreground"
