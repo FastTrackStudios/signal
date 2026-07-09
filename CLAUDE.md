@@ -24,9 +24,12 @@ attic/     parked code (dead apps, legacy shells) — excluded, never built
 docs/      cross-domain guides (facet, styx, tracey, spec/)
 ```
 
-**architect stays external** at `../architect` (consumed like a
-crates.io dep; per-domain `[patch]` blocks point the codeberg URL at the
-sibling checkout).
+**architect lives in-tree** at `libs/architect/` (subtree-imported with
+history; `architect` + derive macros + atom/form/auth/crdt are ordinary
+workspace members, consumed as `architect.workspace = true`). Framework
+changes are ordinary in-tree refactors — no patch blocks, no sibling
+checkout. External consumers (the `task` project) take a git dep on this
+monorepo.
 
 ## Rules
 
