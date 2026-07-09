@@ -26,9 +26,12 @@ tailwind-watch:
 #
 # NOTE: needs `libpipewire` on PKG_CONFIG_PATH for `--features pipewire`.
 
-# The headless rig daemon (serves the vox router on ws://:4040/vox).
-rigd:
-    cargo run -p signal-rigd
+# The signal engine — the headless rig core (serves the vox router on
+# ws://:4040/vox). `rigd` kept as an alias for muscle memory.
+signal-engine:
+    cargo run -p signal-engine
+
+alias rigd := signal-engine
 
 # Open the default guitar rig (Yamaha TF ch4 → NAM amps)
 guitar: (rig "Guitar Rig")

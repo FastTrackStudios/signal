@@ -25,7 +25,17 @@ full = ["signal", "session"]
 # signal also force-enables session-ui/desktop: signal-guitar-ui pulls
 # session-ui (default-features off), which only compiles with its dioxus
 # renderer feature on (dock-dioxus needs "web" for its prelude).
-signal = ["dep:signal-guitar-proto", "dep:signal-guitar-ui", "dep:session-ui"]
+signal = [
+    "dep:signal-guitar-proto",
+    "dep:signal-guitar-ui",
+    "dep:session-ui",
+    # The embedded rig remote (rig_view.rs) — vox over a native WebSocket —
+    # and the engine supervisor (engines.rs).
+    "dep:vox-core",
+    "dep:vox-websocket",
+    "dep:engine-launcher",
+    "dep:architect",
+]
 session = [
     "dep:session-proto",
     "dep:session-ui",
@@ -81,8 +91,13 @@ daw-standalone = { workspace = true, features = ["bootstrap", "audio"], optional
 # Service framework — the root workspace's architect + vox (patched to the
 # sibling ../architect checkout at the root) so the whole graph shares one
 # architect + one vox.
-architect = { workspace = true, features = ["vox", "local"], optional = true }
+architect = { workspace = true, features = ["vox", "local", "platform"], optional = true }
 vox = { workspace = true, optional = true }
+vox-core = { workspace = true, optional = true }
+vox-websocket = { workspace = true, optional = true }
+
+# Engine supervisor (spawn/stop/probe signal-engine) — shared with fts-cli.
+engine-launcher = { workspace = true, optional = true }
 
 tokio = { workspace = true, optional = true }
 eyre = { workspace = true, optional = true }
