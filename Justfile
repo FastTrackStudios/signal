@@ -355,6 +355,14 @@ reaper-integration-test-gui *args:
     FTS_REAPER_RESOURCES="{{ext_reaper_home}}" \
     cargo run -p fts-extensions-xtask -- --gui {{args}}
 
+# daw-domain REAPER integration tests (daw-bridge host, isolated rig
+# under target/fts-reaper-test): transport / tempo map / markers /
+# items / takes / routing / ext-state / action registry against a
+# live headless REAPER.
+daw-reaper-test *args:
+    FTS_REAPER_EXECUTABLE="{{justfile_directory()}}/apps/extensions/reaper-fts-extensions/scripts/reaper-test-wrapper.sh" \
+    cargo run -p daw-reaper-xtask -- {{args}}
+
 # ── Build ────────────────────────────────────────────────────────────────
 
 # Check the whole workspace compiles
