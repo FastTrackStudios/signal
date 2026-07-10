@@ -108,6 +108,18 @@ fn design_loop(f0: f64, b: f64, m: usize, d: f64, sr: f64) -> (usize, f32, f32) 
     (n as usize, ta as f32, a as f32)
 }
 
+#[derive(Clone, Copy)]
+struct HammerParams {
+    k_scale: f32,
+    p_exp: f32,
+    v_scale: f32,
+}
+impl Default for HammerParams {
+    fn default() -> Self {
+        Self { k_scale: 1.0, p_exp: 2.8, v_scale: 1.0 }
+    }
+}
+
 struct StringWaveguide {
     buf: Vec<f32>,
     n: usize,
@@ -120,6 +132,7 @@ struct StringWaveguide {
     sr: f32,
     exc: Vec<f32>,
     exc_pos: usize,
+    hammer: HammerParams,
 }
 
 impl StringWaveguide {
@@ -146,6 +159,7 @@ impl StringWaveguide {
             sr,
             exc: Vec::new(),
             exc_pos: 0,
+            hammer: HammerParams::default(),
         }
     }
 
@@ -154,11 +168,11 @@ impl StringWaveguide {
         let f0_est = self.sr / self.n as f32;
         let g = (f0_est / 220.0).clamp(0.1, 20.0);
         let m = (0.009 * g.powf(-0.3)).clamp(0.004, 0.014);
-        let k = (1.5e9 * g.powf(1.5)).clamp(1e7, 1e11);
-        let p_exp = 2.8f32;
+        let k = (self.hammer.k_scale * 1.5e9 * g.powf(1.5)).clamp(1e7, 1e12);
+        let p_exp = self.hammer.p_exp;
         let two_r = 10.0f32;
         let dt = 1.0 / self.sr;
-        let v0 = 1.2 + 4.3 * vel01;
+        let v0 = self.hammer.v_scale * (1.2 + 4.3 * vel01);
         let (mut xh, mut vh, mut ys) = (0.0f32, v0, 0.0f32);
         let mut pulse: Vec<f32> = Vec::with_capacity(256);
         let g_exc = 0.02;
@@ -300,6 +314,12 @@ struct WgNoteRow {
     detune: f32,
     #[serde(default = "default_skew")]
     skew: f32,
+    #[serde(default = "default_one")]
+    hammer_k: f32,
+    #[serde(default = "default_pexp")]
+    hammer_p: f32,
+    #[serde(default = "default_one")]
+    hammer_v: f32,
     #[serde(default)]
     #[allow(dead_code)]
     body: Option<Vec<(f32, f32)>>,
@@ -307,6 +327,12 @@ struct WgNoteRow {
 
 fn default_skew() -> f32 {
     0.15
+}
+fn default_one() -> f32 {
+    1.0
+}
+fn default_pexp() -> f32 {
+    2.8
 }
 
 #[derive(Deserialize)]
@@ -351,6 +377,9 @@ fn fallback_row(note: u8) -> WgNoteRow {
         strike: 0.08,
         detune: 0.3,
         skew: 0.15,
+        hammer_k: 1.0,
+        hammer_p: 2.8,
+        hammer_v: 1.0,
         body: None,
     }
 }
@@ -432,6 +461,10 @@ impl NativeWaveguide {
             r.f0, r.t60, r.brightness, r.b, r.n_disp, sr, n_strings, r.detune, r.zb,
         );
         cs.skew = r.skew;
+        let h = HammerParams { k_scale: r.hammer_k, p_exp: r.hammer_p, v_scale: r.hammer_v };
+        for s in &mut cs.strings {
+            s.hammer = h;
+        }
         cs.strike((vel as f32 / 127.0).clamp(0.0, 1.0), r.strike);
         let rel_mult = (-6.908 / (RELEASE_T60 * self.sample_rate)).exp();
         let out_gain = MASTER_GAIN / cs.g.max(1e-6);
@@ -596,7 +629,9 @@ mod tests {
 
     #[test]
     fn waveguide_note_is_audible_and_tuned() {
-        // No table in the test env → analytic fallback.
+        // Force the analytic fallback — the dev machine has a real trained
+        // table installed in ~/.config and tests must not depend on it.
+        std::env::set_var("CITY_GRAND_WG_TABLE", "/nonexistent-test-table");
         let mut m = NativeWaveguide::new(48_000);
         m.prepare(48_000.0, 512).unwrap();
         let (inl, inr) = (vec![0.0; 512], vec![0.0; 512]);
@@ -617,6 +652,7 @@ mod tests {
 
     #[test]
     fn note_off_releases() {
+        std::env::set_var("CITY_GRAND_WG_TABLE", "/nonexistent-test-table");
         let mut m = NativeWaveguide::new(48_000);
         m.prepare(48_000.0, 512).unwrap();
         let (inl, inr) = (vec![0.0; 512], vec![0.0; 512]);
