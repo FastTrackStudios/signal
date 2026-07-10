@@ -9,7 +9,7 @@
 //! Moved out of `apps/desktop/src/main.rs` — this is rig domain logic, not
 //! app wiring.
 
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 use architect::dispatch::CurrentThreadDispatcher;
 use architect::{HasDispatcher, Layer, LayerRouter, PubSub, Services, layers};
@@ -50,8 +50,52 @@ struct TapTracker {
     intervals: Vec<f32>,
 }
 
+/// Meter-pump loop state, kept outside the tick so a caught panic in one
+/// iteration doesn't reset gestures or drop the MIDI stream.
+///
+/// MIDI footswitch mapping: CC 101–105 = switches 1–5 (tap on release,
+/// hold at 500 ms fires the hold-layer action); CC 106–110 = the
+/// hold-layer functions directly. Momentary switches repeat while held —
+/// edge-detect on value.
+#[derive(Default)]
+struct MeterPump {
+    /// The open MIDI capture (all input ports merged); `None` until a port
+    /// exists. Reopened by the hot-plug scan.
+    midi: Option<midicore::midir::MidiStream>,
+    /// Input-port names at the last hot-plug scan — a change reopens.
+    midi_ports: Vec<String>,
+    was_running: bool,
+    tick: u64,
+    sw_down: [Option<std::time::Instant>; 5],
+    sw_hold_fired: [bool; 5],
+    cc_down: [bool; 10],
+}
+
 /// Shared live rig (a [`ProfileRig`] wrapping the [`GuitarRig`]).
 type SharedRig = Arc<Mutex<Option<ProfileRig>>>;
+
+/// Poison-tolerant locking, used for every mutex in this file: a panic in
+/// one service call must never take the rest of the rig down with it (the
+/// guarded state is plain data — recovering the inner value is safe, and
+/// far better mid-service than footswitches going dead).
+trait LockExt<T> {
+    fn lock_ok(&self) -> MutexGuard<'_, T>;
+}
+
+impl<T> LockExt<T> for Mutex<T> {
+    fn lock_ok(&self) -> MutexGuard<'_, T> {
+        self.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+}
+
+/// Best-effort text from a caught panic payload.
+fn panic_message(panic: &(dyn std::any::Any + Send)) -> &str {
+    panic
+        .downcast_ref::<&str>()
+        .copied()
+        .or_else(|| panic.downcast_ref::<String>().map(String::as_str))
+        .unwrap_or("<non-string payload>")
+}
 
 /// The headless rig session: live audio + profile/footswitch state, shared
 /// behind `Arc`s so service calls can arrive from any thread. `ProfileRig` is
@@ -92,6 +136,16 @@ pub struct GuitarRigBackend {
     perform_mode: Arc<Mutex<u32>>,
     /// Deferred profile save (live-edit auto-save marks; pump flushes).
     library_dirty: Arc<std::sync::atomic::AtomicBool>,
+    /// Deferred last-active-state save (`last-state.styx`) — marked on
+    /// patch/song/part/setlist/tempo changes; the pump flushes it so a
+    /// crash restart lands back where the set was.
+    state_dirty: Arc<std::sync::atomic::AtomicBool>,
+    /// [`Rig::start`] re-entrancy guard: one open at a time (concurrent
+    /// opens race the drop/sleep/reopen dance into audible gaps).
+    opening: Arc<std::sync::atomic::AtomicBool>,
+    /// Debug-formatted audio prefs the live rig was opened with — a repeat
+    /// `start` with unchanged prefs is a no-op instead of an audio gap.
+    open_prefs: Arc<Mutex<Option<String>>>,
     /// Footswitch CC mapping (midi.styx — remappable).
     midi_map: Arc<Mutex<crate::profiles::MidiMapDef>>,
     /// Keyboard bindings (keymap.styx).
@@ -139,6 +193,9 @@ impl GuitarRigBackend {
             tuner_visible: Arc::new(Mutex::new(false)),
             perform_mode: Arc::new(Mutex::new(1)),
             library_dirty: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            state_dirty: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            opening: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            open_prefs: Arc::new(Mutex::new(None)),
             midi_map: Arc::new(Mutex::new(lib.midi_map)),
             keymap: Arc::new(Mutex::new(lib.keymap)),
             headphone: Arc::new(Mutex::new(HeadphoneState::default())),
@@ -156,133 +213,176 @@ impl GuitarRigBackend {
     /// final event when it stops, so remotes see `running: false`). A plain
     /// thread, not the audio callback — meters cross from the RT thread via
     /// atomics, and `PubSub::publish` takes a lock so it must never run RT.
+    ///
+    /// The pump is also the rig's control heartbeat (footswitch gestures,
+    /// tap tempo, auto-save flushes, MIDI hot-plug), so it must survive the
+    /// whole service: each tick runs under `catch_unwind`, and a panic —
+    /// its own, or one surfacing through a handler it calls — is logged and
+    /// the loop keeps going instead of dying silently while audio plays on.
     fn spawn_meter_pump(&self) {
         let backend = self.clone();
-        std::thread::spawn(move || {
-            let midi = midicore::midir::MidiStream::open_all();
-            if midi.is_some() {
-                tracing::info!("rig core: MIDI capture active");
-            }
-            let mut was_running = false;
-            let mut tick = 0u64;
-            // MIDI footswitch state: CC 101–105 = switches 1–5 (tap on
-            // release, hold at 500 ms fires the hold-layer action); CC
-            // 106–110 = the hold-layer functions directly (manual mapping).
-            // Momentary switches repeat while held — edge-detect on value.
-            let mut sw_down: [Option<std::time::Instant>; 5] = [None; 5];
-            let mut sw_hold_fired = [false; 5];
-            let mut cc_down = [false; 10];
-            loop {
-                std::thread::sleep(METER_INTERVAL);
-                tick += 1;
-                // Flush pending auto-saves (live edits) about once a second.
-                if tick % 30 == 0
-                    && backend
-                        .library_dirty
-                        .swap(false, std::sync::atomic::Ordering::Relaxed)
-                {
-                    let def = backend.profile_def.lock().unwrap();
-                    RigLibrary::save_profile(&def);
-                    tracing::debug!("auto-saved live edits to profile.styx");
+        let spawned = std::thread::Builder::new()
+            .name("rig-meter-pump".into())
+            .spawn(move || {
+                let mut pump = MeterPump::default();
+                loop {
+                    std::thread::sleep(METER_INTERVAL);
+                    let tick = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                        backend.pump_tick(&mut pump);
+                    }));
+                    if let Err(panic) = tick {
+                        tracing::error!(
+                            "meter pump: tick panicked ({}) — pump stays alive",
+                            panic_message(&*panic)
+                        );
+                    }
                 }
-                // Update the GR estimate + drain MIDI regardless of publish.
-                if let Some(stream) = &midi {
-                    let mut events: Vec<(u8, u8)> = Vec::new();
+            });
+        if let Err(e) = spawned {
+            tracing::error!("meter pump: spawn failed: {e}");
+        }
+    }
+
+    /// One meter-pump iteration: MIDI hot-plug + drain, footswitch
+    /// gestures, debounced saves, status/telemetry publish.
+    fn pump_tick(&self, pump: &mut MeterPump) {
+        pump.tick += 1;
+        // MIDI hot-plug: (re)open when the stream is missing or the set of
+        // input ports changed (footswitch replugged / enumerated late) —
+        // checked every ~2 s, so a mid-set replug comes back on its own.
+        if pump.tick == 1 || pump.tick % 60 == 0 {
+            let ports = midicore::midir::input_ports();
+            if pump.midi.is_none() || ports != pump.midi_ports {
+                pump.midi = if ports.is_empty() {
+                    None
+                } else {
+                    midicore::midir::MidiStream::open_all()
+                };
+                match &pump.midi {
+                    Some(s) => {
+                        tracing::info!("rig core: MIDI capture active on {:?}", s.opened)
+                    }
+                    None if ports.is_empty() && !pump.midi_ports.is_empty() => {
+                        tracing::warn!("rig core: all MIDI inputs gone — waiting for replug")
+                    }
+                    None => {}
+                }
+                pump.midi_ports = ports;
+            }
+        }
+        // Flush pending auto-saves (live edits + position) about once a second.
+        if pump.tick % 30 == 0 {
+            if self
+                .library_dirty
+                .swap(false, std::sync::atomic::Ordering::Relaxed)
+            {
+                let def = self.profile_def.lock_ok();
+                RigLibrary::save_profile(&def);
+                tracing::debug!("auto-saved live edits to profile.styx");
+            }
+            if self
+                .state_dirty
+                .swap(false, std::sync::atomic::Ordering::Relaxed)
+            {
+                RigLibrary::save_last_state(&self.snapshot_last_state());
+                tracing::debug!("auto-saved position to last-state.styx");
+            }
+        }
+        // Update the GR estimate + drain MIDI regardless of publish.
+        if let Some(stream) = &pump.midi {
+            let mut events: Vec<(u8, u8)> = Vec::new();
+            {
+                let mut log = self.midi_log.lock_ok();
+                for msg in stream.drain() {
+                    if let Some(midicore::MidiEvent::ControlChange {
+                        controller,
+                        value,
+                        ..
+                    }) = msg.to_event()
                     {
-                        let mut log = backend.midi_log.lock().unwrap();
-                        for msg in stream.drain() {
-                            if let Some(midicore::MidiEvent::ControlChange {
-                                controller,
-                                value,
-                                ..
-                            }) = msg.to_event()
-                            {
-                                let (cc, val) = (u8::from(controller), u8::from(value));
-                                tracing::debug!("midi cc {cc} = {val}");
-                                events.push((cc, val));
-                            }
-                            log.push(format!("{msg:?}"));
-                            let len = log.len();
-                            if len > 128 {
-                                log.drain(0..len - 128);
-                            }
-                        }
+                        let (cc, val) = (u8::from(controller), u8::from(value));
+                        tracing::debug!("midi cc {cc} = {val}");
+                        events.push((cc, val));
                     }
-                    for (cc, val) in events {
-                        // Remappable mapping (midi.styx): gesture switches
-                        // (tap/hold) + direct hold-layer slots.
-                        let map = backend.midi_map.lock().unwrap().clone();
-                        let gesture = map.tap_ccs.iter().position(|c| *c == cc as u32);
-                        let direct = map.direct.iter().find(|d| d.cc == cc as u32).map(|d| d.slot);
-                        let Some(idx) = gesture.or_else(|| direct.map(|s| s as usize + 5)) else {
-                            continue;
-                        };
-                        let idx = idx.min(cc_down.len() - 1);
-                        let down = val > 0;
-                        if down == cc_down[idx] {
-                            continue; // momentary repeat — not an edge
-                        }
-                        cc_down[idx] = down;
-                        match gesture {
-                            // Gesture switches: tap on short release,
-                            // hold-layer action at 500 ms (mirrors the UI).
-                            Some(sw) if sw < 5 => {
-                                if down {
-                                    sw_down[sw] = Some(std::time::Instant::now());
-                                    sw_hold_fired[sw] = false;
-                                } else {
-                                    if !sw_hold_fired[sw] {
-                                        tracing::info!("footswitch {} tap", sw + 1);
-                                        match sw {
-                                            4 => Rig::tap_tempo(&backend),
-                                            s => Rig::press_stack(&backend, s as u32),
-                                        }
-                                    }
-                                    sw_down[sw] = None;
-                                }
-                            }
-                            _ => {
-                                if down {
-                                    if let Some(slot) = direct {
-                                        tracing::info!("footswitch direct cc {cc} → slot {slot}");
-                                        backend.hold_layer_action(slot as usize);
-                                    }
-                                }
-                            }
-                        }
+                    log.push(format!("{msg:?}"));
+                    let len = log.len();
+                    if len > 128 {
+                        log.drain(0..len - 128);
                     }
-                    // Holds: fire the hold-layer action at 500 ms.
-                    for sw in 0..5 {
-                        if let Some(t) = sw_down[sw] {
-                            if !sw_hold_fired[sw] && t.elapsed().as_millis() >= 500 {
-                                sw_hold_fired[sw] = true;
-                                tracing::info!("footswitch {} hold", sw + 1);
-                                backend.hold_layer_action(sw);
-                            }
-                        }
-                    }
-                }
-                let status = Rig::status(&backend);
-                if status.running || was_running {
-                    was_running = status.running;
-                    backend.events.publish(RigEvent::Status(status));
-                    // Spectrum + comp telemetry at full meter rate (~30 Hz)
-                    // — the surface stays alive to the hand.
-                    let _ = tick;
-                    if let Some(bins) = backend.input_spectrum() {
-                        backend.events.publish(RigEvent::Spectrum(bins));
-                    }
-                    let (wave_in, wave_gr) = signal_fx::comp_meter::wave_snapshot(3);
-                    backend.events.publish(RigEvent::CompWave(wave_in, wave_gr));
                 }
             }
-        });
+            for (cc, val) in events {
+                // Remappable mapping (midi.styx): gesture switches
+                // (tap/hold) + direct hold-layer slots.
+                let map = self.midi_map.lock_ok().clone();
+                let gesture = map.tap_ccs.iter().position(|c| *c == cc as u32);
+                let direct = map.direct.iter().find(|d| d.cc == cc as u32).map(|d| d.slot);
+                let Some(idx) = gesture.or_else(|| direct.map(|s| s as usize + 5)) else {
+                    continue;
+                };
+                let idx = idx.min(pump.cc_down.len() - 1);
+                let down = val > 0;
+                if down == pump.cc_down[idx] {
+                    continue; // momentary repeat — not an edge
+                }
+                pump.cc_down[idx] = down;
+                match gesture {
+                    // Gesture switches: tap on short release,
+                    // hold-layer action at 500 ms (mirrors the UI).
+                    Some(sw) if sw < 5 => {
+                        if down {
+                            pump.sw_down[sw] = Some(std::time::Instant::now());
+                            pump.sw_hold_fired[sw] = false;
+                        } else {
+                            if !pump.sw_hold_fired[sw] {
+                                tracing::info!("footswitch {} tap", sw + 1);
+                                match sw {
+                                    4 => Rig::tap_tempo(self),
+                                    s => Rig::press_stack(self, s as u32),
+                                }
+                            }
+                            pump.sw_down[sw] = None;
+                        }
+                    }
+                    _ => {
+                        if down {
+                            if let Some(slot) = direct {
+                                tracing::info!("footswitch direct cc {cc} → slot {slot}");
+                                self.hold_layer_action(slot as usize);
+                            }
+                        }
+                    }
+                }
+            }
+            // Holds: fire the hold-layer action at 500 ms.
+            for sw in 0..5 {
+                if let Some(t) = pump.sw_down[sw] {
+                    if !pump.sw_hold_fired[sw] && t.elapsed().as_millis() >= 500 {
+                        pump.sw_hold_fired[sw] = true;
+                        tracing::info!("footswitch {} hold", sw + 1);
+                        self.hold_layer_action(sw);
+                    }
+                }
+            }
+        }
+        let status = Rig::status(self);
+        if status.running || pump.was_running {
+            pump.was_running = status.running;
+            self.events.publish(RigEvent::Status(status));
+            // Spectrum + comp telemetry at full meter rate (~30 Hz)
+            // — the surface stays alive to the hand.
+            if let Some(bins) = self.input_spectrum() {
+                self.events.publish(RigEvent::Spectrum(bins));
+            }
+            let (wave_in, wave_gr) = signal_fx::comp_meter::wave_snapshot(3);
+            self.events.publish(RigEvent::CompWave(wave_in, wave_gr));
+        }
     }
 
     /// Log-binned input spectrum (dB, −90..0) from the rig's pre-amp tap.
     fn input_spectrum(&self) -> Option<Vec<f32>> {
         let (samples, rate) = {
-            let guard = self.rig.lock().ok()?;
+            let guard = self.rig.lock_ok();
             let prig = guard.as_ref()?;
             (prig.input_samples(), prig.sample_rate() as f32)
         };
@@ -298,9 +398,9 @@ impl GuitarRigBackend {
     fn live_comp_gr(&self) -> f32 {
         let has_comp = self
             .blocks
-            .lock()
-            .map(|b| b.iter().any(|b| b.block_type == BlockType::Compressor && !b.bypassed))
-            .unwrap_or(false);
+            .lock_ok()
+            .iter()
+            .any(|b| b.block_type == BlockType::Compressor && !b.bypassed);
         if has_comp { signal_fx::comp_meter::gr_db().max(0.0) } else { 0.0 }
     }
 
@@ -308,12 +408,13 @@ impl GuitarRigBackend {
     /// and resync everything — the shared tail of every edit-time rebuild.
     fn reload_rebuilt(&self, rebuilt: signal_sampler::rig_profile::RigProfile) {
         let active = {
-            let guard = self.rig.lock().unwrap();
+            let guard = self.rig.lock_ok();
             guard
                 .as_ref()
                 .and_then(|prig| prig.active_patch().map(|p| p.name.clone()))
         };
-        if let Ok(mut guard) = self.rig.lock() {
+        {
+            let mut guard = self.rig.lock_ok();
             if let Some(prig) = guard.as_mut() {
                 if let Err(e) = prig.load_profile(rebuilt, None) {
                     tracing::error!("profile reload failed: {e}");
@@ -341,13 +442,13 @@ impl GuitarRigBackend {
     /// through their drive preset; the amp resolves through the active
     /// patch's pool preset.
     fn nam_path_for_block(&self, block_name: &str) -> Option<String> {
-        let def = self.profile_def.lock().unwrap();
+        let def = self.profile_def.lock_ok();
         if let Some(slot) = def
             .drives
             .iter()
             .find(|d| d.block.eq_ignore_ascii_case(block_name))
         {
-            let dps = self.drive_presets.lock().unwrap();
+            let dps = self.drive_presets.lock_ok();
             return dps
                 .iter()
                 .find(|p| p.name.eq_ignore_ascii_case(&slot.preset))
@@ -355,7 +456,7 @@ impl GuitarRigBackend {
         }
         if block_name.eq_ignore_ascii_case("Amp L") || block_name.eq_ignore_ascii_case("Amp R") {
             let active = {
-                let guard = self.rig.lock().ok()?;
+                let guard = self.rig.lock_ok();
                 guard
                     .as_ref()
                     .and_then(|prig| prig.active_patch().map(|p| p.name.clone()))?
@@ -381,20 +482,20 @@ impl GuitarRigBackend {
         let Some(path) = self.nam_path_for_block(block_name) else {
             return;
         };
-        let sr = {
-            let guard = self.rig.lock().ok();
-            guard
-                .as_ref()
-                .and_then(|g| g.as_ref().map(|p| p.sample_rate() as f64))
-                .unwrap_or(48_000.0)
-        };
+        let sr = self
+            .rig
+            .lock_ok()
+            .as_ref()
+            .map(|p| p.sample_rate() as f64)
+            .unwrap_or(48_000.0);
         let Some((in_db, out_db)) =
             signal_sampler::nam_calibrate::drive_compensation(std::path::Path::new(&path), sr, drive)
         else {
             tracing::warn!("drive compensation unavailable for {block_name} — leaving trims");
             return;
         };
-        if let Ok(guard) = self.rig.lock() {
+        {
+            let guard = self.rig.lock_ok();
             if let Some(prig) = guard.as_ref() {
                 prig.rig().set_active_block_param(block_id, "input_trim", in_db);
                 prig.rig().set_active_block_param(block_id, "output_trim", out_db);
@@ -408,8 +509,7 @@ impl GuitarRigBackend {
     fn apply_all_drives(&self) {
         let blocks: Vec<(String, String, f32)> = self
             .blocks
-            .lock()
-            .unwrap()
+            .lock_ok()
             .iter()
             .filter(|b| {
                 matches!(b.block_type, BlockType::Drive | BlockType::Boost | BlockType::Amp)
@@ -435,21 +535,20 @@ impl GuitarRigBackend {
     fn spawn_drive_calibration(&self) {
         let backend = self.clone();
         std::thread::spawn(move || {
-            let sr = {
-                let guard = backend.rig.lock().ok();
-                guard
-                    .as_ref()
-                    .and_then(|g| g.as_ref().map(|p| p.sample_rate() as f64))
-                    .unwrap_or(48_000.0)
-            };
+            let sr = backend
+                .rig
+                .lock_ok()
+                .as_ref()
+                .map(|p| p.sample_rate() as f64)
+                .unwrap_or(48_000.0);
             let mut paths: Vec<String> = Vec::new();
-            for p in backend.drive_presets.lock().unwrap().iter() {
+            for p in backend.drive_presets.lock_ok().iter() {
                 for o in &p.options {
                     paths.push(o.nam.clone());
                 }
             }
             {
-                let def = backend.profile_def.lock().unwrap();
+                let def = backend.profile_def.lock_ok();
                 for p in &def.presets {
                     paths.push(p.nam.clone());
                 }
@@ -490,11 +589,82 @@ impl GuitarRigBackend {
         }
     }
 
+    /// Mark the last-active position (setlist/song/part/patch/tempo) for
+    /// the pump's debounced flush to `last-state.styx`.
+    fn mark_state_dirty(&self) {
+        self.state_dirty
+            .store(true, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    /// Snapshot the last-active position for persistence.
+    fn snapshot_last_state(&self) -> crate::library::LastState {
+        let active_patch = self
+            .rig
+            .lock_ok()
+            .as_ref()
+            .and_then(|prig| prig.active_patch().map(|p| p.name.clone()))
+            .unwrap_or_default();
+        crate::library::LastState {
+            setlist_index: *self.setlist_index.lock_ok() as u32,
+            song_index: *self.song_index.lock_ok() as u32,
+            part_index: *self.part_index.lock_ok() as u32,
+            active_patch,
+            tempo_bpm: self.tempo.lock_ok().unwrap_or(0.0),
+        }
+    }
+
+    /// Restore the position saved by the pump — after a crash restart the
+    /// rig lands back on the same setlist/song/part/patch/tempo instead of
+    /// song 1 at 120 BPM. Every index/name is re-validated against the
+    /// (possibly hand-edited) library; stale entries clamp or fall back —
+    /// this must never panic. Runs before `open_blocking`'s sync tail, so
+    /// the tail applies tempo/boost/drives to the restored patch.
+    fn restore_last_state(&self) {
+        let Some(st) = RigLibrary::load_last_state() else {
+            return;
+        };
+        {
+            let sets = self.setlists.lock_ok();
+            if !sets.is_empty() {
+                *self.setlist_index.lock_ok() =
+                    (st.setlist_index as usize).min(sets.len() - 1);
+            }
+        }
+        let resolved = self.resolved_setlist();
+        let song = (st.song_index as usize).min(resolved.len().saturating_sub(1));
+        *self.song_index.lock_ok() = if resolved.is_empty() { 0 } else { song };
+        let parts = resolved
+            .get(song)
+            .map(|(_, _, _, _, parts)| parts.len())
+            .unwrap_or(0);
+        *self.part_index.lock_ok() = (st.part_index as usize).min(parts.saturating_sub(1));
+        if st.tempo_bpm > 0.0 {
+            *self.tempo.lock_ok() = Some(st.tempo_bpm.clamp(40.0, 300.0));
+        }
+        if !st.active_patch.is_empty() {
+            let mut guard = self.rig.lock_ok();
+            if let Some(prig) = guard.as_mut() {
+                if !activate_patch_by_name(prig, &st.active_patch) {
+                    tracing::warn!("last-state: patch '{}' no longer exists", st.active_patch);
+                }
+            }
+        }
+        tracing::info!(
+            "restored last state: setlist {} song {} part {} patch '{}' tempo {}",
+            *self.setlist_index.lock_ok(),
+            *self.song_index.lock_ok(),
+            *self.part_index.lock_ok(),
+            st.active_patch,
+            st.tempo_bpm,
+        );
+    }
+
     /// Re-apply the main-output trim: patch base + master trim + mute.
     fn apply_main_mute(&self) {
-        let mute = self.headphone.lock().unwrap().main_mute;
-        let trim = *self.master_trim.lock().unwrap();
-        if let Ok(guard) = self.rig.lock() {
+        let mute = self.headphone.lock_ok().main_mute;
+        let trim = *self.master_trim.lock_ok();
+        {
+            let guard = self.rig.lock_ok();
             if let Some(prig) = guard.as_ref() {
                 let base = prig.active_patch().map(|p| p.output_trim_db).unwrap_or(0.0);
                 prig.rig()
@@ -505,14 +675,14 @@ impl GuitarRigBackend {
 
     /// Publish the full perf model + chain — call after every mutation.
     fn publish_state(&self) {
-        *self.revision.lock().unwrap() += 1;
+        *self.revision.lock_ok() += 1;
         self.events.publish(RigEvent::Perf(Rig::perf(self)));
         self.events.publish(RigEvent::Chain(Rig::chain(self)));
     }
 
     /// The tempo shown/used right now (tapped, or the default).
     fn tempo_bpm(&self) -> f32 {
-        self.tempo.lock().unwrap().unwrap_or(DEFAULT_BPM)
+        self.tempo.lock_ok().unwrap_or(DEFAULT_BPM)
     }
 
     /// Push the tapped tempo onto every delay block in the active chain
@@ -520,14 +690,13 @@ impl GuitarRigBackend {
     /// the first tap; after that, taps own the delay time — including across
     /// patch switches.
     fn apply_tempo_to_delays(&self) {
-        let Some(bpm) = *self.tempo.lock().unwrap() else {
+        let Some(bpm) = *self.tempo.lock_ok() else {
             return;
         };
         let quarter_ms = 60_000.0 / bpm;
         let delay_ids: Vec<String> = self
             .blocks
-            .lock()
-            .unwrap()
+            .lock_ok()
             .iter()
             .filter(|b| b.block_type == BlockType::Delay)
             .map(|b| b.id.clone())
@@ -535,7 +704,8 @@ impl GuitarRigBackend {
         if delay_ids.is_empty() {
             return;
         }
-        if let Ok(guard) = self.rig.lock() {
+        {
+            let guard = self.rig.lock_ok();
             if let Some(prig) = guard.as_ref() {
                 for id in &delay_ids {
                     // The MX engine tempo-syncs itself: with tempo set, each
@@ -549,8 +719,8 @@ impl GuitarRigBackend {
 
     /// The boost currently applied (0.0 while disengaged).
     fn current_boost_db(&self) -> f32 {
-        if *self.boost_on.lock().unwrap() {
-            *self.boost_level.lock().unwrap()
+        if *self.boost_on.lock_ok() {
+            *self.boost_level.lock_ok()
         } else {
             0.0
         }
@@ -561,7 +731,7 @@ impl GuitarRigBackend {
     /// what it sounded like. `param: None` records a bypass override.
     fn record_patch_override(&self, block_id: &str, param: Option<&str>, value: f32) {
         let block = {
-            let blocks = self.blocks.lock().unwrap();
+            let blocks = self.blocks.lock_ok();
             blocks
                 .iter()
                 .find(|b| b.id == block_id)
@@ -569,7 +739,7 @@ impl GuitarRigBackend {
         };
         let Some((block_name, bt)) = block else { return };
         let active = {
-            let guard = self.rig.lock().unwrap();
+            let guard = self.rig.lock_ok();
             guard
                 .as_ref()
                 .and_then(|prig| prig.active_patch().map(|p| p.name.clone()))
@@ -577,7 +747,7 @@ impl GuitarRigBackend {
         let Some(patch_name) = active else { return };
         let module = format!("{:?}", bt.category());
         {
-            let mut def = self.profile_def.lock().unwrap();
+            let mut def = self.profile_def.lock_ok();
             let Some(p) = def
                 .patches
                 .iter_mut()
@@ -612,7 +782,7 @@ impl GuitarRigBackend {
     /// like Lead carries its +3 dB engaged; 0 means boost off.
     fn recall_patch_boost(&self) {
         let active = {
-            let guard = self.rig.lock().unwrap();
+            let guard = self.rig.lock_ok();
             guard
                 .as_ref()
                 .and_then(|prig| prig.active_patch().map(|p| p.name.clone()))
@@ -620,16 +790,15 @@ impl GuitarRigBackend {
         let Some(name) = active else { return };
         let boost = self
             .profile_def
-            .lock()
-            .unwrap()
+            .lock_ok()
             .patches
             .iter()
             .find(|p| p.name.eq_ignore_ascii_case(&name))
             .map(|p| p.boost_db)
             .unwrap_or(0.0);
-        *self.boost_on.lock().unwrap() = boost != 0.0;
+        *self.boost_on.lock_ok() = boost != 0.0;
         if boost != 0.0 {
-            *self.boost_level.lock().unwrap() = boost;
+            *self.boost_level.lock_ok() = boost;
         }
     }
 
@@ -640,8 +809,7 @@ impl GuitarRigBackend {
         let db = self.current_boost_db();
         let boost_ids: Vec<String> = self
             .blocks
-            .lock()
-            .unwrap()
+            .lock_ok()
             .iter()
             .filter(|b| b.block_type == BlockType::Volume && b.name.eq_ignore_ascii_case("Boost"))
             .map(|b| b.id.clone())
@@ -649,7 +817,8 @@ impl GuitarRigBackend {
         if boost_ids.is_empty() {
             return;
         }
-        if let Ok(guard) = self.rig.lock() {
+        {
+            let guard = self.rig.lock_ok();
             if let Some(prig) = guard.as_ref() {
                 for id in &boost_ids {
                     prig.rig().set_active_block_param(id, "gain_db", db);
@@ -662,7 +831,8 @@ impl GuitarRigBackend {
     /// resets: the block mirror + bypass defaults, the tapped tempo on the
     /// fresh delays, and the boost gain block.
     fn activate_stack_and_sync(&self, index: usize) {
-        if let Ok(mut guard) = self.rig.lock() {
+        {
+            let mut guard = self.rig.lock_ok();
             if let Some(prig) = guard.as_mut() {
                 prig.activate_stack(index);
             }
@@ -673,15 +843,16 @@ impl GuitarRigBackend {
         self.apply_boost_to_block();
         self.apply_all_drives();
         self.publish_state();
+        self.mark_state_dirty();
     }
 
     /// The active setlist's entries, resolved against the song library:
     /// `(name, key, bpm, stack, sections)` per slot — per-set overrides win
     /// over the song's defaults.
     fn resolved_setlist(&self) -> Vec<(String, String, u32, usize, Vec<String>)> {
-        let lib = self.songs_lib.lock().unwrap();
-        let setlists = self.setlists.lock().unwrap();
-        let idx = *self.setlist_index.lock().unwrap();
+        let lib = self.songs_lib.lock_ok();
+        let setlists = self.setlists.lock_ok();
+        let idx = *self.setlist_index.lock_ok();
         let Some(set) = setlists.get(idx) else {
             return Vec::new();
         };
@@ -711,8 +882,9 @@ impl GuitarRigBackend {
     fn recall_song(&self, idx: usize) {
         let entry = self.resolved_setlist().get(idx).cloned();
         if let Some((name, key, bpm, stack, _)) = entry {
-            *self.part_index.lock().unwrap() = 0;
-            *self.tempo.lock().unwrap() = Some(bpm as f32);
+            *self.part_index.lock_ok() = 0;
+            *self.tempo.lock_ok() = Some(bpm as f32);
+            self.mark_state_dirty();
             tracing::info!("setlist → {name} ({key} · {bpm} BPM, stack {stack})");
             self.apply_tempo_to_delays();
             // Song switch tuning: reset every stack cursor, then point the
@@ -720,13 +892,13 @@ impl GuitarRigBackend {
             // switches are dialed for the song before anything activates.
             let defaults = self
                 .songs_lib
-                .lock()
-                .unwrap()
+                .lock_ok()
                 .iter()
                 .find(|s| s.name.eq_ignore_ascii_case(&name))
                 .map(|s| s.stack_defaults.clone())
                 .unwrap_or_default();
-            if let Ok(mut guard) = self.rig.lock() {
+            {
+                let mut guard = self.rig.lock_ok();
                 if let Some(prig) = guard.as_mut() {
                     prig.reset_stack_positions();
                     for d in &defaults {
@@ -739,14 +911,12 @@ impl GuitarRigBackend {
             // it (FM9 semantics), silently changing the patch.
             let already_active = self
                 .rig
-                .lock()
-                .ok()
-                .and_then(|g| {
-                    g.as_ref().map(|prig| {
-                        prig.stacks().get(stack).is_some_and(|st| {
-                            st.patches.iter().any(|p| {
-                                prig.active_patch().is_some_and(|a| a.name.eq_ignore_ascii_case(p))
-                            })
+                .lock_ok()
+                .as_ref()
+                .map(|prig| {
+                    prig.stacks().get(stack).is_some_and(|st| {
+                        st.patches.iter().any(|p| {
+                            prig.active_patch().is_some_and(|a| a.name.eq_ignore_ascii_case(p))
                         })
                     })
                 })
@@ -777,11 +947,7 @@ impl GuitarRigBackend {
     /// busy".
     pub fn open_blocking(&self) {
         tracing::info!("rig open: begin");
-        let had_previous = if let Ok(mut g) = self.rig.lock() {
-            g.take().is_some()
-        } else {
-            false
-        };
+        let had_previous = self.rig.lock_ok().take().is_some();
         if had_previous {
             std::thread::sleep(std::time::Duration::from_millis(250));
         }
@@ -808,20 +974,28 @@ impl GuitarRigBackend {
                 // stack a second, different target on top.
                 prig.set_level_match(false);
                 let profile = {
-                    let def = self.profile_def.lock().unwrap();
-                    let dps = self.drive_presets.lock().unwrap();
+                    let def = self.profile_def.lock_ok();
+                    let dps = self.drive_presets.lock_ok();
                     build_profile(&def, &dps)
                 };
                 match prig.load_profile(profile, None) {
                     Ok(()) => tracing::info!("profile loaded ({} patches)", prig.patches().len()),
                     Err(e) => tracing::error!("profile load failed: {e}"),
                 }
-                if let Ok(mut slot) = self.rig.lock() {
+                {
+                    let mut slot = self.rig.lock_ok();
                     *slot = Some(prig);
                 }
+                // Record what we opened with, for the start() no-op check.
+                *self.open_prefs.lock_ok() = Some(format!("{:?}", mgr.audio));
             }
-            Err(e) => tracing::error!("rig open failed: {e:#}"),
+            Err(e) => {
+                *self.open_prefs.lock_ok() = None;
+                tracing::error!("rig open failed: {e:#}");
+            }
         }
+        // Land back where the last set was (crash-restart recovery).
+        self.restore_last_state();
         // Mirror the (now active) patch's FX chain + apply bypass defaults,
         // and re-push any tapped tempo onto the fresh delays.
         self.resync_blocks();
@@ -837,7 +1011,8 @@ impl GuitarRigBackend {
     /// so the off-by-default blocks must be re-bypassed here).
     fn resync_blocks(&self) {
         let mut out = Vec::new();
-        if let Ok(guard) = self.rig.lock() {
+        {
+            let guard = self.rig.lock_ok();
             if let Some(prig) = guard.as_ref() {
                 if let Some(patch) = prig.active_patch() {
                     let ids = prig.active_block_ids();
@@ -871,14 +1046,13 @@ impl GuitarRigBackend {
                         // Drive slots: surface the loaded drive preset and
                         // its NAM options for the board's quick switch.
                         let (preset, options, option) = {
-                            let def = self.profile_def.lock().unwrap();
+                            let def = self.profile_def.lock_ok();
                             def.drives
                                 .iter()
                                 .find(|d| d.block.eq_ignore_ascii_case(&name))
                                 .and_then(|d| {
                                     self.drive_presets
-                                        .lock()
-                                        .unwrap()
+                                        .lock_ok()
                                         .iter()
                                         .find(|p| p.name.eq_ignore_ascii_case(&d.preset))
                                         .map(|p| {
@@ -909,7 +1083,7 @@ impl GuitarRigBackend {
                 }
             }
         }
-        *self.blocks.lock().unwrap() = out;
+        *self.blocks.lock_ok() = out;
     }
 }
 
@@ -1085,6 +1259,35 @@ fn build_perf_model(prig: &ProfileRig, def: &ProfileDef) -> PerformanceModel {
     }
 }
 
+/// Activate a patch by name. If the patch lives in a stack, jump that
+/// stack's rotation to it — the footswitch grid stays consistent with
+/// what's audible (one stack always lit). Loose patches activate directly.
+/// Returns `false` when no patch matches (stale name — never panics).
+fn activate_patch_by_name(prig: &mut ProfileRig, name: &str) -> bool {
+    let Some(index) = prig
+        .patches()
+        .iter()
+        .position(|p| p.name.eq_ignore_ascii_case(name))
+    else {
+        return false;
+    };
+    let in_stack = prig.stacks().iter().enumerate().find_map(|(si, st)| {
+        st.patches
+            .iter()
+            .position(|p| p.eq_ignore_ascii_case(name))
+            .map(|pos| (si, pos))
+    });
+    match in_stack {
+        Some((stack, pos)) => {
+            prig.activate_stack_at(stack, pos);
+        }
+        None => {
+            prig.activate(index);
+        }
+    }
+    true
+}
+
 fn map_device(d: DeviceInfo) -> AudioDevice {
     AudioDevice {
         name: d.name,
@@ -1097,21 +1300,43 @@ fn map_device(d: DeviceInfo) -> AudioDevice {
 
 impl Rig for GuitarRigBackend {
     fn start(&self) {
+        // One open at a time: concurrent starts would race the
+        // drop → 250 ms sleep → reopen dance into audible gaps.
+        if self.opening.swap(true, std::sync::atomic::Ordering::SeqCst) {
+            tracing::info!("rig start: open already in progress — ignored");
+            return;
+        }
         let backend = self.clone();
-        std::thread::spawn(move || backend.open_blocking());
+        std::thread::spawn(move || {
+            let opened = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                // Already live with unchanged prefs? Reopening would drop
+                // the device mid-note for nothing — no-op.
+                let prefs = format!("{:?}", RigManager::load(AUDIO_RIG_NAME).audio);
+                let live = backend.rig.lock_ok().is_some();
+                if live && backend.open_prefs.lock_ok().as_deref() == Some(prefs.as_str()) {
+                    tracing::info!("rig start: already live with unchanged prefs — no-op");
+                    return;
+                }
+                backend.open_blocking();
+            }));
+            backend
+                .opening
+                .store(false, std::sync::atomic::Ordering::SeqCst);
+            if let Err(panic) = opened {
+                tracing::error!("rig open panicked ({})", panic_message(&*panic));
+            }
+        });
     }
 
     fn stop(&self) {
-        *self.rig.lock().unwrap() = None;
+        *self.rig.lock_ok() = None;
+        *self.open_prefs.lock_ok() = None;
         tracing::info!("rig stopped");
         self.publish_state();
     }
 
     fn status(&self) -> RigStatus {
-        let guard = match self.rig.lock() {
-            Ok(g) => g,
-            Err(_) => return RigStatus::default(),
-        };
+        let guard = self.rig.lock_ok();
         let (input_peak, output_peak, in_lr, out_lr, active_patch) = match guard.as_ref() {
             Some(prig) => (
                 prig.rig().input_peak(),
@@ -1144,18 +1369,18 @@ impl Rig for GuitarRigBackend {
 
     fn perf(&self) -> PerformanceModel {
         let mut m = {
-            let def = self.profile_def.lock().unwrap();
+            let def = self.profile_def.lock_ok();
             self.rig
-                .lock()
-                .ok()
-                .and_then(|g| g.as_ref().map(|prig| build_perf_model(prig, &def)))
+                .lock_ok()
+                .as_ref()
+                .map(|prig| build_perf_model(prig, &def))
                 .unwrap_or_default()
         };
         m.boost_db = self.current_boost_db();
         m.tempo_bpm = self.tempo_bpm().round() as u32;
         {
             let resolved = self.resolved_setlist();
-            let song_idx = *self.song_index.lock().unwrap();
+            let song_idx = *self.song_index.lock_ok();
             m.songs = resolved
                 .iter()
                 .map(|(name, key, bpm, _, _)| signal_guitar_proto::SongSlot {
@@ -1169,14 +1394,13 @@ impl Rig for GuitarRigBackend {
                 .get(song_idx)
                 .map(|(_, _, _, _, parts)| parts.clone())
                 .unwrap_or_default();
-            m.setlists = self.setlists.lock().unwrap().iter().map(|s| s.name.clone()).collect();
-            m.setlist_index = *self.setlist_index.lock().unwrap() as u32;
-            m.tuner_visible = *self.tuner_visible.lock().unwrap();
-            m.perform_mode = *self.perform_mode.lock().unwrap();
+            m.setlists = self.setlists.lock_ok().iter().map(|s| s.name.clone()).collect();
+            m.setlist_index = *self.setlist_index.lock_ok() as u32;
+            m.tuner_visible = *self.tuner_visible.lock_ok();
+            m.perform_mode = *self.perform_mode.lock_ok();
             m.key_bindings = self
                 .keymap
-                .lock()
-                .unwrap()
+                .lock_ok()
                 .iter()
                 .map(|b| signal_guitar_proto::KeyBinding {
                     keys: b.keys.clone(),
@@ -1185,8 +1409,7 @@ impl Rig for GuitarRigBackend {
                 .collect();
             m.library_songs = self
                 .songs_lib
-                .lock()
-                .unwrap()
+                .lock_ok()
                 .iter()
                 .map(|s| signal_guitar_proto::SongSlot {
                     name: s.name.clone(),
@@ -1195,15 +1418,15 @@ impl Rig for GuitarRigBackend {
                 })
                 .collect();
         }
-        m.part_index = *self.part_index.lock().unwrap() as u32;
-        m.headphone = self.headphone.lock().unwrap().clone();
-        m.master_trim_db = *self.master_trim.lock().unwrap();
-        m.revision = *self.revision.lock().unwrap();
+        m.part_index = *self.part_index.lock_ok() as u32;
+        m.headphone = self.headphone.lock_ok().clone();
+        m.master_trim_db = *self.master_trim.lock_ok();
+        m.revision = *self.revision.lock_ok();
         m
     }
 
     fn chain(&self) -> Vec<LiveBlock> {
-        self.blocks.lock().map(|b| b.clone()).unwrap_or_default()
+        self.blocks.lock_ok().clone()
     }
 
     fn press_stack(&self, index: u32) {
@@ -1213,7 +1436,7 @@ impl Rig for GuitarRigBackend {
     fn next_song(&self) {
         let last = self.resolved_setlist().len().saturating_sub(1);
         let idx = {
-            let mut i = self.song_index.lock().unwrap();
+            let mut i = self.song_index.lock_ok();
             *i = (*i + 1).min(last);
             *i
         };
@@ -1222,7 +1445,7 @@ impl Rig for GuitarRigBackend {
 
     fn prev_song(&self) {
         let idx = {
-            let mut i = self.song_index.lock().unwrap();
+            let mut i = self.song_index.lock_ok();
             *i = i.saturating_sub(1);
             *i
         };
@@ -1232,13 +1455,13 @@ impl Rig for GuitarRigBackend {
     fn select_song(&self, index: u32) {
         let last = self.resolved_setlist().len().saturating_sub(1);
         let idx = (index as usize).min(last);
-        *self.song_index.lock().unwrap() = idx;
+        *self.song_index.lock_ok() = idx;
         self.recall_song(idx);
     }
 
     fn select_part(&self, index: u32) {
         let (song_idx, last) = {
-            let i = *self.song_index.lock().unwrap();
+            let i = *self.song_index.lock_ok();
             let last = self
                 .resolved_setlist()
                 .get(i)
@@ -1247,7 +1470,8 @@ impl Rig for GuitarRigBackend {
             (i, last)
         };
         let idx = (index as usize).min(last);
-        *self.part_index.lock().unwrap() = idx;
+        *self.part_index.lock_ok() = idx;
+        self.mark_state_dirty();
         tracing::info!("part → {idx} (song {song_idx})");
         // Sections don't drive audio yet (scenes later) — publish so every
         // remote follows the section highlight.
@@ -1255,24 +1479,28 @@ impl Rig for GuitarRigBackend {
     }
 
     fn select_setlist(&self, index: u32) {
-        {
-            let mut idx = self.setlist_index.lock().unwrap();
-            let last = self.setlists.lock().unwrap().len().saturating_sub(1);
-            *idx = (index as usize).min(last);
-        }
-        *self.song_index.lock().unwrap() = 0;
-        tracing::info!(
-            "setlist switched → {}",
-            self.setlists.lock().unwrap()[*self.setlist_index.lock().unwrap()].name
-        );
+        // setlists.styx is user-edited — it may be empty. Guard, don't index.
+        let name = {
+            let sets = self.setlists.lock_ok();
+            if sets.is_empty() {
+                tracing::warn!("select_setlist: no setlists in the library");
+                return;
+            }
+            let idx = (index as usize).min(sets.len() - 1);
+            *self.setlist_index.lock_ok() = idx;
+            sets[idx].name.clone()
+        };
+        *self.song_index.lock_ok() = 0;
+        tracing::info!("setlist switched → {name}");
         self.recall_song(0);
         self.publish_state();
+        self.mark_state_dirty();
     }
 
     fn move_song(&self, from: u32, to: u32) {
         {
-            let mut setlists = self.setlists.lock().unwrap();
-            let active = *self.setlist_index.lock().unwrap();
+            let mut setlists = self.setlists.lock_ok();
+            let active = *self.setlist_index.lock_ok();
             let Some(set) = setlists.get_mut(active) else { return };
             let entries = &mut set.entries;
             let (from, to) = (from as usize, to as usize);
@@ -1283,7 +1511,7 @@ impl Rig for GuitarRigBackend {
             entries.insert(to, song);
             RigLibrary::save_setlists(&setlists);
             // Keep the current-song pointer on the same song.
-            let mut cur = self.song_index.lock().unwrap();
+            let mut cur = self.song_index.lock_ok();
             if *cur == from {
                 *cur = to;
             } else if from < *cur && to >= *cur {
@@ -1296,10 +1524,7 @@ impl Rig for GuitarRigBackend {
     }
 
     fn patches(&self) -> Vec<PatchInfo> {
-        let guard = match self.rig.lock() {
-            Ok(g) => g,
-            Err(_) => return Vec::new(),
-        };
+        let guard = self.rig.lock_ok();
         let Some(prig) = guard.as_ref() else {
             return Vec::new();
         };
@@ -1318,7 +1543,7 @@ impl Rig for GuitarRigBackend {
                     .map(|first| first.eq_ignore_ascii_case(&p.name))
                     .unwrap_or(false);
                 let (preset, override_modules) = {
-                    let def = self.profile_def.lock().unwrap();
+                    let def = self.profile_def.lock_ok();
                     def.patches
                         .iter()
                         .find(|d| d.name.eq_ignore_ascii_case(&p.name))
@@ -1339,28 +1564,11 @@ impl Rig for GuitarRigBackend {
     }
 
     fn select_patch(&self, index: u32) {
-        if let Ok(mut guard) = self.rig.lock() {
+        {
+            let mut guard = self.rig.lock_ok();
             if let Some(prig) = guard.as_mut() {
-                // If the patch lives in a stack, jump that stack's rotation
-                // to it — the footswitch grid stays consistent with what's
-                // audible (one stack always lit). Loose patches activate
-                // directly.
-                let name = prig.patches().get(index as usize).map(|p| p.name.clone());
-                let in_stack = name.as_ref().and_then(|n| {
-                    prig.stacks().iter().enumerate().find_map(|(si, st)| {
-                        st.patches
-                            .iter()
-                            .position(|p| p.eq_ignore_ascii_case(n))
-                            .map(|pos| (si, pos))
-                    })
-                });
-                match in_stack {
-                    Some((stack, pos)) => {
-                        prig.activate_stack_at(stack, pos);
-                    }
-                    None => {
-                        prig.activate(index as usize);
-                    }
+                if let Some(name) = prig.patches().get(index as usize).map(|p| p.name.clone()) {
+                    activate_patch_by_name(prig, &name);
                 }
             }
         }
@@ -1370,15 +1578,16 @@ impl Rig for GuitarRigBackend {
         self.apply_boost_to_block();
         self.apply_all_drives();
         self.publish_state();
+        self.mark_state_dirty();
     }
 
     fn presets(&self) -> Vec<PresetInfo> {
-        let def = self.profile_def.lock().unwrap();
+        let def = self.profile_def.lock_ok();
         let active_patch = self
             .rig
-            .lock()
-            .ok()
-            .and_then(|g| g.as_ref().and_then(|p| p.active_patch().map(|p| p.name.clone())));
+            .lock_ok()
+            .as_ref()
+            .and_then(|p| p.active_patch().map(|p| p.name.clone()));
         let active_preset = active_patch.and_then(|ap| {
             def.patches
                 .iter()
@@ -1402,7 +1611,7 @@ impl Rig for GuitarRigBackend {
     fn set_patch_preset(&self, patch: u32, preset: u32) {
         // Repoint in the definition…
         let rebuilt = {
-            let mut def = self.profile_def.lock().unwrap();
+            let mut def = self.profile_def.lock_ok();
             let Some(preset_name) = def.presets.get(preset as usize).map(|p| p.name.clone())
             else {
                 return;
@@ -1414,7 +1623,7 @@ impl Rig for GuitarRigBackend {
             p.preset = preset_name;
             RigLibrary::save_profile(&def);
             {
-            let dps = self.drive_presets.lock().unwrap();
+            let dps = self.drive_presets.lock_ok();
             build_profile(&def, &dps)
         }
         };
@@ -1422,12 +1631,13 @@ impl Rig for GuitarRigBackend {
         // an edit-time operation, and it keeps every patch preinstalled for
         // gapless footswitching afterward.
         let active = {
-            let guard = self.rig.lock().unwrap();
+            let guard = self.rig.lock_ok();
             guard
                 .as_ref()
                 .and_then(|prig| prig.active_patch().map(|p| p.name.clone()))
         };
-        if let Ok(mut guard) = self.rig.lock() {
+        {
+            let mut guard = self.rig.lock_ok();
             if let Some(prig) = guard.as_mut() {
                 if let Err(e) = prig.load_profile(rebuilt, None) {
                     tracing::error!("profile reload failed: {e}");
@@ -1458,14 +1668,13 @@ impl Rig for GuitarRigBackend {
         // preinstalled for gapless switching afterward).
         let block_name = self
             .blocks
-            .lock()
-            .unwrap()
+            .lock_ok()
             .iter()
             .find(|b| b.id == id)
             .map(|b| b.name.clone());
         let Some(block_name) = block_name else { return };
         let rebuilt = {
-            let mut def = self.profile_def.lock().unwrap();
+            let mut def = self.profile_def.lock_ok();
             let Some(slot) = def
                 .drives
                 .iter_mut()
@@ -1475,8 +1684,7 @@ impl Rig for GuitarRigBackend {
             };
             let n_options = self
                 .drive_presets
-                .lock()
-                .unwrap()
+                .lock_ok()
                 .iter()
                 .find(|p| p.name.eq_ignore_ascii_case(&slot.preset))
                 .map(|p| p.options.len())
@@ -1488,17 +1696,18 @@ impl Rig for GuitarRigBackend {
             tracing::info!("{} → {} option {}", slot.block, slot.preset, slot.option);
             RigLibrary::save_profile(&def);
             {
-            let dps = self.drive_presets.lock().unwrap();
+            let dps = self.drive_presets.lock_ok();
             build_profile(&def, &dps)
         }
         };
         let active = {
-            let guard = self.rig.lock().unwrap();
+            let guard = self.rig.lock_ok();
             guard
                 .as_ref()
                 .and_then(|prig| prig.active_patch().map(|p| p.name.clone()))
         };
-        if let Ok(mut guard) = self.rig.lock() {
+        {
+            let mut guard = self.rig.lock_ok();
             if let Some(prig) = guard.as_mut() {
                 if let Err(e) = prig.load_profile(rebuilt, None) {
                     tracing::error!("profile reload failed: {e}");
@@ -1528,7 +1737,7 @@ impl Rig for GuitarRigBackend {
             return;
         }
         {
-            let mut def = self.profile_def.lock().unwrap();
+            let mut def = self.profile_def.lock_ok();
             if def.presets.iter().any(|p| p.name.eq_ignore_ascii_case(&name)) {
                 tracing::warn!("add_preset: '{name}' already exists");
                 return;
@@ -1543,7 +1752,7 @@ impl Rig for GuitarRigBackend {
 
     fn add_stack(&self, name: String) {
         {
-            let mut def = self.profile_def.lock().unwrap();
+            let mut def = self.profile_def.lock_ok();
             if def.stacks.iter().any(|s| s.name.eq_ignore_ascii_case(&name)) {
                 return;
             }
@@ -1556,7 +1765,7 @@ impl Rig for GuitarRigBackend {
 
     fn add_patch(&self, name: String, stack: String, preset: String) {
         let rebuilt = {
-            let mut def = self.profile_def.lock().unwrap();
+            let mut def = self.profile_def.lock_ok();
             if def.patches.iter().any(|p| p.name.eq_ignore_ascii_case(&name)) {
                 tracing::warn!("add_patch: '{name}' already exists");
                 return;
@@ -1576,7 +1785,7 @@ impl Rig for GuitarRigBackend {
                 st.patches.push(name.clone());
             }
             RigLibrary::save_profile(&def);
-            let dps = self.drive_presets.lock().unwrap();
+            let dps = self.drive_presets.lock_ok();
             build_profile(&def, &dps)
         };
         tracing::info!("patch added: {name}");
@@ -1589,7 +1798,7 @@ impl Rig for GuitarRigBackend {
             return;
         }
         {
-            let mut dps = self.drive_presets.lock().unwrap();
+            let mut dps = self.drive_presets.lock_ok();
             if dps.iter().any(|p| p.name.eq_ignore_ascii_case(&name)) {
                 return;
             }
@@ -1610,15 +1819,15 @@ impl Rig for GuitarRigBackend {
     fn reload_library(&self) {
         tracing::info!("reloading rig library from {}", crate::library::rig_dir().display());
         let lib = RigLibrary::load_or_bootstrap();
-        *self.profile_def.lock().unwrap() = lib.profile;
-        *self.drive_presets.lock().unwrap() = lib.drive_presets;
-        *self.songs_lib.lock().unwrap() = lib.songs;
-        *self.setlists.lock().unwrap() = lib.setlists;
-        *self.midi_map.lock().unwrap() = lib.midi_map;
-        *self.keymap.lock().unwrap() = lib.keymap;
+        *self.profile_def.lock_ok() = lib.profile;
+        *self.drive_presets.lock_ok() = lib.drive_presets;
+        *self.songs_lib.lock_ok() = lib.songs;
+        *self.setlists.lock_ok() = lib.setlists;
+        *self.midi_map.lock_ok() = lib.midi_map;
+        *self.keymap.lock_ok() = lib.keymap;
         let rebuilt = {
-            let def = self.profile_def.lock().unwrap();
-            let dps = self.drive_presets.lock().unwrap();
+            let def = self.profile_def.lock_ok();
+            let dps = self.drive_presets.lock_ok();
             build_profile(&def, &dps)
         };
         self.reload_rebuilt(rebuilt);
@@ -1630,7 +1839,7 @@ impl Rig for GuitarRigBackend {
             return;
         }
         let rebuilt = {
-            let mut def = self.profile_def.lock().unwrap();
+            let mut def = self.profile_def.lock_ok();
             let Some(p) = def.presets.iter_mut().find(|p| p.name.eq_ignore_ascii_case(&old))
             else {
                 return;
@@ -1642,7 +1851,7 @@ impl Rig for GuitarRigBackend {
                 }
             }
             RigLibrary::save_profile(&def);
-            let dps = self.drive_presets.lock().unwrap();
+            let dps = self.drive_presets.lock_ok();
             build_profile(&def, &dps)
         };
         tracing::info!("preset renamed: {old} → {new_name}");
@@ -1651,7 +1860,7 @@ impl Rig for GuitarRigBackend {
 
     fn delete_preset(&self, name: String) {
         {
-            let mut def = self.profile_def.lock().unwrap();
+            let mut def = self.profile_def.lock_ok();
             if def.patches.iter().any(|p| p.preset.eq_ignore_ascii_case(&name)) {
                 tracing::warn!("delete_preset: '{name}' is in use by a patch — repoint first");
                 return;
@@ -1668,7 +1877,7 @@ impl Rig for GuitarRigBackend {
             return;
         }
         let rebuilt = {
-            let mut def = self.profile_def.lock().unwrap();
+            let mut def = self.profile_def.lock_ok();
             let Some(p) = def.patches.iter_mut().find(|p| p.name.eq_ignore_ascii_case(&old))
             else {
                 return;
@@ -1682,7 +1891,7 @@ impl Rig for GuitarRigBackend {
                 }
             }
             RigLibrary::save_profile(&def);
-            let dps = self.drive_presets.lock().unwrap();
+            let dps = self.drive_presets.lock_ok();
             build_profile(&def, &dps)
         };
         tracing::info!("patch renamed: {old} → {new_name}");
@@ -1691,7 +1900,7 @@ impl Rig for GuitarRigBackend {
 
     fn delete_patch(&self, name: String) {
         let rebuilt = {
-            let mut def = self.profile_def.lock().unwrap();
+            let mut def = self.profile_def.lock_ok();
             let before = def.patches.len();
             def.patches.retain(|p| !p.name.eq_ignore_ascii_case(&name));
             if def.patches.len() == before {
@@ -1701,7 +1910,7 @@ impl Rig for GuitarRigBackend {
                 st.patches.retain(|p| !p.eq_ignore_ascii_case(&name));
             }
             RigLibrary::save_profile(&def);
-            let dps = self.drive_presets.lock().unwrap();
+            let dps = self.drive_presets.lock_ok();
             build_profile(&def, &dps)
         };
         tracing::info!("patch deleted: {name}");
@@ -1713,7 +1922,7 @@ impl Rig for GuitarRigBackend {
             return;
         }
         {
-            let mut def = self.profile_def.lock().unwrap();
+            let mut def = self.profile_def.lock_ok();
             let Some(st) = def.stacks.iter_mut().find(|s| s.name.eq_ignore_ascii_case(&old))
             else {
                 return;
@@ -1727,7 +1936,7 @@ impl Rig for GuitarRigBackend {
 
     fn delete_stack(&self, name: String) {
         {
-            let mut def = self.profile_def.lock().unwrap();
+            let mut def = self.profile_def.lock_ok();
             def.stacks.retain(|s| !s.name.eq_ignore_ascii_case(&name));
             RigLibrary::save_profile(&def);
         }
@@ -1740,7 +1949,7 @@ impl Rig for GuitarRigBackend {
             return;
         }
         {
-            let mut songs = self.songs_lib.lock().unwrap();
+            let mut songs = self.songs_lib.lock_ok();
             if songs.iter().any(|s| s.name.eq_ignore_ascii_case(&name)) {
                 return;
             }
@@ -1763,7 +1972,7 @@ impl Rig for GuitarRigBackend {
             return;
         }
         {
-            let mut sets = self.setlists.lock().unwrap();
+            let mut sets = self.setlists.lock_ok();
             if sets.iter().any(|s| s.name.eq_ignore_ascii_case(&name)) {
                 return;
             }
@@ -1776,7 +1985,7 @@ impl Rig for GuitarRigBackend {
 
     fn add_setlist_entry(&self, setlist: u32, song: String) {
         {
-            let mut sets = self.setlists.lock().unwrap();
+            let mut sets = self.setlists.lock_ok();
             let Some(set) = sets.get_mut(setlist as usize) else { return };
             set.entries.push(crate::profiles::SetlistEntryDef {
                 song: song.clone(),
@@ -1791,7 +2000,7 @@ impl Rig for GuitarRigBackend {
 
     fn remove_setlist_entry(&self, setlist: u32, entry: u32) {
         {
-            let mut sets = self.setlists.lock().unwrap();
+            let mut sets = self.setlists.lock_ok();
             let Some(set) = sets.get_mut(setlist as usize) else { return };
             if (entry as usize) < set.entries.len() {
                 set.entries.remove(entry as usize);
@@ -1803,8 +2012,8 @@ impl Rig for GuitarRigBackend {
 
     fn set_setlist_entry(&self, entry: u32, key: String, bpm: u32) {
         {
-            let active = *self.setlist_index.lock().unwrap();
-            let mut sets = self.setlists.lock().unwrap();
+            let active = *self.setlist_index.lock_ok();
+            let mut sets = self.setlists.lock_ok();
             let Some(e) = sets
                 .get_mut(active)
                 .and_then(|s| s.entries.get_mut(entry as usize))
@@ -1816,7 +2025,7 @@ impl Rig for GuitarRigBackend {
             RigLibrary::save_setlists(&sets);
         }
         // Re-recall if the edited entry is the current song (tempo change).
-        if *self.song_index.lock().unwrap() == entry as usize {
+        if *self.song_index.lock_ok() == entry as usize {
             self.recall_song(entry as usize);
         }
         self.publish_state();
@@ -1830,18 +2039,18 @@ impl Rig for GuitarRigBackend {
         // Record as a set_text override on the active patch, then rebuild —
         // the registry loads the IR at chain build time.
         let block = {
-            let blocks = self.blocks.lock().unwrap();
+            let blocks = self.blocks.lock_ok();
             blocks.iter().find(|b| b.id == id).map(|b| b.name.clone())
         };
         let active = {
-            let guard = self.rig.lock().unwrap();
+            let guard = self.rig.lock_ok();
             guard
                 .as_ref()
                 .and_then(|prig| prig.active_patch().map(|p| p.name.clone()))
         };
         let (Some(block_name), Some(patch_name)) = (block, active) else { return };
         let rebuilt = {
-            let mut def = self.profile_def.lock().unwrap();
+            let mut def = self.profile_def.lock_ok();
             let Some(p) = def
                 .patches
                 .iter_mut()
@@ -1858,7 +2067,7 @@ impl Rig for GuitarRigBackend {
                     .push(crate::profiles::OverrideDef::set_text("Time", &block_name, "ir_path", &path)),
             }
             RigLibrary::save_profile(&def);
-            let dps = self.drive_presets.lock().unwrap();
+            let dps = self.drive_presets.lock_ok();
             build_profile(&def, &dps)
         };
         tracing::info!("{block_name}: custom IR {path}");
@@ -1871,12 +2080,12 @@ impl Rig for GuitarRigBackend {
             return;
         }
         let rebuilt = {
-            let mut def = self.profile_def.lock().unwrap();
+            let mut def = self.profile_def.lock_ok();
             let Some(p) = def.presets.get_mut(index as usize) else { return };
             tracing::info!("preset '{}' → {nam_path}", p.name);
             p.nam = nam_path;
             RigLibrary::save_profile(&def);
-            let dps = self.drive_presets.lock().unwrap();
+            let dps = self.drive_presets.lock_ok();
             build_profile(&def, &dps)
         };
         self.reload_rebuilt(rebuilt);
@@ -1885,19 +2094,19 @@ impl Rig for GuitarRigBackend {
 
     fn set_patch_trim(&self, patch: u32, db: f32) {
         let rebuilt = {
-            let mut def = self.profile_def.lock().unwrap();
+            let mut def = self.profile_def.lock_ok();
             let Some(p) = def.patches.get_mut(patch as usize) else { return };
             p.trim_db = db.clamp(-24.0, 24.0);
             tracing::info!("patch '{}' trim {:+.1} dB", p.name, p.trim_db);
             RigLibrary::save_profile(&def);
-            let dps = self.drive_presets.lock().unwrap();
+            let dps = self.drive_presets.lock_ok();
             build_profile(&def, &dps)
         };
         self.reload_rebuilt(rebuilt);
     }
 
     fn set_perform_mode(&self, mode: u32) {
-        *self.perform_mode.lock().unwrap() = mode.min(2);
+        *self.perform_mode.lock_ok() = mode.min(2);
         tracing::info!(
             "perform mode → {}",
             ["preset", "profile", "setlist"][mode.min(2) as usize]
@@ -1908,12 +2117,12 @@ impl Rig for GuitarRigBackend {
     fn play_preset(&self, index: u32) {
         // Resolve the pool preset → its first patch → activate directly.
         let preset_name = {
-            let def = self.profile_def.lock().unwrap();
+            let def = self.profile_def.lock_ok();
             def.presets.get(index as usize).map(|p| p.name.clone())
         };
         let Some(preset_name) = preset_name else { return };
         let patch_idx = {
-            let def = self.profile_def.lock().unwrap();
+            let def = self.profile_def.lock_ok();
             def.patches
                 .iter()
                 .position(|p| p.preset.eq_ignore_ascii_case(&preset_name))
@@ -1922,7 +2131,8 @@ impl Rig for GuitarRigBackend {
             tracing::warn!("play_preset: no patch uses '{preset_name}'");
             return;
         };
-        if let Ok(mut guard) = self.rig.lock() {
+        {
+            let mut guard = self.rig.lock_ok();
             if let Some(prig) = guard.as_mut() {
                 prig.activate(idx);
             }
@@ -1933,17 +2143,19 @@ impl Rig for GuitarRigBackend {
         self.recall_patch_boost();
         self.apply_boost_to_block();
         self.publish_state();
+        self.mark_state_dirty();
     }
 
     fn toggle_tuner(&self) {
         let shown = {
-            let mut t = self.tuner_visible.lock().unwrap();
+            let mut t = self.tuner_visible.lock_ok();
             *t = !*t;
             *t
         };
         // Tuning is silent: mute the instrument INTO the chain (not the
         // output) so delay/reverb trails ring out naturally underneath.
-        if let Ok(guard) = self.rig.lock() {
+        {
+            let guard = self.rig.lock_ok();
             if let Some(prig) = guard.as_ref() {
                 prig.rig().set_input_mute(shown);
             }
@@ -1956,7 +2168,7 @@ impl Rig for GuitarRigBackend {
     fn capture_di_reference(&self, seconds: u32) {
         let secs = seconds.clamp(5, 60) as usize;
         let (sr, armed) = {
-            let guard = self.rig.lock().unwrap();
+            let guard = self.rig.lock_ok();
             match guard.as_ref() {
                 Some(prig) => {
                     let sr = prig.sample_rate() as usize;
@@ -1977,7 +2189,7 @@ impl Rig for GuitarRigBackend {
             for _ in 0..(secs + 2) * 10 {
                 std::thread::sleep(std::time::Duration::from_millis(100));
                 let done = {
-                    let guard = backend.rig.lock().unwrap();
+                    let guard = backend.rig.lock_ok();
                     guard
                         .as_ref()
                         .map(|p| p.rig().di_capture_state().1 == 0)
@@ -1988,7 +2200,7 @@ impl Rig for GuitarRigBackend {
                 }
             }
             let samples = {
-                let guard = backend.rig.lock().unwrap();
+                let guard = backend.rig.lock_ok();
                 guard
                     .as_ref()
                     .map(|p| p.rig().take_di_capture())
@@ -2006,7 +2218,7 @@ impl Rig for GuitarRigBackend {
 
     fn set_headphone(&self, volume: f32, self_mix: f32) {
         {
-            let mut hp = self.headphone.lock().unwrap();
+            let mut hp = self.headphone.lock_ok();
             hp.volume = volume.clamp(0.0, 1.0);
             hp.self_mix = self_mix.clamp(0.0, 1.0);
             // Feed the engine's phones bus (routed interfaces blend the
@@ -2018,7 +2230,7 @@ impl Rig for GuitarRigBackend {
 
     fn toggle_main_mute(&self) {
         {
-            let mut hp = self.headphone.lock().unwrap();
+            let mut hp = self.headphone.lock_ok();
             hp.main_mute = !hp.main_mute;
             tracing::info!("main output: {}", if hp.main_mute { "MUTED" } else { "live" });
         }
@@ -2027,17 +2239,18 @@ impl Rig for GuitarRigBackend {
     }
 
     fn set_master_trim(&self, db: f32) {
-        *self.master_trim.lock().unwrap() = db.clamp(-24.0, 12.0);
+        *self.master_trim.lock_ok() = db.clamp(-24.0, 12.0);
         self.apply_main_mute();
         self.publish_state();
     }
 
     fn midi_recent(&self) -> Vec<String> {
-        self.midi_log.lock().unwrap().clone()
+        self.midi_log.lock_ok().clone()
     }
 
     fn toggle_fx(&self) {
-        if let Ok(mut guard) = self.rig.lock() {
+        {
+            let mut guard = self.rig.lock_ok();
             if let Some(prig) = guard.as_mut() {
                 let on = prig.toggle_fx_bypass();
                 tracing::info!("FX bypass: {}", if on { "ON" } else { "off" });
@@ -2048,7 +2261,7 @@ impl Rig for GuitarRigBackend {
 
     fn toggle_boost(&self) {
         let on = {
-            let mut b = self.boost_on.lock().unwrap();
+            let mut b = self.boost_on.lock_ok();
             *b = !*b;
             *b
         };
@@ -2056,7 +2269,7 @@ impl Rig for GuitarRigBackend {
         tracing::info!(
             "boost pedal: {}",
             if on {
-                format!("{:+.0} dB", *self.boost_level.lock().unwrap())
+                format!("{:+.0} dB", *self.boost_level.lock_ok())
             } else {
                 "off".to_string()
             }
@@ -2066,8 +2279,8 @@ impl Rig for GuitarRigBackend {
 
     fn cycle_boost(&self) {
         {
-            let mut on = self.boost_on.lock().unwrap();
-            let mut level = self.boost_level.lock().unwrap();
+            let mut on = self.boost_on.lock_ok();
+            let mut level = self.boost_level.lock_ok();
             if *on {
                 // Already engaged: rotate to the next level.
                 let next = BOOST_LEVELS
@@ -2087,12 +2300,12 @@ impl Rig for GuitarRigBackend {
     }
 
     fn tuner(&self) -> TunerReading {
-        let (samples, rate) = match self.rig.lock() {
-            Ok(guard) => match guard.as_ref() {
+        let (samples, rate) = {
+            let guard = self.rig.lock_ok();
+            match guard.as_ref() {
                 Some(prig) => (prig.input_samples(), prig.sample_rate() as f32),
                 None => return TunerReading::default(),
-            },
-            Err(_) => return TunerReading::default(),
+            }
         };
         match detect_pitch(&samples, rate) {
             Some(freq) => {
@@ -2105,13 +2318,13 @@ impl Rig for GuitarRigBackend {
 
     fn tap_tempo(&self) {
         // Tuner up? The tap-tempo switch doubles as its dismiss.
-        if *self.tuner_visible.lock().unwrap() {
+        if *self.tuner_visible.lock_ok() {
             Rig::toggle_tuner(self);
             return;
         }
         let now = std::time::Instant::now();
         let new_tempo = {
-            let mut taps = self.taps.lock().unwrap();
+            let mut taps = self.taps.lock_ok();
             let interval = taps.last.map(|t| now - t);
             taps.last = Some(now);
             match interval {
@@ -2137,7 +2350,8 @@ impl Rig for GuitarRigBackend {
             }
         };
         if let Some(bpm) = new_tempo {
-            *self.tempo.lock().unwrap() = Some(bpm);
+            *self.tempo.lock_ok() = Some(bpm);
+            self.mark_state_dirty();
             self.apply_tempo_to_delays();
             self.events.publish(RigEvent::Perf(Rig::perf(self)));
         }
@@ -2146,8 +2360,7 @@ impl Rig for GuitarRigBackend {
     fn set_block_bypass(&self, id: String, bypassed: bool) {
         let current = self
             .blocks
-            .lock()
-            .unwrap()
+            .lock_ok()
             .iter()
             .find(|b| b.id == id)
             .map(|b| b.bypassed);
@@ -2159,14 +2372,15 @@ impl Rig for GuitarRigBackend {
 
     fn toggle_block_bypass(&self, id: String) {
         let new_bypass = {
-            let mut blocks = self.blocks.lock().unwrap();
+            let mut blocks = self.blocks.lock_ok();
             blocks.iter_mut().find(|b| b.id == id).map(|b| {
                 b.bypassed = !b.bypassed;
                 (b.bypassed, b.block_type)
             })
         };
         if let Some((byp, bt)) = new_bypass {
-            if let Ok(mut guard) = self.rig.lock() {
+            {
+                let mut guard = self.rig.lock_ok();
                 if let Some(prig) = guard.as_mut() {
                     // Persist into the patch config so FX-bypass cycles and
                     // re-activation restore this toggle, not the build-time
@@ -2192,8 +2406,7 @@ impl Rig for GuitarRigBackend {
         if param == "drive" {
             let block = self
                 .blocks
-                .lock()
-                .unwrap()
+                .lock_ok()
                 .iter()
                 .find(|b| b.id == id)
                 .map(|b| (b.name.clone(), b.block_type));
@@ -2204,7 +2417,8 @@ impl Rig for GuitarRigBackend {
             }
         }
         let mut retime_delay = false;
-        if let Ok(mut blocks) = self.blocks.lock() {
+        {
+            let mut blocks = self.blocks.lock_ok();
             if let Some(b) = blocks.iter_mut().find(|b| b.id == id) {
                 if b.param_name.as_deref() == Some(param.as_str()) {
                     b.param_value = value;
@@ -2219,7 +2433,8 @@ impl Rig for GuitarRigBackend {
             // A note-division change re-times the delay from the tempo.
             self.apply_tempo_to_delays();
         }
-        if let Ok(guard) = self.rig.lock() {
+        {
+            let guard = self.rig.lock_ok();
             if let Some(prig) = guard.as_ref() {
                 prig.rig().set_active_block_param(&id, &param, value);
             }

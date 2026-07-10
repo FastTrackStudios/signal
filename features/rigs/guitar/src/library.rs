@@ -61,6 +61,27 @@ pub struct KeymapLib {
     pub bindings: Vec<KeyBindingDef>,
 }
 
+/// The rig's last-active position (`last-state.styx`) — flushed by the
+/// meter pump on patch/song/part/setlist/tempo changes and restored on the
+/// next open, so a crash restart mid-set lands back on the same song
+/// instead of song 1 at 120 BPM. Indices/names are re-validated against
+/// the (possibly edited) library on restore.
+#[derive(Clone, Debug, Default, Facet)]
+pub struct LastState {
+    #[facet(default)]
+    pub setlist_index: u32,
+    #[facet(default)]
+    pub song_index: u32,
+    #[facet(default)]
+    pub part_index: u32,
+    /// Active patch by name; empty = none saved.
+    #[facet(default)]
+    pub active_patch: String,
+    /// Tapped/recalled tempo; 0 = none saved.
+    #[facet(default)]
+    pub tempo_bpm: f32,
+}
+
 /// Everything loaded from the rig directory.
 #[derive(Clone, Debug)]
 pub struct RigLibrary {
@@ -287,6 +308,15 @@ impl RigLibrary {
     pub fn save_setlists(setlists: &[SetlistDef]) {
         write("setlists.styx", &SetlistLib { setlists: setlists.to_vec() });
     }
+
+    pub fn save_last_state(state: &LastState) {
+        write("last-state.styx", state);
+    }
+
+    /// `None` when the file is missing (fresh install) or unparsable.
+    pub fn load_last_state() -> Option<LastState> {
+        read("last-state.styx")
+    }
 }
 
 #[cfg(test)]
@@ -303,5 +333,25 @@ mod tests {
         super::resolve_nam(&mut abs);
         super::relativize_nam(&mut abs);
         assert_eq!(abs, "/elsewhere/y.nam");
+    }
+
+    #[test]
+    fn last_state_roundtrips() {
+        // Same dir as the sibling test — tests share the process env.
+        std::env::set_var("SIGNAL_RIG_DIR", "/tmp/fts-test-rig");
+        let state = super::LastState {
+            setlist_index: 2,
+            song_index: 5,
+            part_index: 1,
+            active_patch: "Lead Big".to_string(),
+            tempo_bpm: 74.0,
+        };
+        super::RigLibrary::save_last_state(&state);
+        let back = super::RigLibrary::load_last_state().expect("last-state.styx roundtrip");
+        assert_eq!(back.setlist_index, 2);
+        assert_eq!(back.song_index, 5);
+        assert_eq!(back.part_index, 1);
+        assert_eq!(back.active_patch, "Lead Big");
+        assert_eq!(back.tempo_bpm, 74.0);
     }
 }
