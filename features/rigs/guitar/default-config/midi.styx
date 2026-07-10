@@ -1,0 +1,3 @@
+tap_ccs (101 102 103 104 105)
+
+direct ({cc 106, slot 0} {cc 107, slot 1} {cc 108, slot 2} {cc 109, slot 3} {cc 110, slot 4})

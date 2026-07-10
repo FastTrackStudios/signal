@@ -12,8 +12,13 @@
 //!   setlists.styx       SetlistLib — dated sets with per-entry overrides
 //! ```
 //!
-//! First run bootstraps the files from the built-in worship defaults, so
-//! the directory is always a complete, editable snapshot.
+//! First run bootstraps the files from the in-repo default config
+//! (`features/rigs/guitar/default-config/` — a snapshot of the worship
+//! rig, embedded at compile time), including the NAM model files it
+//! references, so the directory is always a complete, editable snapshot
+//! and a fresh engine makes sound out of the box. NAM paths in the
+//! defaults are relative (`models/<file>.nam`) and resolve against the
+//! rig directory at load; absolute paths pass through untouched.
 
 use std::path::PathBuf;
 
@@ -67,6 +72,94 @@ pub struct RigLibrary {
     pub keymap: Vec<KeyBindingDef>,
 }
 
+// The in-repo default config, embedded so installed binaries can seed a
+// fresh machine without a checkout.
+const DEFAULT_PROFILE: &str = include_str!("../default-config/profile.styx");
+const DEFAULT_DRIVE_PRESETS: &str = include_str!("../default-config/drive-presets.styx");
+const DEFAULT_SONGS: &str = include_str!("../default-config/songs.styx");
+const DEFAULT_SETLISTS: &str = include_str!("../default-config/setlists.styx");
+const DEFAULT_MIDI: &str = include_str!("../default-config/midi.styx");
+const DEFAULT_KEYMAP: &str = include_str!("../default-config/keymap.styx");
+
+/// The NAM captures the default config references (rig-dir-relative
+/// `models/<name>`), embedded for first-run seeding.
+const DEFAULT_MODELS: &[(&str, &[u8])] = &[
+    (
+        "'65 AC30_6 - The Iconic Cleanish.nam",
+        include_bytes!("../default-config/models/'65 AC30_6 - The Iconic Cleanish.nam"),
+    ),
+    (
+        "Fender DRRI _ Clean _ DI Capture (No Cab).nam",
+        include_bytes!("../default-config/models/Fender DRRI _ Clean _ DI Capture (No Cab).nam"),
+    ),
+    (
+        "Fender DRRI _ Clean _ SM57 + Royer R-121 + Room _ Full Rig.nam",
+        include_bytes!(
+            "../default-config/models/Fender DRRI _ Clean _ SM57 + Royer R-121 + Room _ Full Rig.nam"
+        ),
+    ),
+    (
+        "Vib Arena Lead LT.nam",
+        include_bytes!("../default-config/models/Vib Arena Lead LT.nam"),
+    ),
+    (
+        "Vibrato Verb AA Crunch.nam",
+        include_bytes!("../default-config/models/Vibrato Verb AA Crunch.nam"),
+    ),
+    (
+        "Vibrato Verb AA Driven.nam",
+        include_bytes!("../default-config/models/Vibrato Verb AA Driven.nam"),
+    ),
+    (
+        "JHS Morning Glory V4 - High Gain Blue.nam",
+        include_bytes!("../default-config/models/JHS Morning Glory V4 - High Gain Blue.nam"),
+    ),
+    (
+        "JHS Morning Glory V4 - Low Gain Blue.nam",
+        include_bytes!("../default-config/models/JHS Morning Glory V4 - Low Gain Blue.nam"),
+    ),
+    (
+        "JHS Morning Glory V4 - Medium Gain Blue.nam",
+        include_bytes!("../default-config/models/JHS Morning Glory V4 - Medium Gain Blue.nam"),
+    ),
+    (
+        "King of Tone both sides.nam",
+        include_bytes!("../default-config/models/King of Tone both sides.nam"),
+    ),
+    (
+        "King of Tone ver4 Red channel set to Boost.nam",
+        include_bytes!("../default-config/models/King of Tone ver4 Red channel set to Boost.nam"),
+    ),
+];
+
+/// Write any default NAM model missing from `<rig_dir>/models/`.
+fn seed_models() {
+    let dir = rig_dir().join("models");
+    for (name, bytes) in DEFAULT_MODELS {
+        let path = dir.join(name);
+        if path.exists() {
+            continue;
+        }
+        if let Err(e) = std::fs::create_dir_all(&dir) {
+            tracing::warn!("rig library: cannot create {}: {e}", dir.display());
+            return;
+        }
+        if let Err(e) = std::fs::write(&path, bytes) {
+            tracing::warn!("rig library: seed model {name} failed: {e}");
+        } else {
+            tracing::info!("rig library: seeded model {name}");
+        }
+    }
+}
+
+/// Resolve a rig-dir-relative NAM path ("models/…") to absolute;
+/// absolute paths pass through.
+fn resolve_nam(path: &mut String) {
+    if !path.is_empty() && !std::path::Path::new(path.as_str()).is_absolute() {
+        *path = rig_dir().join(path.as_str()).to_string_lossy().into_owned();
+    }
+}
+
 fn read<T: for<'a> Facet<'a>>(file: &str) -> Option<T> {
     let path = rig_dir().join(file);
     let text = std::fs::read_to_string(&path).ok()?;
@@ -95,46 +188,67 @@ fn write<T: for<'a> Facet<'a>>(file: &str, value: &T) {
     }
 }
 
+/// Read `file`, seeding it from the embedded in-repo default text when
+/// missing (the text is written verbatim so the on-disk copy matches the
+/// repo snapshot). Falls back to the code-built default if the embedded
+/// text fails to parse.
+fn read_or_seed<T: for<'a> Facet<'a>>(file: &str, seed: &str, fallback: impl FnOnce() -> T) -> T {
+    if let Some(v) = read(file) {
+        return v;
+    }
+    let dir = rig_dir();
+    if let Err(e) = std::fs::create_dir_all(&dir) {
+        tracing::warn!("rig library: cannot create {}: {e}", dir.display());
+    } else if let Err(e) = std::fs::write(dir.join(file), seed) {
+        tracing::warn!("rig library: seed {file} failed: {e}");
+    } else {
+        tracing::info!("rig library: seeded {file} from the in-repo default");
+    }
+    match facet_styx::from_str::<T>(seed) {
+        Ok(v) => v,
+        Err(e) => {
+            tracing::warn!("rig library: embedded default {file} failed to parse ({e})");
+            let v = fallback();
+            write(file, &v);
+            v
+        }
+    }
+}
+
 impl RigLibrary {
-    /// Load the library, bootstrapping any missing file from the built-in
-    /// defaults (and writing it out so the directory is complete).
+    /// Load the library, bootstrapping any missing file (and the NAM
+    /// models the defaults reference) from the embedded in-repo default
+    /// config, so the directory is always complete.
     pub fn load_or_bootstrap() -> Self {
-        let dir = rig_dir();
-        let profile = read::<ProfileDef>("profile.styx").unwrap_or_else(|| {
-            let def = worship_def();
-            write("profile.styx", &def);
-            tracing::info!("rig library: bootstrapped profile.styx at {}", dir.display());
-            def
-        });
-        let drive_presets = read::<DrivePresetLib>("drive-presets.styx")
-            .map(|l| l.presets)
-            .unwrap_or_else(|| {
-                let presets = drive_presets();
-                write("drive-presets.styx", &DrivePresetLib { presets: presets.clone() });
-                presets
-            });
-        let songs = read::<SongLib>("songs.styx").map(|l| l.songs).unwrap_or_else(|| {
-            let songs = song_library();
-            write("songs.styx", &SongLib { songs: songs.clone() });
-            songs
-        });
-        let setlists = read::<SetlistLib>("setlists.styx")
-            .map(|l| l.setlists)
-            .unwrap_or_else(|| {
-                let setlists = default_setlists();
-                write("setlists.styx", &SetlistLib { setlists: setlists.clone() });
-                setlists
-            });
-        let midi_map = read::<MidiMapDef>("midi.styx").unwrap_or_else(|| {
-            let map = default_midi_map();
-            write("midi.styx", &map);
-            map
-        });
-        let keymap = read::<KeymapLib>("keymap.styx").map(|k| k.bindings).unwrap_or_else(|| {
-            let bindings = default_keymap();
-            write("keymap.styx", &KeymapLib { bindings: bindings.clone() });
-            bindings
-        });
+        seed_models();
+        let mut profile = read_or_seed::<ProfileDef>("profile.styx", DEFAULT_PROFILE, worship_def);
+        let mut drive_presets =
+            read_or_seed::<DrivePresetLib>("drive-presets.styx", DEFAULT_DRIVE_PRESETS, || {
+                DrivePresetLib { presets: drive_presets() }
+            })
+            .presets;
+        let songs = read_or_seed::<SongLib>("songs.styx", DEFAULT_SONGS, || SongLib {
+            songs: song_library(),
+        })
+        .songs;
+        let setlists =
+            read_or_seed::<SetlistLib>("setlists.styx", DEFAULT_SETLISTS, || SetlistLib {
+                setlists: default_setlists(),
+            })
+            .setlists;
+        let midi_map = read_or_seed::<MidiMapDef>("midi.styx", DEFAULT_MIDI, default_midi_map);
+        let keymap = read_or_seed::<KeymapLib>("keymap.styx", DEFAULT_KEYMAP, || KeymapLib {
+            bindings: default_keymap(),
+        })
+        .bindings;
+        for preset in &mut profile.presets {
+            resolve_nam(&mut preset.nam);
+        }
+        for dp in &mut drive_presets {
+            for option in &mut dp.options {
+                resolve_nam(&mut option.nam);
+            }
+        }
         Self { profile, drive_presets, songs, setlists, midi_map, keymap }
     }
 
