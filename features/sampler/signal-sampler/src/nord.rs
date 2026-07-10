@@ -276,10 +276,40 @@ pub fn layering_demo() -> Container {
     )
 }
 
+/// The **City Grand** physically-modeled piano across the full 88 keys — a
+/// single `Harmonic` (modal synthesis) native block. The voice loads its
+/// measured parameter table at runtime (see `native::modal`).
+pub fn city_grand_preset() -> Container {
+    Container::preset("City Grand").add(
+        Container::layer("Grand Piano")
+            .keys(21, 108)
+            .block(BlockType::Harmonic, "City Grand"),
+    )
+}
+
+/// City Wurli — the vendored physically-modeled Wurlitzer 200A
+/// (`openwurli-dsp`) on the Formant block. The engine's native range is MIDI
+/// 33–96; the layer spans the full keyboard and the engine clamps internally.
+pub fn city_wurli_preset() -> Container {
+    Container::preset("City Wurli").add(
+        Container::layer("Wurli")
+            .keys(21, 108)
+            .block(BlockType::Formant, "City Wurli"),
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::rig_node::Role;
+
+    #[test]
+    fn city_grand_preset_spans_the_keyboard() {
+        let p = city_grand_preset();
+        assert_eq!(p.name, "City Grand");
+        let layer = p.find("Grand Piano").unwrap();
+        assert_eq!((layer.zone.key_lo, layer.zone.key_hi), (21, 108));
+    }
 
     #[test]
     fn layering_demo_has_nested_split_and_velocity_zones() {

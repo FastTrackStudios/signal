@@ -1,0 +1,44 @@
+[package]
+name = "openwurli-dsp"
+version = "0.5.2"
+edition = "2024"
+rust-version = "1.87"
+# openwurli is GPL-3.0. Vendored into this tree for personal use — this label
+# is intentionally NOT the workspace MIT/Apache default. See README.md + LICENSE.
+license = "GPL-3.0-or-later"
+repository = "https://github.com/hal0zer0/openwurli"
+authors = ["hal0zer0"]
+description = "Wurlitzer 200A DSP library — modal synthesis, preamp circuit simulation, tremolo, and a framework-agnostic WurliEngine for plugin/CLI/embedded hosts"
+
+[features]
+default = ["legacy-power-amp"]
+# Opt-in melange 12-node DK preamp solver. Default (no feature) uses the
+# hand-written 8-node legacy solver. NOTE: the vendored crate drops the
+# external melange-primitives git dependency (the one biquad it provided is
+# reimplemented locally in filters.rs), so the melange-preamp path is retained
+# only for source parity — the legacy default is what the signal engine builds.
+melange-preamp = []
+legacy-tremolo = []
+legacy-power-amp = []
+
+[lints.rust]
+unexpected_cfgs = { level = "allow", check-cfg = ['cfg(melange_precise_exp)'] }
+unused_variables = "allow"
+
+[lints.clippy]
+# Melange-generated solvers (gen_preamp.rs, gen_tremolo.rs) emit idiomatic
+# MNA/NR code that triggers these lints. Suppressing crate-wide is simpler
+# than patching generated output.
+needless_range_loop = "allow"
+too_many_arguments = "allow"
+approx_constant = "allow"
+absurd_extreme_comparisons = "allow"
+identity_op = "allow"
+erasing_op = "allow"
+unnecessary_cast = "allow"
+
+[dependencies]
+
+[dev-dependencies]
+hound = "3.5"
+midly = "0.5"

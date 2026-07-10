@@ -13,8 +13,8 @@ use signal_proto::block::BlockType;
 use crate::rig::RigBlock;
 
 use super::{
-    FilterCharacter, FilterMode, HarmVoice, NativeAmp, NativeDfs, NativeFilter, NativeWaveshaper,
-    NativeWavetable, SynthConfig,
+    FilterCharacter, FilterMode, HarmVoice, NativeAmp, NativeDfs, NativeFilter, NativeModal,
+    NativeWaveshaper, NativeWavetable, NativeWurli, SynthConfig,
 };
 use crate::native_osc::NativeOscillator;
 
@@ -23,6 +23,10 @@ type Ctor = fn(&RigBlock, u32) -> Box<dyn PluginInstance>;
 /// The registry: `(block type, constructor)`.
 const REGISTRY: &[(BlockType, Ctor)] = &[
     (BlockType::Oscillator, build_oscillator),
+    // City Grand physically-modeled piano (modal synthesis).
+    (BlockType::Harmonic, build_modal),
+    // City Wurli physically-modeled Wurlitzer 200A (vendored openwurli-dsp).
+    (BlockType::Formant, build_wurli),
     (BlockType::Wavetable, build_wavetable),
     (BlockType::Filter, build_filter),
     (BlockType::Amp, build_amp),
@@ -174,6 +178,14 @@ pub fn build_native(block: &RigBlock, sample_rate: u32) -> Option<Box<dyn Plugin
 
 fn build_oscillator(_block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
     Box::new(NativeOscillator::new(sample_rate))
+}
+
+fn build_modal(_block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
+    Box::new(NativeModal::new(sample_rate))
+}
+
+fn build_wurli(_block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
+    Box::new(NativeWurli::new(sample_rate))
 }
 
 fn build_wavetable(block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {

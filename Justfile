@@ -73,6 +73,21 @@ drums: (rig "Drum Rig")
 keys preset="Nord Stage" midi="all":
     PIPEWIRE_PROPS='{ application.name = FTS-Signal }' cargo run --release -p signal-keys --features pipewire --example keys_tui -- --preset "{{preset}}" --midi "{{midi}}"
 
+# Play the City Grand physically-modeled piano from a MIDI keyboard.
+# Voice loads its param table from ~/.config/signal/city-grand/table.json
+# (regenerate with `pm sweep` in research/piano-model).
+# NOTE: --midi targets ONE port by name (substring). Do NOT use "all" here —
+# it allocates an ALSA sequencer queue per port (~24 on this rig) and blows
+# past ALSA's ~32-queue limit. `just piano <name>` picks a different keyboard.
+piano midi="KONTROL":
+    PIPEWIRE_PROPS='{ application.name = FTS-Signal }' cargo run --release -p signal-keys --features pipewire --example keys_tui -- --preset "City Grand" --midi "{{midi}}"
+
+# Play City Wurli — the vendored physically-modeled Wurlitzer 200A (openwurli,
+# GPL, personal use) from a MIDI keyboard (TUI). Same ALSA-queue caveat as
+# `just piano`: --midi targets ONE port by name, never "all".
+wurli midi="KONTROL":
+    PIPEWIRE_PROPS='{ application.name = FTS-Signal }' cargo run --release -p signal-keys --features pipewire --example keys_tui -- --preset "City Wurli" --midi "{{midi}}"
+
 # Play Cinematic Studio Strings — 1st Violins from a MIDI keyboard (TUI).
 strings lib="" midi="all" artic="Leg" mic="Mix":
     PIPEWIRE_PROPS='{ application.name = FTS-Signal }' cargo run --release -p signal-sampler --features pipewire --example strings_tui -- {{ if lib != "" { "--lib '" + lib + "'" } else { "" } }} --midi "{{midi}}" --artic "{{artic}}" --mic "{{mic}}"
