@@ -199,6 +199,21 @@ impl StringWaveguide {
                 pulse[i] -= orig[i - dcomb];
             }
         }
+        // DC-block the excitation: the felt force pulse is unipolar and
+        // DC-heavy, but a string cannot resonate below f0 and a bridge does
+        // not radiate DC — injected raw, the LF content exits the output tap
+        // once as a broadband THUMP that (at treble) swamps the tone by
+        // 25-35 dB and reads as "an impulse, not a piano". One-pole HP at
+        // 0.25·f0 keeps every partial, kills the thud.
+        let fc = 0.25 * f0_est;
+        let a_hp = 1.0 / (1.0 + TAU * fc / self.sr);
+        let (mut y1, mut x1) = (0.0f32, 0.0f32);
+        for x in &mut pulse {
+            let y = a_hp * (y1 + *x - x1);
+            x1 = *x;
+            y1 = y;
+            *x = y;
+        }
         self.exc = pulse;
         self.exc_pos = 0;
     }
