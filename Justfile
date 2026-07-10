@@ -141,6 +141,7 @@ release-package: web-stage
     cp target/release/fts-installer "$stage/fts-installer-$plat"
     for b in fasttrackstudio fts "fts-installer-$plat"; do
         "${PATCHELF[@]}" --set-interpreter /lib64/ld-linux-x86-64.so.2 --remove-rpath "$stage/$b"
+        strip "$stage/$b"
     done
     cp apps/fasttrackstudio/systemd/signal-engine.service "$stage"/
     cp apps/fasttrackstudio/assets/fasttrackstudio.desktop "$stage"/
