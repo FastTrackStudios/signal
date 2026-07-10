@@ -337,10 +337,29 @@ fn GuitarRigView() -> Element {
         let generation = generation();
         async move {
             let target = EngineTarget::current();
+            // Opening a rig IS the intent to run it: when the target is the
+            // local engine and nothing answers, start it ourselves (native
+            // only — the web build can only connect). An engine started via
+            // CLI/systemd/another machine is simply connected to.
+            #[cfg(not(target_arch = "wasm32"))]
+            let mut autostart = matches!(
+                &target,
+                EngineTarget::Ws(url) if url.contains("127.0.0.1") || url.contains("localhost")
+            );
             loop {
                 if let Some(c) = connect_once(&target).await {
                     attempts.set(0);
                     return (generation, c);
+                }
+                #[cfg(not(target_arch = "wasm32"))]
+                if autostart {
+                    autostart = false;
+                    if !crate::engines::signal_running() {
+                        match crate::engines::start_signal() {
+                            Ok(_) => tracing::info!("rig open: auto-started the signal engine"),
+                            Err(e) => tracing::warn!("rig open: engine auto-start failed: {e}"),
+                        }
+                    }
                 }
                 attempts += 1;
                 architect::platform::sleep(std::time::Duration::from_millis(1200)).await;
@@ -408,7 +427,11 @@ fn GuitarRigView() -> Element {
                         span { style: "font-size: 11px; font-family: monospace; color: #71717a;", "{EngineTarget::current().label()}" }
                         if attempts() > 0 {
                             span { style: "font-size: 11px; color: #71717a;",
-                                "Start it from the Engines area above (or `fts signal engine`) and this view will connect on its own."
+                                if cfg!(target_arch = "wasm32") {
+                                    "Start the engine on its machine (desktop app or `fts signal engine`) and this view will connect on its own."
+                                } else {
+                                    "Starting the engine… (an engine started elsewhere — CLI, another machine — connects here too)"
+                                }
                             }
                         }
                         RemoteEngineForm { generation }
