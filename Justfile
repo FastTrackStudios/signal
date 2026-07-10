@@ -74,6 +74,49 @@ rig-install: web-stage
         echo "deployed (engine stopped — start it from the app or: systemctl --user start signal-engine)"
     fi
 
+# Full install on this machine: everything rig-install does (release
+# binary + embedded web UI + systemd unit) PLUS the `fts` CLI, PATH
+# symlinks in ~/.local/bin, and desktop integration (launcher entry +
+# icon) — FastTrackStudio shows up in the app menu like any other app.
+install: rig-install
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cargo build --release -p fts-cli
+    install -m 755 target/release/fts ~/.local/lib/fts/fts.new
+    mv -T ~/.local/lib/fts/fts.new ~/.local/lib/fts/fts
+    install -d ~/.local/bin
+    ln -sf ~/.local/lib/fts/fasttrackstudio ~/.local/bin/fasttrackstudio
+    ln -sf ~/.local/lib/fts/fts ~/.local/bin/fts
+    install -d ~/.local/share/icons/hicolor/scalable/apps
+    install -m 644 apps/fasttrackstudio/assets/icon.svg \
+        ~/.local/share/icons/hicolor/scalable/apps/fasttrackstudio.svg
+    install -d ~/.local/share/applications
+    sed "s|@BIN@|$HOME/.local/lib/fts/fasttrackstudio|" \
+        apps/fasttrackstudio/assets/fasttrackstudio.desktop \
+        > ~/.local/share/applications/fasttrackstudio.desktop
+    update-desktop-database ~/.local/share/applications 2>/dev/null || true
+    gtk-update-icon-cache ~/.local/share/icons/hicolor 2>/dev/null || true
+    echo "installed: fasttrackstudio + fts in ~/.local/bin, launcher entry ready"
+
+# Remove everything `just install` put on this machine: stop + remove
+# the systemd unit, binaries, symlinks, launcher entry, and icon.
+# User data is untouched (~/.config/fts, ~/.config/signal — the rig
+# config may be a symlink into this repo; never deleted).
+uninstall:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    systemctl --user stop signal-engine 2>/dev/null || true
+    systemctl --user disable signal-engine 2>/dev/null || true
+    rm -f ~/.config/systemd/user/signal-engine.service
+    systemctl --user daemon-reload
+    rm -f ~/.local/bin/fasttrackstudio ~/.local/bin/fts
+    rm -rf ~/.local/lib/fts
+    rm -f ~/.local/share/applications/fasttrackstudio.desktop
+    rm -f ~/.local/share/icons/hicolor/scalable/apps/fasttrackstudio.svg
+    update-desktop-database ~/.local/share/applications 2>/dev/null || true
+    gtk-update-icon-cache ~/.local/share/icons/hicolor 2>/dev/null || true
+    echo "uninstalled (user data in ~/.config/fts and ~/.config/signal kept)"
+
 # Pull the latest upstream NeuralAmpModelerCore into the vendored copy
 # (libs/neural-amp-modeler/NeuralAmpModelerCore) and run the crate's
 # test suite. The parity tests run every shipped rig model through BOTH
