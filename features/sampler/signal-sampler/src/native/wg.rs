@@ -128,8 +128,12 @@ impl StringWaveguide {
         let d = (1.0 - brightness).clamp(0.0, 0.98) * 0.5;
         let m = n_disp.max(1);
         let (n, tune_a, disp_a) = design_loop(f0 as f64, b as f64, m, d as f64, sr as f64);
+        // T60 loop gain COMPENSATED for the loss LP's own attenuation at f0
+        // (uncompensated it adds −96 dB/s in the treble — the "plucks" bug).
+        let w0 = TAU * f0 / sr;
+        let hlp = (1.0 - d) / (1.0 - 2.0 * d * w0.cos() + d * d).sqrt();
         let loops = (f0 * t60).max(1.0);
-        let loop_gain = 10f32.powf(-3.0 / loops);
+        let loop_gain = (10f32.powf(-3.0 / loops) / hlp.max(1e-3)).min(0.99995);
         Self {
             buf: vec![0.0; n.max(2)],
             n: n.max(2),
@@ -221,6 +225,7 @@ struct CoupledStrings {
     strings: Vec<StringWaveguide>,
     g: f32,
     outs: Vec<f32>,
+    skew: f32,
 }
 
 impl CoupledStrings {
@@ -245,7 +250,7 @@ impl CoupledStrings {
             })
             .collect();
         let g = 2.0 / (n as f32 + zb.max(0.0));
-        Self { strings, g, outs: vec![0.0; n] }
+        Self { strings, g, outs: vec![0.0; n], skew: 0.15 }
     }
 
     fn strike(&mut self, vel01: f32, strike_pos: f32) {
@@ -253,7 +258,7 @@ impl CoupledStrings {
         for (i, s) in self.strings.iter_mut().enumerate() {
             s.strike(vel01, strike_pos);
             let frac = if n > 1 { i as f32 / (n as f32 - 1.0) - 0.5 } else { 0.0 };
-            s.scale_exc(1.0 + 0.15 * frac);
+            s.scale_exc(1.0 + self.skew * frac);
             let skew = (0.0003 * i as f32 * s.sr) as usize;
             s.delay_exc(skew);
         }
@@ -287,9 +292,15 @@ struct WgNoteRow {
     brightness: f32,
     strike: f32,
     detune: f32,
+    #[serde(default = "default_skew")]
+    skew: f32,
     #[serde(default)]
     #[allow(dead_code)]
     body: Option<Vec<(f32, f32)>>,
+}
+
+fn default_skew() -> f32 {
+    0.15
 }
 
 #[derive(Deserialize)]
@@ -325,6 +336,7 @@ fn fallback_row(note: u8) -> WgNoteRow {
         brightness: 0.4 + 0.4 * ((x - 21.0) / 87.0),
         strike: 0.08,
         detune: 0.3,
+        skew: 0.15,
         body: None,
     }
 }
@@ -405,6 +417,7 @@ impl NativeWaveguide {
         let mut cs = CoupledStrings::new(
             r.f0, r.t60, r.brightness, r.b, r.n_disp, sr, n_strings, r.detune, r.zb,
         );
+        cs.skew = r.skew;
         cs.strike((vel as f32 / 127.0).clamp(0.0, 1.0), r.strike);
         let rel_mult = (-6.908 / (RELEASE_T60 * self.sample_rate)).exp();
         let out_gain = MASTER_GAIN / cs.g.max(1e-6);
