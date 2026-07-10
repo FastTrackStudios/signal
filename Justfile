@@ -133,6 +133,7 @@ release-package: web-stage
     cargo build --release -p fasttrackstudio --features embed-web
     cargo build --release -p fts-cli
     cargo build --release -p fts-installer
+    cargo build --release -p fts-extensions
     version="$(cargo pkgid -p fasttrackstudio | sed 's/.*[#@]//')"
     plat=x86_64-linux
     if command -v patchelf >/dev/null; then PATCHELF=(patchelf); else PATCHELF=(nix shell nixpkgs#patchelf -c patchelf); fi
@@ -143,6 +144,12 @@ release-package: web-stage
         "${PATCHELF[@]}" --set-interpreter /lib64/ld-linux-x86-64.so.2 --remove-rpath "$stage/$b"
         strip "$stage/$b"
     done
+    # REAPER extension cdylib: no interpreter to patch (shared lib), just
+    # rpath + symbols. install.sh drops it into ~/.config/REAPER/UserPlugins
+    # when a REAPER install is present.
+    cp target/release/libreaper_fts_extensions.so "$stage/reaper_fts_extensions.so"
+    "${PATCHELF[@]}" --remove-rpath "$stage/reaper_fts_extensions.so"
+    strip "$stage/reaper_fts_extensions.so"
     cp apps/fasttrackstudio/systemd/signal-engine.service "$stage"/
     cp apps/fasttrackstudio/assets/fasttrackstudio.desktop "$stage"/
     cp apps/fasttrackstudio/assets/icon.svg "$stage/icon.svg"
@@ -151,7 +158,8 @@ release-package: web-stage
     mkdir -p dist
     tarball="fasttrackstudio-v$version-$plat.tar.gz"
     tar -czf "dist/$tarball" -C "$stage" \
-        fasttrackstudio fts signal-engine.service fasttrackstudio.desktop \
+        fasttrackstudio fts reaper_fts_extensions.so \
+        signal-engine.service fasttrackstudio.desktop \
         icon.svg install.sh uninstall.sh VERSION
     mv "$stage/fts-installer-$plat" dist/
     (cd dist && sha256sum "$tarball" "fts-installer-$plat" > SHA256SUMS)
@@ -248,6 +256,104 @@ docs-serve:
 # Build + deploy the docs site to fly.io (app: fts-docs)
 docs-deploy:
     apps/docs-site/deploy.sh
+
+# ── REAPER extension (apps/extensions/reaper-fts-extensions) ────────────
+# The production REAPER extension stack (cdylib reaper_fts_extensions).
+# Dev installs symlink the build + live-editable config into REAPER's
+# resource dir; release packaging copies the .so into the tarball.
+
+ext_reaper_home    := env("REAPER_HOME", home_directory() / ".fts-dev")
+ext_reaper_plugins := env("REAPER_PLUGINS", ext_reaper_home / "UserPlugins")
+ext_fts_config     := ext_reaper_home / "fasttrackstudio"
+ext_lib_name       := "reaper_fts_extensions"
+# Extra cargo features on top of defaults (mod-launcher, mod-session,
+# mod-sync, mod-input, mod-mirror, ui-dock, poll-broadcast, host-hooks):
+#   just ext_features=mod-mirror ext-build
+ext_features := ""
+
+# Build the REAPER extension (release)
+ext-build:
+    cargo build --release -p fts-extensions --features "{{ext_features}}"
+
+# Build with NO default features (bisection mode)
+ext-build-minimal:
+    cargo build --release -p fts-extensions --no-default-features --features "{{ext_features}}"
+
+# Build + symlink the extension and its config into $REAPER_HOME
+ext-install: ext-build ext-install-config
+    mkdir -p {{ext_reaper_plugins}}
+    ln -sf "{{justfile_directory()}}/target/release/lib{{ext_lib_name}}.so" "{{ext_reaper_plugins}}/{{ext_lib_name}}.so"
+    @echo "Symlinked -> {{ext_reaper_plugins}}/{{ext_lib_name}}.so"
+
+# Remove the extension symlink
+ext-uninstall:
+    rm -f "{{ext_reaper_plugins}}/{{ext_lib_name}}.so"
+    @echo "Removed {{ext_reaper_plugins}}/{{ext_lib_name}}.so"
+
+# In-tree sources: reaper-input keybinds/workflows + fts-launcher packs.
+# Live-editable: save a .styx and the extension hot-reloads it.
+# Symlink module config into $REAPER_HOME/fasttrackstudio
+ext-install-config:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    input_cfg="{{justfile_directory()}}/features/reaper/reaper-input/config"
+    packs="{{justfile_directory()}}/features/launcher/fts-launcher/packs"
+    echo "Installing config symlinks -> {{ext_fts_config}}/"
+    mkdir -p "{{ext_fts_config}}/input/keybinds"
+    for p in fasttrackstudio logic reaper pro-tools ableton overlays; do
+        ln -sfn "$input_cfg/$p" "{{ext_fts_config}}/input/keybinds/$p"
+    done
+    rm -rf "{{ext_fts_config}}/input/workflows"
+    ln -sfn "$input_cfg/workflows" "{{ext_fts_config}}/input/workflows"
+    mkdir -p "{{ext_fts_config}}/launcher/packs"
+    ln -sfn "$packs/reaper-core"       "{{ext_fts_config}}/launcher/packs/reaper-core"
+    ln -sfn "$packs/reaper-visibility" "{{ext_fts_config}}/launcher/packs/reaper-visibility"
+    echo "Done."
+
+# Remove the config symlinks
+ext-uninstall-config:
+    #!/usr/bin/env bash
+    for p in fasttrackstudio logic reaper pro-tools ableton overlays; do
+        rm -f "{{ext_fts_config}}/input/keybinds/$p"
+    done
+    rm -f "{{ext_fts_config}}/input/workflows"
+    rm -f "{{ext_fts_config}}/launcher/packs/reaper-core"
+    rm -f "{{ext_fts_config}}/launcher/packs/reaper-visibility"
+    @echo "Removed config symlinks from {{ext_fts_config}}/"
+
+# Tail the extension log (live)
+ext-log:
+    tail -f "$(ls -t {{home_directory()}}/.local/state/fasttrackstudio/reaper-fts-extensions.log.* | head -n 1)"
+
+# ── fts-ui snapshot regression gate (libs/fts-ui/ui-snapshot) ───────────
+
+# Render every scene headlessly and fail on pixel diff above tolerance
+snapshot-check:
+    cargo run -p ui-snapshot --release -- check
+
+# Render one scene to target/ui-snapshots/<name>.png
+snapshot-render name:
+    cargo run -p ui-snapshot --release -- render {{name}}
+
+# Regenerate all reference PNGs after intentional UI changes
+snapshot-update:
+    cargo run -p ui-snapshot --release -- update
+
+# ── REAPER integration tests (fts-extensions-xtask + daw test harness) ──
+# Needs a REAPER install; FTS_REAPER_EXECUTABLE/RESOURCES point the
+# harness at it (wrapper script keeps the test profile isolated).
+
+# Run integration tests headless (no GUI)
+reaper-integration-test *args:
+    FTS_REAPER_EXECUTABLE="{{justfile_directory()}}/apps/extensions/reaper-fts-extensions/scripts/reaper-test-wrapper.sh" \
+    FTS_REAPER_RESOURCES="{{ext_reaper_home}}" \
+    cargo run -p fts-extensions-xtask -- {{args}}
+
+# Integration tests with a visible REAPER window
+reaper-integration-test-gui *args:
+    FTS_REAPER_EXECUTABLE="{{justfile_directory()}}/apps/extensions/reaper-fts-extensions/scripts/reaper-test-wrapper.sh" \
+    FTS_REAPER_RESOURCES="{{ext_reaper_home}}" \
+    cargo run -p fts-extensions-xtask -- --gui {{args}}
 
 # ── Build ────────────────────────────────────────────────────────────────
 
