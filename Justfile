@@ -47,6 +47,21 @@ signal-web-sync: tailwind
     mkdir -p target/debug
     cp -r target/dx/signal-web/release/web/public target/debug/signal-web
 
+# Symlink the live rig config (~/.config/signal/rig) to the repo's
+# in-tree default config, so realtime edits — text editor or the rig's
+# own auto-save — are working-tree diffs you commit like any change.
+# The previous config dir is moved aside as rig.bak-<date>.
+rig-link:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    target="$(pwd)/features/rigs/guitar/default-config"
+    rig="$HOME/.config/signal/rig"
+    if [ -L "$rig" ]; then echo "already linked: $rig -> $(readlink "$rig")"; exit 0; fi
+    if [ -e "$rig" ]; then mv "$rig" "$rig.bak-$(date +%Y%m%d-%H%M%S)"; fi
+    mkdir -p "$(dirname "$rig")"
+    ln -s "$target" "$rig"
+    echo "linked: $rig -> $target"
+
 # Open the default guitar rig (Yamaha TF ch4 → NAM amps)
 guitar: (rig "Guitar Rig")
 

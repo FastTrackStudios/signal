@@ -160,6 +160,16 @@ fn resolve_nam(path: &mut String) {
     }
 }
 
+/// Inverse of [`resolve_nam`] for saves: paths under the rig dir are
+/// stored relative, so the on-disk library stays portable — including
+/// when the rig dir is a symlink into the repo's default-config (live
+/// edits become committable working-tree diffs).
+fn relativize_nam(path: &mut String) {
+    if let Ok(rel) = std::path::Path::new(path.as_str()).strip_prefix(rig_dir()) {
+        *path = rel.to_string_lossy().into_owned();
+    }
+}
+
 fn read<T: for<'a> Facet<'a>>(file: &str) -> Option<T> {
     let path = rig_dir().join(file);
     let text = std::fs::read_to_string(&path).ok()?;
@@ -253,11 +263,21 @@ impl RigLibrary {
     }
 
     pub fn save_profile(profile: &ProfileDef) {
-        write("profile.styx", profile);
+        let mut profile = profile.clone();
+        for preset in &mut profile.presets {
+            relativize_nam(&mut preset.nam);
+        }
+        write("profile.styx", &profile);
     }
 
     pub fn save_drive_presets(presets: &[DrivePresetDef]) {
-        write("drive-presets.styx", &DrivePresetLib { presets: presets.to_vec() });
+        let mut presets = presets.to_vec();
+        for dp in &mut presets {
+            for option in &mut dp.options {
+                relativize_nam(&mut option.nam);
+            }
+        }
+        write("drive-presets.styx", &DrivePresetLib { presets });
     }
 
     pub fn save_songs(songs: &[SongDef]) {
@@ -266,5 +286,22 @@ impl RigLibrary {
 
     pub fn save_setlists(setlists: &[SetlistDef]) {
         write("setlists.styx", &SetlistLib { setlists: setlists.to_vec() });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn nam_paths_roundtrip_relative() {
+        std::env::set_var("SIGNAL_RIG_DIR", "/tmp/fts-test-rig");
+        let mut p = String::from("models/x.nam");
+        super::resolve_nam(&mut p);
+        assert_eq!(p, "/tmp/fts-test-rig/models/x.nam");
+        super::relativize_nam(&mut p);
+        assert_eq!(p, "models/x.nam");
+        let mut abs = String::from("/elsewhere/y.nam");
+        super::resolve_nam(&mut abs);
+        super::relativize_nam(&mut abs);
+        assert_eq!(abs, "/elsewhere/y.nam");
     }
 }
