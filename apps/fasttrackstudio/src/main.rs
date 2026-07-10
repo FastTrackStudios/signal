@@ -167,6 +167,7 @@ fn App() -> Element {
 
     rsx! {
         SessionChrome {}
+        ResizeHandles {}
         div {
             style: "display: flex; flex-direction: column; height: 100vh; background: #0a0a0a; color: #e4e4e7; font-family: sans-serif;",
             // Workspace bar — the app-level switcher (domain views own
@@ -285,6 +286,53 @@ fn WindowControls() -> Element {
 #[cfg(target_arch = "wasm32")]
 #[component]
 fn WindowControls() -> Element {
+    rsx! {}
+}
+
+/// Invisible edge/corner strips that restore native-feeling resize on
+/// the frameless window (decorations off also removes the compositor's
+/// resize borders). Corners render after edges so they win the hit test.
+#[cfg(not(target_arch = "wasm32"))]
+#[component]
+fn ResizeHandles() -> Element {
+    use dioxus::desktop::tao::window::ResizeDirection as Dir;
+    let handles: &[(&str, Dir)] = &[
+        (
+            "top: 0; left: 12px; right: 12px; height: 5px; cursor: ns-resize;",
+            Dir::North,
+        ),
+        (
+            "bottom: 0; left: 12px; right: 12px; height: 5px; cursor: ns-resize;",
+            Dir::South,
+        ),
+        (
+            "left: 0; top: 12px; bottom: 12px; width: 5px; cursor: ew-resize;",
+            Dir::West,
+        ),
+        (
+            "right: 0; top: 12px; bottom: 12px; width: 5px; cursor: ew-resize;",
+            Dir::East,
+        ),
+        ("top: 0; left: 0; width: 12px; height: 12px; cursor: nwse-resize;", Dir::NorthWest),
+        ("top: 0; right: 0; width: 12px; height: 12px; cursor: nesw-resize;", Dir::NorthEast),
+        ("bottom: 0; left: 0; width: 12px; height: 12px; cursor: nesw-resize;", Dir::SouthWest),
+        ("bottom: 0; right: 0; width: 12px; height: 12px; cursor: nwse-resize;", Dir::SouthEast),
+    ];
+    rsx! {
+        for (pos, dir) in handles.iter().copied() {
+            div {
+                style: "position: fixed; z-index: 2147483647; {pos}",
+                onmousedown: move |_| {
+                    let _ = dioxus::desktop::window().drag_resize_window(dir);
+                },
+            }
+        }
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+#[component]
+fn ResizeHandles() -> Element {
     rsx! {}
 }
 

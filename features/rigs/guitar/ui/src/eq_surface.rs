@@ -182,6 +182,16 @@ pub fn EqProSurface(block: LiveBlock, spectrum: Vec<f32>) -> Element {
                         }
                     });
                 },
+                // Keep the viewBox aspect in sync when the panel resizes
+                // (window resize, dock changes) — otherwise the graph
+                // stretches until remount.
+                onresize: move |e| {
+                    if let Ok(size) = e.get_content_box_size() {
+                        if size.height > 1.0 {
+                            vb_w.set((H * size.width / size.height).max(120.0));
+                        }
+                    }
+                },
 
                 // Add a band where the user double-clicks — shape inferred
                 // from position (eq-ui's rule).
