@@ -35,6 +35,11 @@ signal = [
     "dep:vox-websocket",
     "dep:engine-launcher",
     "dep:architect",
+    # p2p path to a remote signal engine: dial its iroh EndpointId from
+    # any network (the app keeps its own device key in ~/.config/fts
+    # natively, localStorage on web). iroh types come via the
+    # architect::iroh_link::iroh re-export.
+    "architect/iroh",
 ]
 session = [
     "dep:session-proto",
@@ -45,6 +50,7 @@ session = [
     "dep:daw",
     "dep:daw-standalone",
     "dep:architect",
+    "architect/local",
     "dep:vox",
     "dep:tokio",
     "dep:eyre",
@@ -61,12 +67,7 @@ session = [
 tts = ["session", "session-guide/tts"]
 
 [dependencies]
-# Root workspace pins dioxus default-features = false, features = ["lib"];
-# the app is the desktop binary, so it turns defaults back on and adds the
-# desktop renderer + launch.
-dioxus = { workspace = true, default-features = true, features = ["desktop", "launch"] }
 tracing.workspace = true
-tracing-subscriber.workspace = true
 
 # Signal domain (the rig)
 signal-guitar-proto = { workspace = true, optional = true }
@@ -75,7 +76,6 @@ signal-guitar-ui = { workspace = true, optional = true }
 # Session domain (setlists / charts / daw) — embedded in-process.
 session = { workspace = true, optional = true }
 session-proto = { workspace = true, optional = true }
-session-ui = { workspace = true, features = ["desktop"], optional = true }
 # Guide engine: click / count-in / section cues rendered into the audio
 # output through daw-standalone's aux post-render hook.
 session-guide = { workspace = true, optional = true }
@@ -91,13 +91,28 @@ daw-standalone = { workspace = true, features = ["bootstrap", "audio"], optional
 # Service framework — the root workspace's architect + vox (patched to the
 # sibling ../architect checkout at the root) so the whole graph shares one
 # architect + one vox.
-architect = { workspace = true, features = ["vox", "local", "platform"], optional = true }
+architect = { workspace = true, features = ["vox", "platform"], optional = true }
 vox = { workspace = true, optional = true }
 vox-core = { workspace = true, optional = true }
 vox-websocket = { workspace = true, optional = true }
 
+tokio = { workspace = true, optional = true }
+eyre = { workspace = true, optional = true }
+
+# The same app on every surface: the desktop binary gets the dioxus
+# desktop renderer; the web build (dx build --platform web) is the SAME
+# UI served over the network — no desktop-only pages. Native extras:
+# the engine supervisor (child processes), file prefs, iroh key file.
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+dioxus = { workspace = true, default-features = true, features = ["desktop", "launch"] }
+tracing-subscriber.workspace = true
+session-ui = { workspace = true, features = ["desktop"], optional = true }
 # Engine supervisor (spawn/stop/probe signal-engine) — shared with fts-cli.
 engine-launcher = { workspace = true, optional = true }
 
-tokio = { workspace = true, optional = true }
-eyre = { workspace = true, optional = true }
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+dioxus = { workspace = true, default-features = true, features = ["web", "launch"] }
+session-ui = { workspace = true, features = ["web"], optional = true }
+web-sys = { version = "0.3", features = ["Window", "Storage", "Location"] }
+# getrandom 0.3 (transitive via iroh) needs its js backend on wasm32.
+getrandom = { version = "0.3", features = ["wasm_js"] }

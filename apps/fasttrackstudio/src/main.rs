@@ -17,19 +17,22 @@
 
 use dioxus::prelude::*;
 
-#[cfg(feature = "signal")]
+#[cfg(all(feature = "signal", not(target_arch = "wasm32")))]
 mod engines;
 #[cfg(feature = "session")]
 mod guide;
+mod prefs;
 #[cfg(feature = "signal")]
 mod rig_view;
 #[cfg(feature = "session")]
 mod session_engine;
 #[cfg(feature = "session")]
 mod session_view;
+#[cfg(not(target_arch = "wasm32"))]
 mod updates;
 
 fn main() {
+    #[cfg(not(target_arch = "wasm32"))]
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
@@ -49,11 +52,13 @@ fn main() {
     dioxus::launch(App);
 }
 
-/// Top-level workspaces. Which ones exist depends on compiled features.
+/// Top-level workspaces. Which ones exist depends on compiled features;
+/// Home always exists — it's the landing page the others hang off.
 #[derive(Clone, Copy, PartialEq)]
 enum Workspace {
+    Home,
     #[cfg(feature = "signal")]
-    Rig,
+    Signal,
     #[cfg(feature = "session")]
     Session,
     #[cfg(feature = "session")]
@@ -63,8 +68,9 @@ enum Workspace {
 impl Workspace {
     fn all() -> Vec<(Self, &'static str)> {
         vec![
+            (Self::Home, "Home"),
             #[cfg(feature = "signal")]
-            (Self::Rig, "Rig"),
+            (Self::Signal, "Signal"),
             #[cfg(feature = "session")]
             (Self::Session, "Session"),
             #[cfg(feature = "session")]
@@ -83,18 +89,8 @@ impl Workspace {
 
 // ── Landing / last-workspace persistence ────────────────────────────────────
 
-fn last_workspace_path() -> Option<std::path::PathBuf> {
-    let home = std::env::var_os("HOME")?;
-    Some(
-        std::path::Path::new(&home)
-            .join(".config/fts")
-            .join("last-workspace"),
-    )
-}
-
 fn load_last_workspace() -> Option<Workspace> {
-    let saved = std::fs::read_to_string(last_workspace_path()?).ok()?;
-    let saved = saved.trim();
+    let saved = prefs::get("last-workspace")?;
     Workspace::all()
         .into_iter()
         .find(|(_, label)| *label == saved)
@@ -102,29 +98,29 @@ fn load_last_workspace() -> Option<Workspace> {
 }
 
 fn store_last_workspace(w: Workspace) {
-    let Some(path) = last_workspace_path() else {
-        return;
-    };
-    if let Some(dir) = path.parent() {
-        let _ = std::fs::create_dir_all(dir);
-    }
-    let _ = std::fs::write(path, w.label());
+    prefs::set("last-workspace", w.label());
 }
 
-/// Where the app lands: the persisted last choice, else Rig when the
-/// signal engine is reachable, else Session (else whatever exists).
+/// Web deep link: `#signal`, `#session`, `#charts`, `#home` (first hash
+/// segment; `#signal/guitar` also picks the rig).
+#[cfg(target_arch = "wasm32")]
+fn hash_workspace() -> Option<Workspace> {
+    let hash = web_sys::window()?.location().hash().ok()?;
+    let first = hash.trim_start_matches('#').split('/').next()?;
+    Workspace::all()
+        .into_iter()
+        .find(|(_, label)| label.eq_ignore_ascii_case(first))
+        .map(|(w, _)| w)
+}
+
+/// Where the app lands: the URL hash (web), else the persisted last
+/// choice, else Home.
 fn initial_workspace() -> Option<Workspace> {
-    if let Some(saved) = load_last_workspace() {
-        return Some(saved);
+    #[cfg(target_arch = "wasm32")]
+    if let Some(w) = hash_workspace() {
+        return Some(w);
     }
-    #[cfg(feature = "signal")]
-    if engines::signal_running() {
-        return Some(Workspace::Rig);
-    }
-    #[cfg(feature = "session")]
-    return Some(Workspace::Session);
-    #[allow(unreachable_code)]
-    Workspace::all().first().map(|(w, _)| *w)
+    Some(load_last_workspace().unwrap_or(Workspace::Home))
 }
 
 #[component]
@@ -168,12 +164,15 @@ fn App() -> Element {
             }
             main { style: "flex: 1; min-height: 0; display: flex;",
                 match current() {
+                    Some(Workspace::Home) | None => rsx! {
+                        HomeView { current }
+                    },
                     #[cfg(feature = "signal")]
-                    Some(Workspace::Rig) => rsx! {
-                        // The guitar-rig remote over vox ws — the same
-                        // surface as the web remote, pointed at the
-                        // (supervised) signal engine.
-                        rig_view::RigWorkspace {}
+                    Some(Workspace::Signal) => rsx! {
+                        // Rig picker → the chosen rig's remote over vox —
+                        // the same surface as the web remote, pointed at
+                        // the (supervised or remote) signal engine.
+                        rig_view::SignalWorkspace {}
                     },
                     #[cfg(feature = "session")]
                     Some(Workspace::Session) => rsx! {
@@ -187,9 +186,84 @@ fn App() -> Element {
                         // Mount point: keyflow chart writing.
                         Placeholder { title: "Charts", body: "keyflow chart writing lands here — song analysis, chord charts, arrangement." }
                     },
-                    None => rsx! {
-                        Placeholder { title: "No workspaces", body: "Build with --features signal, session, or full." }
-                    },
+                }
+            }
+        }
+    }
+}
+
+// ── Home — the landing page ─────────────────────────────────────────────────
+
+/// One workspace card on the Home page. Disabled cards are features not
+/// compiled into this binary.
+#[component]
+fn HomeCard(
+    title: &'static str,
+    body: &'static str,
+    target: Option<Workspace>,
+    current: Signal<Option<Workspace>>,
+) -> Element {
+    let enabled = target.is_some();
+    rsx! {
+        button {
+            style: if enabled {
+                "display: flex; flex-direction: column; align-items: flex-start; gap: 8px; width: 220px; padding: 18px 16px; border-radius: 10px; background: #111113; color: #e4e4e7; border: 1px solid #27272a; text-align: left; cursor: pointer;"
+            } else {
+                "display: flex; flex-direction: column; align-items: flex-start; gap: 8px; width: 220px; padding: 18px 16px; border-radius: 10px; background: #0c0c0e; color: #52525b; border: 1px solid #1c1c1f; text-align: left;"
+            },
+            disabled: !enabled,
+            onclick: move |_| {
+                if let Some(w) = target {
+                    current.set(Some(w));
+                    store_last_workspace(w);
+                }
+            },
+            span { style: "font-size: 16px; font-weight: 700;", "{title}" }
+            span { style: "font-size: 12px; color: #a1a1aa; line-height: 1.5;", "{body}" }
+            if !enabled {
+                span { style: "font-size: 11px; color: #52525b;",
+                    if cfg!(target_arch = "wasm32") { "coming to the web build" } else { "not in this build" }
+                }
+            }
+        }
+    }
+}
+
+#[component]
+fn HomeView(current: Signal<Option<Workspace>>) -> Element {
+    #[cfg(feature = "signal")]
+    let signal_target = Some(Workspace::Signal);
+    #[cfg(not(feature = "signal"))]
+    let signal_target: Option<Workspace> = None;
+    #[cfg(feature = "session")]
+    let (session_target, charts_target) = (Some(Workspace::Session), Some(Workspace::Charts));
+    #[cfg(not(feature = "session"))]
+    let (session_target, charts_target): (Option<Workspace>, Option<Workspace>) = (None, None);
+
+    rsx! {
+        div { style: "display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 24px; flex: 1;",
+            div { style: "display: flex; flex-direction: column; align-items: center; gap: 6px;",
+                span { style: "font-size: 22px; font-weight: 700; letter-spacing: 2px;", "FASTTRACKSTUDIO" }
+                span { style: "font-size: 12px; color: #71717a;", "Headless engines, remotes everywhere. Pick a surface." }
+            }
+            div { style: "display: flex; gap: 14px; flex-wrap: wrap; justify-content: center;",
+                HomeCard {
+                    title: "Session",
+                    body: "Setlists and playback — the live show: songs, transport, guide.",
+                    target: session_target,
+                    current,
+                }
+                HomeCard {
+                    title: "Signal",
+                    body: "Live rigs — pick a rig (guitar, tracks, …) and control its engine, local or across the network.",
+                    target: signal_target,
+                    current,
+                }
+                HomeCard {
+                    title: "Charts",
+                    body: "keyflow chart writing — song analysis, chord charts, arrangement.",
+                    target: charts_target,
+                    current,
                 }
             }
         }
@@ -200,7 +274,7 @@ fn App() -> Element {
 
 /// Compact per-engine status: dot + name + start/stop. The signal engine
 /// is a supervised child process; the session engine is in-process.
-#[cfg(feature = "signal")]
+#[cfg(all(feature = "signal", not(target_arch = "wasm32")))]
 #[component]
 fn EnginesArea() -> Element {
     let mut signal_up = use_signal(engines::signal_running);
@@ -269,14 +343,25 @@ fn EnginesArea() -> Element {
     }
 }
 
-#[cfg(not(feature = "signal"))]
+/// Web build: engines are always remote processes — the browser can't
+/// supervise them, it just connects. (Also the native session-only
+/// build's static status.)
+#[cfg(any(not(feature = "signal"), target_arch = "wasm32"))]
 #[component]
 fn EnginesArea() -> Element {
-    rsx! {
-        div { style: "display: flex; align-items: center; gap: 6px; font-size: 12px;",
-            span { style: "width: 8px; height: 8px; border-radius: 999px; background: #22c55e;" }
-            span { style: "color: #a1a1aa;", "Session" }
-            span { style: "color: #52525b; font-size: 11px;", "(in-process)" }
+    if cfg!(target_arch = "wasm32") {
+        rsx! {
+            div { style: "display: flex; align-items: center; gap: 6px; font-size: 12px;",
+                span { style: "color: #52525b; font-size: 11px;", "engines are remote" }
+            }
+        }
+    } else {
+        rsx! {
+            div { style: "display: flex; align-items: center; gap: 6px; font-size: 12px;",
+                span { style: "width: 8px; height: 8px; border-radius: 999px; background: #22c55e;" }
+                span { style: "color: #a1a1aa;", "Session" }
+                span { style: "color: #52525b; font-size: 11px;", "(in-process)" }
+            }
         }
     }
 }
@@ -285,32 +370,49 @@ fn EnginesArea() -> Element {
 
 #[component]
 fn SettingsPanel() -> Element {
+    #[allow(unused_mut)]
     let mut update_msg = use_signal(String::new);
 
     rsx! {
         div { style: "display: flex; align-items: center; gap: 12px; padding: 8px 12px; border-bottom: 1px solid #27272a; background: #111113; font-size: 12px;",
             span { style: "font-weight: 600;", "Settings" }
-            span { style: "color: #a1a1aa;", "FastTrackStudio v{updates::current_version()}" }
-            button {
-                style: "padding: 3px 10px; border-radius: 5px; background: transparent; color: #a1a1aa; border: 1px solid #27272a; font-size: 11px;",
-                onclick: move |_| {
-                    use updates::Updater as _;
-                    let msg = match updates::CodebergUpdater.check_for_updates() {
-                        updates::UpdateStatus::UpToDate => "Up to date.".to_string(),
-                        updates::UpdateStatus::Available(info) => {
-                            format!("Update available: v{}", info.version)
-                        }
-                        updates::UpdateStatus::Failed(e) => format!("Check failed: {e}"),
-                    };
-                    update_msg.set(msg);
-                },
-                "Check for updates"
-            }
+            span { style: "color: #a1a1aa;", "FastTrackStudio v{env!(\"CARGO_PKG_VERSION\")}" }
+            UpdateCheck { msg: update_msg }
             if !update_msg().is_empty() {
                 span { style: "color: #a1a1aa;", "{update_msg}" }
             }
         }
     }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+#[component]
+fn UpdateCheck(msg: Signal<String>) -> Element {
+    rsx! {
+        button {
+            style: "padding: 3px 10px; border-radius: 5px; background: transparent; color: #a1a1aa; border: 1px solid #27272a; font-size: 11px;",
+            onclick: move |_| {
+                use updates::Updater as _;
+                let text = match updates::CodebergUpdater.check_for_updates() {
+                    updates::UpdateStatus::UpToDate => "Up to date.".to_string(),
+                    updates::UpdateStatus::Available(info) => {
+                        format!("Update available: v{}", info.version)
+                    }
+                    updates::UpdateStatus::Failed(e) => format!("Check failed: {e}"),
+                };
+                msg.set(text);
+            },
+            "Check for updates"
+        }
+    }
+}
+
+/// Web build: the deployment updates itself — nothing to check.
+#[cfg(target_arch = "wasm32")]
+#[component]
+fn UpdateCheck(msg: Signal<String>) -> Element {
+    let _ = msg;
+    rsx! {}
 }
 
 /// App-level chrome the session feature contributes: the compiled
