@@ -315,8 +315,16 @@ struct WgTableFile {
 }
 
 fn load_table() -> Option<Vec<WgNoteRow>> {
+    // resolution order: explicit table path → named preset (the pm preset
+    // pipeline installs to ~/.config/signal/pianos/<name>.json) → the default
+    // City Grand table.
     let path = std::env::var_os("CITY_GRAND_WG_TABLE")
         .map(std::path::PathBuf::from)
+        .or_else(|| {
+            let name = std::env::var("CITY_GRAND_PRESET").ok()?;
+            let h = std::env::var_os("HOME")?;
+            Some(std::path::PathBuf::from(h).join(format!(".config/signal/pianos/{name}.json")))
+        })
         .or_else(|| {
             std::env::var_os("HOME").map(|h| {
                 std::path::PathBuf::from(h).join(".config/signal/city-grand/wg-table.json")
