@@ -296,7 +296,7 @@ ext-uninstall:
 ext-install-config:
     #!/usr/bin/env bash
     set -euo pipefail
-    input_cfg="{{justfile_directory()}}/features/reaper/reaper-input/config"
+    input_cfg="{{justfile_directory()}}/features/reaper/reaper-input/config/config"
     packs="{{justfile_directory()}}/features/launcher/fts-launcher/packs"
     echo "Installing config symlinks -> {{ext_fts_config}}/"
     mkdir -p "{{ext_fts_config}}/input/keybinds"

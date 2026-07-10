@@ -105,6 +105,12 @@
               pkgs.pipewire.jack
               # jack_iodelay / jack_lsp — measure real round-trip latency.
               pkgs.jack-example-tools
+              # Xvfb + xvfb-run — virtual display for the REAPER
+              # integration-test harness (`just reaper-integration-test`).
+              # xvfb-run wraps xorg.xorgserver's Xvfb; Xvfb itself is added
+              # so the harness can also spawn a raw virtual display.
+              pkgs.xorg.xorgserver
+              pkgs.xvfb-run
             ]
             ++ buildInputs
             ++ nativeBuildInputs;
