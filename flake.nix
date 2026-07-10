@@ -139,8 +139,13 @@
             LIBCLANG_PATH = "${pkgs.llvmPackages.libclang.lib}/lib";
             OPENSSL_DIR = "${pkgs.openssl.dev}";
             OPENSSL_LIB_DIR = "${pkgs.openssl.out}/lib";
-            CC_wasm32_unknown_unknown = "${pkgs.llvmPackages_18.clang}/bin/clang";
+            # Unwrapped clang: the nix cc-wrapper injects hardening flags
+            # (-fzero-call-used-regs) unsupported on wasm32 and leaks glibc
+            # includes past -nostdlibinc (breaks ring). Builtin headers come
+            # from the wrapper's resource-root instead.
+            CC_wasm32_unknown_unknown = "${pkgs.llvmPackages_18.clang-unwrapped}/bin/clang";
             AR_wasm32_unknown_unknown = "${pkgs.llvmPackages_18.bintools}/bin/llvm-ar";
+            CFLAGS_wasm32_unknown_unknown = "-isystem ${pkgs.llvmPackages_18.clang}/resource-root/include";
             RUST_SRC_PATH = "${rustToolchain}/lib/rustlib/src/rust/library";
           }
           // lib.optionalAttrs pkgs.stdenv.isLinux {

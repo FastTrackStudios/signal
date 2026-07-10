@@ -47,6 +47,31 @@ signal-web-sync: tailwind
     mkdir -p target/debug
     cp -r target/dx/signal-web/release/web/public target/debug/signal-web
 
+# Build the RELEASE engine + web bundle, deploy to ~/.local/lib/fts/,
+# and (re)start the supervised systemd user service. This is the
+# Sunday-morning path: auto-start at boot, restart-on-crash in ~1s,
+# logs in `journalctl --user -u signal-engine`.
+rig-install:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cargo build --release -p signal-engine
+    just tailwind
+    (cd apps/signal-web && dx build --platform web --release)
+    install -d ~/.local/lib/fts
+    install -m 755 target/release/signal-engine ~/.local/lib/fts/signal-engine.new
+    rm -rf ~/.local/lib/fts/signal-web.new
+    cp -r target/dx/signal-web/release/web/public ~/.local/lib/fts/signal-web.new
+    mv -T ~/.local/lib/fts/signal-engine.new ~/.local/lib/fts/signal-engine
+    rm -rf ~/.local/lib/fts/signal-web && mv -T ~/.local/lib/fts/signal-web.new ~/.local/lib/fts/signal-web
+    install -d ~/.config/systemd/user
+    install -m 644 apps/signal-engine/systemd/signal-engine.service ~/.config/systemd/user/
+    systemctl --user daemon-reload
+    systemctl --user enable signal-engine >/dev/null
+    systemctl --user restart signal-engine
+    sleep 3
+    systemctl --user --no-pager --lines 0 status signal-engine | head -3
+    curl -sf http://127.0.0.1:4040/health >/dev/null && echo "health: ok"
+
 # Pull the latest upstream NeuralAmpModelerCore into the vendored copy
 # (libs/neural-amp-modeler/NeuralAmpModelerCore) and run the crate's
 # test suite. The parity tests run every shipped rig model through BOTH
