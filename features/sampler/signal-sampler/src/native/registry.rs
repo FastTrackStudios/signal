@@ -14,7 +14,7 @@ use crate::rig::RigBlock;
 
 use super::{
     FilterCharacter, FilterMode, HarmVoice, NativeAmp, NativeDfs, NativeFilter, NativeModal,
-    NativeWaveshaper, NativeWavetable, NativeWurli, SynthConfig,
+    NativeWaveguide, NativeWaveshaper, NativeWavetable, NativeWurli, SynthConfig,
 };
 use crate::native_osc::NativeOscillator;
 
@@ -23,7 +23,7 @@ type Ctor = fn(&RigBlock, u32) -> Box<dyn PluginInstance>;
 /// The registry: `(block type, constructor)`.
 const REGISTRY: &[(BlockType, Ctor)] = &[
     (BlockType::Oscillator, build_oscillator),
-    // City Grand physically-modeled piano (modal synthesis).
+    // City Grand physically-modeled piano (coupled waveguide; env-switchable).
     (BlockType::Harmonic, build_modal),
     // City Wurli physically-modeled Wurlitzer 200A (vendored openwurli-dsp).
     (BlockType::Formant, build_wurli),
@@ -181,7 +181,14 @@ fn build_oscillator(_block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstan
 }
 
 fn build_modal(_block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
-    Box::new(NativeModal::new(sample_rate))
+    // The Harmonic block plays the LATEST City Grand engine: the coupled
+    // waveguide (physical simulation). CITY_GRAND_ENGINE=modal falls back to
+    // the additive/DDSP voice for A/B.
+    if std::env::var("CITY_GRAND_ENGINE").as_deref() == Ok("modal") {
+        Box::new(NativeModal::new(sample_rate))
+    } else {
+        Box::new(NativeWaveguide::new(sample_rate))
+    }
 }
 
 fn build_wurli(_block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {

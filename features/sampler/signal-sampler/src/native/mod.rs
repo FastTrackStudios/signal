@@ -22,6 +22,7 @@ mod modal;
 mod registry;
 mod waveshaper;
 mod wavetable;
+mod wg;
 mod wurli;
 
 pub use adsr::{Adsr, AdsrParams};
@@ -33,5 +34,6 @@ pub use freq_shifter::NativeDfs;
 pub use modal::NativeModal;
 pub use registry::{build_native, native_dsp_available};
 pub use waveshaper::NativeWaveshaper;
+pub use wg::NativeWaveguide;
 pub use wavetable::{HarmVoice, NativeWavetable, SynthConfig};
 pub use wurli::NativeWurli;
