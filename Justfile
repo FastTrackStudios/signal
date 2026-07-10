@@ -47,6 +47,26 @@ signal-web-sync: tailwind
     mkdir -p target/debug
     cp -r target/dx/signal-web/release/web/public target/debug/signal-web
 
+# Pull the latest upstream NeuralAmpModelerCore into the vendored copy
+# (libs/neural-amp-modeler/NeuralAmpModelerCore) and run the crate's
+# test suite. The parity tests run every shipped rig model through BOTH
+# engines (upstream C++ oracle vs the pure-Rust wasm engine) — a
+# divergence or a new unsupported architecture fails loudly and is the
+# to-port list for src/pure/. Review the diff before committing.
+nam-update:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    tmp="$(mktemp -d)"
+    trap 'rm -rf "$tmp"' EXIT
+    git clone --depth 1 --recurse-submodules --shallow-submodules \
+        https://github.com/sdatkinson/NeuralAmpModelerCore "$tmp/core"
+    dst="libs/neural-amp-modeler/NeuralAmpModelerCore"
+    rsync -a --delete \
+        --exclude .git --exclude build --exclude build_inline \
+        "$tmp/core/" "$dst/"
+    echo "vendored $(git -C "$tmp/core" rev-parse --short HEAD); running parity…"
+    cargo test -p neural-amp-modeler
+
 # Symlink the live rig config (~/.config/signal/rig) to the repo's
 # in-tree default config, so realtime edits — text editor or the rig's
 # own auto-save — are working-tree diffs you commit like any change.
