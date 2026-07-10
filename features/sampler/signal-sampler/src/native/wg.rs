@@ -173,11 +173,17 @@ impl StringWaveguide {
             ys += f / two_r * dt;
             pulse.push(g_exc * f / two_r);
         }
-        // strike-point comb
-        let dcomb = ((strike_pos * self.n as f32) as usize).clamp(1, self.n.saturating_sub(1));
-        let orig = pulse.clone();
-        for i in dcomb..pulse.len() {
-            pulse[i] -= orig[i - dcomb];
+        // strike-point comb: subtract a copy delayed by the node distance.
+        // On short treble delay lines the node distance degenerates to 1–2
+        // samples and the comb becomes a differencer that guts the excitation
+        // — skip it there (physically: the hammer contact patch spans the
+        // whole node spacing anyway).
+        let dcomb = (strike_pos * self.n as f32) as usize;
+        if dcomb >= 3 && dcomb < self.n {
+            let orig = pulse.clone();
+            for i in dcomb..pulse.len() {
+                pulse[i] -= orig[i - dcomb];
+            }
         }
         self.exc = pulse;
         self.exc_pos = 0;
