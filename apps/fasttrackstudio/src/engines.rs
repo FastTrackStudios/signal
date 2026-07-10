@@ -2,7 +2,8 @@
 //!
 //! FastTrackStudio's domains run as detachable headless engines; the app
 //! is a remote that can also *launch* them. This module supervises the
-//! `signal-engine` child process (spawn / stop / restart, discovery via
+//! signal-engine child — this same binary re-spawned as
+//! `fasttrackstudio --engine` (spawn / stop / restart, discovery via
 //! the shared `engine-launcher` crate — same binary-resolution as
 //! `fts signal engine`). The session engine stays in-process (see
 //! `session_engine.rs`), so there is nothing to supervise for it.
@@ -23,7 +24,7 @@ use engine_launcher::{
     systemd_stop,
 };
 
-/// The signal-engine child we own, if we started one.
+/// The signal engine child we own, if we started one.
 static OWNED: Mutex<Option<Child>> = Mutex::new(None);
 
 /// Is anything serving the signal engine's port (ours or external)?
@@ -64,10 +65,10 @@ pub fn start_signal() -> Result<String, String> {
         return Ok(SIGNAL_ENGINE.ws_url());
     }
     let spawned =
-        spawn(&SIGNAL_ENGINE, &[], &[], false).map_err(|e| format!("spawn signal-engine: {e}"))?;
+        spawn(&SIGNAL_ENGINE, &[], &[], false).map_err(|e| format!("spawn signal engine: {e}"))?;
     let how = match &spawned.source {
         LaunchSource::Binary(path) => path.display().to_string(),
-        LaunchSource::Cargo => "cargo run -p signal-engine (dev fallback)".into(),
+        LaunchSource::Cargo => "cargo run -p fasttrackstudio -- --engine (dev fallback)".into(),
     };
     tracing::info!("signal engine started (pid {}) via {how}", spawned.pid());
     let url = spawned.ws_url.clone();
@@ -86,7 +87,7 @@ pub fn stop_signal() -> Result<(), String> {
     let mut owned = OWNED.lock().unwrap();
     match owned.take() {
         Some(mut child) => {
-            child.kill().map_err(|e| format!("kill signal-engine: {e}"))?;
+            child.kill().map_err(|e| format!("kill signal engine: {e}"))?;
             let _ = child.wait(); // reap
             tracing::info!("signal engine stopped");
             Ok(())

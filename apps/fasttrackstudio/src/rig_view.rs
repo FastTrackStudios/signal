@@ -15,9 +15,10 @@ use signal_guitar_proto::audio::AudioSettingsClient;
 use signal_guitar_proto::rig::{RigClient, RigStreamClient};
 use signal_guitar_ui::GuitarRigRemote;
 
-/// Compiled Tailwind for the signal UI components (the same sheet the
-/// web remote inlines — the app's own sheet is session-scoped).
-const SIGNAL_TAILWIND: &str = include_str!("../../signal-web/assets/tailwind.css");
+/// Compiled Tailwind for the signal UI components (built by `just
+/// tailwind` from ../input.css — the app's own sheet, assets/tailwind.css,
+/// is session-scoped).
+const SIGNAL_TAILWIND: &str = include_str!("../assets/tailwind-signal.css");
 
 use architect::iroh_link::iroh;
 

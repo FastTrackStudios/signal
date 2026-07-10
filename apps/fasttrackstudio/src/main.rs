@@ -14,9 +14,15 @@
 //! Rig workspace embeds `signal-guitar-ui`'s remote over a real vox
 //! WebSocket (`rig_view.rs`); the Session surface embeds `session-ui`'s
 //! performance layout; the Charts surface is keyflow's home.
+//!
+//! It is ALSO the engine itself: `fasttrackstudio --engine` runs the
+//! headless signal engine (`engine_main.rs`) — the same binary the
+//! systemd unit and the Engines supervisor launch.
 
 use dioxus::prelude::*;
 
+#[cfg(all(feature = "signal", not(target_arch = "wasm32")))]
+mod engine_main;
 #[cfg(all(feature = "signal", not(target_arch = "wasm32")))]
 mod engines;
 #[cfg(feature = "session")]
@@ -32,6 +38,16 @@ mod session_view;
 mod updates;
 
 fn main() {
+    // `fasttrackstudio --engine` = the headless signal engine (the former
+    // `signal-engine` binary): no GUI, no in-process session engine — just
+    // the rig core + its vox router + the embedded web remote. Dispatch
+    // before ANY app setup (tracing, session bootstrap, dioxus).
+    #[cfg(all(feature = "signal", not(target_arch = "wasm32")))]
+    if std::env::args().skip(1).any(|a| a == "--engine") {
+        engine_main::run();
+        return;
+    }
+
     #[cfg(not(target_arch = "wasm32"))]
     tracing_subscriber::fmt()
         .with_env_filter(

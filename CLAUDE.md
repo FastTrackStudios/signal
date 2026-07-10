@@ -17,8 +17,10 @@ features/  capabilities — audio, sync, dawfile, reaper, standalone,
 libs/      UI + infra libraries — fts-ui, fts-story, dock, nice-plug,
            utils, vox-discover, installer-core, neural-amp-modeler,
            monarchy, devtools, moire-trace-capture
-apps/      fasttrackstudio (THE app: signal / session / full / tts),
-           rigd (headless rig daemon), signal-web (browser remote),
+apps/      fasttrackstudio (THE app: desktop GUI = signal / session /
+           full / tts; `fasttrackstudio --engine` = the headless signal
+           engine; the dx web build is the browser remote, embeddable in
+           the binary via feature embed-web),
            daw-cli, keyflow-cli, installer,
            site (fts-site — fasttrackstudio.app website, dioxus web),
            docs-site (docs.fasttrackstudio.app — dodeca + kf docs, NOT a
@@ -57,36 +59,36 @@ Everything builds from the repo root (one workspace):
 
 ```bash
 cargo check --workspace --exclude vox-discover   # the whole tree
-cargo build -p signal-engine                     # the signal engine (headless rig core)
-cargo build -p fasttrackstudio                   # THE app (signal/session/full/tts)
+cargo build -p fasttrackstudio                   # THE app (GUI; `--engine` = headless signal engine)
 cargo build -p fts-cli                           # the unified `fts` CLI (fts daw / fts kf / fts signal engine / fts status)
-cargo check -p signal-web --target wasm32-unknown-unknown  # browser remote
+cargo check -p fasttrackstudio --target wasm32-unknown-unknown --no-default-features --features signal  # browser remote (web build)
 ```
 
 Dev shell: `nix develop` (or direnv `use flake`) — root `flake.nix`
 carries the FTS 1.94 toolchain pin, `dx`, wasm target, tailwindcss, and
 the native headers (alsa, pipewire, jack, avahi for vox-discover).
 
-Live rig: `cargo build -p signal-engine` from the repo root →
-`target/debug/signal-engine` (ws://:4040/vox); web remote built with
-`cd apps/signal-web && dx build --platform web`, config in
-`~/.config/signal/rig/*.styx`. (The PREVIOUS deployment ran from
-`signal/target/debug/signal-rigd` — that gitignored target/ dir is left
-in place so a running engine keeps its binary.)
+Live rig: `cargo build -p fasttrackstudio` from the repo root →
+`target/debug/fasttrackstudio --engine` (ws://:4040/vox); browser remote
+= the fts web build (`just web-stage` stages it to
+apps/fasttrackstudio/web-dist/, embedded by `--features embed-web`),
+config in `~/.config/signal/rig/*.styx`. Deployed: `just rig-install` →
+ONE binary at `~/.local/lib/fts/fasttrackstudio` behind the
+`signal-engine` systemd user unit.
 
 ## Signal domain rules (from the dissolved signal/CLAUDE.md)
 
 Signal is the signal-chain / plugin-management domain: `crates/signal/*`
 (facade `signal` + proto/ui/live/storage/controller/import/browser/grid/
 grid-ui/daw-bridge), `features/{fx,rigs,sampler,nam,plugin-host}`,
-`features/reaper/signal-*`, `apps/signal-engine`, `apps/signal-web`. The `signal`
+`features/reaper/signal-*`, the engine mode of `apps/fasttrackstudio`. The `signal`
 facade is the only public API surface: apps depend on `signal`,
 `signal-ui`, or `signal-sampler`, never on the internal domain crates.
 Docs: `crates/signal/docs/` (DESIGN.md, DOMAIN.md).
 
 **Detachable GUI (STRICT)**: the rig core is 100% headless; every GUI is
 a vox remote via architect (`signal-guitar-proto` is the wire contract;
-`apps/signal-engine` serves the router; browser/desktop/tablet UIs are clients).
+`fasttrackstudio --engine` serves the router; browser/desktop/tablet UIs are clients).
 
 **GUI rendering** — signal UI must render identically standalone, as a
 VST3/CLAP plugin, and embedded in REAPER, so all contexts share one
@@ -101,7 +103,7 @@ pipeline: `nice-plug-dioxus` → Blitz (Vello + wgpu) → baseview:
   (embed via `include_str!()`).
 - Components must render correctly without Tailwind — explicit style
   values for layout-critical properties; Tailwind classes are additive
-  only (built via `just tailwind` → `apps/signal-web/assets/tailwind.css`).
+  only (built via `just tailwind` → `apps/fasttrackstudio/assets/tailwind-signal.css`).
 - Root `App` components take no props (context via `use_context_provider`)
   so the same component works standalone and as a plugin editor.
 
@@ -116,7 +118,7 @@ native, WASM/AudioWorklet, and embedded `no_std`:
 - No threads — the graph is driven synchronously by whichever callback
   owns it. No `moire::task::spawn` inside processing crates.
 - No platform I/O in processing crates — `cpal`/`web-sys`/MIDI drivers
-  live only in adapter crates (rigd, signal-web, future embedded).
+  live only in adapter crates (the engine mode, web builds, future embedded).
 - Keep the `AudioNode: Send` bound.
 
 **RPC**: service traits use `#[architect::rpc]`; max 4 params per method

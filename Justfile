@@ -5,18 +5,20 @@
 default:
     @just --list
 
-# ── Tailwind (signal web remote) ─────────────────────────────────────────
-# The compiled sheet is inlined by apps/signal-web (include_str!); rebuild it
-# whenever UI-crate class usage changes. input.css @source globs scan the
-# signal/session UI crates + libs/fts-ui + libs/dock.
+# ── Tailwind (signal UI sheet) ───────────────────────────────────────────
+# The compiled sheet is inlined by apps/fasttrackstudio/src/rig_view.rs
+# (include_str!); rebuild it whenever UI-crate class usage changes.
+# input.css @source globs scan the signal/session UI crates + libs/fts-ui
+# + libs/dock. NOTE: apps/fasttrackstudio/assets/tailwind.css is the
+# SEPARATE session-scoped sheet (asset!()) — this recipe must not touch it.
 
 # Build Tailwind CSS (v4)
 tailwind:
-    cd apps/signal-web && tailwindcss -i ./input.css -o ./assets/tailwind.css --minify
+    cd apps/fasttrackstudio && tailwindcss -i ./input.css -o ./assets/tailwind-signal.css --minify
 
 # Watch Tailwind CSS for changes
 tailwind-watch:
-    cd apps/signal-web && tailwindcss -i ./input.css -o ./assets/tailwind.css --watch --minify
+    cd apps/fasttrackstudio && tailwindcss -i ./input.css -o ./assets/tailwind-signal.css --watch --minify
 
 # ── Live Rigs (carried from the dissolved signal workspace) ──────────────
 # Open a live instrument rig: live input → FX chain (NAM amp / cab / plugins)
@@ -27,47 +29,42 @@ tailwind-watch:
 # NOTE: needs `libpipewire` on PKG_CONFIG_PATH for `--features pipewire`.
 
 # The signal engine — the headless rig core (serves the vox router on
-# ws://:4040/vox). `rigd` kept as an alias for muscle memory.
+# ws://:4040/vox): the fasttrackstudio binary in --engine mode. `rigd`
+# kept as an alias for muscle memory.
 signal-engine:
-    cargo run -p signal-engine
+    cargo run -p fasttrackstudio -- --engine
 
 alias rigd := signal-engine
 
-# Build the browser remote (tailwind + dx release build) and copy the bundle
-# next to the engine binary as target/debug/signal-web, where the engine
-# auto-discovers it (env SIGNAL_WEB_DIST > <exe_dir>/signal-web >
-# target/dx/signal-web/{release,debug}/web/public). Any device on the LAN
-# then gets the UI at http://<host>:4040/.
-# Release deploys: copy the same bundle beside the release binary instead
-# (target/release/signal-web, or <install_dir>/signal-web next to a shipped
-# signal-engine binary).
-signal-web-sync: tailwind
-    cd apps/signal-web && dx build --platform web --release
-    rm -rf target/debug/signal-web
-    mkdir -p target/debug
-    cp -r target/dx/signal-web/release/web/public target/debug/signal-web
+# Stage the fts web bundle (the browser remote) for embedding: tailwind →
+# dx web build (signal feature only) → apps/fasttrackstudio/web-dist/,
+# which `cargo build -p fasttrackstudio --features embed-web` compiles
+# into the binary (include_dir). web-dist/ is gitignored.
+web-stage: tailwind
+    cd apps/fasttrackstudio && dx build --platform web --release --no-default-features --features signal
+    rm -rf apps/fasttrackstudio/web-dist
+    cp -r target/dx/fasttrackstudio/release/web/public apps/fasttrackstudio/web-dist
 
-# Build the RELEASE engine + web bundle and deploy to ~/.local/lib/fts/
-# behind the signal-engine systemd user unit. The unit is installed but
-# NOT enabled: the desktop app (or `systemctl --user start signal-engine`)
-# is the on/off switch; while running, systemd restarts crashes in ~1s;
-# an explicit stop is final. If the engine is running during deploy it
-# restarts onto the new build, otherwise it stays stopped.
+# Build the RELEASE binary (web bundle EMBEDDED) and deploy the ONE
+# artifact to ~/.local/lib/fts/fasttrackstudio behind the signal-engine
+# systemd user unit. The unit is installed but NOT enabled: the desktop
+# app (or `systemctl --user start signal-engine`) is the on/off switch;
+# while running, systemd restarts crashes in ~1s; an explicit stop is
+# final. If the engine is running during deploy it restarts onto the new
+# build, otherwise it stays stopped.
 # Logs: `journalctl --user -u signal-engine`.
-rig-install:
+rig-install: web-stage
     #!/usr/bin/env bash
     set -euo pipefail
-    cargo build --release -p signal-engine
-    just tailwind
-    (cd apps/signal-web && dx build --platform web --release)
+    cargo build --release -p fasttrackstudio --features embed-web
     install -d ~/.local/lib/fts
-    install -m 755 target/release/signal-engine ~/.local/lib/fts/signal-engine.new
-    rm -rf ~/.local/lib/fts/signal-web.new
-    cp -r target/dx/signal-web/release/web/public ~/.local/lib/fts/signal-web.new
-    mv -T ~/.local/lib/fts/signal-engine.new ~/.local/lib/fts/signal-engine
-    rm -rf ~/.local/lib/fts/signal-web && mv -T ~/.local/lib/fts/signal-web.new ~/.local/lib/fts/signal-web
+    install -m 755 target/release/fasttrackstudio ~/.local/lib/fts/fasttrackstudio.new
+    mv -T ~/.local/lib/fts/fasttrackstudio.new ~/.local/lib/fts/fasttrackstudio
+    # The pre-consolidation artifacts (signal-engine binary + signal-web
+    # bundle) are superseded; leave any existing ones in place until the
+    # new unit is confirmed, then clean by hand if desired.
     install -d ~/.config/systemd/user
-    install -m 644 apps/signal-engine/systemd/signal-engine.service ~/.config/systemd/user/
+    install -m 644 apps/fasttrackstudio/systemd/signal-engine.service ~/.config/systemd/user/
     systemctl --user daemon-reload
     systemctl --user try-restart signal-engine
     if systemctl --user is-active --quiet signal-engine; then

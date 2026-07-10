@@ -14,9 +14,9 @@ features/   capabilities — audio, sync, dawfile, reaper, standalone,
             fx (built-in FX), rigs, sampler, nam, plugin-host
 libs/       UI + infra — fts-ui, fts-story, dock, nice-plug, utils,
             vox-discover, installer-core, neural-amp-modeler, monarchy
-apps/       fasttrackstudio (THE app — feature-configured, one binary),
-            rigd (headless rig daemon), signal-web (browser remote),
-            daw-cli, keyflow-cli, installer
+apps/       fasttrackstudio (THE app — one binary: desktop GUI,
+            `--engine` headless signal engine, dx web build = browser
+            remote), daw-cli, keyflow-cli, installer
 docs/       cross-domain guides + specs
 ```
 
@@ -28,8 +28,7 @@ Build everything from the root:
 
 ```bash
 cargo check --workspace --exclude vox-discover
-cargo build -p signal-engine        # headless live rig (the signal engine)
-cargo build -p fasttrackstudio      # THE app
+cargo build -p fasttrackstudio      # THE app (`--engine` = headless live rig)
 ```
 
 Dev shell: `nix develop` (root `flake.nix`; direnv users get it via

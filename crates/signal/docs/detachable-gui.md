@@ -105,12 +105,14 @@ features/signal/
 1. ~~`#[subscribe]` event streams~~ — **done**: `RigEvent` stream replaces
    polling (see Events above). Later refinement: move meter capture onto
    `architect::rt::rt_channel` drained from the pump thread.
-2. ~~`apps/web`~~ — **done**: `apps/signal-engine` (`signal-engine`, formerly `signal-rigd`) serves the same
-   router at `ws://<host>:4040/vox` (axum_ws); `apps/web` (`signal-web`,
+2. ~~`apps/web`~~ — **done**: the headless engine (now `fasttrackstudio
+   --engine`, formerly `apps/signal-engine`/`signal-rigd`) serves the same
+   router at `ws://<host>:4040/vox` (axum_ws); the browser remote (now the
+   fasttrackstudio web build, formerly `signal-web`,
    dioxus wasm) mounts `GuitarRigRemote` from the new feature-scoped
    `features/rigs/guitar/ui/` crate (`signal-guitar-ui` — wasm-clean rig
    components + `use_rig_state`, shared with the desktop shell). Run:
-   `cargo run -p signal-engine` then `cd apps/web && dx serve --platform web`.
+   `cargo run -p fasttrackstudio -- --engine` then `cd apps/fasttrackstudio && dx serve --platform web --no-default-features --features signal`.
    The Edit mode mounts the real graph (`signal-guitar-ui::RigGraph` →
    `signal_grid_ui::RigGridPanel`) with the live chain resolved onto the
    guitar-rig template canvas; param edits round-trip over the Rig service.

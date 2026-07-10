@@ -4,3 +4,6 @@ node_modules/
 .DS_Store
 .direnv/
 .claude/worktrees/
+
+# Staged web bundle embedded into the native binary (just rig-install)
+apps/fasttrackstudio/web-dist/
