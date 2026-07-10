@@ -253,6 +253,11 @@ impl GuitarRigBackend {
         if pump.tick == 1 || pump.tick % 60 == 0 {
             let ports = midicore::midir::input_ports();
             if pump.midi.is_none() || ports != pump.midi_ports {
+                // Release the old stream's OS clients BEFORE opening anew —
+                // opening first doubles ALSA seq usage and can exhaust the
+                // kernel's queue pool (seen live as snd_seq_alloc_named_queue
+                // OOM panics inside midir).
+                pump.midi = None;
                 pump.midi = if ports.is_empty() {
                     None
                 } else {
