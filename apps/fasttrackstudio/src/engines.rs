@@ -7,14 +7,21 @@
 //! `fts signal engine`). The session engine stays in-process (see
 //! `session_engine.rs`), so there is nothing to supervise for it.
 //!
-//! The supervisor only ever kills processes it spawned itself: an engine
-//! that was already running (e.g. the user's live rig started with
-//! `just signal-engine`) is reported as "external" and left alone.
+//! When the deployed systemd user unit exists (`just rig-install`), the
+//! app starts/stops through it: crash supervision (Restart=always) while
+//! running, but the app remains the on/off switch — a stop is final and
+//! nothing starts at boot. Without the unit (dev tree), it falls back to
+//! a direct child process. The supervisor only ever kills what it
+//! controls: an engine that was already running some other way is
+//! reported as "external" and left alone.
 
 use std::process::Child;
 use std::sync::Mutex;
 
-use engine_launcher::{LaunchSource, SIGNAL_ENGINE, probe, spawn};
+use engine_launcher::{
+    LaunchSource, SIGNAL_ENGINE, probe, spawn, systemd_active, systemd_available, systemd_start,
+    systemd_stop,
+};
 
 /// The signal-engine child we own, if we started one.
 static OWNED: Mutex<Option<Child>> = Mutex::new(None);
@@ -24,28 +31,37 @@ pub fn signal_running() -> bool {
     probe(&SIGNAL_ENGINE)
 }
 
-/// Do we own the running signal-engine process?
+/// Do we control the running signal engine (our child, or the systemd
+/// unit we can stop)?
 pub fn signal_owned() -> bool {
-    let mut owned = OWNED.lock().unwrap();
-    match owned.as_mut() {
-        // `try_wait` reaps a crashed child and clears ownership.
-        Some(child) => match child.try_wait() {
-            Ok(None) => true,
-            _ => {
-                *owned = None;
-                false
-            }
-        },
-        None => false,
-    }
+    let child_owned = {
+        let mut owned = OWNED.lock().unwrap();
+        match owned.as_mut() {
+            // `try_wait` reaps a crashed child and clears ownership.
+            Some(child) => match child.try_wait() {
+                Ok(None) => true,
+                _ => {
+                    *owned = None;
+                    false
+                }
+            },
+            None => false,
+        }
+    };
+    child_owned || systemd_active(&SIGNAL_ENGINE)
 }
 
-/// Spawn the signal engine as a supervised child (attached to the app —
-/// its logs share our stdout; it dies with us via the process group on
-/// a terminal Ctrl-C, and [`stop_signal`] kills it explicitly).
+/// Start the signal engine: through its systemd unit when installed
+/// (crash-supervised while running; stop stays final), else as a child
+/// process attached to the app.
 pub fn start_signal() -> Result<String, String> {
     if signal_running() {
         return Err("signal engine already running".into());
+    }
+    if systemd_available(&SIGNAL_ENGINE) {
+        systemd_start(&SIGNAL_ENGINE).map_err(|e| e.to_string())?;
+        tracing::info!("signal engine started (systemd user unit)");
+        return Ok(SIGNAL_ENGINE.ws_url());
     }
     let spawned =
         spawn(&SIGNAL_ENGINE, &[], &[], false).map_err(|e| format!("spawn signal-engine: {e}"))?;
@@ -59,8 +75,14 @@ pub fn start_signal() -> Result<String, String> {
     Ok(url)
 }
 
-/// Stop the signal engine — only if we own it.
+/// Stop the signal engine — the systemd unit if it's the one running,
+/// else our child process.
 pub fn stop_signal() -> Result<(), String> {
+    if systemd_active(&SIGNAL_ENGINE) {
+        systemd_stop(&SIGNAL_ENGINE).map_err(|e| e.to_string())?;
+        tracing::info!("signal engine stopped (systemd user unit)");
+        return Ok(());
+    }
     let mut owned = OWNED.lock().unwrap();
     match owned.take() {
         Some(mut child) => {
