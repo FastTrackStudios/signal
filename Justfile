@@ -32,7 +32,7 @@ tailwind-watch:
 # ws://:4040/vox): the fasttrackstudio binary in --engine mode. `rigd`
 # kept as an alias for muscle memory.
 signal-engine:
-    cargo run -p fasttrackstudio -- --engine
+    cargo run --release -p fasttrackstudio -- --engine
 
 alias rigd := signal-engine
 
@@ -137,7 +137,7 @@ rig-devices:
 # Configure + remember a rig's interface / channel / profile, e.g.:
 #   just rig-setup "Guitar Rig" --input "Yamaha TF" --channel 3 --profile /path/to.styx
 rig-setup name *args:
-    cargo run -p signal-sampler --example guitar_rig -- --rig "{{name}}" {{args}} --write-config
+    cargo run --release -p signal-sampler --example guitar_rig -- --rig "{{name}}" {{args}} --write-config
 
 # ── Website (apps/site → fasttrackstudio.app) ───────────────────────────
 
