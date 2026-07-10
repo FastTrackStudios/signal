@@ -117,6 +117,46 @@ uninstall:
     gtk-update-icon-cache ~/.local/share/icons/hicolor 2>/dev/null || true
     echo "uninstalled (user data in ~/.config/fts and ~/.config/signal kept)"
 
+# ── Release packaging ────────────────────────────────────────────────────
+# Assemble the distributable release artifacts into dist/ (what a
+# codeberg release carries, and what fts-installer downloads):
+#   fasttrackstudio-v<ver>-x86_64-linux.tar.gz   app + fts CLI + systemd
+#       unit + desktop/icon templates + install.sh/uninstall.sh + VERSION
+#   fts-installer-x86_64-linux                    standalone installer
+#   SHA256SUMS                                    covers both
+# Binary copies are patchelf'd to the standard /lib64 loader so they run
+# outside the nix shell (target machines still need the shared libs —
+# see `ldd` on the packaged binary).
+release-package: web-stage
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cargo build --release -p fasttrackstudio --features embed-web
+    cargo build --release -p fts-cli
+    cargo build --release -p fts-installer
+    version="$(cargo pkgid -p fasttrackstudio | sed 's/.*[#@]//')"
+    plat=x86_64-linux
+    if command -v patchelf >/dev/null; then PATCHELF=(patchelf); else PATCHELF=(nix shell nixpkgs#patchelf -c patchelf); fi
+    stage="$(mktemp -d)"; trap 'rm -rf "$stage"' EXIT
+    cp target/release/fasttrackstudio target/release/fts "$stage"/
+    cp target/release/fts-installer "$stage/fts-installer-$plat"
+    for b in fasttrackstudio fts "fts-installer-$plat"; do
+        "${PATCHELF[@]}" --set-interpreter /lib64/ld-linux-x86-64.so.2 --remove-rpath "$stage/$b"
+    done
+    cp apps/fasttrackstudio/systemd/signal-engine.service "$stage"/
+    cp apps/fasttrackstudio/assets/fasttrackstudio.desktop "$stage"/
+    cp apps/fasttrackstudio/assets/icon.svg "$stage/icon.svg"
+    install -m 755 apps/installer/scripts/install.sh apps/installer/scripts/uninstall.sh "$stage"/
+    printf '%s\n' "$version" > "$stage/VERSION"
+    mkdir -p dist
+    tarball="fasttrackstudio-v$version-$plat.tar.gz"
+    tar -czf "dist/$tarball" -C "$stage" \
+        fasttrackstudio fts signal-engine.service fasttrackstudio.desktop \
+        icon.svg install.sh uninstall.sh VERSION
+    mv "$stage/fts-installer-$plat" dist/
+    (cd dist && sha256sum "$tarball" "fts-installer-$plat" > SHA256SUMS)
+    echo "packaged:"
+    ls -lh "dist/$tarball" "dist/fts-installer-$plat" dist/SHA256SUMS
+
 # Pull the latest upstream NeuralAmpModelerCore into the vendored copy
 # (libs/neural-amp-modeler/NeuralAmpModelerCore) and run the crate's
 # test suite. The parity tests run every shipped rig model through BOTH
