@@ -14,4 +14,4 @@ ui = []
 profiles = []
 
 [dependencies]
-pitch-dsp = { workspace = true }
+pitch-dsp = { workspace = true, features = ["signalsmith"] }
