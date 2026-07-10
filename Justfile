@@ -33,6 +33,20 @@ signal-engine:
 
 alias rigd := signal-engine
 
+# Build the browser remote (tailwind + dx release build) and copy the bundle
+# next to the engine binary as target/debug/signal-web, where the engine
+# auto-discovers it (env SIGNAL_WEB_DIST > <exe_dir>/signal-web >
+# target/dx/signal-web/{release,debug}/web/public). Any device on the LAN
+# then gets the UI at http://<host>:4040/.
+# Release deploys: copy the same bundle beside the release binary instead
+# (target/release/signal-web, or <install_dir>/signal-web next to a shipped
+# signal-engine binary).
+signal-web-sync: tailwind
+    cd apps/signal-web && dx build --platform web --release
+    rm -rf target/debug/signal-web
+    mkdir -p target/debug
+    cp -r target/dx/signal-web/release/web/public target/debug/signal-web
+
 # Open the default guitar rig (Yamaha TF ch4 → NAM amps)
 guitar: (rig "Guitar Rig")
 
