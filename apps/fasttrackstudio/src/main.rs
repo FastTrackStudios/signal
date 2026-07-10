@@ -65,6 +65,27 @@ fn main() {
         Err(e) => tracing::error!("session engine failed to start: {e:?}"),
     }
 
+    launch_app();
+}
+
+/// Desktop: a frameless window — the app draws its own top bar (the
+/// header doubles as title bar: drag surfaces + window controls).
+#[cfg(not(target_arch = "wasm32"))]
+fn launch_app() {
+    use dioxus::desktop::tao::dpi::LogicalSize;
+    use dioxus::desktop::{Config, WindowBuilder};
+    let window = WindowBuilder::new()
+        .with_title("FastTrackStudio")
+        .with_decorations(false)
+        .with_inner_size(LogicalSize::new(1280.0, 820.0))
+        .with_min_inner_size(LogicalSize::new(720.0, 480.0));
+    dioxus::LaunchBuilder::new()
+        .with_cfg(Config::new().with_window(window).with_menu(None))
+        .launch(App);
+}
+
+#[cfg(target_arch = "wasm32")]
+fn launch_app() {
     dioxus::launch(App);
 }
 
@@ -150,9 +171,18 @@ fn App() -> Element {
             style: "display: flex; flex-direction: column; height: 100vh; background: #0a0a0a; color: #e4e4e7; font-family: sans-serif;",
             // Workspace bar — the app-level switcher (domain views own
             // their internal navigation).
+            // The header IS the title bar (the native decorations are off
+            // on desktop): the wordmark and the flexible gap are drag
+            // surfaces, double-click toggles maximize, and the window
+            // controls live at the far right.
             header {
-                style: "display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid #27272a;",
-                span { style: "font-weight: 700; letter-spacing: 1px; font-size: 13px;", "FASTTRACKSTUDIO" }
+                style: "display: flex; align-items: center; gap: 8px; padding: 6px 0 6px 12px; border-bottom: 1px solid #27272a; user-select: none;",
+                span {
+                    style: "font-weight: 700; letter-spacing: 1px; font-size: 13px; cursor: default;",
+                    onmousedown: move |_| drag_window(),
+                    ondoubleclick: move |_| toggle_maximize(),
+                    "FASTTRACKSTUDIO"
+                }
                 for (w, label) in Workspace::all() {
                     button {
                         style: if current() == Some(w) {
@@ -167,13 +197,18 @@ fn App() -> Element {
                         "{label}"
                     }
                 }
-                div { style: "flex: 1;" }
+                div {
+                    style: "flex: 1; align-self: stretch;",
+                    onmousedown: move |_| drag_window(),
+                    ondoubleclick: move |_| toggle_maximize(),
+                }
                 EnginesArea {}
                 button {
                     style: "padding: 4px 10px; border-radius: 6px; background: transparent; color: #a1a1aa; border: 1px solid #27272a; font-size: 12px;",
                     onclick: move |_| settings_open.toggle(),
                     "Settings"
                 }
+                WindowControls {}
             }
             if settings_open() {
                 SettingsPanel {}
@@ -206,6 +241,51 @@ fn App() -> Element {
             }
         }
     }
+}
+
+// ── Custom window chrome (desktop is frameless) ─────────────────────────────
+
+fn drag_window() {
+    #[cfg(not(target_arch = "wasm32"))]
+    dioxus::desktop::window().drag();
+}
+
+fn toggle_maximize() {
+    #[cfg(not(target_arch = "wasm32"))]
+    dioxus::desktop::window().toggle_maximized();
+}
+
+/// Minimize / maximize / close — the right end of the title bar.
+#[cfg(not(target_arch = "wasm32"))]
+#[component]
+fn WindowControls() -> Element {
+    const BTN: &str = "width: 40px; align-self: stretch; display: flex; align-items: center; justify-content: center; background: transparent; border: none; color: #a1a1aa; font-size: 13px; cursor: default; padding: 0;";
+    rsx! {
+        div { style: "display: flex; align-self: stretch; margin-left: 4px;",
+            button {
+                style: BTN,
+                onclick: move |_| dioxus::desktop::window().set_minimized(true),
+                "–"
+            }
+            button {
+                style: BTN,
+                onclick: move |_| toggle_maximize(),
+                "▢"
+            }
+            button {
+                style: BTN,
+                onclick: move |_| dioxus::desktop::window().close(),
+                "✕"
+            }
+        }
+    }
+}
+
+/// The browser draws its own chrome.
+#[cfg(target_arch = "wasm32")]
+#[component]
+fn WindowControls() -> Element {
+    rsx! {}
 }
 
 // ── Home — the landing page ─────────────────────────────────────────────────
