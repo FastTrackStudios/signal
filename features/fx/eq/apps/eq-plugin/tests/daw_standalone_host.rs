@@ -49,7 +49,7 @@ fn fts_eq_bundle_path() -> Option<PathBuf> {
         repo.join("target/debug/eq-plugin.clap"),
         repo.join("target/release/eq-plugin.clap"),
         PathBuf::from("/home/cody/.clap/eq-plugin.clap"),
-        PathBuf::from("/home/cody/.config/FastTrackStudio/Reaper/UserPlugins/FX/eq-plugin.clap"),
+        PathBuf::from("/home/cody/fasttrackstudio/UserPlugins/FX/eq-plugin.clap"),
     ]
     .into_iter()
     .find(|p| p.exists())

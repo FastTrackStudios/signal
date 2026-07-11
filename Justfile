@@ -262,7 +262,7 @@ docs-deploy:
 # Dev installs symlink the build + live-editable config into REAPER's
 # resource dir; release packaging copies the .so into the tarball.
 
-ext_reaper_home    := env("REAPER_HOME", home_directory() / ".fts-dev")
+ext_reaper_home    := env("REAPER_HOME", home_directory() / "fts-dev")
 ext_reaper_plugins := env("REAPER_PLUGINS", ext_reaper_home / "UserPlugins")
 ext_fts_config     := ext_reaper_home / "fasttrackstudio"
 ext_lib_name       := "reaper_fts_extensions"
