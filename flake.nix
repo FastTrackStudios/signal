@@ -8,6 +8,18 @@
     nixpkgs.follows = "dioxus-flake/nixpkgs";
     rust-overlay.follows = "dioxus-flake/rust-overlay";
     flake-parts.url = "github:hercules-ci/flake-parts";
+
+    # crane — cargo-in-nix builds for the deployable images (task-server
+    # + the dx web bundles). Same pin style the dissolved task flake used.
+    crane.url = "github:ipetkov/crane";
+
+    # Dedicated, current-unstable nixpkgs used ONLY to source `dx`
+    # (dioxus-cli) at the version the workspace Cargo.lock pins (0.7.9)
+    # plus binaryen 129 (the wasm-opt dx 0.7.9 expects). The main
+    # `nixpkgs` (dioxus-flake's pin) carries dioxus-cli 0.7.4 / binaryen
+    # 126, which dx rejects / SIGABRTs with. Ported from the dissolved
+    # task flake — see its nixpkgs-dx note.
+    nixpkgs-dx.url = "github:NixOS/nixpkgs/d99b013d5d1931ad77fe3912ed218170dec5d9a4";
   };
 
   nixConfig = {
@@ -65,6 +77,325 @@
             tailwindcss_4
           ];
 
+          # ============================================================
+          # Deployable packages + OCI images (ported from the dissolved
+          # task flake — task/flake.nix @ 69605cd28 — paths adjusted to
+          # the monorepo: apps/web → apps/task/web, ui-lab →
+          # apps/task/ui-lab; plus a NEW fts-site image for apps/site).
+          # ============================================================
+
+          # dx 0.7.9 + binaryen 129 + a modern crate fetcher — see the
+          # nixpkgs-dx input note.
+          pkgsDx = import inputs.nixpkgs-dx { inherit system; };
+          dioxus-cli-79 = pkgsDx.dioxus-cli;
+
+          craneLib = (inputs.crane.mkLib pkgs).overrideToolchain rustToolchain;
+
+          # The whole monorepo is the build source: ONE workspace, so the
+          # root Cargo.lock drives vendoring, and the [patch.crates-io]
+          # path patches (libs/vendor/styx-format, libs/editor/vendor/
+          # mermaid-rs-renderer) resolve in-tree. Keep the filter minimal
+          # — the flake source is already the tracked git tree (no
+          # target/, no untracked junk); we only strip obvious non-build
+          # dirs to cut store-copy churn.
+          ftsSrc = lib.cleanSourceWith {
+            src = ./.;
+            filter = path: type:
+              let name = builtins.baseNameOf (toString path); in
+              !(builtins.elem name [ "target" "node_modules" ".git" "result" "web-dist" ]);
+          };
+
+          # Vendor against the root Cargo.lock, with one substitution:
+          # the lock pins `baseview` from Codys-Wright/baseview.git
+          # (nice-plug-dioxus's VST windowing dep) — that repo is GONE
+          # upstream, so the default builtins.fetchGit fails. The exact
+          # commit is still reachable through GitHub's fork network via
+          # RustAudio/baseview (SHA-in-want), so fetch the identical
+          # tree from there. Content is verified by hash + the same
+          # commit id, and cargo's vendor checksums still match.
+          cargoVendorDir = craneLib.vendorCargoDeps {
+            src = ftsSrc;
+            # The override swaps the SOURCE of crane's package-extraction
+            # derivation (drv extracts baseview-<ver> subdirs from the
+            # checkout); returning a raw checkout would skip extraction.
+            overrideVendorGitCheckout = ps: drv:
+              if lib.any (p: lib.hasInfix "Codys-Wright/baseview" (p.source or "")) ps
+              then drv.overrideAttrs (_: {
+                src = pkgs.fetchgit {
+                  url = "https://github.com/RustAudio/baseview.git";
+                  rev = "00e438ff34f7e282776284e75b490a6fc36b16a7";
+                  hash = "sha256-MeCvk/icQlEYaYZbayDx4S49QLRjrpMBDCzXe14VxW0=";
+                };
+              })
+              else drv;
+          };
+
+          commonArgs = {
+            src = ftsSrc;
+            inherit cargoVendorDir;
+            strictDeps = true;
+            nativeBuildInputs = with pkgs; [ pkg-config ];
+            buildInputs = with pkgs; [ openssl ];
+          };
+
+          # wasm-bindgen-cli matching the workspace Cargo.lock's
+          # wasm-bindgen (0.2.126) — dx 0.7.9 rejects a mismatch. Built
+          # through pkgsDx (its fetchCargoVendor pulls from
+          # static.crates.io; the older pin's fetcher 403s).
+          wasm-bindgen-cli-lock = pkgsDx.rustPlatform.buildRustPackage rec {
+            pname = "wasm-bindgen-cli";
+            version = "0.2.126";
+            src = pkgsDx.fetchCrate {
+              inherit pname version;
+              hash = "sha256-H6Is3fiZVxZCfOMWK5dWMSrtn50VGv0sfdnsT+cTtyk=";
+            };
+            cargoHash = "sha256-VucqkXbCi4qtQzY/HrXiDnbSURsagPsdNVMn1Tw3UiY=";
+            nativeBuildInputs = [ pkgsDx.pkg-config ];
+            buildInputs = lib.optionals pkgsDx.stdenv.isLinux [ pkgsDx.openssl ]
+              ++ lib.optionals pkgsDx.stdenv.isDarwin
+                (with pkgsDx.darwin.apple_sdk.frameworks; [ Security CoreFoundation ]);
+            doCheck = false;
+          };
+
+          # task-server, built from the monorepo workspace in ONE
+          # derivation (cargoArtifacts = null skips crane's deps-only
+          # split — mkDummySrc over a ~160-member workspace with custom
+          # build.rs files is not worth the fragility).
+          task-server = craneLib.buildPackage (commonArgs // {
+            pname = "task-server";
+            version = "0.1.0";
+            cargoArtifacts = null;
+            cargoExtraArgs = "--package task-server";
+            doCheck = false;
+          });
+
+          # Shared env for the dx web-bundle builds: arborium /
+          # arborium-tree-sitter compile the tree-sitter C runtime +
+          # grammars to wasm via cc::Build — needs an unwrapped clang
+          # targeting wasm32 and llvm-ar (the cc-wrapper injects
+          # host-only hardening flags clang rejects for wasm). Without
+          # these the C symbols stay as unresolved `(import "env" ...)`
+          # entries and the shipped bundle white-screens. Mirrors
+          # devShells.default exactly.
+          dxWebEnv = {
+            CC_wasm32_unknown_unknown = "${pkgs.llvmPackages_18.clang-unwrapped}/bin/clang";
+            AR_wasm32_unknown_unknown = "${pkgs.llvmPackages_18.bintools-unwrapped}/bin/llvm-ar";
+            CFLAGS_wasm32_unknown_unknown = "-isystem ${pkgs.llvmPackages_18.clang}/resource-root/include";
+            # Hermetic dx: no network in the sandbox. With NO_DOWNLOADS
+            # set, dx resolves wasm-opt / wasm-bindgen from PATH instead
+            # of fetching them from GitHub.
+            NO_DOWNLOADS = "1";
+          };
+
+          dxWebNativeInputs = commonArgs.nativeBuildInputs ++ [
+            dioxus-cli-79            # dx 0.7.9 (nixpkgs-dx)
+            wasm-bindgen-cli-lock    # 0.2.126, matches the lock
+            pkgsDx.binaryen          # wasm-opt 129 — what dx 0.7.9 pins
+          ] ++ (with pkgs; [
+            tailwindcss_4
+            # Pre-compression for --compression-static serving.
+            brotli
+            llvmPackages_18.clang-unwrapped
+            llvmPackages_18.bintools-unwrapped
+          ]);
+
+          # dx bundle → $out/www (+ brotli pre-compression). The dx build
+          # runs from the app dir but writes to the WORKSPACE-ROOT
+          # target/dx/<name>/release/web/public.
+          mkDxWebBundle = { pname, appDir, dxName, preBuild ? "" }:
+            craneLib.buildPackage (commonArgs // dxWebEnv // {
+              inherit pname;
+              version = "0.1.0";
+              cargoArtifacts = null;
+              cargoExtraArgs = "--manifest-path ${appDir}/Cargo.toml";
+              nativeBuildInputs = dxWebNativeInputs;
+              doNotPostBuildInstallCargoBinaries = true;
+              buildPhaseCargoCommand = ''
+                export HOME="$TMPDIR/dx-home"
+                mkdir -p "$HOME"
+                ${preBuild}
+                cd ${appDir}
+                # --debug-symbols false: drop DWARF for a smaller release
+                # bundle (and it sidesteps DWARF-version mismatches in
+                # wasm-opt).
+                dx build --release --platform web --debug-symbols false
+              '';
+              # buildPhase ends inside ${appDir}; anchor the copy at the
+              # workspace root explicitly.
+              installPhaseCommand = ''
+                mkdir -p $out/www
+                srcdir="$(pwd)"
+                case "$srcdir" in */${appDir}) srcdir="''${srcdir%/${appDir}}";; esac
+                cp -R "$srcdir/target/dx/${dxName}/release/web/public/." $out/www/
+                # Pre-compress text/wasm so static-web-server's
+                # --compression-static serves .br variants (the multi-MB
+                # wasm goes over the wire at brotli size).
+                find $out/www -type f \( -name '*.wasm' -o -name '*.js' \
+                  -o -name '*.css' -o -name '*.html' -o -name '*.json' \
+                  -o -name '*.svg' \) -exec brotli --keep --quality=9 {} +
+              '';
+              doCheck = false;
+            });
+
+          task-webapp = mkDxWebBundle {
+            pname = "task-webapp";
+            appDir = "apps/task/web";
+            dxName = "task-app-web";
+            preBuild = ''
+              tailwindcss -i apps/task/web/tailwind.css -o apps/task/web/assets/tailwind.css
+            '';
+          };
+
+          # fasttrackstudio.app website — `just site-build` is a plain
+          # `dx build --platform web --release` (assets/tailwind.css is
+          # committed; no tailwind step).
+          fts-site-web = mkDxWebBundle {
+            pname = "fts-site-web";
+            appDir = "apps/site";
+            dxName = "fts-site";
+          };
+
+          # ── ui-lab (pnpm + Vite) ─────────────────────────────────────
+          # Its own pnpm workspace under apps/task/ui-lab (vendor/* holds
+          # the vendored @bearcove/vox-* TS runtime as workspace:* deps).
+          # Fetcher, config hook, and build pnpm MUST be the same major —
+          # pin all three to pnpm_9.
+          ui-lab = pkgs.stdenv.mkDerivation (finalAttrs: {
+            pname = "task-ui-lab";
+            version = "0.0.0";
+            src = ./apps/task/ui-lab;
+            nativeBuildInputs = [
+              pkgs.nodejs_22
+              pkgs.pnpm_9
+              pkgs.pnpm_9.configHook
+            ];
+            pnpmDeps = pkgs.pnpm_9.fetchDeps {
+              inherit (finalAttrs) pname version src;
+              fetcherVersion = 2;
+              hash = "sha256-JBWJhg81dixFwSc8GZg0yJcSyd38pR08VLcH81KkId4=";
+            };
+            buildPhase = ''
+              runHook preBuild
+              pnpm build
+              runHook postBuild
+            '';
+            installPhase = ''
+              runHook preInstall
+              mkdir -p $out/www
+              cp -R dist/* $out/www/
+              runHook postInstall
+            '';
+          });
+
+          # ── OCI container images (pure Nix, no Docker daemon) ────────
+          # `dockerTools.streamLayeredImage` produces an *executable*
+          # that streams a docker-archive tarball to stdout:
+          #   $(nix build --print-out-paths .#task-server-image) \
+          #     | skopeo copy docker-archive:/dev/stdin docker://…
+          # Linux-only (guarded with lib.optionalAttrs below).
+
+          # Git rev baked into the deployable images so a running
+          # deployment can say WHICH commit it serves (version.json /
+          # TASK_BUILD_REV). Only the cheap wrapper layers depend on it —
+          # the expensive cargo/wasm derivations stay rev-free and cached.
+          buildRev = self.rev or self.dirtyRev or "unknown";
+
+          # static-web-server image factory: serve $root on :8080,
+          # SPA-fallback unknown paths to index.html. HTML is `no-cache`
+          # (nix-store mtimes are 1970 — heuristic freshness would pin
+          # index.html for months); /assets/** is immutable-forever (dx
+          # content-hashes asset URLs). Real copy, not symlinks:
+          # static-web-server denies files resolving outside its root.
+          mkStaticSite = { name, tag ? "latest", siteRoot }:
+            let
+              versionedRoot = pkgs.runCommand "${name}-root" { } ''
+                mkdir -p $out
+                cp -a ${siteRoot}/. $out/
+                chmod u+w $out
+                echo '{"rev":"${buildRev}"}' > $out/version.json
+              '';
+              swsConfig = pkgs.writeText "sws.toml" ''
+                [general]
+                host = "0.0.0.0"
+                port = 8080
+                root = "${versionedRoot}"
+                page-fallback = "${versionedRoot}/index.html"
+                log-level = "info"
+                compression-static = true
+
+                [advanced]
+                [[advanced.headers]]
+                source = "/**"
+                [advanced.headers.headers]
+                Cache-Control = "no-cache"
+
+                [[advanced.headers]]
+                source = "/assets/**"
+                [advanced.headers.headers]
+                Cache-Control = "public, max-age=31536000, immutable"
+              '';
+            in
+            pkgs.dockerTools.streamLayeredImage {
+              inherit name tag;
+              contents = [ pkgs.static-web-server pkgs.cacert ];
+              config = {
+                Entrypoint = [ "/bin/static-web-server" ];
+                Cmd = [ "--config-file" "${swsConfig}" ];
+                ExposedPorts = { "8080/tcp" = { }; };
+                Env = [ "SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt" ];
+              };
+            };
+
+          task-server-image = pkgs.dockerTools.streamLayeredImage {
+            name = "task-server";
+            tag = "latest";
+            # git + curl: the snapshot engine shells out to them; cacert
+            # for outbound TLS; yt-dlp for the watch-view transcript
+            # ingest. /data is the TASK_DATA_ROOT volume.
+            contents = with pkgs; [
+              task-server
+              git
+              curl
+              cacert
+              bashInteractive
+              coreutils
+              yt-dlp
+            ];
+            extraCommands = ''
+              mkdir -p data tmp
+            '';
+            config = {
+              Entrypoint = [ "/bin/task-server" ];
+              Env = [
+                "TASK_BUILD_REV=${buildRev}"
+                "TASK_DATA_ROOT=/data"
+                "TASK_SERVER_BIND=0.0.0.0:8080"
+                "RUST_LOG=info"
+                "SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
+                "GIT_SSL_CAINFO=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
+                "PATH=/bin"
+              ];
+              ExposedPorts = { "8080/tcp" = { }; };
+              Volumes = { "/data" = { }; };
+              WorkingDir = "/data";
+            };
+          };
+
+          task-web-image = mkStaticSite {
+            name = "task-web";
+            siteRoot = "${task-webapp}/www";
+          };
+
+          ui-lab-image = mkStaticSite {
+            name = "task-ui-lab";
+            siteRoot = "${ui-lab}/www";
+          };
+
+          fts-site-image = mkStaticSite {
+            name = "fts-site";
+            siteRoot = "${fts-site-web}/www";
+          };
+
           libPath = lib.makeLibraryPath (with pkgs;
             [ fontconfig freetype openssl ]
             ++ lib.optionals pkgs.stdenv.isLinux [
@@ -83,6 +414,19 @@
           };
 
           formatter = pkgs.nixfmt-rfc-style;
+
+          # ============================================================
+          # Packages — deployable artifacts. The OCI images are
+          # Linux-only (dockerTools needs a Linux store-path layout).
+          # Names/tags match the old task flake so the registry/chart
+          # contract holds: task-server / task-web / task-ui-lab (:latest)
+          # + the new fts-site.
+          # ============================================================
+          packages = {
+            inherit task-server task-webapp fts-site-web ui-lab;
+          } // lib.optionalAttrs pkgs.stdenv.isLinux {
+            inherit task-server-image task-web-image ui-lab-image fts-site-image;
+          };
 
           # ============================================================
           # Dev Shell — one shell for the whole workspace. Toolchain +
