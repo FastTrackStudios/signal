@@ -5,12 +5,12 @@
 default:
     @just --list
 
-# ── Tailwind (signal UI sheet) ───────────────────────────────────────────
-# The compiled sheet is inlined by apps/fasttrackstudio/src/rig_view.rs
-# (include_str!); rebuild it whenever UI-crate class usage changes.
-# input.css @source globs scan the signal/session UI crates + libs/fts-ui
-# + libs/dock. NOTE: apps/fasttrackstudio/assets/tailwind.css is the
-# SEPARATE session-scoped sheet (asset!()) — this recipe must not touch it.
+# ── Tailwind (app UI sheet) ──────────────────────────────────────────────
+# The single compiled sheet (assets/tailwind-signal.css) is inlined by
+# BOTH apps/fasttrackstudio/src/rig_view.rs (signal UI) and
+# src/main.rs SessionChrome (session UI) via include_str!; rebuild it
+# whenever UI-crate class usage changes. input.css @source globs scan the
+# signal/session UI crates + libs/fts-ui + libs/dock.
 
 # Build Tailwind CSS (v4)
 tailwind:
@@ -261,69 +261,13 @@ docs-deploy:
 # The production REAPER extension stack (cdylib reaper_fts_extensions).
 # Dev installs symlink the build + live-editable config into REAPER's
 # resource dir; release packaging copies the .so into the tarball.
-
-ext_reaper_home    := env("REAPER_HOME", home_directory() / "fts-dev")
-ext_reaper_plugins := env("REAPER_PLUGINS", ext_reaper_home / "UserPlugins")
-ext_fts_config     := ext_reaper_home / "fasttrackstudio"
-ext_lib_name       := "reaper_fts_extensions"
-# Extra cargo features on top of defaults (mod-launcher, mod-session,
-# mod-sync, mod-input, mod-mirror, ui-dock, poll-broadcast, host-hooks):
-#   just ext_features=mod-mirror ext-build
-ext_features := ""
-
-# Build the REAPER extension (release)
-ext-build:
-    cargo build --release -p fts-extensions --features "{{ext_features}}"
-
-# Build with NO default features (bisection mode)
-ext-build-minimal:
-    cargo build --release -p fts-extensions --no-default-features --features "{{ext_features}}"
-
-# Build + symlink the extension and its config into $REAPER_HOME
-ext-install: ext-build ext-install-config
-    mkdir -p {{ext_reaper_plugins}}
-    ln -sf "{{justfile_directory()}}/target/release/lib{{ext_lib_name}}.so" "{{ext_reaper_plugins}}/{{ext_lib_name}}.so"
-    @echo "Symlinked -> {{ext_reaper_plugins}}/{{ext_lib_name}}.so"
-
-# Remove the extension symlink
-ext-uninstall:
-    rm -f "{{ext_reaper_plugins}}/{{ext_lib_name}}.so"
-    @echo "Removed {{ext_reaper_plugins}}/{{ext_lib_name}}.so"
-
-# In-tree sources: reaper-input keybinds/workflows + fts-launcher packs.
-# Live-editable: save a .styx and the extension hot-reloads it.
-# Symlink module config into $REAPER_HOME/fasttrackstudio
-ext-install-config:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    input_cfg="{{justfile_directory()}}/features/reaper/reaper-input/config/config"
-    packs="{{justfile_directory()}}/features/launcher/fts-launcher/packs"
-    echo "Installing config symlinks -> {{ext_fts_config}}/"
-    mkdir -p "{{ext_fts_config}}/input/keybinds"
-    for p in fasttrackstudio logic reaper pro-tools ableton overlays; do
-        ln -sfn "$input_cfg/$p" "{{ext_fts_config}}/input/keybinds/$p"
-    done
-    rm -rf "{{ext_fts_config}}/input/workflows"
-    ln -sfn "$input_cfg/workflows" "{{ext_fts_config}}/input/workflows"
-    mkdir -p "{{ext_fts_config}}/launcher/packs"
-    ln -sfn "$packs/reaper-core"       "{{ext_fts_config}}/launcher/packs/reaper-core"
-    ln -sfn "$packs/reaper-visibility" "{{ext_fts_config}}/launcher/packs/reaper-visibility"
-    echo "Done."
-
-# Remove the config symlinks
-ext-uninstall-config:
-    #!/usr/bin/env bash
-    for p in fasttrackstudio logic reaper pro-tools ableton overlays; do
-        rm -f "{{ext_fts_config}}/input/keybinds/$p"
-    done
-    rm -f "{{ext_fts_config}}/input/workflows"
-    rm -f "{{ext_fts_config}}/launcher/packs/reaper-core"
-    rm -f "{{ext_fts_config}}/launcher/packs/reaper-visibility"
-    @echo "Removed config symlinks from {{ext_fts_config}}/"
-
-# Tail the extension log (live)
-ext-log:
-    tail -f "$(ls -t {{home_directory()}}/.local/state/fasttrackstudio/reaper-fts-extensions.log.* | head -n 1)"
+#
+# Recipes live in the `reaper` module (reaper.just):
+#   just reaper install     build + symlink the .so and config into $REAPER_HOME
+#   just reaper build       build the release cdylib
+#   just reaper uninstall   remove the symlink
+#   just reaper log         tail the live extension log
+mod reaper
 
 # ── fts-ui snapshot regression gate (libs/fts-ui/ui-snapshot) ───────────
 
@@ -339,29 +283,10 @@ snapshot-render name:
 snapshot-update:
     cargo run -p ui-snapshot --release -- update
 
-# ── REAPER integration tests (fts-extensions-xtask + daw test harness) ──
-# Needs a REAPER install; FTS_REAPER_EXECUTABLE/RESOURCES point the
-# harness at it (wrapper script keeps the test profile isolated).
-
-# Run integration tests headless (no GUI)
-reaper-integration-test *args:
-    FTS_REAPER_EXECUTABLE="{{justfile_directory()}}/apps/extensions/reaper-fts-extensions/scripts/reaper-test-wrapper.sh" \
-    FTS_REAPER_RESOURCES="{{ext_reaper_home}}" \
-    cargo run -p fts-extensions-xtask -- {{args}}
-
-# Integration tests with a visible REAPER window
-reaper-integration-test-gui *args:
-    FTS_REAPER_EXECUTABLE="{{justfile_directory()}}/apps/extensions/reaper-fts-extensions/scripts/reaper-test-wrapper.sh" \
-    FTS_REAPER_RESOURCES="{{ext_reaper_home}}" \
-    cargo run -p fts-extensions-xtask -- --gui {{args}}
-
-# daw-domain REAPER integration tests (daw-bridge host, isolated rig
-# under target/fts-reaper-test): transport / tempo map / markers /
-# items / takes / routing / ext-state / action registry against a
-# live headless REAPER.
-daw-reaper-test *args:
-    FTS_REAPER_EXECUTABLE="{{justfile_directory()}}/apps/extensions/reaper-fts-extensions/scripts/reaper-test-wrapper.sh" \
-    cargo run -p daw-reaper-xtask -- {{args}}
+# REAPER integration tests moved into the `reaper` module:
+#   just reaper integration-test        (was: just reaper-integration-test)
+#   just reaper integration-test-gui
+#   just reaper daw-test                (was: just daw-reaper-test)
 
 # ── Build ────────────────────────────────────────────────────────────────
 
