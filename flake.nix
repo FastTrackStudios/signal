@@ -149,7 +149,11 @@
             # includes past -nostdlibinc (breaks ring). Builtin headers come
             # from the wrapper's resource-root instead.
             CC_wasm32_unknown_unknown = "${pkgs.llvmPackages_18.clang-unwrapped}/bin/clang";
-            AR_wasm32_unknown_unknown = "${pkgs.llvmPackages_18.bintools}/bin/llvm-ar";
+            # bintools (the wrapper) only exposes unprefixed names (ar, ld…);
+            # llvm-ar lives in bintools-unwrapped. The wrapper path stood
+            # here before and only "worked" while a warm target/ kept ring's
+            # build script from re-running — cold CI builds hit it.
+            AR_wasm32_unknown_unknown = "${pkgs.llvmPackages_18.bintools-unwrapped}/bin/llvm-ar";
             CFLAGS_wasm32_unknown_unknown = "-isystem ${pkgs.llvmPackages_18.clang}/resource-root/include";
             RUST_SRC_PATH = "${rustToolchain}/lib/rustlib/src/rust/library";
           }
