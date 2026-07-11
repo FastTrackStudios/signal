@@ -13,10 +13,14 @@ crates/    domain cores — daw, session, keyflow, signal (facade+proto+
            ui+live+storage+...), midicore, input, audiocore
 features/  capabilities — audio, sync, dawfile, reaper, standalone,
            surfaces, daw-ui, guide, engraver, dynamic-template,
-           fx (built-in FX), rigs, sampler, nam, plugin-host
+           fx (built-in FX), rigs, sampler, nam, plugin-host,
+           task/* (Task's ~28 feature slices: project, inbox, agent, …)
 libs/      UI + infra libraries — fts-ui, fts-story, dock, nice-plug,
            utils, vox-discover, installer-core, neural-amp-modeler,
-           monarchy, devtools, moire-trace-capture
+           monarchy, devtools, moire-trace-capture,
+           editor (subtree-imported Editor stack: editor-state/-view/
+           -vim/-keyflow/… — used by apps/site and Task),
+           vendor/ (patched third-party: styx-format)
 apps/      fasttrackstudio (THE app: desktop GUI = signal / session /
            full / tts; `fasttrackstudio --engine` = the headless signal
            engine; the dx web build is the browser remote, embeddable in
@@ -24,7 +28,10 @@ apps/      fasttrackstudio (THE app: desktop GUI = signal / session /
            daw-cli, keyflow-cli, installer,
            site (fts-site — fasttrackstudio.app website, dioxus web),
            docs-site (docs.fasttrackstudio.app — dodeca + kf docs, NOT a
-           cargo member; `just docs-build` / `just docs-serve`)
+           cargo member; `just docs-build` / `just docs-serve`),
+           task/ (subtree-imported Task product home: cli/desktop/
+           mobile/server/web apps + its docs/deploy/skills; core crates
+           at crates/task/*, feature slices at features/task/*)
 docs/      cross-domain guides (facet, styx, tracey, spec/)
 ```
 
@@ -37,10 +44,11 @@ monorepo.
 
 ## Rules
 
-- **Path deps only** between tree members. If a `[patch]` block's URL is
-  a repo that no longer exists, it is either dead (delete it) or
-  load-bearing for a *transitive* git dep (keyflow's self-patch —
-  Editor.git references keyflow.git). Check before touching.
+- **Path deps only** between tree members. If a `[patch]` block's URL
+  is a repo that no longer exists, it is either dead (delete it) or
+  load-bearing for a *transitive* git dep. Check the lockfile before
+  touching. (The last such table — keyflow.git for Editor.git — died
+  when Editor was imported in-tree 2026-07-10.)
 - **Architect idiom everywhere**: services are `#[architect::rpc]`
   traits; live updates are `#[subscribe]` streams served from
   `architect::PubSub` hubs (never Tx-parameter subscriptions or
