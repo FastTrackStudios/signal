@@ -147,6 +147,12 @@ include_dir = { workspace = true, optional = true }
 # (CoreAudio), keeping engine mode buildable on darwin (voyager).
 [target.'cfg(target_os = "linux")'.dependencies]
 signal-sampler = { workspace = true, features = ["pipewire"], optional = true }
+# MIDI over PipeWire too: the guitar rig's pipewire feature flips midir onto
+# the pipewire-jack backend. Compile-time, whole-binary swap (unifies midir
+# for daw-midi-io as well), so hardware MIDI becomes a routable PipeWire
+# graph node instead of an exclusive ALSA-seq grab. Needs pipewire-jack's
+# libjack at run time — the same host cpal's audio already relies on.
+signal-guitar = { workspace = true, features = ["pipewire"], optional = true }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 dioxus = { workspace = true, default-features = true, features = ["web", "launch"] }

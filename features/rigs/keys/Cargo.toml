@@ -6,7 +6,10 @@ license.workspace = true
 authors.workspace = true
 
 [features]
-pipewire = ["signal-sampler/pipewire"]
+# PipeWire mode: audio via cpal's pipewire host AND MIDI via the
+# pipewire-jack backend (so hardware MIDI stays a routable graph node
+# instead of an exclusive ALSA grab). midir's jack swap is whole-binary.
+pipewire = ["signal-sampler/pipewire", "midicore/midir-pipewire"]
 
 [dependencies]
 # Shared sampler core — the keys rig composes the engine's node-render tree,

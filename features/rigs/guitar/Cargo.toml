@@ -5,6 +5,13 @@ edition = "2021"          # kept on 2021 — pre-move signal workspace edition; 
 license.workspace = true
 authors.workspace = true
 
+[features]
+# PipeWire mode: route this rig's hardware MIDI through the pipewire-jack
+# backend (routable graph node, not an exclusive ALSA grab). midir's jack
+# swap is compile-time and whole-binary. Audio pipewire is picked up via
+# signal-sampler when the app enables it.
+pipewire = ["midicore/midir-pipewire"]
+
 [dependencies]
 # The shared sampler core — GuitarRig / ProfileRig / RigProfile / RigBlock /
 # RigAudioPrefs. The guitar feature is a thin live-handle layer on top.
