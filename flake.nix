@@ -425,7 +425,9 @@
           packages = {
             inherit task-server task-webapp fts-site-web ui-lab;
           } // lib.optionalAttrs pkgs.stdenv.isLinux {
-            inherit task-server-image task-web-image ui-lab-image fts-site-image;
+            inherit task-server-image task-web-image fts-site-image;
+            # CI's contract name (the image itself is `task-ui-lab`).
+            task-ui-lab-image = ui-lab-image;
           };
 
           # ============================================================
