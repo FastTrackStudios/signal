@@ -227,6 +227,10 @@ pub fn install(audio: &daw_standalone::audio_engine::AudioEngine) {
         );
         drop(engine);
 
+        // Route the guide/metronome onto its configured output pair (read
+        // once — this is the audio thread). The mixer's `finish_routing`
+        // then folds it into the headphone-check bus.
+        let (gl, gr) = daw_standalone::audio_engine::MixerRouting::shared().guide_pair();
         let mut audible = false;
         for f in 0..frames {
             let (lv, rv) = (l[f], r[f]);
@@ -236,8 +240,13 @@ pub fn install(audio: &daw_standalone::audio_engine::AudioEngine) {
             if channels == 1 {
                 buf[f] += (lv + rv) * 0.5;
             } else {
-                buf[f * channels] += lv;
-                buf[f * channels + 1] += rv;
+                let base = f * channels;
+                if gl < channels {
+                    buf[base + gl] += lv;
+                }
+                if gr < channels {
+                    buf[base + gr] += rv;
+                }
             }
         }
         if audible && !shared.first_audible_logged.swap(true, Ordering::Relaxed) {

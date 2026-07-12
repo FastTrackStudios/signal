@@ -1,0 +1,16 @@
+[package]
+name = "level"
+version.workspace = true
+edition = "2021"          # matches sibling fx facades (comp, pitch)
+license.workspace = true
+description = "level — facade over level-dsp; vocal riding/de-ess/gate/de-breath (realtime) + offline analyze→envelope. Plugin UI and presets are opt-in."
+
+[features]
+default = []
+# Opt-in plugin UI and preset profiles — declared now so the facade shape is
+# stable; wired once the plugin shell lands (mirrors comp).
+ui = []
+profiles = []
+
+[dependencies]
+level-dsp = { workspace = true }

@@ -258,6 +258,18 @@ fn MetronomePanel() -> Element {
     let mut cues_on = use_signal(crate::guide::cues_enabled);
     let mut click_sound = use_signal(crate::guide::click_sound_index);
 
+    // Output routing (lock-free MixerRouting in daw-standalone). Channel
+    // pairs are (l, l+1); the device's real channel count is published when
+    // the audio stream opens.
+    let routing = daw_standalone::audio_engine::MixerRouting::shared();
+    let channel_count = routing.channel_count();
+    let pairs: Vec<usize> = (0..channel_count).step_by(2).filter(|&l| l + 1 < channel_count).collect();
+    let mut main_l = use_signal(|| routing.main_pair().0);
+    let mut guide_l = use_signal(|| routing.guide_pair().0);
+    let mut phones_on = use_signal(|| routing.phones_enabled());
+    let mut phones_l = use_signal(|| routing.phones_pair().0);
+    let mut main_muted = use_signal(|| routing.main_muted());
+
     rsx! {
         div {
             style: "position: absolute; top: 42px; right: 0; z-index: 30; width: 250px; background: #0f0f11; border: 1px solid #27272a; border-radius: 10px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); padding: 10px;",
@@ -329,9 +341,96 @@ fn MetronomePanel() -> Element {
 
             div { style: "height: 1px; background: #27272a; margin: 6px 4px;" }
             div { style: "padding: 2px 6px;",
-                div { style: "font-size: 12px; font-weight: 600; color: #e4e4e7;", "Output" }
-                span { style: "font-size: 11px; color: #71717a;",
-                    "Route the metronome to its own output channels + a headphone-check mix — coming next."
+                div { style: "font-size: 12px; font-weight: 600; color: #e4e4e7; padding-bottom: 4px;", "Output" }
+
+                if pairs.len() < 2 {
+                    span { style: "font-size: 11px; color: #71717a;",
+                        "This device exposes {channel_count} output channel(s) — a single stereo pair, so there's nothing to route separately."
+                    }
+                } else {
+                    // Main mix output pair.
+                    OutputPairRow {
+                        label: "Main out",
+                        pairs: pairs.clone(),
+                        selected: main_l(),
+                        onselect: move |l: usize| {
+                            routing.set_main_pair(l, l + 1);
+                            main_l.set(l);
+                        },
+                    }
+                    // Metronome / guide output pair.
+                    OutputPairRow {
+                        label: "Metronome out",
+                        pairs: pairs.clone(),
+                        selected: guide_l(),
+                        onselect: move |l: usize| {
+                            routing.set_guide_pair(l, l + 1);
+                            guide_l.set(l);
+                        },
+                    }
+
+                    div { style: "height: 1px; background: #27272a; margin: 6px 4px;" }
+
+                    // Headphone-check monitor bus (main + metronome summed).
+                    GuideToggleRow {
+                        label: "Headphone check",
+                        hint: "Sum main + metronome to a monitor pair",
+                        on: phones_on(),
+                        onclick: move |_| {
+                            let v = !phones_on();
+                            routing.set_phones_enabled(v);
+                            phones_on.set(v);
+                        },
+                    }
+                    if phones_on() {
+                        OutputPairRow {
+                            label: "Check out",
+                            pairs: pairs.clone(),
+                            selected: phones_l(),
+                            onselect: move |l: usize| {
+                                routing.set_phones_pair(l, l + 1);
+                                phones_l.set(l);
+                            },
+                        }
+                    }
+
+                    // Mute the device main output (keep it in your IEMs only).
+                    GuideToggleRow {
+                        label: "Mute main out",
+                        hint: "Silence the main pair on the device",
+                        on: main_muted(),
+                        onclick: move |_| {
+                            let v = !main_muted();
+                            routing.set_main_muted(v);
+                            main_muted.set(v);
+                        },
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// One "label → channel-pair dropdown" row in the metronome output section.
+#[component]
+fn OutputPairRow(
+    label: String,
+    pairs: Vec<usize>,
+    selected: usize,
+    onselect: EventHandler<usize>,
+) -> Element {
+    rsx! {
+        div { style: "display: flex; align-items: center; gap: 8px; padding: 4px 6px;",
+            span { style: "font-size: 12px; color: #a1a1aa; flex: 1;", "{label}" }
+            select {
+                style: "background: #18181b; color: #e4e4e7; border: 1px solid #27272a; border-radius: 6px; padding: 4px 6px; font-size: 12px; cursor: pointer;",
+                onchange: move |evt| {
+                    if let Ok(l) = evt.value().parse::<usize>() {
+                        onselect.call(l);
+                    }
+                },
+                for l in pairs.iter().copied() {
+                    option { value: "{l}", selected: selected == l, "{l + 1}/{l + 2}" }
                 }
             }
         }
