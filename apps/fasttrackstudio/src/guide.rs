@@ -289,9 +289,17 @@ fn rebuild_schedule() {
     }
 
     let Ok(mut engine) = shared.engine.lock() else { return };
-    // Spoken count-in numbers → the count bank (index 0 = "one"). Leaves the
-    // synth tick in place for any word TTS didn't render.
+    // Spoken count-in numbers → the count bank (index 0 = "one"). A real
+    // recorded count wav (`Counts/English Female - N.wav`, already loaded)
+    // wins; TTS fills the rest; the synth tick is the last resort.
+    let counts_dir = config_dir().join("guide-samples/Counts");
     for (i, word) in COUNT_WORDS.iter().enumerate() {
+        if counts_dir
+            .join(format!("English Female - {}.wav", i + 1))
+            .exists()
+        {
+            continue;
+        }
         if let Some(sample) = temp.guides.remove(&tts_cue_key(word)) {
             engine.bank_mut().counts[i] = Some(sample);
         }
