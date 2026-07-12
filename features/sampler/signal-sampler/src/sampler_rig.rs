@@ -638,6 +638,21 @@ impl SamplerRig {
             .load_preset_spec(id_prefix, &preset, dir)
     }
 
+    /// Load a preset from an in-memory [`PresetSpec`] (engine paths resolve
+    /// against `preset_dir`; absolute paths pass through). Lets callers swap a
+    /// single engine ref and reload — the kit-designer's per-piece swap.
+    pub fn load_preset_spec(
+        &self,
+        id_prefix: &str,
+        preset: &crate::preset_spec::PresetSpec,
+        preset_dir: &Path,
+    ) -> eyre::Result<Vec<InstrumentId>> {
+        self.bank()
+            .lock()
+            .map_err(|_| eyre::eyre!("sampler bank lock poisoned"))?
+            .load_preset_spec(id_prefix, preset, preset_dir)
+    }
+
     pub fn unload_instrument(&self, id: &str) {
         match self.bank().lock() {
             Ok(mut bank) => bank.unload_instrument(id),

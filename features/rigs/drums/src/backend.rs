@@ -63,6 +63,9 @@ struct Inner {
     /// One-shot guard so the meter pump is spawned exactly once, however the
     /// rig first becomes active (start / load_kit / open).
     pump_started: std::sync::atomic::AtomicBool,
+    /// The sample-library catalog (every swappable `.signalengine`, grouped by
+    /// kind on the client). Scanned once at construction.
+    library: Vec<signal_drums_proto::LibraryPiece>,
 }
 
 /// The drum-rig backend handle. Cheap to clone (all state is shared); every
@@ -86,6 +89,8 @@ impl DrumRigBackend {
         let library_dir = std::env::var("SIGNAL_DRUM_LIBRARY")
             .map(PathBuf::from)
             .unwrap_or_else(|_| PathBuf::from(DEFAULT_LIBRARY));
+        let library = crate::library::scan_engines(&crate::library::engines_dir(&library_dir));
+        tracing::info!(pieces = library.len(), "drum rig: scanned library");
         let backend = Self {
             inner: Arc::new(Inner {
                 rig: Mutex::new(None),
@@ -95,6 +100,7 @@ impl DrumRigBackend {
                 monitor: MidiMonitor::new(),
                 light: Mutex::new(None),
                 pump_started: std::sync::atomic::AtomicBool::new(false),
+                library,
             }),
         };
         backend.rescan_library();
@@ -210,6 +216,53 @@ impl DrumRigBackend {
         self.publish_all();
     }
 
+    /// The `.signalpreset` path of the currently-loaded kit, if any.
+    fn current_preset_path(&self) -> Option<PathBuf> {
+        let s = self.inner.state.lock().ok()?;
+        s.loaded.and_then(|i| s.kits.get(i)).map(|k| PathBuf::from(&k.path))
+    }
+
+    /// Swap one slot's engine to `engine_path` and reload the kit. The preset's
+    /// note routing + slot ids are unchanged — only the sampled instrument in
+    /// that slot differs — so pads/lights keep working; the mic set (hence the
+    /// mixer strips) may change with the new engine, so we republish the mixer.
+    fn do_swap_piece(&self, slot_id: String, engine_path: String) {
+        let Some(path) = self.current_preset_path() else { return };
+        let Ok(mut spec) = PresetSpec::from_file(&path) else { return };
+        let dir = path.parent().unwrap_or(Path::new("")).to_path_buf();
+        let mut found = false;
+        for e in spec.engines.iter_mut() {
+            if e.id == slot_id {
+                e.engine = engine_path.clone();
+                found = true;
+            }
+        }
+        if !found {
+            tracing::warn!(slot_id, "drum swap: no such slot");
+            return;
+        }
+        {
+            let rig = self.inner.rig.lock().unwrap();
+            let Some(rig) = rig.as_ref() else { return };
+            rig.set_preload_profile(PreloadProfile::DrumKit);
+            match rig.load_preset_spec(KIT, &spec, &dir) {
+                Ok(ids) => {
+                    rig.set_midi_channel(KIT, GM_DRUM_CHANNEL);
+                    rig.set_default_instrument(KIT);
+                    if let Ok(mut s) = self.inner.state.lock() {
+                        s.piece_ids = ids;
+                    }
+                }
+                Err(e) => {
+                    tracing::error!("drum swap: reload failed: {e}");
+                    return;
+                }
+            }
+        }
+        self.paint_light_guide();
+        self.publish_all();
+    }
+
     fn reattach_midi(&self) {
         let (port, map) = {
             let s = self.inner.state.lock().unwrap();
@@ -269,6 +322,7 @@ impl DrumRigBackend {
     fn publish_all(&self) {
         self.inner.events.publish(DrumEvent::Library(DrumRig::kits(self)));
         self.inner.events.publish(DrumEvent::Kit(DrumRig::pieces(self)));
+        self.inner.events.publish(DrumEvent::Design(DrumRig::kit_slots(self)));
         self.inner.events.publish(DrumEvent::Mixer(DrumRig::mixer(self)));
         self.inner.events.publish(DrumEvent::Status(DrumRig::status(self)));
     }
@@ -410,6 +464,44 @@ impl DrumRig for DrumRigBackend {
             }
         }
         pieces
+    }
+
+    fn kit_slots(&self) -> Vec<signal_drums_proto::KitSlot> {
+        let Some(path) = self.current_preset_path() else { return Vec::new() };
+        let Ok(spec) = PresetSpec::from_file(&path) else { return Vec::new() };
+        let dir = path.parent().unwrap_or(Path::new(""));
+        crate::library::preset_slots(&spec, dir)
+            .into_iter()
+            .map(|(id, abs)| {
+                let abs_str = abs.display().to_string();
+                let lib = self.inner.library.iter().find(|p| p.path == abs_str);
+                let current_name = lib
+                    .map(|p| p.name.clone())
+                    .unwrap_or_else(|| abs.file_stem().and_then(|s| s.to_str()).unwrap_or("").to_string());
+                let kind = lib
+                    .map(|p| p.kind.clone())
+                    .filter(|k| !k.is_empty())
+                    .unwrap_or_else(|| crate::library::kind_from_slot(&id).to_string());
+                signal_drums_proto::KitSlot {
+                    label: crate::library::slot_label(&id),
+                    kind,
+                    current_name,
+                    current_path: abs_str,
+                    slot_id: id,
+                }
+            })
+            .collect()
+    }
+
+    fn library(&self) -> Vec<signal_drums_proto::LibraryPiece> {
+        self.inner.library.clone()
+    }
+
+    fn swap_piece(&self, slot_id: String, engine_path: String) {
+        let b = self.clone();
+        let _ = std::thread::Builder::new()
+            .name("drum-swap".into())
+            .spawn(move || b.do_swap_piece(slot_id, engine_path));
     }
 
     fn trigger(&self, note: u32, velocity: u32) {

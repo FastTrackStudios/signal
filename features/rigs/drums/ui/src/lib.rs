@@ -9,8 +9,8 @@ use dioxus::prelude::*;
 use midicore_proto::MidiEvent;
 use midicore_ui::MidiMonitorPanel;
 use signal_drums_proto::drum::{DrumEvent, DrumRigClient, DrumRigStreamClient};
-use signal_drums_proto::{DrumStatus, InputMap, KitInfo, MeterSnapshot, MixerStrip, PieceInfo,
-    StripKind};
+use signal_drums_proto::{DrumStatus, InputMap, KitInfo, KitSlot, LibraryPiece, MeterSnapshot,
+    MixerStrip, PieceInfo, StripKind};
 use signal_ui::components::Piano;
 
 /// Live drum-rig view-state: seeded once, then folded from the event stream.
@@ -23,6 +23,10 @@ struct DrumState {
     /// High-rate peaks — separate from `mixer` (control state) so meter updates
     /// never re-render / clobber a fader being dragged.
     meters: Signal<MeterSnapshot>,
+    /// Kit-designer rows: each piece slot + the instrument currently in it.
+    slots: Signal<Vec<KitSlot>>,
+    /// The whole sample library (swappable pieces), grouped by kind on render.
+    library: Signal<Vec<LibraryPiece>>,
     ports: Signal<Vec<String>>,
     midi: Signal<Vec<MidiEvent>>,
 }
@@ -36,6 +40,8 @@ fn use_drum_state() -> (DrumState, Option<DrumRigClient>) {
     let mut pieces = use_signal(Vec::<PieceInfo>::new);
     let mut mixer = use_signal(Vec::<MixerStrip>::new);
     let mut meters = use_signal(MeterSnapshot::default);
+    let mut slots = use_signal(Vec::<KitSlot>::new);
+    let mut library = use_signal(Vec::<LibraryPiece>::new);
     let mut ports = use_signal(Vec::<String>::new);
     let mut midi = use_signal(Vec::<MidiEvent>::new);
 
@@ -61,6 +67,12 @@ fn use_drum_state() -> (DrumState, Option<DrumRigClient>) {
                 if let Ok(m) = rig.meters().await {
                     meters.set(m);
                 }
+                if let Ok(s) = rig.kit_slots().await {
+                    slots.set(s);
+                }
+                if let Ok(l) = rig.library().await {
+                    library.set(l);
+                }
                 if let Ok(p) = rig.midi_ports().await {
                     ports.set(p);
                 }
@@ -85,12 +97,13 @@ fn use_drum_state() -> (DrumState, Option<DrumRigClient>) {
                 }
             },
             move |ev: DrumEvent| {
-                let (mut status, mut kits, mut pieces, mut mixer, mut meters, mut midi) =
-                    (status, kits, pieces, mixer, meters, midi);
+                let (mut status, mut kits, mut pieces, mut mixer, mut meters, mut slots, mut midi) =
+                    (status, kits, pieces, mixer, meters, slots, midi);
                 match ev {
                     DrumEvent::Status(s) => status.set(s),
                     DrumEvent::Library(k) => kits.set(k),
                     DrumEvent::Kit(p) => pieces.set(p),
+                    DrumEvent::Design(s) => slots.set(s),
                     DrumEvent::Mixer(m) => mixer.set(m),
                     DrumEvent::Meters(m) => meters.set(m),
                     DrumEvent::Midi(m) => midi.set(m),
@@ -99,7 +112,7 @@ fn use_drum_state() -> (DrumState, Option<DrumRigClient>) {
         );
     }
 
-    (DrumState { status, kits, pieces, mixer, meters, ports, midi }, rig)
+    (DrumState { status, kits, pieces, mixer, meters, slots, library, ports, midi }, rig)
 }
 
 /// The drum-rig remote view. Mount inside a host that has provided
@@ -117,6 +130,8 @@ pub fn DrumRigRemote() -> Element {
     // no network round-trip; the engine sync is fire-and-forget).
     let mixer_sig = state.mixer;
     let meters = state.meters.read().clone();
+    let slots = state.slots.read().clone();
+    let library = state.library.read().clone();
     let ports = state.ports.read().clone();
     let midi = state.midi.read().clone();
     let midi_count = midi.len() as u64;
@@ -125,16 +140,24 @@ pub fn DrumRigRemote() -> Element {
         .iter()
         .map(|p| (p.note as u8, format!("{} {}", piece_icon(&p.id), p.id)))
         .collect();
-    // Light the most-recently-struck notes (trailing highlight off the stream).
-    let lit: Vec<u8> = midi
-        .iter()
-        .rev()
-        .filter_map(|e| match e {
-            MidiEvent::NoteOn { key, .. } => Some(key.get()),
-            _ => None,
-        })
-        .take(4)
-        .collect();
+    // Light only keys currently *held*: fold the recent event buffer (oldest→
+    // newest) — a NoteOn(vel>0) presses a key, a NoteOff or NoteOn(vel 0)
+    // releases it. So the light tracks press/release, not the last-N struck.
+    let lit: Vec<u8> = {
+        let mut held = std::collections::BTreeSet::<u8>::new();
+        for e in midi.iter() {
+            match e {
+                MidiEvent::NoteOn { key, velocity, .. } if velocity.get() > 0 => {
+                    held.insert(key.get());
+                }
+                MidiEvent::NoteOn { key, .. } | MidiEvent::NoteOff { key, .. } => {
+                    held.remove(&key.get());
+                }
+                _ => {}
+            }
+        }
+        held.into_iter().collect()
+    };
     // Most-recently-played key and the sample it maps to, for the readout.
     let last_played: Option<(u8, Option<String>)> = midi.iter().rev().find_map(|e| match e {
         MidiEvent::NoteOn { key, .. } => {
@@ -264,6 +287,52 @@ pub fn DrumRigRemote() -> Element {
                             } }
                         }
                     }
+                    // ── Kit designer: swap any piece for another of its type ──
+                    div {
+                        span { style: "font-size:11px; color:#71717a; text-transform:uppercase; letter-spacing:0.05em;", "Kit designer" }
+                        div { style: "display:flex; flex-wrap:wrap; gap:6px; margin-top:6px;",
+                            for slot in slots.iter() {
+                                {
+                                    let rig = rig.clone();
+                                    let slot_id = slot.slot_id.clone();
+                                    let icon = piece_icon(&slot.label);
+                                    // Library options matching this slot's kind (plus the
+                                    // current one, so it's always selectable even if its
+                                    // kind reads oddly).
+                                    let opts: Vec<LibraryPiece> = library
+                                        .iter()
+                                        .filter(|p| p.kind == slot.kind)
+                                        .cloned()
+                                        .collect();
+                                    let cur = slot.current_path.clone();
+                                    rsx!{ div {
+                                        key: "{slot.slot_id}",
+                                        style: "display:flex; flex-direction:column; gap:3px; width:150px; padding:7px; border-radius:8px; background:#111113; border:1px solid #27272a;",
+                                        span { style: "font-size:10px; color:#e4e4e7; font-weight:600;", "{icon} {slot.label}" }
+                                        select {
+                                            style: "background:#18181b; color:#e4e4e7; border:1px solid #27272a; border-radius:5px; padding:3px 5px; font-size:10px; width:100%;",
+                                            onchange: move |e| {
+                                                let (rig, slot_id, path) = (rig.clone(), slot_id.clone(), e.value());
+                                                if !path.is_empty() {
+                                                    spawn(async move { if let Some(r) = rig { let _ = r.swap_piece(slot_id, path).await; } });
+                                                }
+                                            },
+                                            if opts.is_empty() {
+                                                option { value: "", selected: true, "{slot.current_name}" }
+                                            }
+                                            for opt in opts.iter() {
+                                                option {
+                                                    value: "{opt.path}",
+                                                    selected: opt.path == cur,
+                                                    "{opt.name}"
+                                                }
+                                            }
+                                        }
+                                    } }
+                                }
+                            }
+                        }
+                    }
                     div {
                         span { style: "font-size:11px; color:#71717a; text-transform:uppercase; letter-spacing:0.05em;", "Pads" }
                         div { style: "display:flex; flex-wrap:wrap; gap:6px; margin-top:6px;",
@@ -275,7 +344,12 @@ pub fn DrumRigRemote() -> Element {
                                     rsx!{ button {
                                         key: "{piece.id}",
                                         style: pad_btn(ready),
-                                        onclick: move |_| { let rig = rig.clone(); spawn(async move { if let Some(r) = rig { let _ = r.trigger(note, 110).await; } }); },
+                                        onclick: move |_| { let rig = rig.clone(); spawn(async move { if let Some(r) = rig {
+                                            let _ = r.trigger(note, 110).await;
+                                            // Drum one-shot: release immediately so the held-note
+                                            // highlight doesn't stick (the sample still rings out).
+                                            let _ = r.trigger(note, 0).await;
+                                        } }); },
                                         span { style: "font-size:12px; font-weight:600;", "{piece.id}" }
                                         span { style: "font-size:9px; color:#71717a;", "note {piece.note}" }
                                     } }

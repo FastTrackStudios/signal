@@ -88,6 +88,35 @@ pub struct SendInfo {
     pub level_db: f32,
 }
 
+/// One selectable instrument from the sample library — an engine of some type
+/// (kick, snare, tom, …) that can fill a matching kit slot.
+#[derive(Clone, PartialEq, Debug, Default, Facet)]
+pub struct LibraryPiece {
+    /// Display name (the engine's name, else the file stem).
+    pub name: String,
+    /// Absolute path to the `.signalengine`.
+    pub path: String,
+    /// Engine type — matches a [`KitSlot::kind`] (e.g. "kick", "snare", "tom").
+    pub kind: String,
+}
+
+/// One piece slot in the loaded kit and the library instrument currently in it.
+/// The kit designer shows one section per slot; a slot accepts any
+/// [`LibraryPiece`] whose `kind` matches [`KitSlot::kind`].
+#[derive(Clone, PartialEq, Debug, Default, Facet)]
+pub struct KitSlot {
+    /// Preset engine id (`"kick"`, `"rtom1"`, …) — addresses `swap_piece`.
+    pub slot_id: String,
+    /// Friendly label ("Kick", "Rack Tom 1", …).
+    pub label: String,
+    /// Engine type for matching library pieces.
+    pub kind: String,
+    /// Name of the instrument currently in the slot.
+    pub current_name: String,
+    /// Absolute `.signalengine` path currently in the slot.
+    pub current_path: String,
+}
+
 /// High-rate meter snapshot — published at meter rate, carrying only peaks so
 /// the control surface (faders/mutes/solos) is never clobbered mid-drag.
 #[derive(Clone, PartialEq, Debug, Default, Facet)]
@@ -150,7 +179,8 @@ pub mod drum {
 
     use facet::Facet;
 
-    use super::{DrumStatus, InputMap, KitInfo, MeterSnapshot, MixerStrip, PieceInfo};
+    use super::{DrumStatus, InputMap, KitInfo, KitSlot, LibraryPiece, MeterSnapshot, MixerStrip,
+        PieceInfo};
 
     /// One live rig change. Every variant carries **full state** (idempotent
     /// re-application) so a late/reconnecting subscriber is correct after the
@@ -169,6 +199,9 @@ pub mod drum {
         Mixer(Vec<MixerStrip>),
         /// The loaded kit changed (its pieces).
         Kit(Vec<PieceInfo>),
+        /// The kit design changed — the per-slot instrument selection (on load
+        /// or a per-piece swap).
+        Design(Vec<KitSlot>),
         /// The kit library changed (available kits).
         Library(Vec<KitInfo>),
         /// Recent MIDI activity (oldest first), for the monitor — raw events,
@@ -191,6 +224,15 @@ pub mod drum {
         fn load_kit(&self, index: u32);
         /// The loaded kit's pieces (engine + trigger note + preload).
         fn pieces(&self) -> Vec<PieceInfo>;
+        /// The kit's piece slots + the instrument currently in each (the kit
+        /// designer's rows).
+        fn kit_slots(&self) -> Vec<KitSlot>;
+        /// Every swappable instrument in the sample library, grouped by `kind`
+        /// on the client. Static for a session (the library scan).
+        fn library(&self) -> Vec<LibraryPiece>;
+        /// Swap the instrument in slot `slot_id` to the library engine at
+        /// `engine_path`, reloading the kit. Fire-and-forget (reload is async).
+        fn swap_piece(&self, slot_id: String, engine_path: String);
         /// Trigger a pad from the UI: note-on at `velocity`.
         fn trigger(&self, note: u32, velocity: u32);
         /// The drum mixer surface: one [`StripKind::Piece`] per kit piece
