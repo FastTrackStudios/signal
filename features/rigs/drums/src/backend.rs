@@ -99,7 +99,9 @@ impl DrumRigBackend {
         let backend = Self {
             inner: Arc::new(Inner {
                 rig: Mutex::new(None),
-                state: Mutex::new(State::default()),
+                // Default the hardware input to the FTS drum map (our e-kit
+                // layout → the loaded kit), not raw Direct.
+                state: Mutex::new(State { input_map: InputMap::Fts, ..State::default() }),
                 events: PubSub::sliding(64),
                 library_dir,
                 monitor: MidiMonitor::new(),
@@ -639,11 +641,10 @@ impl DrumRig for DrumRigBackend {
         // unmatched mix keep the current kit (else the first available).
         let kit_index = {
             let s = self.inner.state.lock().unwrap();
-            let lname = name.to_lowercase();
-            let by_name = s.kits.iter().position(|k| {
-                let kn = k.name.to_lowercase();
-                kn == lname || lname.contains(&kn) || kn.contains(&lname)
-            });
+            // Normalize away punctuation/spacing so "80's Meet Now-ies" (mix)
+            // matches "80s Meet Now-ies" (kit).
+            let want = norm_name(&name);
+            let by_name = s.kits.iter().position(|k| norm_name(&k.name) == want);
             by_name
                 .filter(|_| !name.eq_ignore_ascii_case("Default"))
                 .or(s.loaded)
@@ -890,6 +891,13 @@ impl Services for DrumRigBackend {
 }
 
 // ── helpers ──────────────────────────────────────────────────────────────
+
+/// Normalize a preset/kit name for matching: lowercase, alphanumerics only
+/// (drops apostrophes, hyphens, spaces) so "80's Meet Now-ies" == "80s Meet
+/// Now-ies".
+fn norm_name(s: &str) -> String {
+    s.chars().filter(|c| c.is_ascii_alphanumeric()).map(|c| c.to_ascii_lowercase()).collect()
+}
 
 /// Collect `.preset` (MM2 Cradle) mix files under `dir` as `(name, path)`.
 fn scan_mixes(dir: &Path) -> Vec<(String, PathBuf)> {
