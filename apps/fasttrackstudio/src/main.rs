@@ -38,6 +38,21 @@ mod session_view;
 mod updates;
 
 fn main() {
+    // NVIDIA + Wayland: force the WebKitGTK webview through XWayland before
+    // tao builds the event loop (`gtk::init` reads GDK_BACKEND there). Dioxus
+    // sets these itself, but only inside `App::new`, AFTER the event loop is
+    // built — so its GDK_BACKEND=x11 (the switch that actually cures the
+    // NVIDIA/Wayland DMABUF lag) lands too late and never takes. Do it here,
+    // before any GTK/tao init. No effect in --engine mode (no webview).
+    #[cfg(target_os = "linux")]
+    if std::env::var("XDG_SESSION_TYPE").as_deref() == Ok("wayland") {
+        // SAFETY: single-threaded, before any GTK init or thread spawn.
+        unsafe {
+            std::env::set_var("GDK_BACKEND", "x11");
+            std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+        }
+    }
+
     // `fasttrackstudio --engine` = the headless signal engine (the former
     // `signal-engine` binary): no GUI, no in-process session engine — just
     // the rig core + its vox router + the embedded web remote. Dispatch
@@ -559,6 +574,14 @@ fn UpdateCheck(msg: Signal<String>) -> Element {
     rsx! {}
 }
 
+/// The comprehensive Tailwind sheet — built by `just tailwind` from
+/// `input.css`, which scans every UI crate (app src, signal-ui,
+/// guitar-ui, session-ui, fts-ui, dock). Inlined rather than loaded as
+/// an external stylesheet so it can't go stale against a committed file
+/// (the same sheet `rig_view` inlines as `SIGNAL_TAILWIND`).
+#[cfg(feature = "session")]
+const APP_TAILWIND: &str = include_str!("../assets/tailwind-signal.css");
+
 /// App-level chrome the session feature contributes: the compiled
 /// Tailwind sheet session-ui's components style themselves with, and
 /// the always-mounted event bridge (hub → global signals).
@@ -566,7 +589,7 @@ fn UpdateCheck(msg: Signal<String>) -> Element {
 #[component]
 fn SessionChrome() -> Element {
     rsx! {
-        document::Stylesheet { href: asset!("/assets/tailwind.css") }
+        document::Style { {APP_TAILWIND} }
         session_view::SessionEventBridge {}
     }
 }

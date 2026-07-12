@@ -32,6 +32,10 @@ use std::sync::{Arc, OnceLock};
 use daw::service::ProjectInfo;
 use daw_standalone::bootstrap::{InProcessDaw, build_in_process_daw};
 use daw_standalone::sync::Standalone;
+use session::services::setlist_service::{
+    SetlistServiceStreamClient, setlist_service_stream_service_descriptor,
+    stream_serve as setlist_service_stream_serve,
+};
 use session::setlist_service::demo::stamp_demo_setlist_with;
 use session::{
     SetlistServiceClient, SetlistServiceImpl, serve_setlist_service,
@@ -48,6 +52,10 @@ pub struct SessionEngine {
     /// RPC client over the in-process LocalServer — installed as
     /// session-ui's `Session` singleton for transport commands.
     pub client: SetlistServiceClient,
+    /// Stream client for the `#[subscribe]` events + active_indices streams.
+    /// The UI bridge drives `events(tx)` / `active_indices(tx)` on this so the
+    /// vox lane pumps them (raw in-process hub attach is never drained).
+    pub stream_client: SetlistServiceStreamClient,
     /// The standalone daw backend itself (kept for future direct
     /// native-trait access; the audio thread holds its own clone).
     #[allow(dead_code)]
@@ -121,17 +129,23 @@ async fn bootstrap(engine_rt: tokio::runtime::Handle) -> eyre::Result<SessionEng
     );
     daw::init_from_parts(bundle.daw.clone(), block_on_rt);
 
-    // 3. The setlist service over the standalone backend + its stream
-    //    pumps (one process-wide task per `#[subscribe]` hub).
+    // 3. The setlist service over the standalone backend.
     let setlist = SetlistServiceImpl::with_daw(standalone.clone());
-    setlist.start_stream_pumps();
 
     // 4. In-process RPC client (architect::LocalServer over a memory
     //    link) — the same conduit shape every remote uses.
-    let router = daw::LayerRouter::new().with(
-        setlist_service_service_descriptor(),
-        serve_setlist_service(setlist.clone()),
-    );
+    let router = daw::LayerRouter::new()
+        .with(
+            setlist_service_service_descriptor(),
+            serve_setlist_service(setlist.clone()),
+        )
+        // The `#[subscribe]` stream sibling (events + active_indices), served
+        // from the impl's PubSub hubs. Without this the stream client's
+        // subscribe calls return `UnknownMethod`.
+        .with(
+            setlist_service_stream_service_descriptor(),
+            setlist_service_stream_serve(setlist.clone()),
+        );
     let scope = architect::Scope::new();
     let server = architect::LocalServer::serve(router, Arc::clone(&scope));
     let caller = server
@@ -140,6 +154,14 @@ async fn bootstrap(engine_rt: tokio::runtime::Handle) -> eyre::Result<SessionEng
         .map_err(|e| eyre::eyre!("local setlist caller: {e:?}"))?;
     let client = SetlistServiceClient::new(caller);
 
+    // Stream client for the `#[subscribe]` streams (events + active_indices).
+    // Subscriptions MUST be consumed through this client so the vox lane pumps
+    // them — attaching a raw `vox::Tx` to the hub in-process is never drained.
+    let stream_client = server
+        .establish::<SetlistServiceStreamClient>()
+        .await
+        .map_err(|e| eyre::eyre!("local setlist stream client: {e:?}"))?;
+
     // Initial build from the seeded project. Later builds (UI-driven)
     // republish through the hub.
     client
@@ -147,6 +169,12 @@ async fn bootstrap(engine_rt: tokio::runtime::Handle) -> eyre::Result<SessionEng
         .await
         .map_err(|e| eyre::eyre!("build_from_open_projects: {e:?}"))?;
     tracing::info!("setlist built from standalone project");
+
+    // Start the `#[subscribe]` stream pumps AFTER the build so the events
+    // pump captures the populated setlist (its song→transport mapping is
+    // snapshotted once at start; starting before the build leaves it empty
+    // and no TransportUpdate is ever emitted → a frozen playhead in the UI).
+    setlist.start_stream_pumps();
 
     // Dev/verification affordance: FTS_AUTOPLAY=1 starts the transport
     // immediately after the setlist is built (e.g. for headless-ish
@@ -171,6 +199,7 @@ async fn bootstrap(engine_rt: tokio::runtime::Handle) -> eyre::Result<SessionEng
     Ok(SessionEngine {
         setlist,
         client,
+        stream_client,
         standalone,
         _daw: bundle,
         _scope: scope,
