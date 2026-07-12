@@ -48,6 +48,8 @@ use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
+use midicore::MidiMonitor;
+
 use daw::service::{
     FxChainContext, FxChains, ProjectContext, ProjectInfo, RouteRef, Routing, SendMode, TrackRef,
     Tracks,
@@ -318,50 +320,9 @@ pub struct BusTrack {
 
 // ── MIDI monitor ─────────────────────────────────────────────────────────────
 
-/// Number of recent MIDI messages the monitor keeps for display.
-const MIDI_MONITOR_CAP: usize = 48;
-
-/// A thread-safe tap on the live MIDI stream for UI monitoring: a rolling log
-/// of the most recent messages plus a running total. Cloning shares the buffer
-/// (`Arc`), so the rig's MIDI input sink can record from the device callback
-/// thread while a UI reads on its own thread. Lets a TUI confirm MIDI is
-/// actually arriving (and from where).
-#[derive(Clone, Default)]
-pub struct MidiMonitor {
-    inner: Arc<Mutex<MidiMonitorInner>>,
-}
-
-#[derive(Default)]
-struct MidiMonitorInner {
-    count: u64,
-    recent: std::collections::VecDeque<midicore::MidiEvent>,
-}
-
-impl MidiMonitor {
-    /// Record a message (tap from a MIDI input callback).
-    pub fn record(&self, msg: &midicore::MidiEvent) {
-        if let Ok(mut g) = self.inner.lock() {
-            g.count = g.count.saturating_add(1);
-            if g.recent.len() >= MIDI_MONITOR_CAP {
-                g.recent.pop_front();
-            }
-            g.recent.push_back(msg.clone());
-        }
-    }
-
-    /// Total MIDI messages seen since the monitor was attached.
-    pub fn count(&self) -> u64 {
-        self.inner.lock().map(|g| g.count).unwrap_or(0)
-    }
-
-    /// Snapshot of the most recent messages, oldest first.
-    pub fn recent(&self) -> Vec<midicore::MidiEvent> {
-        self.inner
-            .lock()
-            .map(|g| g.recent.iter().cloned().collect())
-            .unwrap_or_default()
-    }
-}
+// The rolling MIDI monitor now lives in `midicore` (a cross-cutting MIDI
+// concern, not sampler-specific) and is re-exported below for consumers that
+// reach it via `signal_sampler::MidiMonitor`.
 
 // ── SamplerRig ───────────────────────────────────────────────────────────────
 
@@ -689,6 +650,17 @@ impl SamplerRig {
             Ok(mut bank) => bank.set_midi_channel(id, channel),
             Err(_) => {
                 tracing::warn!("signal-sampler: sampler bank lock poisoned; MIDI channel skipped")
+            }
+        }
+    }
+
+    /// Route live MIDI on any unmapped channel to `id` — makes a single kit /
+    /// instrument react to all MIDI without per-channel setup.
+    pub fn set_default_instrument(&self, id: impl Into<InstrumentId>) {
+        match self.bank().lock() {
+            Ok(mut bank) => bank.set_default_instrument(id),
+            Err(_) => {
+                tracing::warn!("signal-sampler: sampler bank lock poisoned; default instr skipped")
             }
         }
     }
@@ -1097,6 +1069,44 @@ impl SamplerRig {
             // Tap for the UI monitor, then forward full-fidelity to the engine.
             monitor.record(&t.event);
             daw.push_live_midi(&track, t.event);
+        })
+    }
+
+    /// Like [`attach_midi`](Self::attach_midi), but runs every incoming event
+    /// through `transform` first, forwarding each produced event to the engine.
+    /// This is where a drum-map converter (e.g. Strata Prime → MM2) inserts:
+    /// pass a closure that owns a `midicore::DrumMapConverter` and returns
+    /// `conv.convert(ev)`. The monitor taps the *original* (pre-transform)
+    /// event so a UI shows what the hardware actually sent.
+    ///
+    /// `transform` is shared behind a mutex (the midir sink is `Fn + Clone`),
+    /// and runs in the MIDI callback — keep it allocation-light and lock-free
+    /// of the audio thread.
+    pub fn attach_midi_transformed<F>(
+        &self,
+        selection: midicore::PortSelector,
+        transform: F,
+    ) -> eyre::Result<midicore::midir::MidiInput>
+    where
+        F: FnMut(midicore::MidiEvent) -> Vec<midicore::MidiEvent> + Send + 'static,
+    {
+        let (daw, track) = match (self.inner.daw.as_ref(), self.inner.bank_track.as_ref()) {
+            (Some(d), Some(t)) => (d.clone(), t.clone()),
+            _ => eyre::bail!(
+                "attach_midi_transformed requires a live rig with a bank track (not offline)"
+            ),
+        };
+        let monitor = self.inner.midi_monitor.clone();
+        let transform = std::sync::Arc::new(std::sync::Mutex::new(transform));
+        midicore::midir::MidiInput::open(selection, move |t: midicore::TimedEvent| {
+            monitor.record(&t.event);
+            let outs = match transform.lock() {
+                Ok(mut f) => f(t.event),
+                Err(_) => return,
+            };
+            for ev in outs {
+                daw.push_live_midi(&track, ev);
+            }
         })
     }
 

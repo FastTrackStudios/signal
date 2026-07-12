@@ -4,8 +4,8 @@
 //! module collections, and a semantic browser search UI.
 
 use dioxus::prelude::*;
-use signal::tagging::{BrowserHit, BrowserMode, BrowserQuery};
-use signal::{Block, BlockType, ModulePreset, Preset, Snapshot};
+use signal_proto::tagging::{BrowserHit, BrowserMode, BrowserQuery};
+use signal_proto::{Block, BlockType, ModulePreset, Preset, Snapshot};
 
 // region: --- Main Component
 

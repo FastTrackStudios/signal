@@ -49,10 +49,10 @@ impl BlockDetailTab {
 #[derive(Props, Clone, PartialEq)]
 pub struct BlockDetailPanelProps {
     /// The block being edited.
-    pub block: signal::Block,
+    pub block: signal_proto::Block,
     /// Block type for color theming.
     #[props(default)]
-    pub block_type: signal::BlockType,
+    pub block_type: signal_proto::BlockType,
     /// Callback when a parameter value changes: (param_id, new_value).
     #[props(default)]
     pub on_param_change: Option<EventHandler<(String, f32)>>,
@@ -61,7 +61,7 @@ pub struct BlockDetailPanelProps {
     pub on_macro_change: Option<EventHandler<(String, f32)>>,
     /// Callback to save the block.
     #[props(default)]
-    pub on_save: Option<EventHandler<signal::Block>>,
+    pub on_save: Option<EventHandler<signal_proto::Block>>,
     /// Callback to close the detail panel.
     #[props(default)]
     pub on_close: Option<EventHandler<()>>,

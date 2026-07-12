@@ -4,7 +4,7 @@
 //! to [`TileData`] for the dumb [`SceneTileGrid`] component.
 
 use dioxus::prelude::*;
-use signal::song::Song;
+use signal_proto::song::Song;
 
 use crate::components::{SceneTileGrid, TileData};
 

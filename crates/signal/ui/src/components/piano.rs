@@ -391,6 +391,11 @@ pub fn Piano(
     on_note_on: EventHandler<u8>,
     on_note_off: EventHandler<u8>,
     #[props(default = true)] show_labels: bool,
+    /// Optional per-key text label (MIDI note → text), e.g. the sample/piece a
+    /// key plays. Shown on the key face; takes precedence over the C-octave
+    /// label. Keys without an entry fall back to the `show_labels` behaviour.
+    #[props(default)]
+    labels: std::collections::HashMap<u8, String>,
     #[props(default = "#3b82f6".to_string())] accent_color: String,
     /// CSS height of the piano container (e.g. "280px", "35vh").
     #[props(default = "280px".to_string())]
@@ -559,11 +564,13 @@ pub fn Piano(
                     let fill = if pressed { accent.clone() } else { "#f0f0f2".to_string() };
                     let note_clone = note;
 
-                    let label = if show_labels && is_c {
-                        format!("C{}", (note as i32 / 12) - 1)
-                    } else {
-                        String::new()
-                    };
+                    let label = labels.get(&note).cloned().unwrap_or_else(|| {
+                        if show_labels && is_c {
+                            format!("C{}", (note as i32 / 12) - 1)
+                        } else {
+                            String::new()
+                        }
+                    });
 
                     rsx! {
                         g { key: "wk-{note}",
@@ -654,6 +661,19 @@ pub fn Piano(
                                     fill: "{accent}",
                                     fill_opacity: "0.45",
                                     pointer_events: "none",
+                                }
+                            }
+                            // Per-key sample label (e.g. hi-hat piece on a sharp).
+                            if let Some(text_label) = labels.get(&note) {
+                                text {
+                                    x: "{x + BW / 2.0}",
+                                    y: "{y + BH - 5.0}",
+                                    text_anchor: "middle",
+                                    font_size: "7",
+                                    font_family: "-apple-system, sans-serif",
+                                    fill: "white",
+                                    pointer_events: "none",
+                                    "{text_label}"
                                 }
                             }
                         }

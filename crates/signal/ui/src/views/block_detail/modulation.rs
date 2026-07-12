@@ -2,11 +2,11 @@
 
 use dioxus::prelude::*;
 
-use signal::modulation::{ModulationRoute, ModulationSource};
+use signal_proto::modulation::{ModulationRoute, ModulationSource};
 
 #[derive(Props, Clone, PartialEq)]
 pub struct BlockModulationProps {
-    pub block: signal::Block,
+    pub block: signal_proto::Block,
 }
 
 /// Renders modulation routes as a list with source config and controls.

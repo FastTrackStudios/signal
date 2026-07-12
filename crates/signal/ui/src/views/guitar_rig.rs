@@ -3,7 +3,7 @@
 //! toggles, and audio settings (quick input picker + full modal).
 //!
 //! This is the static-RSX entry point the desktop app builds on. It takes the
-//! canonical [`guitar_rig_template`](signal::defaults::guitar::guitar_rig_template)
+//! canonical [`guitar_rig_template`](signal_proto::defaults::guitar::guitar_rig_template)
 //! (11 modules — Source, Dynamics, Special, Drive, Volume, Pre-FX, Amp,
 //! Modulation, Time, Motion, Mastering — Amp and Time using parallel splits)
 //! and renders every block as a dashed template placeholder in [`RigGridPanel`].
@@ -15,7 +15,7 @@ use dioxus::prelude::*;
 use lumen_blocks::components::button::{Button, ButtonVariant};
 use lumen_blocks::components::dropdown::{Dropdown, DropdownContent, DropdownItem, DropdownTrigger};
 
-use signal::defaults::guitar::guitar_rig_template;
+use signal_proto::defaults::guitar::guitar_rig_template;
 use signal::{BlockType, Preset, Signal};
 use signal_browser::grid_conversion::template_to_grid_slots;
 

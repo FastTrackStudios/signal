@@ -14,6 +14,8 @@ use dioxus::prelude::*;
 use signal_guitar_proto::audio::AudioSettingsClient;
 use signal_guitar_proto::rig::{RigClient, RigStreamClient};
 use signal_guitar_ui::GuitarRigRemote;
+use signal_drums_proto::drum::{DrumRigClient, DrumRigStreamClient};
+use signal_drums_ui::DrumRigRemote;
 
 /// Compiled Tailwind for the signal UI components (built by `just
 /// tailwind` from ../input.css). This is the app's single comprehensive
@@ -179,6 +181,7 @@ async fn connect_once(
 #[derive(Clone, Copy, PartialEq)]
 enum RigKind {
     Guitar,
+    Drums,
 }
 
 fn load_last_rig() -> Option<RigKind> {
@@ -191,10 +194,14 @@ fn load_last_rig() -> Option<RigKind> {
             if rig.eq_ignore_ascii_case("guitar") {
                 return Some(RigKind::Guitar);
             }
+            if rig.eq_ignore_ascii_case("drums") {
+                return Some(RigKind::Drums);
+            }
         }
     }
     match prefs::get("last-rig").as_deref() {
         Some("guitar") => Some(RigKind::Guitar),
+        Some("drums") => Some(RigKind::Drums),
         _ => None,
     }
 }
@@ -202,6 +209,7 @@ fn load_last_rig() -> Option<RigKind> {
 fn store_last_rig(rig: Option<RigKind>) {
     match rig {
         Some(RigKind::Guitar) => prefs::set("last-rig", "guitar"),
+        Some(RigKind::Drums) => prefs::set("last-rig", "drums"),
         None => prefs::remove("last-rig"),
     }
 }
@@ -227,6 +235,22 @@ pub fn SignalWorkspace() -> Element {
                 GuitarRigView {}
             }
         },
+        Some(RigKind::Drums) => rsx! {
+            div { style: "flex: 1; min-height: 0; display: flex; flex-direction: column;",
+                div { style: "display: flex; align-items: center; gap: 8px; padding: 4px 12px; border-bottom: 1px solid #1c1c1f; font-size: 11px;",
+                    button {
+                        style: "padding: 2px 8px; border-radius: 5px; background: transparent; color: #a1a1aa; border: 1px solid #27272a; font-size: 11px; cursor: pointer;",
+                        onclick: move |_| {
+                            selected.set(None);
+                            store_last_rig(None);
+                        },
+                        "‹ Rigs"
+                    }
+                    span { style: "color: #71717a;", "Drums" }
+                }
+                DrumRigView {}
+            }
+        },
         None => rsx! {
             RigPicker {
                 on_pick: move |rig| {
@@ -243,7 +267,6 @@ fn RigPicker(on_pick: EventHandler<RigKind>) -> Element {
     const COMING: &[(&str, &str)] = &[
         ("Tracks", "backing tracks & stems"),
         ("Keys", "keys rig"),
-        ("Drums", "drum rig"),
         ("Bass", "bass rig"),
         ("Vocals", "vocal chains"),
     ];
@@ -257,6 +280,13 @@ fn RigPicker(on_pick: EventHandler<RigKind>) -> Element {
                     span { style: "font-size: 14px; font-weight: 700;", "Guitar" }
                     span { style: "font-size: 11px; color: #a1a1aa;", "amp, cab, FX — the live guitar rig" }
                     span { style: "font-size: 10px; color: #22c55e;", "default" }
+                }
+                button {
+                    style: "display: flex; flex-direction: column; align-items: flex-start; gap: 6px; width: 170px; padding: 14px; border-radius: 10px; background: #111113; color: #e4e4e7; border: 1px solid #3f3f46; text-align: left; cursor: pointer;",
+                    onclick: move |_| on_pick.call(RigKind::Drums),
+                    span { style: "font-size: 14px; font-weight: 700;", "Drums" }
+                    span { style: "font-size: 11px; color: #a1a1aa;", "GGD MM2 kits — sampler, multi-mic mixer" }
+                    span { style: "font-size: 10px; color: #3b82f6;", "new" }
                 }
                 for (name, desc) in COMING {
                     div { style: "display: flex; flex-direction: column; align-items: flex-start; gap: 6px; width: 170px; padding: 14px; border-radius: 10px; background: #0c0c0e; color: #52525b; border: 1px solid #1c1c1f;",
@@ -436,6 +466,97 @@ fn GuitarRigView() -> Element {
                             }
                         }
                         RemoteEngineForm { generation }
+                    }
+                },
+            }
+        }
+    }
+}
+
+/// The drum rig's vox endpoint — same engine as guitar, different path.
+fn drum_server_url() -> String {
+    let base = server_url();
+    if base.ends_with("/vox") {
+        format!("{}/drum-vox", &base[..base.len() - 4])
+    } else {
+        base.replace("/vox", "/drum-vox")
+    }
+}
+
+/// The drum rig remote: connect to `/drum-vox` (WebSocket), provide the two
+/// clients in context, and mount [`DrumRigRemote`]. The drum rig shares the
+/// signal engine with guitar; on the local engine we auto-start it if nothing
+/// answers, exactly like [`GuitarRigView`].
+#[component]
+fn DrumRigView() -> Element {
+    let mut generation = use_signal(|| 0u32);
+    let clients = use_resource(move || {
+        let generation = generation();
+        async move {
+            let target = EngineTarget::Ws(drum_server_url());
+            #[cfg(not(target_arch = "wasm32"))]
+            let mut autostart = drum_server_url().contains("127.0.0.1")
+                || drum_server_url().contains("localhost");
+            loop {
+                let rig: Option<DrumRigClient> = establish(&target).await;
+                let stream: Option<DrumRigStreamClient> = establish(&target).await;
+                if let (Some(rig), Some(stream)) = (rig, stream) {
+                    return (generation, (rig, stream));
+                }
+                #[cfg(not(target_arch = "wasm32"))]
+                if autostart {
+                    autostart = false;
+                    if !crate::engines::signal_running() {
+                        let _ = crate::engines::start_signal();
+                    }
+                }
+                architect::platform::sleep(std::time::Duration::from_millis(1200)).await;
+            }
+        }
+    });
+
+    // Watchdog: reconnect on core loss.
+    use_future(move || async move {
+        let mut fails = 0u32;
+        loop {
+            architect::platform::sleep(std::time::Duration::from_millis(1500)).await;
+            let current = clients.peek().as_ref().cloned();
+            let Some((g, (rig, _))) = current else {
+                fails = 0;
+                continue;
+            };
+            if g != *generation.peek() {
+                fails = 0;
+                continue;
+            }
+            if rig.status().await.is_ok() {
+                fails = 0;
+            } else {
+                fails += 1;
+                if fails >= 2 {
+                    fails = 0;
+                    generation += 1;
+                }
+            }
+        }
+    });
+
+    let state = clients
+        .read()
+        .as_ref()
+        .filter(|(g, _)| *g == generation())
+        .map(|(_, c)| c.clone());
+    rsx! {
+        div { style: "flex: 1; min-height: 0; display: flex; flex-direction: column;",
+            match state {
+                Some((rig, stream)) => {
+                    let _ = provide_context(rig);
+                    let _ = provide_context(stream);
+                    rsx! { DrumRigRemote {} }
+                }
+                None => rsx! {
+                    div { style: "display: flex; align-items: center; justify-content: center; gap: 10px; flex: 1; color: #71717a; font-size: 13px;",
+                        "Connecting to the drum engine…"
                     }
                 },
             }

@@ -4,9 +4,9 @@
 //! Blocks can span multiple cells (e.g., 3×2 for an EQ widget).
 //!
 //! Ported from legacy `signal-ui/components/rig_grid/grid_model.rs` — uses
-//! `signal::BlockType` directly instead of `signal_control::block::BlockType`.
+//! `signal_proto::BlockType` directly instead of `signal_control::block::BlockType`.
 
-use signal::BlockType;
+use signal_proto::BlockType;
 use uuid::Uuid;
 
 /// Grid dimensions — 16 columns × 8 rows.
@@ -236,12 +236,12 @@ impl SignalFlowGrid {
 
     /// Build a `SignalFlowGrid` from a `SignalChain`, auto-positioning blocks
     /// with appropriate widgets and sizes.
-    pub fn from_signal_chain(chain: &signal::SignalChain) -> Self {
+    pub fn from_signal_chain(chain: &signal_proto::SignalChain) -> Self {
         let mut grid = Self::new();
         grid.add_input("In", 0);
         grid.add_output("Out", 0);
 
-        let blocks: Vec<&signal::ModuleBlock> = chain.blocks();
+        let blocks: Vec<&signal_proto::ModuleBlock> = chain.blocks();
         let mut col: usize = 1; // start after input jack
 
         for mb in &blocks {
@@ -263,6 +263,8 @@ impl SignalFlowGrid {
 
     /// Build from rig-level data: engines → layers → module chains.
     /// Lays out modules row-by-row with blocks proceeding horizontally.
+    /// (Native-only: `EngineGridData` comes from the Vello-backed flow grid.)
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn from_engines(engines: &[super::signal_flow_grid_view::EngineGridData]) -> Self {
         let mut grid = Self::new();
         grid.add_input("In", 0);

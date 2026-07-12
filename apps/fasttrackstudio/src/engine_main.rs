@@ -150,6 +150,10 @@ async fn embedded_asset(uri: axum::http::Uri) -> Response {
 #[derive(Clone)]
 struct AppState {
     router: architect::LayerRouter,
+    /// The drum rig's router, served at `/drum-vox`. Dormant (no audio) until a
+    /// remote calls `start`/`load_kit`, so the worship guitar rig on `/vox` is
+    /// untouched at boot.
+    drum_router: architect::LayerRouter,
 }
 
 /// One vox connection per WebSocket upgrade; the shared [`architect::LayerRouter`]
@@ -157,6 +161,19 @@ struct AppState {
 async fn vox_handler(ws: WebSocketUpgrade, State(state): State<AppState>) -> Response {
     ws.on_upgrade(move |socket| async move {
         let router = state.router.clone();
+        let acceptor = axum_ws::lane_acceptor_fn(move |_req, connection| {
+            connection.handle_with(router.clone());
+            Ok(())
+        });
+        axum_ws::serve(socket, acceptor).await;
+    })
+    .into_response()
+}
+
+/// Vox connection for the drum rig (served at `/drum-vox`).
+async fn drum_vox_handler(ws: WebSocketUpgrade, State(state): State<AppState>) -> Response {
+    ws.on_upgrade(move |socket| async move {
+        let router = state.drum_router.clone();
         let acceptor = axum_ws::lane_acceptor_fn(move |_req, connection| {
             connection.handle_with(router.clone());
             Ok(())
@@ -242,8 +259,13 @@ async fn async_main() {
     let backend = GuitarRigBackend::new();
     backend.start();
 
+    // The drum rig is mounted but dormant — it opens no audio until a remote
+    // starts it, so booting it never disturbs the live guitar rig.
+    let drum_backend = signal_drums::DrumRigBackend::new();
+
     let state = AppState {
         router: backend.router(),
+        drum_router: drum_backend.router(),
     };
 
     tokio::spawn(serve_iroh(state.router.clone()));
@@ -251,6 +273,7 @@ async fn async_main() {
     let mut app = Router::new()
         .route("/health", get(|| async { "ok" }))
         .route("/vox", get(vox_handler))
+        .route("/drum-vox", get(drum_vox_handler))
         .with_state(state);
 
     let addr = bind_addr();

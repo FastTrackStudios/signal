@@ -116,10 +116,12 @@ pub use runtime::{
     ResolvedEdge,
 };
 pub use sample_map::{SampleKey, SampleMap};
-pub use sampler_rig::{BusTrack, InstrumentTrack, MidiMonitor, SamplerRig};
+pub use midicore::MidiMonitor;
+pub use sampler_rig::{BusTrack, InstrumentTrack, SamplerRig};
 // Hardware MIDI input primitives live in `midicore` (the `midir` OS backend);
 // re-export the selector + handle + event types so rig consumers (e.g. the
 // strings TUI) don't need a direct midicore dependency.
+pub use midicore;
 pub use midicore::MidiEvent;
 pub use midicore::PortSelector as MidiSelection;
 pub use midicore::midir::MidiInput as MidiInputHandle;

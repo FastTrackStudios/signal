@@ -127,6 +127,10 @@ fn main() {
         }
 
         // Play a spread of drum notes and render ~0.5 s offline.
+        // `note_on` dispatches on MIDI channel 0, so map the preset there
+        // first — otherwise every note is dropped (`midi_channels` miss) and
+        // the signal check reads silence.
+        player.set_midi_channel("bench", 0);
         for note in 35u8..=59 {
             player.note_on("bench", note, 110);
         }

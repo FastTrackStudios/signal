@@ -1,0 +1,22 @@
+[package]
+name = "signal-drums-ui"
+version.workspace = true
+edition = "2021"
+license.workspace = true
+authors.workspace = true
+
+# Drum-rig Dioxus components — the feature-scoped, wasm-clean UI half of the
+# detachable GUI. Renders purely from the wire contract (`signal-drums-proto`)
+# via the generated vox clients; no audio backend, no platform I/O.
+
+[dependencies]
+dioxus.workspace = true
+signal-drums-proto.workspace = true
+# The shared MIDI monitor panel + the MidiEvent wire type it renders.
+midicore-ui.workspace = true
+midicore-proto.workspace = true
+# The piano keyboard widget (lives in signal-ui; the crate is native-heavy but
+# wasm-drops its cpal/controller surface, leaving the wasm-clean widgets).
+signal-ui = { workspace = true, features = ["web"] }
+# use_stream (atom+vox) + the portable sleep (tokio native / gloo wasm).
+architect = { workspace = true, features = ["atom", "vox", "platform"] }

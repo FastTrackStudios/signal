@@ -42,18 +42,33 @@
 //! ## [`infer_adapter`] -- adapt DAW bridge inference results for UI display
 
 pub mod components;
+// The controller-bound surface (views, shell, panels, DAW-bridge inference)
+// takes a live `signal::Signal` (the native `SignalController`, which links the
+// cpal audio engine), so it's native-only. A wasm build (browser rig remote)
+// keeps just the wasm-clean widgets in `components` (e.g. the piano).
+#[cfg(not(target_arch = "wasm32"))]
 pub mod hooks;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod infer_adapter;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod panel_registration;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod processing_chain;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod shell;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod views;
 
-// Convenience re-exports
+// Convenience re-exports (native-only, mirroring the modules above).
+#[cfg(not(target_arch = "wasm32"))]
 pub use hooks::use_signal_service;
+#[cfg(not(target_arch = "wasm32"))]
 pub use panel_registration::register_panels;
+#[cfg(not(target_arch = "wasm32"))]
 pub use processing_chain::ProcessingChain;
+#[cfg(not(target_arch = "wasm32"))]
 pub use shell::SignalRoot;
+#[cfg(not(target_arch = "wasm32"))]
 pub use views::{
     AudioDevice, AudioDevices, AudioPrefs, AudioSettingsBridge, AudioSettingsModal, GuitarRigView,
     LiveBlock, PerfStack, PerformanceModel, SignalSlider,

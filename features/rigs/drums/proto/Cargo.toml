@@ -1,0 +1,23 @@
+[package]
+name = "signal-drums-proto"
+version.workspace = true
+edition = "2021"
+license.workspace = true
+authors.workspace = true
+
+# Wire contract for the drum rig: plain facet data types + the
+# `#[architect::rpc]` service traits (`DrumRig`). The detachable-GUI boundary —
+# stays wasm-clean (no audio backend, no Dioxus, no platform I/O) so
+# browser/plugin/embedded remotes can all speak it.
+
+[dependencies]
+architect.workspace = true
+vox = { workspace = true, optional = true }
+facet.workspace = true
+# MidiEvent — the monitor stream carries raw events (rendered by midicore-ui).
+midicore-proto.workspace = true
+
+[features]
+default = ["vox"]
+# Emits the vox dispatcher/client twins for the service traits.
+vox = ["dep:vox", "architect/vox"]

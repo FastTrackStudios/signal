@@ -1,7 +1,7 @@
 //! Detail panel rendering and helper functions.
 
 use dioxus::prelude::*;
-use signal::metadata::Metadata as MetadataModel;
+use signal_proto::metadata::Metadata as MetadataModel;
 
 use super::rig_grid_panel::RigGridPanel;
 use signal_browser::grid_conversion::{
@@ -209,10 +209,10 @@ pub(super) fn filter_and_sort(
 /// Collect all unique tag keys from a set of items, grouped by category.
 pub(super) fn collect_available_tags(
     items: &[ColumnItem],
-) -> Vec<(signal::tagging::TagCategory, Vec<String>)> {
+) -> Vec<(signal_proto::tagging::TagCategory, Vec<String>)> {
     use signal_browser::types::FILTER_CATEGORIES;
     use std::collections::BTreeMap;
-    let mut by_cat: BTreeMap<signal::tagging::TagCategory, Vec<String>> = BTreeMap::new();
+    let mut by_cat: BTreeMap<signal_proto::tagging::TagCategory, Vec<String>> = BTreeMap::new();
     for item in items {
         for tag in item.structured_tags.values() {
             let entry = by_cat.entry(tag.category).or_default();
@@ -235,22 +235,22 @@ pub(super) fn collect_available_tags(
 }
 
 /// Display name for a tag category.
-pub(super) fn tag_category_label(cat: signal::tagging::TagCategory) -> &'static str {
+pub(super) fn tag_category_label(cat: signal_proto::tagging::TagCategory) -> &'static str {
     match cat {
-        signal::tagging::TagCategory::Tone => "Tone",
-        signal::tagging::TagCategory::Character => "Character",
-        signal::tagging::TagCategory::Genre => "Genre",
-        signal::tagging::TagCategory::Vendor => "Vendor",
-        signal::tagging::TagCategory::Plugin => "Plugin",
-        signal::tagging::TagCategory::Context => "Context",
-        signal::tagging::TagCategory::Instrument => "Instrument",
-        signal::tagging::TagCategory::Block => "Block",
-        signal::tagging::TagCategory::Module => "Module",
-        signal::tagging::TagCategory::RigType => "Rig Type",
-        signal::tagging::TagCategory::EngineType => "Engine Type",
-        signal::tagging::TagCategory::DomainLevel => "Level",
-        signal::tagging::TagCategory::Workflow => "Workflow",
-        signal::tagging::TagCategory::Custom => "Custom",
+        signal_proto::tagging::TagCategory::Tone => "Tone",
+        signal_proto::tagging::TagCategory::Character => "Character",
+        signal_proto::tagging::TagCategory::Genre => "Genre",
+        signal_proto::tagging::TagCategory::Vendor => "Vendor",
+        signal_proto::tagging::TagCategory::Plugin => "Plugin",
+        signal_proto::tagging::TagCategory::Context => "Context",
+        signal_proto::tagging::TagCategory::Instrument => "Instrument",
+        signal_proto::tagging::TagCategory::Block => "Block",
+        signal_proto::tagging::TagCategory::Module => "Module",
+        signal_proto::tagging::TagCategory::RigType => "Rig Type",
+        signal_proto::tagging::TagCategory::EngineType => "Engine Type",
+        signal_proto::tagging::TagCategory::DomainLevel => "Level",
+        signal_proto::tagging::TagCategory::Workflow => "Workflow",
+        signal_proto::tagging::TagCategory::Custom => "Custom",
     }
 }
 
@@ -259,14 +259,14 @@ pub(super) fn tag_display_value(key: &str) -> &str {
     key.split_once(':').map_or(key, |(_, v)| v)
 }
 
-pub(super) fn rig_type_display(rt: signal::rig::RigType) -> &'static str {
+pub(super) fn rig_type_display(rt: signal_proto::rig::RigType) -> &'static str {
     match rt {
-        signal::rig::RigType::Guitar => "Guitar",
-        signal::rig::RigType::Bass => "Bass",
-        signal::rig::RigType::Keys => "Keys",
-        signal::rig::RigType::Drums => "Drums",
-        signal::rig::RigType::DrumEnhancement => "Drum Enh.",
-        signal::rig::RigType::Vocals => "Vocals",
+        signal_proto::rig::RigType::Guitar => "Guitar",
+        signal_proto::rig::RigType::Bass => "Bass",
+        signal_proto::rig::RigType::Keys => "Keys",
+        signal_proto::rig::RigType::Drums => "Drums",
+        signal_proto::rig::RigType::DrumEnhancement => "Drum Enh.",
+        signal_proto::rig::RigType::Vocals => "Vocals",
     }
 }
 

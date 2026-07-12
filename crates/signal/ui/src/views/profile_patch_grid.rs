@@ -5,7 +5,7 @@
 //! Clicking a tile activates that patch via `profiles().activate()`.
 
 use dioxus::prelude::*;
-use signal::profile::Profile;
+use signal_proto::profile::Profile;
 
 use crate::components::{SceneTileGrid, TileData};
 
