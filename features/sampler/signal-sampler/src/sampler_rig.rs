@@ -1100,6 +1100,44 @@ impl SamplerRig {
         })
     }
 
+    /// Like [`attach_midi`](Self::attach_midi), but runs every incoming event
+    /// through `transform` first, forwarding each produced event to the engine.
+    /// This is where a drum-map converter (e.g. Strata Prime → MM2) inserts:
+    /// pass a closure that owns a `midicore::DrumMapConverter` and returns
+    /// `conv.convert(ev)`. The monitor taps the *original* (pre-transform)
+    /// event so a UI shows what the hardware actually sent.
+    ///
+    /// `transform` is shared behind a mutex (the midir sink is `Fn + Clone`),
+    /// and runs in the MIDI callback — keep it allocation-light and lock-free
+    /// of the audio thread.
+    pub fn attach_midi_transformed<F>(
+        &self,
+        selection: midicore::PortSelector,
+        transform: F,
+    ) -> eyre::Result<midicore::midir::MidiInput>
+    where
+        F: FnMut(midicore::MidiEvent) -> Vec<midicore::MidiEvent> + Send + 'static,
+    {
+        let (daw, track) = match (self.inner.daw.as_ref(), self.inner.bank_track.as_ref()) {
+            (Some(d), Some(t)) => (d.clone(), t.clone()),
+            _ => eyre::bail!(
+                "attach_midi_transformed requires a live rig with a bank track (not offline)"
+            ),
+        };
+        let monitor = self.inner.midi_monitor.clone();
+        let transform = std::sync::Arc::new(std::sync::Mutex::new(transform));
+        midicore::midir::MidiInput::open(selection, move |t: midicore::TimedEvent| {
+            monitor.record(&t.event);
+            let outs = match transform.lock() {
+                Ok(mut f) => f(t.event),
+                Err(_) => return,
+            };
+            for ev in outs {
+                daw.push_live_midi(&track, ev);
+            }
+        })
+    }
+
     /// The live MIDI monitor — a rolling log + total count of messages reaching
     /// the rig, so a UI can confirm MIDI is arriving (and from which device).
     pub fn midi_monitor(&self) -> MidiMonitor {

@@ -9,10 +9,29 @@
 
 use std::path::Path;
 
+use signal_sampler::midicore::{self, DrumMap, DrumMapConverter};
 use signal_sampler::{InstrumentId, PreloadProfile, SamplerRig};
 
 /// General-MIDI percussion channel (0-indexed 9 = MIDI channel 10).
 pub const GM_DRUM_CHANNEL: u8 = 9;
+
+/// Open a hardware drum controller and play a loaded kit through it, running
+/// every event through a [`DrumMapConverter`] so a `from`-mapped kit (e.g. an
+/// Alesis Strata Prime e-kit, [`DrumMap::StrataPrime`]) drives the loaded
+/// sample library's note layout (e.g. [`DrumMap::Mm2`]).
+///
+/// Returns the live [`MidiInput`](signal_sampler::MidiInputHandle) — hold it
+/// alive for as long as the kit should play. Requires a live (non-offline) rig.
+pub fn attach_converted_kit(
+    rig: &SamplerRig,
+    selection: midicore::PortSelector,
+    from: DrumMap,
+    to: DrumMap,
+) -> Result<signal_sampler::MidiInputHandle, String> {
+    let mut conv = DrumMapConverter::new(from, to);
+    rig.attach_midi_transformed(selection, move |ev| conv.convert(ev))
+        .map_err(|e| e.to_string())
+}
 
 /// Load a full drum kit from a `.signalpreset` (one engine per piece +
 /// GM `note_routing` + the send-based multi-mic [`DrumMixer`]) and route it to
