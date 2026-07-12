@@ -15,5 +15,8 @@ signal-drums-proto.workspace = true
 # The shared MIDI monitor panel + the MidiEvent wire type it renders.
 midicore-ui.workspace = true
 midicore-proto.workspace = true
+# The piano keyboard widget (lives in signal-ui; the crate is native-heavy but
+# wasm-drops its cpal/controller surface, leaving the wasm-clean widgets).
+signal-ui = { workspace = true, features = ["web"] }
 # use_stream (atom+vox) + the portable sleep (tokio native / gloo wasm).
 architect = { workspace = true, features = ["atom", "vox", "platform"] }

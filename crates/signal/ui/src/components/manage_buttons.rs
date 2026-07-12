@@ -1,10 +1,10 @@
 //! Action buttons for Signal management UI
 
 use dioxus::prelude::*;
-use signal::profile::{Patch, PatchId, Profile, ProfileId};
-use signal::rig::{Rig, RigId, RigScene, RigSceneId, RigType};
-use signal::setlist::{Setlist, SetlistEntry, SetlistEntryId, SetlistId};
-use signal::song::{Section, SectionId, Song, SongId};
+use signal_proto::profile::{Patch, PatchId, Profile, ProfileId};
+use signal_proto::rig::{Rig, RigId, RigScene, RigSceneId, RigType};
+use signal_proto::setlist::{Setlist, SetlistEntry, SetlistEntryId, SetlistId};
+use signal_proto::song::{Section, SectionId, Song, SongId};
 
 /// Create Profile button - handles profile creation
 #[component]

@@ -3,11 +3,14 @@
 //! consumed from Dioxus context (provided by the host app root). Inline styles
 //! only (Blitz-safe), no external CSS.
 
+use std::collections::HashMap;
+
 use dioxus::prelude::*;
 use midicore_proto::MidiEvent;
 use midicore_ui::MidiMonitorPanel;
 use signal_drums_proto::drum::{DrumEvent, DrumRigClient, DrumRigStreamClient};
 use signal_drums_proto::{DrumStatus, InputMap, KitInfo, MixerStrip, PieceInfo, StripKind};
+use signal_ui::components::Piano;
 
 /// Live drum-rig view-state: seeded once, then folded from the event stream.
 #[derive(Clone, Copy)]
@@ -104,6 +107,28 @@ pub fn DrumRigRemote() -> Element {
     let ports = state.ports.read().clone();
     let midi = state.midi.read().clone();
     let midi_count = midi.len() as u64;
+    // Label each mapped key with the piece/sample it plays.
+    let piece_labels: HashMap<u8, String> =
+        pieces.iter().map(|p| (p.note as u8, p.id.clone())).collect();
+    // Light the most-recently-struck notes (trailing highlight off the stream).
+    let lit: Vec<u8> = midi
+        .iter()
+        .rev()
+        .filter_map(|e| match e {
+            MidiEvent::NoteOn { key, .. } => Some(key.get()),
+            _ => None,
+        })
+        .take(4)
+        .collect();
+    // Keyboard span: cover the drum notes with a little headroom.
+    let (lo, hi) = pieces.iter().fold((u8::MAX, 0u8), |(lo, hi), p| {
+        (lo.min(p.note as u8), hi.max(p.note as u8))
+    });
+    let (start_note, end_note) = if pieces.is_empty() {
+        (36u8, 60u8)
+    } else {
+        (lo.saturating_sub(1), hi.saturating_add(1))
+    };
     let master_pct = (status.master_peak.clamp(0.0, 1.0) * 100.0) as u32;
     let master_color = meter_color(status.master_peak);
 
@@ -198,8 +223,25 @@ pub fn DrumRigRemote() -> Element {
                         }
                     }
                 }
-                // ── pads + mixer ──
+                // ── piano + pads + mixer ──
                 div { style: "display:flex; flex-direction:column; gap:12px; flex:1; min-height:0; overflow:auto;",
+                    div {
+                        span { style: "font-size:11px; color:#71717a; text-transform:uppercase; letter-spacing:0.05em;", "Keyboard" }
+                        {
+                            let rig = rig.clone();
+                            rsx!{ Piano {
+                                start_note,
+                                end_note,
+                                active_notes: lit,
+                                labels: piece_labels,
+                                show_labels: true,
+                                accent_color: "#3b82f6".to_string(),
+                                height: "150px",
+                                on_note_on: move |n: u8| { let rig = rig.clone(); spawn(async move { if let Some(r) = rig { let _ = r.trigger(n as u32, 110).await; } }); },
+                                on_note_off: move |_n: u8| {},
+                            } }
+                        }
+                    }
                     div {
                         span { style: "font-size:11px; color:#71717a; text-transform:uppercase; letter-spacing:0.05em;", "Pads" }
                         div { style: "display:flex; flex-wrap:wrap; gap:6px; margin-top:6px;",

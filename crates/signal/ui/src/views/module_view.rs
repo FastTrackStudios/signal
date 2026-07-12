@@ -4,7 +4,7 @@
 //! Detail mode shows full parameter cards with knobs.
 
 use dioxus::prelude::*;
-use signal::{BlockType, Module, SignalChain};
+use signal_proto::{BlockType, Module, SignalChain};
 
 use super::block_editor::BlockCard;
 use crate::components::{block_bypassed_style, block_style};

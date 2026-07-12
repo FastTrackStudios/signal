@@ -3,12 +3,12 @@
 //! "Add Block" button.
 //!
 //! Ported from legacy `signal-ui/components/rig_grid/signal_flow_grid.rs`.
-//! Uses `signal::BlockType` and `audio_controls` widgets directly.
+//! Uses `signal_proto::BlockType` and `audio_controls` widgets directly.
 
 use dioxus::prelude::*;
 use uuid::Uuid;
 
-use signal::BlockType;
+use signal_proto::BlockType;
 
 use super::grid_model::{BlockWidget, GRID_COLS, GRID_ROWS, GridBlock, GridJack, SignalFlowGrid};
 
@@ -37,7 +37,7 @@ pub struct LayerGridData {
 #[derive(Clone, PartialEq)]
 pub struct ModuleChainGridData {
     pub name: String,
-    pub chain: signal::SignalChain,
+    pub chain: signal_proto::SignalChain,
 }
 
 // region: --- SignalFlowGridView

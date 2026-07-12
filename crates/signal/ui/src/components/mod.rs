@@ -9,6 +9,9 @@ pub mod audio_controls;
 pub mod audio_viz;
 mod context_menu;
 mod dialog;
+// Controller-bound action buttons (create profile/rig/song, capture) — they
+// call `use_signal_service` (the native SignalController), so native-only.
+#[cfg(not(target_arch = "wasm32"))]
 mod manage_buttons;
 mod side_sheet;
 mod slider;
@@ -30,6 +33,7 @@ pub mod node_graph;
 mod pan_zoom_canvas;
 mod scene_tile;
 mod signal_chain_grid;
+#[cfg(not(target_arch = "wasm32"))]
 mod signal_flow_grid_view;
 
 // Re-exports: primitives
@@ -37,6 +41,7 @@ pub use audio_controls::{Knob, KnobSize, XYPad};
 pub use audio_viz::{LevelMeter, LevelMeterOrientation, SpectrumAnalyzer, WaveformDisplay};
 pub use context_menu::{ContextMenu, ContextMenuItem, ContextMenuSeparator};
 pub use dialog::{Dialog, DialogClose, DialogDescription, DialogFooter, DialogHeader, DialogTitle};
+#[cfg(not(target_arch = "wasm32"))]
 pub use manage_buttons::{
     CaptureButton, CreateProfileButton, CreateRigButton, CreateSetlistButton, CreateSongButton,
 };
@@ -78,6 +83,10 @@ pub use signal_chain_grid::{FlowBlock, SignalChainGrid};
 pub use grid_model::{
     BlockWidget, GridBlock, GridConnection, GridJack, GridPosition, GridSize, SignalFlowGrid,
 };
+// The interactive flow grid's EQ surface uses the native Vello/baseview stack
+// (audiocore-gui), so it's native-only; a wasm build keeps the wasm-clean
+// widgets (piano, node graph, sliders, …).
+#[cfg(not(target_arch = "wasm32"))]
 pub use signal_flow_grid_view::{
     EngineGridData, LayerGridData, ModuleBrowserModal, ModuleCategory, ModuleChainGridData,
     SignalFlowGridView,

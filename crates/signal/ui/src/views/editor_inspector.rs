@@ -324,7 +324,7 @@ pub fn EditorInspectorPanel(props: EditorInspectorPanelProps) -> Element {
             let color = module_slots
                 .first()
                 .map(|s| s.block_type.color())
-                .unwrap_or_else(|| signal::BlockType::Custom.color());
+                .unwrap_or_else(|| signal_proto::BlockType::Custom.color());
             let block_count = module_slots.len();
             let total_params: usize = module_slots.iter().map(|s| s.parameters.len()).sum();
 

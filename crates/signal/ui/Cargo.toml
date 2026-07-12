@@ -9,8 +9,10 @@ authors.workspace = true
 dioxus.workspace = true
 fts-ui.workspace = true
 lumen-blocks.workspace = true
-signal.workspace = true
-signal-browser.workspace = true
+# Wasm-clean domain DATA types (BlockType, SignalChain, tagging, rig, song, …).
+# The UI reads these directly instead of via the `signal` facade, which links
+# the native sampler/daw engine (cpal) and so is native-only below.
+signal-proto.workspace = true
 # The guitar-rig wire contract (types + vox service clients) — the detachable
 # GUI boundary. wasm-clean; NOT the audio backend.
 signal-guitar-proto.workspace = true
@@ -22,17 +24,32 @@ signal-grid-ui.workspace = true
 # `use_stream` (atom + vox): subscribe components to `#[subscribe]` event
 # streams instead of polling.
 architect = { workspace = true, features = ["atom", "vox"] }
-midicore = { workspace = true, features = ["vox", "midir"] }
-signal-controller.workspace = true
-signal-daw-bridge.workspace = true
+midicore = { workspace = true, features = ["vox"] }
 uuid = { version = "1", features = ["v4"] }
-tokio = { workspace = true }
 tracing.workspace = true
 audio-controls.workspace = true
 dock-dioxus = { workspace = true, default-features = false }
 dock-proto.workspace = true
+
+# Native-only: the live signal/daw engine (cpal), the SignalController, the
+# Vello/baseview surfaces (nice-plug-dioxus/audiocore-gui), hardware MIDI
+# (midir), and tokio's net stack (mio). The controller-bound views + the piano
+# waterfall that use these are `cfg(not(wasm))`-gated in code, so a wasm build
+# (browser rig remote) drops them and keeps the wasm-clean widgets (piano, etc.).
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+signal.workspace = true
+signal-browser.workspace = true
+signal-controller.workspace = true
+signal-daw-bridge.workspace = true
 audiocore-gui.workspace = true
 nice-plug-dioxus.workspace = true
+midicore = { workspace = true, features = ["vox", "midir"] }
+tokio = { workspace = true }
+
+# uuid v4 → getrandom 0.3 on wasm needs the wasm_js backend (browser crypto);
+# the `--cfg getrandom_backend="wasm_js"` flag is set by the dx web build.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+getrandom = { version = "0.3", features = ["wasm_js"] }
 
 [features]
 default = ["web"]

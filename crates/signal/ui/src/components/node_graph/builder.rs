@@ -3,7 +3,7 @@
 //! Contains `widget_for_block_type`, `create_module_for_block_type`,
 //! and `build_from_engines` (bridge from signal domain types).
 
-use signal::{BlockType, ModuleBlock, SignalChain};
+use signal_proto::{BlockType, ModuleBlock, SignalChain};
 use uuid::Uuid;
 
 use super::models::{GraphModule, Node, NodeGraph, NodePosition, NodeSize, NodeWidget, Wire};

@@ -9,7 +9,7 @@ use crate::views::MiniKnob;
 
 #[derive(Props, Clone, PartialEq)]
 pub struct BlockMacrosProps {
-    pub block: signal::Block,
+    pub block: signal_proto::Block,
     #[props(default)]
     pub on_macro_change: Option<EventHandler<(String, f32)>>,
     /// Current selector parameter value — determines which macro group is active.
@@ -57,7 +57,7 @@ pub fn BlockMacros(props: BlockMacrosProps) -> Element {
     let active_group_color = active_group.map(|g| g.color.clone());
 
     // Visible knobs: shared + active group
-    let visible_knobs: Vec<&signal::macro_bank::MacroKnob> =
+    let visible_knobs: Vec<&signal_proto::macro_bank::MacroKnob> =
         if let Some(val) = props.active_group_selector_value {
             bank.visible_knobs_for(val)
         } else {
@@ -100,7 +100,7 @@ pub fn BlockMacros(props: BlockMacrosProps) -> Element {
                         "Macro Knobs"
                     }
                     span { class: "text-[10px] text-zinc-600",
-                        "({total_knob_count}/{signal::macro_bank::MacroBank::MAX_KNOBS})"
+                        "({total_knob_count}/{signal_proto::macro_bank::MacroBank::MAX_KNOBS})"
                     }
                 }
                 div { class: "flex gap-3 flex-wrap",
@@ -182,7 +182,7 @@ pub fn BlockMacros(props: BlockMacrosProps) -> Element {
                     }
 
                     // Add knob button
-                    if total_knob_count < signal::macro_bank::MacroBank::MAX_KNOBS {
+                    if total_knob_count < signal_proto::macro_bank::MacroBank::MAX_KNOBS {
                         div {
                             class: "flex flex-col items-center justify-center gap-1 p-2 w-[72px] h-[88px] \
                                     rounded-lg border border-zinc-700 border-dashed \

@@ -1,9 +1,9 @@
 //! Core data model types for the node graph.
 //!
-//! Ported from legacy signal-ui with `signal::BlockType` replacing
+//! Ported from legacy signal-ui with `signal_proto::BlockType` replacing
 //! `signal_control::block::BlockType` and plain `f64` replacing `NormalizedF64`.
 
-use signal::BlockType;
+use signal_proto::BlockType;
 use uuid::Uuid;
 
 /// A parameter attached to a processing node.

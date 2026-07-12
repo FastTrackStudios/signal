@@ -20,8 +20,8 @@ mod toolbar;
 
 use dioxus::prelude::*;
 use fts_ui::prelude::*;
-use signal::rig::RigType;
-use signal::tagging::TagSet;
+use signal_proto::rig::RigType;
+use signal_proto::tagging::TagSet;
 use signal::{ALL_BLOCK_TYPES, ALL_MODULE_TYPES, BlockType};
 
 use signal_browser::data_fetching::{
@@ -144,7 +144,7 @@ pub fn CollectionBrowser(props: CollectionBrowserProps) -> Element {
 
     let mut col2_current_id = use_signal(String::new);
 
-    let mut block_presets_cache = use_signal(Vec::<signal::Preset>::new);
+    let mut block_presets_cache = use_signal(Vec::<signal_proto::Preset>::new);
 
     let mut param_lookup = use_signal(ParamLookup::new);
 

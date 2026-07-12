@@ -4,9 +4,9 @@ use dioxus::prelude::*;
 
 #[derive(Props, Clone, PartialEq)]
 pub struct BlockRawParamsProps {
-    pub block: signal::Block,
+    pub block: signal_proto::Block,
     #[props(default)]
-    pub block_type: signal::BlockType,
+    pub block_type: signal_proto::BlockType,
     #[props(default)]
     pub on_param_change: Option<EventHandler<(String, f32)>>,
 }
