@@ -30,10 +30,18 @@ use session_guide::{
     SampleBank, TtsRenderer, sections_from_song,
 };
 
-/// Master enable for the guide buses (wired to the transport-strip
-/// toggle). Independent of engine installation so the UI can flip it
-/// at any time.
+/// Master enable for the guide buses (wired to the settings popover).
+/// Independent of engine installation so the UI can flip it at any time.
 static ENABLED: AtomicBool = AtomicBool::new(true);
+
+/// Per-bus toggles, applied into `GuideEngine.config` under the engine
+/// mutex by [`apply_bus_config`]. Click (metronome) and count-in on by
+/// default; spoken/section cues OFF by default — the assetless fallback is
+/// a two-tone chime, which reads as noise, so cues stay silent until a TTS
+/// voice or real section samples are configured.
+static CLICK_ON: AtomicBool = AtomicBool::new(true);
+static COUNT_ON: AtomicBool = AtomicBool::new(true);
+static CUES_ON: AtomicBool = AtomicBool::new(false);
 
 /// The engine behind the aux hook, once audio is up.
 static GUIDE: OnceLock<Arc<GuideShared>> = OnceLock::new();
@@ -61,6 +69,43 @@ pub fn is_enabled() -> bool {
 pub fn set_enabled(on: bool) {
     ENABLED.store(on, Ordering::Relaxed);
     tracing::info!("guide {}", if on { "enabled" } else { "disabled" });
+}
+
+pub fn click_enabled() -> bool {
+    CLICK_ON.load(Ordering::Relaxed)
+}
+pub fn count_enabled() -> bool {
+    COUNT_ON.load(Ordering::Relaxed)
+}
+pub fn cues_enabled() -> bool {
+    CUES_ON.load(Ordering::Relaxed)
+}
+
+pub fn set_click_enabled(on: bool) {
+    CLICK_ON.store(on, Ordering::Relaxed);
+    apply_bus_config();
+}
+pub fn set_count_enabled(on: bool) {
+    COUNT_ON.store(on, Ordering::Relaxed);
+    apply_bus_config();
+}
+pub fn set_cues_enabled(on: bool) {
+    CUES_ON.store(on, Ordering::Relaxed);
+    apply_bus_config();
+}
+
+/// Push the per-bus toggles into the live engine config. Briefly locks the
+/// engine mutex — the audio callback only `try_lock`s it, so at worst it
+/// skips one block. No-op until the engine is installed (install() calls
+/// this to seed the initial state, e.g. cues-off).
+fn apply_bus_config() {
+    let Some(shared) = GUIDE.get() else { return };
+    let Ok(mut engine) = shared.engine.lock() else { return };
+    let click = CLICK_ON.load(Ordering::Relaxed);
+    engine.config.enable_beat = click;
+    engine.config.enable_measure_accent = click;
+    engine.config.enable_count = COUNT_ON.load(Ordering::Relaxed);
+    engine.config.enable_guide = CUES_ON.load(Ordering::Relaxed);
 }
 
 fn config_dir() -> PathBuf {
@@ -163,6 +208,9 @@ pub fn install(audio: &daw_standalone::audio_engine::AudioEngine) {
         }
     }));
     tracing::info!("guide engine installed on aux hook ({sample_rate} Hz)");
+
+    // Seed the live config from the per-bus toggles (notably cues-off).
+    apply_bus_config();
 
     // A song may have been announced before audio came up.
     spawn_rebuild();

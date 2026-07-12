@@ -7,10 +7,7 @@
 //! daw-standalone transport underneath.
 
 use dioxus::prelude::*;
-use session_ui::{
-    ACTIVE_INDICES, PLAYBACK_STATE, PerformanceLayout, PerformanceSidebar, SETLIST_STRUCTURE,
-    Session, TransportPanel,
-};
+use session_ui::{PerformanceLayout, PerformanceSidebar, TransportPanel};
 
 use crate::session_engine;
 
@@ -122,9 +119,9 @@ fn feed_guide(
 /// The Session workspace: the full setlist-player surface —
 /// Navigator sidebar (left), performance display (center) and the
 /// transport control bar (bottom), assembled from session-ui's panels.
-/// A slim guide/status strip sits above the transport for the app's
-/// guide toggle and quick song navigation. All three panels read the
-/// same global signals the `SessionEventBridge` keeps fed.
+/// A guide-settings gear floats in the top-right of the main view. All
+/// three panels read the same global signals the `SessionEventBridge`
+/// keeps fed.
 #[component]
 pub fn SessionWorkspace() -> Element {
     if session_engine::engine().is_none() {
@@ -146,12 +143,11 @@ pub fn SessionWorkspace() -> Element {
             }
             // ── Performance display + transport (right column) ─────
             div { style: "flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column;",
-                // Main performance view
-                div { style: "flex: 1; min-height: 0; display: flex;",
+                // Main performance view + floating guide-settings gear.
+                div { style: "position: relative; flex: 1; min-height: 0; display: flex;",
                     PerformanceLayout {}
+                    GuideSettings {}
                 }
-                // Guide / status strip
-                GuideBar {}
                 // Full transport control bar (arm / record / back /
                 // play·pause / loop / advance)
                 div { style: "height: 92px; flex: none; border-top: 1px solid #27272a;",
@@ -162,99 +158,113 @@ pub fn SessionWorkspace() -> Element {
     }
 }
 
-/// Slim strip above the transport: the app-specific guide toggle,
-/// quick prev/next song, and the current song/section readout. Playback
-/// itself lives in `TransportPanel`; this only owns things session-ui's
-/// panel doesn't (the guide bus and song-level jumps).
+/// Floating guide-settings control: a gear in the top-right of the main
+/// view that opens a small popover of independent toggles (Guide master /
+/// Click / Count-in / Spoken cues), each wired to the audio guide's
+/// per-bus flags. Replaces the old always-present guide strip.
 #[component]
-fn GuideBar() -> Element {
+fn GuideSettings() -> Element {
+    let mut open = use_signal(|| false);
     let mut guide_on = use_signal(crate::guide::is_enabled);
-    let indices = ACTIVE_INDICES.read();
-    let song_index = indices.song_index;
-    let section_index = indices.section_index;
-    drop(indices);
+    let mut click_on = use_signal(crate::guide::click_enabled);
+    let mut count_on = use_signal(crate::guide::count_enabled);
+    let mut cues_on = use_signal(crate::guide::cues_enabled);
 
-    let playback_state = *PLAYBACK_STATE.read();
-    let is_playing = matches!(
-        playback_state,
-        daw::service::PlayState::Playing | daw::service::PlayState::Recording
-    );
-
-    let (song_label, section_label, song_count) = {
-        let setlist = SETLIST_STRUCTURE.read();
-        let song = song_index.and_then(|i| setlist.songs.get(i));
-        let song_label = match (song, song_index) {
-            (Some(s), Some(i)) => format!("{}. {}", i + 1, s.name),
-            _ => "—".to_string(),
-        };
-        let section_label = song
-            .and_then(|s| section_index.and_then(|i| s.sections.get(i)))
-            .map(|sec| sec.display_name())
-            .unwrap_or_else(|| "—".to_string());
-        (song_label, section_label, setlist.songs.len())
+    let gear = if guide_on() {
+        "display: flex; align-items: center; justify-content: center; width: 34px; height: 34px; border-radius: 8px; background: #14532d; color: #bbf7d0; border: 1px solid #166534; cursor: pointer; font-size: 17px;"
+    } else {
+        "display: flex; align-items: center; justify-content: center; width: 34px; height: 34px; border-radius: 8px; background: #18181b; color: #a1a1aa; border: 1px solid #27272a; cursor: pointer; font-size: 17px;"
     };
 
-    let btn = "padding: 6px 14px; border-radius: 6px; background: #18181b; color: #e4e4e7; border: 1px solid #27272a; font-size: 13px; cursor: pointer;";
-
     rsx! {
-        div { style: "display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-top: 1px solid #27272a; background: #0f0f11; flex: none;",
-
-            // Prev / Next song
+        div { style: "position: absolute; top: 12px; right: 12px; z-index: 30;",
             button {
-                style: btn,
-                title: "Previous song",
-                onclick: move |_| {
-                    spawn(async move {
-                        if let Err(e) = Session::get().setlist().previous_song().await {
-                            tracing::warn!("previous_song failed: {e:?}");
-                        }
-                    });
-                },
-                "|◀"
-            }
-            button {
-                style: btn,
-                title: "Next song",
-                onclick: move |_| {
-                    spawn(async move {
-                        if let Err(e) = Session::get().setlist().next_song().await {
-                            tracing::warn!("next_song failed: {e:?}");
-                        }
-                    });
-                },
-                "▶|"
+                style: gear,
+                title: "Guide settings (click, count-in, spoken cues)",
+                onclick: move |_| open.toggle(),
+                "\u{2699}"
             }
 
-            // Guide (click / count-in / cues) toggle — flips the shared
-            // guide state the aux audio hook reads.
-            button {
-                style: if guide_on() {
-                    "padding: 6px 14px; border-radius: 6px; background: #14532d; color: #bbf7d0; border: 1px solid #166534; font-size: 13px; font-weight: 600; cursor: pointer;"
-                } else {
-                    btn
-                },
-                title: "Guide: click, count-in and section cues",
-                onclick: move |_| {
-                    let on = !guide_on();
-                    crate::guide::set_enabled(on);
-                    guide_on.set(on);
-                },
-                "Guide"
-            }
-
-            // Current song / section
-            div { style: "display: flex; flex-direction: column; margin-left: 12px; min-width: 0;",
-                span { style: "font-size: 13px; font-weight: 700; color: #e4e4e7; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;",
-                    "{song_label}"
+            if open() {
+                // Backdrop to dismiss on outside click.
+                div {
+                    style: "position: fixed; inset: 0; z-index: 20;",
+                    onclick: move |_| open.set(false),
                 }
-                span { style: "font-size: 11px; color: #a1a1aa;", "{section_label}" }
+                div {
+                    style: "position: absolute; top: 42px; right: 0; z-index: 30; width: 224px; background: #0f0f11; border: 1px solid #27272a; border-radius: 10px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); padding: 10px;",
+                    onclick: move |evt: MouseEvent| evt.stop_propagation(),
+
+                    div { style: "font-size: 12px; font-weight: 700; color: #e4e4e7; padding: 2px 6px 8px;",
+                        "Guide"
+                    }
+
+                    GuideToggleRow {
+                        label: "Guide",
+                        hint: "Master on/off",
+                        on: guide_on(),
+                        onclick: move |_| {
+                            let v = !guide_on();
+                            crate::guide::set_enabled(v);
+                            guide_on.set(v);
+                        },
+                    }
+                    div { style: "height: 1px; background: #27272a; margin: 6px 4px;" }
+                    GuideToggleRow {
+                        label: "Click",
+                        hint: "Metronome",
+                        on: click_on(),
+                        onclick: move |_| {
+                            let v = !click_on();
+                            crate::guide::set_click_enabled(v);
+                            click_on.set(v);
+                        },
+                    }
+                    GuideToggleRow {
+                        label: "Count-in",
+                        hint: "Counts before the song",
+                        on: count_on(),
+                        onclick: move |_| {
+                            let v = !count_on();
+                            crate::guide::set_count_enabled(v);
+                            count_on.set(v);
+                        },
+                    }
+                    GuideToggleRow {
+                        label: "Spoken cues",
+                        hint: "Section names (needs TTS)",
+                        on: cues_on(),
+                        onclick: move |_| {
+                            let v = !cues_on();
+                            crate::guide::set_cues_enabled(v);
+                            cues_on.set(v);
+                        },
+                    }
+                }
             }
+        }
+    }
+}
 
-            div { style: "flex: 1;" }
-
-            span { style: "font-size: 11px; color: #71717a;",
-                if is_playing { "PLAYING" } else { "STOPPED" }
-                " · {song_count} songs · daw-standalone"
+/// One labelled toggle row inside the guide-settings popover.
+#[component]
+fn GuideToggleRow(label: String, hint: String, on: bool, onclick: EventHandler<MouseEvent>) -> Element {
+    let (track, knob_x) = if on {
+        ("#16a34a", "18px")
+    } else {
+        ("#3f3f46", "2px")
+    };
+    rsx! {
+        button {
+            style: "display: flex; align-items: center; gap: 10px; width: 100%; padding: 7px 6px; background: transparent; border: none; cursor: pointer; text-align: left;",
+            onclick: move |evt| onclick.call(evt),
+            div { style: "display: flex; flex-direction: column; flex: 1; min-width: 0;",
+                span { style: "font-size: 13px; color: #e4e4e7; font-weight: 600;", "{label}" }
+                span { style: "font-size: 11px; color: #71717a;", "{hint}" }
+            }
+            // Switch
+            div { style: "position: relative; width: 36px; height: 20px; border-radius: 10px; flex: none; background: {track}; transition: background 120ms;",
+                div { style: "position: absolute; top: 2px; left: {knob_x}; width: 16px; height: 16px; border-radius: 8px; background: #fafafa; transition: left 120ms;" }
             }
         }
     }
