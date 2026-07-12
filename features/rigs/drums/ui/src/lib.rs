@@ -235,8 +235,9 @@ pub fn DrumRigRemote() -> Element {
                                 active_notes: lit,
                                 labels: piece_labels,
                                 show_labels: true,
-                                accent_color: "#3b82f6".to_string(),
-                                height: "150px",
+                                waterfall: false,
+                                accent_color: "#22c55e".to_string(),
+                                height: "120px",
                                 on_note_on: move |n: u8| { let rig = rig.clone(); spawn(async move { if let Some(r) = rig { let _ = r.trigger(n as u32, 110).await; } }); },
                                 on_note_off: move |_n: u8| {},
                             } }

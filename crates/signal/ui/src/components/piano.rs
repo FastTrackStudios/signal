@@ -396,6 +396,11 @@ pub fn Piano(
     /// label. Keys without an entry fall back to the `show_labels` behaviour.
     #[props(default)]
     labels: std::collections::HashMap<u8, String>,
+    /// Show the falling-note "waterfall" zone above the keys. When `false`
+    /// (e.g. a compact drum keyboard) the SVG is keys-only and preserves key
+    /// aspect ratio instead of stretching to fill the container width.
+    #[props(default = true)]
+    waterfall: bool,
     #[props(default = "#3b82f6".to_string())] accent_color: String,
     /// CSS height of the piano container (e.g. "280px", "35vh").
     #[props(default = "280px".to_string())]
@@ -406,7 +411,11 @@ pub fn Piano(
     let end_white = white_key_count_before(end_note.saturating_add(1));
     let num_white = (end_white.saturating_sub(origin_white)).max(1);
     let svg_w = num_white as f64 * WW;
-    let svg_h = FALL_H + WH;
+    // Keys-only when no waterfall: drop the falling-note zone so the keyboard
+    // fills the height, and lay keys at the top (y=0) instead of below FALL_H.
+    let fall_h = if waterfall { FALL_H } else { 0.0 };
+    let svg_h = fall_h + WH;
+    let key_y = fall_h;
 
     let notes: Vec<u8> = (start_note..=end_note).collect();
     let white_notes: Vec<u8> = notes.iter().copied().filter(|&n| !is_black(n)).collect();
@@ -515,49 +524,45 @@ pub fn Piano(
                 width: "100%",
                 height: "100%",
                 view_box: "0 0 {svg_w} {svg_h}",
-                preserve_aspect_ratio: "none",
+                preserve_aspect_ratio: if waterfall { "none" } else { "xMidYMid meet" },
                 style: "display:block; position:absolute; top:0; left:0;",
 
-                // Waterfall background (visible in WebKit / WASM only;
-                // Blitz VelloCanvas covers this zone with its own bg)
-                rect {
-                    x: "0", y: "0",
-                    width: "{svg_w}", height: "{FALL_H}",
-                    fill: "#0d0d0f",
-                    pointer_events: "none",
-                }
-
-                // Subtle vertical grid lines between octaves
-                {(0..=num_white).map(|i| {
-                    let note = i + origin_white;
-                    if (note % 7) != (origin_white % 7) {
-                        return rsx! { g { key: "grid-{i}" } };
+                // Waterfall zone (background + octave grid + falling blocks +
+                // divider) — only when the waterfall is shown.
+                if waterfall {
+                    rect {
+                        x: "0", y: "0",
+                        width: "{svg_w}", height: "{fall_h}",
+                        fill: "#0d0d0f",
+                        pointer_events: "none",
                     }
-                    let x = i as f64 * WW;
-                    rsx! {
-                        line { key: "grid-{i}",
-                            x1: "{x}", y1: "0",
-                            x2: "{x}", y2: "{FALL_H}",
-                            stroke: "#1e1e24", stroke_width: "0.5",
+                    {(0..=num_white).map(|i| {
+                        let note = i + origin_white;
+                        if (note % 7) != (origin_white % 7) {
+                            return rsx! { g { key: "grid-{i}" } };
                         }
+                        let x = i as f64 * WW;
+                        rsx! {
+                            line { key: "grid-{i}",
+                                x1: "{x}", y1: "0",
+                                x2: "{x}", y2: "{fall_h}",
+                                stroke: "#1e1e24", stroke_width: "0.5",
+                            }
+                        }
+                    })}
+                    {svg_note_blocks}
+                    rect {
+                        x: "0", y: "{fall_h - 2.0}",
+                        width: "{svg_w}", height: "2",
+                        fill: "#2a2a3a",
                     }
-                })}
-
-                // SVG waterfall note blocks (CSS drop-shadow glow fallback)
-                {svg_note_blocks}
-
-                // Waterfall / keyboard divider
-                rect {
-                    x: "0", y: "{FALL_H - 2.0}",
-                    width: "{svg_w}", height: "2",
-                    fill: "#2a2a3a",
                 }
 
                 // ── White keys ──────────────────────────────────────────
                 {white_notes.iter().map(|&note| {
                     let wi = white_key_count_before(note).saturating_sub(origin_white);
                     let x = wi as f64 * WW;
-                    let y = FALL_H;
+                    let y = key_y;
                     let pressed = active.contains(&note);
                     let is_c = note % 12 == 0;
 
@@ -617,7 +622,7 @@ pub fn Piano(
                 // ── Black keys (on top) ─────────────────────────────────
                 {black_notes.iter().filter_map(|&note| {
                     let x = black_x(note, origin_white)?;
-                    let y = FALL_H;
+                    let y = key_y;
                     let pressed = active.contains(&note);
                     let fill = if pressed { accent.clone() } else { "#18181b".to_string() };
                     let note_clone = note;
