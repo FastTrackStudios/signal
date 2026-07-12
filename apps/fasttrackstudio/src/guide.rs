@@ -27,8 +27,16 @@ use std::sync::{Arc, Mutex, OnceLock};
 
 use session_guide::{
     BlockClock, ClickSound, CueBank, CueSchedule, GuideConfig, GuideEngine, GuideSongTiming,
-    SampleBank, TtsRenderer, sections_from_song,
+    SampleBank, TtsRenderer, sections_from_song, tts_cue_key,
 };
+
+/// Spoken count-in numbers rendered through TTS into the count bank
+/// (index 0 = "one"). Words rather than digits so Chatterbox voices them
+/// cleanly. Only used when a TTS voice is available; otherwise the count
+/// keeps the synth tick.
+const COUNT_WORDS: [&str; 8] = [
+    "one", "two", "three", "four", "five", "six", "seven", "eight",
+];
 
 /// Master enable for the guide buses (wired to the settings popover).
 /// Independent of engine installation so the UI can flip it at any time.
@@ -257,9 +265,11 @@ fn rebuild_schedule() {
     let sections = sections_from_song(&song);
     let timing = GuideSongTiming::from_song(&song);
 
-    // TTS cues: pre-render/load into a TEMP bank so slow work never
-    // holds the engine mutex the audio callback try_locks.
-    let texts = CueSchedule::tts_texts(&sections);
+    // TTS cues: section names ("Verse 1") + spoken count-in numbers, pre-
+    // rendered/loaded into a TEMP bank so slow work never holds the engine
+    // mutex the audio callback try_locks.
+    let mut texts = CueSchedule::tts_texts(&sections);
+    texts.extend(COUNT_WORDS.iter().map(|w| w.to_string()));
     let cue_bank = CueBank::new(config_dir().join("tts-cache"), tts_voice_id());
     let mut temp = SampleBank::default();
     {
@@ -279,6 +289,13 @@ fn rebuild_schedule() {
     }
 
     let Ok(mut engine) = shared.engine.lock() else { return };
+    // Spoken count-in numbers → the count bank (index 0 = "one"). Leaves the
+    // synth tick in place for any word TTS didn't render.
+    for (i, word) in COUNT_WORDS.iter().enumerate() {
+        if let Some(sample) = temp.guides.remove(&tts_cue_key(word)) {
+            engine.bank_mut().counts[i] = Some(sample);
+        }
+    }
     for (key, sample) in temp.guides {
         engine.bank_mut().insert_guide(key, sample);
     }
