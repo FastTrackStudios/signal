@@ -22,7 +22,7 @@
 //!   feature-free; everything else falls back to the synthesized chime.
 
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 
 use session_guide::{
@@ -92,6 +92,41 @@ pub fn cues_enabled() -> bool {
 pub fn set_click_enabled(on: bool) {
     CLICK_ON.store(on, Ordering::Relaxed);
     apply_bus_config();
+}
+
+/// The selectable click sounds (name + engine variant), in menu order.
+pub const CLICK_SOUNDS: [(&str, ClickSound); 8] = [
+    ("Blip", ClickSound::Blip),
+    ("Classic", ClickSound::Classic),
+    ("Cowbell", ClickSound::Cowbell),
+    ("Digital", ClickSound::Digital),
+    ("Gentle", ClickSound::Gentle),
+    ("Percussive", ClickSound::Percussive),
+    ("Saw", ClickSound::Saw),
+    ("Woodblock", ClickSound::Woodblock),
+];
+
+/// Index into [`CLICK_SOUNDS`] of the active click sound.
+static CLICK_SOUND: AtomicU8 = AtomicU8::new(0);
+
+pub fn click_sound_index() -> usize {
+    CLICK_SOUND.load(Ordering::Relaxed) as usize
+}
+
+/// Switch the click sound live: reload the beat/accent samples from that
+/// sound's folder, re-synthesizing any missing subdivision. Briefly locks
+/// the engine (audio callback only try_locks, so at worst one skipped block).
+pub fn set_click_sound(index: usize) {
+    let index = index.min(CLICK_SOUNDS.len() - 1);
+    CLICK_SOUND.store(index as u8, Ordering::Relaxed);
+    let sound = CLICK_SOUNDS[index].1;
+    let Some(shared) = GUIDE.get() else { return };
+    let Ok(mut engine) = shared.engine.lock() else { return };
+    let dir = config_dir().join("guide-samples/Click");
+    engine.bank_mut().load_click(&dir, sound, shared.sample_rate);
+    // Fill any subdivision the chosen sound is missing with a synth tick.
+    engine.bank_mut().synthesize_defaults(shared.sample_rate);
+    tracing::info!("guide: click sound -> {}", CLICK_SOUNDS[index].0);
 }
 pub fn set_count_enabled(on: bool) {
     COUNT_ON.store(on, Ordering::Relaxed);
