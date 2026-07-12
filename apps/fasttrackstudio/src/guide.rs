@@ -209,7 +209,12 @@ pub fn install(audio: &daw_standalone::audio_engine::AudioEngine) {
     }));
     tracing::info!("guide engine installed on aux hook ({sample_rate} Hz)");
 
-    // Seed the live config from the per-bus toggles (notably cues-off).
+    // Spoken cues default ON when a reference voice is present (TTS renders
+    // section names); OFF otherwise so the synth chime never fires unasked.
+    if tts_voice_path().exists() {
+        CUES_ON.store(true, Ordering::Relaxed);
+    }
+    // Seed the live config from the per-bus toggles.
     apply_bus_config();
 
     // A song may have been announced before audio came up.
@@ -296,30 +301,41 @@ fn tts_voice_id() -> String {
     "chatterbox:ResembleAI/chatterbox-turbo-ONNX@main:Quantized:fts".to_string()
 }
 
-/// Load the local TTS backend — only with the `tts` feature, only when
-/// FTS_TTS=1, and only when the reference voice wav exists. Never
-/// triggers a model download otherwise.
+/// Path to the reference voice clip Chatterbox clones. Spoken cues need it
+/// (voice-cloning), so its presence gates TTS.
+fn tts_voice_path() -> PathBuf {
+    config_dir().join("tts-voice.wav")
+}
+
+/// Load the local TTS backend. Activates whenever the reference voice wav
+/// exists (the flake ships onnxruntime; the model auto-downloads to the HF
+/// cache on first use). Set `FTS_TTS=0` to force the synth fallback even
+/// with a voice present. Loading is slow (model load + first-time download)
+/// — this only runs on the guide's rebuild worker, never the audio thread.
 #[cfg(feature = "tts")]
 fn load_tts() -> Option<Box<dyn TtsRenderer>> {
-    if std::env::var("FTS_TTS").map(|v| v == "1").unwrap_or(false) {
-        let voice = config_dir().join("tts-voice.wav");
-        if !voice.exists() {
-            tracing::warn!(
-                "FTS_TTS=1 but no reference voice at {}; section cues fall back to chimes",
-                voice.display(),
-            );
-            return None;
+    if std::env::var("FTS_TTS").map(|v| v == "0").unwrap_or(false) {
+        return None;
+    }
+    let voice = tts_voice_path();
+    if !voice.exists() {
+        tracing::info!(
+            "no TTS voice at {}; spoken cues stay off (drop a clean ~10s voice clip there)",
+            voice.display(),
+        );
+        return None;
+    }
+    let config = session_guide::ChatterboxTtsConfig::with_voice(voice, "fts");
+    match session_guide::ChatterboxTts::load(config) {
+        Ok(tts) => {
+            debug_assert_eq!(tts.voice_id(), tts_voice_id());
+            Some(Box::new(tts))
         }
-        let config = session_guide::ChatterboxTtsConfig::with_voice(voice, "fts");
-        match session_guide::ChatterboxTts::load(config) {
-            Ok(tts) => {
-                debug_assert_eq!(tts.voice_id(), tts_voice_id());
-                return Some(Box::new(tts));
-            }
-            Err(e) => tracing::warn!("chatterbox TTS unavailable: {e}"),
+        Err(e) => {
+            tracing::warn!("chatterbox TTS unavailable: {e}");
+            None
         }
     }
-    None
 }
 
 /// Without the `tts` feature only already-cached cues load; uncached

@@ -26,7 +26,11 @@ authors = ["FastTrackStudio"]
 
 [features]
 default = ["full"]
-full = ["signal", "session"]
+# Chatterbox TTS (session-guide/tts) is ON by default — spoken section cues
+# are core to the guide. It only *activates* at runtime when a voice wav +
+# model are present; the flake provides onnxruntime + ORT_DYLIB_PATH so the
+# load-dynamic dlopen resolves. Compiles fine without them (TTS just idles).
+full = ["signal", "session", "tts"]
 # signal also force-enables session-ui/desktop: signal-guitar-ui pulls
 # session-ui (default-features off), which only compiles with its dioxus
 # renderer feature on (dock-dioxus needs "web" for its prelude).
