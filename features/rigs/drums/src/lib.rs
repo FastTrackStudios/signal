@@ -13,6 +13,7 @@ use signal_sampler::midicore::{self, DrumMap, DrumMapConverter};
 use signal_sampler::{InstrumentId, PreloadProfile, SamplerRig};
 
 mod backend;
+pub mod cradle;
 mod library;
 mod lightguide;
 pub use backend::DrumRigBackend;
