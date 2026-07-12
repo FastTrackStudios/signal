@@ -120,15 +120,13 @@ pub fn DrumRigRemote() -> Element {
         })
         .take(4)
         .collect();
-    // Keyboard span: cover the drum notes with a little headroom.
-    let (lo, hi) = pieces.iter().fold((u8::MAX, 0u8), |(lo, hi), p| {
-        (lo.min(p.note as u8), hi.max(p.note as u8))
+    // Most-recently-played key and the sample it maps to, for the readout.
+    let last_played: Option<(u8, Option<String>)> = midi.iter().rev().find_map(|e| match e {
+        MidiEvent::NoteOn { key, .. } => {
+            Some((key.get(), piece_labels.get(&key.get()).cloned()))
+        }
+        _ => None,
     });
-    let (start_note, end_note) = if pieces.is_empty() {
-        (36u8, 60u8)
-    } else {
-        (lo.saturating_sub(1), hi.saturating_add(1))
-    };
     let master_pct = (status.master_peak.clamp(0.0, 1.0) * 100.0) as u32;
     let master_color = meter_color(status.master_peak);
 
@@ -226,18 +224,25 @@ pub fn DrumRigRemote() -> Element {
                 // ── piano + pads + mixer ──
                 div { style: "display:flex; flex-direction:column; gap:12px; flex:1; min-height:0; overflow:auto;",
                     div {
-                        span { style: "font-size:11px; color:#71717a; text-transform:uppercase; letter-spacing:0.05em;", "Keyboard" }
+                        div { style: "display:flex; align-items:baseline; gap:10px; margin-bottom:4px;",
+                            span { style: "font-size:11px; color:#71717a; text-transform:uppercase; letter-spacing:0.05em;", "Keyboard" }
+                            match &last_played {
+                                Some((n, Some(sample))) => rsx!{ span { style: "font-size:11px; color:#22c55e;", "note {n} → {sample}" } },
+                                Some((n, None)) => rsx!{ span { style: "font-size:11px; color:#71717a;", "note {n} → (no sample here)" } },
+                                None => rsx!{ span { style: "font-size:11px; color:#52525b;", "play a key…" } },
+                            }
+                        }
                         {
                             let rig = rig.clone();
                             rsx!{ Piano {
-                                start_note,
-                                end_note,
+                                start_note: 21,
+                                end_note: 108,
                                 active_notes: lit,
                                 labels: piece_labels,
-                                show_labels: true,
+                                show_labels: false,
                                 waterfall: false,
                                 accent_color: "#22c55e".to_string(),
-                                height: "120px",
+                                height: "132px",
                                 on_note_on: move |n: u8| { let rig = rig.clone(); spawn(async move { if let Some(r) = rig { let _ = r.trigger(n as u32, 110).await; } }); },
                                 on_note_off: move |_n: u8| {},
                             } }

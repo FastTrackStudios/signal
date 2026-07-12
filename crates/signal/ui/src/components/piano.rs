@@ -396,6 +396,11 @@ pub fn Piano(
     /// label. Keys without an entry fall back to the `show_labels` behaviour.
     #[props(default)]
     labels: std::collections::HashMap<u8, String>,
+    /// Keys to tint as "mapped"/of-interest (e.g. the notes a drum kit plays)
+    /// — a subtle base colour so the set stands out across the whole board,
+    /// without cramming text on narrow keys. Independent of `labels`.
+    #[props(default)]
+    highlight_keys: Vec<u8>,
     /// Show the falling-note "waterfall" zone above the keys. When `false`
     /// (e.g. a compact drum keyboard) the SVG is keys-only and preserves key
     /// aspect ratio instead of stretching to fill the container width.
@@ -524,7 +529,7 @@ pub fn Piano(
                 width: "100%",
                 height: "100%",
                 view_box: "0 0 {svg_w} {svg_h}",
-                preserve_aspect_ratio: if waterfall { "none" } else { "xMidYMid meet" },
+                preserve_aspect_ratio: "none",
                 style: "display:block; position:absolute; top:0; left:0;",
 
                 // Waterfall zone (background + octave grid + falling blocks +
@@ -566,7 +571,16 @@ pub fn Piano(
                     let pressed = active.contains(&note);
                     let is_c = note % 12 == 0;
 
-                    let fill = if pressed { accent.clone() } else { "#f0f0f2".to_string() };
+                    // Keys with a label (e.g. a drum sample mapped here) get a
+                    // subtle tint so the mapped set stands out across the board.
+                    let mapped = highlight_keys.contains(&note);
+                    let fill = if pressed {
+                        accent.clone()
+                    } else if mapped {
+                        "#cbd5f5".to_string()
+                    } else {
+                        "#f0f0f2".to_string()
+                    };
                     let note_clone = note;
 
                     let label = labels.get(&note).cloned().unwrap_or_else(|| {
@@ -624,7 +638,14 @@ pub fn Piano(
                     let x = black_x(note, origin_white)?;
                     let y = key_y;
                     let pressed = active.contains(&note);
-                    let fill = if pressed { accent.clone() } else { "#18181b".to_string() };
+                    let mapped = highlight_keys.contains(&note);
+                    let fill = if pressed {
+                        accent.clone()
+                    } else if mapped {
+                        "#3b4a8c".to_string()
+                    } else {
+                        "#18181b".to_string()
+                    };
                     let note_clone = note;
 
                     Some(rsx! {
