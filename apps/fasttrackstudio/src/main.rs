@@ -181,6 +181,10 @@ fn App() -> Element {
     let mut settings_open = use_signal(|| false);
 
     rsx! {
+        // Global reset: the frameless WebView keeps the platform's default 8px
+        // body margin + white page background, which shows as a white border
+        // around the dark 100vh app. Zero it and paint the page dark.
+        document::Style { {"html,body{margin:0;padding:0;height:100%;background:#0a0a0a;overflow:hidden;}*{box-sizing:border-box;}"} }
         SessionChrome {}
         ResizeHandles {}
         div {

@@ -177,7 +177,7 @@ pub fn DrumRigRemote() -> Element {
                             let rig = rig.clone(); let v = e.value();
                             spawn(async move { if let Some(r) = rig { let _ = r.set_midi_port(if v == "—" { String::new() } else { v }).await; } });
                         },
-                        option { value: "—", selected: current_port.is_none(), "— none —" }
+                        option { value: "—", selected: current_port.is_none(), "Omni (all MIDI)" }
                         for p in ports.iter() {
                             option { value: "{p}", selected: current_port.as_deref() == Some(p.as_str()), "{p}" }
                         }

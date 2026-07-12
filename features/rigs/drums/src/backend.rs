@@ -214,10 +214,14 @@ impl DrumRigBackend {
         if let Ok(mut s) = self.inner.state.lock() {
             s.midi_handle = None;
         }
-        let Some(port) = port else { return };
         let rig = self.inner.rig.lock().unwrap();
         let Some(rig) = rig.as_ref() else { return };
-        let sel = PortSelector::NameContains(port.clone());
+        // Default to omni: no named port → merge *all* MIDI inputs (PipeWire
+        // fans every device into one stream). A named port narrows to it.
+        let sel = match &port {
+            Some(name) => PortSelector::NameContains(name.clone()),
+            None => PortSelector::All,
+        };
         // One transform closure: record the raw event into the monitor, then
         // (optionally) run the drum-map converter. Recording the pre-conversion
         // event shows what the hardware actually sent.
@@ -249,7 +253,8 @@ impl DrumRigBackend {
                 if let Ok(mut s) = self.inner.state.lock() {
                     s.midi_handle = Some(h);
                 }
-                tracing::info!(port = %port, "drum rig: MIDI attached");
+                let which = port.as_deref().unwrap_or("omni (all inputs)");
+                tracing::info!(port = %which, "drum rig: MIDI attached");
             }
             Err(e) => tracing::error!("drum rig: MIDI attach failed: {e}"),
         }
