@@ -14,6 +14,8 @@ use std::collections::BTreeMap;
 /// A parsed Cradle (Lua-table) value.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Value {
+    /// Lua `nil` (appears as placeholder elements in sparse arrays).
+    Null,
     Str(String),
     Num(f64),
     Bool(bool),
@@ -68,6 +70,83 @@ pub struct Strip {
     pub fx: Vec<Value>,
     /// Sends as raw Cradle values.
     pub sends: Vec<Value>,
+}
+
+/// One FX-chain slot on a strip: the effect type, its bypass, the factory
+/// preset name it came from, and the raw `fxData` params (typed access via the
+/// helpers — MM2's param scaling is mapped onto our signal-fx at import time).
+#[derive(Debug, Clone, PartialEq)]
+pub struct FxSlot {
+    /// "EQ", "Modern Compressor", "Vintage Compressor", "Transient", "Drive",
+    /// "Reverb", "Limiter".
+    pub fx_type: String,
+    pub bypass: bool,
+    /// `presetInfo.name`, e.g. "Drum Bus - Smacky".
+    pub preset_name: String,
+    /// Raw `fxData` (nested tables + numbers/strings).
+    pub data: Value,
+}
+
+impl FxSlot {
+    /// A numeric `fxData` field.
+    pub fn num(&self, key: &str) -> Option<f64> {
+        self.data.get(key).and_then(Value::as_f64)
+    }
+    /// A string `fxData` field (discrete params like comp attack "Fast").
+    pub fn text(&self, key: &str) -> Option<&str> {
+        self.data.get(key).and_then(Value::as_str)
+    }
+    /// EQ bands (`filters`), if this is an EQ.
+    pub fn eq_bands(&self) -> Vec<EqBand> {
+        self.data
+            .get("filters")
+            .and_then(Value::as_arr)
+            .map(|arr| {
+                arr.iter()
+                    .map(|b| EqBand {
+                        enabled: b.get("enabled").and_then(Value::as_f64).unwrap_or(1.0) != 0.0,
+                        freq: b.get("frequency").and_then(Value::as_f64).unwrap_or(1000.0) as f32,
+                        gain: b.get("gain").and_then(Value::as_f64).unwrap_or(0.0) as f32,
+                        q: b.get("Q").and_then(Value::as_f64).unwrap_or(0.707) as f32,
+                        mode: b.get("mode").and_then(Value::as_str).unwrap_or("bell").to_string(),
+                    })
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+}
+
+/// One parametric EQ band.
+#[derive(Debug, Clone, PartialEq)]
+pub struct EqBand {
+    pub enabled: bool,
+    pub freq: f32,
+    pub gain: f32,
+    pub q: f32,
+    /// "bell", "lowShelf", "highShelf", "lowPass", "highPass", …
+    pub mode: String,
+}
+
+impl Strip {
+    /// The strip's FX chain as typed slots (order preserved).
+    pub fn fx_slots(&self) -> Vec<FxSlot> {
+        self.fx
+            .iter()
+            .filter_map(|v| {
+                Some(FxSlot {
+                    fx_type: v.get("fxType").and_then(Value::as_str)?.to_string(),
+                    bypass: v.get("bypass").and_then(Value::as_f64).unwrap_or(0.0) != 0.0,
+                    preset_name: v
+                        .get("presetInfo")
+                        .and_then(|p| p.get("name"))
+                        .and_then(Value::as_str)
+                        .unwrap_or("")
+                        .to_string(),
+                    data: v.get("fxData").cloned().unwrap_or(Value::Arr(Vec::new())),
+                })
+            })
+            .collect()
+    }
 }
 
 /// The parsed MM2 mixer: strips + the mic-input→strip routing.
@@ -136,6 +215,15 @@ impl Parser<'_> {
             Some(b'{') => self.table(),
             Some(b'"') => Ok(Value::Str(self.string()?)),
             Some(b't') | Some(b'f') => self.boolean(),
+            Some(b'n') => {
+                // Lua `nil`.
+                if self.b[self.i..].starts_with(b"nil") {
+                    self.i += 3;
+                    Ok(Value::Null)
+                } else {
+                    self.number()
+                }
+            }
             Some(_) => self.number(),
             None => Err("unexpected end of input".into()),
         }
@@ -253,7 +341,10 @@ impl Parser<'_> {
             self.i += 1;
         }
         let s = std::str::from_utf8(&self.b[start..self.i]).map_err(|e| e.to_string())?;
-        s.parse::<f64>().map(Value::Num).map_err(|_| format!("bad number: {s:?}"))
+        s.parse::<f64>().map(Value::Num).map_err(|_| {
+            let ctx = String::from_utf8_lossy(&self.b[start..(start + 40).min(self.b.len())]);
+            format!("bad number {s:?} at {start}; context: {ctx:?}")
+        })
     }
 
     fn boolean(&mut self) -> Result<Value, String> {
