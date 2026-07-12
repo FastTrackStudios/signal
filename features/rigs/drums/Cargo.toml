@@ -5,6 +5,21 @@ edition = "2021"          # kept on 2021 — pre-move signal workspace edition; 
 license.workspace = true
 authors.workspace = true
 
+[features]
+# PipeWire mode: route this rig's hardware MIDI through the pipewire-jack
+# backend (routable graph node, not an exclusive ALSA grab).
+pipewire = ["midicore/midir-pipewire"]
+
 [dependencies]
 # Drums are plain sample zones on the shared engine — no drum-specific DSP.
 signal-sampler.workspace = true
+# The wire contract this crate's headless backend implements (DrumRig service).
+signal-drums-proto.workspace = true
+# Layer/Services composition + dispatchers + PubSub for mounting the services.
+architect = { workspace = true, features = ["vox"] }
+# Hardware MIDI ports + the drum-map converter for the live input path.
+midicore = { workspace = true, features = ["vox", "midir"] }
+tracing.workspace = true
+
+[dev-dependencies]
+tracing-subscriber.workspace = true

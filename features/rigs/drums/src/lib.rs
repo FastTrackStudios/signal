@@ -12,6 +12,10 @@ use std::path::Path;
 use signal_sampler::midicore::{self, DrumMap, DrumMapConverter};
 use signal_sampler::{InstrumentId, PreloadProfile, SamplerRig};
 
+mod backend;
+pub use backend::DrumRigBackend;
+pub use signal_drums_proto as proto;
+
 /// General-MIDI percussion channel (0-indexed 9 = MIDI channel 10).
 pub const GM_DRUM_CHANNEL: u8 = 9;
 
