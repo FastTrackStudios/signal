@@ -209,9 +209,9 @@ pub fn install(audio: &daw_standalone::audio_engine::AudioEngine) {
     }));
     tracing::info!("guide engine installed on aux hook ({sample_rate} Hz)");
 
-    // Spoken cues default ON when a reference voice is present (TTS renders
+    // Spoken cues default ON when a Chatterbox voice is available (TTS renders
     // section names); OFF otherwise so the synth chime never fires unasked.
-    if tts_voice_path().exists() {
+    if tts_voice_available() {
         CUES_ON.store(true, Ordering::Relaxed);
     }
     // Seed the live config from the per-bus toggles.
@@ -294,11 +294,26 @@ fn rebuild_schedule() {
     );
 }
 
-/// Stable cue-cache voice id. Must match `ChatterboxTts::voice_id()` for
-/// the app's config so cached cues load even when the `tts` feature is
-/// compiled out.
+/// Stable cue-cache voice id. Must match `ChatterboxTts::voice_id()` for the
+/// app's config so cached cues load even when the `tts` feature is compiled
+/// out. Fp16 + the bundled `default` profile (see `install_default_voice.sh`).
 fn tts_voice_id() -> String {
-    "chatterbox:ResembleAI/chatterbox-turbo-ONNX@main:Quantized:fts".to_string()
+    "chatterbox:ResembleAI/chatterbox-turbo-ONNX@main:Fp16:default".to_string()
+}
+
+/// A usable Chatterbox voice is available when the bundled `default` profile
+/// is installed (`install_default_voice.sh` → `$HF_HOME/cbx/voices`) or a
+/// reference clip sits at `tts-voice.wav`. Either enables spoken cues.
+fn tts_voice_available() -> bool {
+    let hf_home = std::env::var_os("HF_HOME")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| {
+            std::env::var_os("HOME")
+                .map(PathBuf::from)
+                .unwrap_or_else(|| PathBuf::from("."))
+                .join(".cache/huggingface")
+        });
+    hf_home.join("cbx/voices/default.cbxvoice").exists() || tts_voice_path().exists()
 }
 
 /// Path to the reference voice clip Chatterbox clones. Spoken cues need it
@@ -317,15 +332,17 @@ fn load_tts() -> Option<Box<dyn TtsRenderer>> {
     if std::env::var("FTS_TTS").map(|v| v == "0").unwrap_or(false) {
         return None;
     }
-    let voice = tts_voice_path();
-    if !voice.exists() {
+    if !tts_voice_available() {
         tracing::info!(
-            "no TTS voice at {}; spoken cues stay off (drop a clean ~10s voice clip there)",
-            voice.display(),
+            "no Chatterbox voice available; spoken cues off. Install the bundled \
+             default voice (cbx `install_default_voice.sh`) or drop a clip at {}",
+            tts_voice_path().display(),
         );
         return None;
     }
-    let config = session_guide::ChatterboxTtsConfig::with_voice(voice, "fts");
+    // voice_wav is only used if no cached profile matches; the bundled default
+    // profile takes precedence inside ChatterboxTts.
+    let config = session_guide::ChatterboxTtsConfig::with_voice(tts_voice_path(), "fts");
     match session_guide::ChatterboxTts::load(config) {
         Ok(tts) => {
             debug_assert_eq!(tts.voice_id(), tts_voice_id());
