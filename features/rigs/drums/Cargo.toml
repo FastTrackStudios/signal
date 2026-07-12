@@ -19,6 +19,8 @@ signal-drums-proto.workspace = true
 architect = { workspace = true, features = ["vox"] }
 # Hardware MIDI ports + the drum-map converter for the live input path.
 midicore = { workspace = true, features = ["vox", "midir"] }
+# NI Komplete Kontrol Light Guide — mirror the kit onto the keybed LEDs.
+kontrol.workspace = true
 tracing.workspace = true
 
 [dev-dependencies]

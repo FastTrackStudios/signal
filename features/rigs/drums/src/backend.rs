@@ -57,6 +57,9 @@ struct Inner {
     /// Rolling MIDI monitor (midicore's shared type) — the live MIDI callback
     /// records raw events; the UI renders them via `midicore-ui`.
     monitor: MidiMonitor,
+    /// Optional Komplete Kontrol Light Guide mirroring the kit onto the keybed
+    /// LEDs. `None` when no keyboard is attached / hidraw isn't accessible.
+    light: Mutex<Option<crate::DrumLightGuide>>,
 }
 
 /// The drum-rig backend handle. Cheap to clone (all state is shared); every
@@ -87,6 +90,7 @@ impl DrumRigBackend {
                 events: PubSub::sliding(64),
                 library_dir,
                 monitor: MidiMonitor::new(),
+                light: Mutex::new(None),
             }),
         };
         backend.rescan_library();
@@ -145,6 +149,7 @@ impl DrumRigBackend {
             self.do_load_kit(idx);
         }
         self.reattach_midi();
+        self.paint_light_guide(); // opens the keyboard's Light Guide, paints the kit
         self.publish_all();
     }
 
@@ -196,6 +201,7 @@ impl DrumRigBackend {
             s.pieces = pieces;
         }
         self.reattach_midi();
+        self.paint_light_guide();
         self.publish_all();
     }
 
@@ -220,6 +226,18 @@ impl DrumRigBackend {
         let handle = rig
             .attach_midi_transformed(sel, move |ev| {
                 inner.monitor.record(&ev);
+                // Flash the played key on the Light Guide (the raw/physical key
+                // the player pressed — for a Direct-mapped keyboard that's the
+                // kit note; for a converted kit it's still the key they touched).
+                if let MidiEvent::NoteOn { key, velocity, .. } = &ev {
+                    if velocity.get() > 0 {
+                        if let Ok(mut l) = inner.light.lock() {
+                            if let Some(lg) = l.as_mut() {
+                                lg.note_on(key.get());
+                            }
+                        }
+                    }
+                }
                 match conv.as_mut() {
                     Some(c) => c.convert(ev),
                     None => vec![ev],
@@ -245,12 +263,36 @@ impl DrumRigBackend {
         self.inner.events.publish(DrumEvent::Status(DrumRig::status(self)));
     }
 
+    /// Open the Light Guide (if a keyboard is attached) and paint the current
+    /// kit's per-piece colours onto it. Safe no-op when no keyboard.
+    fn paint_light_guide(&self) {
+        let pieces: Vec<(u8, String)> = {
+            let s = self.inner.state.lock().unwrap();
+            s.pieces.iter().map(|p| (p.note as u8, p.id.clone())).collect()
+        };
+        if let Ok(mut l) = self.inner.light.lock() {
+            if l.is_none() {
+                *l = crate::DrumLightGuide::open();
+            }
+            if let Some(lg) = l.as_mut() {
+                lg.set_kit(&pieces);
+            }
+        }
+    }
+
     fn spawn_meter_pump(&self) {
         let backend = self.clone();
         let _ = std::thread::Builder::new()
             .name("drum-meter-pump".into())
             .spawn(move || loop {
                 std::thread::sleep(std::time::Duration::from_millis(PUMP_MS));
+                // Decay Light Guide flashes even while stopped (cheap no-op if
+                // no keyboard).
+                if let Ok(mut l) = backend.inner.light.lock() {
+                    if let Some(lg) = l.as_mut() {
+                        lg.tick();
+                    }
+                }
                 let running = backend.inner.rig.lock().map(|r| r.is_some()).unwrap_or(false);
                 if !running {
                     continue;
@@ -361,6 +403,13 @@ impl DrumRig for DrumRigBackend {
             MidiEvent::NoteOff { channel, key, velocity: Velocity::new(0) }
         };
         self.inner.monitor.record(&ev);
+        if velocity > 0 {
+            if let Ok(mut l) = self.inner.light.lock() {
+                if let Some(lg) = l.as_mut() {
+                    lg.note_on(note);
+                }
+            }
+        }
     }
 
     fn mixer(&self) -> Vec<MixerStrip> {
