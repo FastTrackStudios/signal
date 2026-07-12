@@ -10,7 +10,31 @@
 use signal_fx::{NativeComp, NativeEq, NativeReverb};
 use signal_plugin_host::{HostedPlugin, PluginInstance};
 
-use crate::cradle::FxSlot;
+use crate::cradle::{FxSlot, Mixer, Strip};
+
+/// Normalize a strip/target name to a token set for matching, folding trailing
+/// plural `s` so "Overhead" matches MM2's "Overheads".
+fn tokens(name: &str) -> Vec<String> {
+    let mut t: Vec<String> = name
+        .to_ascii_lowercase()
+        .split(|c: char| !c.is_ascii_alphanumeric())
+        .filter(|s| !s.is_empty())
+        .map(|s| s.strip_suffix('s').unwrap_or(s).to_string())
+        .collect();
+    t.sort();
+    t
+}
+
+/// Find the MM2 strip whose name matches `target` (token-set equality).
+pub fn match_strip<'a>(mixer: &'a Mixer, target: &str) -> Option<&'a Strip> {
+    let want = tokens(target);
+    mixer.strips.iter().find(|s| tokens(&s.name) == want)
+}
+
+/// Linear level → dB (MM2 `level` is a linear fader value).
+pub fn level_to_db(level: f32) -> f32 {
+    if level > 0.0 { 20.0 * level.log10() } else { -96.0 }
+}
 
 /// Build a hostable processor for one MM2 FX slot, or `None` if it's bypassed
 /// or its type has no mapping yet.

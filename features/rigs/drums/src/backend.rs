@@ -15,7 +15,7 @@ use midicore::{Channel, DrumMap, DrumMapConverter, KeyNumber, MidiEvent, MidiMon
     Velocity};
 use signal_drums_proto::drum::{DrumEvent, DrumRig, DrumRigStreamSource};
 use signal_drums_proto::{DrumStatus, InputMap, KitInfo, MixerStrip, PieceInfo, StripKind};
-use signal_sampler::{MidiInputHandle, PreloadProfile, PresetSpec, SamplerRig};
+use signal_sampler::{FxTarget, MidiInputHandle, PreloadProfile, PresetSpec, SamplerRig};
 
 use crate::GM_DRUM_CHANNEL;
 
@@ -66,6 +66,10 @@ struct Inner {
     /// The sample-library catalog (every swappable `.signalengine`, grouped by
     /// kind on the client). Scanned once at construction.
     library: Vec<signal_drums_proto::LibraryPiece>,
+    /// Available MM2 (Cradle) mix presets — `(name, path)` of `.preset` files
+    /// under the library's `Mixes/` dir — whose per-strip level + FX we can
+    /// import onto the loaded kit.
+    mixes: Vec<(String, PathBuf)>,
 }
 
 /// The drum-rig backend handle. Cheap to clone (all state is shared); every
@@ -90,7 +94,8 @@ impl DrumRigBackend {
             .map(PathBuf::from)
             .unwrap_or_else(|_| PathBuf::from(DEFAULT_LIBRARY));
         let library = crate::library::scan_engines(&crate::library::engines_dir(&library_dir));
-        tracing::info!(pieces = library.len(), "drum rig: scanned library");
+        let mixes = scan_mixes(&library_dir.join("Mixes"));
+        tracing::info!(pieces = library.len(), mixes = mixes.len(), "drum rig: scanned library");
         let backend = Self {
             inner: Arc::new(Inner {
                 rig: Mutex::new(None),
@@ -101,6 +106,7 @@ impl DrumRigBackend {
                 light: Mutex::new(None),
                 pump_started: std::sync::atomic::AtomicBool::new(false),
                 library,
+                mixes,
             }),
         };
         backend.rescan_library();
@@ -258,6 +264,86 @@ impl DrumRigBackend {
                     return;
                 }
             }
+        }
+        self.paint_light_guide();
+        self.publish_all();
+    }
+
+    /// Import an MM2 (Cradle) mix preset onto the loaded kit: reload the kit
+    /// clean, then apply each MM2 strip's fader level + FX chain to the matching
+    /// channel/bus (and the Master Bus chain to master). Strips match our mixer
+    /// by name (Kick In 1, Snare Top, Overheads, Room Far, …).
+    fn do_import_mix(&self, path: PathBuf) {
+        let text = match std::fs::read_to_string(&path) {
+            Ok(t) => t,
+            Err(e) => {
+                tracing::error!("mm2 import: read {}: {e}", path.display());
+                return;
+            }
+        };
+        let mixer = match crate::cradle::parse_mixer(&text) {
+            Ok(m) => m,
+            Err(e) => {
+                tracing::error!("mm2 import: parse: {e}");
+                return;
+            }
+        };
+        let Some(preset_path) = self.current_preset_path() else { return };
+        {
+            let rig = self.inner.rig.lock().unwrap();
+            let Some(rig) = rig.as_ref() else { return };
+            // Clean slate: reload the kit so FX/gains start from default.
+            if let Err(e) = crate::load_preset_kit(rig, KIT, &preset_path) {
+                tracing::error!("mm2 import: reload failed: {e}");
+                return;
+            }
+            let sr = rig.sample_rate() as f64;
+            let Some(layout) = rig.drum_mixer_layout(KIT) else { return };
+
+            let mut fx_applied = 0usize;
+            // Per-piece close-mic channels ← MM2 close-mic strips.
+            for eng in &layout.engines {
+                for ch in &eng.channels {
+                    let piece = crate::library::slot_label(&eng.label);
+                    let target = if ch.mic_label.is_empty() {
+                        piece
+                    } else {
+                        format!("{} {}", piece, ch.mic_label)
+                    };
+                    let Some(strip) = crate::mm2fx::match_strip(&mixer, &target) else { continue };
+                    rig.set_mixer_channel_gain_db(KIT, ch.channel_idx, crate::mm2fx::level_to_db(strip.level));
+                    for fx in strip.fx_slots() {
+                        if let Some(p) = crate::mm2fx::build_processor(&fx, sr) {
+                            if rig.install_mixer_plugin(KIT, FxTarget::Channel(ch.channel_idx), p).is_ok() {
+                                fx_applied += 1;
+                            }
+                        }
+                    }
+                }
+            }
+            // Shared buses (Overhead / Room) ← MM2 bus strips.
+            for bus in &layout.buses {
+                let Some(strip) = crate::mm2fx::match_strip(&mixer, &bus.label) else { continue };
+                rig.set_mixer_bus_gain_db(KIT, bus.bus_idx, crate::mm2fx::level_to_db(strip.level));
+                for fx in strip.fx_slots() {
+                    if let Some(p) = crate::mm2fx::build_processor(&fx, sr) {
+                        if rig.install_mixer_plugin(KIT, FxTarget::Bus(bus.bus_idx), p).is_ok() {
+                            fx_applied += 1;
+                        }
+                    }
+                }
+            }
+            // Master bus FX.
+            if let Some(strip) = crate::mm2fx::match_strip(&mixer, "Master Bus") {
+                for fx in strip.fx_slots() {
+                    if let Some(p) = crate::mm2fx::build_processor(&fx, sr) {
+                        if rig.install_mixer_plugin(KIT, FxTarget::Master, p).is_ok() {
+                            fx_applied += 1;
+                        }
+                    }
+                }
+            }
+            tracing::info!(fx_applied, strips = mixer.strips.len(), "mm2 import: applied mix");
         }
         self.paint_light_guide();
         self.publish_all();
@@ -504,6 +590,22 @@ impl DrumRig for DrumRigBackend {
             .spawn(move || b.do_swap_piece(slot_id, engine_path));
     }
 
+    fn mm2_mixes(&self) -> Vec<String> {
+        self.inner.mixes.iter().map(|(n, _)| n.clone()).collect()
+    }
+
+    fn import_mm2_mix(&self, name: String) {
+        let path = self.inner.mixes.iter().find(|(n, _)| *n == name).map(|(_, p)| p.clone());
+        let Some(path) = path else {
+            tracing::warn!(name, "mm2 import: no such mix");
+            return;
+        };
+        let b = self.clone();
+        let _ = std::thread::Builder::new()
+            .name("drum-mm2-import".into())
+            .spawn(move || b.do_import_mix(path));
+    }
+
     fn trigger(&self, note: u32, velocity: u32) {
         let (note, velocity) = (note as u8, velocity as u8);
         // Inject as live MIDI on the GM percussion channel — the same
@@ -716,6 +818,22 @@ impl Services for DrumRigBackend {
 }
 
 // ── helpers ──────────────────────────────────────────────────────────────
+
+/// Collect `.preset` (MM2 Cradle) mix files under `dir` as `(name, path)`.
+fn scan_mixes(dir: &Path) -> Vec<(String, PathBuf)> {
+    let mut out = Vec::new();
+    if let Ok(entries) = std::fs::read_dir(dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().and_then(|e| e.to_str()) == Some("preset") {
+                let name = path.file_stem().and_then(|s| s.to_str()).unwrap_or("mix").to_string();
+                out.push((name, path));
+            }
+        }
+    }
+    out.sort_by(|a, b| a.0.to_lowercase().cmp(&b.0.to_lowercase()));
+    out
+}
 
 /// Recursively collect `.signalpreset` files as [`KitInfo`].
 fn collect_presets(dir: &Path, out: &mut Vec<KitInfo>) {

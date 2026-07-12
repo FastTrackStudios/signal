@@ -27,6 +27,8 @@ struct DrumState {
     slots: Signal<Vec<KitSlot>>,
     /// The whole sample library (swappable pieces), grouped by kind on render.
     library: Signal<Vec<LibraryPiece>>,
+    /// Available MM2 mix presets (names) to import onto the kit.
+    mixes: Signal<Vec<String>>,
     ports: Signal<Vec<String>>,
     midi: Signal<Vec<MidiEvent>>,
 }
@@ -42,6 +44,7 @@ fn use_drum_state() -> (DrumState, Option<DrumRigClient>) {
     let mut meters = use_signal(MeterSnapshot::default);
     let mut slots = use_signal(Vec::<KitSlot>::new);
     let mut library = use_signal(Vec::<LibraryPiece>::new);
+    let mut mixes = use_signal(Vec::<String>::new);
     let mut ports = use_signal(Vec::<String>::new);
     let mut midi = use_signal(Vec::<MidiEvent>::new);
 
@@ -72,6 +75,9 @@ fn use_drum_state() -> (DrumState, Option<DrumRigClient>) {
                 }
                 if let Ok(l) = rig.library().await {
                     library.set(l);
+                }
+                if let Ok(m) = rig.mm2_mixes().await {
+                    mixes.set(m);
                 }
                 if let Ok(p) = rig.midi_ports().await {
                     ports.set(p);
@@ -112,7 +118,7 @@ fn use_drum_state() -> (DrumState, Option<DrumRigClient>) {
         );
     }
 
-    (DrumState { status, kits, pieces, mixer, meters, slots, library, ports, midi }, rig)
+    (DrumState { status, kits, pieces, mixer, meters, slots, library, mixes, ports, midi }, rig)
 }
 
 /// The drum-rig remote view. Mount inside a host that has provided
@@ -132,6 +138,7 @@ pub fn DrumRigRemote() -> Element {
     let meters = state.meters.read().clone();
     let slots = state.slots.read().clone();
     let library = state.library.read().clone();
+    let mixes = state.mixes.read().clone();
     let ports = state.ports.read().clone();
     let midi = state.midi.read().clone();
     let midi_count = midi.len() as u64;
@@ -358,6 +365,26 @@ pub fn DrumRigRemote() -> Element {
                         }
                     }
                     MidiMonitorPanel { events: midi, count: midi_count, title: "MIDI monitor".to_string() }
+                    // ── MM2 mix import: apply a factory preset's level + FX ──
+                    if !mixes.is_empty() {
+                        div {
+                            span { style: "font-size:11px; color:#71717a; text-transform:uppercase; letter-spacing:0.05em;", "Import mix (MM2)" }
+                            div { style: "display:flex; flex-wrap:wrap; gap:6px; margin-top:6px;",
+                                for mix in mixes.iter() {
+                                    {
+                                        let rig = rig.clone();
+                                        let name = mix.clone();
+                                        rsx!{ button {
+                                            key: "{mix}",
+                                            style: "padding:5px 10px; border-radius:6px; background:#1e1b2e; color:#e4e4e7; border:1px solid #4c3f6b; font-size:11px; cursor:pointer;",
+                                            onclick: move |_| { let rig = rig.clone(); let name = name.clone(); spawn(async move { if let Some(r) = rig { let _ = r.import_mm2_mix(name).await; } }); },
+                                            "{mix}"
+                                        } }
+                                    }
+                                }
+                            }
+                        }
+                    }
                     div {
                         span { style: "font-size:11px; color:#71717a; text-transform:uppercase; letter-spacing:0.05em;", "Mixer" }
                         div { style: "display:flex; flex-wrap:wrap; gap:6px; margin-top:6px; align-items:flex-start;",

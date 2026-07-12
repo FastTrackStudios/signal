@@ -233,6 +233,13 @@ pub mod drum {
         /// Swap the instrument in slot `slot_id` to the library engine at
         /// `engine_path`, reloading the kit. Fire-and-forget (reload is async).
         fn swap_piece(&self, slot_id: String, engine_path: String);
+        /// Available MM2 (Cradle) mix presets by name — their per-strip level +
+        /// FX can be imported onto the loaded kit.
+        fn mm2_mixes(&self) -> Vec<String>;
+        /// Import mix preset `name` (from [`mm2_mixes`](Self::mm2_mixes)) onto the
+        /// loaded kit — applies each strip's fader + FX chain. Reloads the kit
+        /// clean first; fire-and-forget (runs off-thread).
+        fn import_mm2_mix(&self, name: String);
         /// Trigger a pad from the UI: note-on at `velocity`.
         fn trigger(&self, note: u32, velocity: u32);
         /// The drum mixer surface: one [`StripKind::Piece`] per kit piece
