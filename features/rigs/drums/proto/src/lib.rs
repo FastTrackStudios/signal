@@ -135,8 +135,9 @@ pub mod drum {
         Kit(Vec<PieceInfo>),
         /// The kit library changed (available kits).
         Library(Vec<KitInfo>),
-        /// Recent MIDI activity (newest last), for the monitor.
-        Midi(Vec<String>),
+        /// Recent MIDI activity (oldest first), for the monitor — raw events,
+        /// rendered by `midicore-ui`'s panel.
+        Midi(Vec<midicore_proto::MidiEvent>),
     }
 
     #[architect::rpc]
@@ -174,8 +175,8 @@ pub mod drum {
         fn set_midi_port(&self, name: String);
         /// Set how the attached hardware maps onto the kit (converter source).
         fn set_input_map(&self, map: InputMap);
-        /// Recent MIDI events seen by the core (newest last), for the monitor.
-        fn midi_recent(&self) -> Vec<String>;
+        /// Recent MIDI events seen by the core (oldest first), for the monitor.
+        fn midi_recent(&self) -> Vec<midicore_proto::MidiEvent>;
 
         /// Every rig change, as it happens: meters at meter rate, kit/mixer on
         /// mutation. Remotes render from this stream instead of polling.

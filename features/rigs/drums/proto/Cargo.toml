@@ -14,6 +14,8 @@ authors.workspace = true
 architect.workspace = true
 vox = { workspace = true, optional = true }
 facet.workspace = true
+# MidiEvent — the monitor stream carries raw events (rendered by midicore-ui).
+midicore-proto.workspace = true
 
 [features]
 default = ["vox"]

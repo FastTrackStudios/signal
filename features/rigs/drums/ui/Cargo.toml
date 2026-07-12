@@ -12,5 +12,8 @@ authors.workspace = true
 [dependencies]
 dioxus.workspace = true
 signal-drums-proto.workspace = true
+# The shared MIDI monitor panel + the MidiEvent wire type it renders.
+midicore-ui.workspace = true
+midicore-proto.workspace = true
 # use_stream (atom+vox) + the portable sleep (tokio native / gloo wasm).
 architect = { workspace = true, features = ["atom", "vox", "platform"] }

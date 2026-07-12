@@ -6,18 +6,18 @@
 //! service + its `#[subscribe]` event stream; mount [`router`](DrumRigBackend::router)
 //! on a vox transport (in-process, WebSocket, iroh).
 
-use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 use architect::dispatch::CurrentThreadDispatcher;
 use architect::{HasDispatcher, Layer, LayerRouter, PubSub, Services, layers};
-use midicore::{DrumMap, PortSelector};
+use midicore::{Channel, DrumMap, DrumMapConverter, KeyNumber, MidiEvent, MidiMonitor, PortSelector,
+    Velocity};
 use signal_drums_proto::drum::{DrumEvent, DrumRig, DrumRigStreamSource};
 use signal_drums_proto::{DrumStatus, InputMap, KitInfo, MixerStrip, PieceInfo, StripKind};
 use signal_sampler::{MidiInputHandle, PreloadProfile, PresetSpec, SamplerRig};
 
-use crate::{GM_DRUM_CHANNEL, attach_converted_kit};
+use crate::GM_DRUM_CHANNEL;
 
 /// The single instrument-prefix the kit is loaded under.
 const KIT: &str = "kit";
@@ -47,7 +47,6 @@ struct State {
     input_map: InputMap,
     midi_port: Option<String>,
     midi_handle: Option<MidiInputHandle>,
-    recent_midi: VecDeque<String>,
 }
 
 struct Inner {
@@ -55,6 +54,9 @@ struct Inner {
     state: Mutex<State>,
     events: PubSub<DrumEvent>,
     library_dir: PathBuf,
+    /// Rolling MIDI monitor (midicore's shared type) — the live MIDI callback
+    /// records raw events; the UI renders them via `midicore-ui`.
+    monitor: MidiMonitor,
 }
 
 /// The drum-rig backend handle. Cheap to clone (all state is shared); every
@@ -84,6 +86,7 @@ impl DrumRigBackend {
                 state: Mutex::new(State::default()),
                 events: PubSub::sliding(64),
                 library_dir,
+                monitor: MidiMonitor::new(),
             }),
         };
         backend.rescan_library();
@@ -209,10 +212,20 @@ impl DrumRigBackend {
         let rig = self.inner.rig.lock().unwrap();
         let Some(rig) = rig.as_ref() else { return };
         let sel = PortSelector::NameContains(port.clone());
-        let handle = match to_drum_map(map) {
-            None => rig.attach_midi(sel).map_err(|e| e.to_string()),
-            Some(from) => attach_converted_kit(rig, sel, from, DrumMap::Mm2),
-        };
+        // One transform closure: record the raw event into the monitor, then
+        // (optionally) run the drum-map converter. Recording the pre-conversion
+        // event shows what the hardware actually sent.
+        let inner = self.inner.clone();
+        let mut conv = to_drum_map(map).map(|from| DrumMapConverter::new(from, DrumMap::Mm2));
+        let handle = rig
+            .attach_midi_transformed(sel, move |ev| {
+                inner.monitor.record(&ev);
+                match conv.as_mut() {
+                    Some(c) => c.convert(ev),
+                    None => vec![ev],
+                }
+            })
+            .map_err(|e| e.to_string());
         match handle {
             Ok(h) => {
                 if let Ok(mut s) = self.inner.state.lock() {
@@ -244,6 +257,7 @@ impl DrumRigBackend {
                 }
                 backend.inner.events.publish(DrumEvent::Status(DrumRig::status(&backend)));
                 backend.inner.events.publish(DrumEvent::Mixer(DrumRig::mixer(&backend)));
+                backend.inner.events.publish(DrumEvent::Midi(DrumRig::midi_recent(&backend)));
             });
     }
 }
@@ -334,9 +348,12 @@ impl DrumRig for DrumRigBackend {
                 rig.midi_message(GM_DRUM_CHANNEL, 0x90, note as u8, velocity as u8);
             }
         }
-        if let Ok(mut s) = self.inner.state.lock() {
-            push_recent(&mut s.recent_midi, format!("pad note {note} vel {velocity}"));
-        }
+        // Reflect UI pad hits in the monitor too.
+        self.inner.monitor.record(&MidiEvent::NoteOn {
+            channel: Channel::new(GM_DRUM_CHANNEL),
+            key: KeyNumber::new(note as u8),
+            velocity: Velocity::new(velocity as u8),
+        });
     }
 
     fn mixer(&self) -> Vec<MixerStrip> {
@@ -428,12 +445,8 @@ impl DrumRig for DrumRigBackend {
         self.inner.events.publish(DrumEvent::Status(DrumRig::status(self)));
     }
 
-    fn midi_recent(&self) -> Vec<String> {
-        self.inner
-            .state
-            .lock()
-            .map(|s| s.recent_midi.iter().cloned().collect())
-            .unwrap_or_default()
+    fn midi_recent(&self) -> Vec<MidiEvent> {
+        self.inner.monitor.recent()
     }
 }
 
@@ -453,13 +466,6 @@ impl Services for DrumRigBackend {
 }
 
 // ── helpers ──────────────────────────────────────────────────────────────
-
-fn push_recent(q: &mut VecDeque<String>, s: String) {
-    q.push_back(s);
-    while q.len() > 64 {
-        q.pop_front();
-    }
-}
 
 /// Recursively collect `.signalpreset` files as [`KitInfo`].
 fn collect_presets(dir: &Path, out: &mut Vec<KitInfo>) {

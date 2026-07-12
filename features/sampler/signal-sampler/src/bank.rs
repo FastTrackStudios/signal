@@ -330,6 +330,15 @@ impl SamplerBank {
         );
     }
 
+    /// Route live MIDI on any *unmapped* channel to `id` (a loaded instrument
+    /// or preset prefix). This is what makes a single-instrument/single-kit
+    /// live rig "react to all MIDI" without per-channel setup — presets don't
+    /// set it automatically (only `load_instrument` does), so a drum kit that
+    /// should play on any channel must set it explicitly.
+    pub fn set_default_instrument(&mut self, id: impl Into<InstrumentId>) {
+        self.default_instrument = Some(id.into());
+    }
+
     pub fn load_pack(&mut self, id: impl Into<InstrumentId>, pack_path: &Path) -> eyre::Result<()> {
         let id = id.into();
         let cache = self.register_pack(id.clone(), pack_path)?;

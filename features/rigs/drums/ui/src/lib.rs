@@ -4,6 +4,8 @@
 //! only (Blitz-safe), no external CSS.
 
 use dioxus::prelude::*;
+use midicore_proto::MidiEvent;
+use midicore_ui::MidiMonitorPanel;
 use signal_drums_proto::drum::{DrumEvent, DrumRigClient, DrumRigStreamClient};
 use signal_drums_proto::{DrumStatus, InputMap, KitInfo, MixerStrip, PieceInfo, StripKind};
 
@@ -15,6 +17,7 @@ struct DrumState {
     pieces: Signal<Vec<PieceInfo>>,
     mixer: Signal<Vec<MixerStrip>>,
     ports: Signal<Vec<String>>,
+    midi: Signal<Vec<MidiEvent>>,
 }
 
 fn use_drum_state() -> (DrumState, Option<DrumRigClient>) {
@@ -26,6 +29,7 @@ fn use_drum_state() -> (DrumState, Option<DrumRigClient>) {
     let mut pieces = use_signal(Vec::<PieceInfo>::new);
     let mut mixer = use_signal(Vec::<MixerStrip>::new);
     let mut ports = use_signal(Vec::<String>::new);
+    let mut midi = use_signal(Vec::<MidiEvent>::new);
 
     // Seed once — the event stream carries only changes.
     {
@@ -49,6 +53,9 @@ fn use_drum_state() -> (DrumState, Option<DrumRigClient>) {
                 if let Ok(p) = rig.midi_ports().await {
                     ports.set(p);
                 }
+                if let Ok(m) = rig.midi_recent().await {
+                    midi.set(m);
+                }
             }
         });
     }
@@ -67,19 +74,20 @@ fn use_drum_state() -> (DrumState, Option<DrumRigClient>) {
                 }
             },
             move |ev: DrumEvent| {
-                let (mut status, mut kits, mut pieces, mut mixer) = (status, kits, pieces, mixer);
+                let (mut status, mut kits, mut pieces, mut mixer, mut midi) =
+                    (status, kits, pieces, mixer, midi);
                 match ev {
                     DrumEvent::Status(s) => status.set(s),
                     DrumEvent::Library(k) => kits.set(k),
                     DrumEvent::Kit(p) => pieces.set(p),
                     DrumEvent::Mixer(m) => mixer.set(m),
-                    DrumEvent::Midi(_) => {}
+                    DrumEvent::Midi(m) => midi.set(m),
                 }
             },
         );
     }
 
-    (DrumState { status, kits, pieces, mixer, ports }, rig)
+    (DrumState { status, kits, pieces, mixer, ports, midi }, rig)
 }
 
 /// The drum-rig remote view. Mount inside a host that has provided
@@ -94,6 +102,8 @@ pub fn DrumRigRemote() -> Element {
     let pieces = state.pieces.read().clone();
     let strips = state.mixer.read().clone();
     let ports = state.ports.read().clone();
+    let midi = state.midi.read().clone();
+    let midi_count = midi.len() as u64;
     let master_pct = (status.master_peak.clamp(0.0, 1.0) * 100.0) as u32;
     let master_color = meter_color(status.master_peak);
 
@@ -209,6 +219,7 @@ pub fn DrumRigRemote() -> Element {
                             }
                         }
                     }
+                    MidiMonitorPanel { events: midi, count: midi_count, title: "MIDI monitor".to_string() }
                     div {
                         span { style: "font-size:11px; color:#71717a; text-transform:uppercase; letter-spacing:0.05em;", "Mixer" }
                         div { style: "display:flex; flex-wrap:wrap; gap:6px; margin-top:6px;",

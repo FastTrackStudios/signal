@@ -63,6 +63,9 @@ pub fn load_preset_kit(
         .load_preset(id, preset.as_ref())
         .map_err(|e| e.to_string())?;
     rig.set_midi_channel(id, GM_DRUM_CHANNEL);
+    // React to all MIDI: any channel that isn't explicitly mapped (e.g. a
+    // keyboard on ch 1, not GM drums on ch 10) falls back to the kit.
+    rig.set_default_instrument(id);
     Ok(ids)
 }
 
