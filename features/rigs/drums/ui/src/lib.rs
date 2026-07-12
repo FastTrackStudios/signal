@@ -233,7 +233,8 @@ pub fn DrumRigRemote() -> Element {
                             }
                         }
                         {
-                            let rig = rig.clone();
+                            let rig_on = rig.clone();
+                            let rig_off = rig.clone();
                             rsx!{ Piano {
                                 start_note: 21,
                                 end_note: 108,
@@ -243,8 +244,8 @@ pub fn DrumRigRemote() -> Element {
                                 waterfall: false,
                                 accent_color: "#22c55e".to_string(),
                                 height: "132px",
-                                on_note_on: move |n: u8| { let rig = rig.clone(); spawn(async move { if let Some(r) = rig { let _ = r.trigger(n as u32, 110).await; } }); },
-                                on_note_off: move |_n: u8| {},
+                                on_note_on: move |n: u8| { let rig = rig_on.clone(); spawn(async move { if let Some(r) = rig { let _ = r.trigger(n as u32, 110).await; } }); },
+                                on_note_off: move |n: u8| { let rig = rig_off.clone(); spawn(async move { if let Some(r) = rig { let _ = r.trigger(n as u32, 0).await; } }); },
                             } }
                         }
                     }

@@ -343,17 +343,24 @@ impl DrumRig for DrumRigBackend {
     }
 
     fn trigger(&self, note: u32, velocity: u32) {
+        let (note, velocity) = (note as u8, velocity as u8);
+        // Inject as live MIDI on the GM percussion channel — the same
+        // `push_live_midi` path hardware uses — so a UI click/pad is a
+        // first-class event in the system (plays, and any live-MIDI consumer
+        // sees it). Velocity 0 is a note-off (running-status convention).
         if let Ok(rig) = self.inner.rig.lock() {
             if let Some(rig) = rig.as_ref() {
-                rig.midi_message(GM_DRUM_CHANNEL, 0x90, note as u8, velocity as u8);
+                rig.midi_message(GM_DRUM_CHANNEL, 0x90, note, velocity);
             }
         }
-        // Reflect UI pad hits in the monitor too.
-        self.inner.monitor.record(&MidiEvent::NoteOn {
-            channel: Channel::new(GM_DRUM_CHANNEL),
-            key: KeyNumber::new(note as u8),
-            velocity: Velocity::new(velocity as u8),
-        });
+        let channel = Channel::new(GM_DRUM_CHANNEL);
+        let key = KeyNumber::new(note);
+        let ev = if velocity > 0 {
+            MidiEvent::NoteOn { channel, key, velocity: Velocity::new(velocity) }
+        } else {
+            MidiEvent::NoteOff { channel, key, velocity: Velocity::new(0) }
+        };
+        self.inner.monitor.record(&ev);
     }
 
     fn mixer(&self) -> Vec<MixerStrip> {
