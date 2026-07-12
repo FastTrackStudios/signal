@@ -9,7 +9,8 @@ use dioxus::prelude::*;
 use midicore_proto::MidiEvent;
 use midicore_ui::MidiMonitorPanel;
 use signal_drums_proto::drum::{DrumEvent, DrumRigClient, DrumRigStreamClient};
-use signal_drums_proto::{DrumStatus, InputMap, KitInfo, MixerStrip, PieceInfo, StripKind};
+use signal_drums_proto::{DrumStatus, InputMap, KitInfo, MeterSnapshot, MixerStrip, PieceInfo,
+    StripKind};
 use signal_ui::components::Piano;
 
 /// Live drum-rig view-state: seeded once, then folded from the event stream.
@@ -19,6 +20,9 @@ struct DrumState {
     kits: Signal<Vec<KitInfo>>,
     pieces: Signal<Vec<PieceInfo>>,
     mixer: Signal<Vec<MixerStrip>>,
+    /// High-rate peaks — separate from `mixer` (control state) so meter updates
+    /// never re-render / clobber a fader being dragged.
+    meters: Signal<MeterSnapshot>,
     ports: Signal<Vec<String>>,
     midi: Signal<Vec<MidiEvent>>,
 }
@@ -31,6 +35,7 @@ fn use_drum_state() -> (DrumState, Option<DrumRigClient>) {
     let mut kits = use_signal(Vec::<KitInfo>::new);
     let mut pieces = use_signal(Vec::<PieceInfo>::new);
     let mut mixer = use_signal(Vec::<MixerStrip>::new);
+    let mut meters = use_signal(MeterSnapshot::default);
     let mut ports = use_signal(Vec::<String>::new);
     let mut midi = use_signal(Vec::<MidiEvent>::new);
 
@@ -52,6 +57,9 @@ fn use_drum_state() -> (DrumState, Option<DrumRigClient>) {
                 }
                 if let Ok(m) = rig.mixer().await {
                     mixer.set(m);
+                }
+                if let Ok(m) = rig.meters().await {
+                    meters.set(m);
                 }
                 if let Ok(p) = rig.midi_ports().await {
                     ports.set(p);
@@ -77,20 +85,21 @@ fn use_drum_state() -> (DrumState, Option<DrumRigClient>) {
                 }
             },
             move |ev: DrumEvent| {
-                let (mut status, mut kits, mut pieces, mut mixer, mut midi) =
-                    (status, kits, pieces, mixer, midi);
+                let (mut status, mut kits, mut pieces, mut mixer, mut meters, mut midi) =
+                    (status, kits, pieces, mixer, meters, midi);
                 match ev {
                     DrumEvent::Status(s) => status.set(s),
                     DrumEvent::Library(k) => kits.set(k),
                     DrumEvent::Kit(p) => pieces.set(p),
                     DrumEvent::Mixer(m) => mixer.set(m),
+                    DrumEvent::Meters(m) => meters.set(m),
                     DrumEvent::Midi(m) => midi.set(m),
                 }
             },
         );
     }
 
-    (DrumState { status, kits, pieces, mixer, ports, midi }, rig)
+    (DrumState { status, kits, pieces, mixer, meters, ports, midi }, rig)
 }
 
 /// The drum-rig remote view. Mount inside a host that has provided
@@ -104,12 +113,18 @@ pub fn DrumRigRemote() -> Element {
     let kits = state.kits.read().clone();
     let pieces = state.pieces.read().clone();
     let strips = state.mixer.read().clone();
+    // Writable handle for optimistic fader/send updates (track the finger with
+    // no network round-trip; the engine sync is fire-and-forget).
+    let mixer_sig = state.mixer;
+    let meters = state.meters.read().clone();
     let ports = state.ports.read().clone();
     let midi = state.midi.read().clone();
     let midi_count = midi.len() as u64;
-    // Label each mapped key with the piece/sample it plays.
-    let piece_labels: HashMap<u8, String> =
-        pieces.iter().map(|p| (p.note as u8, p.id.clone())).collect();
+    // Label each mapped key with the piece/sample it plays (icon + name).
+    let piece_labels: HashMap<u8, String> = pieces
+        .iter()
+        .map(|p| (p.note as u8, format!("{} {}", piece_icon(&p.id), p.id)))
+        .collect();
     // Light the most-recently-struck notes (trailing highlight off the stream).
     let lit: Vec<u8> = midi
         .iter()
@@ -127,8 +142,8 @@ pub fn DrumRigRemote() -> Element {
         }
         _ => None,
     });
-    let master_pct = (status.master_peak.clamp(0.0, 1.0) * 100.0) as u32;
-    let master_color = meter_color(status.master_peak);
+    let master_pct = (meters.master.clamp(0.0, 1.0) * 100.0) as u32;
+    let master_color = meter_color(meters.master);
 
     let maps = [
         ("Direct", InputMap::Direct),
@@ -240,7 +255,7 @@ pub fn DrumRigRemote() -> Element {
                                 end_note: 108,
                                 active_notes: lit,
                                 labels: piece_labels,
-                                show_labels: false,
+                                show_labels: true,
                                 waterfall: false,
                                 accent_color: "#22c55e".to_string(),
                                 height: "132px",
@@ -271,25 +286,28 @@ pub fn DrumRigRemote() -> Element {
                     MidiMonitorPanel { events: midi, count: midi_count, title: "MIDI monitor".to_string() }
                     div {
                         span { style: "font-size:11px; color:#71717a; text-transform:uppercase; letter-spacing:0.05em;", "Mixer" }
-                        div { style: "display:flex; flex-wrap:wrap; gap:6px; margin-top:6px; align-items:flex-end;",
-                            for strip in strips.iter() {
+                        div { style: "display:flex; flex-wrap:wrap; gap:6px; margin-top:6px; align-items:flex-start;",
+                            for (i, strip) in strips.iter().enumerate() {
                                 {
                                     let rig = rig.clone();
                                     let is_bus = strip.kind == StripKind::Bus;
-                                    let pct = (strip.peak.clamp(0.0, 1.0) * 100.0) as u32;
-                                    let mcolor = meter_color(strip.peak);
+                                    let peak = meters.strips.get(i).copied().unwrap_or(0.0);
+                                    let pct = (peak.clamp(0.0, 1.0) * 100.0) as u32;
+                                    let mcolor = meter_color(peak);
                                     let accent = if is_bus { "#7c3aed" } else { "#2563eb" };
                                     let muted = strip.muted;
                                     let soloed = strip.soloed;
                                     let idx = strip.idx;
                                     let gain_db = strip.gain_db;
+                                    let icon = piece_icon(&strip.label);
+                                    let sends = strip.sends.clone();
                                     // Fader fill: map -60..+12 dB onto 0..100%.
                                     let fader_pct = (((gain_db + 60.0) / 72.0).clamp(0.0, 1.0) * 100.0) as u32;
                                     let (rg, rm, rs) = (rig.clone(), rig.clone(), rig.clone());
                                     rsx!{ div {
                                         key: "{strip.kind:?}-{strip.idx}",
                                         style: format!("display:flex; flex-direction:column; align-items:center; gap:4px; width:64px; padding:6px; border-radius:8px; background:#111113; border:1px solid {};", if is_bus { "#3b2f5c" } else { "#27272a" }),
-                                        span { style: "font-size:9px; color:#e4e4e7; text-align:center; height:22px; overflow:hidden; font-weight:600;", "{strip.label}" }
+                                        span { style: "font-size:9px; color:#e4e4e7; text-align:center; height:22px; overflow:hidden; font-weight:600;", "{icon} {strip.label}" }
                                         // meter + fader side by side
                                         div { style: "display:flex; gap:5px; height:90px; align-items:flex-end;",
                                             // peak meter
@@ -308,6 +326,9 @@ pub fn DrumRigRemote() -> Element {
                                                     oninput: move |e| {
                                                         let rig = rg.clone();
                                                         if let Ok(db) = e.value().parse::<f32>() {
+                                                            // Optimistic: move the fader now, sync the engine async.
+                                                            let mut m = mixer_sig;
+                                                            if let Some(s) = m.write().get_mut(i) { s.gain_db = db; }
                                                             spawn(async move { if let Some(r) = rig {
                                                                 if is_bus { let _ = r.set_bus_gain(idx, db).await; }
                                                                 else { let _ = r.set_piece_gain(idx, db).await; }
@@ -343,6 +364,44 @@ pub fn DrumRigRemote() -> Element {
                                                 "M"
                                             }
                                         }
+                                        // per-piece bus sends (kick → overhead / room …)
+                                        if !sends.is_empty() {
+                                            div { style: "display:flex; flex-direction:column; gap:2px; width:100%; margin-top:2px; border-top:1px solid #27272a; padding-top:3px;",
+                                                for send in sends.iter() {
+                                                    {
+                                                        let rig = rig.clone();
+                                                        let sidx = send.idx;
+                                                        let slvl = send.level_db;
+                                                        let sabbr = bus_abbr(&send.bus_label);
+                                                        let spct = (((slvl + 60.0) / 72.0).clamp(0.0, 1.0) * 100.0) as u32;
+                                                        rsx!{ div {
+                                                            key: "s{sidx}",
+                                                            style: "display:flex; align-items:center; gap:3px;",
+                                                            span { style: "font-size:7px; color:#8b8b93; width:16px;", "{sabbr}" }
+                                                            div { style: "position:relative; flex:1; height:10px; display:flex; align-items:center;",
+                                                                div { style: "position:absolute; left:0; right:0; height:3px; background:#27272a; border-radius:2px;" }
+                                                                div { style: "position:absolute; left:0; width:{spct}%; height:3px; background:#a16207; border-radius:2px;" }
+                                                                input {
+                                                                    r#type: "range", min: "-60", max: "12", step: "1",
+                                                                    value: "{slvl}",
+                                                                    style: "position:absolute; inset:0; width:100%; opacity:0; cursor:pointer;",
+                                                                    oninput: move |e| {
+                                                                        let rig = rig.clone();
+                                                                        if let Ok(db) = e.value().parse::<f32>() {
+                                                                            let mut m = mixer_sig;
+                                                                            if let Some(s) = m.write().get_mut(i) {
+                                                                                if let Some(sd) = s.sends.iter_mut().find(|x| x.idx == sidx) { sd.level_db = db; }
+                                                                            }
+                                                                            spawn(async move { if let Some(r) = rig { let _ = r.set_send_level(sidx, db).await; } });
+                                                                        }
+                                                                    },
+                                                                }
+                                                            }
+                                                        } }
+                                                    }
+                                                }
+                                            }
+                                        }
                                     } }
                                 }
                             }
@@ -376,6 +435,33 @@ fn pad_btn(ready: bool) -> String {
 fn mute_btn(muted: bool) -> String {
     let (bg, fg) = if muted { ("#7f1d1d", "#fecaca") } else { ("#18181b", "#71717a") };
     format!("width:20px; height:18px; border-radius:4px; background:{bg}; color:{fg}; border:1px solid #27272a; font-size:10px; cursor:pointer;")
+}
+
+/// An emoji icon for a drum piece, chosen by keyword — shown on mixer strips
+/// and piano-key labels so a kit reads at a glance.
+fn piece_icon(id: &str) -> &'static str {
+    let s = id.to_ascii_lowercase();
+    if s.contains("kick") { "🦶" }
+    else if s.contains("snare") { "🥁" }
+    else if s.contains("hh") || s.contains("hat") { "🎩" }
+    else if s.contains("tom") { "🪘" }
+    else if s.contains("ride") { "🛎" }
+    else if s.contains("crash") { "💥" }
+    else if s.contains("china") { "🥢" }
+    else if s.contains("splash") { "💦" }
+    else if s.contains("overhead") || s.contains("oh") { "🎙" }
+    else if s.contains("room") { "🏠" }
+    else { "🥁" }
+}
+
+/// Short 2-3 char abbreviation for a bus label (send row is tight on space).
+fn bus_abbr(label: &str) -> String {
+    let l = label.to_ascii_lowercase();
+    if l.contains("overhead") || l == "oh" { "OH".into() }
+    else if l.contains("room close") { "RmC".into() }
+    else if l.contains("room far") { "RmF".into() }
+    else if l.contains("room") { "Rm".into() }
+    else { label.chars().take(3).collect() }
 }
 
 fn solo_btn(soloed: bool) -> String {

@@ -60,6 +60,9 @@ struct Inner {
     /// Optional Komplete Kontrol Light Guide mirroring the kit onto the keybed
     /// LEDs. `None` when no keyboard is attached / hidraw isn't accessible.
     light: Mutex<Option<crate::DrumLightGuide>>,
+    /// One-shot guard so the meter pump is spawned exactly once, however the
+    /// rig first becomes active (start / load_kit / open).
+    pump_started: std::sync::atomic::AtomicBool,
 }
 
 /// The drum-rig backend handle. Cheap to clone (all state is shared); every
@@ -91,9 +94,11 @@ impl DrumRigBackend {
                 library_dir,
                 monitor: MidiMonitor::new(),
                 light: Mutex::new(None),
+                pump_started: std::sync::atomic::AtomicBool::new(false),
             }),
         };
         backend.rescan_library();
+        backend.spawn_meter_pump();
         backend
     }
 
@@ -285,26 +290,44 @@ impl DrumRigBackend {
         }
     }
 
+    /// Spawn the meter pump — idempotent (only the first call wins), so the
+    /// rig streams meters + MIDI however it first becomes active. The pump
+    /// publishes only high-rate data (`Meters`, `Midi`); the control surface
+    /// (`Mixer`) and transport (`Status`) are published on mutation instead,
+    /// so a fader the user is dragging is never overwritten at meter rate.
     fn spawn_meter_pump(&self) {
+        use std::sync::atomic::Ordering;
+        if self.inner.pump_started.swap(true, Ordering::SeqCst) {
+            return; // already running
+        }
         let backend = self.clone();
         let _ = std::thread::Builder::new()
             .name("drum-meter-pump".into())
-            .spawn(move || loop {
-                std::thread::sleep(std::time::Duration::from_millis(PUMP_MS));
-                // Decay Light Guide flashes even while stopped (cheap no-op if
-                // no keyboard).
-                if let Ok(mut l) = backend.inner.light.lock() {
-                    if let Some(lg) = l.as_mut() {
-                        lg.tick();
+            .spawn(move || {
+                let mut last_running = false;
+                loop {
+                    std::thread::sleep(std::time::Duration::from_millis(PUMP_MS));
+                    // Decay Light Guide flashes even while stopped (cheap no-op
+                    // if no keyboard).
+                    if let Ok(mut l) = backend.inner.light.lock() {
+                        if let Some(lg) = l.as_mut() {
+                            lg.tick();
+                        }
                     }
+                    let running = backend.inner.rig.lock().map(|r| r.is_some()).unwrap_or(false);
+                    // Transport transitions are rare — publish Status only on the
+                    // edge, not every tick.
+                    if running != last_running {
+                        last_running = running;
+                        backend.inner.events.publish(DrumEvent::Status(DrumRig::status(&backend)));
+                        backend.inner.events.publish(DrumEvent::Mixer(DrumRig::mixer(&backend)));
+                    }
+                    if !running {
+                        continue;
+                    }
+                    backend.inner.events.publish(DrumEvent::Meters(DrumRig::meters(&backend)));
+                    backend.inner.events.publish(DrumEvent::Midi(DrumRig::midi_recent(&backend)));
                 }
-                let running = backend.inner.rig.lock().map(|r| r.is_some()).unwrap_or(false);
-                if !running {
-                    continue;
-                }
-                backend.inner.events.publish(DrumEvent::Status(DrumRig::status(&backend)));
-                backend.inner.events.publish(DrumEvent::Mixer(DrumRig::mixer(&backend)));
-                backend.inner.events.publish(DrumEvent::Midi(DrumRig::midi_recent(&backend)));
             });
     }
 }
@@ -426,6 +449,15 @@ impl DrumRig for DrumRigBackend {
         // One strip per kit piece (the primary surface: fader + mute + solo,
         // scaling all the piece's mics together), addressed by engine_idx.
         for eng in &layout.engines {
+            let sends = eng
+                .sends
+                .iter()
+                .map(|s| signal_drums_proto::SendInfo {
+                    idx: s.send_idx as u32,
+                    bus_label: s.bus_label.clone(),
+                    level_db: s.level_db,
+                })
+                .collect();
             strips.push(MixerStrip {
                 kind: StripKind::Piece,
                 idx: eng.engine_idx as u32,
@@ -434,6 +466,7 @@ impl DrumRig for DrumRigBackend {
                 muted: eng.piece_muted,
                 soloed: eng.piece_soloed,
                 peak: meters.as_ref().map(|m| m.piece_peak(eng.engine_idx)).unwrap_or(0.0),
+                sends,
             });
         }
         // Then the shared buses (overhead / room).
@@ -446,18 +479,41 @@ impl DrumRig for DrumRigBackend {
                 muted: bus.muted,
                 soloed: bus.soloed,
                 peak: meters.as_ref().map(|m| m.bus_peak(bus.bus_idx)).unwrap_or(0.0),
+                sends: Vec::new(),
             });
         }
         strips
     }
 
+    fn meters(&self) -> signal_drums_proto::MeterSnapshot {
+        let rig = self.inner.rig.lock().unwrap();
+        let Some(rig) = rig.as_ref() else { return Default::default() };
+        let Some(m) = rig.drum_mixer_meters(KIT) else { return Default::default() };
+        // Positionally aligned with `mixer()`: piece peaks first, then buses.
+        let mut strips = Vec::new();
+        if let Some(layout) = rig.drum_mixer_layout(KIT) {
+            for eng in &layout.engines {
+                strips.push(m.piece_peak(eng.engine_idx));
+            }
+            for bus in &layout.buses {
+                strips.push(m.bus_peak(bus.bus_idx));
+            }
+        }
+        signal_drums_proto::MeterSnapshot {
+            master: m.master_peak(),
+            strips,
+            voices: rig.active_voices(KIT) as u32,
+        }
+    }
+
     fn set_piece_gain(&self, idx: u32, db: f32) {
+        // Continuous control — no Mixer echo (the UI tracks it optimistically);
+        // echoing at drag rate is what made the fader jitter.
         if let Ok(rig) = self.inner.rig.lock() {
             if let Some(rig) = rig.as_ref() {
                 rig.set_mixer_piece_gain_db(KIT, idx as usize, db);
             }
         }
-        self.inner.events.publish(DrumEvent::Mixer(DrumRig::mixer(self)));
     }
     fn set_piece_mute(&self, idx: u32, muted: bool) {
         if let Ok(rig) = self.inner.rig.lock() {
@@ -482,6 +538,14 @@ impl DrumRig for DrumRigBackend {
             }
         }
         self.inner.events.publish(DrumEvent::Mixer(DrumRig::mixer(self)));
+    }
+    fn set_send_level(&self, idx: u32, db: f32) {
+        // Continuous — no Mixer echo (see set_piece_gain).
+        if let Ok(rig) = self.inner.rig.lock() {
+            if let Some(rig) = rig.as_ref() {
+                rig.set_mixer_send_level_db(KIT, idx as usize, db);
+            }
+        }
     }
     fn set_channel_gain(&self, idx: u32, db: f32) {
         if let Ok(rig) = self.inner.rig.lock() {

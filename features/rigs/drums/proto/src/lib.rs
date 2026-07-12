@@ -69,8 +69,36 @@ pub struct MixerStrip {
     pub gain_db: f32,
     pub muted: bool,
     pub soloed: bool,
-    /// Current peak level (linear 0..~1).
+    /// Current peak level (linear 0..~1). Seeded by [`drum::DrumRig::mixer`];
+    /// live updates arrive out-of-band via [`drum::DrumEvent::Meters`] so the
+    /// control state (gain/mute/solo) isn't re-sent at meter rate.
     pub peak: f32,
+    /// For a [`StripKind::Piece`] strip: its bus sends (overhead / room), each
+    /// with an adjustable level. Empty for bus strips.
+    pub sends: Vec<SendInfo>,
+}
+
+/// One bus send from a kit piece (e.g. kick → Overhead) with its level.
+#[derive(Clone, PartialEq, Debug, Default, Facet)]
+pub struct SendInfo {
+    /// Global send index — addresses [`drum::DrumRig::set_send_level`].
+    pub idx: u32,
+    /// The destination bus label (e.g. "Overhead", "Room").
+    pub bus_label: String,
+    pub level_db: f32,
+}
+
+/// High-rate meter snapshot — published at meter rate, carrying only peaks so
+/// the control surface (faders/mutes/solos) is never clobbered mid-drag.
+#[derive(Clone, PartialEq, Debug, Default, Facet)]
+pub struct MeterSnapshot {
+    /// Master output peak (linear 0..~1).
+    pub master: f32,
+    /// Per-strip peaks, positionally aligned with [`drum::DrumRig::mixer`]
+    /// (pieces first, then buses).
+    pub strips: Vec<f32>,
+    /// Active voices across the kit.
+    pub voices: u32,
 }
 
 /// Which physical drum-map the attached hardware sends (so the converter knows
@@ -122,7 +150,7 @@ pub mod drum {
 
     use facet::Facet;
 
-    use super::{DrumStatus, InputMap, KitInfo, MixerStrip, PieceInfo};
+    use super::{DrumStatus, InputMap, KitInfo, MeterSnapshot, MixerStrip, PieceInfo};
 
     /// One live rig change. Every variant carries **full state** (idempotent
     /// re-application) so a late/reconnecting subscriber is correct after the
@@ -130,9 +158,14 @@ pub mod drum {
     #[derive(Clone, Debug, PartialEq, Facet)]
     #[repr(C)]
     pub enum DrumEvent {
-        /// Transport + meters (published at meter rate while running).
+        /// Transport + kit/port state. Published on change (low rate).
         Status(DrumStatus),
-        /// The drum mixer surface changed (strips / gains / mutes / meters).
+        /// High-rate peak snapshot (meters only) — published at meter rate so
+        /// meters animate without re-sending the control surface.
+        Meters(MeterSnapshot),
+        /// The drum mixer *control* surface changed (strips / gains / mutes /
+        /// solos / send levels). Published only on mutation, never at meter
+        /// rate — so a fader the user is dragging is never clobbered.
         Mixer(Vec<MixerStrip>),
         /// The loaded kit changed (its pieces).
         Kit(Vec<PieceInfo>),
@@ -171,6 +204,12 @@ pub mod drum {
         fn set_piece_solo(&self, idx: u32, soloed: bool);
         /// Solo/unsolo a bus strip.
         fn set_bus_solo(&self, idx: u32, soloed: bool);
+        /// Set a piece's bus-send level (dB) — e.g. how much kick goes to the
+        /// overhead / room bus. `idx` is the global [`SendInfo::idx`].
+        fn set_send_level(&self, idx: u32, db: f32);
+        /// A one-shot high-rate meter snapshot (peaks). The live feed is the
+        /// [`DrumEvent::Meters`] stream; this seeds it.
+        fn meters(&self) -> MeterSnapshot;
         /// Set a channel strip's gain (dB).
         fn set_channel_gain(&self, idx: u32, db: f32);
         /// Mute/unmute a channel strip.
