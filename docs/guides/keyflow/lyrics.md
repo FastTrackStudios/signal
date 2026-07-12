@@ -10,7 +10,7 @@ order: 7
 Words go under the music as a **`[lyrics]` line** inside a section — right below
 the chords they're sung against:
 
-```kf-src
+```kf-
 VS 4
 C  C  F  C
 [lyrics] Twinkle twinkle little star
@@ -33,14 +33,14 @@ section of its own — unlike the custom `[Name]` headers from
 To show exactly where a chord changes mid-line, put it in `{curly braces}` right
 before the syllable it lands on:
 
-```kf-src
+```kf-
 [lyrics] {C}Hello {G}world {Am}how {F}are you
 ```
 
 The chord sits with the word, so a singer reads the change at the moment it
 happens. Words without a brace just carry on under the chord before them:
 
-```kf-src
+```kf-
 [lyrics] {Gm}Slow down you {A#}crazy child
 ```
 
@@ -51,7 +51,7 @@ Here `Slow down you` are all under Gm, and `crazy child` under A♯.
 When one word is sung over several notes or chords, break it with **hyphens** —
 each piece is its own syllable:
 
-```kf-src
+```kf-
 [lyrics] A-ma-zing grace how sweet
 ```
 
@@ -59,7 +59,7 @@ That's six syllables — `A`, `ma`, `zing`, `grace`, `how`, `sweet` — with the
 first word stretched across three. Hyphens and `{chords}` combine, so a chord can
 land on any syllable:
 
-```kf-src
+```kf-
 [lyrics] {Cmaj7}A-{Dm7}ma-{G}zing grace
 ```
 
@@ -67,7 +67,7 @@ land on any syllable:
 
 Stack a `[lyrics]` line for each set of words that shares the same chords:
 
-```kf-src
+```kf-
 CH 4
 F  C  G  Am
 [lyrics] first time round we sing this line

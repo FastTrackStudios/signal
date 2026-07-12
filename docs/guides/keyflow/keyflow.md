@@ -17,7 +17,7 @@ tooling.
 
 A taste of what a finished chart looks like:
 
-```kf-src
+```kf-
 Vienna (Live) - Billy Joel
 4/4 140bpm #Gm
 
@@ -61,11 +61,11 @@ Keyflow snippets in a note are ordinary fenced code blocks; the fence's info
 string says how the snippet renders:
 
 - `kf` — the engraved chart only (the everyday choice).
-- `kf+` — the source text and the engraved chart together, side by side.
+- `kf+` — the keyflow-highlighted source **and** the engraved chart, stacked.
   The chapters here use it because the source is the lesson.
-- `kf-src` — the source only, as plain code (no engraving).
+- `kf-` — the highlighted source only, no chart.
 
-Every engraved chart also has a small `</>` button (top-right, on hover) that
-flips its source open or closed while you read.
+`kf` and `kf+` charts also carry a small `</>` button (top-right, on hover)
+that flips the source open or closed while you read, plus a copy button.
 
 Back to all [[guides|Guides]].

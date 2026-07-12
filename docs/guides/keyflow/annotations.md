@@ -16,7 +16,7 @@ mixed in with the chord and melody lines.
 A quoted string is **free text** placed on the staff. By default it sits below;
 `^` puts it above, `_` keeps it below:
 
-```kf-src
+```kf-
 "straight feel"        below the staff (the default)
 ^"BIG"                 above the staff
 _"rit. ...."           below the staff
@@ -40,7 +40,7 @@ instead of a whole spot, attach it to the chord: `Cmaj7"as written"` — see
 A cue aimed at one player starts with `@` and the instrument name, then the
 text:
 
-```kf-src
+```kf-
 @Drums "full groove now"
 @Bass "walk it down"
 @Keys "pad only"
@@ -54,7 +54,7 @@ just its own cues.
 Classical dynamics use the `dyn` keyword, so a lone `f` or `p` is never mistaken
 for a chord:
 
-```kf-src
+```kf-
 dyn mp
 dyn ff
 dyn fp
@@ -64,14 +64,14 @@ The levels run `ppp pp p mp mf f ff fff`, plus the accents `sf`, `sfz`, and `fp`
 
 A dynamic sits **below** the staff by default; add `above` to lift it:
 
-```kf-src
+```kf-
 dyn mf above
 ```
 
 To place it on a particular beat of the bar rather than the downbeat, add `@`
 and the beat number:
 
-```kf-src
+```kf-
 dyn fff@4        forte-fortissimo on beat 4
 ```
 
@@ -80,7 +80,7 @@ dyn fff@4        forte-fortissimo on beat 4
 A hairpin is a crescendo or decrescendo wedge, written with `hairpin` and a
 direction — `<` to swell, `>` to fade — over a **beat range** `start..end`:
 
-```kf-src
+```kf-
 hairpin < 1..4        crescendo across the bar
 hairpin > 2..4        decrescendo from beat 2 to 4
 ```

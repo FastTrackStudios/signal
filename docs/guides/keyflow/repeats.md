@@ -14,7 +14,7 @@ Songs loop. Rather than write the same bars again, Keyflow has a few ways to say
 
 `%` replays the bar before it (from [[rhythm|Rhythm]]):
 
-```kf-src
+```kf-
 1  4  %  5        bar 3 repeats bar 2 (the 4)
 ```
 
@@ -28,7 +28,7 @@ Songs loop. Rather than write the same bars again, Keyflow has a few ways to say
 
 Put `x` and a number at the end of a line to play the whole line that many times:
 
-```kf-src
+```kf-
 1 4 5 1 x2        these four bars, played twice (eight bars)
 ```
 
@@ -36,7 +36,7 @@ Put `x` and a number at the end of a line to play the whole line that many times
 
 Wrap bars in repeat barlines to mark a section that plays twice:
 
-```kf-src
+```kf-
 |: 1 4 | 5 1 :|
 ```
 
@@ -49,7 +49,7 @@ bare `|: 1 4 5 1 :|` would pack everything into a single bar.
 When a repeat ends differently the second time, mark the alternate endings with
 `[1]` and `[2]` — placed right after a bar line, on the bars they apply to:
 
-```kf-src
+```kf-
 |: 1 | [1] 4 :| | [2] 5 |
 ```
 

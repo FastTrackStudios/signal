@@ -66,13 +66,13 @@ a major triad.
 For **Roman numerals**, case carries the quality — **uppercase is major,
 lowercase is minor**:
 
-```kf-src
+```kf-
 I  ii  iii  IV  V  vi  vii      → I, iim, iiim, IV, V, vim, viim
 ```
 
 For **Nashville numbers**, a bare number is major; add `m` for minor:
 
-```kf-src
+```kf-
 1  2  6        → major
 1m  2m  6m     → minor
 ```
@@ -129,7 +129,7 @@ Alterations sharpen or flatten a single tone — most often the 5th, 9th, 11th, 
 
 Put a bass note other than the root after a `/`:
 
-```kf-src
+```kf-
 C/E        major triad over E
 Dm7/G      Dm7 over G
 F/A        F over A
@@ -143,7 +143,7 @@ over the 3rd degree) means the same thing as `C/E` in C.
 There's a single twist. Between two **Roman numerals**, `/` doesn't mean slash
 bass — it's a **secondary (applied) chord**, the way analysts write them:
 
-```kf-src
+```kf-
 V/V        "five of five" — the dominant of the dominant
 V/vi       the dominant of the vi chord
 V7/V       …with a seventh
@@ -164,7 +164,7 @@ use for inversions. On a Roman numeral these are **real inversions**: the chord
 actually gets the right bass note, so it resolves and transposes correctly, while
 the chart still shows the figure.
 
-```kf-src
+```kf-
 V^6    V^64    V^65    V^43    V^42
 ```
 
@@ -191,7 +191,7 @@ a 4–3 suspension.
 The `^` figures are *structural* (they change the chord). For a plain text
 **annotation** — a cue, a reminder — use **quotes**:
 
-```kf-src
+```kf-
 G^"watch the push"     text above the chord
 G_"quietly"            text below (subscript)
 Cmaj7"as written"      text attached to the chord
@@ -205,7 +205,7 @@ floating above.
 The pieces stack in order — root, quality, family, extensions, alterations,
 bass:
 
-```kf-src
+```kf-
 Am7         A  + minor + 7th
 Cmaj9       C  + major 7th + 9th
 G7b9        G  + dominant 7th + flat 9th

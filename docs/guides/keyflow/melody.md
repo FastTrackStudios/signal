@@ -14,7 +14,7 @@ short step away.
 
 Notes live in a melody block, `m{ … }`:
 
-```kf-src
+```kf-
 m{ C D E F }
 ```
 
@@ -37,11 +37,11 @@ that line is one 4/4 bar. You add a duration only when you want something else
 The pitch is written one of two ways, exactly like a chord root:
 
 - **Letter names** — `C D E F G A B`, with `#` sharp, `b` flat, `n` natural:
-  ```kf-src
+  ```kf-
   m{ C F# Bb Dn }
   ```
 - **Scale numbers** — `1`–`7`, relative to the key, with the same accidentals:
-  ```kf-src
+  ```kf-
   m{ 1 2 3 4 }          in C: C D E F
   ```
 
@@ -57,17 +57,17 @@ nearest the note before it. You write the line and the leaps sort themselves out
 When you need to steer the octave, three tools, lightest first:
 
 - **Nudge** with `'` (up) and `,` (down) — push one note into the next octave:
-  ```kf-src
+  ```kf-
   m{ C C, C C, }        the 2nd and 4th C drop an octave
   m{ G A B C'' }        C'' jumps two octaves up
   ```
 - **Pin** an absolute octave with `:N` — the same `:` divider that separates a
   chord's root from its quality, here separating a note from its octave:
-  ```kf-src
+  ```kf-
   m{ C:4 D E F }        start on C4; the rest follow relatively
   ```
 - **Set a starting octave** for a whole block or section with `/octave`:
-  ```kf-src
+  ```kf-
   /octave 4
   m{ C D E F }
   ```
@@ -78,7 +78,7 @@ A note with no duration is a quarter note. To write anything else, put the note
 value after the pitch — `8` eighth, `4` quarter, `2` half, `16` sixteenth — with
 `.` for dotted and `t` for a triplet, exactly like [[rhythm|Rhythm]]:
 
-```kf-src
+```kf-
 m{ C8 D8 E8 F8 }        four eighth notes
 m{ C4. D8 E4 }          dotted quarter, eighth, quarter
 m{ C8t D8t E8t }        an eighth-note triplet
@@ -92,7 +92,7 @@ needs that underscore — `1_8`, not `18`, since both are digits.
 Like chords, a duration **sticks** until you change it, so a run of equal notes
 needs it only once:
 
-```kf-src
+```kf-
 m{ C8 D E F G A B C }   one eighth marks them all
 ```
 
@@ -109,7 +109,7 @@ Three more tokens fill the gaps between notes:
 Wrap notes in `< … >` to sound them **together**, read low to high — a melody
 note with harmony notes stacked above it:
 
-```kf-src
+```kf-
 m{ <C E G> }            a C-major shape on one stem
 m{ <F# 'C#> <G# 'D#> }   two stacked pairs
 ```
@@ -122,7 +122,7 @@ puts C# an octave above where it would otherwise land.
 A melody and the chords beneath it run in **parallel**, separated by `;` inside
 `<< … >>`. The chords are one lane, the melody the other:
 
-```kf-src
+```kf-
 << C ;  m{ C8 D8 E8 F8 G8 A8 B8 C8 } >>
 ```
 
@@ -131,7 +131,7 @@ eighth-note run.
 
 For anything longer than a line, the multi-line form reads better:
 
-```kf-src
+```kf-
 <<
   Am  F ;
   m{ C8 D E F E4 C  E8 F G A G4 E }
@@ -144,7 +144,7 @@ For a full chart, keeping chords and melody on one line gets unwieldy. Split the
 into named **lanes** and pair the lanes once. The top section list owns the
 section lengths; each lane just repeats the section name:
 
-```kf-src
+```kf-
 intro 4
 
 let chords = {

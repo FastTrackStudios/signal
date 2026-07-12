@@ -9,7 +9,7 @@ order: 1
 
 Every Keyflow file has the same two-part shape:
 
-```kf-src
+```kf-
 Vienna (Live) - Billy Joel    ← header: what the song is
 4/4 140bpm #Gm
 
@@ -37,13 +37,13 @@ This page covers the header. Sections and the music itself come in later pages.
 
 The first line of text is the title. It may also carry an artist and a subtitle:
 
-```kf-src
+```kf-
 Vienna
 ```
-```kf-src
+```kf-
 Vienna - Billy Joel
 ```
-```kf-src
+```kf-
 Vienna (Live) - Billy Joel
 ```
 
@@ -62,10 +62,10 @@ title is what shows up at the top of the rendered chart.
 The next line sets the song's musical defaults. It holds up to three tokens,
 **space-separated, in any order**:
 
-```kf-src
+```kf-
 4/4 140bpm #Gm
 ```
-```kf-src
+```kf-
 68bpm 4/4 #G
 ```
 
@@ -105,7 +105,7 @@ names, since those are relative to the key. More on that in the Chords pages.
 
 A semicolon starts a comment. Everything after it on the line is ignored:
 
-```kf-src
+```kf-
 4/4 120bpm #C    ; mid-tempo, straight feel
 ```
 
@@ -113,7 +113,7 @@ A semicolon starts a comment. Everything after it on the line is ignored:
 
 A complete header, with the music that follows it:
 
-```kf-src
+```kf-
 Build My Life - Housefires
 68bpm 4/4 #G
 
