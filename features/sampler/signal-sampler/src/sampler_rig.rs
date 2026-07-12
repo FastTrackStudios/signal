@@ -1231,6 +1231,20 @@ impl SamplerRig {
         Ok(Some(slot))
     }
 
+    /// Install an already-built [`HostedPlugin`] (e.g. a built-in signal-fx
+    /// processor) into a drum-mixer channel/bus/master FX chain.
+    pub fn install_mixer_plugin(
+        &self,
+        id: &str,
+        target: crate::mixer::FxTarget,
+        plugin: signal_plugin_host::HostedPlugin,
+    ) -> Result<usize, signal_plugin_host::PluginError> {
+        let mut bank = self.bank().lock().map_err(|_| {
+            signal_plugin_host::PluginError::LoadFailed("bank mutex poisoned".into())
+        })?;
+        bank.install_mixer_plugin(id, target, plugin)
+    }
+
     pub fn load_preset_master_plugin(
         &self,
         id: &str,

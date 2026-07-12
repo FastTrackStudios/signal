@@ -16,6 +16,7 @@ mod backend;
 pub mod cradle;
 mod library;
 mod lightguide;
+pub mod mm2fx;
 pub use backend::DrumRigBackend;
 pub use lightguide::DrumLightGuide;
 pub use signal_drums_proto as proto;

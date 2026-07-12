@@ -94,7 +94,7 @@ pub use engine_spec::{BlockRef, EngineLayerSpec, EngineSpec, FxChainSlot, PortSp
 pub use instrument::SamplerInstrument;
 pub use mixer::{
     Bus, BusStrip, ChannelStrip, DirectChannel, DrumMixer, EngineStrip, FxBackend, FxSlotStrip,
-    MixerLayout, MixerMeters, Send as MixerSend, SendStrip,
+    FxTarget, MixerLayout, MixerMeters, Send as MixerSend, SendStrip,
 };
 pub use module_spec::{ModulePort, ModuleSpec};
 pub use nam::NamProcessor;

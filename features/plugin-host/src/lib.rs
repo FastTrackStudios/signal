@@ -74,6 +74,23 @@ impl HostedPlugin {
         }))
     }
 
+    /// Wrap an already-constructed [`PluginInstance`] — e.g. a built-in
+    /// `signal-fx` `NativeEq`/`NativeComp`/`NativeReverb` — so the host's
+    /// FX-chain machinery can run it exactly like a loaded CLAP/VST3. Prepare it
+    /// before processing (the drum mixer's `install_plugin` does this).
+    pub fn from_instance(mut inner: Box<dyn PluginInstance>) -> Self {
+        let descriptor = inner.descriptor();
+        Self {
+            inner,
+            descriptor,
+            in_l: Vec::new(),
+            in_r: Vec::new(),
+            out_l: Vec::new(),
+            out_r: Vec::new(),
+            pending: Mutex::new(Vec::new()),
+        }
+    }
+
     pub fn descriptor(&self) -> &PluginDescriptor {
         &self.descriptor
     }

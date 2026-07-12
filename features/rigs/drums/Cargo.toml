@@ -21,6 +21,10 @@ architect = { workspace = true, features = ["vox"] }
 midicore = { workspace = true, features = ["vox", "midir"] }
 # NI Komplete Kontrol Light Guide — mirror the kit onto the keybed LEDs.
 kontrol.workspace = true
+# Built-in FX (NativeEq/NativeComp/NativeReverb) + the plugin-host wrapper, so
+# an imported MM2 (Cradle) mix can be reproduced with our own DSP per piece.
+signal-fx.workspace = true
+signal-plugin-host.workspace = true
 tracing.workspace = true
 
 [dev-dependencies]
