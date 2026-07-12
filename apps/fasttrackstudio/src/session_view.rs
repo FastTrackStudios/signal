@@ -7,7 +7,10 @@
 //! daw-standalone transport underneath.
 
 use dioxus::prelude::*;
-use session_ui::{ACTIVE_INDICES, PLAYBACK_STATE, PerformanceLayout, SETLIST_STRUCTURE, Session};
+use session_ui::{
+    ACTIVE_INDICES, PLAYBACK_STATE, PerformanceLayout, PerformanceSidebar, SETLIST_STRUCTURE,
+    Session, TransportPanel,
+};
 
 use crate::session_engine;
 
@@ -17,19 +20,25 @@ use crate::session_engine;
 /// Mounted once in `App` so it survives workspace switches.
 #[component]
 pub fn SessionEventBridge() -> Element {
+    // ── Events stream: setlist structure + 60 Hz per-song transport ─────
     use_future(move || async move {
         let Some(engine) = session_engine::engine() else {
             tracing::warn!("session engine not running; setlist events unavailable");
             return;
         };
 
-        use session::services::setlist_service::SetlistServiceStreamSource;
+        // Consume the `events` `#[subscribe]` stream through the stream
+        // client so the vox lane pumps it. (Attaching a raw Tx to the
+        // in-process hub is never drained — the lane is what moves data.)
         let (tx, mut rx) = vox::channel::<session::SetlistEvent>();
-        engine.setlist.events_hub().attach(tx);
+        spawn(async move {
+            if let Err(e) = engine.stream_client.events(tx).await {
+                tracing::warn!("events subscription ended: {e:?}");
+            }
+        });
 
-        // The hub only carries NEW events — fetch the already-built
-        // setlist as the initial snapshot (deterministic, no reliance
-        // on republish timing).
+        // Fetch the already-built setlist as the initial snapshot
+        // (deterministic, no reliance on the stream's first republish).
         match engine.client.setlist().await {
             Ok(setlist) => {
                 session_ui::apply_setlist_event(&session::SetlistEvent::SetlistChanged(setlist));
@@ -37,50 +46,58 @@ pub fn SessionEventBridge() -> Element {
             Err(e) => tracing::warn!("initial setlist snapshot failed: {e:?}"),
         }
 
-        // Guide schedule bootstrap: the demo transport starts on song 0,
-        // so hand it to the guide before any ActiveIndices arrive.
-        let mut songs: Vec<session_proto::Song> = Vec::new();
-        let mut guide_song: Option<usize> = None;
-        if let Ok(setlist) = engine.client.setlist().await {
-            songs = setlist.songs.clone();
-            feed_guide(&songs, &mut guide_song, Some(0));
-        }
-
-        // Live updates: SetlistChanged / SongHydrated / ActiveIndices /
-        // 60Hz TransportUpdate — folded into the global signals on the
-        // UI scheduler. The guide schedule tracks the active song.
         while let Ok(Some(ev)) = rx.recv().await {
             let ev = ev.get();
-            match ev {
-                session::SetlistEvent::SetlistChanged(setlist) => {
-                    songs = setlist.songs.clone();
-                    let idx = guide_song.take();
-                    feed_guide(&songs, &mut guide_song, Some(idx.unwrap_or(0)));
-                }
-                session::SetlistEvent::SongHydrated { index, song, .. } => {
-                    if let Some(slot) = songs.get_mut(*index) {
-                        *slot = song.clone();
-                    }
-                    // Re-feed if the hydrated song is the scheduled one.
-                    if guide_song == Some(*index) {
-                        guide_song = None;
-                        feed_guide(&songs, &mut guide_song, Some(*index));
-                    }
-                }
-                session::SetlistEvent::SongEntered { index, song, .. } => {
-                    if let Some(slot) = songs.get_mut(*index) {
-                        *slot = song.clone();
-                    }
-                    feed_guide(&songs, &mut guide_song, Some(*index));
-                }
-                session::SetlistEvent::ActiveIndicesChanged(indices) => {
-                    feed_guide(&songs, &mut guide_song, indices.song_index);
-                }
-                _ => {}
+            // Re-feed the guide when the *active* song hydrates (its sections /
+            // count-in arrive after the initial cursor set the schedule).
+            if let session::SetlistEvent::SongHydrated { index, song, .. }
+            | session::SetlistEvent::SongEntered { index, song, .. } = ev
+                && session_ui::ACTIVE_INDICES.peek().song_index == Some(*index)
+            {
+                crate::guide::set_current_song(song.clone());
             }
             session_ui::apply_setlist_event(ev);
         }
         tracing::warn!("setlist event stream ended");
+    });
+
+    // ── Active-indices stream: the cursor (which song/section is current) ─
+    // The single source of truth for selection; also drives the guide's
+    // active-song schedule. Fed by the service's `active_indices`
+    // `#[subscribe]` hub (architect PubSub), not the setlist-events stream.
+    use_future(move || async move {
+        let Some(engine) = session_engine::engine() else { return };
+
+        // Consume the `active_indices` `#[subscribe]` stream through the
+        // stream client (pumps the vox lane).
+        let (tx, mut rx) = vox::channel::<session_proto::ActiveIndices>();
+        spawn(async move {
+            if let Err(e) = engine.stream_client.active_indices(tx).await {
+                tracing::warn!("active_indices subscription ended: {e:?}");
+            }
+        });
+
+        // Open on song 0 / section 0. Fire it CONCURRENTLY (not awaited here)
+        // so this future is already polling `rx` below when the seek's cursor
+        // publish — and the active pump's follow-up 60 Hz publish — arrive.
+        // (The demo's edit cursor starts at the timeline end → nothing active
+        // until we seek.)
+        spawn(async move {
+            match engine.client.seek_to_section(0, 0).await {
+                Ok(_) => tracing::info!("opened setlist on song 0 / section 0"),
+                Err(e) => tracing::warn!("initial seek to song 0 failed: {e:?}"),
+            }
+        });
+
+        let mut guide_song: Option<usize> = None;
+        while let Ok(Some(ai)) = rx.recv().await {
+            let ai = ai.get();
+            // Guide follows the active song, reading the current (possibly
+            // just-hydrated) song list from the shared setlist signal.
+            feed_guide(&session_ui::SETLIST_STRUCTURE.peek().songs, &mut guide_song, ai.song_index);
+            session_ui::apply_active_indices(ai);
+        }
+        tracing::warn!("active-indices stream ended");
     });
 
     rsx! {}
@@ -102,7 +119,12 @@ fn feed_guide(
     crate::guide::set_current_song(song.clone());
 }
 
-/// The Session workspace: transport strip over the performance layout.
+/// The Session workspace: the full setlist-player surface —
+/// Navigator sidebar (left), performance display (center) and the
+/// transport control bar (bottom), assembled from session-ui's panels.
+/// A slim guide/status strip sits above the transport for the app's
+/// guide toggle and quick song navigation. All three panels read the
+/// same global signals the `SessionEventBridge` keeps fed.
 #[component]
 pub fn SessionWorkspace() -> Element {
     if session_engine::engine().is_none() {
@@ -117,21 +139,35 @@ pub fn SessionWorkspace() -> Element {
     }
 
     rsx! {
-        div { style: "display: flex; flex-direction: column; height: 100%; width: 100%; min-height: 0;",
-            TransportStrip {}
-            div { style: "flex: 1; min-height: 0; display: flex;",
-                PerformanceLayout {}
+        div { style: "display: flex; flex-direction: row; height: 100%; width: 100%; min-height: 0;",
+            // ── Navigator sidebar (left) ───────────────────────────
+            div { style: "width: 280px; flex: none; min-height: 0; border-right: 1px solid #27272a; display: flex;",
+                PerformanceSidebar {}
+            }
+            // ── Performance display + transport (right column) ─────
+            div { style: "flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column;",
+                // Main performance view
+                div { style: "flex: 1; min-height: 0; display: flex;",
+                    PerformanceLayout {}
+                }
+                // Guide / status strip
+                GuideBar {}
+                // Full transport control bar (arm / record / back /
+                // play·pause / loop / advance)
+                div { style: "height: 92px; flex: none; border-top: 1px solid #27272a;",
+                    TransportPanel {}
+                }
             }
         }
     }
 }
 
-/// Minimal transport strip: prev / play / stop / next + current
-/// song/section display. Commands go through the `Session` singleton
-/// (the in-process `SetlistServiceClient`), which drives the
-/// daw-standalone transport service.
+/// Slim strip above the transport: the app-specific guide toggle,
+/// quick prev/next song, and the current song/section readout. Playback
+/// itself lives in `TransportPanel`; this only owns things session-ui's
+/// panel doesn't (the guide bus and song-level jumps).
 #[component]
-fn TransportStrip() -> Element {
+fn GuideBar() -> Element {
     let mut guide_on = use_signal(crate::guide::is_enabled);
     let indices = ACTIVE_INDICES.read();
     let song_index = indices.song_index;
@@ -159,12 +195,11 @@ fn TransportStrip() -> Element {
     };
 
     let btn = "padding: 6px 14px; border-radius: 6px; background: #18181b; color: #e4e4e7; border: 1px solid #27272a; font-size: 13px; cursor: pointer;";
-    let btn_accent = "padding: 6px 18px; border-radius: 6px; background: #e4e4e7; color: #0a0a0a; border: none; font-weight: 700; font-size: 13px; cursor: pointer;";
 
     rsx! {
-        div { style: "display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-bottom: 1px solid #27272a; background: #0f0f11; flex: none;",
+        div { style: "display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-top: 1px solid #27272a; background: #0f0f11; flex: none;",
 
-            // Prev / Play-Stop / Next
+            // Prev / Next song
             button {
                 style: btn,
                 title: "Previous song",
@@ -176,33 +211,6 @@ fn TransportStrip() -> Element {
                     });
                 },
                 "|◀"
-            }
-            if is_playing {
-                button {
-                    style: btn_accent,
-                    title: "Stop",
-                    onclick: move |_| {
-                        spawn(async move {
-                            if let Err(e) = Session::get().setlist().stop().await {
-                                tracing::warn!("stop failed: {e:?}");
-                            }
-                        });
-                    },
-                    "■ Stop"
-                }
-            } else {
-                button {
-                    style: btn_accent,
-                    title: "Play",
-                    onclick: move |_| {
-                        spawn(async move {
-                            if let Err(e) = Session::get().setlist().play().await {
-                                tracing::warn!("play failed: {e:?}");
-                            }
-                        });
-                    },
-                    "▶ Play"
-                }
             }
             button {
                 style: btn,
