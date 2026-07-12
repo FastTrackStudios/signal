@@ -66,6 +66,10 @@ pub struct MixerStrip {
     pub idx: u32,
     /// Display label.
     pub label: String,
+    /// The piece folder this strip belongs under (piece label, e.g. "Kick").
+    /// Set for [`StripKind::Channel`] mic strips so the UI nests them beneath
+    /// their piece folder; empty for piece folders and shared buses.
+    pub group: String,
     pub gain_db: f32,
     pub muted: bool,
     pub soloed: bool,

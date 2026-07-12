@@ -81,6 +81,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let (fx_pk, fx_rms) = hit_kick(&rig, &mut buf);
     println!("kick w/ MM2 fx: peak {fx_pk:.4}  rms {fx_rms:.5}");
 
+    // Verify gain plumbing: piece fader -20 dB should drop the kick ~10x.
+    rig.set_mixer_piece_gain_db(KIT, 0, -20.0);
+    warm(&rig, &mut buf);
+    let (g_pk, _) = hit_kick(&rig, &mut buf);
+    println!("kick w/ piece -20dB: peak {g_pk:.4} (was {fx_pk:.4})");
+    let gain_works = g_pk < fx_pk * 0.3;
+    println!("gain plumbing: {}", if gain_works { "OK" } else { "BROKEN" });
+
     let changed = (fx_pk - base_pk).abs() > 0.005 || (fx_rms - base_rms).abs() > 1e-4;
     println!(
         "\n{}",

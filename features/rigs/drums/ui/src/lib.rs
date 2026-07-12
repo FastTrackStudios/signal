@@ -129,7 +129,6 @@ pub fn DrumRigRemote() -> Element {
     let status = state.status.read().clone();
     let running = status.running;
     let preload = status.preload;
-    let kits = state.kits.read().clone();
     let pieces = state.pieces.read().clone();
     let strips = state.mixer.read().clone();
     // Writable handle for optimistic fader/send updates (track the finger with
@@ -251,17 +250,19 @@ pub fn DrumRigRemote() -> Element {
             }
 
             div { style: "display:flex; gap:12px; flex:1; min-height:0;",
-                // ── kit library ──
+                // ── presets: a preset = a kit + its mix (levels + FX) ──
                 div { style: "display:flex; flex-direction:column; gap:4px; width:220px; min-width:220px; overflow:auto; border-right:1px solid #1c1c1f; padding-right:8px;",
-                    span { style: "font-size:11px; color:#71717a; text-transform:uppercase; letter-spacing:0.05em;", "Kits ({kits.len()})" }
-                    for (i, kit) in kits.iter().enumerate() {
+                    span { style: "font-size:11px; color:#71717a; text-transform:uppercase; letter-spacing:0.05em;", "Presets" }
+                    for preset in mixes.iter() {
                         {
                             let rig = rig.clone();
+                            let name = preset.clone();
+                            let loaded = status.loaded_kit.as_deref().map(|k| k.eq_ignore_ascii_case(&name)).unwrap_or(false);
                             rsx!{ button {
-                                key: "{kit.path}",
-                                style: kit_btn(kit.loaded),
-                                onclick: move |_| { let rig = rig.clone(); spawn(async move { if let Some(r) = rig { let _ = r.load_kit(i as u32).await; } }); },
-                                "{kit.name}"
+                                key: "{preset}",
+                                style: kit_btn(loaded),
+                                onclick: move |_| { let rig = rig.clone(); let name = name.clone(); spawn(async move { if let Some(r) = rig { let _ = r.import_mm2_mix(name).await; } }); },
+                                "{preset}"
                             } }
                         }
                     }
@@ -365,58 +366,47 @@ pub fn DrumRigRemote() -> Element {
                         }
                     }
                     MidiMonitorPanel { events: midi, count: midi_count, title: "MIDI monitor".to_string() }
-                    // ── MM2 mix import: apply a factory preset's level + FX ──
-                    if !mixes.is_empty() {
-                        div {
-                            span { style: "font-size:11px; color:#71717a; text-transform:uppercase; letter-spacing:0.05em;", "Import mix (MM2)" }
-                            div { style: "display:flex; flex-wrap:wrap; gap:6px; margin-top:6px;",
-                                for mix in mixes.iter() {
-                                    {
-                                        let rig = rig.clone();
-                                        let name = mix.clone();
-                                        rsx!{ button {
-                                            key: "{mix}",
-                                            style: "padding:5px 10px; border-radius:6px; background:#1e1b2e; color:#e4e4e7; border:1px solid #4c3f6b; font-size:11px; cursor:pointer;",
-                                            onclick: move |_| { let rig = rig.clone(); let name = name.clone(); spawn(async move { if let Some(r) = rig { let _ = r.import_mm2_mix(name).await; } }); },
-                                            "{mix}"
-                                        } }
-                                    }
-                                }
-                            }
-                        }
-                    }
                     div {
                         span { style: "font-size:11px; color:#71717a; text-transform:uppercase; letter-spacing:0.05em;", "Mixer" }
                         div { style: "display:flex; flex-wrap:wrap; gap:6px; margin-top:6px; align-items:flex-start;",
                             for (i, strip) in strips.iter().enumerate() {
                                 {
                                     let rig = rig.clone();
-                                    let is_bus = strip.kind == StripKind::Bus;
+                                    let kind = strip.kind;
+                                    let is_bus = kind == StripKind::Bus;
+                                    let is_ch = kind == StripKind::Channel;
                                     let peak = meters.strips.get(i).copied().unwrap_or(0.0);
                                     let pct = (peak.clamp(0.0, 1.0) * 100.0) as u32;
                                     let mcolor = meter_color(peak);
-                                    let accent = if is_bus { "#7c3aed" } else { "#2563eb" };
+                                    let accent = match kind { StripKind::Bus => "#7c3aed", StripKind::Channel => "#3b82f6", _ => "#2563eb" };
                                     let muted = strip.muted;
                                     let soloed = strip.soloed;
                                     let idx = strip.idx;
                                     let gain_db = strip.gain_db;
-                                    let icon = piece_icon(&strip.label);
+                                    // Piece folders show an icon; mic channels just the mic name.
+                                    let label = if is_ch { strip.label.clone() } else { format!("{} {}", piece_icon(&strip.label), strip.label) };
                                     let sends = strip.sends.clone();
                                     // Fader fill: map -60..+12 dB onto 0..100%.
                                     let fader_pct = (((gain_db + 60.0) / 72.0).clamp(0.0, 1.0) * 100.0) as u32;
                                     let (rg, rm, rs) = (rig.clone(), rig.clone(), rig.clone());
+                                    // Folder = wider + bright border; mic channel = narrower, indented,
+                                    // dimmer (nested under its piece); bus = purple.
+                                    let (width, mh, border, bg) = if is_ch { (52, 70, "#27272a", "#0d0d0f") }
+                                        else if is_bus { (64, 90, "#3b2f5c", "#111113") }
+                                        else { (64, 90, "#3f5178", "#14161c") };
+                                    let ml = if is_ch { "margin-left:-2px;" } else { "" };
                                     rsx!{ div {
                                         key: "{strip.kind:?}-{strip.idx}",
-                                        style: format!("display:flex; flex-direction:column; align-items:center; gap:4px; width:64px; padding:6px; border-radius:8px; background:#111113; border:1px solid {};", if is_bus { "#3b2f5c" } else { "#27272a" }),
-                                        span { style: "font-size:9px; color:#e4e4e7; text-align:center; height:22px; overflow:hidden; font-weight:600;", "{icon} {strip.label}" }
+                                        style: format!("display:flex; flex-direction:column; align-items:center; gap:4px; width:{width}px; padding:6px; border-radius:8px; background:{bg}; border:1px solid {border}; {ml}"),
+                                        span { style: "font-size:9px; color:#e4e4e7; text-align:center; height:22px; overflow:hidden; font-weight:600;", "{label}" }
                                         // meter + fader side by side
-                                        div { style: "display:flex; gap:5px; height:90px; align-items:flex-end;",
+                                        div { style: "display:flex; gap:5px; height:{mh}px; align-items:flex-end;",
                                             // peak meter
-                                            div { style: "width:8px; height:90px; background:#18181b; border-radius:2px; display:flex; flex-direction:column-reverse; overflow:hidden;",
+                                            div { style: "width:8px; height:{mh}px; background:#18181b; border-radius:2px; display:flex; flex-direction:column-reverse; overflow:hidden;",
                                                 div { style: "width:100%; height:{pct}%; background:{mcolor};" }
                                             }
                                             // vertical fader: visible track+fill+thumb, invisible range input on top
-                                            div { style: "position:relative; width:22px; height:90px; display:flex; justify-content:center;",
+                                            div { style: "position:relative; width:22px; height:{mh}px; display:flex; justify-content:center;",
                                                 div { style: "position:absolute; bottom:0; width:4px; height:100%; background:#27272a; border-radius:2px;" }
                                                 div { style: "position:absolute; bottom:0; width:4px; height:{fader_pct}%; background:{accent}; border-radius:2px;" }
                                                 div { style: "position:absolute; bottom:calc({fader_pct}% - 5px); width:18px; height:10px; background:#52525b; border:1px solid #a1a1aa; border-radius:2px;" }
@@ -431,8 +421,11 @@ pub fn DrumRigRemote() -> Element {
                                                             let mut m = mixer_sig;
                                                             if let Some(s) = m.write().get_mut(i) { s.gain_db = db; }
                                                             spawn(async move { if let Some(r) = rig {
-                                                                if is_bus { let _ = r.set_bus_gain(idx, db).await; }
-                                                                else { let _ = r.set_piece_gain(idx, db).await; }
+                                                                match kind {
+                                                                    StripKind::Channel => { let _ = r.set_channel_gain(idx, db).await; }
+                                                                    StripKind::Bus => { let _ = r.set_bus_gain(idx, db).await; }
+                                                                    _ => { let _ = r.set_piece_gain(idx, db).await; }
+                                                                }
                                                             }});
                                                         }
                                                     },
@@ -447,8 +440,11 @@ pub fn DrumRigRemote() -> Element {
                                                 onclick: move |_| {
                                                     let rig = rs.clone();
                                                     spawn(async move { if let Some(r) = rig {
-                                                        if is_bus { let _ = r.set_bus_solo(idx, !soloed).await; }
-                                                        else { let _ = r.set_piece_solo(idx, !soloed).await; }
+                                                        match kind {
+                                                            StripKind::Channel => { let _ = r.set_channel_solo(idx, !soloed).await; }
+                                                            StripKind::Bus => { let _ = r.set_bus_solo(idx, !soloed).await; }
+                                                            _ => { let _ = r.set_piece_solo(idx, !soloed).await; }
+                                                        }
                                                     }});
                                                 },
                                                 "S"
@@ -458,8 +454,11 @@ pub fn DrumRigRemote() -> Element {
                                                 onclick: move |_| {
                                                     let rig = rm.clone();
                                                     spawn(async move { if let Some(r) = rig {
-                                                        if is_bus { let _ = r.set_bus_mute(idx, !muted).await; }
-                                                        else { let _ = r.set_piece_mute(idx, !muted).await; }
+                                                        match kind {
+                                                            StripKind::Channel => { let _ = r.set_channel_mute(idx, !muted).await; }
+                                                            StripKind::Bus => { let _ = r.set_bus_mute(idx, !muted).await; }
+                                                            _ => { let _ = r.set_piece_mute(idx, !muted).await; }
+                                                        }
                                                     }});
                                                 },
                                                 "M"
