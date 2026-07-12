@@ -41,6 +41,9 @@ pub struct PieceInfo {
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Facet)]
 #[repr(u8)]
 pub enum StripKind {
+    /// A whole kit piece (an engine: kick, snare, …) — the primary strip. Its
+    /// fader/mute/solo apply across all the piece's mics at once.
+    Piece,
     /// A close-mic channel, direct to master.
     Channel,
     /// A mic send into a bus.
@@ -157,8 +160,17 @@ pub mod drum {
         fn pieces(&self) -> Vec<PieceInfo>;
         /// Trigger a pad from the UI: note-on at `velocity`.
         fn trigger(&self, note: u32, velocity: u32);
-        /// The drum mixer surface (channels + sends + buses).
+        /// The drum mixer surface: one [`StripKind::Piece`] per kit piece
+        /// (kick, snare, …) followed by the shared [`StripKind::Bus`] strips.
         fn mixer(&self) -> Vec<MixerStrip>;
+        /// Set a kit piece's fader (dB) — scales all the piece's mics together.
+        fn set_piece_gain(&self, idx: u32, db: f32);
+        /// Mute/unmute a whole kit piece.
+        fn set_piece_mute(&self, idx: u32, muted: bool);
+        /// Solo/unsolo a whole kit piece.
+        fn set_piece_solo(&self, idx: u32, soloed: bool);
+        /// Solo/unsolo a bus strip.
+        fn set_bus_solo(&self, idx: u32, soloed: bool);
         /// Set a channel strip's gain (dB).
         fn set_channel_gain(&self, idx: u32, db: f32);
         /// Mute/unmute a channel strip.

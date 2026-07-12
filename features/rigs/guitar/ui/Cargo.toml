@@ -15,7 +15,9 @@ authors.workspace = true
 dioxus.workspace = true
 lumen-blocks.workspace = true
 signal-guitar-proto.workspace = true
-session-ui.workspace = true
+# Uses `session_ui::PerformanceLayout` (a Dioxus component), so session-ui's
+# `dioxus` must be on — it's optional there, gated behind `web`/`desktop`.
+session-ui = { workspace = true, features = ["web"] }
 # The real FTS-EQ editor core (band model, response math, SVG generators,
 # interaction rules) — wasm-portable; see eq_surface.rs.
 eq-ui.workspace = true

@@ -905,6 +905,7 @@ impl PresetRuntime {
         // Field-destructure so the scratch / bus-acc mutable borrows and the
         // immutable channel/send/meter reads don't collide on `*mixer`.
         let crate::mixer::DrumMixer {
+            pieces,
             channels,
             sends,
             buses,
@@ -914,8 +915,17 @@ impl PresetRuntime {
             meters,
             master_scratch,
             channel_scratch,
+            piece_peak_scratch,
             ..
         } = mixer;
+
+        // Per-piece block-peak accumulator (max over the piece's channels+sends).
+        if piece_peak_scratch.len() != pieces.len() {
+            piece_peak_scratch.resize(pieces.len(), 0.0);
+        }
+        for p in piece_peak_scratch.iter_mut() {
+            *p = 0.0;
+        }
 
         // Mix this preset into its own scratch (so master gain/meter are local).
         if master_scratch.len() != master.len() {
@@ -942,8 +952,15 @@ impl PresetRuntime {
         }
 
         // Direct close-mic channels → channel scratch → FX → * gain → master.
+        // A channel is silent if its own OR its piece's mute is set; solo-in-
+        // place passes it if the channel or its piece is soloed. The piece
+        // fader multiplies the channel gain (uniform per-drum level).
         for (ci, ch) in channels.iter_mut().enumerate() {
-            let active = !ch.muted && (!any_solo || ch.soloed);
+            let piece = pieces.get(ch.engine_idx);
+            let p_muted = piece.map(|p| p.muted).unwrap_or(false);
+            let p_soloed = piece.map(|p| p.soloed).unwrap_or(false);
+            let p_gain = piece.map(|p| p.gain_lin).unwrap_or(1.0);
+            let active = !ch.muted && !p_muted && (!any_solo || ch.soloed || p_soloed);
             let mut peak = 0.0f32;
             if active {
                 if let Some(src) = engines
@@ -960,7 +977,7 @@ impl PresetRuntime {
                     if !ch.fx.is_empty() {
                         ch.fx.process(&mut channel_scratch[..n]);
                     }
-                    let g = ch.gain_lin;
+                    let g = ch.gain_lin * p_gain;
                     for k in 0..n {
                         let v = channel_scratch[k] * g;
                         master_scratch[k] += v;
@@ -972,20 +989,30 @@ impl PresetRuntime {
                 }
             }
             meters.set_channel_peak(ci, peak);
+            if let Some(pp) = piece_peak_scratch.get_mut(ch.engine_idx) {
+                if peak > *pp {
+                    *pp = peak;
+                }
+            }
         }
 
         // Bus-mic sends → bus accumulators. A send routes if its own send or
         // its target bus is soloed (so bus solo is audible).
         for (si, snd) in sends.iter().enumerate() {
             let bus_soloed = buses.get(snd.bus_idx).map(|b| b.soloed).unwrap_or(false);
-            let active = !snd.muted && (!any_solo || snd.soloed || bus_soloed);
+            let piece = pieces.get(snd.engine_idx);
+            let p_muted = piece.map(|p| p.muted).unwrap_or(false);
+            let p_soloed = piece.map(|p| p.soloed).unwrap_or(false);
+            let p_gain = piece.map(|p| p.gain_lin).unwrap_or(1.0);
+            let active =
+                !snd.muted && !p_muted && (!any_solo || snd.soloed || p_soloed || bus_soloed);
             let mut peak = 0.0f32;
             if active {
                 if let Some(src) = engines
                     .get(snd.engine_idx)
                     .and_then(|e| e.mic_scratches().get(snd.mic_idx))
                 {
-                    let lvl = snd.level_lin;
+                    let lvl = snd.level_lin * p_gain;
                     if let Some(bus) = buses.get_mut(snd.bus_idx) {
                         let n = bus.acc.len().min(src.len());
                         for k in 0..n {
@@ -1000,12 +1027,23 @@ impl PresetRuntime {
                 }
             }
             meters.set_send_peak(si, peak);
+            if let Some(pp) = piece_peak_scratch.get_mut(snd.engine_idx) {
+                if peak > *pp {
+                    *pp = peak;
+                }
+            }
         }
 
         // Shared bus tracks: bus.acc → FX → * bus gain → master. A bus reaches
         // master if it or any send feeding it is soloed.
         for (bi, bus) in buses.iter_mut().enumerate() {
-            let pulled = bus.soloed || sends.iter().any(|s| s.bus_idx == bi && s.soloed);
+            // A bus reaches master under solo if it, one of its sends, or the
+            // *piece* feeding one of its sends is soloed.
+            let pulled = bus.soloed
+                || sends.iter().any(|s| {
+                    s.bus_idx == bi
+                        && (s.soloed || pieces.get(s.engine_idx).map(|p| p.soloed).unwrap_or(false))
+                });
             let active = !bus.muted && (!any_solo || pulled);
             let mut peak = 0.0f32;
             if active {
@@ -1025,6 +1063,11 @@ impl PresetRuntime {
                 }
             }
             meters.set_bus_peak(bi, peak);
+        }
+
+        // Publish the per-piece meters (max over each piece's channels + sends).
+        for (i, &pk) in piece_peak_scratch.iter().enumerate() {
+            meters.set_piece_peak(i, pk);
         }
 
         // Drum-mixer master FX → preset master FX → master fader + meter.

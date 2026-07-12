@@ -1483,6 +1483,21 @@ impl SamplerBank {
         self.presets.get(prefix)?.mixer().map(|m| m.meters.clone())
     }
 
+    pub fn set_mixer_piece_gain_db(&mut self, prefix: &str, i: usize, db: f32) {
+        if let Some(m) = self.presets.get_mut(prefix).and_then(|p| p.mixer_mut()) {
+            m.set_piece_gain_db(i, db);
+        }
+    }
+    pub fn set_mixer_piece_mute(&mut self, prefix: &str, i: usize, muted: bool) {
+        if let Some(m) = self.presets.get_mut(prefix).and_then(|p| p.mixer_mut()) {
+            m.set_piece_mute(i, muted);
+        }
+    }
+    pub fn set_mixer_piece_solo(&mut self, prefix: &str, i: usize, soloed: bool) {
+        if let Some(m) = self.presets.get_mut(prefix).and_then(|p| p.mixer_mut()) {
+            m.set_piece_solo(i, soloed);
+        }
+    }
     pub fn set_mixer_channel_gain_db(&mut self, prefix: &str, i: usize, db: f32) {
         if let Some(m) = self.presets.get_mut(prefix).and_then(|p| p.mixer_mut()) {
             m.set_channel_gain_db(i, db);

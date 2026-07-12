@@ -271,32 +271,77 @@ pub fn DrumRigRemote() -> Element {
                     MidiMonitorPanel { events: midi, count: midi_count, title: "MIDI monitor".to_string() }
                     div {
                         span { style: "font-size:11px; color:#71717a; text-transform:uppercase; letter-spacing:0.05em;", "Mixer" }
-                        div { style: "display:flex; flex-wrap:wrap; gap:6px; margin-top:6px;",
+                        div { style: "display:flex; flex-wrap:wrap; gap:6px; margin-top:6px; align-items:flex-end;",
                             for strip in strips.iter() {
                                 {
                                     let rig = rig.clone();
                                     let is_bus = strip.kind == StripKind::Bus;
                                     let pct = (strip.peak.clamp(0.0, 1.0) * 100.0) as u32;
+                                    let mcolor = meter_color(strip.peak);
                                     let accent = if is_bus { "#7c3aed" } else { "#2563eb" };
                                     let muted = strip.muted;
+                                    let soloed = strip.soloed;
                                     let idx = strip.idx;
+                                    let gain_db = strip.gain_db;
+                                    // Fader fill: map -60..+12 dB onto 0..100%.
+                                    let fader_pct = (((gain_db + 60.0) / 72.0).clamp(0.0, 1.0) * 100.0) as u32;
+                                    let (rg, rm, rs) = (rig.clone(), rig.clone(), rig.clone());
                                     rsx!{ div {
                                         key: "{strip.kind:?}-{strip.idx}",
-                                        style: "display:flex; flex-direction:column; align-items:center; gap:4px; width:70px; padding:6px; border-radius:8px; background:#111113; border:1px solid #27272a;",
-                                        span { style: "font-size:9px; color:#a1a1aa; text-align:center; height:24px; overflow:hidden;", "{strip.label}" }
-                                        div { style: "width:8px; height:60px; background:#18181b; border-radius:2px; display:flex; flex-direction:column-reverse; overflow:hidden;",
-                                            div { style: "width:100%; height:{pct}%; background:{accent};" }
+                                        style: format!("display:flex; flex-direction:column; align-items:center; gap:4px; width:64px; padding:6px; border-radius:8px; background:#111113; border:1px solid {};", if is_bus { "#3b2f5c" } else { "#27272a" }),
+                                        span { style: "font-size:9px; color:#e4e4e7; text-align:center; height:22px; overflow:hidden; font-weight:600;", "{strip.label}" }
+                                        // meter + fader side by side
+                                        div { style: "display:flex; gap:5px; height:90px; align-items:flex-end;",
+                                            // peak meter
+                                            div { style: "width:8px; height:90px; background:#18181b; border-radius:2px; display:flex; flex-direction:column-reverse; overflow:hidden;",
+                                                div { style: "width:100%; height:{pct}%; background:{mcolor};" }
+                                            }
+                                            // vertical fader: visible track+fill+thumb, invisible range input on top
+                                            div { style: "position:relative; width:22px; height:90px; display:flex; justify-content:center;",
+                                                div { style: "position:absolute; bottom:0; width:4px; height:100%; background:#27272a; border-radius:2px;" }
+                                                div { style: "position:absolute; bottom:0; width:4px; height:{fader_pct}%; background:{accent}; border-radius:2px;" }
+                                                div { style: "position:absolute; bottom:calc({fader_pct}% - 5px); width:18px; height:10px; background:#52525b; border:1px solid #a1a1aa; border-radius:2px;" }
+                                                input {
+                                                    r#type: "range", min: "-60", max: "12", step: "1",
+                                                    value: "{gain_db}",
+                                                    style: "position:absolute; inset:0; width:100%; height:100%; opacity:0; cursor:pointer;",
+                                                    oninput: move |e| {
+                                                        let rig = rg.clone();
+                                                        if let Ok(db) = e.value().parse::<f32>() {
+                                                            spawn(async move { if let Some(r) = rig {
+                                                                if is_bus { let _ = r.set_bus_gain(idx, db).await; }
+                                                                else { let _ = r.set_piece_gain(idx, db).await; }
+                                                            }});
+                                                        }
+                                                    },
+                                                }
+                                            }
                                         }
-                                        button {
-                                            style: mute_btn(muted),
-                                            onclick: move |_| {
-                                                let rig = rig.clone();
-                                                spawn(async move { if let Some(r) = rig {
-                                                    if is_bus { let _ = r.set_bus_mute(idx, !muted).await; }
-                                                    else { let _ = r.set_channel_mute(idx, !muted).await; }
-                                                } });
-                                            },
-                                            "M"
+                                        span { style: "font-size:8px; color:#71717a;", {format!("{:+.0} dB", gain_db)} }
+                                        // solo / mute
+                                        div { style: "display:flex; gap:3px;",
+                                            button {
+                                                style: solo_btn(soloed),
+                                                onclick: move |_| {
+                                                    let rig = rs.clone();
+                                                    spawn(async move { if let Some(r) = rig {
+                                                        if is_bus { let _ = r.set_bus_solo(idx, !soloed).await; }
+                                                        else { let _ = r.set_piece_solo(idx, !soloed).await; }
+                                                    }});
+                                                },
+                                                "S"
+                                            }
+                                            button {
+                                                style: mute_btn(muted),
+                                                onclick: move |_| {
+                                                    let rig = rm.clone();
+                                                    spawn(async move { if let Some(r) = rig {
+                                                        if is_bus { let _ = r.set_bus_mute(idx, !muted).await; }
+                                                        else { let _ = r.set_piece_mute(idx, !muted).await; }
+                                                    }});
+                                                },
+                                                "M"
+                                            }
                                         }
                                     } }
                                 }
@@ -330,5 +375,10 @@ fn pad_btn(ready: bool) -> String {
 
 fn mute_btn(muted: bool) -> String {
     let (bg, fg) = if muted { ("#7f1d1d", "#fecaca") } else { ("#18181b", "#71717a") };
+    format!("width:20px; height:18px; border-radius:4px; background:{bg}; color:{fg}; border:1px solid #27272a; font-size:10px; cursor:pointer;")
+}
+
+fn solo_btn(soloed: bool) -> String {
+    let (bg, fg) = if soloed { ("#78560f", "#fde68a") } else { ("#18181b", "#71717a") };
     format!("width:20px; height:18px; border-radius:4px; background:{bg}; color:{fg}; border:1px solid #27272a; font-size:10px; cursor:pointer;")
 }

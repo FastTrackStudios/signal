@@ -418,19 +418,20 @@ impl DrumRig for DrumRigBackend {
         let Some(layout) = rig.drum_mixer_layout(KIT) else { return Vec::new() };
         let meters = rig.drum_mixer_meters(KIT);
         let mut strips = Vec::new();
+        // One strip per kit piece (the primary surface: fader + mute + solo,
+        // scaling all the piece's mics together), addressed by engine_idx.
         for eng in &layout.engines {
-            for ch in &eng.channels {
-                strips.push(MixerStrip {
-                    kind: StripKind::Channel,
-                    idx: ch.channel_idx as u32,
-                    label: format!("{} {}", eng.label, ch.mic_label),
-                    gain_db: ch.gain_db,
-                    muted: ch.muted,
-                    soloed: ch.soloed,
-                    peak: meters.as_ref().map(|m| m.channel_peak(ch.channel_idx)).unwrap_or(0.0),
-                });
-            }
+            strips.push(MixerStrip {
+                kind: StripKind::Piece,
+                idx: eng.engine_idx as u32,
+                label: eng.label.clone(),
+                gain_db: eng.piece_gain_db,
+                muted: eng.piece_muted,
+                soloed: eng.piece_soloed,
+                peak: meters.as_ref().map(|m| m.piece_peak(eng.engine_idx)).unwrap_or(0.0),
+            });
         }
+        // Then the shared buses (overhead / room).
         for bus in &layout.buses {
             strips.push(MixerStrip {
                 kind: StripKind::Bus,
@@ -445,6 +446,38 @@ impl DrumRig for DrumRigBackend {
         strips
     }
 
+    fn set_piece_gain(&self, idx: u32, db: f32) {
+        if let Ok(rig) = self.inner.rig.lock() {
+            if let Some(rig) = rig.as_ref() {
+                rig.set_mixer_piece_gain_db(KIT, idx as usize, db);
+            }
+        }
+        self.inner.events.publish(DrumEvent::Mixer(DrumRig::mixer(self)));
+    }
+    fn set_piece_mute(&self, idx: u32, muted: bool) {
+        if let Ok(rig) = self.inner.rig.lock() {
+            if let Some(rig) = rig.as_ref() {
+                rig.set_mixer_piece_mute(KIT, idx as usize, muted);
+            }
+        }
+        self.inner.events.publish(DrumEvent::Mixer(DrumRig::mixer(self)));
+    }
+    fn set_piece_solo(&self, idx: u32, soloed: bool) {
+        if let Ok(rig) = self.inner.rig.lock() {
+            if let Some(rig) = rig.as_ref() {
+                rig.set_mixer_piece_solo(KIT, idx as usize, soloed);
+            }
+        }
+        self.inner.events.publish(DrumEvent::Mixer(DrumRig::mixer(self)));
+    }
+    fn set_bus_solo(&self, idx: u32, soloed: bool) {
+        if let Ok(rig) = self.inner.rig.lock() {
+            if let Some(rig) = rig.as_ref() {
+                rig.set_mixer_bus_solo(KIT, idx as usize, soloed);
+            }
+        }
+        self.inner.events.publish(DrumEvent::Mixer(DrumRig::mixer(self)));
+    }
     fn set_channel_gain(&self, idx: u32, db: f32) {
         if let Ok(rig) = self.inner.rig.lock() {
             if let Some(rig) = rig.as_ref() {

@@ -170,6 +170,7 @@ pub fn mic_is_bus(id: &str) -> bool {
 /// peak amplitude (~0..1+); the UI converts to dB.
 #[derive(Debug)]
 pub struct MixerMeters {
+    pieces: Vec<AtomicU32>,
     channels: Vec<AtomicU32>,
     sends: Vec<AtomicU32>,
     buses: Vec<AtomicU32>,
@@ -177,9 +178,10 @@ pub struct MixerMeters {
 }
 
 impl MixerMeters {
-    fn new(channels: usize, sends: usize, buses: usize) -> Self {
+    fn new(pieces: usize, channels: usize, sends: usize, buses: usize) -> Self {
         let mk = |n| (0..n).map(|_| AtomicU32::new(0)).collect();
         Self {
+            pieces: mk(pieces),
             channels: mk(channels),
             sends: mk(sends),
             buses: mk(buses),
@@ -197,6 +199,10 @@ impl MixerMeters {
         f32::from_bits(slot.load(Ordering::Relaxed))
     }
 
+    /// Current peak (linear) of piece (engine) `i`.
+    pub fn piece_peak(&self, i: usize) -> f32 {
+        self.pieces.get(i).map(Self::read).unwrap_or(0.0)
+    }
     /// Current peak (linear) of direct channel `i`.
     pub fn channel_peak(&self, i: usize) -> f32 {
         self.channels.get(i).map(Self::read).unwrap_or(0.0)
@@ -228,6 +234,11 @@ impl MixerMeters {
     }
     pub(crate) fn set_bus_peak(&self, i: usize, peak: f32) {
         if let Some(s) = self.buses.get(i) {
+            Self::store_peak(s, peak);
+        }
+    }
+    pub(crate) fn set_piece_peak(&self, i: usize, peak: f32) {
+        if let Some(s) = self.pieces.get(i) {
             Self::store_peak(s, peak);
         }
     }
@@ -280,9 +291,26 @@ pub struct Bus {
     pub(crate) acc: Vec<f32>,
 }
 
+/// One kit *piece* (an engine: kick, snare, …) — the primary mixer surface.
+/// A piece owns all of an engine's close-mic channels **and** its bus sends, so
+/// its gain/mute/solo apply uniformly across every mic of that drum regardless
+/// of routing (the piece fader is a true per-drum level). Indexed by
+/// `engine_idx` (its position in this vec).
+#[derive(Debug)]
+pub struct Piece {
+    pub engine_idx: usize,
+    pub label: String,
+    pub gain_db: f32,
+    pub gain_lin: f32,
+    pub muted: bool,
+    pub soloed: bool,
+}
+
 /// Routing config + bus/master accumulators + meters for a drum preset.
 #[derive(Debug)]
 pub struct DrumMixer {
+    /// Per-engine piece strips (kick, snare, …) — the primary control surface.
+    pub pieces: Vec<Piece>,
     pub channels: Vec<DirectChannel>,
     pub sends: Vec<Send>,
     pub buses: Vec<Bus>,
@@ -303,6 +331,9 @@ pub struct DrumMixer {
     /// isolation before mixing into `master_scratch`. Re-sized to the
     /// current block size on first render of each block.
     pub(crate) channel_scratch: Vec<f32>,
+    /// Per-piece block-peak accumulator (`pieces.len()`), so a piece meter is
+    /// the max over all its channels' + sends' contributions in the block.
+    pub(crate) piece_peak_scratch: Vec<f32>,
 }
 
 impl DrumMixer {
@@ -318,7 +349,16 @@ impl DrumMixer {
         let mut bus_idx_of: std::collections::HashMap<String, usize> =
             std::collections::HashMap::new();
 
+        let mut pieces = Vec::with_capacity(engine_mics.len());
         for (engine_idx, (engine_label, mics)) in engine_mics.iter().enumerate() {
+            pieces.push(Piece {
+                engine_idx,
+                label: engine_label.clone(),
+                gain_db: 0.0,
+                gain_lin: 1.0,
+                muted: false,
+                soloed: false,
+            });
             for (mic_idx, mic_id) in mics.iter().enumerate() {
                 if mic_is_bus(mic_id) {
                     let bus_idx = *bus_idx_of.entry(mic_id.clone()).or_insert_with(|| {
@@ -361,8 +401,10 @@ impl DrumMixer {
             }
         }
 
-        let meters = Arc::new(MixerMeters::new(channels.len(), sends.len(), buses.len()));
+        let meters =
+            Arc::new(MixerMeters::new(pieces.len(), channels.len(), sends.len(), buses.len()));
         Self {
+            pieces,
             channels,
             sends,
             buses,
@@ -374,6 +416,7 @@ impl DrumMixer {
             sample_rate,
             master_scratch: Vec::new(),
             channel_scratch: Vec::new(),
+            piece_peak_scratch: Vec::new(),
         }
     }
 
@@ -382,11 +425,29 @@ impl DrumMixer {
         self.channels.is_empty() && self.sends.is_empty()
     }
 
-    /// Any channel / send / bus currently soloed → solo-in-place is active.
+    /// Any piece / channel / send / bus currently soloed → solo-in-place active.
     pub(crate) fn any_solo(&self) -> bool {
-        self.channels.iter().any(|c| c.soloed)
+        self.pieces.iter().any(|p| p.soloed)
+            || self.channels.iter().any(|c| c.soloed)
             || self.sends.iter().any(|s| s.soloed)
             || self.buses.iter().any(|b| b.soloed)
+    }
+
+    pub fn set_piece_gain_db(&mut self, i: usize, db: f32) {
+        if let Some(p) = self.pieces.get_mut(i) {
+            p.gain_db = db;
+            p.gain_lin = db_to_lin(db);
+        }
+    }
+    pub fn set_piece_mute(&mut self, i: usize, muted: bool) {
+        if let Some(p) = self.pieces.get_mut(i) {
+            p.muted = muted;
+        }
+    }
+    pub fn set_piece_solo(&mut self, i: usize, soloed: bool) {
+        if let Some(p) = self.pieces.get_mut(i) {
+            p.soloed = soloed;
+        }
     }
 
     pub fn set_channel_gain_db(&mut self, i: usize, db: f32) {
@@ -605,6 +666,11 @@ pub struct MixerLayout {
 pub struct EngineStrip {
     pub engine_idx: usize,
     pub label: String,
+    /// Piece-level (whole-drum) fader/mute/solo — applies across all this
+    /// engine's channels + sends. Addressed by `engine_idx`.
+    pub piece_gain_db: f32,
+    pub piece_muted: bool,
+    pub piece_soloed: bool,
     pub channels: Vec<ChannelStrip>,
     pub sends: Vec<SendStrip>,
 }
@@ -670,15 +736,20 @@ impl DrumMixer {
         let mut engines: Vec<EngineStrip> = Vec::new();
         let mut idx_of_engine: std::collections::HashMap<usize, usize> =
             std::collections::HashMap::new();
+        let pieces = &self.pieces;
         let engine_slot = |engines: &mut Vec<EngineStrip>,
                            idx_of: &mut std::collections::HashMap<usize, usize>,
                            engine_idx: usize,
                            label: &str|
          -> usize {
             *idx_of.entry(engine_idx).or_insert_with(|| {
+                let p = pieces.get(engine_idx);
                 engines.push(EngineStrip {
                     engine_idx,
                     label: label.to_string(),
+                    piece_gain_db: p.map(|p| p.gain_db).unwrap_or(0.0),
+                    piece_muted: p.map(|p| p.muted).unwrap_or(false),
+                    piece_soloed: p.map(|p| p.soloed).unwrap_or(false),
                     channels: Vec::new(),
                     sends: Vec::new(),
                 });

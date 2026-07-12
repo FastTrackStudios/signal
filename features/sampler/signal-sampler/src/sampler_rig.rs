@@ -1126,6 +1126,21 @@ impl SamplerRig {
         self.bank().lock().ok()?.preset_mixer_meters(id)
     }
 
+    pub fn set_mixer_piece_gain_db(&self, id: &str, idx: usize, db: f32) {
+        if let Ok(mut b) = self.bank().lock() {
+            b.set_mixer_piece_gain_db(id, idx, db);
+        }
+    }
+    pub fn set_mixer_piece_mute(&self, id: &str, idx: usize, muted: bool) {
+        if let Ok(mut b) = self.bank().lock() {
+            b.set_mixer_piece_mute(id, idx, muted);
+        }
+    }
+    pub fn set_mixer_piece_solo(&self, id: &str, idx: usize, soloed: bool) {
+        if let Ok(mut b) = self.bank().lock() {
+            b.set_mixer_piece_solo(id, idx, soloed);
+        }
+    }
     pub fn set_mixer_channel_gain_db(&self, id: &str, idx: usize, db: f32) {
         if let Ok(mut b) = self.bank().lock() {
             b.set_mixer_channel_gain_db(id, idx, db);
