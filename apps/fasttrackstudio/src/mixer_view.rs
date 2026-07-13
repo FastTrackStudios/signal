@@ -1,50 +1,77 @@
 //! Mixer workspace — the seeded Praise stems as a per-track mixer over the
-//! in-process daw-standalone engine. Reads/writes the `Tracks` service via the
-//! `daw::reaper::Reaper` facade handle (sync, routed to the standalone backend)
-//! and hands a flat track list to session-ui's presentational `MixerView`.
+//! in-process daw engine. Talks to the **backend-agnostic `daw` facade**
+//! (`daw::get()` + the async `Project`/`TrackHandle` handles), NOT a
+//! REAPER-specific handle, so the same mixer drives whatever backend is wired
+//! (standalone here, REAPER later). Uses Dioxus async (`use_future`/`spawn`)
+//! rather than `daw::block_on` — the UI thread already drives a runtime, so a
+//! nested `block_on` would panic.
 
 use dioxus::prelude::*;
 
-use daw::reaper::Reaper;
-use daw::service::{ProjectContext, Track, TrackRef, Tracks};
+use daw::service::Track;
 use session_ui::components::MixerView;
 
-/// Refresh the track list from the current project. `Signal` is `Copy`, so we
-/// pass it by value rather than sharing one `FnMut` closure.
-fn reload(mut tracks: Signal<Vec<Track>>) {
-    tracks.set(Tracks::all(&Reaper, ProjectContext::Current));
+/// Read the current project's tracks through the async daw facade.
+async fn fetch_tracks() -> Vec<Track> {
+    let Some(daw) = daw::get() else {
+        return Vec::new();
+    };
+    let Ok(project) = daw.current_project().await else {
+        return Vec::new();
+    };
+    project.tracks().all().await.unwrap_or_default()
+}
+
+/// Resolve a track handle by guid and run `f` on it (fire-and-forget edit).
+async fn with_track<F, Fut>(guid: String, f: F)
+where
+    F: FnOnce(daw::rpc::TrackHandle) -> Fut,
+    Fut: std::future::Future<Output = ()>,
+{
+    if let Some(daw) = daw::get() {
+        if let Ok(project) = daw.current_project().await {
+            if let Ok(Some(th)) = project.tracks().by_guid(&guid).await {
+                f(th).await;
+            }
+        }
+    }
 }
 
 #[component]
 pub fn MixerWorkspace() -> Element {
-    let tracks = use_signal(Vec::<Track>::new);
+    let mut tracks = use_signal(Vec::<Track>::new);
 
-    // Pull the current project's tracks (the seeded stems live here).
-    use_effect(move || reload(tracks));
+    // Initial load of the seeded Praise stems.
+    use_future(move || async move {
+        tracks.set(fetch_tracks().await);
+    });
 
     let on_volume = Callback::new(move |(guid, vol): (String, f64)| {
-        let _ = Tracks::set_volume(&Reaper, ProjectContext::Current, TrackRef::Guid(guid), vol);
-        reload(tracks);
+        spawn(async move {
+            with_track(guid, |th| async move {
+                let _ = th.set_volume(vol).await;
+            })
+            .await;
+            tracks.set(fetch_tracks().await);
+        });
     });
     let on_mute = Callback::new(move |guid: String| {
-        let cur = tracks
-            .read()
-            .iter()
-            .find(|t| t.guid == guid)
-            .map(|t| t.muted)
-            .unwrap_or(false);
-        let _ = Tracks::set_muted(&Reaper, ProjectContext::Current, TrackRef::Guid(guid), !cur);
-        reload(tracks);
+        spawn(async move {
+            with_track(guid, |th| async move {
+                let _ = th.toggle_mute().await;
+            })
+            .await;
+            tracks.set(fetch_tracks().await);
+        });
     });
     let on_solo = Callback::new(move |guid: String| {
-        let cur = tracks
-            .read()
-            .iter()
-            .find(|t| t.guid == guid)
-            .map(|t| t.soloed)
-            .unwrap_or(false);
-        let _ = Tracks::set_soloed(&Reaper, ProjectContext::Current, TrackRef::Guid(guid), !cur);
-        reload(tracks);
+        spawn(async move {
+            with_track(guid, |th| async move {
+                let _ = th.toggle_solo().await;
+            })
+            .await;
+            tracks.set(fetch_tracks().await);
+        });
     });
 
     let list = tracks.read().clone();
