@@ -51,6 +51,8 @@ impl PresetRegistry {
             r.register_code(piano);
         }
         r.register_code(crate::nord::layering_demo());
+        r.register_code(crate::nord::city_grand_preset());
+        r.register_code(crate::nord::city_wurli_preset());
         r
     }
 

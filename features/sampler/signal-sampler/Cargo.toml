@@ -23,6 +23,10 @@ facet       = { workspace = true }
 facet-styx  = { workspace = true }
 facet-toml  = { workspace = true }
 
+# City Grand physical-model voice: loads the swept modal parameter table (JSON).
+serde       = { workspace = true }
+serde_json  = { workspace = true }
+
 # Tagging schema reuse (TagSet / TagCategory / StructuredTag)
 signal-proto.workspace = true
 
@@ -38,6 +42,10 @@ neural-amp-modeler = { workspace = true }
 # Built-in FX — PluginInstance wrappers over the vendored FX DSP cores
 # (features/fx/). Backs `BlockImpl::Native` for EQ / Compressor / … blocks.
 signal-fx = { workspace = true }
+
+# Vendored physically-modeled Wurlitzer 200A (GPL, personal use). Backs the
+# "City Wurli" native voice on the Tonewheel block. See features/rigs/wurli/.
+openwurli-dsp.workspace = true
 
 # Audio I/O
 cpal        = { workspace = true }

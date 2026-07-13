@@ -1,0 +1,261 @@
+//! Single voice: reed + hammer + pickup + decay.
+//!
+//! Signal flow: modal_oscillator -> pickup_hpf -> output
+//! Attack noise mixed in during first ~15 ms.
+use crate::hammer::{AttackNoise, dwell_attenuation, onset_ramp_time};
+use crate::mlp_correction::MlpCorrections;
+use crate::pickup::Pickup;
+use crate::reed::ModalReed;
+use crate::tables::{self, NUM_MODES};
+use crate::variation;
+
+pub struct Voice {
+    reed: ModalReed,
+    pickup: Pickup,
+    noise: AttackNoise,
+    post_pickup_gain: f64,
+    sample_rate: f64,
+    midi_note: u8,
+}
+
+impl Voice {
+    /// Initialize a voice for a given note and velocity.
+    ///
+    /// - `midi_note`: MIDI note number (33-96)
+    /// - `velocity`: 0.0 (pp) to 1.0 (ff)
+    /// - `sample_rate`: audio sample rate
+    /// - `noise_seed`: RNG seed for attack noise (decorrelates simultaneous notes)
+    pub fn note_on(
+        midi_note: u8,
+        velocity: f64,
+        sample_rate: f64,
+        noise_seed: u32,
+        mlp_enabled: bool,
+    ) -> Self {
+        let params = tables::note_params(midi_note);
+
+        let detuned_fundamental = params.fundamental_hz * variation::freq_detune(midi_note);
+
+        let dwell = dwell_attenuation(velocity, detuned_fundamental, &params.mode_ratios);
+        let onset_time = onset_ramp_time(velocity, detuned_fundamental);
+        let amp_offsets = variation::mode_amplitude_offsets(midi_note);
+
+        let mut amplitudes = [0.0f64; NUM_MODES];
+        for (i, amp) in amplitudes.iter_mut().enumerate() {
+            *amp = params.mode_amplitudes[i] * dwell[i] * amp_offsets[i];
+        }
+
+        // Sigmoid → power-law velocity curve (physical hammer force — pre-pickup).
+        // S-curve models progressive felt stiffness: pp barely deflects the reed,
+        // bark onset at ~mf, ff saturates. Then power-law applies register-dependent
+        // dynamic range scaling.
+        // output_scale is applied POST-pickup to decouple volume from nonlinearity.
+        let vel_exp = tables::velocity_exponent(midi_note);
+        let vel_scale = tables::velocity_scurve(velocity).powf(vel_exp);
+        for a in &mut amplitudes {
+            *a *= vel_scale;
+        }
+
+        // MLP v2 per-note corrections (zero per-sample cost — runs once at note-on).
+        // Adjusts mode frequencies, decay rates, and pickup displacement scale
+        // based on learned residuals vs OBM recordings.
+        let corrections = if mlp_enabled {
+            MlpCorrections::infer(midi_note, velocity)
+        } else {
+            MlpCorrections::identity()
+        };
+
+        // Apply frequency corrections to modes 1-5 (mode 0 = fundamental, never corrected)
+        let mut corrected_ratios = params.mode_ratios;
+        for (ratio, &cents) in corrected_ratios[1..NUM_MODES.min(6)]
+            .iter_mut()
+            .zip(&corrections.freq_offsets_cents)
+        {
+            *ratio *= f64::powf(2.0, cents / 1200.0);
+        }
+
+        // Apply decay corrections to modes 1-5
+        let mut corrected_decay = params.mode_decay_rates;
+        for (decay, &ratio) in corrected_decay[1..NUM_MODES.min(6)]
+            .iter_mut()
+            .zip(&corrections.decay_offsets)
+        {
+            *decay /= ratio;
+        }
+
+        // Apply displacement scale correction (from H2/H1 ratio matching)
+        let corrected_ds = tables::pickup_displacement_scale(midi_note) * corrections.ds_correction;
+
+        let reed = ModalReed::new(
+            detuned_fundamental,
+            &corrected_ratios,
+            &amplitudes,
+            &corrected_decay,
+            onset_time,
+            velocity,
+            sample_rate,
+            noise_seed,
+        );
+
+        let mut pickup = Pickup::new(sample_rate);
+        pickup.set_displacement_scale(corrected_ds);
+        let noise = AttackNoise::new(velocity, detuned_fundamental, sample_rate, noise_seed);
+
+        // Post-pickup gain: technician voicing (gap adjustment) affects volume
+        // without changing the nonlinear displacement fraction y.
+        let base_output_scale = tables::output_scale(midi_note, velocity);
+
+        // MLP ds_correction changes pickup drive, which changes output level as a
+        // side effect (the MLP targets H2/H1 spectral shape, not overall level).
+        // Compensate using the pickup RMS proxy ratio so MLP adjusts timbre only.
+        //
+        // The static proxy (Fourier of 1/(1-y)) overestimates the RC pickup's
+        // response at high ds because charge dynamics self-limit peak excursions.
+        // sqrt of the proxy ratio (= half the dB) matches the RC model's smoothing
+        // behavior: measured at C4 (ds 0.75→0.97, proxy predicts +20 dB, actual
+        // +7.9 dB ≈ half in dB) and C6 (ds 0.39→0.59, proxy +5.8 dB, actual +2.8 dB).
+        let base_ds = tables::pickup_displacement_scale(midi_note);
+        let mlp_level_compensation = if (corrections.ds_correction - 1.0).abs() > 1e-6 {
+            let f0 = tables::midi_to_freq(midi_note);
+            const HPF_FC: f64 = 2312.0;
+            let proxy_base = tables::pickup_rms_proxy(base_ds, f0, HPF_FC);
+            let proxy_corrected = tables::pickup_rms_proxy(corrected_ds, f0, HPF_FC);
+            if proxy_corrected > 1e-10 {
+                (proxy_base / proxy_corrected).sqrt()
+            } else {
+                1.0
+            }
+        } else {
+            1.0
+        };
+
+        let post_pickup_gain = base_output_scale * mlp_level_compensation;
+
+        Self {
+            reed,
+            pickup,
+            noise,
+            post_pickup_gain,
+            sample_rate,
+            midi_note,
+        }
+    }
+
+    /// Override the pickup displacement scale.
+    pub fn set_displacement_scale(&mut self, scale: f64) {
+        self.pickup.set_displacement_scale(scale);
+    }
+
+    /// Disable attack noise (for A/B testing of transient artifacts).
+    pub fn disable_attack_noise(&mut self) {
+        self.noise.disable();
+    }
+
+    /// Start the damper (called on note_off).
+    /// Activates progressive damping — higher modes die first.
+    pub fn note_off(&mut self) {
+        self.reed.start_damper(self.midi_note, self.sample_rate);
+    }
+
+    /// Render samples into the output buffer.
+    /// Buffer is cleared first, then filled with the voice output.
+    pub fn render(&mut self, output: &mut [f64]) {
+        output.fill(0.0);
+
+        self.reed.render(output);
+
+        if !self.noise.is_done() {
+            self.noise.render(output);
+        }
+
+        self.pickup.process(output);
+
+        // Apply post-pickup voicing gain (technician gap/level adjustment).
+        // This affects volume without changing bark character.
+        let gain = self.post_pickup_gain;
+        for s in output.iter_mut() {
+            *s *= gain;
+        }
+    }
+
+    /// Check if the voice has decayed to silence.
+    /// Also returns true after 10 seconds of release (safety timeout).
+    pub fn is_silent(&self) -> bool {
+        if self.reed.is_damping() && self.reed.release_seconds(self.sample_rate) > 10.0 {
+            return true;
+        }
+        self.reed.is_silent(-80.0)
+    }
+
+    /// Render a complete note of given duration to a Vec.
+    pub fn render_note(
+        midi_note: u8,
+        velocity: f64,
+        duration_secs: f64,
+        sample_rate: f64,
+    ) -> Vec<f64> {
+        Self::render_note_with_scale(midi_note, velocity, duration_secs, sample_rate, None)
+    }
+
+    /// Render a complete note with optional displacement scale override.
+    pub fn render_note_with_scale(
+        midi_note: u8,
+        velocity: f64,
+        duration_secs: f64,
+        sample_rate: f64,
+        displacement_scale: Option<f64>,
+    ) -> Vec<f64> {
+        let noise_seed = (midi_note as u32).wrapping_mul(2654435761);
+        let mut voice = Voice::note_on(midi_note, velocity, sample_rate, noise_seed, false);
+        if let Some(scale) = displacement_scale {
+            voice.set_displacement_scale(scale);
+        }
+        let num_samples = (duration_secs * sample_rate) as usize;
+        let mut output = vec![0.0f64; num_samples];
+
+        for chunk in output.chunks_mut(1024) {
+            voice.render(chunk);
+        }
+
+        output
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_render_note_produces_audio() {
+        let output = Voice::render_note(60, 0.8, 0.5, 44100.0);
+        let peak = output.iter().map(|x| x.abs()).fold(0.0f64, f64::max);
+        assert!(peak > 0.0, "no audio produced");
+    }
+
+    #[test]
+    fn test_higher_velocity_is_louder() {
+        let soft = Voice::render_note(60, 0.3, 0.1, 44100.0);
+        let loud = Voice::render_note(60, 1.0, 0.1, 44100.0);
+
+        let peak_soft = soft.iter().map(|x| x.abs()).fold(0.0f64, f64::max);
+        let peak_loud = loud.iter().map(|x| x.abs()).fold(0.0f64, f64::max);
+        assert!(
+            peak_loud > peak_soft,
+            "loud ({peak_loud}) should exceed soft ({peak_soft})"
+        );
+    }
+
+    #[test]
+    fn test_deterministic() {
+        let a = Voice::render_note(60, 0.8, 0.1, 44100.0);
+        let b = Voice::render_note(60, 0.8, 0.1, 44100.0);
+        assert_eq!(a, b, "same note should produce identical output");
+    }
+
+    #[test]
+    fn test_different_notes_differ() {
+        let a = Voice::render_note(60, 0.8, 0.1, 44100.0);
+        let b = Voice::render_note(72, 0.8, 0.1, 44100.0);
+        assert_ne!(a, b);
+    }
+}

@@ -1,0 +1,44 @@
+//! OpenWurli DSP library — Wurlitzer 200A signal chain modules.
+//!
+//! Pure DSP math with no audio framework dependencies.
+
+// Reed/voice synthesis
+pub mod filters;
+pub mod hammer;
+pub mod mlp_correction;
+pub mod pickup;
+pub mod reed;
+pub mod tables;
+pub mod variation;
+pub mod voice;
+
+// Preamp circuit simulation (melange-generated DK solver)
+pub mod dk_preamp;
+pub mod dk_preamp_legacy;
+pub mod gen_preamp;
+pub mod oversampler;
+pub mod preamp;
+pub mod tremolo;
+
+// Output stage
+pub mod gen_power_amp;
+#[cfg(not(feature = "legacy-tremolo"))]
+pub mod gen_tremolo;
+pub mod power_amp;
+pub mod speaker;
+
+// Synth engine — voice management + signal chain assembly. Library-friendly
+// API for hosts (nih-plug, oomox, custom) to wrap without copying glue.
+pub mod engine;
+
+// Click-band alias detector — shared between preamp-bench `alias-audit`
+// and the engine-level regression test that guards against re-introducing
+// the v0.4.0-era power-amp aliasing.
+pub mod alias_audit;
+
+// Re-exports for ergonomic single-import use:
+//
+//     use openwurli_dsp::{WurliEngine, VoiceState};
+//
+// Without these, callers would need `openwurli_dsp::engine::WurliEngine`.
+pub use engine::{VoiceState, WurliEngine};
