@@ -392,6 +392,18 @@ impl Voice {
         }
     }
 
+    /// Multiply the playback rate by `scale`. Used to compensate for a sample
+    /// whose native sample rate differs from the engine's output rate: a
+    /// 44.1 kHz sample played on a 48 kHz engine must advance its read head at
+    /// `44100/48000` of the pitched rate, otherwise it sounds `48000/44100`
+    /// (~147 cents) sharp. `Voice::new`/`Voice::with_rate` compute pitch only
+    /// (they don't know the output rate); the spawning engine, which knows
+    /// both, applies this. `scale == 1.0` (native == output) is a no-op.
+    pub fn with_rate_scale(mut self, scale: f64) -> Self {
+        self.rate *= scale;
+        self
+    }
+
     /// Set the mic index this voice routes to. `mic_index` indexes into
     /// `LibrarySpec.mics` in declaration order.
     pub fn data_num_frames(&self) -> usize {
@@ -1163,6 +1175,64 @@ mod tests {
 
     fn voice(gain: f32) -> Voice {
         Voice::new(sample(), 60, VoiceKind::SustainLo, 0, gain, 128)
+    }
+
+    /// A mono sine `freq_hz` recorded at `sr`, `secs` long.
+    fn sine_sample(freq_hz: f64, sr: u32, secs: f64) -> Arc<SampleData> {
+        let n = (sr as f64 * secs) as usize;
+        let frames: Vec<f32> = (0..n)
+            .map(|i| (2.0 * std::f64::consts::PI * freq_hz * i as f64 / sr as f64).sin() as f32)
+            .collect();
+        Arc::new(SampleData {
+            frames: Arc::new(frames),
+            channels: 1,
+            sample_rate: sr,
+            num_frames: n,
+        })
+    }
+
+    /// Estimate frequency by counting zero crossings in a mono buffer.
+    fn freq_of(buf: &[f32], out_sr: u32) -> f64 {
+        let mut crossings = 0usize;
+        for w in buf.windows(2) {
+            if (w[0] <= 0.0 && w[1] > 0.0) || (w[0] >= 0.0 && w[1] < 0.0) {
+                crossings += 1;
+            }
+        }
+        (crossings as f64 / 2.0) / (buf.len() as f64 / out_sr as f64)
+    }
+
+    #[test]
+    fn sample_rate_mismatch_is_pitch_compensated() {
+        // A 441 Hz tone recorded at 44.1 kHz, played on a 48 kHz engine, must
+        // stay 441 Hz — not 441 * 48000/44100 = 480 Hz. `with_rate_scale`
+        // (applied by the engine at spawn) supplies the native/output ratio.
+        const OUT_SR: u32 = 48_000;
+        let data = sine_sample(441.0, 44_100, 0.5);
+
+        // render_block writes interleaved stereo; measure channel 0.
+        let mono = |buf: &[f32]| -> Vec<f32> { buf.iter().step_by(2).copied().collect() };
+
+        // Uncompensated (bug): plays sharp.
+        let mut bug = Voice::with_rate(data.clone(), 60, VoiceKind::SustainLo, 1.0, 1.0, 128);
+        let mut buf = vec![0.0f32; 9_600 * 2];
+        bug.render_block(&mut buf);
+        let sharp = freq_of(&mono(&buf), OUT_SR);
+        assert!(
+            (sharp - 480.0).abs() < 6.0,
+            "uncompensated 44.1k sample should sound ~480 Hz, got {sharp:.1}"
+        );
+
+        // Compensated: back in tune.
+        let mut fixed = Voice::with_rate(data, 60, VoiceKind::SustainLo, 1.0, 1.0, 128)
+            .with_rate_scale(44_100.0 / OUT_SR as f64);
+        let mut buf = vec![0.0f32; 9_600 * 2];
+        fixed.render_block(&mut buf);
+        let tuned = freq_of(&mono(&buf), OUT_SR);
+        assert!(
+            (tuned - 441.0).abs() < 5.0,
+            "compensated sample should sound ~441 Hz, got {tuned:.1}"
+        );
     }
 
     #[test]

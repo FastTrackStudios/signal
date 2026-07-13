@@ -90,6 +90,11 @@ impl SampleEngine {
         } else {
             self.artic_class_for(artic_id)
         };
+        // Compensate for a sample recorded at a different rate than the engine
+        // renders (e.g. Keyscape ships 44.1 kHz packs; the engine runs 48 kHz).
+        // Without this the note sounds `output/native` sharp — ~147 cents for
+        // 44.1→48 kHz. `src_sr == output` is a no-op (e.g. 48 kHz CSS packs).
+        let src_sr = data.sample_rate;
         let voice = Voice::new(
             data,
             note,
@@ -98,6 +103,7 @@ impl SampleEngine {
             gain,
             release_frames,
         )
+        .with_rate_scale(src_sr as f64 / self.sample_rate as f64)
         .with_mic_index(mic_index)
         .with_line(self.cur_line as u8)
         .with_artic_class(artic_class);
