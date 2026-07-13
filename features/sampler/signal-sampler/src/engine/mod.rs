@@ -220,10 +220,6 @@ const ZONE_PITCH_TOLERANCE: u8 = 2;
 /// "release velocity" for a fall-back).
 const LEGATO_FALLBACK_VELOCITY: u8 = 80;
 
-/// Maximum gain for a release-tail voice at MIDI release-velocity 127. The
-/// per-fire gain scales linearly down with release velocity so soft releases
-/// produce a quiet damper click while hard releases ring out.
-const RELEASE_SAMPLE_GAIN_MAX: f32 = 0.35;
 /// Below this release velocity the release sample is suppressed entirely —
 /// avoids producing an audible click on every note-off when a controller's
 /// release-velocity is effectively 0.
@@ -492,6 +488,15 @@ pub struct SampleEngine {
     /// controllers routinely send 0/64 "no info" on note-off, and a soft note
     /// must get a soft release or the key-up/mechanical noise drowns it out.
     note_strike_vel: [u8; 128],
+    /// Release/key-up-noise level *relative to the note body* that played
+    /// (linear; default -10 dB, matching Keyscape). Applied to the body's
+    /// measured peak at note-off so the release always sits under the note.
+    release_gain: f32,
+    /// Mechanical pedal-noise level (linear; default -20 dB). Absolute, scaled
+    /// by recent playing velocity.
+    mech_noise_gain: f32,
+    /// Felt / sustain pedal-noise level (linear; default -20 dB).
+    pedal_noise_gain: f32,
     /// While the sustain pedal is held, libraries with distinct pedal-down
     /// body samples (e.g. Keyscape `lacrped`) swap `articulation` to the
     /// pedal variant. The original (no-pedal) ID lives here so we can snap
@@ -735,6 +740,10 @@ impl SampleEngine {
             cc64_value: 0,
             recent_velocity: 90,
             note_strike_vel: [0; 128],
+            // Keyscape defaults: release -10 dB, mechanical -20 dB, pedal -20 dB.
+            release_gain: db_to_gain(-10.0),
+            mech_noise_gain: db_to_gain(-20.0),
+            pedal_noise_gain: db_to_gain(-20.0),
             no_pedal_articulation: None,
             con_sordino: false,
             legato_enabled: true,
@@ -1046,6 +1055,28 @@ impl SampleEngine {
         self.trace.borrow().clone()
     }
 
+    /// Release/key-up-noise level relative to the note body, in dB (0 = as loud
+    /// as the note; Keyscape default -10). Clamped to a sane range.
+    pub fn set_release_gain_db(&mut self, db: f32) {
+        self.release_gain = db_to_gain(db.clamp(-60.0, 0.0));
+    }
+    /// Mechanical pedal-noise level, dB (Keyscape default -20).
+    pub fn set_mech_noise_gain_db(&mut self, db: f32) {
+        self.mech_noise_gain = db_to_gain(db.clamp(-60.0, 6.0));
+    }
+    /// Felt / sustain pedal-noise level, dB (Keyscape default -20).
+    pub fn set_pedal_noise_gain_db(&mut self, db: f32) {
+        self.pedal_noise_gain = db_to_gain(db.clamp(-60.0, 6.0));
+    }
+    /// Current noise levels as dB (release-relative, mechanical, pedal).
+    pub fn noise_gains_db(&self) -> (f32, f32, f32) {
+        (
+            gain_to_db(self.release_gain),
+            gain_to_db(self.mech_noise_gain),
+            gain_to_db(self.pedal_noise_gain),
+        )
+    }
+
     /// Record one trace event on the active line (no-op unless tracing is on).
     /// Takes `&self` — the trace sits behind a `RefCell` so the `&self`
     /// voice-resolution path (`make_voice`) can record spawns and misses.
@@ -1272,6 +1303,16 @@ pub fn ms_to_frames(ms: u32, sample_rate: u32) -> usize {
 #[inline]
 pub fn db_to_gain(db: f32) -> f32 {
     10f32.powf(db / 20.0)
+}
+
+/// Linear amplitude gain → decibels. Inverse of [`db_to_gain`]; `-inf` for 0.
+#[inline]
+pub fn gain_to_db(gain: f32) -> f32 {
+    if gain <= 0.0 {
+        f32::NEG_INFINITY
+    } else {
+        20.0 * gain.log10()
+    }
 }
 
 /// Per-articulation base `change_vol` makeup (dB) for CSS SHORT articulations,

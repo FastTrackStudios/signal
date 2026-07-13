@@ -190,6 +190,11 @@ pub struct Voice {
     /// so notes decayed to silence under a held sustain pedal stop hogging the
     /// pool and forcing voice-steals that cut still-ringing notes.
     quiet_frames: usize,
+    /// Peak-follower of the voice's own output magnitude (fast attack, slow
+    /// release). Read at note-off so the release/key-up noise can be scaled to
+    /// sit a fixed dB UNDER the note body that actually sounded — a soft note
+    /// is a genuinely quiet recording, so a fixed-level release would drown it.
+    env_peak: f32,
 }
 
 /// One decoded Kontakt ENV_FLEX amplitude envelope, evaluated per frame and
@@ -357,6 +362,7 @@ impl Voice {
             flex: None,
             has_sounded: false,
             quiet_frames: 0,
+            env_peak: 0.0,
         }
     }
 
@@ -404,6 +410,7 @@ impl Voice {
             flex: None,
             has_sounded: false,
             quiet_frames: 0,
+            env_peak: 0.0,
         }
     }
 
@@ -783,6 +790,14 @@ impl Voice {
     /// voice-steals that cut still-ringing notes. A looping/held sustain never
     /// stays quiet, so it never retires this way.
     fn update_decay_retire(&mut self, block_peak: f32, frames: usize) {
+        // Peak-follower: jump up to a louder block instantly, ease down slowly
+        // so a momentary dip doesn't read as "quiet". Tracks the note body's
+        // current loudness for release-gain scaling.
+        if block_peak > self.env_peak {
+            self.env_peak = block_peak;
+        } else {
+            self.env_peak *= ENV_PEAK_DECAY;
+        }
         if self.state == VoiceState::Done {
             return;
         }
@@ -795,6 +810,11 @@ impl Voice {
                 self.state = VoiceState::Done;
             }
         }
+    }
+
+    /// Current peak-follower level of this voice (for release-gain scaling).
+    pub fn env_peak(&self) -> f32 {
+        self.env_peak
     }
 }
 
@@ -814,8 +834,14 @@ fn flush_denormal(x: f32) -> f32 {
 /// far below it in practice by freeing faded notes.
 const MAX_VOICES: usize = 160;
 const STEAL_FADE_FRAMES: usize = 128;
-/// Output magnitude below which a voice is considered inaudible (~ -74 dBFS).
-const RETIRE_FLOOR: f32 = 2.0e-4;
+/// Output magnitude below which a voice is considered inaudible (~ -84 dBFS).
+/// Deliberately deep so a still-audible (even very faint) held note is never
+/// retired — only genuinely-silent tails free their slot.
+const RETIRE_FLOOR: f32 = 6.0e-5;
+/// Per-block decay of the voice peak-follower (~ -0.09 dB/block ≈ 100 ms to
+/// -20 dB at 512-frame blocks) — smooth enough to reflect the body's loudness
+/// at note-off without chasing every sample.
+const ENV_PEAK_DECAY: f32 = 0.99;
 /// How long (frames) a sounded voice must stay below [`RETIRE_FLOOR`] before it
 /// retires and frees its slot. ~0.4 s at 44.1/48 kHz — long enough not to clip
 /// a real tail, short enough to reclaim slots during a busy pedal-held passage.
@@ -916,6 +942,19 @@ impl VoicePool {
                 }
             }
         }
+    }
+
+    /// Loudest current peak-follower level among the note's still-sounding
+    /// body voices (non-release, not Done). Used to scale a note's release tail
+    /// so it sits under the actual body that played. `0.0` if nothing sounds.
+    pub fn note_body_peak(&self, note: u8) -> f32 {
+        self.voices
+            .iter()
+            .filter(|v| {
+                v.note == note && v.kind != VoiceKind::Release && v.state != VoiceState::Done
+            })
+            .map(|v| v.env_peak())
+            .fold(0.0f32, f32::max)
     }
 
     /// Fade any still-*Playing* sustain voice of `note` over `fade_frames` — a

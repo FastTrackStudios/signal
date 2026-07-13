@@ -519,13 +519,22 @@ impl SampleEngine {
             .map(|a| a.id.clone())
             .collect();
         let release_frames = self.release_frames;
-        // Velocity-scaled: soft playing → soft pedal noise. Floor at 0.15 of
-        // full so the mechanism is still faintly present; (v/110)^1.2 keeps a
-        // firm press near full and eases off toward pianissimo.
-        const PEDAL_NOISE_MAX_GAIN: f32 = 0.4;
-        let v_norm = (self.recent_velocity as f32 / 110.0).clamp(0.0, 1.0);
-        let gain = PEDAL_NOISE_MAX_GAIN * v_norm.powf(1.2).max(0.15);
+        // Velocity-scaled: soft playing → soft pedal noise. Floor at 0.2 of
+        // full so the mechanism stays faintly present. Mechanical (`mechped`)
+        // and felt (`ped`) noise have independent base levels (both -20 dB by
+        // default, matching Keyscape).
+        let v_scale = (self.recent_velocity as f32 / 110.0)
+            .clamp(0.0, 1.0)
+            .powf(1.2)
+            .max(0.2);
         for id in ids {
+            let is_mech = id.to_ascii_lowercase().contains("mech");
+            let base = if is_mech {
+                self.mech_noise_gain
+            } else {
+                self.pedal_noise_gain
+            };
+            let gain = base * v_scale;
             let dyn_id = self.dynamic_for_artic(&id, 100);
             if let Some(v) = self.make_voice(
                 &id,
@@ -577,26 +586,31 @@ impl SampleEngine {
             .as_ref()
             .filter(|_| velocity >= RELEASE_SAMPLE_VELOCITY_MIN)
         {
-            // The release tail follows the NOTE-ON strike velocity, not the
-            // note-off velocity: controllers routinely send 0/64 "no info" on
-            // note-off, so keying off it makes every release the same loudness
-            // regardless of how softly the note was played — and a soft note's
-            // quiet body gets buried under a full-volume key-up/mechanical
-            // click ("plays a mech noise, the note doesn't ring"). Both the
-            // dynamic-layer pick and the gain scale by the strike instead.
+            // The release-tail DYNAMIC follows the note-on strike (controllers
+            // send 0/64 "no info" on note-off), and its GAIN sits a fixed dB
+            // UNDER the note body that actually sounded. The body samples encode
+            // velocity by loudness (a soft note is a genuinely quiet recording),
+            // so a fixed-level release drowns a soft note — "plays a mechanical
+            // click, no note". Scaling to the body's measured peak keeps the
+            // key-up/damper noise subordinate at every dynamic (Keyscape's
+            // release default is -10 dB below the note).
             let strike = {
                 let s = self.note_strike_vel[note as usize];
                 if s > 0 { s } else { velocity.max(1) }
             };
             let rel_dyn = self.dynamic_for_artic(rel_id, strike);
-            // (v/127)^1.5 sits between the body's v² curve and a flat ramp — a
-            // pianissimo strike gets a near-silent release, a firm strike a
-            // clear click.
-            let v_norm = (strike as f32 / 127.0).clamp(0.0, 1.0);
-            let gain = RELEASE_SAMPLE_GAIN_MAX * v_norm.powf(1.5);
+            let body_peak = self.voices.note_body_peak(note);
+            // Fall back to a strike-scaled estimate if the body wasn't tracked
+            // (e.g. cache miss) so releases still scale sensibly.
+            let body_ref = if body_peak > 0.0 {
+                body_peak
+            } else {
+                (strike as f32 / 127.0).powf(1.5)
+            };
+            let gain = self.release_gain * body_ref;
             tracing::debug!(
                 target: "signal_sampler::trigger",
-                note, strike, gain, dyn = %rel_dyn, "release tail"
+                note, strike, gain, body_peak, dyn = %rel_dyn, "release tail"
             );
 
             // Pick the release variant by pedal state: pedal-up damps the
