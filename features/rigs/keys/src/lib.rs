@@ -28,6 +28,10 @@ use signal_sampler::MidiMonitor;
 use signal_sampler::node_render::RenderNode;
 use signal_sampler::rig_node::Container;
 
+mod backend;
+pub use backend::KeysRigBackend;
+pub use signal_keys_proto as proto;
+
 /// Build a channel-0 `MidiEvent::NoteOn` from raw note/velocity.
 fn ev_note_on(note: u8, vel: u8) -> midicore::MidiEvent {
     use midicore::{Channel, KeyNumber, MidiEvent, Velocity};
