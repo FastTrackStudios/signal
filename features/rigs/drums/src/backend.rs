@@ -394,8 +394,18 @@ impl DrumRigBackend {
         if let Ok(mut s) = self.inner.state.lock() {
             s.midi_handle = None;
         }
-        let rig = self.inner.rig.lock().unwrap();
-        let Some(rig) = rig.as_ref() else { return };
+        // Clone the rig handle out of the lock (cheap Arc clone) BEFORE opening
+        // MIDI ports: a multi-port interface like the mioXM takes ~2 s to open
+        // all its ports, and holding the rig lock that long would freeze every
+        // RPC handler (status/kit_slots/mixer) → the remote UI times out and
+        // shows "no kit". Cloning lets those keep serving during the attach.
+        let rig = {
+            let g = self.inner.rig.lock().unwrap();
+            match g.as_ref() {
+                Some(r) => r.clone(),
+                None => return,
+            }
+        };
         // Default to omni: no named port → merge *all* MIDI inputs (PipeWire
         // fans every device into one stream). A named port narrows to it.
         let sel = match &port {
