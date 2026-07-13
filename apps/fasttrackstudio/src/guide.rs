@@ -106,8 +106,9 @@ pub const CLICK_SOUNDS: [(&str, ClickSound); 8] = [
     ("Woodblock", ClickSound::Woodblock),
 ];
 
-/// Index into [`CLICK_SOUNDS`] of the active click sound.
-static CLICK_SOUND: AtomicU8 = AtomicU8::new(0);
+/// Index into [`CLICK_SOUNDS`] of the active click sound. Cowbell (index 2)
+/// is the default — it cuts through a live worship mix better than the beep.
+static CLICK_SOUND: AtomicU8 = AtomicU8::new(2);
 
 pub fn click_sound_index() -> usize {
     CLICK_SOUND.load(Ordering::Relaxed) as usize
@@ -172,7 +173,7 @@ pub fn install(audio: &daw_standalone::audio_engine::AudioEngine) {
     let samples_dir = config_dir().join("guide-samples");
     engine
         .bank_mut()
-        .load_click(&samples_dir.join("Click"), ClickSound::Blip, sample_rate);
+        .load_click(&samples_dir.join("Click"), ClickSound::Cowbell, sample_rate);
     engine
         .bank_mut()
         .load_counts(&samples_dir.join("Counts"), "English Female", sample_rate);
