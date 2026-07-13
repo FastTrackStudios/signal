@@ -150,21 +150,13 @@ impl SampleEngine {
         } else {
             velocity_gain(velocity)
         };
-        let mut body_spawned = false;
-        if let Some(v) = self.make_voice(
-            &self.articulation,
-            &self.section,
-            &self.mic,
-            &dynamic,
-            note,
-            "",
-            voice_kind.clone(),
-            gain,
-            release_frames,
-        ) {
-            self.voices.spawn(v);
+        // Blend every body LAYER present for this note+dynamic (the base plus
+        // any `_2` hard-hit layer) as one coherent round-robin take.
+        let primary = self.articulation.clone();
+        let mut body_spawned =
+            self.spawn_layers(&primary, note, &dynamic, voice_kind.clone(), gain, release_frames);
+        if body_spawned {
             self.body_voiced.insert(note);
-            body_spawned = true;
         } else {
             // Primary articulation has no sample for this note (e.g.
             // Keyscape LA Custom: `lacrm` covers notes 21,22,28-108 but
@@ -172,7 +164,6 @@ impl SampleEngine {
             // non-Release OneShot articulation in the spec and use the
             // first that resolves a sample for this note. Without this
             // the user hears only the release-tail click on those notes.
-            let primary = self.articulation.clone();
             let alt_ids: Vec<String> = self
                 .patch
                 .spec
@@ -188,18 +179,8 @@ impl SampleEngine {
                 .collect();
             for alt_id in alt_ids {
                 let alt_dyn = self.dynamic_for_artic(&alt_id, velocity);
-                if let Some(v) = self.make_voice(
-                    &alt_id,
-                    &self.section,
-                    &self.mic,
-                    &alt_dyn,
-                    note,
-                    "",
-                    voice_kind.clone(),
-                    gain,
-                    release_frames,
-                ) {
-                    self.voices.spawn(v);
+                if self.spawn_layers(&alt_id, note, &alt_dyn, voice_kind.clone(), gain, release_frames)
+                {
                     self.body_voiced.insert(note);
                     body_spawned = true;
                     break;
@@ -216,6 +197,60 @@ impl SampleEngine {
                 "note-on triggered NO body voice (only release/click will sound)"
             );
         }
+    }
+
+    /// Spawn every blend LAYER present for `(artic, note, dynamic)` as one
+    /// coherent round-robin take — the way the multi-layer Keyscape samples are
+    /// meant to sound: a body's base + `_2` hard-hit layer together, or a
+    /// release's `rel` + `relm` + `relsl` (+ `rel_2`) together, NOT one picked
+    /// at random. Every layer shares the same RR index so the take is coherent.
+    /// Falls back to a single nearest-match voice when the exact note+dynamic
+    /// has no layers indexed. Returns true if any voice sounded.
+    pub(crate) fn spawn_layers(
+        &mut self,
+        artic: &str,
+        note: u8,
+        dynamic: &str,
+        kind: VoiceKind,
+        gain: f32,
+        release_frames: usize,
+    ) -> bool {
+        let section = self.section.clone();
+        let mic = self.mic.clone();
+        let layers = self
+            .patch
+            .map
+            .layer_directions(&section, artic, &mic, note, dynamic);
+        if layers.is_empty() {
+            // No exact (note, dynamic) layers — single nearest-match voice.
+            if let Some(v) =
+                self.make_voice(artic, &section, &mic, dynamic, note, "", kind, gain, release_frames)
+            {
+                self.voices.spawn(v);
+                return true;
+            }
+            return false;
+        }
+        let rr_idx = self.next_rr(&section, artic, dynamic);
+        let mut any = false;
+        for dir in &layers {
+            if let Some(v) = self.make_voice_at_rr(
+                artic,
+                &section,
+                &mic,
+                dynamic,
+                note,
+                dir,
+                kind.clone(),
+                gain,
+                release_frames,
+                rr_idx,
+            ) {
+                self.voices.spawn(v);
+                any = true;
+            }
+        }
+        any
     }
 
     pub(crate) fn trigger_legzero(&mut self, note: u8, _velocity: u8) {
@@ -565,28 +600,6 @@ impl SampleEngine {
         }
     }
 
-    /// Direction suffix to request for a release-tail articulation, honoring
-    /// the pedal state. Keyscape release packs ship damped (`rel`) and
-    /// let-ring (`relsl`) variants — the damper only mutes the string when the
-    /// pedal is up, so pedal-down note-offs should ring on. Returns `""` for
-    /// non-directional release packs (their samples carry no variant), leaving
-    /// resolution unchanged.
-    pub(crate) fn release_direction(&self, rel_id: &str, pedal_down: bool) -> &'static str {
-        let has = |dir: &str| {
-            self.patch
-                .map
-                .iter()
-                .any(|(k, _)| k.articulation == rel_id && k.direction == dir)
-        };
-        if pedal_down && has("relsl") {
-            "relsl"
-        } else if has("rel") {
-            "rel"
-        } else {
-            ""
-        }
-    }
-
     pub(crate) fn do_note_off_with_release_frames(&mut self, note: u8, velocity: u8, release_frames: usize) {
         // Trigger release trail if the current articulation specifies one.
         let release_artic = self
@@ -626,24 +639,19 @@ impl SampleEngine {
                 note, strike, gain, body_peak, fire, dyn = %rel_dyn, "release tail"
             );
 
-            // Pick the release variant by pedal state: pedal-up damps the
-            // string (`rel`), pedal-down lets it ring (`relsl`). "" for
-            // non-directional packs — resolution unchanged.
-            let rel_dir = self.release_direction(rel_id, self.cc64_held);
             if fire {
-                if let Some(v) = self.make_voice(
+                // Blend ALL release layers (`rel` + `relm` + `relsl` + `rel_2`)
+                // as one coherent take — the composite Keyscape release, rather
+                // than picking one variant.
+                let rel_id = rel_id.clone();
+                self.spawn_layers(
                     &rel_id,
-                    &self.section,
-                    &self.mic,
-                    &rel_dyn,
                     note,
-                    rel_dir,
+                    &rel_dyn,
                     VoiceKind::Release,
                     gain,
                     release_frames,
-                ) {
-                    self.voices.spawn(v);
-                }
+                );
             }
         } else {
             // No release_artic at all — still need to clear the tracker

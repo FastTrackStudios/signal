@@ -4,8 +4,20 @@
 use super::*;
 
 impl SampleEngine {
+    /// Advance and return the round-robin take index for this
+    /// (section, articulation, dynamic).
+    pub(crate) fn next_rr(&self, section: &str, artic_id: &str, dynamic: &str) -> usize {
+        let max_rr = self
+            .patch
+            .spec
+            .articulation(artic_id)
+            .map(|a| a.rr)
+            .unwrap_or(1);
+        self.rr.borrow_mut().next(section, artic_id, dynamic, max_rr)
+    }
+
     /// Build a `Voice` for a resolved sample, or `None` if the sample can't
-    /// be found or loaded.
+    /// be found or loaded. Picks a fresh round-robin take.
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn make_voice(
         &self,
@@ -19,18 +31,29 @@ impl SampleEngine {
         gain: f32,
         release_frames: usize,
     ) -> Option<Voice> {
-        let max_rr = self
-            .patch
-            .spec
-            .articulation(artic_id)
-            .map(|a| a.rr)
-            .unwrap_or(1);
+        let rr_idx = self.next_rr(section, artic_id, dynamic);
+        self.make_voice_at_rr(
+            artic_id, section, mic, dynamic, note, direction, kind, gain, release_frames, rr_idx,
+        )
+    }
 
-        let rr_idx = self
-            .rr
-            .borrow_mut()
-            .next(section, artic_id, dynamic, max_rr);
-
+    /// [`make_voice`](Self::make_voice) at an explicit round-robin index — used
+    /// to spawn several blend LAYERS (e.g. `rel`+`relm`+`relsl`, or a body's
+    /// `_2` layer) as one coherent take rather than advancing the RR per layer.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn make_voice_at_rr(
+        &self,
+        artic_id: &str,
+        section: &str,
+        mic: &str,
+        dynamic: &str,
+        note: u8,
+        direction: &str,
+        kind: VoiceKind,
+        gain: f32,
+        release_frames: usize,
+        rr_idx: usize,
+    ) -> Option<Voice> {
         let (path, sampled_note) = match self
             .patch
             .resolve(section, artic_id, mic, dynamic, note, direction, rr_idx)

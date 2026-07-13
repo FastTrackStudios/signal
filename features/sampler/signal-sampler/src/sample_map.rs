@@ -232,6 +232,36 @@ impl SampleMap {
         self.map.iter()
     }
 
+    /// All distinct `direction` (blend-layer) values present for this
+    /// (section, articulation, mic, note, dynamic), sorted. E.g.
+    /// `["rel", "relm", "relsl"]` for a release, or `["", "2"]` for a body
+    /// that ships a second hard-hit layer. Empty when nothing matches (the
+    /// caller then falls back to a single nearest-match voice).
+    pub fn layer_directions(
+        &self,
+        section: &str,
+        articulation: &str,
+        mic: &str,
+        note: u8,
+        dynamic: &str,
+    ) -> Vec<String> {
+        let mut dirs: Vec<String> = self
+            .map
+            .keys()
+            .filter(|k| {
+                k.section == section
+                    && k.articulation == articulation
+                    && k.mic == mic
+                    && k.note == note
+                    && k.dynamic == dynamic
+            })
+            .map(|k| k.direction.clone())
+            .collect();
+        dirs.sort();
+        dirs.dedup();
+        dirs
+    }
+
     /// All (section_id, articulation_id) pairs present in the map.
     pub fn articulations_present(&self) -> Vec<(String, String)> {
         let mut pairs: Vec<(String, String)> = self
@@ -405,9 +435,17 @@ fn parse_keyscape_stem(stem: &str) -> Option<SampleKey> {
         .saturating_sub(1);
     let articulation = parts[1].to_ascii_lowercase();
     let note = parts[2].parse::<u8>().ok()?;
-    let dynamic = parts[3].split('_').next().unwrap_or(parts[3]).to_string();
+    // The dynamic may carry a body-layer suffix — `126_2` is a SECOND body
+    // layer that blends with `126` at the hardest hits. Keep the layer as the
+    // `direction` discriminator so the two files don't collide on one key (they
+    // did, silently dropping a layer). Base body → direction "".
+    let (dynamic, mut direction) = match parts[3].split_once('_') {
+        Some((base, layer)) => (base.to_string(), layer.to_string()),
+        None => (parts[3].to_string(), String::new()),
+    };
 
-    let mut direction = String::new();
+    // A release variant token (`rel`/`relm`/`relsl`/`rel_2`) is its own layer
+    // and takes precedence over any dynamic-suffix layer.
     for tok in &parts[4..] {
         let lower = tok.to_ascii_lowercase();
         if lower.starts_with("rel") {
@@ -788,6 +826,13 @@ mod tests {
         assert_eq!(key.dynamic, "126");
         assert_eq!(key.note, 60);
         assert_eq!(key.rr, 3);
+        // The `_2` body layer is kept as a distinct blend layer, not dropped
+        // (dropping it collided with the base `126` and silently lost a layer).
+        assert_eq!(key.direction, "2");
+        // Base body has no layer suffix.
+        let base = parse_sample_stem("RR04 lacrm 60 126").unwrap();
+        assert_eq!(base.direction, "");
+        assert_eq!(base.dynamic, "126");
     }
 
     #[test]

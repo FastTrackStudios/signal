@@ -1017,11 +1017,4 @@
         // otherwise every note held under the pedal plays the clunk instead of
         // the instrument tone.
         assert_eq!(eng.find_pedal_pair("lacrm"), None, "noise must never be the body");
-
-        // Release variant follows the pedal: damped (`rel`) when up, let-ring
-        // (`relsl`) when held.
-        assert_eq!(eng.release_direction("lacr", false), "rel");
-        assert_eq!(eng.release_direction("lacr", true), "relsl");
-        // A non-directional release pack (no variants) leaves resolution alone.
-        assert_eq!(eng.release_direction("lacrm", true), "");
     }
