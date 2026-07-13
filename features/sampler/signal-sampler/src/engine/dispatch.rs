@@ -612,28 +612,25 @@ impl SampleEngine {
                 if s > 0 { s } else { velocity.max(1) }
             };
             let rel_dyn = self.dynamic_for_artic(rel_id, strike);
+            // Scale the release STRICTLY to the note body that is still
+            // sounding. A note held until it decays (or the voice auto-retired)
+            // has a body_peak near zero — firing a release then is a "thump"
+            // out of nowhere on a note that already faded. So gate on the body
+            // still being audible; no guessing from strike velocity.
             let body_peak = self.voices.note_body_peak(note);
-            // Fall back to a strike-scaled estimate if the body wasn't tracked
-            // (e.g. cache miss) so releases still scale sensibly.
-            let body_ref = if body_peak > 0.0 {
-                body_peak
-            } else {
-                (strike as f32 / 127.0).powf(1.5)
-            };
-            let gain = self.release_gain * body_ref;
+            let gain = self.release_gain * body_peak;
+            let had_body = self.body_voiced.remove(&note);
+            let fire = had_body && body_peak >= RELEASE_BODY_FLOOR;
             tracing::debug!(
                 target: "signal_sampler::trigger",
-                note, strike, gain, body_peak, dyn = %rel_dyn, "release tail"
+                note, strike, gain, body_peak, fire, dyn = %rel_dyn, "release tail"
             );
 
             // Pick the release variant by pedal state: pedal-up damps the
             // string (`rel`), pedal-down lets it ring (`relsl`). "" for
             // non-directional packs — resolution unchanged.
             let rel_dir = self.release_direction(rel_id, self.cc64_held);
-            // Only fire release-tail if the body voice actually sounded —
-            // otherwise the user hears just the mechanical key-up click in
-            // isolation (a body-cache miss with no audible attack).
-            if self.body_voiced.remove(&note) {
+            if fire {
                 if let Some(v) = self.make_voice(
                     &rel_id,
                     &self.section,

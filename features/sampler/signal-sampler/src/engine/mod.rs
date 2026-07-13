@@ -220,6 +220,10 @@ const ZONE_PITCH_TOLERANCE: u8 = 2;
 /// "release velocity" for a fall-back).
 const LEGATO_FALLBACK_VELOCITY: u8 = 80;
 
+/// Note-body peak (linear, ~-54 dBFS) below which a note-off fires NO release
+/// tail: the note has already decayed to near-silence, so a release would just
+/// be a "thump" on a gone note.
+const RELEASE_BODY_FLOOR: f32 = 0.002;
 /// Below this release velocity the release sample is suppressed entirely —
 /// avoids producing an audible click on every note-off when a controller's
 /// release-velocity is effectively 0.
