@@ -43,6 +43,8 @@ signal = [
     "dep:signal-guitar-ui",
     "dep:signal-drums-proto",
     "dep:signal-drums-ui",
+    "dep:signal-keys-proto",
+    "dep:signal-keys-ui",
     "dep:session-ui",
     # The embedded rig remote (rig_view.rs) — vox over a native WebSocket —
     # and the engine supervisor (engines.rs).
@@ -61,6 +63,7 @@ signal = [
     # here is a no-op on the web build.
     "dep:signal-guitar",
     "dep:signal-drums",
+    "dep:signal-keys",
     "dep:signal-sampler",
     "dep:axum",
     "dep:tower-http",
@@ -111,6 +114,8 @@ signal-guitar-proto = { workspace = true, optional = true }
 signal-guitar-ui = { workspace = true, optional = true }
 signal-drums-proto = { workspace = true, optional = true }
 signal-drums-ui = { workspace = true, optional = true }
+signal-keys-proto = { workspace = true, optional = true }
+signal-keys-ui = { workspace = true, optional = true }
 
 # Session domain (setlists / charts / daw) — embedded in-process.
 session = { workspace = true, optional = true }
@@ -165,6 +170,7 @@ tokio = { workspace = true, optional = true }
 #    apps/signal-engine, native only ─────────────────────────────────────
 signal-guitar = { workspace = true, optional = true }
 signal-drums = { workspace = true, optional = true }
+signal-keys = { workspace = true, optional = true }
 signal-sampler = { workspace = true, optional = true }
 axum = { workspace = true, optional = true }
 tower-http = { workspace = true, optional = true }
@@ -186,6 +192,7 @@ signal-sampler = { workspace = true, features = ["pipewire"], optional = true }
 # libjack at run time — the same host cpal's audio already relies on.
 signal-guitar = { workspace = true, features = ["pipewire"], optional = true }
 signal-drums = { workspace = true, features = ["pipewire"], optional = true }
+signal-keys = { workspace = true, features = ["pipewire"], optional = true }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 dioxus = { workspace = true, default-features = true, features = ["web", "launch"] }
