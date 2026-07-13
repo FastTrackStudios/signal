@@ -63,11 +63,25 @@ impl KeysRigBackend {
     /// Build the backend and scan the Keyscape library. Does not open audio.
     pub fn new() -> Self {
         let (presets, specs) = scan_keyscape();
-        tracing::info!(presets = presets.len(), "keys rig: scanned library");
+        // Default patch: the LA Custom Rhodes if present, else the first found.
+        let default_idx = presets
+            .iter()
+            .position(|p| p.name == "Rhodes - LA Custom")
+            .or_else(|| {
+                presets.iter().position(|p| {
+                    let n = p.name.to_ascii_lowercase();
+                    n.contains("rhodes") && n.contains("la custom")
+                })
+            });
+        tracing::info!(
+            presets = presets.len(),
+            default = default_idx.and_then(|i| presets.get(i)).map(|p| p.name.as_str()).unwrap_or("<first>"),
+            "keys rig: scanned library"
+        );
         let backend = Self {
             inner: Arc::new(Inner {
                 rig: Mutex::new(None),
-                state: Mutex::new(State { presets, specs, ..State::default() }),
+                state: Mutex::new(State { presets, specs, loaded: default_idx, ..State::default() }),
                 events: PubSub::sliding(64),
                 pump_started: AtomicBool::new(false),
             }),
