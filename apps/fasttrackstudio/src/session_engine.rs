@@ -102,6 +102,75 @@ pub fn bootstrap_blocking() -> eyre::Result<()> {
     Ok(())
 }
 
+/// Elevation Worship "Praise" multitrack stems, grouped for the mixer. The
+/// audio lives outside the repo; if the folder is absent we skip seeding and
+/// the setlist still loads (markers/sections only). Stems are mmap'd, so this
+/// is near-instant even for 23×78 MB files.
+fn seed_praise_media(standalone: &Standalone, project_guid: &str) {
+    use daw_standalone::media_seed::{StemSpec, seed_media_tracks};
+
+    // (display name, filename, group)
+    const STEMS: &[(&str, &str, &str)] = &[
+        ("Click", "01 - Click.wav", "Guide"),
+        ("Cue", "02 - Cue.wav", "Guide"),
+        (
+            "Original Track",
+            "03 - Elevation Worship - Praise (Original Track).wav",
+            "Reference",
+        ),
+        ("BGVS", "04 - BGVS.wav", "Vocals"),
+        ("BGVS 2", "05 - BGVS 2.wav", "Vocals"),
+        ("Choir", "06 - Choir.wav", "Vocals"),
+        ("Organ", "07 - Organ.wav", "Keys"),
+        ("Keys", "08 - Keys.wav", "Keys"),
+        ("Piano", "09 - Piano.wav", "Keys"),
+        ("Electric Bass 1", "10 - Electric Bass 1.wav", "Bass"),
+        ("Electric Bass 2", "11 - Electric Bass 2.wav", "Bass"),
+        ("Synth Bass", "12 - Synth Bass.wav", "Bass"),
+        ("Acoustic Guitar", "13 - Acoustic Guitar.wav", "Guitars"),
+        ("Electric Guitar 1", "14 - Electric Guitar 1.wav", "Guitars"),
+        ("Electric Guitar 2", "15 - Electric Guitar 2.wav", "Guitars"),
+        ("Electric Guitar 3", "16 - Electric Guitar 3.wav", "Guitars"),
+        ("Electric Guitar 4", "17 - Electric Guitar 4.wav", "Guitars"),
+        ("Electric Guitar 5", "18 - Electric Guitar 5.wav", "Guitars"),
+        ("Electric Guitar 6", "19 - Electric Guitar 6.wav", "Guitars"),
+        ("Electric Guitar 7", "20 - Electric Guitar 7.wav", "Guitars"),
+        ("Loop", "21 - Loop.wav", "Tracks"),
+        ("Hand Percussion", "22 - Hand Percussion.wav", "Percussion"),
+        ("Percussion", "23 - Percussion.wav", "Percussion"),
+    ];
+
+    // Resolve the stems dir: env override, else the known Downloads location.
+    let dir = std::env::var("FTS_PRAISE_STEMS").map(std::path::PathBuf::from).unwrap_or_else(|_| {
+        let home = std::env::var("HOME").unwrap_or_default();
+        std::path::PathBuf::from(home).join(
+            "Downloads/Elevation Worship - Praise-20260712T200150Z-2-001/Elevation Worship - Praise/- MultiTracks",
+        )
+    });
+    if !dir.is_dir() {
+        tracing::info!("Praise stems not found at {dir:?} — seeding markers only");
+        return;
+    }
+
+    let stems: Vec<StemSpec> = STEMS
+        .iter()
+        .map(|(name, file, group)| {
+            StemSpec::new(*name, dir.join(file).to_string_lossy().to_string(), Some(group))
+        })
+        .collect();
+
+    // Praise is the first song: region starts at t=0, stems aligned to it.
+    // Length generously covers the ~276 s song (render clips to source frames).
+    let report = seed_media_tracks(standalone, project_guid, &stems, 0.0, 300.0);
+    tracing::info!(
+        "seeded Praise media: {} tracks / {} folders, {} sources loaded, {} failed",
+        report.tracks_created,
+        report.folders_created,
+        report.materialize.loaded,
+        report.materialize.failed.len(),
+    );
+}
+
 async fn bootstrap(engine_rt: tokio::runtime::Handle) -> eyre::Result<SessionEngine> {
     // 1. Standalone backend seeded with a playable demo setlist
     //    (3 songs with count-ins, sections, markers — see
@@ -114,6 +183,10 @@ async fn bootstrap(engine_rt: tokio::runtime::Handle) -> eyre::Result<SessionEng
     });
     stamp_demo_setlist_with(&standalone).map_err(|e| eyre::eyre!("stamp demo setlist: {e:?}"))?;
     tracing::info!("demo setlist stamped into standalone project '{guid}'");
+
+    // Seed the real Praise multitrack stems as grouped, playable tracks (when
+    // the audio is present on this machine — the demo still works without it).
+    seed_praise_media(&standalone, &guid);
 
     // 2. In-process daw facade over a vox memory link. The setlist
     //    service's build/hydration path goes through `daw::get()`, so

@@ -71,6 +71,7 @@ session = [
     "dep:session-proto",
     "dep:session-ui",
     "dep:keyflow",
+    "dep:keyflow-sync",
     "dep:session",
     "dep:session-guide",
     "dep:daw",
@@ -108,6 +109,10 @@ session-proto = { workspace = true, optional = true }
 # output through daw-standalone's aux post-render hook.
 session-guide = { workspace = true, optional = true }
 keyflow = { workspace = true, optional = true }
+# Lyric-sync sidecar (TimingMap) reader for the Lyric Sync workspace. Lean
+# default features only — no onnx/whisper; alignment is produced offline by
+# the `kf` CLI, the app just loads + edits the resulting sidecar.
+keyflow-sync = { workspace = true, optional = true }
 
 # DAW domain — facade (daw::get / init_from_parts / LayerRouter) + the
 # standalone backend that plays the setlist without REAPER. "audio" is
