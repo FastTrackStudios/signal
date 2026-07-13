@@ -1822,10 +1822,12 @@ impl SampleEngine {
                 self.cc64_value = value;
                 self.cc64_held = value >= 64;
 
-                // Sustain-pedal articulation swap (Keyscape-style libraries
-                // ship distinct pedal-down body samples — e.g. `lacrm` strike
-                // becomes `lacrped` while pedal is held). Keep `lacrm` as the
-                // "no-pedal" default and snap back when the pedal lifts.
+                // Sustain-pedal articulation swap: some libraries ship a full
+                // distinct pedal-down BODY keymap (a different string
+                // resonance) that replaces the played articulation while the
+                // pedal is held. `find_pedal_pair` returns only genuine
+                // full-span bodies — pedal NOISE (`lacrped`) is handled
+                // separately below so it never masquerades as the body.
                 if !was_held && self.cc64_held {
                     let restored = self.voices.repedal_releasing();
                     if restored > 0 {
@@ -1837,11 +1839,11 @@ impl SampleEngine {
                     if let Some(pedal_id) = self.find_pedal_pair(&self.articulation) {
                         self.no_pedal_articulation = Some(self.articulation.clone());
                         self.articulation = pedal_id;
-                        // Mechanical pedal-down click — one-shot ambience layer
-                        // (e.g. `lacrmechped`). Best-effort: skip silently if
-                        // the pack doesn't ship one.
-                        self.trigger_mechanical_pedal();
                     }
+                    // Felt + mechanical pedal-down noise — one-shot ambience
+                    // layer, independent of any body swap. No-ops silently
+                    // when the pack ships no pedal-noise samples.
+                    self.trigger_pedal_noise(true);
                 } else if was_held && !self.cc64_held {
                     if let Some(orig) = self.no_pedal_articulation.take() {
                         self.articulation = orig;
@@ -1849,6 +1851,8 @@ impl SampleEngine {
                     if self.patch.is_zoned() {
                         self.trigger_event_zones(ZoneTrigger::PedalUp, value);
                     }
+                    // Pedal-up release noise (damper drop + mechanical return).
+                    self.trigger_pedal_noise(false);
                 }
 
                 if was_held && !self.cc64_held {

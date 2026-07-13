@@ -939,3 +939,89 @@
         assert!(eng.zone_selected(z, 65, 100, ZoneTrigger::Attack));
         assert!(!eng.zone_selected(z, 40, 100, ZoneTrigger::Attack));
     }
+
+    /// Build a `SampleEngine` from an inline styx spec plus a synthetic sample
+    /// map (parsed from filenames — no files touched).
+    fn engine_from_styx_and_paths(styx: &str, paths: Vec<std::path::PathBuf>) -> SampleEngine {
+        let spec = crate::LibrarySpec::from_styx(styx).expect("parse styx");
+        let mut patch = crate::PlayerPatch::from_spec(spec);
+        patch.map = crate::SampleMap::from_paths(paths);
+        SampleEngine::new(patch, 48_000, "main", "Main")
+    }
+
+    #[test]
+    fn pedal_pair_rejects_noise_body_and_release_follows_pedal() {
+        // Rhodes-style multi-sample pack: a full-keyboard body (`lacrm`), a
+        // directional release (`lacr`, rel/relsl variants), and a pedal-NOISE
+        // articulation (`lacrped`) whose only "notes" are the pedal-state
+        // index (0 = up, 1 = down).
+        let styx = "name \"r\"\n\
+             sections ({\n\
+               id main\n\
+               label m\n\
+               note_grid ()\n\
+               lowest_note C-1\n\
+               highest_note C8\n\
+             })\n\
+             mics ({\n\
+               id Main\n\
+               label Main\n\
+               kind blended\n\
+             })\n\
+             articulations (\n\
+             {\n\
+               id lacr\n\
+               label \"lacr\"\n\
+               kind @Release\n\
+               dynamics (\n\
+                 \"100\"\n\
+               )\n\
+               rr 1\n\
+               dyn_ctrl velocity\n\
+             } {\n\
+               id lacrm\n\
+               label \"lacrm\"\n\
+               kind @OneShot\n\
+               dynamics (\n\
+                 \"100\"\n\
+               )\n\
+               rr 1\n\
+               dyn_ctrl velocity\n\
+               release_artic lacr\n\
+             } {\n\
+               id lacrped\n\
+               label \"lacrped\"\n\
+               kind @OneShot\n\
+               dynamics (\n\
+                 \"127\"\n\
+               )\n\
+               rr 1\n\
+               dyn_ctrl velocity\n\
+             })\n";
+        let mut paths: Vec<std::path::PathBuf> = Vec::new();
+        for n in 21u8..=108 {
+            paths.push(format!("RR01 lacrm {n} 100.flac").into());
+            paths.push(format!("RR01 lacr {n} 100 rel.flac").into());
+            paths.push(format!("RR01 lacr {n} 100 relsl.flac").into());
+        }
+        // Pedal noise: two fixed samples at the pedal-state index.
+        paths.push("RR01_SL01 LACR Ped_0 r03.flac".into());
+        paths.push("RR01_SL01 LACR Ped_1 r03.flac".into());
+        let eng = engine_from_styx_and_paths(styx, paths);
+
+        // The body spans the keyboard; the pedal noise spans ≤2 notes.
+        assert!(eng.artic_note_span("lacrm") >= 80, "body should span the keyboard");
+        assert!(eng.artic_note_span("lacrped") <= 2, "pedal noise spans ≤2 notes");
+
+        // find_pedal_pair must NOT mistake pedal noise for a pedal-down body —
+        // otherwise every note held under the pedal plays the clunk instead of
+        // the instrument tone.
+        assert_eq!(eng.find_pedal_pair("lacrm"), None, "noise must never be the body");
+
+        // Release variant follows the pedal: damped (`rel`) when up, let-ring
+        // (`relsl`) when held.
+        assert_eq!(eng.release_direction("lacr", false), "rel");
+        assert_eq!(eng.release_direction("lacr", true), "relsl");
+        // A non-directional release pack (no variants) leaves resolution alone.
+        assert_eq!(eng.release_direction("lacrm", true), "");
+    }

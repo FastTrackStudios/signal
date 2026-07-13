@@ -409,22 +409,56 @@ impl SampleEngine {
             .map(|a| a.id.clone())
     }
 
-    /// Find a sustain-pedal-down sibling of `base` in the spec.
+    /// Number of distinct-note span an articulation must cover to count as a
+    /// real playable BODY (rather than a fixed pedal-noise layer). Keyscape
+    /// pedal-noise packs (`lacrped`, `wingpedal…`) index the pedal STATE as
+    /// the sample "note" and so span only 1–2 notes; a genuine pedal-down
+    /// body spans most of the keyboard.
+    const PEDAL_BODY_MIN_SPAN: u8 = 12;
+
+    /// Keyboard span (highest − lowest sampled note + 1) of an articulation in
+    /// the sample map, or 0 if it has no samples. Cheap max/min scan — no
+    /// allocation — invoked only on pedal transitions, never per-sample.
+    pub(crate) fn artic_note_span(&self, artic_id: &str) -> u8 {
+        let (mut lo, mut hi, mut any) = (u8::MAX, 0u8, false);
+        for (k, _) in self.patch.map.iter() {
+            if k.articulation == artic_id {
+                lo = lo.min(k.note);
+                hi = hi.max(k.note);
+                any = true;
+            }
+        }
+        if any {
+            hi - lo + 1
+        } else {
+            0
+        }
+    }
+
+    /// Find a sustain-pedal-down BODY sibling of `base` in the spec — a full
+    /// alternate keymap that replaces the played articulation while the pedal
+    /// is held (some libraries ship a distinct pedal-down resonance body).
     ///
-    /// Naming conventions across libraries vary; we try in priority:
-    ///   1. `<base>ped`            — `lacrm` → `lacrmped`
+    /// Candidates must span a real keyboard range ([`Self::PEDAL_BODY_MIN_SPAN`]):
+    /// pedal-NOISE articulations (`lacrped`, `wingpedal…`) map only 1–2 fixed
+    /// samples and must NOT replace the body — otherwise every note held under
+    /// the pedal plays the pedal clunk instead of the instrument. Pedal noise
+    /// is handled separately by [`Self::trigger_pedal_noise`].
+    ///
+    /// Naming conventions vary; we try in priority:
+    ///   1. `<base>ped`                              — `lacrm` → `lacrmped`
     ///   2. `<base>` with trailing `m` removed + `ped` — `lacrm` → `lacrped`
-    ///   3. any non-Release / non-mechanical articulation containing
-    ///      `ped` (case-insensitive) — generic fallback
-    /// Mechanical-pedal articulations (`mech`/`mechped`) are excluded so the
-    /// pedal-down body and the pedal-down mechanical action stay separate.
+    ///   3. any non-Release / non-mechanical articulation containing `ped`
+    /// Mechanical-pedal articulations (`mech`) are excluded.
     pub(crate) fn find_pedal_pair(&self, base: &str) -> Option<String> {
+        let is_body = |id: &str| self.artic_note_span(id) >= Self::PEDAL_BODY_MIN_SPAN;
         let id = |s: &str| -> Option<String> {
             self.patch
                 .spec
                 .articulation(s)
                 .filter(|a| !matches!(a.kind, ArticulationKind::Release))
                 .map(|a| a.id.clone())
+                .filter(|id| is_body(id))
         };
         if let Some(v) = id(&format!("{base}ped")) {
             return Some(v);
@@ -445,42 +479,64 @@ impl SampleEngine {
                     && !a.id.to_ascii_lowercase().contains("mech")
             })
             .map(|a| a.id.clone())
-            .next()
+            .find(|id| is_body(id))
     }
 
-    /// Fire the mechanical pedal-down click (e.g. `lacrmechped`) once,
-    /// at a moderate gain. Pure ambience layer — silently no-ops when the
-    /// pack doesn't ship a mechanical-pedal articulation.
-    pub(crate) fn trigger_mechanical_pedal(&mut self) {
-        let id = self
+    /// Fire every pedal-NOISE articulation (felt `lacrped` + mechanical
+    /// `lacrmechped`, `wingpedal…`) once as a one-shot ambience layer when the
+    /// sustain pedal crosses. These packs index the pedal STATE as the sample
+    /// "note" (0 = up/release, 1 = down/press), so `down` selects which. A
+    /// noise artic is one that fails the body-span test. Silently no-ops when
+    /// the pack ships no pedal noise.
+    pub(crate) fn trigger_pedal_noise(&mut self, down: bool) {
+        let state_note = u8::from(down); // 1 = pedal down/press, 0 = up/release
+        let ids: Vec<String> = self
             .patch
             .spec
             .articulations
             .iter()
-            .find(|a| {
-                a.id.to_ascii_lowercase().contains("mech")
-                    && a.id.to_ascii_lowercase().contains("ped")
-            })
-            .map(|a| a.id.clone());
-        let Some(mech_id) = id else {
-            return;
-        };
-        let dyn_id = self.dynamic_for_artic(&mech_id, 100);
+            .filter(|a| a.id.to_ascii_lowercase().contains("ped"))
+            .filter(|a| self.artic_note_span(&a.id) < Self::PEDAL_BODY_MIN_SPAN)
+            .map(|a| a.id.clone())
+            .collect();
         let release_frames = self.release_frames;
-        // Note doesn't matter — these patches map a fixed sample to any
-        // input note, so we pick a stable middle-C anchor.
-        if let Some(v) = self.make_voice(
-            &mech_id,
-            &self.section,
-            &self.mic,
-            &dyn_id,
-            60,
-            "",
-            VoiceKind::Release,
-            0.4,
-            release_frames,
-        ) {
-            self.voices.spawn(v);
+        for id in ids {
+            let dyn_id = self.dynamic_for_artic(&id, 100);
+            if let Some(v) = self.make_voice(
+                &id,
+                &self.section,
+                &self.mic,
+                &dyn_id,
+                state_note,
+                "",
+                VoiceKind::Release,
+                0.4,
+                release_frames,
+            ) {
+                self.voices.spawn(v);
+            }
+        }
+    }
+
+    /// Direction suffix to request for a release-tail articulation, honoring
+    /// the pedal state. Keyscape release packs ship damped (`rel`) and
+    /// let-ring (`relsl`) variants — the damper only mutes the string when the
+    /// pedal is up, so pedal-down note-offs should ring on. Returns `""` for
+    /// non-directional release packs (their samples carry no variant), leaving
+    /// resolution unchanged.
+    pub(crate) fn release_direction(&self, rel_id: &str, pedal_down: bool) -> &'static str {
+        let has = |dir: &str| {
+            self.patch
+                .map
+                .iter()
+                .any(|(k, _)| k.articulation == rel_id && k.direction == dir)
+        };
+        if pedal_down && has("relsl") {
+            "relsl"
+        } else if has("rel") {
+            "rel"
+        } else {
+            ""
         }
     }
 
@@ -514,6 +570,10 @@ impl SampleEngine {
             let gain = RELEASE_SAMPLE_GAIN_MAX * v_norm.powf(1.5);
             tracing::debug!(note, velocity, gain, dyn = %rel_dyn, "release sample");
 
+            // Pick the release variant by pedal state: pedal-up damps the
+            // string (`rel`), pedal-down lets it ring (`relsl`). "" for
+            // non-directional packs — resolution unchanged.
+            let rel_dir = self.release_direction(rel_id, self.cc64_held);
             // Only fire release-tail if the body voice actually sounded —
             // otherwise the user hears just the mechanical key-up click in
             // isolation (a body-cache miss with no audible attack).
@@ -524,7 +584,7 @@ impl SampleEngine {
                     &self.mic,
                     &rel_dyn,
                     note,
-                    "",
+                    rel_dir,
                     VoiceKind::Release,
                     gain,
                     release_frames,
