@@ -44,6 +44,11 @@ struct State {
     pieces: Vec<PieceInfo>,
     /// Full engine instrument ids ("kit:kick", …) for preload polling.
     piece_ids: Vec<String>,
+    /// The engine actually loaded in each slot `(slot_id, abs .signalengine
+    /// path)` — the source of truth for the kit designer + kit view, so a swap
+    /// is reflected consistently everywhere (re-reading the preset file would
+    /// show the pre-swap engine).
+    engines: Vec<(String, PathBuf)>,
     input_map: InputMap,
     midi_port: Option<String>,
     midi_handle: Option<MidiInputHandle>,
@@ -211,6 +216,7 @@ impl DrumRigBackend {
             }
         };
 
+        let engines = engines_from_preset(&path);
         if let Ok(mut s) = self.inner.state.lock() {
             for (i, k) in s.kits.iter_mut().enumerate() {
                 k.loaded = i == index;
@@ -218,6 +224,7 @@ impl DrumRigBackend {
             s.loaded = Some(index);
             s.piece_ids = piece_ids;
             s.pieces = pieces;
+            s.engines = engines;
         }
         self.reattach_midi();
         self.paint_light_guide();
@@ -257,8 +264,17 @@ impl DrumRigBackend {
                 Ok(ids) => {
                     rig.set_midi_channel(KIT, GM_DRUM_CHANNEL);
                     rig.set_default_instrument(KIT);
+                    let abs = {
+                        let p = PathBuf::from(&engine_path);
+                        if p.is_absolute() { p } else { dir.join(p) }
+                    };
                     if let Ok(mut s) = self.inner.state.lock() {
                         s.piece_ids = ids;
+                        // Reflect the swap in the loaded-engine map (so the kit
+                        // designer + kit view show the new instrument).
+                        if let Some(e) = s.engines.iter_mut().find(|(id, _)| *id == slot_id) {
+                            e.1 = abs;
+                        }
                     }
                 }
                 Err(e) => {
@@ -323,6 +339,7 @@ impl DrumRigBackend {
                 }
             }
         };
+        let engines = engines_from_preset(&path);
         if let Ok(mut s) = self.inner.state.lock() {
             for (i, k) in s.kits.iter_mut().enumerate() {
                 k.loaded = i == kit_index;
@@ -330,6 +347,7 @@ impl DrumRigBackend {
             s.loaded = Some(kit_index);
             s.piece_ids = piece_ids;
             s.pieces = pieces;
+            s.engines = engines;
         }
         self.reattach_midi();
         self.paint_light_guide();
@@ -625,10 +643,10 @@ impl DrumRig for DrumRigBackend {
     }
 
     fn kit_slots(&self) -> Vec<signal_drums_proto::KitSlot> {
-        let Some(path) = self.current_preset_path() else { return Vec::new() };
-        let Ok(spec) = PresetSpec::from_file(&path) else { return Vec::new() };
-        let dir = path.parent().unwrap_or(Path::new(""));
-        crate::library::preset_slots(&spec, dir)
+        // Source of truth = the engines actually loaded (reflects swaps), not
+        // the on-disk preset file.
+        let engines = self.inner.state.lock().map(|s| s.engines.clone()).unwrap_or_default();
+        engines
             .into_iter()
             .map(|(id, abs)| {
                 let abs_str = abs.display().to_string();
@@ -743,10 +761,11 @@ impl DrumRig for DrumRigBackend {
                     level_db: s.level_db,
                 })
                 .collect();
+            let piece_label = crate::library::slot_label(&eng.label);
             strips.push(MixerStrip {
                 kind: StripKind::Piece,
                 idx: eng.engine_idx as u32,
-                label: eng.label.clone(),
+                label: piece_label.clone(),
                 group: String::new(),
                 gain_db: eng.piece_gain_db,
                 muted: eng.piece_muted,
@@ -758,8 +777,8 @@ impl DrumRig for DrumRigBackend {
                 strips.push(MixerStrip {
                     kind: StripKind::Channel,
                     idx: ch.channel_idx as u32,
-                    label: if ch.mic_label.is_empty() { eng.label.clone() } else { ch.mic_label.clone() },
-                    group: eng.label.clone(),
+                    label: if ch.mic_label.is_empty() { piece_label.clone() } else { ch.mic_label.clone() },
+                    group: piece_label.clone(),
                     gain_db: ch.gain_db,
                     muted: ch.muted,
                     soloed: ch.soloed,
@@ -969,6 +988,13 @@ fn collect_presets(dir: &Path, out: &mut Vec<KitInfo>) {
             out.push(KitInfo { name, path: path.display().to_string(), loaded: false });
         }
     }
+}
+
+/// Read `(slot_id, abs engine path)` for each engine in a preset file.
+fn engines_from_preset(path: &Path) -> Vec<(String, PathBuf)> {
+    let Ok(spec) = PresetSpec::from_file(path) else { return Vec::new() };
+    let dir = path.parent().unwrap_or(Path::new(""));
+    crate::library::preset_slots(&spec, dir)
 }
 
 /// Build [`PieceInfo`] from a preset's engines + note routing.

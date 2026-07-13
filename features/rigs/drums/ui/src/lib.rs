@@ -532,137 +532,34 @@ fn mute_btn(muted: bool) -> String {
     format!("width:20px; height:18px; border-radius:4px; background:{bg}; color:{fg}; border:1px solid #27272a; font-size:10px; cursor:pointer;")
 }
 
-/// A top-down drum-kit diagram: each piece drawn in a realistic layout
-/// (kick(s) center, snare + toms, cymbals around), labelled with its current
-/// instrument. Pieces flash when played (held MIDI notes) and trigger on click.
+/// The kit as a simple icon grid — one tile per piece (icon + type + the
+/// current instrument). Flashes when its MIDI note is held; triggers on click.
+/// (Fallback layout; a realistic diagram can come later.)
 #[component]
 fn DrumKit(slots: Vec<KitSlot>, notes: Vec<(String, u32)>, lit: Vec<u8>, on_hit: EventHandler<u32>) -> Element {
     let note_of = |id: &str| notes.iter().find(|(i, _)| i == id).map(|(_, n)| *n).unwrap_or(0);
-    // Assign each slot a position; count occurrences so a 2nd kick/snare gets
-    // its own spot.
-    let mut occ: HashMap<String, usize> = HashMap::new();
-    let mut placed: Vec<Placed> = Vec::new();
-    for s in &slots {
-        let l = s.label.to_ascii_lowercase();
-        let cat = if l.starts_with("kick") {
-            "kick"
-        } else if l.starts_with("snare") {
-            "snare"
-        } else {
-            l.as_str()
-        }
-        .to_string();
-        let o = *occ.get(&cat).unwrap_or(&0);
-        occ.insert(cat, o + 1);
-        if let Some((cx, cy, rx, ry, cym)) = kit_pos(&s.label, o) {
-            let note = note_of(&s.slot_id);
-            placed.push(Placed {
-                label: s.label.clone(),
-                instrument: instrument_short(&s.current_name),
-                note,
-                cx,
-                cy,
-                rx,
-                ry,
-                cymbal: cym,
-            });
-        }
-    }
     rsx! {
-        svg {
-            view_box: "0 0 1000 620",
-            style: "width:100%; max-width:860px; height:auto; display:block; margin:6px auto 0; background:radial-gradient(ellipse at 50% 62%, #1c1c22 0%, #101014 70%); border-radius:12px; border:1px solid #27272a;",
-            // Cymbal stands (behind everything).
-            for p in placed.iter().filter(|p| p.cymbal) {
-                line {
-                    x1: "{p.cx}", y1: "{p.cy}", x2: "{p.cx}", y2: "600",
-                    style: "stroke:#3a3a42; stroke-width:3;",
-                }
-            }
-            for p in placed.iter() {
+        div { style: "display:flex; flex-wrap:wrap; gap:6px; margin-top:6px;",
+            for slot in slots.iter() {
                 {
-                    let note = p.note;
+                    let note = note_of(&slot.slot_id);
                     let is_lit = note > 0 && lit.contains(&(note as u8));
-                    let (cx, cy, rx, ry) = (p.cx, p.cy, p.rx, p.ry);
-                    rsx!{ g {
-                        style: "cursor:pointer;",
+                    let icon = piece_icon(&slot.label);
+                    let instrument = instrument_short(&slot.current_name);
+                    let border = if is_lit { "#eab308" } else { "#27272a" };
+                    let bg = if is_lit { "#2a2410" } else { "#161618" };
+                    rsx!{ div {
+                        key: "{slot.slot_id}",
+                        style: format!("display:flex; flex-direction:column; align-items:center; gap:2px; width:104px; padding:8px 6px; border-radius:10px; background:{bg}; border:1px solid {border}; cursor:pointer;"),
                         onclick: move |_| on_hit.call(note),
-                        if p.cymbal {
-                            // Cymbal: gold disc + concentric grooves + bell.
-                            ellipse { cx: "{cx}", cy: "{cy}", rx: "{rx}", ry: "{ry}",
-                                style: format!("fill:{}; stroke:{}; stroke-width:1.5;", if is_lit {"#f2d268"} else {"#c39a3c"}, if is_lit {"#fff1c0"} else {"#7d621f"}) }
-                            ellipse { cx: "{cx}", cy: "{cy}", rx: "{rx*0.66}", ry: "{ry*0.66}", style: "fill:none; stroke:#8a6d24; stroke-width:1;" }
-                            ellipse { cx: "{cx}", cy: "{cy}", rx: "{rx*0.22}", ry: "{ry*0.5}", style: format!("fill:{};", if is_lit {"#ffe89a"} else {"#d9b757"}) }
-                        } else {
-                            // Drum: shell rim + coated head.
-                            ellipse { cx: "{cx}", cy: "{cy+ry*0.12}", rx: "{rx}", ry: "{ry}", style: "fill:#2a1d10;" }
-                            ellipse { cx: "{cx}", cy: "{cy}", rx: "{rx*0.9}", ry: "{ry*0.86}",
-                                style: format!("fill:{}; stroke:{}; stroke-width:2;", if is_lit {"#fff6d8"} else {"#ded3bd"}, if is_lit {"#ffe9a0"} else {"#b7ab90"}) }
-                        }
-                        // Piece label (centered on the piece).
-                        text { x: "{cx}", y: "{cy + 4.0}",
-                            style: format!("text-anchor:middle; font-size:13px; font-weight:700; fill:{}; pointer-events:none;", if p.cymbal {"#2e2410"} else {"#2a1e10"}),
-                            "{p.label}" }
-                        // Instrument name (below the piece).
-                        text { x: "{cx}", y: "{cy + ry + 15.0}",
-                            style: "text-anchor:middle; font-size:11px; fill:#a9a9b4; pointer-events:none;",
-                            "{p.instrument}" }
+                        span { style: "font-size:22px; line-height:1;", "{icon}" }
+                        span { style: "font-size:11px; font-weight:600; color:#e4e4e7; text-align:center;", "{slot.label}" }
+                        span { style: "font-size:9px; color:#8b8b93; text-align:center; height:22px; overflow:hidden; line-height:1.1;", "{instrument}" }
                     } }
                 }
             }
         }
     }
-}
-
-/// One positioned kit piece for [`DrumKit`].
-struct Placed {
-    label: String,
-    instrument: String,
-    note: u32,
-    cx: f64,
-    cy: f64,
-    rx: f64,
-    ry: f64,
-    cymbal: bool,
-}
-
-/// Layout position `(cx, cy, rx, ry, is_cymbal)` for a piece label in a
-/// top-down kit (viewBox 1000×620). `occ` disambiguates a 2nd kick/snare.
-fn kit_pos(label: &str, occ: usize) -> Option<(f64, f64, f64, f64, bool)> {
-    let l = label.to_ascii_lowercase();
-    Some(if l.starts_with("kick") {
-        if occ == 0 { (500., 500., 96., 82., false) } else { (345., 508., 86., 72., false) }
-    } else if l.starts_with("snare") {
-        if occ == 0 { (430., 402., 54., 46., false) } else { (352., 384., 44., 38., false) }
-    } else if l == "rack tom 1" {
-        (452., 302., 48., 40., false)
-    } else if l == "rack tom 2" {
-        (572., 294., 50., 42., false)
-    } else if l == "rack tom 3" {
-        (512., 242., 44., 37., false)
-    } else if l == "floor tom 1" {
-        (692., 404., 58., 50., false)
-    } else if l == "floor tom 2" {
-        (780., 494., 64., 55., false)
-    } else if l.starts_with("hat") {
-        (300., 358., 64., 18., true)
-    } else if l == "ride" {
-        (780., 288., 80., 22., true)
-    } else if l == "crash l" {
-        (378., 226., 62., 17., true)
-    } else if l == "crash r" {
-        (628., 210., 64., 18., true)
-    } else if l == "crash far l" {
-        (236., 288., 58., 16., true)
-    } else if l == "crash far r" {
-        (708., 190., 60., 17., true)
-    } else if l == "china" {
-        (864., 246., 62., 17., true)
-    } else if l == "splash" {
-        (530., 206., 44., 12., true)
-    } else {
-        return None;
-    })
 }
 
 /// Short instrument name for a kit-piece label: drop the "MM2 " prefix and
