@@ -198,6 +198,17 @@ impl SampleMap {
             } else {
                 Some(key.direction.as_str())
             };
+        // Rank by dynamic distance FIRST, then round-robin distance. The RR
+        // index is decorative variation; the velocity layer decides the
+        // sample's loudness AND length. Filtering by exact RR (as an earlier
+        // version did) is wrong when a library records different RR counts per
+        // dynamic — e.g. Keyscape LA Custom ships 4 RRs for its mid layers but
+        // only 1 (rr0) for the long high-velocity sustains. With an exact-RR
+        // filter, note-ons whose RR counter lands on 1-3 miss the requested
+        // dynamic entirely and fall back to a *shorter* neighbouring layer,
+        // so the note dies right after the attack. Keeping the dynamic and
+        // relaxing the RR fixes that while leaving properly-RR'd dynamics
+        // (which exact-match before this fallback runs) untouched.
         self.map
             .iter()
             .filter(|(candidate, _)| {
@@ -205,15 +216,15 @@ impl SampleMap {
                     && candidate.articulation == key.articulation
                     && candidate.mic == key.mic
                     && candidate.note == key.note
-                    && candidate.rr == key.rr
                     && direction.map_or(true, |direction| candidate.direction == direction)
             })
             .filter_map(|(candidate, path)| {
                 let dynamic = candidate.dynamic.parse::<i16>().ok()?;
-                Some(((dynamic - wanted).abs(), path))
+                let rr_distance = (candidate.rr as i32 - key.rr as i32).unsigned_abs();
+                Some(((dynamic - wanted).abs(), rr_distance, path))
             })
-            .min_by_key(|(distance, _)| *distance)
-            .map(|(_, path)| path)
+            .min_by_key(|(dyn_distance, rr_distance, _)| (*dyn_distance, *rr_distance))
+            .map(|(_, _, path)| path)
     }
 
     /// Iterate all indexed sample keys.
@@ -919,5 +930,72 @@ mod tests {
     #[test]
     fn parse_too_short_returns_none() {
         assert!(parse_wav_stem("random_file").is_none());
+    }
+
+    /// Regression: when a note-on's round-robin index lands on an RR that the
+    /// requested dynamic doesn't have, resolution must keep the requested
+    /// dynamic (falling back across RR) rather than switch to a neighbouring
+    /// dynamic. Keyscape LA Custom ships the long high-velocity sustains at
+    /// rr0 only but 4 RRs for its mid layers — the old exact-RR filter made
+    /// 3 of every 4 note-ons play a short mid-velocity sample, so held notes
+    /// died right after the attack.
+    #[test]
+    fn resolve_prefers_requested_dynamic_over_round_robin() {
+        let styx = "name \"r\"\n\
+             sections ({\n\
+               id main\n\
+               label m\n\
+               note_grid ()\n\
+               lowest_note C-1\n\
+               highest_note C8\n\
+             })\n\
+             mics ({\n\
+               id Main\n\
+               label Main\n\
+               kind blended\n\
+             })\n\
+             articulations (\n\
+             {\n\
+               id lacrm\n\
+               label \"lacrm\"\n\
+               kind @OneShot\n\
+               dynamics (\n\
+                 \"84\"\n\
+                 \"102\"\n\
+               )\n\
+               rr 4\n\
+               dyn_ctrl velocity\n\
+             })\n";
+        let spec = crate::LibrarySpec::from_styx(styx).expect("parse styx");
+        // Long sustain layer (dyn 102) exists at rr0 only; short mid layer
+        // (dyn 84) exists at all four RRs.
+        let paths: Vec<std::path::PathBuf> = vec![
+            "RR01 lacrm 60 102.flac".into(),
+            "RR01 lacrm 60 84.flac".into(),
+            "RR02 lacrm 60 84.flac".into(),
+            "RR03 lacrm 60 84.flac".into(),
+            "RR04 lacrm 60 84.flac".into(),
+        ];
+        let map = SampleMap::from_paths(paths);
+
+        // Every RR index requesting dyn 102 must land on the dyn-102 sample —
+        // never the shorter dyn-84 neighbour — even when that exact RR is
+        // absent for dyn 102.
+        for rr in 0..4 {
+            let (path, _) = map
+                .resolve(&spec, "main", "lacrm", "Main", "102", 60, "", rr)
+                .unwrap_or_else(|| panic!("resolve failed at rr {rr}"));
+            let name = path.file_name().unwrap().to_string_lossy();
+            assert!(
+                name.contains(" 102"),
+                "rr {rr} resolved to {name}, expected the dyn-102 sustain sample"
+            );
+        }
+
+        // A genuinely present RR of the mid layer still round-robins exactly.
+        let (path, _) = map
+            .resolve(&spec, "main", "lacrm", "Main", "84", 60, "", 2)
+            .expect("resolve dyn 84 rr2");
+        assert_eq!(path.file_name().unwrap().to_string_lossy(), "RR03 lacrm 60 84.flac");
     }
 }
