@@ -5,15 +5,20 @@ edition = "2024"
 license = "MIT"
 authors = ["FastTrackStudio"]
 
-# THE app. One binary, feature-configured for how you're working:
+# THE app. One binary over three domain axes — all on by default; drop any one
+# for fast iteration or a focused `dx serve`:
 #
-#   --features signal    the live guitar rig (control surface, perform grid)
-#   --features session   setlists, songs, charts + chords (keyflow), daw sync
-#   --features full      both — combined live usage (default)
+#   --features signal    the live guitar/drums rig (control surface, perform grid)
+#   --features session   setlists / songs / the DAW performance surface (mixer,
+#                        arrangement, lyric sync) + the guide engine
+#   --features charts    keyflow chart writing (the Charts workspace)
 #
-# Chart writing (keyflow), setlist creation, and daw integration are
-# session-side; the rig is signal-side; the shell (navigation, palette,
-# theming) is shared. The signal domain stays a headless engine reached
+# Default = all three. Example fast-iteration builds:
+#   cargo run -p fasttrackstudio --no-default-features --features "session,charts"
+#   cargo run -p fasttrackstudio --no-default-features --features "charts"
+#
+# The rig is signal-side; setlists/daw/guide are session-side; chart writing is
+# charts-side; the shell (navigation, palette, theming) is shared. The signal domain stays a headless engine reached
 # over vox (this app is a remote, like the web remotes). The session
 # domain is embedded IN-PROCESS: a daw-standalone backend (memory-link
 # bootstrap) makes the setlist DATA the app can PLAY — transport over
