@@ -133,11 +133,23 @@ impl SampleEngine {
         // truth for "what sounded on this note". Covers the convention-mode
         // path (Keyscape, drums); the zoned path records its own spawns.
         let rate = 2.0f64.powf(semitone_offset as f64 / 12.0) * (src_sr as f64 / self.sample_rate as f64);
+        let fname = path.file_name().and_then(|s| s.to_str()).unwrap_or_default();
+        // Loud, filterable flag whenever a `rel_2` / `relm` release variant
+        // actually sounds — these are the sharp mechanical-click layers the
+        // engine is NOT supposed to select (it asks for `rel`/`relsl`). If this
+        // ever fires during play, a resolution path is picking the click layer.
+        if fname.contains("rel_2") || fname.contains("relm") {
+            tracing::warn!(
+                target: "signal_sampler::trigger",
+                note, dynamic, rr = rr_idx, gain, file = %fname,
+                "REL_2/RELM click-layer release played (should be rel/relsl)"
+            );
+        }
         tracing::debug!(
             target: "signal_sampler::trigger",
             artic = artic_id, dynamic, note, sampled_note, rr = rr_idx,
             kind = kind.trace_name(), rate, gain,
-            file = %path.file_name().and_then(|s| s.to_str()).unwrap_or_default(),
+            file = %fname,
             "voice spawn"
         );
         if self.trace_enabled {

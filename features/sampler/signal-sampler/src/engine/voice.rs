@@ -838,9 +838,9 @@ const STEAL_FADE_FRAMES: usize = 128;
 /// Deliberately deep so a still-audible (even very faint) held note is never
 /// retired — only genuinely-silent tails free their slot.
 const RETIRE_FLOOR: f32 = 6.0e-5;
-/// Per-block decay of the voice peak-follower (~ -0.09 dB/block ≈ 100 ms to
-/// -20 dB at 512-frame blocks) — smooth enough to reflect the body's loudness
-/// at note-off without chasing every sample.
+/// Per-block decay of the voice peak-follower (~ -0.09 dB/block at 512-frame
+/// blocks) — smooth enough to reflect the body's loudness at note-off without
+/// chasing every sample.
 const ENV_PEAK_DECAY: f32 = 0.99;
 /// How long (frames) a sounded voice must stay below [`RETIRE_FLOOR`] before it
 /// retires and frees its slot. ~0.4 s at 44.1/48 kHz — long enough not to clip

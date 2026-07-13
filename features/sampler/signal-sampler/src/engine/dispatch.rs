@@ -150,6 +150,7 @@ impl SampleEngine {
         } else {
             velocity_gain(velocity)
         };
+        let mut body_spawned = false;
         if let Some(v) = self.make_voice(
             &self.articulation,
             &self.section,
@@ -163,6 +164,7 @@ impl SampleEngine {
         ) {
             self.voices.spawn(v);
             self.body_voiced.insert(note);
+            body_spawned = true;
         } else {
             // Primary articulation has no sample for this note (e.g.
             // Keyscape LA Custom: `lacrm` covers notes 21,22,28-108 but
@@ -199,9 +201,20 @@ impl SampleEngine {
                 ) {
                     self.voices.spawn(v);
                     self.body_voiced.insert(note);
+                    body_spawned = true;
                     break;
                 }
             }
+        }
+        // The main body of the note MUST sound. If nothing spawned (sample or
+        // cache miss on every candidate), the player hears only the release /
+        // pedal click — "a click and no note". Flag it loudly.
+        if !body_spawned {
+            tracing::warn!(
+                target: "signal_sampler::trigger",
+                note, velocity, artic = %self.articulation, dynamic = %dynamic,
+                "note-on triggered NO body voice (only release/click will sound)"
+            );
         }
     }
 
