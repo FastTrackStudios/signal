@@ -178,10 +178,46 @@ async fn connect_once(
 
 /// The rigs the Signal workspace knows about. Guitar is the only one
 /// with a real engine today; the rest are the planned swarm.
+/// A selectable rig. Every rig connects the same way (over the shared `/vox`
+/// router) and differs only in its view component — so adding one (keys, bass,
+/// …) is: a variant here, its `slug`/`label`, and a `view()` arm.
 #[derive(Clone, Copy, PartialEq)]
 enum RigKind {
     Guitar,
     Drums,
+}
+
+impl RigKind {
+    /// Every rig, in picker order.
+    const ALL: &'static [RigKind] = &[RigKind::Guitar, RigKind::Drums];
+
+    /// Stable slug used in prefs + the web URL hash.
+    fn slug(self) -> &'static str {
+        match self {
+            RigKind::Guitar => "guitar",
+            RigKind::Drums => "drums",
+        }
+    }
+
+    /// Display name.
+    fn label(self) -> &'static str {
+        match self {
+            RigKind::Guitar => "Guitar",
+            RigKind::Drums => "Drums",
+        }
+    }
+
+    /// One-line description for the picker card.
+    fn blurb(self) -> &'static str {
+        match self {
+            RigKind::Guitar => "amp, cab, FX — the live guitar rig",
+            RigKind::Drums => "sampled kit, mixer, MM2 mixes",
+        }
+    }
+
+    fn from_slug(s: &str) -> Option<RigKind> {
+        RigKind::ALL.iter().copied().find(|k| k.slug().eq_ignore_ascii_case(s))
+    }
 }
 
 fn load_last_rig() -> Option<RigKind> {
@@ -191,25 +227,17 @@ fn load_last_rig() -> Option<RigKind> {
             .and_then(|w| w.location().hash().ok())
             .unwrap_or_default();
         if let Some(rig) = hash.trim_start_matches('#').split('/').nth(1) {
-            if rig.eq_ignore_ascii_case("guitar") {
-                return Some(RigKind::Guitar);
-            }
-            if rig.eq_ignore_ascii_case("drums") {
-                return Some(RigKind::Drums);
+            if let Some(k) = RigKind::from_slug(rig) {
+                return Some(k);
             }
         }
     }
-    match prefs::get("last-rig").as_deref() {
-        Some("guitar") => Some(RigKind::Guitar),
-        Some("drums") => Some(RigKind::Drums),
-        _ => None,
-    }
+    prefs::get("last-rig").as_deref().and_then(RigKind::from_slug)
 }
 
 fn store_last_rig(rig: Option<RigKind>) {
     match rig {
-        Some(RigKind::Guitar) => prefs::set("last-rig", "guitar"),
-        Some(RigKind::Drums) => prefs::set("last-rig", "drums"),
+        Some(k) => prefs::set("last-rig", k.slug()),
         None => prefs::remove("last-rig"),
     }
 }
@@ -218,47 +246,35 @@ fn store_last_rig(rig: Option<RigKind>) {
 pub fn SignalWorkspace() -> Element {
     let mut selected = use_signal(load_last_rig);
 
-    match selected() {
-        Some(RigKind::Guitar) => rsx! {
-            div { style: "flex: 1; min-height: 0; display: flex; flex-direction: column;",
-                div { style: "display: flex; align-items: center; gap: 8px; padding: 4px 12px; border-bottom: 1px solid #1c1c1f; font-size: 11px;",
-                    button {
-                        style: "padding: 2px 8px; border-radius: 5px; background: transparent; color: #a1a1aa; border: 1px solid #27272a; font-size: 11px; cursor: pointer;",
-                        onclick: move |_| {
-                            selected.set(None);
-                            store_last_rig(None);
-                        },
-                        "‹ Rigs"
-                    }
-                    span { style: "color: #71717a;", "Guitar" }
-                }
-                GuitarRigView {}
-            }
-        },
-        Some(RigKind::Drums) => rsx! {
-            div { style: "flex: 1; min-height: 0; display: flex; flex-direction: column;",
-                div { style: "display: flex; align-items: center; gap: 8px; padding: 4px 12px; border-bottom: 1px solid #1c1c1f; font-size: 11px;",
-                    button {
-                        style: "padding: 2px 8px; border-radius: 5px; background: transparent; color: #a1a1aa; border: 1px solid #27272a; font-size: 11px; cursor: pointer;",
-                        onclick: move |_| {
-                            selected.set(None);
-                            store_last_rig(None);
-                        },
-                        "‹ Rigs"
-                    }
-                    span { style: "color: #71717a;", "Drums" }
-                }
-                DrumRigView {}
-            }
-        },
-        None => rsx! {
+    let Some(kind) = selected() else {
+        return rsx! {
             RigPicker {
                 on_pick: move |rig| {
                     selected.set(Some(rig));
                     store_last_rig(Some(rig));
                 },
             }
-        },
+        };
+    };
+    // Shared chrome for every rig — only the inner view differs.
+    rsx! {
+        div { style: "flex: 1; min-height: 0; display: flex; flex-direction: column;",
+            div { style: "display: flex; align-items: center; gap: 8px; padding: 4px 12px; border-bottom: 1px solid #1c1c1f; font-size: 11px;",
+                button {
+                    style: "padding: 2px 8px; border-radius: 5px; background: transparent; color: #a1a1aa; border: 1px solid #27272a; font-size: 11px; cursor: pointer;",
+                    onclick: move |_| {
+                        selected.set(None);
+                        store_last_rig(None);
+                    },
+                    "‹ Rigs"
+                }
+                span { style: "color: #71717a;", "{kind.label()}" }
+            }
+            match kind {
+                RigKind::Guitar => rsx! { GuitarRigView {} },
+                RigKind::Drums => rsx! { DrumRigView {} },
+            }
+        }
     }
 }
 
@@ -274,19 +290,14 @@ fn RigPicker(on_pick: EventHandler<RigKind>) -> Element {
         div { style: "display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20px; flex: 1;",
             span { style: "font-size: 16px; font-weight: 700;", "Choose a rig" }
             div { style: "display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; max-width: 560px;",
-                button {
-                    style: "display: flex; flex-direction: column; align-items: flex-start; gap: 6px; width: 170px; padding: 14px; border-radius: 10px; background: #111113; color: #e4e4e7; border: 1px solid #3f3f46; text-align: left; cursor: pointer;",
-                    onclick: move |_| on_pick.call(RigKind::Guitar),
-                    span { style: "font-size: 14px; font-weight: 700;", "Guitar" }
-                    span { style: "font-size: 11px; color: #a1a1aa;", "amp, cab, FX — the live guitar rig" }
-                    span { style: "font-size: 10px; color: #22c55e;", "default" }
-                }
-                button {
-                    style: "display: flex; flex-direction: column; align-items: flex-start; gap: 6px; width: 170px; padding: 14px; border-radius: 10px; background: #111113; color: #e4e4e7; border: 1px solid #3f3f46; text-align: left; cursor: pointer;",
-                    onclick: move |_| on_pick.call(RigKind::Drums),
-                    span { style: "font-size: 14px; font-weight: 700;", "Drums" }
-                    span { style: "font-size: 11px; color: #a1a1aa;", "GGD MM2 kits — sampler, multi-mic mixer" }
-                    span { style: "font-size: 10px; color: #3b82f6;", "new" }
+                for kind in RigKind::ALL.iter().copied() {
+                    button {
+                        key: "{kind.slug()}",
+                        style: "display: flex; flex-direction: column; align-items: flex-start; gap: 6px; width: 170px; padding: 14px; border-radius: 10px; background: #111113; color: #e4e4e7; border: 1px solid #3f3f46; text-align: left; cursor: pointer;",
+                        onclick: move |_| on_pick.call(kind),
+                        span { style: "font-size: 14px; font-weight: 700;", "{kind.label()}" }
+                        span { style: "font-size: 11px; color: #a1a1aa;", "{kind.blurb()}" }
+                    }
                 }
                 for (name, desc) in COMING {
                     div { style: "display: flex; flex-direction: column; align-items: flex-start; gap: 6px; width: 170px; padding: 14px; border-radius: 10px; background: #0c0c0e; color: #52525b; border: 1px solid #1c1c1f;",
@@ -473,30 +484,22 @@ fn GuitarRigView() -> Element {
     }
 }
 
-/// The drum rig's vox endpoint — same engine as guitar, different path.
-fn drum_server_url() -> String {
-    let base = server_url();
-    if base.ends_with("/vox") {
-        format!("{}/drum-vox", &base[..base.len() - 4])
-    } else {
-        base.replace("/vox", "/drum-vox")
-    }
-}
-
-/// The drum rig remote: connect to `/drum-vox` (WebSocket), provide the two
-/// clients in context, and mount [`DrumRigRemote`]. The drum rig shares the
-/// signal engine with guitar; on the local engine we auto-start it if nothing
-/// answers, exactly like [`GuitarRigView`].
+/// The drum rig remote: connect over the shared `/vox` endpoint (same engine,
+/// same router as guitar), provide the two clients in context, and mount
+/// [`DrumRigRemote`]. On the local engine we auto-start it if nothing answers,
+/// exactly like [`GuitarRigView`].
 #[component]
 fn DrumRigView() -> Element {
     let mut generation = use_signal(|| 0u32);
     let clients = use_resource(move || {
         let generation = generation();
         async move {
-            let target = EngineTarget::Ws(drum_server_url());
+            let target = EngineTarget::current();
             #[cfg(not(target_arch = "wasm32"))]
-            let mut autostart = drum_server_url().contains("127.0.0.1")
-                || drum_server_url().contains("localhost");
+            let mut autostart = matches!(
+                &target,
+                EngineTarget::Ws(url) if url.contains("127.0.0.1") || url.contains("localhost")
+            );
             loop {
                 let rig: Option<DrumRigClient> = establish(&target).await;
                 let stream: Option<DrumRigStreamClient> = establish(&target).await;

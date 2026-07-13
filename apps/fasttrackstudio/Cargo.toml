@@ -25,12 +25,11 @@ authors = ["FastTrackStudio"]
 # into the binary with `--features embed-web`.
 
 [features]
-default = ["full"]
-# Chatterbox TTS (session-guide/tts) is ON by default — spoken section cues
-# are core to the guide. It only *activates* at runtime when a voice wav +
-# model are present; the flake provides onnxruntime + ORT_DYLIB_PATH so the
-# load-dynamic dlopen resolves. Compiles fine without them (TTS just idles).
-full = ["signal", "session", "tts"]
+# Three domain axes — Signal, Session, Charts — all on by default. Drop any
+# one for fast iteration or a focused `dx serve`; e.g.
+# `cargo run -p fasttrackstudio --no-default-features --features "session,charts"`
+# skips the heavy `signal` rig (nam C++, lucide icons, webkit engine deps).
+default = ["signal", "session", "charts"]
 # signal also force-enables session-ui/desktop: signal-guitar-ui pulls
 # session-ui (default-features off), which only compiles with its dioxus
 # renderer feature on (dock-dioxus needs "web" for its prelude).
@@ -83,17 +82,21 @@ session = [
     "dep:vox",
     "dep:tokio",
     "dep:eyre",
+    # Spoken section cues via Chatterbox TTS — auto-enabled with Session (the
+    # guide is core to it). A named sub-feature (below) so the app's guide code
+    # can gate on it; not one of the three domain axes.
+    "tts",
 ]
-# Spoken section-name cues via local Chatterbox TTS (session-guide/tts,
-# ONNX Runtime). Even with this feature compiled in, models are NEVER
-# downloaded implicitly at startup: TTS activates only when the env var
-# FTS_TTS=1 is set AND a reference voice wav exists at
-# ~/.config/fts/tts-voice.wav (Chatterbox is voice-cloning). Cues are
-# pre-rendered at schedule-build time and cached in
-# ~/.config/fts/tts-cache/ (cached cues keep loading even without this
-# feature). Without the feature — or on any synthesis failure — section
-# cues fall back to the canned/synthesized guide samples.
-tts = ["session", "session-guide/tts"]
+# Charts: keyflow chart writing (the Charts workspace). Keyflow is also pulled
+# by Session (chart parsing), so this is additive; a charts-only build gets it
+# independently.
+charts = ["dep:keyflow"]
+# Chatterbox TTS backend for the guide's spoken cues. Auto-enabled by Session.
+# Models are NEVER downloaded implicitly; TTS only *activates* at runtime when
+# FTS_TTS=1 and a voice wav exists at ~/.config/fts/tts-voice.wav (the flake
+# provides onnxruntime + ORT_DYLIB_PATH). Cached cues keep loading regardless;
+# without it, cues fall back to the synthesized guide samples.
+tts = ["session-guide/tts"]
 
 [dependencies]
 tracing.workspace = true

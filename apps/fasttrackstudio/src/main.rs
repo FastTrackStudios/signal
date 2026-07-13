@@ -123,7 +123,7 @@ enum Workspace {
     Mixer,
     #[cfg(feature = "session")]
     LyricSync,
-    #[cfg(feature = "session")]
+    #[cfg(feature = "charts")]
     Charts,
 }
 
@@ -141,7 +141,7 @@ impl Workspace {
             (Self::Mixer, "Mixer"),
             #[cfg(feature = "session")]
             (Self::LyricSync, "Lyric Sync"),
-            #[cfg(feature = "session")]
+            #[cfg(feature = "charts")]
             (Self::Charts, "Charts"),
         ]
     }
@@ -288,7 +288,7 @@ fn App() -> Element {
                         // TimingMap sidecar (forced alignment on the vocal stem).
                         lyric_sync_view::LyricSyncWorkspace {}
                     },
-                    #[cfg(feature = "session")]
+                    #[cfg(feature = "charts")]
                     Some(Workspace::Charts) => rsx! {
                         // Mount point: keyflow chart writing.
                         Placeholder { title: "Charts", body: "keyflow chart writing lands here — song analysis, chord charts, arrangement." }
@@ -435,9 +435,13 @@ fn HomeView(current: Signal<Option<Workspace>>) -> Element {
     #[cfg(not(feature = "signal"))]
     let signal_target: Option<Workspace> = None;
     #[cfg(feature = "session")]
-    let (session_target, charts_target) = (Some(Workspace::Session), Some(Workspace::Charts));
+    let session_target = Some(Workspace::Session);
     #[cfg(not(feature = "session"))]
-    let (session_target, charts_target): (Option<Workspace>, Option<Workspace>) = (None, None);
+    let session_target: Option<Workspace> = None;
+    #[cfg(feature = "charts")]
+    let charts_target = Some(Workspace::Charts);
+    #[cfg(not(feature = "charts"))]
+    let charts_target: Option<Workspace> = None;
 
     rsx! {
         div { style: "display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 24px; flex: 1;",

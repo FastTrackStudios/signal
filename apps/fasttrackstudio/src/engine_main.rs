@@ -149,31 +149,19 @@ async fn embedded_asset(uri: axum::http::Uri) -> Response {
 
 #[derive(Clone)]
 struct AppState {
+    /// The one shared [`architect::LayerRouter`] serving *every* rig. Each rig
+    /// backend merges its own service bundle into it (`merge_router`), so all
+    /// rigs — guitar, drums, and future ones (keys, …) — are reached over the
+    /// single `/vox` endpoint, dispatched by method id.
     router: architect::LayerRouter,
-    /// The drum rig's router, served at `/drum-vox`. Dormant (no audio) until a
-    /// remote calls `start`/`load_kit`, so the worship guitar rig on `/vox` is
-    /// untouched at boot.
-    drum_router: architect::LayerRouter,
 }
 
 /// One vox connection per WebSocket upgrade; the shared [`architect::LayerRouter`]
-/// dispatches every service (Rig, RigStream, AudioSettings) by method id.
+/// dispatches every rig's services (Rig, RigStream, AudioSettings, DrumRig, …)
+/// by method id.
 async fn vox_handler(ws: WebSocketUpgrade, State(state): State<AppState>) -> Response {
     ws.on_upgrade(move |socket| async move {
         let router = state.router.clone();
-        let acceptor = axum_ws::lane_acceptor_fn(move |_req, connection| {
-            connection.handle_with(router.clone());
-            Ok(())
-        });
-        axum_ws::serve(socket, acceptor).await;
-    })
-    .into_response()
-}
-
-/// Vox connection for the drum rig (served at `/drum-vox`).
-async fn drum_vox_handler(ws: WebSocketUpgrade, State(state): State<AppState>) -> Response {
-    ws.on_upgrade(move |socket| async move {
-        let router = state.drum_router.clone();
         let acceptor = axum_ws::lane_acceptor_fn(move |_req, connection| {
             connection.handle_with(router.clone());
             Ok(())
@@ -254,26 +242,26 @@ async fn async_main() {
         default_hook(info);
     }));
 
-    // The headless core: open the audio device + load the profile off-thread,
-    // exactly like the desktop app's auto-start.
-    let backend = GuitarRigBackend::new();
-    backend.start();
+    // ── Rigs ──────────────────────────────────────────────────────────────
+    // Every rig backend mounts its own service bundle onto ONE shared router
+    // (`merge_router`) served at `/vox`; adding a rig (keys, …) is one more
+    // backend + `.merge_router(rig.router())` here, plus a matching view in the
+    // app. Each rig keeps its own dispatcher/PubSub — only the routing is
+    // shared. Per-rig start policy differs (the worship guitar auto-opens
+    // audio; other rigs stay dormant until a remote starts them), but the
+    // wiring is identical.
+    let guitar = GuitarRigBackend::new();
+    guitar.start(); // worship rig: open audio + load profile off-thread
+    let drums = signal_drums::DrumRigBackend::new(); // dormant until started
 
-    // The drum rig is mounted but dormant — it opens no audio until a remote
-    // starts it, so booting it never disturbs the live guitar rig.
-    let drum_backend = signal_drums::DrumRigBackend::new();
-
-    let state = AppState {
-        router: backend.router(),
-        drum_router: drum_backend.router(),
-    };
+    let router = guitar.router().merge_router(drums.router());
+    let state = AppState { router };
 
     tokio::spawn(serve_iroh(state.router.clone()));
 
     let mut app = Router::new()
         .route("/health", get(|| async { "ok" }))
         .route("/vox", get(vox_handler))
-        .route("/drum-vox", get(drum_vox_handler))
         .with_state(state);
 
     let addr = bind_addr();
