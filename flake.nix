@@ -49,6 +49,11 @@
           ])
           ++ lib.optionals pkgs.stdenv.isLinux (with pkgs; [
             alsa-lib alsa-lib.dev
+            # ONNX Runtime for Chatterbox TTS (session-guide/tts). `ort` uses
+            # load-dynamic, so it dlopens libonnxruntime.so at runtime via
+            # ORT_DYLIB_PATH (below) — never a downloaded binary, which Nix
+            # rejects.
+            onnxruntime
             # avahi — vox-discover links libavahi-client (mDNS service
             # discovery for the rig remotes); `.dev` carries the headers.
             avahi avahi.dev
@@ -505,6 +510,10 @@
           }
           // lib.optionalAttrs pkgs.stdenv.isLinux {
             LD_LIBRARY_PATH = libPath;
+            # Chatterbox TTS: `ort` (load-dynamic) dlopens this exact .so at
+            # runtime. Missing/unset → synthesis fails and section cues fall
+            # back to the synth chime; the app still runs.
+            ORT_DYLIB_PATH = "${pkgs.onnxruntime}/lib/libonnxruntime.so";
             XDG_DATA_DIRS = "${pkgs.gsettings-desktop-schemas}/share/gsettings-schemas/${pkgs.gsettings-desktop-schemas.name}:${pkgs.gtk3}/share/gsettings-schemas/${pkgs.gtk3.name}";
             # WebKitGTK accelerated compositing fails on NixOS (GBM buffer
             # error → white window). Force software rendering.

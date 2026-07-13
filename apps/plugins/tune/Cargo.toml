@@ -1,0 +1,22 @@
+[package]
+name = "tune-plugin"
+version.workspace = true
+edition = "2021"          # matches the nice-plug plugin stack (signal-sampler-clap)
+authors.workspace = true
+license.workspace = true
+description = "FTS Tune — CLAP/VST3 monophonic pitch-correction plugin (YIN detect → scale snap → pitch-dsp shift)"
+
+[lib]
+# cdylib → the loadable CLAP/VST3 binary; lib → tests + a future standalone host.
+crate-type = ["cdylib", "lib"]
+
+[dependencies]
+# Plugin framework (`vst3` on by default). Must be a direct dep — the export
+# macros expand to absolute `::nice_plug::…` paths.
+nice-plug.workspace = true
+
+# DSP facade (re-exports tune-dsp, which re-exports the pitch-dsp shifter).
+tune.workspace = true
+
+# The `Processor` trait + `AudioConfig` used to drive the pitch-shift chain.
+audiocore-dsp.workspace = true

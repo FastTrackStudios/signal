@@ -33,6 +33,10 @@ mod rig_view;
 #[cfg(feature = "session")]
 mod session_engine;
 #[cfg(feature = "session")]
+mod mixer_view;
+#[cfg(feature = "session")]
+mod lyric_sync_view;
+#[cfg(feature = "session")]
 mod session_view;
 #[cfg(not(target_arch = "wasm32"))]
 mod updates;
@@ -114,6 +118,12 @@ enum Workspace {
     #[cfg(feature = "session")]
     Session,
     #[cfg(feature = "session")]
+    Arrangement,
+    #[cfg(feature = "session")]
+    Mixer,
+    #[cfg(feature = "session")]
+    LyricSync,
+    #[cfg(feature = "session")]
     Charts,
 }
 
@@ -125,6 +135,12 @@ impl Workspace {
             (Self::Signal, "Signal"),
             #[cfg(feature = "session")]
             (Self::Session, "Session"),
+            #[cfg(feature = "session")]
+            (Self::Arrangement, "Arrangement"),
+            #[cfg(feature = "session")]
+            (Self::Mixer, "Mixer"),
+            #[cfg(feature = "session")]
+            (Self::LyricSync, "Lyric Sync"),
             #[cfg(feature = "session")]
             (Self::Charts, "Charts"),
         ]
@@ -251,6 +267,26 @@ fn App() -> Element {
                         // layout + transport strip over the in-process
                         // daw-standalone engine.
                         session_view::SessionWorkspace {}
+                    },
+                    #[cfg(feature = "session")]
+                    Some(Workspace::Arrangement) => rsx! {
+                        // The real daw-ui arrangement view — the seeded Praise
+                        // stems' audio clips laid out on the timeline.
+                        div { style: "flex:1; min-height:0; display:flex;",
+                            daw_ui::ArrangementView {}
+                        }
+                    },
+                    #[cfg(feature = "session")]
+                    Some(Workspace::Mixer) => rsx! {
+                        // The real daw-ui mixer over the in-process daw engine —
+                        // the seeded Praise stems with vol/pan/mute/solo + FX.
+                        mixer_view::MixerWorkspace {}
+                    },
+                    #[cfg(feature = "session")]
+                    Some(Workspace::LyricSync) => rsx! {
+                        // Editable per-word lyric timings from a keyflow-sync
+                        // TimingMap sidecar (forced alignment on the vocal stem).
+                        lyric_sync_view::LyricSyncWorkspace {}
                     },
                     #[cfg(feature = "session")]
                     Some(Workspace::Charts) => rsx! {

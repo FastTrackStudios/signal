@@ -160,86 +160,277 @@ pub fn SessionWorkspace() -> Element {
 
 /// Floating guide-settings control: a gear in the top-right of the main
 /// view that opens a small popover of independent toggles (Guide master /
-/// Click / Count-in / Spoken cues), each wired to the audio guide's
-/// per-bus flags. Replaces the old always-present guide strip.
+/// Metronome / guide settings), plus a general settings gear. Replaces the
+/// old always-present guide strip.
 #[component]
 fn GuideSettings() -> Element {
-    let mut open = use_signal(|| false);
+    let mut metro_open = use_signal(|| false);
+    let mut gear_open = use_signal(|| false);
+
+    let guide_on = use_signal(crate::guide::is_enabled);
+
+    let icon = |active: bool| -> String {
+        let (bg, fg, br) = if active {
+            ("#14532d", "#bbf7d0", "#166534")
+        } else {
+            ("#18181b", "#a1a1aa", "#27272a")
+        };
+        format!(
+            "display: flex; align-items: center; justify-content: center; width: 34px; height: 34px; border-radius: 8px; background: {bg}; color: {fg}; border: 1px solid {br}; cursor: pointer;"
+        )
+    };
+
+    rsx! {
+        div { style: "position: absolute; top: 12px; right: 12px; z-index: 30; display: flex; gap: 8px;",
+
+            // ── Metronome: all click / count / guide settings ──────────
+            div { style: "position: relative;",
+                button {
+                    style: icon(guide_on()),
+                    title: "Metronome & guide",
+                    onclick: move |_| {
+                        gear_open.set(false);
+                        metro_open.toggle();
+                    },
+                    // metronome glyph
+                    svg {
+                        width: "18",
+                        height: "18",
+                        view_box: "0 0 24 24",
+                        fill: "none",
+                        stroke: "currentColor",
+                        stroke_width: "2",
+                        stroke_linecap: "round",
+                        stroke_linejoin: "round",
+                        path { d: "M9 3 h6 l3 15 H6 z" }
+                        line { x1: "6", y1: "13", x2: "18", y2: "13" }
+                        path { d: "M12 18 L16 6" }
+                    }
+                }
+                if metro_open() {
+                    div {
+                        style: "position: fixed; inset: 0; z-index: 20;",
+                        onclick: move |_| metro_open.set(false),
+                    }
+                    MetronomePanel {}
+                }
+            }
+
+            // ── General settings (placeholder for now) ─────────────────
+            div { style: "position: relative;",
+                button {
+                    style: icon(false),
+                    title: "Settings",
+                    onclick: move |_| {
+                        metro_open.set(false);
+                        gear_open.toggle();
+                    },
+                    span { style: "font-size: 17px;", "\u{2699}" }
+                }
+                if gear_open() {
+                    div {
+                        style: "position: fixed; inset: 0; z-index: 20;",
+                        onclick: move |_| gear_open.set(false),
+                    }
+                    div {
+                        style: "position: absolute; top: 42px; right: 0; z-index: 30; width: 224px; background: #0f0f11; border: 1px solid #27272a; border-radius: 10px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); padding: 12px;",
+                        onclick: move |evt: MouseEvent| evt.stop_propagation(),
+                        div { style: "font-size: 12px; font-weight: 700; color: #e4e4e7; padding-bottom: 6px;",
+                            "Settings"
+                        }
+                        span { style: "font-size: 12px; color: #71717a;",
+                            "General app settings — coming soon."
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// The metronome popover: guide master, click (+ sound), count-in, and
+/// section cues, plus a placeholder for the (upcoming) output routing.
+#[component]
+fn MetronomePanel() -> Element {
     let mut guide_on = use_signal(crate::guide::is_enabled);
     let mut click_on = use_signal(crate::guide::click_enabled);
     let mut count_on = use_signal(crate::guide::count_enabled);
     let mut cues_on = use_signal(crate::guide::cues_enabled);
+    let mut click_sound = use_signal(crate::guide::click_sound_index);
 
-    let gear = if guide_on() {
-        "display: flex; align-items: center; justify-content: center; width: 34px; height: 34px; border-radius: 8px; background: #14532d; color: #bbf7d0; border: 1px solid #166534; cursor: pointer; font-size: 17px;"
-    } else {
-        "display: flex; align-items: center; justify-content: center; width: 34px; height: 34px; border-radius: 8px; background: #18181b; color: #a1a1aa; border: 1px solid #27272a; cursor: pointer; font-size: 17px;"
-    };
+    // Output routing (lock-free MixerRouting in daw-standalone). Channel
+    // pairs are (l, l+1); the device's real channel count is published when
+    // the audio stream opens.
+    let routing = daw_standalone::audio_engine::MixerRouting::shared();
+    let channel_count = routing.channel_count();
+    let pairs: Vec<usize> = (0..channel_count).step_by(2).filter(|&l| l + 1 < channel_count).collect();
+    let mut main_l = use_signal(|| routing.main_pair().0);
+    let mut guide_l = use_signal(|| routing.guide_pair().0);
+    let mut phones_on = use_signal(|| routing.phones_enabled());
+    let mut phones_l = use_signal(|| routing.phones_pair().0);
+    let mut main_muted = use_signal(|| routing.main_muted());
 
     rsx! {
-        div { style: "position: absolute; top: 12px; right: 12px; z-index: 30;",
-            button {
-                style: gear,
-                title: "Guide settings (click, count-in, spoken cues)",
-                onclick: move |_| open.toggle(),
-                "\u{2699}"
+        div {
+            style: "position: absolute; top: 42px; right: 0; z-index: 30; width: 250px; background: #0f0f11; border: 1px solid #27272a; border-radius: 10px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); padding: 10px;",
+            onclick: move |evt: MouseEvent| evt.stop_propagation(),
+
+            div { style: "font-size: 12px; font-weight: 700; color: #e4e4e7; padding: 2px 6px 8px;",
+                "Metronome & Guide"
             }
 
-            if open() {
-                // Backdrop to dismiss on outside click.
-                div {
-                    style: "position: fixed; inset: 0; z-index: 20;",
-                    onclick: move |_| open.set(false),
+            GuideToggleRow {
+                label: "Guide",
+                hint: "Master on/off",
+                on: guide_on(),
+                onclick: move |_| {
+                    let v = !guide_on();
+                    crate::guide::set_enabled(v);
+                    guide_on.set(v);
+                },
+            }
+            div { style: "height: 1px; background: #27272a; margin: 6px 4px;" }
+
+            GuideToggleRow {
+                label: "Click",
+                hint: "Metronome",
+                on: click_on(),
+                onclick: move |_| {
+                    let v = !click_on();
+                    crate::guide::set_click_enabled(v);
+                    click_on.set(v);
+                },
+            }
+            // Click sound picker
+            div { style: "display: flex; align-items: center; gap: 8px; padding: 4px 6px 8px;",
+                span { style: "font-size: 12px; color: #a1a1aa; flex: 1;", "Click sound" }
+                select {
+                    style: "background: #18181b; color: #e4e4e7; border: 1px solid #27272a; border-radius: 6px; padding: 4px 6px; font-size: 12px; cursor: pointer;",
+                    onchange: move |evt| {
+                        if let Ok(i) = evt.value().parse::<usize>() {
+                            crate::guide::set_click_sound(i);
+                            click_sound.set(i);
+                        }
+                    },
+                    for (i , (name , _)) in crate::guide::CLICK_SOUNDS.iter().enumerate() {
+                        option { value: "{i}", selected: click_sound() == i, "{name}" }
+                    }
                 }
-                div {
-                    style: "position: absolute; top: 42px; right: 0; z-index: 30; width: 224px; background: #0f0f11; border: 1px solid #27272a; border-radius: 10px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); padding: 10px;",
-                    onclick: move |evt: MouseEvent| evt.stop_propagation(),
+            }
 
-                    div { style: "font-size: 12px; font-weight: 700; color: #e4e4e7; padding: 2px 6px 8px;",
-                        "Guide"
+            GuideToggleRow {
+                label: "Count-in",
+                hint: "Counts before the song",
+                on: count_on(),
+                onclick: move |_| {
+                    let v = !count_on();
+                    crate::guide::set_count_enabled(v);
+                    count_on.set(v);
+                },
+            }
+            GuideToggleRow {
+                label: "Section cues",
+                hint: "Spoken section names",
+                on: cues_on(),
+                onclick: move |_| {
+                    let v = !cues_on();
+                    crate::guide::set_cues_enabled(v);
+                    cues_on.set(v);
+                },
+            }
+
+            div { style: "height: 1px; background: #27272a; margin: 6px 4px;" }
+            div { style: "padding: 2px 6px;",
+                div { style: "font-size: 12px; font-weight: 600; color: #e4e4e7; padding-bottom: 4px;", "Output" }
+
+                if pairs.len() < 2 {
+                    span { style: "font-size: 11px; color: #71717a;",
+                        "This device exposes {channel_count} output channel(s) — a single stereo pair, so there's nothing to route separately."
                     }
-
-                    GuideToggleRow {
-                        label: "Guide",
-                        hint: "Master on/off",
-                        on: guide_on(),
-                        onclick: move |_| {
-                            let v = !guide_on();
-                            crate::guide::set_enabled(v);
-                            guide_on.set(v);
+                } else {
+                    // Main mix output pair.
+                    OutputPairRow {
+                        label: "Main out",
+                        pairs: pairs.clone(),
+                        selected: main_l(),
+                        onselect: move |l: usize| {
+                            routing.set_main_pair(l, l + 1);
+                            main_l.set(l);
                         },
                     }
+                    // Metronome / guide output pair.
+                    OutputPairRow {
+                        label: "Metronome out",
+                        pairs: pairs.clone(),
+                        selected: guide_l(),
+                        onselect: move |l: usize| {
+                            routing.set_guide_pair(l, l + 1);
+                            guide_l.set(l);
+                        },
+                    }
+
                     div { style: "height: 1px; background: #27272a; margin: 6px 4px;" }
+
+                    // Headphone-check monitor bus (main + metronome summed).
                     GuideToggleRow {
-                        label: "Click",
-                        hint: "Metronome",
-                        on: click_on(),
+                        label: "Headphone check",
+                        hint: "Sum main + metronome to a monitor pair",
+                        on: phones_on(),
                         onclick: move |_| {
-                            let v = !click_on();
-                            crate::guide::set_click_enabled(v);
-                            click_on.set(v);
+                            let v = !phones_on();
+                            routing.set_phones_enabled(v);
+                            phones_on.set(v);
                         },
                     }
+                    if phones_on() {
+                        OutputPairRow {
+                            label: "Check out",
+                            pairs: pairs.clone(),
+                            selected: phones_l(),
+                            onselect: move |l: usize| {
+                                routing.set_phones_pair(l, l + 1);
+                                phones_l.set(l);
+                            },
+                        }
+                    }
+
+                    // Mute the device main output (keep it in your IEMs only).
                     GuideToggleRow {
-                        label: "Count-in",
-                        hint: "Counts before the song",
-                        on: count_on(),
+                        label: "Mute main out",
+                        hint: "Silence the main pair on the device",
+                        on: main_muted(),
                         onclick: move |_| {
-                            let v = !count_on();
-                            crate::guide::set_count_enabled(v);
-                            count_on.set(v);
+                            let v = !main_muted();
+                            routing.set_main_muted(v);
+                            main_muted.set(v);
                         },
                     }
-                    GuideToggleRow {
-                        label: "Spoken cues",
-                        hint: "Section names (needs TTS)",
-                        on: cues_on(),
-                        onclick: move |_| {
-                            let v = !cues_on();
-                            crate::guide::set_cues_enabled(v);
-                            cues_on.set(v);
-                        },
+                }
+            }
+        }
+    }
+}
+
+/// One "label → channel-pair dropdown" row in the metronome output section.
+#[component]
+fn OutputPairRow(
+    label: String,
+    pairs: Vec<usize>,
+    selected: usize,
+    onselect: EventHandler<usize>,
+) -> Element {
+    rsx! {
+        div { style: "display: flex; align-items: center; gap: 8px; padding: 4px 6px;",
+            span { style: "font-size: 12px; color: #a1a1aa; flex: 1;", "{label}" }
+            select {
+                style: "background: #18181b; color: #e4e4e7; border: 1px solid #27272a; border-radius: 6px; padding: 4px 6px; font-size: 12px; cursor: pointer;",
+                onchange: move |evt| {
+                    if let Ok(l) = evt.value().parse::<usize>() {
+                        onselect.call(l);
                     }
+                },
+                for l in pairs.iter().copied() {
+                    option { value: "{l}", selected: selected == l, "{l + 1}/{l + 2}" }
                 }
             }
         }

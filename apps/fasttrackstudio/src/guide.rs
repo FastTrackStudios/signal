@@ -22,13 +22,21 @@
 //!   feature-free; everything else falls back to the synthesized chime.
 
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 
 use session_guide::{
     BlockClock, ClickSound, CueBank, CueSchedule, GuideConfig, GuideEngine, GuideSongTiming,
-    SampleBank, TtsRenderer, sections_from_song,
+    SampleBank, TtsRenderer, sections_from_song, tts_cue_key,
 };
+
+/// Spoken count-in numbers rendered through TTS into the count bank
+/// (index 0 = "one"). Words rather than digits so Chatterbox voices them
+/// cleanly. Only used when a TTS voice is available; otherwise the count
+/// keeps the synth tick.
+const COUNT_WORDS: [&str; 8] = [
+    "one", "two", "three", "four", "five", "six", "seven", "eight",
+];
 
 /// Master enable for the guide buses (wired to the settings popover).
 /// Independent of engine installation so the UI can flip it at any time.
@@ -85,6 +93,42 @@ pub fn set_click_enabled(on: bool) {
     CLICK_ON.store(on, Ordering::Relaxed);
     apply_bus_config();
 }
+
+/// The selectable click sounds (name + engine variant), in menu order.
+pub const CLICK_SOUNDS: [(&str, ClickSound); 8] = [
+    ("Blip", ClickSound::Blip),
+    ("Classic", ClickSound::Classic),
+    ("Cowbell", ClickSound::Cowbell),
+    ("Digital", ClickSound::Digital),
+    ("Gentle", ClickSound::Gentle),
+    ("Percussive", ClickSound::Percussive),
+    ("Saw", ClickSound::Saw),
+    ("Woodblock", ClickSound::Woodblock),
+];
+
+/// Index into [`CLICK_SOUNDS`] of the active click sound. Cowbell (index 2)
+/// is the default — it cuts through a live worship mix better than the beep.
+static CLICK_SOUND: AtomicU8 = AtomicU8::new(2);
+
+pub fn click_sound_index() -> usize {
+    CLICK_SOUND.load(Ordering::Relaxed) as usize
+}
+
+/// Switch the click sound live: reload the beat/accent samples from that
+/// sound's folder, re-synthesizing any missing subdivision. Briefly locks
+/// the engine (audio callback only try_locks, so at worst one skipped block).
+pub fn set_click_sound(index: usize) {
+    let index = index.min(CLICK_SOUNDS.len() - 1);
+    CLICK_SOUND.store(index as u8, Ordering::Relaxed);
+    let sound = CLICK_SOUNDS[index].1;
+    let Some(shared) = GUIDE.get() else { return };
+    let Ok(mut engine) = shared.engine.lock() else { return };
+    let dir = config_dir().join("guide-samples/Click");
+    engine.bank_mut().load_click(&dir, sound, shared.sample_rate);
+    // Fill any subdivision the chosen sound is missing with a synth tick.
+    engine.bank_mut().synthesize_defaults(shared.sample_rate);
+    tracing::info!("guide: click sound -> {}", CLICK_SOUNDS[index].0);
+}
 pub fn set_count_enabled(on: bool) {
     COUNT_ON.store(on, Ordering::Relaxed);
     apply_bus_config();
@@ -129,7 +173,7 @@ pub fn install(audio: &daw_standalone::audio_engine::AudioEngine) {
     let samples_dir = config_dir().join("guide-samples");
     engine
         .bank_mut()
-        .load_click(&samples_dir.join("Click"), ClickSound::Blip, sample_rate);
+        .load_click(&samples_dir.join("Click"), ClickSound::Cowbell, sample_rate);
     engine
         .bank_mut()
         .load_counts(&samples_dir.join("Counts"), "English Female", sample_rate);
@@ -184,6 +228,10 @@ pub fn install(audio: &daw_standalone::audio_engine::AudioEngine) {
         );
         drop(engine);
 
+        // Route the guide/metronome onto its configured output pair (read
+        // once — this is the audio thread). The mixer's `finish_routing`
+        // then folds it into the headphone-check bus.
+        let (gl, gr) = daw_standalone::audio_engine::MixerRouting::shared().guide_pair();
         let mut audible = false;
         for f in 0..frames {
             let (lv, rv) = (l[f], r[f]);
@@ -193,8 +241,13 @@ pub fn install(audio: &daw_standalone::audio_engine::AudioEngine) {
             if channels == 1 {
                 buf[f] += (lv + rv) * 0.5;
             } else {
-                buf[f * channels] += lv;
-                buf[f * channels + 1] += rv;
+                let base = f * channels;
+                if gl < channels {
+                    buf[base + gl] += lv;
+                }
+                if gr < channels {
+                    buf[base + gr] += rv;
+                }
             }
         }
         if audible && !shared.first_audible_logged.swap(true, Ordering::Relaxed) {
@@ -209,7 +262,12 @@ pub fn install(audio: &daw_standalone::audio_engine::AudioEngine) {
     }));
     tracing::info!("guide engine installed on aux hook ({sample_rate} Hz)");
 
-    // Seed the live config from the per-bus toggles (notably cues-off).
+    // Spoken cues default ON when a Chatterbox voice is available (TTS renders
+    // section names); OFF otherwise so the synth chime never fires unasked.
+    if tts_voice_available() {
+        CUES_ON.store(true, Ordering::Relaxed);
+    }
+    // Seed the live config from the per-bus toggles.
     apply_bus_config();
 
     // A song may have been announced before audio came up.
@@ -252,9 +310,11 @@ fn rebuild_schedule() {
     let sections = sections_from_song(&song);
     let timing = GuideSongTiming::from_song(&song);
 
-    // TTS cues: pre-render/load into a TEMP bank so slow work never
-    // holds the engine mutex the audio callback try_locks.
-    let texts = CueSchedule::tts_texts(&sections);
+    // TTS cues: section names ("Verse 1") + spoken count-in numbers, pre-
+    // rendered/loaded into a TEMP bank so slow work never holds the engine
+    // mutex the audio callback try_locks.
+    let mut texts = CueSchedule::tts_texts(&sections);
+    texts.extend(COUNT_WORDS.iter().map(|w| w.to_string()));
     let cue_bank = CueBank::new(config_dir().join("tts-cache"), tts_voice_id());
     let mut temp = SampleBank::default();
     {
@@ -274,6 +334,21 @@ fn rebuild_schedule() {
     }
 
     let Ok(mut engine) = shared.engine.lock() else { return };
+    // Spoken count-in numbers → the count bank (index 0 = "one"). A real
+    // recorded count wav (`Counts/English Female - N.wav`, already loaded)
+    // wins; TTS fills the rest; the synth tick is the last resort.
+    let counts_dir = config_dir().join("guide-samples/Counts");
+    for (i, word) in COUNT_WORDS.iter().enumerate() {
+        if counts_dir
+            .join(format!("English Female - {}.wav", i + 1))
+            .exists()
+        {
+            continue;
+        }
+        if let Some(sample) = temp.guides.remove(&tts_cue_key(word)) {
+            engine.bank_mut().counts[i] = Some(sample);
+        }
+    }
     for (key, sample) in temp.guides {
         engine.bank_mut().insert_guide(key, sample);
     }
@@ -289,37 +364,65 @@ fn rebuild_schedule() {
     );
 }
 
-/// Stable cue-cache voice id. Must match `ChatterboxTts::voice_id()` for
-/// the app's config so cached cues load even when the `tts` feature is
-/// compiled out.
+/// Stable cue-cache voice id. Must match `ChatterboxTts::voice_id()` for the
+/// app's config so cached cues load even when the `tts` feature is compiled
+/// out. Fp16 + the bundled `default` profile (see `install_default_voice.sh`).
 fn tts_voice_id() -> String {
-    "chatterbox:ResembleAI/chatterbox-turbo-ONNX@main:Quantized:fts".to_string()
+    "chatterbox:ResembleAI/chatterbox-turbo-ONNX@main:Fp16:default".to_string()
 }
 
-/// Load the local TTS backend — only with the `tts` feature, only when
-/// FTS_TTS=1, and only when the reference voice wav exists. Never
-/// triggers a model download otherwise.
+/// A usable Chatterbox voice is available when the bundled `default` profile
+/// is installed (`install_default_voice.sh` → `$HF_HOME/cbx/voices`) or a
+/// reference clip sits at `tts-voice.wav`. Either enables spoken cues.
+fn tts_voice_available() -> bool {
+    let hf_home = std::env::var_os("HF_HOME")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| {
+            std::env::var_os("HOME")
+                .map(PathBuf::from)
+                .unwrap_or_else(|| PathBuf::from("."))
+                .join(".cache/huggingface")
+        });
+    hf_home.join("cbx/voices/default.cbxvoice").exists() || tts_voice_path().exists()
+}
+
+/// Path to the reference voice clip Chatterbox clones. Spoken cues need it
+/// (voice-cloning), so its presence gates TTS.
+fn tts_voice_path() -> PathBuf {
+    config_dir().join("tts-voice.wav")
+}
+
+/// Load the local TTS backend. Activates whenever the reference voice wav
+/// exists (the flake ships onnxruntime; the model auto-downloads to the HF
+/// cache on first use). Set `FTS_TTS=0` to force the synth fallback even
+/// with a voice present. Loading is slow (model load + first-time download)
+/// — this only runs on the guide's rebuild worker, never the audio thread.
 #[cfg(feature = "tts")]
 fn load_tts() -> Option<Box<dyn TtsRenderer>> {
-    if std::env::var("FTS_TTS").map(|v| v == "1").unwrap_or(false) {
-        let voice = config_dir().join("tts-voice.wav");
-        if !voice.exists() {
-            tracing::warn!(
-                "FTS_TTS=1 but no reference voice at {}; section cues fall back to chimes",
-                voice.display(),
-            );
-            return None;
+    if std::env::var("FTS_TTS").map(|v| v == "0").unwrap_or(false) {
+        return None;
+    }
+    if !tts_voice_available() {
+        tracing::info!(
+            "no Chatterbox voice available; spoken cues off. Install the bundled \
+             default voice (cbx `install_default_voice.sh`) or drop a clip at {}",
+            tts_voice_path().display(),
+        );
+        return None;
+    }
+    // voice_wav is only used if no cached profile matches; the bundled default
+    // profile takes precedence inside ChatterboxTts.
+    let config = session_guide::ChatterboxTtsConfig::with_voice(tts_voice_path(), "fts");
+    match session_guide::ChatterboxTts::load(config) {
+        Ok(tts) => {
+            debug_assert_eq!(tts.voice_id(), tts_voice_id());
+            Some(Box::new(tts))
         }
-        let config = session_guide::ChatterboxTtsConfig::with_voice(voice, "fts");
-        match session_guide::ChatterboxTts::load(config) {
-            Ok(tts) => {
-                debug_assert_eq!(tts.voice_id(), tts_voice_id());
-                return Some(Box::new(tts));
-            }
-            Err(e) => tracing::warn!("chatterbox TTS unavailable: {e}"),
+        Err(e) => {
+            tracing::warn!("chatterbox TTS unavailable: {e}");
+            None
         }
     }
-    None
 }
 
 /// Without the `tts` feature only already-cached cues load; uncached

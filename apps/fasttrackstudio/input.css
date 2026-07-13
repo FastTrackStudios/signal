@@ -11,6 +11,7 @@
 @source "../../crates/signal/grid-ui/src/**/*.rs";
 @source "../../features/rigs/guitar/ui/src/**/*.rs";
 @source "../../crates/session/ui/src/**/*.rs";
+@source "../../features/daw-ui/daw-ui/src/**/*.rs";
 @source "../../libs/fts-ui/*/src/**/*.rs";
 @source "../../libs/dock/*/src/**/*.rs";
 /* lumen-blocks is still a git dep -- scan its cargo checkout ($CARGO_HOME). */

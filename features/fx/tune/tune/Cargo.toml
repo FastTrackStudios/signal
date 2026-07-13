@@ -1,0 +1,16 @@
+[package]
+name = "tune"
+version.workspace = true
+edition = "2021"          # matches sibling fx facades (comp, pitch)
+license.workspace = true
+description = "tune — facade over tune-dsp; monophonic pitch correction (detect→note→snap) over the pitch-dsp shift core. Plugin UI and presets are opt-in."
+
+[features]
+default = []
+# Opt-in plugin UI and preset profiles — declared now so the facade shape is
+# stable; wired once the plugin shell lands (mirrors comp/pitch).
+ui = []
+profiles = []
+
+[dependencies]
+tune-dsp = { workspace = true }

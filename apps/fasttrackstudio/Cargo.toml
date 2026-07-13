@@ -26,7 +26,11 @@ authors = ["FastTrackStudio"]
 
 [features]
 default = ["full"]
-full = ["signal", "session"]
+# Chatterbox TTS (session-guide/tts) is ON by default — spoken section cues
+# are core to the guide. It only *activates* at runtime when a voice wav +
+# model are present; the flake provides onnxruntime + ORT_DYLIB_PATH so the
+# load-dynamic dlopen resolves. Compiles fine without them (TTS just idles).
+full = ["signal", "session", "tts"]
 # signal also force-enables session-ui/desktop: signal-guitar-ui pulls
 # session-ui (default-features off), which only compiles with its dioxus
 # renderer feature on (dock-dioxus needs "web" for its prelude).
@@ -66,7 +70,10 @@ embed-web = ["dep:include_dir"]
 session = [
     "dep:session-proto",
     "dep:session-ui",
+    "dep:daw-ui",
+    "dep:dawfile-reaper",
     "dep:keyflow",
+    "dep:keyflow-sync",
     "dep:session",
     "dep:session-guide",
     "dep:daw",
@@ -104,6 +111,10 @@ session-proto = { workspace = true, optional = true }
 # output through daw-standalone's aux post-render hook.
 session-guide = { workspace = true, optional = true }
 keyflow = { workspace = true, optional = true }
+# Lyric-sync sidecar (TimingMap) reader for the Lyric Sync workspace. Lean
+# default features only — no onnx/whisper; alignment is produced offline by
+# the `kf` CLI, the app just loads + edits the resulting sidecar.
+keyflow-sync = { workspace = true, optional = true }
 
 # DAW domain — facade (daw::get / init_from_parts / LayerRouter) + the
 # standalone backend that plays the setlist without REAPER. "audio" is
@@ -130,6 +141,13 @@ eyre = { workspace = true, optional = true }
 dioxus = { workspace = true, default-features = true, features = ["desktop", "launch"] }
 tracing-subscriber.workspace = true
 session-ui = { workspace = true, features = ["desktop"], optional = true }
+# The real DAW panels (MixerPanel / ArrangementView) — self-contained,
+# wired to the in-process daw facade. `web` = the dioxus (WebView) renderer
+# the desktop app uses.
+daw-ui = { workspace = true, features = ["web"], optional = true }
+# REAPER-project (.rpp) export for the "Open in REAPER" button — the
+# standalone project round-trips through dawfile. Native-only.
+dawfile-reaper = { workspace = true, optional = true }
 # Engine supervisor (spawn/stop/probe the engine) — shared with fts-cli.
 engine-launcher = { workspace = true, optional = true }
 # Async runtime: session's in-process engine AND engine mode's server.
@@ -164,6 +182,7 @@ signal-drums = { workspace = true, features = ["pipewire"], optional = true }
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 dioxus = { workspace = true, default-features = true, features = ["web", "launch"] }
 session-ui = { workspace = true, features = ["web"], optional = true }
+daw-ui = { workspace = true, features = ["web"], optional = true }
 web-sys = { version = "0.3", features = ["Window", "Storage", "Location"] }
 # getrandom 0.3 (transitive via iroh) needs its js backend on wasm32.
 getrandom = { version = "0.3", features = ["wasm_js"] }
