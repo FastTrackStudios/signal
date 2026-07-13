@@ -563,23 +563,27 @@ impl SampleEngine {
             .as_ref()
             .filter(|_| velocity >= RELEASE_SAMPLE_VELOCITY_MIN)
         {
-            // For release-trail dynamics, MIDI controllers commonly send
-            // release-velocity 64 as a "no info" default. If we got that
-            // exact value, fall through to the body's note-on velocity
-            // for layer pick — otherwise the picker would always use the
-            // same dynamic regardless of how hard the player struck.
-            let dyn_vel = if velocity == 64 {
-                self.held_notes.get(&note).copied().unwrap_or(velocity)
-            } else {
-                velocity
+            // The release tail follows the NOTE-ON strike velocity, not the
+            // note-off velocity: controllers routinely send 0/64 "no info" on
+            // note-off, so keying off it makes every release the same loudness
+            // regardless of how softly the note was played — and a soft note's
+            // quiet body gets buried under a full-volume key-up/mechanical
+            // click ("plays a mech noise, the note doesn't ring"). Both the
+            // dynamic-layer pick and the gain scale by the strike instead.
+            let strike = {
+                let s = self.note_strike_vel[note as usize];
+                if s > 0 { s } else { velocity.max(1) }
             };
-            let rel_dyn = self.dynamic_for_artic(rel_id, dyn_vel);
-            // Scale by release velocity so soft note-offs whisper and
-            // firm note-offs click clearly. (v/127)^1.5 sits between the
-            // body's v² curve and a perceptually-flat linear ramp.
-            let v_norm = (velocity as f32 / 127.0).clamp(0.0, 1.0);
+            let rel_dyn = self.dynamic_for_artic(rel_id, strike);
+            // (v/127)^1.5 sits between the body's v² curve and a flat ramp — a
+            // pianissimo strike gets a near-silent release, a firm strike a
+            // clear click.
+            let v_norm = (strike as f32 / 127.0).clamp(0.0, 1.0);
             let gain = RELEASE_SAMPLE_GAIN_MAX * v_norm.powf(1.5);
-            tracing::debug!(note, velocity, gain, dyn = %rel_dyn, "release sample");
+            tracing::debug!(
+                target: "signal_sampler::trigger",
+                note, strike, gain, dyn = %rel_dyn, "release tail"
+            );
 
             // Pick the release variant by pedal state: pedal-up damps the
             // string (`rel`), pedal-down lets it ring (`relsl`). "" for

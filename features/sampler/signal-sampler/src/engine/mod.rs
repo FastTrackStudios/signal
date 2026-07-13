@@ -487,6 +487,11 @@ pub struct SampleEngine {
     /// player is currently playing. Drives velocity-scaling of note-independent
     /// ambience (pedal / mechanical noise) so soft passages get soft noise.
     recent_velocity: u8,
+    /// Per-note strike (note-on) velocity, kept until the note releases. The
+    /// release tail's dynamic + gain follow this, NOT the note-off velocity —
+    /// controllers routinely send 0/64 "no info" on note-off, and a soft note
+    /// must get a soft release or the key-up/mechanical noise drowns it out.
+    note_strike_vel: [u8; 128],
     /// While the sustain pedal is held, libraries with distinct pedal-down
     /// body samples (e.g. Keyscape `lacrped`) swap `articulation` to the
     /// pedal variant. The original (no-pedal) ID lives here so we can snap
@@ -729,6 +734,7 @@ impl SampleEngine {
             cc64_held: false,
             cc64_value: 0,
             recent_velocity: 90,
+            note_strike_vel: [0; 128],
             no_pedal_articulation: None,
             con_sordino: false,
             legato_enabled: true,

@@ -186,6 +186,40 @@ fn note_off_fires_a_release_tail() {
     assert!(has_release, "note-off did not fire a release tail");
 }
 
+/// The release tail's loudness follows the NOTE-ON strike velocity, not the
+/// note-off velocity. A soft strike must get a much quieter release than a firm
+/// strike even when both send the same note-off velocity — otherwise a
+/// pianissimo note's quiet body is buried under a full-volume key-up click
+/// ("plays a mech noise, the note doesn't ring").
+#[test]
+fn release_tail_tracks_strike_velocity_not_note_off() {
+    let Some(rig) = rhodes() else { return };
+    let mut buf = vec![0.0f32; BLK * 2];
+
+    let mut release_gain = |vel: u8| -> f32 {
+        rig.set_trace_enabled(ID, true);
+        rig.midi_message(0, 0x90, 72, vel);
+        render(&rig, &mut buf, 6);
+        rig.midi_message(0, 0x80, 72, 64); // identical "no-info" note-off both times
+        render(&rig, &mut buf, 6);
+        rig.render_trace(ID)
+            .spawns_of_note(72)
+            .into_iter()
+            .find(|v| v.voice_kind == "Release")
+            .map(|v| v.gain)
+            .unwrap_or(0.0)
+    };
+
+    let soft = release_gain(20);
+    let firm = release_gain(110);
+    assert!(soft > 0.0 && firm > 0.0, "both strikes should fire a release ({soft}, {firm})");
+    assert!(
+        firm > soft * 4.0,
+        "release must track strike velocity: soft(v20)={soft:.4} vs firm(v110)={firm:.4} \
+         — same note-off velocity, so a fixed release would make these equal"
+    );
+}
+
 /// Under the sustain pedal the body stays the playable instrument (`lacrm`),
 /// never the pedal-NOISE articulation (`lacrped`), and the pedal noise fires as
 /// its own layer. Guards the pedal-body-swap fix.

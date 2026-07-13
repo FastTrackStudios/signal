@@ -234,9 +234,11 @@ impl SampleEngine {
 
         // Track a lightly-smoothed recent velocity (75% history, 25% new) as a
         // proxy for current playing dynamic — used to scale note-independent
-        // ambience (pedal/mechanical noise).
+        // ambience (pedal/mechanical noise). Also remember this note's strike
+        // velocity so its release tail can match it.
         self.recent_velocity =
             (((self.recent_velocity as u16 * 3 + velocity as u16) / 4) as u8).max(1);
+        self.note_strike_vel[note as usize] = velocity;
 
         // Velocity-sensitive keyswitches (CSS-style): a keyswitch note selects
         // an articulation / mode and does NOT sound.
