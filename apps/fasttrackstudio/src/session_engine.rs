@@ -36,7 +36,7 @@ use session::services::setlist_service::{
     SetlistServiceStreamClient, setlist_service_stream_service_descriptor,
     stream_serve as setlist_service_stream_serve,
 };
-use session::setlist_service::demo::stamp_demo_setlist_with;
+use session::setlist_service::demo::{demo_song_layout, stamp_demo_setlist_with};
 use session::{
     SetlistServiceClient, SetlistServiceImpl, serve_setlist_service,
     setlist_service_service_descriptor,
@@ -106,7 +106,7 @@ pub fn bootstrap_blocking() -> eyre::Result<()> {
 /// audio lives outside the repo; if the folder is absent we skip seeding and
 /// the setlist still loads (markers/sections only). Stems are mmap'd, so this
 /// is near-instant even for 23×78 MB files.
-fn seed_praise_media(standalone: &Standalone, project_guid: &str) {
+fn seed_praise_media(standalone: &Standalone, project_guid: &str, start: f64, len: f64) {
     use daw_standalone::media_seed::{StemSpec, seed_media_tracks};
 
     // (display name, filename, group)
@@ -159,9 +159,7 @@ fn seed_praise_media(standalone: &Standalone, project_guid: &str) {
         })
         .collect();
 
-    // Praise is the first song: region starts at t=0, stems aligned to it.
-    // Length generously covers the ~276 s song (render clips to source frames).
-    let report = seed_media_tracks(standalone, project_guid, &stems, 0.0, 300.0);
+    let report = seed_media_tracks(standalone, project_guid, &stems, start, len);
     tracing::info!(
         "seeded Praise media: {} tracks / {} folders, {} sources loaded, {} failed",
         report.tracks_created,
@@ -169,6 +167,131 @@ fn seed_praise_media(standalone: &Standalone, project_guid: &str) {
         report.materialize.loaded,
         report.materialize.failed.len(),
     );
+}
+
+/// A rough instrument-family group for a stem, from its (prefix-stripped) name.
+/// Cosmetic — drives the mixer's folder buses; approximate is fine for the demo.
+fn group_for(name: &str) -> Option<&'static str> {
+    let n = name.to_ascii_lowercase();
+    let any = |ks: &[&str]| ks.iter().any(|k| n.contains(k));
+    if any(&["click", "cue", "guide"]) {
+        Some("Guide")
+    } else if any(&["loop"]) {
+        Some("Tracks")
+    } else if any(&["bass"]) {
+        Some("Bass")
+    } else if any(&["drum", "perc"]) {
+        Some("Drums")
+    } else if any(&["organ", "key", "piano", "rhodes", "synth", "pad"]) {
+        Some("Keys")
+    } else if any(&["guitar", "gtr", "acoustic", "electric", "ag", "eg"]) {
+        Some("Guitars")
+    } else if any(&["vocal", "vox", "bgv", "choir"]) {
+        Some("Vocals")
+    } else if any(&["sax", "horn", "brass", "string", "orch"]) {
+        Some("Orchestra")
+    } else if any(&["fx"]) {
+        Some("FX")
+    } else {
+        None
+    }
+}
+
+/// Seed a song's stems by globbing its folder's `*.wav` files. Display names
+/// strip a leading "Song - " prefix ("Holy Forever - EG 2" → "EG 2"); groups
+/// are inferred from the name. Missing folder ⇒ skip (markers-only).
+fn seed_globbed_media(
+    standalone: &Standalone,
+    project_guid: &str,
+    song: &str,
+    dir: &std::path::Path,
+    start: f64,
+    len: f64,
+) {
+    use daw_standalone::media_seed::{StemSpec, seed_media_tracks};
+
+    if !dir.is_dir() {
+        tracing::info!("{song} stems not found at {dir:?} — seeding markers only");
+        return;
+    }
+    let mut wavs: Vec<std::path::PathBuf> = match std::fs::read_dir(dir) {
+        Ok(rd) => rd
+            .flatten()
+            .map(|e| e.path())
+            .filter(|p| {
+                p.extension()
+                    .map(|x| x.eq_ignore_ascii_case("wav"))
+                    .unwrap_or(false)
+            })
+            .collect(),
+        Err(e) => {
+            tracing::warn!("{song}: read stems dir {dir:?}: {e}");
+            return;
+        }
+    };
+    wavs.sort();
+    let stems: Vec<StemSpec> = wavs
+        .iter()
+        .map(|p| {
+            let stem = p
+                .file_stem()
+                .map(|s| s.to_string_lossy().to_string())
+                .unwrap_or_default();
+            // "Holy Forever - EG 2" → "EG 2"; "01 - Click" → "Click".
+            let name = stem.rsplit(" - ").next().unwrap_or(&stem).trim().to_string();
+            let group = group_for(&name);
+            StemSpec::new(name, p.to_string_lossy().to_string(), group)
+        })
+        .collect();
+    if stems.is_empty() {
+        return;
+    }
+    let report = seed_media_tracks(standalone, project_guid, &stems, start, len);
+    tracing::info!(
+        "seeded {song} media: {} tracks / {} folders, {} sources loaded, {} failed",
+        report.tracks_created,
+        report.folders_created,
+        report.materialize.loaded,
+        report.materialize.failed.len(),
+    );
+}
+
+/// Seed the multitrack stems for EVERY demo song we have audio for, each placed
+/// at its song's `region_start` (from the demo layout) so the audio lines up
+/// with the stamped song region. Praise uses its curated grouped stem table;
+/// the others glob their folder. Missing folders are skipped individually.
+fn seed_all_media(standalone: &Standalone, project_guid: &str) {
+    let layout = demo_song_layout();
+    let at = |name: &str| {
+        layout
+            .iter()
+            .find(|(n, _, _)| *n == name)
+            .map(|(_, s, l)| (*s, *l))
+    };
+
+    if let Some((start, len)) = at("Praise") {
+        seed_praise_media(standalone, project_guid, start, len);
+    }
+
+    // The other worship songs live under FTS_WORSHIP_STEMS (default Downloads).
+    let base = std::env::var("FTS_WORSHIP_STEMS")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| {
+            std::path::PathBuf::from(std::env::var("HOME").unwrap_or_default())
+                .join("Downloads/Worship MultiTracks")
+        });
+    // (demo song name, on-disk folder)
+    const FOLDERS: &[(&str, &str)] = &[
+        ("God, I'm Just Grateful", "God, I_m Just Grateful _ Elevation Worship _ D"),
+        ("Holy Forever", "Holy Forever _ Bethel Music _ Bb"),
+        ("Thank God I'm Free", "Thank God I_m Free _ Elevation Rhythm _ E"),
+        ("Washed", "Washed _ Elevation Rhythm _ B"),
+        ("Who Else", "Who Else _ Gateway Worship _ Ab"),
+    ];
+    for (name, folder) in FOLDERS {
+        let Some((start, len)) = at(name) else { continue };
+        seed_globbed_media(standalone, project_guid, name, &base.join(folder), start, len);
+    }
 }
 
 async fn bootstrap(engine_rt: tokio::runtime::Handle) -> eyre::Result<SessionEngine> {
@@ -184,9 +307,9 @@ async fn bootstrap(engine_rt: tokio::runtime::Handle) -> eyre::Result<SessionEng
     stamp_demo_setlist_with(&standalone).map_err(|e| eyre::eyre!("stamp demo setlist: {e:?}"))?;
     tracing::info!("demo setlist stamped into standalone project '{guid}'");
 
-    // Seed the real Praise multitrack stems as grouped, playable tracks (when
+    // Seed every demo song's multitrack stems as grouped, playable tracks (when
     // the audio is present on this machine — the demo still works without it).
-    seed_praise_media(&standalone, &guid);
+    seed_all_media(&standalone, &guid);
 
     // 2. In-process daw facade over a vox memory link. The setlist
     //    service's build/hydration path goes through `daw::get()`, so
