@@ -52,26 +52,42 @@ pub fn engines_dir(library_root: &Path) -> PathBuf {
     if e.is_dir() { e } else { library_root.to_path_buf() }
 }
 
-/// A friendly label for a preset engine-slot id (`"rtom1"` → `"Rack Tom 1"`).
+/// Canonical piece label for a preset engine-slot id — the MM2 mixer strip
+/// name, so it doubles as the mix-import match key. Handles the differing id
+/// schemes across presets: Metal Monster uses `rtom1`/`hats`/`snare`, while
+/// Pound/Organic use `rtom-a`/`hh-o`/`snare-a`/`kick-b`. Tom numbering comes
+/// from a trailing `1`/`2` or `-a`/`-b`.
 pub fn slot_label(slot_id: &str) -> String {
-    match slot_id {
-        "kick" => "Kick",
-        "snare" => "Snare",
-        "rtom1" => "Rack Tom 1",
-        "rtom2" => "Rack Tom 2",
-        "rtom3" => "Rack Tom 3",
-        "ftom1" => "Floor Tom 1",
-        "ftom2" => "Floor Tom 2",
-        "hats" | "hh" => "Hats",
-        "ride" => "Ride",
-        "crash-l" | "crashl" => "Crash L",
-        "crash-r" | "crashr" => "Crash R",
-        "crash-fl" => "Crash Far L",
-        "china" => "China",
-        "splash" => "Splash",
-        other => return title_case(other),
+    let s = slot_id.to_ascii_lowercase();
+    // Which of a pair of same-type pieces: `-b`/`2`/`3` → 2/3, else 1.
+    let ord = |s: &str| -> u32 {
+        if s.contains('3') { 3 } else if s.ends_with("-b") || s.contains('2') { 2 } else { 1 }
+    };
+    if s.starts_with("kick") {
+        "Kick".into()
+    } else if s.starts_with("snare") {
+        "Snare".into()
+    } else if s.starts_with("rtom") || s.starts_with("racktom") || s.starts_with("rack-tom") {
+        format!("Rack Tom {}", ord(&s))
+    } else if s.starts_with("ftom") || s.starts_with("floortom") || s.starts_with("floor-tom") {
+        format!("Floor Tom {}", ord(&s))
+    } else if s.starts_with("hh") || s.starts_with("hat") {
+        "Hats".into()
+    } else if s.starts_with("ride") {
+        "Ride".into()
+    } else if s.starts_with("splash") {
+        "Splash".into()
+    } else if s.starts_with("china") {
+        "China".into()
+    } else if s.starts_with("crash") {
+        // crash-l / crash-r / crash-fl / crash-fr
+        if s.contains("fl") { "Crash Far L".into() }
+        else if s.contains("fr") { "Crash Far R".into() }
+        else if s.ends_with('r') || s.contains("-r") { "Crash R".into() }
+        else { "Crash L".into() }
+    } else {
+        title_case(slot_id)
     }
-    .to_string()
 }
 
 fn title_case(s: &str) -> String {
