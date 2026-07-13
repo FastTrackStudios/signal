@@ -118,6 +118,8 @@ enum Workspace {
     #[cfg(feature = "session")]
     Session,
     #[cfg(feature = "session")]
+    Arrangement,
+    #[cfg(feature = "session")]
     Mixer,
     #[cfg(feature = "session")]
     LyricSync,
@@ -133,6 +135,8 @@ impl Workspace {
             (Self::Signal, "Signal"),
             #[cfg(feature = "session")]
             (Self::Session, "Session"),
+            #[cfg(feature = "session")]
+            (Self::Arrangement, "Arrangement"),
             #[cfg(feature = "session")]
             (Self::Mixer, "Mixer"),
             #[cfg(feature = "session")]
@@ -261,9 +265,17 @@ fn App() -> Element {
                         session_view::SessionWorkspace {}
                     },
                     #[cfg(feature = "session")]
+                    Some(Workspace::Arrangement) => rsx! {
+                        // The real daw-ui arrangement view — the seeded Praise
+                        // stems' audio clips laid out on the timeline.
+                        div { style: "flex:1; min-height:0; display:flex;",
+                            daw_ui::ArrangementView {}
+                        }
+                    },
+                    #[cfg(feature = "session")]
                     Some(Workspace::Mixer) => rsx! {
-                        // Per-track mixer over the in-process daw-standalone
-                        // engine — the seeded Praise stems with vol/mute/solo.
+                        // The real daw-ui mixer over the in-process daw engine —
+                        // the seeded Praise stems with vol/pan/mute/solo + FX.
                         mixer_view::MixerWorkspace {}
                     },
                     #[cfg(feature = "session")]

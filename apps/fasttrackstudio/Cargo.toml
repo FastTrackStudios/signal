@@ -70,6 +70,8 @@ embed-web = ["dep:include_dir"]
 session = [
     "dep:session-proto",
     "dep:session-ui",
+    "dep:daw-ui",
+    "dep:dawfile-reaper",
     "dep:keyflow",
     "dep:keyflow-sync",
     "dep:session",
@@ -139,6 +141,13 @@ eyre = { workspace = true, optional = true }
 dioxus = { workspace = true, default-features = true, features = ["desktop", "launch"] }
 tracing-subscriber.workspace = true
 session-ui = { workspace = true, features = ["desktop"], optional = true }
+# The real DAW panels (MixerPanel / ArrangementView) — self-contained,
+# wired to the in-process daw facade. `web` = the dioxus (WebView) renderer
+# the desktop app uses.
+daw-ui = { workspace = true, features = ["web"], optional = true }
+# REAPER-project (.rpp) export for the "Open in REAPER" button — the
+# standalone project round-trips through dawfile. Native-only.
+dawfile-reaper = { workspace = true, optional = true }
 # Engine supervisor (spawn/stop/probe the engine) — shared with fts-cli.
 engine-launcher = { workspace = true, optional = true }
 # Async runtime: session's in-process engine AND engine mode's server.
@@ -173,6 +182,7 @@ signal-drums = { workspace = true, features = ["pipewire"], optional = true }
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 dioxus = { workspace = true, default-features = true, features = ["web", "launch"] }
 session-ui = { workspace = true, features = ["web"], optional = true }
+daw-ui = { workspace = true, features = ["web"], optional = true }
 web-sys = { version = "0.3", features = ["Window", "Storage", "Location"] }
 # getrandom 0.3 (transitive via iroh) needs its js backend on wasm32.
 getrandom = { version = "0.3", features = ["wasm_js"] }
