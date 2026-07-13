@@ -481,6 +481,18 @@ impl DrumRigBackend {
             .name("drum-meter-pump".into())
             .spawn(move || {
                 let mut last_running = false;
+                // MIDI hot-plug watch: snapshot the port set and re-attach when
+                // it changes, so a device plugged in after the rig started
+                // (e.g. the mioXM) is picked up without touching the UI.
+                let sorted_ports = || {
+                    let mut p = SamplerRig::midi_input_ports();
+                    p.sort();
+                    p
+                };
+                let mut known_ports = sorted_ports();
+                let mut tick: u32 = 0;
+                // ~every 2 s (60 * 33 ms).
+                const PORT_SCAN_TICKS: u32 = 60;
                 loop {
                     std::thread::sleep(std::time::Duration::from_millis(PUMP_MS));
                     // Decay Light Guide flashes even while stopped (cheap no-op
@@ -491,6 +503,20 @@ impl DrumRigBackend {
                         }
                     }
                     let running = backend.inner.rig.lock().map(|r| r.is_some()).unwrap_or(false);
+                    // Re-scan MIDI ports periodically; on a change, re-attach so
+                    // hot-plugged interfaces are merged into the omni stream.
+                    tick = tick.wrapping_add(1);
+                    if tick % PORT_SCAN_TICKS == 0 {
+                        let now = sorted_ports();
+                        if now != known_ports {
+                            tracing::info!(ports = ?now, "drum rig: MIDI ports changed — re-attaching");
+                            known_ports = now;
+                            if running {
+                                backend.reattach_midi();
+                                backend.inner.events.publish(DrumEvent::Status(DrumRig::status(&backend)));
+                            }
+                        }
+                    }
                     // Transport transitions are rare — publish Status only on the
                     // edge, not every tick.
                     if running != last_running {
