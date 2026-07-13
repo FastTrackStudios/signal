@@ -3,6 +3,11 @@
 
 use super::*;
 
+/// Fade time for the previous same-note body when a key is re-struck (see
+/// [`SampleEngine::trigger_short`]). Smooth enough to subsume the old ring, not
+/// so long that fast repeats overlap into a pileup.
+const RETRIGGER_FADE_MS: u32 = 90;
+
 impl SampleEngine {
     pub(crate) fn trigger_sustain(&mut self, note: u8) {
         let vib_blend = self.cc2_blend();
@@ -90,6 +95,15 @@ impl SampleEngine {
     }
 
     pub(crate) fn trigger_short(&mut self, note: u8, velocity: u8) {
+        // Re-striking the same key re-excites the same string: fade the prior
+        // still-ringing body instead of stacking a second full voice. Under a
+        // held sustain pedal (note-offs deferred) this is what keeps repeated
+        // notes from piling up 30 s voices until the pool steals still-ringing
+        // notes ("plays a click, the note doesn't ring"). ~90 ms is a smooth
+        // subsume, not an audible cut.
+        let retrigger_fade = ms_to_frames(RETRIGGER_FADE_MS, self.sample_rate);
+        self.voices.retrigger_fade_note(note, retrigger_fade);
+
         // Pick dynamic layer based on velocity and spec short_note_cc1_map.
         let dynamic = self.short_note_dynamic(velocity);
         let artic_kind = self

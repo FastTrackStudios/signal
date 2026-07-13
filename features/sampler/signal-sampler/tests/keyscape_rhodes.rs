@@ -220,6 +220,78 @@ fn release_tail_tracks_strike_velocity_not_note_off() {
     );
 }
 
+/// Runs a ton of MIDI through a sustain-pedal-held passage — the exact
+/// condition that made notes drop to "just a click": repeated notes across a
+/// couple octaves, pedal never lifted, so every strike's body would otherwise
+/// pile up a multi-second voice until the pool steals a still-ringing note.
+/// Asserts the whole passage steals NOTHING (no ringing note cut), every
+/// note-on sounds a body, and nothing misses.
+#[test]
+fn heavy_pedal_passage_never_steals_a_ringing_note() {
+    let Some(rig) = rhodes() else { return };
+    rig.set_trace_enabled(ID, true);
+    let mut buf = vec![0.0f32; BLK * 2];
+
+    // Sustain pedal down for the whole passage.
+    rig.midi_message(0, 0xB0, 64, 127);
+
+    // ~two octaves of playable range, struck fast and repeatedly at varied
+    // velocity — a realistic dense pedalled passage.
+    let range: [u8; 25] = [
+        48, 50, 52, 53, 55, 57, 59, 60, 62, 64, 65, 67, 69, 71, 72, 71, 69, 67, 65, 64, 62, 60,
+        59, 57, 55,
+    ];
+    let mut note_ons = 0usize;
+    for round in 0..16 {
+        for (i, &n) in range.iter().enumerate() {
+            // vary velocity across the soft→firm range, including pianissimo.
+            let vel = (12 + ((round * 7 + i * 5) % 110)) as u8;
+            rig.midi_message(0, 0x90, n, vel);
+            render(&rig, &mut buf, 2); // ~20 ms/note
+            rig.midi_message(0, 0x80, n, 64); // note-off deferred by the pedal
+            note_ons += 1;
+        }
+    }
+    render(&rig, &mut buf, 20);
+
+    // The point: nothing ringing was stolen.
+    assert_eq!(
+        rig.stolen_voices(ID),
+        0,
+        "voice stealing occurred during a pedalled passage — a still-ringing note was cut"
+    );
+
+    let trace = rig.render_trace(ID);
+    // No note-on produced a miss.
+    let misses = trace.misses();
+    assert!(misses.is_empty(), "unexpected misses: {}", misses.len());
+    // Every note-on sounded a body.
+    let bodies = trace
+        .events
+        .iter()
+        .filter(|e| matches!(&e.kind, TraceKind::VoiceSpawn(v) if is_body(v.voice_kind)))
+        .count();
+    assert_eq!(
+        bodies, note_ons,
+        "{note_ons} note-ons but only {bodies} body voices — some strikes never sounded"
+    );
+
+    // Sanity: the release tails never exceed the max and stay proportional —
+    // a soft strike must not fire a full-volume release (the "loud mech noise
+    // over a quiet note" complaint). Every release gain is within [0, MAX].
+    for e in &trace.events {
+        if let TraceKind::VoiceSpawn(v) = &e.kind {
+            if v.voice_kind == "Release" {
+                assert!(
+                    v.gain <= 0.36,
+                    "release gain {} exceeds the cap — release far too loud",
+                    v.gain
+                );
+            }
+        }
+    }
+}
+
 /// Under the sustain pedal the body stays the playable instrument (`lacrm`),
 /// never the pedal-NOISE articulation (`lacrped`), and the pedal noise fires as
 /// its own layer. Guards the pedal-body-swap fix.

@@ -179,6 +179,17 @@ pub struct Voice {
     /// AHDSR), multiplied into the output. `None` = flat unity (legacy voices /
     /// families with no decoded envelope).
     flex: Option<FlexEnv>,
+
+    /// True once the voice has produced audible output. Gates auto-retirement
+    /// so a voice still in its silent attack pre-roll / fade-in-under handoff
+    /// is never mistaken for a decayed one.
+    has_sounded: bool,
+    /// Consecutive frames the voice's own output has stayed below the
+    /// audibility floor after having sounded. When it exceeds
+    /// [`RETIRE_SILENCE_FRAMES`] the voice retires (frees its polyphony slot) —
+    /// so notes decayed to silence under a held sustain pedal stop hogging the
+    /// pool and forcing voice-steals that cut still-ringing notes.
+    quiet_frames: usize,
 }
 
 /// One decoded Kontakt ENV_FLEX amplitude envelope, evaluated per frame and
@@ -344,6 +355,8 @@ impl Voice {
             line: 0,
             artic_class: ArticClass::Longs,
             flex: None,
+            has_sounded: false,
+            quiet_frames: 0,
         }
     }
 
@@ -389,6 +402,8 @@ impl Voice {
             line: 0,
             artic_class: ArticClass::Longs,
             flex: None,
+            has_sounded: false,
+            quiet_frames: 0,
         }
     }
 
@@ -744,16 +759,42 @@ impl Voice {
     pub fn render_block(&mut self, output: &mut [f32]) -> usize {
         let num_frames = output.len() / 2;
         let mut rendered = 0;
+        let mut block_peak = 0.0f32;
         for i in 0..num_frames {
             let (l, r) = self.next_frame();
             output[i * 2] += l;
             output[i * 2 + 1] += r;
+            block_peak = block_peak.max(l.abs()).max(r.abs());
             rendered += 1;
             if self.is_done() {
                 break;
             }
         }
+        self.update_decay_retire(block_peak, rendered);
         rendered
+    }
+
+    /// Free a voice that has decayed to silence. Once a voice has actually
+    /// sounded (so silent attack pre-rolls don't trip it) and then stays below
+    /// the audibility floor for [`RETIRE_SILENCE_FRAMES`], retire it. This
+    /// matters for pianos under a held sustain pedal: without it, every struck
+    /// note keeps its full multi-second sample alive in the pool long after it
+    /// has faded to nothing, filling the polyphony budget and forcing
+    /// voice-steals that cut still-ringing notes. A looping/held sustain never
+    /// stays quiet, so it never retires this way.
+    fn update_decay_retire(&mut self, block_peak: f32, frames: usize) {
+        if self.state == VoiceState::Done {
+            return;
+        }
+        if block_peak >= RETIRE_FLOOR {
+            self.has_sounded = true;
+            self.quiet_frames = 0;
+        } else if self.has_sounded {
+            self.quiet_frames = self.quiet_frames.saturating_add(frames);
+            if self.quiet_frames >= RETIRE_SILENCE_FRAMES {
+                self.state = VoiceState::Done;
+            }
+        }
     }
 }
 
@@ -767,9 +808,18 @@ fn flush_denormal(x: f32) -> f32 {
 
 // ── Voice pool ────────────────────────────────────────────────────────────────
 
-/// Maximum simultaneous voices before stealing.
-const MAX_VOICES: usize = 64;
+/// Maximum simultaneous voices before stealing. A piano held under the sustain
+/// pedal accumulates many multi-second voices, so this is generous; the decay
+/// auto-retire (see [`Voice::update_decay_retire`]) keeps the *active* count
+/// far below it in practice by freeing faded notes.
+const MAX_VOICES: usize = 160;
 const STEAL_FADE_FRAMES: usize = 128;
+/// Output magnitude below which a voice is considered inaudible (~ -74 dBFS).
+const RETIRE_FLOOR: f32 = 2.0e-4;
+/// How long (frames) a sounded voice must stay below [`RETIRE_FLOOR`] before it
+/// retires and frees its slot. ~0.4 s at 44.1/48 kHz — long enough not to clip
+/// a real tail, short enough to reclaim slots during a busy pedal-held passage.
+const RETIRE_SILENCE_FRAMES: usize = 19_200;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum VoiceStealPolicy {
@@ -864,6 +914,26 @@ impl VoicePool {
                     Some(frames) => v.note_off_with_release_frames(frames),
                     None => v.note_off(),
                 }
+            }
+        }
+    }
+
+    /// Fade any still-*Playing* sustain voice of `note` over `fade_frames` — a
+    /// re-strike of the same key re-excites the same string, so the previous
+    /// ring is subsumed rather than stacked. Without this, repeated notes under
+    /// a held sustain pedal pile up a fresh multi-second voice per hit, filling
+    /// the pool and forcing steals that cut still-ringing notes. Release tails
+    /// and already-releasing voices are left alone.
+    pub fn retrigger_fade_note(&mut self, note: u8, fade_frames: usize) {
+        for v in &mut self.voices {
+            if v.note == note
+                && v.kind != VoiceKind::Release
+                && matches!(v.state, VoiceState::Playing)
+            {
+                v.ramp_gain(0.0, fade_frames);
+                v.state = VoiceState::Releasing {
+                    frames_remaining: fade_frames,
+                };
             }
         }
     }
@@ -1110,6 +1180,13 @@ impl VoicePool {
         }
 
         self.stolen = self.stolen.saturating_add(1);
+        tracing::debug!(
+            target: "signal_sampler::trigger",
+            active = self.voices.len(),
+            max = self.max_voices,
+            incoming_note,
+            "voice steal — polyphony budget exceeded (a ringing note may be cut)"
+        );
         if let Some(idx) = self.steal_index(incoming_note) {
             self.voices.remove(idx);
         } else if let Some(idx) = quietest_stealable_voice(&self.voices) {
