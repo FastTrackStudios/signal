@@ -43,15 +43,18 @@ impl SampleEngine {
                     "section={section} artic={artic_id} mic={mic} dynamic={dynamic} note={note} direction={direction:?} rr={rr_idx}"
                 ));
                 tracing::debug!(
-                    section,
-                    artic = artic_id,
-                    mic,
-                    dynamic,
-                    note,
-                    direction = ?direction,
-                    rr = rr_idx,
-                    "sample miss"
+                    target: "signal_sampler::trigger",
+                    section, artic = artic_id, mic, dynamic, note,
+                    direction = ?direction, rr = rr_idx,
+                    "sample miss: no matching sample"
                 );
+                self.trace_push(TraceKind::SampleMiss {
+                    note,
+                    articulation: artic_id.to_string(),
+                    dynamic: dynamic.to_string(),
+                    rr: rr_idx,
+                    reason: MissReason::NoSample,
+                });
                 return None;
             }
         };
@@ -61,7 +64,19 @@ impl SampleEngine {
             self.cache_misses
                 .set(self.cache_misses.get().saturating_add(1));
             self.record_cache_miss(&path);
-            tracing::trace!("sample not yet loaded: {}", path.display());
+            tracing::debug!(
+                target: "signal_sampler::trigger",
+                artic = artic_id, note, dynamic, rr = rr_idx,
+                path = %path.display(),
+                "sample miss: not yet loaded"
+            );
+            self.trace_push(TraceKind::SampleMiss {
+                note,
+                articulation: artic_id.to_string(),
+                dynamic: dynamic.to_string(),
+                rr: rr_idx,
+                reason: MissReason::NotLoaded,
+            });
             return None;
         };
 
@@ -113,6 +128,44 @@ impl SampleEngine {
         } else {
             voice
         };
+
+        // Structured trace + live tracing of the actual spawn — the ground
+        // truth for "what sounded on this note". Covers the convention-mode
+        // path (Keyscape, drums); the zoned path records its own spawns.
+        let rate = 2.0f64.powf(semitone_offset as f64 / 12.0) * (src_sr as f64 / self.sample_rate as f64);
+        tracing::debug!(
+            target: "signal_sampler::trigger",
+            artic = artic_id, dynamic, note, sampled_note, rr = rr_idx,
+            kind = kind.trace_name(), rate, gain,
+            file = %path.file_name().and_then(|s| s.to_str()).unwrap_or_default(),
+            "voice spawn"
+        );
+        if self.trace_enabled {
+            let voice_id = self.next_trace_voice_id();
+            self.trace_push(TraceKind::VoiceSpawn(crate::engine::TraceVoiceSpawn {
+                voice_id,
+                voice_kind: kind.trace_name(),
+                file: path
+                    .file_name()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or_default()
+                    .to_string(),
+                note,
+                root_key: sampled_note,
+                rate,
+                gain,
+                dynamic: dynamic.to_string(),
+                articulation: artic_id.to_string(),
+                mic: mic.to_string(),
+                direction: direction.to_string(),
+                interval: 0,
+                rr: rr_idx,
+                start_frame: 0,
+                loop_start: 0,
+                loop_end: 0,
+                loop_xfade: 0,
+            }));
+        }
         Some(voice)
     }
 

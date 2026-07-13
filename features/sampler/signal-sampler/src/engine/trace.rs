@@ -31,6 +31,27 @@ pub enum TraceKind {
     NoteOff { note: u8 },
     /// A legato transition fired: `from → to` (`from == to` = re-bow).
     Transition { from: u8, to: u8, portamento: bool },
+    /// A requested voice produced NO sound: either no sample matched the
+    /// (articulation, dynamic, note, rr) lookup, or the matched sample wasn't
+    /// loaded into the cache yet. This is the ground truth behind "I only hear
+    /// the release / a click / nothing" — a body that never sounded.
+    SampleMiss {
+        note: u8,
+        articulation: String,
+        dynamic: String,
+        rr: usize,
+        reason: MissReason,
+    },
+}
+
+/// Why a [`TraceKind::SampleMiss`] fired.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MissReason {
+    /// No sample matched the (section, articulation, mic, note, dynamic, rr) key.
+    NoSample,
+    /// A sample matched but wasn't decoded into the cache yet (streaming preload
+    /// hasn't reached it) — the audio thread skips it silently.
+    NotLoaded,
 }
 
 /// Everything about a spawned voice needed to reason about it after the fact.
@@ -109,6 +130,28 @@ impl RenderTrace {
             .iter()
             .filter_map(|e| match &e.kind {
                 TraceKind::VoiceSpawn(v) if v.file.contains(needle) => Some((e, v)),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// Every voice spawn of `note`, in order.
+    pub fn spawns_of_note(&self, note: u8) -> Vec<&VoiceSpawn> {
+        self.events
+            .iter()
+            .filter_map(|e| match &e.kind {
+                TraceKind::VoiceSpawn(v) if v.note == note => Some(v),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// Every sample-miss recorded, in order.
+    pub fn misses(&self) -> Vec<(&TraceEvent, u8, MissReason)> {
+        self.events
+            .iter()
+            .filter_map(|e| match &e.kind {
+                TraceKind::SampleMiss { note, reason, .. } => Some((e, *note, *reason)),
                 _ => None,
             })
             .collect()

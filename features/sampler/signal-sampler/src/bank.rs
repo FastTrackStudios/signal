@@ -758,7 +758,7 @@ impl SamplerBank {
 
     /// The structured render trace for an instrument.
     pub fn render_trace(&self, id: &str) -> crate::engine::RenderTrace {
-        self.read_block(id, |b| b.render_trace().clone())
+        self.read_block(id, |b| b.render_trace())
             .unwrap_or_default()
     }
 

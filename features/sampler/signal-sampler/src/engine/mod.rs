@@ -48,7 +48,7 @@ use crate::{PlayerPatch, VoiceConfig};
 use cache::{EvictStats, PreloadStats, SampleCache, SampleData};
 use filter::BiquadFilter;
 use rr::RrCounters;
-pub use trace::{RenderTrace, TraceEvent, TraceKind, VoiceSpawn as TraceVoiceSpawn};
+pub use trace::{MissReason, RenderTrace, TraceEvent, TraceKind, VoiceSpawn as TraceVoiceSpawn};
 pub use voice::ArticClass;
 use voice::{DynLayer, FlexEnv, Voice, VoiceKind, VoicePool, VoiceStealPolicy};
 
@@ -483,6 +483,10 @@ pub struct SampleEngine {
     cc64_held: bool,
     /// Raw CC64 value. 1..63 is treated as half-pedal damping, >=64 as full hold.
     cc64_value: u8,
+    /// Lightly-smoothed recent note-on velocity — a proxy for how hard the
+    /// player is currently playing. Drives velocity-scaling of note-independent
+    /// ambience (pedal / mechanical noise) so soft passages get soft noise.
+    recent_velocity: u8,
     /// While the sustain pedal is held, libraries with distinct pedal-down
     /// body samples (e.g. Keyscape `lacrped`) swap `articulation` to the
     /// pedal variant. The original (no-pedal) ID lives here so we can snap
@@ -546,10 +550,11 @@ pub struct SampleEngine {
     /// `trace` — the structured render trace (see [`trace`]). Off by default.
     trace_enabled: bool,
     /// Structured render trace: which files played, when, loop points, gains,
-    /// transitions. Populated only while `trace_enabled`.
-    trace: RenderTrace,
+    /// transitions. Populated only while `trace_enabled`. Behind a `RefCell`
+    /// so the `&self` voice-resolution path can record spawns/misses.
+    trace: RefCell<RenderTrace>,
     /// Monotonic voice id source for trace correlation.
-    next_voice_id: u64,
+    next_voice_id: Cell<u64>,
 
     /// Con Sordino bus-level filter (placeholder lowpass — see filter.rs).
     sord_filter: BiquadFilter,
@@ -723,6 +728,7 @@ impl SampleEngine {
             poly_aftertouch: [0; 128],
             cc64_held: false,
             cc64_value: 0,
+            recent_velocity: 90,
             no_pedal_articulation: None,
             con_sordino: false,
             legato_enabled: true,
@@ -744,8 +750,8 @@ impl SampleEngine {
             legato_fire_log_enabled: false,
             legato_fire_log: Vec::new(),
             trace_enabled: false,
-            trace: RenderTrace::default(),
-            next_voice_id: 0,
+            trace: RefCell::new(RenderTrace::default()),
+            next_voice_id: Cell::new(0),
             legato_fade_frames,
             cc1_ramp_frames,
             release_frames,
@@ -1022,26 +1028,37 @@ impl SampleEngine {
     /// files play, when, loop points, gains, transitions. Clears on enable.
     pub fn set_trace_enabled(&mut self, enabled: bool) {
         self.trace_enabled = enabled;
-        self.trace.events.clear();
+        let mut trace = self.trace.borrow_mut();
+        trace.events.clear();
         if !enabled {
-            self.trace.events.shrink_to_fit();
+            trace.events.shrink_to_fit();
         }
     }
 
     /// The render trace recorded since it was enabled.
-    pub fn render_trace(&self) -> &RenderTrace {
-        &self.trace
+    pub fn render_trace(&self) -> RenderTrace {
+        self.trace.borrow().clone()
     }
 
     /// Record one trace event on the active line (no-op unless tracing is on).
-    fn trace_push(&mut self, kind: TraceKind) {
+    /// Takes `&self` — the trace sits behind a `RefCell` so the `&self`
+    /// voice-resolution path (`make_voice`) can record spawns and misses.
+    fn trace_push(&self, kind: TraceKind) {
         if self.trace_enabled {
-            self.trace.events.push(TraceEvent {
+            self.trace.borrow_mut().events.push(TraceEvent {
                 frame: self.frames_rendered,
                 line: self.cur_line as u8,
                 kind,
             });
         }
+    }
+
+    /// Next monotonic voice id for the trace (wraps the `Cell` so `&self` paths
+    /// can allocate ids).
+    fn next_trace_voice_id(&self) -> u64 {
+        let id = self.next_voice_id.get();
+        self.next_voice_id.set(id + 1);
+        id
     }
 
     /// How many REACTIVE legato-path triggers (note-on countdown / note-off

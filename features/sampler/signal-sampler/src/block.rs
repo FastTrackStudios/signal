@@ -333,7 +333,7 @@ impl SamplerBlock {
     }
 
     /// The structured render trace — see [`SampleEngine::render_trace`].
-    pub fn render_trace(&self) -> &crate::engine::RenderTrace {
+    pub fn render_trace(&self) -> crate::engine::RenderTrace {
         self.engine.render_trace()
     }
 

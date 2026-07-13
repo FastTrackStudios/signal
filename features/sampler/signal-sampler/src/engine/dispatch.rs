@@ -488,6 +488,11 @@ impl SampleEngine {
     /// "note" (0 = up/release, 1 = down/press), so `down` selects which. A
     /// noise artic is one that fails the body-span test. Silently no-ops when
     /// the pack ships no pedal noise.
+    ///
+    /// The noise gain tracks the recent playing dynamic: these packs ship a
+    /// single fixed-level sample, so without scaling the mechanical clunk sits
+    /// at full volume even under a pianissimo passage. Scale by the smoothed
+    /// recent velocity (with a small floor so it never vanishes entirely).
     pub(crate) fn trigger_pedal_noise(&mut self, down: bool) {
         let state_note = u8::from(down); // 1 = pedal down/press, 0 = up/release
         let ids: Vec<String> = self
@@ -500,6 +505,12 @@ impl SampleEngine {
             .map(|a| a.id.clone())
             .collect();
         let release_frames = self.release_frames;
+        // Velocity-scaled: soft playing → soft pedal noise. Floor at 0.15 of
+        // full so the mechanism is still faintly present; (v/110)^1.2 keeps a
+        // firm press near full and eases off toward pianissimo.
+        const PEDAL_NOISE_MAX_GAIN: f32 = 0.4;
+        let v_norm = (self.recent_velocity as f32 / 110.0).clamp(0.0, 1.0);
+        let gain = PEDAL_NOISE_MAX_GAIN * v_norm.powf(1.2).max(0.15);
         for id in ids {
             let dyn_id = self.dynamic_for_artic(&id, 100);
             if let Some(v) = self.make_voice(
@@ -510,7 +521,7 @@ impl SampleEngine {
                 state_note,
                 "",
                 VoiceKind::Release,
-                0.4,
+                gain,
                 release_frames,
             ) {
                 self.voices.spawn(v);

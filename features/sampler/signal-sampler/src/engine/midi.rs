@@ -232,6 +232,12 @@ impl SampleEngine {
             return;
         }
 
+        // Track a lightly-smoothed recent velocity (75% history, 25% new) as a
+        // proxy for current playing dynamic — used to scale note-independent
+        // ambience (pedal/mechanical noise).
+        self.recent_velocity =
+            (((self.recent_velocity as u16 * 3 + velocity as u16) / 4) as u8).max(1);
+
         // Velocity-sensitive keyswitches (CSS-style): a keyswitch note selects
         // an articulation / mode and does NOT sound.
         if self.try_keyswitch(note, velocity) {
@@ -1518,8 +1524,7 @@ impl SampleEngine {
             // acoustically the same spawn) with everything needed to reason
             // about it after the fact — file, pitch, gain, loop window.
             if k == 0 && self.trace_enabled {
-                let id = self.next_voice_id;
-                self.next_voice_id += 1;
+                let id = self.next_trace_voice_id();
                 if let Some((file, artic, dynamic, direction, interval)) = trace_zone.clone() {
                     self.trace_push(TraceKind::VoiceSpawn(TraceVoiceSpawn {
                         voice_id: id,
