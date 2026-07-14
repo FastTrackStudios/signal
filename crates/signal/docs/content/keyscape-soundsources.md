@@ -47,23 +47,37 @@ soundsource. The original `extract_db` wrote every entry **flat by name**, so:
 3. The short, quiet **mechanical-noise** samples ended up selected as the note
    **body** → notes played a choked mechanical click instead of the sustain.
 
-### Fix — soundsource-aware extraction
+### Fix — collision-proof soundsource-aware extraction
 
-`steam::keyscape_retag` appends a soundsource-derived tag to the articulation
-token (2nd filename field) so soundsources become **distinct articulations** the
-engine keeps separate:
+`steam::keyscape_ss_tags` makes every soundsource a **distinct articulation** the
+engine keeps separate, by a *collision-proof* rule (not a hand-maintained keyword
+list):
 
-| Soundsource keyword | Role | Article retag |
-|---|---|---|
-| `… ^` (no keyword) | sustain **body** | *(unchanged)* |
-| `… Release …` | release | *(unchanged — already `lacr … rel`)* |
-| `Mechanical Noise` | mechanical attack noise | `lacrm` → `lacrm`**`mech`** |
-| `Mechanical Noise … Release` | mechanical release | `lacr` → `lacr`**`mechrel`** |
-| `Pedal Noise` / `Mechanical Pedal Noise` | pedal noise | *(kept — already `lacrped`/`lacrmechped`)* |
+> **Collision** = two soundsources emit the **same output file stem** — the exact
+> condition that makes the extractor's de-duper append `_2` and overwrite/merge
+> them on disk.
 
-Verified on **Rhodes – LA Custom**: the merged `lacrm` (2985) splits cleanly into
-sustain `lacrm` (1577) + `lacrmmech` (1408); the body then resolves to real
-sustains at every note/velocity (0 short samples).
+Detecting by stem (not by leading-alpha article) is what keeps a body and its own
+release **together**: `chime` and `chimerel` share the alpha run but never produce
+the same file, so they are never separated. It still catches the two real merge
+cases:
+
+- **mechanical noise vs body** — both emit `RR01 lacrm 60 84.wav` → collide.
+- **mic / type variants** — Wing Tack's `^ Mono` and `^ Stereo` both emit
+  `RR01_SL01 wup_100-111.wav` → collide.
+
+Soundsources are grouped into connected collision components; within each, the one
+with the **most samples** keeps the article (so `library.styx` stays valid) and
+every other gets a sanitized soundsource-derived tag **inserted after the
+article's leading-alpha run**: `lacrm` → `lacrm`**`mech`**,
+`wup_100-111` → `wup`**`mono`**`_100-111`. Pedal-noise soundsources are excluded
+(already distinct; parsed specially as `lacrped` / `lacrmechped`).
+
+Verified lossless on **Rhodes – LA Custom** (6861 files): the merged `lacrm`
+(2985) splits into sustain `lacrm` (1577) + `lacrmmech` (1408), and `lacr` (3781)
+splits into release `lacr` (3077) + `lacrmechrel` (704); `lacrmsp` (95, a genuine
+low-note articulation) is untouched. The body then resolves to real sustains at
+every note/velocity (0 short samples).
 
 ### Within-soundsource layers
 
@@ -92,34 +106,57 @@ Roles seen:
 - **combo** — `Duo Maps Stage`/`Studio` ship **0 audio**; they reference other
   soundsources.
 
-### Collision cases the keyword retag does NOT yet cover
+### Library-wide collision audit (all 44 patches)
 
-- **Wing Tack Piano** — `^ Mono`, `^ Stereo`, `Tremolo ^ Mono`, `Tremolo ^ Stereo`
-  all use the `wup` article → all four collide.
-- **Chimeatron** — Vibraharp `Fast` and `Slow` both use `vibe` → collide (Chimes
-  `chime` is distinct).
-- **Vinyl Keyscape 01** — 11 `Record Noise NN` soundsources.
+Re-checked every `.db` manifest with the stem-collision rule. **Only two patches
+had a true on-disk collision** the old flat extraction corrupted:
 
-`Weltmeister Claviset` (`Bs`/`Gtr`/`Tut`) and `Simone Celeste` (`Cel`/`CelMt`)
-happen to use distinct article tokens, so they don't collide — but that's luck,
-not by design.
+- **Rhodes – LA Custom** — `lacrm` body vs `lacrm` mechanical-noise (fixed above).
+- **Wing Tack Piano** — `^ Mono` / `^ Stereo` emit identical `wup_100-111` stems →
+  the smaller variants are now tagged (`wupwingtackpianomono` /
+  `…pianostereo`); no more `_2`/`_3`/`_4` dedup junk. (2816 files, 0 collisions.)
+
+Everything else was already correct:
+
+- **Distinct raw articles** — the other mechanical patches never merged because
+  Spectrasonics already named them apart: Rhodes Classic `clrmchr`/`clrmchrel`,
+  Hohner Pianet T `pianetmechatk`/`pntmechrel`.
+- **Body + release** — pairs that share a leading-alpha prefix (`tgp`/`tgprel`,
+  `chime`/`chimerel`) never emit the same stem, so they stay together and blend
+  as intended.
+- **Token-distinguished multi-body** — Chimeatron Vibraharp Fast vs Slow carry a
+  `tr` token (`cat vibe …` vs `cat vibe tr …`); Wing Upright's `wup`/`wuptrm`/
+  `wupr` variants likewise differ in the raw name. They don't collide on disk;
+  whether the **runtime parser** should treat these tokens (`tr` = tremolo) as a
+  separate articulation vs a round-robin is a parser question, not an extraction
+  one — tracked below.
+- **Vinyl Keyscape 01** — 11 `Record Noise NN` ambience soundsources (article
+  `noise`); still needs a runtime ambience-blend path (below).
 
 ## TODO / open work
 
-1. **Generalize `keyscape_retag`** from keyword-matching to a *collision-proof*
-   rule: within a patch, if two soundsources would emit the same article token,
-   tag each with a sanitized soundsource id (mic/variant/multi-body). Guarantees
-   no soundsource ever merges.
-2. **Record-noise & arbitrary ambience layers** — give them their own
-   articulation + a runtime ambience-blend path.
-3. **Duo Maps combos** — resolve soundsource references (the 0-audio patches).
-4. **Runtime blending** — the mechanical-noise / pedal / record-noise layers are
+1. ✅ **Generalize `keyscape_retag`** to a collision-proof stem rule — done
+   (`steam::keyscape_ss_tags`). Library-wide audit confirms it corrects exactly
+   the two collided patches (Rhodes LA Custom, Wing Tack) and leaves the other 42
+   byte-identical.
+2. **Re-extract only what changed** — the collision fix only alters Rhodes LA
+   Custom (already deployed) and Wing Tack Piano; other patches extract identically
+   under the new collector, so a full 44-patch re-extraction isn't required for
+   correctness (only for populating the live library where a patch isn't extracted
+   yet).
+3. **Multi-body parser tokens** — decide whether the runtime should treat
+   variant tokens (`tr`/tremolo, mono/stereo mic, fast/slow) as a distinct
+   articulation or a round-robin. Chimeatron / Wing Upright depend on this.
+4. **Record-noise & arbitrary ambience layers** — give them their own
+   articulation + a runtime ambience-blend path (Vinyl Keyscape's 11 `noise`).
+5. **Duo Maps combos** — resolve soundsource references (the 0-audio patches).
+6. **Runtime blending** — the mechanical-noise / pedal / record-noise layers are
    currently *separated but inert*. Blend them under the body as velocity-scaled
    ambience (like the release layers), matching Keyscape's mix
    (release −10 dB, mechanical −20 dB, pedal −20 dB).
-5. **`library.styx` regeneration** — declare the new per-soundsource
+7. **`library.styx` regeneration** — declare the new per-soundsource
    articulations + their layer roles so the runtime knows body vs ambience.
-6. **Re-pack** each patch after re-extraction so `.signalpack`s match the raw
+8. **Re-pack** each patch after re-extraction so `.signalpack`s match the raw
    library.
 
 ## Full per-patch audit
