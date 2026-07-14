@@ -175,7 +175,10 @@ pub enum MidiMod {
     MpePressure,
     /// MPE per-note timbre / brightness (latest across voices), 0..1.
     MpeTimbre,
-    /// An arbitrary CC, 0..1.
+    /// MPE per-note pitch / glide (the X dimension), −1..+1 over ±48 semitones.
+    MpeBend,
+    /// An arbitrary CC, 0..1. Named performance controllers route through
+    /// this: sustain = CC64, expression = CC11, breath = CC2.
     Cc(u8),
 }
 
@@ -291,6 +294,11 @@ impl ControlSource for MidiSource {
                 (MidiMod::MpePressure, Dim::Pressure) | (MidiMod::MpeTimbre, Dim::Brightness) => {
                     v = (ex.value as f32).clamp(0.0, 1.0);
                 }
+                (MidiMod::MpeBend, Dim::Tuning) => {
+                    // Per-note tuning is semitones (−120..+120); map the usual
+                    // ±48 st MPE glide range to a bipolar −1..+1 source.
+                    v = (ex.value as f32 / 48.0).clamp(-1.0, 1.0);
+                }
                 _ => {}
             }
         }
@@ -333,9 +341,14 @@ impl ModSource {
             "key" | "keytrack" => MidiMod::Key,
             "random" | "random2" | "random unipolar" => MidiMod::Random,
             "alt" => MidiMod::Alt,
-            "constant" | "bias1" | "bias2" => MidiMod::Constant,
+            "constant" | "bias" | "bias1" | "bias2" => MidiMod::Constant,
             "mpev" | "mpepressure" | "mpe pressure" => MidiMod::MpePressure,
             "mpe3" | "mpetimbre" | "mpe timbre" => MidiMod::MpeTimbre,
+            "mpex" | "mpebend" | "mpe pitch" | "mpe glide" | "mpe x" => MidiMod::MpeBend,
+            // Named performance controllers → their CC.
+            "sustain" | "pedal" | "sustain pedal" => MidiMod::Cc(64),
+            "expression" | "expr" => MidiMod::Cc(11),
+            "breath" | "breath control" => MidiMod::Cc(2),
             other => {
                 let n = other.strip_prefix("cc")?.parse().ok()?;
                 MidiMod::Cc(n)
@@ -515,5 +528,28 @@ mod tests {
         assert!((v - 64.0 / 127.0).abs() < 1e-3);
         // Holds its value across empty blocks.
         assert_eq!(src.tick(&no_events(), 64), v);
+    }
+
+    #[test]
+    fn named_performance_sources_resolve() {
+        assert_eq!(ModSource::midi_by_name("sustain"), Some(MidiMod::Cc(64)));
+        assert_eq!(ModSource::midi_by_name("expression"), Some(MidiMod::Cc(11)));
+        assert_eq!(ModSource::midi_by_name("breath"), Some(MidiMod::Cc(2)));
+        assert_eq!(ModSource::midi_by_name("bias"), Some(MidiMod::Constant));
+        assert_eq!(ModSource::midi_by_name("mpex"), Some(MidiMod::MpeBend));
+        assert_eq!(ModSource::midi_by_name("cc74"), Some(MidiMod::Cc(74)));
+        assert_eq!(ModSource::midi_by_name("nope"), None);
+    }
+
+    #[test]
+    fn sustain_source_tracks_cc64_only() {
+        let mut src = ModSource::midi(ModSource::midi_by_name("sustain").unwrap());
+        let down = [PluginMidiEvent { offset: 0, message: ev_cc(64, 127) }];
+        let ev = PluginEvents { params: &[], midi: &down, note_expressions: &[] };
+        assert!((src.tick(&ev, 64) - 1.0).abs() < 1e-3);
+        // A different CC must not disturb the held value.
+        let other = [PluginMidiEvent { offset: 0, message: ev_cc(11, 0) }];
+        let ev2 = PluginEvents { params: &[], midi: &other, note_expressions: &[] };
+        assert!((src.tick(&ev2, 64) - 1.0).abs() < 1e-3);
     }
 }
