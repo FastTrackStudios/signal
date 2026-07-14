@@ -19,8 +19,12 @@ use signal_ui::components::Piano;
 enum Mode {
     /// Live performance: preset browser + MIDI monitor + keyboard.
     Play,
-    /// Read-only keymap editor (KODA-style zone grid).
+    /// The sampler **Setup** — the KODA-style keymap / zone editor.
+    Setup,
+    /// The **Edit** page — the Vital-style single-layer editor (A/B/C/D:
+    /// source, filter, envelopes, LFOs, modulation).
     Edit,
+    // (A top-down **Control** view over the whole rig comes later.)
 }
 
 /// Live synth-rig view-state: seeded once, then folded from the event stream.
@@ -132,12 +136,17 @@ pub fn SynthRigRemote() -> Element {
             div { style: "display:flex; align-items:center; gap:10px; padding:6px 12px; border-bottom:1px solid #1c1c1f;",
                 span { style: "font-weight:700; font-size:13px;", "Synth" }
                 span { style: "font-size:11px; color:#a1a1aa;", {status.loaded_preset.clone().unwrap_or_else(|| "—".into())} }
-                // PLAY / EDIT mode toggle
+                // PLAY / SETUP / EDIT mode toggle
                 div { style: "display:flex; gap:2px; margin-left:6px; background:#18181b; border:1px solid #27272a; border-radius:6px; padding:2px;",
                     button {
                         style: mode_btn(mode() == Mode::Play),
                         onclick: move |_| mode.set(Mode::Play),
                         "PLAY"
+                    }
+                    button {
+                        style: mode_btn(mode() == Mode::Setup),
+                        onclick: move |_| mode.set(Mode::Setup),
+                        "SETUP"
                     }
                     button {
                         style: mode_btn(mode() == Mode::Edit),
@@ -169,8 +178,10 @@ pub fn SynthRigRemote() -> Element {
                     div { style: format!("height:100%; width:{master_pct}%; background:{};", if clipping { "#ef4444" } else { "#22c55e" }) }
                 }
             }
-            if mode() == Mode::Edit {
+            if mode() == Mode::Setup {
                 MappingView {}
+            } else if mode() == Mode::Edit {
+                LayerEditView {}
             } else {
             div { style: "display:flex; gap:12px; flex:1; min-height:0;",
                 // ── preset browser (left) ──
@@ -230,6 +241,18 @@ pub fn SynthRigRemote() -> Element {
 fn mode_btn(active: bool) -> String {
     let (bg, fg) = if active { ("#0c2733", "#e4e4e7") } else { ("transparent", "#71717a") };
     format!("padding:3px 12px; border:none; border-radius:4px; background:{bg}; color:{fg}; font-size:10px; font-weight:700; letter-spacing:0.05em; cursor:pointer;")
+}
+
+/// The **Edit** page — the Vital-style single-layer editor (A/B/C/D layer
+/// selector; per-layer source / filter response / envelopes / LFOs /
+/// modulation). Placeholder until the interactive editor lands.
+#[component]
+fn LayerEditView() -> Element {
+    rsx! {
+        div { style: "display:flex; align-items:center; justify-content:center; flex:1; color:#52525b; font-size:13px;",
+            "Layer editor — coming"
+        }
+    }
 }
 
 fn preset_btn(loaded: bool) -> String {

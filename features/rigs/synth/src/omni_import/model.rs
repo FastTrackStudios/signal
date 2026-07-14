@@ -229,7 +229,7 @@ pub(crate) fn classify_type1(v: f32) -> Option<(&'static str, u32)> {
 
 /// Filter cutoff: normalized → Hz, measured through the real engine
 /// (knee sweep with keytracking off): **cutoff ≈ 15 Hz × 2^(9.55·v)**.
-pub(crate) fn omni_cutoff_hz(v: f32) -> f32 {
+pub fn omni_cutoff_hz(v: f32) -> f32 {
     15.0 * 2f32.powf(9.55 * v.clamp(0.0, 1.0))
 }
 
@@ -240,7 +240,7 @@ pub(crate) fn omni_cutoff_hz(v: f32) -> f32 {
 /// Classification including the engine character: the saturating families
 /// (Juicy / Moogie / OB / Jupiter / FATBOY / Sauce / Beefy / Warm / Power /
 /// French / Brit) map onto the ladder engine.
-pub(crate) fn classify_filter_full(name: &str) -> (&'static str, u32, &'static str) {
+pub fn classify_filter_full(name: &str) -> (&'static str, u32, &'static str) {
     let (mode, poles) = classify_filter_inner(name);
     let k = name.to_ascii_lowercase();
     let saturating = [

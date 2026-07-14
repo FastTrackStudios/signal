@@ -127,13 +127,66 @@ pub struct SynthMapping {
     pub groups: Vec<String>,
 }
 
+/// An ADSR envelope for the Edit page's interactive graph. `attack`/`decay`/
+/// `release` are seconds; `sustain` is a level 0..1.
+#[derive(Clone, PartialEq, Debug, Default, Facet)]
+pub struct SynthEnvelope {
+    pub attack: f32,
+    pub decay: f32,
+    pub sustain: f32,
+    pub release: f32,
+}
+
+/// A filter stage for the Edit page's response curve.
+#[derive(Clone, PartialEq, Debug, Default, Facet)]
+pub struct SynthFilter {
+    /// Display/model name ("Modified", "FATBOY", …).
+    pub name: String,
+    /// Cutoff in Hz (plot on a log axis).
+    pub cutoff_hz: f32,
+    /// Resonance 0..1.
+    pub resonance: f32,
+    /// Signed filter-envelope → cutoff depth (0..1 of the sweep range).
+    pub env_depth: f32,
+    /// "lowpass" | "highpass" | "bandpass" | "notch".
+    pub mode: String,
+    /// Pole count (slope).
+    pub poles: u32,
+}
+
+/// One modulation route (source → target, signed depth).
+#[derive(Clone, PartialEq, Debug, Default, Facet)]
+pub struct SynthModRoute {
+    pub source: String,
+    pub target: String,
+    pub depth: f32,
+}
+
+/// One layer (A/B/C/D) as a self-contained sub-instance, for the Edit page.
+#[derive(Clone, PartialEq, Debug, Default, Facet)]
+pub struct SynthLayer {
+    /// "Layer A".., and whether it's active in the patch.
+    pub name: String,
+    pub active: bool,
+    /// The soundsource (Sample mode) or wavetable label driving this layer.
+    pub source: String,
+    /// Layer level 0..1.
+    pub level: f32,
+    /// The dual filter stages (usually 1–2).
+    pub filters: Vec<SynthFilter>,
+    pub amp_env: SynthEnvelope,
+    pub filter_env: SynthEnvelope,
+    /// Modulation routes scoped to this layer.
+    pub routes: Vec<SynthModRoute>,
+}
+
 pub mod synth {
     //! Live synth-rig control. `SynthRig` → `SynthRigClient` / `SynthRigService`
     //! / `synth_rig_serve`, plus the `#[subscribe]` stream sibling.
 
     use facet::Facet;
 
-    use super::{SynthMapping, SynthNode, SynthPreset, SynthStatus};
+    use super::{SynthLayer, SynthMapping, SynthNode, SynthPreset, SynthStatus};
 
     /// One live rig change. Every variant carries full state (idempotent
     /// re-application) so a reconnecting subscriber is correct after the next
@@ -183,6 +236,9 @@ pub mod synth {
         /// The keymap for one soundsource (empty name ⇒ the first of the loaded
         /// preset). Read cheaply from the pack header — no audio decode.
         fn mapping(&self, soundsource: String) -> SynthMapping;
+        /// The loaded preset's layers (A/B/C/D) with their source / filter /
+        /// envelope / modulation, for the Edit page's single-layer editor.
+        fn layers(&self) -> Vec<SynthLayer>;
 
         /// Every rig change, as it happens.
         #[subscribe]

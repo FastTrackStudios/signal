@@ -25,12 +25,12 @@ pub mod state;
 mod tree;
 
 pub use index::SoundsourceIndex;
-pub use model::{OmniLayer, OmniModRoute, OmniPatch, parse_patch};
+pub use model::{OmniLayer, OmniModRoute, OmniPatch, classify_filter_full, omni_cutoff_hz, parse_patch};
 pub use multi::{OmniMulti, load_multi_file, multi_to_container, parse_multi};
 pub use tree::{load_patch_file, patch_to_container};
 
 #[cfg(test)]
-use model::{classify_effect, classify_filter_full};
+use model::classify_effect;
 
 #[cfg(test)]
 mod tests {

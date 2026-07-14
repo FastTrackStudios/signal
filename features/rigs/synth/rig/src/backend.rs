@@ -23,7 +23,8 @@ use signal_synth_proto::synth::{
     SynthEvent, SynthRig as SynthRigSvc, SynthRigStreamSource,
 };
 use signal_synth_proto::{
-    SynthArticulation, SynthMapping, SynthMic, SynthNode, SynthPreset, SynthStatus, SynthZone,
+    SynthArticulation, SynthEnvelope, SynthFilter, SynthLayer, SynthMapping, SynthMic,
+    SynthModRoute, SynthNode, SynthPreset, SynthStatus, SynthZone,
 };
 
 /// Root of the Omnisphere patch library to browse. Defaults to the factory
@@ -407,6 +408,25 @@ impl SynthRigSvc for SynthRigBackend {
             None => SynthMapping::default(),
         }
     }
+
+    fn layers(&self) -> Vec<SynthLayer> {
+        let path = self
+            .inner
+            .state
+            .lock()
+            .ok()
+            .and_then(|s| s.loaded.and_then(|i| s.paths.get(i).cloned()));
+        let Some(path) = path else { return Vec::new() };
+        // Single-part patches for now (a Multi's parts come later).
+        if path.extension().is_some_and(|e| e == "mlt_omn") {
+            return Vec::new();
+        }
+        let Ok(xml) = std::fs::read_to_string(&path) else { return Vec::new() };
+        match signal_synth::omni_import::parse_patch(&xml) {
+            Ok(patch) => project_layers(&patch),
+            Err(_) => Vec::new(),
+        }
+    }
 }
 
 impl SynthRigStreamSource for SynthRigBackend {
@@ -508,6 +528,69 @@ fn role_tag(role: Role) -> String {
         Role::Module => "module",
     }
     .to_string()
+}
+
+/// Project a parsed patch's layers into the wire [`SynthLayer`]s for the Edit
+/// page. Filter cutoff is the calibrated Hz; routes are scoped to the layer by
+/// the `A/B/C/D ` target prefix.
+fn project_layers(patch: &signal_synth::omni_import::OmniPatch) -> Vec<SynthLayer> {
+    use signal_synth::omni_import::{classify_filter_full, omni_cutoff_hz};
+    const NAMES: [&str; 4] = ["Layer A", "Layer B", "Layer C", "Layer D"];
+    const LETTERS: [&str; 4] = ["A", "B", "C", "D"];
+
+    let env = |e: Option<(f32, f32, f32, f32)>| {
+        let (a, d, s, r) = e.unwrap_or((0.0, 0.0, 1.0, 0.0));
+        SynthEnvelope { attack: a, decay: d, sustain: s, release: r }
+    };
+
+    patch
+        .layers
+        .iter()
+        .take(4)
+        .enumerate()
+        .map(|(i, l)| {
+            let (mode, poles, _) = classify_filter_full(&l.filter_name);
+            let mut filters = vec![SynthFilter {
+                name: l.filter_name.clone(),
+                cutoff_hz: omni_cutoff_hz(l.filter_freq),
+                resonance: l.filter_res,
+                env_depth: l.filter_env_depth,
+                mode: mode.to_string(),
+                poles,
+            }];
+            if let Some((f2, r2)) = l.filter2 {
+                filters.push(SynthFilter {
+                    name: "Filter 2".to_string(),
+                    cutoff_hz: omni_cutoff_hz(f2),
+                    resonance: r2,
+                    env_depth: 0.0,
+                    mode: "lowpass".to_string(),
+                    poles: 2,
+                });
+            }
+            let prefix = format!("{} ", LETTERS[i]);
+            let routes = patch
+                .mod_routes
+                .iter()
+                .filter(|r| r.target.starts_with(&prefix))
+                .map(|r| SynthModRoute {
+                    source: r.source.clone(),
+                    target: r.target.clone(),
+                    depth: r.depth,
+                })
+                .collect();
+            SynthLayer {
+                name: NAMES[i].to_string(),
+                active: !l.soundsource.is_empty() || l.filter_active || l.amp_env.is_some(),
+                source: l.soundsource.clone(),
+                level: l.level,
+                filters,
+                amp_env: env(l.amp_env),
+                filter_env: env(l.filter_env),
+                routes,
+            }
+        })
+        .collect()
 }
 
 /// Collect `(soundsource name, spec path)` for every sample block in the tree.
@@ -739,6 +822,34 @@ mod tests {
         // what's asserted above.
         let looped = m.zones.iter().filter(|z| z.loop_end > z.loop_start).count();
         eprintln!("{looped}/85 zones carry loops (0 = pack predates the STINFO fix)");
+    }
+
+    /// Machine-local: the default patch exposes its layers with filter +
+    /// envelope + modulation over the wire — the Edit page's data source.
+    /// `cargo test -p signal-synth-rig -- --ignored layers`
+    #[test]
+    #[ignore = "requires the factory Omnisphere library"]
+    fn layers_expose_filter_env_and_routes() {
+        use signal_synth_proto::synth::SynthRig as _;
+
+        let b = SynthRigBackend::new();
+        let layers = b.layers();
+        eprintln!("{} layers", layers.len());
+        let a = layers.iter().find(|l| l.name == "Layer A").expect("Layer A");
+        eprintln!(
+            "Layer A: src={:?} level={:.2} filter[0]={} {:.0}Hz res={:.2} envd={:.2} | amp {:?} filt {:?} | {} routes",
+            a.source, a.level, a.filters[0].name, a.filters[0].cutoff_hz, a.filters[0].resonance,
+            a.filters[0].env_depth, a.amp_env, a.filter_env, a.routes.len()
+        );
+        assert!(a.active, "Layer A active");
+        assert!(!a.filters.is_empty(), "Layer A has a filter");
+        assert!(a.filters[0].cutoff_hz > 0.0, "filter cutoff in Hz");
+        // American Obesity: Filter Env + Wheel route the filter cutoff.
+        assert!(
+            a.routes.iter().any(|r| r.source.contains("Wheel") || r.source.contains("Env")),
+            "Layer A carries its mod routes, got {:?}",
+            a.routes
+        );
     }
 
     /// Recursively find a block by display name anywhere in the tree.
