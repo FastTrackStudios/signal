@@ -667,7 +667,12 @@ fn parse_keyscape_loose_stem(stem: &str) -> Option<SampleKey> {
         .iter()
         .find(|(_, value)| *value <= 127)
         .map(|(idx, _)| *idx)?;
-    let note = tokens[note_idx].parse::<u8>().ok()?;
+    // The note value: prefer an explicit `_<note>-<vel>` group when the name uses
+    // that delimiter (e.g. "EP 1 r2_100-107", "MKS-20 Piano 1_100-111"). The
+    // leading-numeric heuristic otherwise mistakes a name-number ("E Piano 1",
+    // "MKS-20") for the note and collapses the whole keyboard onto it. `note_idx`
+    // still drives the articulation/dynamic split, so those ids are unchanged.
+    let note = underscore_note(stem).map_or_else(|| tokens[note_idx].parse::<u8>().ok(), Some)?;
     // Velocity-layer tokens like `v01`..`v19` (Keyscape Classic-style)
     // encode the dynamic separately from the note. Map them onto a
     // velocity-scale dynamic label so different velocity layers don't
@@ -701,15 +706,58 @@ fn parse_keyscape_loose_stem(stem: &str) -> Option<SampleKey> {
         String::new()
     };
 
+    // Sample-layer (`SL01`, `SL02`, …) = distinct simultaneous mic/render layers
+    // (direct / stereo / room). Map them onto the mic dimension so they don't all
+    // collapse onto one key and overwrite each other — which made the surviving
+    // layer vary note-to-note, audible as direct and room mics "colliding". SL01
+    // is the default `Main` mic (what the styx declares); higher layers get their
+    // own mic id, present in the map but reachable only if a spec declares them.
+    // (Interim: the .db-authored zone map replaces this heuristic wholesale.)
+    let mic = tokens
+        .iter()
+        .find_map(|t| {
+            let n: u32 = t.strip_prefix("sl")?.parse().ok()?;
+            (n > 1).then(|| format!("SL{n:02}"))
+        })
+        .unwrap_or_else(|| "Main".to_string());
+
     Some(SampleKey {
         section: "main".to_string(),
         articulation,
-        mic: "Main".to_string(),
+        mic,
         dynamic,
         note,
         direction,
         rr,
     })
+}
+
+/// The note from an explicit `_<note>-<vel>` group (underscore-delimited note-vel
+/// schemes), taking the note of the LAST such group. `None` when the name has no
+/// such group (space-separated schemes fall back to the token heuristic).
+fn underscore_note(stem: &str) -> Option<u8> {
+    let b = stem.as_bytes();
+    let mut found = None;
+    let mut i = 0;
+    while i < b.len() {
+        if b[i] == b'_' {
+            let mut j = i + 1;
+            while j < b.len() && b[j].is_ascii_digit() {
+                j += 1;
+            }
+            // digits, then '-', then at least one digit → a `<note>-<vel>` group
+            if j > i + 1 && j < b.len() && b[j] == b'-' && b.get(j + 1).is_some_and(u8::is_ascii_digit)
+            {
+                if let Ok(n) = stem[i + 1..j].parse::<u16>() {
+                    if n <= 127 {
+                        found = Some(n as u8); // keep the last match
+                    }
+                }
+            }
+        }
+        i += 1;
+    }
+    found
 }
 
 fn loose_tokens(stem: &str) -> Vec<String> {
