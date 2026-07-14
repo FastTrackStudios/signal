@@ -6,7 +6,7 @@
 //! out of the app's active build; audio I/O itself lives in `daw`.
 //!
 //! Moved here from the retired `signal-audio` crate (whose real I/O —
-//! hardware MIDI input — now lives in `daw-midi-io`).
+//! hardware MIDI input — now lives in `midicore`).
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, Ordering};

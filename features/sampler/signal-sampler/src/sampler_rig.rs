@@ -1057,7 +1057,7 @@ impl SamplerRig {
     // ── Hardware MIDI input (daw-owned primitive) ─────────────────────────────
 
     /// List available hardware MIDI input port names — for a device picker.
-    /// All device enumeration lives in daw's `daw-midi-io`; signal only forwards.
+    /// All device enumeration lives in `midicore::midir`; signal only forwards.
     pub fn midi_input_ports() -> Vec<String> {
         midicore::midir::input_ports()
     }

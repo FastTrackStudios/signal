@@ -193,7 +193,7 @@ include_dir = { workspace = true, optional = true }
 signal-sampler = { workspace = true, features = ["pipewire"], optional = true }
 # MIDI over PipeWire too: the guitar rig's pipewire feature flips midir onto
 # the pipewire-jack backend. Compile-time, whole-binary swap (unifies midir
-# for daw-midi-io as well), so hardware MIDI becomes a routable PipeWire
+# for midicore as well), so hardware MIDI becomes a routable PipeWire
 # graph node instead of an exclusive ALSA-seq grab. Needs pipewire-jack's
 # libjack at run time — the same host cpal's audio already relies on.
 signal-guitar = { workspace = true, features = ["pipewire"], optional = true }

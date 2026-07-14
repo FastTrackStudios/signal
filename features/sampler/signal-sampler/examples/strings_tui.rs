@@ -8,7 +8,7 @@
 //! ```
 //!
 //! Signal stays pure sampler business logic: the audio OUTPUT runs on daw's
-//! `AudioEngine` and the MIDI INPUT comes from daw's `daw-midi-io` primitive
+//! `AudioEngine` and the MIDI INPUT comes from the `midicore` primitive
 //! (device / all / virtual), forwarded into daw's live-MIDI ring by
 //! [`SamplerRig::attach_midi`]. This example only expresses intent — which
 //! library, section, mic, articulation, and MIDI source.
