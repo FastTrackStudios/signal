@@ -112,6 +112,9 @@ pub fn SynthRigRemote() -> Element {
     };
 
     let master_pct = (status.master_peak.clamp(0.0, 1.0) * 100.0) as u32;
+    let clipping = status.master_peak >= 0.999;
+    let vol_milli = (status.volume.clamp(0.0, 1.0) * 1000.0) as u32;
+    let vol_pct = (status.volume.clamp(0.0, 1.0) * 100.0) as u32;
 
     rsx! {
         div { style: "display:flex; flex-direction:column; gap:0; flex:1; min-height:0; color:#e4e4e7; font-family:sans-serif;",
@@ -120,9 +123,27 @@ pub fn SynthRigRemote() -> Element {
                 span { style: "font-weight:700; font-size:13px;", "Synth" }
                 span { style: "font-size:11px; color:#a1a1aa;", {status.loaded_preset.clone().unwrap_or_else(|| "—".into())} }
                 div { style: "flex:1;" }
-                // master meter
+                // volume slider
+                span { style: "font-size:10px; color:#71717a;", "VOL {vol_pct}%" }
+                {
+                    let rig_vol = rig.clone();
+                    rsx!{ input {
+                        r#type: "range",
+                        min: "0",
+                        max: "1000",
+                        step: "10",
+                        value: "{vol_milli}",
+                        style: "width:96px; accent-color:#38bdf8;",
+                        oninput: move |e| {
+                            let rig = rig_vol.clone();
+                            let v = e.value().parse::<u32>().unwrap_or(250);
+                            spawn(async move { if let Some(r) = rig { let _ = r.set_volume(v).await; } });
+                        },
+                    } }
+                }
+                // master meter (red at clip)
                 div { style: "width:80px; height:8px; background:#18181b; border-radius:2px; overflow:hidden;",
-                    div { style: "height:100%; width:{master_pct}%; background:#22c55e;" }
+                    div { style: format!("height:100%; width:{master_pct}%; background:{};", if clipping { "#ef4444" } else { "#22c55e" }) }
                 }
             }
             div { style: "display:flex; gap:12px; flex:1; min-height:0;",

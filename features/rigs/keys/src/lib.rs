@@ -72,13 +72,26 @@ const KEYS_TRACK_NAME: &str = "Keys";
 pub struct KeysInstrument {
     render: RenderNode,
     prepared: bool,
+    /// Master output gain (linear, f32 bits), shared with the owning [`KeysRig`]
+    /// so it's adjustable live — a summed multi-layer patch can otherwise clip.
+    gain: Arc<std::sync::atomic::AtomicU32>,
 }
 
 impl KeysInstrument {
     pub fn new(tree: &Container, sample_rate: u32) -> Self {
+        Self::with_gain(tree, sample_rate, Arc::new(std::sync::atomic::AtomicU32::new(1.0f32.to_bits())))
+    }
+
+    /// As [`new`](Self::new) but sharing an external master-gain cell.
+    pub fn with_gain(
+        tree: &Container,
+        sample_rate: u32,
+        gain: Arc<std::sync::atomic::AtomicU32>,
+    ) -> Self {
         Self {
             render: RenderNode::compile(tree, sample_rate),
             prepared: false,
+            gain,
         }
     }
 }
@@ -125,6 +138,12 @@ impl PluginInstance for KeysInstrument {
         events: &PluginEvents<'_>,
     ) -> Result<(), PluginError> {
         self.render.process(in_l, in_r, out_l, out_r, events);
+        let gain = f32::from_bits(self.gain.load(std::sync::atomic::Ordering::Relaxed));
+        if (gain - 1.0).abs() > 1e-4 {
+            for s in out_l.iter_mut().chain(out_r.iter_mut()) {
+                *s *= gain;
+            }
+        }
         Ok(())
     }
     fn deactivate(&mut self) {
@@ -145,6 +164,9 @@ pub struct KeysRig {
     sample_rate: u32,
     preset_name: String,
     midi_monitor: MidiMonitor,
+    /// Master output gain (linear, f32 bits), shared into each hosted
+    /// [`KeysInstrument`] so [`set_output_gain`](Self::set_output_gain) is live.
+    gain: Arc<std::sync::atomic::AtomicU32>,
 }
 
 impl KeysRig {
@@ -189,8 +211,9 @@ impl KeysRig {
         let meters = Meters::new(1);
         daw.set_meters(meters.clone());
 
-        // Compile + install the preset instrument.
-        let mut inst = KeysInstrument::new(tree, sample_rate);
+        // Compile + install the preset instrument, sharing the master-gain cell.
+        let gain = Arc::new(std::sync::atomic::AtomicU32::new(1.0f32.to_bits()));
+        let mut inst = KeysInstrument::with_gain(tree, sample_rate, gain.clone());
         let _ = inst.prepare(sample_rate as f64, PREPARE_BLOCK);
         daw.insert_plugin_instance(fx_guid.clone(), Box::new(inst));
 
@@ -208,12 +231,27 @@ impl KeysRig {
             sample_rate,
             preset_name: tree.name.clone(),
             midi_monitor: MidiMonitor::default(),
+            gain,
         })
+    }
+
+    /// Set the master output gain (linear; 1.0 = unity). Takes effect on the
+    /// next block — no re-host — and survives preset swaps.
+    pub fn set_output_gain(&self, gain: f32) {
+        self.gain.store(
+            gain.max(0.0).to_bits(),
+            std::sync::atomic::Ordering::Relaxed,
+        );
+    }
+
+    /// Current master output gain (linear).
+    pub fn output_gain(&self) -> f32 {
+        f32::from_bits(self.gain.load(std::sync::atomic::Ordering::Relaxed))
     }
 
     /// Swap the playable preset (glitch-free re-insert under the renderer lock).
     pub fn load_preset(&mut self, tree: &Container) {
-        let mut inst = KeysInstrument::new(tree, self.sample_rate);
+        let mut inst = KeysInstrument::with_gain(tree, self.sample_rate, self.gain.clone());
         let _ = inst.prepare(self.sample_rate as f64, PREPARE_BLOCK);
         self.daw
             .insert_plugin_instance(self.fx_guid.clone(), Box::new(inst));

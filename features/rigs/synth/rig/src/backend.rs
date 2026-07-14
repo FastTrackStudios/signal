@@ -36,6 +36,10 @@ const PATCHES_ROOT: &str =
 const DEFAULT_PATCH: &str = "American Obesity";
 /// Meter-stream publish interval (~30 Hz).
 const PUMP_MS: u64 = 33;
+/// Default master output gain — a −12 dB pad, because summed multi-layer
+/// soundsource patches (two full-level layers + the loop) run hot and clip at
+/// unity. The UI volume slider adjusts it live.
+const DEFAULT_VOLUME: f32 = 0.25;
 
 #[derive(Default)]
 struct State {
@@ -47,6 +51,8 @@ struct State {
     tree: Option<Container>,
     midi_port: Option<String>,
     midi_handle: Option<signal_sampler::MidiInputHandle>,
+    /// Master output gain (linear), applied to the rig on open + live changes.
+    volume: f32,
 }
 
 struct Inner {
@@ -91,7 +97,13 @@ impl SynthRigBackend {
         let backend = Self {
             inner: Arc::new(Inner {
                 rig: Mutex::new(None),
-                state: Mutex::new(State { presets, paths, loaded: default_idx, ..State::default() }),
+                state: Mutex::new(State {
+                    presets,
+                    paths,
+                    loaded: default_idx,
+                    volume: DEFAULT_VOLUME,
+                    ..State::default()
+                }),
                 index,
                 events: PubSub::sliding(64),
                 pump_started: AtomicBool::new(false),
@@ -136,8 +148,10 @@ impl SynthRigBackend {
             buffer_size: 256,
             ..Default::default()
         };
+        let volume = self.inner.state.lock().ok().map(|s| s.volume).unwrap_or(DEFAULT_VOLUME);
         match KeysRig::open(&prefs, &tree) {
             Ok(r) => {
+                r.set_output_gain(volume); // pad the hot summed output
                 {
                     let mut rig = self.inner.rig.lock().unwrap();
                     *rig = Some(r);
@@ -273,7 +287,14 @@ impl SynthRigSvc for SynthRigBackend {
         } else {
             0.0
         };
-        SynthStatus { running, loaded_preset, master_peak, voices: 0, midi_port: s.midi_port.clone() }
+        SynthStatus {
+            running,
+            loaded_preset,
+            master_peak,
+            voices: 0,
+            midi_port: s.midi_port.clone(),
+            volume: s.volume,
+        }
     }
 
     fn presets(&self) -> Vec<SynthPreset> {
@@ -319,6 +340,19 @@ impl SynthRigSvc for SynthRigBackend {
             s.midi_port = if name.is_empty() { None } else { Some(name) };
         }
         self.reattach_midi();
+        self.inner.events.publish(SynthEvent::Status(SynthRigSvc::status(self)));
+    }
+
+    fn set_volume(&self, gain_milli: u32) {
+        let gain = gain_milli as f32 / 1000.0;
+        if let Ok(mut s) = self.inner.state.lock() {
+            s.volume = gain;
+        }
+        if let Ok(rig) = self.inner.rig.lock() {
+            if let Some(rig) = rig.as_ref() {
+                rig.set_output_gain(gain);
+            }
+        }
         self.inner.events.publish(SynthEvent::Status(SynthRigSvc::status(self)));
     }
 

@@ -51,6 +51,9 @@ pub struct SynthStatus {
     pub voices: u32,
     /// The attached MIDI input port name, if any (None = omni / all).
     pub midi_port: Option<String>,
+    /// Master output gain (linear; 1.0 = unity). Summed multi-layer patches run
+    /// hot, so this defaults to a pad below unity.
+    pub volume: f32,
 }
 
 pub mod synth {
@@ -98,6 +101,8 @@ pub mod synth {
         fn midi_ports(&self) -> Vec<String>;
         /// Attach a hardware MIDI input by name (empty = omni / all inputs).
         fn set_midi_port(&self, name: String);
+        /// Set the master output gain in milli-units (1000 = unity, 250 = −12 dB).
+        fn set_volume(&self, gain_milli: u32);
         /// Recent MIDI events seen by the core (oldest first), for the monitor.
         fn midi_recent(&self) -> Vec<midicore_proto::MidiEvent>;
 
