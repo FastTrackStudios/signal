@@ -1,0 +1,14 @@
+[package]
+name = "signal-synth-ui"
+version.workspace = true
+edition = "2021"
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+dioxus.workspace = true
+signal-synth-proto.workspace = true
+midicore-ui.workspace = true
+midicore-proto.workspace = true
+signal-ui = { workspace = true, features = ["web"] }
+architect = { workspace = true, features = ["atom", "vox", "platform"] }
