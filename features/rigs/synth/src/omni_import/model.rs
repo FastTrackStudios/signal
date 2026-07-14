@@ -1,6 +1,8 @@
 //! The parsed **patch model** (`OmniPatch` / `OmniLayer`) and the AmberPart
 //! element walk that fills it.
 
+use signal_proto::block::BlockType;
+
 use super::parse_xml;
 use super::xml::XmlNode;
 
@@ -90,9 +92,72 @@ pub struct OmniPatch {
 }
 
 fn rack_types(rack: &XmlNode) -> Vec<String> {
+    // Slot order is preserved; a bypassed module (`Active` ≈ 0) blanks its
+    // slot so it never realizes live DSP (a disengaged reverb must stay
+    // silent). Empty/"No Effect" slots are dropped downstream by name.
     rack.children_tagged("EFFMODULE")
-        .map(|m| m.attr("Type").unwrap_or("").to_string())
+        .map(|m| {
+            let active = m.attr("Active").map(super::omni_num).unwrap_or(0.0) > 0.5;
+            if active {
+                m.attr("Type").unwrap_or("").to_string()
+            } else {
+                String::new()
+            }
+        })
         .collect()
+}
+
+/// Map an Omnisphere FX-unit name onto the nearest **native** DSP block, when
+/// one exists ([`crate::omni`]'s racks are otherwise placeholder pass-throughs).
+/// `None` ⇒ keep a placeholder slot.
+///
+/// Keyword-ordered because several names carry two cues: "Chorus Echo" is a
+/// tape *echo* with modulation (→ Delay, not Chorus), "Multiband Distortion"
+/// is drive not EQ. The high-frequency factory units (verbs, echoes, choruses,
+/// EQs, compressors, tremolos, phasers) all resolve; the exotic ones (Imager,
+/// Retroplex, amp/console sims, backward FX) stay placeholders until they have
+/// DSP. Parameter fidelity is a later pass — this only picks the block type, so
+/// units realize with sensible native defaults.
+pub(crate) fn classify_effect(name: &str) -> Option<BlockType> {
+    let k = name.to_ascii_lowercase();
+    let has = |subs: &[&str]| subs.iter().any(|s| k.contains(s));
+    Some(if has(&["echo", "delay"]) {
+        BlockType::Delay
+    } else if has(&["verb", "innerspace", "shimmer"]) {
+        BlockType::Reverb
+    } else if has(&["flanger"]) {
+        BlockType::Flanger
+    } else if has(&["phaser"]) {
+        BlockType::Phaser
+    } else if has(&["vibrato"]) {
+        BlockType::Vibrato
+    } else if has(&["chorus", "ensemble", "solina"]) {
+        BlockType::Chorus
+    } else if has(&["tremolo"]) {
+        BlockType::Trem
+    } else if has(&["compressor", "limiter", "leveling amp", "1176"]) {
+        BlockType::Compressor
+    } else if has(&[
+        "distortion",
+        "overdrive",
+        "saturator",
+        "fuzz",
+        "smasher",
+        "mean machine",
+        "flame",
+        "slammer",
+        "drive",
+    ]) {
+        BlockType::Drive
+    } else if has(&[" eq", "-band", "parametric", "graphic"]) {
+        BlockType::Eq
+    } else if has(&["filter", "resonators"]) {
+        BlockType::Filter
+    } else if has(&["gate"]) {
+        BlockType::Gate
+    } else {
+        return None;
+    })
 }
 
 /// `type1` slot → `(mode, poles)` — every slot measured through real

@@ -5,7 +5,9 @@ use std::path::Path;
 
 use signal_proto::block::BlockType;
 
-use super::model::{OmniModRoute, OmniPatch, classify_filter_full, classify_type1, omni_cutoff_hz};
+use super::model::{
+    OmniModRoute, OmniPatch, classify_effect, classify_filter_full, classify_type1, omni_cutoff_hz,
+};
 
 /// Omnisphere's normalized cutoff → OUR normalized cutoff param, via the
 /// calibrated Hz curve.
@@ -28,7 +30,9 @@ fn fx_rack_from(name: &str, types: &[String]) -> Container {
             .map(|s| s.as_str())
             .filter(|s| !s.is_empty() && *s != "No Effect");
         rack = match label {
-            Some(fx) => rack.block(BlockType::Custom, fx),
+            // Realize to native DSP when we recognize the unit; otherwise keep
+            // the name on a placeholder slot (renders as pass-through).
+            Some(fx) => rack.block(classify_effect(fx).unwrap_or(BlockType::Custom), fx),
             None => rack.block(BlockType::Custom, format!("{name} Slot {}", slot + 1)),
         };
     }

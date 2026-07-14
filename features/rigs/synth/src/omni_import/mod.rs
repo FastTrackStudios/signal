@@ -30,7 +30,7 @@ pub use multi::{OmniMulti, load_multi_file, multi_to_container, parse_multi};
 pub use tree::{load_patch_file, patch_to_container};
 
 #[cfg(test)]
-use model::classify_filter_full;
+use model::{classify_effect, classify_filter_full};
 
 #[cfg(test)]
 mod tests {
@@ -129,6 +129,36 @@ mod tests {
             ("lowpass", 4, "ladder")
         );
         assert_eq!(classify_filter_full("untitled"), ("lowpass", 2, "clean"));
+    }
+
+    #[test]
+    fn effect_names_classify_to_native_dsp() {
+        use signal_proto::block::BlockType as B;
+        // Dominant factory units resolve to native DSP…
+        assert_eq!(classify_effect("PRO-Verb"), Some(B::Reverb));
+        assert_eq!(classify_effect("Solar Shimmer"), Some(B::Reverb));
+        // "Chorus Echo" is a tape echo → Delay, not Chorus (order matters).
+        assert_eq!(classify_effect("Chorus Echo"), Some(B::Delay));
+        assert_eq!(classify_effect("BPM Delay X2"), Some(B::Delay));
+        assert_eq!(classify_effect("Analog Chorus"), Some(B::Chorus));
+        assert_eq!(classify_effect("Solina Ensemble"), Some(B::Chorus));
+        assert_eq!(classify_effect("Vintage Tremolo"), Some(B::Trem));
+        assert_eq!(classify_effect("Analog Phaser"), Some(B::Phaser));
+        assert_eq!(classify_effect("Analog Flanger"), Some(B::Flanger));
+        assert_eq!(classify_effect("Studio EQ"), Some(B::Eq));
+        assert_eq!(classify_effect("Vintage 2-Band EQ"), Some(B::Eq));
+        // Comp/limiter beats the "-band"/"tube" cues those names also carry.
+        assert_eq!(classify_effect("Multiband Compressor"), Some(B::Compressor));
+        assert_eq!(classify_effect("Classic 1176 Limiter"), Some(B::Compressor));
+        assert_eq!(classify_effect("Optical Leveling Amp"), Some(B::Compressor));
+        assert_eq!(classify_effect("Flame Distortion"), Some(B::Drive));
+        assert_eq!(classify_effect("Multiband Distortion"), Some(B::Drive));
+        assert_eq!(classify_effect("Power Filter"), Some(B::Filter));
+        assert_eq!(classify_effect("Gate Expander"), Some(B::Gate));
+        // …the exotic ones stay placeholders until they have DSP.
+        assert_eq!(classify_effect("Imager"), None);
+        assert_eq!(classify_effect("Retroplex"), None);
+        assert_eq!(classify_effect("No Effect"), None);
     }
 
     #[test]

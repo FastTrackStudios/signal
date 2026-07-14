@@ -238,8 +238,9 @@ mod tests {
         let p = omnisphere_preset();
         let mut rn = signal_sampler::node_render::RenderNode::compile(&p, 48_000);
         rn.prepare(48_000.0, 256);
-        // 4 layers × (2 filters + amp + wavetable + waveshaper + dfs) = 24.
-        assert_eq!(rn.live_leaves(), 24);
+        // 4 layers × (2 filters + amp + wavetable + waveshaper + dfs +
+        // harmonia/modal) = 28 live native leaves; the rest are placeholders.
+        assert_eq!(rn.live_leaves(), 28);
     }
 
     /// Machine-local: the realized Part plays a real Omnisphere soundsource.
