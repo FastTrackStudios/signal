@@ -104,9 +104,17 @@ pub struct SynthZone {
     pub gain_db: f32,
     pub pan: f32,
     pub tune_cents: f32,
-    /// Sustain loop window (`loop_end > loop_start` ⇒ loops).
+    /// Playback window in sample frames (`sample_end == 0` ⇒ to the end).
+    pub sample_start: u32,
+    pub sample_end: u32,
+    /// Sustain loop window (`loop_end > loop_start` ⇒ loops), with crossfade.
     pub loop_start: u32,
     pub loop_end: u32,
+    pub loop_xfade: u32,
+    /// Attack fade-in length (frames from `sample_start`). 0 = none.
+    pub fade_in: u32,
+    /// Release-portion start frame (CSS/one-shot release modelling). 0 = none.
+    pub release_start: u32,
     pub trigger_mode: String,
     /// Mic id (→ [`SynthMic::id`]; empty = mic-agnostic).
     pub mic: String,

@@ -492,6 +492,9 @@ fn zone_from_sfz(
         sample_end: sfz_u32(group, region, "end").unwrap_or(0),
         loop_start: sfz_u32(group, region, "loop_start").unwrap_or(0),
         loop_end: sfz_u32(group, region, "loop_end").unwrap_or(0),
+        loop_xfade: 0,
+        fade_in: 0,
+        release_start: 0,
         playback_mode: String::new(),
         trigger_mode,
         trigger_cc: sfz_u8(group, region, "on_locc").unwrap_or(0),
@@ -937,6 +940,18 @@ pub struct ZoneSpec {
     /// Forward sustain-loop end frame (one-past-last). 0 = no loop.
     #[facet(default)]
     pub loop_end: u32,
+    /// Loop crossfade length in frames — the tail before `loop_end` blended
+    /// into the region before `loop_start` for a seamless wrap. 0 = hard loop.
+    #[facet(default)]
+    pub loop_xfade: u32,
+    /// Attack fade-in length in frames from `sample_start`. 0 = no fade.
+    #[facet(default)]
+    pub fade_in: u32,
+    /// Release-portion start frame — where the note's release tail begins,
+    /// for one-shot / legato release modelling and CSS-style release samples.
+    /// 0 = no distinct release point.
+    #[facet(default)]
+    pub release_start: u32,
     /// Playback mode. Empty or `"forward"` = normal playback, `"reverse"` =
     /// play the zone window backwards, `"alternate"`/`"alternating"` =
     /// ping-pong between loop points.

@@ -23,6 +23,15 @@ Zones covering the same key/velocity/articulation MAY form a **round-robin** set
 cycled per repeated note to avoid the machine-gun effect. Cycling is per
 (articulation, key) and MAY be random, sequential, or with repeat-avoidance.
 
+r[signal.sampling.markers]
+A zone carries editable **sample markers** in frames: `sample_start`/`sample_end`
+(playback window), `fade_in` (attack fade), `loop_start`/`loop_end` + `loop_xfade`
+(sustain loop with crossfade), and `release_start` (where the release tail begins —
+one-shot / legato / CSS-style release samples). The Setup UI renders the sample
+**waveform** with these markers overlaid and draggable, so Omnisphere/Keyscape
+loop points and CSS-strings legato/release points are visible and adjustable.
+Markers persist per zone in the [sound definition](sound-format.md).
+
 ## Multi-Mics
 
 r[signal.sampling.multimic]
