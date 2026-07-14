@@ -512,6 +512,75 @@ impl PluginInstance for NativeWavetable {
     }
 }
 
+impl crate::soundsource::Soundsource for NativeWavetable {
+    fn kind(&self) -> crate::soundsource::SoundsourceKind {
+        crate::soundsource::SoundsourceKind::Oscillator
+    }
+
+    fn prepare(&mut self, sample_rate: f32, block_size: usize) {
+        let _ = PluginInstance::prepare(self, sample_rate as f64, block_size as u32);
+    }
+
+    fn note_on(&mut self, note: u8, velocity: u8) {
+        // Inherent method wins over the trait method of the same name.
+        NativeWavetable::note_on(self, note, velocity);
+    }
+
+    fn note_off(&mut self, note: u8) {
+        NativeWavetable::note_off(self, note);
+    }
+
+    fn render(
+        &mut self,
+        in_l: &[f32],
+        in_r: &[f32],
+        out_l: &mut [f32],
+        out_r: &mut [f32],
+        events: &PluginEvents<'_>,
+    ) {
+        let _ = self.process_block(in_l, in_r, out_l, out_r, events);
+    }
+
+    fn params(&self) -> Vec<PluginParamInfo> {
+        // Mirror the host-param surface (`PluginInstance::params`), reporting
+        // current values as defaults. Kept here because the trait getter takes
+        // `&self` while the host method takes `&mut self`.
+        let mk = |id, name: &str, default: f64| PluginParamInfo {
+            id,
+            name: name.into(),
+            min: 0.0,
+            max: 1.0,
+            default,
+        };
+        vec![
+            mk(0, "shape", self.cfg.shape as f64),
+            mk(
+                1,
+                "unison_detune",
+                (self.cfg.unison_detune_cents / 100.0) as f64,
+            ),
+            mk(2, "fm_depth", self.cfg.fm_depth as f64),
+            mk(3, "ring_mix", self.cfg.ring_mix as f64),
+            mk(4, "tune", (self.pitch_mult.log2() * 12.0 / 48.0 + 0.5) as f64),
+            mk(5, "symmetry", self.duty as f64),
+            mk(6, "harm_mix", self.harm_mix as f64),
+        ]
+    }
+
+    fn set_param(&mut self, id: u32, value: f64) {
+        // Reuse the existing param path: `process_block` applies `events.params`
+        // at block start. With zero-length buffers it only updates state (no
+        // rendering, no allocation).
+        let params = [(id, value)];
+        let events = PluginEvents {
+            params: &params,
+            midi: &[],
+            note_expressions: &[],
+        };
+        let _ = self.process_block(&[], &[], &mut [], &mut [], &events);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

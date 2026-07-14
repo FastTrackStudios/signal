@@ -45,6 +45,7 @@
 //! ```
 
 pub mod api;
+pub mod audio_soundsource;
 pub mod bank;
 pub mod block;
 pub mod convolver;
@@ -99,7 +100,9 @@ pub use mixer::{
 };
 pub use module_spec::{ModulePort, ModuleSpec};
 pub use nam::NamProcessor;
+pub use audio_soundsource::AudioSoundsource;
 pub use native_osc::{NativeOscillator, OscWave};
+pub use soundsource::{Soundsource, SoundsourceKind, SoundsourceLeaf};
 pub use node_render::{RenderNode, build_node_backend};
 pub use preset_registry::{PresetRegistry, PresetSource, RegisteredPreset};
 pub use preset_spec::{
