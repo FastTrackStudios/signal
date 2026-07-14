@@ -163,8 +163,12 @@ pub enum MidiMod {
     Bender,
     /// Velocity of the most recent note-on, 0..1.
     Velocity,
-    /// Note number of the most recent note-on, 0..1 (keytracking).
+    /// Note number of the most recent note-on, 0..1 (raw, uncentered).
     Key,
+    /// Bipolar key-tracking centered at middle C (note 60): −1..+1 across
+    /// ±48 semitones (±4 octaves), note 60 = 0. The centered form a
+    /// key-track modulator wants (settable center/slope is a follow-up).
+    KeyTrack,
     /// Sample-and-hold random, redrawn per note-on, −1..+1.
     Random,
     /// Alternates 0 / 1 on each note-on.
@@ -276,6 +280,11 @@ impl ControlSource for MidiSource {
                 (MidiMod::Key, MidiEvent::NoteOn { key, velocity, .. }) if velocity.get() > 0 => {
                     v = key.get() as f32 / 127.0;
                 }
+                (MidiMod::KeyTrack, MidiEvent::NoteOn { key, velocity, .. })
+                    if velocity.get() > 0 =>
+                {
+                    v = ((key.get() as f32 - 60.0) / 48.0).clamp(-1.0, 1.0);
+                }
                 (MidiMod::Random, MidiEvent::NoteOn { velocity, .. }) if velocity.get() > 0 => {
                     // Redraw from a running hash of the previous value.
                     let bits = (v.to_bits() ^ 0x9E37_79B9).wrapping_mul(0xC2B2_AE35);
@@ -338,7 +347,8 @@ impl ModSource {
             "after" | "aftertouch" | "pressure" => MidiMod::Aftertouch,
             "bender" | "bend" | "pitchbend" => MidiMod::Bender,
             "velo" | "velocity" => MidiMod::Velocity,
-            "key" | "keytrack" => MidiMod::Key,
+            "key" => MidiMod::Key,
+            "keytrack" | "key track" | "keytracking" => MidiMod::KeyTrack,
             "random" | "random2" | "random unipolar" => MidiMod::Random,
             "alt" => MidiMod::Alt,
             "constant" | "bias" | "bias1" | "bias2" => MidiMod::Constant,
@@ -539,6 +549,21 @@ mod tests {
         assert_eq!(ModSource::midi_by_name("mpex"), Some(MidiMod::MpeBend));
         assert_eq!(ModSource::midi_by_name("cc74"), Some(MidiMod::Cc(74)));
         assert_eq!(ModSource::midi_by_name("nope"), None);
+    }
+
+    #[test]
+    fn keytrack_is_bipolar_around_middle_c() {
+        let mut src = ModSource::midi(MidiMod::KeyTrack);
+        let at = |note: u8| [PluginMidiEvent { offset: 0, message: ev_note_on(note, 100) }];
+        let mid = at(60);
+        let ev = PluginEvents { params: &[], midi: &mid, note_expressions: &[] };
+        assert!(src.tick(&ev, 64).abs() < 1e-3, "note 60 centers at 0");
+        let hi = at(108);
+        let ev = PluginEvents { params: &[], midi: &hi, note_expressions: &[] };
+        assert!((src.tick(&ev, 64) - 1.0).abs() < 1e-3, "+48 st → +1");
+        let lo = at(12);
+        let ev = PluginEvents { params: &[], midi: &lo, note_expressions: &[] };
+        assert!((src.tick(&ev, 64) + 1.0).abs() < 1e-3, "-48 st → -1");
     }
 
     #[test]
