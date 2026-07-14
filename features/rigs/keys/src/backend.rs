@@ -7,7 +7,7 @@
 //! mount [`router`](KeysRigBackend::router) on a vox transport.
 
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
 
 use architect::dispatch::CurrentThreadDispatcher;
@@ -29,9 +29,6 @@ const KEYSCAPE_ROOT: &str = "/run/media/AudioHaven/Sampled/Keys/Keyscape";
 /// instrument). Preferred over the raw extraction. Override with
 /// `FTS_KEYSCAPE_PACKS`.
 const KEYSCAPE_PACKS_ROOT: &str = "/run/media/AudioHaven/Signal/Libraries/Keys/Keyscape/Packs";
-/// Meter-stream publish interval (~30 Hz).
-const PUMP_MS: u64 = 33;
-
 #[derive(Default)]
 struct State {
     presets: Vec<KeysPreset>,
@@ -91,7 +88,7 @@ impl KeysRigBackend {
                 pump_started: AtomicBool::new(false),
             }),
         };
-        backend.spawn_meter_pump();
+        signal_sampler::spawn_meter_pump("keys-meter-pump", backend.clone());
         backend
     }
 
@@ -195,30 +192,25 @@ impl KeysRigBackend {
         self.inner.events.publish(KeysEvent::Status(KeysRigSvc::status(self)));
     }
 
-    fn spawn_meter_pump(&self) {
-        if self.inner.pump_started.swap(true, Ordering::SeqCst) {
-            return;
-        }
-        let backend = self.clone();
-        let _ = std::thread::Builder::new()
-            .name("keys-meter-pump".into())
-            .spawn(move || {
-                let mut last_running = false;
-                loop {
-                    std::thread::sleep(std::time::Duration::from_millis(PUMP_MS));
-                    let running = backend.inner.rig.lock().map(|r| r.is_some()).unwrap_or(false);
-                    if running != last_running {
-                        last_running = running;
-                        backend.inner.events.publish(KeysEvent::Status(KeysRigSvc::status(&backend)));
-                        backend.inner.events.publish(KeysEvent::Tree(KeysRigSvc::tree(&backend)));
-                    }
-                    if !running {
-                        continue;
-                    }
-                    backend.inner.events.publish(KeysEvent::Status(KeysRigSvc::status(&backend)));
-                    backend.inner.events.publish(KeysEvent::Midi(KeysRigSvc::midi_recent(&backend)));
-                }
-            });
+}
+
+impl signal_sampler::MeterPumpSource for KeysRigBackend {
+    fn is_running(&self) -> bool {
+        self.inner.rig.lock().map(|r| r.is_some()).unwrap_or(false)
+    }
+
+    fn pump_started(&self) -> &AtomicBool {
+        &self.inner.pump_started
+    }
+
+    fn on_running_edge(&self, _running: bool) {
+        self.inner.events.publish(KeysEvent::Status(KeysRigSvc::status(self)));
+        self.inner.events.publish(KeysEvent::Tree(KeysRigSvc::tree(self)));
+    }
+
+    fn on_running_tick(&self) {
+        self.inner.events.publish(KeysEvent::Status(KeysRigSvc::status(self)));
+        self.inner.events.publish(KeysEvent::Midi(KeysRigSvc::midi_recent(self)));
     }
 }
 

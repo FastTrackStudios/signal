@@ -24,9 +24,6 @@ const KIT: &str = "kit";
 const DEFAULT_LIBRARY: &str =
     "/run/media/AudioHaven/Signal/Libraries/Drum Kits/GGD Modern and Massive 2";
 
-/// Meter-stream publish interval (~30 Hz).
-const PUMP_MS: u64 = 33;
-
 fn to_drum_map(m: InputMap) -> Option<DrumMap> {
     match m {
         InputMap::Direct => None,
@@ -116,7 +113,7 @@ impl DrumRigBackend {
             }),
         };
         backend.rescan_library();
-        backend.spawn_meter_pump();
+        signal_sampler::spawn_meter_pump("drum-meter-pump", backend.clone());
         backend
     }
 
@@ -127,7 +124,7 @@ impl DrumRigBackend {
 
     /// Start the meter pump + open audio in the background.
     pub fn start_background(&self) {
-        self.spawn_meter_pump();
+        signal_sampler::spawn_meter_pump("drum-meter-pump", self.clone());
         let b = self.clone();
         let _ = std::thread::Builder::new()
             .name("drum-rig-open".into())
@@ -489,72 +486,48 @@ impl DrumRigBackend {
             }
         }
     }
+}
 
-    /// Spawn the meter pump — idempotent (only the first call wins), so the
-    /// rig streams meters + MIDI however it first becomes active. The pump
-    /// publishes only high-rate data (`Meters`, `Midi`); the control surface
-    /// (`Mixer`) and transport (`Status`) are published on mutation instead,
-    /// so a fader the user is dragging is never overwritten at meter rate.
-    fn spawn_meter_pump(&self) {
-        use std::sync::atomic::Ordering;
-        if self.inner.pump_started.swap(true, Ordering::SeqCst) {
-            return; // already running
+impl signal_sampler::MeterPumpSource for DrumRigBackend {
+    fn is_running(&self) -> bool {
+        self.inner.rig.lock().map(|r| r.is_some()).unwrap_or(false)
+    }
+
+    fn pump_started(&self) -> &std::sync::atomic::AtomicBool {
+        &self.inner.pump_started
+    }
+
+    fn on_tick(&self) {
+        // Decay Light Guide flashes even while stopped (cheap no-op if no
+        // keyboard).
+        if let Ok(mut l) = self.inner.light.lock() {
+            if let Some(lg) = l.as_mut() {
+                lg.tick();
+            }
         }
-        let backend = self.clone();
-        let _ = std::thread::Builder::new()
-            .name("drum-meter-pump".into())
-            .spawn(move || {
-                let mut last_running = false;
-                // MIDI hot-plug watch: snapshot the port set and re-attach when
-                // it changes, so a device plugged in after the rig started
-                // (e.g. the mioXM) is picked up without touching the UI.
-                let sorted_ports = || {
-                    let mut p = SamplerRig::midi_input_ports();
-                    p.sort();
-                    p
-                };
-                let mut known_ports = sorted_ports();
-                let mut tick: u32 = 0;
-                // ~every 2 s (60 * 33 ms).
-                const PORT_SCAN_TICKS: u32 = 60;
-                loop {
-                    std::thread::sleep(std::time::Duration::from_millis(PUMP_MS));
-                    // Decay Light Guide flashes even while stopped (cheap no-op
-                    // if no keyboard).
-                    if let Ok(mut l) = backend.inner.light.lock() {
-                        if let Some(lg) = l.as_mut() {
-                            lg.tick();
-                        }
-                    }
-                    let running = backend.inner.rig.lock().map(|r| r.is_some()).unwrap_or(false);
-                    // Re-scan MIDI ports periodically; on a change, re-attach so
-                    // hot-plugged interfaces are merged into the omni stream.
-                    tick = tick.wrapping_add(1);
-                    if tick % PORT_SCAN_TICKS == 0 {
-                        let now = sorted_ports();
-                        if now != known_ports {
-                            tracing::info!(ports = ?now, "drum rig: MIDI ports changed — re-attaching");
-                            known_ports = now;
-                            if running {
-                                backend.reattach_midi();
-                                backend.inner.events.publish(DrumEvent::Status(DrumRig::status(&backend)));
-                            }
-                        }
-                    }
-                    // Transport transitions are rare — publish Status only on the
-                    // edge, not every tick.
-                    if running != last_running {
-                        last_running = running;
-                        backend.inner.events.publish(DrumEvent::Status(DrumRig::status(&backend)));
-                        backend.inner.events.publish(DrumEvent::Mixer(DrumRig::mixer(&backend)));
-                    }
-                    if !running {
-                        continue;
-                    }
-                    backend.inner.events.publish(DrumEvent::Meters(DrumRig::meters(&backend)));
-                    backend.inner.events.publish(DrumEvent::Midi(DrumRig::midi_recent(&backend)));
-                }
-            });
+    }
+
+    fn midi_ports(&self) -> Vec<String> {
+        SamplerRig::midi_input_ports()
+    }
+
+    fn on_midi_ports_changed(&self, ports: &[String]) {
+        // A device plugged in after the rig started (e.g. the mioXM) is merged
+        // into the omni stream without touching the UI.
+        tracing::info!(?ports, "drum rig: MIDI ports changed — re-attaching");
+        self.reattach_midi();
+        self.inner.events.publish(DrumEvent::Status(DrumRig::status(self)));
+    }
+
+    fn on_running_edge(&self, _running: bool) {
+        // Transport transitions are rare — full Status + Mixer only on the edge.
+        self.inner.events.publish(DrumEvent::Status(DrumRig::status(self)));
+        self.inner.events.publish(DrumEvent::Mixer(DrumRig::mixer(self)));
+    }
+
+    fn on_running_tick(&self) {
+        self.inner.events.publish(DrumEvent::Meters(DrumRig::meters(self)));
+        self.inner.events.publish(DrumEvent::Midi(DrumRig::midi_recent(self)));
     }
 }
 
@@ -562,7 +535,7 @@ impl DrumRigBackend {
 
 impl DrumRig for DrumRigBackend {
     fn start(&self) {
-        self.spawn_meter_pump();
+        signal_sampler::spawn_meter_pump("drum-meter-pump", self.clone());
         let b = self.clone();
         let _ = std::thread::Builder::new()
             .name("drum-rig-open".into())
