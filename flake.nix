@@ -450,6 +450,9 @@
               cargo-nextest
               bacon
               flac
+              # uv — vehicle for the graphify bootstrap below (graphify is a
+              # PyPI tool, not in nixpkgs; python3 comes from buildInputs).
+              uv
             ]
             ++ lib.optionals pkgs.stdenv.isLinux [
               # pw-jack — run the live rigs through PipeWire's JACK shim.
@@ -479,6 +482,22 @@
                   cargo install --git https://github.com/DioxusLabs/dioxus dioxus-cli --locked
               fi
 
+              # graphify — whole-repo knowledge-graph tool (safishamsi/graphify)
+              # so any agent/assistant can understand this 160-crate tree without
+              # grepping it cold. Not in nixpkgs; bootstrapped via uv like dx,
+              # pinned for reproducibility. Code extraction is 100% local
+              # (tree-sitter, no API calls); the [mcp] extra lets `graphify serve`
+              # expose the graph over MCP. uv tools shim into ~/.local/bin.
+              export PATH="$HOME/.local/bin:$PATH"
+              GRAPHIFY_VERSION="0.9.15"
+              if ! uv tool list 2>/dev/null | grep -q "graphifyy v$GRAPHIFY_VERSION"; then
+                echo "  Installing graphify $GRAPHIFY_VERSION..."
+                UV_PYTHON_DOWNLOADS=never uv tool install --force \
+                  --python "${pkgs.python3}/bin/python3" \
+                  "graphifyy[mcp]==$GRAPHIFY_VERSION" >/dev/null 2>&1 || \
+                  echo "  (graphify install failed — run: uv tool install 'graphifyy[mcp]==$GRAPHIFY_VERSION')"
+              fi
+
               echo ""
               echo "  FastTrackStudio dev shell"
               echo "  ─────────────────────────────────────────────"
@@ -488,6 +507,7 @@
               echo ""
               echo "  Rust: $(rustc --version)"
               echo "  dx:   $(dx --version 2>/dev/null || echo 'not available')"
+              echo "  graphify: $(graphify --version 2>/dev/null || echo 'not available') — 'just graph' to (re)build the repo knowledge graph"
               echo ""
             '';
           }

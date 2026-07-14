@@ -313,6 +313,24 @@ check:
 test:
     cargo test --workspace
 
+# ── Knowledge graph (graphify) ───────────────────────────────────────────
+# Whole-repo knowledge graph for AI assistants — parses the tree with
+# tree-sitter (100% local, no API calls) into graphify-out/ (graph.json +
+# GRAPH_REPORT.md + interactive graph.html). graphify is bootstrapped in the
+# nix dev shell (see flake.nix shellHook). Output is gitignored + regenerable;
+# rebuild after large structural changes. `graph-serve` exposes it over MCP
+# (wired into .mcp.json so Claude Code queries it instead of grepping cold).
+
+# Build/refresh the repo knowledge graph (local AST + clustering, no LLM).
+# --force so the graph shrinks when .graphifyignore excludes more (vendored
+# trees); without it graphify refuses a rebuild that has fewer nodes.
+graph:
+    graphify update . --force
+
+# Serve the knowledge graph over MCP (stdio) — used by .mcp.json
+graph-serve:
+    graphify-mcp --transport stdio --graph graphify-out/graph.json
+
 # ── Aliases ──────────────────────────────────────────────────────────────
 
 alias c := check
