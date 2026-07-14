@@ -94,6 +94,36 @@ lives in the `sample-collector` repo (`crates/sc-import`):
 
 See `references/keyscape.md` and `crates/signal/docs/content/signalpack-keyscape.md`.
 
+## Packing Omnisphere soundsources (STINFO loops + tags)
+
+Omnisphere Core Soundsources arrive as `<Name>/library.styx` + one FLAC **per key**
+(root 24→108 etc.), already zone-mapped. Two things the extraction left out — both
+required for the pad/synth sources to sound right:
+
+1. **Sustain loops.** The zones carry **no** `loop_start`/`loop_end`, so a ~2.8 s
+   pad recording plays as a one-shot and **decays like a piano**. The loop lives in
+   each FLAC's `STINFO` Vorbis comment: `STINFO=<enabled> <loop_start> <loop_end>
+   <xfade>` (frames; `loop_end` == total samples). `LibrarySpec::from_file` now
+   recovers it into each zone (gated to Spectrasonics/Omnisphere vendors).
+2. **Tags.** Set `category` / `instrument` / `style` from the family folder
+   (Synth Classic, Keyboards, Strings, …) so the browser can sort/filter.
+
+Build one with the Omnisphere-aware wrapper:
+```
+cargo run -p signal-synth --release --example build_omni_pack -- \
+    "<soundsource_dir>" "<out.signalpack>" [category] [instrument] [style,style,…]
+# e.g.
+build_omni_pack "…/Core Soundsources/Synth Classic/OB-8 PWM Big Strings" \
+    "…/Signal/Libraries/Keys/Omnisphere/Packs/Synth Classic/OB-8 PWM Big Strings.signalpack" \
+    synth synth-strings "Synth Classic,OB-8,PWM,strings,pad,analog"
+```
+It loop-enriches the spec, then **text-injects** `loop_start`/`loop_end` + the tags
+into the *original* styx and embeds that (see the round-trip gotcha below). Packs
+live at `…/Signal/Libraries/Keys/Omnisphere/Packs/` (mirrors Keyscape;
+`FTS_OMNISPHERE_PACKS`); `SoundsourceIndex` prefers a `<Name>.signalpack` over the
+raw `library.styx`. QA a soundsource in isolation (per-second RMS + tracing) with
+`--example pack_hold_rms -- <pack> [note]`.
+
 ## Gotchas (hard-won)
 
 - **Rebuild the pack after re-extracting/renaming samples.** A stale pack silently
@@ -109,6 +139,19 @@ See `references/keyscape.md` and `crates/signal/docs/content/signalpack-keyscape
   why zone-mode exists.
 - **Offline audio-probe examples (`keyscape_probe`) are currently broken**
   (voices: 0) — validate with `check_pack_resolve` (static resolve), not audio.
+- **Never re-serialize a spec with `facet_styx::to_string` to build a pack.** It
+  emits defaulted `Option` fields (e.g. `dynamics.sustain_controller: None`) as
+  variant tags the styx *parser* rejects, so `from_pack` fails with "got variant
+  tag, expected scalar" and the block loads **silent**. Text-inject changes into
+  the verbatim original styx instead (what `build_omni_pack` does).
+- **A soundsource note is DROPPED if its zone isn't cached yet.** `midi.rs` returns
+  on the cache-miss (no voice) — the caller must re-send note-on until the
+  background preload decodes the zone. A patch played the instant the rig opens can
+  fall through to the native oscillator blocks (sounds like the modal/physical
+  piano) until preload completes. Tests must retrigger every block during warmup.
+- **Loops for Omnisphere live in the FLAC `STINFO` tag, not the styx** — and pack
+  building re-encodes the FLAC (dropping STINFO), so the loop MUST be baked into the
+  embedded spec at build time or the pack won't sustain.
 
 ## Binary format (one-liner)
 
@@ -123,6 +166,8 @@ Full layout: `references/format.md` and
 | Tool | Purpose |
 |---|---|
 | `--example build_pack` | raw dir + styx → `.signalpack` |
+| `-p signal-synth --example build_omni_pack` | Omnisphere soundsource → pack (STINFO loops + tags baked in) |
+| `-p signal-synth --example pack_hold_rms` | QA a soundsource: hold a note, per-second RMS + sampler tracing |
 | `--example peek_header` | dump embedded spec + entry count |
 | `--example check_pack_resolve` | static playability + default-articulation check |
 | `--example dump_key` / `articulation_of` | how convention-mode parses a filename |
