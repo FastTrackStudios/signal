@@ -91,7 +91,6 @@ pub fn SynthRigRemote() -> Element {
     let (state, rig) = use_synth_state();
     let status = state.status.read().clone();
     let presets = state.presets.read().clone();
-    let tree = state.tree.read().clone();
     let midi = state.midi.read().clone();
     let midi_count = midi.len() as u64;
 
@@ -143,16 +142,18 @@ pub fn SynthRigRemote() -> Element {
                         }
                     }
                 }
-                // ── control view + performance ──
+                // ── MIDI monitor (is it coming through?) + keyboard ──
                 div { style: "display:flex; flex-direction:column; gap:12px; flex:1; min-height:0; overflow:auto; padding:10px;",
-                    // control view: the layer tree as boxes
-                    div {
-                        span { style: "font-size:11px; color:#71717a; text-transform:uppercase; letter-spacing:0.05em;", "Control" }
-                        div { style: "margin-top:6px;",
-                            NodeBoxes { node: tree }
-                        }
+                    // The live count is the quickest "is MIDI arriving?" signal.
+                    div { style: "display:flex; align-items:baseline; gap:8px;",
+                        span { style: "font-size:11px; color:#71717a; text-transform:uppercase; letter-spacing:0.05em;", "MIDI in" }
+                        span { style: "font-size:11px; color:#52525b;", {status.midi_port.clone().unwrap_or_else(|| "omni (all inputs)".into())} }
+                        div { style: "flex:1;" }
+                        span { style: "font-size:12px; font-weight:700; color:#38bdf8;", "{midi_count} events" }
                     }
-                    MidiMonitorPanel { events: midi, count: midi_count, title: "MIDI monitor".to_string() }
+                    div { style: "flex:1; min-height:120px;",
+                        MidiMonitorPanel { events: midi, count: midi_count, title: "MIDI monitor".to_string() }
+                    }
                     // performance: piano
                     div {
                         span { style: "font-size:11px; color:#71717a; text-transform:uppercase; letter-spacing:0.05em;", "Keyboard" }
@@ -166,47 +167,11 @@ pub fn SynthRigRemote() -> Element {
                                 show_labels: false,
                                 waterfall: false,
                                 accent_color: "#38bdf8".to_string(),
-                                height: "132px",
+                                height: "150px",
                                 on_note_on: move |n: u8| { let rig = rig_on.clone(); spawn(async move { if let Some(r) = rig { let _ = r.trigger(n as u32, 100).await; } }); },
                                 on_note_off: move |n: u8| { let rig = rig_off.clone(); spawn(async move { if let Some(r) = rig { let _ = r.trigger(n as u32, 0).await; } }); },
                             } }
                         }
-                    }
-                }
-            }
-        }
-    }
-}
-
-/// Recursively render the composition tree as nested selectable boxes — the
-/// Quadzone → layers → blocks structure (placeholder control surface for now).
-#[component]
-fn NodeBoxes(node: SynthNode) -> Element {
-    if node.id.is_empty() {
-        return rsx! { span { style: "font-size:11px; color:#52525b;", "no preset loaded" } };
-    }
-    let border = match node.role.as_str() {
-        "engine" => "#4c3f6b",
-        "layer" => "#3f5178",
-        "block" => {
-            if node.live { "#166534" } else { "#3f3f46" }
-        }
-        _ => "#27272a",
-    };
-    let bg = if node.role == "block" && node.live { "#14321e" } else { "#111113" };
-    rsx! {
-        div { style: format!("display:flex; flex-direction:column; gap:4px; padding:6px 8px; margin:3px 0; border-radius:8px; background:{bg}; border:1px solid {border};"),
-            div { style: "display:flex; align-items:center; gap:6px;",
-                span { style: "font-size:9px; color:#71717a; text-transform:uppercase;", "{node.role}" }
-                span { style: "font-size:12px; font-weight:600;", "{node.label}" }
-                if node.role == "block" && !node.live {
-                    span { style: "font-size:9px; color:#71717a;", "(silent)" }
-                }
-            }
-            if !node.children.is_empty() {
-                div { style: "padding-left:10px; border-left:1px solid #27272a;",
-                    for child in node.children.iter() {
-                        NodeBoxes { key: "{child.id}", node: child.clone() }
                     }
                 }
             }
