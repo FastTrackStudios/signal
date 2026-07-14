@@ -160,15 +160,8 @@ struct AppState {
 /// dispatches every rig's services (Rig, RigStream, AudioSettings, DrumRig, …)
 /// by method id.
 async fn vox_handler(ws: WebSocketUpgrade, State(state): State<AppState>) -> Response {
-    ws.on_upgrade(move |socket| async move {
-        let router = state.router.clone();
-        let acceptor = axum_ws::lane_acceptor_fn(move |_req, connection| {
-            connection.handle_with(router.clone());
-            Ok(())
-        });
-        axum_ws::serve(socket, acceptor).await;
-    })
-    .into_response()
+    ws.on_upgrade(move |socket| axum_ws::serve_router(socket, state.router.clone()))
+        .into_response()
 }
 
 /// Serve the same router over an iroh p2p endpoint — remotes dial the
@@ -202,11 +195,7 @@ async fn serve_iroh(router: architect::LayerRouter) {
         tracing::warn!(error = %e, "could not write iroh-endpoint-id");
     }
 
-    let acceptor = iroh_link::lane_acceptor_fn(move |_req, connection| {
-        connection.handle_with(router.clone());
-        Ok(())
-    });
-    iroh_link::serve_endpoint(&endpoint, acceptor).await;
+    iroh_link::serve_router(&endpoint, router).await;
 }
 
 /// Entry point for `fasttrackstudio --engine`: builds the multi-thread
