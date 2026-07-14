@@ -216,31 +216,44 @@ pub fn patch_to_container(patch: &OmniPatch, index: &SoundsourceIndex) -> Contai
                 }
             }
         };
-        let mut shaper_block = RigBlock::of_type(BlockType::Waveshaper).named("Waveshaper");
-        if let Some((drive, crush, reduce, mix)) = layer.shaper {
-            shaper_block = shaper_block
-                .with_param("drive", format!("{drive:.4}"))
-                .with_param("crush", format!("{crush:.4}"))
-                .with_param("reduce", format!("{reduce:.4}"))
-                .with_param("mix", format!("{mix:.4}"));
+        // The oscillator sub-modules chain in SERIES after the source. The LIVE
+        // native ones (Harmonia → modal, Dual Freq Shifter, Waveshaper) are
+        // sound-generating/processing, so emit them ONLY when the patch engages
+        // them: an always-on modal Harmonia here GENERATES its own tone and
+        // masks the soundsource — every sample-mode patch otherwise collapses
+        // to the same modal-piano voice. Unison/FM/Ring/Granular have no native
+        // DSP yet, so they stay inert structural placeholders (pass-through).
+        let mut osc = osc.block(BlockType::Unison, "Unison");
+        // Harmonia only in sample mode when active; in synth mode the wavetable
+        // already carries the harmonia voices as its own params.
+        if !layer.soundsource.is_empty() && !layer.harmonia.is_empty() {
+            osc = osc.block(BlockType::Harmonic, "Harmonia");
         }
-        let mut dfs_block = RigBlock::of_type(BlockType::Dfs).named("Dual Freq Shifter");
-        if let Some((hz_a, mix_a, hz_b, mix_b, parallel)) = layer.dfs {
-            dfs_block = dfs_block
-                .with_param("shift_a_hz", format!("{hz_a:.2}"))
-                .with_param("mix_a", format!("{mix_a:.4}"))
-                .with_param("shift_b_hz", format!("{hz_b:.2}"))
-                .with_param("mix_b", format!("{mix_b:.4}"))
-                .with_param("parallel", if parallel { "1" } else { "0" });
-        }
-        let osc = osc
-            .block(BlockType::Unison, "Unison")
-            .block(BlockType::Harmonic, "Harmonia")
+        osc = osc
             .block(BlockType::FmOperator, "FM")
-            .block(BlockType::RingModulator, "Ring Mod")
-            .add(dfs_block)
-            .add(shaper_block)
-            .block(BlockType::Granular, "Granular");
+            .block(BlockType::RingModulator, "Ring Mod");
+        if let Some((hz_a, mix_a, hz_b, mix_b, parallel)) = layer.dfs {
+            osc = osc.add(
+                RigBlock::of_type(BlockType::Dfs)
+                    .named("Dual Freq Shifter")
+                    .with_param("shift_a_hz", format!("{hz_a:.2}"))
+                    .with_param("mix_a", format!("{mix_a:.4}"))
+                    .with_param("shift_b_hz", format!("{hz_b:.2}"))
+                    .with_param("mix_b", format!("{mix_b:.4}"))
+                    .with_param("parallel", if parallel { "1" } else { "0" }),
+            );
+        }
+        if let Some((drive, crush, reduce, mix)) = layer.shaper {
+            osc = osc.add(
+                RigBlock::of_type(BlockType::Waveshaper)
+                    .named("Waveshaper")
+                    .with_param("drive", format!("{drive:.4}"))
+                    .with_param("crush", format!("{crush:.4}"))
+                    .with_param("reduce", format!("{reduce:.4}"))
+                    .with_param("mix", format!("{mix:.4}")),
+            );
+        }
+        let osc = osc.block(BlockType::Granular, "Granular");
 
         let filter_label = filter_labels[i].clone();
         let mut built = Container::layer(name)

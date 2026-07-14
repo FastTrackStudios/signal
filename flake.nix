@@ -498,6 +498,15 @@
                   echo "  (graphify install failed — run: uv tool install 'graphifyy[mcp]==$GRAPHIFY_VERSION')"
               fi
 
+              # tracey — spec-coverage CLI (crates.io). Version-pinned so the
+              # requirement traceability in docs/spec/** is reproducible across
+              # machines. Config: .config/tracey/config.styx.
+              TRACEY_VERSION=$(tracey --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 || echo "0")
+              if [ "$TRACEY_VERSION" != "1.3.0" ]; then
+                echo "  Installing tracey 1.3.0..."
+                cargo install tracey --locked --version "=1.3.0" 2>/dev/null || true
+              fi
+
               echo ""
               echo "  FastTrackStudio dev shell"
               echo "  ─────────────────────────────────────────────"

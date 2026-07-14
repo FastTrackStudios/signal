@@ -172,6 +172,39 @@ impl PluginInstance for SamplerInstrument {
     }
 }
 
+impl crate::soundsource::Soundsource for SamplerInstrument {
+    fn kind(&self) -> crate::soundsource::SoundsourceKind {
+        crate::soundsource::SoundsourceKind::Sample
+    }
+
+    fn prepare(&mut self, sample_rate: f32, block_size: usize) {
+        let _ = PluginInstance::prepare(self, sample_rate as f64, block_size as u32);
+    }
+
+    fn note_on(&mut self, note: u8, velocity: u8) {
+        // Drive the wrapped engine directly (the same call `apply_midi` makes
+        // for an incoming NoteOn).
+        self.engine.note_on(note, velocity);
+    }
+
+    fn note_off(&mut self, note: u8) {
+        self.engine.note_off(note);
+    }
+
+    fn render(
+        &mut self,
+        in_l: &[f32],
+        in_r: &[f32],
+        out_l: &mut [f32],
+        out_r: &mut [f32],
+        events: &PluginEvents<'_>,
+    ) {
+        // The sampler is a source: `process_block` ignores `in_l`/`in_r`, reads
+        // notes from `events.midi`, and de-interleaves into the planar output.
+        let _ = self.process_block(in_l, in_r, out_l, out_r, events);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

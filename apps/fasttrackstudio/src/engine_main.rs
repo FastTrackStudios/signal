@@ -254,11 +254,13 @@ async fn async_main() {
     guitar.start(); // worship rig: open audio + load profile off-thread
     let drums = signal_drums::DrumRigBackend::new(); // dormant until started
     let keys = signal_keys::KeysRigBackend::new(); // dormant until started
+    let synth = signal_synth_rig::SynthRigBackend::new(); // dormant until started
 
     let router = guitar
         .router()
         .merge_router(drums.router())
-        .merge_router(keys.router());
+        .merge_router(keys.router())
+        .merge_router(synth.router());
     let state = AppState { router };
 
     tokio::spawn(serve_iroh(state.router.clone()));

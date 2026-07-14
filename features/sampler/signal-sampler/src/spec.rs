@@ -132,9 +132,39 @@ impl LibrarySpec {
     /// Load a spec from a `.styx` or `.toml` file (format detected by extension).
     pub fn from_file(path: &Path) -> Result<Self, SamplerError> {
         let text = std::fs::read_to_string(path).map_err(SamplerError::Io)?;
-        match path.extension().and_then(|e| e.to_str()) {
-            Some("toml") => Self::from_toml(&text),
-            _ => Self::from_styx(&text),
+        let mut spec = match path.extension().and_then(|e| e.to_str()) {
+            Some("toml") => Self::from_toml(&text)?,
+            _ => Self::from_styx(&text)?,
+        };
+        if let Some(dir) = path.parent() {
+            spec.fill_loops_from_flac_stinfo(dir);
+        }
+        Ok(spec)
+    }
+
+    /// Omnisphere soundsource FLACs carry their sustain loop in a `STINFO`
+    /// Vorbis comment (`enabled loop_start loop_end xfade`), but the extraction
+    /// that wrote `library.styx` dropped it — so a sustained pad plays as a
+    /// one-shot and decays like a piano. For any zone that declares no loop,
+    /// read the embedded loop back from the FLAC (metadata only) so the engine
+    /// sustains it. Gated to Spectrasonics/Omnisphere libraries to avoid the
+    /// per-zone I/O on everything else (Keyscape packs carry their own loops).
+    fn fill_loops_from_flac_stinfo(&mut self, dir: &Path) {
+        let vendor = self.vendor.to_ascii_lowercase();
+        if !(vendor.contains("omnisphere") || vendor.contains("spectrasonics")) {
+            return;
+        }
+        for z in &mut self.zones {
+            if z.loop_end > z.loop_start {
+                continue; // already has an explicit loop
+            }
+            if !z.file.to_ascii_lowercase().ends_with(".flac") {
+                continue;
+            }
+            if let Some((ls, le)) = read_flac_stinfo_loop(&dir.join(&z.file)) {
+                z.loop_start = ls;
+                z.loop_end = le;
+            }
         }
     }
 
@@ -256,6 +286,71 @@ impl LibrarySpec {
         }
         set
     }
+}
+
+/// Read the `STINFO` sustain-loop tag from a FLAC's Vorbis comment:
+/// `STINFO=<enabled> <loop_start> <loop_end> <xfade>` (frames). Returns
+/// `(loop_start, loop_end)` only when enabled and non-empty. Metadata only —
+/// walks the FLAC metadata blocks and never decodes audio.
+fn read_flac_stinfo_loop(path: &Path) -> Option<(u32, u32)> {
+    use std::io::{Read, Seek, SeekFrom};
+    let mut f = std::fs::File::open(path).ok()?;
+    let mut magic = [0u8; 4];
+    f.read_exact(&mut magic).ok()?;
+    if &magic != b"fLaC" {
+        return None;
+    }
+    loop {
+        let mut hdr = [0u8; 4];
+        f.read_exact(&mut hdr).ok()?;
+        let is_last = hdr[0] & 0x80 != 0;
+        let block_type = hdr[0] & 0x7f;
+        let len = u32::from_be_bytes([0, hdr[1], hdr[2], hdr[3]]) as usize;
+        if block_type == 4 {
+            // VORBIS_COMMENT
+            let mut body = vec![0u8; len];
+            f.read_exact(&mut body).ok()?;
+            return parse_stinfo_from_vorbis(&body);
+        }
+        f.seek(SeekFrom::Current(len as i64)).ok()?;
+        if is_last {
+            return None;
+        }
+    }
+}
+
+/// Find + parse a `STINFO=` entry inside a FLAC VORBIS_COMMENT block body
+/// (`[vendor_len u32le][vendor][count u32le]([len u32le][KEY=val])*`).
+fn parse_stinfo_from_vorbis(body: &[u8]) -> Option<(u32, u32)> {
+    let rd = |o: usize| -> Option<u32> {
+        body.get(o..o + 4)
+            .map(|s| u32::from_le_bytes([s[0], s[1], s[2], s[3]]))
+    };
+    let mut o = 0usize;
+    o += 4 + rd(o)? as usize; // skip vendor string
+    let count = rd(o)? as usize;
+    o += 4;
+    for _ in 0..count {
+        let clen = rd(o)? as usize;
+        o += 4;
+        let c = body.get(o..o + clen)?;
+        o += clen;
+        let Ok(s) = std::str::from_utf8(c) else { continue };
+        // Vorbis comment keys are case-insensitive.
+        if s.len() >= 7 && s[..7].eq_ignore_ascii_case("STINFO=") {
+            let parts: Vec<&str> = s[7..].split_whitespace().collect();
+            if parts.len() >= 3 {
+                let enabled: u32 = parts[0].parse().ok()?;
+                let ls: u32 = parts[1].parse().ok()?;
+                let le: u32 = parts[2].parse().ok()?;
+                if enabled != 0 && le > ls {
+                    return Some((ls, le));
+                }
+            }
+            return None;
+        }
+    }
+    None
 }
 
 fn parse_sfz_zones(s: &str) -> Result<Vec<ZoneSpec>, SamplerError> {

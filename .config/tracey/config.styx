@@ -1,0 +1,31 @@
+# Tracey — requirement traceability for FastTrackStudio.
+#
+# Specs live in docs/spec/**; requirements are r[<topic>.<id>] paragraphs
+# (signal.*, combined.*, routing.*, organize.*). Code references them with
+# r[impl <id>] / r[verify <id>]. Run `tracey_status` / `tracey_uncovered` to
+# see coverage and what still needs implementing/testing.
+
+specs (
+    {
+        name fts
+        prefix r
+        include (
+            docs/spec/**/*.md
+        )
+        impls (
+            {
+                name rust
+                include (
+                    crates/**/*.rs
+                    features/**/*.rs
+                    libs/**/*.rs
+                    apps/**/*.rs
+                )
+                exclude (
+                    target/**
+                    **/target/**
+                )
+            }
+        )
+    }
+)

@@ -1,0 +1,36 @@
+[package]
+name = "signal-synth-rig"
+version.workspace = true
+edition = "2021"
+license.workspace = true
+authors.workspace = true
+
+[features]
+# PipeWire mode: audio + MIDI through the pipewire host, matching the keys rig.
+# Threads through to the shared KeysRig host + midicore's jack swap.
+pipewire = ["signal-keys/pipewire", "midicore/midir-pipewire"]
+
+[dependencies]
+# The Omnisphere patch importer (`load_patch_file`, `SoundsourceIndex`) — the
+# rig's preset source.
+signal-synth.workspace = true
+# The shared, instrument-agnostic composition-tree audio host. The synth rig
+# plays its imported Container on the very same host the keys rig uses; only
+# the preset source + wire service differ.
+signal-keys.workspace = true
+signal-sampler.workspace = true
+# Filesystem-direct pack discovery + tagging for the BROWSE view (scan_packs).
+signal-browser.workspace = true
+daw-audio-io = { workspace = true, features = ["monitor"] }
+midicore = { workspace = true, features = ["vox", "midir"] }
+# The wire contract this crate's headless backend implements (SynthRig service)
+# + the architect Layer/Services/PubSub machinery to serve it as a vox remote.
+signal-synth-proto.workspace = true
+architect = { workspace = true, features = ["vox"] }
+tracing.workspace = true
+
+[dev-dependencies]
+# The machine-local `#[ignore]`d test renders the default patch to prove its
+# OB-8 PWM Big Strings soundsource is realized + audible.
+signal-plugin-host.workspace = true
+daw.workspace = true

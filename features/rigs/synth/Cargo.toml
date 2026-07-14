@@ -12,9 +12,15 @@ tracing.workspace = true
 signal-sampler.workspace = true
 # BlockType — the composition tree's block tagging schema.
 signal-proto.workspace = true
+# The pack builder serializes the loop/tag-enriched styx before packing.
+facet-styx.workspace = true
 
 [dev-dependencies]
 # The `#[ignore]`d machine-local render tests drive hosted-plugin note events.
 signal-plugin-host.workspace = true
 # `daw::service::MidiMessage` in those same render tests + the omni_state example.
 daw.workspace = true
+# build_omni_pack serializes the loop/tag-enriched LibrarySpec back to styx.
+facet-styx.workspace = true
+# pack_hold_rms surfaces the sampler's tracing (preload / cache-miss) logs.
+tracing-subscriber.workspace = true

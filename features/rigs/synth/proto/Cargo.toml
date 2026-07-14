@@ -1,0 +1,17 @@
+[package]
+name = "signal-synth-proto"
+version.workspace = true
+edition = "2021"
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+architect.workspace = true
+vox = { workspace = true, optional = true }
+facet.workspace = true
+# MidiEvent — the monitor stream carries raw events (rendered by midicore-ui).
+midicore-proto.workspace = true
+
+[features]
+default = ["vox"]
+vox = ["dep:vox", "architect/vox"]

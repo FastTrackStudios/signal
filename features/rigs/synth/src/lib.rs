@@ -15,6 +15,7 @@
 
 pub mod omni;
 pub mod omni_import;
+pub mod pack;
 
 pub use omni::{omnisphere_preset, omnisphere_soundsource_preset};
 
