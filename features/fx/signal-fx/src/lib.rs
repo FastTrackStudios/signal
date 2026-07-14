@@ -483,6 +483,168 @@ impl PluginInstance for NativeComp {
     }
 }
 
+// ── Leveler ────────────────────────────────────────────────────────────────
+
+const LEVEL_PARAMS: &[ParamSpec] = &[
+    // Gate.
+    ParamSpec { id: 0, name: "gate_threshold", min: -80.0, max: 0.0, default: -45.0 },
+    ParamSpec { id: 1, name: "gate_range", min: -80.0, max: 0.0, default: -80.0 },
+    ParamSpec { id: 2, name: "gate_attack", min: 0.1, max: 200.0, default: 1.0 },
+    ParamSpec { id: 3, name: "gate_release", min: 5.0, max: 1000.0, default: 120.0 },
+    // De-breath.
+    ParamSpec { id: 4, name: "debreath_reduction", min: 0.0, max: 40.0, default: 12.0 },
+    ParamSpec { id: 5, name: "debreath_max_level", min: -60.0, max: 0.0, default: -28.0 },
+    // Rider.
+    ParamSpec { id: 6, name: "ride_target", min: -40.0, max: 0.0, default: -18.0 },
+    ParamSpec { id: 7, name: "ride_amount", min: 0.0, max: 1.0, default: 1.0 },
+    ParamSpec { id: 8, name: "ride_max_gain", min: 0.0, max: 24.0, default: 12.0 },
+    ParamSpec { id: 9, name: "ride_max_cut", min: 0.0, max: 24.0, default: 18.0 },
+    // De-ess.
+    ParamSpec { id: 10, name: "deess_freq", min: 2000.0, max: 12000.0, default: 6500.0 },
+    ParamSpec { id: 11, name: "deess_threshold", min: -60.0, max: 0.0, default: -30.0 },
+    ParamSpec { id: 12, name: "deess_ratio", min: 1.0, max: 20.0, default: 4.0 },
+    ParamSpec { id: 13, name: "deess_range", min: 0.0, max: 40.0, default: 12.0 },
+    // Shared adaptive silence floor.
+    ParamSpec { id: 14, name: "silence", min: -90.0, max: -20.0, default: -45.0 },
+];
+
+/// Native Leveler block — wraps [`level_dsp::VocalLeveler`], the realtime vocal
+/// chain (gate → de-breath → ride → de-ess). The core is mono, so L/R each get
+/// their own leveler instance (independent state). Every stage parameter is an
+/// enumerable, macro/modulation-targetable [`PluginParamInfo`].
+pub struct NativeLevel {
+    left: level_dsp::VocalLeveler,
+    right: level_dsp::VocalLeveler,
+    gate: level_dsp::GateConfig,
+    debreath: level_dsp::DeBreathConfig,
+    rider: level_dsp::RiderConfig,
+    deess: level_dsp::DeEssConfig,
+    silence_db: f64,
+    /// A param changed this block → re-push stage configs before processing.
+    dirty: bool,
+    prepared: bool,
+}
+
+impl NativeLevel {
+    pub fn new(sample_rate: f64) -> Self {
+        let cfg = level_dsp::LevelerConfig::default();
+        let sr = sample_rate.max(1.0);
+        Self {
+            left: level_dsp::VocalLeveler::new(sr, cfg),
+            right: level_dsp::VocalLeveler::new(sr, cfg),
+            gate: cfg.gate.unwrap_or_default(),
+            debreath: cfg.debreath.unwrap_or_default(),
+            rider: cfg.rider.unwrap_or_default(),
+            deess: cfg.deess.unwrap_or_default(),
+            silence_db: cfg.silence_db,
+            dirty: false,
+            prepared: false,
+        }
+    }
+
+    fn config(&self) -> level_dsp::LevelerConfig {
+        level_dsp::LevelerConfig {
+            gate: Some(self.gate),
+            debreath: Some(self.debreath),
+            rider: Some(self.rider),
+            deess: Some(self.deess),
+            classify: level_dsp::LevelerConfig::default().classify,
+            silence_db: self.silence_db,
+        }
+    }
+
+    fn set(&mut self, id: u32, v: f64) {
+        match id {
+            0 => self.gate.threshold_db = v,
+            1 => self.gate.range_db = v,
+            2 => self.gate.attack_ms = v,
+            3 => self.gate.release_ms = v,
+            4 => self.debreath.reduction_db = v,
+            5 => self.debreath.max_level_db = v,
+            6 => self.rider.target_db = v,
+            7 => self.rider.amount = v,
+            8 => self.rider.max_gain_db = v,
+            9 => self.rider.max_cut_db = v,
+            10 => self.deess.crossover_hz = v,
+            11 => self.deess.threshold_db = v,
+            12 => self.deess.ratio = v,
+            13 => self.deess.range_db = v,
+            14 => self.silence_db = v,
+            _ => return,
+        }
+        self.dirty = true;
+    }
+
+    /// Apply a build-time parameter by name (`gate_threshold`, `ride_target`, …).
+    pub fn set_named(&mut self, name: &str, value: f64) {
+        if let Some(id) = param_id(LEVEL_PARAMS, name) {
+            self.set(id, value);
+        }
+    }
+}
+
+impl PluginInstance for NativeLevel {
+    fn descriptor(&self) -> PluginDescriptor {
+        descriptor("signal.fx.level", "Leveler")
+    }
+    fn params(&mut self) -> Vec<PluginParamInfo> {
+        param_infos(LEVEL_PARAMS)
+    }
+    fn param_value(&mut self, _id: u32) -> Option<f64> {
+        None
+    }
+    fn value_to_text(&mut self, _id: u32, _value: f64) -> Option<String> {
+        None
+    }
+    fn text_to_value(&mut self, _id: u32, _text: &str) -> Option<f64> {
+        None
+    }
+    fn latency(&mut self) -> u32 {
+        0
+    }
+    fn prepare(&mut self, sample_rate: f64, _block_size: u32) -> Result<(), PluginError> {
+        let cfg = self.config();
+        let sr = sample_rate.max(1.0);
+        self.left = level_dsp::VocalLeveler::new(sr, cfg);
+        self.right = level_dsp::VocalLeveler::new(sr, cfg);
+        self.dirty = false;
+        self.prepared = true;
+        Ok(())
+    }
+    fn is_prepared(&self) -> bool {
+        self.prepared
+    }
+    fn process_block(
+        &mut self,
+        in_l: &[f32],
+        in_r: &[f32],
+        out_l: &mut [f32],
+        out_r: &mut [f32],
+        events: &PluginEvents<'_>,
+    ) -> Result<(), PluginError> {
+        for &(id, value) in events.params {
+            self.set(id, value);
+        }
+        if self.dirty {
+            // Audio-thread-safe, in-place (no allocation) — see VocalLeveler.
+            for lv in [&mut self.left, &mut self.right] {
+                lv.set_stage_configs(self.gate, self.debreath, self.rider, self.deess);
+                lv.set_silence_db(self.silence_db);
+            }
+            self.dirty = false;
+        }
+        let n = out_l.len().min(out_r.len()).min(in_l.len()).min(in_r.len());
+        for i in 0..n {
+            out_l[i] = self.left.process_sample(in_l[i] as f64) as f32;
+            out_r[i] = self.right.process_sample(in_r[i] as f64) as f32;
+        }
+        Ok(())
+    }
+    fn deactivate(&mut self) {
+        self.prepared = false;
+    }
+}
+
 // ── Reverb ─────────────────────────────────────────────────────────────────
 
 const REVERB_PARAMS: &[ParamSpec] = &[

@@ -14,4 +14,5 @@ eq = { workspace = true }
 comp = { workspace = true }
 reverb = { workspace = true }
 delay = { workspace = true }
+level-dsp = { workspace = true }
 modulation = { workspace = true }
