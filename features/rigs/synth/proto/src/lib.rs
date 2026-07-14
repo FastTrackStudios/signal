@@ -180,13 +180,87 @@ pub struct SynthLayer {
     pub routes: Vec<SynthModRoute>,
 }
 
+/// Omnisphere-style **Live global controls** — performance macros applied over
+/// the loaded patch (all layers). Bipolar offset controls are neutral at `0.5`
+/// (no change); unipolar controls are off at `0.0`. See
+/// [`SynthGlobals::neutral`] for the default state.
+#[derive(Clone, PartialEq, Debug, Default, Facet)]
+pub struct SynthGlobals {
+    // Vibrato (unipolar).
+    pub vibrato_rate: f32,
+    pub vibrato_depth: f32,
+    // Filter (bipolar offsets; `filter_env` is env-amount, unipolar-ish).
+    pub filter_cutoff: f32,
+    pub filter_reso: f32,
+    pub filter_env: f32,
+    // Unison (unipolar).
+    pub unison_detune: f32,
+    pub unison_amount: f32,
+    // Amp envelope (bipolar A/D/S/R offsets + velocity sensitivity).
+    pub amp_attack: f32,
+    pub amp_decay: f32,
+    pub amp_sustain: f32,
+    pub amp_release: f32,
+    /// Velocity → amplitude sensitivity. 0.5 = default, higher = more sensitive.
+    pub amp_velocity: f32,
+    // Filter envelope.
+    pub filt_attack: f32,
+    pub filt_decay: f32,
+    pub filt_sustain: f32,
+    pub filt_release: f32,
+    pub filt_velocity: f32,
+    // Ambience (reverb) — unipolar.
+    pub ambience_amount: f32,
+    pub ambience_length: f32,
+    // Tone (3-band EQ, bipolar).
+    pub tone_low: f32,
+    pub tone_mid: f32,
+    pub tone_high: f32,
+    // Effects.
+    pub effects_on: bool,
+    /// Master limiter amount (unipolar).
+    pub limiter: f32,
+}
+
+impl SynthGlobals {
+    /// The neutral state — every control at its no-effect value.
+    pub fn neutral() -> Self {
+        Self {
+            vibrato_rate: 0.0,
+            vibrato_depth: 0.0,
+            filter_cutoff: 0.5,
+            filter_reso: 0.5,
+            filter_env: 0.5,
+            unison_detune: 0.0,
+            unison_amount: 0.0,
+            amp_attack: 0.5,
+            amp_decay: 0.5,
+            amp_sustain: 0.5,
+            amp_release: 0.5,
+            amp_velocity: 0.5,
+            filt_attack: 0.5,
+            filt_decay: 0.5,
+            filt_sustain: 0.5,
+            filt_release: 0.5,
+            filt_velocity: 0.5,
+            ambience_amount: 0.0,
+            ambience_length: 0.5,
+            tone_low: 0.5,
+            tone_mid: 0.5,
+            tone_high: 0.5,
+            effects_on: true,
+            limiter: 0.0,
+        }
+    }
+}
+
 pub mod synth {
     //! Live synth-rig control. `SynthRig` → `SynthRigClient` / `SynthRigService`
     //! / `synth_rig_serve`, plus the `#[subscribe]` stream sibling.
 
     use facet::Facet;
 
-    use super::{SynthLayer, SynthMapping, SynthNode, SynthPreset, SynthStatus};
+    use super::{SynthGlobals, SynthLayer, SynthMapping, SynthNode, SynthPreset, SynthStatus};
 
     /// One live rig change. Every variant carries full state (idempotent
     /// re-application) so a reconnecting subscriber is correct after the next
@@ -239,6 +313,10 @@ pub mod synth {
         /// The loaded preset's layers (A/B/C/D) with their source / filter /
         /// envelope / modulation, for the Edit page's single-layer editor.
         fn layers(&self) -> Vec<SynthLayer>;
+        /// The current Live global controls (filter/env/vibrato/unison/…).
+        fn globals(&self) -> SynthGlobals;
+        /// Set the Live global controls; applied over the loaded patch.
+        fn set_globals(&self, globals: SynthGlobals);
 
         /// Every rig change, as it happens.
         #[subscribe]

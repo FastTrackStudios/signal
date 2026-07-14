@@ -18,12 +18,14 @@ use daw_audio_io::AudioIoPrefs;
 use midicore::{MidiEvent, PortSelector};
 use signal_keys::KeysRig;
 use signal_sampler::rig_node::{Container, RigNode, Role};
-use signal_synth::omni_import::{SoundsourceIndex, load_patch_file};
+use signal_synth::omni_import::{
+    OmniPatch, SoundsourceIndex, load_patch_file, parse_patch, patch_to_container,
+};
 use signal_synth_proto::synth::{
     SynthEvent, SynthRig as SynthRigSvc, SynthRigStreamSource,
 };
 use signal_synth_proto::{
-    SynthArticulation, SynthEnvelope, SynthFilter, SynthLayer, SynthMapping, SynthMic,
+    SynthArticulation, SynthEnvelope, SynthFilter, SynthGlobals, SynthLayer, SynthMapping, SynthMic,
     SynthModRoute, SynthNode, SynthPreset, SynthStatus, SynthZone,
 };
 
@@ -56,6 +58,8 @@ struct State {
     midi_handle: Option<signal_sampler::MidiInputHandle>,
     /// Master output gain (linear), applied to the rig on open + live changes.
     volume: f32,
+    /// Live global controls (Omnisphere-style macros over the loaded patch).
+    globals: SynthGlobals,
 }
 
 struct Inner {
@@ -105,6 +109,7 @@ impl SynthRigBackend {
                     paths,
                     loaded: default_idx,
                     volume: DEFAULT_VOLUME,
+                    globals: SynthGlobals::neutral(),
                     ..State::default()
                 }),
                 index,
@@ -121,12 +126,26 @@ impl SynthRigBackend {
         self.clone().into_router()
     }
 
-    /// Import preset `index` into a composition tree (realizing soundsources).
+    /// Import preset `index` into a composition tree (realizing soundsources),
+    /// with the current Live globals folded in for single-part patches.
     fn program_for(&self, index: usize) -> Option<Container> {
-        let path = {
+        let (path, globals) = {
             let s = self.inner.state.lock().ok()?;
-            s.paths.get(index)?.clone()
+            (s.paths.get(index)?.clone(), s.globals.clone())
         };
+        if path.extension().is_some_and(|e| e == "prt_omn") {
+            let xml = std::fs::read_to_string(&path).ok()?;
+            match parse_patch(&xml) {
+                Ok(mut patch) => {
+                    apply_globals_to_patch(&mut patch, &globals);
+                    return Some(patch_to_container(&patch, &self.inner.index));
+                }
+                Err(e) => {
+                    tracing::error!(?path, "synth rig: patch parse failed: {e}");
+                    return None;
+                }
+            }
+        }
         match load_patch_file(&path, &self.inner.index) {
             Ok(tree) => Some(tree),
             Err(e) => {
@@ -422,11 +441,89 @@ impl SynthRigSvc for SynthRigBackend {
             return Vec::new();
         }
         let Ok(xml) = std::fs::read_to_string(&path) else { return Vec::new() };
-        match signal_synth::omni_import::parse_patch(&xml) {
+        match parse_patch(&xml) {
             Ok(patch) => project_layers(&patch),
             Err(_) => Vec::new(),
         }
     }
+
+    fn globals(&self) -> SynthGlobals {
+        self.inner
+            .state
+            .lock()
+            .map(|s| s.globals.clone())
+            .unwrap_or_else(|_| SynthGlobals::neutral())
+    }
+
+    fn set_globals(&self, globals: SynthGlobals) {
+        if let Ok(mut s) = self.inner.state.lock() {
+            s.globals = globals;
+        }
+        // Rebuild the loaded tree with the new macros folded in + re-host
+        // (glitch-free re-insert). Cheap: XML parse + tree build, no re-decode.
+        let idx = self.inner.state.lock().ok().and_then(|s| s.loaded).unwrap_or(0);
+        if let Some(tree) = self.program_for(idx) {
+            if let Ok(mut rig) = self.inner.rig.lock() {
+                if let Some(rig) = rig.as_mut() {
+                    rig.load_preset(&tree);
+                }
+            }
+            if let Ok(mut s) = self.inner.state.lock() {
+                s.tree = Some(tree);
+            }
+        }
+        self.inner.events.publish(SynthEvent::Status(SynthRigSvc::status(self)));
+    }
+}
+
+/// Fold the Live global macros into a parsed patch before it becomes a tree.
+/// Bipolar controls are neutral at 0.5; unipolar at 0.0. Implemented for the
+/// controls that map onto existing patch fields / native DSP; the rest are
+/// stored in [`SynthGlobals`] and applied once their DSP lands (see the TODO).
+fn apply_globals_to_patch(patch: &mut OmniPatch, g: &SynthGlobals) {
+    // 0.5 → 1× time; ±0.5 → ×2.8 / ×0.35 (perceptually even).
+    let envscale = |x: f32| 2f32.powf((x - 0.5) * 3.0);
+    for l in patch.layers.iter_mut() {
+        // Filter cutoff / resonance offsets (Omnisphere-normalized 0..1).
+        l.filter_freq = (l.filter_freq + (g.filter_cutoff - 0.5) * 0.8).clamp(0.0, 1.0);
+        l.filter_res = (l.filter_res + (g.filter_reso - 0.5)).clamp(0.0, 1.0);
+        // Filter-envelope amount (0.5 neutral → 1×).
+        l.filter_env_depth *= (g.filter_env * 2.0).clamp(0.0, 2.0);
+        // Amp / filter A/D/S/R offsets + sustain scale.
+        if let Some((a, d, s, r)) = l.amp_env {
+            l.amp_env = Some((
+                a * envscale(g.amp_attack),
+                d * envscale(g.amp_decay),
+                (s * g.amp_sustain * 2.0).clamp(0.0, 1.0),
+                r * envscale(g.amp_release),
+            ));
+        }
+        if let Some((a, d, s, r)) = l.filter_env {
+            l.filter_env = Some((
+                a * envscale(g.filt_attack),
+                d * envscale(g.filt_decay),
+                (s * g.filt_sustain * 2.0).clamp(0.0, 1.0),
+                r * envscale(g.filt_release),
+            ));
+        }
+        // Unison: adds detuned voices (2..8).
+        if g.unison_amount > 0.0 {
+            l.unison_count = (2.0 + g.unison_amount * 6.0).round() as u32;
+            l.unison_detune = g.unison_detune;
+        }
+        // Effects off strips the layer FX rack.
+        if !g.effects_on {
+            l.fx.clear();
+        }
+    }
+    if !g.effects_on {
+        patch.common_fx.clear();
+        patch.aux_fx.clear();
+    }
+    // TODO (need added DSP / params, stored in globals meanwhile): vibrato
+    // (rate/depth → pitch LFO), velocity sensitivity (amp/filt envelopes),
+    // ambience (a master reverb amount+length), tone (a 3-band master EQ), and
+    // the master limiter.
 }
 
 impl SynthRigStreamSource for SynthRigBackend {
@@ -850,6 +947,27 @@ mod tests {
             "Layer A carries its mod routes, got {:?}",
             a.routes
         );
+    }
+
+    /// Machine-local: raising the global filter-cutoff macro re-imports the
+    /// patch with a higher cutoff (proves the Live-globals apply pipeline).
+    /// `cargo test -p signal-synth-rig -- --ignored globals`
+    #[test]
+    #[ignore = "requires the factory Omnisphere library"]
+    fn globals_shift_the_filter_cutoff() {
+        let b = SynthRigBackend::new();
+        let idx = b.inner.state.lock().unwrap().loaded.expect("default preset");
+        let t0 = b.program_for(idx).expect("import (neutral)");
+        let c0 = find_block(&t0, "Modified")
+            .and_then(|f| f.param_f32("cutoff"))
+            .expect("Layer A filter cutoff");
+        b.inner.state.lock().unwrap().globals.filter_cutoff = 1.0; // fully open
+        let t1 = b.program_for(idx).expect("import (open)");
+        let c1 = find_block(&t1, "Modified")
+            .and_then(|f| f.param_f32("cutoff"))
+            .expect("Layer A filter cutoff");
+        eprintln!("filter cutoff: neutral={c0:.4}  global-open={c1:.4}");
+        assert!(c1 > c0, "raising the global filter cutoff opens the filter");
     }
 
     /// Recursively find a block by display name anywhere in the tree.
