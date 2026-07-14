@@ -11,7 +11,10 @@ use dioxus::prelude::*;
 use midicore_proto::MidiEvent;
 use midicore_ui::MidiMonitorPanel;
 use signal_synth_proto::synth::{SynthEvent, SynthRigClient, SynthRigStreamClient};
-use signal_synth_proto::{SynthMapping, SynthNode, SynthPreset, SynthStatus, SynthZone};
+use signal_synth_proto::{
+    SynthEnvelope, SynthFilter, SynthLayer, SynthMapping, SynthNode, SynthPreset, SynthStatus,
+    SynthZone,
+};
 use signal_ui::components::Piano;
 
 /// Which top-level view the remote is showing.
@@ -243,16 +246,669 @@ fn mode_btn(active: bool) -> String {
     format!("padding:3px 12px; border:none; border-radius:4px; background:{bg}; color:{fg}; font-size:10px; font-weight:700; letter-spacing:0.05em; cursor:pointer;")
 }
 
-/// The **Edit** page — the Vital-style single-layer editor (A/B/C/D layer
-/// selector; per-layer source / filter response / envelopes / LFOs /
-/// modulation). Placeholder until the interactive editor lands.
-#[component]
-fn LayerEditView() -> Element {
-    rsx! {
-        div { style: "display:flex; align-items:center; justify-content:center; flex:1; color:#52525b; font-size:13px;",
-            "Layer editor — coming"
+// ── Edit page (Vital-style single-layer editor) ───────────────────────────────
+//
+// Everything is inline-styled SVG (Blitz-safe) drawn from `SynthLayer` data
+// pulled over the wire (`SynthRigClient::layers`). Edits are LOCAL only — they
+// mutate a `use_signal<Vec<SynthLayer>>` seeded from the fetched layers and
+// redraw live; no proto setters exist yet, so nothing is persisted back to the
+// engine. Seeding: an effect copies the fetched layers into the edit buffer
+// whenever their identity (names+sources) changes, so loading a new preset
+// reseeds but a live drag is never clobbered.
+
+// Filter-response graph geometry (viewBox user units).
+const FILT_W: f64 = 520.0;
+const FILT_H: f64 = 230.0;
+const FMIN: f64 = 20.0;
+const FMAX: f64 = 20000.0;
+const DBMAX: f64 = 18.0;
+const DBMIN: f64 = -48.0;
+
+// Envelope graph geometry.
+const ENV_W: f64 = 520.0;
+const ENV_H: f64 = 132.0;
+const ENV_TOP: f64 = 12.0;
+const ENV_BOT: f64 = 12.0;
+const ENV_LEFT: f64 = 6.0;
+const ENV_RIGHT: f64 = 8.0;
+
+fn freq_to_x(f: f64) -> f64 {
+    let (lm, lx) = (FMIN.log10(), FMAX.log10());
+    ((f.max(FMIN).log10() - lm) / (lx - lm)) * FILT_W
+}
+fn x_to_freq(x: f64) -> f64 {
+    let (lm, lx) = (FMIN.log10(), FMAX.log10());
+    10f64.powf(lm + (x / FILT_W).clamp(0.0, 1.0) * (lx - lm))
+}
+fn db_to_y(db: f64) -> f64 {
+    ((DBMAX - db.clamp(DBMIN, DBMAX)) / (DBMAX - DBMIN)) * FILT_H
+}
+fn fmt_hz(f: f64) -> String {
+    if f >= 1000.0 {
+        format!("{:.1}k", f / 1000.0)
+    } else {
+        format!("{:.0}", f)
+    }
+}
+
+/// Analytic filter magnitude (dB) at frequency `f`. A resonant 2-pole analog
+/// prototype (peak = Q at cutoff) with extra 1-pole factors for steeper slopes
+/// — enough to *see* the shape, not a sample-accurate response.
+fn filter_mag_db(mode: &str, cutoff: f64, res: f64, poles: u32, f: f64) -> f64 {
+    let fc = cutoff.max(1.0);
+    let w = f / fc;
+    let q = 0.5 + res.clamp(0.0, 1.0) * 8.0; // 0.5 … 8.5
+    let denom2 = |w: f64| {
+        let a = 1.0 - w * w;
+        (a * a + (w / q) * (w / q)).sqrt().max(1e-6)
+    };
+    let extra = poles.saturating_sub(2);
+    let lp_extra = |w: f64| (1.0 / (1.0 + w * w).sqrt()).powi(extra as i32);
+    let hp_extra = |w: f64| (w / (1.0 + w * w).sqrt()).powi(extra as i32);
+    let lin = match mode {
+        "highpass" => {
+            if poles <= 1 {
+                w / (1.0 + w * w).sqrt()
+            } else {
+                (w * w) / denom2(w) * hp_extra(w)
+            }
+        }
+        "bandpass" => (w / q) / denom2(w),
+        "notch" => (1.0 - w * w).abs() / denom2(w),
+        _ => {
+            if poles <= 1 {
+                1.0 / (1.0 + w * w).sqrt()
+            } else {
+                1.0 / denom2(w) * lp_extra(w)
+            }
+        }
+    };
+    20.0 * lin.max(1e-6).log10()
+}
+
+/// The filter response as an SVG stroke path across the log-freq axis.
+fn filter_path(f: &SynthFilter) -> String {
+    let n = 96usize;
+    let mut s = String::new();
+    for i in 0..n {
+        let t = i as f64 / (n - 1) as f64;
+        let freq = 10f64.powf(FMIN.log10() + t * (FMAX.log10() - FMIN.log10()));
+        let db = filter_mag_db(
+            &f.mode,
+            f.cutoff_hz as f64,
+            f.resonance as f64,
+            f.poles,
+            freq,
+        );
+        let (x, y) = (freq_to_x(freq), db_to_y(db));
+        if i == 0 {
+            s.push_str(&format!("M{x:.1} {y:.1}"));
+        } else {
+            s.push_str(&format!(" L{x:.1} {y:.1}"));
         }
     }
+    s
+}
+
+/// Derived DAHDSR geometry for one envelope, in the env viewBox.
+struct EnvGeom {
+    sec_per_x: f64,
+    xa: f64,
+    xc: f64,
+    xh: f64,
+    xr: f64,
+    ysus: f64,
+    y0: f64,
+    ytop: f64,
+    stroke: String,
+    fill: String,
+}
+
+fn env_geom(e: &SynthEnvelope) -> EnvGeom {
+    let a = (e.attack.max(0.0)) as f64;
+    let d = (e.decay.max(0.0)) as f64;
+    let r = (e.release.max(0.0)) as f64;
+    let sus = (e.sustain.clamp(0.0, 1.0)) as f64;
+    // A visual sustain-hold segment so the S corner has room; scales with the
+    // envelope so short and long envelopes both read.
+    let hold = 0.25 * (a + d + r).max(0.08) + 0.05;
+    let total = (a + d + hold + r).max(0.1);
+    let usable_w = ENV_W - ENV_LEFT - ENV_RIGHT;
+    let sec_per_x = total / usable_w;
+    let xa = ENV_LEFT + a / sec_per_x;
+    let xc = xa + d / sec_per_x;
+    let xh = xc + hold / sec_per_x;
+    let xr = xh + r / sec_per_x;
+    let usable_h = ENV_H - ENV_TOP - ENV_BOT;
+    let ytop = ENV_TOP;
+    let ysus = ENV_TOP + (1.0 - sus) * usable_h;
+    let y0 = ENV_TOP + usable_h;
+    let stroke = format!(
+        "M{ENV_LEFT:.1} {y0:.1} L{xa:.1} {ytop:.1} L{xc:.1} {ysus:.1} L{xh:.1} {ysus:.1} L{xr:.1} {y0:.1}"
+    );
+    let fill = format!("{stroke} L{ENV_LEFT:.1} {y0:.1} Z");
+    EnvGeom {
+        sec_per_x,
+        xa,
+        xc,
+        xh,
+        xr,
+        ysus,
+        y0,
+        ytop,
+        stroke,
+        fill,
+    }
+}
+
+/// Which draggable handle is live.
+#[derive(Clone, Copy, PartialEq)]
+enum Handle {
+    /// Filter cutoff dot: X = cutoff (log freq), Y = resonance.
+    Cutoff,
+    /// Amp/Filter envelope: attack peak (X = attack), corner (X = decay, Y =
+    /// sustain), release end (X = release).
+    AmpAttack,
+    AmpCorner,
+    AmpRelease,
+    FiltAttack,
+    FiltCorner,
+    FiltRelease,
+}
+
+/// In-flight drag: the target handle + the cached client rect / viewBox dims of
+/// the SVG it lives in, so pointer-move (on a full-window shield) can map global
+/// coords into graph space. `sec_per_x` + `base_x` freeze the env time-scale for
+/// the duration of a time drag so it stays linear.
+#[derive(Clone, Copy)]
+struct Drag {
+    handle: Handle,
+    ox: f64,
+    oy: f64,
+    w: f64,
+    h: f64,
+    vb_w: f64,
+    vb_h: f64,
+    sec_per_x: f64,
+    base_x: f64,
+}
+
+fn arc_pt(cx: f64, cy: f64, r: f64, deg: f64) -> (f64, f64) {
+    let rad = deg * std::f64::consts::PI / 180.0;
+    (cx + r * rad.cos(), cy + r * rad.sin())
+}
+fn knob_arc(cx: f64, cy: f64, r: f64, a0: f64, a1: f64) -> String {
+    let (x1, y1) = arc_pt(cx, cy, r, a0);
+    let (x2, y2) = arc_pt(cx, cy, r, a1);
+    let large = if (a1 - a0).abs() > 180.0 { 1 } else { 0 };
+    format!("M {x1:.1} {y1:.1} A {r:.1} {r:.1} 0 {large} 1 {x2:.1} {y2:.1}")
+}
+
+/// Small inline-styled SVG arc knob (Blitz-safe, no Tailwind, no external deps).
+/// A transparent range input over the arc handles the drag; `value` is the
+/// normalized 0..1 position and `on_change` fires the new value.
+#[component]
+fn MiniKnob(value: f64, label: String, display: String, color: String, on_change: Callback<f64>) -> Element {
+    let (cx, cy, r) = (22.0, 22.0, 18.0);
+    let (start, sweep) = (135.0, 270.0);
+    let val = value.clamp(0.0, 1.0);
+    let track = knob_arc(cx, cy, r, start, start + sweep);
+    let end = start + val * sweep;
+    let filled = if val > 0.001 {
+        knob_arc(cx, cy, r, start, end)
+    } else {
+        String::new()
+    };
+    let (tx, ty) = arc_pt(cx, cy, r - 6.0, end);
+    let (tx2, ty2) = arc_pt(cx, cy, r + 1.0, end);
+    rsx! {
+        div { style: "position:relative; display:inline-flex; flex-direction:column; align-items:center; gap:2px; width:54px;",
+            div { style: "position:relative; width:44px; height:44px;",
+                svg { width: "44", height: "44", view_box: "0 0 44 44", style: "display:block;",
+                    path { d: "{track}", fill: "none", stroke: "#27272a", stroke_width: "3.5", stroke_linecap: "round" }
+                    if !filled.is_empty() {
+                        path { d: "{filled}", fill: "none", stroke: "{color}", stroke_width: "4", stroke_linecap: "round" }
+                    }
+                    line { x1: "{tx:.1}", y1: "{ty:.1}", x2: "{tx2:.1}", y2: "{ty2:.1}", stroke: "#e4e4e7", stroke_width: "2", stroke_linecap: "round" }
+                }
+                input {
+                    r#type: "range",
+                    min: "0",
+                    max: "1",
+                    step: "0.005",
+                    value: "{val}",
+                    style: "position:absolute; inset:0; width:100%; height:100%; opacity:0; cursor:pointer; margin:0;",
+                    oninput: move |ev: FormEvent| {
+                        if let Ok(v) = ev.value().parse::<f64>() {
+                            on_change.call(v.clamp(0.0, 1.0));
+                        }
+                    },
+                }
+            }
+            span { style: "font-size:10px; color:#e4e4e7; font-family:monospace;", "{display}" }
+            span { style: "font-size:9px; color:#71717a; text-transform:uppercase; letter-spacing:0.04em;", "{label}" }
+        }
+    }
+}
+
+/// The **Edit** page — the Vital-style single-layer editor. A/B/C/D selector
+/// across the top; for the picked layer: source + level, an interactive filter
+/// response curve, amp + filter ADSR graphs, and the modulation routes.
+#[component]
+fn LayerEditView() -> Element {
+    let rig = use_hook(try_consume_context::<SynthRigClient>);
+
+    // The loaded preset's four layers (fetched once; re-fetched on preset change
+    // via the resource's own reactivity is not wired — a manual reload button
+    // could call this again later).
+    let layers_res = {
+        let rig = rig.clone();
+        use_resource(move || {
+            let rig = rig.clone();
+            async move {
+                match rig {
+                    Some(r) => r.layers().await.unwrap_or_default(),
+                    None => Vec::new(),
+                }
+            }
+        })
+    };
+
+    // Local editable copy + selection. Seeded from the fetched layers whenever
+    // their identity changes (new preset) — never mid-drag, since the key only
+    // shifts on a real reload.
+    let mut edit = use_signal(Vec::<SynthLayer>::new);
+    let mut seeded = use_signal(String::new);
+    let mut sel = use_signal(|| 0usize);
+    let mut drag = use_signal(|| None::<Drag>);
+    // SVG element handles, for mapping client coords → viewBox on drag.
+    let mut filt_svg = use_signal(|| None::<std::rc::Rc<MountedData>>);
+    let amp_svg = use_signal(|| None::<std::rc::Rc<MountedData>>);
+    let fenv_svg = use_signal(|| None::<std::rc::Rc<MountedData>>);
+
+    use_effect(move || {
+        let fetched = layers_res.read().clone().unwrap_or_default();
+        let key = fetched
+            .iter()
+            .map(|l| format!("{}~{}", l.name, l.source))
+            .collect::<Vec<_>>()
+            .join("|");
+        if key != seeded.peek().clone() {
+            seeded.set(key);
+            // Default selection: first active layer.
+            let first = fetched.iter().position(|l| l.active).unwrap_or(0);
+            sel.set(first);
+            edit.set(fetched);
+        }
+    });
+
+    // Start a drag: cache the target SVG's client rect (async) + freeze the env
+    // time-scale, then arm the shield. A `Callback` so the envelope sub-graphs
+    // can arm the shared drag state through context.
+    type BeginArgs = (
+        Signal<Option<std::rc::Rc<MountedData>>>,
+        Handle,
+        f64,
+        f64,
+        f64,
+        f64,
+    );
+    let begin = use_callback(move |(svg, handle, vb_w, vb_h, sec_per_x, base_x): BeginArgs| {
+        let mut drag = drag;
+        spawn(async move {
+            let Some(el) = svg.peek().clone() else { return };
+            if let Ok(rect) = el.get_client_rect().await {
+                drag.set(Some(Drag {
+                    handle,
+                    ox: rect.origin.x,
+                    oy: rect.origin.y,
+                    w: rect.width(),
+                    h: rect.height(),
+                    vb_w,
+                    vb_h,
+                    sec_per_x,
+                    base_x,
+                }));
+            }
+        });
+    });
+    use_context_provider(|| EnvHooks { amp_svg, fenv_svg, begin });
+
+    let layers = edit.read().clone();
+    if layers.is_empty() {
+        return rsx! {
+            div { style: "display:flex; align-items:center; justify-content:center; flex:1; color:#52525b; font-size:13px;",
+                "No layers — load a preset."
+            }
+        };
+    }
+    let li = sel().min(layers.len() - 1);
+    let layer = layers[li].clone();
+    let filter = layer.filters.first().cloned().unwrap_or_default();
+
+    let filt_stroke = filter_path(&filter);
+    let filt_fill = format!("{filt_stroke} L{FILT_W:.1} {FILT_H:.1} L0 {FILT_H:.1} Z");
+    let cut_x = freq_to_x(filter.cutoff_hz as f64);
+    let cut_db = filter_mag_db(
+        &filter.mode,
+        filter.cutoff_hz as f64,
+        filter.resonance as f64,
+        filter.poles,
+        filter.cutoff_hz as f64,
+    );
+    let cut_y = db_to_y(cut_db);
+    // Modulated-cutoff ghost: where the filter envelope pushes the cutoff
+    // (env_depth as octaves of upward sweep) — Vital's "you can see the mod".
+    let mod_cut = (filter.cutoff_hz as f64) * 2f64.powf((filter.env_depth as f64) * 4.0);
+    let mod_x = freq_to_x(mod_cut.clamp(FMIN, FMAX));
+    let has_mod = filter.env_depth.abs() > 0.001;
+
+    // Cutoff-knob normalized position (log).
+    let cut_norm =
+        ((filter.cutoff_hz as f64).max(FMIN).log10() - FMIN.log10()) / (FMAX.log10() - FMIN.log10());
+
+    rsx! {
+        div { style: "display:flex; flex-direction:column; gap:0; flex:1; min-height:0;",
+
+            // ── layer selector + source + level ──
+            div { style: "display:flex; align-items:center; gap:10px; padding:8px 12px; border-bottom:1px solid #1c1c1f;",
+                div { style: "display:flex; gap:4px;",
+                    for (i, l) in layers.iter().enumerate() {
+                        {
+                            let active = l.active;
+                            let is_sel = i == li;
+                            let letter = ["A", "B", "C", "D"].get(i).copied().unwrap_or("?");
+                            rsx! { button {
+                                key: "{i}",
+                                style: layer_btn(is_sel, active),
+                                disabled: !active,
+                                onclick: move |_| if active { sel.set(i); },
+                                "{letter}"
+                            } }
+                        }
+                    }
+                }
+                div { style: "display:flex; flex-direction:column; gap:1px; margin-left:6px;",
+                    span { style: "font-size:9px; color:#71717a; text-transform:uppercase; letter-spacing:0.05em;", "Source" }
+                    span { style: "font-size:13px; font-weight:700; color:#e4e4e7;",
+                        {if layer.source.is_empty() { "—".to_string() } else { layer.source.clone() }}
+                    }
+                }
+                div { style: "flex:1;" }
+                {
+                    let level = layer.level as f64;
+                    rsx! { MiniKnob {
+                        value: level,
+                        label: "level".to_string(),
+                        display: format!("{:.0}%", level * 100.0),
+                        color: "#38bdf8".to_string(),
+                        on_change: move |v: f64| { edit.with_mut(|ls| { if let Some(l) = ls.get_mut(li) { l.level = v as f32; } }); },
+                    } }
+                }
+            }
+
+            // ── body: filter | envelopes+mod ──
+            div { style: "display:flex; gap:0; flex:1; min-height:0;",
+
+                // ── FILTER (response curve) ──
+                div { style: "display:flex; flex-direction:column; gap:8px; flex:1; min-width:0; padding:12px; border-right:1px solid #1c1c1f; overflow:auto;",
+                    div { style: "display:flex; align-items:baseline; gap:8px;",
+                        span { style: "font-size:11px; color:#71717a; text-transform:uppercase; letter-spacing:0.06em;", "Filter" }
+                        span { style: "font-size:10px; color:#52525b;", "{filter.mode} · {filter.poles}-pole" }
+                        div { style: "flex:1;" }
+                        span { style: "font-size:11px; color:#38bdf8; font-family:monospace;", "{fmt_hz(filter.cutoff_hz as f64)} Hz  ·  res {(filter.resonance*100.0) as i32}%" }
+                    }
+                    div { style: "position:relative; width:100%; height:230px; background:#09090b; border:1px solid #1c1c1f; border-radius:6px; overflow:hidden;",
+                        svg {
+                            width: "100%",
+                            height: "100%",
+                            view_box: "0 0 520 230",
+                            preserve_aspect_ratio: "none",
+                            style: "display:block; touch-action:none;",
+                            onmounted: move |e| filt_svg.set(Some(e.data())),
+
+                            // grid: 0 dB line + decade freq lines
+                            {
+                                let y0 = db_to_y(0.0);
+                                rsx! { line { x1: "0", y1: "{y0:.1}", x2: "520", y2: "{y0:.1}", stroke: "#27272a", stroke_width: "0.6" } }
+                            }
+                            for f in [100.0, 1000.0, 10000.0] {
+                                {
+                                    let x = freq_to_x(f);
+                                    rsx! { line { key: "g{f}", x1: "{x:.1}", y1: "0", x2: "{x:.1}", y2: "230", stroke: "#18181b", stroke_width: "0.6" } }
+                                }
+                            }
+                            for (f, lbl) in [(100.0, "100"), (1000.0, "1k"), (10000.0, "10k")] {
+                                {
+                                    let x = freq_to_x(f);
+                                    rsx! { text { key: "t{lbl}", x: "{x+3.0:.1}", y: "224", fill: "#3f3f46", font_size: "9", "{lbl}" } }
+                                }
+                            }
+
+                            // response fill + stroke
+                            path { d: "{filt_fill}", fill: "#38bdf815", stroke: "none" }
+                            path { d: "{filt_stroke}", fill: "none", stroke: "#38bdf8", stroke_width: "2" }
+
+                            // modulated-cutoff ghost (filter env → cutoff)
+                            if has_mod {
+                                line { x1: "{mod_x:.1}", y1: "0", x2: "{mod_x:.1}", y2: "230", stroke: "#a78bfa", stroke_width: "1", stroke_dasharray: "3 3", opacity: "0.7" }
+                                text { x: "{mod_x+3.0:.1}", y: "12", fill: "#a78bfa", font_size: "8", "filt env → cutoff" }
+                            }
+
+                            // draggable cutoff handle (X=cutoff, Y=resonance)
+                            circle {
+                                cx: "{cut_x:.1}",
+                                cy: "{cut_y:.1}",
+                                r: "7",
+                                fill: "#38bdf8",
+                                fill_opacity: "0.9",
+                                stroke: "#e4e4e7",
+                                stroke_width: "1.5",
+                                style: "cursor:grab;",
+                                onpointerdown: move |_| begin.call((filt_svg, Handle::Cutoff, FILT_W, FILT_H, 0.0, 0.0)),
+                            }
+                        }
+                    }
+                    // filter knobs
+                    div { style: "display:flex; gap:14px; align-items:flex-start; padding-top:4px;",
+                        MiniKnob {
+                            value: cut_norm,
+                            label: "cutoff".to_string(),
+                            display: format!("{} Hz", fmt_hz(filter.cutoff_hz as f64)),
+                            color: "#38bdf8".to_string(),
+                            on_change: move |v: f64| {
+                                let f = 10f64.powf(FMIN.log10() + v * (FMAX.log10() - FMIN.log10()));
+                                edit.with_mut(|ls| { if let Some(l) = ls.get_mut(li) { if let Some(fl) = l.filters.first_mut() { fl.cutoff_hz = f as f32; } } });
+                            },
+                        }
+                        MiniKnob {
+                            value: filter.resonance as f64,
+                            label: "res".to_string(),
+                            display: format!("{}%", (filter.resonance * 100.0) as i32),
+                            color: "#38bdf8".to_string(),
+                            on_change: move |v: f64| { edit.with_mut(|ls| { if let Some(l) = ls.get_mut(li) { if let Some(fl) = l.filters.first_mut() { fl.resonance = v as f32; } } }); },
+                        }
+                        span { style: "font-size:9px; color:#52525b; max-width:180px; line-height:1.4;",
+                            "Drag the dot: ← → cutoff, ↑ ↓ resonance."
+                        }
+                    }
+                }
+
+                // ── ENVELOPES + MODULATION ──
+                div { style: "display:flex; flex-direction:column; gap:10px; width:560px; min-width:340px; padding:12px; overflow:auto;",
+
+                    EnvBlock {
+                        title: "Amp Env".to_string(),
+                        env: layer.amp_env.clone(),
+                        color: "#22c55e".to_string(),
+                    }
+                    EnvBlock {
+                        title: "Filter Env".to_string(),
+                        env: layer.filter_env.clone(),
+                        color: "#a78bfa".to_string(),
+                    }
+
+                    // modulation routes
+                    div {
+                        span { style: "font-size:11px; color:#71717a; text-transform:uppercase; letter-spacing:0.06em;", "Modulation ({layer.routes.len()})" }
+                        div { style: "display:flex; flex-direction:column; gap:3px; margin-top:6px;",
+                            if layer.routes.is_empty() {
+                                span { style: "font-size:11px; color:#52525b;", "No routes in this layer." }
+                            }
+                            for (ri, route) in layer.routes.iter().enumerate() {
+                                {
+                                    let pct = (route.depth * 100.0) as i32;
+                                    let to_cut = route.source.to_lowercase().contains("env")
+                                        && (route.target.to_lowercase().contains("cut") || route.target.to_lowercase().contains("freq"));
+                                    rsx! { div {
+                                        key: "{ri}",
+                                        style: "display:flex; align-items:center; gap:8px; padding:5px 8px; background:#111113; border:1px solid #1c1c1f; border-radius:5px;",
+                                        span { style: "font-size:11px; color:#e4e4e7; font-weight:600;", "{route.source}" }
+                                        span { style: "font-size:11px; color:#52525b;", "→" }
+                                        span { style: "font-size:11px; color:#a1a1aa;", "{route.target}" }
+                                        if to_cut { span { style: "font-size:8px; color:#a78bfa; border:1px solid #a78bfa55; border-radius:3px; padding:0 3px;", "cutoff" } }
+                                        div { style: "flex:1;" }
+                                        span { style: "font-size:11px; color:#38bdf8; font-family:monospace;", "{pct}%" }
+                                    } }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // ── drag shield: tracks pointer across the whole window ──
+        if drag.read().is_some() {
+            div {
+                style: "position:fixed; inset:0; z-index:1000; cursor:grabbing;",
+                onpointermove: move |e: PointerEvent| {
+                    let Some(d) = drag.peek().as_ref().copied() else { return };
+                    let c = e.client_coordinates();
+                    let vb_x = (c.x - d.ox) / d.w * d.vb_w;
+                    let vb_y = (c.y - d.oy) / d.h * d.vb_h;
+                    edit.with_mut(|ls| {
+                        let Some(l) = ls.get_mut(li) else { return };
+                        match d.handle {
+                            Handle::Cutoff => {
+                                if let Some(f) = l.filters.first_mut() {
+                                    f.cutoff_hz = x_to_freq(vb_x).clamp(FMIN, FMAX) as f32;
+                                    f.resonance = (1.0 - (vb_y / d.vb_h)).clamp(0.0, 1.0) as f32;
+                                }
+                            }
+                            Handle::AmpAttack => { l.amp_env.attack = ((vb_x - d.base_x) * d.sec_per_x).clamp(0.0, 20.0) as f32; }
+                            Handle::AmpCorner => {
+                                l.amp_env.decay = ((vb_x - d.base_x) * d.sec_per_x).clamp(0.0, 20.0) as f32;
+                                let usable = ENV_H - ENV_TOP - ENV_BOT;
+                                l.amp_env.sustain = (1.0 - ((vb_y - ENV_TOP) / usable)).clamp(0.0, 1.0) as f32;
+                            }
+                            Handle::AmpRelease => { l.amp_env.release = ((vb_x - d.base_x) * d.sec_per_x).clamp(0.0, 20.0) as f32; }
+                            Handle::FiltAttack => { l.filter_env.attack = ((vb_x - d.base_x) * d.sec_per_x).clamp(0.0, 20.0) as f32; }
+                            Handle::FiltCorner => {
+                                l.filter_env.decay = ((vb_x - d.base_x) * d.sec_per_x).clamp(0.0, 20.0) as f32;
+                                let usable = ENV_H - ENV_TOP - ENV_BOT;
+                                l.filter_env.sustain = (1.0 - ((vb_y - ENV_TOP) / usable)).clamp(0.0, 1.0) as f32;
+                            }
+                            Handle::FiltRelease => { l.filter_env.release = ((vb_x - d.base_x) * d.sec_per_x).clamp(0.0, 20.0) as f32; }
+                        }
+                    });
+                },
+                onpointerup: move |_| drag.set(None),
+            }
+        }
+    }
+}
+
+/// One envelope graph (amp or filter) with three draggable markers. Reads its
+/// SVG ref + drag arming from the parent via context: to keep this self-
+/// contained we re-derive geometry and re-fetch the rect on each grab.
+#[component]
+fn EnvBlock(title: String, env: SynthEnvelope, color: String) -> Element {
+    // The parent owns the edit buffer + drag state; EnvBlock reaches them from
+    // context. To avoid threading callbacks, the parent exposes an `EnvHooks`
+    // bundle in context.
+    let hooks = use_context::<EnvHooks>();
+    let is_amp = title.starts_with("Amp");
+    let g = env_geom(&env);
+    let svg_ref = if is_amp { hooks.amp_svg } else { hooks.fenv_svg };
+    let (h_attack, h_corner, h_release) = if is_amp {
+        (Handle::AmpAttack, Handle::AmpCorner, Handle::AmpRelease)
+    } else {
+        (Handle::FiltAttack, Handle::FiltCorner, Handle::FiltRelease)
+    };
+    let begin = hooks.begin;
+    let (xa, xc, xh, xr) = (g.xa, g.xc, g.xh, g.xr);
+    let (ytop, ysus, y0, spx) = (g.ytop, g.ysus, g.y0, g.sec_per_x);
+
+    rsx! {
+        div {
+            div { style: "display:flex; align-items:baseline; gap:8px;",
+                span { style: "font-size:11px; color:#71717a; text-transform:uppercase; letter-spacing:0.06em;", "{title}" }
+                div { style: "flex:1;" }
+                span { style: "font-size:10px; color:#52525b; font-family:monospace;",
+                    "A {env.attack:.2}s  D {env.decay:.2}s  S {(env.sustain*100.0) as i32}%  R {env.release:.2}s"
+                }
+            }
+            div { style: "position:relative; width:100%; height:132px; background:#09090b; border:1px solid #1c1c1f; border-radius:6px; overflow:hidden; margin-top:4px;",
+                svg {
+                    width: "100%",
+                    height: "100%",
+                    view_box: "0 0 520 132",
+                    preserve_aspect_ratio: "none",
+                    style: "display:block; touch-action:none;",
+                    onmounted: {
+                        let mut svg_ref = svg_ref;
+                        move |e| svg_ref.set(Some(e.data()))
+                    },
+
+                    // baseline + top gridline
+                    line { x1: "0", y1: "{y0:.1}", x2: "520", y2: "{y0:.1}", stroke: "#18181b", stroke_width: "0.6" }
+                    line { x1: "0", y1: "{ytop:.1}", x2: "520", y2: "{ytop:.1}", stroke: "#141416", stroke_width: "0.6" }
+
+                    // area + curve
+                    path { d: "{g.fill}", fill: "{color}18", stroke: "none" }
+                    path { d: "{g.stroke}", fill: "none", stroke: "{color}", stroke_width: "2", stroke_linejoin: "round" }
+
+                    // markers
+                    circle {
+                        cx: "{xa:.1}", cy: "{ytop:.1}", r: "6",
+                        fill: "{color}", stroke: "#e4e4e7", stroke_width: "1.5", style: "cursor:grab;",
+                        onpointerdown: move |_| begin.call((svg_ref, h_attack, ENV_W, ENV_H, spx, ENV_LEFT)),
+                    }
+                    circle {
+                        cx: "{xc:.1}", cy: "{ysus:.1}", r: "6",
+                        fill: "{color}", stroke: "#e4e4e7", stroke_width: "1.5", style: "cursor:grab;",
+                        onpointerdown: move |_| begin.call((svg_ref, h_corner, ENV_W, ENV_H, spx, xa)),
+                    }
+                    circle {
+                        cx: "{xr:.1}", cy: "{y0:.1}", r: "6",
+                        fill: "{color}", stroke: "#e4e4e7", stroke_width: "1.5", style: "cursor:grab;",
+                        onpointerdown: move |_| begin.call((svg_ref, h_release, ENV_W, ENV_H, spx, xh)),
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Hooks the parent shares with `EnvBlock` via context so the envelope graphs
+/// can arm a drag against the shared drag state.
+#[derive(Clone, Copy)]
+struct EnvHooks {
+    amp_svg: Signal<Option<std::rc::Rc<MountedData>>>,
+    fenv_svg: Signal<Option<std::rc::Rc<MountedData>>>,
+    begin: Callback<(Signal<Option<std::rc::Rc<MountedData>>>, Handle, f64, f64, f64, f64)>,
+}
+
+fn layer_btn(selected: bool, active: bool) -> String {
+    let (bg, br, fg) = if !active {
+        ("#0d0d0f", "#18181b", "#3f3f46")
+    } else if selected {
+        ("#0c2733", "#38bdf8", "#e4e4e7")
+    } else {
+        ("#18181b", "#27272a", "#a1a1aa")
+    };
+    format!("width:32px; height:32px; border-radius:6px; background:{bg}; color:{fg}; border:1px solid {br}; font-size:13px; font-weight:700; cursor:{};", if active { "pointer" } else { "default" })
 }
 
 fn preset_btn(loaded: bool) -> String {
