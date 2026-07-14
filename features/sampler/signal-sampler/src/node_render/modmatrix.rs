@@ -71,26 +71,111 @@ impl ModEngine {
 
     /// Tick all sources through one block and rebuild the per-leaf writes.
     pub(super) fn tick(&mut self, events: &PluginEvents<'_>, frames: usize) {
-        for w in &mut self.writes {
-            w.clear();
-        }
-        // Evaluate each source once, then apply every route.
+        // Evaluate each source once, then apply every route additively.
         let tempo = self.tempo_bpm;
         let values: Vec<f32> = self
             .sources
             .iter_mut()
             .map(|s| s.tick_at(events, frames, tempo))
             .collect();
-        for r in &self.routes {
-            let v = (r.base + (r.depth * values[r.source]) as f64).clamp(0.0, 1.0);
-            if let Some(w) = self.writes.get_mut(r.leaf) {
-                w.push((r.param, v));
-            }
-        }
+        accumulate_writes(&self.routes, &values, &mut self.writes);
     }
 
     pub fn route_count(&self) -> usize {
         self.routes.len()
+    }
+}
+
+/// Rebuild the per-leaf parameter writes for one block: each target parameter
+/// is its **base** plus the **sum** of every route's signed offset
+/// (`depth × source`), clamped once to the normalized range.
+///
+/// Additive by design — two modulators onto one cutoff sum, they don't clobber
+/// (spec `signal.parameter.modulatable` / `signal.modulator.route`: a
+/// parameter's value is `base + Σ(route offsets)`). Before this, the last route
+/// to a target won and the others were silently dropped.
+fn accumulate_writes(routes: &[CompiledRoute], values: &[f32], writes: &mut [Vec<(u32, f64)>]) {
+    for w in writes.iter_mut() {
+        w.clear();
+    }
+    for r in routes {
+        let Some(&source) = values.get(r.source) else {
+            continue;
+        };
+        let offset = r.depth as f64 * source as f64;
+        let Some(w) = writes.get_mut(r.leaf) else {
+            continue;
+        };
+        // First route to a (leaf, param) seeds `base + offset`; the rest add
+        // their offset onto the running sum. `base` is a property of the
+        // parameter, so it's identical across a param's routes.
+        match w.iter_mut().find(|(p, _)| *p == r.param) {
+            Some(entry) => entry.1 += offset,
+            None => w.push((r.param, r.base + offset)),
+        }
+    }
+    for w in writes.iter_mut() {
+        for (_, v) in w.iter_mut() {
+            *v = v.clamp(0.0, 1.0);
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn route(source: usize, leaf: usize, param: u32, base: f64, depth: f32) -> CompiledRoute {
+        CompiledRoute { source, leaf, param, base, depth }
+    }
+
+    #[test]
+    fn multiple_routes_to_one_param_sum_additively() {
+        // Two sources at full scale, two routes onto leaf 0 / param 7.
+        let routes = vec![
+            route(0, 0, 7, 0.2, 0.3), // base 0.2, +0.3
+            route(1, 0, 7, 0.2, 0.1), // +0.1
+        ];
+        let values = [1.0f32, 1.0];
+        let mut writes = vec![Vec::new()];
+        accumulate_writes(&routes, &values, &mut writes);
+        assert_eq!(writes[0].len(), 1, "one accumulated write per param");
+        let (param, v) = writes[0][0];
+        assert_eq!(param, 7);
+        assert!((v - 0.6).abs() < 1e-6, "0.2 + 0.3 + 0.1 = 0.6, got {v}");
+    }
+
+    #[test]
+    fn accumulated_value_clamps_to_unit_range() {
+        let routes = vec![
+            route(0, 0, 1, 0.8, 0.5),
+            route(0, 0, 1, 0.8, 0.5), // → 1.8, clamps to 1.0
+        ];
+        let values = [1.0f32];
+        let mut writes = vec![Vec::new()];
+        accumulate_writes(&routes, &values, &mut writes);
+        assert_eq!(writes[0][0].1, 1.0);
+    }
+
+    #[test]
+    fn negative_depth_subtracts_from_base() {
+        let routes = vec![route(0, 0, 3, 0.5, -0.5)];
+        let values = [1.0f32];
+        let mut writes = vec![Vec::new()];
+        accumulate_writes(&routes, &values, &mut writes);
+        assert!((writes[0][0].1 - 0.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn distinct_params_stay_separate() {
+        let routes = vec![
+            route(0, 0, 1, 0.1, 0.2),
+            route(0, 0, 2, 0.3, 0.2),
+        ];
+        let values = [1.0f32];
+        let mut writes = vec![Vec::new()];
+        accumulate_writes(&routes, &values, &mut writes);
+        assert_eq!(writes[0].len(), 2);
     }
 }
 
