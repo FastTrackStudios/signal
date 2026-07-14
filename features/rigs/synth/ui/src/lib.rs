@@ -1036,7 +1036,7 @@ fn LayerEditView() -> Element {
                         div { style: "flex:1;" }
                         span { style: "font-size:11px; color:#38bdf8; font-family:monospace;", "{fmt_hz(filter.cutoff_hz as f64)} Hz  ·  res {(filter.resonance*100.0) as i32}%" }
                     }
-                    div { style: "position:relative; width:100%; height:230px; background:#09090b; border:1px solid #1c1c1f; border-radius:6px; overflow:hidden;",
+                    div { style: "position:relative; width:100%; max-width:720px; aspect-ratio:520 / 230; background:#09090b; border:1px solid #1c1c1f; border-radius:6px; overflow:hidden;",
                         svg {
                             width: "100%",
                             height: "100%",

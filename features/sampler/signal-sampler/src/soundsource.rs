@@ -21,8 +21,9 @@ pub enum SoundsourceKind {
     /// Sampled multisample playback (zone maps, round-robins, mics, loops) —
     /// Keyscape, **Omnisphere soundsources**, drum kits, orchestral libraries.
     Sample,
-    /// Straight audio file / input streaming — cinematic beds, one-shots,
-    /// granular fodder, live audio into the layer.
+    /// Live audio / file input as the layer's source — the **guitar rig** case
+    /// (the DI feeds straight into the layer's filter/amp/FX), plus cinematic
+    /// beds, one-shots, and granular fodder.
     Audio,
 }
 
@@ -58,7 +59,19 @@ pub trait Soundsource: Send {
 
     /// Generate one block into `out_l`/`out_r`. `events` carries parameter
     /// writes (from the mod engine), pitch bend, and note expressions.
-    fn render(&mut self, out_l: &mut [f32], out_r: &mut [f32], events: &PluginEvents<'_>);
+    ///
+    /// `in_l`/`in_r` are the layer's input audio: **synthesis** generators
+    /// (Oscillator, Sample) ignore it; the **Audio** generator emits it (the
+    /// live guitar DI / a file) — matching the render-tree leaf signature so a
+    /// `Soundsource` drops in without new plumbing.
+    fn render(
+        &mut self,
+        in_l: &[f32],
+        in_r: &[f32],
+        out_l: &mut [f32],
+        out_r: &mut [f32],
+        events: &PluginEvents<'_>,
+    );
 
     /// Parameters exposed to the Control/Edit UI and the mod engine.
     fn params(&self) -> Vec<PluginParamInfo> {
