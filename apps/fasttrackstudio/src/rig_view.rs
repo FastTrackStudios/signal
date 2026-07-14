@@ -46,16 +46,26 @@ fn server_url() -> String {
     if let Some(saved) = prefs::get("signal-engine-ws-url") {
         return saved;
     }
-    let same_origin = web_sys::window().and_then(|w| {
+    let derived = web_sys::window().and_then(|w| {
         let loc = w.location();
-        let host = loc.host().ok()?;
+        let host = loc.host().ok()?; // e.g. "localhost:8080"
+        let hostname = loc.hostname().ok()?; // "localhost"
         let scheme = match loc.protocol().ok()?.as_str() {
             "https:" => "wss",
             _ => "ws",
         };
+        // A dev server (`dx serve`) runs the page on a non-4040 localhost port
+        // and does NOT serve `/vox`; point it at the local engine so hot-reload
+        // iteration connects without a manual `signal-engine-ws-url` override.
+        // Deployed builds are served BY the engine (same-origin), so keep the
+        // origin there.
+        let is_local = hostname == "localhost" || hostname == "127.0.0.1";
+        if is_local && !host.ends_with(":4040") {
+            return Some("ws://127.0.0.1:4040/vox".to_string());
+        }
         Some(format!("{scheme}://{host}/vox"))
     });
-    same_origin.unwrap_or_else(|| "ws://127.0.0.1:4040/vox".to_string())
+    derived.unwrap_or_else(|| "ws://127.0.0.1:4040/vox".to_string())
 }
 
 // ── Engine target (local ws vs remote iroh) ─────────────────────────────────
