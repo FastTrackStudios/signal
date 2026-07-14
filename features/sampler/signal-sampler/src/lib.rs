@@ -61,6 +61,7 @@ pub mod nam;
 pub mod nam_calibrate;
 pub mod native;
 pub mod native_osc;
+pub mod soundsource;
 pub mod node_render;
 pub mod nord;
 pub mod pack_rewrite;
