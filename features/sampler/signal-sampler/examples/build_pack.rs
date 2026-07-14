@@ -50,7 +50,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     )?;
     eprintln!("build_pack: done in {:?} — {stats:?}", t.elapsed());
     if stats.failed > 0 {
-        return Err(format!("{} sample(s) failed to pack", stats.failed).into());
+        // Some source files are undecodable (the original packs skipped these
+        // too). Warn loudly but still produce the pack — a partial pack matches
+        // the historical builds. Fail only if *nothing* packed.
+        eprintln!("build_pack: WARNING — {} sample(s) skipped (undecodable)", stats.failed);
+    }
+    if stats.prepared == 0 {
+        return Err("no samples packed".into());
     }
     Ok(())
 }

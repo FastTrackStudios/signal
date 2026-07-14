@@ -98,6 +98,33 @@ splits into release `lacr` (3077) + `lacrmechrel` (704); `lacrmsp` (95, a genuin
 low-note articulation) is untouched. The body then resolves to real sustains at
 every note/velocity (0 short samples).
 
+### Default-articulation / release-`kind` fix
+
+The engine's default-articulation picker (`engine/mod.rs`) plays the first
+articulation that is **not** `@Release`/`@Legato` and not a mech/pedal aux layer.
+So a patch is only playable if its **body** wins that search — which needs its
+**release combo marked `@Release`** in the styx. The external styx generator
+mis-classified some releases as `@OneShot` when their names didn't match its
+heuristic (`fr`/`mr`/`sr` full/mech/soft-release tokens, not `rel`). The picker
+then grabbed a release/attack layer alphabetically ahead of the body — e.g.
+Hohner Clavinet C defaulted to `clvcfr` (key-off noise) instead of the body
+`clvcr12`: **"just the attack noise, no sustain."**
+
+Fix: `docs/scripts/fix_release_kinds.py` reads each `.db` manifest, finds the
+article-ids produced **exclusively** by `Release`-named soundsources (never by a
+body — guards against flipping a body), and rewrites those articulations
+`kind @OneShot` → `@Release` in the raw styx. Rebuild the pack afterward
+(`build_pack`) so the embedded spec carries the fix. Marking them `@Release` is
+doubly correct: the body becomes the default **and** the releases play on
+note-off as intended.
+
+Nine patches were mis-marked and corrected — the picker now defaults to the body
+for all: Hohner Clavinet C (`clvcr12`), MKS-20 Electric Grand (`mks20egrandr2`,
+was `cp70frl`), Hohner Pianet T (`pntsus`), Dolceola (`dlcsus`), Double Felt
+Grand, Hohner Pianet N, Vintage Vibe EP/Tine Bass, Wing Upright. (Vinyl Keyscape
+01 legitimately defaults to `recordnoise` — it *is* a vinyl-ambience instrument.)
+Verify any pack's default with `--example check_pack_resolve`.
+
 ### Within-soundsource layers
 
 Inside one soundsource, samples still layer by **round-robin**, **velocity**, and

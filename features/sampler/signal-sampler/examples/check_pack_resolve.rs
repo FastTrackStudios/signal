@@ -7,12 +7,39 @@
 
 use std::path::Path;
 
+use signal_sampler::spec::ArticulationKind;
 use signal_sampler::PlayerPatch;
+
+/// Mirror of the engine's default-articulation picker (engine/mod.rs) so we can
+/// report which articulation actually plays by default.
+fn engine_default(spec: &signal_sampler::spec::LibrarySpec) -> Option<String> {
+    let is_aux = |id: &str| {
+        let l = id.to_ascii_lowercase();
+        l.contains("mch") || l.contains("mech") || l.contains("ped")
+    };
+    spec.articulations
+        .iter()
+        .find(|a| a.kind == ArticulationKind::Sustain && !is_aux(&a.id))
+        .or_else(|| {
+            spec.articulations.iter().find(|a| {
+                !matches!(a.kind, ArticulationKind::Release | ArticulationKind::Legato)
+                    && !is_aux(&a.id)
+            })
+        })
+        .or_else(|| {
+            spec.articulations
+                .iter()
+                .find(|a| !matches!(a.kind, ArticulationKind::Release | ArticulationKind::Legato))
+        })
+        .or_else(|| spec.articulations.first())
+        .map(|a| a.id.clone())
+}
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let pack = std::env::args().nth(1).expect("usage: check_pack_resolve <pack>");
     let patch = PlayerPatch::from_pack(Path::new(&pack))?;
     let spec = &patch.spec;
+    println!(">> engine default articulation = {:?}", engine_default(spec));
 
     let section = spec.sections.first().ok_or("no sections")?;
     let mic = spec.mics.first().map(|m| m.id.as_str()).unwrap_or("");
