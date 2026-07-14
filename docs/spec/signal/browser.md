@@ -12,7 +12,7 @@ and `crates/signal/proto/src/tagging.rs` (`BrowserIndex`, `StructuredTag`,
 
 r[signal.browser]
 The browser presents a searchable, filterable view of preset artifacts. It is
-backend-agnostic (it browses `.signalpack`/`.signal.styx` sidecars and rig
+backend-agnostic (it browses `.soundpack`/`.signal.styx` sidecars and rig
 presets, not REAPER files specifically) and drives loading into a target slot.
 
 r[signal.browser.index]

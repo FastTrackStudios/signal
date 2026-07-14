@@ -78,11 +78,38 @@ that crossfades velocity/dynamic layers under an expression controller (e.g. CC1
 or CC11) rather than hard velocity switches, so a held note swells through its
 recorded dynamics. The dynamics control is a Parameter.
 
+## Sound packs (storage)
+
+r[signal.sampling.soundpack]
+A sampled sound is stored as a **sound folder** of one or more `.soundpack` files
+(renamed from `.signalpack` — a soundpack is just a collection of sounds), not one
+monolithic file. The folder carries the mapping/spec + sidecar (the keymap, mic
+list, articulations, loops); each `.soundpack` inside carries the audio bodies for
+one streamable slice. This keeps the map tiny and the bodies splittable.
+
+r[signal.sampling.soundpack.split]
+Packs split along the streamable axes: per **multi-mic**, per **mix/variation**,
+and per **SoundLayer/articulation**. Each slice is a self-contained `.soundpack`
+addressable by `(mic, mix, layer)`, so the bodies a consumer never uses need not
+ship at all.
+
+r[signal.sampling.soundpack.optional]
+A consumer loads **only the slices it needs** — a single mic, one mix, one layer —
+to reach the smallest footprint for portable/embedded rigs. Omitted slices cost no
+storage; present-but-disabled slices cost no I/O. Enabling a mic/mix/layer later
+pulls its `.soundpack` on demand.
+
+r[signal.sampling.soundpack.header]
+The folder's spec/sidecar loads **header-only** (`read_pack_header`, no audio
+decode), so the full keymap — every zone, mic, mix, layer, and loop — is known
+before any body is streamed. The browser and the engine map a sound without
+touching its audio.
+
 ## Memory & streaming
 
 r[signal.sampling.streaming]
 A sampled instrument MAY exceed RAM: zones stream from disk with a preloaded
-head, and the loader honors header-only reads (`read_pack_header`) so a library
-maps its zones/loops/mics without decoding all audio. Triggering a not-yet-loaded
-zone MUST degrade gracefully (the engine preloads on patch load; see the sampler
-warmup note).
+head, from whichever `.soundpack` slices are enabled
+(`signal.sampling.soundpack.optional`). Triggering a not-yet-loaded zone MUST
+degrade gracefully (the engine preloads on patch load; see the sampler warmup
+note).

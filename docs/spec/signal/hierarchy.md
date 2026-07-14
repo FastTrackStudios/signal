@@ -12,17 +12,42 @@ saved-artifact form of any level is a **Preset** (below).
 ## The chain
 
 r[signal.hierarchy]
-Each level composes the level below it:
+Each level composes the level below it, up to a **Preset** — one complete,
+recallable instrument sound — then a performance layer (Rig, Profile, Song,
+Setlist) organizes Presets for playing:
 
 ```
-Block → Module → Layer → Engine → Rig
+sound build-up      Block → Module → Layer → Engine → Preset     one sound
+loaded together     Rig      = many Presets at once              combi / multi
+go-to library       Profile  = Presets as patches, in Scenes     + Stacks
+song structure      Song     = sections → patches
+performance         Setlist  = ordered Songs
 ```
 
 - **Block** — a single FX/plugin/DSP unit with parameter state.
 - **Module** — an ordered chain of blocks (a processing stage).
-- **Layer** — one complete signal path: a source + its modules/blocks.
+- **Layer** — one complete signal path: a source + its modules/blocks;
+  **nestable** (may contain child layers — an imported preset *is* a Layer).
 - **Engine** — groups layers with scene/variant switching.
-- **Rig** — the top-level instrument setup: engines + shared FX sends.
+- **Preset** — a complete, recallable sound: one or more Engines with their
+  Layers, sources, and FX. The unit a musician browses, loads, and plays.
+- **Rig** — the runtime host that loads several Presets simultaneously and
+  combines them (a combi/multi: key splits, velocity layers, stacks) plus shared
+  FX sends. Not a fixed sound tier — a container of Presets.
+- **Profile** — a curated collection of go-to Presets as **patches**, organized
+  into **Scenes** (recallable combinations) and **Stacks** (footswitch
+  rotations). See [profile.md](profile.md).
+- **Song** / **Setlist** — sections mapping to patches, and an ordered run of
+  songs. See [song-setlist.md](song-setlist.md).
+
+r[signal.hierarchy.performance]
+Above a single Preset, three artifacts organize Presets for performance and are
+themselves [Presets](#presets) (browsable, saveable): a **Rig** (many Presets
+loaded and combined at once), a **Profile** (a library of go-to Presets as
+patches, arranged in **Scenes** and **Stacks**), and **Songs**/**Setlists** (the
+section-driven structure that recalls patches during a performance). A **Scene**
+is a recallable snapshot of which Presets/variants are active across the rig; a
+**Stack** is a footswitch rotation through patches (see [profile.md](profile.md)).
 
 r[signal.hierarchy.uniform]
 This is the **only** routing model. Synth, sampler, and every instrument engine
@@ -83,6 +108,15 @@ blocks (e.g. "Clean Guitar", or a synth's Layer A). It is the meeting point with
 the [instrument engine](instrument-engine.md): an instrument Layer additionally
 carries a [Soundsource](soundsource.md) as its source and a keyboard zone.
 
+r[signal.layer.nest]
+A layer is **nestable**: it either holds a Soundsource directly (a leaf) or
+contains **child layers** (a group/multi), recursively. A single Omnisphere-style
+preset is imported as *one* Layer, which may itself nest sub-layers — its A/B/C/D
+parts, or a full multi — so "an external preset is a Layer" holds whether that
+preset is one sound or many. Child layers each keep their own zone, source,
+filter/amp/FX, and modulation (`signal.instrument.layer.independent`) and sum to
+their parent's output.
+
 r[signal.layer.template]
 A layer is savable as a self-contained template capturing its full state — all
 modules, blocks, parameters, source, and routing (REAPER: `.RTrackTemplate`).
@@ -100,29 +134,44 @@ Organ, Pad.
 ## Rigs
 
 r[signal.rig]
-A rig is the top-level instrument setup containing engines and shared FX sends.
+A rig is the runtime host that loads **one or more Presets simultaneously** and
+combines them — key splits, velocity layers, and stacks — plus shared FX sends.
+A rig is itself saveable (a Rig/Rack Preset).
 
 r[signal.rig.scene]
-A rig scene selects which engine scene is active per engine, so one switch
-changes the active tone across all engines simultaneously.
+A rig **scene** is a recallable snapshot of which Presets/variants are active
+across the rig, so one switch changes the whole combination at once.
 
 r[signal.rig.fx-sends]
 A rig MAY include FX send buses for shared effects (reverb, delay) that multiple
-layers route to.
+Presets/layers route to.
 
 ## Presets
 
 r[signal.preset]
-A **Preset** is the saved, recallable state of any hierarchy level — a Block
-preset, Module preset, Layer preset, Engine preset, Rig preset — plus the
-performance artifacts (Profile, Song, Setlist, Rack). "Preset" is the storage/
-browse unit; loading one restores that level's state into a matching slot.
+A **Preset** is a complete, recallable instrument sound — one or more Engines
+with their Layers, sources, filters, amps, and FX. It is the primary unit a
+musician browses, loads, and plays, and the primary artifact the
+[browser](browser.md) indexes.
+
+r[signal.preset.component]
+Each lower level is independently saveable as a **component preset** — Block
+preset, Module preset, Layer preset, Engine preset — reusable across sounds. A
+higher level references a component preset by id + selected snapshot rather than
+copying its state, so editing the component updates every user (unless detached).
 
 r[signal.preset.kind]
 A preset's kind is one of: Block (with block type), Module, Layer, Engine, Rig,
-Profile, Song, Rack — matching the hierarchy. Layer-and-above presets are
-instrument-scoped (stored per instrument); Blocks and Modules are shared across
-instruments.
+Profile, Song, Rack — matching the hierarchy. The complete-sound Preset a musician
+loads is realized as an **Engine** preset (single) or a **Rig/Rack** preset
+(multi — several Presets combined). Layer-and-above presets are instrument-scoped
+(stored per instrument); Blocks and Modules are shared across instruments.
+
+r[signal.preset.multi]
+A Rig/Rack preset holds **multiple Presets loaded at once**, each with its
+key/velocity zone, level, and stack assignment — the combi/multi. Loading it
+instantiates all member Presets together; a rig MAY load any number of Presets
+simultaneously with no fixed cap.
 
 r[signal.preset.sidecar]
 Every preset carries a sidecar (`.signal.styx`) with a stable UUID, its kind,

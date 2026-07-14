@@ -19,6 +19,13 @@ A profile owns a **preset pool**: a small set of named presets (e.g. amp/tone
 captures) that its patches reference by name. Several patches MAY share one pool
 preset and differ only by their overrides, so the pool stays small.
 
+r[signal.profile.scene]
+A profile organizes its patches into **Scenes** — named, recallable combinations
+of active Presets/patches across the rig (a snapshot of "what's on",
+`signal.rig.scene`). Selecting a scene activates its whole combination at once.
+Scenes are the go-to recall points a performer jumps between; Stacks
+(`signal.stack`) step through the patches within them.
+
 r[signal.profile.patch]
 A **patch** is one recallable tone: it names a pool preset (or targets a specific
 hierarchy level directly) plus per-patch adjustments. Each patch targets a level

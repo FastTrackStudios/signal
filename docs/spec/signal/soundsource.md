@@ -22,7 +22,7 @@ velocity)`, `note_off(note)`, `render(in, out, events)`, `params()`,
 into the graph unchanged.
 
 r[signal.soundsource.declarative]
-A normal library loads with **zero code** — a spec (`.styx`/`.signalpack`) plus a
+A normal library loads with **zero code** — a spec (`.styx`/`.soundpack`) plus a
 sample scan. Every exotic behavior (legato, keyswitch, mic mix, round-robin,
 dynamics crossfade) is selected + configured by that data, and is a trait a
 library MAY override for the rare case the data model can't express.

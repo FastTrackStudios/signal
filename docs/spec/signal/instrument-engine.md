@@ -37,7 +37,9 @@ r[signal.instrument.layer]
 A Layer is a self-contained sub-instance — its own source, filters, amp, FX, and
 modulators — of the form: **Soundsource → Filter(s) → Amp → Layer FX**. Layers
 are labelled A, B, C, D, … and are extensible beyond four. A Part sums its active
-Layers.
+Layers. Layers **nest** (`signal.layer.nest`): a Layer may hold a Soundsource
+directly or contain child Layers, so an imported preset (its A/B/C/D or a multi)
+loads as one nestable Layer.
 
 r[signal.instrument.layer.zone]
 Each Layer has a keyboard **Zone**: a key-range split and a velocity window with
