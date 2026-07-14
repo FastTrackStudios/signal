@@ -2,7 +2,7 @@
 
 The generator inside a Layer (see [instrument-engine.md](instrument-engine.md)).
 This spec defines the `Soundsource` contract and each kind — Oscillator, Sample,
-Audio — in full, so one engine covers synths, Keyscape-class pianos, drum kits,
+Physical Model, Audio — in full, so one engine covers synths, Keyscape-class pianos, drum kits,
 and Cinematic-Studio-Strings-class orchestral libraries. Grounded in
 `crates/signal/docs/sampler-trait-design.md` (the dream API) and the CSS work in
 `crates/signal/docs/cinematic-studio-strings-progress.md`.
@@ -67,6 +67,62 @@ r[signal.soundsource.oscillator]
 The Oscillator kind is analog/wavetable synthesis: selectable waveform or
 wavetable, with unison (voice count, detune, width), sub-oscillators, FM, ring
 modulation, and additive/harmonic voices. It is note-triggered and polyphonic.
+
+## Source modules
+
+A Soundsource runs a chain of optional **source modules** (Omnisphere-inspired)
+that shape the raw generator before it reaches the Layer's filter/amp/FX. They
+apply to any kind — a Sample soundsource transposes, reverses, unisons, and
+granulates just as an Oscillator does. Each module's parameters are ordinary
+[Parameters](parameter.md) (modulatable, macro-drivable, learnable). Some modules
+(Analog, Drift) are named here and specced in depth later.
+
+r[signal.soundsource.module]
+A Soundsource exposes an ordered set of source modules, each independently
+enabled. A module operates on the source signal/playback in place; disabled
+modules are bypassed with no cost. Every module parameter is enumerable via
+`params()` (`signal.soundsource.params`).
+
+r[signal.soundsource.module.wave]
+**Wave** is the pitch/playback module: **Transpose** (semitones), **Coarse** and
+**Fine** tune, a **Key Tracking** on/off (off = fixed pitch across the keyboard,
+for percussion/FX), and **Reverse** (play the source backwards). Wave is the base
+tuning every soundsource has.
+
+r[signal.soundsource.module.analog]
+**Analog** models analog-oscillator character (drift/instability, waveform
+warmth). Named here; parameters specced later.
+
+r[signal.soundsource.module.drift]
+**Drift** applies slow, per-voice random pitch/timbre movement for
+analog-style liveliness. Named here; parameters specced later.
+
+r[signal.soundsource.module.unison]
+**Unison** stacks detuned copies of the source for width/thickness: a voice
+**Amount** (count) with **Detune** spread, expressed as **Fine** and **Coarse**
+detune. Unison is per-note (each played note gets its own stack).
+
+r[signal.soundsource.module.harmony]
+**Harmony** adds pitched copies of the source at musical intervals (a built-in
+harmonizer): a set of interval voices with per-voice level/pan, optionally
+scale-aware. Distinct from Unison (musical intervals, not detune).
+
+r[signal.soundsource.module.fm]
+**FM** frequency-modulates the source by a modulator (ratio + depth), for
+metallic/bell/aggressive timbres.
+
+r[signal.soundsource.module.ring]
+**Ring Modulator** multiplies the source by a carrier (ratio + mix) for
+inharmonic/metallic tones.
+
+r[signal.soundsource.module.waveshaper]
+**Waveshaper** applies a nonlinear transfer curve (drive + curve selection) for
+harmonic saturation/distortion of the source.
+
+r[signal.soundsource.module.granular]
+**Granular** resynthesizes the source as a cloud of grains: grain size, density,
+position (with spray), pitch, and window — for time-stretch, textures, and clouds.
+It is a first-class source module, not an FX.
 
 ## Physical Modeling
 
