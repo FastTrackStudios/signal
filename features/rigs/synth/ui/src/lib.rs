@@ -10,10 +10,11 @@
 use dioxus::prelude::*;
 use midicore_proto::MidiEvent;
 use midicore_ui::MidiMonitorPanel;
+use signal_proto::tagging::{StructuredTag, TagCategory, TagSet};
 use signal_synth_proto::synth::{SynthEvent, SynthRigClient, SynthRigStreamClient};
 use signal_synth_proto::{
-    SynthEnvelope, SynthFilter, SynthGlobals, SynthLayer, SynthMapping, SynthNode, SynthPreset,
-    SynthStatus, SynthZone,
+    BrowseItem, SynthEnvelope, SynthFilter, SynthGlobals, SynthLayer, SynthMapping, SynthNode,
+    SynthPreset, SynthStatus, SynthZone,
 };
 use signal_ui::components::Piano;
 
@@ -27,6 +28,9 @@ enum Mode {
     /// The **Edit** page — the Vital-style single-layer editor (A/B/C/D:
     /// source, filter, envelopes, LFOs, modulation).
     Edit,
+    /// The **Browse** page — a faceted, tag-driven browser over the library's
+    /// soundsource packs (search + facet chips + list + detail).
+    Browse,
     // (A top-down **Control** view over the whole rig comes later.)
 }
 
@@ -156,6 +160,11 @@ pub fn SynthRigRemote() -> Element {
                         onclick: move |_| mode.set(Mode::Edit),
                         "EDIT"
                     }
+                    button {
+                        style: mode_btn(mode() == Mode::Browse),
+                        onclick: move |_| mode.set(Mode::Browse),
+                        "BROWSE"
+                    }
                 }
                 div { style: "flex:1;" }
                 // volume slider
@@ -185,6 +194,8 @@ pub fn SynthRigRemote() -> Element {
                 MappingView {}
             } else if mode() == Mode::Edit {
                 LayerEditView {}
+            } else if mode() == Mode::Browse {
+                BrowserView {}
             } else {
             div { style: "display:flex; gap:12px; flex:1; min-height:0;",
                 // ── preset browser (left) ──
@@ -1833,4 +1844,321 @@ fn sidebar_btn(active: bool) -> String {
 fn src_tab(active: bool) -> String {
     let (bg, br, fg) = if active { ("#0c2733", "#0ea5e9", "#e4e4e7") } else { ("#111113", "#27272a", "#a1a1aa") };
     format!("padding:4px 10px; border-radius:5px; background:{bg}; color:{fg}; border:1px solid {br}; font-size:11px; font-weight:600; cursor:pointer;")
+}
+
+// ── Browse (faceted soundsource-pack browser) ─────────────────────────────────
+//
+// A tag-driven browse over the library's soundsource packs, fetched once via
+// `SynthRigClient::browse` (all items, metadata only) and filtered CLIENT-SIDE.
+// Filtering reuses the shared tagging engine: each item's encoded `"cat:value"`
+// tag keys are re-parsed into a `signal_proto::tagging::TagSet` and matched with
+// `contains_key`, exactly like `collection_browser::detail_panel::filter_and_sort`.
+// Inline styles only (Blitz-safe); no fts-ui/Tailwind widgets.
+
+/// The facet categories surfaced as filter-chip groups, in display order —
+/// mirrors `signal_browser::types::FILTER_CATEGORIES` (Instrument first, since
+/// that's the pack library's primary axis).
+const BROWSE_FACET_ORDER: &[TagCategory] = &[
+    TagCategory::Instrument,
+    TagCategory::Character,
+    TagCategory::Tone,
+    TagCategory::Genre,
+    TagCategory::Context,
+    TagCategory::Vendor,
+    TagCategory::Plugin,
+    TagCategory::Module,
+    TagCategory::Block,
+    TagCategory::Workflow,
+    TagCategory::Custom,
+];
+
+/// Re-parse an item's encoded tag keys into a `TagSet` — the same structured
+/// vocabulary the browser engine uses, so `contains_key` matches faceted filters.
+fn item_tagset(item: &BrowseItem) -> TagSet {
+    let mut ts = TagSet::new();
+    for t in &item.tags {
+        ts.insert(StructuredTag::parse(t));
+    }
+    ts
+}
+
+/// Human label for a tag category (Browse facet headers + detail chips).
+fn browse_cat_label(cat: TagCategory) -> &'static str {
+    match cat {
+        TagCategory::Instrument => "Instrument",
+        TagCategory::Tone => "Tone",
+        TagCategory::Character => "Character",
+        TagCategory::Genre => "Genre",
+        TagCategory::Context => "Context",
+        TagCategory::Vendor => "Vendor",
+        TagCategory::Plugin => "Plugin",
+        TagCategory::Module => "Module",
+        TagCategory::Block => "Block",
+        TagCategory::Workflow => "Workflow",
+        TagCategory::RigType => "Rig Type",
+        TagCategory::EngineType => "Engine Type",
+        TagCategory::DomainLevel => "Level",
+        TagCategory::Custom => "Custom",
+    }
+}
+
+/// Value portion of a `"category:value"` tag key (for chip labels).
+fn browse_tag_value(key: &str) -> &str {
+    key.split_once(':').map_or(key, |(_, v)| v)
+}
+
+/// Collect every distinct tag key across the items, grouped by category, in
+/// `BROWSE_FACET_ORDER` (any category outside the order list is appended). Each
+/// group's keys are unique + sorted.
+fn browse_facets(items: &[BrowseItem]) -> Vec<(TagCategory, Vec<String>)> {
+    use std::collections::{BTreeMap, BTreeSet};
+    let mut by_cat: BTreeMap<TagCategory, BTreeSet<String>> = BTreeMap::new();
+    for item in items {
+        for t in &item.tags {
+            let st = StructuredTag::parse(t);
+            by_cat.entry(st.category).or_default().insert(st.key());
+        }
+    }
+    let mut out: Vec<(TagCategory, Vec<String>)> = Vec::new();
+    for cat in BROWSE_FACET_ORDER {
+        if let Some(keys) = by_cat.remove(cat) {
+            out.push((*cat, keys.into_iter().collect()));
+        }
+    }
+    // Append any leftover categories (RigType/EngineType/… if a pack carries them).
+    for (cat, keys) in by_cat {
+        out.push((cat, keys.into_iter().collect()));
+    }
+    out
+}
+
+/// Chip style — a facet tag toggle (active = selected/AND-filtered).
+fn browse_chip(active: bool) -> String {
+    let (bg, br, fg) = if active {
+        ("#0c2733", "#0ea5e9", "#e4e4e7")
+    } else {
+        ("#111113", "#27272a", "#a1a1aa")
+    };
+    format!("padding:2px 8px; border-radius:10px; background:{bg}; color:{fg}; border:1px solid {br}; font-size:10px; cursor:pointer; white-space:nowrap;")
+}
+
+/// Small metadata badge (instrument / category / vendor) on a list row.
+fn browse_badge(color: &str) -> String {
+    format!("font-size:9px; color:{color}; border:1px solid {color}44; border-radius:3px; padding:0 4px; white-space:nowrap;")
+}
+
+/// The **Browse** page — search + facet sidebar + scrollable pack list + detail.
+#[component]
+fn BrowserView() -> Element {
+    let rig = use_hook(try_consume_context::<SynthRigClient>);
+
+    // Fetch every pack once (metadata only; the payload is small).
+    let items_res = {
+        let rig = rig.clone();
+        use_resource(move || {
+            let rig = rig.clone();
+            async move {
+                match rig {
+                    Some(r) => r.browse().await.unwrap_or_default(),
+                    None => Vec::new(),
+                }
+            }
+        })
+    };
+
+    let mut search = use_signal(String::new);
+    // Selected facet tag keys — an item must carry ALL of them ("AND" filter).
+    let mut facets = use_signal(Vec::<String>::new);
+    let mut selected = use_signal(|| Option::<String>::None);
+
+    let loading = items_res.read().is_none();
+    let items: Vec<BrowseItem> = items_res.read().clone().unwrap_or_default();
+    let total = items.len();
+
+    // Available facet chips (grouped by category) over the full item set.
+    let facet_groups = browse_facets(&items);
+    let active_facets = facets();
+
+    // Client-side filter: text on name/instrument/category/vendor + must-have-ALL
+    // selected facet keys (parsed into a TagSet, matched with contains_key).
+    let needle = search().trim().to_ascii_lowercase();
+    let filtered: Vec<BrowseItem> = items
+        .iter()
+        .filter(|item| {
+            if !needle.is_empty() {
+                let hit = item.name.to_ascii_lowercase().contains(&needle)
+                    || item.instrument.to_ascii_lowercase().contains(&needle)
+                    || item.category.to_ascii_lowercase().contains(&needle)
+                    || item.vendor.to_ascii_lowercase().contains(&needle);
+                if !hit {
+                    return false;
+                }
+            }
+            if !active_facets.is_empty() {
+                let ts = item_tagset(item);
+                for key in &active_facets {
+                    if !ts.contains_key(key) {
+                        return false;
+                    }
+                }
+            }
+            true
+        })
+        .cloned()
+        .collect();
+
+    // The detail subject (by id — survives filtering).
+    let sel_id = selected();
+    let detail: Option<BrowseItem> =
+        sel_id.as_ref().and_then(|id| items.iter().find(|i| &i.id == id).cloned());
+
+    rsx! {
+        div { style: "display:flex; gap:0; flex:1; min-height:0;",
+
+            // ── facet sidebar ──
+            div { style: "display:flex; flex-direction:column; gap:10px; width:220px; min-width:220px; overflow:auto; border-right:1px solid #1c1c1f; padding:10px;",
+                div { style: "display:flex; align-items:baseline; gap:6px;",
+                    span { style: "font-size:11px; color:#71717a; text-transform:uppercase; letter-spacing:0.05em;", "Facets" }
+                    div { style: "flex:1;" }
+                    if !active_facets.is_empty() {
+                        button {
+                            style: "padding:1px 6px; border:1px solid #27272a; border-radius:4px; background:#111113; color:#a1a1aa; font-size:9px; cursor:pointer;",
+                            onclick: move |_| facets.set(Vec::new()),
+                            "clear"
+                        }
+                    }
+                }
+                if facet_groups.is_empty() && !loading {
+                    span { style: "font-size:11px; color:#52525b;", "No tags in the library." }
+                }
+                for (cat, keys) in facet_groups.iter() {
+                    div { key: "{browse_cat_label(*cat)}", style: "display:flex; flex-direction:column; gap:4px;",
+                        span { style: "font-size:10px; color:#71717a; text-transform:uppercase; letter-spacing:0.04em;", "{browse_cat_label(*cat)}" }
+                        div { style: "display:flex; flex-wrap:wrap; gap:4px;",
+                            for key in keys.iter() {
+                                {
+                                    let k = key.clone();
+                                    let is_on = active_facets.contains(key);
+                                    rsx!{ button {
+                                        key: "{key}",
+                                        style: browse_chip(is_on),
+                                        onclick: move |_| {
+                                            let k = k.clone();
+                                            facets.with_mut(|f| {
+                                                if let Some(pos) = f.iter().position(|x| x == &k) {
+                                                    f.remove(pos);
+                                                } else {
+                                                    f.push(k);
+                                                }
+                                            });
+                                        },
+                                        "{browse_tag_value(key)}"
+                                    } }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // ── center: search + list ──
+            div { style: "display:flex; flex-direction:column; gap:8px; flex:1; min-width:0; padding:10px; overflow:hidden;",
+                div { style: "display:flex; align-items:center; gap:8px;",
+                    input {
+                        r#type: "text",
+                        value: "{search}",
+                        placeholder: "Search packs…",
+                        style: "flex:1; padding:6px 10px; background:#09090b; border:1px solid #27272a; border-radius:6px; color:#e4e4e7; font-size:12px;",
+                        oninput: move |e| search.set(e.value()),
+                    }
+                    span { style: "font-size:10px; color:#71717a;",
+                        if loading { "scanning…" } else { "{filtered.len()} / {total}" }
+                    }
+                }
+                div { style: "display:flex; flex-direction:column; gap:3px; flex:1; min-height:0; overflow:auto;",
+                    if !loading && filtered.is_empty() {
+                        span { style: "font-size:11px; color:#52525b; padding:8px;", "No packs match." }
+                    }
+                    for item in filtered.iter() {
+                        {
+                            let id = item.id.clone();
+                            let is_sel = sel_id.as_deref() == Some(item.id.as_str());
+                            let (bg, br) = if is_sel { ("#0c2733", "#0ea5e9") } else { ("#111113", "#1c1c1f") };
+                            rsx!{ button {
+                                key: "{item.id}",
+                                style: format!("display:flex; align-items:center; gap:8px; text-align:left; padding:6px 8px; border-radius:5px; background:{bg}; color:#e4e4e7; border:1px solid {br}; cursor:pointer;"),
+                                onclick: move |_| selected.set(Some(id.clone())),
+                                span { style: "font-size:12px; font-weight:600; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;", "{item.name}" }
+                                if !item.instrument.is_empty() {
+                                    span { style: browse_badge("#38bdf8"), "{item.instrument}" }
+                                }
+                                if !item.category.is_empty() {
+                                    span { style: browse_badge("#a78bfa"), "{item.category}" }
+                                }
+                                if item.sample_count > 0 {
+                                    span { style: "font-size:9px; color:#52525b; white-space:nowrap;", "{item.sample_count} smp" }
+                                }
+                            } }
+                        }
+                    }
+                }
+            }
+
+            // ── right: detail ──
+            div { style: "display:flex; flex-direction:column; gap:8px; width:280px; min-width:280px; overflow:auto; border-left:1px solid #1c1c1f; padding:12px;",
+                span { style: "font-size:11px; color:#71717a; text-transform:uppercase; letter-spacing:0.05em;", "Detail" }
+                match detail {
+                    None => rsx!{ span { style: "font-size:11px; color:#52525b; margin-top:6px;", "Select a pack to inspect it." } },
+                    Some(d) => {
+                        let tags = item_tagset(&d);
+                        rsx!{
+                            span { style: "font-size:14px; font-weight:700; color:#e4e4e7; word-break:break-word;", "{d.name}" }
+                            div { style: "display:flex; flex-wrap:wrap; gap:4px;",
+                                span { style: browse_badge("#71717a"), "{d.kind}" }
+                                if !d.instrument.is_empty() { span { style: browse_badge("#38bdf8"), "{d.instrument}" } }
+                                if !d.category.is_empty() { span { style: browse_badge("#a78bfa"), "{d.category}" } }
+                                if !d.vendor.is_empty() { span { style: browse_badge("#f59e0b"), "{d.vendor}" } }
+                            }
+                            if d.sample_count > 0 {
+                                span { style: "font-size:11px; color:#a1a1aa;", "{d.sample_count} samples" }
+                            }
+                            if !d.folder.is_empty() {
+                                div { style: "display:flex; flex-direction:column; gap:2px;",
+                                    span { style: "font-size:10px; color:#71717a; text-transform:uppercase; letter-spacing:0.04em;", "Folder" }
+                                    span { style: "font-size:11px; color:#a1a1aa; word-break:break-word;", "{d.folder.join(\" / \")}" }
+                                }
+                            }
+                            if !d.style.is_empty() {
+                                div { style: "display:flex; flex-direction:column; gap:2px;",
+                                    span { style: "font-size:10px; color:#71717a; text-transform:uppercase; letter-spacing:0.04em;", "Style" }
+                                    span { style: "font-size:11px; color:#a1a1aa;", "{d.style.join(\", \")}" }
+                                }
+                            }
+                            if tags.values().next().is_some() {
+                                div { style: "display:flex; flex-direction:column; gap:4px;",
+                                    span { style: "font-size:10px; color:#71717a; text-transform:uppercase; letter-spacing:0.04em;", "Tags" }
+                                    div { style: "display:flex; flex-wrap:wrap; gap:4px;",
+                                        for tag in tags.values() {
+                                            {
+                                                let key = tag.key();
+                                                rsx!{ span { key: "{key}", style: browse_chip(false),
+                                                    "{browse_cat_label(tag.category)}: {browse_tag_value(&key)}" } }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            // v1: browse + inspect only — a stub load (layer
+                            // assignment comes later).
+                            button {
+                                style: "margin-top:6px; padding:6px 10px; border:1px solid #27272a; border-radius:6px; background:#111113; color:#52525b; font-size:11px; cursor:not-allowed;",
+                                disabled: true,
+                                "Load into layer (soon)"
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 }

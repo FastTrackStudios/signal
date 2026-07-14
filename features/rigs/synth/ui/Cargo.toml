@@ -8,6 +8,9 @@ authors.workspace = true
 [dependencies]
 dioxus.workspace = true
 signal-synth-proto.workspace = true
+# The wasm-clean tagging engine (StructuredTag / TagSet / TagCategory) — the
+# BROWSE view re-parses each item's tags to filter faceted, client-side.
+signal-proto.workspace = true
 midicore-ui.workspace = true
 midicore-proto.workspace = true
 signal-ui = { workspace = true, features = ["web"] }

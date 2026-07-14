@@ -8,9 +8,9 @@
 //! `#[subscribe]` stream; mount [`router`](SynthRigBackend::router) on a vox
 //! transport.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 
 use architect::dispatch::CurrentThreadDispatcher;
 use architect::{HasDispatcher, Layer, LayerRouter, PubSub, Services, layers};
@@ -25,8 +25,8 @@ use signal_synth_proto::synth::{
     SynthEvent, SynthRig as SynthRigSvc, SynthRigStreamSource,
 };
 use signal_synth_proto::{
-    SynthArticulation, SynthEnvelope, SynthFilter, SynthGlobals, SynthLayer, SynthMapping, SynthMic,
-    SynthModRoute, SynthNode, SynthPreset, SynthStatus, SynthZone,
+    BrowseItem, SynthArticulation, SynthEnvelope, SynthFilter, SynthGlobals, SynthLayer,
+    SynthMapping, SynthMic, SynthModRoute, SynthNode, SynthPreset, SynthStatus, SynthZone,
 };
 
 /// Root of the Omnisphere patch library to browse. Defaults to the factory
@@ -34,6 +34,12 @@ use signal_synth_proto::{
 /// `FTS_OMNISPHERE_PATCHES`.
 const PATCHES_ROOT: &str =
     "/run/media/AudioHaven/Sampled/Synth/Spectrasonics-Patches/Omnisphere/Settings Library/Patches/Factory/Live Keyboardist";
+
+/// Root of the built `.signalpack` soundsource library the BROWSE view scans —
+/// the same root [`SoundsourceIndex::scan_default`] overlays. Override with
+/// `FTS_OMNISPHERE_PACKS`.
+const OMNISPHERE_PACKS_ROOT: &str =
+    "/run/media/AudioHaven/Signal/Libraries/Keys/Omnisphere/Packs";
 
 /// Substring of the preset selected on first open — "American Obesity" (a
 /// Live Keyboardist pad built on the OB-8 PWM Big Strings + Prophet 5 Classic
@@ -70,6 +76,9 @@ struct Inner {
     index: SoundsourceIndex,
     events: PubSub<SynthEvent>,
     pump_started: AtomicBool,
+    /// Lazily-scanned soundsource-pack browse index (1400+ packs). Scanned once
+    /// on the first `browse()` call, then served from cache.
+    browse_cache: OnceLock<Vec<BrowseItem>>,
 }
 
 /// The synth-rig backend handle. Cheap to clone (all state shared).
@@ -115,6 +124,7 @@ impl SynthRigBackend {
                 index,
                 events: PubSub::sliding(64),
                 pump_started: AtomicBool::new(false),
+                browse_cache: OnceLock::new(),
             }),
         };
         backend.spawn_meter_pump();
@@ -321,6 +331,10 @@ impl SynthRigSvc for SynthRigBackend {
 
     fn presets(&self) -> Vec<SynthPreset> {
         self.inner.state.lock().map(|s| s.presets.clone()).unwrap_or_default()
+    }
+
+    fn browse(&self) -> Vec<BrowseItem> {
+        self.inner.browse_cache.get_or_init(scan_browse).clone()
     }
 
     fn load_preset(&self, index: u32) {
@@ -589,6 +603,35 @@ fn scan_patches() -> (Vec<SynthPreset>, Vec<PathBuf>) {
         paths.push(path);
     }
     (presets, paths)
+}
+
+/// Scan the built `.signalpack` soundsource library (`FTS_OMNISPHERE_PACKS`
+/// override) into faceted [`BrowseItem`]s. Reuses `signal_browser`'s
+/// rayon-parallel header scan + tag materialisation — no audio decode. Runs
+/// once (cached by the caller); ~1400 packs scan in well under a second.
+fn scan_browse() -> Vec<BrowseItem> {
+    let root =
+        std::env::var("FTS_OMNISPHERE_PACKS").unwrap_or_else(|_| OMNISPHERE_PACKS_ROOT.into());
+    let entries = signal_browser::pack_registry::scan_packs(Path::new(&root));
+    tracing::info!(packs = entries.len(), root = %root, "synth rig: scanned browse library");
+    entries.iter().map(project_browse_item).collect()
+}
+
+/// Project a scanned `PackEntry` into the wire [`BrowseItem`]. Tags are encoded
+/// `"category:value"` keys so the UI can re-parse them into a `TagSet`.
+fn project_browse_item(e: &signal_browser::pack_registry::PackEntry) -> BrowseItem {
+    BrowseItem {
+        id: e.path.to_string_lossy().into_owned(),
+        name: e.name.clone(),
+        kind: e.kind.label().to_string(),
+        instrument: e.instrument.clone(),
+        category: e.category.clone(),
+        vendor: e.vendor.clone(),
+        tags: e.tags.values().map(|t| t.encode()).collect(),
+        style: e.style.clone(),
+        folder: e.folder.clone(),
+        sample_count: e.sample_count as u32,
+    }
 }
 
 fn slug(s: &str) -> String {

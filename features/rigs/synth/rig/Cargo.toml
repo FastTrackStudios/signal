@@ -19,6 +19,8 @@ signal-synth.workspace = true
 # the preset source + wire service differ.
 signal-keys.workspace = true
 signal-sampler.workspace = true
+# Filesystem-direct pack discovery + tagging for the BROWSE view (scan_packs).
+signal-browser.workspace = true
 daw-audio-io = { workspace = true, features = ["monitor"] }
 midicore = { workspace = true, features = ["vox", "midir"] }
 # The wire contract this crate's headless backend implements (SynthRig service)

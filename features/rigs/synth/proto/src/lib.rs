@@ -23,6 +23,36 @@ pub struct SynthPreset {
     pub loaded: bool,
 }
 
+/// One browsable soundsource pack in the library — a faceted, tag-driven
+/// projection of `signal_browser::pack_registry::PackEntry` for the BROWSE view.
+/// Metadata only (no audio): the UI fetches every item once and filters
+/// client-side. `tags` are encoded `"category:value"` keys
+/// ([`signal_proto::tagging::StructuredTag::encode`]); re-parse them with
+/// `StructuredTag::parse` into a `TagSet` to reuse the faceted-filter engine.
+#[derive(Clone, PartialEq, Debug, Default, Facet)]
+pub struct BrowseItem {
+    /// Absolute path to the loadable file — the stable item id.
+    pub id: String,
+    /// Display name (`LibrarySpec.name`, falling back to the file stem).
+    pub name: String,
+    /// Loadable kind label ("pack" | "engine" | "preset" | "module" | "block").
+    pub kind: String,
+    /// `LibrarySpec.instrument` (empty when unclassified).
+    pub instrument: String,
+    /// `LibrarySpec.category` (empty when unclassified).
+    pub category: String,
+    /// `LibrarySpec.vendor`.
+    pub vendor: String,
+    /// Structured tags as encoded `"category:value"` keys.
+    pub tags: Vec<String>,
+    /// `LibrarySpec.style`.
+    pub style: Vec<String>,
+    /// Path-component groups for tree-style display / grouping.
+    pub folder: Vec<String>,
+    /// Total samples in the pack body.
+    pub sample_count: u32,
+}
+
 /// A node in the loaded composition tree (Quadzone → layers → blocks) — the
 /// structure the control view renders as selectable boxes.
 #[derive(Clone, PartialEq, Debug, Default, Facet)]
@@ -260,7 +290,9 @@ pub mod synth {
 
     use facet::Facet;
 
-    use super::{SynthGlobals, SynthLayer, SynthMapping, SynthNode, SynthPreset, SynthStatus};
+    use super::{
+        BrowseItem, SynthGlobals, SynthLayer, SynthMapping, SynthNode, SynthPreset, SynthStatus,
+    };
 
     /// One live rig change. Every variant carries full state (idempotent
     /// re-application) so a reconnecting subscriber is correct after the next
@@ -289,6 +321,10 @@ pub mod synth {
         fn status(&self) -> SynthStatus;
         /// Every preset in the library (the browser).
         fn presets(&self) -> Vec<SynthPreset>;
+        /// Every browsable soundsource pack in the library — the faceted BROWSE
+        /// view's data. All items (metadata only); the UI filters client-side.
+        /// Scanned once and cached on the backend.
+        fn browse(&self) -> Vec<BrowseItem>;
         /// Load preset `index` from [`presets`](Self::presets).
         fn load_preset(&self, index: u32);
         /// The loaded composition tree (layers → blocks).
