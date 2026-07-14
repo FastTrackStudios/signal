@@ -18,3 +18,7 @@ signal-proto.workspace = true
 signal-plugin-host.workspace = true
 # `daw::service::MidiMessage` in those same render tests + the omni_state example.
 daw.workspace = true
+# build_omni_pack serializes the loop/tag-enriched LibrarySpec back to styx.
+facet-styx.workspace = true
+# pack_hold_rms surfaces the sampler's tracing (preload / cache-miss) logs.
+tracing-subscriber.workspace = true

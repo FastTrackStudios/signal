@@ -3,10 +3,17 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
+/// Root of the built `.signalpack` soundsource library (loops baked in, disk
+/// streaming, tags). Mirrors the Keyscape packs root; preferred over the raw
+/// extraction. Override with `FTS_OMNISPHERE_PACKS`.
+pub(crate) const OMNISPHERE_PACKS_ROOT: &str =
+    "/run/media/AudioHaven/Signal/Libraries/Keys/Omnisphere/Packs";
+
 // ── Soundsource index ────────────────────────────────────────────────────────
 
-/// Name → spec-path index over the local soundsource extraction. Multisample
-/// sources are `<Name>/library.styx` dirs; one-shots are flat `<Name>.styx`.
+/// Name → spec-path index over the local soundsource extraction. A built
+/// `<Name>.signalpack` (preferred) wins over a multisample `<Name>/library.styx`
+/// dir or a flat one-shot `<Name>.styx`.
 #[derive(Debug, Default)]
 pub struct SoundsourceIndex {
     by_name: HashMap<String, PathBuf>,
@@ -21,11 +28,18 @@ impl SoundsourceIndex {
         idx
     }
 
-    /// Scan the default extraction root (`FTS_OMNISPHERE_ROOT` override).
+    /// Scan the default extraction root (`FTS_OMNISPHERE_ROOT` override), then
+    /// overlay the built `.signalpack` library (`FTS_OMNISPHERE_PACKS`) so a
+    /// pack always wins over the raw styx for the same name.
     pub fn scan_default() -> Self {
         let root = std::env::var("FTS_OMNISPHERE_ROOT")
             .unwrap_or_else(|_| crate::omni::OMNISPHERE_ROOT.into());
-        Self::scan(Path::new(&root))
+        let mut idx = Self::default();
+        idx.scan_dir(Path::new(&root), 0);
+        let packs = std::env::var("FTS_OMNISPHERE_PACKS")
+            .unwrap_or_else(|_| OMNISPHERE_PACKS_ROOT.into());
+        idx.scan_dir(Path::new(&packs), 0); // packs overwrite raw entries
+        idx
     }
 
     fn scan_dir(&mut self, dir: &Path, depth: usize) {
@@ -46,6 +60,11 @@ impl SoundsourceIndex {
                     }
                 } else {
                     self.scan_dir(&path, depth + 1);
+                }
+            } else if path.extension().is_some_and(|e| e.eq_ignore_ascii_case("signalpack")) {
+                // A built pack (preferred): <Name>.signalpack.
+                if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
+                    self.by_name.insert(stem.to_lowercase(), path.clone());
                 }
             } else if path.extension().is_some_and(|e| e == "styx")
                 && path.file_name().is_some_and(|f| f != "library.styx")

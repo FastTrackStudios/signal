@@ -292,10 +292,13 @@ fn classify_filter_inner(name: &str) -> (&'static str, u32) {
 }
 
 /// Normalized envelope time → seconds. CALIBRATE: the exact Omnisphere
-/// mapping is unverified; a cubic curve into a 10 s range is perceptually
-/// plausible (0.5 → 1.25 s) until the A/B harness measures it.
+/// mapping calibrated against the real UI: the A/D/R time knobs share one
+/// curve spanning **0–20 s**, logarithmic-ish — half travel (0.5) ≈ 2 s. A
+/// power fit through those points gives `t = 20 · v^3.32` (exponent
+/// `ln(0.1)/ln(0.5)`), i.e. 0→0 s, 0.5→2 s, 1.0→20 s. Sustain is a level, not
+/// a time, so it never passes through here.
 pub(crate) fn env_seconds(v: f32) -> f32 {
-    v.clamp(0.0, 1.0).powi(3) * 10.0
+    20.0 * v.clamp(0.0, 1.0).powf(3.321928)
 }
 
 /// Parse an `AENVPARAMS`/`FENVPARAMS` element into `(a, d, s, r)`.
