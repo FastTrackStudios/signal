@@ -12,8 +12,8 @@ use midicore_proto::MidiEvent;
 use midicore_ui::MidiMonitorPanel;
 use signal_synth_proto::synth::{SynthEvent, SynthRigClient, SynthRigStreamClient};
 use signal_synth_proto::{
-    SynthEnvelope, SynthFilter, SynthLayer, SynthMapping, SynthNode, SynthPreset, SynthStatus,
-    SynthZone,
+    SynthEnvelope, SynthFilter, SynthGlobals, SynthLayer, SynthMapping, SynthNode, SynthPreset,
+    SynthStatus, SynthZone,
 };
 use signal_ui::components::Piano;
 
@@ -215,6 +215,8 @@ pub fn SynthRigRemote() -> Element {
                     div { style: "flex:1; min-height:120px;",
                         MidiMonitorPanel { events: midi, count: midi_count, title: "MIDI monitor".to_string() }
                     }
+                    // Live global controls (Omnisphere-style performance macros)
+                    GlobalControlsPanel {}
                     // performance: piano
                     div {
                         span { style: "font-size:11px; color:#71717a; text-transform:uppercase; letter-spacing:0.05em;", "Keyboard" }
@@ -487,6 +489,250 @@ fn MiniKnob(value: f64, label: String, display: String, color: String, on_change
             }
             span { style: "font-size:10px; color:#e4e4e7; font-family:monospace;", "{display}" }
             span { style: "font-size:9px; color:#71717a; text-transform:uppercase; letter-spacing:0.04em;", "{label}" }
+        }
+    }
+}
+
+// ── Live global controls (Omnisphere-style performance macros) ─────────────────
+//
+// A compact strip of macro controls in the PLAY view, driving the loaded patch's
+// `SynthGlobals` (all fields 0..1 + `effects_on`). Each control mutates a single
+// shared `use_signal<SynthGlobals>` and pushes the whole struct to the engine via
+// `set_globals`.
+//
+// NOTE: `set_globals` currently **re-hosts the patch** (rebuilds the tree), so
+// dragging a control while holding notes may retrigger voices. We still send on
+// every `oninput` for now (no debounce) — a future live-param path will make this
+// glitch-free.
+
+/// Unipolar (0..1) control readout as a percentage.
+fn uni_pct(v: f32) -> String {
+    format!("{}%", (v.clamp(0.0, 1.0) * 100.0).round() as i32)
+}
+/// Bipolar (0..1, neutral 0.5) control readout as a signed offset (−100..+100).
+fn bip_disp(v: f32) -> String {
+    format!("{:+}", ((v.clamp(0.0, 1.0) - 0.5) * 200.0).round() as i32)
+}
+
+/// A small labelled range slider for a global control. `value` is the normalized
+/// 0..1 position; the input runs 0..1000 (the top-bar volume pattern) and
+/// `on_change` fires the new 0..1 value.
+#[component]
+fn GSlider(value: f64, label: String, display: String, on_change: Callback<f64>) -> Element {
+    let milli = (value.clamp(0.0, 1.0) * 1000.0).round() as u32;
+    rsx! {
+        div { style: "display:flex; flex-direction:column; gap:2px; width:90px;",
+            input {
+                r#type: "range",
+                min: "0",
+                max: "1000",
+                step: "5",
+                value: "{milli}",
+                style: "width:100%; accent-color:#38bdf8;",
+                oninput: move |e: FormEvent| {
+                    if let Ok(v) = e.value().parse::<u32>() {
+                        on_change.call((v as f64 / 1000.0).clamp(0.0, 1.0));
+                    }
+                },
+            }
+            div { style: "display:flex; align-items:baseline; justify-content:space-between; gap:4px;",
+                span { style: "font-size:9px; color:#71717a; text-transform:uppercase; letter-spacing:0.04em;", "{label}" }
+                span { style: "font-size:9px; color:#a1a1aa; font-family:monospace;", "{display}" }
+            }
+        }
+    }
+}
+
+/// Wrapper card for one control group: a header + a flex row of controls.
+fn group_card() -> &'static str {
+    "display:flex; flex-direction:column; gap:6px; background:#18181b; border:1px solid #27272a; border-radius:6px; padding:8px 10px;"
+}
+fn group_hdr() -> &'static str {
+    "font-size:10px; color:#71717a; text-transform:uppercase; letter-spacing:0.05em;"
+}
+
+/// The Omnisphere-style Live global-controls panel for the PLAY view. Consumes
+/// `SynthRigClient` from context (provided by the host, like the rest of the
+/// remote). One shared `SynthGlobals` signal is seeded once from `globals()` and
+/// pushed on every change via `set_globals`.
+#[component]
+fn GlobalControlsPanel() -> Element {
+    let rig = use_hook(try_consume_context::<SynthRigClient>);
+    let mut globals = use_signal(SynthGlobals::neutral);
+
+    // Seed once from the engine (fall back to neutral).
+    {
+        let rig = rig.clone();
+        use_future(move || {
+            let rig = rig.clone();
+            async move {
+                if let Some(r) = rig.as_ref() {
+                    if let Ok(g) = r.globals().await {
+                        globals.set(g);
+                    }
+                }
+            }
+        });
+    }
+
+    // Push the whole struct to the engine. Cloned client per call (like the
+    // volume slider), so this stays a plain `Callback<SynthGlobals>`.
+    let push = use_callback({
+        let rig = rig.clone();
+        move |g: SynthGlobals| {
+            let rig = rig.clone();
+            spawn(async move {
+                if let Some(r) = rig {
+                    let _ = r.set_globals(g).await;
+                }
+            });
+        }
+    });
+
+    // Set one field then push. `globals` (Signal) + `push` (Callback) are Copy, so
+    // each per-control closure captures its own copy.
+    macro_rules! set {
+        ($field:ident, $v:expr) => {{
+            let out = {
+                let mut g = globals.write();
+                g.$field = $v;
+                g.clone()
+            };
+            push.call(out);
+        }};
+    }
+
+    let g = globals();
+    let fx_on = g.effects_on; // Copy snapshot for the toggle (avoids read+write borrow clash)
+
+    rsx! {
+        div { style: "display:flex; flex-direction:column; gap:6px;",
+            div { style: "display:flex; align-items:baseline; gap:8px;",
+                span { style: "font-size:11px; color:#71717a; text-transform:uppercase; letter-spacing:0.05em;", "Live" }
+                span { style: "font-size:10px; color:#52525b;", "global performance macros" }
+                div { style: "flex:1;" }
+                button {
+                    style: "padding:3px 8px; border:1px solid #27272a; border-radius:4px; background:#111113; color:#a1a1aa; font-size:9px; text-transform:uppercase; letter-spacing:0.05em; cursor:pointer;",
+                    onclick: move |_| { let n = SynthGlobals::neutral(); globals.set(n.clone()); push.call(n); },
+                    "reset"
+                }
+            }
+            // wrapping row of small bordered cards
+            div { style: "display:flex; flex-wrap:wrap; gap:8px; align-items:flex-start;",
+
+                // ── Vibrato ──
+                div { style: group_card(),
+                    span { style: group_hdr(), "Vibrato" }
+                    div { style: "display:flex; gap:10px;",
+                        GSlider { value: g.vibrato_rate as f64, label: "Rate".to_string(), display: uni_pct(g.vibrato_rate),
+                            on_change: move |v: f64| set!(vibrato_rate, v as f32) }
+                        GSlider { value: g.vibrato_depth as f64, label: "Depth".to_string(), display: uni_pct(g.vibrato_depth),
+                            on_change: move |v: f64| set!(vibrato_depth, v as f32) }
+                    }
+                }
+
+                // ── Filter (knobs) ──
+                div { style: group_card(),
+                    span { style: group_hdr(), "Filter" }
+                    div { style: "display:flex; gap:6px;",
+                        MiniKnob { value: g.filter_cutoff as f64, label: "Cutoff".to_string(), display: bip_disp(g.filter_cutoff), color: "#38bdf8".to_string(),
+                            on_change: move |v: f64| set!(filter_cutoff, v as f32) }
+                        MiniKnob { value: g.filter_reso as f64, label: "Reso".to_string(), display: bip_disp(g.filter_reso), color: "#38bdf8".to_string(),
+                            on_change: move |v: f64| set!(filter_reso, v as f32) }
+                        MiniKnob { value: g.filter_env as f64, label: "Env".to_string(), display: bip_disp(g.filter_env), color: "#38bdf8".to_string(),
+                            on_change: move |v: f64| set!(filter_env, v as f32) }
+                    }
+                }
+
+                // ── Unison ──
+                div { style: group_card(),
+                    span { style: group_hdr(), "Unison" }
+                    div { style: "display:flex; gap:10px;",
+                        GSlider { value: g.unison_detune as f64, label: "Detune".to_string(), display: uni_pct(g.unison_detune),
+                            on_change: move |v: f64| set!(unison_detune, v as f32) }
+                        GSlider { value: g.unison_amount as f64, label: "Amount".to_string(), display: uni_pct(g.unison_amount),
+                            on_change: move |v: f64| set!(unison_amount, v as f32) }
+                    }
+                }
+
+                // ── Amp Env ──
+                div { style: group_card(),
+                    span { style: group_hdr(), "Amp Env" }
+                    div { style: "display:flex; gap:8px;",
+                        GSlider { value: g.amp_attack as f64, label: "Attack".to_string(), display: bip_disp(g.amp_attack),
+                            on_change: move |v: f64| set!(amp_attack, v as f32) }
+                        GSlider { value: g.amp_decay as f64, label: "Decay".to_string(), display: bip_disp(g.amp_decay),
+                            on_change: move |v: f64| set!(amp_decay, v as f32) }
+                        GSlider { value: g.amp_sustain as f64, label: "Sustain".to_string(), display: bip_disp(g.amp_sustain),
+                            on_change: move |v: f64| set!(amp_sustain, v as f32) }
+                        GSlider { value: g.amp_release as f64, label: "Release".to_string(), display: bip_disp(g.amp_release),
+                            on_change: move |v: f64| set!(amp_release, v as f32) }
+                        GSlider { value: g.amp_velocity as f64, label: "Velocity".to_string(), display: bip_disp(g.amp_velocity),
+                            on_change: move |v: f64| set!(amp_velocity, v as f32) }
+                    }
+                }
+
+                // ── Filter Env ──
+                div { style: group_card(),
+                    span { style: group_hdr(), "Filter Env" }
+                    div { style: "display:flex; gap:8px;",
+                        GSlider { value: g.filt_attack as f64, label: "Attack".to_string(), display: bip_disp(g.filt_attack),
+                            on_change: move |v: f64| set!(filt_attack, v as f32) }
+                        GSlider { value: g.filt_decay as f64, label: "Decay".to_string(), display: bip_disp(g.filt_decay),
+                            on_change: move |v: f64| set!(filt_decay, v as f32) }
+                        GSlider { value: g.filt_sustain as f64, label: "Sustain".to_string(), display: bip_disp(g.filt_sustain),
+                            on_change: move |v: f64| set!(filt_sustain, v as f32) }
+                        GSlider { value: g.filt_release as f64, label: "Release".to_string(), display: bip_disp(g.filt_release),
+                            on_change: move |v: f64| set!(filt_release, v as f32) }
+                        GSlider { value: g.filt_velocity as f64, label: "Velocity".to_string(), display: bip_disp(g.filt_velocity),
+                            on_change: move |v: f64| set!(filt_velocity, v as f32) }
+                    }
+                }
+
+                // ── Ambience ──
+                div { style: group_card(),
+                    span { style: group_hdr(), "Ambience" }
+                    div { style: "display:flex; gap:10px;",
+                        GSlider { value: g.ambience_amount as f64, label: "Amount".to_string(), display: uni_pct(g.ambience_amount),
+                            on_change: move |v: f64| set!(ambience_amount, v as f32) }
+                        GSlider { value: g.ambience_length as f64, label: "Length".to_string(), display: bip_disp(g.ambience_length),
+                            on_change: move |v: f64| set!(ambience_length, v as f32) }
+                    }
+                }
+
+                // ── Tone ──
+                div { style: group_card(),
+                    span { style: group_hdr(), "Tone" }
+                    div { style: "display:flex; gap:8px;",
+                        GSlider { value: g.tone_low as f64, label: "Low".to_string(), display: bip_disp(g.tone_low),
+                            on_change: move |v: f64| set!(tone_low, v as f32) }
+                        GSlider { value: g.tone_mid as f64, label: "Mid".to_string(), display: bip_disp(g.tone_mid),
+                            on_change: move |v: f64| set!(tone_mid, v as f32) }
+                        GSlider { value: g.tone_high as f64, label: "High".to_string(), display: bip_disp(g.tone_high),
+                            on_change: move |v: f64| set!(tone_high, v as f32) }
+                    }
+                }
+
+                // ── Effects ──
+                div { style: group_card(),
+                    span { style: group_hdr(), "Effects" }
+                    div { style: "display:flex; gap:10px; align-items:flex-start;",
+                        div { style: "display:flex; flex-direction:column; gap:2px; align-items:center; width:54px;",
+                            button {
+                                style: {
+                                    let (bg, br, fg) = if g.effects_on { ("#0c2733", "#0ea5e9", "#e4e4e7") } else { ("#111113", "#27272a", "#71717a") };
+                                    format!("width:44px; height:24px; border-radius:5px; background:{bg}; border:1px solid {br}; color:{fg}; font-size:10px; font-weight:700; cursor:pointer;")
+                                },
+                                onclick: move |_| set!(effects_on, !fx_on),
+                                {if g.effects_on { "ON" } else { "OFF" }}
+                            }
+                            span { style: "font-size:9px; color:#71717a; text-transform:uppercase; letter-spacing:0.04em;", "On/Off" }
+                        }
+                        GSlider { value: g.limiter as f64, label: "Limiter".to_string(), display: uni_pct(g.limiter),
+                            on_change: move |v: f64| set!(limiter, v as f32) }
+                    }
+                }
+            }
         }
     }
 }
