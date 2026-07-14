@@ -18,13 +18,32 @@ A `.signalpack` is one file per instrument:
   spec, a sample index, then one FLAC block per sample (source FLAC bytes
   embedded directly after metadata validation; non-FLAC decoded to PCM).
 
-Built with `signal-cli sampler pack --samples-root <dir> --output <pack>`.
+Build a pack from a raw extraction dir with the in-tree example (the historical
+`signal-cli sampler pack` wrapper is not in this checkout):
 
-> **Runtime note:** the keys rig currently loads the **raw extracted directory**
-> (`PlayerPatch::load` → `SampleMap::scan`), *not* the pack — confirmed by the
-> engine log (`keys rig: scanned library … preloaded N samples`). `SampleMap::scan`
-> **recurses into subdirectories**, so never leave a backup/`_old` folder inside a
-> patch dir — it re-pollutes the map with stale samples.
+```
+cargo run -p signal-sampler --release --example build_pack -- \
+    "<samples_root>" "<out.signalpack>"
+```
+
+It embeds `<samples_root>/library.styx` verbatim and FLAC-i24-encodes every audio
+file directly under the dir. Validate with `--example check_pack_resolve`.
+
+> **Runtime note:** the keys rig now loads the **`.signalpack`** library
+> (`PlayerPatch::from_pack`) from
+> `…/Signal/Libraries/Keys/Keyscape/Packs/<Instrument>.signalpack`, falling back
+> to the raw extraction (`PlayerPatch::load` → `SampleMap::scan`) when no pack is
+> present. The loader in `rig.rs` picks `from_pack` vs `load` by file extension;
+> discovery lives in `keys/backend.rs::scan_keyscape` (env `FTS_KEYSCAPE_PACKS` /
+> `FTS_KEYSCAPE_ROOT`) and `nord.rs::keyscape_spec`. A pack is self-contained
+> (embedded styx + samples), so it reconciles articulation dynamics/RR from its
+> own sample index at load. When editing raw dirs, `SampleMap::scan` **recurses
+> into subdirectories**, so never leave a backup/`_old` folder inside a patch dir.
+>
+> **After re-extracting a patch, rebuild its pack** — a stale pack silently
+> serves the old samples. (Rhodes LA Custom + Wing Tack were rebuilt when their
+> extraction changed; the old packs are archived under
+> `scratch-keyscape/stale-packs/`.)
 
 ## The layering problem
 

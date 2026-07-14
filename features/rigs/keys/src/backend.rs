@@ -22,8 +22,13 @@ use signal_sampler::{Container, MidiInputHandle};
 use crate::KeysRig;
 
 /// Root of the local Keyscape extraction (per-instrument dirs each holding a
-/// `library.styx`). Override with `FTS_KEYSCAPE_ROOT`.
+/// `library.styx`). Used as a fallback when no packs are present. Override with
+/// `FTS_KEYSCAPE_ROOT`.
 const KEYSCAPE_ROOT: &str = "/run/media/AudioHaven/Sampled/Keys/Keyscape";
+/// Root of the built `.signalpack` library (one self-contained pack per
+/// instrument). Preferred over the raw extraction. Override with
+/// `FTS_KEYSCAPE_PACKS`.
+const KEYSCAPE_PACKS_ROOT: &str = "/run/media/AudioHaven/Signal/Libraries/Keys/Keyscape/Packs";
 /// Meter-stream publish interval (~30 Hz).
 const PUMP_MS: u64 = 33;
 
@@ -347,8 +352,18 @@ fn keys_program(name: &str, spec: String) -> Container {
     )
 }
 
-/// Scan the Keyscape extraction root for instruments (dirs with `library.styx`).
+/// Discover Keyscape instruments to load. Prefers the `.signalpack` library
+/// (self-contained packs — faster load, the intended distribution format) and
+/// falls back to the raw `library.styx` extraction if no packs are found.
+/// The stored spec path (`.signalpack` or `library.styx`) is handed to the
+/// sample block; `rig.rs` picks the loader by extension.
 fn scan_keyscape() -> (Vec<KeysPreset>, Vec<PathBuf>) {
+    let packs_root =
+        std::env::var("FTS_KEYSCAPE_PACKS").unwrap_or_else(|_| KEYSCAPE_PACKS_ROOT.into());
+    let (packs, pack_specs) = scan_packs(&packs_root);
+    if !packs.is_empty() {
+        return (packs, pack_specs);
+    }
     let root = std::env::var("FTS_KEYSCAPE_ROOT").unwrap_or_else(|_| KEYSCAPE_ROOT.into());
     let mut presets = Vec::new();
     let mut specs = Vec::new();
@@ -365,6 +380,30 @@ fn scan_keyscape() -> (Vec<KeysPreset>, Vec<PathBuf>) {
                 presets.push(KeysPreset { kind: kind_of(&name), name, loaded: false });
                 specs.push(styx);
             }
+        }
+    }
+    (presets, specs)
+}
+
+/// Enumerate `*.signalpack` files in the packs root; the file stem is the
+/// instrument name.
+fn scan_packs(root: &str) -> (Vec<KeysPreset>, Vec<PathBuf>) {
+    let mut presets = Vec::new();
+    let mut specs = Vec::new();
+    if let Ok(entries) = std::fs::read_dir(root) {
+        let mut packs: Vec<_> = entries
+            .flatten()
+            .map(|e| e.path())
+            .filter(|p| p.extension().is_some_and(|e| e.eq_ignore_ascii_case("signalpack")))
+            .collect();
+        packs.sort();
+        for pack in packs {
+            let name = pack.file_stem().and_then(|s| s.to_str()).unwrap_or("").to_string();
+            if name.is_empty() {
+                continue;
+            }
+            presets.push(KeysPreset { kind: kind_of(&name), name, loaded: false });
+            specs.push(pack);
         }
     }
     (presets, specs)

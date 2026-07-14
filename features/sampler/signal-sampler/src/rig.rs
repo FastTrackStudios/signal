@@ -919,8 +919,13 @@ pub(crate) fn build_block(block: &RigBlock, sample_rate: u32) -> Result<BuiltBlo
         Ok(BuiltBlock::plain(plugin, format!("{dn} (plugin)")))
     } else if block.is_sample() {
         // Sample library → SampleEngine wrapped as an instrument, same as the
-        // sampler TUI's loading path (PlayerPatch::load + SampleEngine::new).
+        // sampler TUI's loading path (PlayerPatch::load/from_pack + SampleEngine::new).
         let spec_path = std::path::Path::new(&block.sample);
+        // A `.signalpack` is self-contained (embedded spec + samples); a bare
+        // `library.styx` needs its sample dir scanned alongside.
+        let is_pack = spec_path
+            .extension()
+            .is_some_and(|e| e.eq_ignore_ascii_case("signalpack"));
         let root = if block.samples_root.trim().is_empty() {
             spec_path
                 .parent()
@@ -929,8 +934,13 @@ pub(crate) fn build_block(block: &RigBlock, sample_rate: u32) -> Result<BuiltBlo
         } else {
             std::path::PathBuf::from(&block.samples_root)
         };
-        let patch = crate::PlayerPatch::load(spec_path, &root)
-            .map_err(|e| format!("load sample library {}: {e}", block.sample))?;
+        let patch = if is_pack {
+            crate::PlayerPatch::from_pack(spec_path)
+                .map_err(|e| format!("load sample pack {}: {e}", block.sample))?
+        } else {
+            crate::PlayerPatch::load(spec_path, &root)
+                .map_err(|e| format!("load sample library {}: {e}", block.sample))?
+        };
         let section = if block.sample_section.trim().is_empty() {
             patch
                 .spec

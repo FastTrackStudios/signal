@@ -127,11 +127,22 @@ fn keys_layer(name: &str, sample_spec: Option<String>) -> Container {
 // ── Sample-realized Keys (machine-local libraries) ───────────────────────────
 
 /// Root of the local Keyscape extraction — per-instrument dirs each holding a
-/// `library.styx` + FLAC samples. Override with `FTS_KEYSCAPE_ROOT`.
+/// `library.styx` + FLAC samples. Fallback when no packs are present. Override
+/// with `FTS_KEYSCAPE_ROOT`.
 const KEYSCAPE_ROOT: &str = "/run/media/AudioHaven/Sampled/Keys/Keyscape";
+/// Root of the built `.signalpack` library — one self-contained pack per
+/// instrument (preferred). Override with `FTS_KEYSCAPE_PACKS`.
+const KEYSCAPE_PACKS_ROOT: &str = "/run/media/AudioHaven/Signal/Libraries/Keys/Keyscape/Packs";
 
-/// Spec path for one Keyscape instrument, if the local extraction has it.
+/// Spec path for one Keyscape instrument. Prefers the `.signalpack` (loaded via
+/// `from_pack` by extension in `rig.rs`) and falls back to the raw
+/// `library.styx`. `None` if the instrument isn't present in either.
 fn keyscape_spec(instrument: &str) -> Option<String> {
+    let packs = std::env::var("FTS_KEYSCAPE_PACKS").unwrap_or_else(|_| KEYSCAPE_PACKS_ROOT.into());
+    let pack = std::path::Path::new(&packs).join(format!("{instrument}.signalpack"));
+    if pack.exists() {
+        return Some(pack.to_string_lossy().into_owned());
+    }
     let root = std::env::var("FTS_KEYSCAPE_ROOT").unwrap_or_else(|_| KEYSCAPE_ROOT.into());
     let p = std::path::Path::new(&root)
         .join(instrument)
