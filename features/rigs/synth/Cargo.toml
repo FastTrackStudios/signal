@@ -12,6 +12,8 @@ tracing.workspace = true
 signal-sampler.workspace = true
 # BlockType — the composition tree's block tagging schema.
 signal-proto.workspace = true
+# The pack builder serializes the loop/tag-enriched styx before packing.
+facet-styx.workspace = true
 
 [dev-dependencies]
 # The `#[ignore]`d machine-local render tests drive hosted-plugin note events.
