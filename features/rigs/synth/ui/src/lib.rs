@@ -352,54 +352,174 @@ fn filter_path(f: &SynthFilter) -> String {
     s
 }
 
-/// Derived DAHDSR geometry for one envelope, in the env viewBox.
+// Envelope time + curve mapping constants.
+const ENV_TMAX: f64 = 20.0; // seconds — full-scale envelope time
+const ENV_PMAX: f64 = 8.0; // ± curve "power" at the knob extremes
+
+/// Vital's `futils::powerScale` — the exponent that bends a 0..1 ramp. `power`
+/// 0 → linear; positive/negative bows the segment one way or the other. This is
+/// the single curve shape used both to *draw* each envelope segment and to
+/// *invert* a segment-drag back into a power value.
+fn power_scale(t: f64, power: f64) -> f64 {
+    if power.abs() < 0.01 {
+        return t;
+    }
+    ((power * t).exp() - 1.0) / (power.exp() - 1.0)
+}
+
+/// Invert `power_scale` at the segment midpoint (t = 0.5): given the fraction `f`
+/// of the segment (measured from its start) that the user dragged the mid-point
+/// to, return the `power` whose curve passes through it. Since
+/// `power_scale(0.5, p) = 1/(e^{0.5p}+1)`, solving gives `p = 2·ln((1−f)/f)`.
+fn power_from_fraction(f: f64) -> f64 {
+    let f = f.clamp(0.02, 0.98);
+    2.0 * ((1.0 - f) / f).ln()
+}
+
+// Log-ish (cube) time ↔ knob mapping: fine resolution at the short end, still
+// reaching ENV_TMAX at the top. Reversible so knob and node stay consistent.
+fn time_to_knob(t: f64) -> f64 {
+    (t / ENV_TMAX).clamp(0.0, 1.0).powf(1.0 / 3.0)
+}
+fn knob_to_time(v: f64) -> f64 {
+    v.clamp(0.0, 1.0).powi(3) * ENV_TMAX
+}
+fn power_to_knob(p: f64) -> f64 {
+    (p / (2.0 * ENV_PMAX) + 0.5).clamp(0.0, 1.0)
+}
+fn knob_to_power(v: f64) -> f64 {
+    (v.clamp(0.0, 1.0) - 0.5) * 2.0 * ENV_PMAX
+}
+fn fmt_secs(t: f64) -> String {
+    if t < 1.0 {
+        format!("{:.0}ms", t * 1000.0)
+    } else {
+        format!("{:.2}s", t)
+    }
+}
+fn fmt_power(p: f64) -> String {
+    if p.abs() < 0.05 {
+        "lin".to_string()
+    } else {
+        format!("{:+.1}", p)
+    }
+}
+
+/// Per-envelope UI-only state with **no proto field yet**: Vital's hold time and
+/// the three per-segment curve powers (attack / decay / release). Held locally
+/// alongside the `SynthEnvelope` A/D/S/R buffer; visual only, never persisted.
+#[derive(Clone, Copy, Default)]
+struct EnvExtra {
+    hold: f64,
+    attack_power: f64,
+    decay_power: f64,
+    release_power: f64,
+}
+
+/// The amp + filter extras for one layer, kept in lock-step with the `edit`
+/// layer buffer (reseeded on preset change).
+#[derive(Clone, Copy, Default)]
+struct LayerEnvExtra {
+    amp: EnvExtra,
+    filter: EnvExtra,
+}
+
+/// Derived DAHDSR geometry for one envelope, in the env viewBox. Marker order
+/// matches Vital: attack peak → hold (flat, at peak) → decay corner (sustain
+/// level) → release end. Each segment is *sampled* through `power_scale` so the
+/// drawn curve bends with its power; the three power grab-points sit at each
+/// segment's midpoint.
 struct EnvGeom {
     sec_per_x: f64,
-    xa: f64,
-    xc: f64,
-    xh: f64,
-    xr: f64,
+    xa: f64,  // attack peak x
+    xh: f64,  // hold-end x (start of decay), at peak
+    xc: f64,  // decay corner x (= sustain point)
+    xr: f64,  // release-end x
     ysus: f64,
     y0: f64,
     ytop: f64,
     stroke: String,
     fill: String,
+    pax: f64, // attack power grab-point
+    pay: f64,
+    pdx: f64, // decay power grab-point
+    pdy: f64,
+    prx: f64, // release power grab-point
+    pry: f64,
 }
 
-fn env_geom(e: &SynthEnvelope) -> EnvGeom {
+fn env_geom(e: &SynthEnvelope, x: &EnvExtra) -> EnvGeom {
     let a = (e.attack.max(0.0)) as f64;
+    let hold = x.hold.max(0.0);
     let d = (e.decay.max(0.0)) as f64;
     let r = (e.release.max(0.0)) as f64;
     let sus = (e.sustain.clamp(0.0, 1.0)) as f64;
-    // A visual sustain-hold segment so the S corner has room; scales with the
-    // envelope so short and long envelopes both read.
-    let hold = 0.25 * (a + d + r).max(0.08) + 0.05;
-    let total = (a + d + hold + r).max(0.1);
+    // Auto-fit the window to the total envelope time (Vital's window_time).
+    let total = (a + hold + d + r).max(0.1);
     let usable_w = ENV_W - ENV_LEFT - ENV_RIGHT;
     let sec_per_x = total / usable_w;
     let xa = ENV_LEFT + a / sec_per_x;
-    let xc = xa + d / sec_per_x;
-    let xh = xc + hold / sec_per_x;
-    let xr = xh + r / sec_per_x;
+    let xh = xa + hold / sec_per_x;
+    let xc = xh + d / sec_per_x;
+    let xr = xc + r / sec_per_x;
     let usable_h = ENV_H - ENV_TOP - ENV_BOT;
     let ytop = ENV_TOP;
     let ysus = ENV_TOP + (1.0 - sus) * usable_h;
     let y0 = ENV_TOP + usable_h;
-    let stroke = format!(
-        "M{ENV_LEFT:.1} {y0:.1} L{xa:.1} {ytop:.1} L{xc:.1} {ysus:.1} L{xh:.1} {ysus:.1} L{xr:.1} {y0:.1}"
-    );
-    let fill = format!("{stroke} L{ENV_LEFT:.1} {y0:.1} Z");
+
+    // Sample each segment through the curve so the stroke follows the power.
+    let n = 20usize;
+    let mut s = format!("M{ENV_LEFT:.1} {y0:.1}");
+    // attack: baseline → peak
+    for i in 1..=n {
+        let t = i as f64 / n as f64;
+        let xx = ENV_LEFT + (xa - ENV_LEFT) * t;
+        let yy = y0 + (ytop - y0) * power_scale(t, x.attack_power);
+        s.push_str(&format!(" L{xx:.1} {yy:.1}"));
+    }
+    // hold: flat at peak
+    s.push_str(&format!(" L{xh:.1} {ytop:.1}"));
+    // decay: peak → sustain
+    for i in 1..=n {
+        let t = i as f64 / n as f64;
+        let xx = xh + (xc - xh) * t;
+        let yy = ytop + (ysus - ytop) * power_scale(t, x.decay_power);
+        s.push_str(&format!(" L{xx:.1} {yy:.1}"));
+    }
+    // release: sustain → baseline
+    for i in 1..=n {
+        let t = i as f64 / n as f64;
+        let xx = xc + (xr - xc) * t;
+        let yy = ysus + (y0 - ysus) * power_scale(t, x.release_power);
+        s.push_str(&format!(" L{xx:.1} {yy:.1}"));
+    }
+    let fill = format!("{s} L{ENV_LEFT:.1} {y0:.1} Z");
+
+    // Power grab-points: each segment's midpoint value (t = 0.5).
+    let pax = (ENV_LEFT + xa) / 2.0;
+    let pay = y0 + (ytop - y0) * power_scale(0.5, x.attack_power);
+    let pdx = (xh + xc) / 2.0;
+    let pdy = ytop + (ysus - ytop) * power_scale(0.5, x.decay_power);
+    let prx = (xc + xr) / 2.0;
+    let pry = ysus + (y0 - ysus) * power_scale(0.5, x.release_power);
+
     EnvGeom {
         sec_per_x,
         xa,
-        xc,
         xh,
+        xc,
         xr,
         ysus,
         y0,
         ytop,
-        stroke,
+        stroke: s,
         fill,
+        pax,
+        pay,
+        pdx,
+        pdy,
+        prx,
+        pry,
     }
 }
 
@@ -408,14 +528,23 @@ fn env_geom(e: &SynthEnvelope) -> EnvGeom {
 enum Handle {
     /// Filter cutoff dot: X = cutoff (log freq), Y = resonance.
     Cutoff,
-    /// Amp/Filter envelope: attack peak (X = attack), corner (X = decay, Y =
-    /// sustain), release end (X = release).
+    /// Amp/Filter envelope: attack peak (X = attack), hold (X = hold), corner
+    /// (X = decay, Y = sustain), release end (X = release), plus the three
+    /// per-segment power grab-points (Y drag bends the segment's curve).
     AmpAttack,
+    AmpHold,
     AmpCorner,
     AmpRelease,
+    AmpAttackPow,
+    AmpDecayPow,
+    AmpReleasePow,
     FiltAttack,
+    FiltHold,
     FiltCorner,
     FiltRelease,
+    FiltAttackPow,
+    FiltDecayPow,
+    FiltReleasePow,
 }
 
 /// In-flight drag: the target handle + the cached client rect / viewBox dims of
@@ -764,6 +893,8 @@ fn LayerEditView() -> Element {
     // their identity changes (new preset) — never mid-drag, since the key only
     // shifts on a real reload.
     let mut edit = use_signal(Vec::<SynthLayer>::new);
+    // Hold + curve-power extras, one per layer, kept in lock-step with `edit`.
+    let mut extras = use_signal(Vec::<LayerEnvExtra>::new);
     let mut seeded = use_signal(String::new);
     let mut sel = use_signal(|| 0usize);
     let mut drag = use_signal(|| None::<Drag>);
@@ -784,6 +915,7 @@ fn LayerEditView() -> Element {
             // Default selection: first active layer.
             let first = fetched.iter().position(|l| l.active).unwrap_or(0);
             sel.set(first);
+            extras.set(vec![LayerEnvExtra::default(); fetched.len()]);
             edit.set(fetched);
         }
     });
@@ -818,7 +950,7 @@ fn LayerEditView() -> Element {
             }
         });
     });
-    use_context_provider(|| EnvHooks { amp_svg, fenv_svg, begin });
+    use_context_provider(|| EnvHooks { amp_svg, fenv_svg, begin, edit, extras, sel });
 
     let layers = edit.read().clone();
     if layers.is_empty() {
@@ -985,12 +1117,10 @@ fn LayerEditView() -> Element {
 
                     EnvBlock {
                         title: "Amp Env".to_string(),
-                        env: layer.amp_env.clone(),
                         color: "#22c55e".to_string(),
                     }
                     EnvBlock {
                         title: "Filter Env".to_string(),
-                        env: layer.filter_env.clone(),
                         color: "#a78bfa".to_string(),
                     }
 
@@ -1033,31 +1163,63 @@ fn LayerEditView() -> Element {
                     let c = e.client_coordinates();
                     let vb_x = (c.x - d.ox) / d.w * d.vb_w;
                     let vb_y = (c.y - d.oy) / d.h * d.vb_h;
-                    edit.with_mut(|ls| {
-                        let Some(l) = ls.get_mut(li) else { return };
-                        match d.handle {
-                            Handle::Cutoff => {
-                                if let Some(f) = l.filters.first_mut() {
-                                    f.cutoff_hz = x_to_freq(vb_x).clamp(FMIN, FMAX) as f32;
-                                    f.resonance = (1.0 - (vb_y / d.vb_h)).clamp(0.0, 1.0) as f32;
-                                }
-                            }
-                            Handle::AmpAttack => { l.amp_env.attack = ((vb_x - d.base_x) * d.sec_per_x).clamp(0.0, 20.0) as f32; }
-                            Handle::AmpCorner => {
-                                l.amp_env.decay = ((vb_x - d.base_x) * d.sec_per_x).clamp(0.0, 20.0) as f32;
-                                let usable = ENV_H - ENV_TOP - ENV_BOT;
-                                l.amp_env.sustain = (1.0 - ((vb_y - ENV_TOP) / usable)).clamp(0.0, 1.0) as f32;
-                            }
-                            Handle::AmpRelease => { l.amp_env.release = ((vb_x - d.base_x) * d.sec_per_x).clamp(0.0, 20.0) as f32; }
-                            Handle::FiltAttack => { l.filter_env.attack = ((vb_x - d.base_x) * d.sec_per_x).clamp(0.0, 20.0) as f32; }
-                            Handle::FiltCorner => {
-                                l.filter_env.decay = ((vb_x - d.base_x) * d.sec_per_x).clamp(0.0, 20.0) as f32;
-                                let usable = ENV_H - ENV_TOP - ENV_BOT;
-                                l.filter_env.sustain = (1.0 - ((vb_y - ENV_TOP) / usable)).clamp(0.0, 1.0) as f32;
-                            }
-                            Handle::FiltRelease => { l.filter_env.release = ((vb_x - d.base_x) * d.sec_per_x).clamp(0.0, 20.0) as f32; }
+                    // Frozen-scale time from a marker's X (linear for the drag).
+                    let secs = ((vb_x - d.base_x) * d.sec_per_x).clamp(0.0, ENV_TMAX) as f32;
+                    // Sustain level from a corner's Y.
+                    let usable = ENV_H - ENV_TOP - ENV_BOT;
+                    let ytop = ENV_TOP;
+                    let y0 = ENV_TOP + usable;
+                    let level = (1.0 - ((vb_y - ENV_TOP) / usable)).clamp(0.0, 1.0) as f32;
+                    // Current sustain Y for whichever env is being power-dragged.
+                    let sus_y = |sus: f32| ENV_TOP + (1.0 - sus.clamp(0.0, 1.0) as f64) * usable;
+                    // Fraction of a segment (start→end) that vb_y sits at.
+                    let frac = |start: f64, end: f64| (vb_y - start) / (end - start);
+                    match d.handle {
+                        Handle::Cutoff => {
+                            edit.with_mut(|ls| { if let Some(l) = ls.get_mut(li) { if let Some(f) = l.filters.first_mut() {
+                                f.cutoff_hz = x_to_freq(vb_x).clamp(FMIN, FMAX) as f32;
+                                f.resonance = (1.0 - (vb_y / d.vb_h)).clamp(0.0, 1.0) as f32;
+                            }}});
                         }
-                    });
+                        // ── Amp env ──
+                        Handle::AmpAttack => { edit.with_mut(|ls| { if let Some(l) = ls.get_mut(li) { l.amp_env.attack = secs; }}); }
+                        Handle::AmpCorner => { edit.with_mut(|ls| { if let Some(l) = ls.get_mut(li) { l.amp_env.decay = secs; l.amp_env.sustain = level; }}); }
+                        Handle::AmpRelease => { edit.with_mut(|ls| { if let Some(l) = ls.get_mut(li) { l.amp_env.release = secs; }}); }
+                        Handle::AmpHold => { extras.with_mut(|ex| { if let Some(l) = ex.get_mut(li) { l.amp.hold = secs as f64; }}); }
+                        Handle::AmpAttackPow => {
+                            let p = power_from_fraction(frac(y0, ytop));
+                            extras.with_mut(|ex| { if let Some(l) = ex.get_mut(li) { l.amp.attack_power = p; }});
+                        }
+                        Handle::AmpDecayPow => {
+                            let ys = sus_y(edit.peek().get(li).map(|l| l.amp_env.sustain).unwrap_or(0.0));
+                            let p = power_from_fraction(frac(ytop, ys));
+                            extras.with_mut(|ex| { if let Some(l) = ex.get_mut(li) { l.amp.decay_power = p; }});
+                        }
+                        Handle::AmpReleasePow => {
+                            let ys = sus_y(edit.peek().get(li).map(|l| l.amp_env.sustain).unwrap_or(0.0));
+                            let p = power_from_fraction(frac(ys, y0));
+                            extras.with_mut(|ex| { if let Some(l) = ex.get_mut(li) { l.amp.release_power = p; }});
+                        }
+                        // ── Filter env ──
+                        Handle::FiltAttack => { edit.with_mut(|ls| { if let Some(l) = ls.get_mut(li) { l.filter_env.attack = secs; }}); }
+                        Handle::FiltCorner => { edit.with_mut(|ls| { if let Some(l) = ls.get_mut(li) { l.filter_env.decay = secs; l.filter_env.sustain = level; }}); }
+                        Handle::FiltRelease => { edit.with_mut(|ls| { if let Some(l) = ls.get_mut(li) { l.filter_env.release = secs; }}); }
+                        Handle::FiltHold => { extras.with_mut(|ex| { if let Some(l) = ex.get_mut(li) { l.filter.hold = secs as f64; }}); }
+                        Handle::FiltAttackPow => {
+                            let p = power_from_fraction(frac(y0, ytop));
+                            extras.with_mut(|ex| { if let Some(l) = ex.get_mut(li) { l.filter.attack_power = p; }});
+                        }
+                        Handle::FiltDecayPow => {
+                            let ys = sus_y(edit.peek().get(li).map(|l| l.filter_env.sustain).unwrap_or(0.0));
+                            let p = power_from_fraction(frac(ytop, ys));
+                            extras.with_mut(|ex| { if let Some(l) = ex.get_mut(li) { l.filter.decay_power = p; }});
+                        }
+                        Handle::FiltReleasePow => {
+                            let ys = sus_y(edit.peek().get(li).map(|l| l.filter_env.sustain).unwrap_or(0.0));
+                            let p = power_from_fraction(frac(ys, y0));
+                            extras.with_mut(|ex| { if let Some(l) = ex.get_mut(li) { l.filter.release_power = p; }});
+                        }
+                    }
                 },
                 onpointerup: move |_| drag.set(None),
             }
@@ -1065,26 +1227,83 @@ fn LayerEditView() -> Element {
     }
 }
 
-/// One envelope graph (amp or filter) with three draggable markers. Reads its
-/// SVG ref + drag arming from the parent via context: to keep this self-
-/// contained we re-derive geometry and re-fetch the rect on each grab.
+/// One envelope graph (amp or filter), Vital-style: draggable attack / hold /
+/// sustain-corner / release markers, three per-segment power grab-points that
+/// bend the curve, and a **knob row below** bound to the SAME parameters. The
+/// A/D/S/R live in the shared `edit` buffer; hold + curve powers live in the
+/// parallel `extras` buffer — both reached from `EnvHooks` in context, so knob
+/// and node edits mutate one source of truth and stay in sync.
 #[component]
-fn EnvBlock(title: String, env: SynthEnvelope, color: String) -> Element {
-    // The parent owns the edit buffer + drag state; EnvBlock reaches them from
-    // context. To avoid threading callbacks, the parent exposes an `EnvHooks`
-    // bundle in context.
+fn EnvBlock(title: String, color: String) -> Element {
     let hooks = use_context::<EnvHooks>();
+    let edit = hooks.edit;
+    let extras = hooks.extras;
     let is_amp = title.starts_with("Amp");
-    let g = env_geom(&env);
+    // Selected layer (reactive — re-renders on selection/edit change).
+    let li = {
+        let ls = edit.read();
+        if ls.is_empty() { 0 } else { hooks.sel.read().min(ls.len() - 1) }
+    };
+    let env = {
+        let ls = edit.read();
+        match ls.get(li) {
+            Some(l) if is_amp => l.amp_env.clone(),
+            Some(l) => l.filter_env.clone(),
+            None => SynthEnvelope::default(),
+        }
+    };
+    let extra = extras
+        .read()
+        .get(li)
+        .map(|l| if is_amp { l.amp } else { l.filter })
+        .unwrap_or_default();
+
+    let g = env_geom(&env, &extra);
     let svg_ref = if is_amp { hooks.amp_svg } else { hooks.fenv_svg };
-    let (h_attack, h_corner, h_release) = if is_amp {
-        (Handle::AmpAttack, Handle::AmpCorner, Handle::AmpRelease)
+    let (h_attack, h_hold, h_corner, h_release, h_ap, h_dp, h_rp) = if is_amp {
+        (
+            Handle::AmpAttack, Handle::AmpHold, Handle::AmpCorner, Handle::AmpRelease,
+            Handle::AmpAttackPow, Handle::AmpDecayPow, Handle::AmpReleasePow,
+        )
     } else {
-        (Handle::FiltAttack, Handle::FiltCorner, Handle::FiltRelease)
+        (
+            Handle::FiltAttack, Handle::FiltHold, Handle::FiltCorner, Handle::FiltRelease,
+            Handle::FiltAttackPow, Handle::FiltDecayPow, Handle::FiltReleasePow,
+        )
     };
     let begin = hooks.begin;
-    let (xa, xc, xh, xr) = (g.xa, g.xc, g.xh, g.xr);
+    let (xa, xh, xc, xr) = (g.xa, g.xh, g.xc, g.xr);
     let (ytop, ysus, y0, spx) = (g.ytop, g.ysus, g.y0, g.sec_per_x);
+    let (pax, pay, pdx, pdy, prx, pry) = (g.pax, g.pay, g.pdx, g.pdy, g.prx, g.pry);
+    // Only surface a segment's power grab-point once the segment is wide enough
+    // to grab distinctly (mirrors Vital's kMinPointDistanceForPower gate).
+    let show_ap = xa - ENV_LEFT > 8.0;
+    let show_dp = xc - xh > 8.0;
+    let show_rp = xr - xc > 8.0;
+
+    // Knob mutators — write straight to the shared buffers. Each shadows a fresh
+    // Copy of the signal so the closure stays `Fn` (Copy) and can be handed to
+    // every knob's `on_change`.
+    let set_env = move |f: fn(&mut SynthEnvelope, f32), v: f32| {
+        let mut edit = edit;
+        edit.with_mut(|ls| {
+            if let Some(l) = ls.get_mut(li) {
+                f(if is_amp { &mut l.amp_env } else { &mut l.filter_env }, v);
+            }
+        });
+    };
+    let set_extra = move |f: fn(&mut EnvExtra, f64), v: f64| {
+        let mut extras = extras;
+        extras.with_mut(|ex| {
+            if let Some(l) = ex.get_mut(li) {
+                f(if is_amp { &mut l.amp } else { &mut l.filter }, v);
+            }
+        });
+    };
+
+    // Snapshots for the readouts / knob positions.
+    let (ea, ed, es, er) = (env.attack as f64, env.decay as f64, env.sustain as f64, env.release as f64);
+    let (eh, pap, pdp, prp) = (extra.hold, extra.attack_power, extra.decay_power, extra.release_power);
 
     rsx! {
         div {
@@ -1092,7 +1311,7 @@ fn EnvBlock(title: String, env: SynthEnvelope, color: String) -> Element {
                 span { style: "font-size:11px; color:#71717a; text-transform:uppercase; letter-spacing:0.06em;", "{title}" }
                 div { style: "flex:1;" }
                 span { style: "font-size:10px; color:#52525b; font-family:monospace;",
-                    "A {env.attack:.2}s  D {env.decay:.2}s  S {(env.sustain*100.0) as i32}%  R {env.release:.2}s"
+                    "A {ea:.2}s  H {eh:.2}s  D {ed:.2}s  S {(es*100.0) as i32}%  R {er:.2}s"
                 }
             }
             div { style: "position:relative; width:100%; height:132px; background:#09090b; border:1px solid #1c1c1f; border-radius:6px; overflow:hidden; margin-top:4px;",
@@ -1115,35 +1334,105 @@ fn EnvBlock(title: String, env: SynthEnvelope, color: String) -> Element {
                     path { d: "{g.fill}", fill: "{color}18", stroke: "none" }
                     path { d: "{g.stroke}", fill: "none", stroke: "{color}", stroke_width: "2", stroke_linejoin: "round" }
 
-                    // markers
+                    // power grab-points (hollow — drag ↑↓ to bend the segment)
+                    if show_ap {
+                        circle {
+                            cx: "{pax:.1}", cy: "{pay:.1}", r: "4",
+                            fill: "#09090b", stroke: "{color}", stroke_width: "1.5", style: "cursor:ns-resize;",
+                            onpointerdown: move |_| begin.call((svg_ref, h_ap, ENV_W, ENV_H, 0.0, 0.0)),
+                        }
+                    }
+                    if show_dp {
+                        circle {
+                            cx: "{pdx:.1}", cy: "{pdy:.1}", r: "4",
+                            fill: "#09090b", stroke: "{color}", stroke_width: "1.5", style: "cursor:ns-resize;",
+                            onpointerdown: move |_| begin.call((svg_ref, h_dp, ENV_W, ENV_H, 0.0, 0.0)),
+                        }
+                    }
+                    if show_rp {
+                        circle {
+                            cx: "{prx:.1}", cy: "{pry:.1}", r: "4",
+                            fill: "#09090b", stroke: "{color}", stroke_width: "1.5", style: "cursor:ns-resize;",
+                            onpointerdown: move |_| begin.call((svg_ref, h_rp, ENV_W, ENV_H, 0.0, 0.0)),
+                        }
+                    }
+
+                    // markers: attack peak, hold, sustain corner, release end
                     circle {
                         cx: "{xa:.1}", cy: "{ytop:.1}", r: "6",
                         fill: "{color}", stroke: "#e4e4e7", stroke_width: "1.5", style: "cursor:grab;",
                         onpointerdown: move |_| begin.call((svg_ref, h_attack, ENV_W, ENV_H, spx, ENV_LEFT)),
                     }
+                    rect {
+                        x: "{xh-4.0:.1}", y: "{ytop-4.0:.1}", width: "8", height: "8", rx: "1.5",
+                        fill: "{color}", stroke: "#e4e4e7", stroke_width: "1.5", style: "cursor:ew-resize;",
+                        onpointerdown: move |_| begin.call((svg_ref, h_hold, ENV_W, ENV_H, spx, xa)),
+                    }
                     circle {
                         cx: "{xc:.1}", cy: "{ysus:.1}", r: "6",
                         fill: "{color}", stroke: "#e4e4e7", stroke_width: "1.5", style: "cursor:grab;",
-                        onpointerdown: move |_| begin.call((svg_ref, h_corner, ENV_W, ENV_H, spx, xa)),
+                        onpointerdown: move |_| begin.call((svg_ref, h_corner, ENV_W, ENV_H, spx, xh)),
                     }
                     circle {
                         cx: "{xr:.1}", cy: "{y0:.1}", r: "6",
                         fill: "{color}", stroke: "#e4e4e7", stroke_width: "1.5", style: "cursor:grab;",
-                        onpointerdown: move |_| begin.call((svg_ref, h_release, ENV_W, ENV_H, spx, xh)),
+                        onpointerdown: move |_| begin.call((svg_ref, h_release, ENV_W, ENV_H, spx, xc)),
                     }
+                }
+            }
+
+            // ── knob row (Vital's envelope-section knobs, bound to the graph) ──
+            div { style: "display:flex; flex-wrap:wrap; gap:6px; align-items:flex-start; padding-top:6px;",
+                MiniKnob {
+                    value: time_to_knob(ea), label: "attack".to_string(), display: fmt_secs(ea), color: color.clone(),
+                    on_change: move |v: f64| set_env(|e, x| e.attack = x, knob_to_time(v) as f32),
+                }
+                MiniKnob {
+                    value: time_to_knob(eh), label: "hold".to_string(), display: fmt_secs(eh), color: color.clone(),
+                    on_change: move |v: f64| set_extra(|e, x| e.hold = x, knob_to_time(v)),
+                }
+                MiniKnob {
+                    value: time_to_knob(ed), label: "decay".to_string(), display: fmt_secs(ed), color: color.clone(),
+                    on_change: move |v: f64| set_env(|e, x| e.decay = x, knob_to_time(v) as f32),
+                }
+                MiniKnob {
+                    value: es, label: "sustain".to_string(), display: format!("{}%", (es * 100.0) as i32), color: color.clone(),
+                    on_change: move |v: f64| set_env(|e, x| e.sustain = x, v.clamp(0.0, 1.0) as f32),
+                }
+                MiniKnob {
+                    value: time_to_knob(er), label: "release".to_string(), display: fmt_secs(er), color: color.clone(),
+                    on_change: move |v: f64| set_env(|e, x| e.release = x, knob_to_time(v) as f32),
+                }
+                // curve/power knobs (visual-only; bend the segments)
+                MiniKnob {
+                    value: power_to_knob(pap), label: "a.crv".to_string(), display: fmt_power(pap), color: "#71717a".to_string(),
+                    on_change: move |v: f64| set_extra(|e, x| e.attack_power = x, knob_to_power(v)),
+                }
+                MiniKnob {
+                    value: power_to_knob(pdp), label: "d.crv".to_string(), display: fmt_power(pdp), color: "#71717a".to_string(),
+                    on_change: move |v: f64| set_extra(|e, x| e.decay_power = x, knob_to_power(v)),
+                }
+                MiniKnob {
+                    value: power_to_knob(prp), label: "r.crv".to_string(), display: fmt_power(prp), color: "#71717a".to_string(),
+                    on_change: move |v: f64| set_extra(|e, x| e.release_power = x, knob_to_power(v)),
                 }
             }
         }
     }
 }
 
-/// Hooks the parent shares with `EnvBlock` via context so the envelope graphs
-/// can arm a drag against the shared drag state.
+/// Hooks the parent shares with `EnvBlock` via context: the SVG refs + the drag
+/// arming callback, plus the shared `edit` (A/D/S/R) and `extras` (hold + curve
+/// power) buffers and the current selection — so a graph and its knob row both
+/// mutate one source of truth.
 #[derive(Clone, Copy)]
 struct EnvHooks {
     amp_svg: Signal<Option<std::rc::Rc<MountedData>>>,
     fenv_svg: Signal<Option<std::rc::Rc<MountedData>>>,
     begin: Callback<(Signal<Option<std::rc::Rc<MountedData>>>, Handle, f64, f64, f64, f64)>,
+    edit: Signal<Vec<SynthLayer>>,
+    extras: Signal<Vec<LayerEnvExtra>>,
+    sel: Signal<usize>,
 }
 
 fn layer_btn(selected: bool, active: bool) -> String {
