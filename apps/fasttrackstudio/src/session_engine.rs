@@ -5,8 +5,9 @@
 //! without REAPER. Construction replicates session's
 //! `standalone_setlist_harness` (the proven REAPER-free path):
 //!
-//! 1. `Standalone::new()` + `seed_project` + `stamp_demo_setlist_with`
-//!    seeds a playable 3-song demo setlist into the in-memory project.
+//! 1. `Standalone::new()` + one `seed_project` per song +
+//!    `stamp_song_with_default_tempo_native` seeds a playable demo setlist as
+//!    ONE standalone project per song (each 0-based, its own tempo/time-sig).
 //! 2. `build_in_process_daw` serves Standalone's service bundle over a
 //!    vox memory link and wires the global `daw::` facade to it
 //!    (`daw::init_from_parts`) — the setlist builder + polling loops
@@ -36,14 +37,16 @@ use session::services::setlist_service::{
     SetlistServiceStreamClient, setlist_service_stream_service_descriptor,
     stream_serve as setlist_service_stream_serve,
 };
-use session::setlist_service::demo::{demo_song_layout, stamp_demo_setlist_with};
+use session::setlist_service::demo::{demo_songs_base, stamp_song_with_default_tempo_native};
 use session::{
     SetlistServiceClient, SetlistServiceImpl, serve_setlist_service,
     setlist_service_service_descriptor,
 };
 
-/// Project GUID the demo setlist is stamped into.
-const DEMO_PROJECT_GUID: &str = "fts-demo";
+/// GUID for the demo song at setlist index `i` (one project per song).
+fn demo_song_guid(i: usize) -> String {
+    format!("demo-song-{i:02}")
+}
 
 pub struct SessionEngine {
     /// Shared service handle — the UI bridge attaches to its
@@ -106,7 +109,12 @@ pub fn bootstrap_blocking() -> eyre::Result<()> {
 /// audio lives outside the repo; if the folder is absent we skip seeding and
 /// the setlist still loads (markers/sections only). Stems are mmap'd, so this
 /// is near-instant even for 23×78 MB files.
-fn seed_praise_media(standalone: &Standalone, project_guid: &str, start: f64, len: f64) {
+fn seed_praise_media(
+    standalone: &Standalone,
+    project_guid: &str,
+    start: f64,
+    len: f64,
+) -> daw_standalone::media_seed::SeedReport {
     use daw_standalone::media_seed::{StemSpec, seed_media_tracks};
 
     // (display name, filename, group)
@@ -149,7 +157,7 @@ fn seed_praise_media(standalone: &Standalone, project_guid: &str, start: f64, le
     });
     if !dir.is_dir() {
         tracing::info!("Praise stems not found at {dir:?} — seeding markers only");
-        return;
+        return daw_standalone::media_seed::SeedReport::default();
     }
 
     let stems: Vec<StemSpec> = STEMS
@@ -167,6 +175,7 @@ fn seed_praise_media(standalone: &Standalone, project_guid: &str, start: f64, le
         report.materialize.loaded,
         report.materialize.failed.len(),
     );
+    report
 }
 
 /// A rough instrument-family group for a stem, from its (prefix-stripped) name.
@@ -207,12 +216,12 @@ fn seed_globbed_media(
     dir: &std::path::Path,
     start: f64,
     len: f64,
-) {
-    use daw_standalone::media_seed::{StemSpec, seed_media_tracks};
+) -> daw_standalone::media_seed::SeedReport {
+    use daw_standalone::media_seed::{SeedReport, StemSpec, seed_media_tracks};
 
     if !dir.is_dir() {
         tracing::info!("{song} stems not found at {dir:?} — seeding markers only");
-        return;
+        return SeedReport::default();
     }
     let mut wavs: Vec<std::path::PathBuf> = match std::fs::read_dir(dir) {
         Ok(rd) => rd
@@ -226,7 +235,7 @@ fn seed_globbed_media(
             .collect(),
         Err(e) => {
             tracing::warn!("{song}: read stems dir {dir:?}: {e}");
-            return;
+            return SeedReport::default();
         }
     };
     wavs.sort();
@@ -244,7 +253,7 @@ fn seed_globbed_media(
         })
         .collect();
     if stems.is_empty() {
-        return;
+        return SeedReport::default();
     }
     let report = seed_media_tracks(standalone, project_guid, &stems, start, len);
     tracing::info!(
@@ -254,62 +263,149 @@ fn seed_globbed_media(
         report.materialize.loaded,
         report.materialize.failed.len(),
     );
+    report
 }
 
-/// Seed the multitrack stems for EVERY demo song we have audio for, each placed
-/// at its song's `region_start` (from the demo layout) so the audio lines up
-/// with the stamped song region. Praise uses its curated grouped stem table;
-/// the others glob their folder. Missing folders are skipped individually.
-fn seed_all_media(standalone: &Standalone, project_guid: &str) {
-    let layout = demo_song_layout();
-    let at = |name: &str| {
-        layout
-            .iter()
-            .find(|(n, _, _)| *n == name)
-            .map(|(_, s, l)| (*s, *l))
+/// On-disk folder (under `FTS_WORSHIP_STEMS`) for each globbed worship song.
+const WORSHIP_FOLDERS: &[(&str, &str)] = &[
+    ("God, I'm Just Grateful", "God, I_m Just Grateful _ Elevation Worship _ D"),
+    ("Holy Forever", "Holy Forever _ Bethel Music _ Bb"),
+    ("Thank God I'm Free", "Thank God I_m Free _ Elevation Rhythm _ E"),
+    ("Washed", "Washed _ Elevation Rhythm _ B"),
+    ("Who Else", "Who Else _ Gateway Worship _ Ab"),
+];
+
+/// Seed one demo song's multitrack stems into ITS OWN project, 0-based (media
+/// downbeat at t=0 so it lines up with the project's own song-start marker).
+/// Praise uses its curated grouped stem table; the others glob their folder.
+/// Missing audio is skipped (the song still loads, markers/sections only).
+fn seed_song_media(standalone: &Standalone, project_guid: &str, name: &str, len: f64) {
+    // Every song lives on its own project timeline starting at 0.
+    let start = 0.0;
+    let report = if name == "Praise" {
+        seed_praise_media(standalone, project_guid, start, len)
+    } else if let Some((_, folder)) = WORSHIP_FOLDERS.iter().find(|(n, _)| *n == name) {
+        let base = std::env::var("FTS_WORSHIP_STEMS")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|_| {
+                std::path::PathBuf::from(std::env::var("HOME").unwrap_or_default())
+                    .join("Downloads/Worship MultiTracks")
+            });
+        seed_globbed_media(standalone, project_guid, name, &base.join(folder), start, len)
+    } else {
+        return;
     };
+    decorate_seeded_tracks(standalone, project_guid, &report);
+}
 
-    if let Some((start, len)) = at("Praise") {
-        seed_praise_media(standalone, project_guid, start, len);
+/// After seeding, colour every track/folder by its instrument family and mute
+/// the multitrack's own baked-in Click/Guide/Cue/Count stems by default — we
+/// synthesize our own click + guide via the guide engine, so the shipped ones
+/// must be silent (they stay in the project, visible). Runs on the native
+/// `Tracks` trait (in-process, no RPC — this is before the daw facade exists).
+fn decorate_seeded_tracks(
+    standalone: &Standalone,
+    project_guid: &str,
+    report: &daw_standalone::media_seed::SeedReport,
+) {
+    use daw::service::{ProjectContext, TrackRef, Tracks};
+
+    let ctx = ProjectContext::Project(project_guid.to_string());
+    let mut muted = 0usize;
+    for t in &report.tracks {
+        let color = category_color(t.group.as_deref(), &t.name);
+        let _ = Tracks::set_color(standalone, ctx.clone(), TrackRef::Guid(t.guid.clone()), color);
+        if is_click_or_guide(t.group.as_deref(), &t.name) {
+            let _ =
+                Tracks::set_muted(standalone, ctx.clone(), TrackRef::Guid(t.guid.clone()), true);
+            muted += 1;
+        }
     }
+    if muted > 0 {
+        tracing::info!("{project_guid}: default-muted {muted} baked-in click/guide stem(s)");
+    }
+}
 
-    // The other worship songs live under FTS_WORSHIP_STEMS (default Downloads).
-    let base = std::env::var("FTS_WORSHIP_STEMS")
-        .map(std::path::PathBuf::from)
-        .unwrap_or_else(|_| {
-            std::path::PathBuf::from(std::env::var("HOME").unwrap_or_default())
-                .join("Downloads/Worship MultiTracks")
-        });
-    // (demo song name, on-disk folder)
-    const FOLDERS: &[(&str, &str)] = &[
-        ("God, I'm Just Grateful", "God, I_m Just Grateful _ Elevation Worship _ D"),
-        ("Holy Forever", "Holy Forever _ Bethel Music _ Bb"),
-        ("Thank God I'm Free", "Thank God I_m Free _ Elevation Rhythm _ E"),
-        ("Washed", "Washed _ Elevation Rhythm _ B"),
-        ("Who Else", "Who Else _ Gateway Worship _ Ab"),
-    ];
-    for (name, folder) in FOLDERS {
-        let Some((start, len)) = at(name) else { continue };
-        seed_globbed_media(standalone, project_guid, name, &base.join(folder), start, len);
+/// `true` when a track's name or group marks it as the multitrack's own
+/// click/guide/cue/count — the stems we replace with our synthesized guide.
+fn is_click_or_guide(group: Option<&str>, name: &str) -> bool {
+    let hay = format!("{} {}", group.unwrap_or(""), name).to_ascii_lowercase();
+    ["click", "guide", "cue", "count"]
+        .iter()
+        .any(|k| hay.contains(k))
+}
+
+/// Worship-palette colour (0xRRGGBB) for a track, by group first then name.
+fn category_color(group: Option<&str>, name: &str) -> u32 {
+    let hay = format!("{} {}", group.unwrap_or(""), name).to_ascii_lowercase();
+    let has = |ks: &[&str]| ks.iter().any(|k| hay.contains(k));
+    // Order matters: click/guide before the instrument families.
+    if has(&["click", "guide", "cue", "count"]) {
+        0x6B_7280 // muted gray
+    } else if has(&["reference", "original", "master mix"]) {
+        0x64_748B // slate (reference/original track)
+    } else if has(&["vocal", "vox", "bgv", "choir", "lead"]) {
+        0xD4_A017 // gold
+    } else if has(&["drum", "kick", "snare", "tom", "hat", "cymbal", "perc"]) {
+        0xC0_2942 // crimson
+    } else if has(&["bass"]) {
+        0x7C_3AED // purple
+    } else if has(&["guitar", "gtr", " ag", " eg", "acoustic", "electric"]) {
+        0xEA_7317 // orange
+    } else if has(&["synth", "pad"]) {
+        0x0E_9488 // teal
+    } else if has(&["key", "piano", "organ", "rhodes", "wurli"]) {
+        0x2563_EB // blue
+    } else if has(&["fx", "loop", "track", "swell", "riser"]) {
+        0x4B_6B5A // gray-green
+    } else if has(&["string", "orch", "horn", "brass", "sax"]) {
+        0xB2_5C2E // burnt orange (orchestra)
+    } else {
+        0x52_5252 // neutral fallback
     }
 }
 
 async fn bootstrap(engine_rt: tokio::runtime::Handle) -> eyre::Result<SessionEngine> {
-    // 1. Standalone backend seeded with a playable demo setlist
-    //    (3 songs with count-ins, sections, markers — see
-    //    session::setlist_service::demo).
+    // 1. Standalone backend seeded with a playable demo setlist — ONE project
+    //    per song (each 0-based: count-in near t=0, first downbeat at that
+    //    song's measure 1, its own default tempo/time-signature). Project names
+    //    are zero-padded (`00 Praise`, `01 …`) because `Projects::list()` sorts
+    //    by name and `build_from_open_projects` follows that order — the padding
+    //    keeps the setlist in authored order (see session demo::ORDER).
     let standalone = Standalone::new();
-    let guid = standalone.seed_project(ProjectInfo {
-        guid: DEMO_PROJECT_GUID.into(),
-        name: "FTS Demo Setlist".into(),
-        path: String::new(),
-    });
-    stamp_demo_setlist_with(&standalone).map_err(|e| eyre::eyre!("stamp demo setlist: {e:?}"))?;
-    tracing::info!("demo setlist stamped into standalone project '{guid}'");
-
-    // Seed every demo song's multitrack stems as grouped, playable tracks (when
-    // the audio is present on this machine — the demo still works without it).
-    seed_all_media(&standalone, &guid);
+    let songs = demo_songs_base();
+    let mut song_guids: Vec<String> = Vec::with_capacity(songs.len());
+    for (i, song) in songs.iter().enumerate() {
+        let guid = demo_song_guid(i);
+        standalone.seed_project(ProjectInfo {
+            guid: guid.clone(),
+            name: format!("{i:02} {}", song.name),
+            path: String::new(),
+        });
+        stamp_song_with_default_tempo_native(
+            &standalone,
+            daw::service::ProjectContext::Project(guid.clone()),
+            song,
+        )
+        .map_err(|e| eyre::eyre!("stamp song {} ({}): {e:?}", i, song.name))?;
+        // Seed this song's multitrack stems 0-based into its own project (when
+        // the audio is present on this machine — the demo still works without).
+        let len = song.region_end - song.region_start;
+        seed_song_media(&standalone, &guid, song.name, len);
+        song_guids.push(guid);
+    }
+    // Focus the first song's project so the initial build centers on song 0.
+    let first_guid = song_guids
+        .first()
+        .cloned()
+        .ok_or_else(|| eyre::eyre!("demo setlist produced no songs"))?;
+    standalone.set_current_project(&first_guid);
+    tracing::info!(
+        "demo setlist stamped into {} per-song projects ('{}' … )",
+        song_guids.len(),
+        first_guid,
+    );
+    let guid = first_guid;
 
     // 2. In-process daw facade over a vox memory link. The setlist
     //    service's build/hydration path goes through `daw::get()`, so
@@ -402,37 +498,119 @@ async fn bootstrap(engine_rt: tokio::runtime::Handle) -> eyre::Result<SessionEng
     })
 }
 
-/// Try to open the default cpal output and let the audio callback drive
-/// the playhead. `attach_audio_engine` disables the project's soft
-/// clock before opening the device, so on failure we re-enable it —
-/// transport keeps advancing (timer-driven) with no audio.
-fn spawn_audio_thread(standalone: Standalone, guid: String, rt: tokio::runtime::Handle) {
+/// Open the default cpal output and let the audio callback drive the playhead
+/// of the ACTIVE project — re-attaching whenever the current project changes.
+///
+/// Per-song-project model: each song is its own standalone project, and the
+/// audio engine renders exactly one project's graph. So the engine must FOLLOW
+/// the active song: when the user seeks to another song (which selects that
+/// song's project), drop the current engine and attach to the new project.
+/// `attach_audio_engine` disables the attached project's soft clock (the audio
+/// callback drives `advance()` instead); on the project we switch AWAY from we
+/// re-enable the soft clock so its playhead still responds to seeks.
+///
+/// The re-attach on a song switch happens between songs, never mid-render, so
+/// the brief device close/reopen is inaudible during a song.
+///
+/// It ALSO supervises the device: if the output stream dies mid-playback (e.g.
+/// PipeWire drops the connection), the engine's error callback re-enables the
+/// soft clock immediately (the playhead never freezes) and latches
+/// `stream_errored()`. This loop notices that and reopens the device so audio
+/// returns on its own — with backoff so a persistently-missing device doesn't
+/// spam re-open attempts.
+fn spawn_audio_thread(standalone: Standalone, initial_guid: String, rt: tokio::runtime::Handle) {
+    use daw::service::Projects;
+    use std::sync::atomic::Ordering;
+    use std::time::Duration;
+
     let result = std::thread::Builder::new()
         .name("fts-audio".into())
         .spawn(move || {
             // Enter the engine runtime: transport_engine_for lazily
             // spawns the per-project soft clock task.
             let _rt_guard = rt.enter();
-            match standalone.attach_audio_engine(&guid) {
-                Ok(engine) => {
-                    tracing::info!("audio engine attached (default cpal output)");
-                    // Guide (click / count-in / section cues): built at the
-                    // device rate and mixed into the output via the aux
-                    // post-render hook.
-                    crate::guide::install(&engine);
-                    // The cpal stream lives on this thread; park forever.
-                    loop {
-                        std::thread::park();
+
+            // Attach to a project: returns the live engine on success. On
+            // failure, re-enable that project's soft clock so play still
+            // advances the playhead silently.
+            let attach = |guid: &str| -> Option<daw_standalone::audio_engine::AudioEngine> {
+                match standalone.attach_audio_engine(guid) {
+                    Ok(engine) => {
+                        // Guide (click / count-in / section cues): built at the
+                        // device rate, mixed in via the aux post-render hook.
+                        crate::guide::install(&engine);
+                        tracing::info!("audio engine attached to project '{guid}'");
+                        Some(engine)
+                    }
+                    Err(e) => {
+                        tracing::warn!(
+                            "no audio output for project '{guid}' ({e}); transport runs silently"
+                        );
+                        standalone
+                            .transport_engine_for(guid)
+                            .soft_clock_enabled
+                            .store(true, Ordering::SeqCst);
+                        None
                     }
                 }
-                Err(e) => {
-                    tracing::warn!("no audio output ({e}); transport runs silently");
-                    // attach disabled the soft clock before failing —
-                    // restore it so play still advances the playhead.
+            };
+
+            let mut attached_guid = initial_guid.clone();
+            // Holds the live cpal stream for the currently-attached project;
+            // dropping it (on switch) closes the device before we reopen it.
+            let mut engine = attach(&initial_guid);
+            // Ticks (×150 ms) to wait before retrying after a failed/absent
+            // device, so a persistently-missing output doesn't spam re-opens.
+            // Reset to 0 on success; capped so recovery stays reasonably prompt.
+            let mut retry_backoff = 0u32;
+
+            // Follow the active project + supervise the device. Polling (not a
+            // subscription) keeps the audio thread self-contained; 150 ms is
+            // well below song-switch cadence and adds no cost while a song plays.
+            loop {
+                std::thread::sleep(Duration::from_millis(150));
+                let current = standalone.current().map(|p| p.guid);
+
+                // 1. Song switch: re-attach to the newly-active project.
+                if let Some(current) = current
+                    && current != attached_guid
+                {
+                    tracing::info!(
+                        "active project changed '{attached_guid}' → '{current}'; re-attaching audio"
+                    );
+                    // Restore the soft clock on the project we're leaving so its
+                    // playhead still moves on seeks while it's not the audio target.
                     standalone
-                        .transport_engine_for(&guid)
+                        .transport_engine_for(&attached_guid)
                         .soft_clock_enabled
-                        .store(true, std::sync::atomic::Ordering::SeqCst);
+                        .store(true, Ordering::SeqCst);
+                    // Drop the old engine (closes its cpal stream) BEFORE opening
+                    // the new one so the single output device is free.
+                    drop(engine.take());
+                    engine = attach(&current);
+                    attached_guid = current;
+                    retry_backoff = 0;
+                    continue;
+                }
+
+                // 2. Device died on the current project: the engine already
+                //    re-enabled the soft clock (playhead keeps moving); reopen
+                //    the device so audio comes back.
+                let dead = engine.as_ref().map(|e| e.stream_errored()).unwrap_or(true);
+                if dead {
+                    if retry_backoff > 0 {
+                        retry_backoff -= 1;
+                        continue;
+                    }
+                    if engine.is_some() {
+                        tracing::warn!(
+                            "audio stream on '{attached_guid}' died; reopening output device"
+                        );
+                    }
+                    drop(engine.take()); // close the dead stream before reopening
+                    engine = attach(&attached_guid);
+                    // On success clear backoff; on failure wait ~2s before retry.
+                    retry_backoff = if engine.is_some() { 0 } else { 13 };
                 }
             }
         });
