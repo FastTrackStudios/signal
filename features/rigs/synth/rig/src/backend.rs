@@ -620,11 +620,13 @@ mod tests {
             early > 1e-3,
             "American Obesity should play its OB-8 soundsource, rms={early}"
         );
-        // NOTE: the full-patch SUSTAIN is not yet asserted — Layer A's filter
-        // ("Modified", base cutoff ~44 Hz, filter-env depth 100%) currently
-        // chokes the held note to near-silence (late rms ≈ {late}), a filter
-        // cutoff/envelope calibration issue tracked separately. The soundsource
-        // itself plays + loops correctly — see `ob8_pack_sustains_at_pitch`.
-        let _ = late;
+        // The held note SUSTAINS: the soundsource loops and the inactive
+        // oscillator sub-modules (Harmonia/Dfs/Waveshaper) are no longer emitted
+        // as live blocks that would mask it. Regression guard for the
+        // "every patch sounds like the modal piano" bug.
+        assert!(
+            late > 1e-2,
+            "American Obesity should SUSTAIN its soundsource past the sample length, late rms={late}"
+        );
     }
 }
