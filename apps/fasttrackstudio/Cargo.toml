@@ -182,7 +182,11 @@ axum = { workspace = true, optional = true }
 tower-http = { workspace = true, optional = true }
 # Engine mode serves the vox router over axum ws (+ iroh, from the
 # `signal` feature). Native-only extra features on the same architect dep.
-architect = { workspace = true, features = ["server-axum"], optional = true }
+# `host` = the engine-binary bootstrap (architect::host) — runtime + tracing +
+# panic logger + /health + /vox + iroh + SPA fallback. Native-only (server-axum
+# isn't wasm-legal), so it lives on this cfg(not wasm) dep line, NOT the shared
+# `signal` feature which the wasm browser build also enables.
+architect = { workspace = true, features = ["server-axum", "host"], optional = true }
 # The staged web bundle, embedded (feature `embed-web`).
 include_dir = { workspace = true, optional = true }
 
