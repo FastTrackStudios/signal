@@ -11,8 +11,7 @@ use std::sync::{Arc, Mutex};
 
 use architect::dispatch::CurrentThreadDispatcher;
 use architect::{HasDispatcher, Layer, LayerRouter, PubSub, Services, layers};
-use midicore::{Channel, DrumMap, DrumMapConverter, KeyNumber, MidiEvent, MidiMonitor, PortSelector,
-    Velocity};
+use midicore::{Channel, DrumMap, DrumMapConverter, KeyNumber, MidiEvent, MidiMonitor, Velocity};
 use signal_drums_proto::drum::{DrumEvent, DrumRig, DrumRigStreamSource};
 use signal_drums_proto::{DrumStatus, InputMap, KitInfo, MixerStrip, PieceInfo, StripKind};
 use signal_sampler::{FxTarget, MidiInputHandle, PreloadProfile, PresetSpec, SamplerRig};
@@ -426,10 +425,7 @@ impl DrumRigBackend {
         };
         // Default to omni: no named port → merge *all* MIDI inputs (PipeWire
         // fans every device into one stream). A named port narrows to it.
-        let sel = match &port {
-            Some(name) => PortSelector::NameContains(name.clone()),
-            None => PortSelector::All,
-        };
+        let sel = midicore::selector_for(port.as_deref());
         // One transform closure: record the raw event into the monitor, then
         // (optionally) run the drum-map converter. Recording the pre-conversion
         // event shows what the hardware actually sent.

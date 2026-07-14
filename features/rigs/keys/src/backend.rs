@@ -13,7 +13,7 @@ use std::sync::{Arc, Mutex};
 use architect::dispatch::CurrentThreadDispatcher;
 use architect::{HasDispatcher, Layer, LayerRouter, PubSub, Services, layers};
 use daw_audio_io::AudioIoPrefs;
-use midicore::{MidiEvent, PortSelector};
+use midicore::MidiEvent;
 use signal_keys_proto::keys::{KeysEvent, KeysRig as KeysRigSvc, KeysRigStreamSource};
 use signal_keys_proto::{KeysNode, KeysPreset, KeysStatus};
 use signal_sampler::rig_node::{RigNode, Role};
@@ -171,10 +171,7 @@ impl KeysRigBackend {
         if let Ok(mut s) = self.inner.state.lock() {
             s.midi_handle = None;
         }
-        let sel = match &port {
-            Some(name) => PortSelector::NameContains(name.clone()),
-            None => PortSelector::All,
-        };
+        let sel = midicore::selector_for(port.as_deref());
         // KeysRig isn't Clone (owns the audio engine), so attach under the lock.
         let handle = {
             let rig = self.inner.rig.lock().unwrap();
