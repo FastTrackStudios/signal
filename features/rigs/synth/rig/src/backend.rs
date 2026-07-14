@@ -22,7 +22,9 @@ use signal_synth::omni_import::{SoundsourceIndex, load_patch_file};
 use signal_synth_proto::synth::{
     SynthEvent, SynthRig as SynthRigSvc, SynthRigStreamSource,
 };
-use signal_synth_proto::{SynthNode, SynthPreset, SynthStatus};
+use signal_synth_proto::{
+    SynthArticulation, SynthMapping, SynthMic, SynthNode, SynthPreset, SynthStatus, SynthZone,
+};
 
 /// Root of the Omnisphere patch library to browse. Defaults to the factory
 /// **Live Keyboardist** bundle (where the default patch lives); override with
@@ -364,6 +366,47 @@ impl SynthRigSvc for SynthRigBackend {
             .and_then(|r| r.as_ref().map(|r| r.midi_monitor().recent()))
             .unwrap_or_default()
     }
+
+    fn soundsources(&self) -> Vec<String> {
+        let mut blocks = Vec::new();
+        if let Ok(s) = self.inner.state.lock() {
+            if let Some(tree) = s.tree.as_ref() {
+                sample_blocks(tree, &mut blocks);
+            }
+        }
+        let mut names: Vec<String> = blocks.into_iter().map(|(n, _)| n).collect();
+        names.dedup();
+        names
+    }
+
+    fn mapping(&self, soundsource: String) -> SynthMapping {
+        // Resolve the soundsource → its spec path: prefer the exact pack the
+        // loaded tree references; fall back to the library index by name.
+        let path = {
+            let s = match self.inner.state.lock() {
+                Ok(s) => s,
+                Err(_) => return SynthMapping::default(),
+            };
+            let mut blocks = Vec::new();
+            if let Some(tree) = s.tree.as_ref() {
+                sample_blocks(tree, &mut blocks);
+            }
+            if soundsource.is_empty() {
+                blocks.into_iter().next().map(|(_, p)| p)
+            } else {
+                blocks
+                    .into_iter()
+                    .find(|(n, _)| n == &soundsource)
+                    .map(|(_, p)| p)
+                    .or_else(|| self.inner.index.find(&soundsource).map(|p| p.to_path_buf()))
+            }
+        };
+        let Some(path) = path else { return SynthMapping::default() };
+        match spec_of(&path) {
+            Some(spec) => project_mapping(&spec, &soundsource),
+            None => SynthMapping::default(),
+        }
+    }
 }
 
 impl SynthRigStreamSource for SynthRigBackend {
@@ -467,6 +510,94 @@ fn role_tag(role: Role) -> String {
     .to_string()
 }
 
+/// Collect `(soundsource name, spec path)` for every sample block in the tree.
+fn sample_blocks(c: &Container, out: &mut Vec<(String, PathBuf)>) {
+    for n in &c.children {
+        match n {
+            RigNode::Block { block } if !block.sample.is_empty() => {
+                out.push((block.display_name().to_string(), PathBuf::from(&block.sample)));
+            }
+            RigNode::Container { container } => sample_blocks(container, out),
+            _ => {}
+        }
+    }
+}
+
+/// Read a soundsource's `LibrarySpec` from its `.signalpack` (header only, no
+/// audio decode) or raw `library.styx`.
+fn spec_of(path: &std::path::Path) -> Option<signal_sampler::LibrarySpec> {
+    if path.extension().is_some_and(|e| e.eq_ignore_ascii_case("signalpack")) {
+        signal_sampler::read_pack_header(path).ok().map(|h| h.spec)
+    } else {
+        signal_sampler::LibrarySpec::from_file(path).ok()
+    }
+}
+
+/// Project a `LibrarySpec` into the wire [`SynthMapping`].
+fn project_mapping(spec: &signal_sampler::LibrarySpec, name: &str) -> SynthMapping {
+    let zones = spec
+        .zones
+        .iter()
+        .map(|z| SynthZone {
+            file: z.file.clone(),
+            key_min: z.key_min,
+            key_max: z.key_max,
+            root_key: z.root_key,
+            vel_min: z.vel_min,
+            vel_max: z.vel_max,
+            rr_index: z.rr_index,
+            rr_mode: z.rr_mode.clone(),
+            gain_db: z.gain_db,
+            pan: z.pan,
+            tune_cents: z.tune_cents,
+            loop_start: z.loop_start,
+            loop_end: z.loop_end,
+            trigger_mode: z.trigger_mode.clone(),
+            mic: z.mic.clone(),
+            articulation: z.articulation.clone(),
+            dynamic: z.dynamic.clone(),
+            group: z.group.clone(),
+            variant: z.variant.clone(),
+        })
+        .collect();
+    let mics = spec
+        .mics
+        .iter()
+        .map(|m| SynthMic {
+            id: m.id.clone(),
+            label: m.label.clone(),
+            kind: m.kind.clone(),
+            default: m.default,
+        })
+        .collect();
+    let articulations = spec
+        .articulations
+        .iter()
+        .map(|a| SynthArticulation {
+            id: a.id.clone(),
+            label: a.label.clone(),
+            kind: format!("{:?}", a.kind),
+            rr: a.rr as u32,
+        })
+        .collect();
+    let mut groups: Vec<String> = spec
+        .zones
+        .iter()
+        .map(|z| z.group.clone())
+        .filter(|g| !g.is_empty())
+        .collect();
+    groups.sort();
+    groups.dedup();
+    SynthMapping {
+        name: if name.is_empty() { spec.name.clone() } else { name.to_string() },
+        vendor: spec.vendor.clone(),
+        zones,
+        mics,
+        articulations,
+        groups,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -559,6 +690,55 @@ mod tests {
             "OB-8 at note 60 should sound ~C4 (261.6 Hz); got {f0:.1} Hz — wrong sample or pitch"
         );
         eprintln!("ob8_pack: sustained late_rms={late:.3}, fundamental={f0:.1} Hz");
+    }
+
+    /// Machine-local: the loaded default patch exposes its soundsources and a
+    /// real keymap (85 one-per-key zones for OB-8 PWM Big Strings) over the
+    /// Mapping wire types — the data source for the Mapping editor UI.
+    /// `cargo test -p signal-synth-rig -- --ignored mapping`
+    #[test]
+    #[ignore = "requires the built OB-8 pack + factory library"]
+    fn mapping_exposes_real_zones() {
+        use signal_synth_proto::synth::SynthRig as _;
+
+        let b = SynthRigBackend::new();
+        // Seed the loaded tree without opening audio.
+        let idx = b.inner.state.lock().unwrap().loaded;
+        let Some(idx) = idx else {
+            eprintln!("skipping: no default preset");
+            return;
+        };
+        let Some(tree) = b.program_for(idx) else {
+            eprintln!("skipping: default patch not importable");
+            return;
+        };
+        b.inner.state.lock().unwrap().tree = Some(tree);
+
+        let sources = b.soundsources();
+        eprintln!("soundsources: {sources:?}");
+        assert!(
+            sources.iter().any(|s| s.contains("OB-8 PWM Big Strings")),
+            "American Obesity should expose its OB-8 soundsource, got {sources:?}"
+        );
+
+        let m = b.mapping("OB-8 PWM Big Strings".into());
+        eprintln!(
+            "mapping {}: {} zones, {} mics, {} artics",
+            m.name,
+            m.zones.len(),
+            m.mics.len(),
+            m.articulations.len()
+        );
+        assert_eq!(m.zones.len(), 85, "OB-8 has one zone per key (85)");
+        assert!(
+            m.zones.iter().all(|z| z.key_min <= z.key_max && z.root_key >= z.key_min),
+            "zones have sane key ranges"
+        );
+        // Loops are library-state-dependent (only packs rebuilt with the STINFO
+        // fix carry them), so this is informational — the projection itself is
+        // what's asserted above.
+        let looped = m.zones.iter().filter(|z| z.loop_end > z.loop_start).count();
+        eprintln!("{looped}/85 zones carry loops (0 = pack predates the STINFO fix)");
     }
 
     /// Recursively find a block by display name anywhere in the tree.

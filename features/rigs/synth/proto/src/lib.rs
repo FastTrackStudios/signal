@@ -56,13 +56,84 @@ pub struct SynthStatus {
     pub volume: f32,
 }
 
+/// One sample zone in a soundsource's keymap — a faithful projection of the
+/// sampler's `ZoneSpec` for the Mapping editor. A rectangle spanning
+/// `key_min..=key_max` × `vel_min..=vel_max`; zones sharing that window and
+/// differing by `rr_index` are round-robins (drawn stacked/striped).
+#[derive(Clone, PartialEq, Debug, Default, Facet)]
+pub struct SynthZone {
+    pub file: String,
+    pub key_min: u8,
+    pub key_max: u8,
+    pub root_key: u8,
+    pub vel_min: u8,
+    pub vel_max: u8,
+    /// Round-robin slot (0-based) + mode ("" / "cycle" / "random" / "no-repeat-random").
+    pub rr_index: u32,
+    pub rr_mode: String,
+    pub gain_db: f32,
+    pub pan: f32,
+    pub tune_cents: f32,
+    /// Sustain loop window (`loop_end > loop_start` ⇒ loops).
+    pub loop_start: u32,
+    pub loop_end: u32,
+    pub trigger_mode: String,
+    /// Mic id (→ [`SynthMic::id`]; empty = mic-agnostic).
+    pub mic: String,
+    /// Articulation id (→ [`SynthArticulation::id`]).
+    pub articulation: String,
+    /// CC1 dynamic layer label (ppp..fff), if any.
+    pub dynamic: String,
+    /// Logical group id.
+    pub group: String,
+    /// Processed-copy variant label (e.g. "Mixed").
+    pub variant: String,
+}
+
+/// A microphone position in a multi-mic soundsource.
+#[derive(Clone, PartialEq, Debug, Default, Facet)]
+pub struct SynthMic {
+    pub id: String,
+    pub label: String,
+    /// "blended" | "separate".
+    pub kind: String,
+    /// Auto-load on open.
+    pub default: bool,
+}
+
+/// An articulation (Sustain, Staccato, …) grouping zones.
+#[derive(Clone, PartialEq, Debug, Default, Facet)]
+pub struct SynthArticulation {
+    pub id: String,
+    pub label: String,
+    /// ArticulationKind name (Sustain/Short/Legato/Release/…).
+    pub kind: String,
+    /// Round-robin count per note per dynamic.
+    pub rr: u32,
+}
+
+/// A soundsource's full keymap for the Mapping editor — zones + the mic /
+/// articulation / group vocabularies they reference.
+#[derive(Clone, PartialEq, Debug, Default, Facet)]
+pub struct SynthMapping {
+    /// Soundsource name (empty ⇒ no mapping / not found).
+    pub name: String,
+    /// Library vendor + instrument/category tags, for the header.
+    pub vendor: String,
+    pub zones: Vec<SynthZone>,
+    pub mics: Vec<SynthMic>,
+    pub articulations: Vec<SynthArticulation>,
+    /// Distinct group ids present across the zones.
+    pub groups: Vec<String>,
+}
+
 pub mod synth {
     //! Live synth-rig control. `SynthRig` → `SynthRigClient` / `SynthRigService`
     //! / `synth_rig_serve`, plus the `#[subscribe]` stream sibling.
 
     use facet::Facet;
 
-    use super::{SynthNode, SynthPreset, SynthStatus};
+    use super::{SynthMapping, SynthNode, SynthPreset, SynthStatus};
 
     /// One live rig change. Every variant carries full state (idempotent
     /// re-application) so a reconnecting subscriber is correct after the next
@@ -105,6 +176,13 @@ pub mod synth {
         fn set_volume(&self, gain_milli: u32);
         /// Recent MIDI events seen by the core (oldest first), for the monitor.
         fn midi_recent(&self) -> Vec<midicore_proto::MidiEvent>;
+
+        /// The soundsource names referenced by the loaded preset's layers that
+        /// resolve against the local library — the Mapping editor's subjects.
+        fn soundsources(&self) -> Vec<String>;
+        /// The keymap for one soundsource (empty name ⇒ the first of the loaded
+        /// preset). Read cheaply from the pack header — no audio decode.
+        fn mapping(&self, soundsource: String) -> SynthMapping;
 
         /// Every rig change, as it happens.
         #[subscribe]
