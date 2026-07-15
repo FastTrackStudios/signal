@@ -134,6 +134,14 @@ native, WASM/AudioWorklet, and embedded `no_std`:
 
 ## Active modernization queue
 
+(Items 1–4 are DONE as of 2026-07-14 — the five daw subscriptions are
+`#[subscribe]` streams, the app embeds daw-standalone + session
+in-process, the guide lives at features/guide with TTS. Newest completed
+item: the architect CRDT doc-sync rework for vox 0.10 channel scoping —
+held-open sync/presence calls, `SyncDown::Attached` envelope; see
+crates/signal/docs/detachable-gui.md. Kept below for context until the
+queue is refilled.)
+
 1. **daw streams**: convert the five Tx-parameter subscriptions
    (track / tempo_map / event_bus / marker / region — all
    `subscribe(project: ProjectContext, tx)`) to `#[subscribe]` streams.

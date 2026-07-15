@@ -96,9 +96,14 @@ features/signal/
   subscribe call, abort to unsubscribe) must wait for attach before
   mutating: no replay on the hub, so pre-attach publishes are lost (the
   first meter event doubles as the attach confirmation).
-- CRDT doc-sync (`crdt/sync.rs`) still uses attach-and-return **and returns
-  a value from the attach call** — it needs a protocol rework for vox 0.10
-  channel scoping; untouched, currently broken over the wire.
+- ~~CRDT doc-sync (`crdt/sync.rs`) still uses attach-and-return~~ — **fixed
+  (2026-07-14)**: `DocSync::sync` / `DocPresence::presence` are held-open
+  calls now (the in-flight call IS the session); the server's version
+  vector rides the down channel as the first `SyncDown::Attached` frame
+  instead of the return value, hosts split attach (under any registry
+  lock) from pump (after release), and the client drivers race the held
+  call against the channels. Verified over a real WebSocket by
+  `vault_collab_e2e::live_smoke_two_clients_plus_put_file`.
 
 ## Next steps
 
