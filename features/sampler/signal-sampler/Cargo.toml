@@ -30,6 +30,11 @@ serde_json  = { workspace = true }
 # Tagging schema reuse (TagSet / TagCategory / StructuredTag)
 signal-proto.workspace = true
 
+# Shared articulation/legato/re-bow annotation model — the ONE source of
+# truth for document mode's stage-1 inference (also consumed by
+# keyflow-orchestra's mirror pass). no_std + alloc, dependency-free.
+keyflow-annotate.workspace = true
+
 # Plugin host (CLAP / VST3) — used to insert hosted plugins into mixer
 # strips and preset master chains. CLAP-only build keeps the dep surface
 # small; flip on `vst3-host` in apps/native to enable .vst3 loading too.

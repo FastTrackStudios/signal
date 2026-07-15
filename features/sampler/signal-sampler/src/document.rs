@@ -19,17 +19,24 @@
 //! picks the same RR slot for every note) and edit-stable (inserting a note
 //! re-rolls only that note).
 //!
-//! The articulation / legato-edge / re-bow inference rules are ported from —
-//! and must stay in parity with — `keyflow-orchestra/src/mirror.rs`
-//! (`mirror_part`, tested against the CSS reference engine in keyflow's
-//! `tests/mirror_parity.rs`). That crate stays independent for phase 1;
-//! TODO: unify the inference into one shared crate once document mode
-//! stabilises.
+//! The articulation / legato-edge / re-bow inference rules are the shared
+//! `keyflow-annotate` model — the same implementation keyflow-orchestra's
+//! mirror pass runs (where it is parity-tested against the CSS reference
+//! engine in keyflow's `tests/mirror_parity.rs`). The adapter-level
+//! equivalence of the two consumers is asserted over the whole MusicXML
+//! corpus in `tests/annotation_parity.rs`.
+
+use keyflow_annotate::{
+    CcTimeline, EPS, EdgeParams, LineNote, annotate_line, default_blocks_rebow, ks_is_marcato,
+};
 
 use crate::engine::{ArticClass, LineId};
 use crate::spec::{ArticulationKind, LibrarySpec};
 
-const EPS: f64 = 1e-6;
+/// Stage-1 annotation of one document note — the shared model's type
+/// (`ks_val`, `legato_from`, `legato_to`, `re_bow_to`), index-aligned with
+/// `TrackDocument::notes` when returned by [`stage1_annotations`].
+pub use keyflow_annotate::NoteAnnotation;
 
 /// Same-pitch abutment tolerance (QN) under which two connectable notes read
 /// as a re-bow. Mirrors keyflow's `Config::break_gap_qn` default (1/64) used
@@ -291,77 +298,15 @@ impl Schedule {
 /// release sample in the supported libraries.
 pub const RECONSTRUCT_TAIL_SEC: f64 = 6.0;
 
-// ── Annotation (ported from keyflow-orchestra mirror.rs — keep in parity) ─────
+// ── Annotation (shared model: keyflow-annotate) ───────────────────────────────
 
-/// CC58 band classification, ported verbatim from
-/// `keyflow-orchestra/src/mirror.rs` (the parity source — tested against the
-/// CSS reference engine there). Only these bands affect timing decisions.
-fn ks_is_marcato(val: u8) -> bool {
-    (66..=75).contains(&val) // marcato + marcato-with-overlay bands
-}
-
-fn ks_is_legato_toggle(val: u8) -> bool {
-    (76..=85).contains(&val) // legato on / legato off
-}
-
-fn ks_is_con_sord(val: u8) -> bool {
-    (86..=95).contains(&val) // con sordino on / off
-}
-
-/// Short-articulation bands (spiccato/staccatissimo/staccato/sfz/pizzicato)
-/// plus tremolo — none of these connect, so a same-pitch abutment between
-/// them is a break, not a re-bow. Marcato deliberately does NOT block
-/// (fast-run tails flowing into held notes re-bow). Parity: `mirror.rs`.
-fn ks_blocks_rebow(val: u8) -> bool {
-    (11..=35).contains(&val) || (56..=60).contains(&val)
-}
-
-/// Per-channel step timeline of a CC's value (port of mirror.rs `CcState`).
-struct CcState {
-    /// (qn, val) sorted by qn.
-    events: Vec<(f64, u8)>,
-}
-
-impl CcState {
-    fn new(ccs: &[DocCc], chan: u8, cc: u8) -> Self {
-        let mut events: Vec<(f64, u8)> = ccs
-            .iter()
+/// The channel's CC timeline for one controller (state machine over events).
+fn cc_timeline(ccs: &[DocCc], chan: u8, cc: u8) -> CcTimeline {
+    CcTimeline::from_events(
+        ccs.iter()
             .filter(|e| e.chan == chan && e.cc == cc)
-            .map(|e| (e.qn, e.val))
-            .collect();
-        events.sort_by(|a, b| a.0.total_cmp(&b.0));
-        Self { events }
-    }
-
-    /// Last value at or before `qn` (None if no event yet).
-    fn at(&self, qn: f64) -> Option<u8> {
-        let mut cur = None;
-        for &(q, v) in &self.events {
-            if q <= qn + EPS {
-                cur = Some(v);
-            } else {
-                break;
-            }
-        }
-        cur
-    }
-
-    /// Last value at/before `qn` satisfying `pred`, skipping non-matching
-    /// events (e.g. the last CC58 that selected a legato *mode*, ignoring the
-    /// articulation / toggle keyswitches pressed since).
-    fn last_matching(&self, qn: f64, pred: impl Fn(u8) -> bool) -> Option<u8> {
-        let mut cur = None;
-        for &(q, v) in &self.events {
-            if q <= qn + EPS {
-                if pred(v) {
-                    cur = Some(v);
-                }
-            } else {
-                break;
-            }
-        }
-        cur
-    }
+            .map(|e| (e.qn, e.val)),
+    )
 }
 
 /// What the spec says a CC58 state plays. `None` label / no articulation
@@ -405,12 +350,6 @@ struct ANote {
 }
 
 impl ANote {
-    /// Parity: mirror.rs `MNote::blocks_rebow` (no notation hints here —
-    /// the document is MIDI-domain only).
-    fn blocks_rebow(&self) -> bool {
-        self.ks_val.map(ks_blocks_rebow).unwrap_or(false)
-    }
-
     fn is_marcato(&self) -> bool {
         self.ks_val.map(ks_is_marcato).unwrap_or(false)
     }
@@ -428,6 +367,55 @@ impl ANote {
             ArticulationKind::Short | ArticulationKind::OneShot
         )
     }
+}
+
+/// Stage 1 of [`annotate`] on its own: infer each note's articulation state
+/// (CC58 at note-on) and the legato/re-bow edges, per engine line — a thin
+/// grouping adapter over [`keyflow_annotate::annotate_line`] (the ONE shared
+/// implementation, also consumed by keyflow-orchestra's mirror pass, where
+/// it is parity-tested against the CSS reference engine). `legato_capable`
+/// is `spec.legato_engine.is_some()` in [`annotate`]. The adapter-level
+/// parity with the mirror pass is asserted in `tests/annotation_parity.rs`.
+pub fn stage1_annotations(doc: &TrackDocument, legato_capable: bool) -> Vec<NoteAnnotation> {
+    let params = EdgeParams {
+        break_gap_qn: BREAK_GAP_QN,
+        rebow_capable: legato_capable,
+        // Performance-domain source: same-pitch overlaps deeper than the
+        // abutment window still connect — on a mono line an overlapping
+        // repeat can only be a re-bow; treating it as a break would leave
+        // the line sounding at the next note-on and push it down the
+        // reactive path.
+        connect_same_pitch_overlap: true,
+    };
+    let (line_of, _blocks) = assign_lines(doc);
+    let mut ann = vec![NoteAnnotation::default(); doc.notes.len()];
+    let mut by_line: std::collections::BTreeMap<u8, Vec<usize>> = std::collections::BTreeMap::new();
+    for i in 0..doc.notes.len() {
+        by_line.entry(line_of[i]).or_default().push(i);
+    }
+    for list in by_line.values_mut() {
+        list.sort_by(|&a, &b| doc.notes[a].start_qn.total_cmp(&doc.notes[b].start_qn));
+    }
+    for list in by_line.values() {
+        // Keyswitch state comes from the line's SOURCE channel (every note
+        // in a line shares one source channel under both allocators).
+        let ch = doc.notes[list[0]].chan;
+        let ks = cc_timeline(&doc.ccs, ch, 58);
+        let line: Vec<LineNote> = list
+            .iter()
+            .map(|&ni| LineNote {
+                start_qn: doc.notes[ni].start_qn,
+                end_qn: doc.notes[ni].end_qn,
+                pitch: doc.notes[ni].pitch as i32,
+            })
+            .collect();
+        // No notation hints here — the document is MIDI-domain only.
+        let line_ann = annotate_line(&line, &ks, default_blocks_rebow, &params);
+        for (w, &ni) in list.iter().enumerate() {
+            ann[ni] = line_ann[w];
+        }
+    }
+    ann
 }
 
 /// Annotate a document against a library spec into a frame-domain
@@ -489,16 +477,22 @@ pub fn annotate(doc: &TrackDocument, spec: &LibrarySpec, sample_rate: u32) -> Sc
     // ranking), so all inference below runs per assigned mono line.
     let (line_of, chan_blocks) = assign_lines(doc);
 
+    // Stage 1 — articulation state + legato/re-bow edges (mirror.rs parity),
+    // per line. Keyswitch state comes from the line's SOURCE channel (every
+    // note in a line shares one source channel under both allocators).
+    let ann = stage1_annotations(doc, legato_capable);
+
     // Working notes grouped per LINE, sorted by source start.
     let mut notes: Vec<ANote> = doc
         .notes
         .iter()
-        .map(|&src| ANote {
+        .enumerate()
+        .map(|(i, &src)| ANote {
             src,
-            ks_val: None,
-            kind: ArticulationKind::Sustain,
-            legato_from: false,
-            legato_to: false,
+            ks_val: ann[i].ks_val,
+            kind: kind_for_ks(spec, ann[i].ks_val),
+            legato_from: ann[i].legato_from,
+            legato_to: ann[i].legato_to,
             legato_expressive: false,
         })
         .collect();
@@ -510,50 +504,18 @@ pub fn annotate(doc: &TrackDocument, spec: &LibrarySpec, sample_rate: u32) -> Sc
         list.sort_by(|&a, &b| notes[a].src.start_qn.total_cmp(&notes[b].src.start_qn));
     }
 
-    // Stage 1 — articulation state + legato/re-bow edges (mirror.rs parity),
-    // per line. Keyswitch state comes from the line's SOURCE channel (every
-    // note in a line shares one source channel under both allocators).
+    // Legato speed mode (spec-dependent, not part of the shared stage-1
+    // annotation model): from the last CC58 that selected one (0-5 Low
+    // Latency / 6-10 Expressive), ignoring articulation & toggle keyswitches
+    // pressed since. CSS default is Low Latency.
     for list in by_line.values() {
         let ch = notes[list[0]].src.chan;
-        let ks = CcState::new(&doc.ccs, ch, 58);
+        let ks = cc_timeline(&doc.ccs, ch, 58);
         for &ni in list {
-            notes[ni].ks_val = ks.at(notes[ni].src.start_qn).filter(|v| {
-                // legato-toggle / sordino presses are state, not articulation
-                !ks_is_legato_toggle(*v) && !ks_is_con_sord(*v)
-            });
-            notes[ni].kind = kind_for_ks(spec, notes[ni].ks_val);
-            // Legato speed mode from the last CC58 that selected one (0-5 Low
-            // Latency / 6-10 Expressive), ignoring articulation & toggle
-            // keyswitches pressed since. CSS default is Low Latency.
             let mode_v = ks.last_matching(notes[ni].src.start_qn, |v| {
                 in_range(ll_range, v) || in_range(exp_range, v)
             });
             notes[ni].legato_expressive = mode_v.is_some_and(|v| in_range(exp_range, v));
-        }
-        for w in 0..list.len().saturating_sub(1) {
-            let (ai, bi) = (list[w], list[w + 1]);
-            let a = &notes[ai];
-            let b = &notes[bi];
-            let gap = b.src.start_qn - a.src.end_qn;
-            if a.src.pitch != b.src.pitch {
-                // different-pitch overlap = legato transition
-                if gap < -EPS {
-                    notes[bi].legato_from = true;
-                    notes[ai].legato_to = true;
-                }
-            } else if legato_capable
-                && !a.blocks_rebow()
-                && !b.blocks_rebow()
-                && gap <= BREAK_GAP_QN * 2.0 + EPS
-            {
-                // Same-pitch abutment OR overlap between sustains = re-bow.
-                // (Overlaps deeper than the abutment window still connect —
-                // on a mono line an overlapping repeat can only be a re-bow;
-                // treating it as a break would leave the line sounding at
-                // the next note-on and push it down the reactive path.)
-                notes[ai].legato_to = true;
-                notes[bi].legato_from = true;
-            }
         }
     }
 

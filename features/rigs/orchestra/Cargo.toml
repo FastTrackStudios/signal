@@ -9,6 +9,9 @@ authors.workspace = true
 # The shared sampler engine implements the CSS articulation behaviour; orchestra
 # is the strings definition + spec + A/B tests on top.
 signal-sampler.workspace = true
+# Score side of the bridge: MusicXML → engine PartOutput, converted here into
+# the sampler's TrackDocument (score → annotated schedule → offline audio).
+keyflow-orchestra.workspace = true
 
 [dev-dependencies]
 signal-sampler = { workspace = true, features = ["pipewire"] }
