@@ -155,6 +155,9 @@ pub fn MixerWorkspace() -> Element {
     // effect on `song_index` so mid-song navigation doesn't rebuild the strips
     // and drop fader/meter state).
     let mut raw = use_signal(Vec::<(Track, bool, bool)>::new);
+    // GUID of the project the strips were built from — the meter pump routes
+    // frames by it (the meters stream carries every project's frames).
+    let mut current_guid = use_signal(String::new);
     let active_song = use_memo(move || session_ui::ACTIVE_INDICES.read().song_index);
     use_effect(move || {
         // Reactive dependency: re-run only when the active song index changes.
@@ -164,6 +167,7 @@ pub fn MixerWorkspace() -> Element {
                 && let Ok(project) = daw.current_project().await
                 && let Ok(list) = project.tracks().all().await
             {
+                current_guid.set(project.guid().to_string());
                 // Routing facts per track (any sends / any receives) so the
                 // strip's routing indicator is truthful. In-process RPCs —
                 // cheap even for a large mixer.
@@ -201,34 +205,43 @@ pub fn MixerWorkspace() -> Element {
         entries.set(built);
     });
 
-    // Per-track metering pump (~30 fps, only while this view is mounted — the
-    // future is dropped on unmount). Reads the standalone engine's post-fader
-    // peak bank DIRECTLY in-process (already linear 0–1), so ~130 tracks cost
-    // zero RPC / marshalling — far lighter than per-track `Peaks` calls. Cell
-    // index i matches project track index i (the same order `tracks().all()`
-    // returns), so it aligns with `entries`.
+    // Per-track metering (only while this view is mounted — the future is
+    // dropped on unmount). ONE backend-agnostic `Peaks::meters` subscription
+    // through the daw facade drives the whole mixer: the backend's ~30 Hz
+    // pump (standalone's meter-bank pump / REAPER's timer poll) pushes one
+    // `MeterFrame` per tick carrying linear 0–1 peak + hold for EVERY track,
+    // `tracks[i]` = project track index i (the same order `tracks().all()`
+    // returns), so it aligns with `entries`. Frames carry their project GUID;
+    // we apply only the active song's (song switches never resubscribe).
     use_future(move || async move {
         loop {
-            if let Some(eng) = crate::session_engine::engine() {
-                let meters = eng.standalone.meters();
-                if !meters.is_empty() {
-                    // Snapshot the meter signals (Copy) without a reactive read.
-                    let sigs: Vec<(usize, Signal<f32>, Signal<f32>, Signal<f32>)> = entries
-                        .peek()
-                        .iter()
-                        .enumerate()
-                        .map(|(i, (_, tv))| (i, tv.level, tv.level_right, tv.peak))
-                        .collect();
-                    for (i, mut level, mut level_right, mut peak) in sigs {
-                        if let Some(cell) = meters.cell(i) {
-                            level.set(cell.peak(0).clamp(0.0, 1.0));
-                            level_right.set(cell.peak(1).clamp(0.0, 1.0));
-                            peak.set(cell.hold(0).max(cell.hold(1)).clamp(0.0, 1.0));
-                        }
+            let Some(daw) = daw::get() else {
+                architect::platform::sleep(std::time::Duration::from_millis(250)).await;
+                continue;
+            };
+            let mut stream = daw.meter_events();
+            while let Ok(Some(frame)) = stream.recv().await {
+                let frame = frame.get();
+                if frame.project_guid != *current_guid.peek() {
+                    continue;
+                }
+                // Snapshot the meter signals (Copy) without a reactive read.
+                let sigs: Vec<(usize, Signal<f32>, Signal<f32>, Signal<f32>)> = entries
+                    .peek()
+                    .iter()
+                    .enumerate()
+                    .map(|(i, (_, tv))| (i, tv.level, tv.level_right, tv.peak))
+                    .collect();
+                for (i, mut level, mut level_right, mut peak) in sigs {
+                    if let Some(t) = frame.tracks.get(i) {
+                        level.set(t.peak_left.clamp(0.0, 1.0));
+                        level_right.set(t.peak_right.clamp(0.0, 1.0));
+                        peak.set(t.hold_left.max(t.hold_right).clamp(0.0, 1.0));
                     }
                 }
             }
-            architect::platform::sleep(std::time::Duration::from_millis(33)).await;
+            // Stream ended (backend gone / link dropped) — back off, resubscribe.
+            architect::platform::sleep(std::time::Duration::from_millis(500)).await;
         }
     });
 
