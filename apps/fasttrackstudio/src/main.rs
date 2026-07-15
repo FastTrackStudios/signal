@@ -25,19 +25,29 @@ use dioxus::prelude::*;
 mod engine_main;
 #[cfg(all(feature = "signal", not(target_arch = "wasm32")))]
 mod engines;
-#[cfg(feature = "session")]
+#[cfg(all(feature = "session", not(target_arch = "wasm32")))]
 mod guide;
 mod prefs;
+// The shared "dial the engine" plumbing every remote surface uses (rig
+// views + the browser session player).
+#[cfg(any(feature = "signal", feature = "session"))]
+mod remote;
 #[cfg(feature = "signal")]
 mod rig_view;
-#[cfg(feature = "session")]
+// The in-process session player (daw-standalone + audio + guide) is
+// native-only; the wasm build is a remote of the network engine instead.
+#[cfg(all(feature = "session", not(target_arch = "wasm32")))]
 mod session_engine;
-#[cfg(feature = "session")]
+#[cfg(all(feature = "session", not(target_arch = "wasm32")))]
 mod mixer_view;
-#[cfg(feature = "session")]
+#[cfg(all(feature = "session", not(target_arch = "wasm32")))]
 mod lyric_sync_view;
-#[cfg(feature = "session")]
+#[cfg(all(feature = "session", not(target_arch = "wasm32")))]
 mod session_view;
+// Browser flavor of the Session workspace: SetlistService over the shared
+// `/vox` link to `fasttrackstudio --engine`.
+#[cfg(all(feature = "session", target_arch = "wasm32"))]
+mod session_remote_view;
 #[cfg(not(target_arch = "wasm32"))]
 mod updates;
 
@@ -78,7 +88,7 @@ fn main() {
     // Session: bring up the in-process engine (standalone daw + setlist
     // service + demo setlist) before the UI. Failure is non-fatal — the
     // Session workspace shows an offline notice.
-    #[cfg(feature = "session")]
+    #[cfg(all(feature = "session", not(target_arch = "wasm32")))]
     match session_engine::bootstrap_blocking() {
         Ok(()) => tracing::info!("session engine ready (in-process daw-standalone)"),
         Err(e) => tracing::error!("session engine failed to start: {e:?}"),
@@ -117,11 +127,11 @@ enum Workspace {
     Signal,
     #[cfg(feature = "session")]
     Session,
-    #[cfg(feature = "session")]
+    #[cfg(all(feature = "session", not(target_arch = "wasm32")))]
     Arrangement,
-    #[cfg(feature = "session")]
+    #[cfg(all(feature = "session", not(target_arch = "wasm32")))]
     Mixer,
-    #[cfg(feature = "session")]
+    #[cfg(all(feature = "session", not(target_arch = "wasm32")))]
     LyricSync,
     #[cfg(feature = "charts")]
     Charts,
@@ -135,11 +145,11 @@ impl Workspace {
             (Self::Signal, "Signal"),
             #[cfg(feature = "session")]
             (Self::Session, "Session"),
-            #[cfg(feature = "session")]
+            #[cfg(all(feature = "session", not(target_arch = "wasm32")))]
             (Self::Arrangement, "Arrangement"),
-            #[cfg(feature = "session")]
+            #[cfg(all(feature = "session", not(target_arch = "wasm32")))]
             (Self::Mixer, "Mixer"),
-            #[cfg(feature = "session")]
+            #[cfg(all(feature = "session", not(target_arch = "wasm32")))]
             (Self::LyricSync, "Lyric Sync"),
             #[cfg(feature = "charts")]
             (Self::Charts, "Charts"),
@@ -261,14 +271,21 @@ fn App() -> Element {
                         // the (supervised or remote) signal engine.
                         rig_view::SignalWorkspace {}
                     },
-                    #[cfg(feature = "session")]
+                    #[cfg(all(feature = "session", not(target_arch = "wasm32")))]
                     Some(Workspace::Session) => rsx! {
                         // The setlist player: session-ui's performance
                         // layout + transport strip over the in-process
                         // daw-standalone engine.
                         session_view::SessionWorkspace {}
                     },
-                    #[cfg(feature = "session")]
+                    #[cfg(all(feature = "session", target_arch = "wasm32"))]
+                    Some(Workspace::Session) => rsx! {
+                        // The browser is a remote: the same session-ui
+                        // panels over SetlistService on the network
+                        // engine's shared /vox router.
+                        session_remote_view::SessionWorkspace {}
+                    },
+                    #[cfg(all(feature = "session", not(target_arch = "wasm32")))]
                     Some(Workspace::Arrangement) => rsx! {
                         // The real daw-ui arrangement view — the seeded Praise
                         // stems' audio clips laid out on the timeline.
@@ -276,13 +293,13 @@ fn App() -> Element {
                             daw_ui::ArrangementView {}
                         }
                     },
-                    #[cfg(feature = "session")]
+                    #[cfg(all(feature = "session", not(target_arch = "wasm32")))]
                     Some(Workspace::Mixer) => rsx! {
                         // The real daw-ui mixer over the in-process daw engine —
                         // the seeded Praise stems with vol/pan/mute/solo + FX.
                         mixer_view::MixerWorkspace {}
                     },
-                    #[cfg(feature = "session")]
+                    #[cfg(all(feature = "session", not(target_arch = "wasm32")))]
                     Some(Workspace::LyricSync) => rsx! {
                         // Editable per-word lyric timings from a keyflow-sync
                         // TimingMap sidecar (forced alignment on the vocal stem).
@@ -628,13 +645,20 @@ const APP_TAILWIND: &str = include_str!("../assets/tailwind-signal.css");
 
 /// App-level chrome the session feature contributes: the compiled
 /// Tailwind sheet session-ui's components style themselves with, and
-/// the always-mounted event bridge (hub → global signals).
+/// the always-mounted event bridge (hub → global signals). Native
+/// bridges the in-process engine's hubs; the browser bridges the
+/// network engine's `#[subscribe]` streams over `/vox`.
 #[cfg(feature = "session")]
 #[component]
 fn SessionChrome() -> Element {
     rsx! {
         document::Style { {APP_TAILWIND} }
-        session_view::SessionEventBridge {}
+        {
+            #[cfg(not(target_arch = "wasm32"))]
+            { rsx! { session_view::SessionEventBridge {} } }
+            #[cfg(target_arch = "wasm32")]
+            { rsx! { session_remote_view::SessionRemoteBridge {} } }
+        }
     }
 }
 

@@ -37,11 +37,13 @@ signal-engine:
 alias rigd := signal-engine
 
 # Stage the fts web bundle (the browser remote) for embedding: tailwind →
-# dx web build (signal feature only) → apps/fasttrackstudio/web-dist/,
-# which `cargo build -p fasttrackstudio --features embed-web` compiles
-# into the binary (include_dir). web-dist/ is gitignored.
+# dx web build (signal rigs + the session setlist remote) →
+# apps/fasttrackstudio/web-dist/, which `cargo build -p fasttrackstudio
+# --features embed-web` compiles into the binary (include_dir). On wasm the
+# session feature is only the wire surface (session-proto clients +
+# session-ui); the player itself runs in the engine. web-dist/ is gitignored.
 web-stage: tailwind
-    cd apps/fasttrackstudio && dx build --platform web --release --no-default-features --features signal
+    cd apps/fasttrackstudio && dx build --platform web --release --no-default-features --features signal,session
     rm -rf apps/fasttrackstudio/web-dist
     cp -r target/dx/fasttrackstudio/release/web/public apps/fasttrackstudio/web-dist
 

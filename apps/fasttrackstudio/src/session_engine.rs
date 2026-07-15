@@ -69,6 +69,28 @@ pub struct SessionEngine {
     _scope: Arc<architect::Scope>,
 }
 
+impl SessionEngine {
+    /// A fresh `LayerRouter` serving THIS engine's setlist service — the RPC
+    /// layer plus its `#[subscribe]` stream sibling (events +
+    /// active_indices), both over the same `SetlistServiceImpl` (shared
+    /// PubSub hubs). Engine mode merges this onto the network `/vox` router
+    /// so browser remotes drive the same transport/setlist the in-process
+    /// UI reads; the serve layers here are additional instances over the
+    /// same impl as the in-process LocalServer's — layers are cheap, the
+    /// state is shared.
+    pub fn router(&self) -> daw::LayerRouter {
+        daw::LayerRouter::new()
+            .with(
+                setlist_service_service_descriptor(),
+                serve_setlist_service(self.setlist.clone()),
+            )
+            .with(
+                setlist_service_stream_service_descriptor(),
+                setlist_service_stream_serve(self.setlist.clone()),
+            )
+    }
+}
+
 static ENGINE: OnceLock<SessionEngine> = OnceLock::new();
 
 /// The engine, once [`bootstrap_blocking`] has succeeded.

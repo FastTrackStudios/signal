@@ -89,16 +89,28 @@ fn web_bundle() -> Option<WebBundle> {
 /// Entry point for `fasttrackstudio --engine`: builds the multi-thread tokio
 /// runtime and never returns until the server dies.
 pub fn run() {
-    host::block_on(async_main());
-}
-
-async fn async_main() {
     host::init_tracing("info");
     // Log every panic loudly (thread name + backtrace). Panics stay
     // unwinding — control-plane panics are caught and survived (the rig's
     // meter pump self-heals; audio keeps playing) — but none die silently.
     host::install_panic_logger();
 
+    // Session player: bring up the in-process daw-standalone setlist engine
+    // (demo setlist + audio + guide) BEFORE the server runtime exists — it
+    // owns its own runtime (bootstrap_blocking), and async_main merges its
+    // SetlistService router onto the shared `/vox` router so browser
+    // remotes drive the ENGINE's transport. Audio stays here on the engine
+    // host; failure is non-fatal (the rig serves without a setlist).
+    #[cfg(feature = "session")]
+    match crate::session_engine::bootstrap_blocking() {
+        Ok(()) => tracing::info!("session engine ready (in-process daw-standalone)"),
+        Err(e) => tracing::error!("session engine failed to start: {e:?}"),
+    }
+
+    host::block_on(async_main());
+}
+
+async fn async_main() {
     // ── Rigs ──────────────────────────────────────────────────────────────
     // Every rig backend mounts its own service bundle onto ONE shared router
     // (`merge_router`) served at `/vox`; adding a rig (keys, …) is one more
@@ -118,6 +130,29 @@ async fn async_main() {
         .merge_router(drums.router())
         .merge_router(keys.router())
         .merge_router(synth.router());
+
+    // ── Session (the setlist player) ─────────────────────────────────────
+    // Mount SetlistService (+ its `#[subscribe]` stream sibling) from the
+    // in-process session engine bootstrapped in `run()`, so browser/desktop
+    // remotes reach the setlist over the SAME `/vox` (and iroh) endpoint as
+    // the rigs. The transport plays HERE — remotes only command and render.
+    #[cfg(feature = "session")]
+    let router = match crate::session_engine::engine() {
+        Some(session) => {
+            // Open the setlist on song 0 / section 0 so remotes land on an
+            // active cursor (demo stamping leaves the edit cursor at the
+            // timeline end — nothing would be active until a user seeks).
+            let client = session.client.clone();
+            tokio::spawn(async move {
+                match client.seek_to_section(0, 0).await {
+                    Ok(_) => tracing::info!("opened setlist on song 0 / section 0"),
+                    Err(e) => tracing::warn!("initial setlist seek failed: {e:?}"),
+                }
+            });
+            router.merge_router(session.router())
+        }
+        None => router, // bootstrap failed — the rigs still serve
+    };
 
     // Serve the router over axum (`/vox` + `/health`) and iroh p2p, with the
     // browser remote as the HTTP fallback — all of it in `architect::host`.

@@ -77,6 +77,14 @@ signal = [
 # the browser remote from memory, ONE deployable artifact. Off by default
 # so a plain `cargo build -p fasttrackstudio` needs no staged dir.
 embed-web = ["dep:include_dir"]
+# Session on the web build is a REMOTE: the wasm target compiles only the
+# wire surface (session-proto's SetlistService clients + session-ui) and
+# talks to the network engine's SetlistService over the shared `/vox` link
+# (src/session_remote_view.rs). The in-process player (session facade,
+# daw-standalone, the guide) is native-only — those optional deps live
+# exclusively in the `cfg(not(target_arch = "wasm32"))` table below, so
+# enabling them here is a no-op on the web build (the same trick the
+# `signal` feature uses for engine mode).
 session = [
     "dep:session-proto",
     "dep:session-ui",
@@ -90,7 +98,12 @@ session = [
     "dep:daw-standalone",
     "dep:architect",
     "architect/local",
+    # The remote path to the session engine (src/remote.rs, shared with the
+    # signal rig views): vox over a WebSocket or iroh p2p.
+    "architect/iroh",
     "dep:vox",
+    "dep:vox-core",
+    "dep:vox-websocket",
     "dep:tokio",
     "dep:eyre",
     # Spoken section cues via Chatterbox TTS — auto-enabled with Session (the
@@ -109,6 +122,12 @@ charts = ["dep:keyflow"]
 # without it, cues fall back to the synthesized guide samples.
 tts = ["session-guide/tts"]
 
+# Network probe for the engine's SetlistService (the browser remote's wire
+# path, natively): `cargo run -p fasttrackstudio --example setlist_probe`.
+[[example]]
+name = "setlist_probe"
+required-features = ["signal", "session"]
+
 [dependencies]
 tracing.workspace = true
 
@@ -122,24 +141,12 @@ signal-keys-ui = { workspace = true, optional = true }
 signal-synth-proto = { workspace = true, optional = true }
 signal-synth-ui = { workspace = true, optional = true }
 
-# Session domain (setlists / charts / daw) — embedded in-process.
-session = { workspace = true, optional = true }
+# Session domain, wire surface — the SetlistService types + generated
+# clients (session-proto) compile everywhere, including the wasm remote.
+# The in-process player crates (session facade, daw-standalone, the guide)
+# are native-only and live in the cfg(not wasm) table below.
 session-proto = { workspace = true, optional = true }
-# Guide engine: click / count-in / section cues rendered into the audio
-# output through daw-standalone's aux post-render hook.
-session-guide = { workspace = true, optional = true }
 keyflow = { workspace = true, optional = true }
-# Lyric-sync sidecar (TimingMap) reader for the Lyric Sync workspace. Lean
-# default features only — no onnx/whisper; alignment is produced offline by
-# the `kf` CLI, the app just loads + edits the resulting sidecar.
-keyflow-sync = { workspace = true, optional = true }
-
-# DAW domain — facade (daw::get / init_from_parts / LayerRouter) + the
-# standalone backend that plays the setlist without REAPER. "audio" is
-# required by daw-standalone's unconditional `sync` module (same
-# workaround session's dev-deps carry) and drives real cpal output.
-daw = { workspace = true, optional = true }
-daw-standalone = { workspace = true, features = ["bootstrap", "audio"], optional = true }
 
 # Service framework — the root workspace's architect + vox (patched to the
 # sibling ../architect checkout at the root) so the whole graph shares one
@@ -170,6 +177,26 @@ dawfile-reaper = { workspace = true, optional = true }
 engine-launcher = { workspace = true, optional = true }
 # Async runtime: session's in-process engine AND engine mode's server.
 tokio = { workspace = true, optional = true }
+
+# ── Session domain, in-process player (feature `session`, native only) ──
+# The session facade + the daw-standalone backend that PLAYS the setlist,
+# plus the guide engine — all native-only (audio, threads, filesystem).
+# The wasm build gets only session-proto + session-ui and drives a
+# network engine instead (session_remote_view.rs).
+session = { workspace = true, optional = true }
+# Guide engine: click / count-in / section cues rendered into the audio
+# output through daw-standalone's aux post-render hook.
+session-guide = { workspace = true, optional = true }
+# Lyric-sync sidecar (TimingMap) reader for the Lyric Sync workspace. Lean
+# default features only — no onnx/whisper; alignment is produced offline by
+# the `kf` CLI, the app just loads + edits the resulting sidecar.
+keyflow-sync = { workspace = true, optional = true }
+# DAW domain — facade (daw::get / init_from_parts / LayerRouter) + the
+# standalone backend that plays the setlist without REAPER. "audio" is
+# required by daw-standalone's unconditional `sync` module (same
+# workaround session's dev-deps carry) and drives real cpal output.
+daw = { workspace = true, optional = true }
+daw-standalone = { workspace = true, features = ["bootstrap", "audio"], optional = true }
 
 # ── Engine mode (`--engine`, feature `signal`) — the former
 #    apps/signal-engine, native only ─────────────────────────────────────
@@ -208,7 +235,9 @@ signal-synth-rig = { workspace = true, features = ["pipewire"], optional = true 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 dioxus = { workspace = true, default-features = true, features = ["web", "launch"] }
 session-ui = { workspace = true, features = ["web"], optional = true }
-daw-ui = { workspace = true, features = ["web"], optional = true }
+# NO daw-ui here: its daw-control backend is not wasm-clean, and the daw
+# panels (Arrangement / Mixer) are native-only workspaces anyway — the
+# session feature's "dep:daw-ui" is a no-op on the web build.
 web-sys = { version = "0.3", features = ["Window", "Storage", "Location"] }
 # getrandom 0.3 (transitive via iroh) needs its js backend on wasm32.
 getrandom = { version = "0.3", features = ["wasm_js"] }
