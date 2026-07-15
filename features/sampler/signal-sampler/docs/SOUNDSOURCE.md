@@ -75,18 +75,24 @@ sampled one).
 The shared engine drives every rig on the production machine, so this lands
 incrementally, never as a big-bang rewrite:
 
-1. **Define** `Soundsource` + `SoundsourceKind` (this doc). No behavior change.
-2. **Adapt**: blanket-impl / newtype so the existing generators
-   (`NativeOscillator`, `NativeWavetable`, `SampleEngine`) satisfy `Soundsource`
-   — they already have `note_on`/`process_block`/`params`. A `SoundsourceLeaf`
-   adapter bridges `Soundsource` ↔ the render tree's `PluginInstance` so nothing
-   in `node_render` changes.
-3. **Audio soundsource**: implement the new one (file/stream player) as the first
-   *native* `Soundsource` (proves the trait carries a non-sampler, non-osc gen).
+1. ~~**Define** `Soundsource` + `SoundsourceKind` (this doc).~~ DONE.
+2. ~~**Adapt** the existing generators onto the trait.~~ DONE — and then
+   **inverted**: `NativeOscillator`, `NativeWavetable`, and the `SampleEngine`
+   (via `SamplerInstrument`) now implement `Soundsource` **natively** as their
+   primary trait; none of them implements `PluginInstance` directly anymore.
+   The single generic `SoundsourceLeaf` adapter is the only bridge into the
+   render tree's `PluginInstance` leaf (generators keep their established
+   descriptor ids — `signal.native.oscillator`, `signal.native.wavetable`,
+   `signal.sampler.instrument` — via `Soundsource::descriptor`).
+3. ~~**Audio soundsource**~~ DONE — `AudioSoundsource` (the guitar-DI /
+   input-passthrough case) was the first native `Soundsource`.
 4. **Expose** `SoundsourceKind` + params over the synth proto so the Control/Edit
    UI shows/edits the layer's source generically (source picker, per-kind params).
-5. Only once (2)–(4) are proven, consider making `node_render` source leaves hold
-   `Box<dyn Soundsource>` directly.
+5. Only once (4) is proven, consider making `node_render` source leaves hold
+   `Box<dyn Soundsource>` directly (today they hold the leaf-wrapped box).
+
+PhysicalModel remains a `SoundsourceKind` stub — the City Grand / Wurli
+physical models still enter the tree as plain `PluginInstance` blocks.
 
 Every step keeps the current `PluginInstance` path working — the live keys /
 drums / guitar / synth rigs never break mid-migration.

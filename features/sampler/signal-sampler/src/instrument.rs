@@ -1,51 +1,52 @@
-//! [`SampleEngine`] wrapped as an instrument [`PluginInstance`].
+//! [`SampleEngine`] as the **Sample** [`Soundsource`] — the first-class
+//! generator for multisample playback (packs, zone maps, round-robins,
+//! mics, legato).
 //!
 //! This is the MIDI analog of the rig's audio-only [`crate::rig::GuitarRig`]:
 //! instead of pass-through processing an input bus, it **generates** audio
-//! from MIDI. Hosted on a daw instrument track, the renderer runs the FX
-//! chain every block (the chain is non-empty so the `dirty || !fx_chain`
-//! guard keeps it alive), feeds it the block's MIDI events — including
-//! live / programmatic ones pushed via `Standalone::push_note_on` — and
-//! the instrument writes the rendered voices into the track bus.
+//! from MIDI. Hosted on a daw instrument track through the generic
+//! [`SoundsourceLeaf`](crate::soundsource::SoundsourceLeaf) adapter, the
+//! renderer runs the FX chain every block (the chain is non-empty so the
+//! `dirty || !fx_chain` guard keeps it alive), feeds it the block's MIDI
+//! events — including live / programmatic ones pushed via
+//! `Standalone::push_note_on` — and the instrument writes the rendered
+//! voices into the track bus.
 //!
 //! `in_l` / `in_r` are ignored: a sampler is a source, not an effect.
 //!
 //! ## Send-safety
-//! [`PluginInstance`] requires `Send`. [`SampleEngine`] contains only
+//! [`Soundsource`] requires `Send`. [`SampleEngine`] contains only
 //! `Cell`/`RefCell` interior mutability (metering counters + a round-robin
 //! state cell) over `Send` payloads — these are `Send` (they are merely
 //! not `Sync`), and there is no `Rc` anywhere in the engine — so
 //! `SamplerInstrument` is `Send`.
 
-use signal_plugin_host::{
-    PluginDescriptor, PluginError, PluginEvents, PluginFormat, PluginInstance, PluginParamInfo,
-};
+use signal_plugin_host::{PluginDescriptor, PluginEvents, PluginFormat};
 
 use crate::engine::SampleEngine;
+use crate::soundsource::{Soundsource, SoundsourceKind};
 
-/// A [`SampleEngine`] presented to a daw host as an instrument plugin.
+/// A [`SampleEngine`] presented as the **Sample** [`Soundsource`].
 ///
 /// The engine is constructed (and its sample rate fixed) before the
 /// instrument is built — `SampleEngine` has no runtime sample-rate change
-/// — so [`prepare`](PluginInstance::prepare) only validates the block size
-/// and (re)sizes the interleaved render scratch.
+/// — so [`prepare`](Soundsource::prepare) only (re)sizes the interleaved
+/// render scratch.
 pub struct SamplerInstrument {
     engine: SampleEngine,
     /// Interleaved stereo render scratch (`2 * block_size`), reused.
     scratch: Vec<f32>,
-    prepared: bool,
 }
 
 impl SamplerInstrument {
     /// Wrap an already-constructed [`SampleEngine`]. The engine's sample
     /// rate must match the host's; the host calls
-    /// [`prepare`](PluginInstance::prepare) with the same rate but the
+    /// [`prepare`](Soundsource::prepare) with the same rate but the
     /// engine ignores it (its rate is immutable post-construction).
     pub fn new(engine: SampleEngine) -> Self {
         Self {
             engine,
             scratch: Vec::new(),
-            prepared: false,
         }
     }
 
@@ -61,7 +62,7 @@ impl SamplerInstrument {
 
     /// Apply one MIDI message to the engine. Channel is ignored — the
     /// engine is monotimbral. Split out so it can be unit-tested without
-    /// driving a full [`process_block`](PluginInstance::process_block).
+    /// driving a full [`render`](Soundsource::render).
     pub(crate) fn apply_midi(&mut self, message: &midicore::MidiEvent) {
         use midicore::MidiEvent;
         match message {
@@ -91,7 +92,12 @@ impl SamplerInstrument {
     }
 }
 
-impl PluginInstance for SamplerInstrument {
+// r[impl signal.soundsource.sample]
+impl Soundsource for SamplerInstrument {
+    fn kind(&self) -> SoundsourceKind {
+        SoundsourceKind::Sample
+    }
+
     fn descriptor(&self) -> PluginDescriptor {
         PluginDescriptor {
             id: "signal.sampler.instrument".into(),
@@ -102,46 +108,33 @@ impl PluginInstance for SamplerInstrument {
         }
     }
 
-    fn params(&mut self) -> Vec<PluginParamInfo> {
-        Vec::new()
-    }
-
-    fn param_value(&mut self, _id: u32) -> Option<f64> {
-        None
-    }
-
-    fn value_to_text(&mut self, _id: u32, _value: f64) -> Option<String> {
-        None
-    }
-
-    fn text_to_value(&mut self, _id: u32, _text: &str) -> Option<f64> {
-        None
-    }
-
-    fn latency(&mut self) -> u32 {
-        0
-    }
-
-    fn prepare(&mut self, _sample_rate: f64, block_size: u32) -> Result<(), PluginError> {
+    fn prepare(&mut self, _sample_rate: f32, block_size: usize) {
         // `SampleEngine`'s rate is fixed at construction; only size the
-        // interleaved (stereo) scratch so `process_block` never allocates.
-        self.scratch.resize(block_size as usize * 2, 0.0);
-        self.prepared = true;
-        Ok(())
+        // interleaved (stereo) scratch so `render` never allocates.
+        self.scratch.resize(block_size * 2, 0.0);
     }
 
-    fn is_prepared(&self) -> bool {
-        self.prepared
+    fn note_on(&mut self, note: u8, velocity: u8) {
+        // Drive the wrapped engine directly (the same call `apply_midi` makes
+        // for an incoming NoteOn).
+        self.engine.note_on(note, velocity);
     }
 
-    fn process_block(
+    fn note_off(&mut self, note: u8) {
+        self.engine.note_off(note);
+    }
+
+    fn render(
         &mut self,
         _in_l: &[f32],
         _in_r: &[f32],
         out_l: &mut [f32],
         out_r: &mut [f32],
         events: &PluginEvents<'_>,
-    ) -> Result<(), PluginError> {
+    ) {
+        // The sampler is a source: audio input is ignored, notes arrive
+        // through `events.midi`, and the engine's interleaved render is
+        // de-interleaved into the planar output.
         let frames = out_l.len().min(out_r.len());
 
         // Apply this block's MIDI in offset order (the host already sorts).
@@ -164,63 +157,27 @@ impl PluginInstance for SamplerInstrument {
             out_l[f] = self.scratch[f * 2];
             out_r[f] = self.scratch[f * 2 + 1];
         }
-        Ok(())
-    }
-
-    fn deactivate(&mut self) {
-        self.prepared = false;
-    }
-}
-
-impl crate::soundsource::Soundsource for SamplerInstrument {
-    fn kind(&self) -> crate::soundsource::SoundsourceKind {
-        crate::soundsource::SoundsourceKind::Sample
-    }
-
-    fn prepare(&mut self, sample_rate: f32, block_size: usize) {
-        let _ = PluginInstance::prepare(self, sample_rate as f64, block_size as u32);
-    }
-
-    fn note_on(&mut self, note: u8, velocity: u8) {
-        // Drive the wrapped engine directly (the same call `apply_midi` makes
-        // for an incoming NoteOn).
-        self.engine.note_on(note, velocity);
-    }
-
-    fn note_off(&mut self, note: u8) {
-        self.engine.note_off(note);
-    }
-
-    fn render(
-        &mut self,
-        in_l: &[f32],
-        in_r: &[f32],
-        out_l: &mut [f32],
-        out_r: &mut [f32],
-        events: &PluginEvents<'_>,
-    ) {
-        // The sampler is a source: `process_block` ignores `in_l`/`in_r`, reads
-        // notes from `events.midi`, and de-interleaves into the planar output.
-        let _ = self.process_block(in_l, in_r, out_l, out_r, events);
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use signal_plugin_host::{PluginEvents, PluginMidiEvent};
+    use crate::soundsource::SoundsourceLeaf;
+    use signal_plugin_host::{PluginEvents, PluginInstance, PluginMidiEvent};
 
-    /// `PluginInstance: Send` is a hard requirement (the renderer hands
-    /// `Box<dyn PluginInstance>` across threads). This is a compile-time
+    /// `Soundsource: Send` is a hard requirement (the renderer hands the
+    /// leaf-wrapped generator across threads). This is a compile-time
     /// proof that the wrapped `SampleEngine` keeps `SamplerInstrument`
     /// `Send` — no `Rc`, only `Send`-but-not-`Sync` interior mutability.
     #[test]
     fn sampler_instrument_is_send() {
         fn assert_send<T: Send>() {}
         assert_send::<SamplerInstrument>();
-        // And it really is usable as the trait object the host stores.
-        fn assert_boxed_send(_: Box<dyn PluginInstance>) {}
-        // (type-checks the Box<dyn PluginInstance>: Send coercion path)
+        assert_send::<SoundsourceLeaf>();
+        // And it really is usable as the trait objects the host stores.
+        fn assert_boxed_send(_: Box<dyn PluginInstance>, _: Box<dyn Soundsource>) {}
+        // (type-checks the Box<dyn Trait>: Send coercion paths)
         let _ = assert_boxed_send;
     }
 
@@ -276,15 +233,16 @@ zones (
         }
     }
 
-    /// End-to-end seam: a `NoteOn` arriving through `process_block` reaches
-    /// the `SampleEngine`, allocates a voice, and produces non-silent output.
+    /// End-to-end seam: a `NoteOn` arriving through the **leaf's**
+    /// `process_block` reaches the `SampleEngine` via `render`, allocates a
+    /// voice, and produces non-silent output.
     #[test]
     fn note_on_through_process_block_produces_audio() {
         let dir = std::env::temp_dir().join(format!("signal-sampler-it-{}", std::process::id()));
         std::fs::create_dir_all(&dir).expect("mkdir");
 
         let mut inst = SamplerInstrument::new(minimal_engine(&dir));
-        inst.prepare(48_000.0, 512).expect("prepare");
+        Soundsource::prepare(&mut inst, 48_000.0, 512);
 
         let frames = 512usize;
         let in_l = vec![0.0f32; frames];
@@ -299,8 +257,7 @@ zones (
             midi: &midi,
             note_expressions: &[],
         };
-        inst.process_block(&in_l, &in_r, &mut out_l, &mut out_r, &events)
-            .expect("process");
+        inst.render(&in_l, &in_r, &mut out_l, &mut out_r, &events);
 
         assert!(
             inst.engine().active_voices() > 0,
@@ -319,8 +276,7 @@ zones (
                 midi: &[],
                 note_expressions: &[],
             };
-            inst.process_block(&in_l, &in_r, &mut out_l, &mut out_r, &empty)
-                .expect("process");
+            inst.render(&in_l, &in_r, &mut out_l, &mut out_r, &empty);
             for s in out_l.iter().chain(out_r.iter()) {
                 energy += (*s as f64) * (*s as f64);
                 count += 1;

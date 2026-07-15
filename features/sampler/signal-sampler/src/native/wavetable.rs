@@ -17,11 +17,10 @@
 //! drivable): shape, unison detune, FM depth, ring mix. Voice-count /
 //! width / harmonia are build-time block params.
 
-use signal_plugin_host::{
-    PluginDescriptor, PluginError, PluginEvents, PluginFormat, PluginInstance, PluginParamInfo,
-};
+use signal_plugin_host::{PluginDescriptor, PluginEvents, PluginFormat, PluginParamInfo};
 
 use super::adsr::{Adsr, AdsrParams};
+use crate::soundsource::{Soundsource, SoundsourceKind};
 
 /// PolyBLEP residual for a discontinuity at phase 0 (t in 0..1, dt = inc).
 #[inline]
@@ -178,7 +177,6 @@ pub struct NativeWavetable {
     /// Harmonia level scale (param 6 "harm_mix").
     harm_mix: f32,
     voices: Vec<Voice>,
-    prepared: bool,
 }
 
 impl NativeWavetable {
@@ -190,7 +188,6 @@ impl NativeWavetable {
             duty: 0.5,
             harm_mix: 1.0,
             voices: Vec::new(),
-            prepared: false,
         }
     }
 
@@ -322,7 +319,12 @@ impl NativeWavetable {
     }
 }
 
-impl PluginInstance for NativeWavetable {
+// r[impl signal.soundsource.oscillator]
+impl Soundsource for NativeWavetable {
+    fn kind(&self) -> SoundsourceKind {
+        SoundsourceKind::Oscillator
+    }
+
     fn descriptor(&self) -> PluginDescriptor {
         PluginDescriptor {
             id: "signal.native.wavetable".into(),
@@ -333,7 +335,9 @@ impl PluginInstance for NativeWavetable {
         }
     }
 
-    fn params(&mut self) -> Vec<PluginParamInfo> {
+    fn params(&self) -> Vec<PluginParamInfo> {
+        // Defaults report the CURRENT values, so the leaf's `param_value`
+        // (a `params()` lookup) reads back live state.
         let mk = |id, name: &str, default: f64| PluginParamInfo {
             id,
             name: name.into(),
@@ -352,37 +356,28 @@ impl PluginInstance for NativeWavetable {
             mk(2, "fm_depth", self.cfg.fm_depth as f64),
             mk(3, "ring_mix", self.cfg.ring_mix as f64),
             // 0.5 center → ±24 semitones.
-            mk(4, "tune", 0.5),
+            mk(4, "tune", (self.pitch_mult.log2() * 12.0 / 48.0 + 0.5) as f64),
             // Square pulse width (0.5 symmetric).
-            mk(5, "symmetry", 0.5),
+            mk(5, "symmetry", self.duty as f64),
             // Harmonia level scale.
-            mk(6, "harm_mix", 1.0),
+            mk(6, "harm_mix", self.harm_mix as f64),
         ]
     }
-    fn param_value(&mut self, id: u32) -> Option<f64> {
-        match id {
-            0 => Some(self.cfg.shape as f64),
-            1 => Some((self.cfg.unison_detune_cents / 100.0) as f64),
-            2 => Some(self.cfg.fm_depth as f64),
-            3 => Some(self.cfg.ring_mix as f64),
-            4 => Some((self.pitch_mult.log2() * 12.0 / 48.0 + 0.5) as f64),
-            5 => Some(self.duty as f64),
-            6 => Some(self.harm_mix as f64),
-            _ => None,
-        }
-    }
-    fn value_to_text(&mut self, _id: u32, _value: f64) -> Option<String> {
-        None
-    }
-    fn text_to_value(&mut self, _id: u32, _text: &str) -> Option<f64> {
-        None
-    }
-    fn latency(&mut self) -> u32 {
-        0
+
+    fn set_param(&mut self, id: u32, value: f64) {
+        // Reuse the render-time param path: with zero-length buffers it only
+        // updates state (no rendering, no allocation).
+        let params = [(id, value)];
+        let events = PluginEvents {
+            params: &params,
+            midi: &[],
+            note_expressions: &[],
+        };
+        self.render(&[], &[], &mut [], &mut [], &events);
     }
 
-    fn prepare(&mut self, sample_rate: f64, _block_size: u32) -> Result<(), PluginError> {
-        let new_sr = sample_rate.max(1.0) as f32;
+    fn prepare(&mut self, sample_rate: f32, _block_size: usize) {
+        let new_sr = sample_rate.max(1.0);
         if (new_sr - self.sample_rate).abs() > f32::EPSILON {
             let ratio = self.sample_rate / new_sr;
             for v in &mut self.voices {
@@ -398,22 +393,25 @@ impl PluginInstance for NativeWavetable {
             }
             self.sample_rate = new_sr;
         }
-        self.prepared = true;
-        Ok(())
     }
 
-    fn is_prepared(&self) -> bool {
-        self.prepared
+    fn note_on(&mut self, note: u8, velocity: u8) {
+        // Inherent method wins over the trait method of the same name.
+        NativeWavetable::note_on(self, note, velocity);
     }
 
-    fn process_block(
+    fn note_off(&mut self, note: u8) {
+        NativeWavetable::note_off(self, note);
+    }
+
+    fn render(
         &mut self,
         _in_l: &[f32],
         _in_r: &[f32],
         out_l: &mut [f32],
         out_r: &mut [f32],
         events: &PluginEvents<'_>,
-    ) -> Result<(), PluginError> {
+    ) {
         for &(id, value) in events.params {
             let v = (value as f32).clamp(0.0, 1.0);
             match id {
@@ -503,81 +501,10 @@ impl PluginInstance for NativeWavetable {
             out_r[f] = sr;
         }
         self.voices.retain(|v| !v.env.is_idle());
-        Ok(())
     }
 
-    fn deactivate(&mut self) {
-        self.prepared = false;
+    fn reset(&mut self) {
         self.voices.clear();
-    }
-}
-
-impl crate::soundsource::Soundsource for NativeWavetable {
-    fn kind(&self) -> crate::soundsource::SoundsourceKind {
-        crate::soundsource::SoundsourceKind::Oscillator
-    }
-
-    fn prepare(&mut self, sample_rate: f32, block_size: usize) {
-        let _ = PluginInstance::prepare(self, sample_rate as f64, block_size as u32);
-    }
-
-    fn note_on(&mut self, note: u8, velocity: u8) {
-        // Inherent method wins over the trait method of the same name.
-        NativeWavetable::note_on(self, note, velocity);
-    }
-
-    fn note_off(&mut self, note: u8) {
-        NativeWavetable::note_off(self, note);
-    }
-
-    fn render(
-        &mut self,
-        in_l: &[f32],
-        in_r: &[f32],
-        out_l: &mut [f32],
-        out_r: &mut [f32],
-        events: &PluginEvents<'_>,
-    ) {
-        let _ = self.process_block(in_l, in_r, out_l, out_r, events);
-    }
-
-    fn params(&self) -> Vec<PluginParamInfo> {
-        // Mirror the host-param surface (`PluginInstance::params`), reporting
-        // current values as defaults. Kept here because the trait getter takes
-        // `&self` while the host method takes `&mut self`.
-        let mk = |id, name: &str, default: f64| PluginParamInfo {
-            id,
-            name: name.into(),
-            min: 0.0,
-            max: 1.0,
-            default,
-        };
-        vec![
-            mk(0, "shape", self.cfg.shape as f64),
-            mk(
-                1,
-                "unison_detune",
-                (self.cfg.unison_detune_cents / 100.0) as f64,
-            ),
-            mk(2, "fm_depth", self.cfg.fm_depth as f64),
-            mk(3, "ring_mix", self.cfg.ring_mix as f64),
-            mk(4, "tune", (self.pitch_mult.log2() * 12.0 / 48.0 + 0.5) as f64),
-            mk(5, "symmetry", self.duty as f64),
-            mk(6, "harm_mix", self.harm_mix as f64),
-        ]
-    }
-
-    fn set_param(&mut self, id: u32, value: f64) {
-        // Reuse the existing param path: `process_block` applies `events.params`
-        // at block start. With zero-length buffers it only updates state (no
-        // rendering, no allocation).
-        let params = [(id, value)];
-        let events = PluginEvents {
-            params: &params,
-            midi: &[],
-            note_expressions: &[],
-        };
-        let _ = self.process_block(&[], &[], &mut [], &mut [], &events);
     }
 }
 
@@ -597,7 +524,7 @@ mod tests {
 
     fn render_cfg(cfg: SynthConfig, n: usize) -> (Vec<f32>, Vec<f32>) {
         let mut osc = NativeWavetable::new(48_000).with_config(cfg);
-        osc.prepare(48_000.0, n as u32).unwrap();
+        Soundsource::prepare(&mut osc, 48_000.0, n);
         let (inl, inr) = (vec![0.0; n], vec![0.0; n]);
         let (mut outl, mut outr) = (vec![0.0; n], vec![0.0; n]);
         let midi = [PluginMidiEvent {
@@ -609,8 +536,7 @@ mod tests {
             midi: &midi,
             note_expressions: &[],
         };
-        osc.process_block(&inl, &inr, &mut outl, &mut outr, &ev)
-            .unwrap();
+        osc.render(&inl, &inr, &mut outl, &mut outr, &ev);
         (outl, outr)
     }
 
@@ -755,7 +681,7 @@ mod tests {
             ..Default::default()
         };
         let mut osc = NativeWavetable::new(48_000).with_config(cfg);
-        osc.prepare(48_000.0, 2_048).unwrap();
+        Soundsource::prepare(&mut osc, 48_000.0, 2_048);
         let (inl, inr) = (vec![0.0; 2_048], vec![0.0; 2_048]);
         let (mut outl, mut outr) = (vec![0.0; 2_048], vec![0.0; 2_048]);
         let midi = [PluginMidiEvent {
@@ -767,8 +693,7 @@ mod tests {
             midi: &midi,
             note_expressions: &[],
         };
-        osc.process_block(&inl, &inr, &mut outl, &mut outr, &ev)
-            .unwrap();
+        osc.render(&inl, &inr, &mut outl, &mut outr, &ev);
         let peak = outl.iter().fold(0.0f32, |m, s| m.max(s.abs()));
         assert!(peak < 0.4, "bounded output at C8, peak={peak}");
     }

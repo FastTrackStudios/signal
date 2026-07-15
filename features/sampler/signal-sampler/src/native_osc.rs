@@ -6,15 +6,16 @@
 //! taxonomy (Pure / Sub / Sync / Shape / Multi / Super / FM …) and `osc_ctrl`
 //! shaping come later — this is the seed.
 //!
-//! Implemented as a [`PluginInstance`] generator (like
+//! Implemented as a first-class [`Soundsource`] generator (like
 //! [`SamplerInstrument`](crate::SamplerInstrument)): it ignores its audio input
-//! and writes summed voices into the output from the MIDI it receives.
+//! and writes summed voices into the output from the MIDI it receives. The
+//! render tree hosts it through the generic
+//! [`SoundsourceLeaf`](crate::soundsource::SoundsourceLeaf) adapter.
 
-use signal_plugin_host::{
-    PluginDescriptor, PluginError, PluginEvents, PluginFormat, PluginInstance, PluginParamInfo,
-};
+use signal_plugin_host::{PluginDescriptor, PluginEvents, PluginFormat};
 
 use crate::native::{Adsr, AdsrParams};
+use crate::soundsource::{Soundsource, SoundsourceKind};
 
 /// Oscillator waveform. (A stand-in for the eventual Nord category/Osc-Ctrl set.)
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -60,7 +61,6 @@ pub struct NativeOscillator {
     sample_rate: f32,
     wave: OscWave,
     voices: Vec<Voice>,
-    prepared: bool,
 }
 
 impl NativeOscillator {
@@ -69,7 +69,6 @@ impl NativeOscillator {
             sample_rate: sample_rate.max(1) as f32,
             wave: OscWave::Sine,
             voices: Vec::new(),
-            prepared: false,
         }
     }
 
@@ -127,7 +126,12 @@ impl NativeOscillator {
     }
 }
 
-impl PluginInstance for NativeOscillator {
+// r[impl signal.soundsource.oscillator]
+impl Soundsource for NativeOscillator {
+    fn kind(&self) -> SoundsourceKind {
+        SoundsourceKind::Oscillator
+    }
+
     fn descriptor(&self) -> PluginDescriptor {
         PluginDescriptor {
             id: "signal.native.oscillator".into(),
@@ -138,25 +142,9 @@ impl PluginInstance for NativeOscillator {
         }
     }
 
-    fn params(&mut self) -> Vec<PluginParamInfo> {
-        Vec::new()
-    }
-    fn param_value(&mut self, _id: u32) -> Option<f64> {
-        None
-    }
-    fn value_to_text(&mut self, _id: u32, _value: f64) -> Option<String> {
-        None
-    }
-    fn text_to_value(&mut self, _id: u32, _text: &str) -> Option<f64> {
-        None
-    }
-    fn latency(&mut self) -> u32 {
-        0
-    }
-
-    fn prepare(&mut self, sample_rate: f64, _block_size: u32) -> Result<(), PluginError> {
+    fn prepare(&mut self, sample_rate: f32, _block_size: usize) {
         // Re-pitch live voices if the rate changed.
-        let new_sr = sample_rate.max(1.0) as f32;
+        let new_sr = sample_rate.max(1.0);
         if (new_sr - self.sample_rate).abs() > f32::EPSILON {
             let ratio = self.sample_rate / new_sr;
             for v in &mut self.voices {
@@ -165,22 +153,28 @@ impl PluginInstance for NativeOscillator {
             }
             self.sample_rate = new_sr;
         }
-        self.prepared = true;
-        Ok(())
     }
 
-    fn is_prepared(&self) -> bool {
-        self.prepared
+    fn note_on(&mut self, note: u8, velocity: u8) {
+        // Inherent `NativeOscillator::note_on` (inherent methods win over the
+        // trait method of the same name, so this is not a recursion).
+        NativeOscillator::note_on(self, note, velocity);
     }
 
-    fn process_block(
+    fn note_off(&mut self, note: u8) {
+        NativeOscillator::note_off(self, note);
+    }
+
+    fn render(
         &mut self,
         _in_l: &[f32],
         _in_r: &[f32],
         out_l: &mut [f32],
         out_r: &mut [f32],
         events: &PluginEvents<'_>,
-    ) -> Result<(), PluginError> {
+    ) {
+        // A synthesis generator: audio input is ignored, notes arrive
+        // through `events.midi`.
         for ev in events.midi {
             self.apply_midi(&ev.message);
         }
@@ -199,45 +193,10 @@ impl PluginInstance for NativeOscillator {
         }
         // Reap voices whose release finished.
         self.voices.retain(|v| !v.env.is_idle());
-        Ok(())
     }
 
-    fn deactivate(&mut self) {
-        self.prepared = false;
+    fn reset(&mut self) {
         self.voices.clear();
-    }
-}
-
-impl crate::soundsource::Soundsource for NativeOscillator {
-    fn kind(&self) -> crate::soundsource::SoundsourceKind {
-        crate::soundsource::SoundsourceKind::Oscillator
-    }
-
-    fn prepare(&mut self, sample_rate: f32, block_size: usize) {
-        let _ = PluginInstance::prepare(self, sample_rate as f64, block_size as u32);
-    }
-
-    fn note_on(&mut self, note: u8, velocity: u8) {
-        // Inherent `NativeOscillator::note_on` (inherent methods win over the
-        // trait method of the same name, so this is not a recursion).
-        NativeOscillator::note_on(self, note, velocity);
-    }
-
-    fn note_off(&mut self, note: u8) {
-        NativeOscillator::note_off(self, note);
-    }
-
-    fn render(
-        &mut self,
-        in_l: &[f32],
-        in_r: &[f32],
-        out_l: &mut [f32],
-        out_r: &mut [f32],
-        events: &PluginEvents<'_>,
-    ) {
-        // A synthesis generator ignores its audio input; `process_block`
-        // already discards `in_l`/`in_r` and reads notes from `events.midi`.
-        let _ = self.process_block(in_l, in_r, out_l, out_r, events);
     }
 }
 
@@ -261,7 +220,7 @@ mod tests {
     #[test]
     fn note_on_generates_non_silent_audio() {
         let mut osc = NativeOscillator::new(48_000);
-        osc.prepare(48_000.0, 512).unwrap();
+        Soundsource::prepare(&mut osc, 48_000.0, 512);
         let (inl, inr) = (vec![0.0; 512], vec![0.0; 512]);
         let (mut outl, mut outr) = (vec![0.0; 512], vec![0.0; 512]);
         let midi = [note_on(69, 100)]; // A4 = 440 Hz
@@ -270,8 +229,7 @@ mod tests {
             midi: &midi,
             note_expressions: &[],
         };
-        osc.process_block(&inl, &inr, &mut outl, &mut outr, &ev)
-            .unwrap();
+        osc.render(&inl, &inr, &mut outl, &mut outr, &ev);
         assert_eq!(osc.active_voices(), 1);
         let rms = (outl.iter().map(|s| s * s).sum::<f32>() / 512.0).sqrt();
         assert!(rms > 1e-3, "oscillator should be audible, rms={rms}");
@@ -280,7 +238,7 @@ mod tests {
     #[test]
     fn note_off_releases_then_silences() {
         let mut osc = NativeOscillator::new(48_000);
-        osc.prepare(48_000.0, 512).unwrap();
+        Soundsource::prepare(&mut osc, 48_000.0, 512);
         osc.note_on(60, 100);
         assert_eq!(osc.active_voices(), 1);
         osc.note_off(60);
@@ -295,11 +253,21 @@ mod tests {
         };
         // 1 s of blocks ≫ the 150 ms release.
         for _ in 0..(48_000 / 512 + 1) * 1 {
-            osc.process_block(&inl, &inr, &mut outl, &mut outr, &ev)
-                .unwrap();
+            osc.render(&inl, &inr, &mut outl, &mut outr, &ev);
         }
         assert_eq!(osc.active_voices(), 0, "voice reaped after release");
         let rms = (outl.iter().map(|s| s * s).sum::<f32>() / 512.0).sqrt();
         assert!(rms < 1e-5, "output silent after release, rms={rms}");
+    }
+
+    /// The generic leaf hosts the oscillator with its legacy identity intact.
+    #[test]
+    fn leaf_keeps_the_native_descriptor() {
+        use crate::soundsource::SoundsourceLeaf;
+        use signal_plugin_host::PluginInstance;
+        let leaf = SoundsourceLeaf::new(NativeOscillator::new(48_000));
+        assert_eq!(leaf.kind(), SoundsourceKind::Oscillator);
+        assert_eq!(leaf.descriptor().id, "signal.native.oscillator");
+        assert_eq!(leaf.descriptor().name, "Oscillator");
     }
 }

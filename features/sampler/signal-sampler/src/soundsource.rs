@@ -5,11 +5,15 @@
 //! layered, or modulated. That generator is a `Soundsource`. See
 //! `docs/SOUNDSOURCE.md` for the full design + migration plan.
 //!
-//! This module defines the abstraction; the existing generators
-//! ([`NativeOscillator`](crate::native_osc::NativeOscillator),
-//! [`NativeWavetable`], and the [`SampleEngine`](crate::SampleEngine)) are
-//! adapted onto it incrementally without disturbing the render tree's
-//! [`PluginInstance`](signal_plugin_host::PluginInstance) leaves.
+//! This module defines the abstraction. The generators —
+//! [`NativeOscillator`](crate::native_osc::NativeOscillator),
+//! [`NativeWavetable`](crate::native::NativeWavetable), the
+//! [`SampleEngine`](crate::SampleEngine) (via
+//! [`SamplerInstrument`](crate::SamplerInstrument)), and
+//! [`AudioSoundsource`](crate::AudioSoundsource) — implement `Soundsource`
+//! **natively**; the single generic [`SoundsourceLeaf`] adapter is what turns
+//! any of them into a render-tree
+//! [`PluginInstance`](signal_plugin_host::PluginInstance) leaf.
 
 use signal_plugin_host::{
     PluginDescriptor, PluginError, PluginEvents, PluginFormat, PluginInstance, PluginParamInfo,
@@ -52,6 +56,7 @@ impl SoundsourceKind {
 /// Contract (shared with the processing-core rules): `Send`; allocate in
 /// [`prepare`](Soundsource::prepare); no heap on the hot path; `render` never
 /// blocks or spawns.
+// r[impl signal.soundsource.trait]
 pub trait Soundsource: Send {
     /// Which generator this is (for the source picker / per-kind UI).
     fn kind(&self) -> SoundsourceKind;
@@ -81,18 +86,39 @@ pub trait Soundsource: Send {
     );
 
     /// Parameters exposed to the Control/Edit UI and the mod engine.
+    // r[impl signal.soundsource.params]
     fn params(&self) -> Vec<PluginParamInfo> {
         Vec::new()
     }
     /// Set a parameter by id (matches [`params`](Soundsource::params)).
     fn set_param(&mut self, _id: u32, _value: f64) {}
+
+    /// Render-tree identity for this generator. The default derives an id /
+    /// name from [`kind`](Soundsource::kind); implementations with an
+    /// established identity (e.g. `signal.native.oscillator`) override it so
+    /// adapting through [`SoundsourceLeaf`] is lossless.
+    fn descriptor(&self) -> PluginDescriptor {
+        let tag = self.kind().tag();
+        PluginDescriptor {
+            id: format!("signal.soundsource.{tag}"),
+            name: format!("Soundsource ({tag})"),
+            vendor: "Signal".into(),
+            version: String::new(),
+            format: PluginFormat::Synthetic,
+        }
+    }
+
+    /// Drop all live voices / transient state (the leaf calls this on
+    /// deactivate). Configuration and preloaded data survive; only sounding
+    /// state is cleared.
+    fn reset(&mut self) {}
 }
 
-/// Adapts any [`Soundsource`] into the render tree's
-/// [`PluginInstance`] leaf, so a generator drops into `node_render` with no
-/// new leaf machinery (migration step 2). `process_block` → `render`,
+/// **The one generic adapter** from [`Soundsource`] to the render tree's
+/// [`PluginInstance`] leaf — every generator drops into `node_render`
+/// through this, with no per-type shims. `process_block` → `render`,
 /// `prepare` → `prepare`, `params`/`param_value` → `params`, the param
-/// setters → `set_param`.
+/// setters → `set_param`, `deactivate` → [`reset`](Soundsource::reset).
 ///
 /// Notes still flow through `events.midi`: `render` forwards the block's
 /// events, and the wrapped source (oscillator / wavetable / sampler) reads
@@ -125,18 +151,21 @@ impl SoundsourceLeaf {
     pub fn kind(&self) -> SoundsourceKind {
         self.source.kind()
     }
+
+    /// The wrapped generator.
+    pub fn source(&self) -> &dyn Soundsource {
+        self.source.as_ref()
+    }
+
+    /// The wrapped generator, mutably (drive voices out-of-band, retune, …).
+    pub fn source_mut(&mut self) -> &mut dyn Soundsource {
+        self.source.as_mut()
+    }
 }
 
 impl PluginInstance for SoundsourceLeaf {
     fn descriptor(&self) -> PluginDescriptor {
-        let tag = self.source.kind().tag();
-        PluginDescriptor {
-            id: format!("signal.soundsource.{tag}"),
-            name: format!("Soundsource ({tag})"),
-            vendor: "Signal".into(),
-            version: String::new(),
-            format: PluginFormat::Synthetic,
-        }
+        self.source.descriptor()
     }
 
     fn params(&mut self) -> Vec<PluginParamInfo> {
@@ -184,6 +213,7 @@ impl PluginInstance for SoundsourceLeaf {
 
     fn deactivate(&mut self) {
         self.prepared = false;
+        self.source.reset();
     }
 }
 

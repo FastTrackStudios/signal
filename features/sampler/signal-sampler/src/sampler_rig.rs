@@ -1501,7 +1501,8 @@ impl SamplerRig {
             .map(|fx| fx.guid)
             .ok_or_else(|| eyre::eyre!("sampler rig: fx slot for {id:?} vanished after add"))?;
 
-        let mut inst = SamplerInstrument::new(engine);
+        // A first-class Sample Soundsource, hosted through the generic leaf.
+        let mut inst = crate::SoundsourceLeaf::new(SamplerInstrument::new(engine));
         let _ = daw::plugin::PluginInstance::prepare(
             &mut inst,
             self.inner.sample_rate as f64,

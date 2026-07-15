@@ -154,6 +154,23 @@ fn main() -> eyre::Result<()> {
             TraceKind::NoteOff { note } => {
                 println!("{:8.3}s  L{}  OFF    {}", t(e.frame), e.line, nm(*note));
             }
+            TraceKind::SampleMiss {
+                note,
+                articulation,
+                dynamic,
+                rr,
+                reason,
+            } => {
+                println!(
+                    "{:8.3}s  L{}  MISS   {:<4} art={} dyn={} rr={} ({reason:?})",
+                    t(e.frame),
+                    e.line,
+                    nm(*note),
+                    articulation,
+                    dynamic,
+                    rr,
+                );
+            }
         }
     }
 

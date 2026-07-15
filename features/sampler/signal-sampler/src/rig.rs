@@ -1001,7 +1001,8 @@ pub(crate) fn build_block(block: &RigBlock, sample_rate: u32) -> Result<BuiltBlo
         {
             tracing::warn!(err = %err, "failed to spawn sample block preload thread");
         }
-        let inst = crate::SamplerInstrument::new(engine);
+        // A first-class Sample Soundsource, hosted through the generic leaf.
+        let inst = crate::SoundsourceLeaf::new(crate::SamplerInstrument::new(engine));
         Ok(BuiltBlock::plain(Box::new(inst), format!("{name} (sample)")))
     } else {
         // Native implementation: built-in DSP from the native registry

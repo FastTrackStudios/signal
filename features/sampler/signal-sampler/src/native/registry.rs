@@ -17,6 +17,7 @@ use super::{
     NativeWaveguide, NativeWaveshaper, NativeWavetable, NativeWurli, SynthConfig,
 };
 use crate::native_osc::NativeOscillator;
+use crate::soundsource::SoundsourceLeaf;
 
 type Ctor = fn(&RigBlock, u32) -> Box<dyn PluginInstance>;
 
@@ -177,7 +178,8 @@ pub fn build_native(block: &RigBlock, sample_rate: u32) -> Option<Box<dyn Plugin
 // ── Constructors ─────────────────────────────────────────────────────────────
 
 fn build_oscillator(_block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
-    Box::new(NativeOscillator::new(sample_rate))
+    // A first-class Soundsource, hosted through the generic leaf adapter.
+    Box::new(SoundsourceLeaf::new(NativeOscillator::new(sample_rate)))
 }
 
 fn build_modal(_block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
@@ -260,7 +262,10 @@ fn build_wavetable(block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance
             };
         }
     }
-    Box::new(NativeWavetable::new(sample_rate).with_config(cfg))
+    // A first-class Soundsource, hosted through the generic leaf adapter.
+    Box::new(SoundsourceLeaf::new(
+        NativeWavetable::new(sample_rate).with_config(cfg),
+    ))
 }
 
 fn build_filter(block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
