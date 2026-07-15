@@ -287,18 +287,18 @@ impl KeysRig {
         midicore::midir::input_ports()
     }
 
-    /// Open a hardware MIDI keyboard and forward its events into the rig.
+    /// Open a hardware MIDI keyboard and forward its events into the rig
+    /// (monitor tap + live-MIDI sink wired by `midicore::attach`).
     pub fn attach_midi(
         &self,
         selection: midicore::PortSelector,
     ) -> eyre::Result<midicore::midir::MidiInput> {
         let daw = self.daw.clone();
         let track = self.track_guid.clone();
-        let monitor = self.midi_monitor.clone();
-        midicore::midir::MidiInput::open(selection, move |t: midicore::TimedEvent| {
-            monitor.record(&t.event);
-            daw.push_live_midi(&track, t.event);
-        })
+        let sink = midicore::attach::tap_sink(self.midi_monitor.clone(), move |ev| {
+            daw.push_live_midi(&track, ev);
+        });
+        midicore::midir::MidiInput::open(selection, sink)
     }
 
     pub fn midi_monitor(&self) -> MidiMonitor {

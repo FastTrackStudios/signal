@@ -3,14 +3,15 @@
 //! Owns a live [`SamplerRig`], loads GGD-style `.signalpreset` kits, plays them
 //! from hardware MIDI (through the drum-map converter) or UI pads, and exposes
 //! the multi-mic drum mixer. Implements the [`signal_drums_proto::drum::DrumRig`]
-//! service + its `#[subscribe]` event stream; mount [`router`](DrumRigBackend::router)
+//! service + its `#[subscribe]` event stream; mount `router()` (`architect::rig::RigBackend`)
 //! on a vox transport (in-process, WebSocket, iroh).
 
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 use architect::dispatch::CurrentThreadDispatcher;
-use architect::{HasDispatcher, Layer, LayerRouter, PubSub, Services, layers};
+use architect::rig::RigBackend;
+use architect::{HasDispatcher, Layer, PubSub, Services, layers};
 use midicore::{Channel, DrumMap, DrumMapConverter, KeyNumber, MidiEvent, MidiMonitor, Velocity};
 use signal_drums_proto::drum::{DrumEvent, DrumRig, DrumRigStreamSource};
 use signal_drums_proto::{DrumStatus, InputMap, KitInfo, MixerStrip, PieceInfo, StripKind};
@@ -103,7 +104,7 @@ impl DrumRigBackend {
                 // Default the hardware input to the FTS drum map (our e-kit
                 // layout → the loaded kit), not raw Direct.
                 state: Mutex::new(State { input_map: InputMap::Fts, ..State::default() }),
-                events: PubSub::sliding(64),
+                events: architect::rig::events_hub(),
                 library_dir,
                 monitor: MidiMonitor::new(),
                 light: Mutex::new(None),
@@ -113,18 +114,13 @@ impl DrumRigBackend {
             }),
         };
         backend.rescan_library();
-        signal_sampler::spawn_meter_pump("drum-meter-pump", backend.clone());
+        backend.spawn_meter_pump("drum-meter-pump");
         backend
-    }
-
-    /// The composed service router — mount this on a vox transport.
-    pub fn router(&self) -> LayerRouter {
-        self.clone().into_router()
     }
 
     /// Start the meter pump + open audio in the background.
     pub fn start_background(&self) {
-        signal_sampler::spawn_meter_pump("drum-meter-pump", self.clone());
+        self.spawn_meter_pump("drum-meter-pump");
         let b = self.clone();
         let _ = std::thread::Builder::new()
             .name("drum-rig-open".into())
@@ -404,61 +400,64 @@ impl DrumRigBackend {
             let s = self.inner.state.lock().unwrap();
             (s.midi_port.clone(), s.input_map)
         };
-        // Drop any existing connection first.
-        if let Ok(mut s) = self.inner.state.lock() {
-            s.midi_handle = None;
-        }
-        // Clone the rig handle out of the lock (cheap Arc clone) BEFORE opening
-        // MIDI ports: a multi-port interface like the mioXM takes ~2 s to open
-        // all its ports, and holding the rig lock that long would freeze every
-        // RPC handler (status/kit_slots/mixer) → the remote UI times out and
-        // shows "no kit". Cloning lets those keep serving during the attach.
-        let rig = {
-            let g = self.inner.rig.lock().unwrap();
-            match g.as_ref() {
-                Some(r) => r.clone(),
-                None => return,
-            }
-        };
-        // Default to omni: no named port → merge *all* MIDI inputs (PipeWire
-        // fans every device into one stream). A named port narrows to it.
-        let sel = midicore::selector_for(port.as_deref());
-        // One transform closure: record the raw event into the monitor, then
-        // (optionally) run the drum-map converter. Recording the pre-conversion
-        // event shows what the hardware actually sent.
-        let inner = self.inner.clone();
-        let mut conv = to_drum_map(map).map(|from| DrumMapConverter::new(from, DrumMap::Mm2));
-        let handle = rig
-            .attach_midi_transformed(sel, move |ev| {
-                inner.monitor.record(&ev);
-                // Flash the played key on the Light Guide (the raw/physical key
-                // the player pressed — for a Direct-mapped keyboard that's the
-                // kit note; for a converted kit it's still the key they touched).
-                if let MidiEvent::NoteOn { key, velocity, .. } = &ev {
-                    if velocity.get() > 0 {
-                        if let Ok(mut l) = inner.light.lock() {
-                            if let Some(lg) = l.as_mut() {
-                                lg.note_on(key.get());
+        midicore::attach::reattach(
+            "drum rig",
+            port.as_deref(),
+            || {
+                if let Ok(mut s) = self.inner.state.lock() {
+                    s.midi_handle = None;
+                }
+            },
+            |sel| {
+                // Clone the rig handle out of the lock (cheap Arc clone)
+                // BEFORE opening MIDI ports: a multi-port interface like the
+                // mioXM takes ~2 s to open all its ports, and holding the rig
+                // lock that long would freeze every RPC handler
+                // (status/kit_slots/mixer) → the remote UI times out and
+                // shows "no kit". Cloning lets those keep serving during the
+                // attach.
+                let rig = {
+                    let g = self.inner.rig.lock().unwrap();
+                    match g.as_ref() {
+                        Some(r) => r.clone(),
+                        None => return Ok(None),
+                    }
+                };
+                // One transform closure: record the raw event into the
+                // monitor, then (optionally) run the drum-map converter.
+                // Recording the pre-conversion event shows what the hardware
+                // actually sent.
+                let inner = self.inner.clone();
+                let mut conv =
+                    to_drum_map(map).map(|from| DrumMapConverter::new(from, DrumMap::Mm2));
+                rig.attach_midi_transformed(sel, move |ev| {
+                    inner.monitor.record(&ev);
+                    // Flash the played key on the Light Guide (the raw/physical
+                    // key the player pressed — for a Direct-mapped keyboard
+                    // that's the kit note; for a converted kit it's still the
+                    // key they touched).
+                    if let MidiEvent::NoteOn { key, velocity, .. } = &ev {
+                        if velocity.get() > 0 {
+                            if let Ok(mut l) = inner.light.lock() {
+                                if let Some(lg) = l.as_mut() {
+                                    lg.note_on(key.get());
+                                }
                             }
                         }
                     }
-                }
-                match conv.as_mut() {
-                    Some(c) => c.convert(ev),
-                    None => vec![ev],
-                }
-            })
-            .map_err(|e| e.to_string());
-        match handle {
-            Ok(h) => {
+                    match conv.as_mut() {
+                        Some(c) => c.convert(ev),
+                        None => vec![ev],
+                    }
+                })
+                .map(Some)
+            },
+            |h| {
                 if let Ok(mut s) = self.inner.state.lock() {
                     s.midi_handle = Some(h);
                 }
-                let which = port.as_deref().unwrap_or("omni (all inputs)");
-                tracing::info!(port = %which, "drum rig: MIDI attached");
-            }
-            Err(e) => tracing::error!("drum rig: MIDI attach failed: {e}"),
-        }
+            },
+        );
     }
 
     // ── event publishing ──
@@ -488,7 +487,15 @@ impl DrumRigBackend {
     }
 }
 
-impl signal_sampler::MeterPumpSource for DrumRigBackend {
+// r[impl primitives.architect.rig-backend]
+impl RigBackend for DrumRigBackend {
+    type Event = DrumEvent;
+    type Tick = ();
+
+    fn events_hub(&self) -> &PubSub<DrumEvent> {
+        &self.inner.events
+    }
+
     fn is_running(&self) -> bool {
         self.inner.rig.lock().map(|r| r.is_some()).unwrap_or(false)
     }
@@ -497,7 +504,7 @@ impl signal_sampler::MeterPumpSource for DrumRigBackend {
         &self.inner.pump_started
     }
 
-    fn on_tick(&self) {
+    fn on_tick(&self, _tick: &mut ()) {
         // Decay Light Guide flashes even while stopped (cheap no-op if no
         // keyboard).
         if let Ok(mut l) = self.inner.light.lock() {
@@ -535,7 +542,7 @@ impl signal_sampler::MeterPumpSource for DrumRigBackend {
 
 impl DrumRig for DrumRigBackend {
     fn start(&self) {
-        signal_sampler::spawn_meter_pump("drum-meter-pump", self.clone());
+        self.spawn_meter_pump("drum-meter-pump");
         let b = self.clone();
         let _ = std::thread::Builder::new()
             .name("drum-rig-open".into())

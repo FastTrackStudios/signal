@@ -5,17 +5,18 @@
 //! `.prt_omn` / `.mlt_omn` into a composition tree (realizing its Soundsources
 //! against the local extraction), and plays it from hardware MIDI or UI notes.
 //! Implements the [`signal_synth_proto::synth::SynthRig`] service + its
-//! `#[subscribe]` stream; mount [`router`](SynthRigBackend::router) on a vox
-//! transport.
+//! `#[subscribe]` stream; mount `router()` (`architect::rig::RigBackend`) on a
+//! vox transport.
 
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex, OnceLock};
 
 use architect::dispatch::CurrentThreadDispatcher;
-use architect::{HasDispatcher, Layer, LayerRouter, PubSub, Services, layers};
+use architect::rig::RigBackend;
+use architect::{HasDispatcher, Layer, PubSub, Services, layers};
 use daw_audio_io::AudioIoPrefs;
-use midicore::{MidiEvent, PortSelector};
+use midicore::MidiEvent;
 use signal_keys::KeysRig;
 use signal_sampler::rig_node::{Container, RigNode, Role};
 use signal_synth::omni_import::{
@@ -45,8 +46,6 @@ const OMNISPHERE_PACKS_ROOT: &str =
 /// Live Keyboardist pad built on the OB-8 PWM Big Strings + Prophet 5 Classic
 /// soundsources). Falls back to the first preset if absent.
 const DEFAULT_PATCH: &str = "American Obesity";
-/// Meter-stream publish interval (~30 Hz).
-const PUMP_MS: u64 = 33;
 /// Default master output gain — a −12 dB pad, because summed multi-layer
 /// soundsource patches (two full-level layers + the loop) run hot and clip at
 /// unity. The UI volume slider adjusts it live.
@@ -122,18 +121,13 @@ impl SynthRigBackend {
                     ..State::default()
                 }),
                 index,
-                events: PubSub::sliding(64),
+                events: architect::rig::events_hub(),
                 pump_started: AtomicBool::new(false),
                 browse_cache: OnceLock::new(),
             }),
         };
-        backend.spawn_meter_pump();
+        backend.spawn_meter_pump("synth-meter-pump");
         backend
-    }
-
-    /// The composed service router — mount this on a vox transport.
-    pub fn router(&self) -> LayerRouter {
-        self.clone().into_router()
     }
 
     /// Import preset `index` into a composition tree (realizing soundsources),
@@ -228,28 +222,29 @@ impl SynthRigBackend {
 
     fn reattach_midi(&self) {
         let port = self.inner.state.lock().ok().and_then(|s| s.midi_port.clone());
-        if let Ok(mut s) = self.inner.state.lock() {
-            s.midi_handle = None;
-        }
-        let sel = match &port {
-            Some(name) => PortSelector::NameContains(name.clone()),
-            None => PortSelector::All,
-        };
-        // KeysRig isn't Clone (owns the audio engine), so attach under the lock.
-        let handle = {
-            let rig = self.inner.rig.lock().unwrap();
-            let Some(rig) = rig.as_ref() else { return };
-            rig.attach_midi(sel).map_err(|e| e.to_string())
-        };
-        match handle {
-            Ok(h) => {
+        midicore::attach::reattach(
+            "synth rig",
+            port.as_deref(),
+            || {
+                if let Ok(mut s) = self.inner.state.lock() {
+                    s.midi_handle = None;
+                }
+            },
+            |sel| {
+                // KeysRig isn't Clone (owns the audio engine), so attach
+                // under the lock.
+                let rig = self.inner.rig.lock().unwrap();
+                match rig.as_ref() {
+                    Some(rig) => rig.attach_midi(sel).map(Some),
+                    None => Ok(None),
+                }
+            },
+            |h| {
                 if let Ok(mut s) = self.inner.state.lock() {
                     s.midi_handle = Some(h);
                 }
-                tracing::info!(port = %port.as_deref().unwrap_or("omni (all inputs)"), "synth rig: MIDI attached");
-            }
-            Err(e) => tracing::error!("synth rig: MIDI attach failed: {e}"),
-        }
+            },
+        );
     }
 
     fn publish_all(&self) {
@@ -258,30 +253,33 @@ impl SynthRigBackend {
         self.inner.events.publish(SynthEvent::Status(SynthRigSvc::status(self)));
     }
 
-    fn spawn_meter_pump(&self) {
-        if self.inner.pump_started.swap(true, Ordering::SeqCst) {
-            return;
-        }
-        let backend = self.clone();
-        let _ = std::thread::Builder::new()
-            .name("synth-meter-pump".into())
-            .spawn(move || {
-                let mut last_running = false;
-                loop {
-                    std::thread::sleep(std::time::Duration::from_millis(PUMP_MS));
-                    let running = backend.inner.rig.lock().map(|r| r.is_some()).unwrap_or(false);
-                    if running != last_running {
-                        last_running = running;
-                        backend.inner.events.publish(SynthEvent::Status(SynthRigSvc::status(&backend)));
-                        backend.inner.events.publish(SynthEvent::Tree(SynthRigSvc::tree(&backend)));
-                    }
-                    if !running {
-                        continue;
-                    }
-                    backend.inner.events.publish(SynthEvent::Status(SynthRigSvc::status(&backend)));
-                    backend.inner.events.publish(SynthEvent::Midi(SynthRigSvc::midi_recent(&backend)));
-                }
-            });
+}
+
+// r[impl primitives.architect.rig-backend]
+impl RigBackend for SynthRigBackend {
+    type Event = SynthEvent;
+    type Tick = ();
+
+    fn events_hub(&self) -> &PubSub<SynthEvent> {
+        &self.inner.events
+    }
+
+    fn is_running(&self) -> bool {
+        self.inner.rig.lock().map(|r| r.is_some()).unwrap_or(false)
+    }
+
+    fn pump_started(&self) -> &AtomicBool {
+        &self.inner.pump_started
+    }
+
+    fn on_running_edge(&self, _running: bool) {
+        self.inner.events.publish(SynthEvent::Status(SynthRigSvc::status(self)));
+        self.inner.events.publish(SynthEvent::Tree(SynthRigSvc::tree(self)));
+    }
+
+    fn on_running_tick(&self) {
+        self.inner.events.publish(SynthEvent::Status(SynthRigSvc::status(self)));
+        self.inner.events.publish(SynthEvent::Midi(SynthRigSvc::midi_recent(self)));
     }
 }
 

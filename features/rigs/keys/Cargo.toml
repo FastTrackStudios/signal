@@ -22,7 +22,7 @@ signal-plugin-host.workspace = true
 # The wire contract this crate's headless backend implements (KeysRig service)
 # + the architect Layer/Services/PubSub machinery to serve it as a vox remote.
 signal-keys-proto.workspace = true
-architect = { workspace = true, features = ["vox"] }
+architect = { workspace = true, features = ["vox", "rig"] }
 tracing.workspace = true
 eyre.workspace = true
 

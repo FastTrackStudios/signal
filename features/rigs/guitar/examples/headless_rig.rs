@@ -5,6 +5,7 @@
 //!
 //!   cargo run -p signal-guitar --features signal-sampler/pipewire --example headless_rig
 
+use architect::rig::RigBackend as _;
 use architect::{LocalServer, Scope};
 use signal_guitar::GuitarRigBackend;
 use signal_guitar::proto::rig::{RigClient, RigEvent, RigStreamClient};

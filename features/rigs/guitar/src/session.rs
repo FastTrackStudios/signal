@@ -12,7 +12,8 @@
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 use architect::dispatch::CurrentThreadDispatcher;
-use architect::{HasDispatcher, Layer, LayerRouter, PubSub, Services, layers};
+use architect::rig::RigBackend;
+use architect::{HasDispatcher, Layer, PubSub, Services, layers};
 use signal_guitar_proto::audio::AudioSettings;
 use signal_guitar_proto::rig::{Rig, RigEvent, RigStreamSource};
 use signal_guitar_proto::{
@@ -58,13 +59,12 @@ struct TapTracker {
 /// hold-layer functions directly. Momentary switches repeat while held —
 /// edge-detect on value.
 #[derive(Default)]
-struct MeterPump {
+pub struct MeterPump {
     /// The open MIDI capture (all input ports merged); `None` until a port
     /// exists. Reopened by the hot-plug scan.
     midi: Option<midicore::midir::MidiStream>,
     /// Input-port names at the last hot-plug scan — a change reopens.
     midi_ports: Vec<String>,
-    was_running: bool,
     tick: u64,
     sw_down: [Option<std::time::Instant>; 5],
     sw_hold_fired: [bool; 5],
@@ -162,6 +162,8 @@ pub struct GuitarRigBackend {
     /// The `#[subscribe]` fan-out hub: every mutation publishes full-state
     /// [`RigEvent`]s here; the meter pump publishes `Status` at meter rate.
     events: PubSub<RigEvent>,
+    /// Once-start guard for the shared meter pump (`architect::rig`).
+    pump_started: Arc<std::sync::atomic::AtomicBool>,
 }
 
 impl Default for GuitarRigBackend {
@@ -169,9 +171,6 @@ impl Default for GuitarRigBackend {
         Self::new()
     }
 }
-
-/// Meter-stream publish interval (~30 Hz).
-const METER_INTERVAL: std::time::Duration = std::time::Duration::from_millis(33);
 
 impl GuitarRigBackend {
     pub fn new() -> Self {
@@ -202,78 +201,28 @@ impl GuitarRigBackend {
             master_trim: Arc::new(Mutex::new(0.0)),
             midi_log: Arc::new(Mutex::new(Vec::new())),
             revision: Arc::new(Mutex::new(0)),
-            events: PubSub::sliding(64),
+            events: architect::rig::events_hub(),
+            pump_started: Arc::new(std::sync::atomic::AtomicBool::new(false)),
         };
-        backend.spawn_meter_pump();
+        backend.spawn_meter_pump("rig-meter-pump");
         backend.spawn_drive_calibration();
         backend
     }
 
-    /// Publish `Status` events at meter rate while the rig runs (plus one
-    /// final event when it stops, so remotes see `running: false`). A plain
-    /// thread, not the audio callback — meters cross from the RT thread via
-    /// atomics, and `PubSub::publish` takes a lock so it must never run RT.
-    ///
-    /// The pump is also the rig's control heartbeat (footswitch gestures,
-    /// tap tempo, auto-save flushes, MIDI hot-plug), so it must survive the
-    /// whole service: each tick runs under `catch_unwind`, and a panic —
-    /// its own, or one surfacing through a handler it calls — is logged and
-    /// the loop keeps going instead of dying silently while audio plays on.
-    fn spawn_meter_pump(&self) {
-        let backend = self.clone();
-        let spawned = std::thread::Builder::new()
-            .name("rig-meter-pump".into())
-            .spawn(move || {
-                let mut pump = MeterPump::default();
-                loop {
-                    std::thread::sleep(METER_INTERVAL);
-                    let tick = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                        backend.pump_tick(&mut pump);
-                    }));
-                    if let Err(panic) = tick {
-                        tracing::error!(
-                            "meter pump: tick panicked ({}) — pump stays alive",
-                            panic_message(&*panic)
-                        );
-                    }
-                }
-            });
-        if let Err(e) = spawned {
-            tracing::error!("meter pump: spawn failed: {e}");
-        }
-    }
-
-    /// One meter-pump iteration: MIDI hot-plug + drain, footswitch
-    /// gestures, debounced saves, status/telemetry publish.
+    /// One meter-pump iteration (the [`RigBackend::on_tick`] body): MIDI
+    /// hot-plug + drain, footswitch gestures, debounced saves. Runs on the
+    /// shared `architect::rig` pump — which supplies the interval, the
+    /// once-start guard, and the per-tick `catch_unwind` survival — while
+    /// the guitar-specific control heartbeat lives here.
     fn pump_tick(&self, pump: &mut MeterPump) {
         pump.tick += 1;
         // MIDI hot-plug: (re)open when the stream is missing or the set of
         // input ports changed (footswitch replugged / enumerated late) —
         // checked every ~2 s, so a mid-set replug comes back on its own.
+        // `rescan_stream` drops the old stream's OS clients BEFORE opening
+        // anew (the ALSA-seq queue-exhaustion invariant).
         if pump.tick == 1 || pump.tick % 60 == 0 {
-            let ports = midicore::midir::input_ports();
-            if pump.midi.is_none() || ports != pump.midi_ports {
-                // Release the old stream's OS clients BEFORE opening anew —
-                // opening first doubles ALSA seq usage and can exhaust the
-                // kernel's queue pool (seen live as snd_seq_alloc_named_queue
-                // OOM panics inside midir).
-                pump.midi = None;
-                pump.midi = if ports.is_empty() {
-                    None
-                } else {
-                    midicore::midir::MidiStream::open_all()
-                };
-                match &pump.midi {
-                    Some(s) => {
-                        tracing::info!("rig core: MIDI capture active on {:?}", s.opened)
-                    }
-                    None if ports.is_empty() && !pump.midi_ports.is_empty() => {
-                        tracing::warn!("rig core: all MIDI inputs gone — waiting for replug")
-                    }
-                    None => {}
-                }
-                pump.midi_ports = ports;
-            }
+            midicore::attach::rescan_stream(&mut pump.midi, &mut pump.midi_ports);
         }
         // Flush pending auto-saves (live edits + position) about once a second.
         if pump.tick % 30 == 0 {
@@ -369,18 +318,6 @@ impl GuitarRigBackend {
                     }
                 }
             }
-        }
-        let status = Rig::status(self);
-        if status.running || pump.was_running {
-            pump.was_running = status.running;
-            self.events.publish(RigEvent::Status(status));
-            // Spectrum + comp telemetry at full meter rate (~30 Hz)
-            // — the surface stays alive to the hand.
-            if let Some(bins) = self.input_spectrum() {
-                self.events.publish(RigEvent::Spectrum(bins));
-            }
-            let (wave_in, wave_gr) = signal_fx::comp_meter::wave_snapshot(3);
-            self.events.publish(RigEvent::CompWave(wave_in, wave_gr));
         }
     }
 
@@ -934,13 +871,6 @@ impl GuitarRigBackend {
         }
     }
 
-    /// Build the vox router serving this session's whole service surface.
-    /// Mount it on any transport — `architect::LocalServer` in-process,
-    /// `architect::axum_ws` for remote GUIs.
-    pub fn router(&self) -> LayerRouter {
-        self.clone().into_router()
-    }
-
     /// Open (or re-open) the live rig, then load the Worship profile (which
     /// pre-installs every patch's chain for gapless footswitch switching).
     ///
@@ -1302,6 +1232,54 @@ fn map_device(d: DeviceInfo) -> AudioDevice {
 }
 
 // ── Service impls ─────────────────────────────────────────────────────────
+
+// r[impl primitives.architect.rig-backend]
+//
+// The shared scaffold supplies the pump loop (one interval, once-guard,
+// running-edge detection, per-tick catch_unwind); the guitar keeps its rich
+// control heartbeat — footswitch gestures, tap tempo, debounced auto-saves,
+// footswitch-MIDI hot-plug — in `pump_tick` as `on_tick` business logic.
+// (Its MIDI runs in `on_tick`, not the scaffold's `midi_ports` hooks,
+// because footswitches must work even while audio is stopped.)
+impl RigBackend for GuitarRigBackend {
+    type Event = RigEvent;
+    type Tick = MeterPump;
+
+    fn events_hub(&self) -> &PubSub<RigEvent> {
+        &self.events
+    }
+
+    fn is_running(&self) -> bool {
+        self.rig.lock_ok().is_some()
+    }
+
+    fn pump_started(&self) -> &std::sync::atomic::AtomicBool {
+        &self.pump_started
+    }
+
+    fn on_tick(&self, pump: &mut MeterPump) {
+        self.pump_tick(pump);
+    }
+
+    /// Publish `Status` on the transport edge — including the final
+    /// `running: false` event when the rig stops, so remotes see it.
+    fn on_running_edge(&self, _running: bool) {
+        self.events.publish(RigEvent::Status(Rig::status(self)));
+    }
+
+    /// Status + spectrum + comp telemetry at full meter rate (~30 Hz) — the
+    /// surface stays alive to the hand. A plain thread, not the audio
+    /// callback: meters cross from the RT thread via atomics, and
+    /// `PubSub::publish` takes a lock so it must never run RT.
+    fn on_running_tick(&self) {
+        self.events.publish(RigEvent::Status(Rig::status(self)));
+        if let Some(bins) = self.input_spectrum() {
+            self.events.publish(RigEvent::Spectrum(bins));
+        }
+        let (wave_in, wave_gr) = signal_fx::comp_meter::wave_snapshot(3);
+        self.events.publish(RigEvent::CompWave(wave_in, wave_gr));
+    }
+}
 
 impl Rig for GuitarRigBackend {
     fn start(&self) {
