@@ -86,13 +86,30 @@ incrementally, never as a big-bang rewrite:
    `signal.sampler.instrument` — via `Soundsource::descriptor`).
 3. ~~**Audio soundsource**~~ DONE — `AudioSoundsource` (the guitar-DI /
    input-passthrough case) was the first native `Soundsource`.
-4. **Expose** `SoundsourceKind` + params over the synth proto so the Control/Edit
-   UI shows/edits the layer's source generically (source picker, per-kind params).
-5. Only once (4) is proven, consider making `node_render` source leaves hold
-   `Box<dyn Soundsource>` directly (today they hold the leaf-wrapped box).
+4. ~~**Expose** `SoundsourceKind` over the proto~~ DONE — `SoundsourceKind`
+   now lives in `signal-proto` (`block_kind.rs`, beside `BlockKind`; this
+   crate re-exports it), with `BlockType::soundsource_kind()` classifying
+   generator block types for remotes and `SynthLayer.source_kind` carrying
+   the tag on the synth wire. Per-kind param editing remains UI work.
+5. ~~`node_render` source leaves hold `Box<dyn Soundsource>` directly~~
+   DONE — a compiled leaf is a `LeafBackend`: `Source(Box<dyn Soundsource>)`
+   for generators (no adapter round-trip inside the tree; see
+   `RenderNode::source_kinds`) or `Plugin(Box<dyn PluginInstance>)` for
+   processors/hosted plugins. `SoundsourceLeaf` remains only at graph
+   boundaries that need a true `PluginInstance` (`build_block`'s FX-chain
+   callers, `build_node_backend`).
 
-PhysicalModel remains a `SoundsourceKind` stub — the City Grand / Wurli
-physical models still enter the tree as plain `PluginInstance` blocks.
+PhysicalModel is a real kind: **City Wurli** (`NativeWurli` over the vendored
+`openwurli-dsp` engine) implements `Soundsource` natively with
+`SoundsourceKind::PhysicalModel`; the trait carries the sample-excited /
+hybrid hook (`supports_sample_excitation` / `excite`,
+r[signal.soundsource.physical.hybrid]) with a no-op default. The City Grand
+waveguide/modal engines still enter the tree as plain `PluginInstance`
+blocks.
+
+Deferred: r[signal.soundsource.module.*] gaps are tracked as Task issues
+(source-module framework + Wave, Analog/Drift, Unison, Harmony, FM/Ring,
+Waveshaper-as-module, Granular) under the sampler pillar.
 
 Every step keeps the current `PluginInstance` path working — the live keys /
 drums / guitar / synth rigs never break mid-migration.

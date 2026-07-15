@@ -33,6 +33,7 @@ pub use filter::{FilterCharacter, FilterMode, Ladder, NativeFilter, Svf};
 pub use freq_shifter::NativeDfs;
 pub use modal::NativeModal;
 pub use registry::{build_native, native_dsp_available};
+pub(crate) use registry::build_native_source;
 pub use waveshaper::NativeWaveshaper;
 pub use wg::NativeWaveguide;
 pub use wavetable::{HarmVoice, NativeWavetable, SynthConfig};

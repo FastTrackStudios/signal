@@ -208,6 +208,11 @@ pub struct SynthLayer {
     pub active: bool,
     /// The soundsource (Sample mode) or wavetable label driving this layer.
     pub source: String,
+    /// The generator kind driving this layer — a
+    /// `signal_proto::block_kind::SoundsourceKind` tag (`"oscillator"` /
+    /// `"sample"` / `"physical-model"` / `"audio"`; empty = unknown) so the
+    /// Control/Edit UI classifies the source without knowing the engine.
+    pub source_kind: String,
     /// Layer level 0..1.
     pub level: f32,
     /// The dual filter stages (usually 1–2).

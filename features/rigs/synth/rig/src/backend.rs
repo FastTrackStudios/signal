@@ -721,6 +721,16 @@ fn project_layers(patch: &signal_synth::omni_import::OmniPatch) -> Vec<SynthLaye
                 name: NAMES[i].to_string(),
                 active: !l.soundsource.is_empty() || l.filter_active || l.amp_env.is_some(),
                 source: l.soundsource.clone(),
+                // Omni layers are Sample soundsources when one is referenced;
+                // an empty reference means the layer runs in synth (DSP
+                // wavetable) mode — the Oscillator kind.
+                source_kind: if l.soundsource.is_empty() {
+                    signal_sampler::SoundsourceKind::Oscillator
+                } else {
+                    signal_sampler::SoundsourceKind::Sample
+                }
+                .tag()
+                .to_string(),
                 level: l.level,
                 filters,
                 amp_env: env(l.amp_env),

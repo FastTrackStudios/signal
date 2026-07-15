@@ -17,7 +17,7 @@ use super::{
     NativeWaveguide, NativeWaveshaper, NativeWavetable, NativeWurli, SynthConfig,
 };
 use crate::native_osc::NativeOscillator;
-use crate::soundsource::SoundsourceLeaf;
+use crate::soundsource::{Soundsource, SoundsourceLeaf};
 
 type Ctor = fn(&RigBlock, u32) -> Box<dyn PluginInstance>;
 
@@ -175,6 +175,26 @@ pub fn build_native(block: &RigBlock, sample_rate: u32) -> Option<Box<dyn Plugin
         .map(|(_, ctor)| ctor(block, sample_rate))
 }
 
+/// Construct the native **generator** for a source block as a bare
+/// [`Soundsource`] — the render tree holds these directly (no
+/// [`SoundsourceLeaf`] adapter in between). `None` for block types whose
+/// native backend is a processor (or not a `Soundsource` yet); those keep
+/// going through [`build_native`].
+pub(crate) fn build_native_source(
+    block: &RigBlock,
+    sample_rate: u32,
+) -> Option<Box<dyn Soundsource>> {
+    match block.block_type {
+        BlockType::Oscillator => Some(Box::new(NativeOscillator::new(sample_rate))),
+        BlockType::Wavetable => Some(Box::new(
+            NativeWavetable::new(sample_rate).with_config(wavetable_config(block)),
+        )),
+        // City Wurli physically-modeled Wurlitzer 200A (PhysicalModel kind).
+        BlockType::Formant => Some(Box::new(NativeWurli::new(sample_rate))),
+        _ => None,
+    }
+}
+
 // ── Constructors ─────────────────────────────────────────────────────────────
 
 fn build_oscillator(_block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
@@ -194,10 +214,12 @@ fn build_modal(_block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
 }
 
 fn build_wurli(_block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
-    Box::new(NativeWurli::new(sample_rate))
+    // The PhysicalModel Soundsource, hosted through the generic leaf adapter.
+    Box::new(SoundsourceLeaf::new(NativeWurli::new(sample_rate)))
 }
 
-fn build_wavetable(block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
+/// Parse a wavetable block's build-time params into its [`SynthConfig`].
+fn wavetable_config(block: &RigBlock) -> SynthConfig {
     let mut cfg = SynthConfig::default();
     let p = |name: &str| block.param_f32(name);
     if let Some(v) = p("shape") {
@@ -262,9 +284,13 @@ fn build_wavetable(block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance
             };
         }
     }
+    cfg
+}
+
+fn build_wavetable(block: &RigBlock, sample_rate: u32) -> Box<dyn PluginInstance> {
     // A first-class Soundsource, hosted through the generic leaf adapter.
     Box::new(SoundsourceLeaf::new(
-        NativeWavetable::new(sample_rate).with_config(cfg),
+        NativeWavetable::new(sample_rate).with_config(wavetable_config(block)),
     ))
 }
 

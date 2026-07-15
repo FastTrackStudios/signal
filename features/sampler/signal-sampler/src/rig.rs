@@ -918,92 +918,16 @@ pub(crate) fn build_block(block: &RigBlock, sample_rate: u32) -> Result<BuiltBlo
         let dn = plugin.descriptor().name;
         Ok(BuiltBlock::plain(plugin, format!("{dn} (plugin)")))
     } else if block.is_sample() {
-        // Sample library → SampleEngine wrapped as an instrument, same as the
-        // sampler TUI's loading path (PlayerPatch::load/from_pack + SampleEngine::new).
-        let spec_path = std::path::Path::new(&block.sample);
-        // A `.signalpack` is self-contained (embedded spec + samples); a bare
-        // `library.styx` needs its sample dir scanned alongside.
-        let is_pack = spec_path
-            .extension()
-            .is_some_and(|e| e.eq_ignore_ascii_case("signalpack"));
-        let root = if block.samples_root.trim().is_empty() {
-            spec_path
-                .parent()
-                .unwrap_or_else(|| std::path::Path::new(""))
-                .to_path_buf()
-        } else {
-            std::path::PathBuf::from(&block.samples_root)
-        };
-        let patch = if is_pack {
-            crate::PlayerPatch::from_pack(spec_path)
-                .map_err(|e| format!("load sample pack {}: {e}", block.sample))?
-        } else {
-            crate::PlayerPatch::load(spec_path, &root)
-                .map_err(|e| format!("load sample library {}: {e}", block.sample))?
-        };
-        let section = if block.sample_section.trim().is_empty() {
-            patch
-                .spec
-                .sections
-                .first()
-                .map(|s| s.id.clone())
-                .unwrap_or_default()
-        } else {
-            block.sample_section.clone()
-        };
-        let mic = if block.sample_mic.trim().is_empty() {
-            patch
-                .spec
-                .mics
-                .first()
-                .map(|m| m.id.clone())
-                .unwrap_or_default()
-        } else {
-            block.sample_mic.clone()
-        };
-        let name = patch.spec.name.clone();
-        let mut engine = crate::SampleEngine::new(patch, sample_rate, section, mic);
-        // Imported per-block settings: unison + amplitude attack/release.
-        if let Some(v) = block.param_f32("unison_voices") {
-            engine.set_unison(
-                v.round() as u8,
-                block
-                    .param_f32("unison_detune")
-                    .unwrap_or(0.1)
-                    .clamp(0.0, 2.0)
-                    * 100.0,
-                block.param_f32("unison_width").unwrap_or(0.7),
-            );
-        }
-        if let Some(v) = block.param_f32("amp_attack") {
-            engine.set_attack_frames((v.max(0.0) * sample_rate as f32) as usize);
-        }
-        if let Some(v) = block.param_f32("amp_release") {
-            engine.set_release_frames((v.max(0.0) * sample_rate as f32) as usize);
-        }
-        // Decode in the background, middle-out from middle C, so the block is
-        // playable almost immediately and never blocks the caller (same
-        // pattern as `SamplerBank::load_block`).
-        let cache = engine.cache_handle();
-        let paths = engine.sample_paths_centered(60);
-        let label = name.clone();
-        if let Err(err) = std::thread::Builder::new()
-            .name(format!("signal-preload:{label}"))
-            .spawn(move || {
-                let stats = cache.preload(paths.iter().map(|p| p.as_path()));
-                tracing::info!(
-                    library = %label,
-                    loaded = stats.loaded,
-                    failed = stats.failed,
-                    "sample block preload complete"
-                );
-            })
-        {
-            tracing::warn!(err = %err, "failed to spawn sample block preload thread");
-        }
-        // A first-class Sample Soundsource, hosted through the generic leaf.
-        let inst = crate::SoundsourceLeaf::new(crate::SamplerInstrument::new(engine));
-        Ok(BuiltBlock::plain(Box::new(inst), format!("{name} (sample)")))
+        // Sample library → the Sample Soundsource, wrapped in the generic
+        // leaf: `build_block`'s callers are graph boundaries that need a
+        // true `PluginInstance` (FX chains); the render tree holds the bare
+        // Soundsource via `build_sample_source` instead.
+        let (inst, name) = build_sample_source(block, sample_rate)?;
+        let leaf = crate::SoundsourceLeaf::new(inst);
+        Ok(BuiltBlock::plain(
+            Box::new(leaf),
+            format!("{name} (sample)"),
+        ))
     } else {
         // Native implementation: built-in DSP from the native registry
         // (synth blocks + the built-in FX in `signal-fx`). `native_dsp_available`
@@ -1020,6 +944,101 @@ pub(crate) fn build_block(block: &RigBlock, sample_rate: u32) -> Result<BuiltBlo
         let dn = inst.descriptor().name;
         Ok(BuiltBlock::plain(inst, format!("{dn} (native)")))
     }
+}
+
+/// Build a sample block's **Sample Soundsource** — the `SampleEngine`
+/// wrapped as a [`SamplerInstrument`](crate::SamplerInstrument), same as the
+/// sampler TUI's loading path (PlayerPatch::load/from_pack +
+/// SampleEngine::new) — plus its display name. The render tree holds this
+/// directly as a `Box<dyn Soundsource>`; [`build_block`] wraps it in the
+/// generic leaf for FX-chain hosts.
+pub(crate) fn build_sample_source(
+    block: &RigBlock,
+    sample_rate: u32,
+) -> Result<(crate::SamplerInstrument, String), String> {
+    let spec_path = std::path::Path::new(&block.sample);
+    // A `.signalpack` is self-contained (embedded spec + samples); a bare
+    // `library.styx` needs its sample dir scanned alongside.
+    let is_pack = spec_path
+        .extension()
+        .is_some_and(|e| e.eq_ignore_ascii_case("signalpack"));
+    let root = if block.samples_root.trim().is_empty() {
+        spec_path
+            .parent()
+            .unwrap_or_else(|| std::path::Path::new(""))
+            .to_path_buf()
+    } else {
+        std::path::PathBuf::from(&block.samples_root)
+    };
+    let patch = if is_pack {
+        crate::PlayerPatch::from_pack(spec_path)
+            .map_err(|e| format!("load sample pack {}: {e}", block.sample))?
+    } else {
+        crate::PlayerPatch::load(spec_path, &root)
+            .map_err(|e| format!("load sample library {}: {e}", block.sample))?
+    };
+    let section = if block.sample_section.trim().is_empty() {
+        patch
+            .spec
+            .sections
+            .first()
+            .map(|s| s.id.clone())
+            .unwrap_or_default()
+    } else {
+        block.sample_section.clone()
+    };
+    let mic = if block.sample_mic.trim().is_empty() {
+        patch
+            .spec
+            .mics
+            .first()
+            .map(|m| m.id.clone())
+            .unwrap_or_default()
+    } else {
+        block.sample_mic.clone()
+    };
+    let name = patch.spec.name.clone();
+    let mut engine = crate::SampleEngine::new(patch, sample_rate, section, mic);
+    // Imported per-block settings: unison + amplitude attack/release.
+    if let Some(v) = block.param_f32("unison_voices") {
+        engine.set_unison(
+            v.round() as u8,
+            block
+                .param_f32("unison_detune")
+                .unwrap_or(0.1)
+                .clamp(0.0, 2.0)
+                * 100.0,
+            block.param_f32("unison_width").unwrap_or(0.7),
+        );
+    }
+    if let Some(v) = block.param_f32("amp_attack") {
+        engine.set_attack_frames((v.max(0.0) * sample_rate as f32) as usize);
+    }
+    if let Some(v) = block.param_f32("amp_release") {
+        engine.set_release_frames((v.max(0.0) * sample_rate as f32) as usize);
+    }
+    // Decode in the background, middle-out from middle C, so the block is
+    // playable almost immediately and never blocks the caller (same
+    // pattern as `SamplerBank::load_block`).
+    let cache = engine.cache_handle();
+    let paths = engine.sample_paths_centered(60);
+    let label = name.clone();
+    if let Err(err) = std::thread::Builder::new()
+        .name(format!("signal-preload:{label}"))
+        .spawn(move || {
+            let stats = cache.preload(paths.iter().map(|p| p.as_path()));
+            tracing::info!(
+                library = %label,
+                loaded = stats.loaded,
+                failed = stats.failed,
+                "sample block preload complete"
+            );
+        })
+    {
+        tracing::warn!(err = %err, "failed to spawn sample block preload thread");
+    }
+    // A first-class Sample Soundsource.
+    Ok((crate::SamplerInstrument::new(engine), name))
 }
 
 /// A resident chain: its pre-built + prepared boxes (one per chain slot, in

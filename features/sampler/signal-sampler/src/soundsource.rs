@@ -19,34 +19,10 @@ use signal_plugin_host::{
     PluginDescriptor, PluginError, PluginEvents, PluginFormat, PluginInstance, PluginParamInfo,
 };
 
-/// Which kind of generator a [`Soundsource`] is.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SoundsourceKind {
-    /// Analog / wavetable synthesis (unison, FM, ring, harmonia).
-    Oscillator,
-    /// Sampled multisample playback (zone maps, round-robins, mics, loops) —
-    /// Keyscape, **Omnisphere soundsources**, drum kits, orchestral libraries.
-    Sample,
-    /// Physically-modeled instrument — an excitation (hammer/bow/pluck/breath)
-    /// driving a resonant model (strings, body/soundboard). A physically-modeled
-    /// piano; may be sample-excited/hybrid. See `docs/spec/signal/soundsource.md`.
-    PhysicalModel,
-    /// Live audio / file input as the layer's source — the **guitar rig** case
-    /// (the DI feeds straight into the layer's filter/amp/FX), plus cinematic
-    /// beds, one-shots, and granular fodder.
-    Audio,
-}
-
-impl SoundsourceKind {
-    pub const fn tag(self) -> &'static str {
-        match self {
-            SoundsourceKind::Oscillator => "oscillator",
-            SoundsourceKind::Sample => "sample",
-            SoundsourceKind::PhysicalModel => "physical-model",
-            SoundsourceKind::Audio => "audio",
-        }
-    }
-}
+/// Which kind of generator a [`Soundsource`] is — defined in `signal-proto`
+/// (beside `BlockType`/`BlockKind`) so remotes classify generators over the
+/// wire; re-exported here as the trait's home crate.
+pub use signal_proto::block_kind::SoundsourceKind;
 
 /// A sound **generator** — turns note/param events into audio, ignoring audio
 /// input (the distinction from a *processor*). A refinement of the render
@@ -112,6 +88,26 @@ pub trait Soundsource: Send {
     /// deactivate). Configuration and preloaded data survive; only sounding
     /// state is cleared.
     fn reset(&mut self) {}
+
+    /// Whether this generator accepts **sampled excitation** — a hybrid /
+    /// sample-excited physical model, where real recordings excite or
+    /// calibrate the resonant model (sampled realism + modeled continuity).
+    /// Default: `false` (pure generators ignore excitation).
+    // r[impl signal.soundsource.physical.hybrid]
+    fn supports_sample_excitation(&self) -> bool {
+        false
+    }
+
+    /// Feed one block of sampled audio as **excitation** for `note`'s
+    /// resonant model (hammer/pluck/bow energy from a recording rather than
+    /// the built-in exciter). Called before [`render`](Soundsource::render)
+    /// for the same block; realtime rules apply (no allocation).
+    ///
+    /// Default: ignored — only hybrid physical models
+    /// ([`supports_sample_excitation`](Soundsource::supports_sample_excitation)
+    /// = `true`) consume it.
+    // r[impl signal.soundsource.physical.hybrid]
+    fn excite(&mut self, _note: u8, _excitation_l: &[f32], _excitation_r: &[f32]) {}
 }
 
 /// **The one generic adapter** from [`Soundsource`] to the render tree's

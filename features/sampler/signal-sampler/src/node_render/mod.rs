@@ -22,26 +22,119 @@
 //! rather than the realtime callback (which will pre-allocate). MIDI events are
 //! delivered to every node; sources consume note on/off, effects ignore them.
 
-use crate::rig::{RigBlock, build_block};
+use crate::rig::{RigBlock, build_block, build_sample_source};
+use crate::soundsource::{Soundsource, SoundsourceKind, SoundsourceLeaf};
 use crate::rig_node::{Combine, Container, RigNode, Zone};
-use signal_plugin_host::{PluginEvents, PluginInstance, PluginMidiEvent};
+use signal_plugin_host::{PluginEvents, PluginInstance, PluginMidiEvent, PluginParamInfo};
 
-/// Build the audio backend for one block at `sample_rate`, or `None` when the
-/// block is a placeholder or an unimplemented `Native` type (→ pass-through).
-pub fn build_node_backend(block: &RigBlock, sample_rate: u32) -> Option<Box<dyn PluginInstance>> {
+/// A compiled leaf's audio backend: **source slots hold their generator
+/// directly** (no [`SoundsourceLeaf`] adapter round-trip inside the tree);
+/// processors and hosted plugins keep the general [`PluginInstance`] leaf
+/// role. The adapter remains only at graph boundaries that need a true
+/// `PluginInstance` (FX chains — see [`build_block`]).
+pub enum LeafBackend {
+    /// A generator (Oscillator / Wavetable / Sample / PhysicalModel / Audio).
+    Source(Box<dyn Soundsource>),
+    /// A processor or hosted plugin — the general leaf.
+    Plugin(Box<dyn PluginInstance>),
+}
+
+impl LeafBackend {
+    /// The generator kind when this leaf is a source slot.
+    pub fn soundsource_kind(&self) -> Option<SoundsourceKind> {
+        match self {
+            LeafBackend::Source(s) => Some(s.kind()),
+            LeafBackend::Plugin(_) => None,
+        }
+    }
+
+    fn prepare(&mut self, sample_rate: f64, block_size: u32) {
+        match self {
+            LeafBackend::Source(s) => {
+                s.prepare(sample_rate.max(1.0) as f32, block_size as usize);
+            }
+            LeafBackend::Plugin(p) => {
+                let _ = p.prepare(sample_rate, block_size);
+            }
+        }
+    }
+
+    fn process(
+        &mut self,
+        in_l: &[f32],
+        in_r: &[f32],
+        out_l: &mut [f32],
+        out_r: &mut [f32],
+        events: &PluginEvents<'_>,
+    ) {
+        match self {
+            LeafBackend::Source(s) => s.render(in_l, in_r, out_l, out_r, events),
+            LeafBackend::Plugin(p) => {
+                let _ = p.process_block(in_l, in_r, out_l, out_r, events);
+            }
+        }
+    }
+
+    /// The parameter table with LIVE values in `default` (build-time block
+    /// params applied) — mod routes modulate around these bases. Sources
+    /// already report live state through `Soundsource::params`.
+    fn params_snapshot(&mut self) -> Vec<PluginParamInfo> {
+        match self {
+            LeafBackend::Source(s) => s.params(),
+            LeafBackend::Plugin(p) => {
+                let mut ps = p.params();
+                for info in &mut ps {
+                    if let Some(v) = p.param_value(info.id) {
+                        info.default = v;
+                    }
+                }
+                ps
+            }
+        }
+    }
+}
+
+/// Build the compiled tree's backend for one block at `sample_rate`, or
+/// `None` when the block is a placeholder or an unimplemented `Native` type
+/// (→ pass-through). Source blocks come back as bare [`Soundsource`]s.
+pub(crate) fn build_leaf_backend(block: &RigBlock, sample_rate: u32) -> Option<LeafBackend> {
     if !block.has_backend() {
         return None;
     }
     if block.is_native() {
-        // Built-in DSP via the native registry (one table, one place to grow).
-        crate::native::build_native(block, sample_rate)
+        // Generators first (held directly), then the native processor table.
+        if let Some(src) = crate::native::build_native_source(block, sample_rate) {
+            return Some(LeafBackend::Source(src));
+        }
+        crate::native::build_native(block, sample_rate).map(LeafBackend::Plugin)
+    } else if block.is_sample() {
+        // Sample library → the Sample Soundsource, held directly.
+        build_sample_source(block, sample_rate)
+            .map_err(|e| tracing::warn!(error = %e, "node_render: sample source build failed"))
+            .ok()
+            .map(|(inst, _name)| LeafBackend::Source(Box::new(inst)))
     } else {
-        // NAM / IR / sample-library / hosted plugin via the shared loader.
+        // NAM / IR / hosted plugin via the shared loader.
         build_block(block, sample_rate)
             .map_err(|e| tracing::warn!(error = %e, "node_render: backend build failed"))
             .ok()
-            .map(|built| built.boxed)
+            .map(|built| LeafBackend::Plugin(built.boxed))
     }
+}
+
+/// Build the audio backend for one block as a render-tree
+/// [`PluginInstance`], or `None` when the block is a placeholder or an
+/// unimplemented `Native` type (→ pass-through). Sources are wrapped in the
+/// generic [`SoundsourceLeaf`] — this is the graph-boundary form; the
+/// compiled tree itself uses [`build_leaf_backend`] and holds sources
+/// directly.
+pub fn build_node_backend(block: &RigBlock, sample_rate: u32) -> Option<Box<dyn PluginInstance>> {
+    build_leaf_backend(block, sample_rate).map(|backend| match backend {
+        LeafBackend::Source(src) => {
+            Box::new(SoundsourceLeaf::from_boxed(src)) as Box<dyn PluginInstance>
+        }
+        LeafBackend::Plugin(p) => p,
+    })
 }
 
 // ── The mod engine ───────────────────────────────────────────────────────────
@@ -53,11 +146,12 @@ use modmatrix::{ModCompiler, build_arp};
 
 /// A compiled, renderable node mirroring the container tree.
 pub enum RenderNode {
-    /// A leaf processor (`inst = None` for a placeholder pass-through).
+    /// A leaf (`inst = None` for a placeholder pass-through): a **source**
+    /// generator held directly, or a processor/plugin — see [`LeafBackend`].
     /// `id` indexes the mod engine's per-leaf write table.
     Leaf {
         id: usize,
-        inst: Option<Box<dyn PluginInstance>>,
+        inst: Option<LeafBackend>,
     },
     /// Children chained in order.
     Serial(Vec<RenderNode>),
@@ -205,20 +299,12 @@ impl RenderNode {
     fn compile_node(node: &RigNode, sample_rate: u32, mc: &mut ModCompiler) -> RenderNode {
         match node {
             RigNode::Block { block: b } => {
-                let mut inst = build_node_backend(b, sample_rate);
+                let mut inst = build_leaf_backend(b, sample_rate);
                 // Snapshot the params with their LIVE values (build-time
                 // block params applied) — routes modulate around these bases.
                 let params = inst
                     .as_mut()
-                    .map(|i| {
-                        let mut ps = i.params();
-                        for p in &mut ps {
-                            if let Some(v) = i.param_value(p.id) {
-                                p.default = v;
-                            }
-                        }
-                        ps
-                    })
+                    .map(|i| i.params_snapshot())
                     .unwrap_or_default();
                 let id = mc.leaves.len();
                 mc.leaves.push((b.display_name().to_lowercase(), params));
@@ -242,7 +328,7 @@ impl RenderNode {
             RenderNode::Leaf {
                 inst: Some(inst), ..
             } => {
-                let _ = inst.prepare(sample_rate, block_size);
+                inst.prepare(sample_rate, block_size);
             }
             RenderNode::Leaf { inst: None, .. } => {}
             RenderNode::Serial(v) | RenderNode::Parallel(v) => {
@@ -288,6 +374,32 @@ impl RenderNode {
             | RenderNode::SendTap { inner, .. }
             | RenderNode::BusInject { inner, .. } => inner.live_leaves(),
         }
+    }
+
+    /// The generator kinds of this subtree's **source** leaves, in compile
+    /// order — the tree-side view remotes classify layers by (processors
+    /// and placeholders are skipped).
+    pub fn source_kinds(&self) -> Vec<SoundsourceKind> {
+        fn walk(node: &RenderNode, out: &mut Vec<SoundsourceKind>) {
+            match node {
+                RenderNode::Leaf { inst, .. } => {
+                    if let Some(kind) = inst.as_ref().and_then(|i| i.soundsource_kind()) {
+                        out.push(kind);
+                    }
+                }
+                RenderNode::Serial(v) | RenderNode::Parallel(v) => {
+                    v.iter().for_each(|n| walk(n, out));
+                }
+                RenderNode::Zoned { inner, .. }
+                | RenderNode::Modulated { inner, .. }
+                | RenderNode::Gain { inner, .. }
+                | RenderNode::SendTap { inner, .. }
+                | RenderNode::BusInject { inner, .. } => walk(inner, out),
+            }
+        }
+        let mut out = Vec::new();
+        walk(self, &mut out);
+        out
     }
 
     /// The compiled ModMatrix, when any routes resolved (for tests/UI).
@@ -370,7 +482,7 @@ impl RenderNode {
             } => {
                 let mods = ctx.writes.get(*id).map(|w| w.as_slice()).unwrap_or(&[]);
                 if mods.is_empty() {
-                    let _ = inst.process_block(in_l, in_r, out_l, out_r, events);
+                    inst.process(in_l, in_r, out_l, out_r, events);
                 } else {
                     // Merge external param writes with this leaf's mod writes.
                     let mut params: Vec<(u32, f64)> =
@@ -382,7 +494,7 @@ impl RenderNode {
                         midi: events.midi,
                         note_expressions: events.note_expressions,
                     };
-                    let _ = inst.process_block(in_l, in_r, out_l, out_r, &ev);
+                    inst.process(in_l, in_r, out_l, out_r, &ev);
                 }
             }
             RenderNode::Leaf { inst: None, .. } => copy_in(in_l, in_r, out_l, out_r, frames),
@@ -596,6 +708,82 @@ mod tests {
         assert!(
             rms(&l) > 1e-3,
             "audio flows osc → filter (default open) → out"
+        );
+    }
+
+    /// The compiled tree holds source generators DIRECTLY (`LeafBackend::
+    /// Source`, no leaf-adapter round-trip), and the direct path renders
+    /// sample-identically to the graph-boundary (`SoundsourceLeaf`-wrapped)
+    /// path — the golden is `oscillator_block_renders_through_a_serial_module`'s
+    /// osc block.
+    #[test]
+    fn source_leaves_held_directly_render_identically_to_the_adapter_path() {
+        use crate::rig::RigBlock;
+        let block = RigBlock::of_type(BlockType::Oscillator).named("Osc");
+
+        // Direct path: the render tree.
+        let tree = Container::module("M").add(block.clone());
+        let mut rn = RenderNode::compile(&tree, 48_000);
+        assert_eq!(
+            rn.source_kinds(),
+            vec![crate::SoundsourceKind::Oscillator],
+            "the compiled leaf holds the generator directly"
+        );
+        rn.prepare(48_000.0, 256);
+
+        // Adapter path: the same block as a graph-boundary PluginInstance.
+        let mut leaf = build_node_backend(&block, 48_000).expect("osc backend");
+        leaf.prepare(48_000.0, 256).unwrap();
+
+        let midi = [note_on(69, 110)];
+        let silence = vec![0.0f32; 256];
+        let (mut tl, mut tr) = (vec![0.0; 256], vec![0.0; 256]);
+        let (mut ll, mut lr) = (vec![0.0; 256], vec![0.0; 256]);
+        for b in 0..4 {
+            let m: &[PluginMidiEvent] = if b == 0 { &midi } else { &[] };
+            let ev = PluginEvents {
+                params: &[],
+                midi: m,
+                note_expressions: &[],
+            };
+            rn.render(&mut tl, &mut tr, &ev);
+            leaf.process_block(&silence, &silence, &mut ll, &mut lr, &ev)
+                .unwrap();
+            assert_eq!(tl, ll, "block {b}: direct == adapter (L)");
+            assert_eq!(tr, lr, "block {b}: direct == adapter (R)");
+        }
+        assert!(rms(&tl) > 1e-3, "and the note is audible");
+    }
+
+    /// A Formant block compiles to the City Wurli physical model, held as a
+    /// direct PhysicalModel source, and a note renders nonzero audio.
+    #[test]
+    fn formant_block_is_a_direct_physical_model_source() {
+        let tree = Container::module("Wurli").block(BlockType::Formant, "Wurli");
+        let mut rn = RenderNode::compile(&tree, 48_000);
+        assert_eq!(
+            rn.source_kinds(),
+            vec![crate::SoundsourceKind::PhysicalModel]
+        );
+        rn.prepare(48_000.0, 512);
+        assert_eq!(rn.live_leaves(), 1);
+
+        let (mut l, mut r) = (vec![0.0; 512], vec![0.0; 512]);
+        let midi = [note_on(60, 100)];
+        let mut peak = 0.0f32;
+        for b in 0..8 {
+            let m: &[PluginMidiEvent] = if b == 0 { &midi } else { &[] };
+            let ev = PluginEvents {
+                params: &[],
+                midi: m,
+                note_expressions: &[],
+            };
+            rn.render(&mut l, &mut r, &ev);
+            peak = peak.max(l.iter().fold(0.0f32, |a, s| a.max(s.abs())));
+        }
+        assert!(
+            peak > 1e-4,
+            "wurli through the tree is audible, peak={peak}"
         );
     }
 

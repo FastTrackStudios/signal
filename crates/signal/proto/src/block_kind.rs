@@ -60,6 +60,99 @@ impl BlockKind {
     }
 }
 
+// ─── Soundsource kind ───────────────────────────────────────────
+
+/// Which kind of **generator** a layer's source is — the wire-visible
+/// classification of a `Soundsource` (the pluggable generator inside an
+/// instrument layer; see `docs/spec/signal/soundsource.md` and
+/// `features/sampler/signal-sampler/src/soundsource.rs`).
+///
+/// A third axis beside [`BlockType`](crate::block::BlockType) (semantic
+/// role) and [`BlockKind`] (how the DSP is realized): `SoundsourceKind`
+/// says what *generates* the sound in a source slot, so remotes can show
+/// a source picker / per-kind editor without knowing the concrete engine.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Facet)]
+#[repr(C)]
+pub enum SoundsourceKind {
+    /// Analog / wavetable synthesis (unison, FM, ring, harmonia).
+    Oscillator,
+    /// Sampled multisample playback (zone maps, round-robins, mics, loops) —
+    /// Keyscape, Omnisphere soundsources, drum kits, orchestral libraries.
+    Sample,
+    /// Physically-modeled instrument — an excitation (hammer/bow/pluck/breath)
+    /// driving a resonant model (strings, body/soundboard); may be
+    /// sample-excited/hybrid.
+    PhysicalModel,
+    /// Live audio / file input as the layer's source — the guitar-DI case,
+    /// plus cinematic beds, one-shots, and granular fodder.
+    Audio,
+}
+
+impl SoundsourceKind {
+    /// Short identifier — used in UI tags, styx files, and log lines.
+    pub const fn tag(self) -> &'static str {
+        match self {
+            Self::Oscillator => "oscillator",
+            Self::Sample => "sample",
+            Self::PhysicalModel => "physical-model",
+            Self::Audio => "audio",
+        }
+    }
+
+    /// Human-readable name for pickers.
+    pub const fn display_name(self) -> &'static str {
+        match self {
+            Self::Oscillator => "Oscillator",
+            Self::Sample => "Sample",
+            Self::PhysicalModel => "Physical Model",
+            Self::Audio => "Audio",
+        }
+    }
+
+    /// Parse a [`tag`](Self::tag) back into the kind.
+    pub fn from_tag(tag: &str) -> Option<Self> {
+        match tag {
+            "oscillator" => Some(Self::Oscillator),
+            "sample" => Some(Self::Sample),
+            "physical-model" => Some(Self::PhysicalModel),
+            "audio" => Some(Self::Audio),
+            _ => None,
+        }
+    }
+
+    /// All kinds in display order (for source pickers).
+    pub const fn all() -> &'static [SoundsourceKind] {
+        &[
+            Self::Oscillator,
+            Self::Sample,
+            Self::PhysicalModel,
+            Self::Audio,
+        ]
+    }
+}
+
+impl crate::block::BlockType {
+    /// Classify a block type as a generator: the [`SoundsourceKind`] its
+    /// source-slot backend renders as, or `None` for processors /
+    /// modulators / utilities that are not generators.
+    ///
+    /// Mirrors the signal-sampler native registry: `Oscillator`/`Wavetable`
+    /// are the Oscillator soundsources, `Sampler` the Sample soundsource,
+    /// `Harmonic` (City Grand waveguide) / `Formant` (City Wurli) the
+    /// physically-modeled ones, and `Input` is the layer's live-audio
+    /// source (the guitar DI).
+    pub const fn soundsource_kind(self) -> Option<SoundsourceKind> {
+        use crate::block::BlockType as T;
+        match self {
+            T::Oscillator | T::Wavetable => Some(SoundsourceKind::Oscillator),
+            T::Sampler => Some(SoundsourceKind::Sample),
+            T::Harmonic | T::Formant => Some(SoundsourceKind::PhysicalModel),
+            T::Input => Some(SoundsourceKind::Audio),
+            _ => None,
+        }
+    }
+}
+
 /// Reference to a `.nam` model file. `model_id` is an optional stable id
 /// (URL or hash) for content-addressed lookups; absent means "use the
 /// path as the id".
@@ -111,6 +204,38 @@ mod tests {
         let j = serde_json::to_string(&k).unwrap();
         let back: BlockKind = serde_json::from_str(&j).unwrap();
         assert_eq!(k, back);
+    }
+
+    #[test]
+    fn soundsource_kind_tags_round_trip() {
+        for &k in SoundsourceKind::all() {
+            assert_eq!(SoundsourceKind::from_tag(k.tag()), Some(k));
+        }
+        assert_eq!(SoundsourceKind::from_tag("granular"), None);
+    }
+
+    #[test]
+    fn soundsource_kind_serde_round_trips() {
+        for &k in SoundsourceKind::all() {
+            let j = serde_json::to_string(&k).unwrap();
+            let back: SoundsourceKind = serde_json::from_str(&j).unwrap();
+            assert_eq!(k, back);
+        }
+    }
+
+    #[test]
+    fn block_types_classify_as_generators() {
+        use crate::block::BlockType as T;
+        assert_eq!(T::Oscillator.soundsource_kind(), Some(SoundsourceKind::Oscillator));
+        assert_eq!(T::Wavetable.soundsource_kind(), Some(SoundsourceKind::Oscillator));
+        assert_eq!(T::Sampler.soundsource_kind(), Some(SoundsourceKind::Sample));
+        assert_eq!(T::Formant.soundsource_kind(), Some(SoundsourceKind::PhysicalModel));
+        assert_eq!(T::Harmonic.soundsource_kind(), Some(SoundsourceKind::PhysicalModel));
+        assert_eq!(T::Input.soundsource_kind(), Some(SoundsourceKind::Audio));
+        // Processors are not generators.
+        assert_eq!(T::Amp.soundsource_kind(), None);
+        assert_eq!(T::Reverb.soundsource_kind(), None);
+        assert_eq!(T::Lfo.soundsource_kind(), None);
     }
 
     #[test]

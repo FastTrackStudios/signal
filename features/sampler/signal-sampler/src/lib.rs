@@ -103,7 +103,7 @@ pub use nam::NamProcessor;
 pub use audio_soundsource::AudioSoundsource;
 pub use native_osc::{NativeOscillator, OscWave};
 pub use soundsource::{Soundsource, SoundsourceKind, SoundsourceLeaf};
-pub use node_render::{RenderNode, build_node_backend};
+pub use node_render::{LeafBackend, RenderNode, build_node_backend};
 pub use preset_registry::{PresetRegistry, PresetSource, RegisteredPreset};
 pub use preset_spec::{
     MacroDef, MacroTarget, MasterFxSlot, NoteRoute, PresetEngineRef, PresetModuleRef, PresetSpec,
