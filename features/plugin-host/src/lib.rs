@@ -24,9 +24,11 @@ use std::path::Path;
 use std::sync::Mutex;
 
 pub use daw::plugin::{
-    PluginDescriptor, PluginError, PluginEvents, PluginFormat, PluginInstance, PluginMidiEvent,
-    PluginNoteExpression, PluginParamInfo,
+    FxFactory, PluginDescriptor, PluginError, PluginEvents, PluginFormat, PluginInstance,
+    PluginMidiEvent, PluginNoteExpression, PluginParamInfo,
 };
+/// Catalog entry type for [`FxFactory::installed`] implementors.
+pub use daw::service::fx::InstalledFx;
 
 /// One pending parameter write from the UI thread, drained at the top of
 /// the next audio block.

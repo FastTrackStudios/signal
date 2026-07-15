@@ -16,3 +16,7 @@ reverb = { workspace = true }
 delay = { workspace = true }
 level-dsp = { workspace = true }
 modulation = { workspace = true }
+
+[dev-dependencies]
+# Integration test: built-in FX through the standalone daw's Effects::add.
+daw = { workspace = true, features = ["standalone"] }

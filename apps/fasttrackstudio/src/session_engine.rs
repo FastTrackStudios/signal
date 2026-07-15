@@ -395,6 +395,10 @@ async fn bootstrap(engine_rt: tokio::runtime::Handle) -> eyre::Result<SessionEng
     //    by name and `build_from_open_projects` follows that order — the padding
     //    keeps the setlist in authored order (see session demo::ORDER).
     let standalone = Standalone::new();
+    // Built-in FX (EQ/comp/reverb/…): `Effects::add("Reverb")` on any
+    // session track instantiates real signal-fx DSP that the render
+    // path processes in that track's chain.
+    standalone.set_fx_factory(std::sync::Arc::new(signal_fx::NativeFxFactory));
     let songs = demo_songs_base();
     let mut song_guids: Vec<String> = Vec::with_capacity(songs.len());
     for (i, song) in songs.iter().enumerate() {

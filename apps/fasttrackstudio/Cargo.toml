@@ -99,6 +99,7 @@ session = [
     "dep:session-guide",
     "dep:daw",
     "dep:daw-standalone",
+    "dep:signal-fx",
     "dep:architect",
     "architect/local",
     # The remote path to the session engine (src/remote.rs, shared with the
@@ -202,6 +203,9 @@ keyflow-sync = { workspace = true, optional = true }
 # workaround session's dev-deps carry) and drives real cpal output.
 daw = { workspace = true, optional = true }
 daw-standalone = { workspace = true, features = ["bootstrap", "audio"], optional = true }
+# Built-in FX (EQ/comp/reverb/…) for session mixer tracks — installed as
+# the standalone backend's FxFactory in session_engine.rs.
+signal-fx = { workspace = true, optional = true }
 
 # ── Engine mode (`--engine`, feature `signal`) — the former
 #    apps/signal-engine, native only ─────────────────────────────────────

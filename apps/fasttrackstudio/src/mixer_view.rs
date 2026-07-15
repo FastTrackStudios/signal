@@ -13,13 +13,14 @@ use daw::service::Track;
 use daw_ui::panels::{MixerControlPanel, TrackView};
 use daw_ui::theming::{ThemeContext, ThemeProvider};
 
-/// Build a themed `TrackView` (with its live signals) from a daw `Track`.
-fn track_view(id: usize, t: &Track) -> TrackView {
+/// Build a themed `TrackView` (with its live signals) from a daw `Track`
+/// plus its routing facts (any sends / any receives).
+fn track_view(id: usize, t: &Track, has_sends: bool, has_receives: bool) -> TrackView {
     let hex = t.color.map(|c| format!("#{:06x}", c & 0x00FF_FFFF));
     let mut tv = TrackView::new(id, t.name.clone(), hex.as_deref())
         .fader(t.volume as f32)
         .depth(t.folder_depth.max(0) as u32)
-        .routing(false, false);
+        .routing(has_sends, has_receives);
     if t.is_folder {
         tv = tv.folder();
     }
@@ -153,7 +154,7 @@ pub fn MixerWorkspace() -> Element {
     // the active SONG changes (not on in-song section seeks — a memo gates the
     // effect on `song_index` so mid-song navigation doesn't rebuild the strips
     // and drop fader/meter state).
-    let mut raw = use_signal(Vec::<Track>::new);
+    let mut raw = use_signal(Vec::<(Track, bool, bool)>::new);
     let active_song = use_memo(move || session_ui::ACTIVE_INDICES.read().song_index);
     use_effect(move || {
         // Reactive dependency: re-run only when the active song index changes.
@@ -163,7 +164,24 @@ pub fn MixerWorkspace() -> Element {
                 && let Ok(project) = daw.current_project().await
                 && let Ok(list) = project.tracks().all().await
             {
-                raw.set(list);
+                // Routing facts per track (any sends / any receives) so the
+                // strip's routing indicator is truthful. In-process RPCs —
+                // cheap even for a large mixer.
+                let mut with_routing = Vec::with_capacity(list.len());
+                for t in list {
+                    let (mut s, mut r) = (false, false);
+                    if let Ok(Some(h)) = project.tracks().by_guid(&t.guid).await {
+                        s = h.sends().all().await.map(|v| !v.is_empty()).unwrap_or(false);
+                        r = h
+                            .receives()
+                            .all()
+                            .await
+                            .map(|v| !v.is_empty())
+                            .unwrap_or(false);
+                    }
+                    with_routing.push((t, s, r));
+                }
+                raw.set(with_routing);
             }
         });
     });
@@ -178,7 +196,7 @@ pub fn MixerWorkspace() -> Element {
             .read()
             .iter()
             .enumerate()
-            .map(|(i, t)| (t.guid.clone(), track_view(i, t)))
+            .map(|(i, (t, s, r))| (t.guid.clone(), track_view(i, t, *s, *r)))
             .collect::<Vec<_>>();
         entries.set(built);
     });

@@ -17,6 +17,9 @@ use signal_plugin_host::{
     PluginDescriptor, PluginError, PluginEvents, PluginFormat, PluginInstance, PluginParamInfo,
 };
 
+mod factory;
+pub use factory::NativeFxFactory;
+
 // ── Param helpers ──────────────────────────────────────────────────────────
 
 /// Hard cap on time-effect (reverb/delay) dry-wet mix for now (10%).
