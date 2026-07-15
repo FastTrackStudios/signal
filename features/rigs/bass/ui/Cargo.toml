@@ -1,0 +1,19 @@
+[package]
+name = "signal-bass-ui"
+version.workspace = true
+edition = "2021"
+license.workspace = true
+authors.workspace = true
+
+# Bass-rig Dioxus components — the feature-scoped, wasm-clean UI half of the
+# detachable GUI. Renders purely from the wire contract (`signal-bass-proto`)
+# via the generated vox clients; no audio backend, no platform I/O.
+
+[dependencies]
+dioxus.workspace = true
+signal-bass-proto.workspace = true
+# The shared MIDI monitor panel + the MidiEvent wire type it renders.
+midicore-ui.workspace = true
+midicore-proto.workspace = true
+# use_stream (atom+vox) + the portable sleep (tokio native / gloo wasm).
+architect = { workspace = true, features = ["atom", "vox", "platform"] }

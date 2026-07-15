@@ -41,6 +41,8 @@ default = ["signal", "session", "charts"]
 signal = [
     "dep:signal-guitar-proto",
     "dep:signal-guitar-ui",
+    "dep:signal-bass-proto",
+    "dep:signal-bass-ui",
     "dep:signal-drums-proto",
     "dep:signal-drums-ui",
     "dep:signal-keys-proto",
@@ -64,6 +66,7 @@ signal = [
     # deps only exist in the not(wasm32) target table, so enabling them
     # here is a no-op on the web build.
     "dep:signal-guitar",
+    "dep:signal-bass",
     "dep:signal-drums",
     "dep:signal-keys",
     "dep:signal-synth-rig",
@@ -134,6 +137,8 @@ tracing.workspace = true
 # Signal domain (the rig)
 signal-guitar-proto = { workspace = true, optional = true }
 signal-guitar-ui = { workspace = true, optional = true }
+signal-bass-proto = { workspace = true, optional = true }
+signal-bass-ui = { workspace = true, optional = true }
 signal-drums-proto = { workspace = true, optional = true }
 signal-drums-ui = { workspace = true, optional = true }
 signal-keys-proto = { workspace = true, optional = true }
@@ -201,6 +206,7 @@ daw-standalone = { workspace = true, features = ["bootstrap", "audio"], optional
 # ── Engine mode (`--engine`, feature `signal`) — the former
 #    apps/signal-engine, native only ─────────────────────────────────────
 signal-guitar = { workspace = true, optional = true }
+signal-bass = { workspace = true, optional = true }
 signal-drums = { workspace = true, optional = true }
 signal-keys = { workspace = true, optional = true }
 signal-synth-rig = { workspace = true, optional = true }
@@ -228,6 +234,7 @@ signal-sampler = { workspace = true, features = ["pipewire"], optional = true }
 # graph node instead of an exclusive ALSA-seq grab. Needs pipewire-jack's
 # libjack at run time — the same host cpal's audio already relies on.
 signal-guitar = { workspace = true, features = ["pipewire"], optional = true }
+signal-bass = { workspace = true, features = ["pipewire"], optional = true }
 signal-drums = { workspace = true, features = ["pipewire"], optional = true }
 signal-keys = { workspace = true, features = ["pipewire"], optional = true }
 signal-synth-rig = { workspace = true, features = ["pipewire"], optional = true }

@@ -1,0 +1,35 @@
+[package]
+name = "signal-bass"
+version.workspace = true
+edition = "2021"
+license.workspace = true
+authors.workspace = true
+
+[features]
+# PipeWire mode: route this rig's hardware MIDI through the pipewire-jack
+# backend (routable graph node, not an exclusive ALSA grab). midir's jack
+# swap is compile-time and whole-binary. Audio pipewire is picked up via
+# signal-sampler when the app enables it.
+pipewire = ["midicore/midir-pipewire"]
+
+[dependencies]
+# The shared sampler core — GuitarRig / ProfileRig / RigProfile / RigBlock /
+# RigAudioPrefs. The bass rig is a preset layer on the same duplex engine.
+signal-sampler.workspace = true
+
+# The wire contract this crate's headless backend implements; front-ends
+# consume the same crate's clients.
+signal-bass-proto.workspace = true
+# Layer/Services composition + the shared rig-backend scaffold (meter pump).
+architect = { workspace = true, features = ["vox", "rig"] }
+# BlockType for the chain mirror.
+signal-proto.workspace = true
+# Styx-serializable rig definitions (the runtime library files).
+facet.workspace = true
+facet-styx.workspace = true
+# MIDI capture (program changes / footswitch CCs) + the monitor.
+midicore = { workspace = true, features = ["vox", "midir"] }
+tracing.workspace = true
+
+[dev-dependencies]
+tracing-subscriber.workspace = true

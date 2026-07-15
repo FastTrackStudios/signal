@@ -1,0 +1,26 @@
+[package]
+name = "signal-bass-proto"
+version.workspace = true
+edition = "2021"
+license.workspace = true
+authors.workspace = true
+
+# Wire contract for the bass rig: plain facet data types + the
+# `#[architect::rpc]` service trait (`BassRig`). This crate is the
+# detachable-GUI boundary — it must stay wasm-clean (no audio backend, no
+# Dioxus, no platform I/O) so browser/plugin/embedded remotes can all speak it.
+
+[dependencies]
+architect.workspace = true
+vox = { workspace = true, optional = true }
+facet.workspace = true
+# BlockType — the one domain type the wire model carries (block coloring/UI).
+signal-proto.workspace = true
+# MidiEvent — the monitor's wire type (rendered by midicore-ui's panel).
+midicore-proto.workspace = true
+
+[features]
+default = ["vox"]
+# Emits the vox dispatcher/client twins for the service trait. Drop this to
+# use the trait purely in-process (direct sync calls, no RPC).
+vox = ["dep:vox", "architect/vox"]

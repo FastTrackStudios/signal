@@ -14,6 +14,8 @@ use dioxus::prelude::*;
 use signal_guitar_proto::audio::AudioSettingsClient;
 use signal_guitar_proto::rig::{RigClient, RigStreamClient};
 use signal_guitar_ui::GuitarRigRemote;
+use signal_bass_proto::bass::{BassRigClient, BassRigStreamClient};
+use signal_bass_ui::BassRigRemote;
 use signal_drums_proto::drum::{DrumRigClient, DrumRigStreamClient};
 use signal_drums_ui::DrumRigRemote;
 use signal_keys_proto::keys::{KeysRigClient, KeysRigStreamClient};
@@ -51,6 +53,7 @@ async fn connect_once(
 #[derive(Clone, Copy, PartialEq)]
 enum RigKind {
     Guitar,
+    Bass,
     Drums,
     Keys,
     Synth,
@@ -59,12 +62,13 @@ enum RigKind {
 impl RigKind {
     /// Every rig, in picker order.
     const ALL: &'static [RigKind] =
-        &[RigKind::Guitar, RigKind::Drums, RigKind::Keys, RigKind::Synth];
+        &[RigKind::Guitar, RigKind::Bass, RigKind::Drums, RigKind::Keys, RigKind::Synth];
 
     /// Stable slug used in prefs + the web URL hash.
     fn slug(self) -> &'static str {
         match self {
             RigKind::Guitar => "guitar",
+            RigKind::Bass => "bass",
             RigKind::Drums => "drums",
             RigKind::Keys => "keys",
             RigKind::Synth => "synth",
@@ -75,6 +79,7 @@ impl RigKind {
     fn label(self) -> &'static str {
         match self {
             RigKind::Guitar => "Guitar",
+            RigKind::Bass => "Bass",
             RigKind::Drums => "Drums",
             RigKind::Keys => "Keys",
             RigKind::Synth => "Synth",
@@ -85,6 +90,7 @@ impl RigKind {
     fn blurb(self) -> &'static str {
         match self {
             RigKind::Guitar => "amp, cab, FX — the live guitar rig",
+            RigKind::Bass => "DI → NAM amp → IR — Bass & Synth Bass presets",
             RigKind::Drums => "sampled kit, mixer, MM2 mixes",
             RigKind::Keys => "Keyscape pianos — Nord-style engine/layer routing",
             RigKind::Synth => "Omnisphere patches — imported into the native engine",
@@ -148,6 +154,7 @@ pub fn SignalWorkspace() -> Element {
             }
             match kind {
                 RigKind::Guitar => rsx! { GuitarRigView {} },
+                RigKind::Bass => rsx! { BassRigView {} },
                 RigKind::Drums => rsx! { DrumRigView {} },
                 RigKind::Keys => rsx! { KeysRigView {} },
                 RigKind::Synth => rsx! { SynthRigView {} },
@@ -160,8 +167,6 @@ pub fn SignalWorkspace() -> Element {
 fn RigPicker(on_pick: EventHandler<RigKind>) -> Element {
     const COMING: &[(&str, &str)] = &[
         ("Tracks", "backing tracks & stems"),
-        ("Keys", "keys rig"),
-        ("Bass", "bass rig"),
         ("Vocals", "vocal chains"),
     ];
     rsx! {
@@ -355,6 +360,89 @@ fn GuitarRigView() -> Element {
                             }
                         }
                         RemoteEngineForm { generation }
+                    }
+                },
+            }
+        }
+    }
+}
+
+/// The bass rig remote: connect over the shared `/vox` endpoint (same engine,
+/// same router as guitar), provide the two clients in context, and mount
+/// [`BassRigRemote`]. Auto-starts the local engine if nothing answers, like
+/// the other rigs.
+#[component]
+fn BassRigView() -> Element {
+    let mut generation = use_signal(|| 0u32);
+    let clients = use_resource(move || {
+        let generation = generation();
+        async move {
+            let target = EngineTarget::current();
+            #[cfg(not(target_arch = "wasm32"))]
+            let mut autostart = matches!(
+                &target,
+                EngineTarget::Ws(url) if url.contains("127.0.0.1") || url.contains("localhost")
+            );
+            loop {
+                let rig: Option<BassRigClient> = establish(&target).await;
+                let stream: Option<BassRigStreamClient> = establish(&target).await;
+                if let (Some(rig), Some(stream)) = (rig, stream) {
+                    return (generation, (rig, stream));
+                }
+                #[cfg(not(target_arch = "wasm32"))]
+                if autostart {
+                    autostart = false;
+                    if !crate::engines::signal_running() {
+                        let _ = crate::engines::start_signal();
+                    }
+                }
+                architect::platform::sleep(std::time::Duration::from_millis(1200)).await;
+            }
+        }
+    });
+
+    // Watchdog: reconnect on core loss.
+    use_future(move || async move {
+        let mut fails = 0u32;
+        loop {
+            architect::platform::sleep(std::time::Duration::from_millis(1500)).await;
+            let current = clients.peek().as_ref().cloned();
+            let Some((g, (rig, _))) = current else {
+                fails = 0;
+                continue;
+            };
+            if g != *generation.peek() {
+                fails = 0;
+                continue;
+            }
+            if rig.status().await.is_ok() {
+                fails = 0;
+            } else {
+                fails += 1;
+                if fails >= 2 {
+                    fails = 0;
+                    generation += 1;
+                }
+            }
+        }
+    });
+
+    let state = clients
+        .read()
+        .as_ref()
+        .filter(|(g, _)| *g == generation())
+        .map(|(_, c)| c.clone());
+    rsx! {
+        div { style: "flex: 1; min-height: 0; display: flex; flex-direction: column;",
+            match state {
+                Some((rig, stream)) => {
+                    let _ = provide_context(rig);
+                    let _ = provide_context(stream);
+                    rsx! { BassRigRemote {} }
+                }
+                None => rsx! {
+                    div { style: "display: flex; align-items: center; justify-content: center; gap: 10px; flex: 1; color: #71717a; font-size: 13px;",
+                        "Connecting to the bass engine…"
                     }
                 },
             }
