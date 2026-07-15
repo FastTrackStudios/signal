@@ -847,18 +847,22 @@ zones (
 
     #[test]
     fn full_nord_preset_renders_synth_oscillators() {
-        // The whole Nord routing: the 3 synth Oscillators plus every native
-        // Filter/Amp are live DSP; the rest are placeholder pass-throughs. A
-        // held note must reach the output through the entire tree (synth
-        // voices → engines-sum → global thru).
+        // The whole Nord routing: every block with a registered native backend
+        // — the 3 synth Oscillators, Filters/Amps/EQ/Comp/Reverb/Delay/Chorus/
+        // Trem, and the passthrough Rotary placeholder — compiles to a live
+        // leaf; only the backend-less sources (tonewheel/sampler/unison) stay
+        // empty. A held note must reach the output through the entire tree
+        // (synth voices → engines-sum → global thru).
         let preset = crate::nord::nord_stage_preset();
         let mut rn = RenderNode::compile(&preset, 48_000);
         rn.prepare(48_000.0, 512);
+        let expected = preset.blocks().iter().filter(|b| b.has_backend()).count();
         assert_eq!(
             rn.live_leaves(),
-            27,
-            "3 oscillators + the tree's native Filter/Amp blocks are live"
+            expected,
+            "every backend block compiles to a live leaf"
         );
+        assert_eq!(rn.live_leaves(), 73, "the Nord tree's backend-block count");
 
         let (mut l, mut r) = (vec![0.0; 512], vec![0.0; 512]);
         let midi = [note_on(64, 100)];

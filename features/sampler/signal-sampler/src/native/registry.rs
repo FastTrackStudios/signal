@@ -355,7 +355,12 @@ mod tests {
             let block = RigBlock::of_type(bt);
             assert!(build_native(&block, 48_000).is_some(), "{bt:?} builds");
         }
-        assert!(!native_dsp_available(BlockType::Rotary));
-        assert!(build_native(&RigBlock::of_type(BlockType::Rotary), 48_000).is_none());
+        // Rotary is registered as a transparent placeholder (NativePassthrough)
+        // so the block exists in chains until rotary DSP lands.
+        assert!(native_dsp_available(BlockType::Rotary));
+        assert!(build_native(&RigBlock::of_type(BlockType::Rotary), 48_000).is_some());
+        // Pitch has no entry at all — no placeholder, no DSP.
+        assert!(!native_dsp_available(BlockType::Pitch));
+        assert!(build_native(&RigBlock::of_type(BlockType::Pitch), 48_000).is_none());
     }
 }

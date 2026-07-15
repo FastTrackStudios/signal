@@ -1924,12 +1924,18 @@ mod tests {
         assert_eq!(delay.block_type, BlockType::Delay);
         assert_eq!(delay.implementation(), BlockImpl::Plugin);
 
-        // …and a typed effect with no asset is Native (built-in DSP) — which has
-        // no backend yet, so it's skipped at install.
+        // …and a typed effect with no asset is Native (built-in DSP). Reverb
+        // has a registered native backend today…
         let native = RigBlock::effect(BlockType::Reverb, "Hall");
         assert_eq!(native.implementation(), BlockImpl::Native);
         assert!(native.is_native());
-        assert!(!native.has_backend());
+        assert!(native.has_backend());
+
+        // …while a Native type with no registry entry (Pitch) has no backend
+        // yet, so it's skipped at install.
+        let pending = RigBlock::effect(BlockType::Pitch, "Shifter");
+        assert_eq!(pending.implementation(), BlockImpl::Native);
+        assert!(!pending.has_backend());
     }
 
     #[test]

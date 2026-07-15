@@ -672,13 +672,9 @@ mod tests {
         assert_eq!(preset.blocks().len(), 3);
         assert!(preset.find("Voices").is_some());
         assert!(preset.find("Rotary").is_none()); // Rotary is a Block, not a container
-        // Filters have Native DSP; the Rotary is still a placeholder.
-        assert!(
-            preset
-                .blocks()
-                .iter()
-                .all(|b| b.has_backend() == (b.block_type_tag() == "filter"))
-        );
+        // Filters have real Native DSP and the Rotary is registered as a
+        // transparent passthrough placeholder — all three blocks have backends.
+        assert!(preset.blocks().iter().all(|b| b.has_backend()));
     }
 
     #[test]

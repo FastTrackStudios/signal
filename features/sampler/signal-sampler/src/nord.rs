@@ -365,10 +365,13 @@ mod tests {
         assert!(types.contains(&"sampler"), "piano source");
         assert!(types.contains(&"oscillator"), "synth source");
         assert!(types.contains(&"rotary"), "global rotary");
-        // Oscillator / Filter / Amp have Native DSP today; everything else is
-        // still a placeholder. (More blocks gain a backend as DSP lands.)
+        // Every FX/synth block type is in the native registry today — real DSP
+        // (oscillator/filter/amp/eq/comp/reverb/delay/chorus/trem/…) or a
+        // transparent passthrough (the global rotary). Only the source engines
+        // without native DSP yet — tonewheel, sampler(-less), unison — have no
+        // backend.
         for b in p.blocks() {
-            let expected = matches!(b.block_type_tag(), "oscillator" | "filter" | "amp");
+            let expected = !matches!(b.block_type_tag(), "tonewheel" | "sampler" | "unison");
             assert_eq!(
                 b.has_backend(),
                 expected,
