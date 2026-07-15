@@ -49,6 +49,7 @@ impl AudioSoundsource {
     }
 }
 
+// r[impl signal.soundsource.audio]
 impl Soundsource for AudioSoundsource {
     fn kind(&self) -> SoundsourceKind {
         SoundsourceKind::Audio
