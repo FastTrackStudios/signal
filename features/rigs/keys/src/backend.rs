@@ -4,14 +4,15 @@
 //! scans the Keyscape library for presets, loads a single-instrument program
 //! per preset, and plays it from hardware MIDI or UI notes. Implements the
 //! [`signal_keys_proto::keys::KeysRig`] service + its `#[subscribe]` stream;
-//! mount [`router`](KeysRigBackend::router) on a vox transport.
+//! mount `router()` (`architect::rig::RigBackend`) on a vox transport.
 
 use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
 
 use architect::dispatch::CurrentThreadDispatcher;
-use architect::{HasDispatcher, Layer, LayerRouter, PubSub, Services, layers};
+use architect::rig::RigBackend;
+use architect::{HasDispatcher, Layer, PubSub, Services, layers};
 use daw_audio_io::AudioIoPrefs;
 use midicore::MidiEvent;
 use signal_keys_proto::keys::{KeysEvent, KeysRig as KeysRigSvc, KeysRigStreamSource};
@@ -84,17 +85,12 @@ impl KeysRigBackend {
             inner: Arc::new(Inner {
                 rig: Mutex::new(None),
                 state: Mutex::new(State { presets, specs, loaded: default_idx, ..State::default() }),
-                events: PubSub::sliding(64),
+                events: architect::rig::events_hub(),
                 pump_started: AtomicBool::new(false),
             }),
         };
-        signal_sampler::spawn_meter_pump("keys-meter-pump", backend.clone());
+        backend.spawn_meter_pump("keys-meter-pump");
         backend
-    }
-
-    /// The composed service router — mount this on a vox transport.
-    pub fn router(&self) -> LayerRouter {
-        self.clone().into_router()
     }
 
     fn program_for(&self, index: usize) -> Option<Container> {
@@ -165,25 +161,29 @@ impl KeysRigBackend {
 
     fn reattach_midi(&self) {
         let port = self.inner.state.lock().ok().and_then(|s| s.midi_port.clone());
-        if let Ok(mut s) = self.inner.state.lock() {
-            s.midi_handle = None;
-        }
-        let sel = midicore::selector_for(port.as_deref());
-        // KeysRig isn't Clone (owns the audio engine), so attach under the lock.
-        let handle = {
-            let rig = self.inner.rig.lock().unwrap();
-            let Some(rig) = rig.as_ref() else { return };
-            rig.attach_midi(sel).map_err(|e| e.to_string())
-        };
-        match handle {
-            Ok(h) => {
+        midicore::attach::reattach(
+            "keys rig",
+            port.as_deref(),
+            || {
+                if let Ok(mut s) = self.inner.state.lock() {
+                    s.midi_handle = None;
+                }
+            },
+            |sel| {
+                // KeysRig isn't Clone (owns the audio engine), so attach
+                // under the lock.
+                let rig = self.inner.rig.lock().unwrap();
+                match rig.as_ref() {
+                    Some(rig) => rig.attach_midi(sel).map(Some),
+                    None => Ok(None),
+                }
+            },
+            |h| {
                 if let Ok(mut s) = self.inner.state.lock() {
                     s.midi_handle = Some(h);
                 }
-                tracing::info!(port = %port.as_deref().unwrap_or("omni (all inputs)"), "keys rig: MIDI attached");
-            }
-            Err(e) => tracing::error!("keys rig: MIDI attach failed: {e}"),
-        }
+            },
+        );
     }
 
     fn publish_all(&self) {
@@ -194,7 +194,15 @@ impl KeysRigBackend {
 
 }
 
-impl signal_sampler::MeterPumpSource for KeysRigBackend {
+// r[impl primitives.architect.rig-backend]
+impl RigBackend for KeysRigBackend {
+    type Event = KeysEvent;
+    type Tick = ();
+
+    fn events_hub(&self) -> &PubSub<KeysEvent> {
+        &self.inner.events
+    }
+
     fn is_running(&self) -> bool {
         self.inner.rig.lock().map(|r| r.is_some()).unwrap_or(false)
     }
@@ -211,6 +219,18 @@ impl signal_sampler::MeterPumpSource for KeysRigBackend {
     fn on_running_tick(&self) {
         self.inner.events.publish(KeysEvent::Status(KeysRigSvc::status(self)));
         self.inner.events.publish(KeysEvent::Midi(KeysRigSvc::midi_recent(self)));
+    }
+
+    fn midi_ports(&self) -> Vec<String> {
+        KeysRig::midi_input_ports()
+    }
+
+    fn on_midi_ports_changed(&self, ports: &[String]) {
+        // A keyboard plugged in after the rig started is merged into the
+        // omni stream without touching the UI.
+        tracing::info!(?ports, "keys rig: MIDI ports changed — re-attaching");
+        self.reattach_midi();
+        self.inner.events.publish(KeysEvent::Status(KeysRigSvc::status(self)));
     }
 }
 

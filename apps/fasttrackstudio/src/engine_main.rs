@@ -16,6 +16,7 @@
 //! the deployed engine is ONE artifact.
 
 use architect::host::{self, EngineHost, WebBundle};
+use architect::rig::RigBackend as _;
 use signal_guitar::proto::rig::Rig as _;
 use signal_guitar::GuitarRigBackend;
 

@@ -26,7 +26,7 @@ midicore = { workspace = true, features = ["vox", "midir"] }
 # The wire contract this crate's headless backend implements (SynthRig service)
 # + the architect Layer/Services/PubSub machinery to serve it as a vox remote.
 signal-synth-proto.workspace = true
-architect = { workspace = true, features = ["vox"] }
+architect = { workspace = true, features = ["vox", "rig"] }
 tracing.workspace = true
 
 [dev-dependencies]

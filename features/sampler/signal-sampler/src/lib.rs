@@ -68,7 +68,6 @@ pub mod nord;
 pub mod pack_rewrite;
 pub mod preset_registry;
 pub mod preset_spec;
-pub mod pump;
 pub mod retag;
 pub mod rig;
 pub mod rig_library;
@@ -83,7 +82,6 @@ pub mod spec;
 pub mod stats;
 
 pub use bank::{PreloadProfile, SamplerBank};
-pub use pump::{spawn_meter_pump, MeterPumpSource};
 pub use block::{BlockParams, BlockSpec, SamplerBlock};
 pub use convolver::Convolver;
 pub use document::{

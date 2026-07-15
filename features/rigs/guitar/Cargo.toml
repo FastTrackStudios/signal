@@ -21,7 +21,7 @@ signal-sampler.workspace = true
 # AudioSettings services); front-ends consume the same crate's clients.
 signal-guitar-proto.workspace = true
 # Layer/Services composition + dispatchers for mounting the services.
-architect = { workspace = true, features = ["vox"] }
+architect = { workspace = true, features = ["vox", "rig"] }
 # BlockType — primary-param mapping per block type.
 signal-proto.workspace = true
 # EQ band-param naming (EQ_BANDS × EQ_FIELDS) — one source of truth with the DSP.

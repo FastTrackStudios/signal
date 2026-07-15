@@ -16,7 +16,7 @@ signal-sampler.workspace = true
 # The wire contract this crate's headless backend implements (DrumRig service).
 signal-drums-proto.workspace = true
 # Layer/Services composition + dispatchers + PubSub for mounting the services.
-architect = { workspace = true, features = ["vox"] }
+architect = { workspace = true, features = ["vox", "rig"] }
 # Hardware MIDI ports + the drum-map converter for the live input path.
 midicore = { workspace = true, features = ["vox", "midir"] }
 # NI Komplete Kontrol Light Guide — mirror the kit onto the keybed LEDs.

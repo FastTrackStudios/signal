@@ -1079,12 +1079,12 @@ impl SamplerRig {
             (Some(d), Some(t)) => (d.clone(), t.clone()),
             _ => eyre::bail!("attach_midi requires a live rig with a bank track (not offline)"),
         };
-        let monitor = self.inner.midi_monitor.clone();
-        midicore::midir::MidiInput::open(selection, move |t: midicore::TimedEvent| {
-            // Tap for the UI monitor, then forward full-fidelity to the engine.
-            monitor.record(&t.event);
-            daw.push_live_midi(&track, t.event);
-        })
+        // Tap for the UI monitor, then forward full-fidelity to the engine —
+        // the monitor-tap → live-MIDI-sink wiring is midicore's.
+        let sink = midicore::attach::tap_sink(self.inner.midi_monitor.clone(), move |ev| {
+            daw.push_live_midi(&track, ev);
+        });
+        midicore::midir::MidiInput::open(selection, sink)
     }
 
     /// Like [`attach_midi`](Self::attach_midi), but runs every incoming event
@@ -1111,18 +1111,14 @@ impl SamplerRig {
                 "attach_midi_transformed requires a live rig with a bank track (not offline)"
             ),
         };
-        let monitor = self.inner.midi_monitor.clone();
-        let transform = std::sync::Arc::new(std::sync::Mutex::new(transform));
-        midicore::midir::MidiInput::open(selection, move |t: midicore::TimedEvent| {
-            monitor.record(&t.event);
-            let outs = match transform.lock() {
-                Ok(mut f) => f(t.event),
-                Err(_) => return,
-            };
-            for ev in outs {
+        let sink = midicore::attach::tap_sink_transformed(
+            self.inner.midi_monitor.clone(),
+            transform,
+            move |ev| {
                 daw.push_live_midi(&track, ev);
-            }
-        })
+            },
+        );
+        midicore::midir::MidiInput::open(selection, sink)
     }
 
     /// The live MIDI monitor — a rolling log + total count of messages reaching
