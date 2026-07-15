@@ -48,6 +48,10 @@ mod session_view;
 // `/vox` link to `fasttrackstudio --engine`.
 #[cfg(all(feature = "session", target_arch = "wasm32"))]
 mod session_remote_view;
+// The browser chart pane: the active song's keyflow chart (CPU engraver →
+// SVG) with a playhead highlight driven by the transport streams.
+#[cfg(all(feature = "session", target_arch = "wasm32"))]
+mod session_chart_pane;
 #[cfg(not(target_arch = "wasm32"))]
 mod updates;
 

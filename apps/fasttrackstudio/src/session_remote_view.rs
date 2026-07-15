@@ -58,7 +58,40 @@ pub fn SessionRemoteBridge() -> Element {
             // deterministic (no reliance on the stream's first republish).
             match client.setlist().await {
                 Ok(setlist) => {
+                    let songs: Vec<_> = setlist
+                        .songs
+                        .iter()
+                        .map(|s| (s.id.clone(), s.name.clone()))
+                        .collect();
                     session_ui::apply_setlist_event(&SetlistEvent::SetlistChanged(setlist));
+
+                    // Chart backfill: charts are stripped from structural
+                    // payloads and stream as `SongChartHydrated` deltas with
+                    // no replay — a remote connecting after hydration ran
+                    // would never see them. Fetch each song's chart via RPC
+                    // and fold it in exactly like the streamed delta.
+                    let chart_client = client.clone();
+                    spawn(async move {
+                        for (index, (song_id, name)) in songs.into_iter().enumerate() {
+                            match chart_client.song_chart(index).await {
+                                Ok(Some(chart)) => {
+                                    session_ui::apply_setlist_event(
+                                        &SetlistEvent::SongChartHydrated {
+                                            song_id,
+                                            index,
+                                            chart,
+                                        },
+                                    );
+                                }
+                                Ok(None) => {
+                                    tracing::debug!("no chart for song {index} ({name})")
+                                }
+                                Err(e) => {
+                                    tracing::warn!("song_chart({index}) failed: {e:?}")
+                                }
+                            }
+                        }
+                    });
                 }
                 Err(e) => tracing::warn!("initial setlist snapshot failed: {e:?}"),
             }
@@ -129,8 +162,13 @@ pub fn SessionWorkspace() -> Element {
             div { style: "width: 280px; flex: none; min-height: 0; border-right: 1px solid #27272a; display: flex;",
                 PerformanceSidebar {}
             }
-            // ── Performance display + transport (right column) ─────
+            // ── Chart + performance display + transport (right column) ─────
             div { style: "flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column;",
+                // The active song's keyflow chart, highlight synced to the
+                // playhead (auto-advances with the setlist cursor).
+                div { style: "flex: 1.4; min-height: 0; display: flex; flex-direction: column; border-bottom: 1px solid #27272a;",
+                    crate::session_chart_pane::SessionChartPane {}
+                }
                 div { style: "position: relative; flex: 1; min-height: 0; display: flex;",
                     PerformanceLayout {}
                 }

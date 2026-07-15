@@ -414,6 +414,20 @@ async fn bootstrap(engine_rt: tokio::runtime::Handle) -> eyre::Result<SessionEng
             song,
         )
         .map_err(|e| eyre::eyre!("stamp song {} ({}): {e:?}", i, song.name))?;
+        // Attach the bundled keyflow chart to the project (ext-state
+        // `FTS/chart_text`) so setlist hydration serves it to remotes —
+        // the browser chart pane renders from exactly this text.
+        if let Some(chart) = session::setlist_service::demo::demo_chart_for(song.name) {
+            use daw::service::ExtState as _;
+            standalone
+                .set_project(
+                    daw::service::ProjectContext::Project(guid.clone()),
+                    session::setlist_service::CHART_EXT_STATE_SECTION,
+                    session::setlist_service::CHART_EXT_STATE_KEY,
+                    chart,
+                )
+                .map_err(|e| eyre::eyre!("stamp chart for {}: {e:?}", song.name))?;
+        }
         // Seed this song's multitrack stems 0-based into its own project (when
         // the audio is present on this machine — the demo still works without).
         let len = song.region_end - song.region_start;

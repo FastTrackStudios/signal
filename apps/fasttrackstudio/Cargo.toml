@@ -250,5 +250,7 @@ session-ui = { workspace = true, features = ["web"], optional = true }
 # panels (Arrangement / Mixer) are native-only workspaces anyway — the
 # session feature's "dep:daw-ui" is a no-op on the web build.
 web-sys = { version = "0.3", features = ["Window", "Storage", "Location"] }
+# Chart pane: @font-face data URIs for the engraver's embedded fonts.
+base64 = { workspace = true }
 # getrandom 0.3 (transitive via iroh) needs its js backend on wasm32.
 getrandom = { version = "0.3", features = ["wasm_js"] }
