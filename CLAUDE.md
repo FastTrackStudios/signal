@@ -10,7 +10,8 @@ this tree. See LAYOUT.md for the full map.
 
 ```
 crates/    domain cores — daw, session, keyflow, signal (facade+proto+
-           ui+live+storage+...), midicore, input, audiocore
+           ui+live+storage+...), midicore, input, audiocore,
+           patchbay (PipeWire studio routing: facade+proto+ui)
 features/  capabilities — audio, sync, dawfile, reaper, standalone,
            surfaces, daw-ui, guide, engraver, dynamic-template,
            fx (built-in FX), rigs, sampler, nam, plugin-host,
