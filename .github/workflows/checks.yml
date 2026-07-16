@@ -108,13 +108,16 @@ jobs:
           }
           if infra:
               gates = {k: True for k in gates}
-              print("run_all_reason=\"rail infra surface\"")
+              print("infra=true")
           for k, v in gates.items():
               print(f"{k}={str(v).lower()}")
           print(f"n_crates={len(crates)}")
           ')" || run_all "plan parse failed"
 
-          [ -n "${run_all_reason:-}" ] && run_all "$run_all_reason"
+          # Infra surface (toolchain / flake / CI inputs changed) is a
+          # DELIBERATE full run, not a failure — everything's inputs
+          # changed, so everything rebuilds.
+          [ "${infra:-false}" = "true" ] && echo "plan: infra-surface change — full run (all gates on)"
 
           {
             echo "workspace=$workspace"
