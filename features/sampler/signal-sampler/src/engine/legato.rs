@@ -91,56 +91,22 @@ impl SampleEngine {
                 self.line_mut().note = Some(note);
             }
             // Fire the transition — no reactive countdown. The scheduler
-            // subtracted the measured lead-in from the trigger time; if the
-            // zone that will actually play has a SHORTER lead-in (e.g. a
-            // different CC1 layer than the schedule's estimate), hold the
-            // fire back by the difference so the arrival still lands on the
-            // destination tick. (NOT counted as a reactive fire.)
+            // subtracted the pre-bow lead from the trigger time; the spawn
+            // aligns the ACTUAL zone's heard-arrival marker to that lead
+            // sample-exactly: a zone whose remaining arrival is longer than
+            // the lead starts partway in (`start_offset`), a shorter one is
+            // held back on a per-voice start hold (`Voice::with_start_hold`)
+            // — either way the pitch change lands ON the destination tick,
+            // per round-robin / mic / dynamic layer. (NOT counted as a
+            // reactive fire; the old block-quantised `LegatoState::Pending`
+            // hold-back is gone — voice holds are sample-exact and immune to
+            // the forced-RR race a countdown re-dispatch had.)
             Some(cur) => {
                 // Document prefire: the scheduler already computed the lead
                 // (IOI-driven); here we only need the portamento flag.
                 let (_delay_ms, portamento) = self.legato_timing(velocity, 0);
                 self.play_direction = if note >= cur { "up" } else { "down" }.to_string();
-                if let Some(lead) = sched_lead {
-                    if let Some(zone_lead) = self.transition_lead_frames(cur, note, portamento) {
-                        if zone_lead < lead {
-                            // Hold the fire back so the arrival lands ON the
-                            // tick (fires via the render countdown; NOT a
-                            // reactive fire — the counter is untouched). With
-                            // the `$1fvjk` pre-bow lead this branch is
-                            // essentially unreachable for CSS (the scheduled
-                            // lead ≤ ~60 ms is always < the measured arrival),
-                            // so it resolves through the reactive path with the
-                            // armed IOI = 0 → deepest-offset fallback.
-                            self.line_mut().state = LegatoState::Pending {
-                                frames_remaining: (lead - zone_lead) as usize,
-                                from_note: cur,
-                                to_note: note,
-                                to_note_velocity: velocity,
-                                portamento,
-                                ioi_ms: 0.0,
-                            };
-                            return;
-                        }
-                        // Longer lead-in than scheduled: fire now, skipping the
-                        // surplus off the sample's front. `arrival − lead·rate`
-                        // resolves the offset to the CSS `$1fvjk` value the
-                        // scheduler encoded in `lead`; the reactive `ioi_ms` is
-                        // unused on this (document) path.
-                        self.fire_legato_with_lead(
-                            cur,
-                            note,
-                            velocity,
-                            portamento,
-                            Some(lead),
-                            0.0,
-                        );
-                        return;
-                    }
-                }
-                // No measurement (legacy library) or live prefire: fire now,
-                // the sample's own lead-in lands wherever it lands.
-                self.fire_legato_with_lead(cur, note, velocity, portamento, None, 0.0);
+                self.fire_legato_with_lead(cur, note, velocity, portamento, sched_lead, 0.0);
             }
         }
     }
@@ -247,7 +213,8 @@ impl SampleEngine {
             // recorded key (whole-tone grid → even notes warm their neighbour).
             let in_range = note >= z.key_min && note <= z.key_max;
             let near =
-                (z.root_key as i32 - note as i32).unsigned_abs() as u8 <= ZONE_PITCH_TOLERANCE;
+                (z.root_key as i32 - note as i32).unsigned_abs() as u8
+                    <= self.patch.spec.performance.zone_pitch_tolerance;
             if !in_range && !near {
                 continue;
             }

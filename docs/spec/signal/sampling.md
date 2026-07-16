@@ -32,6 +32,21 @@ one-shot / legato / CSS-style release samples). The Setup UI renders the sample
 loop points and CSS-strings legato/release points are visible and adjustable.
 Markers persist per zone in the [sound definition](sound-format.md).
 
+r[signal.sampling.markers.arrival]
+A zone MAY carry a measured **arrival marker** (`arrival_ms`, sample-time ms
+from `sample_start`): when the note is actually HEARD after playback begins,
+measured from the sample audio itself — destination-pitch settle for legato
+transitions, the rhythmic (spectral-flux) peak for shorts, the perceptual
+onset (flux leading edge) for re-triggers and fresh sustains. Scheduling MUST
+compensate by the zone's measured arrival where present (pre-roll the trigger
+/ hold the voice so the arrival lands on the grid tick, per round-robin, mic,
+and dynamic layer) and MUST fall back to `lead_in_ms` (transitions) /
+`short_note_timing.pre_delay_ms` (shorts) / trigger-time (sustains) where
+absent. `arrival_ms == 0` means unmeasured. Markers are written by the
+offline measurement tool (`signal-orchestra/examples/measure_arrivals.rs`),
+which is deterministic and idempotent; low-confidence measurements are
+reported, not written.
+
 ## Multi-Mics
 
 r[signal.sampling.multimic]

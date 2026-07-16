@@ -247,6 +247,19 @@ impl SamplerBlock {
         self.engine.note_on_line(line, n, velocity);
     }
 
+    /// Line-addressed note-on with the document scheduler's pre-roll lead
+    /// (per-zone arrival alignment) — see [`SampleEngine::note_on_line_lead`].
+    pub fn note_on_line_lead(
+        &mut self,
+        line: crate::engine::LineId,
+        note: u8,
+        velocity: u8,
+        lead: u64,
+    ) {
+        let n = transposed(note, self.params.transpose);
+        self.engine.note_on_line_lead(line, n, velocity, lead);
+    }
+
     /// Line-addressed note-off — see [`SampleEngine::note_off_line`].
     pub fn note_off_line(&mut self, line: crate::engine::LineId, note: u8) {
         let n = transposed(note, self.params.transpose);
@@ -324,6 +337,16 @@ impl SamplerBlock {
     /// see [`SampleEngine::legato_fire_log`].
     pub fn legato_fire_log(&self) -> &[crate::engine::LegatoFireEvent] {
         self.engine.legato_fire_log()
+    }
+
+    /// see [`SampleEngine::set_emitted_marker_log_enabled`].
+    pub fn set_emitted_marker_log_enabled(&mut self, enabled: bool) {
+        self.engine.set_emitted_marker_log_enabled(enabled);
+    }
+
+    /// see [`SampleEngine::emitted_markers`].
+    pub fn emitted_markers(&self) -> &[crate::engine::EmittedMarker] {
+        self.engine.emitted_markers()
     }
 
     /// Enable/disable the structured render trace —

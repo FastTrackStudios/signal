@@ -222,6 +222,21 @@ impl SampleEngine {
             .or_else(|| self.lines.iter().position(|l| l.order.contains(&note)))
     }
 
+    /// [`note_on_line`](Self::note_on_line) carrying the document
+    /// scheduler's pre-roll lead (wall frames from this call to the note's
+    /// grid tick). Every attack voice spawned by this dispatch is held back
+    /// by `lead − its zone's measured heard-arrival` (`ZoneSpec::arrival_ms`)
+    /// so the note is HEARD exactly on the tick — per round-robin (the
+    /// per-RR replacement for the single global
+    /// `short_note_timing.pre_delay_ms`), per mic, per dynamic layer.
+    /// Zones without a measurement fall back to the historical claim
+    /// (shorts: `pre_delay_ms`; sustains: heard-at-trigger).
+    pub fn note_on_line_lead(&mut self, line: LineId, note: u8, velocity: u8, lead: u64) {
+        self.spawn_align_lead = (lead > 0).then_some(lead);
+        self.note_on_line(line, note, velocity);
+        self.spawn_align_lead = None;
+    }
+
     /// Line-addressed note-on: mono-line legato bookkeeping happens on
     /// `line`, and spawned voices are tagged with it. The channel-less
     /// [`note_on`](Self::note_on) uses line 0 (live single-line play).
@@ -421,7 +436,8 @@ impl SampleEngine {
                 if self.play_mode != PlayMode::Lookahead {
                     if let Some(&prev) = self.line().order.last() {
                         // Fall back at a medium transition speed.
-                        self.start_legato_transition(note, prev, LEGATO_FALLBACK_VELOCITY);
+                        let fallback_vel = self.patch.spec.legato_cfg().fallback_velocity;
+                        self.start_legato_transition(note, prev, fallback_vel);
                         return;
                     }
                 }
@@ -441,7 +457,11 @@ impl SampleEngine {
             // Held-sustain note-off (spec §6): immediate note_off + overlapping
             // fade (~`$tukcw=200` ms). This line's voices only, so a unison
             // note held by another divisi line keeps sounding.
-            let sus_off = ms_to_frames(SUSTAIN_NOTEOFF_MS, self.sample_rate).max(release_frames);
+            let sus_off = ms_to_frames(
+                self.patch.spec.performance.sustain_noteoff_ms,
+                self.sample_rate,
+            )
+            .max(release_frames);
             self.voices.note_off_line(cur_line, note, Some(sus_off));
             return;
         }
@@ -551,22 +571,11 @@ impl SampleEngine {
     /// [`update_sustain_gains`](Self::update_sustain_gains)), so a held note
     /// swells the full dynamic range. `self.articulation` is the non-vibrato
     /// base; the vibrato pair is found and blended in by CC2.
-    /// CSS master tune (`CSS_MASTER_TUNE_CENTS`), applied globally on top of the
-    /// per-note transpose — but ONLY for the CSS libraries it was decoded from
-    /// (`tune=1.00521` is a Cinematic Studio property, not a generic default).
-    /// Other libraries stay at 0 so they are not detuned.
+    /// Library master tune (`PerformanceSpec::master_tune_cents`), applied
+    /// globally on top of the per-note transpose. 0 for libraries that don't
+    /// set it; CSS ships `tune=1.00521` ≈ +9.0 cents in its spec.
     pub(crate) fn master_tune_cents(&self) -> f64 {
-        if self
-            .patch
-            .spec
-            .name
-            .to_ascii_lowercase()
-            .contains("cinematic")
-        {
-            CSS_MASTER_TUNE_CENTS
-        } else {
-            0.0
-        }
+        f64::from(self.patch.spec.performance.master_tune_cents)
     }
 
     pub(crate) fn trigger_zoned_sustain(&mut self, note: u8) {
@@ -729,7 +738,7 @@ impl SampleEngine {
             .articulation(artic)
             .map(|a| a.dynamics.clone())
             .unwrap_or_default();
-        let expr = Self::cc1_expression(self.cc1);
+        let expr = self.cc1_expression(self.cc1);
         if dyn_labels.len() <= 1 {
             // Single (or no) declared dynamic — one zone, loudness from CC1.
             let label = dyn_labels.first().map(String::as_str).unwrap_or("");
@@ -852,7 +861,7 @@ impl SampleEngine {
         let delay_ms = if portamento {
             0
         } else {
-            ioi_legato_delay_ms(
+            self.patch.spec.legato_cfg().overlap_delay_ms(
                 frames_to_ms(ioi_frames, self.sample_rate),
                 velocity,
                 self.legato_expressive,
@@ -897,7 +906,6 @@ impl SampleEngine {
         sched_lead: Option<u64>,
         ioi_ms: f32,
     ) {
-        let _ = velocity;
         if portamento {
             // Portamento glides: single `Port` articulation (one `f` dynamic,
             // no vibrato pair), volume from CC5 "Portamento Volume".
@@ -909,6 +917,7 @@ impl SampleEngine {
                     &id,
                     from,
                     to,
+                    velocity,
                     self.cc5_porta_volume,
                     sched_lead,
                     ioi_ms,
@@ -930,7 +939,7 @@ impl SampleEngine {
         // `$3tsb0`). It plays at recorded level × CC1 — the same net level as the
         // legato SUSTAIN it overlays (which nets 0 dB: +6 OUTPUT_MAKEUP − 6
         // $3tsb0). `$3tsb0` lands on the sustain voice via `legato_sustain`.
-        let expr = Self::cc1_expression(self.cc1);
+        let expr = self.cc1_expression(self.cc1);
         let mut spawned = false;
         for (id, scale) in [(nv_id, nv_scale), (vib_id, vb_scale)] {
             let Some(id) = id else { continue };
@@ -939,7 +948,15 @@ impl SampleEngine {
             if scale <= 0.001 && spawned {
                 continue;
             }
-            self.spawn_transition_voice(&id, from, to, scale.max(0.001) * expr, sched_lead, ioi_ms);
+            self.spawn_transition_voice(
+                &id,
+                from,
+                to,
+                velocity,
+                scale.max(0.001) * expr,
+                sched_lead,
+                ioi_ms,
+            );
             spawned = true;
         }
     }
@@ -948,22 +965,30 @@ impl SampleEngine {
     /// crossfade — (`NVLeg`, `Leg`), or the `*zero` re-trigger pair when
     /// `retrigger`. Either side may be absent.
     pub(crate) fn legato_pair_ids(&self, retrigger: bool) -> (Option<String>, Option<String>) {
-        let want_sord = self.articulation.starts_with("Sord");
+        let want_sord = self
+            .patch
+            .spec
+            .articulation(&self.articulation)
+            .map(|a| a.is_sordino())
+            .unwrap_or_else(|| self.articulation.starts_with("Sord"));
+        let want_role = if retrigger {
+            crate::spec::LegatoRole::Retrigger
+        } else {
+            crate::spec::LegatoRole::Transition
+        };
         let mut nv = None;
         let mut vib = None;
         for a in &self.patch.spec.articulations {
             if a.kind != ArticulationKind::Legato {
                 continue;
             }
-            if a.id.starts_with("Sord") != want_sord {
+            if a.is_sordino() != want_sord {
                 continue;
             }
-            let id_lower = a.id.to_lowercase();
-            if id_lower.contains("port") || id_lower.contains("zero") != retrigger {
+            if a.resolve_legato_role() != want_role {
                 continue;
             }
-            let is_nv = id_lower.contains("nv") || id_lower.contains("nonvib");
-            let slot = if is_nv { &mut nv } else { &mut vib };
+            let slot = if a.is_vibrato() { &mut vib } else { &mut nv };
             if slot.is_none() {
                 *slot = Some(a.id.clone());
             }
@@ -974,11 +999,13 @@ impl SampleEngine {
     /// Spawn one transition voice from articulation `leg_id` for `from → to`
     /// (see [`spawn_legato_transition`](Self::spawn_legato_transition) for
     /// the selection rules).
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn spawn_transition_voice(
         &mut self,
         leg_id: &str,
         from: u8,
         to: u8,
+        velocity: u8,
         gain: f32,
         sched_lead: Option<u64>,
         ioi_ms: f32,
@@ -987,13 +1014,21 @@ impl SampleEngine {
         let (lo, hi, blend) = self.layers_for_artic(leg_id);
         let dynamic = if blend >= 0.5 { hi } else { lo };
         if from == to {
-            // Re-bow: `Legzero` destination-note re-trigger (3 RRs, no lead-in).
+            // Re-bow: `Legzero` destination-note re-trigger (3 RRs). The
+            // re-attack is NOT instantaneous — the zone's measured onset
+            // (`arrival_ms`) says when the bow change speaks. Under a
+            // document prefire (`sched_lead`) the spawn is arrival-aligned
+            // (held back by `lead − onset`) so the re-bow speaks ON the
+            // tick; live re-bows keep firing immediately.
             let rr = self
                 .forced_rr
                 .map(|f| f as usize)
                 .unwrap_or(self.zone_rr_counter);
             if let Some(idx) = self.find_layer_zone(leg_id, "", &dynamic, to, rr) {
+                let restore = self.spawn_align_lead;
+                self.spawn_align_lead = sched_lead.filter(|&l| l > 0);
                 self.spawn_zone_voice(idx, to, VoiceKind::Legato, gain, None, 0.0);
+                self.spawn_align_lead = restore;
             }
             return;
         }
@@ -1017,12 +1052,31 @@ impl SampleEngine {
         } else {
             0.0
         };
-        // The measured lead-in is in SAMPLE time; playback runs at `rate`,
-        // so the surplus skipped off the front must be `sched_lead` WALL
-        // frames short of the lead-in in sample frames.
+        // The heard-arrival marker is in SAMPLE time (measured `arrival_ms`
+        // when present, metadata `lead_in_ms` otherwise); playback runs at
+        // `rate`, so the surplus skipped off the front must be `sched_lead`
+        // WALL frames short of the arrival in sample frames.
         let rate = 2.0f64.powf((f64::from(to) - f64::from(z.root_key) + pitch_offset) / 12.0);
+        // Diagnostic sweep semantics (see `document::arrival_semantics_env`):
+        // the effective arrival is re-interpreted between the LT offset and
+        // the measured settle. Unset env = the marker as measured. The
+        // schedule applied the same re-interpretation to the prefire lead,
+        // so `offset = arrival_eff − lead·rate` stays consistent.
+        let arrival_eff_ms = {
+            let (frac, bias) = crate::document::arrival_semantics_env();
+            if (frac - 1.0).abs() < 1e-6 && bias.abs() < 1e-6 {
+                z.transition_arrival_ms()
+            } else {
+                let off = self
+                    .patch
+                    .spec
+                    .legato_cfg()
+                    .lt_offset_ms(ioi_ms.max(400.0), velocity, self.legato_expressive);
+                (off + (z.transition_arrival_ms() - off).max(0.0) * frac + bias).max(0.0)
+            }
+        };
         let lead_sample_frames =
-            ms_to_frames(z.lead_in_ms.max(0.0).round() as u32, self.sample_rate) as u64;
+            ms_to_frames(arrival_eff_ms.max(0.0).round() as u32, self.sample_rate) as u64;
         // Sample-start offset = the CSS `$1fvjk` curve, IOI-driven (177 → 117 ms):
         //
         //  * Document (lookahead) path — `sched_lead` is set: the scheduler
@@ -1042,11 +1096,36 @@ impl SampleEngine {
                 lead_sample_frames.saturating_sub(lead_in_sample) as usize
             }
             None => {
-                let off = ms_to_frames(lt_start_offset_ms(ioi_ms).round() as u32, self.sample_rate)
-                    as u64;
+                // Reactive (live) path: the real CSS `$1fvjk` — velocity-range
+                // base + soft/fast IOI boost (falls back to the legacy IOI
+                // curve when the spec authors no bases).
+                let off_ms = self.patch.spec.legato_cfg().lt_offset_ms(
+                    ioi_ms,
+                    velocity,
+                    self.legato_expressive,
+                );
+                let off = ms_to_frames(off_ms.round() as u32, self.sample_rate) as u64;
                 off.min(lead_sample_frames) as usize
             }
         };
+        // Deterministic heard-arrival prediction (see
+        // [`LegatoFireEvent::arrival`]): the in-sample arrival marker
+        // (`lead_in_ms`, measured per zone) minus the offset we skip off the
+        // front, in wall frames at this voice's playback rate. When both CC2
+        // sides spawn, the last (dominant-selection order) wins — the pair is
+        // recorded from the same performance, so the markers agree.
+        self.last_arrival_prediction = self.frames_rendered
+            + ((lead_sample_frames.saturating_sub(start_offset as u64)) as f64 / rate).round()
+                as u64;
+        // Arrival alignment (document path): when the zone's remaining
+        // in-sample arrival is SHORTER than the scheduled lead (a corrected
+        // per-zone marker under a median-derived schedule lead), the voice is
+        // held back by the difference so the pitch change still lands ON the
+        // tick — sample-exact, per zone (`spawn_zone_voice_at` computes the
+        // hold from this lead and the zone's own marker).
+        let restore = self.spawn_align_lead;
+        self.spawn_align_lead = sched_lead.filter(|&l| l > 0);
+        self.spawn_arrival_override_ms = Some(arrival_eff_ms);
         let ok = self.spawn_zone_voice_at(
             idx,
             to,
@@ -1056,6 +1135,8 @@ impl SampleEngine {
             pitch_offset,
             start_offset,
         );
+        self.spawn_arrival_override_ms = None;
+        self.spawn_align_lead = restore;
         if std::env::var_os("SIGNAL_LEGATO_DEBUG").is_some() {
             eprintln!(
                 "LEGATO {}→{} zone={} root={} int={} dir={} lead_ms={} sched={:?} offset={} pitch_off={} spawned={}",
@@ -1065,61 +1146,13 @@ impl SampleEngine {
                 self.patch.spec.zones[idx].root_key,
                 self.patch.spec.zones[idx].interval,
                 self.patch.spec.zones[idx].direction,
-                self.patch.spec.zones[idx].lead_in_ms,
+                self.patch.spec.zones[idx].transition_arrival_ms(),
                 sched_lead,
                 start_offset,
                 pitch_offset,
                 ok,
             );
         }
-    }
-
-    /// Measured lead-in (frames) of the transition zone that WOULD be picked
-    /// for `from → to` right now (dominant CC2 side, current CC1 layer) —
-    /// the document prefire path uses this to decide whether to hold the
-    /// fire back so the pitch change lands exactly on the destination tick.
-    ///
-    /// `None` = no measurement available (legacy library without per-zone
-    /// `lead_in_ms`): callers keep the legacy fire-at-prefire behaviour.
-    pub(crate) fn transition_lead_frames(&self, from: u8, to: u8, portamento: bool) -> Option<u64> {
-        if from == to {
-            // Legzero re-triggers genuinely have no lead-in — but only for
-            // libraries that carry measurements at all.
-            return self.patch.spec.has_measured_legato().then_some(0);
-        }
-        let id = if portamento {
-            self.find_port_artic_id()
-                .or_else(|| self.find_legato_artic_id(false))
-        } else {
-            let (nv, vib) = self.legato_pair_ids(false);
-            let (nv_scale, vb_scale) = Self::equal_power(self.cc2_blend());
-            if vb_scale >= nv_scale {
-                vib.or(nv)
-            } else {
-                nv.or(vib)
-            }
-        };
-        let id = id?;
-        let (lo, hi, blend) = self.layers_for_artic(&id);
-        let dynamic = if blend >= 0.5 { hi } else { lo };
-        let direction = if to > from { "up" } else { "down" };
-        let named = from.min(to);
-        let interval = u32::from(from.abs_diff(to)).min(12);
-        let idx = self.find_transition_zone(&id, direction, &dynamic, named, interval)?;
-        let z = &self.patch.spec.zones[idx];
-        if z.lead_in_ms <= 0.0 {
-            return None;
-        }
-        // Convert the sample-time lead-in to WALL frames at the playback
-        // rate this zone will actually get (destination pinned to `to`).
-        let pitch_offset = if z.direction.eq_ignore_ascii_case("up") {
-            -f64::from(z.interval)
-        } else {
-            0.0
-        };
-        let rate = 2.0f64.powf((f64::from(to) - f64::from(z.root_key) + pitch_offset) / 12.0);
-        let sample_frames = ms_to_frames(z.lead_in_ms.round() as u32, self.sample_rate) as f64;
-        Some((sample_frames / rate) as u64)
     }
 
     /// Pick the transition zone for (articulation, direction, dynamic,
@@ -1190,7 +1223,8 @@ impl SampleEngine {
         // decay — but these samples are normalised loud, so at unity (×makeup)
         // they spike louder than the note itself ("note-off noise"). Trim them.
         if let Some(idx) = self.find_layer_zone(&rel_id, "", &dynamic, note, rr) {
-            self.spawn_zone_voice(idx, note, VoiceKind::Release, RELEASE_GAIN, None, 0.0);
+            let release_gain = self.patch.spec.performance.release_gain;
+            self.spawn_zone_voice(idx, note, VoiceKind::Release, release_gain, None, 0.0);
         }
     }
 
@@ -1246,7 +1280,7 @@ impl SampleEngine {
         // No exact zone — use the nearest recorded pitch within range and let
         // spawn_zone_voice pitch-shift it (note - root_key semitones).
         nearest
-            .filter(|(d, _)| *d <= ZONE_PITCH_TOLERANCE)
+            .filter(|(d, _)| *d <= self.patch.spec.performance.zone_pitch_tolerance)
             .map(|(_, i)| i)
     }
 
@@ -1333,6 +1367,106 @@ impl SampleEngine {
         let semitones = note as f64 - root_key as f64 + pitch_offset + artic_transpose;
         let total_cents = semitones * 100.0 + tune_cents as f64 + self.master_tune_cents();
         let rate = 2.0f64.powf(total_cents / 1200.0);
+
+        // Marker position for playback emission (FILE frames): the zone's
+        // heard-arrival CLAIM, exactly the ladder the alignment uses —
+        // measured `arrival_ms`, else `lead_in_ms` for pitch transitions,
+        // else the global short pre-delay, else "heard at playback start"
+        // (0 → the marker emits on the voice's first sounding frame).
+        // Attack kinds only: release tails and CC-trigger voices have no
+        // grid arrival.
+        let marker_arrival_file = if matches!(
+            kind,
+            VoiceKind::Legato | VoiceKind::Short | VoiceKind::SustainLayer
+        ) {
+            let z = &self.patch.spec.zones[idx];
+            let ms = if z.arrival_ms > 0.0 {
+                z.arrival_ms
+            } else if matches!(kind, VoiceKind::Legato) && z.interval > 0 {
+                z.lead_in_ms
+            } else if matches!(kind, VoiceKind::Short) {
+                self.patch
+                    .spec
+                    .short_note_timing
+                    .as_ref()
+                    .map(|t| t.pre_delay_ms as f32)
+                    .unwrap_or(0.0)
+            } else {
+                0.0
+            };
+            Some(f64::from(ms) / 1000.0 * data.sample_rate as f64 + f64::from(sample_start))
+        } else {
+            None
+        };
+
+        // ── Per-zone arrival alignment (document scheduling) ─────────────
+        // The scheduler pre-rolled this trigger by `spawn_align_lead` wall
+        // frames (an upper bound over the candidate zones); this voice is
+        // held back by `lead − its own heard-arrival` so the note is HEARD
+        // exactly on the grid tick — per round-robin / mic / dynamic layer.
+        // The zone's claim is the MEASURED `arrival_ms` when present, else
+        // the historical fallback (shorts: the global `pre_delay_ms`;
+        // transitions: metadata `lead_in_ms`; sustains: heard-at-trigger),
+        // which reproduces the pre-marker timing for unmeasured zones.
+        let start_hold = match self.spawn_align_lead {
+            Some(lead) => {
+                let z = &self.patch.spec.zones[idx];
+                // The zone's arrival claim (ms of sample time from playback
+                // start). `None` = no claim at all — an UNMEASURED pitch
+                // transition, whose schedule lead was built on the premise
+                // that the sample's intrinsic latency IS the lead (legacy
+                // behaviour): fire immediately, no hold.
+                let eff_ms = if matches!(kind, VoiceKind::Legato)
+                    && z.interval > 0
+                    && self.spawn_arrival_override_ms.is_some()
+                {
+                    // Diagnostic sweep: the transition caller already
+                    // computed the re-interpreted arrival — use it verbatim.
+                    self.spawn_arrival_override_ms
+                } else if z.arrival_ms > 0.0 {
+                    Some(z.arrival_ms)
+                } else if matches!(kind, VoiceKind::Legato) && z.interval > 0 {
+                    (z.lead_in_ms > 0.0).then_some(z.lead_in_ms)
+                } else if matches!(kind, VoiceKind::Short) {
+                    // Unmeasured short: the historical claim is the global
+                    // recorded pre-delay.
+                    Some(
+                        self.patch
+                            .spec
+                            .short_note_timing
+                            .as_ref()
+                            .map(|t| t.pre_delay_ms as f32)
+                            .unwrap_or(0.0),
+                    )
+                } else {
+                    // Unmeasured sustain / re-trigger: heard at trigger.
+                    Some(0.0)
+                };
+                match eff_ms {
+                    Some(eff_ms) => {
+                        // Arrival in FILE frames from playback start, minus
+                        // whatever the caller already skipped off the front
+                        // (`start_offset`), converted to wall frames at this
+                        // voice's true playback advance (pitch rate ×
+                        // source/output sample-rate ratio).
+                        let sr_scale = data.sample_rate as f64 / self.sample_rate as f64;
+                        let arrival_file = (f64::from(eff_ms) / 1000.0
+                            * data.sample_rate as f64)
+                            - start_offset as f64;
+                        let arrival_wall =
+                            (arrival_file.max(0.0) / (rate * sr_scale)).round() as u64;
+                        let hold = lead.saturating_sub(arrival_wall) as usize;
+                        // The deterministic heard-arrival this spawn actually
+                        // produces (fire-log truth for transitions/re-bows).
+                        self.last_arrival_prediction =
+                            self.frames_rendered + hold as u64 + arrival_wall;
+                        hold
+                    }
+                    None => 0,
+                }
+            }
+            None => 0,
+        };
         let is_sustain_layer = matches!(
             kind,
             VoiceKind::SustainNVLo
@@ -1355,13 +1489,28 @@ impl SampleEngine {
         // it plays at recorded level scaled by CC1, same net level as the −6 dB
         // sustain it overlays. Shorts and release tails play the recording as-is.
         let makeup = if is_sustain_layer {
+            let base = db_to_gain(self.patch.spec.performance.sustain_makeup_db);
             if self.legato_sustain {
-                OUTPUT_MAKEUP * db_to_gain(CSS_LEGATO_MAKEUP_DB)
+                base * db_to_gain(self.patch.spec.legato_cfg().sustain_trim_db)
             } else {
-                OUTPUT_MAKEUP
+                base
             }
         } else {
             1.0
+        };
+        // CSS `%1wcdh` slow secondary bloom: the −6 dB (`$3tsb0`) connected
+        // sustain swells back to FULL body over ~1 s ($foyeb/$g4dbu), so a
+        // long held note doesn't sit 6 dB down until its next join — without
+        // it the note's carrier has decayed by the time the next
+        // transition's pre-bow plays (slow tempi), and the incoming
+        // destination pitch reads early against a vanishing source.
+        // Multiplicative on the voice, so CC1/CC2 re-levelling keeps working.
+        let bloom = if is_sustain_layer && self.legato_sustain {
+            let cfg = self.patch.spec.legato_cfg();
+            let frames = ms_to_frames(cfg.sustain_bloom_ms, self.sample_rate);
+            (frames > 0).then(|| (frames, db_to_gain(-cfg.sustain_trim_db)))
+        } else {
+            None
         };
         let gain = 10.0f32.powf(gain_db / 20.0) * gain_scale * makeup;
         let mic_index = self.mic_index_for(&mic);
@@ -1371,7 +1520,13 @@ impl SampleEngine {
         // freeze at their hold level while held (indefinite sustain); shorts and
         // releases play their decoded decay one-shot.
         let flex_artic = self.patch.spec.zones[idx].articulation.clone();
-        let flex_env = flex_env_for(&flex_artic, &kind, is_sustain_layer, self.sample_rate);
+        let flex_env = amp_env_for(
+            &self.patch.spec,
+            &flex_artic,
+            &kind,
+            is_sustain_layer,
+            self.sample_rate,
+        );
 
         // CSS-style sustains ship no loop points but have a slow ~0.8s natural
         // attack pre-roll that CSS skips (Kontakt sample-start) for a fast attack.
@@ -1427,7 +1582,8 @@ impl SampleEngine {
             // Deep mid-sample entry (skipped-swell Low-Latency prefire): fade
             // in over a longer window, scaled to how far we skipped (capped),
             // so the steep bow-change we begin partway through eases in.
-            ms_to_frames(SKIP_DECLICK_MS, self.sample_rate).min(start_offset)
+            ms_to_frames(self.patch.spec.legato_cfg().skip_declick_ms, self.sample_rate)
+                .min(start_offset)
         } else if matches!(kind, VoiceKind::Legato | VoiceKind::Release) {
             ms_to_frames(ONSET_DECLICK_MS, self.sample_rate)
         } else {
@@ -1470,9 +1626,24 @@ impl SampleEngine {
             .with_artic_class(artic_class)
             .with_pan(u_pan)
             .with_attack(attack)
+            .with_start_hold(start_hold)
             .with_sample_window(start_frame, (sample_end > 0).then_some(sample_end as usize));
+            // Playback-emitted arrival marker: attach the zone's heard-
+            // arrival position (FILE frames at the SOURCE rate) so the voice
+            // emits the marker when its real playhead crosses it. Underlay
+            // sustains spawned during a legato handoff are excluded — their
+            // muted `attack_delay` advances the playhead while inaudible, so
+            // a crossing there would not be a heard arrival.
+            if let Some(m) = marker_arrival_file {
+                if !(is_sustain_layer && self.legato_sustain) {
+                    voice = voice.with_arrival_marker(m, self.frames_rendered);
+                }
+            }
             if let Some((delay, fade)) = fade_in_under {
                 voice = voice.with_fade_in_under(delay, fade);
+            }
+            if let Some((frames, target)) = bloom {
+                voice = voice.with_slow_bloom(frames, target);
             }
             if let Some(layer) = dyn_layer {
                 voice = voice.with_dyn_layer(layer);
@@ -1480,7 +1651,8 @@ impl SampleEngine {
             if let Some(flex) = flex_env.clone() {
                 voice = voice.with_flex_env(flex);
             }
-            let loop_xfade = ms_to_frames(LOOP_XFADE_MS, self.sample_rate) as usize;
+            let loop_xfade =
+                ms_to_frames(self.patch.spec.performance.loop_xfade_ms, self.sample_rate) as usize;
             // Effective loop window for this voice: (start, end, xfade). An
             // `end == 0` means the voice plays once to the end (no loop). This
             // is the single source of truth for both the voice and the trace.
@@ -1788,6 +1960,17 @@ impl SampleEngine {
         }
         if self.patch.is_zoned() {
             self.trigger_cc_zones(controller, old_value, value);
+        }
+        // Latched-CC articulation selector (spec `selector uacc`): the
+        // selector's CC number is data-configured, so it's matched here
+        // rather than in the fixed-CC arms below. Engine-global, like CC58.
+        // r[impl signal.sampling.articulation.select]
+        if self
+            .latched_cc_selector
+            .as_ref()
+            .is_some_and(|sel| sel.cc == controller)
+        {
+            self.apply_latched_cc_selector(value);
         }
         match controller {
             1 => {

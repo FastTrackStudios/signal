@@ -49,11 +49,41 @@ pub struct LibrarySpec {
     /// Legato engine configuration (absent for piano/drums).
     pub legato_engine: Option<LegatoEngineSpec>,
 
+    /// Library-wide playback-policy numbers (makeup gain, master tune,
+    /// note-off fades, loop crossfade, …). All fields default to the values
+    /// the engine historically hardcoded, so specs that don't set them are
+    /// bit-identical to the pre-data-driven behaviour.
+    // r[impl signal.soundsource.declarative]
+    #[facet(default)]
+    pub performance: PerformanceSpec,
+
     /// Short-note pre-delay compensation.
     pub short_note_timing: Option<ShortNoteTimingSpec>,
 
     /// Keyswitch and CC58 articulation switching.
     pub keyswitch: Option<KeyswitchSpec>,
+
+    /// Articulation-selector source — enables the **latched-CC selector**:
+    /// a single continuous controller whose latched VALUE selects the
+    /// articulation for all subsequent notes (like a keyswitch, but a CC).
+    ///
+    /// `"uacc"` is currently the only source and configures the selector
+    /// with the UACC defaults (Spitfire's Universal Articulation Controller
+    /// Channel convention): CC32 + the published standard code table
+    /// ([`UACC_STANDARD_TABLE`]). Empty = no selector (default; existing
+    /// packs are untouched).
+    ///
+    /// Per-articulation codes come from the articulation's explicit
+    /// `uacc <code>` field, falling back to the standard table matched by
+    /// id/label/aliases — so `selector uacc` alone gets the published
+    /// mapping for conventionally-named articulations.
+    // r[impl signal.sampling.articulation.select]
+    #[facet(default)]
+    pub selector: String,
+    /// CC number carrying the latched-CC selector value. 0 = the source's
+    /// default (UACC: CC32).
+    #[facet(default)]
+    pub selector_cc: u8,
 
     /// Live auto-divisi legato interval gate (semitones): in strict live
     /// mode a note continues an existing mono line as a legato transition
@@ -189,8 +219,11 @@ impl LibrarySpec {
             dynamics: DynamicsSpec::default(),
             articulations: Vec::new(),
             legato_engine: None,
+            performance: PerformanceSpec::default(),
             short_note_timing: None,
             keyswitch: None,
+            selector: String::new(),
+            selector_cc: 0,
             live_legato_interval_max: 2,
             live_chord_window_ms: 30.0,
             zones,
@@ -208,6 +241,76 @@ impl LibrarySpec {
         self.articulations.iter().find(|a| a.id == id)
     }
 
+    /// The Con Sordino counterpart of `artic_id` when toggling sordino
+    /// `active`: the articulation's explicit `sordino_pair` when authored
+    /// (`""` = none), else the CSS `Sord` id-prefix convention — in both
+    /// cases only if the counterpart exists in the spec.
+    pub fn sordino_counterpart(&self, artic_id: &str, active: bool) -> Option<String> {
+        let a = self.articulation(artic_id);
+        if let Some(pair) = a.and_then(|a| a.sordino_pair.clone()) {
+            if pair.is_empty() {
+                return None;
+            }
+            let target = self.articulation(&pair)?;
+            if target.is_sordino() == active {
+                return Some(pair);
+            }
+            return None;
+        }
+        if active {
+            if !artic_id.starts_with("Sord") {
+                let sord_id = format!("Sord{artic_id}");
+                if self.articulation(&sord_id).is_some() {
+                    return Some(sord_id);
+                }
+            }
+        } else if let Some(base) = artic_id.strip_prefix("Sord") {
+            if self.articulation(base).is_some() {
+                return Some(base.to_string());
+            }
+        }
+        None
+    }
+
+    /// The CC2 vibrato-crossfade counterpart of `artic_id`: the explicit
+    /// `vibrato_pair` when authored (`""` = none), else the opposite
+    /// vibrato side within the same kind + sordino family. `None` when the
+    /// library declares no vibrato controller.
+    pub fn vibrato_counterpart(&self, artic_id: &str) -> Option<String> {
+        self.dynamics.vibrato_controller.as_deref()?;
+        let a = self.articulation(artic_id);
+        if let Some(pair) = a.and_then(|a| a.vibrato_pair.clone()) {
+            return (!pair.is_empty() && self.articulation(&pair).is_some()).then_some(pair);
+        }
+        // Inferred: same kind (Sustain↔Sustain, Legato↔Legato), same sordino
+        // family, opposite vibrato side.
+        let a = a?;
+        let (want_kind, is_sord, is_vib) = (a.kind.clone(), a.is_sordino(), a.is_vibrato());
+        self.articulations
+            .iter()
+            .filter(|c| c.id != artic_id)
+            .filter(|c| c.kind == want_kind)
+            .filter(|c| {
+                matches!(
+                    c.kind,
+                    ArticulationKind::Sustain | ArticulationKind::Legato
+                )
+            })
+            .find(|c| c.is_sordino() == is_sord && c.is_vibrato() != is_vib)
+            .map(|c| c.id.clone())
+    }
+
+    /// The legato-engine configuration, falling back to an all-defaults
+    /// [`LegatoEngineSpec`] when the library declares none — so engine code
+    /// can read timing/crossfade policy unconditionally (the defaults are
+    /// the historical hardcoded values).
+    pub fn legato_cfg(&self) -> &LegatoEngineSpec {
+        static DEFAULT: std::sync::OnceLock<LegatoEngineSpec> = std::sync::OnceLock::new();
+        self.legato_engine
+            .as_ref()
+            .unwrap_or_else(|| DEFAULT.get_or_init(LegatoEngineSpec::default))
+    }
+
     /// Look up a section by its `id` field.
     pub fn section(&self, id: &str) -> Option<&SectionSpec> {
         self.sections.iter().find(|s| s.id == id)
@@ -218,26 +321,58 @@ impl LibrarySpec {
         self.mics.iter().find(|m| m.id == id)
     }
 
-    /// Median measured lead-in (ms) across the legato transition zones that
+    /// Median heard-arrival (ms) across the legato transition zones that
     /// match a `from → to` move — the document scheduler prefires the
     /// transition by exactly this so the pitch change lands on the
-    /// destination tick.
+    /// destination tick. Per zone the MEASURED `arrival_ms` (destination-
+    /// pitch settle, measured from the sample audio) wins; `lead_in_ms`
+    /// (library metadata) is only a fallback for unmeasured zones.
     ///
     /// Matching mirrors the engine's transition selection: direction from
     /// `sign(to - from)`, named note `min(from, to)`, interval
     /// `|to - from|` clamped to an octave (CSS samples nothing wider; the
     /// engine octave-clamps and pitch-shifts so the destination stays
     /// exact). Zones are matched at the nearest recorded root (whole-tone
-    /// grid). `Some(0)` for a same-pitch re-bow — the `Legzero` re-trigger
-    /// samples have no lead-in. `None` when the library has no measured
-    /// transition zones (caller falls back to the velocity curve).
+    /// grid). For a same-pitch re-bow: the median measured onset of the
+    /// re-trigger (`Legzero`) zones at the nearest root, or `Some(0)` when
+    /// they are unmeasured (the historical claim — no lead-in). `None` when
+    /// the library has no measured transition zones at all (caller falls
+    /// back to the velocity curve).
     pub fn legato_lead_ms(&self, from: u8, to: u8) -> Option<u32> {
         if from == to {
-            // Same-pitch re-bow: the Legzero re-trigger samples have no
-            // lead-in — but only claim that for libraries that actually
-            // carry measured transitions; legacy libraries keep the
-            // velocity-curve behaviour.
-            return self.has_measured_legato().then_some(0);
+            if !self.has_measured_legato() {
+                // Legacy libraries keep the velocity-curve behaviour.
+                return None;
+            }
+            // Same-pitch re-bow: the re-trigger (Legzero) samples' measured
+            // perceptual onset — the bow re-attack is NOT instantaneous.
+            // Unmeasured re-trigger zones keep the historical zero-lead
+            // claim.
+            let retrig = |id: &str| {
+                self.articulations.iter().any(|a| {
+                    a.kind == ArticulationKind::Legato
+                        && a.resolve_legato_role() == LegatoRole::Retrigger
+                        && a.id.eq_ignore_ascii_case(id)
+                })
+            };
+            let candidates = || {
+                self.zones
+                    .iter()
+                    .filter(|z| z.arrival_ms > 0.0 && retrig(&z.articulation))
+            };
+            let Some(best_dist) = candidates().map(|z| z.root_key.abs_diff(from)).min() else {
+                return Some(0);
+            };
+            // MAX over the nearest-root group (all RRs / mics / dynamic
+            // layers): the re-bow cannot be skipped into (its front IS the
+            // re-attack), so the engine can only HOLD a voice back — the
+            // schedule lead must be an upper bound over every zone the
+            // dispatch could pick, or a zone with a later onset lands late.
+            return candidates()
+                .filter(|z| z.root_key.abs_diff(from) == best_dist)
+                .map(|z| z.arrival_ms)
+                .max_by(|a, b| a.total_cmp(b))
+                .map(|ms| ms.ceil() as u32);
         }
         let direction = if to > from { "up" } else { "down" };
         let named = from.min(to);
@@ -251,18 +386,43 @@ impl LibrarySpec {
             self.zones.iter().filter(|z| {
                 z.interval == interval
                     && z.direction.eq_ignore_ascii_case(direction)
-                    && z.lead_in_ms > 0.0
+                    && z.transition_arrival_ms() > 0.0
                     && is_legato_artic(&z.articulation)
             })
         };
-        // Nearest recorded root first, then the median lead of that group.
+        // Nearest recorded root first, then the median arrival of that group.
         let best_dist = candidates().map(|z| z.root_key.abs_diff(named)).min()?;
         let mut leads: Vec<f32> = candidates()
             .filter(|z| z.root_key.abs_diff(named) == best_dist)
-            .map(|z| z.lead_in_ms)
+            .map(|z| z.transition_arrival_ms())
             .collect();
         leads.sort_by(|a, b| a.total_cmp(b));
         Some(leads[leads.len() / 2].round() as u32)
+    }
+
+    /// The largest measured heard-arrival (ms) over the attack zones any of
+    /// `artic_ids` could fire at `pitch` — the document scheduler pre-rolls
+    /// a fresh trigger by exactly this upper bound, and each spawned voice is
+    /// held back by `lead − its own zone's arrival` so the heard arrival
+    /// lands ON the tick regardless of which round-robin / mic / dynamic
+    /// layer fires. `None` when no matching zone carries a measurement
+    /// (caller falls back to `pre_delay_ms` for shorts / trigger-time for
+    /// sustains — the historical behaviour).
+    pub fn max_attack_arrival_ms(&self, artic_ids: &[&str], pitch: u8) -> Option<f32> {
+        let tol = self.performance.zone_pitch_tolerance;
+        self.zones
+            .iter()
+            .filter(|z| {
+                z.arrival_ms > 0.0
+                    && (z.trigger_mode.is_empty() || z.trigger_mode.eq_ignore_ascii_case("attack"))
+                    && artic_ids
+                        .iter()
+                        .any(|id| z.articulation.eq_ignore_ascii_case(id))
+                    && ((pitch >= z.key_min && pitch <= z.key_max)
+                        || (z.root_key as i32 - pitch as i32).unsigned_abs() as u8 <= tol)
+            })
+            .map(|z| z.arrival_ms)
+            .max_by(|a, b| a.total_cmp(b))
     }
 
     /// Whether any zone carries a measured legato transition (interval +
@@ -272,7 +432,61 @@ impl LibrarySpec {
     pub fn has_measured_legato(&self) -> bool {
         self.zones
             .iter()
-            .any(|z| z.interval > 0 && z.lead_in_ms > 0.0)
+            .any(|z| z.interval > 0 && z.transition_arrival_ms() > 0.0)
+    }
+
+    /// The resolved latched-CC articulation selector, when the pack enables
+    /// one (`selector uacc`). `None` = no selector configured — the engine
+    /// behaves exactly as before (defaults leave existing packs untouched).
+    ///
+    /// Resolution per articulation, first match wins per code:
+    /// 1. explicit `uacc <code>` field (any articulation kind — the author
+    ///    knows best),
+    /// 2. the published standard table by id / label / aliases
+    ///    ([`standard_uacc_code`]) — skipped for `Legato` transition and
+    ///    `Release` articulations, which are engine-internal sample sets,
+    ///    not selectable playing styles.
+    // r[impl signal.sampling.articulation.select]
+    pub fn latched_cc_selector(&self) -> Option<LatchedCcSelector> {
+        if !self.selector.eq_ignore_ascii_case("uacc") {
+            return None;
+        }
+        let cc = if self.selector_cc == 0 {
+            UACC_DEFAULT_CC
+        } else {
+            self.selector_cc
+        };
+        let mut map: Vec<(u8, String)> = Vec::new();
+        let mut push = |code: u8, id: &str| {
+            if code > 0 && !map.iter().any(|(c, _)| *c == code) {
+                map.push((code, id.to_string()));
+            }
+        };
+        // Explicit codes first — they always beat table inference.
+        for a in &self.articulations {
+            if a.uacc > 0 {
+                push(a.uacc, &a.id);
+            }
+        }
+        // Standard-table defaults for the rest.
+        for a in &self.articulations {
+            if a.uacc > 0
+                || matches!(
+                    a.kind,
+                    ArticulationKind::Legato | ArticulationKind::Release
+                )
+            {
+                continue;
+            }
+            let code = standard_uacc_code(&a.id)
+                .or_else(|| standard_uacc_code(&a.label))
+                .or_else(|| a.aliases.iter().find_map(|al| standard_uacc_code(al)));
+            if let Some(code) = code {
+                push(code, &a.id);
+            }
+        }
+        map.sort_by_key(|(c, _)| *c);
+        Some(LatchedCcSelector { cc, map })
     }
 
     /// Materialize a [`TagSet`] from the flat `tags` vector.
@@ -285,6 +499,336 @@ impl LibrarySpec {
             set.insert(t.clone());
         }
         set
+    }
+}
+
+// ── Performance model ─────────────────────────────────────────────────────────
+
+/// Library-wide playback-policy numbers — the POLICY the engine reads from
+/// data (the engine keeps only the MECHANISM: zone resolution, scheduling,
+/// crossfading). Every default equals the value the engine hardcoded before
+/// this block existed, so a spec that omits `performance` plays identically.
+///
+/// The non-zero defaults were decoded from Cinematic Studio Strings (KSP
+/// persistent values / GroupList envelopes) but apply harmlessly to any
+/// zoned library; a library that needs different numbers writes them here.
+// r[impl signal.soundsource.declarative]
+#[derive(Debug, Clone, Facet)]
+pub struct PerformanceSpec {
+    /// Held-sustain note-off overlap fade (ms) for zoned sustains (CSS
+    /// `$tukcw` = 400): on key-up the looping sustain fades over this window.
+    #[facet(default = 400)]
+    pub sustain_noteoff_ms: u32,
+    /// Output makeup (dB) applied to looping sustain-layer voices — the flat
+    /// level offset between a looped-plateau playback and the vendor
+    /// instrument's rendered level (CSS: +6 dB, see the A/B calibration).
+    #[facet(default = 6.0f32)]
+    pub sustain_makeup_db: f32,
+    /// Global master tune in cents, applied on top of the per-note transpose.
+    /// CSS ships `tune=1.00521` ≈ +9.0 cents on every playable group; other
+    /// libraries stay at 0.
+    #[facet(default = 0.0f32)]
+    pub master_tune_cents: f32,
+    /// Seamless loop-crossfade length (ms) for held/looped bodies.
+    #[facet(default = 150)]
+    pub loop_xfade_ms: u32,
+    /// Max semitones to pitch-shift from the nearest recorded zone when no
+    /// zone spans a note (CSS whole-tone grid → 2).
+    #[facet(default = 2)]
+    pub zone_pitch_tolerance: u8,
+    /// Linear gain for recorded release-tail voices (the release ENV_FLEX
+    /// does the shaping; CSS release groups ship 0 dB static → 1.0).
+    #[facet(default = 1.0f32)]
+    pub release_gain: f32,
+    /// Default amp attack (ms) applied to sustain-layer voices at load.
+    /// `None` keeps the engine's default (no attack bloom). CSS "Arco
+    /// attack" ships `$mmirg = 30/127` ≈ 198 ms under Kontakt's cubic law.
+    pub attack_ms: Option<u32>,
+    /// Default note-off release (ms) applied at load. `None` keeps the
+    /// engine default. CSS: 400 (`$tukcw`).
+    pub release_ms: Option<u32>,
+    /// Grid placement policy for FRESH sustain attacks (phrase starts) in
+    /// document scheduling:
+    ///
+    /// * `"start_at_tick"` — the sample STARTS on the grid tick and speaks
+    ///   naturally after it. Nothing sounds before the click the note starts
+    ///   on; the perceptual onset lands `arrival_ms` late by the recording's
+    ///   own nature (exactly what the vendor instrument does live).
+    /// * `"arrive_at_tick"` (default / empty) — the trigger pre-rolls by the
+    ///   measured perceptual-onset bound so the note SPEAKS on the tick
+    ///   (audio from the sample's own bloom is audible before the click).
+    ///
+    /// Applies to fresh sustain-family attacks only. Legato transitions and
+    /// re-bows always arrive-at-tick (their pre-click content is the
+    /// PREVIOUS note continuing — correct musical behaviour), and shorts
+    /// always arrive-at-tick (their recorded pre-roll is the attack noise
+    /// before the rhythmic peak).
+    #[facet(default)]
+    pub attack_placement: String,
+}
+
+impl Default for PerformanceSpec {
+    fn default() -> Self {
+        Self {
+            sustain_noteoff_ms: 400,
+            sustain_makeup_db: 6.0,
+            master_tune_cents: 0.0,
+            loop_xfade_ms: 150,
+            zone_pitch_tolerance: 2,
+            release_gain: 1.0,
+            attack_ms: None,
+            attack_placement: String::new(),
+            release_ms: None,
+        }
+    }
+}
+
+/// One decoded amp-envelope segment `(time_ms, level, curve)` — the literal
+/// ENV_FLEX representation (segment 0 is the attack). See
+/// [`ArticulationSpec::amp_env`].
+#[derive(Debug, Clone, Copy, PartialEq, Facet)]
+pub struct EnvSegmentSpec {
+    /// Segment duration in ms.
+    pub time_ms: f32,
+    /// Target level at the end of the segment (0..=1).
+    pub level: f32,
+    /// Curve shape parameter (0.5 = linear-ish; matches the decoded tables).
+    pub curve: f32,
+}
+
+/// A piecewise-linear curve over the inter-onset interval (IOI, ms): below
+/// `thresholds_ms[0]` → `anchors_ms[0]`, above the last threshold → the last
+/// anchor, linear between. Used for the legato Overlap-Delay and the
+/// transition sample-start offset.
+#[derive(Debug, Clone, PartialEq, Facet)]
+pub struct IoiCurveSpec {
+    /// Ascending IOI breakpoints (ms).
+    pub thresholds_ms: Vec<f32>,
+    /// Anchor values (ms) at each breakpoint; same length as `thresholds_ms`.
+    pub anchors_ms: Vec<f32>,
+}
+
+impl IoiCurveSpec {
+    /// Piecewise-linear interpolation of `ioi_ms` across the breakpoints.
+    pub fn value_at(&self, ioi_ms: f32) -> f32 {
+        let n = self.thresholds_ms.len().min(self.anchors_ms.len());
+        if n == 0 {
+            return 0.0;
+        }
+        if ioi_ms <= self.thresholds_ms[0] {
+            return self.anchors_ms[0];
+        }
+        for k in 0..n - 1 {
+            if ioi_ms < self.thresholds_ms[k + 1] {
+                let span = (self.thresholds_ms[k + 1] - self.thresholds_ms[k]).max(1e-6);
+                let t = (ioi_ms - self.thresholds_ms[k]) / span;
+                return self.anchors_ms[k] + (self.anchors_ms[k + 1] - self.anchors_ms[k]) * t;
+            }
+        }
+        self.anchors_ms[n - 1]
+    }
+}
+
+/// Overlap-Delay curves for one legato mode: how long the engine waits after
+/// a note-on before firing the transition, interpolated over the IOI. `soft`
+/// applies to attack-velocity range 1 (≤ the first
+/// [`LegatoEngineSpec::velocity_splits`] split), `loud` to ranges 2+.
+#[derive(Debug, Clone, PartialEq, Facet)]
+pub struct OverlapDelayCurveSpec {
+    pub soft: IoiCurveSpec,
+    pub loud: IoiCurveSpec,
+}
+
+/// Overlap-Delay configuration (CSS `legtrans_OD` / `$b0n3s`), per legato
+/// mode. Defaults are the decoded CSS persistent values — near-zero
+/// everywhere except soft+fast playing.
+#[derive(Debug, Clone, PartialEq, Facet)]
+pub struct OverlapDelaySpec {
+    pub low_latency: OverlapDelayCurveSpec,
+    pub expressive: OverlapDelayCurveSpec,
+}
+
+impl Default for OverlapDelaySpec {
+    /// The decoded CSS persistent values (`CSS 1st Violins.nki` BParScript
+    /// store): LL thresholds `$deey3/$fxiox/$jystg/$zvaet`, EX thresholds
+    /// `$g45yq/$bwkdm/$waq1e/$whtm2`; soft anchors `$nbkqa…` / `$kadcz…`;
+    /// loud anchors all-zero.
+    fn default() -> Self {
+        let z4 = vec![0.0, 0.0, 0.0, 0.0];
+        Self {
+            low_latency: OverlapDelayCurveSpec {
+                soft: IoiCurveSpec {
+                    thresholds_ms: vec![75.0, 100.0, 800.0, 1100.0],
+                    anchors_ms: vec![77.0, 0.0, 0.0, 0.0],
+                },
+                loud: IoiCurveSpec {
+                    thresholds_ms: vec![75.0, 100.0, 800.0, 1100.0],
+                    anchors_ms: z4.clone(),
+                },
+            },
+            expressive: OverlapDelayCurveSpec {
+                soft: IoiCurveSpec {
+                    thresholds_ms: vec![200.0, 300.0, 800.0, 800.0],
+                    anchors_ms: vec![83.0, 0.0, 0.0, 0.0],
+                },
+                loud: IoiCurveSpec {
+                    thresholds_ms: vec![200.0, 300.0, 800.0, 800.0],
+                    anchors_ms: z4,
+                },
+            },
+        }
+    }
+}
+
+/// The default transition sample-start offset curve — the decoded CSS
+/// `$1fvjk` IOI curve (`$ocjln = 6`): flat 177 ms up to a 150 ms IOI, linear
+/// 177 → 117 ms across 150…500 ms, flat 117 ms above. Fast lines start
+/// DEEPER into the transition recording (less audible pre-bow).
+fn default_start_offset_curve() -> IoiCurveSpec {
+    IoiCurveSpec {
+        thresholds_ms: vec![100.0, 150.0, 500.0],
+        anchors_ms: vec![177.0, 177.0, 117.0],
+    }
+}
+
+/// CC1 → loudness expression curve for CC1-crossfaded sustains: 0 dB at and
+/// above `knee`, linear to `floor_db` at CC1=0. The per-layer crossfade
+/// handles TIMBRE (≈flat total level); this supplies only the gentle bottom
+/// rolloff. Defaults calibrated on the CSS reference render (CC1=20 →
+/// −3.0 dB, flat from CC1≈45).
+#[derive(Debug, Clone, Copy, PartialEq, Facet)]
+pub struct Cc1ExpressionSpec {
+    #[facet(default = 45)]
+    pub knee: u8,
+    #[facet(default = -5.4f32)]
+    pub floor_db: f32,
+}
+
+impl Default for Cc1ExpressionSpec {
+    fn default() -> Self {
+        Self {
+            knee: 45,
+            floor_db: -5.4,
+        }
+    }
+}
+
+impl DynamicsSpec {
+    /// CC1 → linear loudness gain from [`DynamicsSpec::cc1_expression`]
+    /// (falling back to the CSS-calibrated defaults): 0 dB at/above the knee,
+    /// linear to `floor_db` at CC1=0.
+    pub fn cc1_expression_gain(&self, cc1: u8) -> f32 {
+        let c = self.cc1_expression.unwrap_or_default();
+        let db = if cc1 >= c.knee || c.knee == 0 {
+            0.0
+        } else {
+            c.floor_db * (c.knee - cc1) as f32 / c.knee as f32
+        };
+        10f32.powf(db / 20.0)
+    }
+}
+
+// ── Default (family) amp envelopes ───────────────────────────────────────────
+//
+// The decoded CSS ENV_FLEX amp envelopes (GroupList 0x33; literal shipped
+// values, Main mic) — retained here as the FAMILY DEFAULTS an articulation
+// falls back to when its spec carries no `amp_env`. A pack can override any
+// of them per articulation; libraries that never matched these families
+// (non-zoned, plain synth) are unaffected.
+
+/// Sustain family: fast bake attack, hold, 20 s decay-to-0. Held via the
+/// engine's sustain-hold freeze.
+pub const AMP_ENV_SUSTAIN: &[EnvSegmentSpec] = &[
+    seg(4.0, 1.0, 0.505),
+    seg(1000.0, 1.0, 0.9),
+    seg(20000.0, 0.0, 0.05),
+];
+/// Legato / legato-zero transition body.
+pub const AMP_ENV_LEGATO: &[EnvSegmentSpec] = &[
+    seg(80.0, 1.0, 0.499),
+    seg(480.0, 1.0, 0.72),
+    seg(442.3, 1.0, 0.5),
+    seg(1002.3, 0.0, 0.33),
+    seg(152.0, 0.0, 0.5),
+    seg(342.0, 0.0, 0.75),
+];
+/// Portamento glide.
+pub const AMP_ENV_PORTAMENTO: &[EnvSegmentSpec] = &[
+    seg(88.0, 0.466, 0.499),
+    seg(472.0, 1.0, 0.8),
+    seg(1240.0, 0.0, 0.5),
+    seg(152.0, 0.0, 0.5),
+    seg(342.0, 0.0, 0.75),
+];
+/// Marcato-legato / marc-port.
+pub const AMP_ENV_MARC_LEG: &[EnvSegmentSpec] = &[
+    seg(68.0, 0.493, 0.499),
+    seg(492.0, 1.0, 0.72),
+    seg(1440.0, 0.0, 0.33),
+    seg(156.6, 0.0, 0.5),
+    seg(342.0, 0.0, 0.75),
+];
+/// Marcato-mod overlay.
+pub const AMP_ENV_MARCATO_MOD: &[EnvSegmentSpec] = &[
+    seg(1.0, 1.0, 0.685),
+    seg(1499.0, 1.0, 0.5),
+    seg(104.0, 1.0, 0.45),
+    seg(1000.0, 0.0, 0.63),
+];
+/// Short family: one-shot, natural end shaped by the 8/604/7381 decay.
+pub const AMP_ENV_SHORT: &[EnvSegmentSpec] = &[
+    seg(8.0, 1.0, 0.505),
+    seg(604.0, 1.0, 0.45),
+    seg(7381.0, 0.0, 0.65),
+];
+/// Release tails.
+pub const AMP_ENV_RELEASE: &[EnvSegmentSpec] = &[
+    seg(1.0, 0.986, 0.125),
+    seg(4007.0, 1.0, 0.9),
+    seg(1250.0, 0.0, 0.7),
+];
+
+const fn seg(time_ms: f32, level: f32, curve: f32) -> EnvSegmentSpec {
+    EnvSegmentSpec {
+        time_ms,
+        level,
+        curve,
+    }
+}
+
+/// The voice role the engine resolved from its `VoiceKind` — the MECHANISM
+/// side of amp-envelope selection. The POLICY (which family table applies)
+/// lives here in the spec layer, in [`default_amp_env`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AmpEnvRole {
+    Release,
+    Short,
+    Legato,
+    SustainLayer,
+    Other,
+}
+
+/// Family-default amp envelope `(segments, hold)` for an articulation id +
+/// voice role. `None` = no envelope (flat unity — legacy behaviour for
+/// families outside the decoded set).
+pub fn default_amp_env(artic_id: &str, role: AmpEnvRole) -> Option<(&'static [EnvSegmentSpec], bool)> {
+    let id = artic_id.to_ascii_lowercase();
+    if role == AmpEnvRole::Release || id.contains("rel") {
+        Some((AMP_ENV_RELEASE, false))
+    } else if role == AmpEnvRole::Short {
+        Some((AMP_ENV_SHORT, false))
+    } else if id.contains("port") {
+        Some((AMP_ENV_PORTAMENTO, false))
+    } else if id.contains("marc") && id.contains("leg") {
+        Some((AMP_ENV_MARC_LEG, false))
+    } else if id.contains("marcato") && id.contains("mod") {
+        Some((AMP_ENV_MARCATO_MOD, false))
+    } else if role == AmpEnvRole::Legato || id.contains("legato") {
+        Some((AMP_ENV_LEGATO, false))
+    } else if role == AmpEnvRole::SustainLayer {
+        Some((AMP_ENV_SUSTAIN, true))
+    } else {
+        None
     }
 }
 
@@ -506,6 +1050,7 @@ fn zone_from_sfz(
         direction: String::new(),
         interval: 0,
         lead_in_ms: 0.0,
+        arrival_ms: 0.0,
         group: group_id.clone(),
         group_polyphony: 0,
         choke_group: group_id,
@@ -631,6 +1176,10 @@ pub struct DynamicsSpec {
     /// computes the curve; this flag only gates whether it is applied.
     #[facet(default)]
     pub apply_short_velvol: bool,
+    /// Continuous CC1 → loudness curve on top of the layer crossfade (the
+    /// gentle bottom rolloff). `None` = the CSS-calibrated defaults
+    /// (knee 45, floor −5.4 dB → −3.0 dB at CC1=20).
+    pub cc1_expression: Option<Cc1ExpressionSpec>,
 }
 
 /// One CC1 dynamic layer with its crossfade range.
@@ -680,6 +1229,13 @@ pub struct ArticulationSpec {
     #[facet(default)]
     pub aliases: Vec<String>,
 
+    /// UACC code — the latched-CC selector value (see `LibrarySpec.selector`)
+    /// that selects this articulation. 0 = unset → resolved from the
+    /// published standard table ([`UACC_STANDARD_TABLE`]) by matching
+    /// id/label/aliases. An explicit code always wins over the table.
+    #[facet(default)]
+    pub uacc: u8,
+
     /// Short-note velocity-layer boundaries (CSS KSP `%g1qri`, the thresholds
     /// AFTER the implicit floor of 1). A note's velocity picks the band it falls
     /// in — `[t0,t1,…]` gives bands `[1,t0) [t0,t1) …`, plus a top band above the
@@ -703,6 +1259,90 @@ pub struct ArticulationSpec {
     /// engine drops them an octave to match. Default 0 = no shift.
     #[facet(default)]
     pub transpose: i8,
+
+    /// Decoded per-articulation amp envelope (ENV_FLEX segments; segment 0
+    /// is the attack). Empty = fall back to the built-in family defaults
+    /// ([`default_amp_env`], keyed by articulation kind/id), which preserve
+    /// the historical behaviour for libraries that don't author envelopes.
+    // r[impl signal.soundsource.declarative]
+    #[facet(default)]
+    pub amp_env: Vec<EnvSegmentSpec>,
+    /// Whether the envelope freezes at its hold level while the note is held
+    /// (sustains) or plays through one-shot (shorts, releases, transitions).
+    /// `None` = held for Sustain/Looped/Trill kinds, one-shot otherwise.
+    pub amp_env_hold: Option<bool>,
+
+    /// Which side of the CC2 vibrato crossfade this articulation belongs to.
+    /// `None` = infer from the id (CSS convention: `NV`/`Nonvib` in the name
+    /// = non-vibrato side; everything else vibrato).
+    pub vibrato: Option<bool>,
+    /// The CC2 vibrato-crossfade counterpart articulation id (e.g. `Nonvib`
+    /// → `Vibsus`, `NVLeg` → `Leg`). `Some("")` = explicitly no pair;
+    /// `None` = infer by name (same kind + sordino family, opposite side).
+    pub vibrato_pair: Option<String>,
+    /// Role of a `kind @Legato` articulation in transition selection:
+    /// `"transition"` (interval move), `"retrigger"` (same-note re-bow, CSS
+    /// `*zero`), or `"portamento"` (glide). Empty = infer from the id
+    /// (`zero` → retrigger, `port` → portamento, else transition).
+    // r[impl signal.soundsource.legato]
+    #[facet(default)]
+    pub legato_role: String,
+    /// Whether this articulation is the Con Sordino (muted) variant.
+    /// `None` = infer from the id (`Sord` prefix).
+    pub sordino: Option<bool>,
+    /// The Con Sordino counterpart id (both directions are looked up).
+    /// `Some("")` = explicitly none; `None` = infer by the `Sord` prefix.
+    pub sordino_pair: Option<String>,
+}
+
+/// Role of a legato-kind articulation in transition selection.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LegatoRole {
+    /// Interval transition (`Leg`, `NVLeg`).
+    Transition,
+    /// Same-note re-trigger / re-bow (`Legzero`, `NVLegzero`).
+    Retrigger,
+    /// Portamento glide (`Port`).
+    Portamento,
+}
+
+impl ArticulationSpec {
+    /// Sordino-family membership: the explicit `sordino` flag, else the CSS
+    /// `Sord` id-prefix convention.
+    pub fn is_sordino(&self) -> bool {
+        self.sordino.unwrap_or_else(|| self.id.starts_with("Sord"))
+    }
+
+    /// Vibrato-side membership for the CC2 crossfade: the explicit
+    /// `vibrato` flag, else the CSS convention (`nv`/`nonvib` in the id =
+    /// non-vibrato side).
+    pub fn is_vibrato(&self) -> bool {
+        self.vibrato.unwrap_or_else(|| {
+            let id = self.id.to_lowercase();
+            !(id.contains("nv") || id.contains("nonvib"))
+        })
+    }
+
+    /// Transition-selection role: the explicit `legato_role`, else inferred
+    /// from the id (CSS convention: `port` → portamento, `zero` →
+    /// retrigger).
+    pub fn resolve_legato_role(&self) -> LegatoRole {
+        match self.legato_role.to_ascii_lowercase().as_str() {
+            "retrigger" => LegatoRole::Retrigger,
+            "portamento" => LegatoRole::Portamento,
+            "transition" => LegatoRole::Transition,
+            _ => {
+                let id = self.id.to_lowercase();
+                if id.contains("port") {
+                    LegatoRole::Portamento
+                } else if id.contains("zero") {
+                    LegatoRole::Retrigger
+                } else {
+                    LegatoRole::Transition
+                }
+            }
+        }
+    }
 }
 
 /// High-level category for an articulation's playback behaviour.
@@ -744,6 +1384,99 @@ pub struct LegatoEngineSpec {
     pub portamento: Option<PortamentoSpec>,
     /// Same-note re-trigger (Legzero) configuration.
     pub retrigger: Option<RetriggerSpec>,
+
+    /// Attack-velocity range splits (CSS `$eluxs`/`$0uhls`): velocities ≤
+    /// `splits[0]` are range 1 (soft), ≤ `splits[1]` range 2, above range 3.
+    /// Empty = the decoded CSS defaults `[64, 100]`.
+    // r[impl signal.soundsource.legato.velocity-zones]
+    #[facet(default)]
+    pub velocity_splits: Vec<u8>,
+    /// Overlap-Delay curves (`legtrans_OD` / `$b0n3s`) — the wait between a
+    /// live note-on and the transition firing, IOI-interpolated per legato
+    /// mode and velocity range. `None` = the decoded CSS defaults.
+    // r[impl signal.soundsource.legato.live]
+    pub overlap_delay: Option<OverlapDelaySpec>,
+    /// Transition sample-start offset curve (`$1fvjk`): how far INTO the
+    /// transition recording playback begins, IOI-interpolated. `None` = the
+    /// decoded CSS defaults (177 → 117 ms).
+    // r[impl signal.soundsource.legato.offline]
+    pub start_offset: Option<IoiCurveSpec>,
+    /// Default legato crossfade (ms) — the old voice ramps out over this.
+    #[facet(default = 30)]
+    pub transition_fade_ms: u32,
+    /// Legato-retire crossfade (ms) for the PREVIOUS transition voice,
+    /// indexed by attack-velocity range (1..=3). Empty = the decoded CSS
+    /// defaults `[150, 281, 281]` (`$fjtlu`/`$hbi2j`/`$2ebzd`).
+    #[facet(default)]
+    pub retire_transition_ms: Vec<u32>,
+    /// Legato-retire crossfade (ms) for the PREVIOUS sustain voice, indexed
+    /// by attack-velocity range. Empty = the decoded CSS defaults
+    /// `[550, 500, 500]` (`$tdjzq`/`$3ivkj`/`$u0t23`).
+    #[facet(default)]
+    pub retire_sustain_ms: Vec<u32>,
+    /// Trim (dB) on the legato-connected held SUSTAIN voice (CSS `$3tsb0` =
+    /// −6 dB `change_vol` on `%grhcg`) — a connected note sits this far below
+    /// a fresh first note.
+    #[facet(default = -6.0f32)]
+    pub sustain_trim_db: f32,
+    /// Velocity used for the transition back to a held note when the
+    /// sounding note is released (no real release-velocity exists).
+    #[facet(default = 80)]
+    pub fallback_velocity: u8,
+    /// Declick fade (ms) for a transition voice that starts DEEP inside the
+    /// recording via the start-offset curve (a Low-Latency prefire skips
+    /// ~300 ms in and begins partway up the bow-change swell).
+    #[facet(default = 25)]
+    pub skip_declick_ms: u32,
+    /// Standard-legato transition START-OFFSET bases (ms) per attack-velocity
+    /// range (1..=3, split by `velocity_splits`), EXPRESSIVE mode — the real
+    /// CSS `$1fvjk` selection for `$ocjln = 0` (KSP: `$fjf3c/$2p1wl/$ywj0r`,
+    /// shipped `0/83/177` for 1st Violins). The soft+fast IOI boost
+    /// (`legtrans_OD`, added to the OFFSET — it is not a wait) comes from
+    /// [`Self::overlap_delay_ms`]. Empty = fall back to the legacy
+    /// IOI-interpolated [`Self::start_offset`] curve — which the decode shows
+    /// is actually CSS's MARCATO transition table (`$ocjln = 6`:
+    /// `$ggt00/$v0rbb/$5exar` = 177/177→117 over IOI 100/150/500).
+    #[facet(default)]
+    pub lt_offset_expressive: Vec<u32>,
+    /// [`Self::lt_offset_expressive`] for LOW-LATENCY mode (KSP:
+    /// `$ak2j4/$ixzi1/$cltif`, shipped `100/148/177`).
+    #[facet(default)]
+    pub lt_offset_low_latency: Vec<u32>,
+    /// Slow secondary bloom on the legato-connected held sustain (CSS
+    /// `%1wcdh`, `$foyeb`/`$g4dbu` ≈ 1 s): the −6 dB `sustain_trim_db`
+    /// handoff level ramps back to full over this window, so a LONG
+    /// connected note recovers the body of a fresh note instead of sitting
+    /// 6 dB down until the next join — without it the held note's carrier
+    /// has decayed by the time the next transition's pre-bow plays at slow
+    /// tempi, and the incoming destination pitch reads (and sounds) early.
+    /// `0` disables the bloom (the pre-model behaviour).
+    #[facet(default = 1000)]
+    pub sustain_bloom_ms: u32,
+}
+
+impl Default for LegatoEngineSpec {
+    fn default() -> Self {
+        Self {
+            zones: Vec::new(),
+            expressive: None,
+            low_latency: None,
+            portamento: None,
+            retrigger: None,
+            velocity_splits: Vec::new(),
+            overlap_delay: None,
+            start_offset: None,
+            transition_fade_ms: 30,
+            retire_transition_ms: Vec::new(),
+            retire_sustain_ms: Vec::new(),
+            sustain_trim_db: -6.0,
+            fallback_velocity: 80,
+            skip_declick_ms: 25,
+            sustain_bloom_ms: 1000,
+            lt_offset_expressive: Vec::new(),
+            lt_offset_low_latency: Vec::new(),
+        }
+    }
 }
 
 impl LegatoEngineSpec {
@@ -758,6 +1491,99 @@ impl LegatoEngineSpec {
         } else {
             self.expressive.clone()
         }
+    }
+
+    /// Attack-velocity range (1..=3) from [`Self::velocity_splits`]
+    /// (defaults `[64, 100]` — CSS `$eluxs`/`$0uhls`).
+    pub fn velocity_range(&self, vel: u8) -> u8 {
+        let (s1, s2) = match self.velocity_splits.as_slice() {
+            [] => (64, 100),
+            [a] => (*a, 127),
+            [a, b, ..] => (*a, *b),
+        };
+        if vel <= s1 {
+            1
+        } else if vel <= s2 {
+            2
+        } else {
+            3
+        }
+    }
+
+    /// Overlap-Delay (ms) before a reactive legato transition fires —
+    /// IOI-interpolated per mode + velocity range from
+    /// [`Self::overlap_delay`] (defaults = the decoded CSS persistent
+    /// values: near-zero except soft+fast playing).
+    // r[impl signal.soundsource.legato.live]
+    pub fn overlap_delay_ms(&self, ioi_ms: f32, velocity: u8, expressive: bool) -> u32 {
+        let default;
+        let od = match &self.overlap_delay {
+            Some(od) => od,
+            None => {
+                default = OverlapDelaySpec::default();
+                &default
+            }
+        };
+        let mode = if expressive {
+            &od.expressive
+        } else {
+            &od.low_latency
+        };
+        let curve = if self.velocity_range(velocity) == 1 {
+            &mode.soft
+        } else {
+            &mode.loud
+        };
+        curve.value_at(ioi_ms).round().max(0.0) as u32
+    }
+
+    /// Transition sample-start offset (ms) — how far INTO the transition
+    /// recording playback begins (`$1fvjk`), IOI-interpolated from
+    /// [`Self::start_offset`] (defaults 177 → 117 ms).
+    // r[impl signal.soundsource.legato.offline]
+    pub fn start_offset_ms(&self, ioi_ms: f32) -> f32 {
+        match &self.start_offset {
+            Some(c) => c.value_at(ioi_ms),
+            None => default_start_offset_curve().value_at(ioi_ms),
+        }
+    }
+
+    /// STANDARD-legato transition start offset (ms) — the real CSS `$1fvjk`
+    /// for `$ocjln = 0`: a base per attack-VELOCITY range and mode
+    /// ([`Self::lt_offset_expressive`] / [`Self::lt_offset_low_latency`])
+    /// plus the `legtrans_OD` soft+fast IOI boost, which the shipped script
+    /// ADDS TO THE OFFSET (`$1fvjk := base + $b0n3s` — it is not a wait).
+    /// Libraries without authored bases keep the legacy IOI curve
+    /// ([`Self::start_offset_ms`]).
+    pub fn lt_offset_ms(&self, ioi_ms: f32, velocity: u8, expressive: bool) -> f32 {
+        let bases = if expressive {
+            &self.lt_offset_expressive
+        } else {
+            &self.lt_offset_low_latency
+        };
+        if bases.is_empty() {
+            return self.start_offset_ms(ioi_ms);
+        }
+        let vr = (self.velocity_range(velocity) - 1) as usize;
+        let base = bases.get(vr.min(bases.len() - 1)).copied().unwrap_or(0) as f32;
+        base + self.overlap_delay_ms(ioi_ms, velocity, expressive) as f32
+    }
+
+    /// Retire crossfades `(transition_ms, sustain_ms)` for the PREVIOUS
+    /// legato pair, indexed by the attack-velocity range of the NEW note.
+    pub fn retire_fades_ms(&self, velocity: u8) -> (u32, u32) {
+        let vr = (self.velocity_range(velocity) - 1) as usize;
+        let pick = |v: &[u32], defaults: [u32; 3]| -> u32 {
+            if v.is_empty() {
+                defaults[vr.min(2)]
+            } else {
+                v[vr.min(v.len() - 1)]
+            }
+        };
+        (
+            pick(&self.retire_transition_ms, [150, 281, 281]),
+            pick(&self.retire_sustain_ms, [550, 500, 500]),
+        )
     }
 }
 
@@ -885,6 +1711,110 @@ impl KeyswitchSpec {
             }
         }
         None
+    }
+}
+
+// ── Latched-CC articulation selector (UACC) ──────────────────────────────────
+
+/// Default controller for the `"uacc"` selector source: CC32, per Spitfire's
+/// Universal Articulation Controller Channel convention.
+pub const UACC_DEFAULT_CC: u8 = 32;
+
+/// The published UACC standard code table (core codes), as
+/// `(code, canonical name, match keywords)`.
+///
+/// Provenance: Spitfire's UACC v2 specification. Codes cross-checked against
+/// the Spitfire support articles ("Long = 1", "Staccato = 40",
+/// "26 = Legato - Muted", "52 = Short Marcato", "56 = Pizzicato",
+/// "40 Generic / 41 Alternative / 42 Very short (spicc)") and the
+/// Reaticulate factory banks for the Spitfire libraries (which encode the
+/// same table as `cc:32,<code>` outputs). This is DATA, not law: the full
+/// v2 table has more rows (FX, run/flurry families, 90+) — extend here as
+/// needed, and any pack can override per articulation with an explicit
+/// `uacc <code>` field. Do not renumber existing entries.
+///
+/// The keyword lists drive [`standard_uacc_code`]: an articulation whose
+/// normalized id/label/alias equals one of the keywords gets the code.
+pub const UACC_STANDARD_TABLE: &[(u8, &str, &[&str])] = &[
+    (1, "Long", &["long", "sustain", "sus", "vibsus", "arco"]),
+    (3, "Long Octave", &["longoctave"]),
+    (6, "Long Flutter", &["flutter", "fluttertongue"]),
+    (7, "Long Con Sordino", &["longconsord", "longmuted"]),
+    (8, "Long Flautando", &["flautando"]),
+    (9, "Long Marcato", &["longmarcato"]),
+    (10, "Long Harmonics", &["harmonics", "harmonic", "harm"]),
+    (11, "Long Tremolo", &["tremolo", "trem"]),
+    (12, "Long Tremolo Con Sordino", &["tremoloconsord", "tremolomuted"]),
+    (13, "Long Tremolo Sul Pont", &["tremolosulpont"]),
+    (17, "Long Sul Tasto", &["sultasto"]),
+    (18, "Long Sul Pont", &["sulpont"]),
+    (20, "Legato", &["legato", "leg"]),
+    (26, "Legato Con Sordino", &["legatoconsord", "legatomuted"]),
+    (31, "Legato Portamento", &["portamento", "port"]),
+    (32, "Legato Fast", &["legatofast"]),
+    (33, "Legato Runs", &["legatoruns", "runs"]),
+    (40, "Short", &["staccato", "stac", "short"]),
+    (41, "Short Alternative", &["staccatissimo", "staccatiss"]),
+    (42, "Very Short", &["spiccato", "spicc"]),
+    (47, "Short Con Sordino", &["shortconsord", "staccatoconsord", "shortmuted"]),
+    (48, "Short Brushed", &["spiccatofeathered", "feathered", "brushed"]),
+    (52, "Short Marcato", &["marcato", "marc"]),
+    (54, "Short Sforzando", &["sforzando", "sfz"]),
+    (55, "Short Bells Up", &["bellsup"]),
+    (56, "Pizzicato", &["pizzicato", "pizz"]),
+    (57, "Bartok Pizzicato", &["bartokpizz", "bartokpizzicato", "snappizzicato", "snappizz"]),
+    (58, "Col Legno", &["collegno", "clegno"]),
+    (70, "Trill (Minor 2nd)", &["trillminor2nd", "trillm2", "htrills", "halftonetrill", "trill"]),
+    (71, "Trill (Major 2nd)", &["trillmajor2nd", "trillmaj2", "wtrills", "wholetonetrill"]),
+    (72, "Trill (Minor 3rd)", &["trillminor3rd", "trillm3"]),
+    (73, "Trill (Major 3rd)", &["trillmajor3rd", "trillmaj3"]),
+    (74, "Trill (Perfect 4th)", &["trillperfect4th", "trillp4"]),
+    (81, "Tremolo Measured 150", &["tremolomeasured", "meastrem", "measuredtremolo"]),
+    (90, "FX", &["fx"]),
+];
+
+/// Normalize an articulation name for standard-table matching: lowercase,
+/// alphanumerics only (`"Bartok Pizz."` → `"bartokpizz"`).
+fn normalize_artic_name(s: &str) -> String {
+    s.chars()
+        .filter(|c| c.is_ascii_alphanumeric())
+        .collect::<String>()
+        .to_ascii_lowercase()
+}
+
+/// The standard UACC code for a conventionally-named articulation, matching
+/// the normalized name against [`UACC_STANDARD_TABLE`] keywords. `None` =
+/// not a standard name (the pack must author `uacc <code>` explicitly).
+pub fn standard_uacc_code(name: &str) -> Option<u8> {
+    let n = normalize_artic_name(name);
+    if n.is_empty() {
+        return None;
+    }
+    UACC_STANDARD_TABLE
+        .iter()
+        .find(|(_, _, keys)| keys.contains(&n.as_str()))
+        .map(|&(code, _, _)| code)
+}
+
+/// A resolved latched-CC articulation selector: the controller number and
+/// the code → articulation-id map, ready for the engine (which treats it as
+/// a pure mechanism — no convention names in engine code).
+#[derive(Debug, Clone, PartialEq)]
+pub struct LatchedCcSelector {
+    /// Controller number carrying the selector value.
+    pub cc: u8,
+    /// `(code, articulation id)` — sorted by code, unique codes.
+    pub map: Vec<(u8, String)>,
+}
+
+impl LatchedCcSelector {
+    /// The articulation id selected by CC `value`, if any. Unknown codes
+    /// select nothing (the previous latch stays).
+    pub fn artic_for(&self, value: u8) -> Option<&str> {
+        self.map
+            .iter()
+            .find(|(code, _)| *code == value)
+            .map(|(_, id)| id.as_str())
     }
 }
 
@@ -1024,6 +1954,26 @@ pub struct ZoneSpec {
     /// never assumed. 0 for non-transition zones.
     #[facet(default)]
     pub lead_in_ms: f32,
+    /// MEASURED heard-arrival marker (ms of sample time from `sample_start`):
+    /// when this zone's note is actually HEARD after playback begins, measured
+    /// from the sample audio itself (see the `measure_arrivals` tool) — never
+    /// assumed, never copied from library metadata. Semantics per zone class:
+    ///
+    /// * legato transition (`interval > 0`): destination-pitch settle — the
+    ///   moment the destination pitch takes over from the source (Goertzel
+    ///   harmonic-share crossing). Supersedes `lead_in_ms` where present
+    ///   (the CSS pack's `lead_in_ms` values came from library metadata that
+    ///   the audio contradicts).
+    /// * short / one-shot: the rhythmic peak of the attack (spectral-flux
+    ///   peak) — the per-round-robin replacement for the single global
+    ///   `short_note_timing.pre_delay_ms`.
+    /// * re-trigger (Legzero) / fresh sustain: perceptual onset — where the
+    ///   note starts speaking (spectral-flux leading edge).
+    ///
+    /// `0` = unmeasured (or a release zone, where arrival is meaningless):
+    /// consumers fall back to `lead_in_ms` / `pre_delay_ms` / trigger-time.
+    #[facet(default)]
+    pub arrival_ms: f32,
     /// Logical zone group id. Used for group-level editing and for choke
     /// relationships when `off_by` references another group.
     #[facet(default)]
@@ -1162,6 +2112,18 @@ pub struct WavetableSpec {
 }
 
 impl ZoneSpec {
+    /// The heard-arrival marker of a legato TRANSITION zone (ms of sample
+    /// time): the MEASURED `arrival_ms` (destination-pitch settle from the
+    /// audio itself) when present, else the metadata `lead_in_ms`. `0.0` =
+    /// no marker at all (legacy zone).
+    pub fn transition_arrival_ms(&self) -> f32 {
+        if self.arrival_ms > 0.0 {
+            self.arrival_ms
+        } else {
+            self.lead_in_ms
+        }
+    }
+
     /// Whether this zone contains the given `(note, velocity)`.
     pub fn contains(&self, note: u8, velocity: u8) -> bool {
         note >= self.key_min
@@ -1182,19 +2144,9 @@ mod tests {
     use super::*;
 
     fn specs_dir() -> std::path::PathBuf {
-        // Prefer the sample-collector repo next to signal, fall back to a local specs/ dir.
+        // The CSS soundpack definition is owned by the orchestra rig crate.
         let manifest = std::env::var("CARGO_MANIFEST_DIR").unwrap();
-        let signal_root = std::path::Path::new(&manifest)
-            .parent()
-            .unwrap()
-            .parent()
-            .unwrap();
-        let sc_specs = signal_root.parent().unwrap().join("sample-collector/specs");
-        if sc_specs.exists() {
-            sc_specs
-        } else {
-            signal_root.join("specs")
-        }
+        std::path::Path::new(&manifest).join("../../rigs/orchestra/specs")
     }
 
     #[test]
@@ -1204,12 +2156,81 @@ mod tests {
         assert_eq!(parse_range("bad"), None);
     }
 
+    // r[verify signal.sampling.articulation.select]
+    #[test]
+    fn latched_cc_selector_uacc() {
+        // No selector configured (default) → None; existing packs untouched.
+        let bare = LibrarySpec::from_styx("name \"b\"\n").unwrap();
+        assert_eq!(bare.selector, "");
+        assert!(bare.latched_cc_selector().is_none());
+
+        // `selector uacc` alone: CC32 + the published standard table matched
+        // by id/label/aliases. Explicit `uacc <code>` overrides the table.
+        let spec = LibrarySpec::from_styx(
+            "name \"u\"\n\
+             selector uacc\n\
+             articulations (\n\
+               {id Vibsus, label Sustain, kind @Sustain}\n\
+               {id Spiccato, label Spiccato, kind @Short}\n\
+               {id Stac, label Staccato, kind @Short}\n\
+               {id Shorts2, label \"Alt Short\", kind @Short, uacc 41}\n\
+               {id Pizzicato, label Pizzicato, kind @Short}\n\
+               {id Clegno, label \"Col Legno\", kind @Short}\n\
+               {id Tremolo, label Tremolo, kind @Sustain}\n\
+               {id Harm, label Harmonics, kind @Sustain}\n\
+               {id HTrills, label \"Half-Tone Trills\", kind @Trill}\n\
+               {id Weird, label \"House Special\", kind @Special}\n\
+               {id Leg, label Legato, kind @Legato}\n\
+               {id Rel, label Release, kind @Release}\n\
+             )\n",
+        )
+        .unwrap();
+        let sel = spec.latched_cc_selector().expect("selector configured");
+        assert_eq!(sel.cc, UACC_DEFAULT_CC);
+        assert_eq!(sel.artic_for(1), Some("Vibsus")); // Long ← label "Sustain"
+        assert_eq!(sel.artic_for(42), Some("Spiccato"));
+        assert_eq!(sel.artic_for(40), Some("Stac")); // ← label "Staccato"
+        assert_eq!(sel.artic_for(41), Some("Shorts2")); // explicit uacc 41
+        assert_eq!(sel.artic_for(56), Some("Pizzicato"));
+        assert_eq!(sel.artic_for(58), Some("Clegno"));
+        assert_eq!(sel.artic_for(11), Some("Tremolo"));
+        assert_eq!(sel.artic_for(10), Some("Harm"));
+        assert_eq!(sel.artic_for(70), Some("HTrills"));
+        // Non-standard names get no code; unknown codes select nothing.
+        assert_eq!(sel.artic_for(90), None);
+        assert_eq!(sel.artic_for(0), None);
+        // Legato transition / Release sample sets are never table-inferred.
+        assert!(!sel.map.iter().any(|(_, id)| id == "Leg" || id == "Rel"));
+
+        // Explicit codes beat table inference even when names collide, and
+        // `selector_cc` moves the selector off CC32.
+        let spec2 = LibrarySpec::from_styx(
+            "name \"u2\"\n\
+             selector uacc\n\
+             selector_cc 33\n\
+             articulations (\n\
+               {id A, label Staccato, kind @Short, uacc 42}\n\
+               {id B, label Spiccato, kind @Short}\n\
+             )\n",
+        )
+        .unwrap();
+        let sel2 = spec2.latched_cc_selector().unwrap();
+        assert_eq!(sel2.cc, 33);
+        assert_eq!(sel2.artic_for(42), Some("A")); // explicit beats B's table match
+        assert_eq!(sel2.artic_for(40), None); // A's table match is skipped (has explicit)
+
+        // The standard table itself: canonical names resolve, garbage doesn't.
+        assert_eq!(standard_uacc_code("Legato"), Some(20));
+        assert_eq!(standard_uacc_code("Bartok Pizz."), Some(57));
+        assert_eq!(standard_uacc_code("sfz"), Some(54));
+        assert_eq!(standard_uacc_code("Marcato"), Some(52));
+        assert_eq!(standard_uacc_code("NotAThing"), None);
+    }
+
     #[test]
     fn load_css_spec_styx() {
         let path = specs_dir().join("cinematic-strings.styx");
-        if !path.exists() {
-            return;
-        }
+        assert!(path.exists(), "CSS soundpack definition missing: {path:?}");
         let spec = LibrarySpec::from_file(&path).expect("parse CSS styx spec");
         assert_eq!(spec.sections.len(), 5);
         assert!(spec.articulations.len() > 10);
@@ -1229,6 +2250,69 @@ mod tests {
         let ks = spec.keyswitch.as_ref().unwrap();
         assert_eq!(ks.cc58_function(0), Some("Sustain: Low Latency Legato"));
         assert_eq!(ks.cc58_function(88), Some("Con Sordino On"));
+
+        // The performance / timing model is carried by the pack, and its
+        // values equal the engine's compiled-in defaults (so an old spec
+        // without the blocks plays identically).
+        assert_eq!(spec.performance.master_tune_cents, 9.0);
+        assert_eq!(spec.performance.attack_ms, Some(198));
+        assert_eq!(spec.performance.release_ms, Some(400));
+        assert_eq!(spec.performance.sustain_noteoff_ms, 400);
+        assert_eq!(le.velocity_splits, vec![64, 100]);
+        assert_eq!(le.overlap_delay_ms(50.0, 30, false), 77); // soft+fast LL
+        assert_eq!(le.overlap_delay_ms(50.0, 30, true), 83); // soft+fast EX
+        assert_eq!(le.overlap_delay_ms(400.0, 30, false), 0); // slow line
+        assert_eq!(le.overlap_delay_ms(50.0, 110, true), 0); // loud
+        assert_eq!(le.start_offset_ms(100.0), 177.0);
+        assert_eq!(le.start_offset_ms(500.0), 117.0);
+        assert_eq!(le.retire_fades_ms(30), (150, 550));
+        assert_eq!(le.retire_fades_ms(110), (281, 500));
+        assert_eq!(le.sustain_trim_db, -6.0);
+        // Defaults (spec omits nothing) equal an unset spec's resolution.
+        let default = LegatoEngineSpec::default();
+        assert_eq!(
+            default.overlap_delay_ms(50.0, 30, false),
+            le.overlap_delay_ms(50.0, 30, false)
+        );
+        assert_eq!(default.start_offset_ms(300.0), le.start_offset_ms(300.0));
+
+        // Transition selection is data: roles + vibrato pairing.
+        let leg = spec.articulation("Leg").unwrap();
+        assert_eq!(leg.resolve_legato_role(), LegatoRole::Transition);
+        assert!(leg.is_vibrato());
+        assert_eq!(
+            spec.vibrato_counterpart("Leg").as_deref(),
+            Some("NVLeg")
+        );
+        assert_eq!(
+            spec.articulation("Legzero").unwrap().resolve_legato_role(),
+            LegatoRole::Retrigger
+        );
+        assert_eq!(
+            spec.articulation("Port").unwrap().resolve_legato_role(),
+            LegatoRole::Portamento
+        );
+        // Tremolo/Harmonics explicitly opt out of the CC2 pair (fixes the
+        // inferred Tremolo↔Nonvib mispairing).
+        assert_eq!(spec.vibrato_counterpart("Tremolo"), None);
+        assert_eq!(spec.vibrato_counterpart("Harm"), None);
+        assert_eq!(
+            spec.vibrato_counterpart("Nonvib").as_deref(),
+            Some("Vibsus")
+        );
+
+        // Amp envelopes are authored per articulation for the long families
+        // and equal the decoded family defaults.
+        let sus_env = &spec.articulation("Vibsus").unwrap().amp_env;
+        assert_eq!(sus_env.as_slice(), AMP_ENV_SUSTAIN);
+        assert_eq!(
+            spec.articulation("Leg").unwrap().amp_env.as_slice(),
+            AMP_ENV_LEGATO
+        );
+        assert_eq!(
+            spec.articulation("NVrel").unwrap().amp_env.as_slice(),
+            AMP_ENV_RELEASE
+        );
     }
 
     #[test]

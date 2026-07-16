@@ -303,7 +303,10 @@ impl SampleEngine {
         let delay_ms = if portamento {
             0 // portamento fires immediately — the glide pitch ramp is the "delay"
         } else {
-            ioi_legato_delay_ms(ioi_ms, velocity, self.legato_expressive)
+            self.patch
+                .spec
+                .legato_cfg()
+                .overlap_delay_ms(ioi_ms, velocity, self.legato_expressive)
         };
 
         let frames_remaining = ms_to_frames(delay_ms, self.sample_rate);
@@ -345,7 +348,9 @@ impl SampleEngine {
         sched_lead: Option<u64>,
         ioi_ms: f32,
     ) {
-        if self.legato_fire_log_enabled && self.legato_fire_log.len() < LEGATO_FIRE_LOG_CAP {
+        let log_idx = if self.legato_fire_log_enabled
+            && self.legato_fire_log.len() < LEGATO_FIRE_LOG_CAP
+        {
             self.legato_fire_log.push(LegatoFireEvent {
                 frame: self.frames_rendered,
                 line: self.cur_line as u8,
@@ -353,8 +358,18 @@ impl SampleEngine {
                 to_note,
                 velocity,
                 portamento,
+                // Patched below from `last_arrival_prediction` once the
+                // transition voice has spawned and the actually-chosen zone's
+                // arrival marker (lead_in) and start offset are known.
+                arrival: self.frames_rendered,
             });
-        }
+            Some(self.legato_fire_log.len() - 1)
+        } else {
+            None
+        };
+        // Default: arrival == fire frame (re-bow / legacy / non-zoned);
+        // `spawn_transition_voice` overwrites for measured transition zones.
+        self.last_arrival_prediction = self.frames_rendered;
         self.trace_push(TraceKind::Transition {
             from: from_note,
             to: to_note,
@@ -367,9 +382,9 @@ impl SampleEngine {
         // (real persistent values, indexed by attack-velocity range), so the
         // new pair emerges under them with no inter-note tick. Line-scoped so a
         // unison note held by another divisi line keeps sounding.
-        let vr = (velocity_range(velocity) - 1) as usize;
-        let trans_fade = ms_to_frames(RETIRE_TRANS_MS[vr], self.sample_rate);
-        let sus_fade = ms_to_frames(RETIRE_SUS_MS[vr], self.sample_rate);
+        let (retire_trans_ms, retire_sus_ms) = self.patch.spec.legato_cfg().retire_fades_ms(velocity);
+        let trans_fade = ms_to_frames(retire_trans_ms, self.sample_rate);
+        let sus_fade = ms_to_frames(retire_sus_ms, self.sample_rate);
         self.voices
             .retire_note_line(self.cur_line as u8, from_note, trans_fade, sus_fade);
 
@@ -394,15 +409,28 @@ impl SampleEngine {
             self.spawn_legato_transition(
                 from_note, to_note, velocity, portamento, sched_lead, ioi_ms,
             );
-            // 2. Main held sustain (`%grhcg`) — immediate, full level, declick
-            //    only, carrying the −6 dB `$3tsb0` legato makeup.
+            // 2. Main held sustain (`%grhcg`) — full level, declick only,
+            //    carrying the −6 dB `$3tsb0` legato makeup. In REACTIVE play
+            //    the fire happens AFTER the musical tick (the CSS latency),
+            //    so "immediate at fire" enters at/after the beat — but a
+            //    document PREFIRE happens `sched_lead` BEFORE the tick, and
+            //    an immediate destination sustain would put the arrived
+            //    note's pitch in the air up to a whole velocity-zone delay
+            //    early (the "underlay masking" that reads as wide intervals
+            //    arriving before the click). Hold it back to the tick: the
+            //    transition sample owns the pre-arrival air, exactly as it
+            //    does in Kontakt.
             let declick = ms_to_frames(SUSTAIN_DECLICK_MS, self.sample_rate);
-            self.sustain_fade_in = Some((0, declick));
+            let hold = sched_lead.unwrap_or(0) as usize;
+            self.sustain_fade_in = Some((hold, declick));
             self.legato_sustain = true;
             self.trigger_zoned_sustain(to_note);
             self.legato_sustain = false;
             self.sustain_fade_in = None;
             self.line_mut().note = Some(to_note);
+            if let Some(i) = log_idx {
+                self.legato_fire_log[i].arrival = self.last_arrival_prediction;
+            }
             return;
         }
 
@@ -456,18 +484,26 @@ impl SampleEngine {
         // when the legato transition sample finishes. The Leg sample provides
         // the attack character; the Vibsus/Nonvib body takes over after it ends.
         self.trigger_sustain(to_note);
+        if let Some(i) = log_idx {
+            self.legato_fire_log[i].arrival = self.last_arrival_prediction;
+        }
     }
 
     /// Find the Port articulation matching the current sordino state.
     pub(crate) fn find_port_artic_id(&self) -> Option<String> {
-        let want_sord = self.articulation.starts_with("Sord");
+        let want_sord = self
+            .patch
+            .spec
+            .articulation(&self.articulation)
+            .map(|a| a.is_sordino())
+            .unwrap_or_else(|| self.articulation.starts_with("Sord"));
         self.patch
             .spec
             .articulations
             .iter()
             .filter(|a| a.kind == ArticulationKind::Legato)
-            .filter(|a| a.id.starts_with("Sord") == want_sord)
-            .find(|a| a.id.to_lowercase().contains("port"))
+            .filter(|a| a.is_sordino() == want_sord)
+            .find(|a| a.resolve_legato_role() == crate::spec::LegatoRole::Portamento)
             .map(|a| a.id.clone())
     }
 
@@ -711,7 +747,7 @@ impl SampleEngine {
         };
 
         // Continuous loudness sweep on top of the (short) timbre crossfade.
-        let expr = Self::cc1_expression(self.cc1);
+        let expr = self.cc1_expression(self.cc1);
         for v in self.voices.voices_mut() {
             if v.line != cur_line {
                 continue;
@@ -769,36 +805,7 @@ impl SampleEngine {
     /// name we look for one that does (and vice-versa), staying within the
     /// same family (Con Sordino vs regular).
     pub(crate) fn find_vibrato_pair_id(&self, artic_id: &str) -> Option<String> {
-        // Only applies when CC2 is the vibrato controller.
-        self.patch.spec.dynamics.vibrato_controller.as_deref()?;
-
-        let id_lower = artic_id.to_lowercase();
-        let is_sord = id_lower.contains("sord");
-        let is_nv = id_lower.contains("nv") || id_lower.contains("nonvib");
-
-        // The vibrato pair lives in the same articulation family — Sustain
-        // (Vibsus↔Nonvib) or Legato (Leg↔NVLeg) — so legato gets CC2 vibrato too.
-        let want_kind = self
-            .patch
-            .spec
-            .articulation(artic_id)
-            .map(|a| a.kind.clone());
-        self.patch
-            .spec
-            .articulations
-            .iter()
-            .filter(|a| a.id != artic_id)
-            .filter(|a| Some(&a.kind) == want_kind.as_ref())
-            .filter(|a| matches!(a.kind, ArticulationKind::Sustain | ArticulationKind::Legato))
-            .filter(|a| {
-                let other = a.id.to_lowercase();
-                // Same family (sord vs non-sord)
-                other.contains("sord") == is_sord
-                    // Opposite vibrato side
-                    && (other.contains("nv") || other.contains("nonvib")) != is_nv
-            })
-            .map(|a| a.id.clone())
-            .next()
+        self.patch.spec.vibrato_counterpart(artic_id)
     }
 
     /// Map CC58 → action and execute it.
@@ -876,6 +883,28 @@ impl SampleEngine {
             .map(|a| a.id.clone())
             .unwrap_or_else(|| tag.to_string());
         self.articulation = self.remap_sordino(&id, self.con_sordino);
+    }
+
+    /// Apply a latched-CC selector value (spec `selector uacc`): the CC's
+    /// value is a code in the resolved code → articulation map. A matching
+    /// code latches that articulation for all subsequent notes — identical
+    /// semantics to a keyswitch latch (StrictLive: a CC arriving before a
+    /// note-on selects the articulation the notes after it play). Unknown
+    /// codes keep the previous latch (published code tables leave gaps by
+    /// design). Honours Con Sordino remapping via `select_articulation_tag`.
+    // r[impl signal.sampling.articulation.select]
+    pub(crate) fn apply_latched_cc_selector(&mut self, value: u8) {
+        let Some(id) = self
+            .latched_cc_selector
+            .as_ref()
+            .and_then(|sel| sel.artic_for(value))
+            .map(str::to_string)
+        else {
+            return;
+        };
+        self.select_articulation_tag(&id);
+        // A direct selection cancels any pending CC58 velocity-split group.
+        self.pending_cc58_group = None;
     }
 
     pub(crate) fn apply_cc58(&mut self) {

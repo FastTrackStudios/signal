@@ -148,6 +148,44 @@ pub struct Voice {
     /// one-shot bow-change transition. `0` = no delay (normal attack).
     attack_delay: usize,
 
+    /// True start delay: while > 0 the voice outputs silence and its read
+    /// position does NOT advance — the sample genuinely starts later. This is
+    /// the per-zone arrival alignment (a zone whose measured heard-arrival is
+    /// SHORTER than the schedule's pre-roll is held back so the arrival still
+    /// lands exactly on the tick). Unlike `attack_delay` (which mutes while
+    /// the position advances, keeping a loop phase-aligned), nothing of the
+    /// sample is consumed during the hold. `0` = start immediately.
+    start_hold: usize,
+
+    /// Playback-emitted ARRIVAL marker (r[signal.sampling.markers.arrival],
+    /// emitted-by-playback): the zone's heard-arrival position in FILE
+    /// frames. When the voice's real playhead crosses it — after every
+    /// start-offset skip, start hold, and rate scaling — the voice records
+    /// the OUTPUT frame it happened on (`spawn_frame + frames_out`). A
+    /// marker exists because the voice actually played through that sample
+    /// position at that output moment; nothing is estimated. `None` = the
+    /// zone carries no marker.
+    marker_arrival_file: Option<f64>,
+    /// Engine `frames_rendered` at spawn — the base for stamping emissions
+    /// with absolute output frames.
+    spawn_frame: u64,
+    /// Output frames this voice has produced (holds included — they occupy
+    /// real output time).
+    frames_out: u64,
+    /// The emitted arrival (absolute output frame), once crossed. Drained by
+    /// the engine after each block via `take_emitted_arrival`.
+    arrival_emitted: Option<u64>,
+    arrival_drained: bool,
+
+    /// Slow secondary bloom (CSS `%1wcdh`): a multiplicative gain ramp from
+    /// 1.0 to `bloom_target` over `bloom_frames`, running AFTER the start
+    /// hold / attack delay elapse. Multiplicative and separate from the
+    /// `gain`/`target_gain` machinery, so CC1/CC2 re-levelling
+    /// (`update_sustain_gains`) never cancels it. `bloom_frames == 0` = off.
+    bloom_frames: usize,
+    bloom_total: usize,
+    bloom_target: f32,
+
     /// MIDI note this voice belongs to (for note-off matching).
     pub note: u8,
 
@@ -351,6 +389,15 @@ impl Voice {
             release_hold: 0,
             pending_fade: 0,
             attack_delay: 0,
+            start_hold: 0,
+            marker_arrival_file: None,
+            spawn_frame: 0,
+            frames_out: 0,
+            arrival_emitted: None,
+            arrival_drained: false,
+            bloom_frames: 0,
+            bloom_total: 0,
+            bloom_target: 1.0,
             kind,
             note,
             mic_index: None,
@@ -399,6 +446,15 @@ impl Voice {
             release_hold: 0,
             pending_fade: 0,
             attack_delay: 0,
+            start_hold: 0,
+            marker_arrival_file: None,
+            spawn_frame: 0,
+            frames_out: 0,
+            arrival_emitted: None,
+            arrival_drained: false,
+            bloom_frames: 0,
+            bloom_total: 0,
+            bloom_target: 1.0,
             kind,
             note,
             mic_index: None,
@@ -507,6 +563,53 @@ impl Voice {
             self.gain = 0.0; // target_gain stays at the intended spawn gain
             self.attack_delay = delay_frames;
             self.gain_ramp_frames = fade_frames;
+        }
+        self
+    }
+
+    /// Hold the voice back `frames` frames before it starts playing: silence
+    /// out, read position frozen at the start (nothing of the sample is
+    /// consumed). The per-zone arrival alignment — the scheduler pre-rolls a
+    /// trigger by an upper-bound lead; each spawned voice is held back by
+    /// `lead − its own measured arrival` so the heard arrival lands exactly
+    /// on the grid tick, per round-robin / mic / dynamic layer. `0` = no-op.
+    pub fn with_start_hold(mut self, frames: usize) -> Self {
+        self.start_hold = frames;
+        self
+    }
+
+    /// Attach the zone's ARRIVAL marker (FILE frames) for playback emission
+    /// and the engine output frame this voice spawns at. See
+    /// `marker_arrival_file` — the marker is emitted when the real playhead
+    /// crosses the position, stamped with the actual output frame.
+    pub fn with_arrival_marker(mut self, file_frame: f64, spawn_frame: u64) -> Self {
+        self.marker_arrival_file = Some(file_frame);
+        self.spawn_frame = spawn_frame;
+        self
+    }
+
+    /// The playback-emitted arrival (absolute output frame), once, if the
+    /// playhead has crossed the marker since the last drain. Lock-free /
+    /// alloc-free: one Option read per voice per block.
+    pub fn take_emitted_arrival(&mut self) -> Option<u64> {
+        if self.arrival_drained {
+            return None;
+        }
+        let e = self.arrival_emitted?;
+        self.arrival_drained = true;
+        Some(e)
+    }
+
+    /// Slow secondary bloom (CSS `%1wcdh`): multiply the voice's output by a
+    /// ramp from 1.0 to `target` over `frames` frames (after any start hold
+    /// / attack delay). Used by the legato handoff to swell the −6 dB
+    /// connected sustain back to full body over ~1 s. No-op when `frames ==
+    /// 0` or `target == 1.0`.
+    pub fn with_slow_bloom(mut self, frames: usize, target: f32) -> Self {
+        if frames > 0 && (target - 1.0).abs() > 1e-6 {
+            self.bloom_frames = frames;
+            self.bloom_total = frames;
+            self.bloom_target = target;
         }
         self
     }
@@ -631,6 +734,33 @@ impl Voice {
             return (0.0, 0.0);
         }
 
+        // Output-frame clock for playback-emitted markers: every call
+        // produces one output frame (holds included — they occupy real
+        // output time), so the emission stamp `spawn_frame + frames_out` is
+        // the exact output moment of the crossing.
+        self.frames_out += 1;
+
+        // True start hold (per-zone arrival alignment): nothing advances —
+        // the sample genuinely begins `start_hold` frames after the spawn.
+        // Sits before every other per-frame update so envelopes, fades, and
+        // the read position all start when the hold elapses.
+        if self.start_hold > 0 {
+            self.start_hold -= 1;
+            return (0.0, 0.0);
+        }
+
+        // Playback-emitted ARRIVAL: the playhead is at/past the marker on
+        // this output frame (covers start-offset overshoot too — a voice
+        // spawned past its marker emits on its first sounding frame, which
+        // makes over-skips visible instead of silent).
+        if self.arrival_emitted.is_none() {
+            if let Some(m) = self.marker_arrival_file {
+                if self.position >= m {
+                    self.arrival_emitted = Some(self.spawn_frame + self.frames_out - 1);
+                }
+            }
+        }
+
         // Delayed release: hold at full gain (Playing) until the countdown
         // elapses, then begin the fade. Lets a legato source note cover the
         // transition sample's pre-arrival dip, then hand off at the tick.
@@ -657,6 +787,13 @@ impl Voice {
             self.gain_ramp_frames -= 1;
         } else {
             self.gain = self.target_gain;
+        }
+
+        // Slow secondary bloom (CSS `%1wcdh`): a multiplicative swell from
+        // 1.0 to `bloom_target`, advanced only once the voice is audible
+        // (start hold / attack delay done). Applied via `bloom_gain()` below.
+        if self.attack_delay == 0 && self.bloom_frames > 0 {
+            self.bloom_frames -= 1;
         }
 
         // Envelope
@@ -722,7 +859,13 @@ impl Voice {
             None => 1.0,
         };
 
-        let amp = self.gain * env * flex;
+        let bloom = if self.bloom_total > 0 {
+            let t = 1.0 - self.bloom_frames as f32 / self.bloom_total as f32;
+            1.0 + (self.bloom_target - 1.0) * t
+        } else {
+            1.0
+        };
+        let amp = self.gain * env * flex * bloom;
 
         // Advance position
         if self.reverse {

@@ -9,6 +9,8 @@
 //! *tests* that verify the engine reproduces a real Cinematic Studio Strings
 //! render (`examples/`).
 
+pub mod timing;
+
 use std::path::Path;
 
 use keyflow_orchestra::{Config, PartOutput, ProfileKind, process_part, score};
@@ -23,16 +25,15 @@ pub const CSS_ROOT: &str =
     "/run/media/AudioHaven/Sampled/Orchestral/Cinematic Series/Cinematic Studio Strings";
 
 /// The articulation-config styx that maps CSS zones/articulations onto the
-/// engine (lives in the sample-collector repo).
-pub const CSS_CONFIG: &str =
-    "/run/media/Development/FastTrackStudio-legacy/sample-collector/specs/cinematic-strings.styx";
-
-/// CSS "Arco attack" ships at `$mmirg = 30/127`; Kontakt's cubic
-/// `ENGINE_PAR_ATTACK` makes that ≈ 198 ms — the sustain bloom the engine
-/// applies to sustain-layer voices.
-pub const CSS_ATTACK_MS: u32 = 198;
-/// `$tukcw` — the note-off overlap fade.
-pub const CSS_RELEASE_MS: u32 = 400;
+/// engine — the SOUNDPACK DEFINITION: every CSS-specific number (legato
+/// timing curves, retire crossfades, makeup gains, master tune, amp
+/// envelopes, keyswitch map) lives in this file, not in engine code. Owned
+/// by this crate; resolved relative to the source tree at compile time.
+// r[impl signal.soundsource.declarative]
+pub const CSS_CONFIG: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/specs/cinematic-strings.styx"
+);
 
 /// Load a CSS strings section (e.g. `"1st Violins"`) into `rig` under `id`,
 /// wired with the engine settings that match a real CSS-in-Kontakt render
@@ -56,8 +57,8 @@ pub fn load_strings(
         .map_err(|e| e.to_string())?;
     rig.set_solo_mic(id, Some(mic.to_string()));
     rig.set_midi_channel(id, 0);
-    rig.set_attack_ms(id, CSS_ATTACK_MS);
-    rig.set_release_ms(id, CSS_RELEASE_MS);
+    // Attack/release blooms come from the spec (`performance { attack_ms,
+    // release_ms }` in the config styx) — nothing engine-side to set here.
     Ok(())
 }
 

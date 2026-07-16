@@ -91,7 +91,7 @@ pub use document::{
 pub use document_rt::{BlockTransport, RealtimeScheduler};
 pub use engine::cache::SignalPcmPack;
 pub use engine::trace::{RenderTrace, TraceEvent, TraceKind, VoiceSpawn};
-pub use engine::{ArticClass, LegatoFireEvent, LineId, PlayMode, SampleEngine};
+pub use engine::{ArticClass, EmittedMarker, LegatoFireEvent, LineId, PlayMode, SampleEngine};
 pub use engine_spec::{BlockRef, EngineLayerSpec, EngineSpec, FxChainSlot, PortSpec, VoiceConfig};
 pub use instrument::SamplerInstrument;
 pub use mixer::{
@@ -319,6 +319,7 @@ impl PlayerPatch {
         patch.spec.legato_engine = cfg.legato_engine;
         patch.spec.short_note_timing = cfg.short_note_timing;
         patch.spec.keyswitch = cfg.keyswitch;
+        patch.spec.performance = cfg.performance;
         Ok(patch)
     }
 
@@ -392,6 +393,7 @@ impl PlayerPatch {
                     direction: String::new(),
                     interval: 0,
                     lead_in_ms: 0.0,
+                    arrival_ms: 0.0,
                     group: String::new(),
                     group_polyphony: 0,
                     choke_group: String::new(),

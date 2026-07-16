@@ -83,6 +83,7 @@
             direction: String::new(),
             interval: 0,
             lead_in_ms: 0.0,
+            arrival_ms: 0.0,
             group: String::new(),
             group_polyphony: 0,
             choke_group: String::new(),
@@ -804,6 +805,66 @@
             "Staccato",
             "CC1 selects the short TYPE via short_note_cc1_map"
         );
+    }
+
+    // r[verify signal.sampling.articulation.select]
+    #[test]
+    fn latched_cc_selector_latches_articulation_live() {
+        // `selector uacc`: a CC32 value arriving BEFORE a note-on latches the
+        // articulation the following notes play — keyswitch semantics on a CC.
+        let styx = "name \"u\"\n\
+             selector uacc\n\
+             articulations (\n\
+               {id Vibsus, label Sustain, kind @Sustain}\n\
+               {id Spiccato, label Spiccato, kind @Short}\n\
+               {id Stac, label Staccato, kind @Short}\n\
+             )\n\
+             zones (\n\
+               {file \"a.wav\", key_min 0, key_max 127, root_key 60, articulation \"Vibsus\"}\n\
+               {file \"b.wav\", key_min 0, key_max 127, root_key 60, articulation \"Spiccato\"}\n\
+               {file \"c.wav\", key_min 0, key_max 127, root_key 60, articulation \"Stac\"}\n\
+             )\n";
+        let mut eng = engine_from_styx(styx);
+        eng.set_articulation("Vibsus");
+
+        // CC32=42 (Very Short / spiccato) latches Spiccato for the next note.
+        eng.cc(32, 42);
+        assert_eq!(eng.articulation(), "Spiccato", "CC latch before note-on");
+        eng.note_on(60, 100);
+        assert_eq!(eng.articulation(), "Spiccato", "note plays the latch");
+        eng.note_off(60);
+
+        // Re-latch switches; the latch persists across notes until re-sent.
+        eng.cc(32, 40);
+        assert_eq!(eng.articulation(), "Stac");
+        eng.note_on(62, 100);
+        eng.note_off(62);
+        eng.note_on(64, 100);
+        assert_eq!(eng.articulation(), "Stac", "latch persists across notes");
+        eng.note_off(64);
+
+        // Unknown code (a gap in the table) keeps the previous latch.
+        eng.cc(32, 99);
+        assert_eq!(eng.articulation(), "Stac", "unknown code keeps the latch");
+
+        // Back to Long (1).
+        eng.cc(32, 1);
+        assert_eq!(eng.articulation(), "Vibsus");
+
+        // No `selector` in the spec → CC32 is inert (defaults untouched).
+        let mut plain = engine_from_styx(
+            "name \"p\"\n\
+             articulations (\n\
+               {id Vibsus, label Sustain, kind @Sustain}\n\
+               {id Spiccato, label Spiccato, kind @Short}\n\
+             )\n\
+             zones (\n\
+               {file \"a.wav\", key_min 0, key_max 127, root_key 60, articulation \"Vibsus\"}\n\
+             )\n",
+        );
+        plain.set_articulation("Vibsus");
+        plain.cc(32, 42);
+        assert_eq!(plain.articulation(), "Vibsus", "no selector: CC32 inert");
     }
 
     #[test]

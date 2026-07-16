@@ -12,6 +12,10 @@ signal-sampler.workspace = true
 # Score side of the bridge: MusicXML → engine PartOutput, converted here into
 # the sampler's TrackDocument (score → annotated schedule → offline audio).
 keyflow-orchestra.workspace = true
+# Click/count-in engine for the timing-verification harness: the click is
+# rendered from THE SAME tempo map as the document render, so grid alignment
+# is audible (examples) and testable (tests). Light dep (no tts feature).
+session-guide.workspace = true
 
 [dev-dependencies]
 signal-sampler = { workspace = true, features = ["pipewire"] }

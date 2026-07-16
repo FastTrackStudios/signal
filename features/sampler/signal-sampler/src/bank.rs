@@ -651,6 +651,21 @@ impl SamplerBank {
         self.with_block(id, |b| b.note_on_line(line, note, velocity));
     }
 
+    /// [`note_on_instrument_line`](Self::note_on_instrument_line) carrying
+    /// the document scheduler's pre-roll lead (wall frames to the note's
+    /// grid tick) for per-zone arrival alignment — see
+    /// [`SampleEngine::note_on_line_lead`](crate::engine::SampleEngine::note_on_line_lead).
+    pub fn note_on_instrument_line_lead(
+        &mut self,
+        id: &str,
+        line: crate::engine::LineId,
+        note: u8,
+        velocity: u8,
+        lead: u64,
+    ) {
+        self.with_block(id, |b| b.note_on_line_lead(line, note, velocity, lead));
+    }
+
     /// Per-instrument note-off, addressed by id.
     pub fn note_off_instrument(&mut self, id: &str, note: u8) {
         self.with_block(id, |b| b.note_off(note));
@@ -748,6 +763,18 @@ impl SamplerBank {
     /// Recorded legato transition firings for an instrument.
     pub fn legato_fire_log(&self, id: &str) -> Vec<crate::engine::LegatoFireEvent> {
         self.read_block(id, |b| b.legato_fire_log().to_vec())
+            .unwrap_or_default()
+    }
+
+    /// Enable/disable an instrument's playback-emitted marker log.
+    pub fn set_emitted_marker_log_enabled(&mut self, id: &str, enabled: bool) {
+        self.with_block(id, |b| b.set_emitted_marker_log_enabled(enabled));
+    }
+
+    /// Markers emitted BY PLAYBACK for an instrument since the log was
+    /// enabled (see [`crate::engine::EmittedMarker`]).
+    pub fn emitted_markers(&self, id: &str) -> Vec<crate::engine::EmittedMarker> {
+        self.read_block(id, |b| b.emitted_markers().to_vec())
             .unwrap_or_default()
     }
 

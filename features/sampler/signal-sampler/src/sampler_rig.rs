@@ -824,6 +824,15 @@ impl SamplerRig {
         }
     }
 
+    /// Engine frames rendered so far by an instrument — the clock the fire
+    /// log's `frame` field is measured on (tests / offline analysis).
+    pub fn engine_frames_rendered(&self, id: &str) -> Option<u64> {
+        self.bank()
+            .lock()
+            .ok()
+            .and_then(|b| b.engine_frames_rendered(id))
+    }
+
     /// REACTIVE legato-path trigger count since an instrument's fire log was
     /// last enabled — see
     /// [`SampleEngine::reactive_legato_fires`](crate::engine::SampleEngine::reactive_legato_fires).
@@ -862,15 +871,7 @@ impl SamplerRig {
             .instrument_spec(id)
             .ok_or_else(|| eyre::eyre!("no instrument loaded under '{id}'"))?;
         let schedule = crate::document::annotate(doc, &spec, self.inner.sample_rate);
-        // Warm every pitch the document plays (current articulation + vib
-        // pair + releases + legato/portamento transitions) so the offline
-        // walk never cache-misses into silence.
-        let mut pitches: Vec<u8> = doc.notes.iter().map(|n| n.pitch).collect();
-        pitches.sort_unstable();
-        pitches.dedup();
-        for p in pitches {
-            let _ = bank.warm_note(id, p);
-        }
+        warm_document(&mut bank, id, doc, &spec);
         Ok(crate::document::render_schedule(
             &mut bank, id, &schedule, opts,
         ))
@@ -921,12 +922,7 @@ impl SamplerRig {
             .instrument_spec(id)
             .ok_or_else(|| eyre::eyre!("no instrument loaded under '{id}'"))?;
         let schedule = crate::document::annotate(doc, &spec, self.inner.sample_rate);
-        let mut pitches: Vec<u8> = doc.notes.iter().map(|n| n.pitch).collect();
-        pitches.sort_unstable();
-        pitches.dedup();
-        for p in pitches {
-            let _ = bank.warm_note(id, p);
-        }
+        warm_document(&mut bank, id, doc, &spec);
         Ok(crate::document::render_schedule_buses(
             &mut bank, id, &schedule, opts, &routing,
         ))
@@ -1773,6 +1769,54 @@ impl SamplerRig {
 
     pub fn output_peak_db(&self) -> f64 {
         linear_to_db(self.output_peak())
+    }
+}
+
+/// Warm every pitch a document plays under EVERY articulation state the
+/// document passes through — its CC58 keyswitch values and, when the spec
+/// configures a latched-CC selector (UACC), the selector's values too.
+///
+/// Warming resolves zones from the engine's CURRENT articulation, so a
+/// document that keyswitches (e.g. CC58 → staccato) would otherwise
+/// cache-miss the switched-to zones into silence during the offline walk
+/// (the walker never decodes on the render path). States are applied
+/// in REVERSE chronological order so the engine is left in the document's
+/// FIRST keyswitch state — the state any pre-keyswitch notes render under.
+fn warm_document(
+    bank: &mut crate::bank::SamplerBank,
+    id: &str,
+    doc: &crate::document::TrackDocument,
+    spec: &crate::spec::LibrarySpec,
+) {
+    let mut pitches: Vec<u8> = doc.notes.iter().map(|n| n.pitch).collect();
+    pitches.sort_unstable();
+    pitches.dedup();
+
+    let mut ks_ccs = vec![58u8];
+    if let Some(sel) = spec.latched_cc_selector() {
+        ks_ccs.push(sel.cc);
+    }
+    // Chronological keyswitch states, deduped by (cc, val).
+    let mut states: Vec<(u8, u8, u8)> = doc
+        .ccs
+        .iter()
+        .filter(|c| ks_ccs.contains(&c.cc))
+        .map(|c| (c.chan, c.cc, c.val))
+        .collect();
+    let mut seen = std::collections::BTreeSet::new();
+    states.retain(|s| seen.insert((s.1, s.2)));
+
+    if states.is_empty() {
+        for &p in &pitches {
+            let _ = bank.warm_note(id, p);
+        }
+        return;
+    }
+    for &(chan, cc, val) in states.iter().rev() {
+        bank.cc_instrument_line(id, crate::document::line_for_chan(chan), cc, val);
+        for &p in &pitches {
+            let _ = bank.warm_note(id, p);
+        }
     }
 }
 

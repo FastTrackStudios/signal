@@ -304,17 +304,13 @@ impl SampleEngine {
     /// crossfade — this is what makes the dynamics feel smooth across the whole
     /// 0–127 range rather than stepping between the recorded layers. A dB ramp
     /// from `CC1_DYN_FLOOR_DB` at CC1=0 up to 0 dB at CC1=127.
-    pub(crate) fn cc1_expression(cc1: u8) -> f32 {
-        // DATA-DERIVED flat-with-bottom-rolloff (see `CC1_KNEE`/`CC1_FLOOR_DB`).
-        // The per-layer CC1 tables handle the TIMBRE crossfade (equal-power, so
-        // total level ≈ flat); this only supplies the gentle bottom rolloff the
-        // reference render shows (−3 dB at CC1=20, 0 dB from CC1≈45 up).
-        let db = if cc1 >= CC1_KNEE {
-            0.0
-        } else {
-            CC1_FLOOR_DB * (CC1_KNEE - cc1) as f32 / CC1_KNEE as f32
-        };
-        10f32.powf(db / 20.0)
+    pub(crate) fn cc1_expression(&self, cc1: u8) -> f32 {
+        // DATA-DRIVEN flat-with-bottom-rolloff (`DynamicsSpec::cc1_expression`,
+        // defaults calibrated on the CSS reference render). The per-layer CC1
+        // tables handle the TIMBRE crossfade (equal-power, so total level ≈
+        // flat); this only supplies the gentle bottom rolloff (−3 dB at
+        // CC1=20, 0 dB from CC1≈45 up).
+        self.patch.spec.dynamics.cc1_expression_gain(cc1)
     }
 
     /// The CC1 layer slice for a given articulation (by its dynamics count).
@@ -453,9 +449,19 @@ impl SampleEngine {
     ///   prefer `NVLeg`; otherwise prefer `Leg`. Falls back to any match if
     ///   the preferred variant is absent.
     pub(crate) fn find_legato_artic_id(&self, retrigger: bool) -> Option<String> {
-        let want_sord = self.articulation.starts_with("Sord");
-        let artic_lower = self.articulation.to_lowercase();
-        let prefer_nv = artic_lower.contains("nv") || artic_lower.contains("nonvib");
+        let cur = self.patch.spec.articulation(&self.articulation);
+        let want_sord = cur
+            .map(|a| a.is_sordino())
+            .unwrap_or_else(|| self.articulation.starts_with("Sord"));
+        let prefer_vibrato = cur.map(|a| a.is_vibrato()).unwrap_or_else(|| {
+            let l = self.articulation.to_lowercase();
+            !(l.contains("nv") || l.contains("nonvib"))
+        });
+        let want_role = if retrigger {
+            crate::spec::LegatoRole::Retrigger
+        } else {
+            crate::spec::LegatoRole::Transition
+        };
 
         let candidates: Vec<&crate::spec::ArticulationSpec> = self
             .patch
@@ -466,29 +472,14 @@ impl SampleEngine {
             .filter(|a| {
                 a.instrument_filter.is_empty() || a.instrument_filter.contains(&self.section)
             })
-            .filter(|a| a.id.starts_with("Sord") == want_sord)
-            .filter(|a| {
-                let id_lower = a.id.to_lowercase();
-                if retrigger {
-                    id_lower.contains("zero")
-                } else {
-                    !id_lower.contains("zero")
-                }
-            })
+            .filter(|a| a.is_sordino() == want_sord)
+            .filter(|a| a.resolve_legato_role() == want_role)
             .collect();
 
-        // Prefer NVLeg when in non-vibrato mode, Leg otherwise.
-        let preferred = if prefer_nv {
-            candidates
-                .iter()
-                .find(|a| a.id.to_lowercase().contains("nv"))
-        } else {
-            candidates
-                .iter()
-                .find(|a| !a.id.to_lowercase().contains("nv"))
-        };
-
-        preferred
+        // Prefer the transition set on the current vibrato side.
+        candidates
+            .iter()
+            .find(|a| a.is_vibrato() == prefer_vibrato)
             .or_else(|| candidates.first())
             .map(|a| a.id.clone())
     }
@@ -499,18 +490,9 @@ impl SampleEngine {
     /// `"SordVibsus"` + `active=false` → `"Vibsus"` (if it exists in the spec)
     /// Returns the original ID unchanged if no counterpart is found.
     pub(crate) fn remap_sordino(&self, artic_id: &str, active: bool) -> String {
-        if active {
-            if !artic_id.starts_with("Sord") {
-                let sord_id = format!("Sord{artic_id}");
-                if self.patch.spec.articulation(&sord_id).is_some() {
-                    return sord_id;
-                }
-            }
-        } else if let Some(base) = artic_id.strip_prefix("Sord") {
-            if self.patch.spec.articulation(base).is_some() {
-                return base.to_string();
-            }
-        }
-        artic_id.to_string()
+        self.patch
+            .spec
+            .sordino_counterpart(artic_id, active)
+            .unwrap_or_else(|| artic_id.to_string())
     }
 }
