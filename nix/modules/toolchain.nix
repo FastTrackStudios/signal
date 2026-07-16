@@ -5,7 +5,12 @@
   perSystem = { pkgs, lib, config, ... }:
     let
       libPath = lib.makeLibraryPath (with pkgs;
-        [ fontconfig freetype openssl ]
+        # stdenv.cc.cc.lib — libstdc++ for the NAM C++ core (and any other
+        # dynamically-linked C++ dep). On NixOS hosts the system profile
+        # papered over its absence; on GitHub-hosted (Ubuntu) runners
+        # nix-built test binaries failed to load with
+        # "libstdc++.so.6: cannot open shared object file".
+        [ stdenv.cc.cc.lib fontconfig freetype openssl ]
         ++ lib.optionals pkgs.stdenv.isLinux [
           alsa-lib avahi libjack2 pipewire
           libGL vulkan-loader gtk3 glib
