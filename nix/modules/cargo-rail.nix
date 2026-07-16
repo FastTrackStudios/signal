@@ -1,48 +1,39 @@
-# cargo-rail — graph-aware workspace maintenance (unify / change /
-# release / split / plan). nixpkgs carries 0.7.0, which predates the
-# plan/change/release surface and mis-walks this workspace's graph, so
-# we package the upstream release binaries (static musl on Linux — no
-# patchelf) and pin by hash.
+# cargo-rail — graph-aware workspace maintenance (unify / plan / run /
+# change / release / split). Built from source (nixpkgs carries 0.7.0,
+# which predates the plan/change/release surface) with one patch:
 #
-# KNOWN LIMIT (v0.17.3, tested 2026-07-16): `plan`/`affected` computes a
-# wrong transitive-impact set on this tree — a leaf patchbay change
-# selects ~all 214 members (dependents AND dependencies mixed), so CI
-# change-selection stays on the hand-rolled path filter in
-# .forgejo/workflows/ci-heavy.yml until upstream fixes the walk.
-# `unify`, `change`, and `release` are unaffected.
+#   nix/patches/cargo-rail-resolve-graph.patch — build dependency edges
+#   from cargo's RESOLVE graph (package-ID-keyed) instead of manifest
+#   dep names. Upstream v0.17.3 keys nodes by bare name over ALL
+#   packages: crates.io's iroh dev-depends on a crate literally named
+#   `patchbay`, which aliased our workspace crate and welded the whole
+#   graph together (a leaf patchbay change "affected" 214 members).
+#   Verified fixed 2026-07-16: patchbay .rs change → exactly
+#   {patchbay, patchbay-ui, fts-patchbay}. Candidate for upstreaming.
+#
+# rust-version is relaxed 1.95 → 1.94: the crate compiles on the FTS
+# toolchain era; the floor was a policy bump, not a feature need.
 { ... }:
 {
-  perSystem = { pkgs, lib, system, ... }:
+  perSystem = { pkgs, lib, config, ... }:
     let
-      version = "0.17.3";
-      assets = {
-        x86_64-linux = {
-          target = "x86_64-unknown-linux-musl";
-          hash = "sha256-OVPS1ltIqJBvhQ26/F/2zBMdiLSAwb7RniJkYgkaIls=";
-        };
-        aarch64-linux = {
-          target = "aarch64-unknown-linux-musl";
-          hash = "sha256-cIuLaX36JF5SMDNOqjoWJxZyTbWP+A6CNFMyObiL/8Q=";
-        };
-        aarch64-darwin = {
-          target = "aarch64-apple-darwin";
-          hash = "sha256-kkAbnLtvj5mgzg0St4QK8dMtqwFJJc3+VfgUpucSRhs=";
-        };
-        # no upstream x86_64-darwin asset — fts.cargoRail is null there.
-      };
-      asset = assets.${system} or null;
-      cargo-rail = pkgs.stdenvNoCC.mkDerivation {
+      pkgsDx = config.fts.pkgsDx;
+      cargo-rail = pkgsDx.rustPlatform.buildRustPackage rec {
         pname = "cargo-rail";
-        inherit version;
-        src = pkgs.fetchurl {
-          url = "https://github.com/loadingalias/cargo-rail/releases/download/v${version}/cargo-rail-${asset.target}.tar.gz";
-          inherit (asset) hash;
+        version = "0.17.3";
+        src = pkgsDx.fetchFromGitHub {
+          owner = "loadingalias";
+          repo = "cargo-rail";
+          rev = "v${version}";
+          hash = "sha256-ROro3gyTGo38yzRi7c8UUsCZ1HqJVUD8pCYauh1H10s=";
         };
-        sourceRoot = ".";
-        dontBuild = true;
-        installPhase = ''
-          install -Dm755 cargo-rail $out/bin/cargo-rail
+        cargoHash = "sha256-OuSc0bmXmdh2ZeENz1Ecbw0ALTX+HTv7XMiMy3iFcko=";
+        patches = [ ../patches/cargo-rail-resolve-graph.patch ];
+        postPatch = ''
+          substituteInPlace Cargo.toml \
+            --replace-fail 'rust-version = "1.95.0"' 'rust-version = "1.94.0"'
         '';
+        doCheck = false;
         meta = {
           description = "Cargo-native monorepo control plane: unify, plan/run, change/release, split/sync";
           homepage = "https://github.com/loadingalias/cargo-rail";
@@ -52,6 +43,6 @@
       };
     in
     {
-      fts.cargoRail = if asset == null then null else cargo-rail;
+      fts.cargoRail = cargo-rail;
     };
 }
