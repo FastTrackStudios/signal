@@ -1049,6 +1049,15 @@ impl SampleEngine {
                 off.min(lead_sample_frames) as usize
             }
         };
+        // Deterministic heard-arrival prediction (see
+        // [`LegatoFireEvent::arrival`]): the in-sample arrival marker
+        // (`lead_in_ms`, measured per zone) minus the offset we skip off the
+        // front, in wall frames at this voice's playback rate. When both CC2
+        // sides spawn, the last (dominant-selection order) wins — the pair is
+        // recorded from the same performance, so the markers agree.
+        self.last_arrival_prediction = self.frames_rendered
+            + ((lead_sample_frames.saturating_sub(start_offset as u64)) as f64 / rate).round()
+                as u64;
         let ok = self.spawn_zone_voice_at(
             idx,
             to,

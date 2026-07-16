@@ -348,7 +348,9 @@ impl SampleEngine {
         sched_lead: Option<u64>,
         ioi_ms: f32,
     ) {
-        if self.legato_fire_log_enabled && self.legato_fire_log.len() < LEGATO_FIRE_LOG_CAP {
+        let log_idx = if self.legato_fire_log_enabled
+            && self.legato_fire_log.len() < LEGATO_FIRE_LOG_CAP
+        {
             self.legato_fire_log.push(LegatoFireEvent {
                 frame: self.frames_rendered,
                 line: self.cur_line as u8,
@@ -356,8 +358,18 @@ impl SampleEngine {
                 to_note,
                 velocity,
                 portamento,
+                // Patched below from `last_arrival_prediction` once the
+                // transition voice has spawned and the actually-chosen zone's
+                // arrival marker (lead_in) and start offset are known.
+                arrival: self.frames_rendered,
             });
-        }
+            Some(self.legato_fire_log.len() - 1)
+        } else {
+            None
+        };
+        // Default: arrival == fire frame (re-bow / legacy / non-zoned);
+        // `spawn_transition_voice` overwrites for measured transition zones.
+        self.last_arrival_prediction = self.frames_rendered;
         self.trace_push(TraceKind::Transition {
             from: from_note,
             to: to_note,
@@ -406,6 +418,9 @@ impl SampleEngine {
             self.legato_sustain = false;
             self.sustain_fade_in = None;
             self.line_mut().note = Some(to_note);
+            if let Some(i) = log_idx {
+                self.legato_fire_log[i].arrival = self.last_arrival_prediction;
+            }
             return;
         }
 
@@ -459,6 +474,9 @@ impl SampleEngine {
         // when the legato transition sample finishes. The Leg sample provides
         // the attack character; the Vibsus/Nonvib body takes over after it ends.
         self.trigger_sustain(to_note);
+        if let Some(i) = log_idx {
+            self.legato_fire_log[i].arrival = self.last_arrival_prediction;
+        }
     }
 
     /// Find the Port articulation matching the current sordino state.

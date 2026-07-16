@@ -238,6 +238,17 @@ pub struct LegatoFireEvent {
     pub to_note: u8,
     pub velocity: u8,
     pub portamento: bool,
+    /// Predicted HEARD-ARRIVAL frame of the destination pitch, derived from
+    /// the transition zone that actually spawned: the zone's measured
+    /// `lead_in_ms` (the in-sample arrival marker — time from sample start
+    /// until the pitch leaves the source; the loop region beyond it is the
+    /// settled destination) minus the applied sample-start offset, converted
+    /// to wall frames at the voice's playback rate, from `frame`. Equals
+    /// `frame` for same-pitch re-bows (Legzero has no lead-in), legacy
+    /// libraries without measured transitions, and non-zoned patches.
+    /// Deterministic: no audio analysis involved — this is the schedule/zone
+    /// metadata's own claim of when the note speaks.
+    pub arrival: u64,
 }
 
 /// Cap on the fire log so an enabled log can never grow unbounded on the
@@ -451,6 +462,11 @@ pub struct SampleEngine {
     legato_fire_log_enabled: bool,
     /// Recorded legato transition firings (see [`LegatoFireEvent`]).
     legato_fire_log: Vec<LegatoFireEvent>,
+    /// Predicted heard-arrival frame of the most recent transition spawn
+    /// (see [`LegatoFireEvent::arrival`]); written by
+    /// `spawn_transition_voice`, harvested by `fire_legato_with_lead` into
+    /// the fire log entry.
+    last_arrival_prediction: u64,
     /// When true, every voice spawn / note-off / transition is appended to
     /// `trace` — the structured render trace (see [`trace`]). Off by default.
     trace_enabled: bool,
@@ -675,6 +691,7 @@ impl SampleEngine {
             frames_rendered: 0,
             legato_fire_log_enabled: false,
             legato_fire_log: Vec::new(),
+            last_arrival_prediction: 0,
             trace_enabled: false,
             trace: RefCell::new(RenderTrace::default()),
             next_voice_id: Cell::new(0),

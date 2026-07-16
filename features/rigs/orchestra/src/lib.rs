@@ -9,6 +9,8 @@
 //! *tests* that verify the engine reproduces a real Cinematic Studio Strings
 //! render (`examples/`).
 
+pub mod timing;
+
 use std::path::Path;
 
 use keyflow_orchestra::{Config, PartOutput, ProfileKind, process_part, score};

@@ -220,6 +220,46 @@ pub enum DocEvent {
     },
 }
 
+/// Kind of a [`RenderMarker`] — one point on the render's marker timeline.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MarkerKind {
+    /// Trigger of a fresh attack: a phrase-start sustain fires ON its grid
+    /// tick; a short fires pre-rolled (`pre_delay_ms` early).
+    NoteStart,
+    /// A legato transition sample begins — the prefire trigger; everything
+    /// between this and [`MarkerKind::Arrival`] is the audible pre-bow.
+    TransitionStart,
+    /// Same-pitch re-bow trigger (Legzero re-trigger; no lead-in, so its
+    /// arrival coincides with the trigger).
+    Rebow,
+    /// The note is HEARD — the destination pitch arrives / the rhythmic
+    /// peak lands. By construction this is the note's grid tick: for
+    /// transitions it is the in-sample arrival marker's (`lead_in_ms`)
+    /// playback time; for shorts, `pre_delay_ms` past the pre-rolled
+    /// trigger; for fresh sustains, the trigger itself.
+    Arrival,
+    /// Note release (note-off dispatch / release-sample spawn point).
+    /// Re-bow SOURCES have none — the transition into the repeat replaces
+    /// their release.
+    Release,
+}
+
+/// One typed marker on a document render's timeline: the GUI-renderable
+/// waveform-marker set (note starts, transition starts, arrivals, re-bows,
+/// releases) and the substrate the deterministic timing tests assert on.
+/// Built during [`annotate`] (frames are absolute document frames) and
+/// carried through [`Schedule::markers`] → [`DocumentRenderResult::markers`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RenderMarker {
+    /// Absolute frame from the document epoch.
+    pub frame: u64,
+    /// Engine mono line ([`LineId`], truncated).
+    pub line: u8,
+    /// The note this marker belongs to.
+    pub note: u8,
+    pub kind: MarkerKind,
+}
+
 /// One scheduled event at an absolute frame from the document epoch.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ScheduledEvent {
@@ -252,6 +292,9 @@ pub struct Schedule {
     /// The document's tempo map (copied through) so the realtime scheduler
     /// can compare it against the host-reported tempo. Empty ⇒ 120 BPM.
     pub tempo: Vec<TempoPoint>,
+    /// Typed marker timeline (sorted by frame): note starts, transition
+    /// starts, arrivals, re-bows, releases — see [`RenderMarker`].
+    pub markers: Vec<RenderMarker>,
     /// Merged engine-activity spans `(first_trigger, last_ring_out)`,
     /// sorted: the union of every note's `[trigger_frame, note_off +
     /// RECONSTRUCT_TAIL]`. Between spans the engine is provably quiescent.
@@ -640,6 +683,8 @@ pub fn annotate(doc: &TrackDocument, spec: &LibrarySpec, sample_rate: u32) -> Sc
     // reconstruction map, merged below.
     let tail_frames = (RECONSTRUCT_TAIL_SEC * sample_rate as f64).round() as u64;
     let mut spans: Vec<(u64, u64)> = Vec::with_capacity(doc.notes.len());
+    // Marker timeline: ~2–3 markers per note (start/arrival [+ release]).
+    let mut markers: Vec<RenderMarker> = Vec::with_capacity(doc.notes.len() * 3);
 
     for (&line, list) in &by_line {
         // Previous trigger frame on this line — keeps the mono line's
@@ -791,6 +836,29 @@ pub fn annotate(doc: &TrackDocument, spec: &LibrarySpec, sample_rate: u32) -> Sc
                 _ => 3,
             };
             events.push((trigger_frame as u64, prio, line, kind));
+            // Marker timeline: the trigger, and the heard ARRIVAL on the
+            // note's grid tick (trigger + lead for transitions, trigger +
+            // pre_delay for pre-rolled shorts, the trigger itself for fresh
+            // sustains — all equal `start` by construction).
+            let start_marker = match kind {
+                DocEvent::LegatoPrefire { .. } if prev_pitch == Some(n.src.pitch) => {
+                    MarkerKind::Rebow
+                }
+                DocEvent::LegatoPrefire { .. } => MarkerKind::TransitionStart,
+                _ => MarkerKind::NoteStart,
+            };
+            markers.push(RenderMarker {
+                frame: trigger_frame as u64,
+                line,
+                note: n.src.pitch,
+                kind: start_marker,
+            });
+            markers.push(RenderMarker {
+                frame: start.max(trigger_frame) as u64,
+                line,
+                note: n.src.pitch,
+                kind: MarkerKind::Arrival,
+            });
             spans.push((
                 trigger_frame as u64,
                 end.max(trigger_frame + 1).max(0) as u64 + tail_frames,
@@ -816,6 +884,12 @@ pub fn annotate(doc: &TrackDocument, spec: &LibrarySpec, sample_rate: u32) -> Sc
                         rr,
                     },
                 ));
+                markers.push(RenderMarker {
+                    frame: end.max(trigger_frame + 1).max(0) as u64,
+                    line,
+                    note: n.src.pitch,
+                    kind: MarkerKind::Release,
+                });
             }
 
             // IOI clock: the next note on this line measures its Overlap-Delay
@@ -852,6 +926,10 @@ pub fn annotate(doc: &TrackDocument, spec: &LibrarySpec, sample_rate: u32) -> Sc
         short_count,
         max_prefire_lead,
         tempo: doc.tempo.clone(),
+        markers: {
+            markers.sort_by(|a, b| a.frame.cmp(&b.frame));
+            markers
+        },
         busy: merge_spans(spans),
     }
 }
@@ -1025,6 +1103,13 @@ pub struct DocumentRenderResult {
     /// Trigger events replayed (audio discarded) before `start_frame` to
     /// reconstruct the voices alive across it.
     pub reconstructed_events: u64,
+    /// Typed marker timeline of this render (absolute document frames,
+    /// `>= start_frame`; see [`RenderMarker`]) — note starts, transition
+    /// starts, arrivals, re-bows, releases, ready for a GUI waveform
+    /// overlay. Arrivals here are the SCHEDULE's grid-tick claims; the
+    /// engine's per-transition truth is [`Self::transitions`]'
+    /// [`crate::engine::LegatoFireEvent::arrival`].
+    pub markers: Vec<RenderMarker>,
 }
 
 /// Result of one offline document render split into articulation-class
@@ -1044,6 +1129,8 @@ pub struct DocumentBusRenderResult {
     /// Trigger events replayed (audio discarded) before `start_frame` to
     /// reconstruct the voices alive across it.
     pub reconstructed_events: u64,
+    /// Typed marker timeline (see [`DocumentRenderResult::markers`]).
+    pub markers: Vec<RenderMarker>,
 }
 
 /// Dispatch one scheduled event into the bank — the single translation from
@@ -1184,6 +1271,7 @@ fn walk_schedule(
         .legato_fire_log(id)
         .into_iter()
         .map(|mut e| {
+            e.arrival = (e.arrival - e.frame) + (e.frame - base_engine_frame) + recon_from;
             e.frame = (e.frame - base_engine_frame) + recon_from;
             e
         })
@@ -1227,6 +1315,12 @@ pub fn render_schedule(
         transitions,
         reactive_fallbacks,
         reconstructed_events,
+        markers: schedule
+            .markers
+            .iter()
+            .filter(|m| m.frame >= opts.start_frame)
+            .copied()
+            .collect(),
     }
 }
 
@@ -1287,6 +1381,12 @@ pub fn render_schedule_buses(
         transitions,
         reactive_fallbacks,
         reconstructed_events,
+        markers: schedule
+            .markers
+            .iter()
+            .filter(|m| m.frame >= opts.start_frame)
+            .copied()
+            .collect(),
     }
 }
 
