@@ -120,6 +120,9 @@ patchbay-install:
         > ~/.local/share/applications/patchbay.desktop
     update-desktop-database ~/.local/share/applications 2>/dev/null || true
     gtk-update-icon-cache ~/.local/share/icons/hicolor 2>/dev/null || true
+    # KDE keeps its own per-environment menu cache; rebuild it in the
+    # session's env (a dev-shell kbuildsycoca updates the wrong cache).
+    systemd-run --user --collect kbuildsycoca6 2>/dev/null || kbuildsycoca6 2>/dev/null || true
     echo "installed: Patchbay (run 'patchbay' or launch from the app menu)"
 
 # Remove everything `just install` put on this machine: stop + remove
