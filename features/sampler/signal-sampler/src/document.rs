@@ -27,11 +27,12 @@
 //! corpus in `tests/annotation_parity.rs`.
 
 use keyflow_annotate::{
-    CcTimeline, EPS, EdgeParams, LineNote, annotate_line, default_blocks_rebow, ks_is_marcato,
+    CcTimeline, EPS, EdgeParams, LineNote, annotate_line, annotate_line_with,
+    default_blocks_rebow, ks_is_marcato,
 };
 
 use crate::engine::{ArticClass, LineId};
-use crate::spec::{ArticulationKind, LibrarySpec};
+use crate::spec::{ArticulationKind, LatchedCcSelector, LibrarySpec};
 
 /// Stage-1 annotation of one document note — the shared model's type
 /// (`ks_val`, `legato_from`, `legato_to`, `re_bow_to`), index-aligned with
@@ -326,6 +327,32 @@ fn kind_for_ks(spec: &LibrarySpec, ks_val: Option<u8>) -> ArticulationKind {
         .unwrap_or(ArticulationKind::Sustain)
 }
 
+/// What the spec says a latched-CC selector code plays. Unmatched code /
+/// no `ks_val` ⇒ the engine's default long articulation, i.e. sustain-like.
+fn kind_for_selector(
+    spec: &LibrarySpec,
+    sel: &LatchedCcSelector,
+    ks_val: Option<u8>,
+) -> ArticulationKind {
+    ks_val
+        .and_then(|v| sel.artic_for(v))
+        .and_then(|id| spec.articulation(id))
+        .map(|a| a.kind.clone())
+        .unwrap_or(ArticulationKind::Sustain)
+}
+
+/// Whether a latched-CC selector code names a marcato-technique
+/// articulation (no sampled pre-delay → zero-lead prefire, mirroring the
+/// CC58 marcato-band rule).
+fn selector_is_marcato(spec: &LibrarySpec, sel: &LatchedCcSelector, val: u8) -> bool {
+    sel.artic_for(val)
+        .and_then(|id| spec.articulation(id))
+        .is_some_and(|a| {
+            let m = |s: &str| s.to_ascii_lowercase().contains("marcato");
+            m(&a.id) || m(&a.label)
+        })
+}
+
 /// Working copy of a note through annotation.
 struct ANote {
     src: DocNote,
@@ -347,11 +374,15 @@ struct ANote {
     /// races that prefire and can double the arrived voice (or spawn a spurious
     /// mid-phrase release). Only genuine phrase-ends keep their note-off.
     legato_to: bool,
+    /// Marcato technique at this note (no sampled pre-delay → zero-lead
+    /// prefire): CC58 marcato band, or a latched-CC selector code resolving
+    /// to a marcato articulation.
+    marcato: bool,
 }
 
 impl ANote {
     fn is_marcato(&self) -> bool {
-        self.ks_val.map(ks_is_marcato).unwrap_or(false)
+        self.marcato
     }
 
     fn is_sustain_like(&self) -> bool {
@@ -377,6 +408,22 @@ impl ANote {
 /// is `spec.legato_engine.is_some()` in [`annotate`]. The adapter-level
 /// parity with the mirror pass is asserted in `tests/annotation_parity.rs`.
 pub fn stage1_annotations(doc: &TrackDocument, legato_capable: bool) -> Vec<NoteAnnotation> {
+    stage1_annotations_impl(doc, legato_capable, None, None)
+}
+
+/// [`stage1_annotations`], selector-aware: when the spec configures a
+/// latched-CC articulation selector (`selector uacc`), the keyswitch
+/// timeline is the SELECTOR CC (not CC58), every selector value is an
+/// articulation code (no CC58 toggle-band filtering), and re-bow blocking
+/// derives from the RESOLVED articulation's kind (shorts don't connect)
+/// instead of the CC58 band classification. Without a selector this is
+/// byte-identical to [`stage1_annotations`] (parity-locked path).
+fn stage1_annotations_impl(
+    doc: &TrackDocument,
+    legato_capable: bool,
+    sel: Option<&LatchedCcSelector>,
+    spec: Option<&LibrarySpec>,
+) -> Vec<NoteAnnotation> {
     let params = EdgeParams {
         break_gap_qn: BREAK_GAP_QN,
         rebow_capable: legato_capable,
@@ -400,7 +447,7 @@ pub fn stage1_annotations(doc: &TrackDocument, legato_capable: bool) -> Vec<Note
         // Keyswitch state comes from the line's SOURCE channel (every note
         // in a line shares one source channel under both allocators).
         let ch = doc.notes[list[0]].chan;
-        let ks = cc_timeline(&doc.ccs, ch, 58);
+        let ks = cc_timeline(&doc.ccs, ch, sel.map(|s| s.cc).unwrap_or(58));
         let line: Vec<LineNote> = list
             .iter()
             .map(|&ni| LineNote {
@@ -410,7 +457,26 @@ pub fn stage1_annotations(doc: &TrackDocument, legato_capable: bool) -> Vec<Note
             })
             .collect();
         // No notation hints here — the document is MIDI-domain only.
-        let line_ann = annotate_line(&line, &ks, default_blocks_rebow, &params);
+        let line_ann = match (sel, spec) {
+            (Some(sel), Some(spec)) => annotate_line_with(
+                &line,
+                &ks,
+                // Shorts never connect, so a same-pitch abutment between
+                // them is a break, not a re-bow (kind-driven counterpart of
+                // the CC58 `ks_blocks_rebow` bands).
+                |_, val| {
+                    matches!(
+                        kind_for_selector(spec, sel, val),
+                        ArticulationKind::Short | ArticulationKind::OneShot
+                    )
+                },
+                // Every latched-CC selector value is an articulation code —
+                // the convention has no toggle/mode presses to filter.
+                |_| true,
+                &params,
+            ),
+            _ => annotate_line(&line, &ks, default_blocks_rebow, &params),
+        };
         for (w, &ni) in list.iter().enumerate() {
             ann[ni] = line_ann[w];
         }
@@ -477,10 +543,15 @@ pub fn annotate(doc: &TrackDocument, spec: &LibrarySpec, sample_rate: u32) -> Sc
     // ranking), so all inference below runs per assigned mono line.
     let (line_of, chan_blocks) = assign_lines(doc);
 
+    // Latched-CC articulation selector (spec `selector uacc`), if any: the
+    // articulation identity then rides the selector CC instead of CC58.
+    // r[impl signal.sampling.articulation.select]
+    let selector = spec.latched_cc_selector();
+
     // Stage 1 — articulation state + legato/re-bow edges (mirror.rs parity),
     // per line. Keyswitch state comes from the line's SOURCE channel (every
     // note in a line shares one source channel under both allocators).
-    let ann = stage1_annotations(doc, legato_capable);
+    let ann = stage1_annotations_impl(doc, legato_capable, selector.as_ref(), Some(spec));
 
     // Working notes grouped per LINE, sorted by source start.
     let mut notes: Vec<ANote> = doc
@@ -490,10 +561,19 @@ pub fn annotate(doc: &TrackDocument, spec: &LibrarySpec, sample_rate: u32) -> Sc
         .map(|(i, &src)| ANote {
             src,
             ks_val: ann[i].ks_val,
-            kind: kind_for_ks(spec, ann[i].ks_val),
+            kind: match &selector {
+                Some(sel) => kind_for_selector(spec, sel, ann[i].ks_val),
+                None => kind_for_ks(spec, ann[i].ks_val),
+            },
             legato_from: ann[i].legato_from,
             legato_to: ann[i].legato_to,
             legato_expressive: false,
+            marcato: match &selector {
+                Some(sel) => ann[i]
+                    .ks_val
+                    .is_some_and(|v| selector_is_marcato(spec, sel, v)),
+                None => ann[i].ks_val.map(ks_is_marcato).unwrap_or(false),
+            },
         })
         .collect();
     let mut by_line: std::collections::BTreeMap<u8, Vec<usize>> = std::collections::BTreeMap::new();
@@ -1330,6 +1410,83 @@ keyswitch {
             .collect();
         assert_eq!(note_ons.len(), 1);
         assert_eq!(note_ons[0].frame, 0);
+    }
+
+    // r[verify signal.sampling.articulation.select]
+    #[test]
+    fn latched_cc_selector_drives_offline_schedule() {
+        // A `selector uacc` pack: articulation identity rides CC32 codes in
+        // the document. The scheduler must (a) forward the CC32 events so
+        // the engine latches at playback, and (b) derive per-note timing
+        // (short pre-roll) from the CODE-selected articulation's kind.
+        let spec = LibrarySpec::from_styx(
+            r#"
+name UaccTest
+selector uacc
+articulations (
+    { id Sus,   label Sustain,  kind @Sustain, rr 1 }
+    { id Spicc, label Spiccato, kind @Short,   rr 1 }
+)
+short_note_timing { pre_delay_ms 60 }
+"#,
+        )
+        .expect("parse uacc test spec");
+        assert!(spec.latched_cc_selector().is_some());
+
+        let cc = |qn: f64, val: u8| DocCc {
+            qn,
+            chan: 0,
+            cc: 32,
+            val,
+        };
+        let doc = TrackDocument {
+            seed: 7,
+            // Long (1) → sustain note at qn 0; Very Short (42) → short note
+            // at qn 2 (120 BPM: qn 2.0 = 48000 frames at 48 kHz).
+            ccs: vec![cc(0.0, 1), cc(1.5, 42)],
+            notes: vec![note(0.0, 1.0, 60, 90), note(2.0, 2.5, 62, 90)],
+            ..Default::default()
+        };
+        let sched = annotate(&doc, &spec, SR);
+
+        // Both CC32 events survive into the schedule (the engine's latched
+        // selector applies them at playback).
+        let cc32: Vec<_> = sched
+            .events
+            .iter()
+            .filter_map(|e| match e.kind {
+                DocEvent::Cc { cc: 32, val } => Some(val),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(cc32, vec![1, 42]);
+
+        // The code-42 note is SHORT: pre-rolled by pre_delay_ms (60 ms =
+        // 2880 frames at 48 kHz) ahead of its qn-2.0 tick.
+        assert_eq!(sched.short_count, 1);
+        let mut ons: Vec<u64> = sched
+            .events
+            .iter()
+            .filter(|e| matches!(e.kind, DocEvent::NoteOn { .. }))
+            .map(|e| e.frame)
+            .collect();
+        ons.sort_unstable();
+        assert_eq!(ons, vec![0, 48_000 - 2_880]);
+
+        // Same document WITHOUT the selector: CC32 means nothing, both
+        // notes schedule as sustains on their ticks (defaults untouched).
+        let mut plain = spec.clone();
+        plain.selector = String::new();
+        let sched2 = annotate(&doc, &plain, SR);
+        assert_eq!(sched2.short_count, 0);
+        let mut ons2: Vec<u64> = sched2
+            .events
+            .iter()
+            .filter(|e| matches!(e.kind, DocEvent::NoteOn { .. }))
+            .map(|e| e.frame)
+            .collect();
+        ons2.sort_unstable();
+        assert_eq!(ons2, vec![0, 48_000]);
     }
 
     #[test]

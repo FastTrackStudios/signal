@@ -1801,6 +1801,17 @@ impl SampleEngine {
         if self.patch.is_zoned() {
             self.trigger_cc_zones(controller, old_value, value);
         }
+        // Latched-CC articulation selector (spec `selector uacc`): the
+        // selector's CC number is data-configured, so it's matched here
+        // rather than in the fixed-CC arms below. Engine-global, like CC58.
+        // r[impl signal.sampling.articulation.select]
+        if self
+            .latched_cc_selector
+            .as_ref()
+            .is_some_and(|sel| sel.cc == controller)
+        {
+            self.apply_latched_cc_selector(value);
+        }
         match controller {
             1 => {
                 self.cc1 = value;

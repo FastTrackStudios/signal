@@ -857,6 +857,28 @@ impl SampleEngine {
         self.articulation = self.remap_sordino(&id, self.con_sordino);
     }
 
+    /// Apply a latched-CC selector value (spec `selector uacc`): the CC's
+    /// value is a code in the resolved code → articulation map. A matching
+    /// code latches that articulation for all subsequent notes — identical
+    /// semantics to a keyswitch latch (StrictLive: a CC arriving before a
+    /// note-on selects the articulation the notes after it play). Unknown
+    /// codes keep the previous latch (published code tables leave gaps by
+    /// design). Honours Con Sordino remapping via `select_articulation_tag`.
+    // r[impl signal.sampling.articulation.select]
+    pub(crate) fn apply_latched_cc_selector(&mut self, value: u8) {
+        let Some(id) = self
+            .latched_cc_selector
+            .as_ref()
+            .and_then(|sel| sel.artic_for(value))
+            .map(str::to_string)
+        else {
+            return;
+        };
+        self.select_articulation_tag(&id);
+        // A direct selection cancels any pending CC58 velocity-split group.
+        self.pending_cc58_group = None;
+    }
+
     pub(crate) fn apply_cc58(&mut self) {
         let Some(ks) = self.patch.spec.keyswitch.as_ref() else {
             return;

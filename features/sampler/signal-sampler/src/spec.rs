@@ -63,6 +63,28 @@ pub struct LibrarySpec {
     /// Keyswitch and CC58 articulation switching.
     pub keyswitch: Option<KeyswitchSpec>,
 
+    /// Articulation-selector source — enables the **latched-CC selector**:
+    /// a single continuous controller whose latched VALUE selects the
+    /// articulation for all subsequent notes (like a keyswitch, but a CC).
+    ///
+    /// `"uacc"` is currently the only source and configures the selector
+    /// with the UACC defaults (Spitfire's Universal Articulation Controller
+    /// Channel convention): CC32 + the published standard code table
+    /// ([`UACC_STANDARD_TABLE`]). Empty = no selector (default; existing
+    /// packs are untouched).
+    ///
+    /// Per-articulation codes come from the articulation's explicit
+    /// `uacc <code>` field, falling back to the standard table matched by
+    /// id/label/aliases — so `selector uacc` alone gets the published
+    /// mapping for conventionally-named articulations.
+    // r[impl signal.sampling.articulation.select]
+    #[facet(default)]
+    pub selector: String,
+    /// CC number carrying the latched-CC selector value. 0 = the source's
+    /// default (UACC: CC32).
+    #[facet(default)]
+    pub selector_cc: u8,
+
     /// Live auto-divisi legato interval gate (semitones): in strict live
     /// mode a note continues an existing mono line as a legato transition
     /// only if it is within this interval of the line's sounding (or
@@ -200,6 +222,8 @@ impl LibrarySpec {
             performance: PerformanceSpec::default(),
             short_note_timing: None,
             keyswitch: None,
+            selector: String::new(),
+            selector_cc: 0,
             live_legato_interval_max: 2,
             live_chord_window_ms: 30.0,
             zones,
@@ -352,6 +376,60 @@ impl LibrarySpec {
         self.zones
             .iter()
             .any(|z| z.interval > 0 && z.lead_in_ms > 0.0)
+    }
+
+    /// The resolved latched-CC articulation selector, when the pack enables
+    /// one (`selector uacc`). `None` = no selector configured — the engine
+    /// behaves exactly as before (defaults leave existing packs untouched).
+    ///
+    /// Resolution per articulation, first match wins per code:
+    /// 1. explicit `uacc <code>` field (any articulation kind — the author
+    ///    knows best),
+    /// 2. the published standard table by id / label / aliases
+    ///    ([`standard_uacc_code`]) — skipped for `Legato` transition and
+    ///    `Release` articulations, which are engine-internal sample sets,
+    ///    not selectable playing styles.
+    // r[impl signal.sampling.articulation.select]
+    pub fn latched_cc_selector(&self) -> Option<LatchedCcSelector> {
+        if !self.selector.eq_ignore_ascii_case("uacc") {
+            return None;
+        }
+        let cc = if self.selector_cc == 0 {
+            UACC_DEFAULT_CC
+        } else {
+            self.selector_cc
+        };
+        let mut map: Vec<(u8, String)> = Vec::new();
+        let mut push = |code: u8, id: &str| {
+            if code > 0 && !map.iter().any(|(c, _)| *c == code) {
+                map.push((code, id.to_string()));
+            }
+        };
+        // Explicit codes first — they always beat table inference.
+        for a in &self.articulations {
+            if a.uacc > 0 {
+                push(a.uacc, &a.id);
+            }
+        }
+        // Standard-table defaults for the rest.
+        for a in &self.articulations {
+            if a.uacc > 0
+                || matches!(
+                    a.kind,
+                    ArticulationKind::Legato | ArticulationKind::Release
+                )
+            {
+                continue;
+            }
+            let code = standard_uacc_code(&a.id)
+                .or_else(|| standard_uacc_code(&a.label))
+                .or_else(|| a.aliases.iter().find_map(|al| standard_uacc_code(al)));
+            if let Some(code) = code {
+                push(code, &a.id);
+            }
+        }
+        map.sort_by_key(|(c, _)| *c);
+        Some(LatchedCcSelector { cc, map })
     }
 
     /// Materialize a [`TagSet`] from the flat `tags` vector.
@@ -1074,6 +1152,13 @@ pub struct ArticulationSpec {
     #[facet(default)]
     pub aliases: Vec<String>,
 
+    /// UACC code — the latched-CC selector value (see `LibrarySpec.selector`)
+    /// that selects this articulation. 0 = unset → resolved from the
+    /// published standard table ([`UACC_STANDARD_TABLE`]) by matching
+    /// id/label/aliases. An explicit code always wins over the table.
+    #[facet(default)]
+    pub uacc: u8,
+
     /// Short-note velocity-layer boundaries (CSS KSP `%g1qri`, the thresholds
     /// AFTER the implicit floor of 1). A note's velocity picks the band it falls
     /// in — `[t0,t1,…]` gives bands `[1,t0) [t0,t1) …`, plus a top band above the
@@ -1503,6 +1588,110 @@ impl KeyswitchSpec {
     }
 }
 
+// ── Latched-CC articulation selector (UACC) ──────────────────────────────────
+
+/// Default controller for the `"uacc"` selector source: CC32, per Spitfire's
+/// Universal Articulation Controller Channel convention.
+pub const UACC_DEFAULT_CC: u8 = 32;
+
+/// The published UACC standard code table (core codes), as
+/// `(code, canonical name, match keywords)`.
+///
+/// Provenance: Spitfire's UACC v2 specification. Codes cross-checked against
+/// the Spitfire support articles ("Long = 1", "Staccato = 40",
+/// "26 = Legato - Muted", "52 = Short Marcato", "56 = Pizzicato",
+/// "40 Generic / 41 Alternative / 42 Very short (spicc)") and the
+/// Reaticulate factory banks for the Spitfire libraries (which encode the
+/// same table as `cc:32,<code>` outputs). This is DATA, not law: the full
+/// v2 table has more rows (FX, run/flurry families, 90+) — extend here as
+/// needed, and any pack can override per articulation with an explicit
+/// `uacc <code>` field. Do not renumber existing entries.
+///
+/// The keyword lists drive [`standard_uacc_code`]: an articulation whose
+/// normalized id/label/alias equals one of the keywords gets the code.
+pub const UACC_STANDARD_TABLE: &[(u8, &str, &[&str])] = &[
+    (1, "Long", &["long", "sustain", "sus", "vibsus", "arco"]),
+    (3, "Long Octave", &["longoctave"]),
+    (6, "Long Flutter", &["flutter", "fluttertongue"]),
+    (7, "Long Con Sordino", &["longconsord", "longmuted"]),
+    (8, "Long Flautando", &["flautando"]),
+    (9, "Long Marcato", &["longmarcato"]),
+    (10, "Long Harmonics", &["harmonics", "harmonic", "harm"]),
+    (11, "Long Tremolo", &["tremolo", "trem"]),
+    (12, "Long Tremolo Con Sordino", &["tremoloconsord", "tremolomuted"]),
+    (13, "Long Tremolo Sul Pont", &["tremolosulpont"]),
+    (17, "Long Sul Tasto", &["sultasto"]),
+    (18, "Long Sul Pont", &["sulpont"]),
+    (20, "Legato", &["legato", "leg"]),
+    (26, "Legato Con Sordino", &["legatoconsord", "legatomuted"]),
+    (31, "Legato Portamento", &["portamento", "port"]),
+    (32, "Legato Fast", &["legatofast"]),
+    (33, "Legato Runs", &["legatoruns", "runs"]),
+    (40, "Short", &["staccato", "stac", "short"]),
+    (41, "Short Alternative", &["staccatissimo", "staccatiss"]),
+    (42, "Very Short", &["spiccato", "spicc"]),
+    (47, "Short Con Sordino", &["shortconsord", "staccatoconsord", "shortmuted"]),
+    (48, "Short Brushed", &["spiccatofeathered", "feathered", "brushed"]),
+    (52, "Short Marcato", &["marcato", "marc"]),
+    (54, "Short Sforzando", &["sforzando", "sfz"]),
+    (55, "Short Bells Up", &["bellsup"]),
+    (56, "Pizzicato", &["pizzicato", "pizz"]),
+    (57, "Bartok Pizzicato", &["bartokpizz", "bartokpizzicato", "snappizzicato", "snappizz"]),
+    (58, "Col Legno", &["collegno", "clegno"]),
+    (70, "Trill (Minor 2nd)", &["trillminor2nd", "trillm2", "htrills", "halftonetrill", "trill"]),
+    (71, "Trill (Major 2nd)", &["trillmajor2nd", "trillmaj2", "wtrills", "wholetonetrill"]),
+    (72, "Trill (Minor 3rd)", &["trillminor3rd", "trillm3"]),
+    (73, "Trill (Major 3rd)", &["trillmajor3rd", "trillmaj3"]),
+    (74, "Trill (Perfect 4th)", &["trillperfect4th", "trillp4"]),
+    (81, "Tremolo Measured 150", &["tremolomeasured", "meastrem", "measuredtremolo"]),
+    (90, "FX", &["fx"]),
+];
+
+/// Normalize an articulation name for standard-table matching: lowercase,
+/// alphanumerics only (`"Bartok Pizz."` → `"bartokpizz"`).
+fn normalize_artic_name(s: &str) -> String {
+    s.chars()
+        .filter(|c| c.is_ascii_alphanumeric())
+        .collect::<String>()
+        .to_ascii_lowercase()
+}
+
+/// The standard UACC code for a conventionally-named articulation, matching
+/// the normalized name against [`UACC_STANDARD_TABLE`] keywords. `None` =
+/// not a standard name (the pack must author `uacc <code>` explicitly).
+pub fn standard_uacc_code(name: &str) -> Option<u8> {
+    let n = normalize_artic_name(name);
+    if n.is_empty() {
+        return None;
+    }
+    UACC_STANDARD_TABLE
+        .iter()
+        .find(|(_, _, keys)| keys.contains(&n.as_str()))
+        .map(|&(code, _, _)| code)
+}
+
+/// A resolved latched-CC articulation selector: the controller number and
+/// the code → articulation-id map, ready for the engine (which treats it as
+/// a pure mechanism — no convention names in engine code).
+#[derive(Debug, Clone, PartialEq)]
+pub struct LatchedCcSelector {
+    /// Controller number carrying the selector value.
+    pub cc: u8,
+    /// `(code, articulation id)` — sorted by code, unique codes.
+    pub map: Vec<(u8, String)>,
+}
+
+impl LatchedCcSelector {
+    /// The articulation id selected by CC `value`, if any. Unknown codes
+    /// select nothing (the previous latch stays).
+    pub fn artic_for(&self, value: u8) -> Option<&str> {
+        self.map
+            .iter()
+            .find(|(code, _)| *code == value)
+            .map(|(_, id)| id.as_str())
+    }
+}
+
 // ── Zones ────────────────────────────────────────────────────────────────────
 
 /// One sample placed at a specific (key range × velocity range × RR slot).
@@ -1807,6 +1996,77 @@ mod tests {
         assert_eq!(parse_range("0-5"), Some((0, 5)));
         assert_eq!(parse_range("76-80"), Some((76, 80)));
         assert_eq!(parse_range("bad"), None);
+    }
+
+    // r[verify signal.sampling.articulation.select]
+    #[test]
+    fn latched_cc_selector_uacc() {
+        // No selector configured (default) → None; existing packs untouched.
+        let bare = LibrarySpec::from_styx("name \"b\"\n").unwrap();
+        assert_eq!(bare.selector, "");
+        assert!(bare.latched_cc_selector().is_none());
+
+        // `selector uacc` alone: CC32 + the published standard table matched
+        // by id/label/aliases. Explicit `uacc <code>` overrides the table.
+        let spec = LibrarySpec::from_styx(
+            "name \"u\"\n\
+             selector uacc\n\
+             articulations (\n\
+               {id Vibsus, label Sustain, kind @Sustain}\n\
+               {id Spiccato, label Spiccato, kind @Short}\n\
+               {id Stac, label Staccato, kind @Short}\n\
+               {id Shorts2, label \"Alt Short\", kind @Short, uacc 41}\n\
+               {id Pizzicato, label Pizzicato, kind @Short}\n\
+               {id Clegno, label \"Col Legno\", kind @Short}\n\
+               {id Tremolo, label Tremolo, kind @Sustain}\n\
+               {id Harm, label Harmonics, kind @Sustain}\n\
+               {id HTrills, label \"Half-Tone Trills\", kind @Trill}\n\
+               {id Weird, label \"House Special\", kind @Special}\n\
+               {id Leg, label Legato, kind @Legato}\n\
+               {id Rel, label Release, kind @Release}\n\
+             )\n",
+        )
+        .unwrap();
+        let sel = spec.latched_cc_selector().expect("selector configured");
+        assert_eq!(sel.cc, UACC_DEFAULT_CC);
+        assert_eq!(sel.artic_for(1), Some("Vibsus")); // Long ← label "Sustain"
+        assert_eq!(sel.artic_for(42), Some("Spiccato"));
+        assert_eq!(sel.artic_for(40), Some("Stac")); // ← label "Staccato"
+        assert_eq!(sel.artic_for(41), Some("Shorts2")); // explicit uacc 41
+        assert_eq!(sel.artic_for(56), Some("Pizzicato"));
+        assert_eq!(sel.artic_for(58), Some("Clegno"));
+        assert_eq!(sel.artic_for(11), Some("Tremolo"));
+        assert_eq!(sel.artic_for(10), Some("Harm"));
+        assert_eq!(sel.artic_for(70), Some("HTrills"));
+        // Non-standard names get no code; unknown codes select nothing.
+        assert_eq!(sel.artic_for(90), None);
+        assert_eq!(sel.artic_for(0), None);
+        // Legato transition / Release sample sets are never table-inferred.
+        assert!(!sel.map.iter().any(|(_, id)| id == "Leg" || id == "Rel"));
+
+        // Explicit codes beat table inference even when names collide, and
+        // `selector_cc` moves the selector off CC32.
+        let spec2 = LibrarySpec::from_styx(
+            "name \"u2\"\n\
+             selector uacc\n\
+             selector_cc 33\n\
+             articulations (\n\
+               {id A, label Staccato, kind @Short, uacc 42}\n\
+               {id B, label Spiccato, kind @Short}\n\
+             )\n",
+        )
+        .unwrap();
+        let sel2 = spec2.latched_cc_selector().unwrap();
+        assert_eq!(sel2.cc, 33);
+        assert_eq!(sel2.artic_for(42), Some("A")); // explicit beats B's table match
+        assert_eq!(sel2.artic_for(40), None); // A's table match is skipped (has explicit)
+
+        // The standard table itself: canonical names resolve, garbage doesn't.
+        assert_eq!(standard_uacc_code("Legato"), Some(20));
+        assert_eq!(standard_uacc_code("Bartok Pizz."), Some(57));
+        assert_eq!(standard_uacc_code("sfz"), Some(54));
+        assert_eq!(standard_uacc_code("Marcato"), Some(52));
+        assert_eq!(standard_uacc_code("NotAThing"), None);
     }
 
     #[test]

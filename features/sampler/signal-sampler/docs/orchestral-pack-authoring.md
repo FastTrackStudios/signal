@@ -208,6 +208,36 @@ one programmatically (`pin_articulation`).
 `@legato-on/off`, `@legato-expressive/low`, `@sordino-on/off`, `@novib`.
 `+` combines a zone selection with mode switches.
 
+**Latched-CC selector (UACC).** For libraries that follow Spitfire's UACC
+convention — one latched CC whose *value* is a standardized articulation
+code — enable the selector at the top level of the spec:
+
+```styx
+selector    uacc      // latched-CC articulation selector, UACC defaults (CC32)
+selector_cc 32        // optional — omit for the UACC default CC32
+```
+
+`selector uacc` alone gives conventionally-named articulations the
+published standard codes (`Long/Sustain` 1, `Legato` 20, `Staccato` 40,
+`Spiccato` 42, `Pizzicato` 56, `Col Legno` 58, `Tremolo` 11, `Harmonics`
+10, trills 70+, … — the core of the Spitfire UACC v2 table, shipped as
+data in `spec::UACC_STANDARD_TABLE`). Any articulation can override or
+opt in explicitly with a per-articulation code, which always wins:
+
+```styx
+articulations (
+    { id Shorts2, label "Alt Staccato", kind @Short, uacc 41 }
+)
+```
+
+Mechanically it is a **latched CC**: a value on the selector CC before a
+note-on latches that articulation for all subsequent notes (exactly like
+a keyswitch latch) — live and in offline document renders (the scheduler
+forwards selector CC events and derives short pre-roll / legato prefire
+timing from the selected articulation's `kind`). Codes with no matching
+articulation leave the previous latch untouched. `keyswitch {}` and
+`selector` can coexist; omit both for a no-keyswitch library.
+
 ### 2.7 `short_note_timing {}`
 
 ```styx
@@ -234,6 +264,7 @@ library check in engine code:
 | `zones[].trigger_mode` | attack, `one-shot`, `release`, `pedal-down/up`, `cc`, `aftertouch` |
 | `zones[].playback_mode` | forward, `reverse`, `alternate` |
 | keyswitch `@`-tokens | `@legato-*`, `@sordino-*`, `@novib` |
+| `selector` | `uacc` (latched-CC selector, CC32 + published code table) |
 
 ## 4. Recipe: the next instrument
 

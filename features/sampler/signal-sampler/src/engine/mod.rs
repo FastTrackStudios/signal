@@ -356,6 +356,13 @@ pub struct SampleEngine {
     /// the velocity-sensitive keyswitch NOTES resolve (`try_keyswitch`), giving
     /// CC58 the same per-note-velocity behaviour as playing the KS note.
     pending_cc58_group: Option<usize>,
+    /// Latched-CC articulation selector, resolved once from the spec
+    /// (`selector uacc` → CC number + code → articulation-id map). The CC's
+    /// latched VALUE selects the articulation for subsequent notes, exactly
+    /// like a keyswitch latch. `None` = not configured (default) — behaviour
+    /// is bit-identical to before the selector existed.
+    // r[impl signal.sampling.articulation.select]
+    latched_cc_selector: Option<crate::spec::LatchedCcSelector>,
     /// Master output volume [0.0, 1.0] from CC11 (CSS "Volume"). 1.0 = full.
     cc11_volume: f32,
     /// Portamento glide volume [0.0, 1.0] from CC5 (CSS "Portamento Volume").
@@ -604,6 +611,10 @@ impl SampleEngine {
             })
             .unwrap_or_default();
 
+        // Resolve the latched-CC articulation selector once (control-path
+        // lookups stay allocation-free at runtime).
+        let latched_cc_selector = patch.spec.latched_cc_selector();
+
         Self {
             patch,
             cache,
@@ -630,6 +641,7 @@ impl SampleEngine {
             cc2: 0,
             cc58: 0,
             pending_cc58_group: None,
+            latched_cc_selector,
             cc11_volume: 1.0,
             cc5_porta_volume: 1.0,
             cc_values: [0; 128],
