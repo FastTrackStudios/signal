@@ -411,6 +411,42 @@
               webkitgtk_4_1 libsoup_3 xdotool
             ]
           );
+
+          # Env every dev/CI shell needs — build-script and bindgen
+          # paths, the wasm cross toolchain, runtime library paths.
+          # Shared by devShells.{default,ci,reaper-test}.
+          commonShellEnv = {
+            LIBCLANG_PATH = "${pkgs.llvmPackages.libclang.lib}/lib";
+            OPENSSL_DIR = "${pkgs.openssl.dev}";
+            OPENSSL_LIB_DIR = "${pkgs.openssl.out}/lib";
+            # Unwrapped clang: the nix cc-wrapper injects hardening flags
+            # (-fzero-call-used-regs) unsupported on wasm32 and leaks glibc
+            # includes past -nostdlibinc (breaks ring). Builtin headers come
+            # from the wrapper's resource-root instead.
+            CC_wasm32_unknown_unknown = "${pkgs.llvmPackages_18.clang-unwrapped}/bin/clang";
+            # bintools (the wrapper) only exposes unprefixed names (ar, ld…);
+            # llvm-ar lives in bintools-unwrapped. The wrapper path stood
+            # here before and only "worked" while a warm target/ kept ring's
+            # build script from re-running — cold CI builds hit it.
+            AR_wasm32_unknown_unknown = "${pkgs.llvmPackages_18.bintools-unwrapped}/bin/llvm-ar";
+            CFLAGS_wasm32_unknown_unknown = "-isystem ${pkgs.llvmPackages_18.clang}/resource-root/include";
+            RUST_SRC_PATH = "${rustToolchain}/lib/rustlib/src/rust/library";
+          }
+          // lib.optionalAttrs pkgs.stdenv.isLinux {
+            LD_LIBRARY_PATH = libPath;
+            # Chatterbox TTS: `ort` (load-dynamic) dlopens this exact .so at
+            # runtime. Missing/unset → synthesis fails and section cues fall
+            # back to the synth chime; the app still runs.
+            ORT_DYLIB_PATH = "${pkgs.onnxruntime}/lib/libonnxruntime.so";
+            XDG_DATA_DIRS = "${pkgs.gsettings-desktop-schemas}/share/gsettings-schemas/${pkgs.gsettings-desktop-schemas.name}:${pkgs.gtk3}/share/gsettings-schemas/${pkgs.gtk3.name}";
+            # WebKitGTK accelerated compositing fails on NixOS (GBM buffer
+            # error → white window). Force software rendering.
+            # See: https://github.com/NixOS/nixpkgs/issues/32580
+            WEBKIT_DISABLE_COMPOSITING_MODE = "1";
+          }
+          // lib.optionalAttrs pkgs.stdenv.isDarwin {
+            DYLD_LIBRARY_PATH = libPath;
+          };
         in {
           _module.args.pkgs = import inputs.nixpkgs {
             inherit system;
@@ -489,6 +525,13 @@
               # (tree-sitter, no API calls); the [mcp] extra lets `graphify serve`
               # expose the graph over MCP. uv tools shim into ~/.local/bin.
               export PATH="$HOME/.local/bin:$PATH"
+              # Dev-convenience installers (graphify, tracey) are for
+              # interactive shells ONLY. In CI they're dead weight — and
+              # worse: `cargo install tracey` compiled from source (or hung
+              # on flaky crates.io egress, stderr silenced) on EVERY job,
+              # stalling `nix develop -c true` for hours before the first
+              # cargo step. Forgejo/GitHub runners set CI=true.
+              if [ -z "''${CI:-}" ]; then
               GRAPHIFY_VERSION="0.9.15"
               if ! uv tool list 2>/dev/null | grep -q "graphifyy v$GRAPHIFY_VERSION"; then
                 echo "  Installing graphify $GRAPHIFY_VERSION..."
@@ -506,6 +549,7 @@
                 echo "  Installing tracey 1.3.0..."
                 cargo install tracey --locked --version "=1.3.0" 2>/dev/null || true
               fi
+              fi
 
               echo ""
               echo "  FastTrackStudio dev shell"
@@ -520,38 +564,52 @@
               echo ""
             '';
           }
-          // {
-            LIBCLANG_PATH = "${pkgs.llvmPackages.libclang.lib}/lib";
-            OPENSSL_DIR = "${pkgs.openssl.dev}";
-            OPENSSL_LIB_DIR = "${pkgs.openssl.out}/lib";
-            # Unwrapped clang: the nix cc-wrapper injects hardening flags
-            # (-fzero-call-used-regs) unsupported on wasm32 and leaks glibc
-            # includes past -nostdlibinc (breaks ring). Builtin headers come
-            # from the wrapper's resource-root instead.
-            CC_wasm32_unknown_unknown = "${pkgs.llvmPackages_18.clang-unwrapped}/bin/clang";
-            # bintools (the wrapper) only exposes unprefixed names (ar, ld…);
-            # llvm-ar lives in bintools-unwrapped. The wrapper path stood
-            # here before and only "worked" while a warm target/ kept ring's
-            # build script from re-running — cold CI builds hit it.
-            AR_wasm32_unknown_unknown = "${pkgs.llvmPackages_18.bintools-unwrapped}/bin/llvm-ar";
-            CFLAGS_wasm32_unknown_unknown = "-isystem ${pkgs.llvmPackages_18.clang}/resource-root/include";
-            RUST_SRC_PATH = "${rustToolchain}/lib/rustlib/src/rust/library";
+          // commonShellEnv);
+
+          # CI shell — the default shell minus every interactive
+          # convenience. No shellHook installers (the dx / graphify /
+          # tracey cargo-installs stalled CI jobs for HOURS compiling
+          # from source on cache misses), no dioxus-cli / tailwind /
+          # editor tooling (CI drives plain cargo), no .env sourcing.
+          # Toolchain + native headers + the env the build scripts
+          # need, nothing else. Workflows enter it via
+          # `nix develop .#ci`.
+          devShells.ci = pkgs.mkShell ({
+            packages = [ rustToolchain pkgs.cargo-nextest ]
+            ++ buildInputs
+            ++ [ pkgs.pkg-config pkgs.rustPlatform.bindgenHook ];
+
+            # Seeded cargo-home bins (dx for the web-bundle steps)
+            # resolve from PATH — never installed from here.
+            shellHook = ''
+              export PATH="$HOME/.cargo/bin:$PATH"
+            '';
           }
-          // lib.optionalAttrs pkgs.stdenv.isLinux {
-            LD_LIBRARY_PATH = libPath;
-            # Chatterbox TTS: `ort` (load-dynamic) dlopens this exact .so at
-            # runtime. Missing/unset → synthesis fails and section cues fall
-            # back to the synth chime; the app still runs.
-            ORT_DYLIB_PATH = "${pkgs.onnxruntime}/lib/libonnxruntime.so";
-            XDG_DATA_DIRS = "${pkgs.gsettings-desktop-schemas}/share/gsettings-schemas/${pkgs.gsettings-desktop-schemas.name}:${pkgs.gtk3}/share/gsettings-schemas/${pkgs.gtk3.name}";
-            # WebKitGTK accelerated compositing fails on NixOS (GBM buffer
-            # error → white window). Force software rendering.
-            # See: https://github.com/NixOS/nixpkgs/issues/32580
-            WEBKIT_DISABLE_COMPOSITING_MODE = "1";
+          // commonShellEnv);
+
+          # REAPER-integration shell — `.#ci` plus what the REAPER
+          # harness needs around the pinned binary the workflow
+          # resolves (jack routing + a virtual display). Workflows
+          # enter it via `nix develop .#reaper-test`.
+          devShells.reaper-test = pkgs.mkShell ({
+            packages = [ rustToolchain pkgs.cargo-nextest ]
+            ++ lib.optionals pkgs.stdenv.isLinux [
+              # pw-jack + jack tools — the suites route audio through
+              # PipeWire's JACK shim on the runner.
+              pkgs.pipewire.jack
+              pkgs.jack-example-tools
+              # Xvfb + xvfb-run — the REAPER harness needs a display.
+              pkgs.xorg.xorgserver
+              pkgs.xvfb-run
+            ]
+            ++ buildInputs
+            ++ [ pkgs.pkg-config pkgs.rustPlatform.bindgenHook ];
+
+            shellHook = ''
+              export PATH="$HOME/.cargo/bin:$PATH"
+            '';
           }
-          // lib.optionalAttrs pkgs.stdenv.isDarwin {
-            DYLD_LIBRARY_PATH = libPath;
-          });
+          // commonShellEnv);
         };
     };
 }

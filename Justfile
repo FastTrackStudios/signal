@@ -100,6 +100,31 @@ install: rig-install
     gtk-update-icon-cache ~/.local/share/icons/hicolor 2>/dev/null || true
     echo "installed: fasttrackstudio + fts in ~/.local/bin, launcher entry ready"
 
+# Install Patchbay (the PipeWire studio-routing app): release binary in
+# ~/.local/lib/fts, `patchbay` on PATH, launcher entry + icon.
+patchbay-install:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cargo build --release -p fts-patchbay
+    install -d ~/.local/lib/fts
+    install -m 755 target/release/fts-patchbay ~/.local/lib/fts/patchbay.new
+    mv -T ~/.local/lib/fts/patchbay.new ~/.local/lib/fts/patchbay
+    install -d ~/.local/bin
+    ln -sf ~/.local/lib/fts/patchbay ~/.local/bin/patchbay
+    install -d ~/.local/share/icons/hicolor/scalable/apps
+    install -m 644 apps/patchbay/assets/icon.svg \
+        ~/.local/share/icons/hicolor/scalable/apps/patchbay.svg
+    install -d ~/.local/share/applications
+    sed "s|@BIN@|$HOME/.local/lib/fts/patchbay|" \
+        apps/patchbay/assets/patchbay.desktop \
+        > ~/.local/share/applications/patchbay.desktop
+    update-desktop-database ~/.local/share/applications 2>/dev/null || true
+    gtk-update-icon-cache ~/.local/share/icons/hicolor 2>/dev/null || true
+    # KDE keeps its own per-environment menu cache; rebuild it in the
+    # session's env (a dev-shell kbuildsycoca updates the wrong cache).
+    systemd-run --user --collect kbuildsycoca6 2>/dev/null || kbuildsycoca6 2>/dev/null || true
+    echo "installed: Patchbay (run 'patchbay' or launch from the app menu)"
+
 # Remove everything `just install` put on this machine: stop + remove
 # the systemd unit, binaries, symlinks, launcher entry, and icon.
 # User data is untouched (~/.config/fts, ~/.config/signal — the rig
