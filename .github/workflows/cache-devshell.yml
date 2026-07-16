@@ -1,0 +1,44 @@
+# Seed fasttrackstudio.cachix.org with the CI devshell closure so
+# checks.yml jobs pull the toolchain (rust pin, dx trio, patched
+# cargo-rail, native deps) instead of rebuilding it on every fresh
+# hosted runner.
+#
+# Needs the CACHIX_AUTH_TOKEN repo/org secret (a cachix auth token with
+# write access to the fasttrackstudio cache). Without it the workflow
+# skips pushing and merely reports what would be cached.
+
+name: cache-devshell
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "flake.nix"
+      - "flake.lock"
+      - "nix/**"
+
+concurrency:
+  group: cache-devshell
+  cancel-in-progress: true
+
+jobs:
+  seed:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup
+          df -h / | tail -1
+      - uses: DeterminateSystems/nix-installer-action@v22
+      - uses: cachix/cachix-action@v17
+        with:
+          name: fasttrackstudio
+          authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
+      - name: Build CI devshell closure
+        run: |
+          nix build --accept-flake-config --no-link \
+            .#devShells.x86_64-linux.ci \
+            .#devShells.x86_64-linux.default

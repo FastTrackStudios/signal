@@ -1,0 +1,76 @@
+# Releases — cargo-rail's changesets-style flow, dispatch-driven.
+#
+# Day-to-day: PRs record release intent as change files (.changes/*.md,
+# `cargo rail change add <crate> --bump <level> -m "..."`). On release
+# day, dispatch this workflow:
+#
+#   mode=check    read-only release plan: bumps, causes, changelog
+#                 sections, publish order, skips. ALWAYS start here.
+#   mode=pr       open a release PR (bumps + changelogs + lockfile;
+#                 no tags, no publish). Review, merge, then...
+#   mode=finalize tag + push + GitHub release + publish in dependency
+#                 order, from updated main.
+#
+# Notes:
+#   - `--bump auto` precedence: change files > conventional commits >
+#     dependency updates. Crates with nothing release-worthy are
+#     skipped with the reason recorded.
+#   - Publishing to crates.io needs the CARGO_REGISTRY_TOKEN secret
+#     once we start publishing packages.
+#   - Full-history checkout is REQUIRED: --bump auto refuses shallow
+#     clones (missing tags mean wrong answers).
+
+name: release
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Release mode"
+        required: true
+        default: "check"
+        type: choice
+        options: [check, pr, finalize]
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+env:
+  NIX_DEV: nix develop --accept-flake-config .#ci -c
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: DeterminateSystems/nix-installer-action@v22
+      - name: Release (${{ github.event.inputs.mode }})
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: |
+          set -eu
+          git config user.name "fts-release-bot"
+          git config user.email "release@fasttrackstudio.app"
+          mode="${{ github.event.inputs.mode }}"
+          case "$mode" in
+            check)
+              ${NIX_DEV} cargo rail change status || true
+              ${NIX_DEV} cargo rail release run --all --bump auto --check
+              ;;
+            pr)
+              ${NIX_DEV} cargo rail release run --all --bump auto --pr --yes
+              ;;
+            finalize)
+              ${NIX_DEV} cargo rail release finalize --all --yes
+              ;;
+          esac

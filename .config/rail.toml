@@ -47,14 +47,14 @@ tag_prefix = "v"
 tag_format = "{crate}-{prefix}{version}"  # e.g. my-crate-v1.0.0 (with tag_prefix = "v")
 require_clean = true
 publish_delay = 5  # seconds between publishes
-create_github_release = false
+create_github_release = true  # canonical forge is GitHub (2026-07-16)
 sign_tags = false
 changelog_path = "CHANGELOG.md"
 changelog_relative_to = "crate"  # crate = per-crate, workspace = single file
 skip_changelog_for = []
 require_changelog_entries = false
 forge = "auto"  # Release creation provider: auto, github, gitlab
-push = false  # Push release commit and tags before public publishing
+push = true  # Push release commit and tags before public publishing (GitHub canonical)
 require_release_notes = true  # Require release notes for target version before apply
 release_notes_dir = "release-notes"  # Manual release notes override directory
 change_dir = ".changes"  # Pending release intent file directory
