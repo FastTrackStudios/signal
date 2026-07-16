@@ -489,6 +489,13 @@
               # (tree-sitter, no API calls); the [mcp] extra lets `graphify serve`
               # expose the graph over MCP. uv tools shim into ~/.local/bin.
               export PATH="$HOME/.local/bin:$PATH"
+              # Dev-convenience installers (graphify, tracey) are for
+              # interactive shells ONLY. In CI they're dead weight — and
+              # worse: `cargo install tracey` compiled from source (or hung
+              # on flaky crates.io egress, stderr silenced) on EVERY job,
+              # stalling `nix develop -c true` for hours before the first
+              # cargo step. Forgejo/GitHub runners set CI=true.
+              if [ -z "''${CI:-}" ]; then
               GRAPHIFY_VERSION="0.9.15"
               if ! uv tool list 2>/dev/null | grep -q "graphifyy v$GRAPHIFY_VERSION"; then
                 echo "  Installing graphify $GRAPHIFY_VERSION..."
@@ -505,6 +512,7 @@
               if [ "$TRACEY_VERSION" != "1.3.0" ]; then
                 echo "  Installing tracey 1.3.0..."
                 cargo install tracey --locked --version "=1.3.0" 2>/dev/null || true
+              fi
               fi
 
               echo ""
