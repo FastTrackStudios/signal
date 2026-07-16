@@ -319,6 +319,7 @@ impl PlayerPatch {
         patch.spec.legato_engine = cfg.legato_engine;
         patch.spec.short_note_timing = cfg.short_note_timing;
         patch.spec.keyswitch = cfg.keyswitch;
+        patch.spec.performance = cfg.performance;
         Ok(patch)
     }
 

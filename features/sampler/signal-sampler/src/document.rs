@@ -621,34 +621,47 @@ pub fn annotate(doc: &TrackDocument, spec: &LibrarySpec, sample_rate: u32) -> Sc
                 // line — interpolated across the KSP thresholds, NOT the
                 // velocity zone. Marcato and portamento (vel ≤ threshold) have
                 // no sampled pre-delay → fire on the tick.
-                let _ = (
-                    &expressive,
-                    &low_latency,
-                    &primary,
-                    LEGATO_DELAY_FALLBACK_MS,
-                );
                 let lead_ms = if n.is_marcato() || (porta_vel_max > 0 && vel <= porta_vel_max) {
                     0
                 } else {
                     let ioi_frames = prev_start.map(|p| (start - p).max(0)).unwrap_or(0);
                     let ioi_ms = crate::engine::frames_to_ms(ioi_frames as u64, sample_rate);
-                    // CSS `$1fvjk`: the transition sample starts `lt_start_offset_ms`
+                    // The spec's velocity-zone delay for the mode this note
+                    // resolved (Expressive / Low-Latency / flat) — the
+                    // library's own trigger→arrival latency ceiling.
+                    let mode_delay_ms = if n.legato_expressive {
+                        expressive.as_ref()
+                    } else {
+                        low_latency.as_ref()
+                    }
+                    .or(primary.as_ref())
+                    .and_then(|m| m.delay_for_velocity(vel))
+                    .unwrap_or(LEGATO_DELAY_FALLBACK_MS);
+                    // CSS `$1fvjk`: the transition sample starts `start_offset_ms`
                     // in (IOI-interpolated 177 → 117 ms). To land the destination
                     // pitch on the tick with that offset applied, prefire by the
                     // AUDIBLE pre-bow that still plays before the arrival =
-                    // (per-move measured arrival − $1fvjk). Fast lines → ~0 ms (fire
-                    // on the tick); slow lines → ~60 ms of bow-change lead-in. The
-                    // engine's `start_offset = arrival − lead·rate` then resolves to
-                    // exactly $1fvjk (see `spawn_transition_voice`). Libraries
-                    // without measured transitions keep the legacy Overlap-Delay
-                    // curve (`ioi_legato_delay_ms`).
+                    // (per-move measured arrival − $1fvjk) — CAPPED at the
+                    // mode's velocity-zone delay: the measured lead-ins spread
+                    // wide (median ~330 ms, outliers > 1 s), and an uncapped
+                    // lead pulls the whole handoff (previous-voice retire +
+                    // destination sustain) that far early, collapsing the
+                    // phrase. The cap is the library's own advertised
+                    // latency; the engine's `start_offset = arrival − lead·rate`
+                    // still lands the arrival exactly ON the tick (it just
+                    // skips deeper into the swell). Libraries without measured
+                    // transitions keep the Overlap-Delay curve
+                    // (`LegatoEngineSpec::overlap_delay_ms`).
+                    // r[impl signal.soundsource.legato.offline]
                     match prev_pitch.and_then(|from| spec.legato_lead_ms(from, n.src.pitch)) {
-                        Some(arrival_ms) => (arrival_ms as f32
-                            - crate::engine::lt_start_offset_ms(ioi_ms))
+                        Some(arrival_ms) => ((arrival_ms as f32
+                            - spec.legato_cfg().start_offset_ms(ioi_ms))
                         .max(0.0)
-                        .round() as u32,
+                        .round() as u32)
+                            .min(mode_delay_ms),
                         None => {
-                            crate::engine::ioi_legato_delay_ms(ioi_ms, vel, n.legato_expressive)
+                            spec.legato_cfg()
+                                .overlap_delay_ms(ioi_ms, vel, n.legato_expressive)
                         }
                     }
                 };
@@ -1373,6 +1386,222 @@ keyswitch {
         };
         let sched = annotate(&doc, &spec_with_legato(), SR);
         assert_eq!(sched.legato_count, 0);
+    }
+
+    /// The prefire lead for libraries WITHOUT measured transition zones
+    /// comes from the spec's Overlap-Delay IOI curves — soft+fast playing
+    /// pulls the default low-latency 77 ms anchor, expressive CC58 the 83 ms
+    /// anchor, and slow lines get zero. Pins the offline-lookahead pre-roll
+    /// to the data.
+    // r[impl signal.soundsource.legato.offline]
+    // r[impl signal.soundsource.mode.offline-lookahead]
+    #[test]
+    fn prefire_lead_follows_spec_overlap_delay_curves() {
+        let spec = spec_with_legato();
+        // Soft (vel 30) + fast: IOI = 0.16 QN @120 BPM = 80 ms.
+        // LL curve: 77 @75ms → 0 @100ms ⇒ 80 ms → 61.6 ≈ 62 ms.
+        let doc = TrackDocument {
+            seed: 1,
+            notes: vec![note(0.0, 0.18, 60, 30), note(0.16, 1.0, 62, 30)],
+            ..Default::default()
+        };
+        let sched = annotate(&doc, &spec, SR);
+        let tick = qn_to_frame(&doc.tempo, 0.16, SR) as u64;
+        let pf = sched
+            .events
+            .iter()
+            .find_map(|e| match e.kind {
+                DocEvent::LegatoPrefire { lead, .. } => Some((e.frame, lead)),
+                _ => None,
+            })
+            .expect("prefire");
+        assert_eq!(pf.1, ms_to_frames_i64(62, SR) as u32, "LL soft+fast lead");
+        assert_eq!(pf.0 + pf.1 as u64, tick, "arrival lands on the tick");
+
+        // Expressive keyswitch (CC58 8), IOI = 0.3 QN = 150 ms (the lead must
+        // fit inside the IOI — the schedule keeps mono trigger order): the
+        // expressive curve is flat 83 ms below its 200 ms threshold.
+        let doc_ex = TrackDocument {
+            seed: 1,
+            notes: vec![note(0.0, 0.32, 60, 30), note(0.3, 1.0, 62, 30)],
+            ccs: vec![DocCc {
+                qn: 0.0,
+                chan: 0,
+                cc: 58,
+                val: 8,
+            }],
+            ..Default::default()
+        };
+        let mut spec_ex = spec.clone();
+        spec_ex
+            .legato_engine
+            .as_mut()
+            .unwrap()
+            .expressive
+            .as_mut()
+            .unwrap()
+            .enabled_cc58_range = Some("6-10".into());
+        let sched_ex = annotate(&doc_ex, &spec_ex, SR);
+        let pf_ex = sched_ex
+            .events
+            .iter()
+            .find_map(|e| match e.kind {
+                DocEvent::LegatoPrefire { lead, .. } => Some(lead),
+                _ => None,
+            })
+            .expect("prefire");
+        assert_eq!(pf_ex, ms_to_frames_i64(83, SR) as u32, "EX soft lead");
+
+        // Slow line (1 QN = 500 ms IOI) → zero lead, fire on the tick.
+        let doc_slow = TrackDocument {
+            seed: 1,
+            notes: vec![note(0.0, 1.05, 60, 30), note(1.0, 2.0, 62, 30)],
+            ..Default::default()
+        };
+        let sched_slow = annotate(&doc_slow, &spec, SR);
+        let pf_slow = sched_slow
+            .events
+            .iter()
+            .find_map(|e| match e.kind {
+                DocEvent::LegatoPrefire { lead, .. } => Some(lead),
+                _ => None,
+            })
+            .expect("prefire");
+        assert_eq!(pf_slow, 0, "slow line has no overlap delay");
+    }
+
+    /// A pack can author its own Overlap-Delay curves — the schedule follows
+    /// the authored numbers, not compiled-in constants.
+    // r[impl signal.soundsource.declarative]
+    #[test]
+    fn custom_overlap_delay_curve_is_honored() {
+        let mut spec = spec_with_legato();
+        let flat = |ms: f32| crate::spec::IoiCurveSpec {
+            thresholds_ms: vec![10.0, 2000.0],
+            anchors_ms: vec![ms, ms],
+        };
+        spec.legato_engine.as_mut().unwrap().overlap_delay =
+            Some(crate::spec::OverlapDelaySpec {
+                low_latency: crate::spec::OverlapDelayCurveSpec {
+                    soft: flat(50.0),
+                    loud: flat(0.0),
+                },
+                expressive: crate::spec::OverlapDelayCurveSpec {
+                    soft: flat(90.0),
+                    loud: flat(0.0),
+                },
+            });
+        let doc = TrackDocument {
+            seed: 1,
+            notes: vec![note(0.0, 0.18, 60, 30), note(0.16, 1.0, 62, 30)],
+            ..Default::default()
+        };
+        let sched = annotate(&doc, &spec, SR);
+        let lead = sched
+            .events
+            .iter()
+            .find_map(|e| match e.kind {
+                DocEvent::LegatoPrefire { lead, .. } => Some(lead),
+                _ => None,
+            })
+            .expect("prefire");
+        assert_eq!(lead, ms_to_frames_i64(50, SR) as u32);
+    }
+
+    /// With MEASURED transition zones the prefire lead is the audible
+    /// pre-bow: measured arrival − the spec's start-offset curve at the
+    /// line's IOI — and an authored start-offset curve changes it.
+    // r[impl signal.soundsource.legato.offline]
+    #[test]
+    fn measured_lead_prefires_arrival_minus_start_offset() {
+        let mut spec = spec_with_legato();
+        // One measured up-transition C4→D4 with a 300 ms lead-in.
+        spec.zones.push(crate::spec::ZoneSpec {
+            direction: "up".into(),
+            interval: 2,
+            lead_in_ms: 300.0,
+            root_key: 60,
+            key_min: 60,
+            key_max: 60,
+            articulation: "Leg".into(),
+            ..crate::spec::ZoneSpec {
+                file: "leg_up_C4_2.wav".into(),
+                key_min: 0,
+                key_max: 0,
+                root_key: 0,
+                vel_min: 0,
+                vel_max: 127,
+                rr_index: 0,
+                rr_mode: String::new(),
+                gain_db: 0.0,
+                pan: 0.0,
+                tune_cents: 0.0,
+                sample_start: 0,
+                sample_end: 0,
+                loop_start: 0,
+                loop_end: 0,
+                loop_xfade: 0,
+                fade_in: 0,
+                release_start: 0,
+                playback_mode: String::new(),
+                trigger_mode: String::new(),
+                trigger_cc: 0,
+                trigger_value_min: 0,
+                trigger_value_max: 0,
+                mic: String::new(),
+                articulation: String::new(),
+                dynamic: String::new(),
+                direction: String::new(),
+                interval: 0,
+                lead_in_ms: 0.0,
+                group: String::new(),
+                group_polyphony: 0,
+                choke_group: String::new(),
+                off_by: vec![],
+                section: String::new(),
+                variant: String::new(),
+            }
+        });
+        // 1 QN apart @120 BPM → IOI 500 ms → default $1fvjk curve = 117 ms.
+        let doc = TrackDocument {
+            seed: 1,
+            notes: vec![note(0.0, 1.05, 60, 90), note(1.0, 2.0, 62, 90)],
+            ..Default::default()
+        };
+        let sched = annotate(&doc, &spec, SR);
+        let lead = sched
+            .events
+            .iter()
+            .find_map(|e| match e.kind {
+                DocEvent::LegatoPrefire { lead, .. } => Some(lead),
+                _ => None,
+            })
+            .expect("prefire");
+        // arrival(300) − start-offset(117 at 500 ms IOI) = 183 ms, CAPPED at
+        // the mode's velocity-zone delay (vel 90 → 100 ms in the test spec):
+        // the pack's own latency ceiling bounds the pre-roll.
+        assert_eq!(
+            lead,
+            ms_to_frames_i64(100, SR) as u32,
+            "lead = min(arrival − start-offset, mode delay)"
+        );
+
+        // Author a deeper start offset — the audible pre-bow shrinks below
+        // the mode-delay cap and the authored curve wins.
+        spec.legato_engine.as_mut().unwrap().start_offset = Some(crate::spec::IoiCurveSpec {
+            thresholds_ms: vec![10.0, 2000.0],
+            anchors_ms: vec![250.0, 250.0],
+        });
+        let sched2 = annotate(&doc, &spec, SR);
+        let lead2 = sched2
+            .events
+            .iter()
+            .find_map(|e| match e.kind {
+                DocEvent::LegatoPrefire { lead, .. } => Some(lead),
+                _ => None,
+            })
+            .expect("prefire");
+        assert_eq!(lead2, ms_to_frames_i64(50, SR) as u32);
     }
 
     #[test]

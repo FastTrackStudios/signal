@@ -123,3 +123,30 @@ All in `crates/signal-sampler/src/engine/`:
 
 Workflow: `gen_css_test_full` → user renders through CSS → `render_css_test` for
 our version → `spectral_ab` / targeted sox measurements to compare and tune.
+
+## 2026-07-15 — legato defined by the soundpack (issue 020bc328)
+
+All decoded CSS policy moved out of engine constants into the soundpack
+spec (`features/rigs/orchestra/specs/cinematic-strings.styx`, now in-repo):
+performance{} (makeup, master tune, note-off fades, attack/release),
+legato_engine{} (velocity splits, Overlap-Delay + $1fvjk start-offset IOI
+curves, retire crossfades, $3tsb0 sustain trim), dynamics.cc1_expression,
+per-articulation amp_env (ENV_FLEX) and transition-selection tags
+(legato_role / vibrato_pair / sordino_pair). Engine keeps mechanism only;
+defaults equal the old constants (refactor verified ≤1 int16 LSB on the
+full A/B render; scorecard digit-identical: timbre 0.963, mean|level|
+3.4 dB, short-onset 23 ms, MATCH 38/62 onset-gated).
+
+Fixes found by the new tests: (1) inferred Tremolo↔Nonvib CC2 mispairing —
+now explicitly disabled via `vibrato_pair ""`; (2) offline prefire leads
+were the raw measured arrival − $1fvjk, so outlier lead-in measurements
+(>1 s on some down intervals) pulled the whole legato handoff a second
+early — now capped at the mode's velocity-zone delay (arrival still lands
+ON the tick via start_offset).
+
+New regression tests: schedule-level (document.rs — spec curves drive the
+prefire leads; authored curves honored) and audio-level with the real
+library (orchestra tests/legato_lookahead.rs — offline pre-rolls + zero
+reactive fallbacks + join continuity; StrictLive commits reactively within
+the Overlap-Delay bound). Authoring guide:
+`features/sampler/signal-sampler/docs/orchestral-pack-authoring.md`.

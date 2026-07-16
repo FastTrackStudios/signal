@@ -421,7 +421,8 @@ impl SampleEngine {
                 if self.play_mode != PlayMode::Lookahead {
                     if let Some(&prev) = self.line().order.last() {
                         // Fall back at a medium transition speed.
-                        self.start_legato_transition(note, prev, LEGATO_FALLBACK_VELOCITY);
+                        let fallback_vel = self.patch.spec.legato_cfg().fallback_velocity;
+                        self.start_legato_transition(note, prev, fallback_vel);
                         return;
                     }
                 }
@@ -441,7 +442,11 @@ impl SampleEngine {
             // Held-sustain note-off (spec §6): immediate note_off + overlapping
             // fade (~`$tukcw=200` ms). This line's voices only, so a unison
             // note held by another divisi line keeps sounding.
-            let sus_off = ms_to_frames(SUSTAIN_NOTEOFF_MS, self.sample_rate).max(release_frames);
+            let sus_off = ms_to_frames(
+                self.patch.spec.performance.sustain_noteoff_ms,
+                self.sample_rate,
+            )
+            .max(release_frames);
             self.voices.note_off_line(cur_line, note, Some(sus_off));
             return;
         }
@@ -551,22 +556,11 @@ impl SampleEngine {
     /// [`update_sustain_gains`](Self::update_sustain_gains)), so a held note
     /// swells the full dynamic range. `self.articulation` is the non-vibrato
     /// base; the vibrato pair is found and blended in by CC2.
-    /// CSS master tune (`CSS_MASTER_TUNE_CENTS`), applied globally on top of the
-    /// per-note transpose — but ONLY for the CSS libraries it was decoded from
-    /// (`tune=1.00521` is a Cinematic Studio property, not a generic default).
-    /// Other libraries stay at 0 so they are not detuned.
+    /// Library master tune (`PerformanceSpec::master_tune_cents`), applied
+    /// globally on top of the per-note transpose. 0 for libraries that don't
+    /// set it; CSS ships `tune=1.00521` ≈ +9.0 cents in its spec.
     pub(crate) fn master_tune_cents(&self) -> f64 {
-        if self
-            .patch
-            .spec
-            .name
-            .to_ascii_lowercase()
-            .contains("cinematic")
-        {
-            CSS_MASTER_TUNE_CENTS
-        } else {
-            0.0
-        }
+        f64::from(self.patch.spec.performance.master_tune_cents)
     }
 
     pub(crate) fn trigger_zoned_sustain(&mut self, note: u8) {
@@ -729,7 +723,7 @@ impl SampleEngine {
             .articulation(artic)
             .map(|a| a.dynamics.clone())
             .unwrap_or_default();
-        let expr = Self::cc1_expression(self.cc1);
+        let expr = self.cc1_expression(self.cc1);
         if dyn_labels.len() <= 1 {
             // Single (or no) declared dynamic — one zone, loudness from CC1.
             let label = dyn_labels.first().map(String::as_str).unwrap_or("");
@@ -852,7 +846,7 @@ impl SampleEngine {
         let delay_ms = if portamento {
             0
         } else {
-            ioi_legato_delay_ms(
+            self.patch.spec.legato_cfg().overlap_delay_ms(
                 frames_to_ms(ioi_frames, self.sample_rate),
                 velocity,
                 self.legato_expressive,
@@ -930,7 +924,7 @@ impl SampleEngine {
         // `$3tsb0`). It plays at recorded level × CC1 — the same net level as the
         // legato SUSTAIN it overlays (which nets 0 dB: +6 OUTPUT_MAKEUP − 6
         // $3tsb0). `$3tsb0` lands on the sustain voice via `legato_sustain`.
-        let expr = Self::cc1_expression(self.cc1);
+        let expr = self.cc1_expression(self.cc1);
         let mut spawned = false;
         for (id, scale) in [(nv_id, nv_scale), (vib_id, vb_scale)] {
             let Some(id) = id else { continue };
@@ -948,22 +942,30 @@ impl SampleEngine {
     /// crossfade — (`NVLeg`, `Leg`), or the `*zero` re-trigger pair when
     /// `retrigger`. Either side may be absent.
     pub(crate) fn legato_pair_ids(&self, retrigger: bool) -> (Option<String>, Option<String>) {
-        let want_sord = self.articulation.starts_with("Sord");
+        let want_sord = self
+            .patch
+            .spec
+            .articulation(&self.articulation)
+            .map(|a| a.is_sordino())
+            .unwrap_or_else(|| self.articulation.starts_with("Sord"));
+        let want_role = if retrigger {
+            crate::spec::LegatoRole::Retrigger
+        } else {
+            crate::spec::LegatoRole::Transition
+        };
         let mut nv = None;
         let mut vib = None;
         for a in &self.patch.spec.articulations {
             if a.kind != ArticulationKind::Legato {
                 continue;
             }
-            if a.id.starts_with("Sord") != want_sord {
+            if a.is_sordino() != want_sord {
                 continue;
             }
-            let id_lower = a.id.to_lowercase();
-            if id_lower.contains("port") || id_lower.contains("zero") != retrigger {
+            if a.resolve_legato_role() != want_role {
                 continue;
             }
-            let is_nv = id_lower.contains("nv") || id_lower.contains("nonvib");
-            let slot = if is_nv { &mut nv } else { &mut vib };
+            let slot = if a.is_vibrato() { &mut vib } else { &mut nv };
             if slot.is_none() {
                 *slot = Some(a.id.clone());
             }
@@ -1042,8 +1044,8 @@ impl SampleEngine {
                 lead_sample_frames.saturating_sub(lead_in_sample) as usize
             }
             None => {
-                let off = ms_to_frames(lt_start_offset_ms(ioi_ms).round() as u32, self.sample_rate)
-                    as u64;
+                let off_ms = self.patch.spec.legato_cfg().start_offset_ms(ioi_ms);
+                let off = ms_to_frames(off_ms.round() as u32, self.sample_rate) as u64;
                 off.min(lead_sample_frames) as usize
             }
         };
@@ -1190,7 +1192,8 @@ impl SampleEngine {
         // decay — but these samples are normalised loud, so at unity (×makeup)
         // they spike louder than the note itself ("note-off noise"). Trim them.
         if let Some(idx) = self.find_layer_zone(&rel_id, "", &dynamic, note, rr) {
-            self.spawn_zone_voice(idx, note, VoiceKind::Release, RELEASE_GAIN, None, 0.0);
+            let release_gain = self.patch.spec.performance.release_gain;
+            self.spawn_zone_voice(idx, note, VoiceKind::Release, release_gain, None, 0.0);
         }
     }
 
@@ -1246,7 +1249,7 @@ impl SampleEngine {
         // No exact zone — use the nearest recorded pitch within range and let
         // spawn_zone_voice pitch-shift it (note - root_key semitones).
         nearest
-            .filter(|(d, _)| *d <= ZONE_PITCH_TOLERANCE)
+            .filter(|(d, _)| *d <= self.patch.spec.performance.zone_pitch_tolerance)
             .map(|(_, i)| i)
     }
 
@@ -1355,10 +1358,11 @@ impl SampleEngine {
         // it plays at recorded level scaled by CC1, same net level as the −6 dB
         // sustain it overlays. Shorts and release tails play the recording as-is.
         let makeup = if is_sustain_layer {
+            let base = db_to_gain(self.patch.spec.performance.sustain_makeup_db);
             if self.legato_sustain {
-                OUTPUT_MAKEUP * db_to_gain(CSS_LEGATO_MAKEUP_DB)
+                base * db_to_gain(self.patch.spec.legato_cfg().sustain_trim_db)
             } else {
-                OUTPUT_MAKEUP
+                base
             }
         } else {
             1.0
@@ -1371,7 +1375,13 @@ impl SampleEngine {
         // freeze at their hold level while held (indefinite sustain); shorts and
         // releases play their decoded decay one-shot.
         let flex_artic = self.patch.spec.zones[idx].articulation.clone();
-        let flex_env = flex_env_for(&flex_artic, &kind, is_sustain_layer, self.sample_rate);
+        let flex_env = amp_env_for(
+            &self.patch.spec,
+            &flex_artic,
+            &kind,
+            is_sustain_layer,
+            self.sample_rate,
+        );
 
         // CSS-style sustains ship no loop points but have a slow ~0.8s natural
         // attack pre-roll that CSS skips (Kontakt sample-start) for a fast attack.
@@ -1427,7 +1437,8 @@ impl SampleEngine {
             // Deep mid-sample entry (skipped-swell Low-Latency prefire): fade
             // in over a longer window, scaled to how far we skipped (capped),
             // so the steep bow-change we begin partway through eases in.
-            ms_to_frames(SKIP_DECLICK_MS, self.sample_rate).min(start_offset)
+            ms_to_frames(self.patch.spec.legato_cfg().skip_declick_ms, self.sample_rate)
+                .min(start_offset)
         } else if matches!(kind, VoiceKind::Legato | VoiceKind::Release) {
             ms_to_frames(ONSET_DECLICK_MS, self.sample_rate)
         } else {
@@ -1480,7 +1491,8 @@ impl SampleEngine {
             if let Some(flex) = flex_env.clone() {
                 voice = voice.with_flex_env(flex);
             }
-            let loop_xfade = ms_to_frames(LOOP_XFADE_MS, self.sample_rate) as usize;
+            let loop_xfade =
+                ms_to_frames(self.patch.spec.performance.loop_xfade_ms, self.sample_rate) as usize;
             // Effective loop window for this voice: (start, end, xfade). An
             // `end == 0` means the voice plays once to the end (no loop). This
             // is the single source of truth for both the voice and the trace.

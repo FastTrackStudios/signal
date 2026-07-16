@@ -1,0 +1,783 @@
+// Cinematic Strings — Library Specification
+//
+// Derived by inspecting extracted WAV filenames across all NKX archives.
+// Intended to drive signal-sampler: patch building, keymap layout,
+// legato engine, release triggering, and dynamic crossfade routing.
+//
+// Source archives: 6x "Mix mic_N.nkx" + 18x "Separate mics_N.nkx"
+
+name    "Cinematic Strings"
+version 1.7
+vendor  "Cinematic Studio"
+
+// ── Sections ──────────────────────────────────────────────────────────────────
+// Whole-tone grid every 2 semitones; sampler pitch-shifts ±1 semitone to fill.
+
+sections (
+    {
+        id          1v
+        label       "1st Violins"
+        note_grid   (G A B C# D# F)
+        lowest_note  G2
+        highest_note C#6
+    }
+    {
+        id          2v
+        label       "2nd Violins"
+        note_grid   (G A B C# D# F)
+        lowest_note  G2
+        highest_note C#6
+    }
+    {
+        id          Va
+        label       Violas
+        note_grid   (C D E F# G# A#)
+        lowest_note  C2
+        highest_note E4
+    }
+    {
+        id          Ce
+        label       Cellos
+        note_grid   (C D E F# G# A#)
+        lowest_note  C1
+        highest_note D#4
+    }
+    {
+        id          Ba
+        label       Basses
+        note_grid   (C D E F# G# A#)
+        lowest_note  C1   // A#1–F#3 actual; C1 used as lower bound
+        highest_note F#3
+    }
+)
+
+// ── Microphone Positions ───────────────────────────────────────────────────────
+// Mix    = pre-blended stereo bus (6 NKX archives, one section per archive)
+// Others = individual channels from 18 separate-mic archives
+
+// `default true` on Mix — the pre-blended stereo bus is the only mic that
+// loads on open. Main/Room/Spot1/Spot2 stay unloaded until explicitly
+// requested (CSS uses ~25 GB per mic at 24-bit/44.1k; loading all 5 by
+// default would blow RAM). Same convention applies to MM2 drum kits etc.
+mics (
+    {id Mix,   label Mix,      kind blended,  default true}
+    {id Main,  label Main,     kind separate}
+    {id Room,  label Room,     kind separate}
+    {id Spot1, label "Spot 1", kind separate}
+    {id Spot2, label "Spot 2", kind separate}
+)
+
+
+// ── Performance model ─────────────────────────────────────────────────────────
+// Library-wide playback-policy numbers, decoded from the shipped instrument
+// (KSP persistent values / GroupList). The engine reads ALL of these from
+// here — nothing below is hardcoded in signal-sampler.
+
+performance {
+    sustain_noteoff_ms   400   // $tukcw — held-sustain key-up overlap fade
+    sustain_makeup_db    6.0   // looped-plateau → Kontakt-render level offset (A/B calibrated)
+    master_tune_cents    9.0   // tune=1.00521 on every playable group (CSS_GROUP_MOD.md §1)
+    loop_xfade_ms        150   // synth-loop seam crossfade
+    zone_pitch_tolerance 2     // whole-tone grid → shift ±1..2 to fill
+    release_gain         1.0   // release groups ship 0 dB static; the amp env shapes the tail
+    attack_ms            198   // "Arco attack" $mmirg=30/127 under Kontakt's cubic law
+    release_ms           400   // $tukcw — note-off overlap fade
+}
+
+// ── Dynamic Control Model ─────────────────────────────────────────────────────
+// Sustains: CC1 crossfades between sampled dynamic layers. Velocity irrelevant.
+// Vibrato:  CC2=0 → Nonvib, CC2=127 → Vibsus (both always playing, x-faded).
+// Shorts:   CC1 selects the short-note TYPE; velocity controls dynamic within it.
+
+dynamics {
+    sustain_controller    CC1
+    vibrato_controller    CC2
+    // SHORT-NOTE DYNAMICS — the KSP-confirmed model:
+    //
+    // Decoded from `script_1.ksp` (~lines 10775–11135) and verified against the
+    // shipped reference render (css_ab_css.wav): the short TYPE is selected by CC1
+    // (`short_note_cc1_map`) / CC58 keyswitch → the `$g25wo` articulation index;
+    // VELOCITY then does BOTH — it selects the recorded DYNAMIC layer (KSP
+    // `VeloIDX`, range-checked against that type's `%g1qri` thresholds) AND scales
+    // volume continuously within the band (`$arhiq = (band_top − vel)·%bcez1 /
+    // (span−1)`). CC1 is NOT in the short-dynamic path.
+    //
+    // The reference confirms this: with CC58 keyswitching each arco short and CC1
+    // fixed at 90, the real-CSS render collapses ALL FOUR (Spiccato/Staccatissimo/
+    // Staccato/Sfz) to the SAME sound (the CC1=90 → `short_note_cc1_map` type,
+    // Staccato), and VELOCITY drives a ~20 dB span WITH a brightness rise (spectral
+    // centroid 1924→1847→2230 for vel 40/80/120) — a SAMPLE/LAYER switch, exactly
+    // what `%g1qri` band selection produces. The engine implements this in
+    // `SampleEngine::short_layer_and_velvol` / `short_band` / `short_velocity_volume_db`.
+    //
+    // NOTE: the earlier "corrected" CC1=layer / velocity=volume model (attributed
+    // to the library owner) CONTRADICTS the KSP and is removed — CC1 never drives
+    // short dynamics. Per-artic `%g1qri`/`%bcez1` values are staged as
+    // `vel_thresholds`/`vel_layer_db` below.
+    short_note_controller velocity
+    // enable_velocity_layers: use the exact per-artic `%g1qri` velocity→layer
+    // bands (below) instead of an even velocity split. ON for CSS — validated
+    // against the reference render: timbre holds (overall 0.962 / SHORT 0.987),
+    // and the CC1=90-collapsed Staccato ladder lands on mp/f/fff (the reference
+    // levels) via the real thresholds. A trailing terminal 127 is the open-top
+    // marker; when a type has more recorded dynamics than g1qri bands the bands
+    // TOP-align (the softest recorded dynamic sits below the short's g1qri floor).
+    enable_velocity_layers true
+    // apply_short_velvol: apply the decoded `$arhiq` intra-band volume trim
+    // (`%bcez1` = `vel_layer_db` below) ON TOP of the layer selection. OFF: the
+    // trim is fully wired + unit-tested, but the currently-decoded `%bcez1`
+    // over-attenuates vs the reference (regresses mean|level| 3.4→4.0 dB /
+    // MATCH 38→31 while timbre holds). The reference's within-band level is ~flat,
+    // so `$arhiq` awaits re-derivation of the true `%bcez1` magnitudes from the
+    // KSP persistent (`nki … --persist`). Turn ON once re-derived.
+    apply_short_velvol false
+
+    // CC1 crossfade zones — DERIVED from the decoded per-layer CC_VOLUME=1
+    // bipolar tables (nkx-extract groups.json / CSS_GROUP_MOD.md §3). Those
+    // tables are the real CSS dynamics curve: every dynamic layer sounds at once,
+    // each scaled by its own CC1→volume curve, whose key inflection x's are:
+    //   • ff  engages at x≈0.608 → CC1 77 (min of its curve, then rises to top)
+    //   • mf  is FULL (y≈0) until x≈0.446 → CC1 57, then eases down (present to top)
+    //   • p   present low, dips from x≈0.662 → CC1 84
+    //   • ppp/pp roughly flat-negative — present at a low level across all CC1
+    // Our engine can only crossfade 1–2 layers, so we approximate the N-layer sum
+    // with WIDE, overlapping ranges: ff engagement pulled to CC1 77, mf kept
+    // present across most of the range (so low CC1 is not pure-softest, matching
+    // CSS keeping mf under the ppp/p at the bottom). Verified against css_ab_css:
+    // SUS-DYN CC1=80 dip closes without regressing SUS-PITCH(CC1=90)/LONG/LEG.
+    // Harmonics ship only pp/mp (2 dynamics). Decoded harmonics CC1 tables:
+    // pp `(0,0),(1,-0.169)` (eases down high), mp `(0,0),(0,-0.084)` (flat, a
+    // touch under) → they cross at x≈0.5 → CC1 63, so mp owns the upper half.
+    // Without this slice a 2-dynamic articulation fell back to the missing "p"
+    // layer (empty cc1_blend), mis-selecting the harmonics sample at CC1=90.
+    cc1_layers_2 (
+        {label pp, cc_range (0  70)}
+        {label mp, cc_range (56 127)}
+    )
+    cc1_layers_3 (
+        {label p,   cc_range (0  55)}
+        {label mf,  cc_range (30 100)}
+        {label ff,  cc_range (77 127)}
+    )
+    cc1_layers_4 (
+        {label ppp, cc_range (0  30)}
+        {label p,   cc_range (0  75)}
+        {label mf,  cc_range (40 105)}
+        {label ff,  cc_range (77 127)}
+    )
+    // Five layers — used by Clegno (pp/p/mp/mf/f). ~25 CC wide with ~10 overlap.
+    cc1_layers_5 (
+        {label pp, cc_range (0  30)}
+        {label p,  cc_range (21 56)}
+        {label mp, cc_range (47 82)}
+        {label mf, cc_range (73 107)}
+        {label f,  cc_range (98 127)}
+    )
+
+    // CC1 selects short-note sub-type when in Staccato/Spiccato group.
+    short_note_cc1_map {
+        0-31   Spiccato
+        32-63  Staccatissimo
+        64-95  Staccato
+        96-127 Sfz
+    }
+
+    // CC1 selects pizzicato sub-type when in Pizzicato group.
+    // REVERSE-ENGINEERED from the A/B reference (css_ab_css.wav): at CC1=90 the
+    // reference renders Pizz/Bartok/ColLegno IDENTICALLY at Bartók-snap level
+    // (-40/-33/-28 dB v40/80/120), NOT col-legno level. Measured pizz-family
+    // sample RMS confirms this is Bartokpizz (mf -32, fff -27), not Pizzicato
+    // (pp -61…fff -30) or Clegno (pp -63…f -45). Only CC1=90 is empirically
+    // constrained; the low/mid bands below are a reasonable interpolation
+    // (Pizzicato = no-modwheel default) and are NOT independently verified.
+    pizzicato_cc1_map {
+        0-41   Pizzicato
+        42-84  Bartokpizz
+        85-127 Bartokpizz
+    }
+
+    // Continuous CC1 → loudness on top of the layer crossfade: 0 dB from the
+    // knee up, linear to floor_db at CC1=0. Calibrated on the reference
+    // render (CC1=20 → −3.0 dB, flat from CC1≈45).
+    cc1_expression { knee 45, floor_db -5.4 }
+}
+
+// ── Articulations ─────────────────────────────────────────────────────────────
+
+articulations (
+
+    // ── Sustains ────────────────────────────────────────────────────────────
+
+    {
+        id            Vibsus
+        label         "Vibrato Sustain"
+        kind          @Sustain
+        dynamics      (ppp p mf ff)
+        rr            1
+        dyn_ctrl      cc1
+        release_artic Vsusrel
+        notes         full
+        vibrato      true
+        vibrato_pair Nonvib
+        // Decoded GroupList ENV_FLEX (sustain family): bake attack, hold,
+        // 20 s bow-runs-out decay; frozen at hold level while the key is down.
+        amp_env      ( {time_ms 4.0, level 1.0, curve 0.505}
+                       {time_ms 1000.0, level 1.0, curve 0.9}
+                       {time_ms 20000.0, level 0.0, curve 0.05} )
+        amp_env_hold true
+    }
+    {
+        id            Nonvib
+        label         "Non-Vibrato Sustain"
+        kind          @Sustain
+        dynamics      (p mf ff)
+        rr            1
+        dyn_ctrl      cc1
+        release_artic NVrel
+        notes         full
+        vibrato      false
+        vibrato_pair Vibsus
+        // Decoded GroupList ENV_FLEX (sustain family): bake attack, hold,
+        // 20 s bow-runs-out decay; frozen at hold level while the key is down.
+        amp_env      ( {time_ms 4.0, level 1.0, curve 0.505}
+                       {time_ms 1000.0, level 1.0, curve 0.9}
+                       {time_ms 20000.0, level 0.0, curve 0.05} )
+        amp_env_hold true
+    }
+    {
+        id            Tremolo
+        label         Tremolo
+        kind          @Sustain
+        dynamics      (pp mp f fff)
+        rr            1
+        dyn_ctrl      cc1
+        release_artic Tremrel
+        notes         full
+        // "Measured Tremolo" (CC58=63) is KSP-scripted — re-triggers spiccato
+        // samples at a synced 16th-note rate. Not replicable without scripting.
+        vibrato_pair ""   // no CC2 crossfade partner — tremolo is its own colour
+    }
+    {
+        id            HTrills
+        label         "Half-Tone Trills"
+        kind          @Trill
+        dynamics      (p mf ff)
+        rr            1
+        dyn_ctrl      cc1
+        release_artic HTrel
+        notes         full
+    }
+    {
+        id            WTrills
+        label         "Whole-Tone Trills"
+        kind          @Trill
+        dynamics      (p mf ff)
+        rr            1
+        dyn_ctrl      cc1
+        release_artic WTrel
+        notes         full
+    }
+    {
+        id            Harm
+        label         Harmonics
+        kind          @Sustain
+        dynamics      (pp mp)
+        rr            1
+        dyn_ctrl      cc1
+        release_artic Harmrel
+        notes         short   // reduced range ~G2–G4 for violins; absent from Basses
+        // Natural-harmonic zones are mapped an octave above CSS's sounded pitch
+        // (raw sample for key G4 sounds G6; CSS renders G5). Drop an octave to
+        // match — pinned by the A/B (unit #47). See ArticulationSpec::transpose.
+        transpose     -12
+        vibrato_pair ""   // harmonics have no vibrato pair
+    }
+    {
+        id       Clegno
+        label    "Col Legno"
+        kind     @Short          // col legno battuto is a percussive one-shot; NKI zones do NOT loop (0/240 looped) — was @Sustain, which routed it through the CC1-driven sustain path (velocity-invariant, stuck on one layer)
+        dynamics (pp mp f)   // matches the extracted zones (only 3 dynamics ship)
+        rr       4
+        dyn_ctrl velocity   // shipped CSS: velocity selects the dynamic layer (see dynamics{} note)
+        notes    full
+    }
+
+    // ── Legato / Transitions ─────────────────────────────────────────────────
+    // Velocity controls pre-delay (transition speed), not which sample plays.
+    // Direction (up/down) is filename-encoded; direction token precedes note.
+    // NOTE: the 1..12 filename suffix on Leg/NVLeg/Port is the transition
+    // INTERVAL in semitones (named note = lower pitch of the pair), NOT a
+    // round-robin index — there is exactly one take per (dyn, dir, interval).
+    // Only the *zero re-trigger sets have real RRs (3).
+
+    {
+        id          Leg
+        label       "Vibrato Legato"
+        kind        @Legato
+        dynamics    (p mf ff)
+        rr          1
+        dyn_ctrl    cc1
+        directional true
+        notes       full
+        vibrato      true
+        vibrato_pair NVLeg
+        legato_role  transition
+        // Decoded ENV_FLEX (legato transition body).
+        amp_env ( {time_ms 80.0, level 1.0, curve 0.499}
+                  {time_ms 480.0, level 1.0, curve 0.72}
+                  {time_ms 442.3, level 1.0, curve 0.5}
+                  {time_ms 1002.3, level 0.0, curve 0.33}
+                  {time_ms 152.0, level 0.0, curve 0.5}
+                  {time_ms 342.0, level 0.0, curve 0.75} )
+    }
+    {
+        id          Legzero
+        label       "Vibrato Legato Re-trigger"
+        kind        @Legato
+        dynamics    (p mf ff)
+        rr          3
+        dyn_ctrl    cc1
+        directional false
+        notes       full
+        vibrato      true
+        vibrato_pair NVLegzero
+        legato_role  retrigger
+        // Decoded ENV_FLEX (legato transition body).
+        amp_env ( {time_ms 80.0, level 1.0, curve 0.499}
+                  {time_ms 480.0, level 1.0, curve 0.72}
+                  {time_ms 442.3, level 1.0, curve 0.5}
+                  {time_ms 1002.3, level 0.0, curve 0.33}
+                  {time_ms 152.0, level 0.0, curve 0.5}
+                  {time_ms 342.0, level 0.0, curve 0.75} )
+    }
+    {
+        id          NVLeg
+        label       "Non-Vibrato Legato"
+        kind        @Legato
+        dynamics    (p mf ff)
+        rr          1
+        dyn_ctrl    cc1
+        directional true
+        notes       full
+        vibrato      false
+        vibrato_pair Leg
+        legato_role  transition
+        // Decoded ENV_FLEX (legato transition body).
+        amp_env ( {time_ms 80.0, level 1.0, curve 0.499}
+                  {time_ms 480.0, level 1.0, curve 0.72}
+                  {time_ms 442.3, level 1.0, curve 0.5}
+                  {time_ms 1002.3, level 0.0, curve 0.33}
+                  {time_ms 152.0, level 0.0, curve 0.5}
+                  {time_ms 342.0, level 0.0, curve 0.75} )
+    }
+    {
+        id          NVLegzero
+        label       "Non-Vibrato Legato Re-trigger"
+        kind        @Legato
+        dynamics    (p mf ff)
+        rr          3
+        dyn_ctrl    cc1
+        directional false
+        notes       full
+        vibrato      false
+        vibrato_pair Legzero
+        legato_role  retrigger
+        // Decoded ENV_FLEX (legato transition body).
+        amp_env ( {time_ms 80.0, level 1.0, curve 0.499}
+                  {time_ms 480.0, level 1.0, curve 0.72}
+                  {time_ms 442.3, level 1.0, curve 0.5}
+                  {time_ms 1002.3, level 0.0, curve 0.33}
+                  {time_ms 152.0, level 0.0, curve 0.5}
+                  {time_ms 342.0, level 0.0, curve 0.75} )
+    }
+    {
+        id          Port
+        label       Portamento
+        kind        @Legato
+        dynamics    (f)
+        rr          1
+        dyn_ctrl    fixed   // single dynamic; CC1 irrelevant for sample selection
+        directional true
+        notes       full
+        legato_role  portamento
+        // Decoded ENV_FLEX (portamento glide).
+        amp_env ( {time_ms 88.0, level 0.466, curve 0.499}
+                  {time_ms 472.0, level 1.0, curve 0.8}
+                  {time_ms 1240.0, level 0.0, curve 0.5}
+                  {time_ms 152.0, level 0.0, curve 0.5}
+                  {time_ms 342.0, level 0.0, curve 0.75} )
+    }
+
+    // ── Short Notes ──────────────────────────────────────────────────────────
+
+    {
+        id       Staccato
+        label    Staccato
+        kind     @Short
+        dynamics (pp mp f fff)
+        rr       4
+        dyn_ctrl velocity   // shipped CSS: velocity selects the dynamic layer
+        notes    full
+        // Decoded KSP velocity layers (%g1qri / %bcez1, g25wo=2, ktuur=0 → 3 bands).
+        vel_thresholds (51 83 127)
+        vel_layer_db   (-17 -8 -13 0)
+    }
+    {
+        id       Staccatissimo
+        label    Staccatissimo
+        kind     @Short
+        dynamics (pp mp f fff)   // confirmed from NKC index
+        rr       5
+        dyn_ctrl velocity   // shipped CSS: velocity selects the dynamic layer
+        notes    full
+        // Decoded KSP velocity layers (%g1qri / %bcez1, g25wo=1, ktuur=1 → 4 bands).
+        vel_thresholds (35 65 105)
+        vel_layer_db   (-12 -8 -12 0)
+    }
+    {
+        id       Spiccato
+        label    Spiccato
+        kind     @Short
+        // Dynamics vary by section (NKC index confirmed):
+        //   1v: pp/p/mf/ff  |  2v/Va/Ba: p/mf/ff  |  Ce: p/mf/f
+        // Spec lists 1v set. Sample map returns None for missing combos → silence.
+        dynamics (pp p mf ff)
+        rr       5
+        dyn_ctrl velocity   // shipped CSS: velocity selects the dynamic layer
+        notes    full
+        // Decoded KSP velocity layers (%g1qri / %bcez1, g25wo=0, ktuur=1 → 4 bands).
+        vel_thresholds (25 55 108)
+        vel_layer_db   (-9 -10 -12 -6)
+    }
+    {
+        id            Marcato
+        label         Marcato
+        kind          @Short
+        dynamics      (mf f fff)
+        rr            2
+        dyn_ctrl      velocity   // shipped CSS: velocity selects the dynamic layer
+        release_artic Marcrel
+        notes         full
+    }
+    {
+        id       Sfz
+        label    Sforzando
+        kind     @Short
+        dynamics (mf f fff)
+        rr       2
+        dyn_ctrl velocity   // shipped CSS: velocity selects the dynamic layer
+        notes    full
+        // Decoded KSP velocity layers (%g1qri / %bcez1, g25wo=3, ktuur=0 → 3 bands).
+        vel_thresholds (45 65 127)
+        vel_layer_db   (-17 -6 -9 0)
+    }
+    {
+        id       Pizzicato
+        label    Pizzicato
+        kind     @Short
+        dynamics (pp mp f fff)
+        rr       4
+        dyn_ctrl velocity   // shipped CSS: velocity selects the dynamic layer
+        notes    full
+        aliases  (Pizz)   // 1v uses "Pizzicato"; 2v/Va/Ce/Ba use "Pizz"
+        // Decoded KSP velocity layers (%g1qri / %bcez1, g25wo=4, ktuur=0 → 3 bands).
+        vel_thresholds (50 90 127)
+        vel_layer_db   (-17 -12 -10 0)
+    }
+    {
+        id       Bartokpizz
+        label    "Bartók Pizzicato"
+        kind     @Short
+        dynamics (mf fff)   // confirmed from NKC index: only 2 dynamics
+        rr       2
+        dyn_ctrl velocity   // shipped CSS: velocity selects the dynamic layer
+        notes    short       // confirmed from NKC: A2–G4 (23 notes)
+    }
+
+    // ── Release Samples ──────────────────────────────────────────────────────
+    // Triggered on note-off. Single sample per note per dynamic (rr=1).
+    // Selected by current CC1 at moment of note-off. Played at reduced gain.
+
+    {
+        id       Vsusrel
+        label    "Vibrato Sustain Release"
+        kind     @Release
+        dynamics (ppp p mf ff)
+        rr       1
+        dyn_ctrl cc1
+        notes    full
+        // Decoded ENV_FLEX (release tail).
+        amp_env ( {time_ms 1.0, level 0.986, curve 0.125}
+                  {time_ms 4007.0, level 1.0, curve 0.9}
+                  {time_ms 1250.0, level 0.0, curve 0.7} )
+    }
+    {
+        id       NVrel
+        label    "Non-Vibrato Release"
+        kind     @Release
+        dynamics (p mf ff)
+        rr       1
+        dyn_ctrl cc1
+        notes    full
+        // Decoded ENV_FLEX (release tail).
+        amp_env ( {time_ms 1.0, level 0.986, curve 0.125}
+                  {time_ms 4007.0, level 1.0, curve 0.9}
+                  {time_ms 1250.0, level 0.0, curve 0.7} )
+    }
+    {
+        id       Harmrel
+        label    "Harmonics Release"
+        kind     @Release
+        dynamics (pp mp)
+        rr       1
+        dyn_ctrl cc1
+        notes    short
+    }
+    {
+        id       Marcrel
+        label    "Marcato Release"
+        kind     @Release
+        dynamics (mf f fff)
+        rr       1
+        dyn_ctrl cc1
+        notes    full
+    }
+    {
+        id       HTrel
+        label    "Half-Tone Trill Release"
+        kind     @Release
+        dynamics (p mf ff)
+        rr       1
+        dyn_ctrl cc1
+        notes    full
+    }
+    {
+        id       WTrel
+        label    "Whole-Tone Trill Release"
+        kind     @Release
+        dynamics (p mf ff)
+        rr       1
+        dyn_ctrl cc1
+        notes    full
+    }
+    {
+        id       Tremrel
+        label    "Tremolo Release"
+        kind     @Release
+        dynamics (pp mp f fff)
+        rr       1
+        dyn_ctrl cc1
+        notes    full
+    }
+)
+
+// ── Con Sordino ───────────────────────────────────────────────────────────────
+// DSP effect only — no separate sample set exists in this library.
+// Activated via CC58 88 (On) / CC58 93 (Off).
+// Engine applies a lowpass biquad to the output bus when active.
+
+// ── Legato Engine ─────────────────────────────────────────────────────────────
+// Default mode: Low Latency. Velocity selects pre-delay zone (not sample).
+// Both modes switchable via CC58 (or keyswitches).
+
+legato_engine {
+    // EXPRESSIVE MODE — three velocity zones (values from manual):
+    expressive {
+        enabled_cc58_range 6-10
+        zones (
+            {vel_range (0   64),  label slow,   delay_ms 333}
+            {vel_range (65  100), label medium,  delay_ms 250}
+            {vel_range (101 127), label fast,    delay_ms 100}
+        )
+    }
+
+    // LOW LATENCY MODE — two velocity zones (~150ms headline from v1.7 notes).
+    // Same velocity→speed direction as Expressive: softer = slower (more delay),
+    // harder = faster (less delay). So low velocity = medium (150ms), high
+    // velocity = fast (100ms). (Was inverted.)
+    low_latency {
+        enabled_cc58_range 0-5
+        zones (
+            {vel_range (0  64),  label medium, delay_ms 150}
+            {vel_range (65 127), label fast,   delay_ms 100}
+        )
+    }
+
+    // PORTAMENTO — triggered when legato velocity <= trigger_vel_max (default 20)
+    portamento {
+        trigger_vel_max   20    // CSS default "Portamento Velocity" (manual p.5)
+        volume_controller CC5   // CSS "Portamento Volume"
+    }
+
+    // REPEATED NOTES (Legzero) — same note re-triggered while CC64 (sustain) held
+    retrigger {
+        trigger sustain_pedal_held
+        rr      3
+    }
+
+    // ── Transition timing / crossfade model (decoded persistent values) ──
+    // Attack-velocity range splits $eluxs/$0uhls: vel ≤64 = soft (range 1),
+    // ≤100 = range 2, else range 3.
+    velocity_splits (64 100)
+
+    // Overlap-Delay (legtrans_OD / $b0n3s): the wait between a live note-on
+    // and the transition firing, piecewise-linear over the inter-onset
+    // interval. Near-zero everywhere except soft+fast playing.
+    overlap_delay {
+        low_latency {
+            soft { thresholds_ms (75 100 800 1100), anchors_ms (77 0 0 0) }   // $deey3.. / $nbkqa..
+            loud { thresholds_ms (75 100 800 1100), anchors_ms (0 0 0 0) }    // $55anl.. (all zero)
+        }
+        expressive {
+            soft { thresholds_ms (200 300 800 800), anchors_ms (83 0 0 0) }   // $g45yq.. / $kadcz..
+            loud { thresholds_ms (200 300 800 800), anchors_ms (0 0 0 0) }
+        }
+    }
+
+    // Transition sample-start offset ($1fvjk, $ocjln=6 IOI curve): how far
+    // INTO the transition recording playback begins. Fast lines start deeper
+    // (177 ms — less audible pre-bow), slow lines shallower (117 ms).
+    start_offset { thresholds_ms (100 150 500), anchors_ms (177 177 117) }
+
+    // Crossfades: default legato fade; retire fades for the PREVIOUS
+    // transition/sustain pair indexed by attack-velocity range
+    // ($fjtlu/$hbi2j/$2ebzd and $tdjzq/$3ivkj/$u0t23).
+    transition_fade_ms   30
+    retire_transition_ms (150 281 281)
+    retire_sustain_ms    (550 500 500)
+
+    // $3tsb0: the legato-connected held sustain sits −6 dB below a fresh
+    // first note (change_vol on %grhcg).
+    sustain_trim_db   -6.0
+    // Velocity for the note-off fall-back transition to a still-held note.
+    fallback_velocity 80
+    // Declick for transitions that start deep inside the recording.
+    skip_declick_ms   25
+}
+
+// ── Short Note Timing ─────────────────────────────────────────────────────────
+// All short-note samples have a 60ms pre-delay before rhythmic peak.
+// Apply -60ms track delay when sequencing shorts for on-grid playback.
+
+short_note_timing {
+    pre_delay_ms 60
+}
+
+// ── Keyswitch / CC58 Switching ────────────────────────────────────────────────
+// CSS uses velocity-sensitive keyswitches: hitting KS hard vs soft selects
+// different articulations. CC58 is the programmatic equivalent.
+// Ranges are tolerance bands; canonical values: 8 13 18 23 28 33 38 43 53 63 68 73 76 83 88 93
+// "Con Sordino On/Off" and "Legato On/Off" are MODE SWITCHES, not articulations.
+// "Measured Tremolo" (CC58=63) is KSP-scripted — engine ignores it.
+
+keyswitch {
+    velocity_sensitive true
+    user_configurable  true
+
+    cc58_map {
+        0-5   "Sustain: Low Latency Legato"
+        6-10  "Sustain: Expressive Legato"
+        11-15 Spiccato
+        16-20 Staccatissimo
+        21-25 Staccato
+        26-30 Sfz
+        31-35 Pizzicato
+        36-40 Bartokpizz
+        41-45 Clegno
+        46-50 Trills
+        51-55 Harm
+        56-60 Tremolo
+        61-65 "Measured Tremolo"
+        66-70 "Marcato (no overlay)"
+        71-75 "Marcato (with overlay)"
+        76-80 "Legato On"
+        81-85 "Legato Off"
+        86-90 "Con Sordino On"
+        91-95 "Con Sordino Off"
+    }
+
+    // Velocity-sensitive keyswitch NOTES (low octave, C0 = MIDI 12, well below
+    // the G2 playing range). Values are zone articulation TAGS or @mode tokens
+    // (`+` applies several). The velocity sub-ranges are exactly per the CSS
+    // manual; the note assignments are user-configurable in CSS — confirmed
+    // defaults are C0=Sustain, A#0=Non-Vibrato, B0=Marcato, the rest laid out
+    // contiguously. Edit freely; no code changes needed.
+    notes (
+        {
+            note "C0"
+            label "Sustain"
+            vel_map {
+                0-64   "Nonvib+@legato-low"
+                65-127 "Nonvib+@legato-expressive"
+            }
+        }
+        {
+            note "C#0"
+            label "Shorts"
+            vel_map {
+                0-32   "Spiccato"
+                33-64  "Staccatissimo"
+                65-96  "Staccato"
+                97-127 "Sfz"
+            }
+        }
+        {
+            note "D0"
+            label "Pizzicato"
+            vel_map {
+                0-41   "Pizzicato"
+                42-84  "Bartokpizz"
+                85-127 "Clegno"
+            }
+        }
+        {
+            note "D#0"
+            label "Trills"
+            vel_map {
+                0-64   "HTrills"
+                65-127 "WTrills"
+            }
+        }
+        {
+            note "E0"
+            label "Harmonics"
+            vel_map { 0-127 "Harm" }
+        }
+        {
+            note "F0"
+            label "Tremolo"
+            vel_map { 0-127 "Tremolo" }
+        }
+        {
+            note "F#0"
+            label "Marcato"
+            vel_map { 0-127 "Marcato" }
+        }
+        {
+            note "G0"
+            label "Con Sordino"
+            vel_map {
+                0-64   "@sordino-off"
+                65-127 "@sordino-on"
+            }
+        }
+        {
+            note "G#0"
+            label "Legato"
+            vel_map {
+                0-64   "@legato-off"
+                65-127 "@legato-on"
+            }
+        }
+        {
+            note "A#0"
+            label "Non-Vibrato"
+            vel_map { 0-127 "Nonvib+@novib" }
+        }
+        {
+            note "B0"
+            label "Marcato KS"
+            vel_map { 0-127 "Marcato" }
+        }
+    )
+}

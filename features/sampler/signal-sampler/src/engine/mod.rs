@@ -84,99 +84,16 @@ const KEY_UP_DECLICK_MS: u32 = 80;
 /// ~20 key presses — causing voice-stealing and intermittent silence.
 const RELEASE_MAX_LIFETIME_MS: u32 = 2_000;
 
-/// Default legato crossfade — old sustain ramps out over this many ms.
-const LEGATO_FADE_MS: u32 = 30;
-
-/// `$foyeb=1000` (wait), `$g4dbu=1000` (fade) from `CSS 1st Violins.nki`.
-///
-/// DECODED CORRECTION (`script_1.ksp`, verified): these `wait/fade_in` values do
-/// NOT time the main held sustain. A CSS legato note spawns THREE voices:
-///   * `%grhcg` — the MAIN held sustain: `play_note(note,$jabns,0,-1)` → offset
-///     0, length −1 (loops), plays IMMEDIATELY at full level, then
-///     `change_vol(%grhcg,$3tsb0*100,1)` = −6 dB legato makeup. THIS carries the
-///     note. It is NOT muted and NOT faded in. (Modeled: see `fire_legato_with_lead`
-///     — spawned immediately with a declick only, gained −6 dB via `legato_sustain`.)
-///   * `%ftriy` — the bow-change TRANSITION: instant-muted then CSS_W-faded with
-///     ITS OWN timing (`$ohdjc/$wtxmh`) — the attack ornament. (Modeled as the
-///     `VoiceKind::Legato` transition voice.)
-///   * `%1wcdh` — a secondary bloom/OVERLAY: instant-muted then `wait $foyeb=1000;
-///     fade_in $g4dbu=1000`. A slow secondary layer, NOT the main tone.
-///
-/// So `$foyeb/$g4dbu` (1000/1000) describe the `%1wcdh` secondary overlay, which
-/// we currently leave UNMODELED (a subtle bloom the transition + immediate
-/// sustain already cover). They are NOT the main-sustain fade — the earlier code
-/// mis-applied them to `%grhcg`, muting the held tone ~1 s so legato notes were
-/// carried only by the quiet transition (~10 dB below the first note). Retained
-/// as documentation of the overlay's real timing.
-#[allow(dead_code)]
-const CSS_W_WAIT_MS: u32 = 1000; // $foyeb — %1wcdh secondary overlay wait (unmodeled)
-#[allow(dead_code)]
-const CSS_W_FADE_MS: u32 = 1000; // $g4dbu — %1wcdh secondary overlay fade (unmodeled)
-
-/// CSS held-sustain note-off overlap fade (`$tukcw`, spec §6): on key-up (pedal
-/// not latched) the looping sustain is note_off'd immediately and fades out
-/// over this window. Real persistent value: **400 ms**.
-const SUSTAIN_NOTEOFF_MS: u32 = 400; // $tukcw
-
-/// CSS legato-retire crossfades (spec §2.1 step 4) — how the PREVIOUS pair is
-/// faded out as the new pair starts. Real persistent values, indexed by
-/// attack-velocity range (`$xp1ku` 1/2/3). The old 30 ms fade was the source
-/// of the inter-note "tick"; these long overlapping fades remove it.
-const RETIRE_TRANS_MS: [u32; 3] = [150, 281, 281]; // $fjtlu / $hbi2j / $2ebzd
-const RETIRE_SUS_MS: [u32; 3] = [550, 500, 500]; // $tdjzq / $3ivkj / $u0t23
-
-/// Overall CC1 → loudness roll-off for CSS sustains. DATA-DERIVED, not a taste
-/// knob: the decoded per-layer `CC_VOLUME cc=1` tables (nkx-extract
-/// `CSS_GROUP_MOD.md` §3 / `groups.json`) are a bipolar TIMBRE crossfade whose
-/// per-layer `y` amounts sum to a nearly-flat total — confirmed by the
-/// reference render (`css_ab_css.wav`, onset-aligned nonvib G4 sweep):
-/// CC1=20 → −3.0 dB, CC1=50/80/110 → 0.0 dB relative to full. So CC1 changes
-/// which recorded layer's colour dominates (handled by the equal-power layer
-/// crossfade) while total level stays ≈flat, gently rolling off only at the
-/// very bottom. The old −12 dB linear floor over-attenuated everything below
-/// CC1=127 — the cause of the SUS-DYN/SUS-PITCH −7…−10 dB deficit.
-///
-/// Piecewise: 0 dB at/above the knee, linear to `CC1_FLOOR_DB` at CC1=0.
-/// Both constants are pinned to the one sanctioned calibration render (the
-/// nonvib sweep above): knee at CC1=45 (flat by CC1=50), floor set so
-/// CC1=20 → −3.0 dB.
-const CC1_KNEE: u8 = 45;
-const CC1_FLOOR_DB: f32 = -5.4; // −3.0 dB at CC1=20 on the 0→45 ramp
-
-/// `$3tsb0` legato makeup — the −6 dB `change_vol` on the CSS legato held
-/// SUSTAIN (`%grhcg`), NOT the transition.
-/// DATA-DERIVED: KSP `change_vol(%grhcg[...],$3tsb0*100,1)` on the legato
-/// (`VRange`) branch (`script_1.ksp` ~12945/13004); persistent `$3tsb0=−60`
-/// → −6.0 dB (millidecibel law: change_vol = dB×1000, persistent vol vars in
-/// 0.1 dB units). `%grhcg` is the main held tone, so this trim lands on the
-/// legato SUSTAIN voice (via the `legato_sustain` flag in `spawn_zone_voice_at`),
-/// leaving a legato-connected note ~6 dB below a fresh first note — the real,
-/// subtle CSS handoff. (Previously mis-applied to the transition voice.)
-const CSS_LEGATO_MAKEUP_DB: f32 = -6.0; // $3tsb0
-
-/// Global output makeup applied to looping sustain-layer voices. STILL NOT
-/// instrument-derived — and the ENV_FLEX work proved its old rationale wrong.
-///
-/// The prior doc claimed this compensated a ~6 dB bloom-peak-vs-plateau gap.
-/// Measured directly on the decoded CSS Mix sustain samples (nonvib/vibsus G4),
-/// the smoothed-RMS bloom peak sits only **~1.7–2.8 dB** above the steady-loop
-/// plateau — NOT 6 dB. So the ENV_FLEX (which holds level 1.0 = the sample
-/// as-recorded) does NOT hold a level 6 dB above our looped plateau, and
-/// removing this constant drops every SUS-DYN note ~6 dB (regressing the A/B
-/// from ~0 dB to ~−6 dB). At most ~2.5 dB is a real bloom/plateau ratio; the
-/// residual ~3.5 dB is a flat level offset between our looped-plateau playback
-/// and CSS's Kontakt render that is NOT present in the decoded GroupList (all
-/// groups ship 0 dB static, change_vol 0) — it lives in Kontakt's instrument
-/// output stage / the shipped sample normalization, which our GroupList decode
-/// does not capture. Kept because it makes the CALIB/SUS-DYN anchor match;
-/// flagged in the audit as the ONE constant still not instrument-derived.
-const OUTPUT_MAKEUP: f32 = 1.995_262; // +6 dB = 10^(6/20)
-
-/// CSS master tune, global on every playable group: `tune=1.00521`
-/// (`CSS_GROUP_MOD.md` §1) = 1200·log₂(1.00521) ≈ **+9.0 cents**. NOT baked into
-/// the styx zones (`tune_cents` ships 0.000 for all 32175 zones — verified), so
-/// applied here globally on top of the per-note transpose.
-const CSS_MASTER_TUNE_CENTS: f64 = 9.0;
+// The legato/articulation POLICY numbers that used to live here as constants
+// (note-off fades, retire crossfades, CC1 expression curve, legato sustain
+// trim, output makeup, master tune, Overlap-Delay + `$1fvjk` start-offset
+// curves, ENV_FLEX amp-envelope tables) are DATA now: see
+// `crate::spec::{PerformanceSpec, LegatoEngineSpec, DynamicsSpec,
+// Cc1ExpressionSpec, default_amp_env}`. Their defaults equal the historical
+// hardcoded values, so specs that don't set them play identically; the
+// engine keeps only the mechanism (zone resolution, scheduling,
+// crossfading) and reads every number from `patch.spec`.
+// r[impl signal.soundsource.declarative]
 
 /// Minimum attack fade (ms) for a synthesized-loop sustain that starts mid-sample
 /// at full level — just enough to avoid an onset click without slowing the attack.
@@ -186,39 +103,6 @@ const SUSTAIN_DECLICK_MS: u32 = 12;
 /// starts mid-sample (`start_offset`). Long enough to remove the onset step
 /// click, short enough to be inaudible on a recorded bow-change / release.
 const ONSET_DECLICK_MS: u32 = 6;
-
-/// Declick fade (ms) for a voice that starts DEEP inside a sample via
-/// `start_offset` — a Low-Latency legato prefire skips ~300 ms into the
-/// transition recording and begins partway up the steep bow-change swell. A
-/// 6 ms fade leaves that entry abrupt (perceived as a click on every note); a
-/// longer fade eases into the steep material without moving the arrival tick.
-const SKIP_DECLICK_MS: u32 = 25;
-
-/// Seamless loop crossfade (ms). A held/looped body (CSS synth-loop sustains,
-/// legato tails) wraps from `loop_end` back to `loop_start`; without a fade the
-/// waveform discontinuity clicks once per loop. Blend the loop tail into the
-/// pre-`loop_start` material over this window. Long enough to smooth the seam
-/// on evolving string timbre, short enough not to audibly smear the loop.
-const LOOP_XFADE_MS: u32 = 150;
-
-/// Gain for recorded CSS release-tail voices (NVrel/Vsusrel). DATA-DERIVED (was
-/// a guessed 0.3): the release groups ship **0 dB static** volume
-/// (`CSS_GROUP_MOD.md` §1) and now carry their decoded release ENV_FLEX
-/// (`FLEX_RELEASE`, 1 ms→0.99 → 4007 ms→1.0 → 1250 ms→0) which shapes the tail —
-/// so the correct base gain is unity, the envelope does the shaping. Kept at
-/// `RELEASE_MAX_LIFETIME_MS` so the tail cannot bleed unbounded into the next
-/// note.
-const RELEASE_GAIN: f32 = 1.0;
-
-/// Max semitones to pitch-shift from the nearest recorded zone when no zone
-/// spans a note. CSS samples a whole-tone grid (±1 to fill); 2 covers grid
-/// gaps + edge rounding without obviously detuning.
-const ZONE_PITCH_TOLERANCE: u8 = 2;
-
-/// Velocity used for the legato transition back to a held note when the
-/// sounding note is released (a medium transition speed — there's no real
-/// "release velocity" for a fall-back).
-const LEGATO_FALLBACK_VELOCITY: u8 = 80;
 
 /// Note-body peak (linear, ~-54 dBFS) below which a note-off fires NO release
 /// tail: the note has already decayed to near-silence, so a release would just
@@ -243,7 +127,7 @@ enum LegatoState {
         portamento: bool,
         /// Inter-onset interval (ms) at the moment the transition was armed —
         /// carried through the countdown so the reactive fire can apply the
-        /// CSS `$1fvjk` sample-start offset ([`lt_start_offset_ms`]).
+        /// CSS `$1fvjk` sample-start offset (`LegatoEngineSpec::start_offset_ms`).
         ioi_ms: f32,
     },
 }
@@ -531,11 +415,11 @@ pub struct SampleEngine {
     /// attack (first note / polyphonic sustain).
     sustain_fade_in: Option<(usize, usize)>,
     /// When true, sustain-layer voices spawned during this dispatch carry the
-    /// −6 dB `$3tsb0` legato makeup (`CSS_LEGATO_MAKEUP_DB`) — the KSP
+    /// −6 dB `$3tsb0` legato makeup (`LegatoEngineSpec::sustain_trim_db`) — the KSP
     /// `change_vol(%grhcg,$3tsb0*100)` on the held legato tone. Set only around
     /// the `trigger_zoned_sustain` inside a legato handoff so a legato-connected
     /// note ends up ~6 dB below a fresh first note. `false` = first note /
-    /// polyphonic sustain (full `OUTPUT_MAKEUP`).
+    /// polyphonic sustain (full `PerformanceSpec::sustain_makeup_db`).
     legato_sustain: bool,
 
     /// Notes currently held down: MIDI note → velocity. Shared across lines
@@ -669,9 +553,20 @@ impl SampleEngine {
             .map(|a| a.id.clone())
             .unwrap_or_default();
 
-        let legato_fade_frames = ms_to_frames(LEGATO_FADE_MS, sample_rate);
+        let legato_fade_frames =
+            ms_to_frames(patch.spec.legato_cfg().transition_fade_ms, sample_rate);
         let cc1_ramp_frames = ms_to_frames(CC1_RAMP_MS, sample_rate);
-        let release_frames = ms_to_frames(RELEASE_MS, sample_rate);
+        // Library-authored defaults (CSS: 198 ms arco-attack bloom / 400 ms
+        // note-off overlap) — callers can still override via
+        // `set_attack_frames` / `set_release_frames`.
+        let release_frames =
+            ms_to_frames(patch.spec.performance.release_ms.unwrap_or(RELEASE_MS), sample_rate);
+        let spec_attack_frames = patch
+            .spec
+            .performance
+            .attack_ms
+            .map(|ms| ms_to_frames(ms, sample_rate))
+            .unwrap_or(0);
         let cache = if let Some(pack) = patch.pack.clone() {
             SampleCache::with_pack(pack)
         } else {
@@ -774,7 +669,7 @@ impl SampleEngine {
             legato_fade_frames,
             cc1_ramp_frames,
             release_frames,
-            attack_frames: 0,
+            attack_frames: spec_attack_frames,
             unison: (1, 0.0, 0.0),
             zone_rr_counter: 0,
             zone_rr_random_state: 0x9e37_79b9_7f4a_7c15,
@@ -1337,91 +1232,51 @@ fn css_short_makeup_db(artic_id: &str) -> f32 {
     }
 }
 
-// ── ENV_FLEX amp envelopes (decoded per articulation family) ────────────────────
+// ── Amp envelopes ────────────────────────────────────────────────────────────
 //
-// The instrument's real live amp AHDSR, from `GroupList (0x33)` — see
-// `nkx-extract/CSS_GROUP_MOD.md` §2 / `scratchpad/groups_out/groups.json`. Each
-// entry is a shipped `(time_ms, level, curve)` segment; segment 0 is the attack.
-// These are the literal decoded values (Main mic; all mics carry byte-identical
-// envelopes), NOT approximations. Applied per-voice by [`FlexEnv`].
+// Per-voice ENV_FLEX amp envelopes are POLICY read from the spec: an
+// articulation's `amp_env` segments when authored, else the family defaults
+// in `crate::spec::default_amp_env` (the decoded CSS GroupList tables, kept
+// as defaults so legacy libraries play unchanged). The engine only maps a
+// `VoiceKind` to a role and builds the `FlexEnv` mechanism.
+// r[impl signal.soundsource.declarative]
 
-/// Sustain family (vibsus / nonvib / trills / tremolo / harmonics): fast bake
-/// attack, hold, then a 20 s decay-to-0 (the bow eventually running out). Held
-/// indefinitely via the [`FlexEnv`] sustain-hold freeze. (mf layer ships a 20 ms
-/// attack vs 4 ms elsewhere — negligible under the $mmirg 198 ms CC_ATTACK
-/// bloom applied on top, so a single 4 ms table is used.)
-const FLEX_SUSTAIN: &[(f32, f32, f32)] =
-    &[(4.0, 1.0, 0.505), (1000.0, 1.0, 0.9), (20000.0, 0.0, 0.05)];
-/// Legato / NVlegato / legato-zero transition body.
-const FLEX_LEGATO: &[(f32, f32, f32)] = &[
-    (80.0, 1.0, 0.499),
-    (480.0, 1.0, 0.72),
-    (442.3, 1.0, 0.5),
-    (1002.3, 0.0, 0.33),
-    (152.0, 0.0, 0.5),
-    (342.0, 0.0, 0.75),
-];
-/// Portamento / NVportamento glide.
-const FLEX_PORTAMENTO: &[(f32, f32, f32)] = &[
-    (88.0, 0.466, 0.499),
-    (472.0, 1.0, 0.8),
-    (1240.0, 0.0, 0.5),
-    (152.0, 0.0, 0.5),
-    (342.0, 0.0, 0.75),
-];
-/// Marcato-legato / marc-port.
-const FLEX_MARC_LEG: &[(f32, f32, f32)] = &[
-    (68.0, 0.493, 0.499),
-    (492.0, 1.0, 0.72),
-    (1440.0, 0.0, 0.33),
-    (156.6, 0.0, 0.5),
-    (342.0, 0.0, 0.75),
-];
-/// Marcato-mod overlay.
-const FLEX_MARCATO_MOD: &[(f32, f32, f32)] = &[
-    (1.0, 1.0, 0.685),
-    (1499.0, 1.0, 0.5),
-    (104.0, 1.0, 0.45),
-    (1000.0, 0.0, 0.63),
-];
-/// Short family (spicc / staccatissimo / stacc / sfz / marcato / pizz / bartók /
-/// col legno): one-shot, plays to natural end shaped by the 8/604/7381 decay.
-const FLEX_SHORT: &[(f32, f32, f32)] =
-    &[(8.0, 1.0, 0.505), (604.0, 1.0, 0.45), (7381.0, 0.0, 0.65)];
-/// Release tails (rel *): 0 dB static group, shaped by this decoded envelope.
-const FLEX_RELEASE: &[(f32, f32, f32)] =
-    &[(1.0, 0.986, 0.125), (4007.0, 1.0, 0.9), (1250.0, 0.0, 0.7)];
-
-/// Select the decoded ENV_FLEX amplitude envelope for a voice from its
-/// articulation id + voice kind. Returns `None` for families with no decoded
-/// envelope (legacy / non-CSS libraries) — those keep flat unity.
-fn flex_env_for(
+/// Select the amp envelope for a voice: the zone articulation's authored
+/// `amp_env` first, else the spec-layer family default. `None` = flat unity.
+fn amp_env_for(
+    spec: &crate::spec::LibrarySpec,
     artic_id: &str,
     kind: &VoiceKind,
     is_sustain_layer: bool,
     sample_rate: u32,
 ) -> Option<FlexEnv> {
-    let id = artic_id.to_ascii_lowercase();
-    let (segs, hold): (&[(f32, f32, f32)], bool) =
-        if matches!(kind, VoiceKind::Release) || id.contains("rel") {
-            (FLEX_RELEASE, false)
-        } else if matches!(kind, VoiceKind::Short) {
-            (FLEX_SHORT, false)
-        } else if id.contains("port") {
-            (FLEX_PORTAMENTO, false)
-        } else if id.contains("marc") && id.contains("leg") {
-            (FLEX_MARC_LEG, false)
-        } else if id.contains("marcato") && id.contains("mod") {
-            (FLEX_MARCATO_MOD, false)
-        } else if matches!(kind, VoiceKind::Legato) || id.contains("legato") {
-            (FLEX_LEGATO, false)
-        } else if is_sustain_layer {
-            // vibsus / nonvib / trills / tremolo / harmonics — the held families.
-            (FLEX_SUSTAIN, true)
-        } else {
-            return None;
-        };
-    FlexEnv::from_segments(segs, 0.0, sample_rate, hold)
+    use crate::spec::AmpEnvRole;
+    let role = if matches!(kind, VoiceKind::Release) {
+        AmpEnvRole::Release
+    } else if matches!(kind, VoiceKind::Short) {
+        AmpEnvRole::Short
+    } else if matches!(kind, VoiceKind::Legato) {
+        AmpEnvRole::Legato
+    } else if is_sustain_layer {
+        AmpEnvRole::SustainLayer
+    } else {
+        AmpEnvRole::Other
+    };
+    // Authored per-articulation envelope wins.
+    let authored = spec
+        .articulations
+        .iter()
+        .find(|a| a.id.eq_ignore_ascii_case(artic_id))
+        .filter(|a| !a.amp_env.is_empty());
+    let (segs, hold): (&[crate::spec::EnvSegmentSpec], bool) = match authored {
+        Some(a) => (
+            a.amp_env.as_slice(),
+            a.amp_env_hold.unwrap_or(role == AmpEnvRole::SustainLayer),
+        ),
+        None => crate::spec::default_amp_env(artic_id, role)?,
+    };
+    let tuples: Vec<(f32, f32, f32)> = segs.iter().map(|s| (s.time_ms, s.level, s.curve)).collect();
+    FlexEnv::from_segments(&tuples, 0.0, sample_rate, hold)
 }
 
 /// Frames → milliseconds (the inverse of [`ms_to_frames`]).
@@ -1430,138 +1285,6 @@ pub fn frames_to_ms(frames: u64, sample_rate: u32) -> f32 {
         return 0.0;
     }
     frames as f32 * 1000.0 / sample_rate as f32
-}
-
-// ── CSS legato Overlap-Delay (real persistent values) ──────────────────────────
-//
-// `legtrans_OD` waits `$b0n3s` ms before the transition fires. `$b0n3s`
-// interpolates across the IOI thresholds to per-(mode, velocity-range) anchors.
-// These are the ACTUAL values read from `CSS 1st Violins.nki`'s persistent
-// snapshot (extracted from the BParScript store, not the compiled `:=`
-// defaults) — see `scratchpad/css_persistent_values.md`. The delay is
-// near-ZERO everywhere except soft+fast playing (max 77–83 ms), which INVERTS
-// the earlier spec approximation.
-
-/// Attack-velocity range `$xp1ku` (spec §1.3): 1 = [0..`$eluxs`], 2 =
-/// [`$eluxs`+1..`$0uhls`], 3 = rest. Real splits: `$eluxs=64`, `$0uhls=100`.
-const VEL_SPLIT_1: u8 = 64; // $eluxs
-const VEL_SPLIT_2: u8 = 100; // $0uhls
-fn velocity_range(vel: u8) -> u8 {
-    if vel <= VEL_SPLIT_1 {
-        1
-    } else if vel <= VEL_SPLIT_2 {
-        2
-    } else {
-        3
-    }
-}
-
-// Low-Latency O+D: thresholds $deey3/$fxiox/$jystg/$zvaet; anchors per range.
-const OD_LL_THR: [f32; 4] = [75.0, 100.0, 800.0, 1100.0];
-const OD_LL_VR1_ANC: [f32; 4] = [77.0, 0.0, 0.0, 0.0]; // $nbkqa/$mih5r/$yzpsq/$myv02
-const OD_LL_VR23_ANC: [f32; 4] = [0.0, 0.0, 0.0, 0.0]; // $55anl/$umt5l/$cffjr/$yeo2q
-// Expressive O+D: thresholds $g45yq/$bwkdm/$waq1e/$whtm2; anchors per range.
-const OD_EX_THR: [f32; 4] = [200.0, 300.0, 800.0, 800.0];
-const OD_EX_VR1_ANC: [f32; 4] = [83.0, 0.0, 0.0, 0.0]; // $kadcz/$nug53/$tfwqt/$xvurx
-const OD_EX_VR23_ANC: [f32; 4] = [0.0, 0.0, 0.0, 0.0]; // vr2 + vr3 both all-zero
-
-/// Piecewise-linear interpolation of `ioi` across 4 ascending `thr` to 4 `anc`.
-/// Below `thr[0]` → `anc[0]`; above `thr[3]` → `anc[3]`.
-fn interp_od(ioi: f32, thr: [f32; 4], anc: [f32; 4]) -> f32 {
-    if ioi < thr[0] {
-        return anc[0];
-    }
-    for k in 0..3 {
-        if ioi < thr[k + 1] {
-            let span = (thr[k + 1] - thr[k]).max(1e-6);
-            let t = (ioi - thr[k]) / span;
-            return anc[k] + (anc[k + 1] - anc[k]) * t;
-        }
-    }
-    anc[3]
-}
-
-/// CSS legato Overlap-Delay (ms) — the KSP `legtrans_OD` model (spec §2.1,
-/// corrected to the real persistent values). Driven by the inter-onset
-/// interval (IOI, ms), the attack `velocity` (→ range `$xp1ku`), and the
-/// legato mode. Near-zero except soft (vel ≤ 64) + fast (small IOI) playing.
-pub fn ioi_legato_delay_ms(ioi_ms: f32, velocity: u8, expressive: bool) -> u32 {
-    let vr = velocity_range(velocity);
-    let (thr, anc) = if expressive {
-        (
-            OD_EX_THR,
-            if vr == 1 {
-                OD_EX_VR1_ANC
-            } else {
-                OD_EX_VR23_ANC
-            },
-        )
-    } else {
-        (
-            OD_LL_THR,
-            if vr == 1 {
-                OD_LL_VR1_ANC
-            } else {
-                OD_LL_VR23_ANC
-            },
-        )
-    };
-    interp_od(ioi_ms, thr, anc).round().max(0.0) as u32
-}
-
-// ── CSS legato transition sample-start offset `$1fvjk` (real persistent values) ──
-//
-// The main-path (`$ocjln=6`) legato transition is spawned
-// `play_note(note, RR, $1fvjk*1000, 0)` — `play_note`'s 3rd arg is the sample-start
-// offset in µs, so `$1fvjk` (ms) is how far INTO the transition recording playback
-// begins. It is IOI-interpolated: FAST lines start DEEPER in (skip more of the
-// recorded bow-change swell → less audible pre-bow), SLOW lines start SHALLOWER
-// (more pre-bow lead-in). Read from `CSS 1st Violins.nki`'s persistent snapshot
-// (BParScript store, not the compiled `:=` defaults):
-//   thresholds  $yam53 = 100, $nzsuf = 150, $5c2um = 500  (ms)
-//   anchors     $ggt00 = 177, $v0rbb = 177, $5exar = 117  (ms)
-// i.e. flat 177 ms up to a 150 ms IOI, then a linear ramp 177 → 117 ms across
-// 150…500 ms, then flat 117 ms. (The `$yam53 = 100` breakpoint sits inside the
-// flat 177 ms region, so it is a no-op for the curve shape but kept for parity.)
-//
-// A per-velocity-range `$ocjln = 4` variant exists — base offsets 0/83/177 ms +
-// the Overlap-Delay `$b0n3s` — but `$ocjln = 6` (this IOI curve) is CSS's primary
-// legato path and the one modeled here.
-const LT_OFF_THR: [f32; 3] = [100.0, 150.0, 500.0]; // $yam53 / $nzsuf / $5c2um
-const LT_OFF_ANC: [f32; 3] = [177.0, 177.0, 117.0]; // $ggt00 / $v0rbb / $5exar
-
-/// Reference transition-arrival point (ms) = the deepest `$1fvjk` (`$ggt00`): at a
-/// fast line the sample starts essentially AT the destination-pitch arrival, so
-/// the audible pre-bow is ~0. Documentary constant only; the document scheduler
-/// derives the actual pre-bow from the per-move MEASURED arrival minus `$1fvjk`.
-const LT_ARRIVAL_REF_MS: f32 = 177.0; // $ggt00
-
-/// CSS legato transition sample-start offset (ms) — the decoded `$1fvjk` IOI curve
-/// (`$ocjln = 6`). Below `$yam53` → `$ggt00` (177); above `$5c2um` → `$5exar`
-/// (117); piecewise-linear between. `ioi_ms` is the inter-onset interval on the
-/// line (frames since the previous onset), the same IOI clock as
-/// [`ioi_legato_delay_ms`].
-pub fn lt_start_offset_ms(ioi_ms: f32) -> f32 {
-    if ioi_ms <= LT_OFF_THR[0] {
-        return LT_OFF_ANC[0];
-    }
-    for k in 0..2 {
-        if ioi_ms < LT_OFF_THR[k + 1] {
-            let span = (LT_OFF_THR[k + 1] - LT_OFF_THR[k]).max(1e-6);
-            let t = (ioi_ms - LT_OFF_THR[k]) / span;
-            return LT_OFF_ANC[k] + (LT_OFF_ANC[k + 1] - LT_OFF_ANC[k]) * t;
-        }
-    }
-    LT_OFF_ANC[2]
-}
-
-/// Documentary reference pre-bow (ms) for the `$1fvjk` offset, assuming the
-/// reference arrival [`LT_ARRIVAL_REF_MS`]: `max(0, LT_ARRIVAL_REF_MS − $1fvjk)`.
-/// The document scheduler prefers the per-move MEASURED arrival (see
-/// [`crate::spec::LibrarySpec::legato_lead_ms`]); this is the zone-agnostic
-/// fallback shape. Fast lines → ~0 ms; slow lines → ~60 ms.
-pub fn lt_prebow_ms(ioi_ms: f32) -> f32 {
-    (LT_ARRIVAL_REF_MS - lt_start_offset_ms(ioi_ms)).max(0.0)
 }
 
 /// Locate the steady-state sustain **plateau** of a decoded sample so a hold

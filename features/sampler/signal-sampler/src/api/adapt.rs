@@ -806,6 +806,7 @@ zones (
             low_latency: None,
             portamento: None,
             retrigger: None,
+            ..LegatoEngineSpec::default()
         });
         let leg = legato_from_spec(&spec).expect("legato built");
         assert!(matches!(leg.mode, LegatoMode::Mono));

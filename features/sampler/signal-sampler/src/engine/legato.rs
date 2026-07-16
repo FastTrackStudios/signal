@@ -247,7 +247,8 @@ impl SampleEngine {
             // recorded key (whole-tone grid → even notes warm their neighbour).
             let in_range = note >= z.key_min && note <= z.key_max;
             let near =
-                (z.root_key as i32 - note as i32).unsigned_abs() as u8 <= ZONE_PITCH_TOLERANCE;
+                (z.root_key as i32 - note as i32).unsigned_abs() as u8
+                    <= self.patch.spec.performance.zone_pitch_tolerance;
             if !in_range && !near {
                 continue;
             }

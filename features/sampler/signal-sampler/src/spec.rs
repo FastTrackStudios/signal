@@ -49,6 +49,14 @@ pub struct LibrarySpec {
     /// Legato engine configuration (absent for piano/drums).
     pub legato_engine: Option<LegatoEngineSpec>,
 
+    /// Library-wide playback-policy numbers (makeup gain, master tune,
+    /// note-off fades, loop crossfade, …). All fields default to the values
+    /// the engine historically hardcoded, so specs that don't set them are
+    /// bit-identical to the pre-data-driven behaviour.
+    // r[impl signal.soundsource.declarative]
+    #[facet(default)]
+    pub performance: PerformanceSpec,
+
     /// Short-note pre-delay compensation.
     pub short_note_timing: Option<ShortNoteTimingSpec>,
 
@@ -189,6 +197,7 @@ impl LibrarySpec {
             dynamics: DynamicsSpec::default(),
             articulations: Vec::new(),
             legato_engine: None,
+            performance: PerformanceSpec::default(),
             short_note_timing: None,
             keyswitch: None,
             live_legato_interval_max: 2,
@@ -206,6 +215,76 @@ impl LibrarySpec {
     /// Look up an articulation by its `id` field.
     pub fn articulation(&self, id: &str) -> Option<&ArticulationSpec> {
         self.articulations.iter().find(|a| a.id == id)
+    }
+
+    /// The Con Sordino counterpart of `artic_id` when toggling sordino
+    /// `active`: the articulation's explicit `sordino_pair` when authored
+    /// (`""` = none), else the CSS `Sord` id-prefix convention — in both
+    /// cases only if the counterpart exists in the spec.
+    pub fn sordino_counterpart(&self, artic_id: &str, active: bool) -> Option<String> {
+        let a = self.articulation(artic_id);
+        if let Some(pair) = a.and_then(|a| a.sordino_pair.clone()) {
+            if pair.is_empty() {
+                return None;
+            }
+            let target = self.articulation(&pair)?;
+            if target.is_sordino() == active {
+                return Some(pair);
+            }
+            return None;
+        }
+        if active {
+            if !artic_id.starts_with("Sord") {
+                let sord_id = format!("Sord{artic_id}");
+                if self.articulation(&sord_id).is_some() {
+                    return Some(sord_id);
+                }
+            }
+        } else if let Some(base) = artic_id.strip_prefix("Sord") {
+            if self.articulation(base).is_some() {
+                return Some(base.to_string());
+            }
+        }
+        None
+    }
+
+    /// The CC2 vibrato-crossfade counterpart of `artic_id`: the explicit
+    /// `vibrato_pair` when authored (`""` = none), else the opposite
+    /// vibrato side within the same kind + sordino family. `None` when the
+    /// library declares no vibrato controller.
+    pub fn vibrato_counterpart(&self, artic_id: &str) -> Option<String> {
+        self.dynamics.vibrato_controller.as_deref()?;
+        let a = self.articulation(artic_id);
+        if let Some(pair) = a.and_then(|a| a.vibrato_pair.clone()) {
+            return (!pair.is_empty() && self.articulation(&pair).is_some()).then_some(pair);
+        }
+        // Inferred: same kind (Sustain↔Sustain, Legato↔Legato), same sordino
+        // family, opposite vibrato side.
+        let a = a?;
+        let (want_kind, is_sord, is_vib) = (a.kind.clone(), a.is_sordino(), a.is_vibrato());
+        self.articulations
+            .iter()
+            .filter(|c| c.id != artic_id)
+            .filter(|c| c.kind == want_kind)
+            .filter(|c| {
+                matches!(
+                    c.kind,
+                    ArticulationKind::Sustain | ArticulationKind::Legato
+                )
+            })
+            .find(|c| c.is_sordino() == is_sord && c.is_vibrato() != is_vib)
+            .map(|c| c.id.clone())
+    }
+
+    /// The legato-engine configuration, falling back to an all-defaults
+    /// [`LegatoEngineSpec`] when the library declares none — so engine code
+    /// can read timing/crossfade policy unconditionally (the defaults are
+    /// the historical hardcoded values).
+    pub fn legato_cfg(&self) -> &LegatoEngineSpec {
+        static DEFAULT: std::sync::OnceLock<LegatoEngineSpec> = std::sync::OnceLock::new();
+        self.legato_engine
+            .as_ref()
+            .unwrap_or_else(|| DEFAULT.get_or_init(LegatoEngineSpec::default))
     }
 
     /// Look up a section by its `id` field.
@@ -285,6 +364,317 @@ impl LibrarySpec {
             set.insert(t.clone());
         }
         set
+    }
+}
+
+// ── Performance model ─────────────────────────────────────────────────────────
+
+/// Library-wide playback-policy numbers — the POLICY the engine reads from
+/// data (the engine keeps only the MECHANISM: zone resolution, scheduling,
+/// crossfading). Every default equals the value the engine hardcoded before
+/// this block existed, so a spec that omits `performance` plays identically.
+///
+/// The non-zero defaults were decoded from Cinematic Studio Strings (KSP
+/// persistent values / GroupList envelopes) but apply harmlessly to any
+/// zoned library; a library that needs different numbers writes them here.
+// r[impl signal.soundsource.declarative]
+#[derive(Debug, Clone, Facet)]
+pub struct PerformanceSpec {
+    /// Held-sustain note-off overlap fade (ms) for zoned sustains (CSS
+    /// `$tukcw` = 400): on key-up the looping sustain fades over this window.
+    #[facet(default = 400)]
+    pub sustain_noteoff_ms: u32,
+    /// Output makeup (dB) applied to looping sustain-layer voices — the flat
+    /// level offset between a looped-plateau playback and the vendor
+    /// instrument's rendered level (CSS: +6 dB, see the A/B calibration).
+    #[facet(default = 6.0f32)]
+    pub sustain_makeup_db: f32,
+    /// Global master tune in cents, applied on top of the per-note transpose.
+    /// CSS ships `tune=1.00521` ≈ +9.0 cents on every playable group; other
+    /// libraries stay at 0.
+    #[facet(default = 0.0f32)]
+    pub master_tune_cents: f32,
+    /// Seamless loop-crossfade length (ms) for held/looped bodies.
+    #[facet(default = 150)]
+    pub loop_xfade_ms: u32,
+    /// Max semitones to pitch-shift from the nearest recorded zone when no
+    /// zone spans a note (CSS whole-tone grid → 2).
+    #[facet(default = 2)]
+    pub zone_pitch_tolerance: u8,
+    /// Linear gain for recorded release-tail voices (the release ENV_FLEX
+    /// does the shaping; CSS release groups ship 0 dB static → 1.0).
+    #[facet(default = 1.0f32)]
+    pub release_gain: f32,
+    /// Default amp attack (ms) applied to sustain-layer voices at load.
+    /// `None` keeps the engine's default (no attack bloom). CSS "Arco
+    /// attack" ships `$mmirg = 30/127` ≈ 198 ms under Kontakt's cubic law.
+    pub attack_ms: Option<u32>,
+    /// Default note-off release (ms) applied at load. `None` keeps the
+    /// engine default. CSS: 400 (`$tukcw`).
+    pub release_ms: Option<u32>,
+}
+
+impl Default for PerformanceSpec {
+    fn default() -> Self {
+        Self {
+            sustain_noteoff_ms: 400,
+            sustain_makeup_db: 6.0,
+            master_tune_cents: 0.0,
+            loop_xfade_ms: 150,
+            zone_pitch_tolerance: 2,
+            release_gain: 1.0,
+            attack_ms: None,
+            release_ms: None,
+        }
+    }
+}
+
+/// One decoded amp-envelope segment `(time_ms, level, curve)` — the literal
+/// ENV_FLEX representation (segment 0 is the attack). See
+/// [`ArticulationSpec::amp_env`].
+#[derive(Debug, Clone, Copy, PartialEq, Facet)]
+pub struct EnvSegmentSpec {
+    /// Segment duration in ms.
+    pub time_ms: f32,
+    /// Target level at the end of the segment (0..=1).
+    pub level: f32,
+    /// Curve shape parameter (0.5 = linear-ish; matches the decoded tables).
+    pub curve: f32,
+}
+
+/// A piecewise-linear curve over the inter-onset interval (IOI, ms): below
+/// `thresholds_ms[0]` → `anchors_ms[0]`, above the last threshold → the last
+/// anchor, linear between. Used for the legato Overlap-Delay and the
+/// transition sample-start offset.
+#[derive(Debug, Clone, PartialEq, Facet)]
+pub struct IoiCurveSpec {
+    /// Ascending IOI breakpoints (ms).
+    pub thresholds_ms: Vec<f32>,
+    /// Anchor values (ms) at each breakpoint; same length as `thresholds_ms`.
+    pub anchors_ms: Vec<f32>,
+}
+
+impl IoiCurveSpec {
+    /// Piecewise-linear interpolation of `ioi_ms` across the breakpoints.
+    pub fn value_at(&self, ioi_ms: f32) -> f32 {
+        let n = self.thresholds_ms.len().min(self.anchors_ms.len());
+        if n == 0 {
+            return 0.0;
+        }
+        if ioi_ms <= self.thresholds_ms[0] {
+            return self.anchors_ms[0];
+        }
+        for k in 0..n - 1 {
+            if ioi_ms < self.thresholds_ms[k + 1] {
+                let span = (self.thresholds_ms[k + 1] - self.thresholds_ms[k]).max(1e-6);
+                let t = (ioi_ms - self.thresholds_ms[k]) / span;
+                return self.anchors_ms[k] + (self.anchors_ms[k + 1] - self.anchors_ms[k]) * t;
+            }
+        }
+        self.anchors_ms[n - 1]
+    }
+}
+
+/// Overlap-Delay curves for one legato mode: how long the engine waits after
+/// a note-on before firing the transition, interpolated over the IOI. `soft`
+/// applies to attack-velocity range 1 (≤ the first
+/// [`LegatoEngineSpec::velocity_splits`] split), `loud` to ranges 2+.
+#[derive(Debug, Clone, PartialEq, Facet)]
+pub struct OverlapDelayCurveSpec {
+    pub soft: IoiCurveSpec,
+    pub loud: IoiCurveSpec,
+}
+
+/// Overlap-Delay configuration (CSS `legtrans_OD` / `$b0n3s`), per legato
+/// mode. Defaults are the decoded CSS persistent values — near-zero
+/// everywhere except soft+fast playing.
+#[derive(Debug, Clone, PartialEq, Facet)]
+pub struct OverlapDelaySpec {
+    pub low_latency: OverlapDelayCurveSpec,
+    pub expressive: OverlapDelayCurveSpec,
+}
+
+impl Default for OverlapDelaySpec {
+    /// The decoded CSS persistent values (`CSS 1st Violins.nki` BParScript
+    /// store): LL thresholds `$deey3/$fxiox/$jystg/$zvaet`, EX thresholds
+    /// `$g45yq/$bwkdm/$waq1e/$whtm2`; soft anchors `$nbkqa…` / `$kadcz…`;
+    /// loud anchors all-zero.
+    fn default() -> Self {
+        let z4 = vec![0.0, 0.0, 0.0, 0.0];
+        Self {
+            low_latency: OverlapDelayCurveSpec {
+                soft: IoiCurveSpec {
+                    thresholds_ms: vec![75.0, 100.0, 800.0, 1100.0],
+                    anchors_ms: vec![77.0, 0.0, 0.0, 0.0],
+                },
+                loud: IoiCurveSpec {
+                    thresholds_ms: vec![75.0, 100.0, 800.0, 1100.0],
+                    anchors_ms: z4.clone(),
+                },
+            },
+            expressive: OverlapDelayCurveSpec {
+                soft: IoiCurveSpec {
+                    thresholds_ms: vec![200.0, 300.0, 800.0, 800.0],
+                    anchors_ms: vec![83.0, 0.0, 0.0, 0.0],
+                },
+                loud: IoiCurveSpec {
+                    thresholds_ms: vec![200.0, 300.0, 800.0, 800.0],
+                    anchors_ms: z4,
+                },
+            },
+        }
+    }
+}
+
+/// The default transition sample-start offset curve — the decoded CSS
+/// `$1fvjk` IOI curve (`$ocjln = 6`): flat 177 ms up to a 150 ms IOI, linear
+/// 177 → 117 ms across 150…500 ms, flat 117 ms above. Fast lines start
+/// DEEPER into the transition recording (less audible pre-bow).
+fn default_start_offset_curve() -> IoiCurveSpec {
+    IoiCurveSpec {
+        thresholds_ms: vec![100.0, 150.0, 500.0],
+        anchors_ms: vec![177.0, 177.0, 117.0],
+    }
+}
+
+/// CC1 → loudness expression curve for CC1-crossfaded sustains: 0 dB at and
+/// above `knee`, linear to `floor_db` at CC1=0. The per-layer crossfade
+/// handles TIMBRE (≈flat total level); this supplies only the gentle bottom
+/// rolloff. Defaults calibrated on the CSS reference render (CC1=20 →
+/// −3.0 dB, flat from CC1≈45).
+#[derive(Debug, Clone, Copy, PartialEq, Facet)]
+pub struct Cc1ExpressionSpec {
+    #[facet(default = 45)]
+    pub knee: u8,
+    #[facet(default = -5.4f32)]
+    pub floor_db: f32,
+}
+
+impl Default for Cc1ExpressionSpec {
+    fn default() -> Self {
+        Self {
+            knee: 45,
+            floor_db: -5.4,
+        }
+    }
+}
+
+impl DynamicsSpec {
+    /// CC1 → linear loudness gain from [`DynamicsSpec::cc1_expression`]
+    /// (falling back to the CSS-calibrated defaults): 0 dB at/above the knee,
+    /// linear to `floor_db` at CC1=0.
+    pub fn cc1_expression_gain(&self, cc1: u8) -> f32 {
+        let c = self.cc1_expression.unwrap_or_default();
+        let db = if cc1 >= c.knee || c.knee == 0 {
+            0.0
+        } else {
+            c.floor_db * (c.knee - cc1) as f32 / c.knee as f32
+        };
+        10f32.powf(db / 20.0)
+    }
+}
+
+// ── Default (family) amp envelopes ───────────────────────────────────────────
+//
+// The decoded CSS ENV_FLEX amp envelopes (GroupList 0x33; literal shipped
+// values, Main mic) — retained here as the FAMILY DEFAULTS an articulation
+// falls back to when its spec carries no `amp_env`. A pack can override any
+// of them per articulation; libraries that never matched these families
+// (non-zoned, plain synth) are unaffected.
+
+/// Sustain family: fast bake attack, hold, 20 s decay-to-0. Held via the
+/// engine's sustain-hold freeze.
+pub const AMP_ENV_SUSTAIN: &[EnvSegmentSpec] = &[
+    seg(4.0, 1.0, 0.505),
+    seg(1000.0, 1.0, 0.9),
+    seg(20000.0, 0.0, 0.05),
+];
+/// Legato / legato-zero transition body.
+pub const AMP_ENV_LEGATO: &[EnvSegmentSpec] = &[
+    seg(80.0, 1.0, 0.499),
+    seg(480.0, 1.0, 0.72),
+    seg(442.3, 1.0, 0.5),
+    seg(1002.3, 0.0, 0.33),
+    seg(152.0, 0.0, 0.5),
+    seg(342.0, 0.0, 0.75),
+];
+/// Portamento glide.
+pub const AMP_ENV_PORTAMENTO: &[EnvSegmentSpec] = &[
+    seg(88.0, 0.466, 0.499),
+    seg(472.0, 1.0, 0.8),
+    seg(1240.0, 0.0, 0.5),
+    seg(152.0, 0.0, 0.5),
+    seg(342.0, 0.0, 0.75),
+];
+/// Marcato-legato / marc-port.
+pub const AMP_ENV_MARC_LEG: &[EnvSegmentSpec] = &[
+    seg(68.0, 0.493, 0.499),
+    seg(492.0, 1.0, 0.72),
+    seg(1440.0, 0.0, 0.33),
+    seg(156.6, 0.0, 0.5),
+    seg(342.0, 0.0, 0.75),
+];
+/// Marcato-mod overlay.
+pub const AMP_ENV_MARCATO_MOD: &[EnvSegmentSpec] = &[
+    seg(1.0, 1.0, 0.685),
+    seg(1499.0, 1.0, 0.5),
+    seg(104.0, 1.0, 0.45),
+    seg(1000.0, 0.0, 0.63),
+];
+/// Short family: one-shot, natural end shaped by the 8/604/7381 decay.
+pub const AMP_ENV_SHORT: &[EnvSegmentSpec] = &[
+    seg(8.0, 1.0, 0.505),
+    seg(604.0, 1.0, 0.45),
+    seg(7381.0, 0.0, 0.65),
+];
+/// Release tails.
+pub const AMP_ENV_RELEASE: &[EnvSegmentSpec] = &[
+    seg(1.0, 0.986, 0.125),
+    seg(4007.0, 1.0, 0.9),
+    seg(1250.0, 0.0, 0.7),
+];
+
+const fn seg(time_ms: f32, level: f32, curve: f32) -> EnvSegmentSpec {
+    EnvSegmentSpec {
+        time_ms,
+        level,
+        curve,
+    }
+}
+
+/// The voice role the engine resolved from its `VoiceKind` — the MECHANISM
+/// side of amp-envelope selection. The POLICY (which family table applies)
+/// lives here in the spec layer, in [`default_amp_env`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AmpEnvRole {
+    Release,
+    Short,
+    Legato,
+    SustainLayer,
+    Other,
+}
+
+/// Family-default amp envelope `(segments, hold)` for an articulation id +
+/// voice role. `None` = no envelope (flat unity — legacy behaviour for
+/// families outside the decoded set).
+pub fn default_amp_env(artic_id: &str, role: AmpEnvRole) -> Option<(&'static [EnvSegmentSpec], bool)> {
+    let id = artic_id.to_ascii_lowercase();
+    if role == AmpEnvRole::Release || id.contains("rel") {
+        Some((AMP_ENV_RELEASE, false))
+    } else if role == AmpEnvRole::Short {
+        Some((AMP_ENV_SHORT, false))
+    } else if id.contains("port") {
+        Some((AMP_ENV_PORTAMENTO, false))
+    } else if id.contains("marc") && id.contains("leg") {
+        Some((AMP_ENV_MARC_LEG, false))
+    } else if id.contains("marcato") && id.contains("mod") {
+        Some((AMP_ENV_MARCATO_MOD, false))
+    } else if role == AmpEnvRole::Legato || id.contains("legato") {
+        Some((AMP_ENV_LEGATO, false))
+    } else if role == AmpEnvRole::SustainLayer {
+        Some((AMP_ENV_SUSTAIN, true))
+    } else {
+        None
     }
 }
 
@@ -631,6 +1021,10 @@ pub struct DynamicsSpec {
     /// computes the curve; this flag only gates whether it is applied.
     #[facet(default)]
     pub apply_short_velvol: bool,
+    /// Continuous CC1 → loudness curve on top of the layer crossfade (the
+    /// gentle bottom rolloff). `None` = the CSS-calibrated defaults
+    /// (knee 45, floor −5.4 dB → −3.0 dB at CC1=20).
+    pub cc1_expression: Option<Cc1ExpressionSpec>,
 }
 
 /// One CC1 dynamic layer with its crossfade range.
@@ -703,6 +1097,90 @@ pub struct ArticulationSpec {
     /// engine drops them an octave to match. Default 0 = no shift.
     #[facet(default)]
     pub transpose: i8,
+
+    /// Decoded per-articulation amp envelope (ENV_FLEX segments; segment 0
+    /// is the attack). Empty = fall back to the built-in family defaults
+    /// ([`default_amp_env`], keyed by articulation kind/id), which preserve
+    /// the historical behaviour for libraries that don't author envelopes.
+    // r[impl signal.soundsource.declarative]
+    #[facet(default)]
+    pub amp_env: Vec<EnvSegmentSpec>,
+    /// Whether the envelope freezes at its hold level while the note is held
+    /// (sustains) or plays through one-shot (shorts, releases, transitions).
+    /// `None` = held for Sustain/Looped/Trill kinds, one-shot otherwise.
+    pub amp_env_hold: Option<bool>,
+
+    /// Which side of the CC2 vibrato crossfade this articulation belongs to.
+    /// `None` = infer from the id (CSS convention: `NV`/`Nonvib` in the name
+    /// = non-vibrato side; everything else vibrato).
+    pub vibrato: Option<bool>,
+    /// The CC2 vibrato-crossfade counterpart articulation id (e.g. `Nonvib`
+    /// → `Vibsus`, `NVLeg` → `Leg`). `Some("")` = explicitly no pair;
+    /// `None` = infer by name (same kind + sordino family, opposite side).
+    pub vibrato_pair: Option<String>,
+    /// Role of a `kind @Legato` articulation in transition selection:
+    /// `"transition"` (interval move), `"retrigger"` (same-note re-bow, CSS
+    /// `*zero`), or `"portamento"` (glide). Empty = infer from the id
+    /// (`zero` → retrigger, `port` → portamento, else transition).
+    // r[impl signal.soundsource.legato]
+    #[facet(default)]
+    pub legato_role: String,
+    /// Whether this articulation is the Con Sordino (muted) variant.
+    /// `None` = infer from the id (`Sord` prefix).
+    pub sordino: Option<bool>,
+    /// The Con Sordino counterpart id (both directions are looked up).
+    /// `Some("")` = explicitly none; `None` = infer by the `Sord` prefix.
+    pub sordino_pair: Option<String>,
+}
+
+/// Role of a legato-kind articulation in transition selection.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LegatoRole {
+    /// Interval transition (`Leg`, `NVLeg`).
+    Transition,
+    /// Same-note re-trigger / re-bow (`Legzero`, `NVLegzero`).
+    Retrigger,
+    /// Portamento glide (`Port`).
+    Portamento,
+}
+
+impl ArticulationSpec {
+    /// Sordino-family membership: the explicit `sordino` flag, else the CSS
+    /// `Sord` id-prefix convention.
+    pub fn is_sordino(&self) -> bool {
+        self.sordino.unwrap_or_else(|| self.id.starts_with("Sord"))
+    }
+
+    /// Vibrato-side membership for the CC2 crossfade: the explicit
+    /// `vibrato` flag, else the CSS convention (`nv`/`nonvib` in the id =
+    /// non-vibrato side).
+    pub fn is_vibrato(&self) -> bool {
+        self.vibrato.unwrap_or_else(|| {
+            let id = self.id.to_lowercase();
+            !(id.contains("nv") || id.contains("nonvib"))
+        })
+    }
+
+    /// Transition-selection role: the explicit `legato_role`, else inferred
+    /// from the id (CSS convention: `port` → portamento, `zero` →
+    /// retrigger).
+    pub fn resolve_legato_role(&self) -> LegatoRole {
+        match self.legato_role.to_ascii_lowercase().as_str() {
+            "retrigger" => LegatoRole::Retrigger,
+            "portamento" => LegatoRole::Portamento,
+            "transition" => LegatoRole::Transition,
+            _ => {
+                let id = self.id.to_lowercase();
+                if id.contains("port") {
+                    LegatoRole::Portamento
+                } else if id.contains("zero") {
+                    LegatoRole::Retrigger
+                } else {
+                    LegatoRole::Transition
+                }
+            }
+        }
+    }
 }
 
 /// High-level category for an articulation's playback behaviour.
@@ -744,6 +1222,71 @@ pub struct LegatoEngineSpec {
     pub portamento: Option<PortamentoSpec>,
     /// Same-note re-trigger (Legzero) configuration.
     pub retrigger: Option<RetriggerSpec>,
+
+    /// Attack-velocity range splits (CSS `$eluxs`/`$0uhls`): velocities ≤
+    /// `splits[0]` are range 1 (soft), ≤ `splits[1]` range 2, above range 3.
+    /// Empty = the decoded CSS defaults `[64, 100]`.
+    // r[impl signal.soundsource.legato.velocity-zones]
+    #[facet(default)]
+    pub velocity_splits: Vec<u8>,
+    /// Overlap-Delay curves (`legtrans_OD` / `$b0n3s`) — the wait between a
+    /// live note-on and the transition firing, IOI-interpolated per legato
+    /// mode and velocity range. `None` = the decoded CSS defaults.
+    // r[impl signal.soundsource.legato.live]
+    pub overlap_delay: Option<OverlapDelaySpec>,
+    /// Transition sample-start offset curve (`$1fvjk`): how far INTO the
+    /// transition recording playback begins, IOI-interpolated. `None` = the
+    /// decoded CSS defaults (177 → 117 ms).
+    // r[impl signal.soundsource.legato.offline]
+    pub start_offset: Option<IoiCurveSpec>,
+    /// Default legato crossfade (ms) — the old voice ramps out over this.
+    #[facet(default = 30)]
+    pub transition_fade_ms: u32,
+    /// Legato-retire crossfade (ms) for the PREVIOUS transition voice,
+    /// indexed by attack-velocity range (1..=3). Empty = the decoded CSS
+    /// defaults `[150, 281, 281]` (`$fjtlu`/`$hbi2j`/`$2ebzd`).
+    #[facet(default)]
+    pub retire_transition_ms: Vec<u32>,
+    /// Legato-retire crossfade (ms) for the PREVIOUS sustain voice, indexed
+    /// by attack-velocity range. Empty = the decoded CSS defaults
+    /// `[550, 500, 500]` (`$tdjzq`/`$3ivkj`/`$u0t23`).
+    #[facet(default)]
+    pub retire_sustain_ms: Vec<u32>,
+    /// Trim (dB) on the legato-connected held SUSTAIN voice (CSS `$3tsb0` =
+    /// −6 dB `change_vol` on `%grhcg`) — a connected note sits this far below
+    /// a fresh first note.
+    #[facet(default = -6.0f32)]
+    pub sustain_trim_db: f32,
+    /// Velocity used for the transition back to a held note when the
+    /// sounding note is released (no real release-velocity exists).
+    #[facet(default = 80)]
+    pub fallback_velocity: u8,
+    /// Declick fade (ms) for a transition voice that starts DEEP inside the
+    /// recording via the start-offset curve (a Low-Latency prefire skips
+    /// ~300 ms in and begins partway up the bow-change swell).
+    #[facet(default = 25)]
+    pub skip_declick_ms: u32,
+}
+
+impl Default for LegatoEngineSpec {
+    fn default() -> Self {
+        Self {
+            zones: Vec::new(),
+            expressive: None,
+            low_latency: None,
+            portamento: None,
+            retrigger: None,
+            velocity_splits: Vec::new(),
+            overlap_delay: None,
+            start_offset: None,
+            transition_fade_ms: 30,
+            retire_transition_ms: Vec::new(),
+            retire_sustain_ms: Vec::new(),
+            sustain_trim_db: -6.0,
+            fallback_velocity: 80,
+            skip_declick_ms: 25,
+        }
+    }
 }
 
 impl LegatoEngineSpec {
@@ -758,6 +1301,78 @@ impl LegatoEngineSpec {
         } else {
             self.expressive.clone()
         }
+    }
+
+    /// Attack-velocity range (1..=3) from [`Self::velocity_splits`]
+    /// (defaults `[64, 100]` — CSS `$eluxs`/`$0uhls`).
+    pub fn velocity_range(&self, vel: u8) -> u8 {
+        let (s1, s2) = match self.velocity_splits.as_slice() {
+            [] => (64, 100),
+            [a] => (*a, 127),
+            [a, b, ..] => (*a, *b),
+        };
+        if vel <= s1 {
+            1
+        } else if vel <= s2 {
+            2
+        } else {
+            3
+        }
+    }
+
+    /// Overlap-Delay (ms) before a reactive legato transition fires —
+    /// IOI-interpolated per mode + velocity range from
+    /// [`Self::overlap_delay`] (defaults = the decoded CSS persistent
+    /// values: near-zero except soft+fast playing).
+    // r[impl signal.soundsource.legato.live]
+    pub fn overlap_delay_ms(&self, ioi_ms: f32, velocity: u8, expressive: bool) -> u32 {
+        let default;
+        let od = match &self.overlap_delay {
+            Some(od) => od,
+            None => {
+                default = OverlapDelaySpec::default();
+                &default
+            }
+        };
+        let mode = if expressive {
+            &od.expressive
+        } else {
+            &od.low_latency
+        };
+        let curve = if self.velocity_range(velocity) == 1 {
+            &mode.soft
+        } else {
+            &mode.loud
+        };
+        curve.value_at(ioi_ms).round().max(0.0) as u32
+    }
+
+    /// Transition sample-start offset (ms) — how far INTO the transition
+    /// recording playback begins (`$1fvjk`), IOI-interpolated from
+    /// [`Self::start_offset`] (defaults 177 → 117 ms).
+    // r[impl signal.soundsource.legato.offline]
+    pub fn start_offset_ms(&self, ioi_ms: f32) -> f32 {
+        match &self.start_offset {
+            Some(c) => c.value_at(ioi_ms),
+            None => default_start_offset_curve().value_at(ioi_ms),
+        }
+    }
+
+    /// Retire crossfades `(transition_ms, sustain_ms)` for the PREVIOUS
+    /// legato pair, indexed by the attack-velocity range of the NEW note.
+    pub fn retire_fades_ms(&self, velocity: u8) -> (u32, u32) {
+        let vr = (self.velocity_range(velocity) - 1) as usize;
+        let pick = |v: &[u32], defaults: [u32; 3]| -> u32 {
+            if v.is_empty() {
+                defaults[vr.min(2)]
+            } else {
+                v[vr.min(v.len() - 1)]
+            }
+        };
+        (
+            pick(&self.retire_transition_ms, [150, 281, 281]),
+            pick(&self.retire_sustain_ms, [550, 500, 500]),
+        )
     }
 }
 
@@ -1182,19 +1797,9 @@ mod tests {
     use super::*;
 
     fn specs_dir() -> std::path::PathBuf {
-        // Prefer the sample-collector repo next to signal, fall back to a local specs/ dir.
+        // The CSS soundpack definition is owned by the orchestra rig crate.
         let manifest = std::env::var("CARGO_MANIFEST_DIR").unwrap();
-        let signal_root = std::path::Path::new(&manifest)
-            .parent()
-            .unwrap()
-            .parent()
-            .unwrap();
-        let sc_specs = signal_root.parent().unwrap().join("sample-collector/specs");
-        if sc_specs.exists() {
-            sc_specs
-        } else {
-            signal_root.join("specs")
-        }
+        std::path::Path::new(&manifest).join("../../rigs/orchestra/specs")
     }
 
     #[test]
@@ -1207,9 +1812,7 @@ mod tests {
     #[test]
     fn load_css_spec_styx() {
         let path = specs_dir().join("cinematic-strings.styx");
-        if !path.exists() {
-            return;
-        }
+        assert!(path.exists(), "CSS soundpack definition missing: {path:?}");
         let spec = LibrarySpec::from_file(&path).expect("parse CSS styx spec");
         assert_eq!(spec.sections.len(), 5);
         assert!(spec.articulations.len() > 10);
@@ -1229,6 +1832,69 @@ mod tests {
         let ks = spec.keyswitch.as_ref().unwrap();
         assert_eq!(ks.cc58_function(0), Some("Sustain: Low Latency Legato"));
         assert_eq!(ks.cc58_function(88), Some("Con Sordino On"));
+
+        // The performance / timing model is carried by the pack, and its
+        // values equal the engine's compiled-in defaults (so an old spec
+        // without the blocks plays identically).
+        assert_eq!(spec.performance.master_tune_cents, 9.0);
+        assert_eq!(spec.performance.attack_ms, Some(198));
+        assert_eq!(spec.performance.release_ms, Some(400));
+        assert_eq!(spec.performance.sustain_noteoff_ms, 400);
+        assert_eq!(le.velocity_splits, vec![64, 100]);
+        assert_eq!(le.overlap_delay_ms(50.0, 30, false), 77); // soft+fast LL
+        assert_eq!(le.overlap_delay_ms(50.0, 30, true), 83); // soft+fast EX
+        assert_eq!(le.overlap_delay_ms(400.0, 30, false), 0); // slow line
+        assert_eq!(le.overlap_delay_ms(50.0, 110, true), 0); // loud
+        assert_eq!(le.start_offset_ms(100.0), 177.0);
+        assert_eq!(le.start_offset_ms(500.0), 117.0);
+        assert_eq!(le.retire_fades_ms(30), (150, 550));
+        assert_eq!(le.retire_fades_ms(110), (281, 500));
+        assert_eq!(le.sustain_trim_db, -6.0);
+        // Defaults (spec omits nothing) equal an unset spec's resolution.
+        let default = LegatoEngineSpec::default();
+        assert_eq!(
+            default.overlap_delay_ms(50.0, 30, false),
+            le.overlap_delay_ms(50.0, 30, false)
+        );
+        assert_eq!(default.start_offset_ms(300.0), le.start_offset_ms(300.0));
+
+        // Transition selection is data: roles + vibrato pairing.
+        let leg = spec.articulation("Leg").unwrap();
+        assert_eq!(leg.resolve_legato_role(), LegatoRole::Transition);
+        assert!(leg.is_vibrato());
+        assert_eq!(
+            spec.vibrato_counterpart("Leg").as_deref(),
+            Some("NVLeg")
+        );
+        assert_eq!(
+            spec.articulation("Legzero").unwrap().resolve_legato_role(),
+            LegatoRole::Retrigger
+        );
+        assert_eq!(
+            spec.articulation("Port").unwrap().resolve_legato_role(),
+            LegatoRole::Portamento
+        );
+        // Tremolo/Harmonics explicitly opt out of the CC2 pair (fixes the
+        // inferred Tremolo↔Nonvib mispairing).
+        assert_eq!(spec.vibrato_counterpart("Tremolo"), None);
+        assert_eq!(spec.vibrato_counterpart("Harm"), None);
+        assert_eq!(
+            spec.vibrato_counterpart("Nonvib").as_deref(),
+            Some("Vibsus")
+        );
+
+        // Amp envelopes are authored per articulation for the long families
+        // and equal the decoded family defaults.
+        let sus_env = &spec.articulation("Vibsus").unwrap().amp_env;
+        assert_eq!(sus_env.as_slice(), AMP_ENV_SUSTAIN);
+        assert_eq!(
+            spec.articulation("Leg").unwrap().amp_env.as_slice(),
+            AMP_ENV_LEGATO
+        );
+        assert_eq!(
+            spec.articulation("NVrel").unwrap().amp_env.as_slice(),
+            AMP_ENV_RELEASE
+        );
     }
 
     #[test]

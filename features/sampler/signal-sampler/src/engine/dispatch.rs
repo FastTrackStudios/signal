@@ -303,7 +303,10 @@ impl SampleEngine {
         let delay_ms = if portamento {
             0 // portamento fires immediately — the glide pitch ramp is the "delay"
         } else {
-            ioi_legato_delay_ms(ioi_ms, velocity, self.legato_expressive)
+            self.patch
+                .spec
+                .legato_cfg()
+                .overlap_delay_ms(ioi_ms, velocity, self.legato_expressive)
         };
 
         let frames_remaining = ms_to_frames(delay_ms, self.sample_rate);
@@ -367,9 +370,9 @@ impl SampleEngine {
         // (real persistent values, indexed by attack-velocity range), so the
         // new pair emerges under them with no inter-note tick. Line-scoped so a
         // unison note held by another divisi line keeps sounding.
-        let vr = (velocity_range(velocity) - 1) as usize;
-        let trans_fade = ms_to_frames(RETIRE_TRANS_MS[vr], self.sample_rate);
-        let sus_fade = ms_to_frames(RETIRE_SUS_MS[vr], self.sample_rate);
+        let (retire_trans_ms, retire_sus_ms) = self.patch.spec.legato_cfg().retire_fades_ms(velocity);
+        let trans_fade = ms_to_frames(retire_trans_ms, self.sample_rate);
+        let sus_fade = ms_to_frames(retire_sus_ms, self.sample_rate);
         self.voices
             .retire_note_line(self.cur_line as u8, from_note, trans_fade, sus_fade);
 
@@ -460,14 +463,19 @@ impl SampleEngine {
 
     /// Find the Port articulation matching the current sordino state.
     pub(crate) fn find_port_artic_id(&self) -> Option<String> {
-        let want_sord = self.articulation.starts_with("Sord");
+        let want_sord = self
+            .patch
+            .spec
+            .articulation(&self.articulation)
+            .map(|a| a.is_sordino())
+            .unwrap_or_else(|| self.articulation.starts_with("Sord"));
         self.patch
             .spec
             .articulations
             .iter()
             .filter(|a| a.kind == ArticulationKind::Legato)
-            .filter(|a| a.id.starts_with("Sord") == want_sord)
-            .find(|a| a.id.to_lowercase().contains("port"))
+            .filter(|a| a.is_sordino() == want_sord)
+            .find(|a| a.resolve_legato_role() == crate::spec::LegatoRole::Portamento)
             .map(|a| a.id.clone())
     }
 
@@ -711,7 +719,7 @@ impl SampleEngine {
         };
 
         // Continuous loudness sweep on top of the (short) timbre crossfade.
-        let expr = Self::cc1_expression(self.cc1);
+        let expr = self.cc1_expression(self.cc1);
         for v in self.voices.voices_mut() {
             if v.line != cur_line {
                 continue;
@@ -769,36 +777,7 @@ impl SampleEngine {
     /// name we look for one that does (and vice-versa), staying within the
     /// same family (Con Sordino vs regular).
     pub(crate) fn find_vibrato_pair_id(&self, artic_id: &str) -> Option<String> {
-        // Only applies when CC2 is the vibrato controller.
-        self.patch.spec.dynamics.vibrato_controller.as_deref()?;
-
-        let id_lower = artic_id.to_lowercase();
-        let is_sord = id_lower.contains("sord");
-        let is_nv = id_lower.contains("nv") || id_lower.contains("nonvib");
-
-        // The vibrato pair lives in the same articulation family — Sustain
-        // (Vibsus↔Nonvib) or Legato (Leg↔NVLeg) — so legato gets CC2 vibrato too.
-        let want_kind = self
-            .patch
-            .spec
-            .articulation(artic_id)
-            .map(|a| a.kind.clone());
-        self.patch
-            .spec
-            .articulations
-            .iter()
-            .filter(|a| a.id != artic_id)
-            .filter(|a| Some(&a.kind) == want_kind.as_ref())
-            .filter(|a| matches!(a.kind, ArticulationKind::Sustain | ArticulationKind::Legato))
-            .filter(|a| {
-                let other = a.id.to_lowercase();
-                // Same family (sord vs non-sord)
-                other.contains("sord") == is_sord
-                    // Opposite vibrato side
-                    && (other.contains("nv") || other.contains("nonvib")) != is_nv
-            })
-            .map(|a| a.id.clone())
-            .next()
+        self.patch.spec.vibrato_counterpart(artic_id)
     }
 
     /// Map CC58 → action and execute it.

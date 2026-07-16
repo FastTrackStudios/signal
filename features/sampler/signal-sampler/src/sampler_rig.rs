@@ -824,6 +824,15 @@ impl SamplerRig {
         }
     }
 
+    /// Engine frames rendered so far by an instrument — the clock the fire
+    /// log's `frame` field is measured on (tests / offline analysis).
+    pub fn engine_frames_rendered(&self, id: &str) -> Option<u64> {
+        self.bank()
+            .lock()
+            .ok()
+            .and_then(|b| b.engine_frames_rendered(id))
+    }
+
     /// REACTIVE legato-path trigger count since an instrument's fire log was
     /// last enabled — see
     /// [`SampleEngine::reactive_legato_fires`](crate::engine::SampleEngine::reactive_legato_fires).
