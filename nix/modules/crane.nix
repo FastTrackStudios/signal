@@ -20,30 +20,10 @@
 
       craneLib = (inputs.crane.mkLib pkgs).overrideToolchain config.fts.rustToolchain;
 
-      # Vendor against the root Cargo.lock, with one substitution:
-      # the lock pins `baseview` from Codys-Wright/baseview.git
-      # (nice-plug-dioxus's VST windowing dep) — that repo is GONE
-      # upstream, so the default builtins.fetchGit fails. The exact
-      # commit is still reachable through GitHub's fork network via
-      # RustAudio/baseview (SHA-in-want), so fetch the identical
-      # tree from there. Content is verified by hash + the same
-      # commit id, and cargo's vendor checksums still match.
-      cargoVendorDir = craneLib.vendorCargoDeps {
-        src = ftsSrc;
-        # The override swaps the SOURCE of crane's package-extraction
-        # derivation (drv extracts baseview-<ver> subdirs from the
-        # checkout); returning a raw checkout would skip extraction.
-        overrideVendorGitCheckout = ps: drv:
-          if lib.any (p: lib.hasInfix "Codys-Wright/baseview" (p.source or "")) ps
-          then drv.overrideAttrs (_: {
-            src = pkgs.fetchgit {
-              url = "https://github.com/RustAudio/baseview.git";
-              rev = "00e438ff34f7e282776284e75b490a6fc36b16a7";
-              hash = "sha256-MeCvk/icQlEYaYZbayDx4S49QLRjrpMBDCzXe14VxW0=";
-            };
-          })
-          else drv;
-      };
+      # Vendor against the root Cargo.lock. (The old baseview fetch
+      # override is gone: the dead Codys-Wright/baseview.git dep was
+      # vendored into libs/vendor/baseview as a path dep 2026-07-16.)
+      cargoVendorDir = craneLib.vendorCargoDeps { src = ftsSrc; };
     in
     {
       fts.craneLib = craneLib;
