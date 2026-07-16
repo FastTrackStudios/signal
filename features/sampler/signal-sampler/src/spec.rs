@@ -321,26 +321,58 @@ impl LibrarySpec {
         self.mics.iter().find(|m| m.id == id)
     }
 
-    /// Median measured lead-in (ms) across the legato transition zones that
+    /// Median heard-arrival (ms) across the legato transition zones that
     /// match a `from → to` move — the document scheduler prefires the
     /// transition by exactly this so the pitch change lands on the
-    /// destination tick.
+    /// destination tick. Per zone the MEASURED `arrival_ms` (destination-
+    /// pitch settle, measured from the sample audio) wins; `lead_in_ms`
+    /// (library metadata) is only a fallback for unmeasured zones.
     ///
     /// Matching mirrors the engine's transition selection: direction from
     /// `sign(to - from)`, named note `min(from, to)`, interval
     /// `|to - from|` clamped to an octave (CSS samples nothing wider; the
     /// engine octave-clamps and pitch-shifts so the destination stays
     /// exact). Zones are matched at the nearest recorded root (whole-tone
-    /// grid). `Some(0)` for a same-pitch re-bow — the `Legzero` re-trigger
-    /// samples have no lead-in. `None` when the library has no measured
-    /// transition zones (caller falls back to the velocity curve).
+    /// grid). For a same-pitch re-bow: the median measured onset of the
+    /// re-trigger (`Legzero`) zones at the nearest root, or `Some(0)` when
+    /// they are unmeasured (the historical claim — no lead-in). `None` when
+    /// the library has no measured transition zones at all (caller falls
+    /// back to the velocity curve).
     pub fn legato_lead_ms(&self, from: u8, to: u8) -> Option<u32> {
         if from == to {
-            // Same-pitch re-bow: the Legzero re-trigger samples have no
-            // lead-in — but only claim that for libraries that actually
-            // carry measured transitions; legacy libraries keep the
-            // velocity-curve behaviour.
-            return self.has_measured_legato().then_some(0);
+            if !self.has_measured_legato() {
+                // Legacy libraries keep the velocity-curve behaviour.
+                return None;
+            }
+            // Same-pitch re-bow: the re-trigger (Legzero) samples' measured
+            // perceptual onset — the bow re-attack is NOT instantaneous.
+            // Unmeasured re-trigger zones keep the historical zero-lead
+            // claim.
+            let retrig = |id: &str| {
+                self.articulations.iter().any(|a| {
+                    a.kind == ArticulationKind::Legato
+                        && a.resolve_legato_role() == LegatoRole::Retrigger
+                        && a.id.eq_ignore_ascii_case(id)
+                })
+            };
+            let candidates = || {
+                self.zones
+                    .iter()
+                    .filter(|z| z.arrival_ms > 0.0 && retrig(&z.articulation))
+            };
+            let Some(best_dist) = candidates().map(|z| z.root_key.abs_diff(from)).min() else {
+                return Some(0);
+            };
+            // MAX over the nearest-root group (all RRs / mics / dynamic
+            // layers): the re-bow cannot be skipped into (its front IS the
+            // re-attack), so the engine can only HOLD a voice back — the
+            // schedule lead must be an upper bound over every zone the
+            // dispatch could pick, or a zone with a later onset lands late.
+            return candidates()
+                .filter(|z| z.root_key.abs_diff(from) == best_dist)
+                .map(|z| z.arrival_ms)
+                .max_by(|a, b| a.total_cmp(b))
+                .map(|ms| ms.ceil() as u32);
         }
         let direction = if to > from { "up" } else { "down" };
         let named = from.min(to);
@@ -354,18 +386,43 @@ impl LibrarySpec {
             self.zones.iter().filter(|z| {
                 z.interval == interval
                     && z.direction.eq_ignore_ascii_case(direction)
-                    && z.lead_in_ms > 0.0
+                    && z.transition_arrival_ms() > 0.0
                     && is_legato_artic(&z.articulation)
             })
         };
-        // Nearest recorded root first, then the median lead of that group.
+        // Nearest recorded root first, then the median arrival of that group.
         let best_dist = candidates().map(|z| z.root_key.abs_diff(named)).min()?;
         let mut leads: Vec<f32> = candidates()
             .filter(|z| z.root_key.abs_diff(named) == best_dist)
-            .map(|z| z.lead_in_ms)
+            .map(|z| z.transition_arrival_ms())
             .collect();
         leads.sort_by(|a, b| a.total_cmp(b));
         Some(leads[leads.len() / 2].round() as u32)
+    }
+
+    /// The largest measured heard-arrival (ms) over the attack zones any of
+    /// `artic_ids` could fire at `pitch` — the document scheduler pre-rolls
+    /// a fresh trigger by exactly this upper bound, and each spawned voice is
+    /// held back by `lead − its own zone's arrival` so the heard arrival
+    /// lands ON the tick regardless of which round-robin / mic / dynamic
+    /// layer fires. `None` when no matching zone carries a measurement
+    /// (caller falls back to `pre_delay_ms` for shorts / trigger-time for
+    /// sustains — the historical behaviour).
+    pub fn max_attack_arrival_ms(&self, artic_ids: &[&str], pitch: u8) -> Option<f32> {
+        let tol = self.performance.zone_pitch_tolerance;
+        self.zones
+            .iter()
+            .filter(|z| {
+                z.arrival_ms > 0.0
+                    && (z.trigger_mode.is_empty() || z.trigger_mode.eq_ignore_ascii_case("attack"))
+                    && artic_ids
+                        .iter()
+                        .any(|id| z.articulation.eq_ignore_ascii_case(id))
+                    && ((pitch >= z.key_min && pitch <= z.key_max)
+                        || (z.root_key as i32 - pitch as i32).unsigned_abs() as u8 <= tol)
+            })
+            .map(|z| z.arrival_ms)
+            .max_by(|a, b| a.total_cmp(b))
     }
 
     /// Whether any zone carries a measured legato transition (interval +
@@ -375,7 +432,7 @@ impl LibrarySpec {
     pub fn has_measured_legato(&self) -> bool {
         self.zones
             .iter()
-            .any(|z| z.interval > 0 && z.lead_in_ms > 0.0)
+            .any(|z| z.interval > 0 && z.transition_arrival_ms() > 0.0)
     }
 
     /// The resolved latched-CC articulation selector, when the pack enables
@@ -490,6 +547,24 @@ pub struct PerformanceSpec {
     /// Default note-off release (ms) applied at load. `None` keeps the
     /// engine default. CSS: 400 (`$tukcw`).
     pub release_ms: Option<u32>,
+    /// Grid placement policy for FRESH sustain attacks (phrase starts) in
+    /// document scheduling:
+    ///
+    /// * `"start_at_tick"` — the sample STARTS on the grid tick and speaks
+    ///   naturally after it. Nothing sounds before the click the note starts
+    ///   on; the perceptual onset lands `arrival_ms` late by the recording's
+    ///   own nature (exactly what the vendor instrument does live).
+    /// * `"arrive_at_tick"` (default / empty) — the trigger pre-rolls by the
+    ///   measured perceptual-onset bound so the note SPEAKS on the tick
+    ///   (audio from the sample's own bloom is audible before the click).
+    ///
+    /// Applies to fresh sustain-family attacks only. Legato transitions and
+    /// re-bows always arrive-at-tick (their pre-click content is the
+    /// PREVIOUS note continuing — correct musical behaviour), and shorts
+    /// always arrive-at-tick (their recorded pre-roll is the attack noise
+    /// before the rhythmic peak).
+    #[facet(default)]
+    pub attack_placement: String,
 }
 
 impl Default for PerformanceSpec {
@@ -502,6 +577,7 @@ impl Default for PerformanceSpec {
             zone_pitch_tolerance: 2,
             release_gain: 1.0,
             attack_ms: None,
+            attack_placement: String::new(),
             release_ms: None,
         }
     }
@@ -974,6 +1050,7 @@ fn zone_from_sfz(
         direction: String::new(),
         interval: 0,
         lead_in_ms: 0.0,
+        arrival_ms: 0.0,
         group: group_id.clone(),
         group_polyphony: 0,
         choke_group: group_id,
@@ -1351,6 +1428,31 @@ pub struct LegatoEngineSpec {
     /// ~300 ms in and begins partway up the bow-change swell).
     #[facet(default = 25)]
     pub skip_declick_ms: u32,
+    /// Standard-legato transition START-OFFSET bases (ms) per attack-velocity
+    /// range (1..=3, split by `velocity_splits`), EXPRESSIVE mode — the real
+    /// CSS `$1fvjk` selection for `$ocjln = 0` (KSP: `$fjf3c/$2p1wl/$ywj0r`,
+    /// shipped `0/83/177` for 1st Violins). The soft+fast IOI boost
+    /// (`legtrans_OD`, added to the OFFSET — it is not a wait) comes from
+    /// [`Self::overlap_delay_ms`]. Empty = fall back to the legacy
+    /// IOI-interpolated [`Self::start_offset`] curve — which the decode shows
+    /// is actually CSS's MARCATO transition table (`$ocjln = 6`:
+    /// `$ggt00/$v0rbb/$5exar` = 177/177→117 over IOI 100/150/500).
+    #[facet(default)]
+    pub lt_offset_expressive: Vec<u32>,
+    /// [`Self::lt_offset_expressive`] for LOW-LATENCY mode (KSP:
+    /// `$ak2j4/$ixzi1/$cltif`, shipped `100/148/177`).
+    #[facet(default)]
+    pub lt_offset_low_latency: Vec<u32>,
+    /// Slow secondary bloom on the legato-connected held sustain (CSS
+    /// `%1wcdh`, `$foyeb`/`$g4dbu` ≈ 1 s): the −6 dB `sustain_trim_db`
+    /// handoff level ramps back to full over this window, so a LONG
+    /// connected note recovers the body of a fresh note instead of sitting
+    /// 6 dB down until the next join — without it the held note's carrier
+    /// has decayed by the time the next transition's pre-bow plays at slow
+    /// tempi, and the incoming destination pitch reads (and sounds) early.
+    /// `0` disables the bloom (the pre-model behaviour).
+    #[facet(default = 1000)]
+    pub sustain_bloom_ms: u32,
 }
 
 impl Default for LegatoEngineSpec {
@@ -1370,6 +1472,9 @@ impl Default for LegatoEngineSpec {
             sustain_trim_db: -6.0,
             fallback_velocity: 80,
             skip_declick_ms: 25,
+            sustain_bloom_ms: 1000,
+            lt_offset_expressive: Vec::new(),
+            lt_offset_low_latency: Vec::new(),
         }
     }
 }
@@ -1441,6 +1546,27 @@ impl LegatoEngineSpec {
             Some(c) => c.value_at(ioi_ms),
             None => default_start_offset_curve().value_at(ioi_ms),
         }
+    }
+
+    /// STANDARD-legato transition start offset (ms) — the real CSS `$1fvjk`
+    /// for `$ocjln = 0`: a base per attack-VELOCITY range and mode
+    /// ([`Self::lt_offset_expressive`] / [`Self::lt_offset_low_latency`])
+    /// plus the `legtrans_OD` soft+fast IOI boost, which the shipped script
+    /// ADDS TO THE OFFSET (`$1fvjk := base + $b0n3s` — it is not a wait).
+    /// Libraries without authored bases keep the legacy IOI curve
+    /// ([`Self::start_offset_ms`]).
+    pub fn lt_offset_ms(&self, ioi_ms: f32, velocity: u8, expressive: bool) -> f32 {
+        let bases = if expressive {
+            &self.lt_offset_expressive
+        } else {
+            &self.lt_offset_low_latency
+        };
+        if bases.is_empty() {
+            return self.start_offset_ms(ioi_ms);
+        }
+        let vr = (self.velocity_range(velocity) - 1) as usize;
+        let base = bases.get(vr.min(bases.len() - 1)).copied().unwrap_or(0) as f32;
+        base + self.overlap_delay_ms(ioi_ms, velocity, expressive) as f32
     }
 
     /// Retire crossfades `(transition_ms, sustain_ms)` for the PREVIOUS
@@ -1828,6 +1954,26 @@ pub struct ZoneSpec {
     /// never assumed. 0 for non-transition zones.
     #[facet(default)]
     pub lead_in_ms: f32,
+    /// MEASURED heard-arrival marker (ms of sample time from `sample_start`):
+    /// when this zone's note is actually HEARD after playback begins, measured
+    /// from the sample audio itself (see the `measure_arrivals` tool) — never
+    /// assumed, never copied from library metadata. Semantics per zone class:
+    ///
+    /// * legato transition (`interval > 0`): destination-pitch settle — the
+    ///   moment the destination pitch takes over from the source (Goertzel
+    ///   harmonic-share crossing). Supersedes `lead_in_ms` where present
+    ///   (the CSS pack's `lead_in_ms` values came from library metadata that
+    ///   the audio contradicts).
+    /// * short / one-shot: the rhythmic peak of the attack (spectral-flux
+    ///   peak) — the per-round-robin replacement for the single global
+    ///   `short_note_timing.pre_delay_ms`.
+    /// * re-trigger (Legzero) / fresh sustain: perceptual onset — where the
+    ///   note starts speaking (spectral-flux leading edge).
+    ///
+    /// `0` = unmeasured (or a release zone, where arrival is meaningless):
+    /// consumers fall back to `lead_in_ms` / `pre_delay_ms` / trigger-time.
+    #[facet(default)]
+    pub arrival_ms: f32,
     /// Logical zone group id. Used for group-level editing and for choke
     /// relationships when `off_by` references another group.
     #[facet(default)]
@@ -1966,6 +2112,18 @@ pub struct WavetableSpec {
 }
 
 impl ZoneSpec {
+    /// The heard-arrival marker of a legato TRANSITION zone (ms of sample
+    /// time): the MEASURED `arrival_ms` (destination-pitch settle from the
+    /// audio itself) when present, else the metadata `lead_in_ms`. `0.0` =
+    /// no marker at all (legacy zone).
+    pub fn transition_arrival_ms(&self) -> f32 {
+        if self.arrival_ms > 0.0 {
+            self.arrival_ms
+        } else {
+            self.lead_in_ms
+        }
+    }
+
     /// Whether this zone contains the given `(note, velocity)`.
     pub fn contains(&self, note: u8, velocity: u8) -> bool {
         note >= self.key_min

@@ -82,6 +82,11 @@ performance {
     release_gain         1.0   // release groups ship 0 dB static; the amp env shapes the tail
     attack_ms            198   // "Arco attack" $mmirg=30/127 under Kontakt's cubic law
     release_ms           400   // $tukcw — note-off overlap fade
+    // Fresh attacks START on the click and speak naturally after it —
+    // nothing sounds before the beat a note begins on (owner policy;
+    // matches what the vendor instrument does live). Legato transitions,
+    // re-bows, and shorts keep arrive-at-tick compensation.
+    attack_placement     start_at_tick
 }
 
 // ── Dynamic Control Model ─────────────────────────────────────────────────────
@@ -637,7 +642,15 @@ legato_engine {
     // Transition sample-start offset ($1fvjk, $ocjln=6 IOI curve): how far
     // INTO the transition recording playback begins. Fast lines start deeper
     // (177 ms — less audible pre-bow), slow lines shallower (117 ms).
+    // MARCATO transition offset table ($ocjln=6: $ggt00/$v0rbb/$5exar over
+    // $yam53/$nzsuf/$5c2um) — kept as the fallback curve.
     start_offset { thresholds_ms (100 150 500), anchors_ms (177 177 117) }
+    // STANDARD legato ($ocjln=0) LT offset bases per attack-velocity range
+    // (splits 64/100): $1fvjk = base + legtrans_OD (the OD is ADDED TO THE
+    // OFFSET in the shipped script, not a wait). Decoded persistent values,
+    // 1st Violins: EX $fjf3c/$2p1wl/$ywj0r, LL $ak2j4/$ixzi1/$cltif.
+    lt_offset_expressive  (0 83 177)
+    lt_offset_low_latency (100 148 177)
 
     // Crossfades: default legato fade; retire fades for the PREVIOUS
     // transition/sustain pair indexed by attack-velocity range
@@ -653,6 +666,9 @@ legato_engine {
     fallback_velocity 80
     // Declick for transitions that start deep inside the recording.
     skip_declick_ms   25
+    // %1wcdh slow secondary bloom ($foyeb/$g4dbu ~1 s): the −6 dB connected
+    // sustain swells back to full so long notes keep their body.
+    sustain_bloom_ms  1000
 }
 
 // ── Short Note Timing ─────────────────────────────────────────────────────────

@@ -184,8 +184,33 @@ soft+fast playing).
 is one configuration. Live play uses the low-latency tables reactively
 (bounded latency, no lookahead); document/offline rendering pre-rolls each
 transition so its *arrival lands exactly on the tick*, using the measured
-per-zone `lead_in_ms` from the inventory capped by the mode's velocity-zone
-delay. Same samples, same spec — only scheduling differs.
+per-zone `arrival_ms` (falling back to `lead_in_ms`) from the inventory
+capped by the mode's velocity-zone delay. Same samples, same spec — only
+scheduling differs.
+
+### 2.5b Grid placement policies (r[signal.sampling.markers.arrival])
+
+Two placement policies govern where a note's audio sits against the grid
+tick in document scheduling; which applies is a property of the note's
+ROLE, plus one authored switch:
+
+* **arrive-at-tick** — the trigger pre-rolls so the zone's measured
+  heard-arrival (`arrival_ms`) lands exactly ON the tick; audio from the
+  recording plays before the click. Always used for:
+  - **legato transitions and re-bows** — the pre-click content is the
+    PREVIOUS note continuing (the recorded bow change), which is correct
+    musical behaviour;
+  - **shorts** — the pre-click content is the recorded attack noise before
+    the rhythmic peak (the per-RR replacement for the single global
+    `short_note_timing.pre_delay_ms`).
+* **start-at-tick** — the sample STARTS on the tick and speaks naturally
+  after it: nothing sounds before the click the note begins on. Authored
+  per library for FRESH sustain attacks (phrase starts) via
+  `performance { attack_placement start_at_tick }`; the default
+  (`arrive_at_tick` / unset) pre-rolls fresh sustains by their measured
+  perceptual-onset bound instead. CSS Violin 1 ships `start_at_tick` —
+  it matches what the vendor instrument does live, and the owner's ear:
+  no audio before the beat a note starts on.
 
 ### 2.6 `keyswitch {}` — articulation selection sources
 

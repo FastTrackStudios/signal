@@ -416,11 +416,19 @@ pub fn pitch_arrival(
         .map(|f| (audio[f * 2] as f64 + audio[f * 2 + 1] as f64) * 0.5)
         .collect();
     let (f_from, f_to) = (midi_to_hz(from), midi_to_hz(to));
-    // Harmonics 1..=4 of each side, pruned where they collide with any
-    // harmonic 1..=8 of the other side (within 3%) — e.g. the octave's
-    // fundamental equals the source's 2nd harmonic.
+    // Harmonics of each side, pruned where they collide with any harmonic
+    // 1..=8 of the other side (within 3%) — e.g. the octave's fundamental
+    // equals the source's 2nd harmonic. For SEMITONE/WHOLE-TONE moves the
+    // fundamentals are only ~6-12% apart — inside one bin of the 43 ms
+    // analysis window (≈23 Hz at 48 kHz) — so both smear into both sides
+    // and dilute the share toward the louder (source) side, reading the
+    // arrival tens of ms late; start at the 2nd harmonic there, where the
+    // spacing doubles and the bins resolve. (A whole tone is ~2× a
+    // semitone's spacing and already resolves — only the semitone loses
+    // its fundamental.)
+    let h_lo: u32 = if from.abs_diff(to) <= 1 { 2 } else { 1 };
     let harmonics = |f: f64, other: f64| -> Vec<f64> {
-        (1..=4)
+        (h_lo..=h_lo + 3)
             .map(|h| f * f64::from(h))
             .filter(|hf| {
                 !(1..=8).any(|oh| {
@@ -458,7 +466,15 @@ pub fn pitch_arrival(
             0.0
         });
     }
-    // First sustained (3 hops) crossing of 50%, linearly interpolated.
+    // First sustained (3 hops) crossing of 50%, linearly interpolated. NO
+    // post-crossing validation here: in render context (retiring source
+    // voice + vibrato under the join) any hold/mean grading rejects genuine
+    // crossings and reports phantom late arrivals. The MARKER measurement
+    // (`examples/measure_arrivals.rs`) does validate its crossings on the
+    // raw samples, where the grading is meaningful; the one case a plain
+    // first-crossing misreads in renders — octaves, whose destination bins
+    // are fed by source-harmonic leak-through — is handled by the caller
+    // (octave joins carry a loose gate / are skipped when undetectable).
     for i in 1..share.len().saturating_sub(2) {
         if share[i] >= 0.5 && share[i + 1] >= 0.5 && share[i + 2] >= 0.5 && share[i - 1] < 0.5 {
             let frac = (0.5 - share[i - 1]) / (share[i] - share[i - 1]).max(1e-9);
@@ -471,6 +487,126 @@ pub fn pitch_arrival(
         return Some(center0);
     }
     None
+}
+
+/// Destination-vs-source harmonic share over `[t0, t1]` (sec) of interleaved
+/// stereo `audio` — the raw curve behind [`pitch_arrival`], exported for the
+/// offline arrival-measurement tool (`examples/measure_arrivals.rs`), which
+/// needs the whole curve to grade its own confidence (source dominant before
+/// the crossing, destination settled after) instead of just the crossing.
+/// Same analysis: Goertzel power on collision-pruned harmonics 1..=4 of each
+/// side, 2048-sample Hann window, 128-sample hop.
+pub struct PitchShareCurve {
+    /// Time (sec) of curve sample 0 (window CENTER).
+    pub t0: f64,
+    pub hop_sec: f64,
+    /// Destination share `e_to / (e_from + e_to)` per hop, 0 when silent.
+    pub v: Vec<f32>,
+}
+
+/// Compute the [`PitchShareCurve`] for a `from → to` pitch pair.
+pub fn pitch_share_curve(
+    audio: &[f32],
+    sr: u32,
+    from: u8,
+    to: u8,
+    t0: f64,
+    t1: f64,
+) -> PitchShareCurve {
+    const N: usize = 2048;
+    const HOP_PA: usize = 128;
+    let frames = audio.len() / 2;
+    let mono: Vec<f64> = (0..frames)
+        .map(|f| (audio[f * 2] as f64 + audio[f * 2 + 1] as f64) * 0.5)
+        .collect();
+    let (f_from, f_to) = (midi_to_hz(from), midi_to_hz(to));
+    // Same harmonic policy as [`pitch_arrival`] — including the SEMITONE
+    // fundamental drop (unresolvable in one 43 ms bin).
+    let h_lo: u32 = if from.abs_diff(to) <= 1 { 2 } else { 1 };
+    let harmonics = |f: f64, other: f64| -> Vec<f64> {
+        (h_lo..=h_lo + 3)
+            .map(|h| f * f64::from(h))
+            .filter(|hf| {
+                !(1..=8).any(|oh| {
+                    let of = other * f64::from(oh);
+                    (hf - of).abs() / of < 0.03
+                })
+            })
+            .collect()
+    };
+    let mut hf_from = harmonics(f_from, f_to);
+    let mut hf_to = harmonics(f_to, f_from);
+    if hf_from.is_empty() {
+        hf_from = vec![f_from];
+    }
+    if hf_to.is_empty() {
+        hf_to = vec![f_to];
+    }
+    let hop_sec = HOP_PA as f64 / f64::from(sr);
+    let n_hops = (((t1 - t0) / hop_sec).max(0.0)) as usize;
+    let mut v = Vec::with_capacity(n_hops);
+    for h in 0..n_hops {
+        let center = t0 + h as f64 * hop_sec;
+        let off = ((center * f64::from(sr)) as isize - (N as isize) / 2).max(0) as usize;
+        let e_from: f64 = hf_from.iter().map(|&f| goertzel(&mono, off, N, sr, f)).sum();
+        let e_to: f64 = hf_to.iter().map(|&f| goertzel(&mono, off, N, sr, f)).sum();
+        v.push(if e_from + e_to > 0.0 {
+            (e_to / (e_from + e_to)) as f32
+        } else {
+            0.0
+        });
+    }
+    PitchShareCurve { t0, hop_sec, v }
+}
+
+/// Destination-band ENERGY curve over `[t0, t1]` (sec) of interleaved stereo
+/// `audio`: summed Goertzel power on the destination's collision-pruned
+/// harmonics (same pruning + windows as [`pitch_share_curve`]) — WITHOUT
+/// normalizing against the source. The share detector reads
+/// "destination-vs-source balance", which the source's own level skews
+/// (retiring voices, recorded tails, collision leak); the raw destination
+/// energy tracks what the ear follows — "when does the new note's pitch
+/// appear and grow" — independent of everything else in the mix. Used by
+/// the join analyzer (`examples/analyze_joins.rs`) as the independent
+/// cross-measurement.
+pub fn dest_energy_curve(
+    audio: &[f32],
+    sr: u32,
+    from: u8,
+    to: u8,
+    t0: f64,
+    t1: f64,
+) -> PitchShareCurve {
+    const N: usize = 2048;
+    const HOP_PA: usize = 128;
+    let frames = audio.len() / 2;
+    let mono: Vec<f64> = (0..frames)
+        .map(|f| (audio[f * 2] as f64 + audio[f * 2 + 1] as f64) * 0.5)
+        .collect();
+    let (f_from, f_to) = (midi_to_hz(from), midi_to_hz(to));
+    let h_lo: u32 = if from.abs_diff(to) <= 1 { 2 } else { 1 };
+    let mut hf_to: Vec<f64> = (h_lo..=h_lo + 3)
+        .map(|h| f_to * f64::from(h))
+        .filter(|hf| {
+            !(1..=8).any(|oh| {
+                let of = f_from * f64::from(oh);
+                (hf - of).abs() / of < 0.03
+            })
+        })
+        .collect();
+    if hf_to.is_empty() {
+        hf_to = vec![f_to];
+    }
+    let hop_sec = HOP_PA as f64 / f64::from(sr);
+    let n_hops = (((t1 - t0) / hop_sec).max(0.0)) as usize;
+    let mut v = Vec::with_capacity(n_hops);
+    for h in 0..n_hops {
+        let center = t0 + h as f64 * hop_sec;
+        let off = ((center * f64::from(sr)) as isize - (N as isize) / 2).max(0) as usize;
+        let e: f64 = hf_to.iter().map(|&f| goertzel(&mono, off, N, sr, f)).sum();
+        v.push(e as f32);
+    }
+    PitchShareCurve { t0, hop_sec, v }
 }
 
 // ── Showcase corpus ──────────────────────────────────────────────────────────
@@ -641,6 +777,31 @@ pub fn timing_corpus() -> Vec<TimingCase> {
         "zones_fast_lowlat_120bpm",
         "legato scale, low-latency FAST zone (vel 110, 100 ms delay), 120 bpm",
     ));
+
+    // 2b. The three EXPRESSIVE transition speeds (KSP attack-velocity
+    //     splits 64/100 → LT-offset bases 0/83/177): the same scale and
+    //     interval material at slow / medium / fast velocity, so the ear
+    //     can verify EVERY speed class lands its arrivals on the grid.
+    for (vel, speed) in [(40u8, "slow"), (85, "med"), (115, "fast")] {
+        let mut b = CaseBuilder::new(90.0, KS_EXPR, 90);
+        legato_line(&mut b, vel);
+        cases.push(b.build(
+            &format!("scale_expr_90bpm_{speed}"),
+            &format!("legato scale, expressive {speed} speed (vel {vel}), 90 bpm"),
+        ));
+        let mut b = CaseBuilder::new(90.0, KS_EXPR, 90);
+        let mut qn = COUNT_IN_QN;
+        for iv in [1i8, 2, 3, 4, 5, 7, 9, 12] {
+            let to = (67i16 + i16::from(iv)) as u8;
+            b.note(qn, qn + 2.02, 67, vel, OnsetKind::PhraseStart);
+            b.note(qn + 2.0, qn + 4.0, to, vel, OnsetKind::Legato);
+            qn += 6.0;
+        }
+        cases.push(b.build(
+            &format!("intervals_up_90bpm_{speed}"),
+            &format!("two-note legato slurs up, expressive {speed} speed (vel {vel}), 90 bpm"),
+        ));
+    }
 
     // 3. Intervals up and down (2nds through the octave): isolated two-note
     //    slurs (half + half) with a two-beat rest between pairs — each pair

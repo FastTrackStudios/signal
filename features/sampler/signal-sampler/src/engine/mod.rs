@@ -255,6 +255,27 @@ pub struct LegatoFireEvent {
 /// audio thread (the Vec is pre-allocated to this capacity when enabled).
 const LEGATO_FIRE_LOG_CAP: usize = 1024;
 
+/// One PLAYBACK-EMITTED marker: the voice actually played through the
+/// zone's marker position at this output frame — after every start-offset
+/// skip, start hold, and playback-rate scaling. Nothing is estimated; the
+/// emitted time IS what was heard (r[signal.sampling.markers.arrival]).
+/// Collected per block from the voice pool when the log is enabled; the
+/// schedule-derived marker timeline remains available as the INTENDED
+/// times for comparison.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct EmittedMarker {
+    /// Absolute engine output frame of the crossing.
+    pub frame: u64,
+    /// The note the emitting voice belongs to.
+    pub note: u8,
+    /// Mono line of the emitting voice.
+    pub line: u8,
+}
+
+/// Cap on the emitted-marker log (pre-allocated on enable; the audio
+/// thread never allocates, and excess emissions are dropped, not grown).
+const EMITTED_MARKER_LOG_CAP: usize = 4096;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ZoneTrigger {
     Attack,
@@ -460,6 +481,10 @@ pub struct SampleEngine {
     /// `legato_fire_log` (up to `LEGATO_FIRE_LOG_CAP`). Off by default —
     /// enabled by tests and offline document renders only.
     legato_fire_log_enabled: bool,
+    /// Playback-emitted marker log (see [`EmittedMarker`]); enabled by
+    /// offline document renders / tests, drained per rendered block.
+    emitted_marker_log_enabled: bool,
+    emitted_markers: Vec<EmittedMarker>,
     /// Recorded legato transition firings (see [`LegatoFireEvent`]).
     legato_fire_log: Vec<LegatoFireEvent>,
     /// Predicted heard-arrival frame of the most recent transition spawn
@@ -508,6 +533,19 @@ pub struct SampleEngine {
     /// our RR ordering with a deterministic CSS render (CC59 cycle). `None` =
     /// normal CC59 / cycle / random behaviour.
     forced_rr: Option<u32>,
+    /// Document-scheduler arrival alignment for the CURRENT dispatch: wall
+    /// frames from now to the note's grid tick (the schedule's pre-roll
+    /// lead). While `Some`, every attack voice spawned is held back by
+    /// `lead − its zone's measured heard-arrival` (see
+    /// `ZoneSpec::arrival_ms`) so the heard arrival lands exactly ON the
+    /// tick — per round-robin, per mic, per dynamic layer. `None` = live /
+    /// legacy dispatch (voices start immediately).
+    spawn_align_lead: Option<u64>,
+    /// Transition-spawn arrival override (ms of sample time) for the
+    /// diagnostic semantics sweep — set by `spawn_transition_voice` so the
+    /// alignment hold uses the SAME re-interpreted arrival the prefire lead
+    /// was computed from. `None` in normal operation.
+    spawn_arrival_override_ms: Option<f32>,
 
     /// Reusable scratch for the zoned trigger path so note-on doesn't allocate.
     /// Drained/refilled each note-on via `mem::take` + restore.
@@ -690,6 +728,8 @@ impl SampleEngine {
             deferred_note_off_velocities: HashMap::with_capacity(128),
             frames_rendered: 0,
             legato_fire_log_enabled: false,
+            emitted_marker_log_enabled: false,
+            emitted_markers: Vec::new(),
             legato_fire_log: Vec::new(),
             last_arrival_prediction: 0,
             trace_enabled: false,
@@ -704,6 +744,8 @@ impl SampleEngine {
             zone_rr_random_state: 0x9e37_79b9_7f4a_7c15,
             zone_rr_last_slots: HashMap::with_capacity(128),
             forced_rr: None,
+            spawn_align_lead: None,
+            spawn_arrival_override_ms: None,
             zone_indices_scratch: Vec::with_capacity(32),
             zone_choked_scratch: Vec::with_capacity(16),
             zone_capped_scratch: Vec::with_capacity(16),
@@ -967,6 +1009,43 @@ impl SampleEngine {
         &self.legato_fire_log
     }
 
+    /// Enable/disable the playback-emitted marker log. Enabling clears and
+    /// pre-allocates the capped buffer (the audio thread never allocates).
+    pub fn set_emitted_marker_log_enabled(&mut self, enabled: bool) {
+        self.emitted_marker_log_enabled = enabled;
+        self.emitted_markers.clear();
+        if enabled {
+            self.emitted_markers.reserve(EMITTED_MARKER_LOG_CAP);
+        } else {
+            self.emitted_markers.shrink_to_fit();
+        }
+    }
+
+    /// Markers EMITTED BY PLAYBACK since the log was enabled — each one a
+    /// real playhead crossing at a real output frame.
+    pub fn emitted_markers(&self) -> &[EmittedMarker] {
+        &self.emitted_markers
+    }
+
+    /// Drain per-voice emissions into the log (called after each rendered
+    /// block; one Option read per voice, capped push, no alloc).
+    fn drain_emitted_markers(&mut self) {
+        if !self.emitted_marker_log_enabled {
+            return;
+        }
+        for v in self.voices.voices_mut() {
+            if let Some(frame) = v.take_emitted_arrival() {
+                if self.emitted_markers.len() < EMITTED_MARKER_LOG_CAP {
+                    self.emitted_markers.push(EmittedMarker {
+                        frame,
+                        note: v.note,
+                        line: v.line,
+                    });
+                }
+            }
+        }
+    }
+
     /// Enable/disable the structured render trace ([`RenderTrace`]) — which
     /// files play, when, loop points, gains, transitions. Clears on enable.
     pub fn set_trace_enabled(&mut self, enabled: bool) {
@@ -1048,6 +1127,7 @@ impl SampleEngine {
 
         self.voices.render(output);
         self.frames_rendered += block_frames as u64;
+        self.drain_emitted_markers();
 
         // CSS "Volume" (CC11) — master output level.
         if self.cc11_volume != 1.0 {
@@ -1075,6 +1155,7 @@ impl SampleEngine {
 
         self.voices.render_multi(outputs);
         self.frames_rendered += block_frames as u64;
+        self.drain_emitted_markers();
 
         // CSS "Volume" (CC11) — master output level, all mic buses.
         if self.cc11_volume != 1.0 {

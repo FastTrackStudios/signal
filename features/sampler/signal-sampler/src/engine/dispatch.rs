@@ -409,10 +409,20 @@ impl SampleEngine {
             self.spawn_legato_transition(
                 from_note, to_note, velocity, portamento, sched_lead, ioi_ms,
             );
-            // 2. Main held sustain (`%grhcg`) — immediate, full level, declick
-            //    only, carrying the −6 dB `$3tsb0` legato makeup.
+            // 2. Main held sustain (`%grhcg`) — full level, declick only,
+            //    carrying the −6 dB `$3tsb0` legato makeup. In REACTIVE play
+            //    the fire happens AFTER the musical tick (the CSS latency),
+            //    so "immediate at fire" enters at/after the beat — but a
+            //    document PREFIRE happens `sched_lead` BEFORE the tick, and
+            //    an immediate destination sustain would put the arrived
+            //    note's pitch in the air up to a whole velocity-zone delay
+            //    early (the "underlay masking" that reads as wide intervals
+            //    arriving before the click). Hold it back to the tick: the
+            //    transition sample owns the pre-arrival air, exactly as it
+            //    does in Kontakt.
             let declick = ms_to_frames(SUSTAIN_DECLICK_MS, self.sample_rate);
-            self.sustain_fade_in = Some((0, declick));
+            let hold = sched_lead.unwrap_or(0) as usize;
+            self.sustain_fade_in = Some((hold, declick));
             self.legato_sustain = true;
             self.trigger_zoned_sustain(to_note);
             self.legato_sustain = false;
