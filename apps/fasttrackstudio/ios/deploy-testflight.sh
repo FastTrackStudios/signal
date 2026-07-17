@@ -24,10 +24,23 @@ ln -sf /usr/bin/xcrun "$BIN_IOS/xcrun"
 # shellcheck disable=SC1090
 source "$HOME/.appstoreconnect/config.env"
 
-# Distribution signing identity (Apple Distribution).
+# Distribution signing identity — create it via the API + import into the
+# login keychain if it isn't there yet (no Xcode UI needed).
+if ! security find-identity -v -p codesigning | grep -q "Apple Distribution"; then
+    echo "=== creating Apple Distribution certificate ==="
+    eval "$(ruby "$(dirname "$0")/mint-dist-cert.rb" | grep -E '^DIST_(KEY|CER)=')"
+    # Bundle key + cert into a .p12 and import (-A: allow all apps, so
+    # codesign uses it without a per-run keychain prompt).
+    openssl x509 -inform DER -in "$DIST_CER" -out /tmp/fts-dist.pem
+    openssl pkcs12 -export -legacy -inkey "$DIST_KEY" -in /tmp/fts-dist.pem \
+        -name "Apple Distribution" -out /tmp/fts-dist.p12 -passout pass:fts
+    security import /tmp/fts-dist.p12 -k "$HOME/Library/Keychains/login.keychain-db" \
+        -P fts -A -T /usr/bin/codesign
+    rm -f /tmp/fts-dist.pem /tmp/fts-dist.p12
+fi
 SIGN_ID="$(security find-identity -v -p codesigning \
     | awk -F'"' '/Apple Distribution/{print $2; exit}')"
-[ -n "$SIGN_ID" ] || { echo "ERROR: no 'Apple Distribution' cert in the keychain. Create one in Xcode." >&2; exit 1; }
+[ -n "$SIGN_ID" ] || { echo "ERROR: distribution identity still missing after import." >&2; exit 1; }
 echo "=== distribution identity: $SIGN_ID ==="
 
 echo "=== App Store provisioning profile ==="
@@ -44,15 +57,32 @@ echo "=== building release ==="
 APP="$(git rev-parse --show-toplevel)/target/dx/fasttrackstudio/release/ios/Fasttrackstudio.app"
 BUNDLE="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Info.plist")"
 
-# Info.plist: usage strings + file sharing + a fresh build number.
+# Info.plist: usage strings + file sharing + versions. The App Store
+# requires CFBundleShortVersionString to be 1-3 period-separated integers
+# (the crate's "0.0.1-alpha" is rejected); CFBundleVersion just has to climb.
 BUILD_NO="${BUILD_NO:-$(date +%s)}"
+MARKETING_VER="${MARKETING_VER:-0.0.1}"
+/usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $MARKETING_VER" "$APP/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD_NO" "$APP/Info.plist"
+# Minimum OS — App Store rejects a bundle without it (dx doesn't emit one).
+/usr/libexec/PlistBuddy -c "Set :MinimumOSVersion 15.0" "$APP/Info.plist" 2>/dev/null \
+    || /usr/libexec/PlistBuddy -c "Add :MinimumOSVersion string 15.0" "$APP/Info.plist"
 /usr/libexec/PlistBuddy -c "Add :NSMicrophoneUsageDescription string 'Processes your guitar signal from the connected audio interface or microphone.'" "$APP/Info.plist" 2>/dev/null || true
 /usr/libexec/PlistBuddy -c "Add :UIFileSharingEnabled bool true" "$APP/Info.plist" 2>/dev/null || true
 /usr/libexec/PlistBuddy -c "Add :LSSupportsOpeningDocumentsInPlace bool true" "$APP/Info.plist" 2>/dev/null || true
 # TestFlight requires ITSAppUsesNonExemptEncryption declared (false = no
 # non-standard crypto → no export-compliance docs).
 /usr/libexec/PlistBuddy -c "Add :ITSAppUsesNonExemptEncryption bool false" "$APP/Info.plist" 2>/dev/null || true
+
+# Home-screen icon (dx emits none).
+ICONS_DIR="$(git rev-parse --show-toplevel)/apps/fasttrackstudio/ios/Assets.xcassets"
+if [ -d "$ICONS_DIR" ]; then
+    actool "$ICONS_DIR" --compile "$APP" --platform iphoneos \
+        --minimum-deployment-target 15.0 --app-icon AppIcon \
+        --output-partial-info-plist /tmp/fts-icon.plist >/dev/null 2>&1 \
+        && /usr/libexec/PlistBuddy -c "Merge /tmp/fts-icon.plist" "$APP/Info.plist" 2>/dev/null \
+        || echo "warn: app-icon compile skipped"
+fi
 echo "=== app: $APP ($BUNDLE) build $BUILD_NO ==="
 
 echo "=== signing (distribution) ==="
@@ -69,7 +99,9 @@ WORK="$(mktemp -d)"
 mkdir -p "$WORK/Payload"
 cp -R "$APP" "$WORK/Payload/"
 IPA="$WORK/FastTrackStudio.ipa"
-( cd "$WORK" && zip -qry "$IPA" Payload )
+# ditto (not zip) — preserves the _CodeSignature/CodeResources symlink that
+# altool requires; a plain zip breaks it.
+( cd "$WORK" && ditto -c -k --sequesterRsrc --keepParent Payload "$IPA" )
 
 echo "=== uploading to TestFlight ==="
 xcrun altool --upload-app -t ios -f "$IPA" \
