@@ -49,8 +49,18 @@ PROFILE="$(PROFILE_TYPE=IOS_APP_STORE CERT_TYPE=DISTRIBUTION \
 echo "profile: $PROFILE"
 
 echo "=== building release ==="
+# TestFlight needs a RELEASE Xcode/SDK. Point the build at a specific
+# Xcode via XCODE_DIR (…/Xcode.app/Contents/Developer) — exporting
+# DEVELOPER_DIR overrides both the nix apple-sdk env and xcode-select.
+# Unset (default) uses whatever xcode-select points at.
+if [ -n "${XCODE_DIR:-}" ]; then
+    XCODE_ENV="export DEVELOPER_DIR='$XCODE_DIR'; unset SDKROOT"
+    echo "using Xcode: $XCODE_DIR"
+else
+    XCODE_ENV="unset DEVELOPER_DIR SDKROOT"
+fi
 "$NIX" develop "$(git rev-parse --show-toplevel)" -c bash -c \
-    "unset DEVELOPER_DIR SDKROOT; export PATH=$BIN_IOS:\$PATH; \
+    "$XCODE_ENV; export PATH=$BIN_IOS:\$PATH; \
      dx build --platform ios --device --release --no-default-features --features signal-guitar" \
     2>&1 | tail -2
 
