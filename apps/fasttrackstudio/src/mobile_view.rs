@@ -31,12 +31,21 @@ enum MobilePage {
 pub fn MobileApp() -> Element {
     let engine = crate::rig_engine::engine();
     rsx! {
+        // Without device-width + viewport-fit=cover, WKWebView lays out a
+        // 980px legacy viewport and the safe-area env() vars stay zero.
+        document::Meta {
+            name: "viewport",
+            content: "width=device-width, initial-scale=1, viewport-fit=cover",
+        }
         document::Style { {SIGNAL_TAILWIND} }
         div {
             style: "display: flex; flex-direction: column; height: 100dvh; width: 100vw; \
+                    box-sizing: border-box; \
                     background: #09090b; color: #e4e4e7; overflow: hidden; \
                     padding-top: env(safe-area-inset-top); \
-                    padding-bottom: env(safe-area-inset-bottom);",
+                    padding-bottom: env(safe-area-inset-bottom); \
+                    padding-left: env(safe-area-inset-left); \
+                    padding-right: env(safe-area-inset-right);",
             match engine {
                 Some(engine) => {
                     let _ = provide_context(engine.rig.clone());
@@ -56,42 +65,66 @@ pub fn MobileApp() -> Element {
     }
 }
 
+/// Landscape shell: a slim left rail (page tabs + engine status) beside the
+/// full-width page — the grid gets the whole screen, like the floor unit.
 #[component]
 fn MobileShell() -> Element {
     let mut page = use_signal(|| MobilePage::Scenes);
     let state = use_rig_state();
     let perf = state.perf;
+    let running = state.running.cloned();
+    let bpm = perf.cloned().tempo_bpm;
 
     rsx! {
-        div { style: "flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden;",
-            match page() {
-                MobilePage::Scenes => rsx! { ScenesPage { state: state.clone() } },
-                MobilePage::Control => rsx! {
-                    div { style: "flex: 1; min-height: 0; overflow-y: auto;",
-                        ControlView { model: perf.cloned(), state: state.clone() }
+        div { style: "flex: 1; min-height: 0; display: flex; flex-direction: row; overflow: hidden;",
+            // Left rail.
+            div {
+                style: "width: 64px; display: flex; flex-direction: column; align-items: stretch; \
+                        border-right: 1px solid #27272a; background: #0f0f10; \
+                        padding: 6px 0 8px; gap: 2px;",
+                for (p, label, icon) in [
+                    (MobilePage::Scenes, "Scenes", "🎛"),
+                    (MobilePage::Control, "Control", "🎚"),
+                    (MobilePage::Audio, "Audio", "🔊"),
+                ] {
+                    button {
+                        style: format!(
+                            "padding: 8px 0 6px; background: {}; border: none; border-radius: 8px; \
+                             margin: 0 6px; display: flex; flex-direction: column; align-items: center; \
+                             gap: 1px; font-size: 9px; font-weight: 600; color: {};",
+                            if page() == p { "#1e293b" } else { "transparent" },
+                            if page() == p { "#38bdf8" } else { "#71717a" }
+                        ),
+                        onclick: move |_| page.set(p),
+                        span { style: "font-size: 17px;", "{icon}" }
+                        "{label}"
                     }
-                },
-                MobilePage::Audio => rsx! { AudioPage {} },
+                }
+                div { style: "flex: 1;" }
+                // Engine status: dot + bpm.
+                div {
+                    style: "display: flex; flex-direction: column; align-items: center; gap: 3px;",
+                    span {
+                        style: format!(
+                            "width: 8px; height: 8px; border-radius: 999px; background: {};",
+                            if running { "#22c55e" } else { "#ef4444" }
+                        )
+                    }
+                    span { style: "font-size: 10px; font-weight: 700; color: #a1a1aa; font-variant-numeric: tabular-nums;",
+                        "{bpm}"
+                    }
+                }
             }
-        }
-        // Bottom tab bar.
-        div {
-            style: "display: flex; border-top: 1px solid #27272a; background: #0f0f10;",
-            for (p, label, icon) in [
-                (MobilePage::Scenes, "Scenes", "🎛"),
-                (MobilePage::Control, "Control", "🎚"),
-                (MobilePage::Audio, "Audio", "🔊"),
-            ] {
-                button {
-                    style: format!(
-                        "flex: 1; padding: 10px 0 8px; background: none; border: none; \
-                         display: flex; flex-direction: column; align-items: center; gap: 2px; \
-                         font-size: 11px; font-weight: 600; color: {};",
-                        if page() == p { "#38bdf8" } else { "#71717a" }
-                    ),
-                    onclick: move |_| page.set(p),
-                    span { style: "font-size: 18px;", "{icon}" }
-                    "{label}"
+            // Page content.
+            div { style: "flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow: hidden;",
+                match page() {
+                    MobilePage::Scenes => rsx! { ScenesPage { state: state.clone() } },
+                    MobilePage::Control => rsx! {
+                        div { style: "flex: 1; min-height: 0; overflow-y: auto;",
+                            ControlView { model: perf.cloned(), state: state.clone() }
+                        }
+                    },
+                    MobilePage::Audio => rsx! { AudioPage {} },
                 }
             }
         }
@@ -139,19 +172,12 @@ fn ScenesPage(state: signal_guitar_ui::RigViewState) -> Element {
         })
     };
 
+    let _ = running;
     rsx! {
-        div { style: "display: flex; align-items: center; gap: 6px; padding: 6px 10px 2px;",
-            span {
-                style: format!(
-                    "width: 8px; height: 8px; border-radius: 999px; background: {};",
-                    if running { "#22c55e" } else { "#ef4444" }
-                )
-            }
-            span { style: "font-size: 12px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;",
+        // A whisper of a header: just the active patch, centered.
+        if !active.is_empty() {
+            div { style: "text-align: center; font-size: 11px; font-weight: 600; color: #a1a1aa; padding: 2px 0 0;",
                 "{active}"
-            }
-            span { style: "margin-left: auto; font-size: 12px; font-weight: 700; color: #a1a1aa; font-variant-numeric: tabular-nums;",
-                "{perf.tempo_bpm} bpm"
             }
         }
         div { style: "flex: 1; min-height: 0; padding: 4px;",
