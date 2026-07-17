@@ -84,6 +84,33 @@ MARKETING_VER="${MARKETING_VER:-0.0.1}"
 # non-standard crypto → no export-compliance docs).
 /usr/libexec/PlistBuddy -c "Add :ITSAppUsesNonExemptEncryption bool false" "$APP/Info.plist" 2>/dev/null || true
 
+# SDK build-metadata keys. Xcode's build injects these; dx does NOT, and
+# without them App Store Connect can't identify the SDK the binary was built
+# against and rejects the upload as "unsupported SDK/Xcode" (error 90534).
+# Derive them from the active Xcode/SDK so they stay correct across versions.
+DEV="${XCODE_DIR:-$(xcode-select -p)}"
+SDK="$DEV/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS.sdk"
+SDK_VER="$(/usr/libexec/PlistBuddy -c 'Print :Version' "$SDK/SDKSettings.plist" 2>/dev/null)"
+SDK_BUILD="$(/usr/libexec/PlistBuddy -c 'Print :ProductBuildVersion' "$DEV/Platforms/iPhoneOS.platform/version.plist" 2>/dev/null)"
+XCODE_ROOT="${DEV%/Contents/Developer}"
+XCODE_BUILD="$(/usr/libexec/PlistBuddy -c 'Print :ProductBuildVersion' "$XCODE_ROOT/version.plist" 2>/dev/null)"
+XCODE_VER="$(DEVELOPER_DIR="$DEV" xcodebuild -version 2>/dev/null | awk '/^Xcode/{print $2}')"
+# DTXcode = major*100 + minor*10 + patch, 4-digit (26.6 → 2660).
+DTXCODE="$(echo "$XCODE_VER" | awk -F. '{printf "%02d%d%d", $1, ($2==""?0:$2), ($3==""?0:$3)}')"
+MACOS_BUILD="$(sw_vers -buildVersion)"
+add_str() { /usr/libexec/PlistBuddy -c "Add :$1 string $2" "$APP/Info.plist" 2>/dev/null || \
+            /usr/libexec/PlistBuddy -c "Set :$1 $2" "$APP/Info.plist" 2>/dev/null || true; }
+add_str DTPlatformName iphoneos
+add_str DTPlatformVersion "$SDK_VER"
+add_str DTPlatformBuild "$SDK_BUILD"
+add_str DTSDKName "iphoneos${SDK_VER}"
+add_str DTSDKBuild "$SDK_BUILD"
+add_str DTXcode "$DTXCODE"
+add_str DTXcodeBuild "$XCODE_BUILD"
+add_str DTCompiler "com.apple.compilers.llvm.clang.1_0"
+add_str BuildMachineOSBuild "$MACOS_BUILD"
+echo "=== SDK metadata: iphoneos${SDK_VER} (${SDK_BUILD}), Xcode ${XCODE_VER} (${XCODE_BUILD}) ==="
+
 # Home-screen icon (dx emits none).
 ICONS_DIR="$(git rev-parse --show-toplevel)/apps/fasttrackstudio/ios/Assets.xcassets"
 if [ -d "$ICONS_DIR" ]; then
