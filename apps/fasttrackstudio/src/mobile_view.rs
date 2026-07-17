@@ -208,7 +208,9 @@ fn RigShell(on_home: EventHandler<()>) -> Element {
                             ControlView { model: perf.cloned(), state: state.clone() }
                         }
                     },
-                    MobilePage::Audio => rsx! { AudioPage {} },
+                    MobilePage::Audio => rsx! {
+                        AudioPage { on_close: move |_| page.set(MobilePage::Scenes) }
+                    },
                 }
             }
         }
@@ -281,9 +283,11 @@ fn ScenesPage(state: signal_guitar_ui::RigViewState) -> Element {
 }
 
 /// Audio: device pickers over the AudioSettings service. Saving persists
-/// prefs and restarts the rig so they take effect.
+/// prefs and restarts the rig so they take effect. `on_close` returns to
+/// the Scenes page (the shared modal is full-screen — without a working
+/// close it traps the UI).
 #[component]
-fn AudioPage() -> Element {
+fn AudioPage(on_close: EventHandler<()>) -> Element {
     let settings = use_hook(try_consume_context::<AudioSettingsClient>);
     let rig = use_hook(try_consume_context::<RigClient>);
 
@@ -326,7 +330,7 @@ fn AudioPage() -> Element {
                             prefs: prefs.clone(),
                             on_save,
                         },
-                        on_close: move |_| {},
+                        on_close: move |_| on_close.call(()),
                     }
                 },
                 Some(None) => rsx! {
