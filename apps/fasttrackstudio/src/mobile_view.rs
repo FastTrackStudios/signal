@@ -25,6 +25,9 @@ const SIGNAL_TAILWIND: &str = include_str!("../assets/tailwind-signal.css");
 #[derive(Clone, Copy, PartialEq)]
 enum MobileScreen {
     Home,
+    /// The Signal domain: pick an instrument rig.
+    Signal,
+    /// The guitar rig (the one live instrument today).
     Rig,
 }
 
@@ -76,14 +79,21 @@ pub fn MobileApp() -> Element {
     }
 }
 
-/// Home ⇄ Rig. Each screen owns its orientation (set on mount), so
-/// navigating swaps the component and rotates the phone.
+/// Home → Signal (instrument chooser) → Rig. Each screen owns its
+/// orientation (set on mount), so navigating swaps the component and rotates
+/// the phone.
 #[component]
 fn Router() -> Element {
     let mut screen = use_signal(|| MobileScreen::Home);
     match screen() {
         MobileScreen::Home => rsx! {
-            HomePage { on_open_rig: move |_| screen.set(MobileScreen::Rig) }
+            HomePage { on_open: move |s| screen.set(s) }
+        },
+        MobileScreen::Signal => rsx! {
+            SignalChooser {
+                on_back: move |_| screen.set(MobileScreen::Home),
+                on_pick_guitar: move |_| screen.set(MobileScreen::Rig),
+            }
         },
         MobileScreen::Rig => rsx! {
             RigShell { on_home: move |_| screen.set(MobileScreen::Home) }
@@ -91,52 +101,101 @@ fn Router() -> Element {
     }
 }
 
-/// Portrait landing: the app's surfaces as tappable cards. Guitar Rig is
-/// live; the rest are placeholders until their mobile ports land.
+/// Portrait landing: the app's domains as tappable cards. No wordmark — the
+/// app icon carries the identity.
 #[component]
-fn HomePage(on_open_rig: EventHandler<()>) -> Element {
+fn HomePage(on_open: EventHandler<MobileScreen>) -> Element {
     use_hook(crate::ios_orientation::portrait);
 
     rsx! {
-        div { style: "flex: 1; min-height: 0; overflow-y: auto; padding: 20px 18px; display: flex; flex-direction: column; gap: 18px;",
-            div { style: "display: flex; flex-direction: column; gap: 2px; padding-top: 8px;",
-                span { style: "font-size: 24px; font-weight: 800; letter-spacing: -0.5px;", "FastTrackStudio" }
-                span { style: "font-size: 13px; color: #71717a;", "Live rig & session control" }
+        div { style: "flex: 1; min-height: 0; overflow-y: auto; padding: 24px 18px; \
+                      display: flex; flex-direction: column; gap: 14px;",
+            SurfaceCard {
+                title: "Signal",
+                sub: "The live rig — guitar, keys, drums, vocals",
+                live: true,
+                on_open: move |_| on_open.call(MobileScreen::Signal),
             }
-            // Guitar Rig — the live surface. Left accent rule instead of an
-            // icon: quiet, and it echoes the rail's active-edge LED.
+            SurfaceCard { title: "Session", sub: "Setlists, sections & the click", live: false }
+            SurfaceCard { title: "Charts", sub: "Keyflow chart writing", live: false }
+        }
+    }
+}
+
+/// A domain/surface card. `live` cards glow with the accent edge-LED and are
+/// tappable; the rest read as quietly coming-soon.
+#[component]
+fn SurfaceCard(
+    title: &'static str,
+    sub: &'static str,
+    live: bool,
+    on_open: Option<EventHandler<()>>,
+) -> Element {
+    if live {
+        rsx! {
             button {
                 style: "position: relative; text-align: left; border: none; border-radius: 14px; \
                         padding: 18px 18px 18px 22px; overflow: hidden; \
                         background: linear-gradient(135deg, #10283f, #0b3a52); color: #e0f2fe; \
                         display: flex; flex-direction: column; gap: 5px;",
-                onclick: move |_| on_open_rig.call(()),
+                onclick: move |_| { if let Some(h) = on_open { h.call(()); } },
                 span {
                     style: "position: absolute; left: 0; top: 14px; bottom: 14px; width: 4px; \
                             border-radius: 0 2px 2px 0; background: #38bdf8; box-shadow: 0 0 12px #38bdf8;",
                 }
                 span { style: "font-size: 11px; font-weight: 600; letter-spacing: 0.14em; \
                                text-transform: uppercase; color: #7dd3fc;", "Live" }
-                span { style: "font-size: 19px; font-weight: 700;", "Guitar Rig" }
-                span { style: "font-size: 12px; opacity: 0.72;",
-                    "The signal engine, live on this phone — scenes, chain, tuner."
-                }
+                span { style: "font-size: 20px; font-weight: 700;", "{title}" }
+                span { style: "font-size: 12px; opacity: 0.72;", "{sub}" }
             }
-            // Placeholders for the surfaces still to port.
-            for (title, sub) in [
-                ("Session", "Setlists, transport & the mixer"),
-                ("Charts", "Keyflow chart writing"),
-            ] {
-                div {
-                    style: "border: 1px solid #1f1f23; border-radius: 14px; padding: 16px 18px; \
-                            background: #131316; color: #52525b; display: flex; flex-direction: column; gap: 4px;",
-                    div { style: "display: flex; align-items: center; gap: 8px;",
-                        span { style: "font-size: 16px; font-weight: 700;", "{title}" }
-                        span { style: "margin-left: auto; font-size: 9px; font-weight: 600; \
-                                       letter-spacing: 0.12em; color: #3f3f46;", "SOON" }
-                    }
-                    span { style: "font-size: 12px;", "{sub}" }
+        }
+    } else {
+        rsx! {
+            div {
+                style: "border: 1px solid #1f1f23; border-radius: 14px; padding: 16px 18px; \
+                        background: #131316; color: #52525b; display: flex; flex-direction: column; gap: 4px;",
+                div { style: "display: flex; align-items: center; gap: 8px;",
+                    span { style: "font-size: 17px; font-weight: 700;", "{title}" }
+                    span { style: "margin-left: auto; font-size: 9px; font-weight: 600; \
+                                   letter-spacing: 0.12em; color: #3f3f46;", "SOON" }
                 }
+                span { style: "font-size: 12px;", "{sub}" }
+            }
+        }
+    }
+}
+
+/// Instrument chooser under Signal. Guitar is live; the rest await their
+/// mobile ports (their UIs pull desktop-only render deps today).
+#[component]
+fn SignalChooser(on_back: EventHandler<()>, on_pick_guitar: EventHandler<()>) -> Element {
+    use_hook(crate::ios_orientation::portrait);
+
+    rsx! {
+        div { style: "flex: 1; min-height: 0; overflow-y: auto; padding: 16px 18px 24px; \
+                      display: flex; flex-direction: column; gap: 12px;",
+            // Back + section label.
+            button {
+                style: "align-self: flex-start; appearance: none; background: transparent; border: none; \
+                        color: #71717a; font-size: 13px; font-weight: 600; padding: 4px 0; \
+                        display: flex; align-items: center; gap: 4px;",
+                onclick: move |_| on_back.call(()),
+                span { style: "font-size: 15px;", "‹" }
+                "Signal"
+            }
+            SurfaceCard {
+                title: "Guitar",
+                sub: "NAM amp, drives, footswitch scenes — live on this phone",
+                live: true,
+                on_open: move |_| on_pick_guitar.call(()),
+            }
+            for (title, sub) in [
+                ("Keys", "Sampled pianos, pads & synths"),
+                ("Drums", "Sampled kits & e-drums"),
+                ("Bass", "DI + amp + synth bass"),
+                ("Vocals", "Live vocal FX chain"),
+            ] {
+                SurfaceCard { title, sub, live: false }
             }
         }
     }
@@ -153,7 +212,6 @@ fn RigShell(on_home: EventHandler<()>) -> Element {
     let state = use_rig_state();
     let perf = state.perf;
     let running = state.running.cloned();
-    let bpm = perf.cloned().tempo_bpm;
 
     rsx! {
         div { style: "flex: 1; min-height: 0; display: flex; flex-direction: row; overflow: hidden;",
@@ -209,10 +267,11 @@ fn RigShell(on_home: EventHandler<()>) -> Element {
                     }
                 }
                 div { style: "flex: 1;" }
-                // Engine readout: status LED + tempo, like a panel meter.
+                // Engine status LED — live/idle. (Tempo lives on the perform
+                // grid's Tap Tempo, so no BPM readout here.)
                 div {
                     style: "display: flex; flex-direction: column; align-items: center; gap: 4px; \
-                            padding-top: 6px; border-top: 1px solid #1b1b1f; margin: 0 12px;",
+                            padding-top: 8px; border-top: 1px solid #1b1b1f; margin: 0 12px;",
                     span {
                         style: format!(
                             "width: 7px; height: 7px; border-radius: 999px; background: {}; box-shadow: 0 0 6px {};",
@@ -221,14 +280,8 @@ fn RigShell(on_home: EventHandler<()>) -> Element {
                         )
                     }
                     span {
-                        style: "font-size: 11px; font-weight: 700; color: #d4d4d8; \
-                                font-variant-numeric: tabular-nums; letter-spacing: 0.02em;",
-                        "{bpm}"
-                    }
-                    span {
-                        style: "font-size: 7px; font-weight: 600; color: #3f3f46; \
-                                letter-spacing: 0.14em;",
-                        "BPM"
+                        style: "font-size: 7px; font-weight: 600; color: #3f3f46; letter-spacing: 0.14em;",
+                        if running { "LIVE" } else { "IDLE" }
                     }
                 }
             }

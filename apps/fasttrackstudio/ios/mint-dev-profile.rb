@@ -20,9 +20,15 @@ require "net/http"
 require "uri"
 require "securerandom"
 
-DEVICE_UDID = ARGV[0] or abort("usage: mint-dev-profile.rb <device-udid> [bundle-id] [name]")
+DEVICE_UDID = ARGV[0] or abort("usage: mint-dev-profile.rb <device-udid|-> [bundle-id] [name]")
 BUNDLE_ID = ARGV[1] || "app.fasttrackstudio"
-PROFILE_NAME = ARGV[2] || "FTS Dev"
+# Profile/cert type: development (device install) by default; set
+# PROFILE_TYPE=IOS_APP_STORE + CERT_TYPE=DISTRIBUTION for a TestFlight
+# upload profile (no device list needed there).
+PROFILE_TYPE = ENV["PROFILE_TYPE"] || "IOS_APP_DEVELOPMENT"
+CERT_TYPE = ENV["CERT_TYPE"] || "DEVELOPMENT"
+APP_STORE = PROFILE_TYPE == "IOS_APP_STORE"
+PROFILE_NAME = ARGV[2] || (APP_STORE ? "FTS App Store" : "FTS Dev")
 
 KEY_ID = ENV.fetch("ASC_KEY_ID")
 ISSUER_ID = ENV.fetch("ASC_ISSUER_ID")
@@ -65,25 +71,31 @@ def api(method, path, body = nil)
   (res.body.nil? || res.body.empty?) ? {} : JSON.parse(res.body)
 end
 
-# ── 1. Device (register if missing) ──────────────────────────────────────
-devices = api(:get, "/v1/devices?filter[platform]=IOS&limit=200")["data"]
-dev = devices.find { |d| d["attributes"]["udid"].to_s.casecmp?(DEVICE_UDID) }
-if dev.nil?
-  puts "registering device #{DEVICE_UDID}"
-  dev = api(:post, "/v1/devices", {
-    data: { type: "devices", attributes: {
-      name: "FTS iPhone", platform: "IOS", udid: DEVICE_UDID
-    } }
-  })["data"]
+# ── 1. Devices (development profiles only; App Store profiles carry none) ──
+device_ids = []
+unless APP_STORE
+  devices = api(:get, "/v1/devices?filter[platform]=IOS&limit=200")["data"]
+  dev = devices.find { |d| d["attributes"]["udid"].to_s.casecmp?(DEVICE_UDID) }
+  if dev.nil?
+    puts "registering device #{DEVICE_UDID}"
+    dev = api(:post, "/v1/devices", {
+      data: { type: "devices", attributes: {
+        name: "FTS iPhone", platform: "IOS", udid: DEVICE_UDID
+      } }
+    })["data"]
+  end
+  device_ids = devices.select { |d| d["attributes"]["status"] == "ENABLED" }.map { |d| d["id"] }
+  device_ids |= [dev["id"]]
+  puts "devices in profile: #{device_ids.size}"
 end
-# All enabled iOS devices go in the profile (so it covers phone + future).
-device_ids = devices.select { |d| d["attributes"]["status"] == "ENABLED" }.map { |d| d["id"] }
-device_ids |= [dev["id"]]
-puts "devices in profile: #{device_ids.size}"
 
-# ── 2. Development certificate ───────────────────────────────────────────
-certs = api(:get, "/v1/certificates?filter[certificateType]=DEVELOPMENT&limit=50")["data"]
-abort("no DEVELOPMENT certificate in the account — create one in Xcode") if certs.empty?
+# ── 2. Signing certificate ───────────────────────────────────────────────
+certs = api(:get, "/v1/certificates?filter[certificateType]=#{CERT_TYPE}&limit=50")["data"]
+if certs.empty?
+  hint = APP_STORE ? "Apple Distribution" : "Apple Development"
+  abort("no #{CERT_TYPE} certificate — create an '#{hint}' cert in Xcode " \
+        "(Settings → Accounts → Manage Certificates → +)")
+end
 cert_id = certs.first["id"]
 puts "cert: #{certs.first["attributes"]["name"]}"
 
@@ -109,15 +121,18 @@ existing.each do |p|
   api(:delete, "/v1/profiles/#{p["id"]}")
 end
 
+relationships = {
+  bundleId: { data: { type: "bundleIds", id: bundle_id } },
+  certificates: { data: [{ type: "certificates", id: cert_id }] },
+}
+# App Store profiles carry no devices; development profiles do.
+relationships[:devices] = { data: device_ids.map { |id| { type: "devices", id: id } } } unless APP_STORE
+
 profile = api(:post, "/v1/profiles", {
   data: {
     type: "profiles",
-    attributes: { name: PROFILE_NAME, profileType: "IOS_APP_DEVELOPMENT" },
-    relationships: {
-      bundleId: { data: { type: "bundleIds", id: bundle_id } },
-      certificates: { data: [{ type: "certificates", id: cert_id }] },
-      devices: { data: device_ids.map { |id| { type: "devices", id: id } } }
-    }
+    attributes: { name: PROFILE_NAME, profileType: PROFILE_TYPE },
+    relationships: relationships,
   }
 })["data"]
 

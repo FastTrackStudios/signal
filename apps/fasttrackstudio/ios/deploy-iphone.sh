@@ -60,6 +60,18 @@ echo "=== app: $APP ($BUNDLE) ==="
 /usr/libexec/PlistBuddy -c "Add :UIFileSharingEnabled bool true" "$APP/Info.plist" 2>/dev/null || true
 /usr/libexec/PlistBuddy -c "Add :LSSupportsOpeningDocumentsInPlace bool true" "$APP/Info.plist" 2>/dev/null || true
 
+# Home-screen icon: compile the FTS asset catalog into the bundle (dx emits
+# no app icon). actool produces Assets.car + a partial plist (CFBundleIcons /
+# asset-name keys) we merge in.
+ICONS_DIR="$(git rev-parse --show-toplevel)/apps/fasttrackstudio/ios/Assets.xcassets"
+if [ -d "$ICONS_DIR" ]; then
+    actool "$ICONS_DIR" --compile "$APP" --platform iphoneos \
+        --minimum-deployment-target 15.0 --app-icon AppIcon \
+        --output-partial-info-plist /tmp/fts-icon.plist >/dev/null 2>&1 \
+        && /usr/libexec/PlistBuddy -c "Merge /tmp/fts-icon.plist" "$APP/Info.plist" 2>/dev/null \
+        || echo "warn: app-icon compile skipped"
+fi
+
 echo "=== signing ==="
 cp "$PROFILE" "$APP/embedded.mobileprovision"
 # Entitlements come straight from the profile, so signature and embedded
