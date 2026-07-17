@@ -33,6 +33,11 @@
       ])
       ++ lib.optionals pkgs.stdenv.isLinux (with pkgs; [
         alsa-lib alsa-lib.dev
+        # libudev — hidapi's build script pkg-configs it (kontrol's raw
+        # USB HID access). On the old self-hosted runner a warm target
+        # dir meant the build script never re-ran; cold hosted runners
+        # exposed the missing dep.
+        udev
         # ONNX Runtime for Chatterbox TTS (session-guide/tts). `ort` uses
         # load-dynamic, so it dlopens libonnxruntime.so at runtime via
         # ORT_DYLIB_PATH (below) — never a downloaded binary, which Nix

@@ -18,10 +18,13 @@
       ++ config.fts.buildInputs
       ++ [ pkgs.pkg-config pkgs.rustPlatform.bindgenHook ];
 
-      # Seeded cargo-home bins (dx for the web-bundle steps)
-      # resolve from PATH — never installed from here.
+      # Seeded cargo-home bins (dx for the web-bundle steps) resolve
+      # from PATH — never installed from here. APPEND, don't prepend:
+      # GitHub-hosted runners ship a rustup stable in ~/.cargo/bin that
+      # would otherwise shadow the pinned nix rustc (first symptom:
+      # "can't find crate for core" on the wasm target).
       shellHook = ''
-        export PATH="$HOME/.cargo/bin:$PATH"
+        export PATH="$PATH:$HOME/.cargo/bin"
       '';
     }
     // config.fts.shellEnv);
