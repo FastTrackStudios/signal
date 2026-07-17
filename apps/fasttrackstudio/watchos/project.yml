@@ -1,0 +1,39 @@
+# XcodeGen manifest for the watch remote. `xcodegen generate` → FTSWatch.xcodeproj.
+name: FTSWatch
+options:
+  bundleIdPrefix: app.fasttrackstudio
+  deploymentTarget:
+    watchOS: "11.0"
+  createIntermediateGroups: true
+
+targets:
+  FTSWatch:
+    type: application
+    platform: watchOS
+    sources:
+      - FTSWatch
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.fasttrackstudio.watch
+        PRODUCT_NAME: FastTrackStudio
+        CURRENT_PROJECT_VERSION: 1
+        MARKETING_VERSION: 0.1.0
+        SWIFT_VERSION: "6.0"
+    info:
+      path: FTSWatch/Info.plist
+      properties:
+        CFBundleDisplayName: FTS
+        # Standalone watch app (no iOS companion required).
+        WKApplication: true
+        WKWatchOnly: true
+        # Local-network HTTP to the engine bridge.
+        NSLocalNetworkUsageDescription: >-
+          Connects to the FastTrackStudio engine on your local network to
+          switch guitar-rig scenes.
+        # BLE MIDI controller mode.
+        NSBluetoothAlwaysUsageDescription: >-
+          Sends MIDI to Bluetooth LE MIDI devices to switch scenes and
+          control your rig.
+        # Dev builds talk plain http:// to the engine (no TLS on :4040).
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true

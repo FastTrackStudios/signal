@@ -74,6 +74,13 @@ signal = [
     "dep:axum",
     "dep:tower-http",
     "dep:tokio",
+    # The watch bridge (engine_watch.rs): HTTP+SSE JSON for watchOS remotes,
+    # served as an in-process vox client (architect::LocalServer). All these
+    # deps live in the not(wasm32) table, so no-ops on the web build.
+    "dep:vox",
+    "dep:facet-json",
+    "dep:futures-util",
+    "architect/local",
 ]
 # Embed the staged web bundle (`web-dist/`, copied from the dx web build
 # by `just rig-install`) into the native binary — engine mode then serves
@@ -217,6 +224,10 @@ signal-synth-rig = { workspace = true, optional = true }
 signal-sampler = { workspace = true, optional = true }
 axum = { workspace = true, optional = true }
 tower-http = { workspace = true, optional = true }
+# Watch bridge (engine_watch.rs): facet-json for the WatchState wire form,
+# futures-util for the SSE stream adapter.
+facet-json = { workspace = true, optional = true }
+futures-util = { workspace = true, optional = true }
 # Engine mode serves the vox router over axum ws (+ iroh, from the
 # `signal` feature). Native-only extra features on the same architect dep.
 # `host` = the engine-binary bootstrap (architect::host) — runtime + tracing +

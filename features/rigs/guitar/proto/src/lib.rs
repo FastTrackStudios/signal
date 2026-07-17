@@ -266,6 +266,8 @@ pub struct LiveBlock {
 // One `#[architect::rpc]` trait per module (the macro emits a `Service`
 // token + `serve`/`layer` verbs at module scope).
 
+pub mod watch;
+
 pub mod rig {
     //! Live rig control. `Rig` → `RigClient` / `RigService` / `rig_serve`,
     //! plus the `#[subscribe]` stream sibling: `RigStreamClient` /

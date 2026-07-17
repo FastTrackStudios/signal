@@ -23,6 +23,10 @@ use dioxus::prelude::*;
 
 #[cfg(all(feature = "signal", not(target_arch = "wasm32")))]
 mod engine_main;
+// The watchOS remote's HTTP+SSE bridge (mounted by engine mode; watchOS
+// can't speak vox over WebSocket).
+#[cfg(all(feature = "signal", not(target_arch = "wasm32")))]
+mod engine_watch;
 #[cfg(all(feature = "signal", not(target_arch = "wasm32")))]
 mod engines;
 #[cfg(all(feature = "session", not(target_arch = "wasm32")))]
