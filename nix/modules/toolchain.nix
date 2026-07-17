@@ -25,7 +25,13 @@
       # signal/daw/session flakes), with wasm for the web remotes.
       fts.rustToolchain = pkgs.rust-bin.stable."1.94.0".default.override {
         extensions = [ "rust-src" "rust-analyzer" "clippy" "rustfmt" ];
-        targets = [ "wasm32-unknown-unknown" ];
+        # wasm for the web remotes; on darwin also the iOS targets for the
+        # iPhone app (device + simulator).
+        targets = [ "wasm32-unknown-unknown" ]
+          ++ lib.optionals pkgs.stdenv.isDarwin [
+            "aarch64-apple-ios"
+            "aarch64-apple-ios-sim"
+          ];
       };
 
       fts.buildInputs = (with pkgs; [
@@ -59,7 +65,9 @@
         libxkbcommon wayland libGL vulkan-loader
       ])
       ++ lib.optionals pkgs.stdenv.isDarwin (with pkgs; [
-        apple-sdk_15
+        # No explicit apple-sdk here: the darwin stdenv already carries one,
+        # and a second SDK in scope makes the cc wrapper abort with
+        # "Multiple conflicting values defined for DEVELOPER_DIR".
         libiconv
       ]);
 
@@ -100,8 +108,27 @@
         # See: https://github.com/NixOS/nixpkgs/issues/32580
         WEBKIT_DISABLE_COMPOSITING_MODE = "1";
       }
-      // lib.optionalAttrs pkgs.stdenv.isDarwin {
-        DYLD_LIBRARY_PATH = libPath;
-      };
+      // lib.optionalAttrs pkgs.stdenv.isDarwin (
+        let
+          # iOS cross toolchain: the nix cc wrapper only targets macOS, so
+          # the iOS targets link/compile through Xcode's clang via xcrun,
+          # with the nix SDK env (SDKROOT/DEVELOPER_DIR) scrubbed.
+          iosCC = sdk: pkgs.writeShellScript "ios-clang-${sdk}" ''
+            exec /usr/bin/env -u SDKROOT -u DEVELOPER_DIR /usr/bin/xcrun --sdk ${sdk} clang "$@"
+          '';
+          iosCXX = sdk: pkgs.writeShellScript "ios-clang++-${sdk}" ''
+            exec /usr/bin/env -u SDKROOT -u DEVELOPER_DIR /usr/bin/xcrun --sdk ${sdk} clang++ "$@"
+          '';
+        in
+        {
+          DYLD_LIBRARY_PATH = libPath;
+          CARGO_TARGET_AARCH64_APPLE_IOS_LINKER = "${iosCC "iphoneos"}";
+          CARGO_TARGET_AARCH64_APPLE_IOS_SIM_LINKER = "${iosCC "iphonesimulator"}";
+          CC_aarch64_apple_ios = "${iosCC "iphoneos"}";
+          CXX_aarch64_apple_ios = "${iosCXX "iphoneos"}";
+          CC_aarch64_apple_ios_sim = "${iosCC "iphonesimulator"}";
+          CXX_aarch64_apple_ios_sim = "${iosCXX "iphonesimulator"}";
+        }
+      );
     };
 }

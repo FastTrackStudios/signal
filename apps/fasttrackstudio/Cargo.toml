@@ -38,9 +38,30 @@ default = ["signal", "session", "charts"]
 # signal also force-enables session-ui/desktop: signal-guitar-ui pulls
 # session-ui (default-features off), which only compiles with its dioxus
 # renderer feature on (dock-dioxus needs "web" for its prelude).
-signal = [
+# The guitar rig alone — what the iPhone build ships: the in-process rig
+# engine (rig_engine.rs) + the mobile shell (mobile_view.rs). Kept separate
+# from `signal` because the drums/keys/synth rig UIs pull signal-ui's
+# Vello/baseview surfaces, which don't build for iOS.
+signal-guitar = [
     "dep:signal-guitar-proto",
     "dep:signal-guitar-ui",
+    "dep:session-ui",
+    "dep:vox-core",
+    "dep:vox-websocket",
+    "dep:architect",
+    "architect/iroh",
+    # In-process serving (rig_engine.rs, the watch bridge).
+    "architect/local",
+    # The engine core (native-only tables; no-op on web).
+    "dep:signal-guitar",
+    "dep:tokio",
+    "dep:vox",
+    "dep:facet-json",
+    "dep:futures-util",
+    "dep:eyre",
+]
+signal = [
+    "signal-guitar",
     "dep:signal-bass-proto",
     "dep:signal-bass-ui",
     "dep:signal-drums-proto",
@@ -49,23 +70,13 @@ signal = [
     "dep:signal-keys-ui",
     "dep:signal-synth-proto",
     "dep:signal-synth-ui",
-    "dep:session-ui",
     # The embedded rig remote (rig_view.rs) — vox over a native WebSocket —
     # and the engine supervisor (engines.rs).
-    "dep:vox-core",
-    "dep:vox-websocket",
     "dep:engine-launcher",
-    "dep:architect",
-    # p2p path to a remote signal engine: dial its iroh EndpointId from
-    # any network (the app keeps its own device key in ~/.config/fts
-    # natively, localStorage on web). iroh types come via the
-    # architect::iroh_link::iroh re-export.
-    "architect/iroh",
     # The headless engine itself (`fasttrackstudio --engine`,
     # engine_main.rs — the former apps/signal-engine). These optional
     # deps only exist in the not(wasm32) target table, so enabling them
     # here is a no-op on the web build.
-    "dep:signal-guitar",
     "dep:signal-bass",
     "dep:signal-drums",
     "dep:signal-keys",
@@ -73,14 +84,6 @@ signal = [
     "dep:signal-sampler",
     "dep:axum",
     "dep:tower-http",
-    "dep:tokio",
-    # The watch bridge (engine_watch.rs): HTTP+SSE JSON for watchOS remotes,
-    # served as an in-process vox client (architect::LocalServer). All these
-    # deps live in the not(wasm32) table, so no-ops on the web build.
-    "dep:vox",
-    "dep:facet-json",
-    "dep:futures-util",
-    "architect/local",
 ]
 # Embed the staged web bundle (`web-dist/`, copied from the dx web build
 # by `just rig-install`) into the native binary — engine mode then serves
@@ -175,8 +178,13 @@ eyre = { workspace = true, optional = true }
 # desktop renderer; the web build (dx build --platform web) is the SAME
 # UI served over the network — no desktop-only pages. Native extras:
 # the engine supervisor (child processes), file prefs, iroh key file.
-[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+# The dioxus renderer splits by platform: desktop (wry window chrome) vs
+# mobile (the same wry renderer with iOS launch glue, in the ios table
+# further down).
+[target.'cfg(not(any(target_arch = "wasm32", target_os = "ios")))'.dependencies]
 dioxus = { workspace = true, default-features = true, features = ["desktop", "launch"] }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 tracing-subscriber.workspace = true
 session-ui = { workspace = true, features = ["desktop"], optional = true }
 # The real DAW panels (MixerPanel / ArrangementView) — self-contained,
@@ -241,6 +249,12 @@ include_dir = { workspace = true, optional = true }
 # The native PipeWire duplex backend is Linux-only (cpal's pipewire host);
 # on macOS/other platforms the sampler core falls back to plain cpal
 # (CoreAudio), keeping engine mode buildable on darwin (voyager).
+# ── iPhone (dx build --platform ios) — the in-process rig + phone shell ──
+[target.'cfg(target_os = "ios")'.dependencies]
+dioxus = { workspace = true, default-features = true, features = ["mobile", "launch"] }
+# AVAudioSession bootstrap (ios_audio.rs) — four dynamic objc calls.
+objc2 = "0.5"
+
 [target.'cfg(target_os = "linux")'.dependencies]
 signal-sampler = { workspace = true, features = ["pipewire"], optional = true }
 # MIDI over PipeWire too: the guitar rig's pipewire feature flips midir onto

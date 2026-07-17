@@ -60,8 +60,17 @@ mod session_remote_view;
 // SVG) with a playhead highlight driven by the transport streams.
 #[cfg(all(feature = "session", target_arch = "wasm32"))]
 mod session_chart_pane;
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(not(any(target_arch = "wasm32", target_os = "ios")))]
 mod updates;
+// ── iPhone: the in-process rig + the phone shell ────────────────────────
+// iOS forbids child processes, so the signal engine runs inside the app
+// (rig_engine.rs) and the UI is a phone-sized shell (mobile_view.rs).
+#[cfg(all(feature = "signal-guitar", target_os = "ios"))]
+mod ios_audio;
+#[cfg(all(feature = "signal-guitar", target_os = "ios"))]
+mod rig_engine;
+#[cfg(all(feature = "signal-guitar", target_os = "ios"))]
+mod mobile_view;
 
 fn main() {
     // NVIDIA + Wayland: force the WebKitGTK webview through XWayland before
@@ -106,12 +115,24 @@ fn main() {
         Err(e) => tracing::error!("session engine failed to start: {e:?}"),
     }
 
+    // iPhone: configure the audio session (duplex, speaker default), then
+    // run the signal engine IN-PROCESS — iOS forbids child processes, so
+    // the engines.rs supervisor path doesn't exist here.
+    #[cfg(all(feature = "signal-guitar", target_os = "ios"))]
+    {
+        ios_audio::configure();
+        match rig_engine::bootstrap_blocking() {
+            Ok(()) => tracing::info!("rig engine ready (in-process)"),
+            Err(e) => tracing::error!("rig engine failed to start: {e:?}"),
+        }
+    }
+
     launch_app();
 }
 
 /// Desktop: a frameless window — the app draws its own top bar (the
 /// header doubles as title bar: drag surfaces + window controls).
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(not(any(target_arch = "wasm32", target_os = "ios")))]
 fn launch_app() {
     use dioxus::desktop::tao::dpi::LogicalSize;
     use dioxus::desktop::{Config, WindowBuilder};
@@ -127,6 +148,15 @@ fn launch_app() {
 
 #[cfg(target_arch = "wasm32")]
 fn launch_app() {
+    dioxus::launch(App);
+}
+
+/// iPhone: the phone-sized shell (mobile_view.rs) over the in-process rig.
+#[cfg(target_os = "ios")]
+fn launch_app() {
+    #[cfg(feature = "signal-guitar")]
+    dioxus::launch(mobile_view::MobileApp);
+    #[cfg(not(feature = "signal-guitar"))]
     dioxus::launch(App);
 }
 
@@ -331,17 +361,17 @@ fn App() -> Element {
 // ── Custom window chrome (desktop is frameless) ─────────────────────────────
 
 fn drag_window() {
-    #[cfg(not(target_arch = "wasm32"))]
+    #[cfg(not(any(target_arch = "wasm32", target_os = "ios")))]
     dioxus::desktop::window().drag();
 }
 
 fn toggle_maximize() {
-    #[cfg(not(target_arch = "wasm32"))]
+    #[cfg(not(any(target_arch = "wasm32", target_os = "ios")))]
     dioxus::desktop::window().toggle_maximized();
 }
 
 /// Minimize / maximize / close — the right end of the title bar.
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(not(any(target_arch = "wasm32", target_os = "ios")))]
 #[component]
 fn WindowControls() -> Element {
     const BTN: &str = "width: 40px; align-self: stretch; display: flex; align-items: center; justify-content: center; background: transparent; border: none; color: #a1a1aa; font-size: 13px; cursor: default; padding: 0;";
@@ -366,8 +396,8 @@ fn WindowControls() -> Element {
     }
 }
 
-/// The browser draws its own chrome.
-#[cfg(target_arch = "wasm32")]
+/// The browser/phone draws its own chrome.
+#[cfg(any(target_arch = "wasm32", target_os = "ios"))]
 #[component]
 fn WindowControls() -> Element {
     rsx! {}
@@ -376,7 +406,7 @@ fn WindowControls() -> Element {
 /// Invisible edge/corner strips that restore native-feeling resize on
 /// the frameless window (decorations off also removes the compositor's
 /// resize borders). Corners render after edges so they win the hit test.
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(not(any(target_arch = "wasm32", target_os = "ios")))]
 #[component]
 fn ResizeHandles() -> Element {
     use dioxus::desktop::tao::window::ResizeDirection as Dir;
@@ -414,7 +444,7 @@ fn ResizeHandles() -> Element {
     }
 }
 
-#[cfg(target_arch = "wasm32")]
+#[cfg(any(target_arch = "wasm32", target_os = "ios"))]
 #[component]
 fn ResizeHandles() -> Element {
     rsx! {}
@@ -617,7 +647,7 @@ fn SettingsPanel() -> Element {
     }
 }
 
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(not(any(target_arch = "wasm32", target_os = "ios")))]
 #[component]
 fn UpdateCheck(msg: Signal<String>) -> Element {
     rsx! {
@@ -639,8 +669,8 @@ fn UpdateCheck(msg: Signal<String>) -> Element {
     }
 }
 
-/// Web build: the deployment updates itself — nothing to check.
-#[cfg(target_arch = "wasm32")]
+/// Web/mobile build: the deployment updates itself — nothing to check.
+#[cfg(any(target_arch = "wasm32", target_os = "ios"))]
 #[component]
 fn UpdateCheck(msg: Signal<String>) -> Element {
     let _ = msg;
