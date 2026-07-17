@@ -27,7 +27,7 @@ struct PerformGridView: View {
     }
 
     private var header: some View {
-        HStack {
+        HStack(spacing: 4) {
             Circle()
                 .fill(store.connected ? RigColors.tunerGreen : .red)
                 .frame(width: 5, height: 5)
@@ -35,9 +35,9 @@ struct PerformGridView: View {
                 .font(.system(size: 11, weight: .medium))
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
-            Spacer(minLength: 40) // keep clear of the system clock
         }
-        .padding(.leading, 4)
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, 36) // stay clear of the corner clock
         .padding(.top, 2)
     }
 
