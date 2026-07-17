@@ -103,32 +103,37 @@ fn HomePage(on_open_rig: EventHandler<()>) -> Element {
                 span { style: "font-size: 24px; font-weight: 800; letter-spacing: -0.5px;", "FastTrackStudio" }
                 span { style: "font-size: 13px; color: #71717a;", "Live rig & session control" }
             }
-            // Guitar Rig — the live surface.
+            // Guitar Rig — the live surface. Left accent rule instead of an
+            // icon: quiet, and it echoes the rail's active-edge LED.
             button {
-                style: "text-align: left; border: none; border-radius: 16px; padding: 18px; \
-                        background: linear-gradient(135deg, #1e3a5f, #0c4a6e); color: #e0f2fe; \
-                        display: flex; flex-direction: column; gap: 4px;",
+                style: "position: relative; text-align: left; border: none; border-radius: 14px; \
+                        padding: 18px 18px 18px 22px; overflow: hidden; \
+                        background: linear-gradient(135deg, #10283f, #0b3a52); color: #e0f2fe; \
+                        display: flex; flex-direction: column; gap: 5px;",
                 onclick: move |_| on_open_rig.call(()),
-                div { style: "display: flex; align-items: center; gap: 8px;",
-                    span { style: "font-size: 24px;", "🎸" }
-                    span { style: "font-size: 18px; font-weight: 700;", "Guitar Rig" }
+                span {
+                    style: "position: absolute; left: 0; top: 14px; bottom: 14px; width: 4px; \
+                            border-radius: 0 2px 2px 0; background: #38bdf8; box-shadow: 0 0 12px #38bdf8;",
                 }
-                span { style: "font-size: 12px; opacity: 0.75;",
-                    "The signal engine, live on this phone — scenes, chain, tuner. Rotates to landscape."
+                span { style: "font-size: 11px; font-weight: 600; letter-spacing: 0.14em; \
+                               text-transform: uppercase; color: #7dd3fc;", "Live" }
+                span { style: "font-size: 19px; font-weight: 700;", "Guitar Rig" }
+                span { style: "font-size: 12px; opacity: 0.72;",
+                    "The signal engine, live on this phone — scenes, chain, tuner."
                 }
             }
             // Placeholders for the surfaces still to port.
-            for (icon, title, sub) in [
-                ("🎵", "Session", "Setlists, transport & the mixer"),
-                ("🎼", "Charts", "Keyflow chart writing"),
+            for (title, sub) in [
+                ("Session", "Setlists, transport & the mixer"),
+                ("Charts", "Keyflow chart writing"),
             ] {
                 div {
-                    style: "border: 1px solid #27272a; border-radius: 16px; padding: 16px; \
-                            background: #131316; color: #52525b; display: flex; flex-direction: column; gap: 3px;",
+                    style: "border: 1px solid #1f1f23; border-radius: 14px; padding: 16px 18px; \
+                            background: #131316; color: #52525b; display: flex; flex-direction: column; gap: 4px;",
                     div { style: "display: flex; align-items: center; gap: 8px;",
-                        span { style: "font-size: 20px; opacity: 0.5;", "{icon}" }
                         span { style: "font-size: 16px; font-weight: 700;", "{title}" }
-                        span { style: "margin-left: auto; font-size: 10px; font-weight: 600; color: #3f3f46;", "SOON" }
+                        span { style: "margin-left: auto; font-size: 9px; font-weight: 600; \
+                                       letter-spacing: 0.12em; color: #3f3f46;", "SOON" }
                     }
                     span { style: "font-size: 12px;", "{sub}" }
                 }
@@ -152,50 +157,78 @@ fn RigShell(on_home: EventHandler<()>) -> Element {
 
     rsx! {
         div { style: "flex: 1; min-height: 0; display: flex; flex-direction: row; overflow: hidden;",
-            // Left rail.
+            // Rack rail: anodized panel, active page marked by a glowing
+            // accent LED on the inner edge (echoes the stompbox LEDs).
             div {
-                style: "width: 64px; display: flex; flex-direction: column; align-items: stretch; \
-                        border-right: 1px solid #27272a; background: #0f0f10; \
-                        padding: 6px 0 8px; gap: 2px;",
+                style: "width: 62px; flex-shrink: 0; display: flex; flex-direction: column; \
+                        align-items: stretch; background: #0a0a0c; \
+                        border-right: 1px solid #1b1b1f; padding: 4px 0 6px;",
                 // Home / back.
                 button {
-                    style: "padding: 8px 0 6px; background: transparent; border: none; border-radius: 8px; \
-                            margin: 0 6px 4px; display: flex; flex-direction: column; align-items: center; \
-                            gap: 1px; font-size: 9px; font-weight: 600; color: #71717a;",
+                    style: "appearance: none; background: transparent; border: none; \
+                            padding: 9px 0 7px; display: flex; flex-direction: column; \
+                            align-items: center; gap: 3px; color: #52525b;",
                     onclick: move |_| on_home.call(()),
-                    span { style: "font-size: 17px;", "‹" }
-                    "Home"
+                    HomeIcon {}
+                    RailLabel { text: "Home" }
                 }
-                for (p, label, icon) in [
-                    (MobilePage::Scenes, "Scenes", "🎛"),
-                    (MobilePage::Control, "Control", "🎚"),
-                    (MobilePage::Audio, "Audio", "🔊"),
+                div { style: "height: 1px; background: #1b1b1f; margin: 2px 12px 4px;" }
+                for (p, label) in [
+                    (MobilePage::Scenes, "Scenes"),
+                    (MobilePage::Control, "Control"),
+                    (MobilePage::Audio, "Audio"),
                 ] {
-                    button {
-                        style: format!(
-                            "padding: 8px 0 6px; background: {}; border: none; border-radius: 8px; \
-                             margin: 0 6px; display: flex; flex-direction: column; align-items: center; \
-                             gap: 1px; font-size: 9px; font-weight: 600; color: {};",
-                            if page() == p { "#1e293b" } else { "transparent" },
-                            if page() == p { "#38bdf8" } else { "#71717a" }
-                        ),
-                        onclick: move |_| page.set(p),
-                        span { style: "font-size: 17px;", "{icon}" }
-                        "{label}"
+                    {
+                        let active = page() == p;
+                        rsx! {
+                            button {
+                                style: format!(
+                                    "position: relative; appearance: none; border: none; \
+                                     background: {}; padding: 11px 0 9px; display: flex; \
+                                     flex-direction: column; align-items: center; gap: 4px; color: {};",
+                                    if active { "#101821" } else { "transparent" },
+                                    if active { "#38bdf8" } else { "#52525b" },
+                                ),
+                                onclick: move |_| page.set(p),
+                                // Accent LED on the inner (content-side) edge.
+                                if active {
+                                    span {
+                                        style: "position: absolute; right: 0; top: 8px; bottom: 8px; \
+                                                width: 3px; border-radius: 2px 0 0 2px; background: #38bdf8; \
+                                                box-shadow: 0 0 8px #38bdf8, 0 0 2px #38bdf8;",
+                                    }
+                                }
+                                match p {
+                                    MobilePage::Scenes => rsx! { ScenesIcon {} },
+                                    MobilePage::Control => rsx! { ControlIcon {} },
+                                    MobilePage::Audio => rsx! { AudioIcon {} },
+                                }
+                                RailLabel { text: label }
+                            }
+                        }
                     }
                 }
                 div { style: "flex: 1;" }
-                // Engine status: dot + bpm.
+                // Engine readout: status LED + tempo, like a panel meter.
                 div {
-                    style: "display: flex; flex-direction: column; align-items: center; gap: 3px;",
+                    style: "display: flex; flex-direction: column; align-items: center; gap: 4px; \
+                            padding-top: 6px; border-top: 1px solid #1b1b1f; margin: 0 12px;",
                     span {
                         style: format!(
-                            "width: 8px; height: 8px; border-radius: 999px; background: {};",
-                            if running { "#22c55e" } else { "#ef4444" }
+                            "width: 7px; height: 7px; border-radius: 999px; background: {}; box-shadow: 0 0 6px {};",
+                            if running { "#22c55e" } else { "#3f3f46" },
+                            if running { "#22c55e88" } else { "transparent" },
                         )
                     }
-                    span { style: "font-size: 10px; font-weight: 700; color: #a1a1aa; font-variant-numeric: tabular-nums;",
+                    span {
+                        style: "font-size: 11px; font-weight: 700; color: #d4d4d8; \
+                                font-variant-numeric: tabular-nums; letter-spacing: 0.02em;",
                         "{bpm}"
+                    }
+                    span {
+                        style: "font-size: 7px; font-weight: 600; color: #3f3f46; \
+                                letter-spacing: 0.14em;",
+                        "BPM"
                     }
                 }
             }
@@ -258,6 +291,14 @@ fn ScenesPage(state: signal_guitar_ui::RigViewState) -> Element {
         })
     };
 
+    tracing::info!(
+        stacks = perf.stacks.len(),
+        mode = perf.perform_mode,
+        songs = perf.songs.len(),
+        profile = %perf.profile_name,
+        rig_ctx = rig.is_some(),
+        "scenes render"
+    );
     let _ = running;
     rsx! {
         // A whisper of a header: just the active patch, centered.
@@ -340,6 +381,84 @@ fn AudioPage(on_close: EventHandler<()>) -> Element {
                     span { style: "font-size: 13px; color: #71717a;", "Loading devices…" }
                 },
             }
+        }
+    }
+}
+
+// ── Rail glyphs ─────────────────────────────────────────────────────────────
+// Stroke-based line icons drawn from the rig's own world; they inherit the
+// button's `color` via `currentColor`, so active/inactive tint is free.
+
+/// Uppercase micro-caps rail label — a rack-panel legend.
+#[component]
+fn RailLabel(text: &'static str) -> Element {
+    rsx! {
+        span {
+            style: "font-size: 8px; font-weight: 600; letter-spacing: 0.1em; \
+                    text-transform: uppercase; color: currentColor;",
+            "{text}"
+        }
+    }
+}
+
+/// Back-to-home chevron.
+#[component]
+fn HomeIcon() -> Element {
+    rsx! {
+        svg {
+            width: "22", height: "22", view_box: "0 0 24 24", fill: "none",
+            stroke: "currentColor", stroke_width: "1.75",
+            stroke_linecap: "round", stroke_linejoin: "round",
+            path { d: "M14 6 L8 12 L14 18" }
+        }
+    }
+}
+
+/// Scenes: the footswitch grid itself (6 pads, floor-unit layout).
+#[component]
+fn ScenesIcon() -> Element {
+    rsx! {
+        svg {
+            width: "22", height: "22", view_box: "0 0 24 24", fill: "none",
+            stroke: "currentColor", stroke_width: "1.6",
+            rect { x: "3.5", y: "3.5", width: "7", height: "5", rx: "1.4" }
+            rect { x: "13.5", y: "3.5", width: "7", height: "5", rx: "1.4" }
+            rect { x: "3.5", y: "9.5", width: "7", height: "5", rx: "1.4" }
+            rect { x: "13.5", y: "9.5", width: "7", height: "5", rx: "1.4" }
+            rect { x: "3.5", y: "15.5", width: "7", height: "5", rx: "1.4" }
+            rect { x: "13.5", y: "15.5", width: "7", height: "5", rx: "1.4" }
+        }
+    }
+}
+
+/// Control: a fader stack (the instrument panel — chain, params, meters).
+#[component]
+fn ControlIcon() -> Element {
+    rsx! {
+        svg {
+            width: "22", height: "22", view_box: "0 0 24 24", fill: "none",
+            stroke: "currentColor", stroke_width: "1.6", stroke_linecap: "round",
+            line { x1: "3", y1: "6.5", x2: "21", y2: "6.5" }
+            circle { cx: "8", cy: "6.5", r: "2.4", fill: "currentColor", stroke: "none" }
+            line { x1: "3", y1: "12", x2: "21", y2: "12" }
+            circle { cx: "15.5", cy: "12", r: "2.4", fill: "currentColor", stroke: "none" }
+            line { x1: "3", y1: "17.5", x2: "21", y2: "17.5" }
+            circle { cx: "11", cy: "17.5", r: "2.4", fill: "currentColor", stroke: "none" }
+        }
+    }
+}
+
+/// Audio: speaker + sound waves (device I/O).
+#[component]
+fn AudioIcon() -> Element {
+    rsx! {
+        svg {
+            width: "22", height: "22", view_box: "0 0 24 24", fill: "none",
+            stroke: "currentColor", stroke_width: "1.6",
+            stroke_linecap: "round", stroke_linejoin: "round",
+            path { d: "M4 9 H7 L11 5.5 V18.5 L7 15 H4 Z" }
+            path { d: "M15 9.5 A4 4 0 0 1 15 14.5" }
+            path { d: "M17.5 7 A7.5 7.5 0 0 1 17.5 17" }
         }
     }
 }
