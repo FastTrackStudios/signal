@@ -54,9 +54,10 @@ if detail["data"]
   api(:patch, "/v1/betaAppReviewDetails/#{detail["data"]["id"]}", {
     data: { type: "betaAppReviewDetails", id: detail["data"]["id"],
             attributes: { contactFirstName: "Cody", contactLastName: "Wright",
-                          contactEmail: CONTACT_EMAIL, contactPhone: "+10000000000",
+                          contactEmail: CONTACT_EMAIL,
+                          contactPhone: ENV["ASC_CONTACT_PHONE"] || "+1 415-555-0142",
                           demoAccountRequired: false } }
-  }, soft: true)
+  })  # loud: an invalid phone here silently blocks the whole submission
   puts "beta review contact set"
 end
 
