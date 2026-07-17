@@ -76,6 +76,17 @@ BUNDLE="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Info.plis
 # (the crate's "0.0.1-alpha" is rejected); CFBundleVersion just has to climb.
 BUILD_NO="${BUILD_NO:-$(date +%s)}"
 MARKETING_VER="${MARKETING_VER:-0.0.1}"
+# App bundle OS type — App Store requires CFBundlePackageType=APPL (dx omits it).
+/usr/libexec/PlistBuddy -c "Set :CFBundlePackageType APPL" "$APP/Info.plist" 2>/dev/null \
+    || /usr/libexec/PlistBuddy -c "Add :CFBundlePackageType string APPL" "$APP/Info.plist"
+# Launch screen — required because iPad multitasking is implied by the
+# orientation set. An empty UILaunchScreen dict = system default (fine).
+/usr/libexec/PlistBuddy -c "Add :UILaunchScreen dict" "$APP/Info.plist" 2>/dev/null || true
+# Single supported platform — dx leaves both iPhoneOS+iPadOS, which Apple
+# rejects (91177). This is an iOS app; keep only iPhoneOS.
+/usr/libexec/PlistBuddy -c "Delete :CFBundleSupportedPlatforms" "$APP/Info.plist" 2>/dev/null || true
+/usr/libexec/PlistBuddy -c "Add :CFBundleSupportedPlatforms array" "$APP/Info.plist"
+/usr/libexec/PlistBuddy -c "Add :CFBundleSupportedPlatforms:0 string iPhoneOS" "$APP/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $MARKETING_VER" "$APP/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD_NO" "$APP/Info.plist"
 # Minimum OS — App Store rejects a bundle without it (dx doesn't emit one).
@@ -92,13 +103,15 @@ MARKETING_VER="${MARKETING_VER:-0.0.1}"
 # without them App Store Connect can't identify the SDK the binary was built
 # against and rejects the upload as "unsupported SDK/Xcode" (error 90534).
 # Derive them from the active Xcode/SDK so they stay correct across versions.
+# All reads are `|| true`-guarded inside the command sub so a missing key
+# can't trip set -e (a bare `var=$(failing)` assignment DOES exit under -e).
 DEV="${XCODE_DIR:-$(xcode-select -p)}"
 SDK="$DEV/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS.sdk"
-SDK_VER="$(/usr/libexec/PlistBuddy -c 'Print :Version' "$SDK/SDKSettings.plist" 2>/dev/null)"
-SDK_BUILD="$(/usr/libexec/PlistBuddy -c 'Print :ProductBuildVersion' "$DEV/Platforms/iPhoneOS.platform/version.plist" 2>/dev/null)"
+SDK_VER="$(/usr/libexec/PlistBuddy -c 'Print :Version' "$SDK/SDKSettings.plist" 2>/dev/null || true)"
+SDK_BUILD="$(/usr/libexec/PlistBuddy -c 'Print :ProductBuildVersion' "$DEV/Platforms/iPhoneOS.platform/version.plist" 2>/dev/null || true)"
 XCODE_ROOT="${DEV%/Contents/Developer}"
-XCODE_BUILD="$(/usr/libexec/PlistBuddy -c 'Print :ProductBuildVersion' "$XCODE_ROOT/version.plist" 2>/dev/null)"
-XCODE_VER="$(DEVELOPER_DIR="$DEV" xcodebuild -version 2>/dev/null | awk '/^Xcode/{print $2}')"
+XCODE_BUILD="$(/usr/libexec/PlistBuddy -c 'Print :ProductBuildVersion' "$XCODE_ROOT/Contents/version.plist" 2>/dev/null || true)"
+XCODE_VER="$(DEVELOPER_DIR="$DEV" xcodebuild -version 2>/dev/null | awk '/^Xcode/{print $2}' || true)"
 # DTXcode = major*100 + minor*10 + patch, 4-digit (26.6 → 2660).
 DTXCODE="$(echo "$XCODE_VER" | awk -F. '{printf "%02d%d%d", $1, ($2==""?0:$2), ($3==""?0:$3)}')"
 MACOS_BUILD="$(sw_vers -buildVersion)"
