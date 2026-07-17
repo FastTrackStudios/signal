@@ -25,13 +25,9 @@ dx build --platform ios --no-default-features --features signal-guitar
 
 APP="$(cd ../.. && pwd)/target/dx/fasttrackstudio/debug/ios/Fasttrackstudio.app"
 
-# Landscape-only: the rig is a wide control surface (dx offers no
-# orientation config, so patch the generated Info.plist).
-/usr/libexec/PlistBuddy -c "Delete :UISupportedInterfaceOrientations" "$APP/Info.plist" 2>/dev/null || true
-/usr/libexec/PlistBuddy -c "Add :UISupportedInterfaceOrientations array" "$APP/Info.plist"
-/usr/libexec/PlistBuddy -c "Add :UISupportedInterfaceOrientations:0 string UIInterfaceOrientationLandscapeRight" "$APP/Info.plist"
-/usr/libexec/PlistBuddy -c "Add :UISupportedInterfaceOrientations:1 string UIInterfaceOrientationLandscapeLeft" "$APP/Info.plist"
-# Microphone / audio-interface input for the rig.
+# The app rotates per-screen at runtime (ios_orientation.rs), so Info.plist
+# keeps BOTH portrait and landscape (dx's default) — no orientation patch.
+# Add the mic/audio-interface usage string the rig needs.
 /usr/libexec/PlistBuddy -c "Add :NSMicrophoneUsageDescription string 'Processes your guitar signal from the connected audio interface or microphone.'" "$APP/Info.plist" 2>/dev/null || true
 
 echo "built: $APP"

@@ -1,12 +1,14 @@
-//! The iPhone shell — a phone-sized layout over the SAME in-process rig
-//! the desktop/engine builds run. Three pages behind a bottom tab bar:
+//! The iPhone shell.
 //!
-//! - **Scenes**: the perform grid (footswitch stacks, tap tempo, hold
-//!   layer) — the shared `PerformGrid` component, full-screen.
-//! - **Control**: the guitar instrument panel (chain, params, meters) —
-//!   the shared `ControlView`.
-//! - **Audio**: input/output device + buffer/sample-rate selection over
-//!   `AudioSettingsClient`, with a rig restart to apply.
+//! A portrait **home** page opens onto surfaces; the guitar rig is the
+//! first. The rig (`RigShell`) is a wide control panel that switches the
+//! phone to landscape on entry (and back to portrait on exit) via
+//! `ios_orientation`. Inside the rig, three pages sit behind a slim left
+//! rail:
+//!
+//! - **Scenes**: the perform grid (footswitch stacks, tap tempo, hold layer)
+//! - **Control**: the guitar instrument panel (chain, params, meters)
+//! - **Audio**: input/output device + buffer/rate selection
 //!
 //! The rig clients come from `rig_engine.rs` (in-process LocalServer) and
 //! are provided as context, so every shared component works unchanged.
@@ -19,6 +21,14 @@ use signal_guitar_ui::{use_rig_state, AudioSettingsBridge, AudioSettingsModal, C
 
 const SIGNAL_TAILWIND: &str = include_str!("../assets/tailwind-signal.css");
 
+/// Which top-level screen is showing.
+#[derive(Clone, Copy, PartialEq)]
+enum MobileScreen {
+    Home,
+    Rig,
+}
+
+/// Which rig page is showing (within `RigShell`).
 #[derive(Clone, Copy, PartialEq)]
 enum MobilePage {
     Scenes,
@@ -26,7 +36,8 @@ enum MobilePage {
     Audio,
 }
 
-/// The phone app root: bootstrap status + tabbed pages.
+/// The phone app root: bootstrap the engine into context, then route
+/// between the home page and the surfaces.
 #[component]
 pub fn MobileApp() -> Element {
     let engine = crate::rig_engine::engine();
@@ -51,7 +62,7 @@ pub fn MobileApp() -> Element {
                     let _ = provide_context(engine.rig.clone());
                     let _ = provide_context(engine.stream.clone());
                     let _ = provide_context(engine.settings.clone());
-                    rsx! { MobileShell {} }
+                    rsx! { Router {} }
                 }
                 None => rsx! {
                     div { style: "display: flex; flex: 1; align-items: center; justify-content: center; flex-direction: column; gap: 8px;",
@@ -65,10 +76,74 @@ pub fn MobileApp() -> Element {
     }
 }
 
-/// Landscape shell: a slim left rail (page tabs + engine status) beside the
-/// full-width page — the grid gets the whole screen, like the floor unit.
+/// Home ⇄ Rig. Each screen owns its orientation (set on mount), so
+/// navigating swaps the component and rotates the phone.
 #[component]
-fn MobileShell() -> Element {
+fn Router() -> Element {
+    let mut screen = use_signal(|| MobileScreen::Home);
+    match screen() {
+        MobileScreen::Home => rsx! {
+            HomePage { on_open_rig: move |_| screen.set(MobileScreen::Rig) }
+        },
+        MobileScreen::Rig => rsx! {
+            RigShell { on_home: move |_| screen.set(MobileScreen::Home) }
+        },
+    }
+}
+
+/// Portrait landing: the app's surfaces as tappable cards. Guitar Rig is
+/// live; the rest are placeholders until their mobile ports land.
+#[component]
+fn HomePage(on_open_rig: EventHandler<()>) -> Element {
+    use_hook(crate::ios_orientation::portrait);
+
+    rsx! {
+        div { style: "flex: 1; min-height: 0; overflow-y: auto; padding: 20px 18px; display: flex; flex-direction: column; gap: 18px;",
+            div { style: "display: flex; flex-direction: column; gap: 2px; padding-top: 8px;",
+                span { style: "font-size: 24px; font-weight: 800; letter-spacing: -0.5px;", "FastTrackStudio" }
+                span { style: "font-size: 13px; color: #71717a;", "Live rig & session control" }
+            }
+            // Guitar Rig — the live surface.
+            button {
+                style: "text-align: left; border: none; border-radius: 16px; padding: 18px; \
+                        background: linear-gradient(135deg, #1e3a5f, #0c4a6e); color: #e0f2fe; \
+                        display: flex; flex-direction: column; gap: 4px;",
+                onclick: move |_| on_open_rig.call(()),
+                div { style: "display: flex; align-items: center; gap: 8px;",
+                    span { style: "font-size: 24px;", "🎸" }
+                    span { style: "font-size: 18px; font-weight: 700;", "Guitar Rig" }
+                }
+                span { style: "font-size: 12px; opacity: 0.75;",
+                    "The signal engine, live on this phone — scenes, chain, tuner. Rotates to landscape."
+                }
+            }
+            // Placeholders for the surfaces still to port.
+            for (icon, title, sub) in [
+                ("🎵", "Session", "Setlists, transport & the mixer"),
+                ("🎼", "Charts", "Keyflow chart writing"),
+            ] {
+                div {
+                    style: "border: 1px solid #27272a; border-radius: 16px; padding: 16px; \
+                            background: #131316; color: #52525b; display: flex; flex-direction: column; gap: 3px;",
+                    div { style: "display: flex; align-items: center; gap: 8px;",
+                        span { style: "font-size: 20px; opacity: 0.5;", "{icon}" }
+                        span { style: "font-size: 16px; font-weight: 700;", "{title}" }
+                        span { style: "margin-left: auto; font-size: 10px; font-weight: 600; color: #3f3f46;", "SOON" }
+                    }
+                    span { style: "font-size: 12px;", "{sub}" }
+                }
+            }
+        }
+    }
+}
+
+/// Landscape rig shell: a slim left rail (Home + page tabs + engine status)
+/// beside the full-width page — the grid gets the whole screen, like the
+/// floor unit.
+#[component]
+fn RigShell(on_home: EventHandler<()>) -> Element {
+    use_hook(crate::ios_orientation::landscape);
+
     let mut page = use_signal(|| MobilePage::Scenes);
     let state = use_rig_state();
     let perf = state.perf;
@@ -82,6 +157,15 @@ fn MobileShell() -> Element {
                 style: "width: 64px; display: flex; flex-direction: column; align-items: stretch; \
                         border-right: 1px solid #27272a; background: #0f0f10; \
                         padding: 6px 0 8px; gap: 2px;",
+                // Home / back.
+                button {
+                    style: "padding: 8px 0 6px; background: transparent; border: none; border-radius: 8px; \
+                            margin: 0 6px 4px; display: flex; flex-direction: column; align-items: center; \
+                            gap: 1px; font-size: 9px; font-weight: 600; color: #71717a;",
+                    onclick: move |_| on_home.call(()),
+                    span { style: "font-size: 17px;", "‹" }
+                    "Home"
+                }
                 for (p, label, icon) in [
                     (MobilePage::Scenes, "Scenes", "🎛"),
                     (MobilePage::Control, "Control", "🎚"),

@@ -122,6 +122,12 @@
         in
         {
           DYLD_LIBRARY_PATH = libPath;
+          # Rust defaults aarch64-apple-ios to iOS 10, whose runtime lacks
+          # `___chkstk_darwin` (it moved into libSystem at iOS 12) — linking
+          # a large-stack crate then fails with an undefined symbol. Pin a
+          # modern floor for compile + link consistency (the device is iOS
+          # 26; 15 is a safe, widely-compatible baseline).
+          IPHONEOS_DEPLOYMENT_TARGET = "15.0";
           CARGO_TARGET_AARCH64_APPLE_IOS_LINKER = "${iosCC "iphoneos"}";
           CARGO_TARGET_AARCH64_APPLE_IOS_SIM_LINKER = "${iosCC "iphonesimulator"}";
           CC_aarch64_apple_ios = "${iosCC "iphoneos"}";

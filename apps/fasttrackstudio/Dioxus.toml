@@ -1,0 +1,12 @@
+# dx config for the app. Only the mobile/bundle identity lives here; the
+# desktop and web launches are configured in main.rs via LaunchBuilder, and
+# feature selection is via cargo features (see Cargo.toml).
+[application]
+
+# App bundle identity (iOS CFBundleIdentifier / TestFlight App ID). The
+# flagship id — this binary is the whole FastTrackStudio app (rig today,
+# session/charts to follow), not the rig alone. Watch app is a separate
+# record (app.fasttrackstudio.watch).
+[bundle]
+identifier = "app.fasttrackstudio"
+publisher = "FastTrackStudio"

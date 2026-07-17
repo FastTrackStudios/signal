@@ -68,6 +68,8 @@ mod updates;
 #[cfg(all(feature = "signal-guitar", target_os = "ios"))]
 mod ios_audio;
 #[cfg(all(feature = "signal-guitar", target_os = "ios"))]
+mod ios_orientation;
+#[cfg(all(feature = "signal-guitar", target_os = "ios"))]
 mod rig_engine;
 #[cfg(all(feature = "signal-guitar", target_os = "ios"))]
 mod mobile_view;
