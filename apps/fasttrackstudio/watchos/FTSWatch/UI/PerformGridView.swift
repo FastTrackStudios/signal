@@ -18,6 +18,9 @@ struct PerformGridView: View {
             header
             grid
         }
+        // Full-bleed: reclaim the top status-bar band (the clock floats over
+        // our header row, which keeps its right side clear for it).
+        .ignoresSafeArea()
         .overlay {
             if store.state.tunerVisible { tunerOverlay }
         }
@@ -32,12 +35,10 @@ struct PerformGridView: View {
                 .font(.system(size: 11, weight: .medium))
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
-            Spacer()
-            Text("\(store.state.tempoBpm)")
-                .font(.system(size: 11, weight: .bold).monospacedDigit())
-                .foregroundStyle(RigColors.tapTempoText)
+            Spacer(minLength: 40) // keep clear of the system clock
         }
-        .padding(.horizontal, 2)
+        .padding(.leading, 4)
+        .padding(.top, 2)
     }
 
     private var grid: some View {
@@ -77,7 +78,9 @@ struct PerformGridView: View {
     private var tapTempoButton: some View {
         SwitchButton(
             label: "TAP",
-            sublabel: store.state.fxBypass ? "FX OFF" : boostLabel,
+            sublabel: store.state.fxBypass
+                ? "FX OFF"
+                : (boostLabel.isEmpty ? "\(store.state.tempoBpm) bpm" : boostLabel),
             background: RigColors.tapTempo,
             foreground: RigColors.tapTempoText,
             isActive: true,

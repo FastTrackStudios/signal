@@ -194,14 +194,19 @@ final class DemoRig: RigTransport {
         let sectionProgress = (songProgress * Double(sectionCount)).truncatingRemainder(
             dividingBy: 1.0)
 
-        // 8-measure loop, ~2s per measure at the mock pace.
+        // 8-measure loop, ~2s per measure at the mock pace. The window is
+        // the current LINE of four (advances a line at a time), with the
+        // playhead chord highlighted within it.
         let progression = progressions[songIndex % progressions.count]
         let measure = Int(songProgress * 120)  // ~120 measures per mock song
-        let window = (0..<4).map { k -> WatchChord in
-            let idx = (measure + k) % progression.count
+        let idx = measure % progression.count
+        let lineStart = (idx / 4) * 4
+        let window = (0..<4).compactMap { k -> WatchChord? in
+            let i = lineStart + k
+            guard i < progression.count else { return nil }
             return WatchChord(
-                symbol: progression[idx], measure: Int32(measure + k), beat: 0,
-                isCurrent: k == 0)
+                symbol: progression[i], measure: Int32(measure - idx + i), beat: 0,
+                isCurrent: i == idx)
         }
 
         revision += 1

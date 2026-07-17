@@ -279,7 +279,11 @@ fn chord_window(chart: &SongChart, t: f64) -> (Vec<WatchChord>, String) {
             c.measure < measure || (c.measure == measure && (c.beat as f64) <= playhead_beat)
         })
         .saturating_sub(1);
-    let window: Vec<WatchChord> = chart.chords[idx..]
+    // Chart-line semantics: the window is the current LINE of four chords
+    // (advancing a line at a time), with the playhead chord highlighted —
+    // not a rolling next-3 window.
+    let line_start = (idx / 4) * 4;
+    let window: Vec<WatchChord> = chart.chords[line_start..]
         .iter()
         .take(4)
         .enumerate()
@@ -287,7 +291,7 @@ fn chord_window(chart: &SongChart, t: f64) -> (Vec<WatchChord>, String) {
             symbol: c.symbol.clone(),
             measure: c.measure,
             beat: c.beat,
-            is_current: k == 0,
+            is_current: line_start + k == idx,
         })
         .collect();
     let lyric = chart

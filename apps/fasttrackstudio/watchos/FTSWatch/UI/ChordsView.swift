@@ -23,6 +23,8 @@ struct ChordsView: View {
                 ProgressView(value: Double(min(max(s.sectionProgress, 0), 1)))
                     .tint(RigColors.song)
                     .scaleEffect(y: 0.6)
+                    // State arrives in ~0.5 s steps; glide between them.
+                    .animation(.linear(duration: 0.5), value: s.sectionProgress)
             }
 
             // The chord window: current + next 3.

@@ -19,6 +19,10 @@ targets:
         CURRENT_PROJECT_VERSION: 1
         MARKETING_VERSION: 0.1.0
         SWIFT_VERSION: "6.0"
+        # Signing: Cody's personal team; xcodebuild registers devices and
+        # mints profiles itself via -allowProvisioningUpdates.
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: 28C2G63DA7
     info:
       path: FTSWatch/Info.plist
       properties:

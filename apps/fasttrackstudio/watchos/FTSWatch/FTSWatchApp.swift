@@ -15,7 +15,6 @@ struct FTSWatchApp: App {
         WindowGroup {
             TabView(selection: $tab) {
                 PerformGridView()
-                    .ignoresSafeArea(edges: .bottom)
                     .tag("perform")
                 ChordsView()
                     .tag("chords")

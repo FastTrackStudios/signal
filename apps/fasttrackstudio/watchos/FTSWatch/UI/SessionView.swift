@@ -36,6 +36,7 @@ struct SessionView: View {
                             .lineLimit(1)
                         ProgressView(value: Double(min(max(s.songProgress, 0), 1)))
                             .scaleEffect(y: 0.6)
+                            .animation(.linear(duration: 0.5), value: s.songProgress)
                     }
                     .listRowBackground(Color.clear)
                 }
