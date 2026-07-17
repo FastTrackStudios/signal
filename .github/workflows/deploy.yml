@@ -81,6 +81,10 @@ jobs:
             git config --global --add safe.directory "$FTS_LOCAL_REPO" 2>/dev/null || true
             git config --global --add safe.directory "$FTS_LOCAL_REPO/.git" 2>/dev/null || true
           fi
+          # The runner reuses its _work dir across jobs, and this step
+          # replaces actions/checkout (which would clean), so wipe any
+          # prior job's tree before cloning into '.'.
+          find . -mindepth 1 -maxdepth 1 -exec rm -rf {} + 2>/dev/null || true
           git clone --quiet "$FTS_LOCAL_REPO" . || git clone "$url" .
           if [ -n "$sha" ] && ! git cat-file -e "${sha}^{commit}" 2>/dev/null; then
             echo "$sha not in the local mirror — fetching from the forge"
@@ -143,6 +147,10 @@ jobs:
             git config --global --add safe.directory "$FTS_LOCAL_REPO" 2>/dev/null || true
             git config --global --add safe.directory "$FTS_LOCAL_REPO/.git" 2>/dev/null || true
           fi
+          # The runner reuses its _work dir across jobs, and this step
+          # replaces actions/checkout (which would clean), so wipe any
+          # prior job's tree before cloning into '.'.
+          find . -mindepth 1 -maxdepth 1 -exec rm -rf {} + 2>/dev/null || true
           git clone --quiet "$FTS_LOCAL_REPO" . || git clone "$url" .
           if [ -n "$sha" ] && ! git cat-file -e "${sha}^{commit}" 2>/dev/null; then
             echo "$sha not in the local mirror — fetching from the forge"
@@ -213,6 +221,10 @@ jobs:
             git config --global --add safe.directory "$FTS_LOCAL_REPO" 2>/dev/null || true
             git config --global --add safe.directory "$FTS_LOCAL_REPO/.git" 2>/dev/null || true
           fi
+          # The runner reuses its _work dir across jobs, and this step
+          # replaces actions/checkout (which would clean), so wipe any
+          # prior job's tree before cloning into '.'.
+          find . -mindepth 1 -maxdepth 1 -exec rm -rf {} + 2>/dev/null || true
           git clone --quiet "$FTS_LOCAL_REPO" . || git clone "$url" .
           if [ -n "$sha" ] && ! git cat-file -e "${sha}^{commit}" 2>/dev/null; then
             echo "$sha not in the local mirror — fetching from the forge"
