@@ -6,13 +6,23 @@ import SwiftUI
 @main
 struct FTSWatchApp: App {
     @State private var store = RigStore()
+    // Initial tab override for demo/screenshot automation:
+    // SIMCTL_CHILD_FTS_TAB=perform|chords|session|settings.
+    @State private var tab: String =
+        ProcessInfo.processInfo.environment["FTS_TAB"] ?? "perform"
 
     var body: some Scene {
         WindowGroup {
-            TabView {
+            TabView(selection: $tab) {
                 PerformGridView()
                     .ignoresSafeArea(edges: .bottom)
+                    .tag("perform")
+                ChordsView()
+                    .tag("chords")
+                SessionView()
+                    .tag("session")
                 SettingsView()
+                    .tag("settings")
             }
             .tabViewStyle(.verticalPage)
             .environment(store)

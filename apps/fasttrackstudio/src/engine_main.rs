@@ -163,7 +163,16 @@ async fn async_main() {
     // router — the core can't tell a watch from a browser.
     let watch_scope = architect::Scope::new();
     let local = architect::LocalServer::serve(router.clone(), watch_scope.clone());
-    let watch_routes = crate::engine_watch::router(local).await;
+    let mut watch_routes = crate::engine_watch::router(local.clone()).await;
+    // Session half (transport + mixer + chords) when the session domain is
+    // compiled in and its router was merged above.
+    #[cfg(feature = "session")]
+    if let Some(session_routes) = crate::engine_watch_session::router(local).await {
+        watch_routes = Some(match watch_routes {
+            Some(rig) => rig.merge(session_routes),
+            None => session_routes,
+        });
+    }
 
     // Serve the router over axum (`/vox` + `/health`) and iroh p2p, with the
     // browser remote as the HTTP fallback — all of it in `architect::host`.

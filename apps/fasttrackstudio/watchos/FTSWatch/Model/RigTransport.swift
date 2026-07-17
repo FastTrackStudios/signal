@@ -15,6 +15,15 @@ enum RigAction: String, CaseIterable, Sendable {
     case prevSong = "prev-song"
 }
 
+/// Session transport commands (`/watch/v1/session/transport/{cmd}`).
+enum SessionTransportCommand: String, CaseIterable, Sendable {
+    case play, pause, stop, toggle
+    case nextSong = "next-song"
+    case prevSong = "prev-song"
+    case nextSection = "next-section"
+    case prevSection = "prev-section"
+}
+
 /// A rig the watch can drive. Implementations push `WatchState` snapshots
 /// through `onState`; commands are fire-and-forget (state comes back via
 /// the stream, never via the command result — same shape as the vox
@@ -24,6 +33,8 @@ enum RigAction: String, CaseIterable, Sendable {
 protocol RigTransport: AnyObject {
     /// Snapshot sink.
     var onState: ((WatchState) -> Void)? { get set }
+    /// Session (setlist / transport / mixer / chords) snapshot sink.
+    var onSession: ((WatchSessionState) -> Void)? { get set }
     /// Connection health sink.
     var onConnected: ((Bool) -> Void)? { get set }
 
@@ -34,4 +45,11 @@ protocol RigTransport: AnyObject {
     func pressStack(_ index: Int)
     /// Fire a hold-layer / function action.
     func perform(_ action: RigAction)
+
+    // ── Session ──
+    func sessionTransport(_ cmd: SessionTransportCommand)
+    func seekSection(song: Int, section: Int)
+    func toggleTrackMute(_ guid: String)
+    func toggleTrackSolo(_ guid: String)
+    func setTrackVolume(_ guid: String, _ volume: Double)
 }

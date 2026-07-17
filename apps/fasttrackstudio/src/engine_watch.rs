@@ -157,8 +157,9 @@ async fn events(State(b): State<Bridge>) -> Result<axum::response::Response, Sta
 }
 
 /// A `Stream` over the bridge's mpsc receiver — avoids pulling a
-/// tokio-stream dep for one adapter.
-struct SseStream(tokio::sync::mpsc::Receiver<String>);
+/// tokio-stream dep for one adapter. Shared with the session half of the
+/// bridge (`engine_watch_session.rs`).
+pub(crate) struct SseStream(pub(crate) tokio::sync::mpsc::Receiver<String>);
 
 impl futures_util::Stream for SseStream {
     type Item = Result<Event, std::convert::Infallible>;

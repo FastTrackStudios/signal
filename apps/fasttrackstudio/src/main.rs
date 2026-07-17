@@ -27,6 +27,10 @@ mod engine_main;
 // can't speak vox over WebSocket).
 #[cfg(all(feature = "signal", not(target_arch = "wasm32")))]
 mod engine_watch;
+// The session half of the watch bridge (setlist transport + mixer + chord
+// window) — needs both the rig bridge plumbing and the session domain.
+#[cfg(all(feature = "signal", feature = "session", not(target_arch = "wasm32")))]
+mod engine_watch_session;
 #[cfg(all(feature = "signal", not(target_arch = "wasm32")))]
 mod engines;
 #[cfg(all(feature = "session", not(target_arch = "wasm32")))]

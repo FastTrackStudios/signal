@@ -9,6 +9,7 @@ import Foundation
 @MainActor
 final class DemoRig: RigTransport {
     var onState: ((WatchState) -> Void)?
+    var onSession: ((WatchSessionState) -> Void)?
     var onConnected: ((Bool) -> Void)?
 
     private var stacks: [(name: String, patches: [String], position: Int)] = [
@@ -28,12 +29,37 @@ final class DemoRig: RigTransport {
     private var revision: UInt64 = 0
     private var lastTap: Date?
 
+    // ── Session mock state ──
+    private var isPlaying = false
+    private var songProgress: Double = 0.12
+    private var sessionTimer: Timer?
+    private let sectionNames = ["Intro", "Verse 1", "Chorus 1", "Verse 2", "Chorus 2", "Bridge"]
+    /// One looping progression per song (chords land one per measure).
+    private let progressions: [[String]] = [
+        ["G", "D", "Em7", "C", "G/B", "D/F#", "Em7", "Csus2"],
+        ["D", "A/C#", "Bm7", "G", "D/F#", "A", "Gmaj7", "Asus4"],
+        ["C", "G/B", "Am7", "F", "C/E", "G", "F2", "Gsus4"],
+    ]
+    private var mockTracks: [WatchTrack] = [
+        ("Click", 0x808080), ("Guide", 0xA78BFA), ("Drums", 0xEF4444),
+        ("Bass", 0x2563EB), ("Keys", 0x06B6D4), ("EG 1", 0xF97316),
+        ("EG 2", 0xFB923C), ("Vox", 0xEC4899),
+    ].enumerated().map { i, t in
+        WatchTrack(
+            guid: "demo-\(i)", name: t.0, index: UInt32(i), muted: false,
+            soloed: false, volume: 0.8, pan: 0, isFolder: false, color: UInt32(t.1))
+    }
+
     func start() {
         onConnected?(true)
         publish()
+        publishSession()
     }
 
-    func stop() {}
+    func stop() {
+        sessionTimer?.invalidate()
+        sessionTimer = nil
+    }
 
     func pressStack(_ index: Int) {
         guard stacks.indices.contains(index) else { return }
@@ -78,6 +104,121 @@ final class DemoRig: RigTransport {
             songIndex = (songIndex + songs.count - 1) % songs.count
         }
         publish()
+    }
+
+    // ── Session mock behavior ──
+
+    func sessionTransport(_ cmd: SessionTransportCommand) {
+        switch cmd {
+        case .play: setPlaying(true)
+        case .pause: setPlaying(false)
+        case .stop:
+            setPlaying(false)
+            songProgress = 0
+        case .toggle: setPlaying(!isPlaying)
+        case .nextSong:
+            songIndex = (songIndex + 1) % songs.count
+            songProgress = 0
+        case .prevSong:
+            songIndex = (songIndex + songs.count - 1) % songs.count
+            songProgress = 0
+        case .nextSection:
+            songProgress = min(1.0, (sectionFraction(after: songProgress)))
+        case .prevSection:
+            songProgress = max(0.0, (sectionFraction(before: songProgress)))
+        }
+        publishSession()
+    }
+
+    func seekSection(song: Int, section: Int) {
+        songIndex = song % songs.count
+        songProgress = Double(section) / Double(sectionNames.count)
+        publishSession()
+    }
+
+    func toggleTrackMute(_ guid: String) {
+        if let i = mockTracks.firstIndex(where: { $0.guid == guid }) {
+            mockTracks[i].muted.toggle()
+            publishSession()
+        }
+    }
+
+    func toggleTrackSolo(_ guid: String) {
+        if let i = mockTracks.firstIndex(where: { $0.guid == guid }) {
+            mockTracks[i].soloed.toggle()
+            publishSession()
+        }
+    }
+
+    func setTrackVolume(_ guid: String, _ volume: Double) {
+        if let i = mockTracks.firstIndex(where: { $0.guid == guid }) {
+            mockTracks[i].volume = Float(min(max(volume, 0), 1))
+            publishSession()
+        }
+    }
+
+    private func setPlaying(_ playing: Bool) {
+        isPlaying = playing
+        sessionTimer?.invalidate()
+        sessionTimer = nil
+        if playing {
+            // A ~4 minute mock song: creep progress and re-publish.
+            sessionTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) {
+                [weak self] _ in
+                Task { @MainActor in
+                    guard let self, self.isPlaying else { return }
+                    self.songProgress += 0.5 / 240.0
+                    if self.songProgress >= 1.0 {
+                        self.songProgress = 0
+                        self.songIndex = (self.songIndex + 1) % self.songs.count
+                    }
+                    self.publishSession()
+                }
+            }
+        }
+    }
+
+    private func sectionFraction(after p: Double) -> Double {
+        let step = 1.0 / Double(sectionNames.count)
+        return (Double(Int(p / step)) + 1) * step
+    }
+
+    private func sectionFraction(before p: Double) -> Double {
+        let step = 1.0 / Double(sectionNames.count)
+        return (Double(Int(p / step)) - 1) * step
+    }
+
+    private func publishSession() {
+        let sectionCount = sectionNames.count
+        let sectionIdx = min(Int(songProgress * Double(sectionCount)), sectionCount - 1)
+        let sectionProgress = (songProgress * Double(sectionCount)).truncatingRemainder(
+            dividingBy: 1.0)
+
+        // 8-measure loop, ~2s per measure at the mock pace.
+        let progression = progressions[songIndex % progressions.count]
+        let measure = Int(songProgress * 120)  // ~120 measures per mock song
+        let window = (0..<4).map { k -> WatchChord in
+            let idx = (measure + k) % progression.count
+            return WatchChord(
+                symbol: progression[idx], measure: Int32(measure + k), beat: 0,
+                isCurrent: k == 0)
+        }
+
+        revision += 1
+        onSession?(
+            WatchSessionState(
+                songs: songs,
+                songIndex: Int32(songIndex),
+                sections: sectionNames,
+                sectionIndex: Int32(sectionIdx),
+                isPlaying: isPlaying,
+                songProgress: Float(songProgress),
+                sectionProgress: Float(sectionProgress),
+                chords: window,
+                lyricLine: "You give life, You are love, You bring light to the darkness",
+                tracks: mockTracks,
+                revision: revision
+            ))
     }
 
     private func publish() {

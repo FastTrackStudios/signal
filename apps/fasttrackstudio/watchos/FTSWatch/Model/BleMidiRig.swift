@@ -26,6 +26,7 @@ final class BleMidiRig: NSObject, RigTransport {
         string: "7772E5DB-3868-4112-A1A9-F2669D106BF9")
 
     var onState: ((WatchState) -> Void)?
+    var onSession: ((WatchSessionState) -> Void)?
     var onConnected: ((Bool) -> Void)?
 
     /// Local optimistic state so the grid animates while MIDI is one-way.
@@ -37,6 +38,7 @@ final class BleMidiRig: NSObject, RigTransport {
 
     func start() {
         mirror.onState = onState
+        mirror.onSession = onSession
         mirror.start()
         // nil queue = callbacks on the main queue, matching our actor.
         central = CBCentralManager(delegate: self, queue: nil)
@@ -72,6 +74,32 @@ final class BleMidiRig: NSObject, RigTransport {
         mirror.perform(action)
     }
 
+    // ── Session: transport as MIDI Machine Control sysex, mixer mirrored ──
+
+    func sessionTransport(_ cmd: SessionTransportCommand) {
+        // MMC: F0 7F <device=7F all> 06 <cmd> F7 — 01 stop, 02 play, 09 pause.
+        switch cmd {
+        case .play: sendMidi([0xF0, 0x7F, 0x7F, 0x06, 0x02, 0xF7])
+        case .pause, .toggle: sendMidi([0xF0, 0x7F, 0x7F, 0x06, 0x09, 0xF7])
+        case .stop: sendMidi([0xF0, 0x7F, 0x7F, 0x06, 0x01, 0xF7])
+        case .nextSong: sendMidi([0xB0, 85, 127])
+        case .prevSong: sendMidi([0xB0, 84, 127])
+        case .nextSection: sendMidi([0xB0, 88, 127])
+        case .prevSection: sendMidi([0xB0, 87, 127])
+        }
+        mirror.sessionTransport(cmd)
+    }
+
+    func seekSection(song: Int, section: Int) {
+        mirror.seekSection(song: song, section: section)
+    }
+
+    func toggleTrackMute(_ guid: String) { mirror.toggleTrackMute(guid) }
+    func toggleTrackSolo(_ guid: String) { mirror.toggleTrackSolo(guid) }
+    func setTrackVolume(_ guid: String, _ volume: Double) {
+        mirror.setTrackVolume(guid, volume)
+    }
+
     /// Wrap a MIDI message in the BLE-MIDI packet frame (header + timestamp
     /// bytes carrying the low 13 bits of a millisecond clock).
     private func sendMidi(_ message: [UInt8]) {
@@ -79,7 +107,13 @@ final class BleMidiRig: NSObject, RigTransport {
         let millis = UInt16(UInt64(Date().timeIntervalSince1970 * 1000) & 0x1FFF)
         let header = UInt8(0x80 | ((millis >> 7) & 0x3F))
         let timestamp = UInt8(0x80 | (millis & 0x7F))
-        let packet = Data([header, timestamp] + message)
+        // Sysex framing: the trailing F7 gets its own timestamp byte.
+        let packet: Data =
+            if message.first == 0xF0, message.last == 0xF7 {
+                Data([header, timestamp] + message.dropLast() + [timestamp, 0xF7])
+            } else {
+                Data([header, timestamp] + message)
+            }
         let type: CBCharacteristicWriteType =
             characteristic.properties.contains(.writeWithoutResponse)
             ? .withoutResponse : .withResponse
