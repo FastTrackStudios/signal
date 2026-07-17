@@ -1290,7 +1290,16 @@ impl Rig for GuitarRigBackend {
             return;
         }
         let backend = self.clone();
+        // Opening starts the transport engine, which lazily spawns pump
+        // tasks via `moire::task::spawn` (→ `tokio::spawn`) — that needs an
+        // ambient runtime. This open runs on a fresh OS thread, which does
+        // NOT inherit the caller's runtime, so carry the caller's handle
+        // across and enter it on the new thread. (On the pipewire engine
+        // the duplex path never spawned these, which is why it worked
+        // without this; the cpal path on iOS/macOS does.)
+        let rt_handle = tokio::runtime::Handle::try_current().ok();
         std::thread::spawn(move || {
+            let _rt_guard = rt_handle.as_ref().map(|h| h.enter());
             let opened = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                 // Already live with unchanged prefs? Reopening would drop
                 // the device mid-note for nothing — no-op.

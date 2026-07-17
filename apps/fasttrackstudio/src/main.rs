@@ -122,6 +122,19 @@ fn main() {
     // the engines.rs supervisor path doesn't exist here.
     #[cfg(all(feature = "signal-guitar", target_os = "ios"))]
     {
+        // The container ROOT isn't writable on iOS — only Documents/,
+        // Library/, tmp/. Root all app config under one Files-app-visible
+        // folder, Documents/FastTrackStudio/ (file sharing is on), so the
+        // seeded guitar config lands writably AND the user can drop
+        // keys/drums sample packs in by hand.
+        if let Some(home) = std::env::var_os("HOME") {
+            let app_root = std::path::PathBuf::from(&home).join("Documents/FastTrackStudio");
+            let _ = std::fs::create_dir_all(&app_root);
+            // signal_config_dir() = $XDG_CONFIG_HOME/signal →
+            // Documents/FastTrackStudio/signal.
+            // SAFETY: single-threaded, before the engine bootstrap spawns.
+            unsafe { std::env::set_var("XDG_CONFIG_HOME", &app_root) };
+        }
         ios_audio::configure();
         match rig_engine::bootstrap_blocking() {
             Ok(()) => tracing::info!("rig engine ready (in-process)"),

@@ -53,8 +53,12 @@ BUNDLE="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Info.plis
 echo "=== app: $APP ($BUNDLE) ==="
 
 # Runtime per-screen rotation (ios_orientation.rs) needs both orientations
-# in the plist, which dx already emits. Add the mic usage string.
+# in the plist, which dx already emits. Add the mic usage string + Files-app
+# sharing so Documents/FastTrackStudio (config + user sample packs) is
+# visible and manageable on-device.
 /usr/libexec/PlistBuddy -c "Add :NSMicrophoneUsageDescription string 'Processes your guitar signal from the connected audio interface or microphone.'" "$APP/Info.plist" 2>/dev/null || true
+/usr/libexec/PlistBuddy -c "Add :UIFileSharingEnabled bool true" "$APP/Info.plist" 2>/dev/null || true
+/usr/libexec/PlistBuddy -c "Add :LSSupportsOpeningDocumentsInPlace bool true" "$APP/Info.plist" 2>/dev/null || true
 
 echo "=== signing ==="
 cp "$PROFILE" "$APP/embedded.mobileprovision"
