@@ -59,12 +59,16 @@ if [ -n "${XCODE_DIR:-}" ]; then
 else
     XCODE_ENV="unset DEVELOPER_DIR SDKROOT"
 fi
+APP="$(git rev-parse --show-toplevel)/target/dx/fasttrackstudio/release/ios/Fasttrackstudio.app"
+# dx can exit non-zero even on a successful build (and `| tail` + pipefail
+# would then abort us), so capture to a log and gate on the .app instead.
 "$NIX" develop "$(git rev-parse --show-toplevel)" -c bash -c \
     "$XCODE_ENV; export PATH=$BIN_IOS:\$PATH; \
      dx build --platform ios --device --release --no-default-features --features signal-guitar" \
-    2>&1 | tail -2
+    > /tmp/fts-build.log 2>&1 || true
+tail -2 /tmp/fts-build.log
+[ -d "$APP" ] || { echo "ERROR: release build produced no app"; tail -25 /tmp/fts-build.log; exit 1; }
 
-APP="$(git rev-parse --show-toplevel)/target/dx/fasttrackstudio/release/ios/Fasttrackstudio.app"
 BUNDLE="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Info.plist")"
 
 # Info.plist: usage strings + file sharing + versions. The App Store
