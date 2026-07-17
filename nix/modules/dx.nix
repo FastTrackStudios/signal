@@ -34,9 +34,9 @@
         };
         cargoHash = "sha256-VucqkXbCi4qtQzY/HrXiDnbSURsagPsdNVMn1Tw3UiY=";
         nativeBuildInputs = [ pkgsDx.pkg-config ];
-        buildInputs = lib.optionals pkgsDx.stdenv.isLinux [ pkgsDx.openssl ]
-          ++ lib.optionals pkgsDx.stdenv.isDarwin
-            (with pkgsDx.darwin.apple_sdk.frameworks; [ Security CoreFoundation ]);
+        # No darwin frameworks: nixpkgs removed the apple_sdk stubs — the
+        # default apple-sdk in the darwin stdenv covers Security/CF.
+        buildInputs = lib.optionals pkgsDx.stdenv.isLinux [ pkgsDx.openssl ];
         doCheck = false;
       };
     };

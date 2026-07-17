@@ -156,10 +156,33 @@ async fn async_main() {
         None => router, // bootstrap failed — the rigs still serve
     };
 
+    // ── Watch bridge ──────────────────────────────────────────────────────
+    // watchOS can't speak vox over WebSocket (TN3135), so the watch remote
+    // gets a thin HTTP+SSE JSON surface (engine_watch.rs). The bridge is an
+    // ordinary vox client over an in-process LocalServer against the SAME
+    // router — the core can't tell a watch from a browser.
+    let watch_scope = architect::Scope::new();
+    let local = architect::LocalServer::serve(router.clone(), watch_scope.clone());
+    let mut watch_routes = crate::engine_watch::router(local.clone()).await;
+    // Session half (transport + mixer + chords) when the session domain is
+    // compiled in and its router was merged above.
+    #[cfg(feature = "session")]
+    if let Some(session_routes) = crate::engine_watch_session::router(local).await {
+        watch_routes = Some(match watch_routes {
+            Some(rig) => rig.merge(session_routes),
+            None => session_routes,
+        });
+    }
+
     // Serve the router over axum (`/vox` + `/health`) and iroh p2p, with the
     // browser remote as the HTTP fallback — all of it in `architect::host`.
     let config_dir = signal_sampler::rig_prefs::signal_config_dir();
-    EngineHost::new(router, bind_addr())
+    let mut engine_host = EngineHost::new(router, bind_addr());
+    if let Some(routes) = watch_routes {
+        engine_host = engine_host.extend(routes);
+        tracing::info!("watch bridge mounted at /watch/v1");
+    }
+    engine_host
         .iroh(
             config_dir.join("iroh.key"),
             Some(config_dir.join("iroh-endpoint-id")),
