@@ -24,6 +24,10 @@ struct FTSWatchApp: App {
                     .tag("settings")
             }
             .tabViewStyle(.verticalPage)
+            // Note: the corner clock cannot be hidden in third-party watch
+            // apps (.persistentSystemOverlays(.hidden) is ignored — tested
+            // on watchOS 26.5); the layouts keep the top-right corner clear
+            // instead.
             .environment(store)
         }
     }
