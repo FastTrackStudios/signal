@@ -51,7 +51,7 @@ fi
 # in the keychain yet (no Xcode UI needed).
 if ! security find-identity -v -p codesigning "$KEYCHAIN" | grep -q "Apple Distribution"; then
     echo "=== creating Apple Distribution certificate ==="
-    eval "$(ruby "$(dirname "$0")/mint-dist-cert.rb" | grep -E '^DIST_(KEY|CER)=')"
+    eval "$(ruby "$SCRIPT_DIR/mint-dist-cert.rb" | grep -E '^DIST_(KEY|CER)=')"
     # Bundle key + cert into a .p12 and import (-A: allow all apps, so
     # codesign uses it without a per-run keychain prompt). OpenSSL 3.x needs
     # -legacy for the encoding `security` reads; LibreSSL defaults to it.
@@ -70,7 +70,7 @@ echo "=== distribution identity: $SIGN_ID (keychain: $KEYCHAIN) ==="
 
 echo "=== App Store provisioning profile ==="
 PROFILE="$(PROFILE_TYPE=IOS_APP_STORE CERT_TYPE=DISTRIBUTION \
-    ruby "$(dirname "$0")/mint-dev-profile.rb" - | awk -F= '/PROFILE_PATH=/{print $2}')"
+    ruby "$SCRIPT_DIR/mint-dev-profile.rb" - | awk -F= '/PROFILE_PATH=/{print $2}')"
 echo "profile: $PROFILE"
 
 echo "=== building release ==="
