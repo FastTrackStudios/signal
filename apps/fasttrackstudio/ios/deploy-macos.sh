@@ -75,6 +75,7 @@ else
     fi
     "$NIX" develop "$ROOT" --accept-flake-config -c bash -c "
         set -euo pipefail
+        cd $ROOT
         $STAGE_WEB
         cd apps/fasttrackstudio
         dx build --platform macos --release $FEATURES
