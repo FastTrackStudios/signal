@@ -57,15 +57,19 @@ if [ "${SKIP_BUILD:-}" = "1" ] && [ -d "$APP" ]; then
     echo "SKIP_BUILD=1 — reusing existing app"
 else
     echo "=== building macOS app ==="
+    # Remove any prior .app so a failed build can't be silently mistaken for a
+    # fresh one (dx exits non-zero even on success, so we gate on the .app, not
+    # the exit code — but only if it's THIS build's output).
+    rm -rf "$APP"
     "$NIX" develop "$ROOT" --accept-flake-config -c bash -c '
         set -euo pipefail
         just web-stage
         cd apps/fasttrackstudio
         dx build --platform macos --release --features embed-web
     ' > /tmp/fts-macos-build.log 2>&1 || true
-    tail -2 /tmp/fts-macos-build.log
+    tail -3 /tmp/fts-macos-build.log
 fi
-[ -d "$APP" ] || { echo "ERROR: build produced no app"; tail -25 /tmp/fts-macos-build.log; exit 1; }
+[ -d "$APP" ] || { echo "ERROR: build produced no app"; tail -30 /tmp/fts-macos-build.log; exit 1; }
 
 # ── Home-screen icon (beta actool — 26.6's is broken on macOS 27) ────────────
 ICONS_DIR="$ROOT/apps/fasttrackstudio/ios/Assets.xcassets"
