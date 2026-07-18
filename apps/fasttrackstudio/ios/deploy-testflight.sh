@@ -31,6 +31,9 @@ DX_FEATURES="${DX_FEATURES---no-default-features --features signal-guitar}"
 # Bundle id the App Store profile is minted for — must match the built .app's
 # CFBundleIdentifier (from the package's Dioxus.toml).
 DX_BUNDLE_ID="${DX_BUNDLE_ID:-app.fasttrackstudio}"
+# Optional Tailwind input (relative to DX_APP_DIR) to compile → assets/tailwind.css
+# before the build, so the embedded stylesheet isn't a stale stub (Task mobile).
+DX_TAILWIND="${DX_TAILWIND:-}"
 
 TEAM_ID="${TEAM_ID:-28C2G63DA7}"
 # nix-darwin (airlock) and nixos put nix in different places; find it.
@@ -106,7 +109,9 @@ if [ "${SKIP_BUILD:-}" = "1" ] && [ -d $APP_GLOB ]; then
 else
     "$NIX" develop "$ROOT" -c bash -c \
         "$XCODE_ENV; export PATH=$BIN_IOS:\$PATH; \
-         cd '$ROOT/$DX_APP_DIR' && dx build --platform ios --device --release $DX_FEATURES" \
+         cd '$ROOT/$DX_APP_DIR'; \
+         ${DX_TAILWIND:+tailwindcss -i '$DX_TAILWIND' -o assets/tailwind.css;} \
+         dx build --platform ios --device --release $DX_FEATURES" \
         > /tmp/fts-build.log 2>&1 || true
     tail -2 /tmp/fts-build.log
 fi
