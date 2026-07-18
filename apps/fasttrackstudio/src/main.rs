@@ -159,6 +159,11 @@ fn launch_app() {
     dioxus::LaunchBuilder::new()
         .with_cfg(Config::new().with_window(window).with_menu(None))
         .launch(App);
+    // The desktop event loop returned (last window closed) — reap the engine we
+    // spawned so it doesn't outlive the app. The engine's own watchdog is the
+    // backstop for exits that never reach here (SIGKILL, crash).
+    #[cfg(feature = "signal")]
+    engines::shutdown();
 }
 
 #[cfg(target_arch = "wasm32")]

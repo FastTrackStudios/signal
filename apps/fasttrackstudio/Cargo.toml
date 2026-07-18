@@ -60,6 +60,18 @@ signal-guitar = [
     "dep:futures-util",
     "dep:eyre",
 ]
+# The Session demo (iOS): setlist sections + a metronome click, WITHOUT the
+# heavy session/daw/reaper/tts stack. Only the iOS-clean cores — session-proto
+# (data), session-guide default features (synthesizes click ticks, no assets,
+# no ONNX), and daw-audio-io (a small cpal output stream). Deliberately NOT
+# the `session` feature, whose reaper FFI + auto-`tts`/ort don't build for iOS.
+session-demo = [
+    "dep:session-proto",
+    "dep:session-guide",
+    "dep:daw-audio-io",
+    "dep:cpal",
+    "dep:eyre",
+]
 signal = [
     "signal-guitar",
     "dep:signal-bass-proto",
@@ -206,8 +218,18 @@ tokio = { workspace = true, optional = true }
 # network engine instead (session_remote_view.rs).
 session = { workspace = true, optional = true }
 # Guide engine: click / count-in / section cues rendered into the audio
-# output through daw-standalone's aux post-render hook.
+# output through daw-standalone's aux post-render hook. On iOS the
+# session-demo feature drives it with default features (no tts/ONNX) into a
+# small cpal stream instead.
 session-guide = { workspace = true, optional = true }
+# Session-demo audio out (iOS): a small cpal output stream for the click,
+# independent of the rig's engine.
+daw-audio-io = { workspace = true, optional = true }
+cpal = { workspace = true, optional = true }
+# Engine supervision: the desktop app's watchdog polls its supervisor pid
+# (kill(pid,0)) and reaps the engine's process group on exit (engine_main.rs,
+# engines.rs). Unix-only usage is cfg-gated in code.
+libc = { workspace = true }
 # Lyric-sync sidecar (TimingMap) reader for the Lyric Sync workspace. Lean
 # default features only — no onnx/whisper; alignment is produced offline by
 # the `kf` CLI, the app just loads + edits the resulting sidecar.
