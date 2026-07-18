@@ -83,3 +83,37 @@ jobs:
           tag="${{ github.event.release.tag_name || inputs.tag }}"
           nix run nixpkgs#gh -- release upload "$tag" "$artifact" --clobber
           echo "uploaded $artifact to $tag"
+
+  macos-desktop:
+    # Self-hosted Mac (airlock) — the only machine that can Developer-ID-sign
+    # and notarize. Its build keychain + ASC key + Developer ID cert are
+    # provisioned locally; see deploy-macos.sh. airlock reaches GitHub, so a
+    # plain checkout works (no local mirror like the nix-host).
+    runs-on: [self-hosted, macos, airlock]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name || inputs.tag }}
+          clean: false
+      - name: Build, sign, notarize, staple .dmg
+        env:
+          KEYCHAIN: fts-build.keychain
+          KEYCHAIN_PW: fts-build
+          ACTOOL_DEVELOPER_DIR: /Applications/Xcode-beta.app/Contents/Developer
+        run: |
+          set -euo pipefail
+          export PATH="/nix/var/nix/profiles/default/bin:$PATH"
+          export NIX=/nix/var/nix/profiles/default/bin/nix
+          # Version from the tag (strip a leading v): 0.1.0 from v0.1.0.
+          tag="${{ github.event.release.tag_name || inputs.tag }}"
+          export MARKETING_VER="${tag#v}"
+          bash apps/fasttrackstudio/ios/deploy-macos.sh
+          echo "artifact=$(ls -t target/FastTrackStudio-*-macos.dmg | head -1)" >> "$GITHUB_ENV"
+      - name: Upload to the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          tag="${{ github.event.release.tag_name || inputs.tag }}"
+          nix run nixpkgs#gh -- release upload "$tag" "$artifact" --clobber
+          echo "uploaded $artifact to $tag"
