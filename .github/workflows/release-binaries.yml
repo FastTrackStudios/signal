@@ -33,6 +33,9 @@ env:
 jobs:
   linux-desktop:
     runs-on: [self-hosted, nix-host]
+    # AppImage packaging still needs dx to locate linuxdeploy in its cache dir
+    # (it's on PATH but dx looks elsewhere) — non-blocking until that's sorted.
+    continue-on-error: true
     steps:
       - name: Checkout the release tag (local-first)
         run: |
@@ -100,6 +103,10 @@ jobs:
           KEYCHAIN: fts-build.keychain
           KEYCHAIN_PW: fts-build
           ACTOOL_DEVELOPER_DIR: /Applications/Xcode-beta.app/Contents/Developer
+          # Native app for now — the wasm web build (embed-web) can't run on
+          # macOS yet (clang dylib mismatch in ring). Flip to 1 once web-dist is
+          # staged from Linux or the wasm-on-darwin build is fixed.
+          EMBED_WEB: "0"
         run: |
           set -euo pipefail
           export PATH="/nix/var/nix/profiles/default/bin:$PATH"
