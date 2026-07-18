@@ -21,6 +21,9 @@ cd "$SCRIPT_DIR/.."
 #       ICONS_DIR=apps/task/mobile/ios/Assets.xcassets
 DX_PACKAGE="${DX_PACKAGE:-fasttrackstudio}"
 DX_APP_DIR="${DX_APP_DIR:-apps/fasttrackstudio}"
+# Optional Tailwind input (relative to DX_APP_DIR) compiled → assets/tailwind.css
+# before the build so the embedded sheet isn't a stale stub (Task desktop).
+DX_TAILWIND="${DX_TAILWIND:-}"
 
 # shellcheck disable=SC1090
 source "$HOME/.appstoreconnect/config.env"
@@ -86,6 +89,7 @@ else
         cd $ROOT
         $STAGE_WEB
         cd '$ROOT/$DX_APP_DIR'
+        ${DX_TAILWIND:+tailwindcss -i '$DX_TAILWIND' -o assets/tailwind.css}
         dx build --platform macos --release $FEATURES
     " > /tmp/fts-macos-build.log 2>&1 || true
     tail -3 /tmp/fts-macos-build.log
