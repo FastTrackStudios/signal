@@ -64,6 +64,10 @@ jobs:
           KEYCHAIN: fts-build.keychain
           KEYCHAIN_PW: fts-build
           MARKETING_VER: ${{ inputs.marketing_version || '0.0.1' }}
+          # Build/sign/upload with the release Xcode (xcode-select → 26.6 GM),
+          # but compile the icon catalog with the beta's actool — 26.6's actool
+          # can't produce Assets.car on macOS 27 (simulator-SDK mismatch).
+          ACTOOL_DEVELOPER_DIR: /Applications/Xcode-beta.app/Contents/Developer
         run: |
           set -euo pipefail
           export PATH="/nix/var/nix/profiles/default/bin:$PATH"
