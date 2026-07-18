@@ -9,8 +9,8 @@ continue the watch work from section 7.
 
 | Product | iOS/TestFlight | macOS .dmg | Linux .deb | Server image | watchOS |
 |---|---|---|---|---|---|
-| **FastTrackStudio** | ✅ live | ✅ notarized | ✅ | — | ⏳ (this doc) |
-| **Task** | ✅ live | ✅ notarized | ✅ | ✅ `docker load` tarball | ⏳ (this doc) |
+| **FastTrackStudio** | ✅ live | ✅ notarized | ✅ | — | ✅ embedded companion (build 1784362568) |
+| **Task** | ✅ live | ✅ notarized | ✅ | ✅ `docker load` tarball | ⏳ (§7.6) |
 
 GitHub releases (minimal notes — version + downloads only, by request):
 - `v0.0.1` — FastTrackStudio (macOS dmg + Linux deb, embed-web)
@@ -112,11 +112,45 @@ to starcommand (the server + served web app); the self-host artifact.
   (`../../../crates/task/…`, `../../../libs/fts-ui/…`); the pre-monorepo
   `FastTrackStudio/fts-ui` paths are dead. Vendor `fts-theme.css` in-tree.
 
-## 7. ⭐ THE WATCH WORK (unfinished — the main handoff)
+## 7. ⭐ THE WATCH WORK
 
 **Goal:** the watch apps install on the paired watch **via the iPhone app's
 TestFlight build** and **auto-update** with every iOS build (not the current
 direct `devicectl` push).
+
+**FTS watch: DONE (2026-07-18).** `deploy-testflight.sh` now takes `WATCH_APP`
+(+ `WATCH_XCODE_DIR`, `WATCH_SCHEME`, `WATCH_PRODUCT`, `WATCH_BUNDLE_ID`); it
+xcodebuilds the watch app unsigned, embeds it at `<iOS.app>/Watch/<product>.app`,
+version-locks it to the host, and signs it inside-out with its own App Store
+profile before the outer app is sealed. Build 1784362568 uploaded VALID with the
+companion embedded — Apple accepted the nested watch bundle. Exact FTS run:
+```
+KEYCHAIN=fts-build.keychain KEYCHAIN_PW=fts-build \
+NIX=/nix/var/nix/profiles/default/bin/nix \
+ACTOOL_DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer \
+WATCH_XCODE_DIR=/Applications/Xcode-beta.app/Contents/Developer \
+WATCH_APP=apps/fasttrackstudio/watchos MARKETING_VER=0.0.1 \
+bash apps/fasttrackstudio/ios/deploy-testflight.sh
+```
+Remaining FTS check: confirm the app offers to install on the paired watch after
+installing the TestFlight build (device step). Then do §7.6 (Task watch).
+
+**⚠️ macOS 27 toolchain trap (cost hours — read this).** airlock is on macOS 27.
+Do **NOT** pass `XCODE_DIR` to the iOS build. Doing so exports `DEVELOPER_DIR`,
+which makes the Rust **host** build scripts (getrandom/num-traits/objc2-…) link
+against the **macOS-27 system SDK**, whose `libSystem.tbd` dropped the legacy
+`_dyld_image_count`/`_dyld_get_image_*` symbols libstd references →
+`ld: symbol(s) not found for architecture arm64`, build dies ~130 crates in, on
+BOTH Xcode 26.6 and 27. The proven pipeline leaves `DEVELOPER_DIR` unset so the
+host links against the flake's own `apple-sdk-14.4` (still has those symbols);
+the iOS *target* crates use Xcode's iOS SDK via `xcrun`. "Xcode 26 doesn't run on
+macOS 27" only means its **actool/simulator** GUI pieces are broken (hence
+`ACTOOL_DEVELOPER_DIR`=27-beta for icons) — its command-line iOS SDK build is
+fine. Keep icons + the watch build on 27 beta (both decoupled via
+`ACTOOL_DEVELOPER_DIR` / `WATCH_XCODE_DIR`); leave the main build on the default.
+Also: the watchOS **device** platform must be installed for the chosen watch
+Xcode (`xcodebuild -downloadPlatform watchOS`) — 27 beta had it, 26.6 needed the
+download (~4 GB).
 
 **Done:** `apps/fasttrackstudio/watchos/FTSWatch` (SwiftUI: perform/chords/
 session/settings) is converted from standalone (`WKWatchOnly`) to an **embedded
@@ -160,9 +194,12 @@ validating the watch icon (the watch app needs its own AppIcon).
 
 ## 8. Immediate next actions for the new session
 1. Free airlock disk (section 2) before building.
-2. Do steps 7.1–7.5 for FTS; verify the watch app appears on the paired watch
-   after installing the new TestFlight build.
-3. Then 7.6 (create + embed the Task watch app).
+2. ✅ FTS watch embedded + uploaded (build 1784362568). Remaining: confirm it
+   installs on the paired watch from the TestFlight build (device step).
+3. §7.6 — create + embed the **Task** watch app (`app.fasttrackstudio.task.watch`,
+   id 8Y5Z8223CC; new SwiftUI app modeled on FTSWatch). Reuse the same
+   `WATCH_APP=…` wiring via the Task deploy invocation (§3), pointing `WATCH_APP`
+   at the new Task watchos project + `WATCH_BUNDLE_ID=app.fasttrackstudio.task.watch`.
 4. Fix the release-binaries `fts-v*` gate + add a Task release job (section 5).
 
 Related memory: [[airlock-ios-build-machine]], [[phon-jit-macos-nightly]],

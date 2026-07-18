@@ -35,6 +35,17 @@ DX_BUNDLE_ID="${DX_BUNDLE_ID:-app.fasttrackstudio}"
 # before the build, so the embedded stylesheet isn't a stale stub (Task mobile).
 DX_TAILWIND="${DX_TAILWIND:-}"
 
+# Optional embedded watchOS companion. WATCH_APP = path (from repo root) to a
+# watchos xcodegen project dir; when set, the watch app is built (xcodebuild,
+# unsigned), embedded at <iOS.app>/Watch/<WATCH_PRODUCT>.app, and re-signed
+# inside-out with the Apple Distribution cert + its own App Store profile, so
+# it rides the iOS TestFlight build onto the paired watch and auto-updates.
+#   WATCH_APP=apps/fasttrackstudio/watchos ./ios/deploy-testflight.sh
+WATCH_APP="${WATCH_APP:-}"
+WATCH_SCHEME="${WATCH_SCHEME:-FTSWatch}"       # xcodebuild scheme
+WATCH_PRODUCT="${WATCH_PRODUCT:-FastTrackStudio}"   # built .app product name
+WATCH_BUNDLE_ID="${WATCH_BUNDLE_ID:-app.fasttrackstudio.watch}"
+
 TEAM_ID="${TEAM_ID:-28C2G63DA7}"
 # nix-darwin (airlock) and nixos put nix in different places; find it.
 NIX="${NIX:-}"
@@ -210,11 +221,73 @@ if [ -d "$ICONS_DIR" ]; then
 fi
 echo "=== app: $APP ($BUNDLE) build $BUILD_NO ==="
 
+# ── Embedded watchOS companion ───────────────────────────────────────────
+# Build the watch app unsigned (xcodebuild), stamp its versions to match the
+# host, embed at <iOS.app>/Watch/, and sign it inside-out with its OWN App
+# Store profile. Must happen BEFORE the outer iOS app is signed (inside-out
+# codesign order); the outer sign then seals the Watch/ subtree.
+if [ -n "$WATCH_APP" ]; then
+    echo "=== building watch companion ($WATCH_BUNDLE_ID) ==="
+    WATCH_DIR="$ROOT/$WATCH_APP"
+    # Regenerate the xcodeproj from project.yml (xcodegen from the flake registry).
+    ( cd "$WATCH_DIR" && "$NIX" run nixpkgs#xcodegen -- generate ) \
+        > /tmp/fts-watch-xcodegen.log 2>&1 || { echo "ERROR: xcodegen failed"; tail -20 /tmp/fts-watch-xcodegen.log; exit 1; }
+    WATCH_DD="$(mktemp -d)"
+    # The watch build's Xcode is decoupled from the iOS build's: the dx iOS
+    # Rust build's HOST build scripts fail to link under Xcode 27 beta
+    # (ld: symbol(s) not found for arm64), so the main build must stay on the
+    # GM, while the watch build can use whichever Xcode has the watchOS device
+    # platform installed. Defaults to the main build's Xcode ($DEV).
+    WATCH_DEV="${WATCH_XCODE_DIR:-$DEV}"
+    # Unsigned generic-watchOS-device build; we re-sign manually below.
+    DEVELOPER_DIR="$WATCH_DEV" xcodebuild \
+        -project "$WATCH_DIR/$WATCH_SCHEME.xcodeproj" -scheme "$WATCH_SCHEME" \
+        -configuration Release -destination 'generic/platform=watchOS' \
+        -derivedDataPath "$WATCH_DD" \
+        CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
+        build > /tmp/fts-watch-build.log 2>&1 \
+        || { echo "ERROR: watch build failed"; tail -30 /tmp/fts-watch-build.log; exit 1; }
+    WATCH_BUILT="$WATCH_DD/Build/Products/Release-watchos/$WATCH_PRODUCT.app"
+    [ -d "$WATCH_BUILT" ] || { echo "ERROR: no watch .app at $WATCH_BUILT"; tail -30 /tmp/fts-watch-build.log; exit 1; }
+
+    echo "=== watch App Store provisioning profile ==="
+    WATCH_PROFILE="$(PROFILE_TYPE=IOS_APP_STORE CERT_TYPE=DISTRIBUTION \
+        ruby "$SCRIPT_DIR/mint-dev-profile.rb" - "$WATCH_BUNDLE_ID" "FTS Watch App Store" \
+        | awk -F= '/PROFILE_PATH=/{print $2}')"
+    echo "watch profile: $WATCH_PROFILE"
+
+    # Embed at <iOS.app>/Watch/<product>.app (NOT PlugIns — modern companions).
+    mkdir -p "$APP/Watch"
+    rm -rf "$APP/Watch/$WATCH_PRODUCT.app"
+    cp -R "$WATCH_BUILT" "$APP/Watch/"
+    EMB="$APP/Watch/$WATCH_PRODUCT.app"
+    # Version lockstep with the host app (companion + watch must agree, and
+    # CFBundleVersion must climb per upload just like the host).
+    /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $MARKETING_VER" "$EMB/Info.plist"
+    /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD_NO" "$EMB/Info.plist"
+    # actool compiles the AppIcon into Assets.car but doesn't always write the
+    # icon key; altool wants CFBundleIconName. Add it (the catalog has AppIcon).
+    /usr/libexec/PlistBuddy -c "Add :CFBundleIconName string AppIcon" "$EMB/Info.plist" 2>/dev/null \
+        || /usr/libexec/PlistBuddy -c "Set :CFBundleIconName AppIcon" "$EMB/Info.plist"
+    # Sign inside-out with the WATCH profile's entitlements.
+    cp "$WATCH_PROFILE" "$EMB/embedded.mobileprovision"
+    security cms -D -i "$WATCH_PROFILE" > /tmp/fts-watch-prof.plist
+    /usr/libexec/PlistBuddy -x -c "Print :Entitlements" /tmp/fts-watch-prof.plist > /tmp/fts-watch-ent.plist
+    find "$EMB" \( -name "*.dylib" -o -name "*.framework" \) -print0 \
+        | while IFS= read -r -d '' f; do codesign --force --keychain "$KEYCHAIN" --sign "$SIGN_ID" --timestamp "$f"; done
+    codesign --force --keychain "$KEYCHAIN" --sign "$SIGN_ID" \
+        --entitlements /tmp/fts-watch-ent.plist --timestamp "$EMB"
+    codesign --verify --strict "$EMB"
+    echo "=== embedded + signed watch companion: $EMB ==="
+fi
+
 echo "=== signing (distribution) ==="
 cp "$PROFILE" "$APP/embedded.mobileprovision"
 security cms -D -i "$PROFILE" > /tmp/fts-prof.plist
 /usr/libexec/PlistBuddy -x -c "Print :Entitlements" /tmp/fts-prof.plist > /tmp/fts-ent.plist
-find "$APP" \( -name "*.dylib" -o -name "*.framework" \) -print0 \
+# Exclude the Watch/ subtree — it's already sealed; re-signing a nested
+# framework would invalidate the watch app's signature.
+find "$APP" \( -name "*.dylib" -o -name "*.framework" \) -not -path "$APP/Watch/*" -print0 \
     | while IFS= read -r -d '' f; do codesign --force --keychain "$KEYCHAIN" --sign "$SIGN_ID" --timestamp "$f"; done
 codesign --force --keychain "$KEYCHAIN" --sign "$SIGN_ID" --entitlements /tmp/fts-ent.plist --timestamp "$APP"
 codesign --verify --deep --strict "$APP"
