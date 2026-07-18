@@ -19,6 +19,15 @@
           webkitgtk_4_1 libsoup_3 xdotool
         ]
       );
+      # A pinned nightly rustc used ONLY to compile phon-jit's copy-and-patch
+      # stencils, which chain via `become` (explicit tail calls — a nightly
+      # feature). The rest of the workspace stays on the stable 1.94 pin; the
+      # stencils interface with stable-compiled code purely as extracted machine
+      # code (symbols + relocations), so there is no ABI mixing. Pinned via the
+      # locked rust-overlay input, so it's reproducible. Darwin-only: the native
+      # stencil backend only compiles on macOS-aarch64 (elsewhere phon-jit uses
+      # the interpreter and never invokes rustc for stencils).
+      rustNightly = pkgs.rust-bin.selectLatestNightlyWith (t: t.minimal);
     in
     {
       # Rust toolchain — the FTS-wide pin (same as the dissolved
@@ -122,6 +131,10 @@
         in
         {
           DYLD_LIBRARY_PATH = libPath;
+          # phon-jit's build script compiles its `become` tail-call stencils
+          # with this pinned nightly rustc (the workspace pin is stable 1.94,
+          # which can't parse `become`). See libs/vendor/phon-jit/build.rs.
+          PHON_JIT_NIGHTLY_RUSTC = "${rustNightly}/bin/rustc";
           # Rust defaults aarch64-apple-ios to iOS 10, whose runtime lacks
           # `___chkstk_darwin` (it moved into libSystem at iOS 12) — linking
           # a large-stack crate then fails with an undefined symbol. Pin a
