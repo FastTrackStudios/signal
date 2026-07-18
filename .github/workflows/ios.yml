@@ -1,0 +1,77 @@
+# iOS TestFlight — build the FastTrackStudio iPhone app and upload it to
+# TestFlight on every push to main that touches the app or its dependencies.
+#
+# Runs on a SELF-HOSTED macOS runner labeled `airlock` (a headless Mac mini).
+# Register it once: repo → Settings → Actions → Runners → New self-hosted
+# runner (macOS), labels `macos,airlock`, and run it as the `rat` user so it
+# inherits that account's provisioned state:
+#   - ~/.appstoreconnect  (App Store Connect API key + config.env + dist cert)
+#   - fts-build.keychain  (headless codesigning identity; see setup-keychain.sh)
+#   - the nix store with the FTS dev shell warmed
+# so no GitHub secrets are needed — the box holds its own credentials.
+#
+# CHANGE-GATED by the push `paths:` filter below (only app-feeding files
+# trigger a build). Serialized so the single Mac never runs two builds at
+# once. workflow_dispatch forces a build regardless of what changed.
+#
+# The build number is stamped from unix time (climbs every run); the marketing
+# version is MARKETING_VER. Uploaded builds appear in TestFlight after Apple
+# processing (~5-15 min); internal testers get them with no review.
+
+name: ios
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/fasttrackstudio/**"
+      - "features/rigs/**"
+      - "features/fx/**"
+      - "features/nam/**"
+      - "features/plugin-host/**"
+      - "libs/neural-amp-modeler/**"
+      - "crates/signal/**"
+      - "crates/daw/**"
+      - "crates/audiocore/**"
+      - "crates/midicore/**"
+      - "flake.nix"
+      - "flake.lock"
+      - ".github/workflows/ios.yml"
+  workflow_dispatch:
+    inputs:
+      marketing_version:
+        description: "CFBundleShortVersionString (e.g. 0.0.2)"
+        required: false
+        default: "0.0.1"
+
+# One TestFlight build at a time on the single Mac; queue, never cancel.
+concurrency:
+  group: ios-testflight
+  cancel-in-progress: false
+
+jobs:
+  testflight:
+    runs-on: [self-hosted, macos, airlock]
+    steps:
+      # clean:false keeps target/ between runs so nix+cargo build incrementally
+      # (a fresh checkout each time would recompile the whole tree).
+      - uses: actions/checkout@v4
+        with:
+          clean: false
+
+      - name: Build, sign, and upload to TestFlight
+        env:
+          KEYCHAIN: fts-build.keychain
+          KEYCHAIN_PW: fts-build
+          MARKETING_VER: ${{ inputs.marketing_version || '0.0.1' }}
+        run: |
+          set -euo pipefail
+          export PATH="/nix/var/nix/profiles/default/bin:$PATH"
+          export NIX=/nix/var/nix/profiles/default/bin/nix
+          bash apps/fasttrackstudio/ios/deploy-testflight.sh
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "### iOS TestFlight" >> "$GITHUB_STEP_SUMMARY"
+          echo "commit \`$(git rev-parse --short HEAD)\` → build uploaded (see log for build number)." >> "$GITHUB_STEP_SUMMARY"

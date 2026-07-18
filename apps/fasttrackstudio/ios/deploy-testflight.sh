@@ -87,11 +87,16 @@ fi
 APP="$ROOT/target/dx/fasttrackstudio/release/ios/Fasttrackstudio.app"
 # dx can exit non-zero even on a successful build (and `| tail` + pipefail
 # would then abort us), so capture to a log and gate on the .app instead.
-"$NIX" develop "$ROOT" -c bash -c \
-    "$XCODE_ENV; export PATH=$BIN_IOS:\$PATH; \
-     dx build --platform ios --device --release --no-default-features --features signal-guitar" \
-    > /tmp/fts-build.log 2>&1 || true
-tail -2 /tmp/fts-build.log
+# SKIP_BUILD=1 reuses an existing .app (fast iteration on the sign/upload path).
+if [ "${SKIP_BUILD:-}" = "1" ] && [ -d "$APP" ]; then
+    echo "SKIP_BUILD=1 — reusing existing app"
+else
+    "$NIX" develop "$ROOT" -c bash -c \
+        "$XCODE_ENV; export PATH=$BIN_IOS:\$PATH; \
+         dx build --platform ios --device --release --no-default-features --features signal-guitar" \
+        > /tmp/fts-build.log 2>&1 || true
+    tail -2 /tmp/fts-build.log
+fi
 [ -d "$APP" ] || { echo "ERROR: release build produced no app"; tail -25 /tmp/fts-build.log; exit 1; }
 
 BUNDLE="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Info.plist")"
@@ -153,14 +158,33 @@ add_str DTCompiler "com.apple.compilers.llvm.clang.1_0"
 add_str BuildMachineOSBuild "$MACOS_BUILD"
 echo "=== SDK metadata: iphoneos${SDK_VER} (${SDK_BUILD}), Xcode ${XCODE_VER} (${XCODE_BUILD}) ==="
 
-# Home-screen icon (dx emits none).
+# Home-screen icon (dx emits none). actool compiles the asset catalog into
+# Assets.car and writes CFBundleIcons/CFBundleIconName to a partial plist we
+# merge. actool couples to the simulator SDK: on macOS 27 beta the system
+# CoreSimulator wants an iOS 27 runtime that Xcode 26.6's simulator SDK can't
+# supply, so 26.6's actool aborts before writing Assets.car (altool then
+# rejects the upload: 90022/90023/91111). Point ACTOOL_DEVELOPER_DIR at an
+# Xcode whose actool matches this OS (the 27 beta) for the icon compile ONLY —
+# it produces a valid Assets.car and does not touch the build/upload SDK.
 ICONS_DIR="$ROOT/apps/fasttrackstudio/ios/Assets.xcassets"
 if [ -d "$ICONS_DIR" ]; then
-    actool "$ICONS_DIR" --compile "$APP" --platform iphoneos \
+    ICON_DEV="${ACTOOL_DEVELOPER_DIR:-$DEV}"
+    ACTOOL="$ICON_DEV/usr/bin/actool"; [ -x "$ACTOOL" ] || ACTOOL="$(xcrun --find actool)"
+    DEVELOPER_DIR="$ICON_DEV" "$ACTOOL" "$ICONS_DIR" --compile "$APP" --platform iphoneos \
         --minimum-deployment-target 15.0 --app-icon AppIcon \
-        --output-partial-info-plist /tmp/fts-icon.plist >/dev/null 2>&1 \
-        && /usr/libexec/PlistBuddy -c "Merge /tmp/fts-icon.plist" "$APP/Info.plist" 2>/dev/null \
-        || echo "warn: app-icon compile skipped"
+        --output-partial-info-plist /tmp/fts-icon.plist >/tmp/fts-actool.log 2>&1 || true
+    if [ -f "$APP/Assets.car" ] && /usr/libexec/PlistBuddy -c "Print :CFBundleIcons" /tmp/fts-icon.plist >/dev/null 2>&1; then
+        /usr/libexec/PlistBuddy -c "Merge /tmp/fts-icon.plist" "$APP/Info.plist"
+        # altool also wants a top-level CFBundleIconName (actool only nests it
+        # under CFBundleIcons); add it defensively.
+        /usr/libexec/PlistBuddy -c "Add :CFBundleIconName string AppIcon" "$APP/Info.plist" 2>/dev/null \
+            || /usr/libexec/PlistBuddy -c "Set :CFBundleIconName AppIcon" "$APP/Info.plist" 2>/dev/null || true
+        echo "app icon embedded (Assets.car + CFBundleIconName)"
+    else
+        echo "ERROR: app-icon compile produced no Assets.car — altool will reject."
+        echo "  set ACTOOL_DEVELOPER_DIR to an Xcode whose actool matches this macOS."
+        tail -6 /tmp/fts-actool.log
+    fi
 fi
 echo "=== app: $APP ($BUNDLE) build $BUILD_NO ==="
 
