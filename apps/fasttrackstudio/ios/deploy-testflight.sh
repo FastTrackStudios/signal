@@ -20,6 +20,18 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 cd "$SCRIPT_DIR/.."
 
+# Which product to build+ship. Defaults to the FastTrackStudio app; override
+# for Task (or any dx iOS app in the tree):
+#   DX_PACKAGE=task-app-mobile DX_APP_DIR=apps/task/mobile DX_FEATURES="" \
+#   ICONS_DIR=apps/task/mobile/ios/Assets.xcassets ./ios/deploy-testflight.sh
+DX_PACKAGE="${DX_PACKAGE:-fasttrackstudio}"
+DX_APP_DIR="${DX_APP_DIR:-apps/fasttrackstudio}"
+# No colon: an explicitly-empty DX_FEATURES (Task, default features) is honored.
+DX_FEATURES="${DX_FEATURES---no-default-features --features signal-guitar}"
+# Bundle id the App Store profile is minted for — must match the built .app's
+# CFBundleIdentifier (from the package's Dioxus.toml).
+DX_BUNDLE_ID="${DX_BUNDLE_ID:-app.fasttrackstudio}"
+
 TEAM_ID="${TEAM_ID:-28C2G63DA7}"
 # nix-darwin (airlock) and nixos put nix in different places; find it.
 NIX="${NIX:-}"
@@ -70,7 +82,7 @@ echo "=== distribution identity: $SIGN_ID (keychain: $KEYCHAIN) ==="
 
 echo "=== App Store provisioning profile ==="
 PROFILE="$(PROFILE_TYPE=IOS_APP_STORE CERT_TYPE=DISTRIBUTION \
-    ruby "$SCRIPT_DIR/mint-dev-profile.rb" - | awk -F= '/PROFILE_PATH=/{print $2}')"
+    ruby "$SCRIPT_DIR/mint-dev-profile.rb" - "$DX_BUNDLE_ID" | awk -F= '/PROFILE_PATH=/{print $2}')"
 echo "profile: $PROFILE"
 
 echo "=== building release ==="
@@ -84,20 +96,25 @@ if [ -n "${XCODE_DIR:-}" ]; then
 else
     XCODE_ENV="unset DEVELOPER_DIR SDKROOT"
 fi
-APP="$ROOT/target/dx/fasttrackstudio/release/ios/Fasttrackstudio.app"
+APP_GLOB="$ROOT/target/dx/$DX_PACKAGE/release/ios/"*.app
 # dx can exit non-zero even on a successful build (and `| tail` + pipefail
 # would then abort us), so capture to a log and gate on the .app instead.
 # SKIP_BUILD=1 reuses an existing .app (fast iteration on the sign/upload path).
-if [ "${SKIP_BUILD:-}" = "1" ] && [ -d "$APP" ]; then
+# shellcheck disable=SC2086
+if [ "${SKIP_BUILD:-}" = "1" ] && [ -d $APP_GLOB ]; then
     echo "SKIP_BUILD=1 — reusing existing app"
 else
     "$NIX" develop "$ROOT" -c bash -c \
         "$XCODE_ENV; export PATH=$BIN_IOS:\$PATH; \
-         dx build --platform ios --device --release --no-default-features --features signal-guitar" \
+         cd '$ROOT/$DX_APP_DIR' && dx build --platform ios --device --release $DX_FEATURES" \
         > /tmp/fts-build.log 2>&1 || true
     tail -2 /tmp/fts-build.log
 fi
-[ -d "$APP" ] || { echo "ERROR: release build produced no app"; tail -25 /tmp/fts-build.log; exit 1; }
+# Resolve the actual .app (dx names it from the Dioxus.toml, per package).
+# shellcheck disable=SC2086
+APP="$(ls -d $APP_GLOB 2>/dev/null | head -1)"
+[ -n "$APP" ] && [ -d "$APP" ] || { echo "ERROR: release build produced no app"; tail -25 /tmp/fts-build.log; exit 1; }
+echo "=== app bundle: $APP ==="
 
 BUNDLE="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Info.plist")"
 
@@ -166,7 +183,7 @@ echo "=== SDK metadata: iphoneos${SDK_VER} (${SDK_BUILD}), Xcode ${XCODE_VER} ($
 # rejects the upload: 90022/90023/91111). Point ACTOOL_DEVELOPER_DIR at an
 # Xcode whose actool matches this OS (the 27 beta) for the icon compile ONLY —
 # it produces a valid Assets.car and does not touch the build/upload SDK.
-ICONS_DIR="$ROOT/apps/fasttrackstudio/ios/Assets.xcassets"
+ICONS_DIR="${ICONS_DIR:-$ROOT/apps/fasttrackstudio/ios/Assets.xcassets}"
 if [ -d "$ICONS_DIR" ]; then
     ICON_DEV="${ACTOOL_DEVELOPER_DIR:-$DEV}"
     ACTOOL="$ICON_DEV/usr/bin/actool"; [ -x "$ACTOOL" ] || ACTOOL="$(xcrun --find actool)"
