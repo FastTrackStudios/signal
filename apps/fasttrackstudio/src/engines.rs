@@ -20,8 +20,8 @@ use std::process::Child;
 use std::sync::Mutex;
 
 use engine_launcher::{
-    LaunchSource, SIGNAL_ENGINE, probe, spawn, systemd_active, systemd_available, systemd_start,
-    systemd_stop,
+    KillSignal, LaunchSource, SIGNAL_ENGINE, kill_group, probe, spawn, systemd_active,
+    systemd_available, systemd_start, systemd_stop,
 };
 
 /// The signal engine child we own, if we started one.
@@ -64,8 +64,11 @@ pub fn start_signal() -> Result<String, String> {
         tracing::info!("signal engine started (systemd user unit)");
         return Ok(SIGNAL_ENGINE.ws_url());
     }
-    let spawned =
-        spawn(&SIGNAL_ENGINE, &[], &[], false).map_err(|e| format!("spawn signal engine: {e}"))?;
+    // supervise: true — own process group + FTS_SUPERVISOR_PID, so closing the
+    // app reaps the engine (and any grandchildren), and the engine's watchdog
+    // self-exits if we die without reaping.
+    let spawned = spawn(&SIGNAL_ENGINE, &[], &[], false, true)
+        .map_err(|e| format!("spawn signal engine: {e}"))?;
     let how = match &spawned.source {
         LaunchSource::Binary(path) => path.display().to_string(),
         LaunchSource::Cargo => "cargo run -p fasttrackstudio -- --engine (dev fallback)".into(),
@@ -87,12 +90,27 @@ pub fn stop_signal() -> Result<(), String> {
     let mut owned = OWNED.lock().unwrap();
     match owned.take() {
         Some(mut child) => {
-            child.kill().map_err(|e| format!("kill signal engine: {e}"))?;
-            let _ = child.wait(); // reap
+            // Kill the whole group (engine + any grandchildren), not just the
+            // direct child; SIGTERM so the audio device closes cleanly.
+            kill_group(child.id(), KillSignal::Term);
+            let _ = child.wait(); // reap the direct child
             tracing::info!("signal engine stopped");
             Ok(())
         }
         None => Err("signal engine is not ours to stop (external process)".into()),
+    }
+}
+
+/// Best-effort teardown when the app is shutting down: SIGTERM the owned
+/// engine's process group so it doesn't outlive the window. The engine's own
+/// watchdog (FTS_SUPERVISOR_PID) is the backstop if we're killed before this
+/// runs. Safe to call when nothing is owned.
+pub fn shutdown() {
+    // systemd-managed engines are intentionally left running (a stop is final
+    // and user-driven); only reap the child we spawned.
+    if let Some(child) = OWNED.lock().unwrap().take() {
+        tracing::info!("app shutting down — stopping owned signal engine");
+        kill_group(child.id(), KillSignal::Term);
     }
 }
 

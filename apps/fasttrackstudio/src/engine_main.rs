@@ -86,6 +86,42 @@ fn web_bundle() -> Option<WebBundle> {
     }
 }
 
+/// If the desktop app spawned this engine (it sets `FTS_SUPERVISOR_PID`), poll
+/// that pid and exit when it disappears — the cross-platform guarantee that
+/// closing the app takes its engine down too, even when the app is SIGKILLed
+/// and never gets to reap us. No-op when run standalone (systemd unit,
+/// `fts signal engine`, or a manual `--engine`): no supervisor, nothing to
+/// watch, so those lifetimes are unaffected.
+fn spawn_parent_watchdog() {
+    let Ok(raw) = std::env::var("FTS_SUPERVISOR_PID") else {
+        return;
+    };
+    let Ok(pid) = raw.parse::<i32>() else {
+        return;
+    };
+    tracing::info!("supervised by pid {pid}; parent-death watchdog armed");
+    std::thread::Builder::new()
+        .name("parent-watchdog".into())
+        .spawn(move || {
+            loop {
+                std::thread::sleep(std::time::Duration::from_millis(500));
+                // kill(pid, 0) probes liveness without signalling: 0 = alive;
+                // ESRCH = the process is gone; EPERM = it exists (just not
+                // ours to signal). Only ESRCH means the supervisor died.
+                #[cfg(unix)]
+                {
+                    if unsafe { libc::kill(pid, 0) } != 0
+                        && std::io::Error::last_os_error().raw_os_error() == Some(libc::ESRCH)
+                    {
+                        tracing::warn!("supervisor {pid} gone — engine exiting");
+                        std::process::exit(0);
+                    }
+                }
+            }
+        })
+        .ok();
+}
+
 /// Entry point for `fasttrackstudio --engine`: builds the multi-thread tokio
 /// runtime and never returns until the server dies.
 pub fn run() {
@@ -94,6 +130,10 @@ pub fn run() {
     // unwinding — control-plane panics are caught and survived (the rig's
     // meter pump self-heals; audio keeps playing) — but none die silently.
     host::install_panic_logger();
+
+    // If the desktop app spawned us (FTS_SUPERVISOR_PID), self-terminate when
+    // it goes away — even if it was SIGKILLed and never reaped us.
+    spawn_parent_watchdog();
 
     // Session player: bring up the in-process daw-standalone setlist engine
     // (demo setlist + audio + guide) BEFORE the server runtime exists — it

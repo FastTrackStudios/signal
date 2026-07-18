@@ -1,0 +1,119 @@
+# Release binaries — attach downloadable platform builds to a GitHub Release.
+#
+# Fires when `release.yml` (cargo-rail finalize) publishes a release. Each job
+# builds one platform artifact and uploads it to that release. iOS/watchOS are
+# NOT here — those push to TestFlight/App Store via ios.yml, not GitHub assets.
+#
+#   linux-desktop  .AppImage           self-hosted nix-host (THEBATTLESHIP)
+#   macos-desktop  notarized .dmg      self-hosted airlock          (TODO)
+#   docker         self-host image     self-hosted nix-host         (TODO)
+#
+# workflow_dispatch takes a tag so a release can be (re)built by hand.
+
+name: release-binaries
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to build and attach to (e.g. v0.1.0)"
+        required: true
+
+concurrency:
+  group: release-binaries-${{ github.event.release.tag_name || inputs.tag }}
+  cancel-in-progress: false
+
+env:
+  # Local mirror on THEBATTLESHIP (same as deploy.yml) — github egress here is
+  # unreliable, so clone local-first and fall back to the forge.
+  FTS_LOCAL_REPO: /run/media/Development/FastTrackStudio
+
+jobs:
+  linux-desktop:
+    runs-on: [self-hosted, nix-host]
+    steps:
+      - name: Checkout the release tag (local-first)
+        run: |
+          set -eu
+          url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git"
+          tag="${{ github.event.release.tag_name || inputs.tag }}"
+          [ -n "$FTS_LOCAL_REPO" ] && {
+            git config --global --add safe.directory "$FTS_LOCAL_REPO" 2>/dev/null || true
+            git config --global --add safe.directory "$FTS_LOCAL_REPO/.git" 2>/dev/null || true
+          }
+          find . -mindepth 1 -maxdepth 1 -exec rm -rf {} + 2>/dev/null || true
+          git clone --quiet "$FTS_LOCAL_REPO" . || git clone "$url" .
+          if ! git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
+            attempt=1
+            until git fetch --no-tags "$url" "refs/tags/$tag:refs/tags/$tag"; do
+              [ "$attempt" -ge 6 ] && { echo "fetch tag $tag failed"; exit 1; }
+              attempt=$((attempt + 1)); sleep 15
+            done
+          fi
+          git checkout --quiet "tags/$tag"
+          echo "building $(git rev-parse --short HEAD) for tag $tag"
+
+      - name: Bundle Linux AppImage
+        run: |
+          set -euo pipefail
+          # The desktop app embeds the web view and serves it on the LAN
+          # (feature embed-web), so stage the web bundle first, then bundle the
+          # desktop app with embed-web added to the defaults. AppImage packaging
+          # needs `linuxdeploy` on PATH — provided by the dev shell.
+          nix develop --accept-flake-config . -c bash -c '
+            set -euo pipefail
+            just web-stage
+            cd apps/fasttrackstudio
+            dx bundle --platform linux --package-types appimage --release --features embed-web
+          '
+          out="$(find target/dx/fasttrackstudio -name '*.AppImage' | head -1)"
+          [ -n "$out" ] || { echo "no AppImage produced (linuxdeploy missing?)"; exit 1; }
+          tag="${{ github.event.release.tag_name || inputs.tag }}"
+          dest="FastTrackStudio-${tag}-linux-x86_64.AppImage"
+          cp "$out" "$dest"
+          echo "artifact=$dest" >> "$GITHUB_ENV"
+
+      - name: Upload to the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          tag="${{ github.event.release.tag_name || inputs.tag }}"
+          nix run nixpkgs#gh -- release upload "$tag" "$artifact" --clobber
+          echo "uploaded $artifact to $tag"
+
+  macos-desktop:
+    # Self-hosted Mac (airlock) — the only machine that can Developer-ID-sign
+    # and notarize. Its build keychain + ASC key + Developer ID cert are
+    # provisioned locally; see deploy-macos.sh. airlock reaches GitHub, so a
+    # plain checkout works (no local mirror like the nix-host).
+    runs-on: [self-hosted, macos, airlock]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name || inputs.tag }}
+          clean: false
+      - name: Build, sign, notarize, staple .dmg
+        env:
+          KEYCHAIN: fts-build.keychain
+          KEYCHAIN_PW: fts-build
+          ACTOOL_DEVELOPER_DIR: /Applications/Xcode-beta.app/Contents/Developer
+        run: |
+          set -euo pipefail
+          export PATH="/nix/var/nix/profiles/default/bin:$PATH"
+          export NIX=/nix/var/nix/profiles/default/bin/nix
+          # Version from the tag (strip a leading v): 0.1.0 from v0.1.0.
+          tag="${{ github.event.release.tag_name || inputs.tag }}"
+          export MARKETING_VER="${tag#v}"
+          bash apps/fasttrackstudio/ios/deploy-macos.sh
+          echo "artifact=$(ls -t target/FastTrackStudio-*-macos.dmg | head -1)" >> "$GITHUB_ENV"
+      - name: Upload to the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          tag="${{ github.event.release.tag_name || inputs.tag }}"
+          nix run nixpkgs#gh -- release upload "$tag" "$artifact" --clobber
+          echo "uploaded $artifact to $tag"

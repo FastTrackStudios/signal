@@ -77,12 +77,48 @@ pub fn bootstrap_blocking() -> eyre::Result<()> {
             .map_err(|e| eyre::eyre!("audio settings client: {e:?}"))?;
 
         // Open the audio device + load the profile (returns immediately;
-        // the open happens on the backend's own thread).
+        // the open happens on the backend's own thread). On iOS we only
+        // open when a real interface is present — otherwise there's no
+        // input to route (the built-in mic is never used), and the hotplug
+        // watcher opens the rig when one is connected. The perf model /
+        // stacks are built in `new()`, so the UI is populated either way.
+        #[cfg(not(target_os = "ios"))]
         backend.start();
+        #[cfg(target_os = "ios")]
+        if crate::ios_audio::has_external_input() {
+            backend.start();
+        }
 
         Ok::<_, eyre::Report>(RigEngine { rig, stream, settings, _scope: scope })
     })?;
 
     let _ = ENGINE.set(engine);
+
+    // iOS: watch for audio-interface hotplug. When an external interface is
+    // connected/disconnected, reconfigure the session (record vs
+    // output-only — the built-in mic is never engaged) and reopen the rig
+    // so cpal binds the new device. Polling is fine for device hotplug.
+    #[cfg(target_os = "ios")]
+    {
+        let rig = ENGINE.get().unwrap().rig.clone();
+        let handle = runtime.handle().clone();
+        std::thread::spawn(move || {
+            let mut had = crate::ios_audio::has_external_input();
+            loop {
+                std::thread::sleep(std::time::Duration::from_millis(1000));
+                let now = crate::ios_audio::has_external_input();
+                if now != had {
+                    had = now;
+                    tracing::info!(external = now, "audio route changed — reopening rig");
+                    crate::ios_audio::configure();
+                    let rig = rig.clone();
+                    handle.spawn(async move {
+                        let _ = rig.start().await;
+                    });
+                }
+            }
+        });
+    }
+
     Ok(())
 }

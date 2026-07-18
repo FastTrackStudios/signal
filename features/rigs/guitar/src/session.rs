@@ -1138,6 +1138,43 @@ fn patch_display(stack_name: &str, patch_name: &str) -> String {
 
 /// Snapshot the performance model (folders + live cursor/active state),
 /// decorated from the profile definition (preset pointers + override badges).
+/// A perf model built from the profile DEFINITION alone — the footswitch
+/// stacks and their patch rotations — with default live state. Used before
+/// the audio rig opens (e.g. iOS with no interface plugged in yet) so the
+/// perform grid shows the stacks instead of an empty screen; the live model
+/// ([`build_perf_model`]) takes over once the rig is open.
+fn build_perf_model_static(def: &ProfileDef) -> PerformanceModel {
+    let stacks = def
+        .stacks
+        .iter()
+        .map(|st| {
+            let cur = st.patches.first().cloned().unwrap_or_default();
+            let patch_def = def
+                .patches
+                .iter()
+                .find(|p| p.name.eq_ignore_ascii_case(&cur));
+            PerfStack {
+                name: st.name.clone(),
+                current_patch: patch_display(&st.name, &cur),
+                position: 0,
+                patch_count: st.patches.len() as u32,
+                available: false,
+                is_active: false,
+                preset: patch_def.map(|p| p.preset.clone()).unwrap_or_default(),
+                override_modules: patch_def
+                    .map(|p| p.override_modules())
+                    .unwrap_or_default(),
+            }
+        })
+        .collect();
+    PerformanceModel {
+        profile_name: def.name.clone(),
+        stacks,
+        tempo_bpm: 120,
+        ..Default::default()
+    }
+}
+
 fn build_perf_model(prig: &ProfileRig, def: &ProfileDef) -> PerformanceModel {
     let active_stack = prig.active_stack();
     let patches = prig.patches();
@@ -1290,7 +1327,16 @@ impl Rig for GuitarRigBackend {
             return;
         }
         let backend = self.clone();
+        // Opening starts the transport engine, which lazily spawns pump
+        // tasks via `moire::task::spawn` (→ `tokio::spawn`) — that needs an
+        // ambient runtime. This open runs on a fresh OS thread, which does
+        // NOT inherit the caller's runtime, so carry the caller's handle
+        // across and enter it on the new thread. (On the pipewire engine
+        // the duplex path never spawned these, which is why it worked
+        // without this; the cpal path on iOS/macOS does.)
+        let rt_handle = tokio::runtime::Handle::try_current().ok();
         std::thread::spawn(move || {
+            let _rt_guard = rt_handle.as_ref().map(|h| h.enter());
             let opened = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                 // Already live with unchanged prefs? Reopening would drop
                 // the device mid-note for nothing — no-op.
@@ -1353,11 +1399,14 @@ impl Rig for GuitarRigBackend {
     fn perf(&self) -> PerformanceModel {
         let mut m = {
             let def = self.profile_def.lock_ok();
+            // Live model when the audio rig is open; otherwise the static
+            // model from the profile def, so the footswitch stacks still
+            // render before the device opens (iOS with no interface yet).
             self.rig
                 .lock_ok()
                 .as_ref()
                 .map(|prig| build_perf_model(prig, &def))
-                .unwrap_or_default()
+                .unwrap_or_else(|| build_perf_model_static(&def))
         };
         m.boost_db = self.current_boost_db();
         m.tempo_bpm = self.tempo_bpm().round() as u32;

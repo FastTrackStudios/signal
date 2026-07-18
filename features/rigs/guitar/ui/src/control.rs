@@ -20,6 +20,20 @@ use signal_proto::block::BlockType;
 
 use crate::state::RigViewState;
 
+/// A quiet placeholder for a block that isn't in the active patch's chain.
+/// Keeps the panel's footprint (so the layout doesn't jump) and reads as an
+/// intentional empty slot — a dashed outline + dimmed label — rather than an
+/// error message.
+fn empty_slot(label: &str) -> Element {
+    rsx! {
+        div {
+            class: "flex-1 min-h-0 w-full flex flex-col items-center justify-center gap-1.5 opacity-40 select-none",
+            div { class: "w-6 h-6 rounded-md border border-dashed border-zinc-600" }
+            span { class: "text-[9px] font-semibold uppercase tracking-[0.14em] text-zinc-500", "{label}" }
+        }
+    }
+}
+
 /// Find a chain block by (type, name).
 fn find_block(blocks: &[LiveBlock], bt: BlockType, name: &str) -> Option<LiveBlock> {
     blocks
@@ -604,7 +618,7 @@ fn DelayPanel(blocks: Vec<LiveBlock>, tempo_bpm: u32) -> Element {
         .cloned()
         .collect();
     if delays.is_empty() {
-        return rsx! { span { class: "text-xs text-muted-foreground italic p-2", "No delays in the chain." } };
+        return rsx! { {empty_slot("Delay")} };
     }
     let quarter = 60_000.0 / tempo_bpm.max(1) as f32;
     let win_ms = quarter * 8.0;
@@ -764,7 +778,7 @@ fn ReverbPanel(blocks: Vec<LiveBlock>) -> Element {
         .cloned()
         .collect();
     if verbs.is_empty() {
-        return rsx! { span { class: "text-xs text-muted-foreground italic p-2", "No reverbs in the chain." } };
+        return rsx! { {empty_slot("Reverb")} };
     }
     let cur = verbs[sel().min(verbs.len() - 1)].clone();
     let cur_id = cur.id.clone();
@@ -940,7 +954,7 @@ fn ModGroupPanel(
         .filter_map(|k| blocks.iter().find(|b| b.block_type == *k).cloned())
         .collect();
     if members.is_empty() {
-        return rsx! { span { class: "text-xs text-muted-foreground italic p-2", "No {title} blocks." } };
+        return rsx! { {empty_slot(title)} };
     }
     let active_idx = members.iter().position(|b| !b.bypassed);
     let shown = active_idx.unwrap_or(0);
@@ -1400,7 +1414,7 @@ pub fn ControlView(
                                         gr_db,
                                     }
                                 } else {
-                                    span { class: "text-xs text-muted-foreground italic", "No Compressor in the chain." }
+                                    {empty_slot("Compressor")}
                                 }
                             }
                         }
@@ -1414,7 +1428,7 @@ pub fn ControlView(
                                 if let Some(gate) = gate {
                                     GatePanel { block: gate, in_db }
                                 } else {
-                                    span { class: "text-xs text-muted-foreground italic", "No Gate." }
+                                    {empty_slot("Gate")}
                                 }
                             }
                         }
@@ -1423,7 +1437,7 @@ pub fn ControlView(
                                 if let Some(eq) = eq {
                                     crate::eq_surface::EqProSurface { block: eq, spectrum }
                                 } else {
-                                    span { class: "text-xs text-muted-foreground italic", "No Amp EQ in the chain." }
+                                    {empty_slot("Amp EQ")}
                                 }
                             }
                         }

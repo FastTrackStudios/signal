@@ -40,6 +40,11 @@
         # integration-test harness (`just reaper-integration-test`).
         pkgs.xorg.xorgserver
         pkgs.xvfb-run
+        # linuxdeploy — dx's AppImage bundler (`dx bundle --package-types
+        # appimage`) shells out to it; without it packaging aborts. Not in the
+        # flake's (older) nixpkgs pin, so take it from the current-unstable
+        # nixpkgs-dx set that already provides the dx toolchain.
+        config.fts.pkgsDx.linuxdeploy
       ]
       ++ config.fts.buildInputs
       ++ config.fts.nativeBuildInputs;
