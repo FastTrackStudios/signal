@@ -12,6 +12,11 @@
   perSystem = { pkgs, lib, config, ... }: {
     devShells.default = pkgs.mkShell ({
       packages = (with pkgs; [
+        # The command runner the whole repo drives through (just web-stage,
+        # just rig-install, …). NixOS hosts have it system-wide, which masked
+        # its absence here; nix-darwin (airlock) does not, so builds that shell
+        # out to `just` failed there.
+        just
         cargo-watch
         cargo-nextest
         bacon
