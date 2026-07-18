@@ -128,9 +128,19 @@
           iosCXX = sdk: pkgs.writeShellScript "ios-clang++-${sdk}" ''
             exec /usr/bin/env -u SDKROOT -u DEVELOPER_DIR /usr/bin/xcrun --sdk ${sdk} clang++ "$@"
           '';
+          # The wasm C compiler (ring's build for the web bundle) is clang-18,
+          # but the darwin DYLD_LIBRARY_PATH below (for the app's runtime dylibs)
+          # forces it to load the stdenv's clang-21 libclang-cpp → symbol
+          # mismatch → SIGABRT. Run it with DYLD_LIBRARY_PATH unset so it
+          # resolves its OWN libs via rpath.
+          wasmCC = pkgs.writeShellScript "wasm-clang-18" ''
+            exec /usr/bin/env -u DYLD_LIBRARY_PATH ${pkgs.llvmPackages_18.clang-unwrapped}/bin/clang "$@"
+          '';
         in
         {
           DYLD_LIBRARY_PATH = libPath;
+          # Override the common wasm CC with the DYLD-clean wrapper (darwin only).
+          CC_wasm32_unknown_unknown = "${wasmCC}";
           # phon-jit's build script compiles its `become` tail-call stencils
           # with this pinned nightly rustc (the workspace pin is stable 1.94,
           # which can't parse `become`). See libs/vendor/phon-jit/build.rs.
