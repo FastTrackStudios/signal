@@ -61,12 +61,24 @@ else
     # fresh one (dx exits non-zero even on success, so we gate on the .app, not
     # the exit code — but only if it's THIS build's output).
     rm -rf "$APP"
-    "$NIX" develop "$ROOT" --accept-flake-config -c bash -c '
+    # EMBED_WEB=1 (default) bakes the browser remote into the binary so the app
+    # serves it on the LAN. That needs the wasm web build (`just web-stage`),
+    # which currently can't run on macOS (a clang-18/clang-21 dylib mismatch in
+    # ring's wasm C build). Stage web-dist on Linux and copy it over, OR set
+    # EMBED_WEB=0 to ship the native app without the embedded remote.
+    if [ "${EMBED_WEB:-1}" = "1" ]; then
+        FEATURES="--features embed-web"
+        STAGE_WEB='just web-stage'
+    else
+        FEATURES=""
+        STAGE_WEB='echo "EMBED_WEB=0 — skipping web bundle"'
+    fi
+    "$NIX" develop "$ROOT" --accept-flake-config -c bash -c "
         set -euo pipefail
-        just web-stage
+        $STAGE_WEB
         cd apps/fasttrackstudio
-        dx build --platform macos --release --features embed-web
-    ' > /tmp/fts-macos-build.log 2>&1 || true
+        dx build --platform macos --release $FEATURES
+    " > /tmp/fts-macos-build.log 2>&1 || true
     tail -3 /tmp/fts-macos-build.log
 fi
 [ -d "$APP" ] || { echo "ERROR: build produced no app"; tail -30 /tmp/fts-macos-build.log; exit 1; }
