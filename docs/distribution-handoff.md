@@ -180,11 +180,30 @@ TestFlight offers the watch app on the paired watch and updates it each build.
 5. **Wire into `deploy-testflight.sh`** behind a `WATCH_APP` flag (path to the
    watchos project + product name), so `WATCH_APP=…` builds+embeds the companion
    as part of the normal TestFlight run.
-6. **Task watch = a NEW app.** There's only the bundle id
-   (`app.fasttrackstudio.task.watch`). Create a SwiftUI watch app (model it on
-   FTSWatch — Task's list/inbox/today views over its `/watch/v1`-style bridge or
-   local CRDT), `WKCompanionAppBundleIdentifier: app.fasttrackstudio.task`, then
-   embed it in the Task iOS build via the same `WATCH_APP` path.
+6. **Task watch = a NEW app.** ✅ BUILT (2026-07-18) — app + server bridge done
+   and verified; remaining is deploy + TestFlight embed.
+   - **App**: `apps/task/watchos/TaskWatch` (SwiftUI, companion of
+     `app.fasttrackstudio.task`). Two tabs: **Timer** (start/stop a
+     `WorkSession`, live clock, dictated description) and **Capture** (dictate a
+     fleeting note → inbox). Builds on Xcode 27 beta (generic watchOS).
+   - **Why not native vox**: vox has NO HTTP/SSE transport and the Swift
+     `VoxRuntime` is TCP-only (raw sockets forbidden on watchOS per TN3135); the
+     promised URLSession Link doesn't exist. So the watch uses the vox **HTTP
+     bridge** convention over URLSession — the sanctioned `EngineHost::extend`
+     pattern (see [[fts-ios-macos27-host-sdk]]'s sibling memory + the two
+     research passes). Full analysis is in this session.
+   - **Bridge**: `apps/task/server/src/watch_bridge.rs` — axum routes
+     `POST/GET /org/{slug}/watch/v1/{timer/start,timer/stop,timer/active,inbox}`
+     calling the org's `timer`/`inbox` vox backends in-process. Bearer
+     `TASK_WATCH_TOKEN`; identity = `v5(org_id,"task-local-owner")` so entries
+     unify with desktop/CLI. **Verified end-to-end** (start/stop/active/409 +
+     inbox `.md` with `source: watch`).
+   - **Remaining**: (a) deploy the Task server with `TASK_WATCH_TOKEN` set (prod
+     is starcommand k3s; test on a dev-clone first); (b) ship the watch on
+     TestFlight via `WATCH_APP=apps/task/watchos WATCH_SCHEME=TaskWatch
+     WATCH_PRODUCT=Task WATCH_BUNDLE_ID=app.fasttrackstudio.task.watch` added to
+     the Task `deploy-testflight.sh` invocation (§3); (c) enter server URL + org
+     slug + token in the watch's Settings.
 
 **Watch-specific gotchas to expect:** the watch profile's platform/type; the
 `.ipa` needs `Payload/App.app/Watch/WatchApp.app` (not `PlugIns`); the watch
