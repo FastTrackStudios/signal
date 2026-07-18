@@ -1,22 +1,34 @@
 #!/usr/bin/env bash
 # Build a release IPA and upload it to TestFlight via the App Store Connect
-# API. Runs in the Mac's GUI login session (codesign needs the unlocked
-# login keychain). One-time prerequisites (create in the browser / Xcode):
-#   1. App record in App Store Connect for the bundle id (app.fasttrackstudio)
-#   2. An "Apple Distribution" certificate in the keychain
-#      (Xcode → Settings → Accounts → Manage Certificates → + )
-# The App Store Connect API key lives in ~/.appstoreconnect (config.env).
+# API. The distribution cert is created via the API on first run, so no Xcode
+# UI is needed. The App Store Connect key lives in ~/.appstoreconnect.
 #
-#   ./ios/deploy-testflight.sh
+# Two ways to run:
+#   Interactive Mac (login keychain, GUI session):
+#     ./ios/deploy-testflight.sh
+#   Headless build box (airlock) — run setup-keychain.sh once, then:
+#     KEYCHAIN=fts-build.keychain KEYCHAIN_PW=fts-build ./ios/deploy-testflight.sh
+#   (a dedicated keychain lets codesign work over SSH with no one logged in).
 #
 # Each upload needs a higher build number than the last; we stamp it from
 # the current unix time (passed in, since dx/nix can't read the clock).
 set -euo pipefail
 
-cd "$(dirname "$0")/.."
+# Derive paths from the script's own location, not git — a build box may hold
+# an rsync'd source copy that isn't a git checkout.
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
+cd "$SCRIPT_DIR/.."
 
 TEAM_ID="${TEAM_ID:-28C2G63DA7}"
-NIX="${NIX:-/run/current-system/sw/bin/nix}"
+# nix-darwin (airlock) and nixos put nix in different places; find it.
+NIX="${NIX:-}"
+if [ -z "$NIX" ]; then
+    for c in /run/current-system/sw/bin/nix /nix/var/nix/profiles/default/bin/nix "$(command -v nix 2>/dev/null || true)"; do
+        [ -n "$c" ] && [ -x "$c" ] && { NIX="$c"; break; }
+    done
+fi
+[ -n "$NIX" ] || { echo "ERROR: nix not found (set NIX=...)." >&2; exit 1; }
 BIN_IOS="$HOME/bin-ios"
 mkdir -p "$BIN_IOS"
 ln -sf /usr/bin/xcrun "$BIN_IOS/xcrun"
@@ -24,24 +36,37 @@ ln -sf /usr/bin/xcrun "$BIN_IOS/xcrun"
 # shellcheck disable=SC1090
 source "$HOME/.appstoreconnect/config.env"
 
-# Distribution signing identity — create it via the API + import into the
-# login keychain if it isn't there yet (no Xcode UI needed).
-if ! security find-identity -v -p codesigning | grep -q "Apple Distribution"; then
+# Signing keychain. On a headless box (airlock) set KEYCHAIN + KEYCHAIN_PW to
+# the dedicated keychain that setup-keychain.sh provisioned — over SSH the
+# login keychain can't be used for codesign (errSecInternalComponent). Default
+# is the login keychain, which works when run from a GUI session (voyager).
+KEYCHAIN="${KEYCHAIN:-login.keychain-db}"
+KEYCHAIN_PW="${KEYCHAIN_PW:-}"
+if [ -n "$KEYCHAIN_PW" ]; then
+    security unlock-keychain -p "$KEYCHAIN_PW" "$KEYCHAIN"
+    security list-keychains -d user -s "$KEYCHAIN" login.keychain-db >/dev/null 2>&1 || true
+fi
+
+# Distribution signing identity — create it via the API + import if it isn't
+# in the keychain yet (no Xcode UI needed).
+if ! security find-identity -v -p codesigning "$KEYCHAIN" | grep -q "Apple Distribution"; then
     echo "=== creating Apple Distribution certificate ==="
     eval "$(ruby "$(dirname "$0")/mint-dist-cert.rb" | grep -E '^DIST_(KEY|CER)=')"
     # Bundle key + cert into a .p12 and import (-A: allow all apps, so
-    # codesign uses it without a per-run keychain prompt).
+    # codesign uses it without a per-run keychain prompt). OpenSSL 3.x needs
+    # -legacy for the encoding `security` reads; LibreSSL defaults to it.
     openssl x509 -inform DER -in "$DIST_CER" -out /tmp/fts-dist.pem
-    openssl pkcs12 -export -legacy -inkey "$DIST_KEY" -in /tmp/fts-dist.pem \
+    if openssl pkcs12 -help 2>&1 | grep -q -- -legacy; then LEG="-legacy"; else LEG=""; fi
+    # shellcheck disable=SC2086
+    openssl pkcs12 -export $LEG -inkey "$DIST_KEY" -in /tmp/fts-dist.pem \
         -name "Apple Distribution" -out /tmp/fts-dist.p12 -passout pass:fts
-    security import /tmp/fts-dist.p12 -k "$HOME/Library/Keychains/login.keychain-db" \
-        -P fts -A -T /usr/bin/codesign
+    security import /tmp/fts-dist.p12 -k "$KEYCHAIN" -P fts -A -T /usr/bin/codesign
     rm -f /tmp/fts-dist.pem /tmp/fts-dist.p12
 fi
-SIGN_ID="$(security find-identity -v -p codesigning \
+SIGN_ID="$(security find-identity -v -p codesigning "$KEYCHAIN" \
     | awk -F'"' '/Apple Distribution/{print $2; exit}')"
 [ -n "$SIGN_ID" ] || { echo "ERROR: distribution identity still missing after import." >&2; exit 1; }
-echo "=== distribution identity: $SIGN_ID ==="
+echo "=== distribution identity: $SIGN_ID (keychain: $KEYCHAIN) ==="
 
 echo "=== App Store provisioning profile ==="
 PROFILE="$(PROFILE_TYPE=IOS_APP_STORE CERT_TYPE=DISTRIBUTION \
@@ -59,10 +84,10 @@ if [ -n "${XCODE_DIR:-}" ]; then
 else
     XCODE_ENV="unset DEVELOPER_DIR SDKROOT"
 fi
-APP="$(git rev-parse --show-toplevel)/target/dx/fasttrackstudio/release/ios/Fasttrackstudio.app"
+APP="$ROOT/target/dx/fasttrackstudio/release/ios/Fasttrackstudio.app"
 # dx can exit non-zero even on a successful build (and `| tail` + pipefail
 # would then abort us), so capture to a log and gate on the .app instead.
-"$NIX" develop "$(git rev-parse --show-toplevel)" -c bash -c \
+"$NIX" develop "$ROOT" -c bash -c \
     "$XCODE_ENV; export PATH=$BIN_IOS:\$PATH; \
      dx build --platform ios --device --release --no-default-features --features signal-guitar" \
     > /tmp/fts-build.log 2>&1 || true
@@ -129,7 +154,7 @@ add_str BuildMachineOSBuild "$MACOS_BUILD"
 echo "=== SDK metadata: iphoneos${SDK_VER} (${SDK_BUILD}), Xcode ${XCODE_VER} (${XCODE_BUILD}) ==="
 
 # Home-screen icon (dx emits none).
-ICONS_DIR="$(git rev-parse --show-toplevel)/apps/fasttrackstudio/ios/Assets.xcassets"
+ICONS_DIR="$ROOT/apps/fasttrackstudio/ios/Assets.xcassets"
 if [ -d "$ICONS_DIR" ]; then
     actool "$ICONS_DIR" --compile "$APP" --platform iphoneos \
         --minimum-deployment-target 15.0 --app-icon AppIcon \
@@ -144,8 +169,8 @@ cp "$PROFILE" "$APP/embedded.mobileprovision"
 security cms -D -i "$PROFILE" > /tmp/fts-prof.plist
 /usr/libexec/PlistBuddy -x -c "Print :Entitlements" /tmp/fts-prof.plist > /tmp/fts-ent.plist
 find "$APP" \( -name "*.dylib" -o -name "*.framework" \) -print0 \
-    | while IFS= read -r -d '' f; do codesign --force --sign "$SIGN_ID" --timestamp "$f"; done
-codesign --force --sign "$SIGN_ID" --entitlements /tmp/fts-ent.plist --timestamp "$APP"
+    | while IFS= read -r -d '' f; do codesign --force --keychain "$KEYCHAIN" --sign "$SIGN_ID" --timestamp "$f"; done
+codesign --force --keychain "$KEYCHAIN" --sign "$SIGN_ID" --entitlements /tmp/fts-ent.plist --timestamp "$APP"
 codesign --verify --deep --strict "$APP"
 
 echo "=== packaging IPA ==="
