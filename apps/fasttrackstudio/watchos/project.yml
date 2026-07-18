@@ -29,7 +29,9 @@ targets:
         CFBundleDisplayName: FTS
         # Standalone watch app (no iOS companion required).
         WKApplication: true
-        WKWatchOnly: true
+        # Embedded companion (rides the iPhone app's TestFlight build so it
+        # installs on the paired watch and auto-updates). Was WKWatchOnly.
+        WKCompanionAppBundleIdentifier: app.fasttrackstudio
         # Local-network HTTP to the engine bridge.
         NSLocalNetworkUsageDescription: >-
           Connects to the FastTrackStudio engine on your local network to

@@ -16,6 +16,15 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 cd "$SCRIPT_DIR/.."
 
+# Which product to build. Defaults to the FastTrackStudio desktop app; for
+# Task: DX_PACKAGE=task-app-desktop DX_APP_DIR=apps/task/desktop EMBED_WEB=0 \
+#       ICONS_DIR=apps/task/mobile/ios/Assets.xcassets
+DX_PACKAGE="${DX_PACKAGE:-fasttrackstudio}"
+DX_APP_DIR="${DX_APP_DIR:-apps/fasttrackstudio}"
+# Optional Tailwind input (relative to DX_APP_DIR) compiled → assets/tailwind.css
+# before the build so the embedded sheet isn't a stale stub (Task desktop).
+DX_TAILWIND="${DX_TAILWIND:-}"
+
 # shellcheck disable=SC1090
 source "$HOME/.appstoreconnect/config.env"
 
@@ -52,15 +61,17 @@ SIGN_ID="$(security find-identity -v -p codesigning "$KEYCHAIN" \
 echo "=== signing identity: $SIGN_ID ==="
 
 # ── Build (embed the web view so the app serves it on the LAN) ───────────────
-APP="$ROOT/target/dx/fasttrackstudio/release/macos/Fasttrackstudio.app"
-if [ "${SKIP_BUILD:-}" = "1" ] && [ -d "$APP" ]; then
+APP_GLOB="$ROOT/target/dx/$DX_PACKAGE/release/macos/"*.app
+# shellcheck disable=SC2086
+if [ "${SKIP_BUILD:-}" = "1" ] && [ -d $APP_GLOB ]; then
     echo "SKIP_BUILD=1 — reusing existing app"
 else
     echo "=== building macOS app ==="
     # Remove any prior .app so a failed build can't be silently mistaken for a
     # fresh one (dx exits non-zero even on success, so we gate on the .app, not
     # the exit code — but only if it's THIS build's output).
-    rm -rf "$APP"
+    # shellcheck disable=SC2086
+    rm -rf $APP_GLOB
     # EMBED_WEB=1 (default) bakes the browser remote into the binary so the app
     # serves it on the LAN. That needs the wasm web build (`just web-stage`),
     # which currently can't run on macOS (a clang-18/clang-21 dylib mismatch in
@@ -77,15 +88,19 @@ else
         set -euo pipefail
         cd $ROOT
         $STAGE_WEB
-        cd apps/fasttrackstudio
+        cd '$ROOT/$DX_APP_DIR'
+        ${DX_TAILWIND:+tailwindcss -i '$DX_TAILWIND' -o assets/tailwind.css}
         dx build --platform macos --release $FEATURES
     " > /tmp/fts-macos-build.log 2>&1 || true
     tail -3 /tmp/fts-macos-build.log
 fi
-[ -d "$APP" ] || { echo "ERROR: build produced no app"; tail -30 /tmp/fts-macos-build.log; exit 1; }
+# shellcheck disable=SC2086
+APP="$(ls -d $APP_GLOB 2>/dev/null | head -1)"
+[ -n "$APP" ] && [ -d "$APP" ] || { echo "ERROR: build produced no app"; tail -30 /tmp/fts-macos-build.log; exit 1; }
+echo "=== app bundle: $APP ==="
 
 # ── Home-screen icon (beta actool — 26.6's is broken on macOS 27) ────────────
-ICONS_DIR="$ROOT/apps/fasttrackstudio/ios/Assets.xcassets"
+ICONS_DIR="${ICONS_DIR:-$ROOT/apps/fasttrackstudio/ios/Assets.xcassets}"
 ICON_DEV="${ACTOOL_DEVELOPER_DIR:-$(xcode-select -p)}"
 if [ -d "$ICONS_DIR" ] && [ -x "$ICON_DEV/usr/bin/actool" ]; then
     DEVELOPER_DIR="$ICON_DEV" "$ICON_DEV/usr/bin/actool" "$ICONS_DIR" --compile "$APP/Contents/Resources" \
@@ -125,12 +140,13 @@ codesign --verify --deep --strict --verbose=2 "$APP"
 # ── Package .dmg ─────────────────────────────────────────────────────────────
 echo "=== packaging .dmg ==="
 BUILD_NO="${BUILD_NO:-$(date +%s)}"
-DMG="$ROOT/target/FastTrackStudio-${MARKETING_VER:-0.0.1}-${BUILD_NO}-macos.dmg"
+PRODUCT_NAME="${PRODUCT_NAME:-FastTrackStudio}"
+DMG="$ROOT/target/${PRODUCT_NAME}-${MARKETING_VER:-0.0.1}-${BUILD_NO}-macos.dmg"
 STAGE="$(mktemp -d)"
 cp -R "$APP" "$STAGE/"
 ln -s /Applications "$STAGE/Applications"
 rm -f "$DMG"
-hdiutil create -volname "FastTrackStudio" -srcfolder "$STAGE" -ov -format UDZO "$DMG" >/dev/null
+hdiutil create -volname "$PRODUCT_NAME" -srcfolder "$STAGE" -ov -format UDZO "$DMG" >/dev/null
 rm -rf "$STAGE"
 echo "dmg: $DMG"
 
