@@ -61,6 +61,10 @@ jobs:
           # 26.6 GM builds/signs/uploads; the beta's actool compiles the icon
           # catalog (26.6's actool can't produce Assets.car on macOS 27).
           ACTOOL_DEVELOPER_DIR: /Applications/Xcode-beta.app/Contents/Developer
+          # Sentry DSN baked into the build at compile time (option_env! in
+          # task-telemetry). Sourced from the repo secret — never committed
+          # (public repo). Empty when the secret is unset → telemetry no-op.
+          TASK_SENTRY_DSN: ${{ secrets.TASK_SENTRY_DSN }}
           # ── Task product overrides (see deploy-testflight.sh header) ──
           DX_PACKAGE: task-app-mobile
           DX_APP_DIR: apps/task/mobile
