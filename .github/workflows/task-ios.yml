@@ -1,0 +1,88 @@
+# Task iOS TestFlight — build the Task iPhone app + its embedded watchOS
+# companion and upload to TestFlight on every push to main that touches Task
+# or its dependencies.
+#
+# Runs on the SAME self-hosted airlock Mac as the audio app's `ios.yml`, and
+# shares its `ios-testflight` concurrency group so the single Mac never runs
+# two iOS builds at once (Task and audio builds queue behind each other).
+#
+# This does NOT add a new build script — it reuses the proven, parameterized
+# `apps/fasttrackstudio/ios/deploy-testflight.sh` with Task's env overrides
+# (documented in that script's header + `apps/task/watchos/project.yml`):
+#   DX_PACKAGE=task-app-mobile, DX_APP_DIR=apps/task/mobile, Task bundle ids,
+#   WATCH_APP=apps/task/watchos. The watch companion is embedded in the iOS
+#   build so it installs on the paired watch and auto-updates.
+#
+# CHANGE-GATED by the push `paths:` filter (Task app + its Rust deps).
+# workflow_dispatch forces a build regardless of what changed.
+
+name: task-ios
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/task/**"
+      - "crates/task/**"
+      - "features/task/**"
+      - "libs/architect/**"
+      - "libs/editor/**"
+      - "flake.nix"
+      - "flake.lock"
+      - ".github/workflows/task-ios.yml"
+      - "apps/fasttrackstudio/ios/**"
+  workflow_dispatch:
+    inputs:
+      marketing_version:
+        description: "CFBundleShortVersionString (e.g. 0.0.2)"
+        required: false
+        default: "0.0.1"
+
+# Serialize with the audio iOS build too — one iOS build at a time on the
+# single Mac. Shared group name across both workflows; queue, never cancel.
+concurrency:
+  group: ios-testflight
+  cancel-in-progress: false
+
+jobs:
+  testflight:
+    runs-on: [self-hosted, macos, airlock]
+    steps:
+      # clean:false keeps target/ between runs so nix+cargo build incrementally.
+      - uses: actions/checkout@v4
+        with:
+          clean: false
+
+      - name: Build, sign, and upload Task to TestFlight
+        env:
+          KEYCHAIN: fts-build.keychain
+          KEYCHAIN_PW: fts-build
+          MARKETING_VER: ${{ inputs.marketing_version || '0.0.1' }}
+          # 26.6 GM builds/signs/uploads; the beta's actool compiles the icon
+          # catalog (26.6's actool can't produce Assets.car on macOS 27).
+          ACTOOL_DEVELOPER_DIR: /Applications/Xcode-beta.app/Contents/Developer
+          # ── Task product overrides (see deploy-testflight.sh header) ──
+          DX_PACKAGE: task-app-mobile
+          DX_APP_DIR: apps/task/mobile
+          # Explicitly empty = Task's default cargo features (honored: the
+          # script uses `${DX_FEATURES-<default>}`, not `:-`).
+          DX_FEATURES: ""
+          DX_BUNDLE_ID: app.fasttrackstudio.task
+          DX_TAILWIND: tailwind.css
+          ICONS_DIR: ${{ github.workspace }}/apps/task/mobile/ios/Assets.xcassets
+          # ── Embedded watchOS companion (apps/task/watchos/project.yml) ──
+          WATCH_APP: apps/task/watchos
+          WATCH_SCHEME: TaskWatch
+          WATCH_PRODUCT: Task
+          WATCH_BUNDLE_ID: app.fasttrackstudio.task.watch
+        run: |
+          set -euo pipefail
+          export PATH="/nix/var/nix/profiles/default/bin:$PATH"
+          export NIX=/nix/var/nix/profiles/default/bin/nix
+          bash apps/fasttrackstudio/ios/deploy-testflight.sh
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "### Task iOS TestFlight" >> "$GITHUB_STEP_SUMMARY"
+          echo "commit \`$(git rev-parse --short HEAD)\` → Task app + watch companion uploaded (see log for build number)." >> "$GITHUB_STEP_SUMMARY"
