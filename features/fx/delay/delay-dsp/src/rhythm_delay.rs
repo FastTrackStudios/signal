@@ -34,6 +34,12 @@ pub struct RhythmDelay {
     smoother: ParamSmoother,
 }
 
+impl Default for RhythmDelay {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl RhythmDelay {
     /// 5 seconds * 8 taps = 40 seconds max delay.
     const MAX_DELAY_S: f64 = 40.0;

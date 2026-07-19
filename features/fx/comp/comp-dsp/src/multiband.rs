@@ -208,7 +208,7 @@ impl CompressionBand {
 
         // Step 7b: Apply style-specific FET coloration.
         if self.gain_curve.style() == crate::styles::CompressionStyle::Fet {
-            let atan_input = self.gain_curve.attack_coeff * -1.0;
+            let atan_input = -self.gain_curve.attack_coeff;
             let atan_result = crate::styles::atan_approx(atan_input);
 
             // Constants from the reference model.
@@ -325,9 +325,9 @@ impl MultiBandCompressor {
         // - Processes each band with independent compression
         // - Recombines by summing the 3 processed bands
         // Normalization by 3 prevents clipping from summation
-        let combined_output = (band0_output + band1_output + band2_output) / 3.0;
+        
 
-        combined_output
+        (band0_output + band1_output + band2_output) / 3.0
     }
 
     /// Update to new sample rate

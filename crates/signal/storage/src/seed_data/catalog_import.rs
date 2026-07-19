@@ -320,7 +320,7 @@ fn collect_snapshot_metas(dir: &Path, out: &mut Vec<(SnapshotMetadata, PathBuf)>
         let path = entry.path();
         if path.is_dir() {
             collect_snapshot_metas(&path, out);
-        } else if path.extension().map_or(false, |ext| ext == "json") {
+        } else if path.extension().is_some_and(|ext| ext == "json") {
             if let Ok(contents) = std::fs::read_to_string(&path) {
                 if let Ok(meta) = serde_json::from_str::<SnapshotMetadata>(&contents) {
                     let parent = path.parent().unwrap_or(dir).to_path_buf();

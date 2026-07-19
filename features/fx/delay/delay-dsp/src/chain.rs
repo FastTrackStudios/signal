@@ -267,6 +267,12 @@ pub struct DelayChain {
     pan_r_smoother: ParamSmoother,
 }
 
+impl Default for DelayChain {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl DelayChain {
     pub fn new() -> Self {
         let mut lr_smoother = ParamSmoother::new(8.0);

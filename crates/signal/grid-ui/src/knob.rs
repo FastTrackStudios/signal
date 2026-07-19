@@ -8,17 +8,14 @@ use std::f64::consts::PI;
 
 /// Knob display size.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Default)]
 pub enum KnobSize {
     Small,
+    #[default]
     Medium,
     Large,
 }
 
-impl Default for KnobSize {
-    fn default() -> Self {
-        Self::Medium
-    }
-}
 
 impl KnobSize {
     fn diameter(self) -> u32 {

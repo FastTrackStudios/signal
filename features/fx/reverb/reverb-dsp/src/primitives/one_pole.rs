@@ -18,6 +18,12 @@ pub struct Lp1 {
     cutoff_hz: f64,
 }
 
+impl Default for Lp1 {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Lp1 {
     pub fn new() -> Self {
         let mut lp = Self {
@@ -90,6 +96,12 @@ pub struct Hp1 {
     a1: f64,
     sample_rate: f64,
     cutoff_hz: f64,
+}
+
+impl Default for Hp1 {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Hp1 {

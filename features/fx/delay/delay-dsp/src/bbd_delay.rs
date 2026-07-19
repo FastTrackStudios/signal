@@ -97,6 +97,12 @@ pub struct BbdDelay {
     jitter_state: f64,
 }
 
+impl Default for BbdDelay {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl BbdDelay {
     pub fn new() -> Self {
         Self {

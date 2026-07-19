@@ -61,7 +61,7 @@ impl PreparedIr {
         }
 
         let fft_fwd = planner.plan_fft_forward(FFT_LEN);
-        let num_partitions = (ir.len() + BLOCK - 1) / BLOCK;
+        let num_partitions = ir.len().div_ceil(BLOCK);
 
         let mut partitions = Vec::with_capacity(num_partitions);
         let mut padded = vec![0.0_f64; FFT_LEN];

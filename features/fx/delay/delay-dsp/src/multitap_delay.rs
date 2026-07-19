@@ -377,6 +377,12 @@ pub struct MultiTapDelay {
     mod_phase: f64,
 }
 
+impl Default for MultiTapDelay {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MultiTapDelay {
     pub const MIN_TIME_MS: f64 = 60.0;
     pub const MAX_TIME_MS: f64 = 2500.0;

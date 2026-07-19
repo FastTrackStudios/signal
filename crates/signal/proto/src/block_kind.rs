@@ -27,8 +27,10 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Facet)]
 #[serde(tag = "kind", content = "data")]
 #[repr(C)]
+#[derive(Default)]
 pub enum BlockKind {
     /// Built-in DSP for this block type. Default.
+    #[default]
     Native,
     /// Neural Amp Modeler — a `.nam` model file processed by
     /// `neural-amp-modeler` (FFI to NeuralAmpModelerCore). Works for any
@@ -42,11 +44,6 @@ pub enum BlockKind {
     Custom(CustomRef),
 }
 
-impl Default for BlockKind {
-    fn default() -> Self {
-        Self::Native
-    }
-}
 
 impl BlockKind {
     /// Short identifier for the variant — used in UI tags and log lines.

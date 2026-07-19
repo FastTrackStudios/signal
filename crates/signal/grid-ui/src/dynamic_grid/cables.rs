@@ -276,7 +276,7 @@ pub(crate) fn resolve_cables(chain: &[GridSlot]) -> Vec<Cable> {
         chain
             .iter()
             .find(|s| s.col == col && s.row == row)
-            .map_or(false, |s| s.bypassed)
+            .is_some_and(|s| s.bypassed)
     };
 
     for m in &modules {

@@ -47,6 +47,12 @@ pub struct ShimmerDelay {
     pub grain_ms: f64,
 }
 
+impl Default for ShimmerDelay {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ShimmerDelay {
     const MAX_DELAY_S: f64 = 5.0;
 

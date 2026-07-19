@@ -31,6 +31,12 @@ pub struct CleanDelay {
     smoother: ParamSmoother,
 }
 
+impl Default for CleanDelay {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl CleanDelay {
     const MAX_DELAY_S: f64 = 5.0;
 

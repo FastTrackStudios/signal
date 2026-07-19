@@ -235,6 +235,12 @@ pub struct LoFiDelay {
     rng: XorShift32,
 }
 
+impl Default for LoFiDelay {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl LoFiDelay {
     const MAX_DELAY_S: f64 = 5.0;
 

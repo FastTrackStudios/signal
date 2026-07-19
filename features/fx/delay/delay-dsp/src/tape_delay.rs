@@ -210,6 +210,12 @@ pub struct TapeDelay {
     coeff_refresh: u32,
 }
 
+impl Default for TapeDelay {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TapeDelay {
     /// Maximum delay time in seconds (must accommodate Head 3 at 2.85× base).
     const MAX_DELAY_S: f64 = 5.0;

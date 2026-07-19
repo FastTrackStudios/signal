@@ -192,6 +192,12 @@ pub struct ReverbChain {
 /// (0.67 ms at 48 kHz) while a ramp is in motion.
 const SMOOTH_BLOCK: usize = 32;
 
+impl Default for ReverbChain {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ReverbChain {
     pub fn new() -> Self {
         let sample_rate = 48000.0;

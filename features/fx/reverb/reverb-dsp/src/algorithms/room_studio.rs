@@ -361,8 +361,8 @@ impl ReverbAlgorithm for RoomStudio {
         // Bass trapping: subtract low-passed signal to remove bass energy
         let bass_l = self.bass_hp_l.tick(late_l);
         let bass_r = self.bass_hp_r.tick(late_r);
-        late_l = late_l - bass_l * 0.3; // Partial bass reduction
-        late_r = late_r - bass_r * 0.3;
+        late_l -= bass_l * 0.3; // Partial bass reduction
+        late_r -= bass_r * 0.3;
 
         // Stereo width
         let mid = (late_l + late_r) * 0.5;

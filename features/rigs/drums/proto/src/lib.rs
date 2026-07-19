@@ -40,11 +40,13 @@ pub struct PieceInfo {
 /// overhead/room mics as sends into shared buses).
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Facet)]
 #[repr(u8)]
+#[derive(Default)]
 pub enum StripKind {
     /// A whole kit piece (an engine: kick, snare, …) — the primary strip. Its
     /// fader/mute/solo apply across all the piece's mics at once.
     Piece,
     /// A close-mic channel, direct to master.
+    #[default]
     Channel,
     /// A mic send into a bus.
     Send,
@@ -52,11 +54,6 @@ pub enum StripKind {
     Bus,
 }
 
-impl Default for StripKind {
-    fn default() -> Self {
-        StripKind::Channel
-    }
-}
 
 /// One mixer strip (channel / send / bus) in the drum mixer.
 #[derive(Clone, PartialEq, Debug, Default, Facet)]
@@ -138,8 +135,10 @@ pub struct MeterSnapshot {
 /// how to remap it onto the loaded kit). Mirrors `midicore::DrumMap`.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Facet)]
 #[repr(u8)]
+#[derive(Default)]
 pub enum InputMap {
     /// No conversion — hardware already speaks the kit's note layout.
+    #[default]
     Direct,
     /// Alesis Strata Prime e-kit.
     StrataPrime,
@@ -149,11 +148,6 @@ pub enum InputMap {
     Ggd,
 }
 
-impl Default for InputMap {
-    fn default() -> Self {
-        InputMap::Direct
-    }
-}
 
 /// Live transport + meter snapshot — the high-rate poll payload.
 #[derive(Clone, PartialEq, Debug, Default, Facet)]

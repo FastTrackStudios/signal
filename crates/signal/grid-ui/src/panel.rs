@@ -71,15 +71,15 @@ pub fn RigGridPanel(props: RigGridPanelProps) -> Element {
     let picker_cell = PICKER_CELL();
     let picker_pos = PICKER_CLICK_POS();
 
-    let on_param_change_prop = props.on_param_change.clone();
-    let on_save_prop = props.on_save.clone();
-    let on_save_as_new_prop = props.on_save_as_new.clone();
-    let on_selection_change_prop = props.on_selection_change.clone();
-    let on_save_block_snapshot_prop = props.on_save_block_snapshot.clone();
-    let on_save_block_snapshot_as_prop = props.on_save_block_snapshot_as.clone();
-    let on_save_module_preset_as_prop = props.on_save_module_preset_as.clone();
-    let on_save_module_snapshot_prop = props.on_save_module_snapshot.clone();
-    let on_save_module_snapshot_as_prop = props.on_save_module_snapshot_as.clone();
+    let on_param_change_prop = props.on_param_change;
+    let on_save_prop = props.on_save;
+    let on_save_as_new_prop = props.on_save_as_new;
+    let on_selection_change_prop = props.on_selection_change;
+    let on_save_block_snapshot_prop = props.on_save_block_snapshot;
+    let on_save_block_snapshot_as_prop = props.on_save_block_snapshot_as;
+    let on_save_module_preset_as_prop = props.on_save_module_preset_as;
+    let on_save_module_snapshot_prop = props.on_save_module_snapshot;
+    let on_save_module_snapshot_as_prop = props.on_save_module_snapshot_as;
 
     let current_chain = chain();
     let current_sel = selection();
@@ -125,13 +125,13 @@ pub fn RigGridPanel(props: RigGridPanelProps) -> Element {
             GridContextMenu {
                 target: ctx_menu_target(),
                 chain: current_chain.clone(),
-                on_save: on_save_prop.clone(),
-                on_save_as_new: on_save_as_new_prop.clone(),
-                on_save_block_snapshot: on_save_block_snapshot_prop.clone(),
-                on_save_block_snapshot_as: on_save_block_snapshot_as_prop.clone(),
-                on_save_module_preset_as: on_save_module_preset_as_prop.clone(),
-                on_save_module_snapshot: on_save_module_snapshot_prop.clone(),
-                on_save_module_snapshot_as: on_save_module_snapshot_as_prop.clone(),
+                on_save: on_save_prop,
+                on_save_as_new: on_save_as_new_prop,
+                on_save_block_snapshot: on_save_block_snapshot_prop,
+                on_save_block_snapshot_as: on_save_block_snapshot_as_prop,
+                on_save_module_preset_as: on_save_module_preset_as_prop,
+                on_save_module_snapshot: on_save_module_snapshot_prop,
+                on_save_module_snapshot_as: on_save_module_snapshot_as_prop,
                 on_close: move |_| { ctx_menu_target.set(None); },
             }
         }
@@ -166,8 +166,8 @@ pub fn RigGridPanel(props: RigGridPanelProps) -> Element {
                 selection: current_sel,
                 chain: current_chain,
                 on_param_change: param_change_handler,
-                on_save: on_save_prop.clone(),
-                on_save_as_new: on_save_as_new_prop.clone(),
+                on_save: on_save_prop,
+                on_save_as_new: on_save_as_new_prop,
             }
         }
     }

@@ -248,8 +248,8 @@ impl GainCurve {
                 // Optical: vintage frequency-dependent processing
                 // Creates smooth vintage coloration
                 let freq_normalized = input_frequency / 1000.0; // Normalize to kHz-like scale
-                let vintage_factor = (constants.blend_factor / freq_normalized).clamp(0.7, 1.3);
-                vintage_factor
+                
+                (constants.blend_factor / freq_normalized).clamp(0.7, 1.3)
             }
             _ => {
                 // VCA and Clean: no post-curve adjustment

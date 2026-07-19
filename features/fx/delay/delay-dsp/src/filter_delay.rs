@@ -175,6 +175,12 @@ pub struct FilterDelay {
     ctrl_countdown: u32,
 }
 
+impl Default for FilterDelay {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl FilterDelay {
     pub const MIN_TIME_MS: f64 = 60.0;
     pub const MAX_TIME_MS: f64 = 2500.0;

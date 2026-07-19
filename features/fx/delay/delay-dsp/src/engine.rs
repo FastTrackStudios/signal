@@ -328,6 +328,12 @@ pub struct DelayEngine {
     pub filter_trem_shape: FilterLfoShape,
 }
 
+impl Default for DelayEngine {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl DelayEngine {
     pub fn new() -> Self {
         Self {

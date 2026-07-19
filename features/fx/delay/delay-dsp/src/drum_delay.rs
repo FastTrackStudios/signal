@@ -113,6 +113,12 @@ pub struct DrumDelay {
     rng: XorShift32,
 }
 
+impl Default for DrumDelay {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl DrumDelay {
     pub const MIN_TIME_MS: f64 = 200.0;
     pub const MAX_TIME_MS: f64 = 2000.0;

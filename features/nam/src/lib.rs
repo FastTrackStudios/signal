@@ -436,7 +436,7 @@ pub fn full_rig_models_by_pack(
             .filter_map(|e| e.ok())
         {
             let path = entry.path();
-            if path.is_file() && path.extension().map_or(false, |e| e == "nam") {
+            if path.is_file() && path.extension().is_some_and(|e| e == "nam") {
                 if let Some(name) = path.file_name() {
                     let name_str = name.to_string_lossy().to_string();
                     // First match wins — don't overwrite
@@ -517,7 +517,7 @@ pub fn drive_models_by_pack(
             .filter_map(|e| e.ok())
         {
             let path = entry.path();
-            if path.is_file() && path.extension().map_or(false, |e| e == "nam") {
+            if path.is_file() && path.extension().is_some_and(|e| e == "nam") {
                 if let Some(name) = path.file_name() {
                     let name_str = name.to_string_lossy().to_string();
                     filename_index

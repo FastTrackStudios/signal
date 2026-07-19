@@ -70,6 +70,12 @@ pub struct Flutter {
     amp3: f64,
 }
 
+impl Default for Flutter {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Flutter {
     pub fn new() -> Self {
         Self {
@@ -139,6 +145,12 @@ pub struct Wow {
     rng: XorShift32,
     sh_value: f64,
     sh_triggered: bool,
+}
+
+impl Default for Wow {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Wow {
@@ -266,6 +278,12 @@ pub struct DuckingFollower {
     release_coeff: f64,
     release_fast_coeff: f64,
     sample_rate: f64,
+}
+
+impl Default for DuckingFollower {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl DuckingFollower {

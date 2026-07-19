@@ -172,7 +172,7 @@ struct CloudChannel {
 impl CloudChannel {
     fn new(sample_rate: f64, is_right: bool) -> Self {
         let lines: Vec<ReverbLine> = (0..TOTAL_LINE_COUNT)
-            .map(|_| ReverbLine::new(sample_rate as f64))
+            .map(|_| ReverbLine::new(sample_rate))
             .collect();
 
         let mut diffuser = AllpassDiffuser::new_default();

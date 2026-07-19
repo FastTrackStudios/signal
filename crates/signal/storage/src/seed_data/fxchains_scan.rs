@@ -232,7 +232,7 @@ fn block_type_from_folder(dir: &Path, base: &Path) -> Option<BlockType> {
 fn is_rfxchain(path: &Path) -> bool {
     path.extension()
         .and_then(|e| e.to_str())
-        .map_or(false, |ext| ext.eq_ignore_ascii_case("rfxchain"))
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("rfxchain"))
 }
 
 fn file_stem(path: &Path) -> String {

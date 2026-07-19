@@ -14,6 +14,12 @@ pub struct Detector {
     sample_rate: f64,
 }
 
+impl Default for Detector {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Detector {
     pub fn new() -> Self {
         Self {

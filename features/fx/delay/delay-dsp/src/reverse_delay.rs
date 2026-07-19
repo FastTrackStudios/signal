@@ -32,6 +32,12 @@ pub struct ReverseDelay {
     grain_samples: usize,
 }
 
+impl Default for ReverseDelay {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ReverseDelay {
     const MAX_DELAY_S: f64 = 5.0;
 

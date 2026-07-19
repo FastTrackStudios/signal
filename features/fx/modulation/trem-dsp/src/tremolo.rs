@@ -110,8 +110,10 @@ impl Default for Tremolo {
 
 /// Saturation character applied to the tremolo output.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Default)]
 pub enum AnalogStyle {
     /// No saturation — clean digital.
+    #[default]
     Clean,
     /// Gentle low-frequency warmth.
     Fat,
@@ -127,11 +129,6 @@ pub enum AnalogStyle {
     Pump,
 }
 
-impl Default for AnalogStyle {
-    fn default() -> Self {
-        AnalogStyle::Clean
-    }
-}
 
 /// Stateful analog-style processor (Crunch needs a crossover filter).
 pub struct AnalogProcessor {

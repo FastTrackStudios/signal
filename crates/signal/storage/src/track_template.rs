@@ -299,7 +299,7 @@ pub fn scan_track_templates(root: &Path) -> Vec<ScannedTemplate> {
                     let path = file_entry.path();
                     if path
                         .extension()
-                        .map_or(true, |e| !e.eq_ignore_ascii_case("rtracktemplate"))
+                        .is_none_or(|e| !e.eq_ignore_ascii_case("rtracktemplate"))
                     {
                         continue;
                     }

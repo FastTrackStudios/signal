@@ -759,13 +759,9 @@ impl TrackRole {
             Some(Self::Engine {
                 name: rest.to_string(),
             })
-        } else if let Some(rest) = display_name.strip_prefix("[L] ") {
-            Some(Self::Layer {
+        } else { display_name.strip_prefix("[L] ").map(|rest| Self::Layer {
                 name: rest.to_string(),
-            })
-        } else {
-            None
-        }
+            }) }
     }
 }
 

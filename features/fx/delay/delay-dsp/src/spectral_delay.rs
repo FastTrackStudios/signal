@@ -143,6 +143,12 @@ pub struct SpectralDelay {
     rng: XorShift32,
 }
 
+impl Default for SpectralDelay {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SpectralDelay {
     pub const MIN_TIME_MS: f64 = 60.0;
     pub const MAX_TIME_MS: f64 = 2500.0;

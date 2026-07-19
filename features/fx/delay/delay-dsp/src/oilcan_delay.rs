@@ -68,6 +68,12 @@ pub struct OilCanDelay {
     rng: XorShift32,
 }
 
+impl Default for OilCanDelay {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl OilCanDelay {
     pub const MIN_TIME_MS: f64 = 200.0;
     pub const MAX_TIME_MS: f64 = 800.0;

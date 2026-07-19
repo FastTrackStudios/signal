@@ -23,19 +23,16 @@ use signal_proto::block::BlockType;
 /// "Synth Bass", and a future sampled bass presets of the SAME rig.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Facet)]
 #[repr(u8)]
+#[derive(Default)]
 pub enum PresetKind {
     /// The live DI path: bass in → (drive) → NAM amp → (cab IR) → out.
+    #[default]
     Audio,
     /// A sampled bass driven by MIDI notes (not wired yet — listed so the
     /// preset surface is already shaped for it).
     Sample,
 }
 
-impl Default for PresetKind {
-    fn default() -> Self {
-        PresetKind::Audio
-    }
-}
 
 /// One preset in the bass library — a complete tone the rig can switch to.
 #[derive(Clone, PartialEq, Debug, Default, Facet)]

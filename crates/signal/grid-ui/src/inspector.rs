@@ -45,7 +45,7 @@ pub fn BlockInspectorPanel(props: BlockInspectorPanelProps) -> Element {
                 let slot_clone = slot.clone();
                 let has_preset = slot.preset_id.is_some();
                 let mut show_save_as_new = use_signal(|| false);
-                let mut save_as_new_name = use_signal(|| String::new());
+                let mut save_as_new_name = use_signal(String::new);
 
                 rsx! {
                     div { class: "mt-3 rounded overflow-hidden",
@@ -78,7 +78,7 @@ pub fn BlockInspectorPanel(props: BlockInspectorPanelProps) -> Element {
                                             let slot_id = slot.id;
                                             let val = *value as f64;
                                             let accent = color.bg.to_string();
-                                            let on_change = props.on_param_change.clone();
+                                            let on_change = props.on_param_change;
                                             rsx! {
                                                 Knob {
                                                     key: "{name}",
@@ -103,7 +103,7 @@ pub fn BlockInspectorPanel(props: BlockInspectorPanelProps) -> Element {
                         // Save button (only when slot has a preset_id to save back to)
                         if has_preset {
                             {
-                                let on_save = props.on_save.clone();
+                                let on_save = props.on_save;
                                 let save_slot = slot_clone.clone();
                                 rsx! {
                                     div { class: "px-3 py-2",
@@ -124,7 +124,7 @@ pub fn BlockInspectorPanel(props: BlockInspectorPanelProps) -> Element {
                         }
                         // Save As New Preset
                         {
-                            let on_save_as_new = props.on_save_as_new.clone();
+                            let on_save_as_new = props.on_save_as_new;
                             let new_slot = slot_clone.clone();
                             let default_name = format!("{:?} Preset", slot.block_type);
                             rsx! {
@@ -148,7 +148,7 @@ pub fn BlockInspectorPanel(props: BlockInspectorPanelProps) -> Element {
                                                             bg-amber-600 hover:bg-amber-500 text-white \
                                                             transition-colors duration-150",
                                                     onclick: {
-                                                        let on_save_as_new = on_save_as_new.clone();
+                                                        let on_save_as_new = on_save_as_new;
                                                         let new_slot = new_slot.clone();
                                                         move |_| {
                                                             let name = save_as_new_name();

@@ -130,7 +130,7 @@ pub fn DynamicGridView(props: DynamicGridViewProps) -> Element {
         }
     };
 
-    let mut chain_signal = use_signal(|| Vec::<GridSlot>::new());
+    let mut chain_signal = use_signal(Vec::<GridSlot>::new);
     if *chain_signal.read() != chain_snapshot {
         chain_signal.set(chain_snapshot.clone());
     }
@@ -232,7 +232,7 @@ pub fn DynamicGridView(props: DynamicGridViewProps) -> Element {
                 continue;
             }
             // The fader panel occupies [cg.x, cg.x + LAYER_LEFT_PAD] × [cg.y, cg.y + cg.h]
-            let panel_right = cg.x + LAYER_LEFT_PAD as f64;
+            let panel_right = cg.x + LAYER_LEFT_PAD;
             let panel_bottom = cg.y + cg.h;
             for r in 0..rows {
                 let cell_top = r as f64 * step;
@@ -677,7 +677,7 @@ pub fn DynamicGridView(props: DynamicGridViewProps) -> Element {
                 for group in module_groups.iter() {
                     {
                         let name = group.name.clone();
-                        let is_being_dragged = interaction().group_drag().map_or(false, |gd| gd.group_name == name);
+                        let is_being_dragged = interaction().group_drag().is_some_and(|gd| gd.group_name == name);
                         let is_module_selected = selection == Some(GridSelection::Module(name.clone()));
 
                         let module_slots: Vec<&GridSlot> = drag_chain.iter()
@@ -753,7 +753,7 @@ pub fn DynamicGridView(props: DynamicGridViewProps) -> Element {
                             {
                                 let slot = drag_chain.iter().find(|s| s.col == col && s.row == row && !s.is_phantom);
                                 let is_drag_target = hover_cell == Some((col, row)) && dragged_slot_id.is_some();
-                                let is_being_dragged = slot.as_ref().map_or(false, |s| dragged_slot_id == Some(s.id));
+                                let is_being_dragged = slot.as_ref().is_some_and(|s| dragged_slot_id == Some(s.id));
 
                                 if let Some(slot) = slot {
                                     let slot_id = slot.id;
@@ -776,7 +776,7 @@ pub fn DynamicGridView(props: DynamicGridViewProps) -> Element {
                                     let left_port_hovered = hovered_port_slot() == Some((slot_id, true));
                                     let right_port_hovered = hovered_port_slot() == Some((slot_id, false));
 
-                                    let outer_style = if interaction().group_drag().map_or(false, |gd| {
+                                    let outer_style = if interaction().group_drag().is_some_and(|gd| {
                                         slot.module_group.as_deref() == Some(&gd.group_name)
                                     }) {
                                         "z-index: 50; opacity: 0.85;".to_string()
@@ -819,7 +819,7 @@ pub fn DynamicGridView(props: DynamicGridViewProps) -> Element {
                                                 *PICKER_CELL.write() = None;
                                             },
                                             on_context_menu: {
-                                                let on_ctx = props.on_context_menu.clone();
+                                                let on_ctx = props.on_context_menu;
                                                 move |evt: MouseEvent| {
                                                     if !is_selected {
                                                         props.on_select.call(Some(GridSelection::Block(slot_id)));
@@ -949,7 +949,7 @@ pub fn DynamicGridView(props: DynamicGridViewProps) -> Element {
                                     }));
                                 },
                                 oncontextmenu: {
-                                    let on_ctx = props.on_context_menu.clone();
+                                    let on_ctx = props.on_context_menu;
                                     let ctx_name = gname.clone();
                                     move |evt: MouseEvent| {
                                         if !is_this_module_selected {
