@@ -56,6 +56,12 @@ mod session_view;
 // `/vox` link to `fasttrackstudio --engine`.
 #[cfg(all(feature = "session", target_arch = "wasm32"))]
 mod session_remote_view;
+// Standalone web surface at /{org}/{collection}: dials the task-server's
+// per-org CollectionService and lists that collection's songs. Additive —
+// the wasm entry branches to it only when the URL matches (see launch_app);
+// every other URL is the normal app shell.
+#[cfg(all(feature = "session", target_arch = "wasm32"))]
+mod collection_browser;
 // The browser chart pane: the active song's keyflow chart (CPU engraver →
 // SVG) with a playhead highlight driven by the transport streams.
 #[cfg(all(feature = "session", target_arch = "wasm32"))]
@@ -168,6 +174,14 @@ fn launch_app() {
 
 #[cfg(target_arch = "wasm32")]
 fn launch_app() {
+    // Additive branch: a `/{org}/{collection}` URL launches the standalone
+    // collection browser instead of the app shell. Every other path (root,
+    // `#session` deep links, …) falls through to the normal app unchanged.
+    #[cfg(feature = "session")]
+    if collection_browser::route_matches() {
+        dioxus::launch(collection_browser::CollectionBrowser);
+        return;
+    }
     dioxus::launch(App);
 }
 

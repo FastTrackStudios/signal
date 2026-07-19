@@ -112,6 +112,8 @@ embed-web = ["dep:include_dir"]
 # `signal` feature uses for engine mode).
 session = [
     "dep:session-proto",
+    # Wasm-only collection browser dep (no-op on native — see note above).
+    "dep:collection-proto",
     "dep:session-ui",
     "dep:daw-ui",
     "dep:dawfile-reaper",
@@ -175,6 +177,11 @@ signal-synth-ui = { workspace = true, optional = true }
 # are native-only and live in the cfg(not wasm) table below.
 session-proto = { workspace = true, optional = true }
 keyflow = { workspace = true, optional = true }
+# Ordered-collection wire contract (song Library / Setlist / …). Only the
+# wasm build uses it (the /{org}/{collection} browser dials the task-server's
+# per-org CollectionService), so the actual optional dep lives in the wasm
+# target table below; `dep:collection-proto` in the `session` feature is a
+# no-op on native (dep absent there) — the same trick daw-standalone uses.
 
 # Service framework — the root workspace's architect + vox (patched to the
 # sibling ../architect checkout at the root) so the whole graph shares one
@@ -293,6 +300,10 @@ signal-synth-rig = { workspace = true, features = ["pipewire"], optional = true 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 dioxus = { workspace = true, default-features = true, features = ["web", "launch"] }
 session-ui = { workspace = true, features = ["web"], optional = true }
+# The collection browser's wire client (CollectionServiceClient + Collection /
+# CollectionItem / NodeRef). Wasm-only: this surface exists only in the web
+# build. Enabled via the `session` feature's `dep:collection-proto`.
+collection-proto = { workspace = true, features = ["vox"], optional = true }
 # NO daw-ui here: its daw-control backend is not wasm-clean, and the daw
 # panels (Arrangement / Mixer) are native-only workspaces anyway — the
 # session feature's "dep:daw-ui" is a no-op on the web build.
