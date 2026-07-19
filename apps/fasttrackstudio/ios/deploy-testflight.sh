@@ -242,6 +242,10 @@ if [ -n "$WATCH_APP" ]; then
             || { echo "ERROR: xcodegen failed"; tail -25 /tmp/fts-watch-xcodegen.log; exit 1; }
     fi
     WATCH_DD="$(mktemp -d)"
+    # Clean the watch DerivedData on exit — otherwise every build leaks a
+    # multi-hundred-MB temp dir (they accumulated to gigabytes and filled the
+    # airlock disk, failing builds with "No space left on device").
+    trap 'rm -rf "$WATCH_DD"' EXIT
     # The watch build's Xcode is decoupled from the iOS build's: the dx iOS
     # Rust build's HOST build scripts fail to link under Xcode 27 beta
     # (ld: symbol(s) not found for arm64), so the main build must stay on the
