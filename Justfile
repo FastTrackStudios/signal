@@ -100,6 +100,21 @@ install: rig-install
     gtk-update-icon-cache ~/.local/share/icons/hicolor 2>/dev/null || true
     echo "installed: fasttrackstudio + fts in ~/.local/bin, launcher entry ready"
 
+# Install the Task CLI: `task` on PATH (symlinked from ~/.local/lib/fts).
+# Debug build on purpose — the CLI is a network-bound vox client, so
+# release opt buys nothing but a much slower rebuild; debug keeps the
+# "edit → just task-install → run" loop fast. Re-run after CLI changes.
+task-install:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cargo build -p task-cli
+    install -d ~/.local/lib/fts
+    install -m 755 target/debug/task ~/.local/lib/fts/task.new
+    mv -T ~/.local/lib/fts/task.new ~/.local/lib/fts/task
+    install -d ~/.local/bin
+    ln -sf ~/.local/lib/fts/task ~/.local/bin/task
+    echo "installed: task in ~/.local/bin — re-run 'just task-install' to update"
+
 # Install Patchbay (the PipeWire studio-routing app): release binary in
 # ~/.local/lib/fts, `patchbay` on PATH, launcher entry + icon.
 patchbay-install:
