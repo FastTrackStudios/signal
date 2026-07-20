@@ -6,6 +6,11 @@
 //! shows — unlike eq-standalone's dioxus-native shell, which renders through
 //! a different windowing stack.
 //!
+//! The parent window is a **baseview** window (crates.io 0.2, core-X11), not
+//! winit: winit selects XInput2 on its window, which starves the plugin's
+//! core-X11-only baseview child of pointer/key events — REAPER's plain X11
+//! parent is what makes input work there, and this shell reproduces it.
+//!
 //! ```sh
 //! fts-clap-host "FTS EQ"                    # resolves ~/.clap/FTS EQ.clap
 //! fts-clap-host ~/.clap/"FTS EQ.clap"       # explicit bundle path
@@ -17,20 +22,12 @@
 //! audio stay idle until we wire a cpal/PipeWire stream through
 //! `daw-standalone`'s engine in a follow-up.
 
+use std::cell::RefCell;
 use std::path::PathBuf;
-use std::time::{Duration, Instant};
 
+use baseview::{Event, EventStatus, Window, WindowEvent, WindowHandler, WindowOpenOptions};
 use daw_standalone::audio_engine::plugin_host::{ClapHost, LoadedClapPlugin};
-use raw_window_handle::{HasWindowHandle, RawWindowHandle};
-use winit::application::ApplicationHandler;
-use winit::dpi::PhysicalSize;
-use winit::event::WindowEvent;
-use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
-use winit::window::{Window, WindowId};
-
-/// How often we run the plugin's deferred main-thread work. REAPER's UI
-/// timer runs at ~30 Hz; 60 Hz keeps dioxus editors snappy.
-const PUMP_INTERVAL: Duration = Duration::from_millis(16);
+use raw_window_handle::HasWindowHandle;
 
 fn resolve_bundle(arg: &str) -> PathBuf {
     let direct = PathBuf::from(arg);
@@ -49,97 +46,37 @@ fn resolve_bundle(arg: &str) -> PathBuf {
     direct
 }
 
-struct HostApp {
-    bundle: PathBuf,
-    plugin_index: usize,
-    title: String,
-    plugin: Option<LoadedClapPlugin>,
-    window: Option<Window>,
-    next_pump: Instant,
+struct HostHandler {
+    /// `WindowHandler` methods take `&self` in baseview 0.2 — the plugin
+    /// lives behind a RefCell. Everything runs on the one GUI thread.
+    plugin: RefCell<Option<LoadedClapPlugin>>,
 }
 
-impl ApplicationHandler for HostApp {
-    fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-        if self.window.is_some() {
-            return;
-        }
-
-        // Parent window first — the plugin needs its handle at set_parent
-        // time. Sized provisionally; we adopt the plugin's reported size
-        // right after the GUI is created.
-        let window = event_loop
-            .create_window(
-                Window::default_attributes()
-                    .with_title(self.title.clone())
-                    .with_inner_size(PhysicalSize::new(800, 500)),
-            )
-            .expect("creating the host window");
-
-        let raw: RawWindowHandle = window
-            .window_handle()
-            .expect("host window handle")
-            .as_raw();
-
-        let mut plugin = ClapHost::default()
-            .load(&self.bundle, self.plugin_index)
-            .unwrap_or_else(|e| panic!("loading {}: {e:?}", self.bundle.display()));
-        eprintln!(
-            "hosting {} ({}) — embedded GUI",
-            plugin.descriptor().name,
-            plugin.descriptor().id
-        );
-
-        match plugin.open_gui_embedded(raw) {
-            Ok((w, h)) => {
-                let _ = window.request_inner_size(PhysicalSize::new(w, h));
-            }
-            Err(e) => {
-                eprintln!("error: plugin GUI failed to embed: {e:?}");
-                event_loop.exit();
-                return;
-            }
-        }
-
-        self.plugin = Some(plugin);
-        self.window = Some(window);
-        self.next_pump = Instant::now();
-    }
-
-    fn window_event(
-        &mut self,
-        event_loop: &ActiveEventLoop,
-        _window_id: WindowId,
-        event: WindowEvent,
-    ) {
-        match event {
-            WindowEvent::CloseRequested => {
-                if let Some(plugin) = &mut self.plugin {
-                    plugin.close_gui();
-                }
-                event_loop.exit();
-            }
-            WindowEvent::Resized(size) => {
-                // Host-side resize → offer the new size to the plugin. The
-                // plugin may clamp it (fixed-size editors refuse).
-                if let Some(plugin) = &mut self.plugin {
-                    if size.width > 0 && size.height > 0 {
-                        plugin.gui_set_size(size.width, size.height);
-                    }
-                }
-            }
-            _ => {}
+impl WindowHandler for HostHandler {
+    fn on_frame(&self) {
+        // The DAW-timer equivalent: run the plugin's deferred main-thread
+        // work every frame (~60 Hz) so param/GUI tasks keep flowing.
+        if let Some(plugin) = self.plugin.borrow_mut().as_mut() {
+            plugin.pump_main_thread();
         }
     }
 
-    fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
-        if let Some(plugin) = &mut self.plugin {
-            let now = Instant::now();
-            if now >= self.next_pump {
-                plugin.pump_main_thread();
-                self.next_pump = now + PUMP_INTERVAL;
+    fn resized(&self, new_size: baseview::WindowSize) {
+        if let Some(plugin) = self.plugin.borrow_mut().as_mut() {
+            let (w, h) = (new_size.physical.width, new_size.physical.height);
+            if w > 0 && h > 0 {
+                plugin.gui_set_size(w, h);
             }
-            event_loop.set_control_flow(ControlFlow::WaitUntil(self.next_pump));
         }
+    }
+
+    fn on_event(&self, event: Event) -> EventStatus {
+        if let Event::Window(WindowEvent::WillClose) = event {
+            if let Some(plugin) = self.plugin.borrow_mut().as_mut() {
+                plugin.close_gui();
+            }
+        }
+        EventStatus::Ignored
     }
 }
 
@@ -166,24 +103,42 @@ fn main() -> eyre::Result<()> {
         bundle.file_stem().unwrap_or_default().to_string_lossy()
     );
 
-    // nice-plug editors embed via X11 on Linux (no Wayland surface support
-    // in baseview) — force the X11 backend so the parent handle is Xlib.
-    #[cfg(target_os = "linux")]
-    let event_loop = {
-        use winit::platform::x11::EventLoopBuilderExtX11;
-        EventLoop::builder().with_x11().build()?
-    };
-    #[cfg(not(target_os = "linux"))]
-    let event_loop = EventLoop::new()?;
+    // open_blocking runs the build closure and the event loop on THIS
+    // (main) thread — where CLAP requires all main-thread calls to happen.
+    let mut options = WindowOpenOptions::default();
+    options.title = title;
+    options.size = baseview::dpi::LogicalSize::new(800.0, 500.0).into();
+    options.scale = baseview::WindowScalePolicy::SystemScaleFactor;
+    Window::open_blocking(
+        options,
+        move |ctx| {
+            let mut plugin = ClapHost::default()
+                .load(&bundle, plugin_index)
+                .unwrap_or_else(|e| panic!("loading {}: {e:?}", bundle.display()));
+            eprintln!(
+                "hosting {} ({}) — embedded GUI",
+                plugin.descriptor().name,
+                plugin.descriptor().id
+            );
 
-    let mut app = HostApp {
-        bundle,
-        plugin_index,
-        title,
-        plugin: None,
-        window: None,
-        next_pump: Instant::now(),
-    };
-    event_loop.run_app(&mut app)?;
+            let raw = ctx
+                .window_handle()
+                .expect("host window handle")
+                .as_raw();
+            match plugin.open_gui_embedded(raw) {
+                Ok((w, h)) => {
+                    ctx.resize(baseview::dpi::PhysicalSize::new(w, h));
+                }
+                Err(e) => {
+                    eprintln!("error: plugin GUI failed to embed: {e:?}");
+                    ctx.request_close();
+                }
+            }
+
+            HostHandler {
+                plugin: RefCell::new(Some(plugin)),
+            }
+        },
+    );
     Ok(())
 }

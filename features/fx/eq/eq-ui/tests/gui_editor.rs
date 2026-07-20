@@ -205,22 +205,13 @@ use support::{mount, ptr_key, Gesture};
 // Tests
 // ─────────────────────────────────────────────────────────────────────────
 
-/// The full editor mounts headless: header, graph widget node, band name
-/// labels (proof the EqGraph subtree rendered), overlay selector, and the
-/// inspector panel are all present, and the graph surface has real layout.
+/// The graph-only editor mounts headless: the graph widget node has real
+/// (non-collapsed) layout and the EqGraph subtree rendered its band name
+/// labels. The header / inspector / bottom bar are parked behind
+/// `SHOW_CHROME = false` in control_view.rs and must NOT render.
 #[tokio::test]
-async fn editor_mounts_headless_with_graph_and_inspector() -> dioxus_test::Result<()> {
+async fn editor_mounts_headless_graph_only() -> dioxus_test::Result<()> {
     let fx = mount();
-
-    // Header + inspector shell.
-    fx.tester
-        .query(":root")
-        .expect(inner_html(contains_substring("FTS EQ")))
-        .immediately()?;
-    fx.tester
-        .query(":root")
-        .expect(inner_html(contains_substring("Inspector")))
-        .immediately()?;
 
     // The graph custom-widget node exists and got a real (non-collapsed)
     // layout box — i.e. the re-injected Tailwind actually applied and the
@@ -231,7 +222,7 @@ async fn editor_mounts_headless_with_graph_and_inspector() -> dioxus_test::Resul
     assert!(h > 350.0, "graph surface too short for hit-testing: {h}px");
 
     // EqGraph subtree rendered: the default Gregory-Scott bands are named and
-    // their DOM name labels are present, as is the cheat-sheet overlay select.
+    // their DOM name labels are present.
     fx.tester
         .query(":root")
         .expect(inner_html(contains_substring("Low Shelf")))
@@ -240,25 +231,18 @@ async fn editor_mounts_headless_with_graph_and_inspector() -> dioxus_test::Resul
         .query(":root")
         .expect(inner_html(contains_substring("High Shelf")))
         .immediately()?;
-    fx.tester.query("select").immediately()?;
 
-    // Default state: two active bands, no band selected yet.
-    fx.tester
-        .query(":root")
-        .expect(inner_html(contains_substring("2 bands active")))
-        .immediately()?;
-    fx.tester
-        .query(":root")
-        .expect(inner_html(contains_substring("Select or add a band")))
-        .immediately()?;
+    // Chrome is parked: no header title, no inspector.
+    let html = fx.tester.query(":root").immediately()?.inner_html();
+    assert!(!html.contains("Inspector"), "inspector chrome leaked into the graph-only editor");
     Ok(())
 }
 
-/// A hit-tested click on band 2's node (High Shelf @ 2.5 kHz) selects it:
-/// the inspector switches from the empty state to the "Selected band"
-/// card for Band 2. A pure selection click must NOT touch any parameter.
+/// A hit-tested click on band 2's node (High Shelf @ 2.5 kHz) focuses it:
+/// the graph's band info popup appears with the band's frequency label
+/// ("2.5k"). A pure selection click must NOT touch any parameter.
 #[tokio::test]
-async fn clicking_a_band_node_selects_it_in_the_inspector() -> dioxus_test::Result<()> {
+async fn clicking_a_band_node_focuses_it_and_shows_its_popup() -> dioxus_test::Result<()> {
     let fx = mount();
     let (x, y) = fx.band_point(1);
 
@@ -269,12 +253,8 @@ async fn clicking_a_band_node_selects_it_in_the_inspector() -> dioxus_test::Resu
 
     fx.tester
         .query(":root")
-        .expect(inner_html(contains_substring("Selected band")))
+        .expect(inner_html(contains_substring("2.5k")))
         .await?;
-    fx.tester
-        .query(":root")
-        .expect(inner_html(contains_substring("Band 2")))
-        .immediately()?;
 
     // Selection alone is not an automation gesture.
     let log = fx.log.lock().unwrap();

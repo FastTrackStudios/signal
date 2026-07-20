@@ -94,6 +94,11 @@ pub fn App() -> Element {
 /// scope so shadcn primitives can resolve their theme tokens.
 #[component]
 fn AppShell() -> Element {
+    // Chrome (header / inspector / bottom bar) is parked while the editor is
+    // graph-only — the controls migrate INTO the graph surface piece by piece
+    // (issue #31). Flip to re-enable everything for reference.
+    const SHOW_CHROME: bool = false;
+
     let t = use_init_theme();
     let t = *t.read();
 
@@ -294,6 +299,7 @@ fn AppShell() -> Element {
             // Theme-driven: background `--card`, border `--border`, text
             // `--foreground` / `--muted-foreground`. Tailwind utilities
             // come from the fts-ui scan paths configured in tailwind.css.
+            if SHOW_CHROME { // header (parked: graph-only editor, issue #31)
             div {
                 class: "flex flex-wrap justify-between items-center gap-2 px-4 py-3 border-b border-border bg-card/50 backdrop-blur-sm",
                 div { class: "flex items-baseline gap-3 shrink-0",
@@ -329,6 +335,7 @@ fn AppShell() -> Element {
                         "FastTrackStudio"
                     }
                 }
+            }
             }
 
             // ── Main EQ graph + inspector ─────────────────────────
@@ -470,6 +477,7 @@ fn AppShell() -> Element {
                     }
                 }
 
+                if SHOW_CHROME { // inspector (parked: graph-only editor, issue #31)
                 Card {
                     class: "w-[310px] min-w-[290px] max-w-[34vw] overflow-hidden rounded-md flex flex-col".to_string(),
                     CardHeader { class: "p-3 pb-2".to_string(),
@@ -905,6 +913,7 @@ fn AppShell() -> Element {
                         }
                     }
                 }
+                }
             }
 
             // ── Bottom bar: meters + output gain ──────────────────
@@ -913,6 +922,7 @@ fn AppShell() -> Element {
             // the window is narrow, instead of clipping or overflowing.
             // Every panel is `shrink-0` so it stays whole if it can't
             // fit on the current row.
+            if SHOW_CHROME { // bottom bar (parked: graph-only editor, issue #31)
             div {
                 class: "flex flex-wrap items-center gap-4 px-4 py-3 border-t border-border bg-card/40",
                 LevelMeterDb { level_db: input_db, label: "IN".to_string(), height: 40.0 }
@@ -968,6 +978,7 @@ fn AppShell() -> Element {
                         size: KnobSize::Small,
                     }
                 }
+            }
             }
             ResizeHandle {
                 min_width: 600,

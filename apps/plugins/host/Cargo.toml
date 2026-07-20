@@ -15,7 +15,9 @@ path = "src/main.rs"
 # `decode` papers over a daw-standalone feature-gating gap: `clap-host`
 # alone fails to build (source.rs unconditionally uses the decoder).
 daw-standalone = { workspace = true, features = ["clap-host", "audio"] }
-# Parent window + event loop. rwh 0.6 matches clack's raw-window-handle_06.
-winit = "0.30"
+# Parent window + event loop: baseview (core X11, like REAPER's parent) —
+# winit selects XInput2 on its window, which starves the plugin's core-X11
+# baseview child of input. rwh 0.6 matches clack's raw-window-handle_06.
+baseview = "0.2.2"
 raw-window-handle = "0.6"
 eyre = { workspace = true }
