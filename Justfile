@@ -213,13 +213,18 @@ release-package: web-stage
 tailwind-eq:
     tailwindcss -i features/fx/eq/eq-ui/tailwind.css -o features/fx/eq/eq-ui/assets/tailwind.css --minify
 
+# Rebuild comp-ui's embedded Tailwind (features/fx/comp/comp-ui/assets/
+# tailwind.css) after class changes in comp-ui / fts-ui.
+tailwind-comp:
+    tailwindcss -i features/fx/comp/comp-ui/tailwind.css -o features/fx/comp/comp-ui/assets/tailwind.css --minify
+
 # Bundle every FTS plugin as .clap + .vst3 (target/bundled/, names from
 # bundler.toml). Debug of a single plugin: cargo run -p fts-plugin-xtask
 # -- bundle -p eq-plugin
 plugins-bundle:
     #!/usr/bin/env bash
     set -euo pipefail
-    for p in eq comp reverb delay tune modulation nam level saturate signal guide gate limiter; do
+    for p in eq comp reverb delay tune modulation nam level saturate signal guide gate limiter trigger; do
         cargo run -q -p fts-plugin-xtask -- bundle -p "$p-plugin" --release
     done
     ls target/bundled/

@@ -1,6 +1,6 @@
 //! FTS Comp — CLAP/VST3 compressor plugin.
 //!
-//! A thin nice-plug shell over the [`comp`] engine's stereo chain
+//! A nice-plug shell over the [`comp`] engine's stereo chain
 //! ([`comp::CompChain`]: linked detector → gain curve → hermite-smoothed gain
 //! reduction → makeup → parallel mix). The classic parameter set only —
 //! threshold / ratio / attack / release / knee / makeup / mix, plus the
@@ -12,121 +12,25 @@
 //! max-linked key (blended by `channel_link`), while gain smoothing and
 //! metering stay per channel inside the shared `ProC3Compressor` core.
 //!
-//! GUI is deliberately absent for now (headless, host-generic params),
-//! matching `level-plugin`; the nice-plug-dioxus editor is a follow-up.
+//! Params + shared UI state live in [`comp_ui::params`] (like `eq-ui`), so
+//! the Dioxus editor ([`comp_ui::control_view::App`]) renders against them
+//! without a circular dep.
 
-use nice_plug::prelude::*;
+use audiocore_core::prelude::*;
 use std::sync::Arc;
+use std::sync::atomic::Ordering;
 
 use comp::CompChain;
+use comp_ui::params::{CompParams, CompUiState};
 
 const PLUGIN_NAME: &str = "FTS Comp";
-
-// ── Parameters ────────────────────────────────────────────────────────────
-
-#[derive(Params)]
-pub struct CompParams {
-    /// Level above which compression starts.
-    #[id = "threshold"]
-    pub threshold_db: FloatParam,
-    /// Compression ratio (1:1 = off).
-    #[id = "ratio"]
-    pub ratio: FloatParam,
-    /// Attack time.
-    #[id = "attack"]
-    pub attack_ms: FloatParam,
-    /// Release time.
-    #[id = "release"]
-    pub release_ms: FloatParam,
-    /// Soft-knee width around the threshold (0 = hard knee).
-    #[id = "knee"]
-    pub knee_db: FloatParam,
-    /// Makeup (output) gain applied after compression.
-    #[id = "makeup"]
-    pub makeup_db: FloatParam,
-    /// Parallel (dry/wet) mix — the engine's `fold` parameter.
-    #[id = "mix"]
-    pub mix: FloatParam,
-    /// Stereo detector link (1 = fully linked max of both channels).
-    #[id = "link"]
-    pub stereo_link: FloatParam,
-}
-
-impl Default for CompParams {
-    fn default() -> Self {
-        Self {
-            threshold_db: FloatParam::new(
-                "Threshold",
-                -20.0,
-                FloatRange::Linear { min: -60.0, max: 0.0 },
-            )
-            .with_unit(" dB")
-            .with_value_to_string(formatters::v2s_f32_rounded(1)),
-            ratio: FloatParam::new(
-                "Ratio",
-                4.0,
-                FloatRange::Skewed {
-                    min: 1.0,
-                    max: 20.0,
-                    factor: FloatRange::skew_factor(-1.5),
-                },
-            )
-            .with_unit(":1")
-            .with_value_to_string(formatters::v2s_f32_rounded(1)),
-            attack_ms: FloatParam::new(
-                "Attack",
-                3.0,
-                FloatRange::Skewed {
-                    min: 0.005,
-                    max: 300.0,
-                    factor: FloatRange::skew_factor(-2.0),
-                },
-            )
-            .with_unit(" ms")
-            .with_value_to_string(formatters::v2s_f32_rounded(1)),
-            release_ms: FloatParam::new(
-                "Release",
-                100.0,
-                FloatRange::Skewed {
-                    min: 10.0,
-                    max: 3000.0,
-                    factor: FloatRange::skew_factor(-2.0),
-                },
-            )
-            .with_unit(" ms")
-            .with_value_to_string(formatters::v2s_f32_rounded(0)),
-            knee_db: FloatParam::new(
-                "Knee",
-                6.0,
-                FloatRange::Linear { min: 0.0, max: 24.0 },
-            )
-            .with_unit(" dB")
-            .with_value_to_string(formatters::v2s_f32_rounded(1)),
-            makeup_db: FloatParam::new(
-                "Makeup",
-                0.0,
-                FloatRange::Linear { min: -24.0, max: 24.0 },
-            )
-            .with_unit(" dB")
-            .with_value_to_string(formatters::v2s_f32_rounded(1)),
-            mix: FloatParam::new("Mix", 1.0, FloatRange::Linear { min: 0.0, max: 1.0 })
-                .with_unit("%")
-                .with_value_to_string(formatters::v2s_f32_percentage(0)),
-            stereo_link: FloatParam::new(
-                "Stereo Link",
-                1.0,
-                FloatRange::Linear { min: 0.0, max: 1.0 },
-            )
-            .with_unit("%")
-            .with_value_to_string(formatters::v2s_f32_percentage(0)),
-        }
-    }
-}
 
 // ── Plugin ────────────────────────────────────────────────────────────────
 
 pub struct FtsComp {
     params: Arc<CompParams>,
+    ui_state: Arc<CompUiState>,
+    editor_state: Arc<DioxusState>,
     /// One stereo chain: linked detection, per-channel gain state inside.
     chain: CompChain,
     sample_rate: f64,
@@ -134,8 +38,12 @@ pub struct FtsComp {
 
 impl Default for FtsComp {
     fn default() -> Self {
+        let params = Arc::new(CompParams::default());
+        let ui_state = Arc::new(CompUiState::new(params.clone()));
         Self {
-            params: Arc::new(CompParams::default()),
+            params,
+            ui_state,
+            editor_state: DioxusState::new(|| (800, 420)),
             chain: CompChain::new(),
             sample_rate: 48_000.0,
         }
@@ -183,6 +91,14 @@ impl Plugin for FtsComp {
         self.params.clone()
     }
 
+    fn editor(&mut self, _async_executor: AsyncExecutor<Self>) -> Option<Box<dyn Editor>> {
+        create_dioxus_editor_with_state(
+            self.editor_state.clone(),
+            self.ui_state.clone(),
+            comp_ui::control_view::App,
+        )
+    }
+
     fn initialize(
         &mut self,
         _audio_io_layout: &AudioIOLayout,
@@ -190,6 +106,9 @@ impl Plugin for FtsComp {
         _context: &mut impl InitContext<Self>,
     ) -> bool {
         self.sample_rate = buffer_config.sample_rate as f64;
+        self.ui_state
+            .sample_rate
+            .store(buffer_config.sample_rate, Ordering::Relaxed);
         self.chain.update_sample_rate(self.sample_rate);
         true
     }
@@ -206,6 +125,8 @@ impl Plugin for FtsComp {
     ) -> ProcessStatus {
         self.sync_params();
 
+        let mut input_peak: f32 = 0.0;
+        let mut output_peak: f32 = 0.0;
         for mut frame in buffer.iter_samples() {
             let mut it = frame.iter_mut();
             let (Some(l), r) = (it.next(), it.next()) else {
@@ -215,12 +136,42 @@ impl Plugin for FtsComp {
             // Mono buses: feed the single channel to both sides of the chain
             // (the linked detector then behaves as plain mono detection).
             let mut right = r.as_ref().map(|s| **s as f64).unwrap_or(left);
+            input_peak = input_peak.max(left.abs().max(right.abs()) as f32);
             self.chain.process_sample(&mut left, &mut right);
+            output_peak = output_peak.max(left.abs().max(right.abs()) as f32);
             *l = left as f32;
             if let Some(r) = r {
                 *r = right as f32;
             }
         }
+
+        // ── UI metering (lock-free atomics; ~0.3 dB/block decay) ────────
+        self.ui_state
+            .gain_reduction_db
+            .store(self.chain.comp.gain_reduction_db() as f32, Ordering::Relaxed);
+
+        let prev_in = self.ui_state.input_peak_db.load(Ordering::Relaxed);
+        let in_db = if input_peak > 0.0 {
+            20.0 * input_peak.log10()
+        } else {
+            -100.0
+        };
+        self.ui_state.input_peak_db.store(
+            if in_db > prev_in { in_db } else { prev_in - 0.3 },
+            Ordering::Relaxed,
+        );
+
+        let prev_out = self.ui_state.output_peak_db.load(Ordering::Relaxed);
+        let out_db = if output_peak > 0.0 {
+            20.0 * output_peak.log10()
+        } else {
+            -100.0
+        };
+        self.ui_state.output_peak_db.store(
+            if out_db > prev_out { out_db } else { prev_out - 0.3 },
+            Ordering::Relaxed,
+        );
+
         ProcessStatus::Normal
     }
 }

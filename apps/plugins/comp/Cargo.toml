@@ -11,6 +11,7 @@ description = "FTS Comp — CLAP/VST3 compressor plugin over the comp engine"
 crate-type = ["cdylib", "lib"]
 
 [dependencies]
+audiocore-core = { workspace = true }
 # Plugin framework. `nice_plug` must be a DIRECT dep: `#[derive(Params)]` and
 # `nice_export_clap!`/`nice_export_vst3!` expand to absolute `::nice_plug::…`
 # paths, so the crate has to be nameable here. `vst3` is on by default.
@@ -18,3 +19,6 @@ nice-plug.workspace = true
 
 # The DSP facade (re-exports comp-dsp). Never depend on comp-dsp directly.
 comp.workspace = true
+# The full Dioxus plugin editor (control view, params, GR meter) —
+# `native` pulls nice-plug-dioxus/Blitz.
+comp-ui = { workspace = true, features = ["native"] }
