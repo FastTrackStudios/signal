@@ -1,0 +1,12 @@
+[package]
+name = "saturate-dsp"
+version.workspace = true
+edition = "2021"          # matches sibling fx DSP crates (comp-dsp, level-dsp)
+authors.workspace = true
+license.workspace = true
+description = "saturate-dsp — saturation engine: tanh/tape/tube waveshapers with drive, tone tilt, and loudness-compensated makeup."
+
+[dependencies]
+
+[dev-dependencies]
+approx = { workspace = true }
