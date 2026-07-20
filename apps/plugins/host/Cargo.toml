@@ -1,0 +1,21 @@
+[package]
+name = "fts-clap-host"
+version.workspace = true
+edition = "2021"
+authors.workspace = true
+license.workspace = true
+description = "fts-clap-host — launch any CLAP plugin's embedded GUI in a window (the REAPER-parity way to iterate on FTS plugin editors)"
+
+[[bin]]
+name = "fts-clap-host"
+path = "src/main.rs"
+
+[dependencies]
+# The clack-based CLAP host (bundle loading, embedded GUI, main-thread pump).
+# `decode` papers over a daw-standalone feature-gating gap: `clap-host`
+# alone fails to build (source.rs unconditionally uses the decoder).
+daw-standalone = { workspace = true, features = ["clap-host", "audio"] }
+# Parent window + event loop. rwh 0.6 matches clack's raw-window-handle_06.
+winit = "0.30"
+raw-window-handle = "0.6"
+eyre = { workspace = true }
