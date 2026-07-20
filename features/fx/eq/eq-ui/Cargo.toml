@@ -46,6 +46,14 @@ spectrum-analyzer = { workspace = true }
 # including dioxus's built-in task scheduler.
 futures-timer = { version = "3", optional = true }
 
+# The real-editor behavioral tests (tests/gui_editor.rs) mount
+# `control_view::App` — the `native`-gated plugin editor surface — on the
+# dioxus-test harness. Declared explicitly with required-features so a plain
+# `cargo test -p eq-ui` (no features) still builds and just skips it.
+[[test]]
+name = "gui_editor"
+required-features = ["native"]
+
 [dev-dependencies]
 # Headless GUI tests:
 # - tests/gui_smoke.rs — SSR structure tests (plain VirtualDom + dioxus-ssr).
