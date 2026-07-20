@@ -230,9 +230,22 @@ if [ -n "$WATCH_APP" ]; then
     echo "=== building watch companion ($WATCH_BUNDLE_ID) ==="
     WATCH_DIR="$ROOT/$WATCH_APP"
     # Regenerate the xcodeproj from project.yml (xcodegen from the flake registry).
-    ( cd "$WATCH_DIR" && "$NIX" run nixpkgs#xcodegen -- generate ) \
-        > /tmp/fts-watch-xcodegen.log 2>&1 || { echo "ERROR: xcodegen failed"; tail -20 /tmp/fts-watch-xcodegen.log; exit 1; }
+    # Self-heal a stale nix eval cache: after a store GC the cached eval can hand
+    # back a derivation whose `.drv` is gone ("don't know how to recreate store
+    # derivation …xcodegen…"), which `nix run` alone won't recover from. On the
+    # first failure, drop the eval cache and retry once so it re-evaluates fresh.
+    run_xcodegen() { ( cd "$WATCH_DIR" && "$NIX" run nixpkgs#xcodegen -- generate ); }
+    if ! run_xcodegen > /tmp/fts-watch-xcodegen.log 2>&1; then
+        echo "xcodegen failed; clearing nix eval cache + retrying" | tee -a /tmp/fts-watch-xcodegen.log
+        rm -rf "$HOME/.cache/nix"
+        run_xcodegen >> /tmp/fts-watch-xcodegen.log 2>&1 \
+            || { echo "ERROR: xcodegen failed"; tail -25 /tmp/fts-watch-xcodegen.log; exit 1; }
+    fi
     WATCH_DD="$(mktemp -d)"
+    # Clean the watch DerivedData on exit — otherwise every build leaks a
+    # multi-hundred-MB temp dir (they accumulated to gigabytes and filled the
+    # airlock disk, failing builds with "No space left on device").
+    trap 'rm -rf "$WATCH_DD"' EXIT
     # The watch build's Xcode is decoupled from the iOS build's: the dx iOS
     # Rust build's HOST build scripts fail to link under Xcode 27 beta
     # (ld: symbol(s) not found for arm64), so the main build must stay on the
