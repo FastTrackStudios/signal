@@ -15,3 +15,11 @@ profiles = []
 
 [dependencies]
 comp-dsp = { workspace = true }
+
+# Backs the `limiter` module (Airwindows clip primitives). The intended dep is
+# `limiter-dsp` (LimiterChain over AdClip/ClipSoftly/BlockParty/Loud), but that
+# crate is currently an all-stub skeleton whose manifest inherits a `fts-dsp`
+# workspace dep that does not exist in the root workspace — declaring a path
+# dep on it would break workspace resolution. Swap this for `limiter-dsp` once
+# that crate is implemented and registered at the root.
+audiocore-dsp = { workspace = true }

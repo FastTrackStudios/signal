@@ -14,7 +14,7 @@ path = "src/main.rs"
 nice-plug = { workspace = true }
 nice-plug-dioxus = { workspace = true }
 audiocore-core = { workspace = true }
-eq-ui = { workspace = true }
+eq-ui = { workspace = true, features = ["native"] }
 spectrum-analyzer = { workspace = true }
 atomic_float = { workspace = true }
 # Pulled directly so we can vendor a custom launch that captures the
@@ -33,10 +33,10 @@ dioxus-signals = "0.7"
 # (ALSA/PipeWire/PulseAudio on Linux, CoreAudio on macOS, WASAPI on Windows);
 # the app appears as an input node you can patch the system-audio monitor into
 # (e.g. via qpwgraph on PipeWire) without touching the output path.
-cpal = "0.15"
+cpal = { workspace = true }
 anyhow = { workspace = true }
 # Native PipeWire capture. Setting `stream.capture.sink = true` makes PipeWire
 # auto-connect our input stream to the default sink's monitor — so the analyzer
 # shows live system audio with no manual patchbay routing (the approach cava
 # uses). cpal stays as a fallback for non-PipeWire systems / `FTS_EQ_CAPTURE=cpal`.
-pipewire = "0.8"
+pipewire = "0.10"

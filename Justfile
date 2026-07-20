@@ -214,7 +214,7 @@ release-package: web-stage
 plugins-bundle:
     #!/usr/bin/env bash
     set -euo pipefail
-    for p in eq comp reverb delay tune modulation nam level saturate signal guide; do
+    for p in eq comp reverb delay tune modulation nam level saturate signal guide gate limiter; do
         cargo run -q -p fts-plugin-xtask -- bundle -p "$p-plugin" --release
     done
     ls target/bundled/

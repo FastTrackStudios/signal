@@ -1,20 +1,21 @@
 [package]
 name = "eq-plugin"
 version.workspace = true
-edition = "2021"          # matches the nice-plug plugin stack (signal-sampler-clap)
 authors.workspace = true
 license.workspace = true
-description = "FTS EQ — CLAP/VST3 parametric equalizer (low/high cut, shelves, peaks) over the eq engine"
+edition = "2021"          # kept on 2021 — pre-move signal workspace edition; migrate deliberately
+description = "FTS EQ — CLAP/VST3 audio plugin entry point"
 
 [lib]
-# cdylib → the loadable CLAP/VST3 binary; lib → tests + a future standalone host.
 crate-type = ["cdylib", "lib"]
 
 [dependencies]
-# Plugin framework. `nice_plug` must be a DIRECT dep: `#[derive(Params)]` and
-# `nice_export_clap!`/`nice_export_vst3!` expand to absolute `::nice_plug::…`
-# paths, so the crate has to be nameable here. `vst3` is on by default.
-nice-plug.workspace = true
-
-# The DSP facade (re-exports eq-dsp). Never depend on eq-dsp directly.
-eq.workspace = true
+audiocore-core = { workspace = true }
+eq-dsp = { workspace = true }
+eq-profiles = { workspace = true }
+# The full Dioxus plugin editor (control view, EQ graph, spectrum) —
+# `native` pulls nice-plug-dioxus/Blitz.
+eq-ui = { workspace = true, features = ["native"] }
+audiocore-dsp = { workspace = true }
+nice-plug = { workspace = true }
+spectrum-analyzer = { workspace = true }

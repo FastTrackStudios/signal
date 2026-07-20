@@ -34,3 +34,9 @@ name = "FTS Signal"
 
 [guide-plugin]
 name = "FTS Guide"
+
+[gate-plugin]
+name = "FTS Gate"
+
+[limiter-plugin]
+name = "FTS Limiter"
