@@ -141,6 +141,7 @@ impl Chorale {
             ChoirVoice::Soprano => 1.4,
         };
 
+        #[allow(clippy::needless_range_loop)]
         for i in 0..3 {
             let base = VOWEL_FORMANTS[lo][i] * (1.0 - frac) + VOWEL_FORMANTS[hi][i] * frac;
             // Per-channel formant drift from the mod randomization.

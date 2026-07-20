@@ -231,7 +231,7 @@ impl<S: SignalApi> SetlistOps<S> {
                     id: setlist_id.to_string(),
                 })?;
         setlist.add_entry(entry);
-        Ok(self.save(setlist).await?)
+        self.save(setlist).await
     }
 
     /// Remove an entry, returning an error if the setlist or entry doesn't exist.

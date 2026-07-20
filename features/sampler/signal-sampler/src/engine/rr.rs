@@ -26,6 +26,12 @@ pub struct RrCounters {
     rr_start: usize,
 }
 
+impl Default for RrCounters {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl RrCounters {
     pub fn new() -> Self {
         Self {

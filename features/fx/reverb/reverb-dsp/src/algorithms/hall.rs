@@ -182,6 +182,7 @@ impl Hall {
         let base_delays = [137, 173, 211, 257, 307, 359, 419, 479];
         let scale = self.sample_rate / 48000.0 * self.size.max(0.2);
 
+        #[allow(clippy::needless_range_loop)]
         for i in 0..FDN_MOD_AP_COUNT {
             let delay = ((base_delays[i] as f64) * scale) as usize;
             self.mod_ap_l[i].sample_delay = delay.max(4);

@@ -213,7 +213,7 @@ impl FilterDelay {
             one_shot_phase: 1.0,
             attack_env: audiocore_dsp::envelope::EnvelopeFollower::new(0.0),
             attack_gate: false,
-            rng: XorShift32::new(0xF117_E4),
+            rng: XorShift32::new(0x00F1_17E4),
             ctrl_countdown: 0,
         }
     }

@@ -148,7 +148,7 @@ fn build_module_chain(children: &[FxNode], routing: &FxRoutingMode) -> (SignalCh
             FxNodeKind::Container { name, .. } => {
                 blocks.push(ModuleBlock::new(
                     name,
-                    &clean_container_name(name),
+                    clean_container_name(name),
                     infer_block_type_from_name(name),
                     ModuleBlockSource::Inline {
                         block: Block::default(),
@@ -205,10 +205,7 @@ fn infer_block_type(plugin_name: &str, display_name: &str) -> BlockType {
 /// multi-FX blocks).
 fn infer_block_type_from_name(container_name: &str) -> BlockType {
     // Try FxRole::parse directly — handles "[B] Type Block: name"
-    match FxRole::parse(container_name) {
-        FxRole::Block { block_type, .. } => return block_type,
-        _ => {}
-    }
+    if let FxRole::Block { block_type, .. } = FxRole::parse(container_name) { return block_type }
     // Fallback: strip [B] prefix, parse "Type: name" where prefix is the block type
     let stripped = strip_role_prefix(container_name);
     if let Some(block_type) = parse_type_colon_prefix(stripped) {
@@ -225,10 +222,7 @@ fn infer_block_type_from_name(container_name: &str) -> BlockType {
 /// - `"DRIVE"` → synthetic "DRIVE Module: _" parse
 fn infer_module_type(container_name: &str) -> ModuleType {
     // 1. Try FxRole::parse directly — handles "[M] TYPE Module: name"
-    match FxRole::parse(container_name) {
-        FxRole::Module { module_type, .. } => return module_type,
-        _ => {}
-    }
+    if let FxRole::Module { module_type, .. } = FxRole::parse(container_name) { return module_type }
     // 2. Strip [M]/[B] prefix, then parse "Type: name" where prefix is the module type
     let stripped = strip_role_prefix(container_name);
     if let Some((type_part, _)) = stripped.split_once(':') {

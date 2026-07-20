@@ -110,7 +110,7 @@ pub fn poll() {
 
         if target_name.is_empty() {
             // No active scene at this position — mute ALL sends for this controller
-            for (_, &send_idx) in &ctrl.name_to_send_index {
+            for &send_idx in ctrl.name_to_send_index.values() {
                 daw.set_send_muted(&ctrl.input_track_guid, send_idx, true);
             }
             if !old.is_empty() {
@@ -121,7 +121,7 @@ pub fn poll() {
             }
         } else if let Some(&target_send_idx) = ctrl.name_to_send_index.get(target_name) {
             // Active scene — unmute the target send, mute all others
-            for (_, &send_idx) in &ctrl.name_to_send_index {
+            for &send_idx in ctrl.name_to_send_index.values() {
                 daw.set_send_muted(
                     &ctrl.input_track_guid,
                     send_idx,

@@ -133,7 +133,7 @@ impl<S: SignalApi> ProfileOps<S> {
                     .clone()
                 {
                     let applied = match rig_applier
-                        .switch_scene(&rig_id.to_string(), &scene_id.to_string(), Some(&p.name))
+                        .switch_scene(rig_id.as_ref(), scene_id.as_ref(), Some(&p.name))
                         .await
                     {
                         Ok(applied) => applied,
@@ -384,7 +384,7 @@ impl<S: SignalApi> ProfileOps<S> {
                     id: profile_id.to_string(),
                 })?;
         profile.add_patch(patch);
-        Ok(self.save(profile).await?)
+        self.save(profile).await
     }
 
     /// Remove a patch, returning an error if the profile or patch doesn't exist.

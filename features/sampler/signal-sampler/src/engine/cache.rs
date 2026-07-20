@@ -160,6 +160,12 @@ const SIGNAL_PACK_VERSION: u32 = 1;
 const SIGNAL_PACK_HEADER_LEN: usize = 64;
 const SIGNAL_PACK_KIND_FLAC_I24: u32 = 5;
 
+impl Default for SampleCache {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SampleCache {
     pub fn new() -> Self {
         Self {
@@ -330,7 +336,7 @@ impl SampleCache {
             .par_iter()
             .for_each(|(path, prepared, prepared_dir, packed)| {
                 let result = match packed {
-                    Some((pack_mmap, entry)) => load_pack_sample(&pack_mmap, entry),
+                    Some((pack_mmap, entry)) => load_pack_sample(pack_mmap, entry),
                     None => match prepared {
                         Some(entry) => {
                             load_prepared_sample(&Some(prepared_dir.clone().unwrap()), entry)
@@ -355,10 +361,10 @@ impl SampleCache {
                     }
                 }
                 let done = completed.fetch_add(1, Ordering::Relaxed) + 1;
-                if done <= 8 || done == total || done % 32 == 0 {
+                if done <= 8 || done == total || done.is_multiple_of(32) {
                     self.publish_loaded_snapshot();
                 }
-                if total >= 100 && (done == total || done % 250 == 0) {
+                if total >= 100 && (done == total || done.is_multiple_of(250)) {
                     tracing::info!("signal-sampler: preloaded {done}/{total} samples");
                 }
             });
@@ -425,7 +431,7 @@ impl SampleCache {
             // Publish the audio-thread snapshot incrementally so voices come
             // online during preload (publish clones the map — batch it).
             let done = completed.fetch_add(1, Ordering::Relaxed) + 1;
-            if done <= 8 || done == total || done % 64 == 0 {
+            if done <= 8 || done == total || done.is_multiple_of(64) {
                 self.publish_loaded_snapshot();
             }
         });
@@ -742,8 +748,7 @@ fn parse_extended80(b: &[u8]) -> f64 {
 
 fn load_wav(path: &Path) -> Result<SampleData, SamplerError> {
     let mut reader = hound::WavReader::open(path).map_err(|e| {
-        SamplerError::Io(std::io::Error::new(
-            std::io::ErrorKind::Other,
+        SamplerError::Io(std::io::Error::other(
             e.to_string(),
         ))
     })?;
@@ -757,8 +762,7 @@ fn load_wav(path: &Path) -> Result<SampleData, SamplerError> {
             .samples::<f32>()
             .map(|s| {
                 s.map_err(|e| {
-                    SamplerError::Io(std::io::Error::new(
-                        std::io::ErrorKind::Other,
+                    SamplerError::Io(std::io::Error::other(
                         e.to_string(),
                     ))
                 })
@@ -770,8 +774,7 @@ fn load_wav(path: &Path) -> Result<SampleData, SamplerError> {
                 .samples::<i32>()
                 .map(|s| {
                     s.map(|v| v as f32 / max).map_err(|e| {
-                        SamplerError::Io(std::io::Error::new(
-                            std::io::ErrorKind::Other,
+                        SamplerError::Io(std::io::Error::other(
                             e.to_string(),
                         ))
                     })
@@ -1029,7 +1032,7 @@ pub fn prepare_sample_cache<'a>(
         .map(|(i, path)| {
             let result = prepare_one_sample(cache_dir, i, path);
             let done = completed.fetch_add(1, Ordering::Relaxed) + 1;
-            if done == total || done % 100 == 0 {
+            if done == total || done.is_multiple_of(100) {
                 tracing::info!("signal-sampler: prepared {done}/{total} samples");
                 eprintln!("prepared {done}/{total} samples");
             }
@@ -1091,7 +1094,7 @@ pub fn create_signal_pack<'a>(
         .map(|path| {
             let result = pack_one_sample(path);
             let done = completed.fetch_add(1, Ordering::Relaxed) + 1;
-            if total >= 100 && (done == total || done % 100 == 0) {
+            if total >= 100 && (done == total || done.is_multiple_of(100)) {
                 tracing::info!("signal-sampler: packed {done}/{total} samples");
                 eprintln!("packed {done}/{total} samples");
             }
@@ -1369,23 +1372,20 @@ fn write_wav_f32(
         sample_format: hound::SampleFormat::Float,
     };
     let mut writer = hound::WavWriter::create(path, spec).map_err(|e| {
-        SamplerError::Io(std::io::Error::new(
-            std::io::ErrorKind::Other,
+        SamplerError::Io(std::io::Error::other(
             e.to_string(),
         ))
     })?;
 
     for sample in samples {
         writer.write_sample(*sample).map_err(|e| {
-            SamplerError::Io(std::io::Error::new(
-                std::io::ErrorKind::Other,
+            SamplerError::Io(std::io::Error::other(
                 e.to_string(),
             ))
         })?;
     }
     writer.finalize().map_err(|e| {
-        SamplerError::Io(std::io::Error::new(
-            std::io::ErrorKind::Other,
+        SamplerError::Io(std::io::Error::other(
             e.to_string(),
         ))
     })?;
@@ -1661,8 +1661,7 @@ fn invalid_data(message: impl Into<String>) -> SamplerError {
 
 fn load_flac(path: &Path) -> Result<SampleData, SamplerError> {
     let mut reader = claxon::FlacReader::open(path).map_err(|e| {
-        SamplerError::Io(std::io::Error::new(
-            std::io::ErrorKind::Other,
+        SamplerError::Io(std::io::Error::other(
             e.to_string(),
         ))
     })?;
@@ -1681,8 +1680,7 @@ fn load_flac_reader<R: Read>(
         .samples()
         .map(|s| {
             s.map(|v| v as f32 / max).map_err(|e| {
-                SamplerError::Io(std::io::Error::new(
-                    std::io::ErrorKind::Other,
+                SamplerError::Io(std::io::Error::other(
                     e.to_string(),
                 ))
             })

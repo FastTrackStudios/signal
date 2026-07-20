@@ -1021,6 +1021,12 @@ pub struct VoicePool {
     steal_policy: VoiceStealPolicy,
 }
 
+impl Default for VoicePool {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl VoicePool {
     pub fn new() -> Self {
         Self {
@@ -1063,11 +1069,10 @@ impl VoicePool {
         // Remove done voices first
         self.voices.retain(|v| !v.is_done());
 
-        if self.voices.len() >= self.max_voices {
-            if self.steal_one_for(&voice) == StealOutcome::DropIncoming {
+        if self.voices.len() >= self.max_voices
+            && self.steal_one_for(&voice) == StealOutcome::DropIncoming {
                 return;
             }
-        }
         self.voices.push(voice);
     }
 

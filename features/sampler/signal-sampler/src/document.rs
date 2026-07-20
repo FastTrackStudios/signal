@@ -395,10 +395,10 @@ fn kind_for_selector(
 /// concrete articulation (not a mode/toggle band). Mirrors [`kind_for_ks`]
 /// but keeps the identity — the per-note arrival pre-roll needs the actual
 /// zone articulation ids, not just the kind.
-fn artic_for_ks<'a>(
-    spec: &'a LibrarySpec,
+fn artic_for_ks(
+    spec: &LibrarySpec,
     ks_val: Option<u8>,
-) -> Option<&'a crate::spec::ArticulationSpec> {
+) -> Option<&crate::spec::ArticulationSpec> {
     let val = ks_val?;
     let label = spec.keyswitch.as_ref()?.cc58_function(val)?;
     spec.articulations
@@ -933,7 +933,7 @@ pub fn annotate(doc: &TrackDocument, spec: &LibrarySpec, sample_rate: u32) -> Sc
                         Some(arrival_ms) => {
                             let want = ((arrival_ms as f32 - start_off) * frac + bias).max(0.0);
                             let room = if ioi_ms > 0.0 {
-                                (ioi_ms as f32 - (ioi_ms as f32 * 0.35).max(150.0)).max(0.0)
+                                (ioi_ms - (ioi_ms * 0.35).max(150.0)).max(0.0)
                             } else {
                                 want
                             };

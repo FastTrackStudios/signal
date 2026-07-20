@@ -235,6 +235,7 @@ fn apply_decay_window(buf: &mut Vec<f64>, frac: f64, gate: bool) {
         // second half so the shortening is smooth, not a cliff.
         let ramp_start = keep / 2;
         let ramp_len = (keep - ramp_start).max(1);
+        #[allow(clippy::needless_range_loop)]
         for i in ramp_start..keep {
             let g = 1.0 - (i - ramp_start) as f64 / ramp_len as f64;
             buf[i] *= g;

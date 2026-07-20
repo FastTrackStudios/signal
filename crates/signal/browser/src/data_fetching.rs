@@ -33,7 +33,7 @@ pub async fn fetch_col2(signal: &Signal, nav: NavCategory, rig_type: RigType) ->
             let rigs = signal.rigs().list().await.unwrap_or_default();
             items.extend(
                 rigs.into_iter()
-                    .filter(|r| r.rig_type.map_or(false, |rt| rt == rig_type))
+                    .filter(|r| r.rig_type == Some(rig_type))
                     .map(|r| {
                         let meta = r.metadata().clone();
                         let tags = TagSet::from_tags(&meta.tags);
@@ -728,7 +728,7 @@ async fn resolve_node_params(node: &signal::SignalNode, lookup: &mut ParamLookup
                 ..
             } => {
                 let key = (preset_id.to_string(), snapshot_id.to_string());
-                if !lookup.contains_key(&key) {
+                if let std::collections::hash_map::Entry::Vacant(e) = lookup.entry(key) {
                     if let Some(block) = signal
                         .block_presets()
                         .load_variant(mb.block_type(), preset_id.clone(), snapshot_id.clone())
@@ -741,13 +741,13 @@ async fn resolve_node_params(node: &signal::SignalNode, lookup: &mut ParamLookup
                             .iter()
                             .map(|p| (p.name().to_string(), p.value().get()))
                             .collect();
-                        lookup.insert(key, params);
+                        e.insert(params);
                     }
                 }
             }
             signal::ModuleBlockSource::PresetDefault { preset_id, .. } => {
                 let key = (preset_id.to_string(), "default".to_string());
-                if !lookup.contains_key(&key) {
+                if let std::collections::hash_map::Entry::Vacant(e) = lookup.entry(key) {
                     if let Some(block) = signal
                         .block_presets()
                         .load_default(mb.block_type(), preset_id.clone())
@@ -760,7 +760,7 @@ async fn resolve_node_params(node: &signal::SignalNode, lookup: &mut ParamLookup
                             .iter()
                             .map(|p| (p.name().to_string(), p.value().get()))
                             .collect();
-                        lookup.insert(key, params);
+                        e.insert(params);
                     }
                 }
             }
@@ -808,7 +808,7 @@ mod tests {
         let rigs = signal.rigs().list().await.unwrap();
         let guitar_rigs: Vec<_> = rigs
             .into_iter()
-            .filter(|r| r.rig_type.map_or(false, |t| t == RigType::Guitar))
+            .filter(|r| r.rig_type == Some(RigType::Guitar))
             .collect();
 
         assert!(!guitar_rigs.is_empty(), "expected at least one Guitar rig");

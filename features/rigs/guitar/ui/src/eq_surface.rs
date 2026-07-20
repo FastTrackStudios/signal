@@ -160,7 +160,7 @@ pub fn EqProSurface(block: LiveBlock, spectrum: Vec<f32>) -> Element {
 
     let sel = selected();
     let sel_band = sel.and_then(|i| bands.get(i).cloned()).filter(|b| b.used);
-    let block_id = block.id.clone();
+    let _block_id = block.id.clone();
     let bands_for_move = bands.clone();
     let bands_for_down = bands.clone();
     let bands_for_wheel = bands.clone();

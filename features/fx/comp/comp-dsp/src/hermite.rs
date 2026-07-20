@@ -50,6 +50,7 @@ impl HermiteCubicSmoother {
     /// 2. Detect change: threshold = gr_inst * 0.001, compare with history
     /// 3. Route: Hermite cubic if change detected, sqrt(gr_inst) if steady state
     /// 4. Update history for next sample
+    #[allow(clippy::too_many_arguments)]
     pub fn process(
         &mut self,
         gr_inst: f64,

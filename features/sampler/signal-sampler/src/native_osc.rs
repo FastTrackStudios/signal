@@ -252,7 +252,7 @@ mod tests {
             note_expressions: &[],
         };
         // 1 s of blocks ≫ the 150 ms release.
-        for _ in 0..(48_000 / 512 + 1) * 1 {
+        for _ in 0..(48_000 / 512 + 1) {
             osc.render(&inl, &inr, &mut outl, &mut outr, &ev);
         }
         assert_eq!(osc.active_voices(), 0, "voice reaped after release");

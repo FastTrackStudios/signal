@@ -286,7 +286,7 @@
         let (lo, hi, blend) = probe(33);
         assert_eq!(lo, "p");
         assert_eq!(hi, "mf");
-        assert!(blend >= 0.0 && blend <= 1.0);
+        assert!((0.0..=1.0).contains(&blend));
 
         let (lo, hi, blend) = probe(50);
         assert_eq!(lo, "mf");
