@@ -1,0 +1,22 @@
+[package]
+name = "guide-plugin"
+version.workspace = true
+edition = "2021"          # matches the nice-plug plugin stack (signal-sampler-clap)
+authors.workspace = true
+license.workspace = true
+description = "FTS Guide — CLAP/VST3 click/guide generator over the session-guide engine, driven by the host transport"
+
+[lib]
+# cdylib → the loadable CLAP/VST3 binary; lib → tests + a future standalone host.
+crate-type = ["cdylib", "lib"]
+
+[dependencies]
+# Plugin framework. `nice_plug` must be a DIRECT dep: `#[derive(Params)]` and
+# `nice_export_clap!`/`nice_export_vst3!` expand to absolute `::nice_plug::…`
+# paths, so the crate has to be nameable here. `vst3` is on by default.
+nice-plug.workspace = true
+
+# The portable guide engine (click / count-in / section guide, ported from
+# legacy fts-guide). The plugin drives it with a per-block `BlockClock`
+# built from the host transport.
+session-guide.workspace = true

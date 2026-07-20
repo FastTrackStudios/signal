@@ -1,0 +1,19 @@
+[package]
+name = "saturate-plugin"
+version.workspace = true
+edition = "2021"          # matches the nice-plug plugin stack (level-plugin, tune-plugin)
+authors.workspace = true
+license.workspace = true
+description = "FTS Saturate — CLAP/VST3 saturation plugin (tanh/tape/tube/hard curves) over the saturate engine"
+
+[lib]
+# cdylib → the loadable CLAP/VST3 binary; lib → tests + a future standalone host.
+crate-type = ["cdylib", "lib"]
+
+[dependencies]
+# Plugin framework. Must be a direct dep — the export macros expand to
+# absolute `::nice_plug::…` paths.
+nice-plug.workspace = true
+
+# The DSP facade (re-exports saturate-dsp). Never depend on saturate-dsp directly.
+saturate.workspace = true

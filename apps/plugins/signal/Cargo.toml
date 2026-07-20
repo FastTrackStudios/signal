@@ -1,0 +1,31 @@
+[package]
+name = "signal-plugin"
+version.workspace = true
+edition = "2021"          # matches the nice-plug plugin stack (signal-sampler-clap, level-plugin)
+authors.workspace = true
+license.workspace = true
+description = "FTS Signal — all-in-one rig-platform CLAP/VST3 plugin (v0: .signalpack sampler rigs over signal-sampler; FX-chain rig hosting arrives when the signal facade grows a headless rig-host API)"
+
+[lib]
+# cdylib → the loadable CLAP/VST3 binary; lib → tests + a future standalone host.
+crate-type = ["cdylib", "lib"]
+
+[dependencies]
+# Plugin framework. `nice_plug` must be a DIRECT dep: `#[derive(Params)]` and
+# `nice_export_clap!`/`nice_export_vst3!` expand to absolute `::nice_plug::…`
+# paths, so the crate has to be nameable here. `vst3` is on by default.
+nice-plug.workspace = true
+
+# The sampler engine — the one rig backend the signal facade exposes headlessly
+# today (see crate docs for the facade gaps blocking full rig hosting).
+signal-sampler.workspace = true
+
+# Rig config (.styx) parsing — same stack as signal-sampler-clap's PatchConfig
+facet.workspace = true
+facet-styx.workspace = true
+
+# Observability (file logger — hosts eat stderr)
+tracing.workspace = true
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+
+eyre.workspace = true

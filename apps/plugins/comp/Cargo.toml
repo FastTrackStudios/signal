@@ -1,0 +1,20 @@
+[package]
+name = "comp-plugin"
+version.workspace = true
+edition = "2021"          # matches the nice-plug plugin stack (signal-sampler-clap)
+authors.workspace = true
+license.workspace = true
+description = "FTS Comp — CLAP/VST3 compressor plugin over the comp engine"
+
+[lib]
+# cdylib → the loadable CLAP/VST3 binary; lib → tests + a future standalone host.
+crate-type = ["cdylib", "lib"]
+
+[dependencies]
+# Plugin framework. `nice_plug` must be a DIRECT dep: `#[derive(Params)]` and
+# `nice_export_clap!`/`nice_export_vst3!` expand to absolute `::nice_plug::…`
+# paths, so the crate has to be nameable here. `vst3` is on by default.
+nice-plug.workspace = true
+
+# The DSP facade (re-exports comp-dsp). Never depend on comp-dsp directly.
+comp.workspace = true
