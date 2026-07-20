@@ -58,6 +58,10 @@ impl WindowHandler for HostHandler {
         // work every frame (~60 Hz) so param/GUI tasks keep flowing.
         if let Some(plugin) = self.plugin.borrow_mut().as_mut() {
             plugin.pump_main_thread();
+            // GUI-only host: drain GUI-issued param gestures every frame —
+            // the process() loop that normally applies them doesn't exist
+            // here, and without this the editor's edits never take effect.
+            plugin.flush_params();
         }
     }
 
@@ -71,6 +75,18 @@ impl WindowHandler for HostHandler {
     }
 
     fn on_event(&self, event: Event) -> EventStatus {
+        // Diagnostic (FTS_HOST_TRACE=1): any mouse/key event that reaches the
+        // PARENT window was NOT delivered to the plugin's child window —
+        // routing telemetry for embedded-input debugging. Notably, keyboard
+        // events currently land HERE (the child never gets focus) — keyboard
+        // forwarding is a known gap.
+        if std::env::var_os("FTS_HOST_TRACE").is_some() {
+            match &event {
+                Event::Mouse(m) => eprintln!("[parent] mouse: {m:?}"),
+                Event::Keyboard(k) => eprintln!("[parent] key: {k:?}"),
+                _ => {}
+            }
+        }
         if let Event::Window(WindowEvent::WillClose) = event {
             if let Some(plugin) = self.plugin.borrow_mut().as_mut() {
                 plugin.close_gui();
