@@ -221,11 +221,11 @@ impl GuitarRigBackend {
         // checked every ~2 s, so a mid-set replug comes back on its own.
         // `rescan_stream` drops the old stream's OS clients BEFORE opening
         // anew (the ALSA-seq queue-exhaustion invariant).
-        if pump.tick == 1 || pump.tick % 60 == 0 {
+        if pump.tick == 1 || pump.tick.is_multiple_of(60) {
             midicore::attach::rescan_stream(&mut pump.midi, &mut pump.midi_ports);
         }
         // Flush pending auto-saves (live edits + position) about once a second.
-        if pump.tick % 30 == 0 {
+        if pump.tick.is_multiple_of(30) {
             if self
                 .library_dirty
                 .swap(false, std::sync::atomic::Ordering::Relaxed)

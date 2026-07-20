@@ -257,6 +257,7 @@ fn count_chain_width(nodes: &[signal_proto::SignalNode]) -> usize {
 }
 
 /// Recursively flatten SignalNodes into GridSlots, handling splits.
+#[allow(clippy::too_many_arguments)]
 fn flatten_chain_nodes(
     nodes: &[signal_proto::SignalNode],
     module_key: &str,
@@ -337,6 +338,7 @@ fn flatten_chain_nodes(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn place_module(
     nodes: &[signal_proto::SignalNode],
     module_key: &str,

@@ -54,8 +54,8 @@ pub fn use_rig_state() -> RigViewState {
     let mut out_peak_db = use_signal(|| -90.0f32);
     let mut stereo_db = use_signal(|| (-90.0f32, -90.0f32, -90.0f32, -90.0f32));
     let mut comp_gr_db = use_signal(|| 0.0f32);
-    let mut spectrum = use_signal(Vec::<f32>::new);
-    let mut comp_wave = use_signal(|| (Vec::<f32>::new(), Vec::<f32>::new()));
+    let spectrum = use_signal(Vec::<f32>::new);
+    let comp_wave = use_signal(|| (Vec::<f32>::new(), Vec::<f32>::new()));
     let mut perf = use_signal(PerformanceModel::default);
     let mut blocks = use_signal(Vec::<LiveBlock>::new);
     let mut active_patch = use_signal(|| None::<String>);

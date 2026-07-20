@@ -203,7 +203,8 @@ impl CloudChannel {
             input_mix: 0.0,
             early_out: 1.0,
             line_out: 1.0,
-            cross_seed: if is_right { 0.5 } else { 0.5 },
+            // Same seed both sides (kept explicit for future L/R spread).
+            cross_seed: 0.5,
             is_right,
         };
 

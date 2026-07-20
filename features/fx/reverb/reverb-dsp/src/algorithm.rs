@@ -633,6 +633,7 @@ pub trait ReverbAlgorithm: Send {
     /// the slot as cheap `Arc` clones (RT-safe — no allocation) and
     /// clears the dirty flag for that slot. `None` = nothing to do or
     /// original unavailable.
+    #[allow(clippy::type_complexity)]
     fn impulse_reshape_source(
         &mut self,
         slot: IrSlot,

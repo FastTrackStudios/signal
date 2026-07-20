@@ -167,6 +167,7 @@ impl Bloom {
         let mut out = [0.0; NUM_LINES];
         for i in 0..NUM_LINES {
             out[i] = vals[i] * direct;
+            #[allow(clippy::needless_range_loop)]
             for j in 0..NUM_LINES {
                 if j != i {
                     out[i] += vals[j] * cross;

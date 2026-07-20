@@ -128,6 +128,7 @@ pub fn track_templates_root() -> PathBuf {
 ///
 /// # Returns
 /// The path to the written `.RTrackTemplate` file.
+#[allow(clippy::too_many_arguments)]
 pub fn save_track_template(
     preset_name: &str,
     variation_name: &str,

@@ -61,7 +61,7 @@ required-features = ["native"]
 #   the vendored dioxus-test (libs/vendor/dioxus-test, backported to the
 #   workspace dioxus 0.7.9 + blitz pins — no 0.8-alpha migration needed).
 dioxus = { workspace = true }
-dioxus-ssr = { version = "=0.7.9", default-features = false }
+dioxus-ssr = { git = "https://github.com/DioxusLabs/dioxus", rev = "f717a8e184a522d078b70bb4b4d62a5f9a99ddfc", default-features = false }
 dioxus-test = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt"] }
 test-that = { version = "0.5.2", default-features = false, features = ["regex", "num-traits"] }

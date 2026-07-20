@@ -133,8 +133,6 @@ fn render_block_menu(
                 index: 0usize,
                 on_select: {
                     let slot = slot.clone();
-                    let on_save = on_save;
-                    let on_close = on_close;
                     move |_: String| {
                         if let Some(ref cb) = on_save {
                             cb.call(slot.clone());
@@ -169,7 +167,6 @@ fn render_block_menu(
                 on_select: {
                     let slot = slot.clone();
                     let on_snap = on_save_block_snapshot;
-                    let on_close = on_close;
                     move |_: String| {
                         if let Some(ref cb) = on_snap {
                             cb.call(slot.clone());
@@ -212,9 +209,6 @@ fn render_block_menu(
                     oninput: move |evt| save_name.set(evt.value()),
                     onkeydown: {
                         let slot = slot.clone();
-                        let on_save_as_new = on_save_as_new;
-                        let on_save_block_snapshot_as = on_save_block_snapshot_as;
-                        let on_close = on_close;
                         move |evt: KeyboardEvent| {
                             if evt.key() == Key::Enter {
                                 let name = name_for_keydown.clone();
@@ -248,9 +242,6 @@ fn render_block_menu(
                         disabled: is_name_empty,
                         onclick: {
                             let slot = slot.clone();
-                            let on_save_as_new = on_save_as_new;
-                            let on_save_block_snapshot_as = on_save_block_snapshot_as;
-                            let on_close = on_close;
                             move |_| {
                                 let name = name_for_btn.clone();
                                 if !name.is_empty() {
@@ -363,9 +354,6 @@ fn render_module_menu(
                     oninput: move |evt| save_name.set(evt.value()),
                     onkeydown: {
                         let slots = module_slots.clone();
-                        let on_save_module_preset_as = on_save_module_preset_as;
-                        let on_save_module_snapshot_as = on_save_module_snapshot_as;
-                        let on_close = on_close;
                         move |evt: KeyboardEvent| {
                             if evt.key() == Key::Enter {
                                 let name = name_for_keydown.clone();
@@ -399,9 +387,6 @@ fn render_module_menu(
                         disabled: is_name_empty,
                         onclick: {
                             let slots = module_slots.clone();
-                            let on_save_module_preset_as = on_save_module_preset_as;
-                            let on_save_module_snapshot_as = on_save_module_snapshot_as;
-                            let on_close = on_close;
                             move |_| {
                                 let name = name_for_btn.clone();
                                 if !name.is_empty() {

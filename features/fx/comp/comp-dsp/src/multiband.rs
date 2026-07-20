@@ -162,9 +162,9 @@ impl CompressionBand {
         const HYSTERESIS_WIDTH: f64 = 4.0;
         const DETECTION_THRESHOLD: f64 = 40.0;
 
-        let output_with_hysteresis = if band2_output > DETECTION_THRESHOLD {
-            band2_output
-        } else if band2_output < (DETECTION_THRESHOLD - HYSTERESIS_WIDTH) {
+        let hysteresis_zone =
+            (DETECTION_THRESHOLD - HYSTERESIS_WIDTH)..=DETECTION_THRESHOLD;
+        let output_with_hysteresis = if !hysteresis_zone.contains(&band2_output) {
             band2_output
         } else {
             // Within hysteresis zone - use smoothed interpolation
@@ -312,6 +312,7 @@ impl MultiBandCompressor {
     /// 2. Detects level of band-specific audio
     /// 3. Applies compression to band-specific audio
     /// 4. Returns compressed band audio
+    ///
     /// Bands are summed for final output reconstruction
     pub fn process(&mut self, input: f64, channel: usize) -> f64 {
         // Process through all 3 bands and collect compressed band outputs

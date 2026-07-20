@@ -251,7 +251,7 @@ impl RigSceneManager {
                     state.project.clone()
                 })
                 .await
-                .map_err(|e| RigSceneApplyError::LoadError(e))?;
+                .map_err(RigSceneApplyError::LoadError)?;
 
             let rig_track = rig_load_result.rig_instance.rig_track;
 

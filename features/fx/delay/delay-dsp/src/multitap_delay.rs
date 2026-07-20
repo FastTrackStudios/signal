@@ -200,6 +200,7 @@ impl TapPreset {
             }
             // 3: eighth-note drive, alternating narrow pans. // interpretation
             3 => {
+                #[allow(clippy::needless_range_loop)]
                 for i in 0..8 {
                     let p = (i + 1) as f64 / 8.0;
                     let pan = if i % 2 == 0 { -0.4 } else { 0.4 };
@@ -268,6 +269,7 @@ impl TapPreset {
             }
             // 13: pan sweep L→R across even 16ths. // interpretation
             13 => {
+                #[allow(clippy::needless_range_loop)]
                 for i in 0..8 {
                     let p = (i + 1) as f64 / 8.0;
                     let pan = -1.0 + i as f64 * (2.0 / 7.0);

@@ -58,7 +58,7 @@ fn every_sample_ir_loads_and_transforms() {
     let transforms = IrTransforms::default();
 
     for path in &wavs {
-        let asset = IrAsset::load(path, SR).expect(&format!("decode {}", path.display()));
+        let asset = IrAsset::load(path, SR).unwrap_or_else(|_| panic!("decode {}", path.display()));
         assert!(asset.frames() > 0, "{:?} has 0 frames", path.file_name());
 
         let (l, r) = transforms.apply(&asset);

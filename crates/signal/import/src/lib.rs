@@ -108,8 +108,7 @@ pub async fn import_presets_with_library(
     let plugin_tag_value = collection
         .plugin_name
         .to_ascii_lowercase()
-        .replace(' ', "_")
-        .replace('-', "_");
+        .replace([' ', '-'], "_");
 
     let mut snapshots: Vec<Snapshot> = Vec::with_capacity(collection.snapshots.len());
 
@@ -132,7 +131,7 @@ pub async fn import_presets_with_library(
 
         // Vendor + plugin tags
         tag_set.insert(
-            StructuredTag::new(TagCategory::Vendor, &collection.vendor.to_ascii_lowercase())
+            StructuredTag::new(TagCategory::Vendor, collection.vendor.to_ascii_lowercase())
                 .with_source(TagSource::Imported),
         );
         tag_set.insert(
@@ -202,7 +201,7 @@ pub async fn import_presets_with_library(
         StructuredTag::new(TagCategory::Workflow, "imported").with_source(TagSource::Imported),
     );
     preset_tags.insert(
-        StructuredTag::new(TagCategory::Vendor, &collection.vendor.to_ascii_lowercase())
+        StructuredTag::new(TagCategory::Vendor, collection.vendor.to_ascii_lowercase())
             .with_source(TagSource::Imported),
     );
     preset_tags.insert(

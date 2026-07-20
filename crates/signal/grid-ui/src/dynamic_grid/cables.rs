@@ -172,6 +172,7 @@ pub(crate) fn resolve_cables(chain: &[GridSlot]) -> Vec<Cable> {
     }
 
     // (name, min_col, max_col, min_row, max_row, color, layer_group)
+    #[allow(clippy::type_complexity)]
     let mut group_map: Vec<(String, usize, usize, usize, usize, String, Option<String>)> =
         Vec::new();
     let mut seen: BTreeMap<String, usize> = BTreeMap::new();

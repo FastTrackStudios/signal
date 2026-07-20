@@ -123,7 +123,7 @@ async fn probe_chart(client: &SetlistServiceClient, stream: &SetlistServiceStrea
     let parsed = keyflow::parse(chart.chart_text.as_str()).expect("chart text parses");
     let font_bundle = ChartFontBundle::new().expect("font bundle");
     let style: &'static MStyle = Box::leak(Box::new(MStyle::new()));
-    let mut engine = font_bundle.create_layout_engine(style);
+    let engine = font_bundle.create_layout_engine(style);
     let width = 640.0;
     let layout = engine.layout_chart_with_config(
         &parsed,
