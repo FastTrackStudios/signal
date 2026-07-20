@@ -1,0 +1,14 @@
+[package]
+name = "fts-plugin-xtask"
+version.workspace = true
+edition = "2021"
+authors.workspace = true
+license.workspace = true
+description = "Bundler for the FTS plugin suite — wraps nice-plug-xtask (`cargo run -p fts-plugin-xtask -- bundle <package> --release`)"
+
+[[bin]]
+name = "fts-plugin-xtask"
+path = "src/main.rs"
+
+[dependencies]
+nice-plug-xtask.workspace = true

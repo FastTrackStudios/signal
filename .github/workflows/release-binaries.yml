@@ -84,6 +84,50 @@ jobs:
           nix run nixpkgs#gh -- release upload "$tag" "$artifact" --clobber
           echo "uploaded $artifact to $tag"
 
+  linux-plugins:
+    # The FTS plugin bundle (11 CLAP+VST3 plugins, issue #31): built with the
+    # same nix devshell, packaged by `just plugins-package`, attached as
+    # fts-plugins-v<version>-x86_64-linux.tar.gz.
+    runs-on: [self-hosted, nix-host]
+    steps:
+      - name: Checkout the release tag (local-first)
+        run: |
+          set -eu
+          url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git"
+          tag="${{ github.event.release.tag_name || inputs.tag }}"
+          [ -n "$FTS_LOCAL_REPO" ] && {
+            git config --global --add safe.directory "$FTS_LOCAL_REPO" 2>/dev/null || true
+            git config --global --add safe.directory "$FTS_LOCAL_REPO/.git" 2>/dev/null || true
+          }
+          find . -mindepth 1 -maxdepth 1 -exec rm -rf {} + 2>/dev/null || true
+          git clone --quiet "$FTS_LOCAL_REPO" . || git clone "$url" .
+          if ! git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
+            attempt=1
+            until git fetch --no-tags "$url" "refs/tags/$tag:refs/tags/$tag"; do
+              [ "$attempt" -ge 6 ] && { echo "fetch tag $tag failed"; exit 1; }
+              attempt=$((attempt + 1)); sleep 15
+            done
+          fi
+          git checkout --quiet "tags/$tag"
+          echo "building $(git rev-parse --short HEAD) for tag $tag"
+
+      - name: Build + package the plugin bundle
+        run: |
+          set -euo pipefail
+          nix develop --accept-flake-config . -c just plugins-package
+          artifact="$(find dist -name 'fts-plugins-*.tar.gz' | head -1)"
+          [ -n "$artifact" ] || { echo "no plugin tarball produced"; exit 1; }
+          echo "artifact=$artifact" >> "$GITHUB_ENV"
+
+      - name: Upload to the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          tag="${{ github.event.release.tag_name || inputs.tag }}"
+          nix run nixpkgs#gh -- release upload "$tag" "$artifact" --clobber
+          echo "uploaded $artifact to $tag"
+
   macos-desktop:
     # Self-hosted Mac (airlock) — the only machine that can Developer-ID-sign
     # and notarize. Its build keychain + ASC key + Developer ID cert are

@@ -208,6 +208,30 @@ release-package: web-stage
     echo "packaged:"
     ls -lh "dist/$tarball" "dist/fts-installer-$plat" dist/SHA256SUMS
 
+# Bundle every FTS plugin as .clap + .vst3 (target/bundled/, names from
+# bundler.toml). Debug of a single plugin: cargo run -p fts-plugin-xtask
+# -- bundle -p eq-plugin
+plugins-bundle:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    for p in eq comp reverb delay tune modulation nam level saturate signal guide; do
+        cargo run -q -p fts-plugin-xtask -- bundle -p "$p-plugin" --release
+    done
+    ls target/bundled/
+
+# Package the plugin bundles as a single release tarball in dist/
+# (fts-plugins-v<version>-x86_64-linux.tar.gz + SHA256SUMS entry).
+plugins-package: plugins-bundle
+    #!/usr/bin/env bash
+    set -euo pipefail
+    version="$(cargo pkgid -p eq-plugin | sed 's/.*[#@]//')"
+    plat=x86_64-linux
+    mkdir -p dist
+    tarball="fts-plugins-v$version-$plat.tar.gz"
+    tar -czf "dist/$tarball" -C target/bundled .
+    (cd dist && sha256sum "$tarball" >> SHA256SUMS 2>/dev/null || sha256sum "$tarball" > SHA256SUMS)
+    echo "packaged: dist/$tarball"
+
 # Pull the latest upstream NeuralAmpModelerCore into the vendored copy
 # (libs/neural-amp-modeler/NeuralAmpModelerCore) and run the crate's
 # test suite. The parity tests run every shipped rig model through BOTH
