@@ -208,6 +208,11 @@ release-package: web-stage
     echo "packaged:"
     ls -lh "dist/$tarball" "dist/fts-installer-$plat" dist/SHA256SUMS
 
+# Rebuild eq-ui's embedded Tailwind (features/fx/eq/eq-ui/assets/
+# tailwind.css) after class changes in eq-ui / fts-ui.
+tailwind-eq:
+    tailwindcss -i features/fx/eq/eq-ui/tailwind.css -o features/fx/eq/eq-ui/assets/tailwind.css --minify
+
 # Bundle every FTS plugin as .clap + .vst3 (target/bundled/, names from
 # bundler.toml). Debug of a single plugin: cargo run -p fts-plugin-xtask
 # -- bundle -p eq-plugin

@@ -81,6 +81,11 @@ pub fn App() -> Element {
     let theme_state = use_signal(|| ThemeState::new(default_theme_preset(), ThemeMode::Dark));
     rsx! {
         document::Style { {nice_plug_dioxus::TAILWIND_CSS} }
+        // eq-ui's own compiled utilities + theme tokens — the framework CSS
+        // above only covers nice-plug-dioxus's widgets, so without this every
+        // layout-critical class (flex-1, min-h-0, …) is undefined and the
+        // graph area collapses in the embedded editor. `just tailwind-eq`.
+        document::Style { {include_str!("../assets/tailwind.css")} }
         ThemeProvider { state: theme_state, AppShell {} }
     }
 }
