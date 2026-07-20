@@ -1,0 +1,65 @@
+[package]
+name = "fts-cli"
+version.workspace = true
+edition = "2024"
+license.workspace = true
+authors.workspace = true
+description = "fts — the one FastTrackStudio CLI (daw, keyflow, engines, status)"
+
+# One CLI over the whole stack:
+#
+#   fts daw <...>            the daw command tree (daw::cli, feature `daw`)
+#   fts keyflow <...>        the kf command tree  (keyflow-cli, feature `keyflow`;
+#                            alias: fts kf)
+#   fts signal engine        spawn `fasttrackstudio --engine` (headless rig core)
+#   fts session engine       in-process standalone session engine on ws://:3030/ws
+#   fts status               probe the known engine ports and report up/down
+#
+# The heavy domains are feature-gated (default = all) so a lean build is
+# `--no-default-features` + just the engines/status plumbing.
+
+[[bin]]
+name = "fts"
+path = "src/main.rs"
+
+[features]
+default = ["daw", "keyflow", "session"]
+# `fts daw <...>` — mounts daw::cli's clap tree.
+daw = ["dep:daw", "daw/cli"]
+# `fts keyflow <...>` / `fts kf <...>` — mounts keyflow-cli's clap tree.
+keyflow = ["dep:keyflow-cli"]
+# `fts session engine` — the in-process standalone session engine
+# (daw-standalone + SetlistService) served over architect axum_ws.
+session = [
+    "dep:daw",
+    "dep:daw-standalone",
+    "dep:session",
+    "dep:architect",
+    "dep:axum",
+    "dep:vox",
+]
+
+[dependencies]
+clap = { workspace = true }
+eyre = { workspace = true }
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "signal"] }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+engine-launcher = { workspace = true }
+
+# fts daw / fts session engine
+daw = { workspace = true, optional = true }
+
+# fts keyflow
+keyflow-cli = { workspace = true, optional = true }
+
+# fts session engine — the same standalone stack apps/fasttrackstudio's
+# session_engine.rs builds, served over a WebSocket instead of in-app.
+daw-standalone = { workspace = true, features = ["bootstrap", "audio"], optional = true }
+session = { workspace = true, optional = true }
+architect = { workspace = true, features = ["vox", "local", "server-axum"], optional = true }
+axum = { workspace = true, optional = true }
+vox = { workspace = true, optional = true }
+
+[lints]
+workspace = true
