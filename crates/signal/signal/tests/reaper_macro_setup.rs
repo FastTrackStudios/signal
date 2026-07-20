@@ -451,7 +451,7 @@ async fn macro_lfo_modulation_demo(ctx: &daw::test::ReaperTestContext) -> eyre::
         // Update "compress" macro to drive Ratio parameter
         let targets = signal::macro_registry::get_targets("compress");
         for target in targets {
-            let param_val = (target.min + (target.max - target.min) * macro_val as f32) as f64;
+            let param_val = (target.min + (target.max - target.min) * macro_val) as f64;
             target_fx.param(target.param_index).set(param_val).await?;
         }
 
@@ -699,7 +699,7 @@ async fn macro_lfo_multi_plugin_demo(ctx: &daw::test::ReaperTestContext) -> eyre
         let rg = rea_gate.clone();
 
         for target in targets {
-            let param_val = (target.min + (target.max - target.min) * macro_val as f32) as f64;
+            let param_val = (target.min + (target.max - target.min) * macro_val) as f64;
             let guid = target.fx_guid.clone();
 
             // Clone for this iteration
@@ -709,13 +709,13 @@ async fn macro_lfo_multi_plugin_demo(ctx: &daw::test::ReaperTestContext) -> eyre
 
             let fut = async move {
                 match guid.as_str() {
-                    g if g == rc1_iter.guid().to_string() => {
+                    g if g == rc1_iter.guid() => {
                         rc1_iter.param(target.param_index).set(param_val).await
                     }
-                    g if g == rc2_iter.guid().to_string() => {
+                    g if g == rc2_iter.guid() => {
                         rc2_iter.param(target.param_index).set(param_val).await
                     }
-                    g if g == rg_iter.guid().to_string() => {
+                    g if g == rg_iter.guid() => {
                         rg_iter.param(target.param_index).set(param_val).await
                     }
                     _ => Ok(()),

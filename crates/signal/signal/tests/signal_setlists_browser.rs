@@ -703,8 +703,8 @@ async fn resolve_all_guitar_profile_patches() {
         for patch in &profile.patches {
             let result = signal
                 .resolve_target(ResolveTarget::ProfilePatch {
-                    profile_id: profile.id.clone().into(),
-                    patch_id: patch.id.clone().into(),
+                    profile_id: profile.id.clone(),
+                    patch_id: patch.id.clone(),
                 })
                 .await;
 
@@ -758,8 +758,8 @@ async fn resolve_all_seeded_song_sections() {
         for section in &song.sections {
             let result = signal
                 .resolve_target(ResolveTarget::SongSection {
-                    song_id: song.id.clone().into(),
-                    section_id: section.id.clone().into(),
+                    song_id: song.id.clone(),
+                    section_id: section.id.clone(),
                 })
                 .await;
 

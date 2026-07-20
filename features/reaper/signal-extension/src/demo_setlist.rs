@@ -375,7 +375,7 @@ pub async fn load_demo_setlist(daw: &Daw) -> Result<()> {
         .set_ext_state(
             "fts_signal",
             "input_track_guid",
-            &rig_input.guid().to_string(),
+            rig_input.guid(),
         )
         .await?;
 

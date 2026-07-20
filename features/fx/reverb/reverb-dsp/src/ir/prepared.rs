@@ -107,6 +107,7 @@ pub struct PreparedIrPair {
     /// The un-shaped time-domain IR, carried along so the Impulse
     /// engine can re-shape later without re-decoding from disk.
     /// `Arc` so audio-thread clones are allocation-free.
+    #[allow(clippy::type_complexity)]
     pub raw: Option<(std::sync::Arc<Vec<f64>>, std::sync::Arc<Vec<f64>>)>,
 }
 

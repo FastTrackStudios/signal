@@ -50,7 +50,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // "Hold a note for a second or two and you should still hear it" — measure
     // the level still sounding at ~1.0 s across the whole keyboard.
-    println!("\n{:>4} {:>8} {:>8}  {}", "note", "attack", "@1.0s", "verdict");
+    println!("\n{:>4} {:>8} {:>8}  verdict", "note", "attack", "@1.0s");
     let mut died = Vec::new();
     let mut alive = 0;
     for note in 21u8..=108 {

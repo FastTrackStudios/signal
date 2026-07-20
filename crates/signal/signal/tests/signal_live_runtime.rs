@@ -1468,19 +1468,17 @@ async fn engine_rapid_scene_switches() {
 async fn resolve_rapid_scene_sequence() {
     let signal = controller().await;
 
-    let scene_ids = vec![
-        seed_id("keys-megarig-default"),
+    let scene_ids = [seed_id("keys-megarig-default"),
         seed_id("keys-megarig-wide"),
         seed_id("keys-megarig-focus"),
-        seed_id("keys-megarig-air"),
-    ];
+        seed_id("keys-megarig-air")];
 
     let mut prev_engine_count = 0;
     for (i, scene_id) in scene_ids.iter().enumerate() {
         let result = signal
             .resolve_target(ResolveTarget::RigScene {
                 rig_id: keys_rig_id(),
-                scene_id: scene_id.clone().into(),
+                scene_id: (*scene_id).into(),
             })
             .await;
         assert!(

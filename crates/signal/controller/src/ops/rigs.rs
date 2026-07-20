@@ -227,7 +227,7 @@ impl<S: SignalApi> RigOps<S> {
                 id: rig_id.to_string(),
             })?;
         rig.add_variant(scene);
-        Ok(self.save(rig).await?)
+        self.save(rig).await
     }
 
     /// Remove a scene, returning an error if the rig or scene doesn't exist.

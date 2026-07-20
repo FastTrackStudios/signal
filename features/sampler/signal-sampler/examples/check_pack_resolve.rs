@@ -134,7 +134,7 @@ fn note_name_midi(s: &str) -> u8 {
         _ => return 21,
     };
     let mut i = 1;
-    let mut semis = step as i32;
+    let mut semis = step;
     if i < b.len() && (b[i] == b'#' || b[i] == b's') {
         semis += 1;
         i += 1;

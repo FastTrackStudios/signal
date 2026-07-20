@@ -459,8 +459,8 @@ pub fn extract_xml_from_chunk(data: &[u8]) -> Option<String> {
     let xml_start = data.windows(5).position(|w| w == b"<?xml")?;
     // Find the end: last '>' before the next non-printable section
     let mut end = xml_start;
-    for i in xml_start..data.len() {
-        if data[i] >= 0x20 && data[i] < 0x7F {
+    for (i, &b) in data.iter().enumerate().skip(xml_start) {
+        if (0x20..0x7F).contains(&b) {
             end = i + 1;
         } else {
             break;

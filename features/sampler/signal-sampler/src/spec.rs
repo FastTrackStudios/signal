@@ -1026,9 +1026,7 @@ fn zone_from_sfz(
         vel_min: sfz_u8(group, region, "lovel").unwrap_or(0),
         vel_max: sfz_u8(group, region, "hivel").unwrap_or(127),
         rr_index: seq_position.saturating_sub(1),
-        rr_mode: (seq_length > 0)
-            .then(|| "cycle".to_string())
-            .unwrap_or_default(),
+        rr_mode: if seq_length > 0 { "cycle".to_string() } else { Default::default() },
         gain_db: sfz_f32(group, region, "volume").unwrap_or(0.0),
         pan: (sfz_f32(group, region, "pan").unwrap_or(0.0) / 100.0).clamp(-1.0, 1.0),
         tune_cents: tune + transpose,

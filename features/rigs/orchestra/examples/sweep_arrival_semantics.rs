@@ -20,7 +20,6 @@
 //! cargo run --release -p signal-orchestra --example sweep_arrival_semantics
 //! ```
 
-use std::io::Write as _;
 use std::path::PathBuf;
 
 use signal_orchestra::timing::{CountIn, mix_click, render_click, timing_corpus};

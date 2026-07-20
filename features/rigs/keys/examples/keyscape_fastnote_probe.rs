@@ -81,7 +81,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // ── dump the trace ──
     let trace = rig.render_trace(ID);
     let bl = |frame: u64| frame as f32 / SR as f32 * 1000.0; // ms
-    println!("\n{:>7} {:>5} {:>12} {:>6} {:>6}  {}", "t(ms)", "note", "kind", "rate", "gain", "file");
+    println!("\n{:>7} {:>5} {:>12} {:>6} {:>6}  file", "t(ms)", "note", "kind", "rate", "gain");
     for e in &trace.events {
         match &e.kind {
             TraceKind::VoiceSpawn(v) => {

@@ -216,7 +216,7 @@ impl SampleMap {
                     && candidate.articulation == key.articulation
                     && candidate.mic == key.mic
                     && candidate.note == key.note
-                    && direction.map_or(true, |direction| candidate.direction == direction)
+                    && direction.is_none_or(|direction| candidate.direction == direction)
             })
             .filter_map(|(candidate, path)| {
                 let dynamic = candidate.dynamic.parse::<i16>().ok()?;

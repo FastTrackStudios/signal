@@ -200,8 +200,11 @@ impl<S: SignalApi> BlockPresetOps<S> {
 
         // Apply to DAW if an applier is attached
         let snapshot_name = snapshot.name().to_string();
+        // Clone out of the lock in its own statement — an if-let scrutinee
+        // temporary would hold the guard across the await below.
+        let applier = self.0.daw_applier.read().expect("lock poisoned").clone();
         let applied_to_daw =
-            if let Some(applier) = self.0.daw_applier.read().expect("lock poisoned").clone() {
+            if let Some(applier) = applier {
                 match applier.apply_graph(&graph, Some(&snapshot_name)).await {
                     Ok(_) => true,
                     Err(e) => {

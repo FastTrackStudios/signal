@@ -128,7 +128,7 @@ pub async fn generate_scene_midi_items(daw: &Daw) -> Result<()> {
             if let Some(first_take) = takes.first() {
                 let take_handle = take_list.by_index(first_take.index).await?;
                 if let Some(take) = take_handle {
-                    take.set_name(&scene_name).await?;
+                    take.set_name(scene_name).await?;
                 }
             }
 

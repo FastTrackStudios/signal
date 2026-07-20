@@ -121,64 +121,6 @@ fn accumulate_writes(routes: &[CompiledRoute], values: &[f32], writes: &mut [Vec
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn route(source: usize, leaf: usize, param: u32, base: f64, depth: f32) -> CompiledRoute {
-        CompiledRoute { source, leaf, param, base, depth }
-    }
-
-    #[test]
-    fn multiple_routes_to_one_param_sum_additively() {
-        // Two sources at full scale, two routes onto leaf 0 / param 7.
-        let routes = vec![
-            route(0, 0, 7, 0.2, 0.3), // base 0.2, +0.3
-            route(1, 0, 7, 0.2, 0.1), // +0.1
-        ];
-        let values = [1.0f32, 1.0];
-        let mut writes = vec![Vec::new()];
-        accumulate_writes(&routes, &values, &mut writes);
-        assert_eq!(writes[0].len(), 1, "one accumulated write per param");
-        let (param, v) = writes[0][0];
-        assert_eq!(param, 7);
-        assert!((v - 0.6).abs() < 1e-6, "0.2 + 0.3 + 0.1 = 0.6, got {v}");
-    }
-
-    #[test]
-    fn accumulated_value_clamps_to_unit_range() {
-        let routes = vec![
-            route(0, 0, 1, 0.8, 0.5),
-            route(0, 0, 1, 0.8, 0.5), // → 1.8, clamps to 1.0
-        ];
-        let values = [1.0f32];
-        let mut writes = vec![Vec::new()];
-        accumulate_writes(&routes, &values, &mut writes);
-        assert_eq!(writes[0][0].1, 1.0);
-    }
-
-    #[test]
-    fn negative_depth_subtracts_from_base() {
-        let routes = vec![route(0, 0, 3, 0.5, -0.5)];
-        let values = [1.0f32];
-        let mut writes = vec![Vec::new()];
-        accumulate_writes(&routes, &values, &mut writes);
-        assert!((writes[0][0].1 - 0.0).abs() < 1e-9);
-    }
-
-    #[test]
-    fn distinct_params_stay_separate() {
-        let routes = vec![
-            route(0, 0, 1, 0.1, 0.2),
-            route(0, 0, 2, 0.3, 0.2),
-        ];
-        let values = [1.0f32];
-        let mut writes = vec![Vec::new()];
-        accumulate_writes(&routes, &values, &mut writes);
-        assert_eq!(writes[0].len(), 2);
-    }
-}
-
 /// Compile-time state: modulator scope stack + leaf registry + route table
 /// + send-bus registry.
 pub(super) struct ModCompiler {
@@ -329,5 +271,63 @@ impl ModCompiler {
                 );
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn route(source: usize, leaf: usize, param: u32, base: f64, depth: f32) -> CompiledRoute {
+        CompiledRoute { source, leaf, param, base, depth }
+    }
+
+    #[test]
+    fn multiple_routes_to_one_param_sum_additively() {
+        // Two sources at full scale, two routes onto leaf 0 / param 7.
+        let routes = vec![
+            route(0, 0, 7, 0.2, 0.3), // base 0.2, +0.3
+            route(1, 0, 7, 0.2, 0.1), // +0.1
+        ];
+        let values = [1.0f32, 1.0];
+        let mut writes = vec![Vec::new()];
+        accumulate_writes(&routes, &values, &mut writes);
+        assert_eq!(writes[0].len(), 1, "one accumulated write per param");
+        let (param, v) = writes[0][0];
+        assert_eq!(param, 7);
+        assert!((v - 0.6).abs() < 1e-6, "0.2 + 0.3 + 0.1 = 0.6, got {v}");
+    }
+
+    #[test]
+    fn accumulated_value_clamps_to_unit_range() {
+        let routes = vec![
+            route(0, 0, 1, 0.8, 0.5),
+            route(0, 0, 1, 0.8, 0.5), // → 1.8, clamps to 1.0
+        ];
+        let values = [1.0f32];
+        let mut writes = vec![Vec::new()];
+        accumulate_writes(&routes, &values, &mut writes);
+        assert_eq!(writes[0][0].1, 1.0);
+    }
+
+    #[test]
+    fn negative_depth_subtracts_from_base() {
+        let routes = vec![route(0, 0, 3, 0.5, -0.5)];
+        let values = [1.0f32];
+        let mut writes = vec![Vec::new()];
+        accumulate_writes(&routes, &values, &mut writes);
+        assert!((writes[0][0].1 - 0.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn distinct_params_stay_separate() {
+        let routes = vec![
+            route(0, 0, 1, 0.1, 0.2),
+            route(0, 0, 2, 0.3, 0.2),
+        ];
+        let values = [1.0f32];
+        let mut writes = vec![Vec::new()];
+        accumulate_writes(&routes, &values, &mut writes);
+        assert_eq!(writes[0].len(), 2);
     }
 }

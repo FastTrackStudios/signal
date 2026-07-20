@@ -309,7 +309,7 @@ fn save_wav(path: &str, samples: &[f64], sample_rate: f64) -> std::io::Result<()
     let num_channels: u32 = 1;
     let byte_rate = sample_rate as u32 * num_channels * bytes_per_sample;
     let block_align = (num_channels * bytes_per_sample) as u16;
-    let subchunk2_size = (num_samples as u32 * bytes_per_sample) as u32;
+    let subchunk2_size = (num_samples as u32 * bytes_per_sample);
     let chunk_size = 36 + subchunk2_size;
 
     let mut file = File::create(path)?;

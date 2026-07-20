@@ -576,7 +576,7 @@ fn main() -> Result<(), String> {
                 let m = measure_zone(spec, &spec.zones[zi], &patch.zone_paths[zi]);
                 let mut r = results.lock().unwrap();
                 r.push(m);
-                if r.len() % 2000 == 0 {
+                if r.len().is_multiple_of(2000) {
                     eprintln!("  {}/{}", r.len(), jobs.len());
                 }
             });
@@ -590,12 +590,9 @@ fn main() -> Result<(), String> {
     let mut skipped = 0usize;
     let mut per_class: BTreeMap<&'static str, (usize, Vec<f64>)> = BTreeMap::new();
     for m in &results {
-        match m.class {
-            Class::Skip => {
-                skipped += 1;
-                continue;
-            }
-            _ => {}
+        if m.class == Class::Skip {
+            skipped += 1;
+            continue;
         }
         let cname = match m.class {
             Class::Transition => "transition (pitch settle)",

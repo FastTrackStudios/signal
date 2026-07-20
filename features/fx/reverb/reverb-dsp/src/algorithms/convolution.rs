@@ -254,6 +254,7 @@ fn synthesize_ir(sample_rate: f64, seconds: f64, seed: u64) -> Vec<f64> {
     // Pre-delay window: blend out the first ~5ms so direct signal isn't
     // doubled when wet/dry are summed.
     let predelay = (sample_rate * 0.005) as usize;
+    #[allow(clippy::needless_range_loop)]
     for i in 0..predelay.min(n) {
         ir[i] *= i as f64 / predelay as f64;
     }
@@ -392,6 +393,7 @@ pub struct Convolution {
     /// Slots whose partitions are stale vs `impulse`'s shaping params.
     shape_dirty: [bool; 2],
     /// Original (un-shaped) IRs per slot, kept for re-preparation.
+    #[allow(clippy::type_complexity)]
     originals: [Option<(Arc<Vec<f64>>, Arc<Vec<f64>>)>; 2],
     /// Smoothed feedback amount (10 ms) + recirculation state.
     fb_smoother: ParamSmoother,
