@@ -125,13 +125,15 @@ impl<S: SignalApi> ProfileOps<S> {
                 ref scene_id,
             } = p.target
             {
-                if let Some(rig_applier) = self
+                // Clone out of the lock in its own statement — an if-let
+                // scrutinee temporary would hold the guard across the await.
+                let rig_applier = self
                     .0
                     .daw_rig_applier
                     .read()
                     .expect("lock poisoned")
-                    .clone()
-                {
+                    .clone();
+                if let Some(rig_applier) = rig_applier {
                     let applied = match rig_applier
                         .switch_scene(rig_id.as_ref(), scene_id.as_ref(), Some(&p.name))
                         .await
@@ -178,8 +180,10 @@ impl<S: SignalApi> ProfileOps<S> {
             .iter()
             .find(|p| p.id == patch_id)
             .map(|p| p.name.as_str());
+        // Clone out of the lock in its own statement (guard-across-await).
+        let applier = self.0.daw_applier.read().expect("lock poisoned").clone();
         let applied_to_daw =
-            if let Some(applier) = self.0.daw_applier.read().expect("lock poisoned").clone() {
+            if let Some(applier) = applier {
                 match applier.apply_graph(&graph, patch_name).await {
                     Ok(_) => true,
                     Err(e) => {
