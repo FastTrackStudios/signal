@@ -1,0 +1,16 @@
+[package]
+name = "trigger"
+version.workspace = true
+edition = "2021"          # matches sibling fx facades (comp, level)
+license.workspace = true
+description = "trigger — facade over trigger-dsp; drum-trigger onset detection → MIDI hits (envelope follower + dynamics margin + retrigger guard). Plugin UI and presets are opt-in."
+
+[features]
+default = []
+# Opt-in plugin UI and preset profiles — declared now so the facade shape is
+# stable; wired once the Dioxus editor lands (mirrors level).
+ui = []
+profiles = []
+
+[dependencies]
+trigger-dsp = { workspace = true }

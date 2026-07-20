@@ -1,0 +1,12 @@
+[package]
+name = "trigger-dsp"
+version.workspace = true
+edition = "2021"          # matches sibling fx DSP crates (comp-dsp, level-dsp)
+authors.workspace = true
+license.workspace = true
+description = "trigger-dsp — drum-trigger engine: envelope-follower onset detection with dynamics margin, retrigger guard, and dB→MIDI-velocity mapping."
+
+[dependencies]
+
+[dev-dependencies]
+approx = { workspace = true }

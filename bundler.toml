@@ -40,3 +40,6 @@ name = "FTS Gate"
 
 [limiter-plugin]
 name = "FTS Limiter"
+
+[trigger-plugin]
+name = "FTS Trigger"
