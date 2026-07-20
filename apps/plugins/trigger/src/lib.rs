@@ -1,23 +1,34 @@
 //! FTS Trigger — CLAP/VST3 drum-trigger plugin.
 //!
-//! A thin nice-plug shell over the [`trigger`] engine's
-//! [`trigger::TriggerDetector`]: the input is mono-summed for detection,
-//! passes through untouched, and every detected hit becomes a sample-accurate
-//! `NoteOn` (channel 0, configurable note) with a matching `NoteOff` a few ms
-//! later — scheduled across block boundaries when needed. `MIDI_OUTPUT =
-//! MidiConfig::Basic` declares the note-out port (the mirror of
-//! `signal-sampler-clap`'s note *input*).
+//! A nice-plug shell over the legacy FTS-Trigger engine
+//! ([`trigger::TriggerChain`]): each stereo frame runs through the chain's
+//! detection sidechain (`detect_tick` — HPF/LPF → onset detector → velocity
+//! curve) while the audio passes through untouched, and every detected onset
+//! becomes a sample-accurate `NoteOn` (channel 0, configurable note) with a
+//! matching `NoteOff` a few ms later — scheduled across block boundaries when
+//! needed. `MIDI_OUTPUT = MidiConfig::Basic` declares the note-out port (the
+//! mirror of `signal-sampler-clap`'s note *input*).
+//!
+//! Detection can be the zero-latency time-domain peak envelope or one of the
+//! six FFT onset detection functions (spectral flux / SuperFlux / HFC /
+//! complex domain / rectified complex domain / modified KL); FFT modes report
+//! their latency to the host.
 //!
 //! Listen mode mutes the passthrough and replaces it with a short 1 kHz click
 //! per hit (scaled by velocity) for threshold tuning.
 //!
-//! GUI is deliberately absent for now (headless, host-generic params),
-//! matching `level-plugin`; the nice-plug-dioxus editor is a follow-up.
+//! The chain's sample playback engine (`sampler` — velocity layers +
+//! round-robin) is deliberately NOT wired yet: loading samples needs
+//! file-management UI/state, so this shell is MIDI-out + passthrough only.
+//! GUI is also deliberately absent (headless, host-generic params), matching
+//! `level-plugin`; both are follow-ups.
 
 use nice_plug::prelude::*;
 use std::sync::Arc;
 
-use trigger::TriggerDetector;
+use trigger::detector::DetectAlgorithm;
+use trigger::velocity::{VelocityCurve, VelocityMapper};
+use trigger::{AudioConfig, Processor, TriggerChain};
 
 const PLUGIN_NAME: &str = "FTS Trigger";
 
@@ -36,24 +47,63 @@ pub struct TriggerParams {
     /// Absolute onset threshold.
     #[id = "threshold"]
     pub threshold_db: FloatParam,
-    /// Dynamics margin above the recent floor (ring-out rejection).
+    /// Detection confirmation window (the legacy engine's "sensitivity"):
+    /// the level must hold above the threshold this long before the trigger
+    /// fires. 0 = fire immediately; longer = fewer false triggers from spikes.
     #[id = "sensitivity"]
-    pub sensitivity_db: FloatParam,
+    pub sensitivity_ms: FloatParam,
     /// Retrigger-guard window.
     #[id = "retrigger"]
     pub retrigger_ms: FloatParam,
     /// MIDI note to emit (default 36 = C1 kick).
     #[id = "note"]
     pub note: IntParam,
-    /// Peak level mapped to velocity 1.
+    /// Velocity floor (output clamp, 0-1).
     #[id = "vel_min"]
-    pub vel_min_db: FloatParam,
-    /// Peak level mapped to velocity 127.
+    pub vel_min: FloatParam,
+    /// Velocity ceiling (output clamp, 0-1).
     #[id = "vel_max"]
-    pub vel_max_db: FloatParam,
+    pub vel_max: FloatParam,
     /// Mute passthrough and click on every hit (threshold tuning).
     #[id = "listen"]
     pub listen: BoolParam,
+    /// Sidechain HPF frequency; 0 = off. Isolates the drum from low bleed.
+    #[id = "sc_hpf"]
+    pub sc_hpf_hz: FloatParam,
+    /// Sidechain LPF frequency; 0 = off. Rejects cymbal/hat bleed.
+    #[id = "sc_lpf"]
+    pub sc_lpf_hz: FloatParam,
+    /// Detection algorithm: peak envelope (zero latency) or an FFT onset
+    /// detection function.
+    #[id = "algorithm"]
+    pub algorithm: IntParam,
+    /// Velocity curve.
+    #[id = "vel_curve"]
+    pub vel_curve: IntParam,
+    /// Velocity dynamics: 0 = fixed velocity, 1 = full dynamic range.
+    #[id = "dynamics"]
+    pub dynamics: FloatParam,
+}
+
+fn algorithm_from_index(i: i32) -> DetectAlgorithm {
+    match i {
+        1 => DetectAlgorithm::SpectralFlux,
+        2 => DetectAlgorithm::SuperFlux,
+        3 => DetectAlgorithm::Hfc,
+        4 => DetectAlgorithm::ComplexDomain,
+        5 => DetectAlgorithm::RectifiedComplexDomain,
+        6 => DetectAlgorithm::ModifiedKl,
+        _ => DetectAlgorithm::PeakEnvelope,
+    }
+}
+
+fn curve_from_index(i: i32) -> VelocityCurve {
+    match i {
+        1 => VelocityCurve::Logarithmic,
+        2 => VelocityCurve::Exponential,
+        3 => VelocityCurve::Fixed,
+        _ => VelocityCurve::Linear,
+    }
 }
 
 impl Default for TriggerParams {
@@ -66,12 +116,12 @@ impl Default for TriggerParams {
             )
             .with_unit(" dB")
             .with_value_to_string(formatters::v2s_f32_rounded(1)),
-            sensitivity_db: FloatParam::new(
+            sensitivity_ms: FloatParam::new(
                 "Sensitivity",
-                6.0,
-                FloatRange::Linear { min: 0.0, max: 24.0 },
+                1.0,
+                FloatRange::Linear { min: 0.0, max: 10.0 },
             )
-            .with_unit(" dB")
+            .with_unit(" ms")
             .with_value_to_string(formatters::v2s_f32_rounded(1)),
             retrigger_ms: FloatParam::new(
                 "Retrigger",
@@ -86,21 +136,50 @@ impl Default for TriggerParams {
             .with_value_to_string(formatters::v2s_f32_rounded(0)),
             note: IntParam::new("Note", 36, IntRange::Linear { min: 0, max: 127 })
                 .with_value_to_string(formatters::v2s_i32_note_formatter()),
-            vel_min_db: FloatParam::new(
-                "Vel Min",
-                -40.0,
-                FloatRange::Linear { min: -60.0, max: 0.0 },
-            )
-            .with_unit(" dB")
-            .with_value_to_string(formatters::v2s_f32_rounded(1)),
-            vel_max_db: FloatParam::new(
-                "Vel Max",
-                -6.0,
-                FloatRange::Linear { min: -60.0, max: 0.0 },
-            )
-            .with_unit(" dB")
-            .with_value_to_string(formatters::v2s_f32_rounded(1)),
+            vel_min: FloatParam::new("Vel Min", 0.0, FloatRange::Linear { min: 0.0, max: 1.0 })
+                .with_value_to_string(formatters::v2s_f32_rounded(2)),
+            vel_max: FloatParam::new("Vel Max", 1.0, FloatRange::Linear { min: 0.0, max: 1.0 })
+                .with_value_to_string(formatters::v2s_f32_rounded(2)),
             listen: BoolParam::new("Listen", false),
+            sc_hpf_hz: FloatParam::new(
+                "SC HPF",
+                0.0,
+                FloatRange::Linear { min: 0.0, max: 1_000.0 },
+            )
+            .with_unit(" Hz")
+            .with_value_to_string(formatters::v2s_f32_rounded(0)),
+            sc_lpf_hz: FloatParam::new(
+                "SC LPF",
+                0.0,
+                FloatRange::Linear { min: 0.0, max: 20_000.0 },
+            )
+            .with_unit(" Hz")
+            .with_value_to_string(formatters::v2s_f32_rounded(0)),
+            algorithm: IntParam::new("Algorithm", 0, IntRange::Linear { min: 0, max: 6 })
+                .with_value_to_string(Arc::new(|v| {
+                    match v {
+                        1 => "Spectral Flux",
+                        2 => "SuperFlux",
+                        3 => "HFC",
+                        4 => "Complex",
+                        5 => "Rect Complex",
+                        6 => "Mod KL",
+                        _ => "Peak Env",
+                    }
+                    .to_string()
+                })),
+            vel_curve: IntParam::new("Curve", 0, IntRange::Linear { min: 0, max: 3 })
+                .with_value_to_string(Arc::new(|v| {
+                    match v {
+                        1 => "Log",
+                        2 => "Exp",
+                        3 => "Fixed",
+                        _ => "Linear",
+                    }
+                    .to_string()
+                })),
+            dynamics: FloatParam::new("Dynamics", 0.5, FloatRange::Linear { min: 0.0, max: 1.0 })
+                .with_value_to_string(formatters::v2s_f32_rounded(2)),
         }
     }
 }
@@ -115,9 +194,26 @@ struct PendingOff {
     note: u8,
 }
 
+/// Cached copy of the last-synced param values so the chain (filter design,
+/// spectral detector) is only rebuilt when something actually changed.
+#[derive(Clone, Copy, PartialEq)]
+struct SyncedParams {
+    threshold_db: f32,
+    sensitivity_ms: f32,
+    retrigger_ms: f32,
+    vel_min: f32,
+    vel_max: f32,
+    sc_hpf_hz: f32,
+    sc_lpf_hz: f32,
+    algorithm: i32,
+    vel_curve: i32,
+    dynamics: f32,
+}
+
 pub struct FtsTrigger {
     params: Arc<TriggerParams>,
-    detector: TriggerDetector,
+    chain: TriggerChain,
+    synced: Option<SyncedParams>,
     sample_rate: f32,
     note_len_samples: u32,
     /// NoteOffs carried across block boundaries. NOTE_LEN < min retrigger
@@ -134,7 +230,8 @@ impl Default for FtsTrigger {
     fn default() -> Self {
         Self {
             params: Arc::new(TriggerParams::default()),
-            detector: TriggerDetector::new(48_000.0),
+            chain: TriggerChain::new(),
+            synced: None,
             sample_rate: 48_000.0,
             note_len_samples: (NOTE_LEN_MS * 48.0) as u32,
             pending_offs: [None; 4],
@@ -147,18 +244,52 @@ impl Default for FtsTrigger {
 }
 
 impl FtsTrigger {
-    /// Push the current params into the detector (no allocation).
-    fn sync_params(&mut self) {
-        self.detector
-            .set_threshold_db(self.params.threshold_db.value());
-        self.detector
-            .set_dynamics_db(self.params.sensitivity_db.value());
-        self.detector
-            .set_retrigger_ms(self.params.retrigger_ms.value());
-        self.detector.set_velocity_range_db(
-            self.params.vel_min_db.value(),
-            self.params.vel_max_db.value(),
-        );
+    fn audio_config(&self) -> AudioConfig {
+        AudioConfig {
+            sample_rate: self.sample_rate as f64,
+            max_buffer_size: 512,
+        }
+    }
+
+    /// Push the current params into the chain. Filter/detector rebuilds only
+    /// happen when a value actually changed (`chain.update` redesigns the
+    /// sidechain filters and can reallocate the spectral detector).
+    fn sync_params(&mut self, context: &mut impl ProcessContext<Self>) {
+        let now = SyncedParams {
+            threshold_db: self.params.threshold_db.value(),
+            sensitivity_ms: self.params.sensitivity_ms.value(),
+            retrigger_ms: self.params.retrigger_ms.value(),
+            vel_min: self.params.vel_min.value(),
+            vel_max: self.params.vel_max.value(),
+            sc_hpf_hz: self.params.sc_hpf_hz.value(),
+            sc_lpf_hz: self.params.sc_lpf_hz.value(),
+            algorithm: self.params.algorithm.value(),
+            vel_curve: self.params.vel_curve.value(),
+            dynamics: self.params.dynamics.value(),
+        };
+        if self.synced == Some(now) {
+            return;
+        }
+
+        let algorithm_changed =
+            self.synced.map(|s| s.algorithm) != Some(now.algorithm);
+        self.synced = Some(now);
+
+        self.chain.threshold_db = now.threshold_db as f64;
+        self.chain.detect_time_ms = now.sensitivity_ms as f64;
+        self.chain.retrigger_ms = now.retrigger_ms as f64;
+        self.chain.dynamics = now.dynamics as f64;
+        self.chain.velocity_curve = curve_from_index(now.vel_curve);
+        self.chain.velocity.min_velocity = now.vel_min as f64;
+        self.chain.velocity.max_velocity = now.vel_max.max(now.vel_min) as f64;
+        self.chain.detector.algorithm = algorithm_from_index(now.algorithm);
+        self.chain.set_sc_hpf(now.sc_hpf_hz as f64);
+        self.chain.set_sc_lpf(now.sc_lpf_hz as f64);
+        self.chain.update(self.audio_config());
+
+        if algorithm_changed {
+            context.set_latency_samples(self.chain.latency_samples() as u32);
+        }
     }
 
     fn schedule_off(&mut self, off: PendingOff) {
@@ -209,7 +340,11 @@ impl Plugin for FtsTrigger {
         _context: &mut impl InitContext<Self>,
     ) -> bool {
         self.sample_rate = buffer_config.sample_rate;
-        self.detector.set_sample_rate(self.sample_rate);
+        self.synced = None; // force a full re-sync at the new rate
+        self.chain.update(AudioConfig {
+            sample_rate: self.sample_rate as f64,
+            max_buffer_size: buffer_config.max_buffer_size as usize,
+        });
         self.note_len_samples =
             ((NOTE_LEN_MS * 0.001 * self.sample_rate) as u32).max(1);
         self.click_step =
@@ -218,7 +353,7 @@ impl Plugin for FtsTrigger {
     }
 
     fn reset(&mut self) {
-        self.detector.reset();
+        self.chain.reset();
         self.pending_offs = [None; 4];
         self.click_remaining = 0;
         self.click_phase = 0.0;
@@ -231,13 +366,19 @@ impl Plugin for FtsTrigger {
         _aux: &mut AuxiliaryBuffers,
         context: &mut impl ProcessContext<Self>,
     ) -> ProcessStatus {
-        self.sync_params();
+        self.sync_params(context);
 
         let block_len = buffer.samples() as u32;
         let note = self.params.note.value().clamp(0, 127) as u8;
         let listen = self.params.listen.value();
         let click_len =
             ((CLICK_LEN_MS * 0.001 * self.sample_rate) as u32).max(1);
+        // Confirmation window delay: the detector fires at the END of the
+        // detect window, so place the note back at the onset (clamped to the
+        // block start when the onset was in the previous block). FFT modes
+        // have additional latency, reported to the host instead.
+        let confirm_samples = (self.params.sensitivity_ms.value() * 0.001
+            * self.sample_rate) as u32;
 
         // Flush NoteOffs owed from previous blocks.
         for slot in &mut self.pending_offs {
@@ -261,21 +402,15 @@ impl Plugin for FtsTrigger {
         }
 
         for (i, mut frame) in buffer.iter_samples().enumerate() {
-            // Mono sum for detection; the audio itself is untouched.
-            let mut sum = 0.0f32;
-            let mut channels = 0u32;
-            for sample in frame.iter_mut() {
-                sum += *sample;
-                channels += 1;
-            }
-            let mono = if channels > 0 { sum / channels as f32 } else { 0.0 };
+            // The chain sidechain wants a stereo pair; duplicate mono.
+            let mut it = frame.iter_mut();
+            let l = it.next().map(|s| *s as f64).unwrap_or(0.0);
+            let r = it.next().map(|s| *s as f64).unwrap_or(l);
 
-            if let Some(hit) = self.detector.process_sample(mono) {
-                // The detector reports at the end of its ~1.5 ms capture
-                // window; place the note back at the onset sample (clamped
-                // to the block start if the onset was in the previous block).
-                let onset = (i as u32).saturating_sub(hit.latency_samples);
-                let velocity = hit.velocity as f32 / 127.0;
+            if let Some(vel) = self.chain.detect_tick(l, r) {
+                let onset = (i as u32).saturating_sub(confirm_samples);
+                let velocity =
+                    (VelocityMapper::to_midi(vel) as f32 / 127.0).clamp(0.0, 1.0);
                 context.send_event(NoteEvent::NoteOn {
                     timing: onset,
                     voice_id: None,
