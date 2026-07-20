@@ -240,6 +240,7 @@ impl Room {
         let base_delays = [71, 97, 127, 163, 199, 239, 277, 317];
         let scale = self.sample_rate / 48000.0 * self.size.max(0.1);
 
+        #[allow(clippy::needless_range_loop)]
         for i in 0..FDN_MOD_AP_COUNT {
             let delay = ((base_delays[i] as f64) * scale) as usize;
             self.mod_ap_l[i].sample_delay = delay.max(4);

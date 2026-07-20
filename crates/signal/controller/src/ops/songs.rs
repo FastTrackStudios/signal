@@ -334,7 +334,7 @@ impl<S: SignalApi> SongOps<S> {
                 id: song_id.to_string(),
             })?;
         song.add_section(section);
-        Ok(self.save(song).await?)
+        self.save(song).await
     }
 
     /// Remove a section, returning an error if the song or section doesn't exist.

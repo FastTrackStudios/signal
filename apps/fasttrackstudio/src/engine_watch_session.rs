@@ -187,8 +187,8 @@ async fn build_song_chart(b: &SessionBridge, song_index: usize) -> Arc<SongChart
     // Chart carried no chord tokens (section-outline charts) — fall back to
     // the song's MIDI-detected chords, mapping PPQ → seconds → measure/beat
     // through the measure table (960 PPQ per quarter, song tempo).
-    if out.chords.is_empty() && !out.measure_times.is_empty() {
-        if let Ok(song) = b.setlist.song(song_index).await {
+    if out.chords.is_empty() && !out.measure_times.is_empty()
+        && let Ok(song) = b.setlist.song(song_index).await {
             let bpm = song.tempo.unwrap_or(120.0).max(1.0);
             for dc in &song.detected_chords {
                 let sec = dc.start_ppq as f64 / 960.0 * 60.0 / bpm;
@@ -205,7 +205,6 @@ async fn build_song_chart(b: &SessionBridge, song_index: usize) -> Arc<SongChart
             out.chords
                 .sort_by_key(|c| (c.measure, c.beat, c.subdivision));
         }
-    }
 
     tracing::info!(
         song_index,
@@ -360,15 +359,14 @@ async fn current_indices(b: &SessionBridge) -> ActiveIndices {
     // No "get indices" RPC — synthesize a snapshot from the active song /
     // section queries; the SSE stream corrects it on the next publish.
     let mut indices = ActiveIndices::default();
-    if let Ok(setlist) = b.setlist.setlist().await {
-        if let Ok(song) = b.setlist.active_song().await {
+    if let Ok(setlist) = b.setlist.setlist().await
+        && let Ok(song) = b.setlist.active_song().await {
             indices.song_index = setlist.songs.iter().position(|s| s.id == song.id);
             if let Ok(section) = b.setlist.active_section().await {
                 indices.section_index =
                     song.sections.iter().position(|s| s.section_id == section.section_id);
             }
         }
-    }
     indices
 }
 

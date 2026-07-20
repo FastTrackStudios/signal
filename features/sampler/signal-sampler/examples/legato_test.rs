@@ -59,7 +59,7 @@ fn main() -> eyre::Result<()> {
     warm(from);
     warm(to);
     let mut acc: Vec<f32> = Vec::new();
-    let mut render = |rig: &SamplerRig, label: &str, frames: usize, acc: &mut Vec<f32>| {
+    let render = |rig: &SamplerRig, label: &str, frames: usize, acc: &mut Vec<f32>| {
         let mut b = vec![0.0f32; frames * 2];
         rig.render_offline(&mut b).ok();
         let peak = b.iter().fold(0f32, |m, &s| m.max(s.abs()));

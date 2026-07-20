@@ -824,7 +824,7 @@ fn ReverbPanel(blocks: Vec<LiveBlock>) -> Element {
                         (4.0, "4"), (6.0, "6"), (8.0, "8"), (16.0, "16"),
                     ]
                     .iter()
-                    .map(|(t, l)| (x_of_t(*t as f64), *l))
+                    .map(|(t, l)| (x_of_t(*t), *l))
                     .collect();
                     rsx! {
                         div {

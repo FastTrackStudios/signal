@@ -148,7 +148,6 @@ pub fn BlockInspectorPanel(props: BlockInspectorPanelProps) -> Element {
                                                             bg-amber-600 hover:bg-amber-500 text-white \
                                                             transition-colors duration-150",
                                                     onclick: {
-                                                        let on_save_as_new = on_save_as_new;
                                                         let new_slot = new_slot.clone();
                                                         move |_| {
                                                             let name = save_as_new_name();

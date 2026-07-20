@@ -42,6 +42,22 @@ pub enum FxSendCategory {
     Custom(String),
 }
 
+impl core::str::FromStr for FxSendCategory {
+    type Err = core::convert::Infallible;
+
+    /// Never fails — unknown names land in `Custom`.
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        Ok(match value {
+            "reverb" => Self::Reverb,
+            "delay" => Self::Delay,
+            "chorus" => Self::Chorus,
+            "pitch" => Self::Pitch,
+            "vocoder" => Self::Vocoder,
+            other => Self::Custom(other.to_string()),
+        })
+    }
+}
+
 impl FxSendCategory {
     pub fn as_str(&self) -> &str {
         match self {
@@ -51,17 +67,6 @@ impl FxSendCategory {
             Self::Pitch => "pitch",
             Self::Vocoder => "vocoder",
             Self::Custom(s) => s.as_str(),
-        }
-    }
-
-    pub fn from_str(value: &str) -> Self {
-        match value {
-            "reverb" => Self::Reverb,
-            "delay" => Self::Delay,
-            "chorus" => Self::Chorus,
-            "pitch" => Self::Pitch,
-            "vocoder" => Self::Vocoder,
-            other => Self::Custom(other.to_string()),
         }
     }
 

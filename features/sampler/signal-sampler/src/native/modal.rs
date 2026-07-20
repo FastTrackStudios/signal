@@ -238,7 +238,7 @@ impl ResidualGen {
         // Merge the stored bands down to at most MAX_RES_BANDS (energy-summed
         // gains, geometric-mean centres).
         let n = res.band_gain.len().min(res.band_hz.len());
-        let group = (n + MAX_RES_BANDS - 1) / MAX_RES_BANDS;
+        let group = n.div_ceil(MAX_RES_BANDS);
         let mut filters = Vec::new();
         let mut i = 0;
         while i < n {

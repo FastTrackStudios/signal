@@ -527,8 +527,8 @@ async fn resolve_song_section_via_patch_matches_direct_patch() {
 
         let graph = signal
             .resolve_target(ResolveTarget::SongSection {
-                song_id: song_id.into(),
-                section_id: section_id.into(),
+                song_id: song_id,
+                section_id: section_id,
             })
             .await
             .expect("resolve song section failed");
@@ -547,8 +547,8 @@ async fn resolve_song_section_via_patch_matches_direct_patch() {
 
     let graph = signal
         .resolve_target(ResolveTarget::SongSection {
-            song_id: song.id.clone().into(),
-            section_id: first_section.id.clone().into(),
+            song_id: song.id.clone(),
+            section_id: first_section.id.clone(),
         })
         .await
         .expect("resolve song section failed");
@@ -586,8 +586,8 @@ async fn resolve_rig_scene_section_equals_direct_rig_scene() {
 
     let via_section = signal
         .resolve_target(ResolveTarget::SongSection {
-            song_id: song_id.into(),
-            section_id: section_id.into(),
+            song_id: song_id,
+            section_id: section_id,
         })
         .await
         .expect("resolve via section failed");
@@ -684,8 +684,8 @@ async fn resolve_self_referencing_patch_detects_cycle() {
 
     let result = signal
         .resolve_target(ResolveTarget::ProfilePatch {
-            profile_id: profile_id.into(),
-            patch_id: patch_a_id.into(),
+            profile_id: profile_id,
+            patch_id: patch_a_id,
         })
         .await;
 
@@ -715,8 +715,8 @@ async fn resolve_two_patch_cycle_detects_cycle() {
 
     let result = signal
         .resolve_target(ResolveTarget::ProfilePatch {
-            profile_id: profile_id.into(),
-            patch_id: patch_a_id.into(),
+            profile_id: profile_id,
+            patch_id: patch_a_id,
         })
         .await;
 
@@ -749,8 +749,8 @@ async fn resolve_three_patch_cycle_detects_cycle() {
 
     let result = signal
         .resolve_target(ResolveTarget::ProfilePatch {
-            profile_id: profile_id.into(),
-            patch_id: patch_a_id.into(),
+            profile_id: profile_id,
+            patch_id: patch_a_id,
         })
         .await;
 
@@ -787,8 +787,8 @@ async fn resolve_valid_patch_chain_succeeds() {
 
     let graph = signal
         .resolve_target(ResolveTarget::ProfilePatch {
-            profile_id: profile_id.into(),
-            patch_id: patch_a_id.into(),
+            profile_id: profile_id,
+            patch_id: patch_a_id,
         })
         .await
         .expect("valid patch chain should resolve");
@@ -824,8 +824,8 @@ async fn resolve_song_section_with_cyclic_patch_detects_cycle() {
 
     let result = signal
         .resolve_target(ResolveTarget::SongSection {
-            song_id: song_id.into(),
-            section_id: section_id.into(),
+            song_id: song_id,
+            section_id: section_id,
         })
         .await;
 
@@ -859,7 +859,7 @@ async fn all_around_activate_each_patch() {
 
     let profile = signal
         .profiles()
-        .load(profile_id.clone())
+        .load(profile_id)
         .await
         .unwrap()
         .expect("All-Around profile not found");
@@ -873,7 +873,7 @@ async fn all_around_activate_each_patch() {
     // Activate default (None) — should resolve to Clean
     let default_graph = signal
         .profiles()
-        .activate(profile_id.clone(), None::<PatchId>)
+        .activate(profile_id, None::<PatchId>)
         .await
         .expect("activate_patch(default) failed");
     println!(
@@ -891,7 +891,7 @@ async fn all_around_activate_each_patch() {
 
         let graph = signal
             .profiles()
-            .activate(profile_id.clone(), Some(patch.id.clone()))
+            .activate(profile_id, Some(patch.id.clone()))
             .await
             .unwrap_or_else(|e| panic!("activate_patch('{}') failed: {:?}", patch.name, e));
 

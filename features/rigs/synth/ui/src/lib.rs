@@ -1702,7 +1702,7 @@ fn MappingView() -> Element {
                         {
                             let id = g.clone();
                             let is_sel = matches!(&fv, Filter::Group(x) if x == &id);
-                            let count = zones.iter().filter(|z| &z.group == &id).count();
+                            let count = zones.iter().filter(|z| z.group == id).count();
                             rsx!{ button {
                                 key: "{g}",
                                 style: sidebar_btn(is_sel),

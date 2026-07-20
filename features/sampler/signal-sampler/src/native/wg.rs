@@ -225,7 +225,7 @@ impl StringWaveguide {
     }
     fn delay_exc(&mut self, samples: usize) {
         if samples > 0 {
-            self.exc.splice(0..0, std::iter::repeat(0.0).take(samples));
+            self.exc.splice(0..0, std::iter::repeat_n(0.0, samples));
         }
     }
 

@@ -136,7 +136,7 @@ fn main() {
         }
         let mut block = vec![0.0f32; 512 * 2];
         let mut master_peak = 0.0f32;
-        for _ in 0..((48_000 / 512) / 2).max(1) {
+        for _ in 0..((48_000 / 512) / 2) {
             let _ = player.render_offline(&mut block);
             for &s in &block {
                 master_peak = master_peak.max(s.abs());

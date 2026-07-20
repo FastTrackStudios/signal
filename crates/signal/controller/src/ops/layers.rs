@@ -218,7 +218,7 @@ impl<S: SignalApi> LayerOps<S> {
                 id: layer_id.to_string(),
             })?;
         layer.add_variant(snapshot);
-        Ok(self.save(layer).await?)
+        self.save(layer).await
     }
 
     /// Remove a variant, returning an error if the layer or variant doesn't exist.

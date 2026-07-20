@@ -327,8 +327,8 @@ fn step_table(cur: u32, table: &[u32], dir: i32) -> u32 {
         .iter()
         .position(|&v| v >= cur)
         .unwrap_or(table.len() - 1) as i32;
-    let n = table[(idx + dir).clamp(0, table.len() as i32 - 1) as usize];
-    n
+    
+    table[(idx + dir).clamp(0, table.len() as i32 - 1) as usize]
 }
 
 /// One pickable device — display name + channel count, plus the device-substring

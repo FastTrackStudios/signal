@@ -32,8 +32,10 @@ const FAST_AUDITION_PRELOAD_SAMPLES: usize = 64;
 const PERFORMANCE_PRELOAD_SAMPLES: usize = 512;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Default)]
 pub enum PreloadProfile {
     FastAudition,
+    #[default]
     Performance,
     Full,
     DrumKit,
@@ -41,11 +43,6 @@ pub enum PreloadProfile {
     OrchestralArticulation,
 }
 
-impl Default for PreloadProfile {
-    fn default() -> Self {
-        Self::Performance
-    }
-}
 
 impl PreloadProfile {
     pub fn from_name(name: &str) -> Option<Self> {

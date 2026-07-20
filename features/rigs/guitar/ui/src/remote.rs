@@ -110,7 +110,7 @@ pub fn GuitarRigRemote() -> Element {
 
     let perf = state.perf;
     let blocks = state.blocks;
-    let connected = rig.is_some();
+    let _connected = rig.is_some();
     let profile = perf().profile_name;
     let running = state.running.cloned();
 

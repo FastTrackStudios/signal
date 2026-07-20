@@ -765,7 +765,7 @@ async fn reorder_engines_in_rig() {
         .load(seed_id("removable-rig"))
         .await
         .unwrap()
-        .or_else(|| {
+        .or({
             // Might not exist if tests run in isolation — create fresh
             None
         });

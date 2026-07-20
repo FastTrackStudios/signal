@@ -57,7 +57,7 @@ where
                 .load_layer(layer_id)
                 .await
                 .map_err(|e| SignalServiceError::StorageError(e.to_string()))?
-                .ok_or_else(|| SignalServiceError::not_found("Layer", &layer_id))?;
+                .ok_or_else(|| SignalServiceError::not_found("Layer", layer_id))?;
             if !engine.is_layer_type_compatible(layer.engine_type) {
                 return Err(SignalServiceError::ValidationError(format!(
                     "layer {} engine type {:?} incompatible with engine {:?}",

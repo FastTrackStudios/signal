@@ -49,6 +49,7 @@ struct SpringUnit {
 }
 
 impl SpringUnit {
+    #[allow(clippy::too_many_arguments)]
     fn new(
         sample_rate: f64,
         delay_ms: f64,

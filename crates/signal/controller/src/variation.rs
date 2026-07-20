@@ -166,7 +166,7 @@ where
         let rig_applier = self.daw_rig_applier.read().expect("lock poisoned").clone();
         if let Some(rig_applier) = rig_applier {
             match rig_applier
-                .switch_scene(&rig_id.to_string(), &scene_id.to_string(), Some(&name))
+                .switch_scene(rig_id.as_ref(), scene_id.as_ref(), Some(&name))
                 .await
             {
                 Ok(true) => {
@@ -245,7 +245,7 @@ where
             signal_proto::song::SectionSource::RigScene { rig_id, scene_id } => {
                 if let Some(rig_applier) = rig_applier {
                     match rig_applier
-                        .switch_scene(&rig_id.to_string(), &scene_id.to_string(), Some(&name))
+                        .switch_scene(rig_id.as_ref(), scene_id.as_ref(), Some(&name))
                         .await
                     {
                         Ok(_) => {

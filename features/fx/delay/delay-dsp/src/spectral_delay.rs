@@ -176,7 +176,7 @@ impl SpectralDelay {
             feedback_sample: 0.0,
             sample_rate: 48000.0,
             smoother: ParamSmoother::new(0.0),
-            rng: XorShift32::new(0x5EC7_0A1),
+            rng: XorShift32::new(0x05EC_70A1),
         }
     }
 

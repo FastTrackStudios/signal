@@ -71,6 +71,12 @@ pub struct ReaperPatchApplier {
     state: RwLock<Option<FolderRigState>>,
 }
 
+impl Default for ReaperPatchApplier {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ReaperPatchApplier {
     pub fn new() -> Self {
         Self {

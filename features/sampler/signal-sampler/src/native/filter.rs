@@ -167,7 +167,7 @@ impl NativeFilter {
     /// Pole count 1..=8 → cascade sections (12 dB per section, rounded up).
     #[must_use]
     pub fn with_poles(mut self, poles: u32) -> Self {
-        self.sections = ((poles.clamp(1, 8) + 1) / 2) as usize;
+        self.sections = poles.clamp(1, 8).div_ceil(2) as usize;
         self.update_coeffs();
         self
     }

@@ -221,7 +221,7 @@ impl<S: SignalApi> EngineOps<S> {
                 id: engine_id.to_string(),
             })?;
         engine.add_variant(scene);
-        Ok(self.save(engine).await?)
+        self.save(engine).await
     }
 
     /// Remove a scene, returning an error if the engine or scene doesn't exist.

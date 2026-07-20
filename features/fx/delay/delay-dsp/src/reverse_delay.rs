@@ -247,8 +247,8 @@ mod tests {
             let pos_b = (pos + grain_len) % (grain_len * 2);
             let wa = ReverseDelay::grain_window(pos, grain_len, cf);
             let wb = ReverseDelay::grain_window(pos_b, grain_len, cf);
-            assert!(wa >= 0.0 && wa <= 1.0, "Window A out of range: {wa}");
-            assert!(wb >= 0.0 && wb <= 1.0, "Window B out of range: {wb}");
+            assert!((0.0..=1.0).contains(&wa), "Window A out of range: {wa}");
+            assert!((0.0..=1.0).contains(&wb), "Window B out of range: {wb}");
         }
     }
 }

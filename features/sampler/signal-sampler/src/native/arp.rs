@@ -130,15 +130,14 @@ impl ArpEngine {
         while t < frames as f32 {
             // Close the sounding note when its gate ends inside this block.
             if let Some((note, off_at)) = self.sounding {
-                if off_at <= t || off_at < frames as f32 {
-                    if off_at >= t {
+                if (off_at <= t || off_at < frames as f32)
+                    && off_at >= t {
                         out.push(PluginMidiEvent {
                             offset: off_at as u32,
                             message: ev_note_off(note),
                         });
                         self.sounding = None;
                     }
-                }
             }
             if self.held.is_empty() {
                 break;

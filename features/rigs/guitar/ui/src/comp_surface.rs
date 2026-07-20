@@ -204,9 +204,9 @@ pub fn CompSurface(
         }
     };
 
-    let fmt_ratio: fn(f32) -> String = |v| format!("{v:.1}:1");
+    let _fmt_ratio: fn(f32) -> String = |v| format!("{v:.1}:1");
     let fmt_ms: fn(f32) -> String = |v| format!("{v:.1}ms");
-    let fmt_db: fn(f32) -> String = |v| format!("{v:.1}dB");
+    let _fmt_db: fn(f32) -> String = |v| format!("{v:.1}dB");
 
     rsx! {
         div { class: "relative flex flex-col h-full min-h-0 overflow-hidden",

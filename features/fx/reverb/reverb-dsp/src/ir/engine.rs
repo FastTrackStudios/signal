@@ -99,6 +99,7 @@ impl IrEngine {
         }
     }
 
+    #[allow(clippy::result_large_err)]
     pub fn submit(&self, job: IrJob) -> Result<(), crossbeam_channel::SendError<IrJob>> {
         self.tx_jobs.send(job)
     }
@@ -108,6 +109,7 @@ impl IrEngine {
     }
 
     /// Convenience for the most common case: just submit a path (slot A).
+    #[allow(clippy::result_large_err)]
     pub fn submit_path<P: AsRef<Path>>(
         &self,
         id: u64,
@@ -120,6 +122,7 @@ impl IrEngine {
 
     /// Submit a path load destined for a specific IR slot (B feeds the
     /// convolution morph's second convolver).
+    #[allow(clippy::result_large_err)]
     pub fn submit_path_slot<P: AsRef<Path>>(
         &self,
         id: u64,

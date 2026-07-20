@@ -169,7 +169,7 @@ pub fn render_click(
 /// (`pan` 0.5 = center, 1.0 = hard right) so it reads clearly against the
 /// music.
 pub fn mix_click(music: &[f32], click: &[f32], click_gain: f32, pan: f32) -> Vec<f32> {
-    let frames = (music.len().max(click.len()) + 1) / 2;
+    let frames = music.len().max(click.len()).div_ceil(2);
     let (gl, gr) = (
         click_gain * (1.0 - pan).max(0.0) * 2.0,
         click_gain * pan.min(1.0) * 2.0,

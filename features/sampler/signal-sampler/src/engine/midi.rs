@@ -1652,7 +1652,7 @@ impl SampleEngine {
                 voice = voice.with_flex_env(flex);
             }
             let loop_xfade =
-                ms_to_frames(self.patch.spec.performance.loop_xfade_ms, self.sample_rate) as usize;
+                ms_to_frames(self.patch.spec.performance.loop_xfade_ms, self.sample_rate);
             // Effective loop window for this voice: (start, end, xfade). An
             // `end == 0` means the voice plays once to the end (no loop). This
             // is the single source of truth for both the voice and the trace.

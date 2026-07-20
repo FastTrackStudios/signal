@@ -73,7 +73,7 @@ impl MultitapDelay {
     }
 
     pub fn set_tap_count(&mut self, count: usize) {
-        self.count = count.max(1).min(MAX_TAPS);
+        self.count = count.clamp(1, MAX_TAPS);
         self.update_taps();
     }
 

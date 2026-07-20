@@ -151,7 +151,7 @@ pub fn PerformGrid(
         )
     };
     let pedals: Vec<LiveBlock> = chain_blocks.iter().filter(|b| pedal_types(b)).cloned().collect();
-    let set_mode = {
+    let _set_mode = {
         let rig = rig.clone();
         move |m: u32| {
             if let Some(r) = rig.clone() {

@@ -188,6 +188,7 @@ impl HallCathedral {
         let base_delays = [191, 241, 293, 353, 421, 491, 569, 647];
         let scale = self.sample_rate / 48000.0 * self.size.max(0.5);
 
+        #[allow(clippy::needless_range_loop)]
         for i in 0..FDN_MOD_AP_COUNT {
             let delay = ((base_delays[i] as f64) * scale) as usize;
             self.mod_ap_l[i].sample_delay = delay.max(4);

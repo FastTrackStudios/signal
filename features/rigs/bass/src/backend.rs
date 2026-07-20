@@ -176,14 +176,14 @@ impl BassRigBackend {
         tick.tick += 1;
         // Late/replugged MIDI while stopped: the scaffold's hot-plug hook
         // only fires while running, so re-try a missing handle here.
-        if tick.tick % 60 == 0
+        if tick.tick.is_multiple_of(60)
             && self.inner.midi_handle.lock_ok().is_none()
             && !midicore::midir::input_ports().is_empty()
         {
             self.reattach_midi();
         }
         // Flush the pending last-state save about once a second.
-        if tick.tick % 30 == 0 && self.inner.state_dirty.swap(false, Ordering::Relaxed) {
+        if tick.tick.is_multiple_of(30) && self.inner.state_dirty.swap(false, Ordering::Relaxed) {
             BassLibrary::save_last_state(&self.snapshot_last_state());
         }
         let queued: Vec<MidiEvent> = std::mem::take(&mut *self.inner.control_q.lock_ok());
