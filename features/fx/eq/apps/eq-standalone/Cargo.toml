@@ -20,8 +20,8 @@ atomic_float = { workspace = true }
 # Pulled directly so we can vendor a custom launch that captures the
 # winit EventLoopProxy + WindowId. Pinned to the SAME DioxusLabs/blitz revision
 # as nice-plug-dioxus (9ebd23a) so they share blitz/anyrender/vello types.
-dioxus-native = { git = "https://github.com/DioxusLabs/blitz.git", rev = "727dab0105fb42659f76f7862040b82f4e982893", features = ["prelude"] }
-blitz-shell = { git = "https://github.com/DioxusLabs/blitz.git", rev = "727dab0105fb42659f76f7862040b82f4e982893" }
+dioxus-native = { git = "https://github.com/DioxusLabs/blitz.git", rev = "02523b833ada999d70f72784b592d61df7279f62", features = ["prelude"] }
+blitz-shell = { git = "https://github.com/DioxusLabs/blitz.git", rev = "02523b833ada999d70f72784b592d61df7279f62" }
 winit = "0.30"
 dioxus-core = "0.7"
 # `asset!` macro (from dioxus_native::prelude) expands to `::manganis::...`,
