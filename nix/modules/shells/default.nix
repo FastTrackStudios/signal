@@ -54,6 +54,14 @@
       ++ config.fts.buildInputs
       ++ config.fts.nativeBuildInputs;
 
+      # Playwright browsers for the editor web suite (libs/editor/tests).
+      # pkgsDx's playwright-driver (1.59.1) matches the @playwright/test
+      # pin in tests/package.json — keep them in lockstep. Without this
+      # Playwright falls back to its own downloaded chromium, which can't
+      # load shared libs on NixOS (libnspr4.so).
+      PLAYWRIGHT_BROWSERS_PATH = config.fts.pkgsDx.playwright-driver.browsers;
+      PLAYWRIGHT_SKIP_VALIDATE_HOST_REQUIREMENTS = "true";
+
       shellHook = ''
         [ -f .env ] && { set -a; source .env; set +a; }
         # Append (not prepend): store-provided tools (dx, wasm-bindgen)
