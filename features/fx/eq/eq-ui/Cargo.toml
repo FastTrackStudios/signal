@@ -47,6 +47,14 @@ spectrum-analyzer = { workspace = true }
 futures-timer = { version = "3", optional = true }
 
 [dev-dependencies]
+# Headless GUI smoke tests (tests/gui_smoke.rs): mount the portable-core SVG
+# graph in a plain VirtualDom and assert on the SSR'd markup. dioxus-ssr is
+# version-locked to the workspace dioxus pin (=0.7.9). NOTE: the experimental
+# DioxusLabs/dioxus-test harness was evaluated 2026-07-20 and rejected for
+# now — it requires dioxus 0.8.0-alpha (git) + blitz-dom 0.3.0-beta.1, which
+# conflicts with this tree's =0.7.9 / blitz rev pins. Revisit on the 0.8 bump.
+dioxus = { workspace = true }
+dioxus-ssr = { version = "=0.7.9", default-features = false }
 pollster = "0.4"
 # Only the render_smoke GPU test uses wgpu directly; keep it in lockstep with
 # nice-plug-dioxus's wgpu (29) so vello's render_to_texture types line up.
