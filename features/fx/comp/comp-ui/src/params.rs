@@ -7,6 +7,54 @@
 use atomic_float::AtomicF32;
 use audiocore_core::prelude::*;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
+
+/// Samples kept in each waveform history ring (one per processed block —
+/// ~2.7 s at 512-sample blocks / 48 kHz).
+pub const WAVE_HISTORY_LEN: usize = 256;
+
+/// Lock-free single-writer history ring for the graph's rolling traces.
+///
+/// The audio thread [`push`](WaveRing::push)es one value per block (no
+/// allocation, relaxed atomics); the UI thread
+/// [`snapshot`](WaveRing::snapshot)s the whole window oldest → newest. A
+/// torn read across the head is at worst one stale sample — invisible in a
+/// scrolling waveform — so no synchronization beyond the atomics is needed.
+pub struct WaveRing {
+    buf: [AtomicF32; WAVE_HISTORY_LEN],
+    /// Next write slot (monotonically increasing, wrapped on use).
+    head: AtomicUsize,
+}
+
+impl Default for WaveRing {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl WaveRing {
+    pub fn new() -> Self {
+        Self {
+            buf: std::array::from_fn(|_| AtomicF32::new(0.0)),
+            head: AtomicUsize::new(0),
+        }
+    }
+
+    /// Audio thread: append one value. Lock-free, allocation-free.
+    pub fn push(&self, v: f32) {
+        let i = self.head.load(Ordering::Relaxed);
+        self.buf[i % WAVE_HISTORY_LEN].store(v, Ordering::Relaxed);
+        self.head.store(i.wrapping_add(1), Ordering::Relaxed);
+    }
+
+    /// UI thread: copy the window out, oldest → newest.
+    pub fn snapshot(&self) -> Vec<f32> {
+        let head = self.head.load(Ordering::Relaxed);
+        (0..WAVE_HISTORY_LEN)
+            .map(|k| self.buf[(head.wrapping_add(k)) % WAVE_HISTORY_LEN].load(Ordering::Relaxed))
+            .collect()
+    }
+}
 
 /// Audio-thread → UI metering data.
 pub struct CompUiState {
@@ -16,6 +64,10 @@ pub struct CompUiState {
     pub input_peak_db: AtomicF32,
     pub output_peak_db: AtomicF32,
     pub sample_rate: AtomicF32,
+    /// Per-block input peaks (linear 0..1) for the graph's waveform fill.
+    pub input_wave: WaveRing,
+    /// Per-block gain reduction (dB, positive) for the graph's GR overlay.
+    pub gr_wave: WaveRing,
 }
 
 impl CompUiState {
@@ -26,6 +78,8 @@ impl CompUiState {
             input_peak_db: AtomicF32::new(-100.0),
             output_peak_db: AtomicF32::new(-100.0),
             sample_rate: AtomicF32::new(48_000.0),
+            input_wave: WaveRing::new(),
+            gr_wave: WaveRing::new(),
         }
     }
 }

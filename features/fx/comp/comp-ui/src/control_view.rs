@@ -1,9 +1,12 @@
 //! Comp editor — Dioxus GUI root component.
 //!
-//! The classic comp control surface: a knob row (threshold / ratio / attack /
-//! release / knee / makeup / mix / stereo link) beside live gain-reduction and
-//! I/O level meters. Reusable widgets (knobs, meters, drag provider) come from
-//! [`fts_ui_audio`]; theme + layout primitives from [`fts_ui`].
+//! The compressor graph ([`crate::comp_graph::CompGraph`] — transfer curve,
+//! threshold/knee drag, rolling waveform + GR traces) on top, with the
+//! classic comp control surface below: a knob row (threshold / ratio /
+//! attack / release / knee / makeup / mix / stereo link) beside live
+//! gain-reduction and I/O level meters. Reusable widgets (knobs, meters,
+//! drag provider) come from [`fts_ui_audio`]; theme + layout primitives
+//! from [`fts_ui`].
 
 use std::sync::atomic::Ordering;
 
@@ -105,6 +108,19 @@ fn AppShell() -> Element {
                             "Stereo Compressor"
                         }
                     }
+                }
+
+                // ── Compressor graph ────────────────────────────────
+                // Height pinned to exactly GRAPH_H CSS px so pointer y maps
+                // 1:1 onto the graph's fixed viewBox (see comp_graph.rs) —
+                // the knob row below takes the remaining space.
+                div {
+                    "data-testid": "comp-graph",
+                    style: format!(
+                        "height:{}px; flex:none; position:relative; overflow:hidden;",
+                        crate::comp_graph::GRAPH_H
+                    ),
+                    crate::comp_graph::CompGraph {}
                 }
 
                 // ── Control surface ─────────────────────────────────

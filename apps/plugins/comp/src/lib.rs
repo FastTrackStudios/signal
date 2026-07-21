@@ -43,7 +43,8 @@ impl Default for FtsComp {
         Self {
             params,
             ui_state,
-            editor_state: DioxusState::new(|| (800, 420)),
+            // Tall enough for the 300 px graph + knob rows + meters.
+            editor_state: DioxusState::new(|| (800, 640)),
             chain: CompChain::new(),
             sample_rate: 48_000.0,
         }
@@ -146,9 +147,13 @@ impl Plugin for FtsComp {
         }
 
         // ── UI metering (lock-free atomics; ~0.3 dB/block decay) ────────
-        self.ui_state
-            .gain_reduction_db
-            .store(self.chain.comp.gain_reduction_db() as f32, Ordering::Relaxed);
+        let gr_db = self.chain.comp.gain_reduction_db() as f32;
+        self.ui_state.gain_reduction_db.store(gr_db, Ordering::Relaxed);
+
+        // Graph history rings: one input peak + one GR value per block —
+        // lock-free stores, no allocation on the audio thread.
+        self.ui_state.input_wave.push(input_peak);
+        self.ui_state.gr_wave.push(gr_db);
 
         let prev_in = self.ui_state.input_peak_db.load(Ordering::Relaxed);
         let in_db = if input_peak > 0.0 {

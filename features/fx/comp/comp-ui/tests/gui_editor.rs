@@ -34,6 +34,8 @@ use dioxus_test::{
     render, DocumentTester,
 };
 
+use comp_ui::comp_graph::GRAPH_H;
+use comp_ui::comp_graph_svg::db_to_y;
 use comp_ui::control_view::App;
 use comp_ui::params::{CompParams, CompUiState};
 
@@ -162,6 +164,37 @@ mod support {
             let (ox, oy) = el.document_origin();
             let (w, h) = el.size();
             (ox + w as f64 / 2.0, oy + h as f64 / 2.0)
+        }
+
+        /// Document-space origin of the compressor-graph interaction surface.
+        /// The graph container is pinned to GRAPH_H CSS px, so element y IS
+        /// viewBox y — points computed with `db_to_y(.., GRAPH_H)` plus this
+        /// origin land exactly where the component hit-tests them.
+        pub fn graph_origin(&self) -> (f64, f64) {
+            self.tester
+                .query(by_testid("comp-graph"))
+                .immediately()
+                .expect("comp-graph container not in DOM")
+                .document_origin()
+        }
+
+        /// The current `d` attribute of the transfer-curve path.
+        pub fn transfer_curve_d(&self) -> String {
+            let html = self
+                .tester
+                .query(by_testid("comp-graph"))
+                .immediately()
+                .expect("comp-graph container not in DOM")
+                .inner_html();
+            let i = html
+                .find("transfer-curve")
+                .expect("transfer-curve path missing from graph DOM");
+            let tag_start = html[..i].rfind('<').expect("malformed html around transfer-curve");
+            let tag_end = i + html[i..].find('>').expect("unclosed transfer-curve tag");
+            let tag = &html[tag_start..tag_end];
+            let di = tag.find(" d=\"").expect("transfer-curve path has no d attribute");
+            let rest = &tag[di + 4..];
+            rest[..rest.find('"').expect("unterminated d attribute")].to_string()
         }
     }
 }
@@ -301,6 +334,157 @@ async fn dragging_threshold_knob_up_raises_threshold() -> dioxus_test::Result<()
     assert!(
         sets.windows(2).all(|w| w[1] >= w[0]),
         "threshold sets not monotonic: {sets:?}"
+    );
+    Ok(())
+}
+
+/// The compressor graph renders: the container has real (non-collapsed)
+/// layout with its height pinned to GRAPH_H, and the SVG transfer-curve path
+/// is present and well-formed (61 polyline points across the display range).
+#[tokio::test]
+async fn graph_renders_transfer_curve() -> dioxus_test::Result<()> {
+    let fx = mount();
+
+    let el = fx.tester.query(by_testid("comp-graph")).immediately()?;
+    let (w, h) = el.size();
+    assert!(w > 300.0, "graph too narrow: {w}px");
+    assert!(
+        (h as f64 - GRAPH_H).abs() < 1.0,
+        "graph height {h}px != pinned {GRAPH_H}px — pointer↔viewBox mapping broken"
+    );
+
+    let d = fx.transfer_curve_d();
+    assert!(d.starts_with("M "), "transfer path malformed: {d}");
+    assert_eq!(d.matches("L ").count(), 60, "expected 61 curve points: {d}");
+
+    // The threshold line + readouts rendered too.
+    let html = el.inner_html();
+    assert!(html.contains("GR"), "GR readout missing from graph");
+    assert!(html.contains("Thr · Ratio · Knee"), "param readout missing from graph");
+    Ok(())
+}
+
+/// Grab the threshold line (drawn at db_to_y(−20 dB)) and drag it 45 px down.
+/// The threshold must fall to the dB the pointer lands on (−29 dB on the
+/// 60 dB / 300 px scale), through recorded host gestures — and the rendered
+/// transfer-curve path must move with it.
+#[tokio::test]
+async fn dragging_threshold_line_on_graph_lowers_threshold() -> dioxus_test::Result<()> {
+    let fx = mount();
+    let tp = &fx.params.threshold_db;
+    let key = ptr_key(tp.as_ptr());
+    let before = tp.value();
+    assert!((before - (-20.0)).abs() < 1e-4, "default threshold: {before}");
+
+    let d_before = fx.transfer_curve_d();
+
+    let (gx, gy) = fx.graph_origin();
+    let ty = db_to_y(before as f64, GRAPH_H); // 100 px for −20 dB
+    let (sx, sy) = (gx + 180.0, gy + ty);
+
+    fx.tester.pointer_down(sx, sy);
+    let _ = fx.tester.pump().await;
+    for step in 1..=3 {
+        fx.tester.pointer_move(sx, sy + 15.0 * step as f64, true);
+        let _ = fx.tester.pump().await;
+    }
+    fx.tester.pointer_up(sx, sy + 45.0);
+    let _ = fx.tester.pump().await;
+
+    // 45 px down on the 60 dB / 300 px scale = −9 dB.
+    let after = tp.value();
+    assert!(after < before, "drag down did not lower threshold: {before} → {after}");
+    let expected = -(((ty + 45.0) / GRAPH_H) * 60.0) as f32;
+    assert!(
+        (after - expected).abs() < 0.5,
+        "threshold landed at {after} dB, expected ~{expected} dB"
+    );
+
+    // Real host gestures: begin, one set per move (monotonically falling —
+    // every step moved down), end.
+    {
+        let log = fx.log.lock().unwrap();
+        let begins = log.iter().filter(|g| matches!(g, Gesture::Begin(k) if *k == key)).count();
+        let ends = log.iter().filter(|g| matches!(g, Gesture::End(k) if *k == key)).count();
+        let sets: Vec<f32> = log
+            .iter()
+            .filter_map(|g| match g {
+                Gesture::Set(k, v) if *k == key => Some(*v),
+                _ => None,
+            })
+            .collect();
+        assert!(begins >= 1, "no begin gesture for threshold: {log:?}");
+        assert!(ends >= 1, "no end gesture for threshold: {log:?}");
+        assert!(sets.len() >= 3, "expected ≥3 set gestures, got {}", sets.len());
+        assert!(
+            sets.windows(2).all(|w| w[1] <= w[0]),
+            "threshold sets not monotonically falling: {sets:?}"
+        );
+    }
+
+    // The rendered curve tracked the param change.
+    let d_after = fx.transfer_curve_d();
+    assert_ne!(d_before, d_after, "transfer-curve path did not move with the threshold");
+    Ok(())
+}
+
+/// Press in the compressed region well above the threshold line and drag
+/// 60 px down: the slope tilts — one full doubling of the ratio (4:1 → ~8:1)
+/// through recorded host gestures.
+#[tokio::test]
+async fn dragging_above_knee_on_graph_raises_ratio() -> dioxus_test::Result<()> {
+    let fx = mount();
+    let rp = &fx.params.ratio;
+    let key = ptr_key(rp.as_ptr());
+    let thr_key = ptr_key(fx.params.threshold_db.as_ptr());
+    let before = rp.value();
+    assert!((before - 4.0).abs() < 1e-4, "default ratio: {before}");
+
+    let (gx, gy) = fx.graph_origin();
+    let ty = db_to_y(-20.0, GRAPH_H); // threshold line at 100 px
+    // 60 px above the line — outside the ±16 px threshold grab zone, inside
+    // the compressed region.
+    let (sx, sy) = (gx + 180.0, gy + ty - 60.0);
+
+    fx.tester.pointer_down(sx, sy);
+    let _ = fx.tester.pump().await;
+    for step in 1..=3 {
+        fx.tester.pointer_move(sx, sy + 20.0 * step as f64, true);
+        let _ = fx.tester.pump().await;
+    }
+    fx.tester.pointer_up(sx, sy + 60.0);
+    let _ = fx.tester.pump().await;
+
+    // 60 px at 60 px-per-doubling = ratio × 2 (through the skewed range's
+    // normalized round-trip).
+    let after = rp.value();
+    assert!(after > before, "drag down did not raise ratio: {before} → {after}");
+    assert!(
+        (after - 8.0).abs() < 1.0,
+        "ratio landed at {after}:1, expected ~8:1"
+    );
+
+    let log = fx.log.lock().unwrap();
+    let begins = log.iter().filter(|g| matches!(g, Gesture::Begin(k) if *k == key)).count();
+    let ends = log.iter().filter(|g| matches!(g, Gesture::End(k) if *k == key)).count();
+    let sets: Vec<f32> = log
+        .iter()
+        .filter_map(|g| match g {
+            Gesture::Set(k, v) if *k == key => Some(*v),
+            _ => None,
+        })
+        .collect();
+    assert!(begins >= 1, "no begin gesture for ratio: {log:?}");
+    assert!(ends >= 1, "no end gesture for ratio: {log:?}");
+    assert!(sets.len() >= 3, "expected ≥3 set gestures, got {}", sets.len());
+    assert!(
+        sets.windows(2).all(|w| w[1] >= w[0]),
+        "ratio sets not monotonically rising: {sets:?}"
+    );
+    // A ratio drag must not touch the threshold.
+    assert!(
+        !log.iter().any(|g| matches!(g, Gesture::Set(k, _) if *k == thr_key)),
+        "ratio drag leaked threshold sets: {log:?}"
     );
     Ok(())
 }

@@ -11,6 +11,7 @@
 //! - [`param_adapter`]: nice_plug `ParamPtr` → [`fts_ui_audio::ParamHandle`]
 
 // ── Portable core (no plugin framework; compiles for wasm) ──
+pub mod comp_graph_svg;
 pub mod profile_view;
 
 pub use profile_view::{
@@ -19,6 +20,8 @@ pub use profile_view::{
 };
 
 // ── The Blitz/vello plugin editor ──
+#[cfg(feature = "native")]
+pub mod comp_graph;
 #[cfg(feature = "native")]
 pub mod control_view;
 #[cfg(feature = "native")]
