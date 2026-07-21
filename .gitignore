@@ -7,6 +7,7 @@ node_modules/
 
 # Staged web bundle embedded into the native binary (just rig-install)
 apps/fasttrackstudio/web-dist/
+apps/patchbay/web-dist/
 
 # graphify knowledge graph — regenerable via `just graph`, machine-local.
 # Un-ignore graph.json/GRAPH_REPORT.md if you want to share a prebuilt graph.
