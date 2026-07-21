@@ -6,11 +6,11 @@ type: concept
 
 # REAPER Guide
 
-Drive REAPER the FastTrackStudio way — a modal, keyboard-first input layer over a stock REAPER install. This guide walks the essentials in the order you'll meet them in a session; the /input page is the full searchable reference for every binding.
+Drive REAPER the FastTrackStudio way — a modal, keyboard-first input layer over a stock REAPER install. This guide assumes the FTS layer is already installed and running (if it isn't, start with [[installation-setup|Installation & Setup]]); everything below is about *using* it. It walks the essentials in the order you'll meet them in a session, and the /input page is the full searchable reference for every binding.
 
 ## Foundations
 
-1. [[getting-started|Getting started]] — install the extension, where config lives, and the on-screen status panel that teaches you as you go.
+1. [[installation-setup|Installation & Setup]] — the one-time install, and how to confirm the layer is live.
 2. [[Input System|The input layer]] — profiles, which-key menus, overlays, and modes: the mental model everything else builds on.
 
 ## Everyday driving
