@@ -20,6 +20,11 @@ While a take plays back, tap a number to rank it — the marker lands two second
 - `kbd:@_FTS_SESSION_TAKE_RANK_PLAYPOS_3` — Rank :))) at the play position.
 - `kbd:@_FTS_SESSION_TAKE_RANK_PLAYPOS_DOWN` — Down-rank at the play position.
 
+```gif
+recording-take-ranking
+While the take rolls, tapping a number drops a ranked marker two seconds back — right on the phrase you just heard.
+```
+
 Hold Shift to rank the whole take instead of a moment — the marker sits at the item start:
 
 - `kbd:@_FTS_SESSION_TAKE_RANK_ITEM_1` — Rank :) item-wide (likewise `kbd:<S-2>`, `kbd:<S-3>`, `kbd:<S-0>`).

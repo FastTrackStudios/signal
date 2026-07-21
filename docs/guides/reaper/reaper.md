@@ -6,13 +6,30 @@ type: concept
 
 # REAPER Guide
 
-Drive REAPER the FastTrackStudio way — a modal, keyboard-first input layer over a stock REAPER install. This guide walks the essentials; the /input page is the full searchable reference.
+Drive REAPER the FastTrackStudio way — a modal, keyboard-first input layer over a stock REAPER install. This guide walks the essentials in the order you'll meet them in a session; the /input page is the full searchable reference for every binding.
 
-## Start here
+## Foundations
 
-1. [[Input System|The input layer]] — profiles, which-key menus, overlays, and modes: the mental model everything else builds on.
-2. [[Transport]] — play, stop, record, and marker navigation. The first things to get under your fingers.
-3. [[Tracks]] — inserting tracks, the `n` track-manager menu, and the `<S-n>` create-track family.
-4. [[Recording]] — Record mode's take-ranking pad and tracking controls (mode-specific).
+1. [[getting-started|Getting started]] — install the extension, where config lives, and the on-screen status panel that teaches you as you go.
+2. [[Input System|The input layer]] — profiles, which-key menus, overlays, and modes: the mental model everything else builds on.
+
+## Everyday driving
+
+3. [[Transport]] — play, stop, record, and marker navigation. The first things to get under your fingers.
+4. [[navigation|Navigation]] — moving the edit cursor and track selection, vim-style.
+5. [[Tracks]] — inserting tracks, the `n` track-manager menu, and the `<S-n>` create-track family.
+6. [[editing|Editing]] — split, delete, smart-duplicate, glue, and the undo stack.
+
+## Arranging and tracking
+
+7. [[markers-regions|Markers & regions]] — drop song-section regions and jump between them by name.
+8. [[Recording]] — Record mode's take-ranking pad and tracking controls (mode-specific).
+9. [[comping-takes|Comping & takes]] — fixed-lane comping, take switching, and imploding takes.
+
+## Shaping the session
+
+10. [[zoom-views|Zoom & views]] — the mixer, FX browser, window sets, and wheel zoom.
+11. [[mixing|Mixing]] — Mix mode and the mixing surface.
+12. [[modes|Modes]] — the workflow states that re-layer the keyboard for each phase of a production.
 
 Back to all [[guides|Guides]].

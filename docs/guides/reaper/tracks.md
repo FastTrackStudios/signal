@@ -25,6 +25,11 @@ Press `kbd:n` to open the Track Manager menu. The overlay lists every follow-up 
 - `kbd:@_FTS_SESSION_TRACK_MANAGER_ADD_MULTI_MIC` — Add a multi-mic group.
 - `kbd:@_FTS_SESSION_TRACK_MANAGER_ADD_PERFORMER` — Add a performer.
 
+```gif
+tracks-manager-menu
+Press `n` and the which-key overlay lists every follow-up key; tap a letter to add that entity.
+```
+
 ## Create categorized tracks (`kbd:<S-n>` menu)
 
 Press `kbd:<S-n>` to create fully-configured session tracks — named, routed, and colored for their role. Keep Shift held and tap letters to create several in a row.
@@ -38,5 +43,10 @@ Press `kbd:<S-n>` to create fully-configured session tracks — named, routed, a
 Branches nest: `kbd:<S-n> s` opens a synth submenu — arp, bass, lead, pad:
 
 - `kbd:@_FTS_SESSION_CREATE_NEW_SYNTH_ARP` — Synth arp.
+
+```gif
+tracks-create-category
+Hold Shift and tap letters from the `<S-n>` menu to spin up named, routed, colored tracks in a row.
+```
 
 Next: get a take down with [[Transport]] and comp it in [[Recording]].
