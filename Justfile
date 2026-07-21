@@ -117,10 +117,17 @@ task-install:
 
 # Install Patchbay (the PipeWire studio-routing app): release binary in
 # ~/.local/lib/fts, `patchbay` on PATH, launcher entry + icon.
-patchbay-install:
+# dx web build of the patchbay browser remote → apps/patchbay/web-dist/,
+# embedded into fts-patchbay by `--features embed-web` (patchbay-install).
+patchbay-web-stage:
+    cd apps/patchbay/web && dx build --platform web --release
+    rm -rf apps/patchbay/web-dist
+    cp -r target/dx/patchbay-web/release/web/public apps/patchbay/web-dist
+
+patchbay-install: patchbay-web-stage
     #!/usr/bin/env bash
     set -euo pipefail
-    cargo build --release -p fts-patchbay
+    cargo build --release -p fts-patchbay --features embed-web
     install -d ~/.local/lib/fts
     install -m 755 target/release/fts-patchbay ~/.local/lib/fts/patchbay.new
     mv -T ~/.local/lib/fts/patchbay.new ~/.local/lib/fts/patchbay
