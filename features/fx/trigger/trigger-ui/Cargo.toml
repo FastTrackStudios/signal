@@ -1,0 +1,45 @@
+[package]
+name = "trigger-ui"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+edition = "2021"          # kept on 2021 — matches the nice-plug plugin stack (comp-ui)
+description = "Trigger GUI — analysis waveform (scrolling peaks + draggable threshold + hit markers), params, and control view"
+
+[features]
+# Core-only by default in the signal workspace (wasm remotes). The plugin
+# builds enable `native` for the Blitz/nice-plug editor.
+default = []
+# The Blitz/vello plugin editor: control view, nice-plug param tree, param
+# adapter. Off → only the portable core (waveform SVG math) compiles.
+native = [
+    "dep:nice-plug",
+    "dep:nice-plug-dioxus",
+    "dep:audiocore-core",
+    "dep:fts-ui",
+    "dep:fts-ui-audio",
+    "dep:atomic_float",
+]
+
+[dependencies]
+audiocore-core = { workspace = true, optional = true }
+fts-ui = { workspace = true, optional = true }
+fts-ui-audio = { workspace = true, optional = true }
+nice-plug = { workspace = true, optional = true }
+nice-plug-dioxus = { workspace = true, optional = true }
+atomic_float = { workspace = true, optional = true }
+
+# The real-editor behavioral tests (tests/gui_editor.rs) mount
+# `control_view::App` — the `native`-gated plugin editor surface — on the
+# dioxus-test harness. Declared explicitly with required-features so a plain
+# `cargo test -p trigger-ui` (no features) still builds and just skips it.
+[[test]]
+name = "gui_editor"
+required-features = ["native"]
+
+[dev-dependencies]
+# Headless GUI tests: REAL event dispatch on a headless Blitz DOM via the
+# vendored dioxus-test (libs/vendor/dioxus-test) — same harness as comp-ui.
+dioxus = { workspace = true }
+dioxus-test = { workspace = true }
+tokio = { workspace = true, features = ["macros", "rt"] }

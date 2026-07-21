@@ -19,16 +19,25 @@
 //!
 //! The chain's sample playback engine (`sampler` — velocity layers +
 //! round-robin) is deliberately NOT wired yet: loading samples needs
-//! file-management UI/state, so this shell is MIDI-out + passthrough only.
-//! GUI is also deliberately absent (headless, host-generic params), matching
-//! `level-plugin`; both are follow-ups.
+//! file-management UI/state, so this shell is MIDI-out + passthrough only;
+//! it is a follow-up.
+//!
+//! Params + shared UI state live in [`trigger_ui::params`] (like `comp-ui`),
+//! so the Dioxus editor ([`trigger_ui::control_view::App`] — analysis
+//! waveform with draggable threshold + hit markers, knob/select surface)
+//! renders against them without a circular dep. `process()` feeds the
+//! editor's lock-free rings: one mono-sum input peak per block plus a
+//! `(block_index, velocity)` entry per detected hit.
 
 use nice_plug::prelude::*;
+use nice_plug_dioxus::prelude::*;
 use std::sync::Arc;
+use std::sync::atomic::Ordering;
 
 use trigger::detector::DetectAlgorithm;
 use trigger::velocity::{VelocityCurve, VelocityMapper};
 use trigger::{AudioConfig, Processor, TriggerChain};
+use trigger_ui::params::{TriggerParams, TriggerUiState};
 
 const PLUGIN_NAME: &str = "FTS Trigger";
 
@@ -41,49 +50,8 @@ const CLICK_LEN_MS: f32 = 2.0;
 const CLICK_FREQ_HZ: f32 = 1_000.0;
 
 // ── Parameters ────────────────────────────────────────────────────────────
-
-#[derive(Params)]
-pub struct TriggerParams {
-    /// Absolute onset threshold.
-    #[id = "threshold"]
-    pub threshold_db: FloatParam,
-    /// Detection confirmation window (the legacy engine's "sensitivity"):
-    /// the level must hold above the threshold this long before the trigger
-    /// fires. 0 = fire immediately; longer = fewer false triggers from spikes.
-    #[id = "sensitivity"]
-    pub sensitivity_ms: FloatParam,
-    /// Retrigger-guard window.
-    #[id = "retrigger"]
-    pub retrigger_ms: FloatParam,
-    /// MIDI note to emit (default 36 = C1 kick).
-    #[id = "note"]
-    pub note: IntParam,
-    /// Velocity floor (output clamp, 0-1).
-    #[id = "vel_min"]
-    pub vel_min: FloatParam,
-    /// Velocity ceiling (output clamp, 0-1).
-    #[id = "vel_max"]
-    pub vel_max: FloatParam,
-    /// Mute passthrough and click on every hit (threshold tuning).
-    #[id = "listen"]
-    pub listen: BoolParam,
-    /// Sidechain HPF frequency; 0 = off. Isolates the drum from low bleed.
-    #[id = "sc_hpf"]
-    pub sc_hpf_hz: FloatParam,
-    /// Sidechain LPF frequency; 0 = off. Rejects cymbal/hat bleed.
-    #[id = "sc_lpf"]
-    pub sc_lpf_hz: FloatParam,
-    /// Detection algorithm: peak envelope (zero latency) or an FFT onset
-    /// detection function.
-    #[id = "algorithm"]
-    pub algorithm: IntParam,
-    /// Velocity curve.
-    #[id = "vel_curve"]
-    pub vel_curve: IntParam,
-    /// Velocity dynamics: 0 = fixed velocity, 1 = full dynamic range.
-    #[id = "dynamics"]
-    pub dynamics: FloatParam,
-}
+// The param tree moved to trigger_ui::params (same ids/ranges — host
+// sessions keep loading); only the engine-enum mappings live here.
 
 fn algorithm_from_index(i: i32) -> DetectAlgorithm {
     match i {
@@ -103,84 +71,6 @@ fn curve_from_index(i: i32) -> VelocityCurve {
         2 => VelocityCurve::Exponential,
         3 => VelocityCurve::Fixed,
         _ => VelocityCurve::Linear,
-    }
-}
-
-impl Default for TriggerParams {
-    fn default() -> Self {
-        Self {
-            threshold_db: FloatParam::new(
-                "Threshold",
-                -30.0,
-                FloatRange::Linear { min: -60.0, max: 0.0 },
-            )
-            .with_unit(" dB")
-            .with_value_to_string(formatters::v2s_f32_rounded(1)),
-            sensitivity_ms: FloatParam::new(
-                "Sensitivity",
-                1.0,
-                FloatRange::Linear { min: 0.0, max: 10.0 },
-            )
-            .with_unit(" ms")
-            .with_value_to_string(formatters::v2s_f32_rounded(1)),
-            retrigger_ms: FloatParam::new(
-                "Retrigger",
-                40.0,
-                FloatRange::Skewed {
-                    min: 5.0,
-                    max: 200.0,
-                    factor: FloatRange::skew_factor(-1.0),
-                },
-            )
-            .with_unit(" ms")
-            .with_value_to_string(formatters::v2s_f32_rounded(0)),
-            note: IntParam::new("Note", 36, IntRange::Linear { min: 0, max: 127 })
-                .with_value_to_string(formatters::v2s_i32_note_formatter()),
-            vel_min: FloatParam::new("Vel Min", 0.0, FloatRange::Linear { min: 0.0, max: 1.0 })
-                .with_value_to_string(formatters::v2s_f32_rounded(2)),
-            vel_max: FloatParam::new("Vel Max", 1.0, FloatRange::Linear { min: 0.0, max: 1.0 })
-                .with_value_to_string(formatters::v2s_f32_rounded(2)),
-            listen: BoolParam::new("Listen", false),
-            sc_hpf_hz: FloatParam::new(
-                "SC HPF",
-                0.0,
-                FloatRange::Linear { min: 0.0, max: 1_000.0 },
-            )
-            .with_unit(" Hz")
-            .with_value_to_string(formatters::v2s_f32_rounded(0)),
-            sc_lpf_hz: FloatParam::new(
-                "SC LPF",
-                0.0,
-                FloatRange::Linear { min: 0.0, max: 20_000.0 },
-            )
-            .with_unit(" Hz")
-            .with_value_to_string(formatters::v2s_f32_rounded(0)),
-            algorithm: IntParam::new("Algorithm", 0, IntRange::Linear { min: 0, max: 6 })
-                .with_value_to_string(Arc::new(|v| {
-                    match v {
-                        1 => "Spectral Flux",
-                        2 => "SuperFlux",
-                        3 => "HFC",
-                        4 => "Complex",
-                        5 => "Rect Complex",
-                        6 => "Mod KL",
-                        _ => "Peak Env",
-                    }
-                    .to_string()
-                })),
-            vel_curve: IntParam::new("Curve", 0, IntRange::Linear { min: 0, max: 3 })
-                .with_value_to_string(Arc::new(|v| {
-                    match v {
-                        1 => "Log",
-                        2 => "Exp",
-                        3 => "Fixed",
-                        _ => "Linear",
-                    }
-                    .to_string()
-                })),
-            dynamics: FloatParam::new("Dynamics", 0.5, FloatRange::Linear { min: 0.0, max: 1.0 })
-                .with_value_to_string(formatters::v2s_f32_rounded(2)),
-        }
     }
 }
 
@@ -212,6 +102,8 @@ struct SyncedParams {
 
 pub struct FtsTrigger {
     params: Arc<TriggerParams>,
+    ui_state: Arc<TriggerUiState>,
+    editor_state: Arc<DioxusState>,
     chain: TriggerChain,
     synced: Option<SyncedParams>,
     sample_rate: f32,
@@ -228,8 +120,13 @@ pub struct FtsTrigger {
 
 impl Default for FtsTrigger {
     fn default() -> Self {
+        let params = Arc::new(TriggerParams::default());
+        let ui_state = Arc::new(TriggerUiState::new(params.clone()));
         Self {
-            params: Arc::new(TriggerParams::default()),
+            params,
+            ui_state,
+            // Tall enough for the 260 px analysis waveform + the control row.
+            editor_state: DioxusState::new(|| (900, 560)),
             chain: TriggerChain::new(),
             synced: None,
             sample_rate: 48_000.0,
@@ -333,6 +230,14 @@ impl Plugin for FtsTrigger {
         self.params.clone()
     }
 
+    fn editor(&mut self, _async_executor: AsyncExecutor<Self>) -> Option<Box<dyn Editor>> {
+        create_dioxus_editor_with_state(
+            self.editor_state.clone(),
+            self.ui_state.clone(),
+            trigger_ui::control_view::App,
+        )
+    }
+
     fn initialize(
         &mut self,
         _audio_io_layout: &AudioIOLayout,
@@ -340,6 +245,9 @@ impl Plugin for FtsTrigger {
         _context: &mut impl InitContext<Self>,
     ) -> bool {
         self.sample_rate = buffer_config.sample_rate;
+        self.ui_state
+            .sample_rate
+            .store(buffer_config.sample_rate, Ordering::Relaxed);
         self.synced = None; // force a full re-sync at the new rate
         self.chain.update(AudioConfig {
             sample_rate: self.sample_rate as f64,
@@ -380,6 +288,13 @@ impl Plugin for FtsTrigger {
         let confirm_samples = (self.params.sensitivity_ms.value() * 0.001
             * self.sample_rate) as u32;
 
+        // ── UI display feed (lock-free, no allocation) ──────────────────
+        // Index of THIS block in the editor's scrolling window: the wave
+        // ring's head before the end-of-block push. Hits detected below are
+        // stamped with it so their markers stay glued to their column.
+        let block_index = self.ui_state.input_wave.head();
+        let mut block_peak: f32 = 0.0;
+
         // Flush NoteOffs owed from previous blocks.
         for slot in &mut self.pending_offs {
             if let Some(off) = *slot {
@@ -406,6 +321,7 @@ impl Plugin for FtsTrigger {
             let mut it = frame.iter_mut();
             let l = it.next().map(|s| *s as f64).unwrap_or(0.0);
             let r = it.next().map(|s| *s as f64).unwrap_or(l);
+            block_peak = block_peak.max((0.5 * (l + r)).abs() as f32);
 
             if let Some(vel) = self.chain.detect_tick(l, r) {
                 let onset = (i as u32).saturating_sub(confirm_samples);
@@ -433,6 +349,8 @@ impl Plugin for FtsTrigger {
                         note,
                     });
                 }
+                // Hit marker for the editor's analysis waveform.
+                self.ui_state.hits.push(block_index, velocity);
                 if listen {
                     self.click_remaining = click_len;
                     self.click_phase = 0.0;
@@ -455,6 +373,9 @@ impl Plugin for FtsTrigger {
                 }
             }
         }
+
+        // One column per block for the editor's scrolling peak display.
+        self.ui_state.input_wave.push(block_peak);
 
         ProcessStatus::Normal
     }

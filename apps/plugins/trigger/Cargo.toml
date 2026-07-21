@@ -18,3 +18,8 @@ nice-plug.workspace = true
 
 # The DSP facade (re-exports trigger-dsp). Never depend on trigger-dsp directly.
 trigger.workspace = true
+# The full Dioxus plugin editor (analysis waveform, params, control view) —
+# `native` pulls nice-plug-dioxus/Blitz.
+trigger-ui = { workspace = true, features = ["native"] }
+# For the editor glue (DioxusState + create_dioxus_editor_with_state).
+nice-plug-dioxus.workspace = true

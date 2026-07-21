@@ -218,6 +218,11 @@ tailwind-eq:
 tailwind-comp:
     tailwindcss -i features/fx/comp/comp-ui/tailwind.css -o features/fx/comp/comp-ui/assets/tailwind.css --minify
 
+# Rebuild trigger-ui's embedded Tailwind (features/fx/trigger/trigger-ui/
+# assets/tailwind.css) after class changes in trigger-ui / fts-ui.
+tailwind-trigger:
+    tailwindcss -i features/fx/trigger/trigger-ui/tailwind.css -o features/fx/trigger/trigger-ui/assets/tailwind.css --minify
+
 # Bundle every FTS plugin as .clap + .vst3 (target/bundled/, names from
 # bundler.toml). Debug of a single plugin: cargo run -p fts-plugin-xtask
 # -- bundle -p eq-plugin
