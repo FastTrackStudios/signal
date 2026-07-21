@@ -5,8 +5,12 @@
 # NOT here — those push to TestFlight/App Store via ios.yml, not GitHub assets.
 #
 #   linux-desktop  .AppImage           self-hosted nix-host (THEBATTLESHIP)
+#   patchbay-linux .deb                self-hosted nix-host (THEBATTLESHIP)
 #   macos-desktop  notarized .dmg      self-hosted airlock          (TODO)
 #   docker         self-host image     self-hosted nix-host         (TODO)
+#
+# fts-patchbay is Linux-only (PipeWire), so it ships a Linux .deb only —
+# no macOS/iOS. It embeds its own browser remote (feature embed-web).
 #
 # workflow_dispatch takes a tag so a release can be (re)built by hand.
 
@@ -72,6 +76,61 @@ jobs:
           [ -n "$out" ] || { echo "no .deb produced"; exit 1; }
           tag="${{ github.event.release.tag_name || inputs.tag }}"
           dest="FastTrackStudio-${tag}-linux-amd64.deb"
+          cp "$out" "$dest"
+          echo "artifact=$dest" >> "$GITHUB_ENV"
+
+      - name: Upload to the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          tag="${{ github.event.release.tag_name || inputs.tag }}"
+          nix run nixpkgs#gh -- release upload "$tag" "$artifact" --clobber
+          echo "uploaded $artifact to $tag"
+
+  patchbay-linux:
+    # fts-patchbay: the PipeWire studio-routing app. Linux-only, embeds
+    # its browser remote (feature embed-web → served on :4046). Same
+    # self-hosted nix-host + local-mirror checkout as linux-desktop.
+    runs-on: [self-hosted, nix-host]
+    steps:
+      - name: Checkout the release tag (local-first)
+        run: |
+          set -eu
+          url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git"
+          tag="${{ github.event.release.tag_name || inputs.tag }}"
+          [ -n "$FTS_LOCAL_REPO" ] && {
+            git config --global --add safe.directory "$FTS_LOCAL_REPO" 2>/dev/null || true
+            git config --global --add safe.directory "$FTS_LOCAL_REPO/.git" 2>/dev/null || true
+          }
+          find . -mindepth 1 -maxdepth 1 -exec rm -rf {} + 2>/dev/null || true
+          git clone --quiet "$FTS_LOCAL_REPO" . || git clone "$url" .
+          if ! git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
+            attempt=1
+            until git fetch --no-tags "$url" "refs/tags/$tag:refs/tags/$tag"; do
+              [ "$attempt" -ge 6 ] && { echo "fetch tag $tag failed"; exit 1; }
+              attempt=$((attempt + 1)); sleep 15
+            done
+          fi
+          git checkout --quiet "tags/$tag"
+          echo "building patchbay $(git rev-parse --short HEAD) for tag $tag"
+
+      - name: Bundle Linux .deb
+        run: |
+          set -euo pipefail
+          # Stage the browser remote (dx web build → web-dist/), then bundle
+          # the desktop app with embed-web so the ONE binary also serves the
+          # web UI on the LAN. .deb needs no external tooling.
+          nix develop --accept-flake-config . -c bash -c '
+            set -euo pipefail
+            just patchbay-web-stage
+            cd apps/patchbay
+            dx bundle --platform linux --package-types deb --release --features embed-web
+          '
+          out="$(find target/dx/fts-patchbay -name '*.deb' | head -1)"
+          [ -n "$out" ] || { echo "no .deb produced"; exit 1; }
+          tag="${{ github.event.release.tag_name || inputs.tag }}"
+          dest="FTS-Patchbay-${tag}-linux-amd64.deb"
           cp "$out" "$dest"
           echo "artifact=$dest" >> "$GITHUB_ENV"
 
