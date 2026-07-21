@@ -9,7 +9,38 @@ mode: mode-record
 
 Record mode turns the number row into a take-ranking pad for comping while you track. Ranks drop a marker on the take so the comp pass later is just picking the smiley faces.
 
-Activate the Record mode workflow to use these bindings — they layer over the base profile (see [[Input System|modes]]) and step aside when you leave the mode.
+Activate the Record mode workflow to use these bindings — they layer over the base profile (see [[Input System|modes]]) and step aside when you leave the mode. (Latency while monitoring? That's [[audio-setup|Audio Setup]], not recording.)
+
+## Getting a take down
+
+The whole loop is four steps:
+
+1. **Arm** the track — `kbd:@9` toggles record-arm on the selection.
+2. **Monitor** so the performer hears themselves — `kbd:@_FTS_SESSION_MONITOR_TOGGLE_ON_OFF` (keep the buffer small; see [[audio-setup|Audio Setup]]).
+3. **Roll** — `kbd:@1013` starts recording; play, then `kbd:@40044` to stop.
+4. **Keep or retry** — happy? Move on. Not? `kbd:@_FTS_SESSION_RECORD_RESTART` deletes the bad take and rolls again in one press.
+
+To punch in and out at exact points, make a time selection over the phrase first — recording only writes inside it (auto-punch).
+
+## Pre-roll and count-in
+
+Give the player a lead-in so they're in the pocket by bar one:
+
+- `kbd:@41819` — Toggle pre-roll on record (REAPER rolls a bit of lead-in before the punch, then records).
+- `kbd:@41818` — Toggle pre-roll on play, to audition with the same lead-in.
+- `kbd:@40363` — Open the metronome / pre-roll settings to set the lead-in length and click.
+- `kbd:@40364` — Toggle the metronome.
+
+For a bars-and-beats count-in the band can see, drop a count-in region: `kbd:@_FTS_SESSION_INSERT_COUNT_IN_REGION` (part of the [[markers-regions|section regions]]).
+
+```gif right
+recording-preroll
+**Lead-in, not a cold start.**
+
+- `kbd:@41819` gives a pre-roll before every record pass.
+- Set its length in the metronome / pre-roll settings (`kbd:@40363`).
+- A count-in region shows the band the bars before the downbeat.
+```
 
 ## Rank takes as they happen
 

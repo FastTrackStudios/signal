@@ -11,25 +11,32 @@ Drive REAPER the FastTrackStudio way — a modal, keyboard-first input layer ove
 ## Foundations
 
 1. [[installation-setup|Installation & Setup]] — the one-time install, and how to confirm the layer is live.
-2. [[Input System|The input layer]] — profiles, which-key menus, overlays, and modes: the mental model everything else builds on.
+2. [[audio-setup|Audio Setup]] — device, sample rate, and the buffer-size tradeoff behind every latency question.
+3. [[Input System|The input layer]] — profiles, which-key menus, overlays, and modes: the mental model everything else builds on.
 
 ## Everyday driving
 
-3. [[Transport]] — play, stop, record, and marker navigation. The first things to get under your fingers.
-4. [[navigation|Navigation]] — moving the edit cursor and track selection, vim-style.
-5. [[Tracks]] — inserting tracks, the `n` track-manager menu, and the `<S-n>` create-track family.
-6. [[editing|Editing]] — split, delete, smart-duplicate, glue, and the undo stack.
+4. [[Transport]] — play, stop, record, and marker navigation.
+5. [[navigation|Navigation]] — moving the edit cursor and track selection, vim-style.
+6. [[Tracks]] — inserting tracks, the `n` track-manager menu, and the `<S-n>` create-track family.
+7. [[editing|Editing]] — split, delete, smart-duplicate, glue, and the undo stack.
 
-## Arranging and tracking
+## Arranging & tracking
 
-7. [[markers-regions|Markers & regions]] — drop song-section regions and jump between them by name.
-8. [[Recording]] — Record mode's take-ranking pad and tracking controls (mode-specific).
-9. [[comping-takes|Comping & takes]] — fixed-lane comping, take switching, and imploding takes.
+8. [[markers-regions|Markers & regions]] — drop song-section regions and jump between them by name.
+9. [[Recording]] — how to track: arm, monitor, pre-roll, and the take-ranking pad.
+10. [[comping-takes|Comping & takes]] — fixed-lane comping, take switching, and imploding takes.
+11. [[project-organization|Project Organization]] — self-naming tracks, buses, and section structure.
 
 ## Shaping the session
 
-10. [[zoom-views|Zoom & views]] — the mixer, FX browser, window sets, and wheel zoom.
-11. [[mixing|Mixing]] — Mix mode and the mixing surface.
-12. [[modes|Modes]] — the workflow states that re-layer the keyboard for each phase of a production.
+12. [[zoom-views|Zoom & views]] — the mixer, FX browser, window sets, and wheel zoom.
+13. [[mixing|Mixing]] — Mix mode and the mixing surface.
+14. [[modes|Modes]] — the ten workflow states, and what each re-tools the keyboard for.
+
+## Help & walkthroughs
+
+- [[faq|FAQ]] — quick answers ("I hear latency", "my number keys do nothing") that point at the right page.
+- [[case-studies|Case Studies]] — complete start-to-finish workflows, like [[tracking-guitars|Tracking Guitars]].
 
 Back to all [[guides|Guides]].
