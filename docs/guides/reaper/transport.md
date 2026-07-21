@@ -30,7 +30,7 @@ transport-play-stop
 - `kbd:@40172` — Go to the previous marker.
 - `kbd:@40173` — Go to the next marker. Both work while the transport runs.
 
-```gif
+```gif right
 transport-markers
 **Marker hopping** keeps you moving without the mouse.
 
