@@ -17,7 +17,11 @@ The transport is the first thing to get under your fingers — everything else i
 
 ```gif
 transport-play-stop
-Space plays; press it again to stop and the edit cursor snaps back to where playback began.
+**Play / stop** is the key you'll press most.
+
+- `kbd:@40044` toggles playback — hit it again to stop.
+- Stopping returns the edit cursor to where playback started, so repeated takes audition the same spot.
+- Need to keep your place instead? `kbd:@40073` pauses without snapping back.
 ```
 
 ## Getting around
@@ -28,7 +32,11 @@ Space plays; press it again to stop and the edit cursor snaps back to where play
 
 ```gif
 transport-markers
-`,` and `.` hop the edit cursor between markers — the keycaps carry < and >, pointing the way.
+**Marker hopping** keeps you moving without the mouse.
+
+- `kbd:@40172` / `kbd:@40173` jump to the previous / next marker.
+- The keycaps carry `<` and `>` — the arrows point the way.
+- Both work while the transport is rolling.
 ```
 
 ## Rolling

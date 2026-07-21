@@ -22,7 +22,11 @@ While a take plays back, tap a number to rank it — the marker lands two second
 
 ```gif
 recording-take-ranking
-While the take rolls, tapping a number drops a ranked marker two seconds back — right on the phrase you just heard.
+**Rank as you listen.**
+
+- While a take plays, tap a number to rank the moment you just heard.
+- The marker lands ~two seconds behind the play cursor, on the phrase itself.
+- Comping later is just picking the smiley faces — no scrubbing to find the keeper.
 ```
 
 Hold Shift to rank the whole take instead of a moment — the marker sits at the item start:

@@ -27,7 +27,11 @@ Press `kbd:n` to open the Track Manager menu. The overlay lists every follow-up 
 
 ```gif
 tracks-manager-menu
-Press `n` and the which-key overlay lists every follow-up key; tap a letter to add that entity.
+**The `n` menu** adds session entities.
+
+- Press `kbd:n` and the which-key overlay lists every follow-up key.
+- Each letter is mnemonic for what it adds — `p` for performer, `c` for channel.
+- The overlay teaches the family as you go; no need to memorize it first.
 ```
 
 ## Create categorized tracks (`kbd:<S-n>` menu)
