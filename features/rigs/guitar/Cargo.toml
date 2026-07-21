@@ -33,8 +33,8 @@ facet-styx.workspace = true
 midicore = { workspace = true, features = ["vox", "midir"] }
 tracing.workspace = true
 # Runtime handle only: the audio-open thread carries the caller's tokio
-# handle across so the transport pump's `moire::task::spawn` has a runtime
-# (see Rig::start). Already in the graph via moire.
+# handle across so the transport pump's `architect::platform::spawn`
+# (→ `tokio::spawn` on native) has a runtime (see Rig::start).
 tokio = { workspace = true, features = ["rt"] }
 
 [dev-dependencies]

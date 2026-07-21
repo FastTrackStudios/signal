@@ -14,7 +14,7 @@
 //!     [L] Drive / [L] Amp / [L] Time
 //! ```
 
-use moire::sync::{Mutex, RwLock};
+use tokio::sync::{Mutex, RwLock};
 use std::collections::{HashMap, HashSet};
 use std::future::Future;
 use std::pin::Pin;
@@ -69,7 +69,7 @@ pub struct RigSceneManager {
 impl RigSceneManager {
     pub fn new(signal_live: Arc<SignalLive>) -> Self {
         Self {
-            state: RwLock::new("signal.rig_scene.state", None),
+            state: RwLock::new(None),
             signal_live,
         }
     }
@@ -181,7 +181,7 @@ impl RigSceneManager {
             current: recovered_current,
             tail: None,
             preloaded: recovered_preloaded,
-            pending_mutes: Arc::new(Mutex::new("signal.rig_scene.pending_mutes", HashSet::new())),
+            pending_mutes: Arc::new(Mutex::new(HashSet::new())),
             preloading_active: false,
         });
 

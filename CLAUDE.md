@@ -18,7 +18,7 @@ features/  capabilities — audio, sync, dawfile, reaper, standalone,
            task/* (Task's ~28 feature slices: project, inbox, agent, …)
 libs/      UI + infra libraries — fts-ui, fts-story, dock, nice-plug,
            utils, vox-discover, installer-core, neural-amp-modeler,
-           monarchy, devtools, moire-trace-capture,
+           monarchy, devtools,
            editor (subtree-imported Editor stack: editor-state/-view/
            -vim/-keyflow/… — used by apps/site and Task),
            vendor/ (patched third-party: styx-format)
@@ -57,8 +57,11 @@ monorepo.
   `architect::axum_ws` + `LayerRouter` server-side and
   `vox_core::initiator_on(link).establish::<Client>()` client-side.
   `session/` is the reference conversion; `signal/` was born this way.
-- Async: `moire::task::spawn`, `moire::sync::*` — never raw tokio in
-  domain crates.
+- Async (moire is retired — Jul 2026): `tokio::sync::*` for locks/channels
+  (`Mutex`/`RwLock`/`broadcast`/`watch`/`mpsc`); `architect::platform::{spawn,
+  sleep, timeout}` for tasks/timers — the wasm-cfg-split seam (tokio on native,
+  `spawn_local`/browser timers on wasm). Drop the old moire instrumentation
+  name-arg on constructors.
 - Each domain has its own CLAUDE.md with domain rules; read it before
   working in that domain.
 
@@ -125,7 +128,8 @@ native, WASM/AudioWorklet, and embedded `no_std`:
 - No heap allocation on the hot path — pre-allocate at `reset()`;
   `process()` never calls `Vec::push`/`Box::new`.
 - No threads — the graph is driven synchronously by whichever callback
-  owns it. No `moire::task::spawn` inside processing crates.
+  owns it. No task spawning (`architect::platform::spawn` / `tokio`) inside
+  processing crates.
 - No platform I/O in processing crates — `cpal`/`web-sys`/MIDI drivers
   live only in adapter crates (the engine mode, web builds, future embedded).
 - Keep the `AudioNode: Send` bound.
