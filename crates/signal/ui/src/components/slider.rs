@@ -7,16 +7,13 @@ use dioxus::prelude::*;
 
 /// Slider orientation.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Default)]
 pub enum SliderOrientation {
+    #[default]
     Horizontal,
     Vertical,
 }
 
-impl Default for SliderOrientation {
-    fn default() -> Self {
-        Self::Horizontal
-    }
-}
 
 /// A styled range slider.
 #[derive(Props, Clone, PartialEq)]

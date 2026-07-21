@@ -59,7 +59,7 @@ pub fn EditorInspectorPanel(props: EditorInspectorPanelProps) -> Element {
                 let slot_clone = slot.clone();
                 let has_preset = slot.preset_id.is_some();
                 let mut show_save_as_new = use_signal(|| false);
-                let mut save_as_new_name = use_signal(|| String::new());
+                let mut save_as_new_name = use_signal(String::new);
 
                 rsx! {
                     div { class: "p-3 space-y-3",
@@ -113,7 +113,7 @@ pub fn EditorInspectorPanel(props: EditorInspectorPanelProps) -> Element {
                                             {
                                                 let name = name.clone();
                                                 let slot_id = slot.id;
-                                                let on_change = props.on_param_change.clone();
+                                                let on_change = props.on_param_change;
                                                 let initial_value = *value;
                                                 rsx! {
                                                     InspectorParamSlider {
@@ -138,7 +138,7 @@ pub fn EditorInspectorPanel(props: EditorInspectorPanelProps) -> Element {
                         // ── Section 2b: Expand Detail (cyan accent) ──
                         if let Some(ref on_expand) = props.on_expand_detail {
                             {
-                                let on_expand = on_expand.clone();
+                                let on_expand = *on_expand;
                                 rsx! {
                                     button {
                                         class: "w-full px-3 py-2 text-xs rounded-lg \
@@ -205,7 +205,7 @@ pub fn EditorInspectorPanel(props: EditorInspectorPanelProps) -> Element {
                                     }
                                     if has_preset {
                                         {
-                                            let on_save = props.on_save.clone();
+                                            let on_save = props.on_save;
                                             let save_slot = slot_clone.clone();
                                             rsx! {
                                                 button {
@@ -230,7 +230,7 @@ pub fn EditorInspectorPanel(props: EditorInspectorPanelProps) -> Element {
 
                         // ── Section 5: Save As New Preset (amber accent) ──
                         {
-                            let on_save_as_new = props.on_save_as_new.clone();
+                            let on_save_as_new = props.on_save_as_new;
                             let new_slot = slot_clone.clone();
                             let default_name = format!("{:?} Preset", slot.block_type);
                             rsx! {
@@ -259,7 +259,6 @@ pub fn EditorInspectorPanel(props: EditorInspectorPanelProps) -> Element {
                                                                 text-white font-medium \
                                                                 transition-all duration-150",
                                                         onclick: {
-                                                            let on_save_as_new = on_save_as_new.clone();
                                                             let new_slot = new_slot.clone();
                                                             move |_| {
                                                                 let name = save_as_new_name();

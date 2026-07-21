@@ -1164,10 +1164,11 @@ mod tests {
         ];
 
         // Parse every FX name and collect modules with their blocks
-        let mut modules: Vec<(ModuleType, String, Vec<(BlockType, String, Vec<u32>)>)> = Vec::new();
-        let mut current_module: Option<(ModuleType, String, Vec<(BlockType, String, Vec<u32>)>)> =
-            None;
-        let mut current_block_fx: Option<(BlockType, String, Vec<u32>)> = None;
+        type BlockFx = (BlockType, String, Vec<u32>);
+        type ModuleFx = (ModuleType, String, Vec<BlockFx>);
+        let mut modules: Vec<ModuleFx> = Vec::new();
+        let mut current_module: Option<ModuleFx> = None;
+        let mut current_block_fx: Option<BlockFx> = None;
 
         for (idx, name, param_count) in &fx_chain {
             let role = FxRole::parse(name);
@@ -1202,7 +1203,7 @@ mod tests {
                         }
                     }
                 }
-                FxRole::GenericModule { name } => {
+                FxRole::GenericModule { name: _ } => {
                     // Sub-module within a parent module (e.g., "Module: Room")
                     if let Some(block) = current_block_fx.take() {
                         if let Some(ref mut m) = current_module {
@@ -1544,7 +1545,8 @@ mod tests {
             ),
         ];
         for (input, expected) in &cases {
-            let parsed = TrackRole::parse(input).expect(&format!("should parse '{input}'"));
+            let parsed =
+                TrackRole::parse(input).unwrap_or_else(|| panic!("should parse '{input}'"));
             assert_eq!(&parsed, expected);
             assert_eq!(parsed.display_name(), *input);
         }

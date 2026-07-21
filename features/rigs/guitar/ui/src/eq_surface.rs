@@ -148,9 +148,10 @@ pub fn EqProSurface(block: LiveBlock, spectrum: Vec<f32>) -> Element {
 
     // Pointer → graph coordinates (svg is scaled; measure the element).
     let gw = w;
+    type GraphCoordsFuture = std::pin::Pin<Box<dyn std::future::Future<Output = Option<(f64, f64)>>>>;
     let to_graph = move |coords: dioxus::html::geometry::ElementPoint,
                          el: Option<std::rc::Rc<MountedData>>|
-          -> std::pin::Pin<Box<dyn std::future::Future<Output = Option<(f64, f64)>>>> {
+          -> GraphCoordsFuture {
         Box::pin(async move {
             let el = el?;
             let rect = el.get_client_rect().await.ok()?;
@@ -309,7 +310,6 @@ pub fn EqProSurface(block: LiveBlock, spectrum: Vec<f32>) -> Element {
                                 path { key: "bf{bi}", d: "{fill}", fill: "{color}22", stroke: "none" }
                             }
                             path {
-                                key: "bs{bi}",
                                 d: "{stroke}",
                                 fill: "none",
                                 stroke: "{color}",
@@ -341,7 +341,6 @@ pub fn EqProSurface(block: LiveBlock, spectrum: Vec<f32>) -> Element {
                                 class: "cursor-grab",
                             }
                             text {
-                                key: "t{b.index}",
                                 x: "{cx:.1}", y: "{cy + 3.0:.1}",
                                 fill: "#09090b", font_size: "9", font_weight: "700",
                                 text_anchor: "middle", pointer_events: "none",
@@ -363,7 +362,6 @@ pub fn EqProSurface(block: LiveBlock, spectrum: Vec<f32>) -> Element {
                                     "{role}"
                                 }
                                 line {
-                                    key: "ll{b.index}",
                                     x1: "{cx:.1}",
                                     y1: "13",
                                     x2: "{cx:.1}",

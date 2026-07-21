@@ -7,6 +7,7 @@
 //!   identity as drive → 0).
 //! - **crush** — bit-depth reduction (quantization).
 //! - **reduce** — sample-rate reduction (sample-and-hold).
+//!
 //! Plus a wet/dry **mix**. All four are runtime params (mod-matrix drivable)
 //! and build-time block params.
 

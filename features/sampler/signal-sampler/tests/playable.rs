@@ -104,7 +104,15 @@ fn keyscape_resolves_a_sample() {
             let n = dynamics.len();
             let idx = (vel as usize * n / 128).min(n - 1);
             let dyn_label = &dynamics[idx];
-            let r = patch.resolve(&section, &artic, &mic, dyn_label, note, "", 0);
+            let r = patch.resolve(&signal_sampler::SampleQuery {
+                section_id: &section,
+                articulation_id: &artic,
+                mic_id: &mic,
+                dynamic: dyn_label,
+                target_note: note,
+                direction: "",
+                rr: 0,
+            });
             eprintln!(
                 "  note={note} vel={vel} dyn={dyn_label:?} → {}",
                 if r.is_some() { "FOUND" } else { "miss" }

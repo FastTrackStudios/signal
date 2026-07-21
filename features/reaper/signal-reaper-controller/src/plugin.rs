@@ -337,8 +337,8 @@ impl Plugin for FtsSignalController {
 
         // ── 3. Macro change detection ──────────────────────────────
         let macros = self.read_macros();
-        for i in 0..NUM_MACROS {
-            let delta = (macros[i] - self.prev_macros[i]).abs();
+        for (i, (m, prev_m)) in macros.iter().zip(self.prev_macros.iter()).enumerate() {
+            let delta = (m - prev_m).abs();
             if delta > 1e-5 {
                 self.ui_state.macro_activity[i].store(delta.min(1.0), Ordering::Relaxed);
             } else {

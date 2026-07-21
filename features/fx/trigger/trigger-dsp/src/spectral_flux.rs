@@ -265,7 +265,7 @@ impl SpectralFluxDetector {
         // Maximum filter on previous frame
         let half = self.max_filter_size / 2;
         for b in 0..self.num_bands {
-            let lo = if b >= half { b - half } else { 0 };
+            let lo = b.saturating_sub(half);
             let hi = (b + half + 1).min(self.num_bands);
             let mut max_val = self.prev_filtered_spec[lo];
             for j in (lo + 1)..hi {

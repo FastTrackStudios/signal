@@ -539,8 +539,8 @@ fn stage1_annotations_impl(
     let (line_of, _blocks) = assign_lines(doc);
     let mut ann = vec![NoteAnnotation::default(); doc.notes.len()];
     let mut by_line: std::collections::BTreeMap<u8, Vec<usize>> = std::collections::BTreeMap::new();
-    for i in 0..doc.notes.len() {
-        by_line.entry(line_of[i]).or_default().push(i);
+    for (i, &line) in line_of.iter().enumerate().take(doc.notes.len()) {
+        by_line.entry(line).or_default().push(i);
     }
     for list in by_line.values_mut() {
         list.sort_by(|&a, &b| doc.notes[a].start_qn.total_cmp(&doc.notes[b].start_qn));
@@ -679,8 +679,8 @@ pub fn annotate(doc: &TrackDocument, spec: &LibrarySpec, sample_rate: u32) -> Sc
         })
         .collect();
     let mut by_line: std::collections::BTreeMap<u8, Vec<usize>> = std::collections::BTreeMap::new();
-    for i in 0..notes.len() {
-        by_line.entry(line_of[i]).or_default().push(i);
+    for (i, &line) in line_of.iter().enumerate().take(notes.len()) {
+        by_line.entry(line).or_default().push(i);
     }
     for list in by_line.values_mut() {
         list.sort_by(|&a, &b| notes[a].src.start_qn.total_cmp(&notes[b].src.start_qn));

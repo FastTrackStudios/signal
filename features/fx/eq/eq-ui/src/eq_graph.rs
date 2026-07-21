@@ -251,7 +251,7 @@ pub fn EqGraph(
     // Track-name source. Optional: standalone/plugin inject it via context; if
     // absent, `Auto` simply resolves to off.
     let track_provider =
-        use_hook(|| try_consume_context::<Arc<dyn crate::cheatsheet::TrackInfoProvider>>());
+        use_hook(try_consume_context::<Arc<dyn crate::cheatsheet::TrackInfoProvider>>);
 
     // Empirically-discovered wrapper bounds. The canvas's content_box
     // (cfg.rect_w/rect_h) and the wrapper's element_coordinate space
@@ -911,7 +911,10 @@ pub fn EqGraph(
                                     "▲ {fr.too_much}"
                                 }
                                 div {
-                                    key: "tl-{fr.lo_hz}",
+                                    // Keys are only allowed on the first node of a
+                                    // multi-node rsx block (dioxus deprecation lint);
+                                    // the `tm-{fr.lo_hz}` key above already uniquely
+                                    // identifies this loop iteration's fragment.
                                     style: format!(
                                         "position:absolute; left:{cx}px; top:{tl_y}px; \
                                          transform:translateX(-50%); z-index:7; \

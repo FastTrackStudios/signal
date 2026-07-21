@@ -16,7 +16,7 @@
 use comp_dsp::ProC3Compressor;
 use audiocore_dsp::db::linear_to_db;
 use std::fs::File;
-use std::io::{Read, Write};
+use std::io::Write;
 
 fn main() {
     println!("\n{}", "=".repeat(80));
@@ -37,7 +37,7 @@ fn main() {
     let freq_hz = 1000.0;
     let omega = 2.0 * std::f64::consts::PI * freq_hz / sample_rate;
 
-    for i in 0..num_samples {
+    for (i, sample) in input.iter_mut().enumerate() {
         let t = i as f64 / sample_rate;
         // Sine wave
         let sine = (omega * i as f64).sin() * 0.3;
@@ -47,7 +47,7 @@ fn main() {
         } else {
             0.0
         };
-        input[i] = sine + transient;
+        *sample = sine + transient;
     }
 
     println!("Generated: 1kHz sine @ -10.5dB + transients");
@@ -309,7 +309,7 @@ fn save_wav(path: &str, samples: &[f64], sample_rate: f64) -> std::io::Result<()
     let num_channels: u32 = 1;
     let byte_rate = sample_rate as u32 * num_channels * bytes_per_sample;
     let block_align = (num_channels * bytes_per_sample) as u16;
-    let subchunk2_size = (num_samples as u32 * bytes_per_sample);
+    let subchunk2_size = num_samples as u32 * bytes_per_sample;
     let chunk_size = 36 + subchunk2_size;
 
     let mut file = File::create(path)?;

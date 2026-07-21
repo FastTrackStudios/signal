@@ -382,11 +382,11 @@ fn goertzel(mono: &[f64], off: usize, n: usize, sr: u32, freq: f64) -> f64 {
     }
     let w = 2.0 * std::f64::consts::PI * freq / f64::from(sr);
     let coeff = 2.0 * w.cos();
-    let (mut s0, mut s1, mut s2) = (0.0f64, 0.0f64, 0.0f64);
+    let (mut s1, mut s2) = (0.0f64, 0.0f64);
     for i in 0..n {
         let hann =
             0.5 * (1.0 - (2.0 * std::f64::consts::PI * i as f64 / (n - 1) as f64).cos());
-        s0 = mono[off + i] * hann + coeff * s1 - s2;
+        let s0 = mono[off + i] * hann + coeff * s1 - s2;
         s2 = s1;
         s1 = s0;
     }

@@ -22,7 +22,7 @@ const CSS_CONFIG: &str =
     "/run/media/Development/FastTrackStudio/sample-collector/specs/cinematic-strings.styx";
 const ID: &str = "strings_1v";
 const SR: u32 = 48_000;
-const SEED: u64 = 0x77ACE_D00D;
+const SEED: u64 = 0x0007_7ACE_D00D;
 const OVERLAP_QN: f64 = 1.0 / 32.0;
 
 const NN: [&str; 12] = [

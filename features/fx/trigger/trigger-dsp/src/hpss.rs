@@ -218,6 +218,9 @@ impl HpssProcessor {
         let eps = 1e-10;
         let center_stft: Vec<Complex<f64>> = self.stft_ring[center_idx].clone();
 
+        // `k` indexes four parallel buffers (harmonic/percussive/center_stft/fft_buf) in lockstep;
+        // enumerate() over one would obscure the shared index.
+        #[allow(clippy::needless_range_loop)]
         for k in 0..self.num_bins {
             let h2 = self.harmonic[k] * self.harmonic[k];
             let p2 = self.percussive[k] * self.percussive[k];
@@ -240,6 +243,9 @@ impl HpssProcessor {
     fn overlap_add_frame(&mut self, frame: &[Complex<f64>]) {
         let scale = 1.0 / self.fft_size as f64;
         let ring_len = self.output_ring.len();
+        // `i` indexes `frame`/`window` directly and `output_ring` via a wrapped offset;
+        // the wraparound makes a plain enumerate() over one buffer insufficient.
+        #[allow(clippy::needless_range_loop)]
         for i in 0..self.fft_size {
             let idx = (self.output_write_pos + i) % ring_len;
             self.output_ring[idx] += frame[i].re * scale * self.window[i];

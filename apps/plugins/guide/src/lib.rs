@@ -99,15 +99,17 @@ pub struct FtsGuide {
 
 impl Default for FtsGuide {
     fn default() -> Self {
-        let mut config = GuideConfig::default();
         // v0: click + downbeat accent only. Count-in and section guide need
         // a section-built CueSchedule (see crate docs) — hold them off so an
         // accidentally installed schedule can't speak.
-        config.enable_count = false;
-        config.enable_guide = false;
-        config.enable_eighth = false;
-        config.enable_sixteenth = false;
-        config.enable_triplet = false;
+        let config = GuideConfig {
+            enable_count: false,
+            enable_guide: false,
+            enable_eighth: false,
+            enable_sixteenth: false,
+            enable_triplet: false,
+            ..Default::default()
+        };
         Self {
             params: Arc::new(GuideParams::default()),
             engine: GuideEngine::new(config),

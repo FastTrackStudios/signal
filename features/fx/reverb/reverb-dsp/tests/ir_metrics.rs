@@ -104,8 +104,8 @@ fn rt60(left: &[f64], right: &[f64]) -> (f64, bool) {
     let mut i5 = None;
     let mut i35 = None;
     let mut i60 = None;
-    for i in 0..n {
-        let d = db(edc[i]);
+    for (i, &e) in edc.iter().enumerate() {
+        let d = db(e);
         if i5.is_none() && d <= -5.0 {
             i5 = Some(i);
         }

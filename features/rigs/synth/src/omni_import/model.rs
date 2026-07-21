@@ -298,7 +298,8 @@ fn classify_filter_inner(name: &str) -> (&'static str, u32) {
 /// `ln(0.1)/ln(0.5)`), i.e. 0→0 s, 0.5→2 s, 1.0→20 s. Sustain is a level, not
 /// a time, so it never passes through here.
 pub(crate) fn env_seconds(v: f32) -> f32 {
-    20.0 * v.clamp(0.0, 1.0).powf(3.321928)
+    // ln(0.1)/ln(0.5) == log2(10) — the same exponent either way.
+    20.0 * v.clamp(0.0, 1.0).powf(std::f32::consts::LOG2_10)
 }
 
 /// Parse an `AENVPARAMS`/`FENVPARAMS` element into `(a, d, s, r)`.

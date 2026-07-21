@@ -66,7 +66,7 @@ pub fn BlockRawParams(props: BlockRawParamsProps) -> Element {
                         let param_name = param.name().to_string();
                         let value = param.value().get();
                         let accent = color.bg.to_string();
-                        let on_change = props.on_param_change.clone();
+                        let on_change = props.on_param_change;
                         rsx! {
                             RawParamSlider {
                                 key: "{param_id}",

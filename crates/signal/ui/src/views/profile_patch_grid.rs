@@ -67,7 +67,7 @@ pub fn ProfilePatchGrid(
                     subtitle: None,
                     active: active_patch_id
                         .as_ref()
-                        .map_or(false, |aid| aid == &patch.id.to_string()),
+                        .is_some_and(|aid| aid == &patch.id.to_string()),
                     empty: false,
                     preloaded: true,
                     loading: false,

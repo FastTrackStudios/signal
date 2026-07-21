@@ -59,7 +59,7 @@ pub fn RigSceneGrid(
                     subtitle: None,
                     active: active_scene_id
                         .as_ref()
-                        .map_or(false, |aid| aid == &v.id.to_string()),
+                        .is_some_and(|aid| aid == &v.id.to_string()),
                     empty: false,
                     preloaded: true,
                     loading: false,

@@ -172,6 +172,10 @@ fn null_depth_db(a: &[f32], b: &[f32], max_lag: i64) -> f32 {
     while lag <= max_lag {
         let mut dot = 0.0f32;
         let mut bb = 0.0f32;
+        #[allow(
+            clippy::needless_range_loop,
+            reason = "index i drives a lag-shifted second index j into b; not expressible as a single zip/enumerate"
+        )]
         for i in 0..n {
             let j = i as i64 + lag;
             if j < 0 || j as usize >= b.len() {
@@ -184,6 +188,10 @@ fn null_depth_db(a: &[f32], b: &[f32], max_lag: i64) -> f32 {
         if bb > 0.0 {
             let g = dot / bb; // optimal gain
             let mut resid = 0.0f32;
+            #[allow(
+                clippy::needless_range_loop,
+                reason = "index i drives a lag-shifted second index j into b; not expressible as a single zip/enumerate"
+            )]
             for i in 0..n {
                 let j = i as i64 + lag;
                 let bv = if j >= 0 && (j as usize) < b.len() {

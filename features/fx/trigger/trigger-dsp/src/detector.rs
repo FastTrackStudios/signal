@@ -188,18 +188,19 @@ impl TriggerDetector {
         };
 
         match flux_mode {
-            Some(mode) => {
-                if self.spectral.is_none() || self.spectral.as_ref().unwrap().mode != mode {
+            Some(mode) => match self.spectral.as_mut() {
+                Some(spectral) if spectral.mode == mode => {
+                    spectral.update(sample_rate);
+                }
+                _ => {
                     self.spectral = Some(SpectralFluxDetector::new(
                         mode,
                         DEFAULT_FFT_SIZE,
                         DEFAULT_HOP_SIZE,
                         sample_rate,
                     ));
-                } else {
-                    self.spectral.as_mut().unwrap().update(sample_rate);
                 }
-            }
+            },
             None => {
                 self.spectral = None;
             }

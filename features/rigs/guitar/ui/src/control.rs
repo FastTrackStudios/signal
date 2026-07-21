@@ -580,7 +580,7 @@ fn PKnob(
     name: &'static str,
     label: &'static str,
     p: BlockParam,
-    #[props(default)] fmt: Option<fn(f32) -> String>,
+    #[props(default)] fmt: Option<crate::knob::FmtFn>,
     /// Strip-embedded: tiny body, no numeric readout.
     #[props(default)] tiny: bool,
 ) -> Element {
@@ -913,7 +913,7 @@ fn ReverbPanel(blocks: Vec<LiveBlock>) -> Element {
                         // RT60 estimate from the Hall feedback law
                         // (g = 0.5 + 0.48·d, ~80 ms loop) — a readable tail
                         // length, not a lab measurement.
-                        fmt: Some(decay_seconds_label as fn(f32) -> String),
+                        fmt: Some(crate::knob::FmtFn(decay_seconds_label as fn(f32) -> String)),
                     }
                 }
                 if let Some(p) = param(&cur, "tone") {
@@ -1154,7 +1154,7 @@ fn ModGroupPanel(
                         label: "Speed",
                         p,
                         tiny: true,
-                        fmt: Some((|v| format!("{v:.2}Hz")) as fn(f32) -> String),
+                        fmt: Some(crate::knob::FmtFn((|v| format!("{v:.2}Hz")) as fn(f32) -> String)),
                     }
                 }
             }

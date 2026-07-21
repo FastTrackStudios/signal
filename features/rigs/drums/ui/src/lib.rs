@@ -17,6 +17,7 @@ use signal_ui::components::Piano;
 #[derive(Clone, Copy)]
 struct DrumState {
     status: Signal<DrumStatus>,
+    #[allow(dead_code, reason = "seeded from the rig snapshot but not yet read by any view — kit picker UI isn't wired up here yet")]
     kits: Signal<Vec<KitInfo>>,
     pieces: Signal<Vec<PieceInfo>>,
     mixer: Signal<Vec<MixerStrip>>,
@@ -522,6 +523,7 @@ fn kit_btn(loaded: bool) -> String {
     format!("text-align:left; padding:6px 8px; border-radius:6px; background:{bg}; color:{fg}; border:1px solid {br}; font-size:12px; cursor:pointer;")
 }
 
+#[allow(dead_code, reason = "pad-grid styling helper, not yet wired to a view")]
 fn pad_btn(ready: bool) -> String {
     let border = if ready { "#3f3f46" } else { "#52341a" };
     format!("display:flex; flex-direction:column; align-items:center; gap:2px; width:78px; height:56px; justify-content:center; border-radius:8px; background:#161618; color:#e4e4e7; border:1px solid {border}; cursor:pointer;")

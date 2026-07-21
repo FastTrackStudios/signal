@@ -51,6 +51,20 @@ pub struct SampleKey {
     pub rr: usize,
 }
 
+// ── Sample query ──────────────────────────────────────────────────────────────
+
+/// Playback-lookup parameters for [`SampleMap::resolve`].
+#[derive(Debug, Clone, Copy)]
+pub struct SampleQuery<'a> {
+    pub section_id: &'a str,
+    pub articulation_id: &'a str,
+    pub mic_id: &'a str,
+    pub dynamic: &'a str,
+    pub target_note: u8,
+    pub direction: &'a str,
+    pub rr: usize,
+}
+
 // ── Sample map ────────────────────────────────────────────────────────────────
 
 /// In-memory index: `SampleKey → absolute sample path`.
@@ -135,14 +149,18 @@ impl SampleMap {
     pub fn resolve(
         &self,
         spec: &LibrarySpec,
-        section_id: &str,
-        articulation_id: &str,
-        mic_id: &str,
-        dynamic: &str,
-        target_note: u8,
-        direction: &str,
-        rr: usize,
+        query: &SampleQuery<'_>,
     ) -> Option<(PathBuf, u8 /* sampled_note */)> {
+        let &SampleQuery {
+            section_id,
+            articulation_id,
+            mic_id,
+            dynamic,
+            target_note,
+            direction,
+            rr,
+        } = query;
+
         // Find the section to get the note grid.
         let section = spec.section(section_id)?;
         let lowest = note_name_to_midi(&section.lowest_note).ok()?;
@@ -1076,7 +1094,18 @@ mod tests {
         // absent for dyn 102.
         for rr in 0..4 {
             let (path, _) = map
-                .resolve(&spec, "main", "lacrm", "Main", "102", 60, "", rr)
+                .resolve(
+                    &spec,
+                    &SampleQuery {
+                        section_id: "main",
+                        articulation_id: "lacrm",
+                        mic_id: "Main",
+                        dynamic: "102",
+                        target_note: 60,
+                        direction: "",
+                        rr,
+                    },
+                )
                 .unwrap_or_else(|| panic!("resolve failed at rr {rr}"));
             let name = path.file_name().unwrap().to_string_lossy();
             assert!(
@@ -1087,7 +1116,18 @@ mod tests {
 
         // A genuinely present RR of the mid layer still round-robins exactly.
         let (path, _) = map
-            .resolve(&spec, "main", "lacrm", "Main", "84", 60, "", 2)
+            .resolve(
+                &spec,
+                &SampleQuery {
+                    section_id: "main",
+                    articulation_id: "lacrm",
+                    mic_id: "Main",
+                    dynamic: "84",
+                    target_note: 60,
+                    direction: "",
+                    rr: 2,
+                },
+            )
             .expect("resolve dyn 84 rr2");
         assert_eq!(path.file_name().unwrap().to_string_lossy(), "RR03 lacrm 60 84.flac");
     }

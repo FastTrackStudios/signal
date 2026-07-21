@@ -70,10 +70,12 @@ fn document_annotation_matches_mirror_across_corpus() {
         let score = keyflow_orchestra::score::load(&f).expect("parse");
         for part in &score.parts {
             let profile = detect_profile(&part.name);
-            let mut cfg = Config::default();
-            cfg.profile = profile;
-            cfg.timing_comp = false;
-            cfg.tempo_map = Some(score.meta.tempos.clone());
+            let cfg = Config {
+                profile,
+                timing_comp: false,
+                tempo_map: Some(score.meta.tempos.clone()),
+                ..Config::default()
+            };
             let stage1 = process_part(part, &cfg);
             if stage1.empty {
                 continue;
@@ -81,10 +83,9 @@ fn document_annotation_matches_mirror_across_corpus() {
             let src: Vec<MidiNote> = stage1.notes.iter().map(MidiNote::from).collect();
 
             // Mirror path (hintless — documents have no notation events).
-            let mcfg = {
-                let mut c = Config::default();
-                c.profile = profile;
-                c
+            let mcfg = Config {
+                profile,
+                ..Config::default()
             };
             let m = mirror_annotations(&src, &stage1.ccs, None, &mcfg);
 

@@ -39,9 +39,9 @@ fn detector() -> TriggerDetector {
 fn add_kick(buf: &mut [f64], at: usize, amp: f64, decay_ms: f64) {
     let w = 2.0 * std::f64::consts::PI * 60.0 / SR;
     let decay = -1.0 / (decay_ms * 0.001 * SR);
-    for i in at..buf.len() {
-        let n = (i - at) as f64;
-        buf[i] += amp * (n * decay).exp() * (n * w).sin();
+    for (n, sample) in buf.iter_mut().enumerate().skip(at) {
+        let n = (n - at) as f64;
+        *sample += amp * (n * decay).exp() * (n * w).sin();
     }
 }
 

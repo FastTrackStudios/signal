@@ -650,6 +650,7 @@ impl SampleEngine {
     /// - Spiccato `(25 55 108)` → 4 bands `[1,24][25,54][55,107][108,127]`.
     /// - Staccato `(51 83 127)` → 3 bands `[1,50][51,82][83,127]` (the `127` is
     ///   the top edge, not a degenerate `[127,127]` band).
+    ///
     /// The last band's top is 127 with span `128 − lo` (KSP open top edge).
     ///
     /// Band → recorded-dynamic mapping is done by the caller: 1:1 when the counts

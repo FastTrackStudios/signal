@@ -178,7 +178,7 @@ pub fn CompSurface(
     let knob = |name: &'static str,
                 label: &'static str,
                 size: KnobSize,
-                fmt: Option<fn(f32) -> String>|
+                fmt: Option<crate::knob::FmtFn>|
      -> Element {
         let p = param(&block, name);
         let rig = rig.clone();
@@ -205,7 +205,7 @@ pub fn CompSurface(
     };
 
     let _fmt_ratio: fn(f32) -> String = |v| format!("{v:.1}:1");
-    let fmt_ms: fn(f32) -> String = |v| format!("{v:.1}ms");
+    let fmt_ms = crate::knob::FmtFn(|v| format!("{v:.1}ms"));
     let _fmt_db: fn(f32) -> String = |v| format!("{v:.1}dB");
 
     rsx! {

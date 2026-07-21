@@ -23,11 +23,11 @@ const PACKS: &str = "/run/media/AudioHaven/Signal/Libraries/Keys/Omnisphere/Pack
 fn main() {
     let mut args = std::env::args().skip(1).peekable();
     let ext_root = PathBuf::from(
-        args.peek().filter(|a| !a.starts_with("--")).cloned().inspect(|a| { args.next(); })
+        args.peek().filter(|a| !a.starts_with("--")).cloned().inspect(|_| { args.next(); })
             .unwrap_or_else(|| EXTRACTION.into()),
     );
     let packs_root = PathBuf::from(
-        args.peek().filter(|a| !a.starts_with("--")).cloned().inspect(|a| { args.next(); })
+        args.peek().filter(|a| !a.starts_with("--")).cloned().inspect(|_| { args.next(); })
             .unwrap_or_else(|| PACKS.into()),
     );
     let force = std::env::args().any(|a| a == "--force");

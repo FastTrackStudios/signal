@@ -527,8 +527,8 @@ async fn resolve_song_section_via_patch_matches_direct_patch() {
 
         let graph = signal
             .resolve_target(ResolveTarget::SongSection {
-                song_id: song_id,
-                section_id: section_id,
+                song_id,
+                section_id,
             })
             .await
             .expect("resolve song section failed");
@@ -586,8 +586,8 @@ async fn resolve_rig_scene_section_equals_direct_rig_scene() {
 
     let via_section = signal
         .resolve_target(ResolveTarget::SongSection {
-            song_id: song_id,
-            section_id: section_id,
+            song_id,
+            section_id,
         })
         .await
         .expect("resolve via section failed");
@@ -684,7 +684,7 @@ async fn resolve_self_referencing_patch_detects_cycle() {
 
     let result = signal
         .resolve_target(ResolveTarget::ProfilePatch {
-            profile_id: profile_id,
+            profile_id,
             patch_id: patch_a_id,
         })
         .await;
@@ -715,7 +715,7 @@ async fn resolve_two_patch_cycle_detects_cycle() {
 
     let result = signal
         .resolve_target(ResolveTarget::ProfilePatch {
-            profile_id: profile_id,
+            profile_id,
             patch_id: patch_a_id,
         })
         .await;
@@ -749,7 +749,7 @@ async fn resolve_three_patch_cycle_detects_cycle() {
 
     let result = signal
         .resolve_target(ResolveTarget::ProfilePatch {
-            profile_id: profile_id,
+            profile_id,
             patch_id: patch_a_id,
         })
         .await;
@@ -787,7 +787,7 @@ async fn resolve_valid_patch_chain_succeeds() {
 
     let graph = signal
         .resolve_target(ResolveTarget::ProfilePatch {
-            profile_id: profile_id,
+            profile_id,
             patch_id: patch_a_id,
         })
         .await
@@ -824,8 +824,8 @@ async fn resolve_song_section_with_cyclic_patch_detects_cycle() {
 
     let result = signal
         .resolve_target(ResolveTarget::SongSection {
-            song_id: song_id,
-            section_id: section_id,
+            song_id,
+            section_id,
         })
         .await;
 

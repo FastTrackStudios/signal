@@ -67,10 +67,10 @@ pub fn ModuleContainer(props: ModuleContainerProps) -> Element {
 
     let port_size = if props.compact { 8.0 } else { 12.0 };
 
-    let on_title_drag = props.on_title_drag_start.clone();
-    let on_select = props.on_select.clone();
-    let on_context_menu = props.on_context_menu.clone();
-    let on_toggle_collapse = props.on_toggle_collapse.clone();
+    let on_title_drag = props.on_title_drag_start;
+    let on_select = props.on_select;
+    let on_context_menu = props.on_context_menu;
+    let on_toggle_collapse = props.on_toggle_collapse;
     let module_id = module.id;
     let node_count = module.nodes.len();
 
@@ -143,7 +143,6 @@ pub fn ModuleContainer(props: ModuleContainerProps) -> Element {
                         border-bottom: 1px solid {color.bg}40; \
                         cursor: {title_cursor};",
                 onmousedown: {
-                    let on_title_drag = on_title_drag.clone();
                     move |evt: MouseEvent| {
                         evt.stop_propagation();
                         if let Some(ref handler) = on_title_drag {
@@ -226,10 +225,10 @@ pub fn ModuleContainer(props: ModuleContainerProps) -> Element {
                         offset_x: 0.0,
                         offset_y: title_height,
                         compact: props.compact,
-                        on_double_click: props.on_node_double_click.clone(),
-                        on_port_drag_start: props.on_port_drag_start.clone(),
-                        on_port_hover: props.on_port_hover.clone(),
-                        on_port_hover_end: props.on_port_hover_end.clone(),
+                        on_double_click: props.on_node_double_click,
+                        on_port_drag_start: props.on_port_drag_start,
+                        on_port_hover: props.on_port_hover,
+                        on_port_hover_end: props.on_port_hover_end,
                         wire_draft_active: props.wire_draft_active,
                         hovered_port: props.hovered_port.clone(),
                     }
@@ -246,7 +245,7 @@ pub fn ModuleContainer(props: ModuleContainerProps) -> Element {
                         let port_x = -port_size / 2.0;
                         let port_color = port.color.as_deref().unwrap_or(color.fg);
 
-                        let is_hovered = props.hovered_port.as_ref().map_or(false, |(eid, pid, _)| {
+                        let is_hovered = props.hovered_port.as_ref().is_some_and(|(eid, pid, _)| {
                             *eid == module.id && pid == &port.id
                         });
                         let glow = if is_hovered {
@@ -261,9 +260,9 @@ pub fn ModuleContainer(props: ModuleContainerProps) -> Element {
 
                         let port_id = port.id.clone();
                         let module_id = module.id;
-                        let on_port_start = props.on_port_drag_start.clone();
-                        let on_hover = props.on_port_hover.clone();
-                        let on_hover_end = props.on_port_hover_end.clone();
+                        let on_port_start = props.on_port_drag_start;
+                        let on_hover = props.on_port_hover;
+                        let on_hover_end = props.on_port_hover_end;
                         let wire_active = props.wire_draft_active;
 
                         rsx! {
@@ -315,7 +314,7 @@ pub fn ModuleContainer(props: ModuleContainerProps) -> Element {
                         let port_x = w - port_size / 2.0;
                         let port_color = port.color.as_deref().unwrap_or(color.fg);
 
-                        let is_hovered = props.hovered_port.as_ref().map_or(false, |(eid, pid, _)| {
+                        let is_hovered = props.hovered_port.as_ref().is_some_and(|(eid, pid, _)| {
                             *eid == module.id && pid == &port.id
                         });
                         let glow = if is_hovered {
@@ -330,9 +329,9 @@ pub fn ModuleContainer(props: ModuleContainerProps) -> Element {
 
                         let port_id = port.id.clone();
                         let module_id = module.id;
-                        let on_port_start = props.on_port_drag_start.clone();
-                        let on_hover = props.on_port_hover.clone();
-                        let on_hover_end = props.on_port_hover_end.clone();
+                        let on_port_start = props.on_port_drag_start;
+                        let on_hover = props.on_port_hover;
+                        let on_hover_end = props.on_port_hover_end;
                         let wire_active = props.wire_draft_active;
 
                         rsx! {

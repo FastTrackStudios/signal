@@ -850,15 +850,15 @@ impl SampleEngine {
         } else {
             let dynamic = self.short_note_dynamic(velocity);
             self.patch
-                .resolve(
-                    &self.section,
-                    &self.articulation,
-                    &self.mic,
-                    &dynamic,
-                    note,
-                    "",
-                    0,
-                )
+                .resolve(&crate::sample_map::SampleQuery {
+                    section_id: &self.section,
+                    articulation_id: &self.articulation,
+                    mic_id: &self.mic,
+                    dynamic: &dynamic,
+                    target_note: note,
+                    direction: "",
+                    rr: 0,
+                })
                 .map(|(path, _)| path)
         };
         let Some(path) = path else {
@@ -1440,11 +1440,11 @@ fn steady_loop_region(
     // sub-cycle fragments. Window ≈ 250 ms (a few vibrato periods).
     let win = ((data.sample_rate as usize * 250 / 1000 / HOP).max(1)).min(n / 2 + 1);
     let mut sm = vec![0.0f32; n];
-    for i in 0..n {
+    for (i, out) in sm.iter_mut().enumerate().take(n) {
         let a = i.saturating_sub(win);
         let b = (i + win + 1).min(n);
         let slice = &fine[a..b];
-        sm[i] = slice.iter().copied().sum::<f32>() / slice.len() as f32;
+        *out = slice.iter().copied().sum::<f32>() / slice.len() as f32;
     }
     // Take the WIDEST steady body — the longest contiguous run of the smoothed
     // envelope at/above a fraction of its peak. A LONG loop is the key to not

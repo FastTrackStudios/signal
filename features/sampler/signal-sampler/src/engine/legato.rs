@@ -441,7 +441,7 @@ impl SampleEngine {
         }
         if !config.voice_steal.trim().is_empty() {
             self.voices
-                .set_steal_policy(VoiceStealPolicy::from_str(&config.voice_steal));
+                .set_steal_policy(VoiceStealPolicy::parse(&config.voice_steal));
         }
     }
 

@@ -73,13 +73,13 @@ fn EqPanel(chain: ProcessingChain) -> Element {
         }
     };
 
-    let mut on_band_add = move |band: EqBand| {
+    let on_band_add = move |band: EqBand| {
         let mut new_band = band.clone();
         new_band.index = bands.read().len();
         bands.write().push(new_band);
     };
 
-    let mut on_band_remove = move |idx: usize| {
+    let on_band_remove = move |idx: usize| {
         let mut bs = bands.write();
         if idx < bs.len() {
             bs.remove(idx);
@@ -103,8 +103,8 @@ fn EqPanel(chain: ProcessingChain) -> Element {
                 bands: bands,
                 sample_rate: 48000.0,
                 on_band_change: move |(idx, band)| on_band_change((idx, band)),
-                on_band_add: move |band| on_band_add(band),
-                on_band_remove: move |idx| on_band_remove(idx),
+                on_band_add: on_band_add,
+                on_band_remove: on_band_remove,
             }
         }
     }

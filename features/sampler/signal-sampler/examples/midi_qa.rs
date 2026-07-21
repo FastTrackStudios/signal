@@ -7,7 +7,7 @@
 //!   * click / pop  — an abrupt inter-sample step far above the waveform slope
 //!   * gap          — an unexpected dropout to near-silence mid-phrase
 //!   * jump         — a sudden level change across a legato move (dynamics
-//!                    are continuous, so an arrival should not step in level)
+//!     are continuous, so an arrival should not step in level)
 //!   * doubling     — level ~2× after a move = two voices of the note stacking
 //!
 //! For each pattern it writes `target/qa_<name>.wav` and an Audacity label
@@ -30,7 +30,7 @@ const CSS_CONFIG: &str =
     "/run/media/Development/FastTrackStudio/sample-collector/specs/cinematic-strings.styx";
 const ID: &str = "strings_1v";
 const SR: u32 = 48_000;
-const SEED: u64 = 0x0DA_11A_5EED_0001;
+const SEED: u64 = 0x000D_A11A_5EED_0001;
 const OVERLAP_QN: f64 = 1.0 / 32.0;
 
 // ── Boundary-check thresholds ───────────────────────────────────────────────
@@ -147,7 +147,9 @@ fn main() -> eyre::Result<()> {
 
     let q = 1.0;
     // ── Battery ─────────────────────────────────────────────────────────────
-    let mut battery: Vec<(&str, f64, Vec<(u8, f64)>)> = Vec::new();
+    // Each entry: (pattern name, total-QN length, [(pitch, duration-QN), ...]).
+    type QaPattern = (&'static str, f64, Vec<(u8, f64)>);
+    let mut battery: Vec<QaPattern> = Vec::new();
 
     // Chromatic up then down (the reported "doubles at the top").
     let mut chroma: Vec<(u8, f64)> = (60u8..=72).map(|p| (p, 0.5)).collect();

@@ -133,6 +133,7 @@ impl Gen {
         self.idx += 1;
     }
     /// One isolated held/short note. `hold` = note length, `win` = analysis window.
+    #[allow(clippy::too_many_arguments, reason = "one-off CSS-generation script; one positional arg per MIDI/articulation knob reads clearer than a params struct here")]
     fn shot(
         &mut self,
         cat: &str,
@@ -154,6 +155,7 @@ impl Gen {
         self.t += win + GAP;
     }
     /// One isolated legato phrase A→B (single segment). `win` covers the phrase.
+    #[allow(clippy::too_many_arguments, reason = "one-off CSS-generation script; one positional arg per MIDI/articulation knob reads clearer than a params struct here")]
     fn leg(&mut self, cat: &str, desc: &str, ks: u8, a: u8, b: u8, vel: u8, hold: f64) {
         self.setcc(58, ks);
         self.setcc(2, 0);

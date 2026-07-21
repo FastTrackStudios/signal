@@ -54,7 +54,7 @@ impl ControlLfo {
             sample_rate: 48_000.0,
             phase: 0.0,
             held: 0.0,
-            rng: 0x2F6E_2B1,
+            rng: 0x02F6_E2B1,
         }
     }
 

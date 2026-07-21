@@ -274,7 +274,7 @@ async fn fast_path_open(
     let mut fxchain_nodes = Vec::new();
     for (container_name, blocks) in module_specs {
         let mut children = Vec::new();
-        for ref data in (*blocks).iter().flatten() {
+        for data in (*blocks).iter().flatten() {
             if let Some(node) = parse_raw_block_bytes(data) {
                 children.push(node);
             }

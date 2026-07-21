@@ -57,9 +57,25 @@ fn dump_rhodes() {
         eprintln!("  key={k:?} → {}", p.display());
     }
     // Try resolve for note 36 vel 30 with the same args trigger_short uses.
-    let r = patch.resolve("main", "lacrm", "Main", "35", 36, "", 0);
+    let r = patch.resolve(&signal_sampler::SampleQuery {
+        section_id: "main",
+        articulation_id: "lacrm",
+        mic_id: "Main",
+        dynamic: "35",
+        target_note: 36,
+        direction: "",
+        rr: 0,
+    });
     eprintln!("resolve(main, lacrm, Main, 35, 36, 0) = {r:?}");
-    let r2 = patch.resolve("main", "lacrm", "Main", "35", 60, "", 0);
+    let r2 = patch.resolve(&signal_sampler::SampleQuery {
+        section_id: "main",
+        articulation_id: "lacrm",
+        mic_id: "Main",
+        dynamic: "35",
+        target_note: 60,
+        direction: "",
+        rr: 0,
+    });
     eprintln!("resolve(main, lacrm, Main, 35, 60, 0) = {r2:?}");
     // Compare a few preload-iterator paths vs resolved paths.
     let preload_paths: Vec<_> = patch
@@ -120,7 +136,15 @@ fn dump_rhodes() {
     }
     // Verify resolve at note 36 for the RR cycle.
     for rr in 0..4 {
-        let r = patch.resolve("main", "lacrm", "Main", "35", 36, "", rr);
+        let r = patch.resolve(&signal_sampler::SampleQuery {
+            section_id: "main",
+            articulation_id: "lacrm",
+            mic_id: "Main",
+            dynamic: "35",
+            target_note: 36,
+            direction: "",
+            rr,
+        });
         eprintln!("resolve(36, dyn=35, rr={rr}) = {r:?}");
     }
     for (artic, dyns) in &by_artic {

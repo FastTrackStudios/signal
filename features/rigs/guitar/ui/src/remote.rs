@@ -26,6 +26,7 @@ enum Mode {
     Control,
     /// Full-screen footswitch grid (Preset/Profile/Setlist select this
     /// view AND the grid's perform mode).
+    #[allow(dead_code, reason = "not yet wired to a page switch — reserved for the Preset/Profile/Setlist full-screen perform view")]
     Perform,
     /// Integration layer (DAW sync, external control) — landing here.
     Session,

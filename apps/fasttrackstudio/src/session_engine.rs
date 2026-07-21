@@ -377,7 +377,7 @@ fn category_color(group: Option<&str>, name: &str) -> u32 {
     } else if has(&["synth", "pad"]) {
         0x0E_9488 // teal
     } else if has(&["key", "piano", "organ", "rhodes", "wurli"]) {
-        0x2563_EB // blue
+        0x0025_63EB // blue
     } else if has(&["fx", "loop", "track", "swell", "riser"]) {
         0x4B_6B5A // gray-green
     } else if has(&["string", "orch", "horn", "brass", "sax"]) {

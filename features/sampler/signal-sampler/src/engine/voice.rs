@@ -1000,7 +1000,7 @@ pub enum VoiceStealPolicy {
 }
 
 impl VoiceStealPolicy {
-    pub fn from_str(value: &str) -> Self {
+    pub fn parse(value: &str) -> Self {
         match value.trim().to_ascii_lowercase().as_str() {
             "oldest" => Self::Oldest,
             "quietest" => Self::Quietest,
@@ -1038,7 +1038,7 @@ impl VoicePool {
     }
 
     pub fn with_max_voices(max_voices: usize) -> Self {
-        let capacity = max_voices.max(1).min(MAX_VOICES);
+        let capacity = max_voices.clamp(1, MAX_VOICES);
         Self {
             voices: Vec::with_capacity(capacity),
             stolen: 0,
@@ -1574,19 +1574,19 @@ mod tests {
     #[test]
     fn parses_voice_steal_policy_names() {
         assert_eq!(
-            VoiceStealPolicy::from_str("same-note-first"),
+            VoiceStealPolicy::parse("same-note-first"),
             VoiceStealPolicy::SameNoteFirst
         );
         assert_eq!(
-            VoiceStealPolicy::from_str("oldest"),
+            VoiceStealPolicy::parse("oldest"),
             VoiceStealPolicy::Oldest
         );
         assert_eq!(
-            VoiceStealPolicy::from_str("none"),
+            VoiceStealPolicy::parse("none"),
             VoiceStealPolicy::DropNew
         );
         assert_eq!(
-            VoiceStealPolicy::from_str(""),
+            VoiceStealPolicy::parse(""),
             VoiceStealPolicy::ReleaseFirstQuietest
         );
     }

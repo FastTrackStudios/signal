@@ -133,8 +133,10 @@ fn motion_moves_and_is_finite() {
 fn duck_reduces_wet_during_burst() {
     let run = |duck: f64| -> f64 {
         let mut c = Convolution::new(SR);
-        let mut p = ConvolutionModParams::default();
-        p.duck_wet_depth = duck;
+        let p = ConvolutionModParams {
+            duck_wet_depth: duck,
+            ..Default::default()
+        };
         c.set_conv_mod_params(&p, true);
         // Prime the tail with an impulse, then a loud sustained burst.
         let n = (SR * 1.5) as usize;
@@ -171,8 +173,10 @@ fn predelay_shifts_arrival() {
         // Distinct, known IR so arrival is unambiguous.
         let ir: Vec<f64> = (0..256).map(|i| if i == 0 { 1.0 } else { 0.0 }).collect();
         c.load_ir_stereo(&ir, &ir);
-        let mut p = ConvolutionModParams::default();
-        p.predelay_ms = pd_ms;
+        let p = ConvolutionModParams {
+            predelay_ms: pd_ms,
+            ..Default::default()
+        };
         c.set_conv_mod_params(&p, true);
         for i in 0..48000 {
             let x = if i == 0 { 1.0 } else { 0.0 };
@@ -229,8 +233,10 @@ fn morph_blends_both_slots() {
         let mut c = Convolution::new(SR);
         c.load_ir_stereo_slot(&ir_a, &ir_a, IrSlot::A);
         c.load_ir_stereo_slot(&ir_b, &ir_b, IrSlot::B);
-        let mut p = ConvolutionModParams::default();
-        p.morph = morph;
+        let p = ConvolutionModParams {
+            morph,
+            ..Default::default()
+        };
         c.set_conv_mod_params(&p, true);
         let mut early = 0.0; // A's tap window (0..2000 + block latency)
         let mut late = 0.0; // B's tap window (4000..6000 + block latency)

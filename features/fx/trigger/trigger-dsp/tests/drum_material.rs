@@ -63,11 +63,7 @@ fn load_wav(filename: &str) -> Option<Audio> {
 
     let mut samples = Vec::new();
 
-    loop {
-        let packet = match reader.next_packet() {
-            Ok(p) => p,
-            Err(_) => break,
-        };
+    while let Ok(packet) = reader.next_packet() {
         if packet.track_id() != track_id {
             continue;
         }

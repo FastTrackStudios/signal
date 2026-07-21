@@ -163,7 +163,7 @@ impl NodeGraph {
 
         for idx in indices {
             let this_y = self.modules[idx].position.y;
-            let same_row = rows.last().map_or(false, |row| {
+            let same_row = rows.last().is_some_and(|row| {
                 let row_y = self.modules[row[0]].position.y;
                 (this_y - row_y).abs() < row_threshold
             });

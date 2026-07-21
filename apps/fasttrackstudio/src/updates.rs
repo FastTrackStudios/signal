@@ -46,11 +46,13 @@ pub enum UpdateStatus {
     UpToDate,
     #[allow(dead_code)]
     Available(UpdateInfo),
+    #[allow(dead_code, reason = "STUB — no code path produces a network failure yet; the network half is deliberately unimplemented")]
     Failed(String),
 }
 
 /// The update pipeline. One real implementation will exist
 /// ([`CodebergUpdater`]); the trait keeps the UI testable.
+#[allow(dead_code, reason = "STUB trait — download/apply are the not-yet-implemented network/install halves described at the top of this file")]
 pub trait Updater {
     /// Query [`FEED_URL`] and compare against [`current_version`].
     fn check_for_updates(&self) -> UpdateStatus;

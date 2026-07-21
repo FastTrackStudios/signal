@@ -441,7 +441,7 @@ mod tests {
         let new_ambient =
             Patch::from_rig_scene(PatchId::new(), "Ambient", rig_id.clone(), scene_id.clone());
         let new_shimmer_pid = new_shimmer.id.clone();
-        let new_funk_pid = new_funk.id.clone();
+        let _new_funk_pid = new_funk.id.clone();
         let new_solo_pid = new_solo.id.clone();
         let new_ambient_pid = new_ambient.id.clone();
         let mut new_profile = Profile::new(ProfileId::new(), "All-Around", new_shimmer);

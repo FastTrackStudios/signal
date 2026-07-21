@@ -376,8 +376,8 @@ pub fn ABComparison(props: ABComparisonProps) -> Element {
                     ComparisonRowView {
                         key: "{row.param_id}",
                         row: row.clone(),
-                        on_copy_a_to_b: props.on_copy_a_to_b.clone(),
-                        on_copy_b_to_a: props.on_copy_b_to_a.clone(),
+                        on_copy_a_to_b: props.on_copy_a_to_b,
+                        on_copy_b_to_a: props.on_copy_b_to_a,
                     }
                 }
             }

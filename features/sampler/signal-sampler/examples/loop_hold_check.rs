@@ -20,7 +20,7 @@ const CSS_CONFIG: &str =
     "/run/media/Development/FastTrackStudio/sample-collector/specs/cinematic-strings.styx";
 const ID: &str = "strings_1v";
 const SR: u32 = 48_000;
-const SEED: u64 = 0x10_09_ABCD_EF01_2345;
+const SEED: u64 = 0x1009_ABCD_EF01_2345;
 const BPM: f64 = 60.0; // 1 QN = 1 s
 
 fn write_wav(path: &std::path::Path, samples: &[f32]) -> eyre::Result<()> {

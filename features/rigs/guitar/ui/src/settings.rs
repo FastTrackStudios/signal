@@ -1,7 +1,7 @@
 //! Audio settings — device / channel / buffer / sample-rate picker.
 //!
 //! Pure presentation over the proto types: the hosting view fetches devices
-//! + prefs over the `AudioSettings` service, builds an [`AudioSettingsBridge`]
+//! and prefs over the `AudioSettings` service, builds an [`AudioSettingsBridge`]
 //! carrying them plus a save callback, and hands it to the modal.
 
 use dioxus::prelude::*;

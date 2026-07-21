@@ -78,7 +78,7 @@ async fn clicking_band_toggle_drops_and_restores_the_curve() -> Result<()> {
         .query(dioxus_test::by_testid("band-toggle"))
         .click()
         .await?;
-    tester.pump().await;
+    let _ = tester.pump().await;
 
     tester
         .query(dioxus_test::by_testid("band-toggle"))

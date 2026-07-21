@@ -119,7 +119,7 @@ pub use runtime::{
     BufferRef, EngineInstance, LayerRuntime, ModuleInstance, PortRuntime, PresetRuntime,
     ResolvedEdge,
 };
-pub use sample_map::{SampleKey, SampleMap};
+pub use sample_map::{SampleKey, SampleMap, SampleQuery};
 pub use midicore::MidiMonitor;
 pub use sampler_rig::{BusTrack, InstrumentTrack, SamplerRig};
 // Hardware MIDI input primitives live in `midicore` (the `midir` OS backend);
@@ -534,24 +534,9 @@ impl PlayerPatch {
 
     pub fn resolve(
         &self,
-        section_id: &str,
-        articulation_id: &str,
-        mic_id: &str,
-        dynamic: &str,
-        target_note: u8,
-        direction: &str,
-        rr: usize,
+        query: &crate::sample_map::SampleQuery<'_>,
     ) -> Option<(std::path::PathBuf, u8)> {
-        self.map.resolve(
-            &self.spec,
-            section_id,
-            articulation_id,
-            mic_id,
-            dynamic,
-            target_note,
-            direction,
-            rr,
-        )
+        self.map.resolve(&self.spec, query)
     }
 
     /// Resolve a zone for `(note, velocity)`, RR-cycling within the matching set.

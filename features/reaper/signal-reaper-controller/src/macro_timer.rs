@@ -32,6 +32,10 @@ struct Mapping {
 
 #[derive(Debug, Clone, serde::Deserialize)]
 enum TrackRef {
+    // Deserialized from mapping config, but track targeting isn't wired up
+    // yet — `target_track` (which holds this) is likewise `allow(dead_code)`
+    // above until the routing logic consumes it.
+    #[allow(dead_code)]
     ByIndex(u32),
 }
 
@@ -274,9 +278,9 @@ fn apply_macros(state: &mut MacroState) {
         // Read macro values from the signal controller's FX params
         let macros = if let Some(fx_idx) = ts.controller_fx_index {
             let mut values = [0.0f32; NUM_MACROS];
-            for i in 0..NUM_MACROS {
+            for (i, value) in values.iter_mut().enumerate() {
                 if let Some(v) = daw.fx_param_get(&ts.track_guid, fx_idx, i as u32) {
-                    values[i] = v as f32;
+                    *value = v as f32;
                 }
             }
             values
@@ -286,8 +290,8 @@ fn apply_macros(state: &mut MacroState) {
 
         // Check for changes
         let mut changed = false;
-        for i in 0..NUM_MACROS {
-            if (macros[i] - ts.prev_macros[i]).abs() > 1e-5 {
+        for (m, prev) in macros.iter().zip(ts.prev_macros.iter()) {
+            if (m - prev).abs() > 1e-5 {
                 changed = true;
                 break;
             }
@@ -300,8 +304,8 @@ fn apply_macros(state: &mut MacroState) {
         if ts.controller_fx_index.is_some() {
             let mut best_idx = 0usize;
             let mut best_delta = 0.0f32;
-            for i in 0..NUM_MACROS {
-                let delta = (macros[i] - ts.prev_macros[i]).abs();
+            for (i, (m, prev)) in macros.iter().zip(ts.prev_macros.iter()).enumerate() {
+                let delta = (m - prev).abs();
                 if delta > best_delta {
                     best_delta = delta;
                     best_idx = i;

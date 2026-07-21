@@ -75,9 +75,9 @@ pub fn NodeBlock(props: NodeBlockProps) -> Element {
     let header_h = if props.compact { h } else { 28.0 };
     let content_h = if props.compact { 0.0 } else { h - 28.0 };
 
-    let on_header_drag = props.on_header_drag_start.clone();
-    let on_select = props.on_select.clone();
-    let on_dbl_click = props.on_double_click.clone();
+    let on_header_drag = props.on_header_drag_start;
+    let on_select = props.on_select;
+    let on_dbl_click = props.on_double_click;
     let node_id = node.id;
     let header_cursor = if props.wire_draft_active {
         "crosshair"
@@ -200,11 +200,11 @@ pub fn NodeBlock(props: NodeBlockProps) -> Element {
                         node_height: h,
                         is_input: true,
                         entity_id: node.id,
-                        on_port_drag_start: props.on_port_drag_start.clone(),
-                        on_port_hover: props.on_port_hover.clone(),
-                        on_port_hover_end: props.on_port_hover_end.clone(),
+                        on_port_drag_start: props.on_port_drag_start,
+                        on_port_hover: props.on_port_hover,
+                        on_port_hover_end: props.on_port_hover_end,
                         wire_draft_active: props.wire_draft_active,
-                        is_hovered: props.hovered_port.as_ref().map_or(false, |(eid, pid, _)| {
+                        is_hovered: props.hovered_port.as_ref().is_some_and(|(eid, pid, _)| {
                             *eid == node.id && pid == &port.id
                         }),
                     }
@@ -219,11 +219,11 @@ pub fn NodeBlock(props: NodeBlockProps) -> Element {
                         node_width: w,
                         is_input: false,
                         entity_id: node.id,
-                        on_port_drag_start: props.on_port_drag_start.clone(),
-                        on_port_hover: props.on_port_hover.clone(),
-                        on_port_hover_end: props.on_port_hover_end.clone(),
+                        on_port_drag_start: props.on_port_drag_start,
+                        on_port_hover: props.on_port_hover,
+                        on_port_hover_end: props.on_port_hover_end,
                         wire_draft_active: props.wire_draft_active,
-                        is_hovered: props.hovered_port.as_ref().map_or(false, |(eid, pid, _)| {
+                        is_hovered: props.hovered_port.as_ref().is_some_and(|(eid, pid, _)| {
                             *eid == node.id && pid == &port.id
                         }),
                     }
@@ -286,9 +286,9 @@ fn PortCircle(props: PortCircleProps) -> Element {
         "none"
     };
 
-    let on_port_start = props.on_port_drag_start.clone();
-    let on_hover = props.on_port_hover.clone();
-    let on_hover_end = props.on_port_hover_end.clone();
+    let on_port_start = props.on_port_drag_start;
+    let on_hover = props.on_port_hover;
+    let on_hover_end = props.on_port_hover_end;
     let port_id = props.port.id.clone();
     let entity_id = props.entity_id;
     let is_input = props.is_input;

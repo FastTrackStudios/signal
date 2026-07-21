@@ -155,6 +155,7 @@ pub fn CollectionBrowser(props: CollectionBrowserProps) -> Element {
 
     let mut expanded_folders = use_signal(std::collections::HashSet::<String>::new);
 
+    #[allow(clippy::redundant_closure, reason = "passing `nav` bare instead of `move || nav()` fails to typecheck against use_memo's FnMut + 'static bound on a dioxus Signal")]
     let nav_memo = use_memo(move || nav());
 
     {
@@ -316,32 +317,29 @@ pub fn CollectionBrowser(props: CollectionBrowserProps) -> Element {
                         }
                     }
                     Key::Enter => {
-                        match focus_col() {
-                            2 => {
-                                if let Some(idx) = col2_selected() {
-                                    let items = col2_items();
-                                    if let Some(item) = items.get(idx) {
-                                        let signal = signal.clone();
-                                        let nav_val = nav();
-                                        let id = item.id.clone();
-                                        let tag = item.tag;
-                                        col2_current_id.set(id.clone());
-                                        col3_selected.set(None);
-                                        col4_items.set(Vec::new());
-                                        col4_selected.set(None);
-                                        block_presets_cache.set(Vec::new());
-                                        spawn(async move {
-                                            let (v, presets) = fetch_col3(&signal, nav_val, &id, tag).await;
-                                            let params = build_param_lookup(&signal, &v).await;
-                                            param_lookup.set(params);
-                                            col3_items.set(v);
-                                            block_presets_cache.set(presets);
-                                        });
-                                        focus_col.set(3);
-                                    }
+                        if focus_col() == 2 {
+                            if let Some(idx) = col2_selected() {
+                                let items = col2_items();
+                                if let Some(item) = items.get(idx) {
+                                    let signal = signal.clone();
+                                    let nav_val = nav();
+                                    let id = item.id.clone();
+                                    let tag = item.tag;
+                                    col2_current_id.set(id.clone());
+                                    col3_selected.set(None);
+                                    col4_items.set(Vec::new());
+                                    col4_selected.set(None);
+                                    block_presets_cache.set(Vec::new());
+                                    spawn(async move {
+                                        let (v, presets) = fetch_col3(&signal, nav_val, &id, tag).await;
+                                        let params = build_param_lookup(&signal, &v).await;
+                                        param_lookup.set(params);
+                                        col3_items.set(v);
+                                        block_presets_cache.set(presets);
+                                    });
+                                    focus_col.set(3);
                                 }
                             }
-                            _ => {}
                         }
                     }
                     Key::Escape => {
@@ -795,23 +793,19 @@ pub fn CollectionBrowser(props: CollectionBrowserProps) -> Element {
                                     let preset_id = preset_item.id.clone();
                                     if let Some(c4) = col4_selected() {
                                         let c4_items = &all_col4;
-                                        if let Some(snap_item) = c4_items.get(c4) {
-                                            Some(BrowserAssignment::BlockSnapshot {
+                                        c4_items.get(c4).map(|snap_item| BrowserAssignment::BlockSnapshot {
                                                 preset_id,
                                                 snapshot_id: snap_item.id.clone(),
                                             })
-                                        } else { None }
                                     } else {
                                         let cached = block_presets_cache();
                                         let default_snap_id = cached.iter()
                                             .find(|p| p.id().to_string() == preset_id)
                                             .map(|p| p.default_snapshot().id().to_string());
-                                        if let Some(snap_id) = default_snap_id {
-                                            Some(BrowserAssignment::BlockPresetDefault {
+                                        default_snap_id.map(|snap_id| BrowserAssignment::BlockPresetDefault {
                                                 preset_id,
                                                 snapshot_id: snap_id,
                                             })
-                                        } else { None }
                                     }
                                 } else { None }
                             } else { None }
@@ -821,7 +815,7 @@ pub fn CollectionBrowser(props: CollectionBrowserProps) -> Element {
                 };
                 let pick_mode = props.on_assign.is_some();
                 let can_assign = assignment.is_some() && pick_mode;
-                let on_assign = props.on_assign.clone();
+                let on_assign = props.on_assign;
 
                 rsx! {
                     div {

@@ -64,7 +64,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let mut any = false;
             for d in &dyns {
                 tot += 1;
-                if patch.resolve(&section.id, &art.id, mic, d, n, "", 0).is_some() {
+                if patch.resolve(&signal_sampler::SampleQuery {
+                    section_id: &section.id,
+                    articulation_id: &art.id,
+                    mic_id: mic,
+                    dynamic: d,
+                    target_note: n,
+                    direction: "",
+                    rr: 0,
+                }).is_some() {
                     hit += 1;
                     any = true;
                 }
@@ -90,7 +98,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let mut any = false;
         for d in &dyns {
             total += 1;
-            if patch.resolve(&section.id, &art.id, mic, d, n, "", 0).is_some() {
+            if patch.resolve(&signal_sampler::SampleQuery {
+                    section_id: &section.id,
+                    articulation_id: &art.id,
+                    mic_id: mic,
+                    dynamic: d,
+                    target_note: n,
+                    direction: "",
+                    rr: 0,
+                }).is_some() {
                 any = true;
                 hits += 1;
             }

@@ -1015,9 +1015,9 @@ impl PresetRuntime {
                     let lvl = snd.level_lin * p_gain;
                     if let Some(bus) = buses.get_mut(snd.bus_idx) {
                         let n = bus.acc.len().min(src.len());
-                        for k in 0..n {
-                            let v = src[k] * lvl;
-                            bus.acc[k] += v;
+                        for (dst, &s) in bus.acc[..n].iter_mut().zip(&src[..n]) {
+                            let v = s * lvl;
+                            *dst += v;
                             let a = v.abs();
                             if a > peak {
                                 peak = a;
@@ -1053,9 +1053,9 @@ impl PresetRuntime {
                 }
                 let g = bus.gain_lin;
                 let n = master_scratch.len().min(bus.acc.len());
-                for k in 0..n {
-                    let v = bus.acc[k] * g;
-                    master_scratch[k] += v;
+                for (dst, &s) in master_scratch[..n].iter_mut().zip(&bus.acc[..n]) {
+                    let v = s * g;
+                    *dst += v;
                     let a = v.abs();
                     if a > peak {
                         peak = a;
