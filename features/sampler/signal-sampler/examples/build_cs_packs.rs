@@ -2,9 +2,10 @@
 //! mic) signalpacks — lossless FLAC + Ogg Vorbis proxy.
 //!
 //!   cargo run -p signal-sampler --release --example build_cs_packs -- \
-//!       "<lib_root>" <engine-config.styx> <groups.styx> "<out_root>" \
+//!       "<lib_root>" <engine-config.styx> <groups.styx> \
+//!       "<full_out_root>" "<proxy_out_root>" \
 //!       [--sections "1st Violins,Cellos"] [--mics Main,Mix] [--groups Legato] \
-//!       [--variant both|lossless|proxy] [--quality 0.8] [--dry-run] [--force]
+//!       [--variant both|lossless|proxy] [--quality 0.6] [--dry-run] [--force]
 //!
 //! Inputs:
 //! - `<lib_root>/_patches/<Section>/library.styx` — the rich per-section zone
@@ -19,9 +20,13 @@
 //!   cs-strings-packs.styx): friendly pack name ← raw articulation ids, with
 //!   releases/legato folded into their body group.
 //!
-//! Output layout (filename fully denotes the pack):
-//!   <out_root>/<Section>/<Group>/<Section> - <Group> - <Mic>.signalpack
-//!   <out_root>/<Section>/<Group>/<Section> - <Group> - <Mic>.proxy.signalpack
+//! Output: TWO parallel trees with IDENTICAL subpaths and filenames, so the
+//! whole proxy tree is a transferable drop-in replacement for the full tree
+//! (variant is distinguished by tree root + pack header kind, not filename):
+//!   <full_out_root>/<Section>/<Group>/<Section> - <Group> - <Mic>.signalpack   (FLAC)
+//!   <proxy_out_root>/<Section>/<Group>/<Section> - <Group> - <Mic>.signalpack  (Ogg Vorbis)
+//! Convention: full_out_root  = …/Signal/Libraries/Full/<Category>/<Library>
+//!             proxy_out_root = …/Signal/Libraries/Proxy/<Category>/<Library>
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
@@ -364,7 +369,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut filter_mics: Option<BTreeSet<String>> = None;
     let mut filter_groups: Option<BTreeSet<String>> = None;
     let mut variant = "both".to_string();
-    let mut quality = 0.8f32;
+    let mut quality = 0.6f32;
     let mut dry_run = false;
     let mut force = false;
 
@@ -382,11 +387,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             _ => positional.push(arg),
         }
     }
-    let [lib_root, config_path, groups_path, out_root]: [String; 4] = positional
+    let [lib_root, config_path, groups_path, full_out_root, proxy_out_root]: [String; 5] = positional
         .try_into()
-        .map_err(|_| "usage: build_cs_packs <lib_root> <engine-config.styx> <groups.styx> <out_root> [--sections …] [--mics …] [--groups …] [--variant both|lossless|proxy] [--quality 0.8] [--dry-run] [--force]")?;
+        .map_err(|_| "usage: build_cs_packs <lib_root> <engine-config.styx> <groups.styx> <full_out_root> <proxy_out_root> [--sections …] [--mics …] [--groups …] [--variant both|lossless|proxy] [--quality 0.6] [--dry-run] [--force]")?;
     let lib_root = PathBuf::from(lib_root);
-    let out_root = PathBuf::from(out_root);
+    let full_out_root = PathBuf::from(full_out_root);
+    let proxy_out_root = PathBuf::from(proxy_out_root);
     assert!(
         matches!(variant.as_str(), "both" | "lossless" | "proxy"),
         "--variant must be both|lossless|proxy"
@@ -509,16 +515,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .into_iter()
                 .collect();
 
-            let dir = out_root.join(section).join(group);
+            let rel = PathBuf::from(section)
+                .join(group)
+                .join(format!("{pack_name}.signalpack"));
             let mut jobs: Vec<(PathBuf, PackCodec)> = Vec::new();
             if variant != "proxy" {
-                jobs.push((dir.join(format!("{pack_name}.signalpack")), PackCodec::FlacI24));
+                jobs.push((full_out_root.join(&rel), PackCodec::FlacI24));
             }
             if variant != "lossless" {
-                jobs.push((
-                    dir.join(format!("{pack_name}.proxy.signalpack")),
-                    PackCodec::OggVorbis { quality },
-                ));
+                jobs.push((proxy_out_root.join(&rel), PackCodec::OggVorbis { quality }));
             }
 
             for (out_path, codec) in jobs {
