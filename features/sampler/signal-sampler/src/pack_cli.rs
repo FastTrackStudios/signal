@@ -102,6 +102,32 @@ enum SpecCmd {
 
 #[derive(Subcommand)]
 enum ZonesCmd {
+    /// Append zones for articulations MISSING from a spec, generated from an
+    /// `nki --zones` zones.tsv (Cinematic Studio naming:
+    /// `<sec>_<Artic>_<Mic>_<REST>.ncw` → `<Mic>/<section>/[<Cat>/]<Artic>/<REST>.wav`).
+    /// Existing articulations are never touched (they may carry measured
+    /// fields — lead_in, arrival — the tsv cannot reproduce).
+    AppendMissing {
+        /// A .signalpack or a loose library.styx.
+        target: PathBuf,
+        /// zones.tsv from the `nki` decoder.
+        #[arg(long)]
+        from_tsv: PathBuf,
+        /// Section label used in extracted WAV paths (e.g. "2 Trumpets").
+        #[arg(long)]
+        section: String,
+        /// Extraction uses flat `<Mic>/<Section>/<Artic>/` (CSB/CSW/Solo
+        /// Strings). Without this, the CSS category-folder taxonomy is used.
+        #[arg(long)]
+        flat: bool,
+        /// Verify each generated zone's file exists under this root; error on
+        /// missing files.
+        #[arg(long)]
+        wav_root: Option<PathBuf>,
+        /// Report what would be appended without writing.
+        #[arg(long)]
+        dry_run: bool,
+    },
     /// Set scalar fields on matching zones: `--set loop_xfade=4800 …`.
     Set {
         /// A .signalpack (embedded spec is rewritten) or a loose .styx
@@ -169,6 +195,17 @@ pub fn cli_main(argv: impl IntoIterator<Item = OsString>) -> Result<()> {
                     no_validate,
                 },
         } => spec_set(&pack, &spec, no_validate),
+        Cmd::Zones {
+            command:
+                ZonesCmd::AppendMissing {
+                    target,
+                    from_tsv,
+                    section,
+                    flat,
+                    wav_root,
+                    dry_run,
+                },
+        } => zones_append_missing(&target, &from_tsv, &section, flat, wav_root.as_deref(), dry_run),
         Cmd::Zones {
             command:
                 ZonesCmd::Set {
@@ -456,6 +493,276 @@ fn zones_set(
         println!("(dry run — nothing written)");
         return Ok(());
     }
+    tgt.write(&new_spec)
+}
+
+// ── zones append-missing (Cinematic Studio NKI flow) ─────────────────────────
+
+#[derive(Clone)]
+struct TsvZone {
+    key_min: u8,
+    key_max: u8,
+    root_key: u8,
+    tune_cents: f64,
+    rr_index: u32,
+    mic: String,
+    articulation: String,
+    dynamic: String,
+    direction: Option<String>,
+    interval: u32,
+    loop_start: u64,
+    loop_end: u64,
+    section: String,
+    file: String,
+}
+
+fn cs_is_legato(artic: &str) -> bool {
+    matches!(artic, "Leg" | "NVLeg" | "MLeg" | "Port")
+}
+fn cs_is_zero(artic: &str) -> bool {
+    matches!(artic, "Legzero" | "NVLegzero")
+}
+
+/// Parse an `nki --zones` zones.tsv into per-FILE zones (key ranges unioned
+/// across duplicate rows, loops first-wins) using the Cinematic Studio NCW
+/// naming. `flat` = no category folder in the extracted tree (CSB/CSW/Solo
+/// Strings); otherwise the CSS taxonomy applies.
+fn load_tsv_zones(
+    tsv: &Path,
+    section_label: &str,
+    flat: bool,
+) -> Result<BTreeMap<String, TsvZone>> {
+    let text = std::fs::read_to_string(tsv)?;
+    let mut lines = text.lines();
+    let header: Vec<&str> = lines
+        .next()
+        .ok_or_else(|| eyre::eyre!("empty zones.tsv"))?
+        .split('\t')
+        .collect();
+    let col = |name: &str| {
+        header
+            .iter()
+            .position(|h| *h == name)
+            .ok_or_else(|| eyre::eyre!("zones.tsv missing column {name:?}"))
+    };
+    let (c_klo, c_khi, c_root, c_tune, c_ls, c_le, c_sample) = (
+        col("key_lo")?,
+        col("key_hi")?,
+        col("root")?,
+        col("tune")?,
+        col("loop_start")?,
+        col("loop_end")?,
+        col("sample")?,
+    );
+
+    let mut by_file: BTreeMap<String, TsvZone> = BTreeMap::new();
+    let mut skipped = 0usize;
+    for line in lines {
+        let f: Vec<&str> = line.split('\t').collect();
+        let Some(sample) = f.get(c_sample).filter(|s| !s.is_empty()) else {
+            skipped += 1;
+            continue;
+        };
+        let base = sample.rsplit('/').next().unwrap_or(sample);
+        let stem = base
+            .strip_suffix(".ncw")
+            .or_else(|| base.strip_suffix(".wav"))
+            .unwrap_or(base);
+        let parts: Vec<&str> = stem.split('_').collect();
+        if parts.len() < 4 {
+            skipped += 1;
+            continue;
+        }
+        let (artic, mic) = (parts[1].to_string(), parts[2].to_string());
+        let rest = &parts[3..];
+        let wav_stem = rest.join("_");
+        let file = if flat {
+            format!("{mic}/{section_label}/{artic}/{wav_stem}.wav")
+        } else {
+            let Some(cat) = cs_category(&artic) else {
+                skipped += 1;
+                continue;
+            };
+            format!("{mic}/{section_label}/{cat}/{artic}/{wav_stem}.wav")
+        };
+
+        let dynamic = rest[0].to_string();
+        let (direction, interval, rr_index) = if cs_is_legato(&artic) {
+            if rest.len() >= 4 && (rest[1] == "up" || rest[1] == "down") {
+                (
+                    Some(rest[1].to_string()),
+                    rest[3].parse::<u32>().unwrap_or(0),
+                    0,
+                )
+            } else {
+                (None, 0, 0)
+            }
+        } else if cs_is_zero(&artic) {
+            let rr = rest.last().and_then(|s| s.parse::<u32>().ok()).unwrap_or(1);
+            (None, 0, rr.saturating_sub(1))
+        } else {
+            let rr = if rest.len() >= 3 {
+                rest.last().and_then(|s| s.parse::<u32>().ok()).unwrap_or(1)
+            } else {
+                1
+            };
+            (None, 0, rr.saturating_sub(1))
+        };
+
+        let key_lo: i32 = f.get(c_klo).and_then(|v| v.parse().ok()).unwrap_or(0);
+        let key_hi: i32 = f.get(c_khi).and_then(|v| v.parse().ok()).unwrap_or(0);
+        let root: i32 = f.get(c_root).and_then(|v| v.parse().ok()).unwrap_or(60);
+        let tune: f64 = f.get(c_tune).and_then(|v| v.parse().ok()).unwrap_or(1.0);
+        let (ls, le) = (
+            f.get(c_ls).and_then(|v| v.parse::<u64>().ok()).unwrap_or(0),
+            f.get(c_le).and_then(|v| v.parse::<u64>().ok()).unwrap_or(0),
+        );
+
+        let entry = by_file.entry(file.clone()).or_insert_with(|| TsvZone {
+            key_min: key_lo.clamp(0, 127) as u8,
+            key_max: key_hi.clamp(0, 127) as u8,
+            root_key: root.clamp(0, 127) as u8,
+            tune_cents: if tune > 0.0 { 1200.0 * tune.log2() } else { 0.0 },
+            rr_index,
+            mic,
+            articulation: artic,
+            dynamic,
+            direction,
+            interval,
+            loop_start: 0,
+            loop_end: 0,
+            section: section_label.to_string(),
+            file,
+        });
+        entry.key_min = entry.key_min.min(key_lo.clamp(0, 127) as u8);
+        entry.key_max = entry.key_max.max(key_hi.clamp(0, 127) as u8);
+        if le > ls && entry.loop_end <= entry.loop_start {
+            entry.loop_start = ls;
+            entry.loop_end = le;
+        }
+    }
+    if skipped > 0 {
+        eprintln!("  NOTE: {skipped} tsv row(s) skipped (unparseable/unmapped)");
+    }
+    Ok(by_file)
+}
+
+fn emit_zone_block(z: &TsvZone) -> String {
+    let mut s = String::from("    {\n");
+    let mut f = |k: &str, v: String| {
+        s.push_str(&format!("        {k:<12} {v}\n"));
+    };
+    f("section", format!("{:?}", z.section));
+    f("file", format!("{:?}", z.file));
+    f("key_min", z.key_min.to_string());
+    f("key_max", z.key_max.to_string());
+    f("root_key", z.root_key.to_string());
+    f("vel_min", "0".into());
+    f("vel_max", "127".into());
+    f("rr_index", z.rr_index.to_string());
+    f("mic", format!("{:?}", z.mic));
+    f("articulation", format!("{:?}", z.articulation));
+    f("dynamic", format!("{:?}", z.dynamic));
+    f("gain_db", "0.000".into());
+    let cents = if z.tune_cents.abs() < 1e-2 { 0.0 } else { z.tune_cents };
+    f("tune_cents", format!("{cents:.3}"));
+    if let Some(d) = &z.direction {
+        f("direction", format!("{d:?}"));
+        f("interval", z.interval.to_string());
+    }
+    if z.loop_end > z.loop_start {
+        f("loop_start", z.loop_start.to_string());
+        f("loop_end", z.loop_end.to_string());
+    }
+    s.push_str("    }\n");
+    s
+}
+
+fn zones_append_missing(
+    target: &Path,
+    from_tsv: &Path,
+    section: &str,
+    flat: bool,
+    wav_root: Option<&Path>,
+    dry_run: bool,
+) -> Result<()> {
+    let tsv_zones = load_tsv_zones(from_tsv, section, flat)?;
+    let (tgt, spec_text) = Target::open(target)?;
+
+    // Articulations already present in the spec are authoritative — skip.
+    let (_, is, ie, _) = styx_edit::find_list_block(&spec_text, "zones")
+        .ok_or_else(|| eyre::eyre!("spec has no `zones (…)` block"))?;
+    let inner = &spec_text[is..ie];
+    let mut present: std::collections::BTreeSet<String> = Default::default();
+    for (s, e) in styx_edit::split_entries(inner) {
+        if let Some(a) = styx_edit::entry_field(&inner[s..e], "articulation") {
+            present.insert(a);
+        }
+    }
+
+    let missing: Vec<&TsvZone> = tsv_zones
+        .values()
+        .filter(|z| !present.contains(&z.articulation))
+        .collect();
+    let mut per_artic: BTreeMap<&str, usize> = BTreeMap::new();
+    for z in &missing {
+        *per_artic.entry(z.articulation.as_str()).or_default() += 1;
+    }
+    println!(
+        "spec has {} articulation(s); appending {} zone(s) across {} missing articulation(s):",
+        present.len(),
+        missing.len(),
+        per_artic.len()
+    );
+    for (a, n) in &per_artic {
+        println!("  + {a:<16} {n} zone(s)");
+    }
+    if missing.is_empty() {
+        println!("nothing to append");
+        return Ok(());
+    }
+
+    let missing: Vec<&TsvZone> = if let Some(root) = wav_root {
+        let (present_on_disk, absent): (Vec<&TsvZone>, Vec<&TsvZone>) = missing
+            .into_iter()
+            .partition(|z| root.join(&z.file).exists());
+        if !absent.is_empty() {
+            println!(
+                "  WARNING: dropping {} zone(s) whose file is missing under {}:",
+                absent.len(),
+                root.display()
+            );
+            for z in absent.iter().take(10) {
+                println!("    - {}", z.file);
+            }
+        }
+        println!(
+            "all {} appended files exist under {}",
+            present_on_disk.len(),
+            root.display()
+        );
+        present_on_disk
+    } else {
+        missing
+    };
+    if missing.is_empty() {
+        println!("nothing to append after file filtering");
+        return Ok(());
+    }
+
+    if dry_run {
+        println!("(dry run — nothing written)");
+        return Ok(());
+    }
+
+    let mut appended = String::new();
+    for z in &missing {
+        appended.push_str(&emit_zone_block(z));
+    }
+    let mut new_spec = String::with_capacity(spec_text.len() + appended.len());
+    new_spec.push_str(&spec_text[..ie]);
+    new_spec.push_str(&appended);
+    new_spec.push_str(&spec_text[ie..]);
     tgt.write(&new_spec)
 }
 
