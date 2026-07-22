@@ -130,7 +130,7 @@ map for implementers, not part of the contract.
 **architect (extend, then collapse consumers):**
 - router→acceptor helper — collapses the identical closure at
   `apps/fasttrackstudio/src/engine_main.rs:165` & `:205`,
-  `apps/fts-cli/src/session_engine.rs:41`,
+  `apps/fasttrackstudio/cli/src/session_engine.rs:41`,
   `apps/task/server/src/lib.rs:1257` & `:1712`, and architect's own
   `libs/architect/architect/src/local.rs:60` & `:139`.
 - vox axum route — collapses `vox_handler` (`engine_main.rs:162`), `ws_handler`

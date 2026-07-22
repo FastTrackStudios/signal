@@ -1328,7 +1328,7 @@ impl Rig for GuitarRigBackend {
         }
         let backend = self.clone();
         // Opening starts the transport engine, which lazily spawns pump
-        // tasks via `moire::task::spawn` (→ `tokio::spawn`) — that needs an
+        // tasks via `architect::platform::spawn` (→ `tokio::spawn`) — that needs an
         // ambient runtime. This open runs on a fresh OS thread, which does
         // NOT inherit the caller's runtime, so carry the caller's handle
         // across and enter it on the new thread. (On the pipewire engine

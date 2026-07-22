@@ -13,7 +13,7 @@
 //! reverb/delay tail rings out naturally, while the new patch plays
 //! immediately on a fresh child track.
 
-use moire::sync::{Mutex, RwLock};
+use tokio::sync::{Mutex, RwLock};
 use std::collections::{HashMap, HashSet};
 use std::future::Future;
 use std::pin::Pin;
@@ -81,7 +81,7 @@ impl Default for ReaperPatchApplier {
 impl ReaperPatchApplier {
     pub fn new() -> Self {
         Self {
-            state: RwLock::new("signal.applier.state", None),
+            state: RwLock::new(None),
         }
     }
 
@@ -220,7 +220,7 @@ impl ReaperPatchApplier {
             project,
             preloaded_patches: recovered_preloaded,
             preloading_active: false,
-            pending_mutes: Arc::new(Mutex::new("signal.applier.pending_mutes", HashSet::new())),
+            pending_mutes: Arc::new(Mutex::new(HashSet::new())),
         });
         Ok(())
     }

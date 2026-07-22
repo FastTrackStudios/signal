@@ -419,6 +419,20 @@ graph:
 graph-serve:
     graphify-mcp --transport stdio --graph graphify-out/graph.json
 
+# Rebuild the browser setlist player's AudioWorklet wasm bundle — a small
+# RELEASE build of daw-standalone (the render graph that runs ON the audio
+# thread; see apps/task/web/assets/worklet/processor.js). wasm-bindgen-cli
+# comes from the dev shell, pinned to the workspace wasm-bindgen version.
+# Re-run after changing daw-standalone's audio/render/web code; artifacts
+# are committed so plain `dx serve` / CI need no extra step.
+task-worklet-wasm:
+    cd apps/task && cargo build -p daw-standalone --lib \
+        --target wasm32-unknown-unknown --release \
+        --no-default-features --features decode,web
+    wasm-bindgen --target web --out-dir apps/task/web/assets/worklet \
+        --out-name daw_standalone \
+        target/wasm32-unknown-unknown/release/daw_standalone.wasm
+
 # ── Aliases ──────────────────────────────────────────────────────────────
 
 alias c := check

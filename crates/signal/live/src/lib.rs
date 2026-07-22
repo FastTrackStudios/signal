@@ -112,7 +112,7 @@ mod song_service;
 #[cfg(test)]
 mod tests;
 
-use moire::sync::RwLock;
+use tokio::sync::RwLock;
 use signal_proto::{
     ALL_BLOCK_TYPES, Block, BlockParameterOverride, BlockService, BlockType, BrowserService,
     EngineService, LayerService, ModuleBlockSource, ModulePreset, ModulePresetId, ModuleSnapshot,
@@ -288,7 +288,7 @@ where
             setlist_repo,
             scene_template_repo,
             rack_repo,
-            cache: Arc::new(RwLock::new("signal.service_cache", ServiceCache::new())),
+            cache: Arc::new(RwLock::new(ServiceCache::new())),
         }
     }
 }
