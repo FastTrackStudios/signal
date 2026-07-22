@@ -1,0 +1,74 @@
+// Cinematic Studio Strings — per-articulation signalpack grouping.
+//
+// Consumed by `signal-sampler --example build_cs_packs`. Each group becomes
+// one pack per (section, mic): `<Section> - <name> - <Mic>.signalpack`
+// (+ `.proxy.signalpack` Ogg Vorbis variant). `articulations` lists the RAW
+// zone articulation ids folded into the group — release samples and legato
+// transitions ship with their body articulation so every pack is a complete
+// playable unit (note-on body, note-off release, legato handoff).
+//
+// Vibsus/Nonvib are a CC2 crossfade pair and must stay together; the CSS
+// sustain patch IS the legato patch (transitions play over sustains), so the
+// whole family lands in one "Legato" group — exactly how CSS ships it.
+//
+// The builder ERRORS on any zone articulation not claimed by a group
+// (no silent drops). Keyswitch/CC58 tables in the engine config reference
+// articulations across groups; entries pointing outside a pack are inert.
+
+library "Cinematic Studio Strings"
+
+groups (
+    {
+        name "Legato"
+        articulations (Vibsus Nonvib Vsusrel NVrel Leg Legzero NVLeg NVLegzero Port)
+    }
+    {
+        name "Tremolo"
+        articulations (Tremolo Tremrel)
+    }
+    {
+        name "Half-Tone Trills"
+        articulations (HTrills HTrel)
+    }
+    {
+        name "Whole-Tone Trills"
+        articulations (WTrills WTrel)
+    }
+    {
+        name "Harmonics"
+        articulations (Harm Harmrel)
+    }
+    {
+        name "Col Legno"
+        articulations (Clegno)
+    }
+    {
+        name "Staccato"
+        articulations (Staccato)
+    }
+    {
+        name "Staccatissimo"
+        articulations (Staccatissimo)
+    }
+    {
+        name "Spiccato"
+        articulations (Spiccato)
+    }
+    {
+        name "Marcato"
+        articulations (Marcato Marcrel)
+    }
+    {
+        name "Sforzando"
+        articulations (Sfz)
+    }
+    {
+        // 1st Violins zones say "Pizzicato"; 2v/Va/Ce/Ba say "Pizz".
+        name "Pizzicato"
+        articulations (Pizzicato Pizz)
+    }
+    {
+        name "Bartok Pizzicato"
+        articulations (Bartokpizz)
+    }
+)

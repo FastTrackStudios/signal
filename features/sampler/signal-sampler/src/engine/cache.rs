@@ -171,6 +171,33 @@ const SIGNAL_PACK_MAGIC: &[u8; 8] = b"SIGPACK\0";
 const SIGNAL_PACK_VERSION: u32 = 1;
 const SIGNAL_PACK_HEADER_LEN: usize = 64;
 const SIGNAL_PACK_KIND_FLAC_I24: u32 = 5;
+/// Lossy proxy pack: entries are Ogg Vorbis streams instead of FLAC.
+/// Same header/index/spec layout; index `num_frames`/`samples` still carry
+/// the SOURCE PCM truth, so frame-indexed zone metadata (loop points,
+/// sample_start/end) stays valid — decode trims/pads to the index length.
+const SIGNAL_PACK_KIND_OGG_VORBIS: u32 = 6;
+
+/// Codec used for the audio entries of a `.signalpack`.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum PackCodec {
+    /// Lossless FLAC (24-bit int, 16-bit when the source fits). The default.
+    FlacI24,
+    /// Lossy Ogg Vorbis proxy at the given quality (-0.2..=1.0 — libvorbis
+    /// scale, i.e. oggenc `-q -2..10` divided by 10; 0.8 ≈ q8 ≈ ~256 kbps).
+    OggVorbis { quality: f32 },
+}
+
+impl PackCodec {
+    /// Vorbis proxy at q8 — transparent on orchestral content, ~7-8× smaller.
+    pub const OGG_VORBIS_Q8: PackCodec = PackCodec::OggVorbis { quality: 0.8 };
+
+    fn header_kind(self) -> u32 {
+        match self {
+            PackCodec::FlacI24 => SIGNAL_PACK_KIND_FLAC_I24,
+            PackCodec::OggVorbis { .. } => SIGNAL_PACK_KIND_OGG_VORBIS,
+        }
+    }
+}
 
 impl Default for SampleCache {
     fn default() -> Self {
@@ -840,9 +867,9 @@ impl SignalPcmPack {
             )));
         }
         let kind = read_u32(&header, 12)?;
-        if kind != SIGNAL_PACK_KIND_FLAC_I24 {
+        if kind != SIGNAL_PACK_KIND_FLAC_I24 && kind != SIGNAL_PACK_KIND_OGG_VORBIS {
             return Err(invalid_data(format!(
-                "signal pack kind {kind} is not a FLAC i24 PCM pack"
+                "signal pack kind {kind} is not a FLAC i24 or Ogg Vorbis pack"
             )));
         }
         let index_offset = read_u64(&header, 24)?;
@@ -993,17 +1020,47 @@ fn load_pack_sample(pack_data: &[u8], entry: &PackEntry) -> Result<SampleData, S
         .filter(|&e| e <= pack_data.len())
         .ok_or_else(|| invalid_data("signal pack entry out of bounds"))?;
     let bytes = &pack_data[start..end];
-    let data = load_flac_bytes(bytes)?;
-    if data.channels != entry.channels
-        || data.sample_rate != entry.sample_rate
-        || data.num_frames != entry.num_frames
-        || data.frames.len() != entry.samples
-    {
+    // Dispatch on the entry's own payload magic (not the pack-level kind) —
+    // robust and leaves room for mixed-codec packs.
+    let data = if bytes.starts_with(b"OggS") {
+        load_ogg_vorbis_bytes(bytes)?
+    } else {
+        let data = load_flac_bytes(bytes)?;
+        // flacenc pads the final block with silence (see `encode_flac_i24`),
+        // so decode may run LONG; that trims below. Decoding SHORT of the
+        // index is real corruption.
+        if data.num_frames < entry.num_frames || data.frames.len() < entry.samples {
+            return Err(invalid_data(
+                "signal pack FLAC decoded short of index metadata",
+            ));
+        }
+        data
+    };
+    if data.channels != entry.channels || data.sample_rate != entry.sample_rate {
         return Err(invalid_data(
-            "signal pack FLAC metadata does not match index",
+            "signal pack entry metadata does not match index",
         ));
     }
-    Ok(data)
+    // The index carries the SOURCE PCM length. Lossy codecs may decode a few
+    // frames long/short at the tail; coerce to the authoritative length so
+    // frame-indexed zone metadata (loop points, sample_start/end) stays exact.
+    Ok(coerce_to_index_len(data, entry))
+}
+
+/// Trim or silence-pad decoded audio to the index's authoritative
+/// `num_frames`/`samples`. No-op when they already match.
+fn coerce_to_index_len(data: SampleData, entry: &PackEntry) -> SampleData {
+    if data.num_frames == entry.num_frames && data.frames.len() == entry.samples {
+        return data;
+    }
+    let mut frames = data.frames.as_ref().clone();
+    frames.resize(entry.samples, 0.0);
+    SampleData {
+        frames: Arc::new(frames),
+        channels: data.channels,
+        sample_rate: data.sample_rate,
+        num_frames: entry.num_frames,
+    }
 }
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -1083,11 +1140,35 @@ pub fn prepare_sample_cache<'a>(
     Ok(stats)
 }
 
+/// Where a pack's embedded spec comes from: an on-disk file or in-memory text
+/// (builders that synthesize per-group specs — e.g. the Cinematic Studio
+/// splitter — never touch disk).
+pub enum PackSpecSource<'s> {
+    Path(&'s Path),
+    Text { text: &'s str, format: &'s str },
+}
+
 pub fn create_signal_pack<'a>(
     pack_path: &Path,
     spec_path: &Path,
     samples_root: &Path,
     paths: impl Iterator<Item = &'a Path>,
+) -> Result<PrepareStats, SamplerError> {
+    create_signal_pack_with(
+        pack_path,
+        PackSpecSource::Path(spec_path),
+        samples_root,
+        paths,
+        PackCodec::FlacI24,
+    )
+}
+
+pub fn create_signal_pack_with<'a>(
+    pack_path: &Path,
+    spec: PackSpecSource<'_>,
+    samples_root: &Path,
+    paths: impl Iterator<Item = &'a Path>,
+    codec: PackCodec,
 ) -> Result<PrepareStats, SamplerError> {
     let paths = paths.map(Path::to_owned).collect::<Vec<_>>();
     if let Some(parent) = pack_path.parent() {
@@ -1099,7 +1180,7 @@ pub fn create_signal_pack<'a>(
     let packed = paths
         .par_iter()
         .map(|path| {
-            let result = pack_one_sample(path);
+            let result = pack_one_sample(path, codec);
             let done = completed.fetch_add(1, Ordering::Relaxed) + 1;
             if total >= 100 && (done == total || done.is_multiple_of(100)) {
                 tracing::info!("signal-sampler: packed {done}/{total} samples");
@@ -1137,17 +1218,23 @@ pub fn create_signal_pack<'a>(
 
     let index_offset = offset;
     let mut index = Vec::new();
-    let spec_text = std::fs::read_to_string(spec_path)?;
+    let (spec_text, spec_format, spec_origin) = match spec {
+        PackSpecSource::Path(spec_path) => (
+            std::fs::read_to_string(spec_path)?,
+            spec_path
+                .extension()
+                .and_then(|e| e.to_str())
+                .unwrap_or("styx")
+                .to_string(),
+            spec_path.display().to_string(),
+        ),
+        PackSpecSource::Text { text, format } => {
+            (text.to_string(), format.to_string(), "<inline>".to_string())
+        }
+    };
     writeln!(index, "# signalpack-index-v1")?;
-    writeln!(index, "# spec_path\t{}", spec_path.display())?;
-    writeln!(
-        index,
-        "# spec_format\t{}",
-        spec_path
-            .extension()
-            .and_then(|e| e.to_str())
-            .unwrap_or("styx")
-    )?;
+    writeln!(index, "# spec_path\t{spec_origin}")?;
+    writeln!(index, "# spec_format\t{spec_format}")?;
     writeln!(index, "# spec_begin")?;
     index.extend_from_slice(spec_text.as_bytes());
     if !spec_text.ends_with('\n') {
@@ -1179,7 +1266,7 @@ pub fn create_signal_pack<'a>(
     let mut header = [0u8; SIGNAL_PACK_HEADER_LEN];
     header[0..8].copy_from_slice(SIGNAL_PACK_MAGIC);
     write_u32(&mut header, 8, SIGNAL_PACK_VERSION);
-    write_u32(&mut header, 12, SIGNAL_PACK_KIND_FLAC_I24);
+    write_u32(&mut header, 12, codec.header_kind());
     write_u64(&mut header, 16, SIGNAL_PACK_HEADER_LEN as u64);
     write_u64(&mut header, 24, index_offset);
     write_u64(&mut header, 32, index.len() as u64);
@@ -1207,9 +1294,9 @@ pub fn extract_signal_pack(
         )));
     }
     let kind = read_u32(&header, 12)?;
-    if kind != SIGNAL_PACK_KIND_FLAC_I24 {
+    if kind != SIGNAL_PACK_KIND_FLAC_I24 && kind != SIGNAL_PACK_KIND_OGG_VORBIS {
         return Err(invalid_data(format!(
-            "signal pack kind {kind} is not an exportable FLAC i24 PCM pack"
+            "signal pack kind {kind} is not an exportable pack"
         )));
     }
     let index_offset = read_u64(&header, 24)?;
@@ -1258,7 +1345,12 @@ pub fn extract_signal_pack(
         file.seek(SeekFrom::Start(offset))?;
         let mut data = vec![0u8; bytes as usize];
         file.read_exact(&mut data)?;
-        let data = load_flac_bytes(&data).map_err(|err| {
+        let data = if data.starts_with(b"OggS") {
+            load_ogg_vorbis_bytes(&data)
+        } else {
+            load_flac_bytes(&data)
+        }
+        .map_err(|err| {
             SamplerError::Io(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
                 format!("failed to decode packed sample {source}: {err}"),
@@ -1301,23 +1393,31 @@ struct PackIndexRow {
     payload: Vec<u8>,
 }
 
-fn pack_one_sample(path: &Path) -> Result<PackIndexRow, (PathBuf, SamplerError)> {
+fn pack_one_sample(path: &Path, codec: PackCodec) -> Result<PackIndexRow, (PathBuf, SamplerError)> {
     let data = load_sample(path).map_err(|err| (path.to_owned(), err))?;
     let uncompressed_bytes = data.frames.len() * 3;
-    let payload = if path
-        .extension()
-        .and_then(|ext| ext.to_str())
-        .is_some_and(|ext| ext.eq_ignore_ascii_case("flac"))
-    {
-        std::fs::read(path).map_err(|err| (path.to_owned(), SamplerError::Io(err)))?
-    } else {
-        let samples = data
-            .frames
-            .iter()
-            .map(|sample| f32_to_i24_i32(*sample))
-            .collect::<Vec<_>>();
-        encode_flac_i24(&samples, data.channels, data.sample_rate)
-            .map_err(|err| (path.to_owned(), err))?
+    let payload = match codec {
+        PackCodec::OggVorbis { quality } => {
+            encode_ogg_vorbis(&data.frames, data.channels, data.sample_rate, quality)
+                .map_err(|err| (path.to_owned(), err))?
+        }
+        PackCodec::FlacI24 => {
+            if path
+                .extension()
+                .and_then(|ext| ext.to_str())
+                .is_some_and(|ext| ext.eq_ignore_ascii_case("flac"))
+            {
+                std::fs::read(path).map_err(|err| (path.to_owned(), SamplerError::Io(err)))?
+            } else {
+                let samples = data
+                    .frames
+                    .iter()
+                    .map(|sample| f32_to_i24_i32(*sample))
+                    .collect::<Vec<_>>();
+                encode_flac_i24(&samples, data.channels, data.sample_rate)
+                    .map_err(|err| (path.to_owned(), err))?
+            }
+        }
     };
 
     Ok(PackIndexRow {
@@ -1637,6 +1737,130 @@ fn decode_flac_symphonia(bytes: &[u8]) -> Result<SampleData, SamplerError> {
     })
 }
 
+/// Decode an in-pack Ogg Vorbis sample (lossy proxy packs) to interleaved
+/// f32. Pure-Rust symphonia path — wasm-clean, mirrors `decode_flac_symphonia`.
+///
+/// The decoded length may differ from the source PCM by a partial tail
+/// block; callers coerce to the index's authoritative frame count
+/// (`coerce_to_index_len`), keeping loop points sample-exact.
+fn load_ogg_vorbis_bytes(bytes: &[u8]) -> Result<SampleData, SamplerError> {
+    use symphonia_codec_vorbis::VorbisDecoder;
+    use symphonia_core::audio::SampleBuffer;
+    use symphonia_core::codecs::{Decoder, DecoderOptions};
+    use symphonia_core::errors::Error as SymErr;
+    use symphonia_core::formats::{FormatOptions, FormatReader};
+    use symphonia_core::io::MediaSourceStream;
+    use symphonia_format_ogg::OggReader;
+
+    let sym_io = |e: SymErr| SamplerError::Io(std::io::Error::other(e.to_string()));
+
+    let owned = bytes.to_vec();
+    let mss = MediaSourceStream::new(Box::new(std::io::Cursor::new(owned)), Default::default());
+    let mut format = OggReader::try_new(mss, &FormatOptions::default()).map_err(sym_io)?;
+    let track = format
+        .default_track()
+        .ok_or_else(|| invalid_data("ogg: no default track"))?;
+    let track_id = track.id;
+    let mut decoder =
+        VorbisDecoder::try_new(&track.codec_params, &DecoderOptions::default()).map_err(sym_io)?;
+
+    let mut frames: Vec<f32> = Vec::new();
+    let mut channels = 0u16;
+    let mut sample_rate = 0u32;
+    let mut sbuf: Option<SampleBuffer<f32>> = None;
+    loop {
+        let packet = match format.next_packet() {
+            Ok(p) => p,
+            Err(SymErr::IoError(e))
+                if e.kind() == std::io::ErrorKind::UnexpectedEof
+                    || e.to_string() == "end of stream" =>
+            {
+                break;
+            }
+            Err(SymErr::ResetRequired) => break,
+            Err(e) => return Err(sym_io(e)),
+        };
+        if packet.track_id() != track_id {
+            continue;
+        }
+        match decoder.decode(&packet) {
+            Ok(decoded) => {
+                if decoded.frames() == 0 {
+                    continue;
+                }
+                if sbuf.is_none() {
+                    let spec = *decoded.spec();
+                    channels = spec.channels.count() as u16;
+                    sample_rate = spec.rate;
+                    sbuf = Some(SampleBuffer::<f32>::new(decoded.capacity() as u64, spec));
+                }
+                let sb = sbuf.as_mut().unwrap();
+                sb.copy_interleaved_ref(decoded);
+                frames.extend_from_slice(sb.samples());
+            }
+            Err(SymErr::DecodeError(_)) => continue,
+            Err(e) => return Err(sym_io(e)),
+        }
+    }
+
+    if frames.is_empty() {
+        return Err(invalid_data("ogg: symphonia decoded no samples"));
+    }
+    let channels = channels.max(1);
+    let num_frames = frames.len() / channels as usize;
+    Ok(SampleData {
+        frames: Arc::new(frames),
+        channels,
+        sample_rate,
+        num_frames,
+    })
+}
+
+/// Encode interleaved f32 PCM to an Ogg Vorbis stream (builder-side only —
+/// runtime never encodes). `quality` is the libvorbis base-quality scale
+/// (-0.2..=1.0, oggenc's `-q` divided by 10).
+fn encode_ogg_vorbis(
+    frames: &[f32],
+    channels: u16,
+    sample_rate: u32,
+    quality: f32,
+) -> Result<Vec<u8>, SamplerError> {
+    use std::num::{NonZeroU8, NonZeroU32};
+    use vorbis_rs::{VorbisBitrateManagementStrategy, VorbisEncoderBuilder};
+
+    let vorb =
+        |e: vorbis_rs::VorbisError| invalid_data(format!("vorbis encode failed: {e}"));
+
+    let channels_nz = NonZeroU8::new(channels.try_into().map_err(|_| {
+        invalid_data(format!("vorbis: unsupported channel count {channels}"))
+    })?)
+    .ok_or_else(|| invalid_data("vorbis: zero channels"))?;
+    let rate_nz = NonZeroU32::new(sample_rate)
+        .ok_or_else(|| invalid_data("vorbis: zero sample rate"))?;
+
+    // De-interleave to planar, as libvorbis wants.
+    let ch = channels as usize;
+    let n_frames = frames.len() / ch;
+    let mut planar: Vec<Vec<f32>> = vec![Vec::with_capacity(n_frames); ch];
+    for frame in frames.chunks_exact(ch) {
+        for (c, &s) in frame.iter().enumerate() {
+            planar[c].push(s);
+        }
+    }
+
+    let mut out = Vec::new();
+    let mut encoder = VorbisEncoderBuilder::new(rate_nz, channels_nz, &mut out)
+        .map_err(vorb)?
+        .bitrate_management_strategy(VorbisBitrateManagementStrategy::QualityVbr {
+            target_quality: quality,
+        })
+        .build()
+        .map_err(vorb)?;
+    encoder.encode_audio_block(&planar).map_err(vorb)?;
+    encoder.finish().map_err(vorb)?;
+    Ok(out)
+}
+
 fn read_u32(bytes: &[u8], offset: usize) -> Result<u32, SamplerError> {
     let slice = bytes
         .get(offset..offset + 4)
@@ -1749,6 +1973,57 @@ mod tests {
             max_diff < 1e-6,
             "sample value mismatch: max_diff={max_diff}"
         );
+    }
+
+    #[test]
+    fn ogg_vorbis_round_trip_is_sample_exact_in_length() {
+        // Stereo sine, deliberately NOT a multiple of any codec block size.
+        let sample_rate = 44_100u32;
+        let channels = 2u16;
+        let n_frames = 44_100 + 1234;
+        let mut frames = Vec::with_capacity(n_frames * 2);
+        for i in 0..n_frames {
+            let t = i as f32 / sample_rate as f32;
+            frames.push((t * 440.0 * std::f32::consts::TAU).sin() * 0.5);
+            frames.push((t * 554.37 * std::f32::consts::TAU).sin() * 0.5);
+        }
+
+        let ogg = encode_ogg_vorbis(&frames, channels, sample_rate, 0.8).expect("encode");
+        assert!(ogg.starts_with(b"OggS"), "payload must be an Ogg stream");
+        assert!(
+            ogg.len() < frames.len() * 2,
+            "vorbis q8 should beat 16-bit PCM in size"
+        );
+
+        let decoded = load_ogg_vorbis_bytes(&ogg).expect("decode");
+        assert_eq!(decoded.channels, channels);
+        assert_eq!(decoded.sample_rate, sample_rate);
+        // Raw decode may drift by a partial tail block; the pack-entry path
+        // coerces to the index's authoritative length.
+        let entry = PackEntry {
+            offset: 0,
+            bytes: ogg.len() as u64,
+            channels,
+            sample_rate,
+            num_frames: n_frames,
+            samples: n_frames * 2,
+        };
+        let coerced = coerce_to_index_len(decoded, &entry);
+        assert_eq!(coerced.num_frames, n_frames);
+        assert_eq!(coerced.frames.len(), n_frames * 2);
+
+        // Content sanity: same tone, so correlation with the source should be
+        // high (lossy — not bit-exact).
+        let dot: f64 = coerced
+            .frames
+            .iter()
+            .zip(frames.iter())
+            .map(|(a, b)| (*a as f64) * (*b as f64))
+            .sum();
+        let norm_a: f64 = coerced.frames.iter().map(|a| (*a as f64).powi(2)).sum();
+        let norm_b: f64 = frames.iter().map(|b| (*b as f64).powi(2)).sum();
+        let corr = dot / (norm_a.sqrt() * norm_b.sqrt()).max(f64::EPSILON);
+        assert!(corr > 0.98, "decoded audio should correlate with source, got {corr}");
     }
 
     #[test]
