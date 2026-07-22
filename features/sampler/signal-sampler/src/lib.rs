@@ -65,6 +65,7 @@ pub mod native_osc;
 pub mod soundsource;
 pub mod node_render;
 pub mod nord;
+pub mod pack_cli;
 pub mod pack_rewrite;
 pub mod preset_registry;
 pub mod preset_spec;
@@ -80,6 +81,7 @@ pub mod sample_map;
 pub mod sampler_rig;
 pub mod spec;
 pub mod stats;
+pub mod styx_edit;
 
 pub use bank::{PreloadProfile, SamplerBank};
 pub use block::{BlockParams, BlockSpec, SamplerBlock};

@@ -70,6 +70,15 @@ enum SignalCmd {
     /// Stop the signal engine (the systemd user unit — same switch the
     /// desktop app uses; a stop is final, nothing restarts it).
     Stop,
+    /// Signalpack tools: inspect / spec / zones / loops / check / extract /
+    /// build / transcode — `fts signal pack inspect <pack> --json`, ...
+    #[cfg(feature = "pack")]
+    #[command(disable_help_flag = true)]
+    Pack {
+        /// Arguments forwarded verbatim to the pack CLI.
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        args: Vec<OsString>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -86,7 +95,10 @@ enum SessionCmd {
 fn main() -> Result<()> {
     tracing_subscriber::fmt()
         .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()),
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                // symphonia logs per-stream demux INFO — noise during pack
+                // decode probes/transcodes.
+                .unwrap_or_else(|_| "info,symphonia_format_ogg=warn,symphonia_core=warn".into()),
         )
         .with_writer(std::io::stderr)
         .init();
@@ -112,6 +124,10 @@ fn main() -> Result<()> {
         Cmd::Signal {
             command: SignalCmd::Stop,
         } => signal_stop(),
+        #[cfg(feature = "pack")]
+        Cmd::Signal {
+            command: SignalCmd::Pack { args },
+        } => signal_sampler::pack_cli::cli_main(args),
         Cmd::Session {
             command: SessionCmd::Engine { addr },
         } => session_engine_cmd(addr),

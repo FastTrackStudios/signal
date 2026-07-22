@@ -35,135 +35,6 @@ fn engine_default(spec: &signal_sampler::spec::LibrarySpec) -> Option<String> {
         .map(|a| a.id.clone())
 }
 
-fn check_zone_mode(patch: &PlayerPatch) -> Result<(), Box<dyn std::error::Error>> {
-    use std::collections::{BTreeMap, BTreeSet};
-
-    let spec = &patch.spec;
-    let pack = patch.pack.as_ref().ok_or("zone-mode check requires a pack-loaded patch")?;
-    println!(
-        "pack: {}  (zone mode: {} zones, {} pack entries)",
-        spec.name,
-        spec.zones.len(),
-        pack.entry_count()
-    );
-
-    // Per-articulation key coverage: contiguous within [min_key, max_key]?
-    let mut by_artic: BTreeMap<&str, BTreeSet<u8>> = BTreeMap::new();
-    for z in &spec.zones {
-        let keys = by_artic.entry(z.articulation.as_str()).or_default();
-        for k in z.key_min..=z.key_max {
-            keys.insert(k);
-        }
-    }
-    let mut gaps = 0usize;
-    for (artic, keys) in &by_artic {
-        let (lo, hi) = (*keys.first().unwrap(), *keys.last().unwrap());
-        // The CS whole-tone grid leaves ≤2-semitone holes the engine fills by
-        // pitch-shifting (performance.zone_pitch_tolerance) — only wider holes
-        // are real gaps.
-        let tol = spec.performance.zone_pitch_tolerance.max(1) as u8;
-        let mut missing: Vec<u8> = Vec::new();
-        let mut last = lo;
-        for k in keys.iter().copied() {
-            if k > last && k - last > tol + 1 {
-                missing.extend(last + 1..k);
-            }
-            last = k;
-        }
-        if missing.is_empty() {
-            println!("  artic '{artic}': keys {lo}..={hi} covered ({} keys)", keys.len());
-        } else {
-            gaps += 1;
-            println!("  artic '{artic}': keys {lo}..={hi} — GAPS beyond pitch tolerance: {missing:?}");
-        }
-    }
-
-    // Every zone file must have a pack entry (exact relative-path match).
-    let entries: BTreeSet<&Path> = pack.entry_paths().collect();
-    let missing_files: Vec<&str> = spec
-        .zones
-        .iter()
-        .map(|z| z.file.as_str())
-        .filter(|f| !entries.contains(Path::new(f)))
-        .collect();
-    if !missing_files.is_empty() {
-        println!(
-            "  {} zone file(s) have NO pack entry, e.g. {:?}",
-            missing_files.len(),
-            &missing_files[..missing_files.len().min(5)]
-        );
-    }
-
-    // Decode a few entries end-to-end (first / middle / last zone) — proves
-    // the codec path (FLAC or Ogg Vorbis) actually yields audio. With
-    // `--src-root <lib_root>` also A/B the decode against the source WAV:
-    // exact length match + normalized correlation (1.0 lossless, ≥0.95 proxy).
-    let src_root = {
-        let args: Vec<String> = std::env::args().collect();
-        args.iter()
-            .position(|a| a == "--src-root")
-            .and_then(|i| args.get(i + 1))
-            .map(std::path::PathBuf::from)
-    };
-    let cache = signal_sampler::engine::cache::SampleCache::with_pack(pack.clone());
-    let picks = [0usize, spec.zones.len() / 2, spec.zones.len() - 1];
-    let mut decode_fail = 0usize;
-    for i in picks {
-        let z = &spec.zones[i];
-        match cache.get(Path::new(&z.file)) {
-            Ok(data) => {
-                print!(
-                    "  decode '{}': {} ch, {} Hz, {} frames ok",
-                    z.file, data.channels, data.sample_rate, data.num_frames
-                );
-                if let Some(root) = &src_root {
-                    match signal_sampler::engine::cache::load_sample(&root.join(&z.file)) {
-                        Ok(src) if src.num_frames == data.num_frames => {
-                            let dot: f64 = data
-                                .frames
-                                .iter()
-                                .zip(src.frames.iter())
-                                .map(|(a, b)| (*a as f64) * (*b as f64))
-                                .sum();
-                            let na: f64 = data.frames.iter().map(|a| (*a as f64).powi(2)).sum();
-                            let nb: f64 = src.frames.iter().map(|b| (*b as f64).powi(2)).sum();
-                            let corr = dot / (na.sqrt() * nb.sqrt()).max(f64::EPSILON);
-                            print!("  corr={corr:.5}");
-                            if corr < 0.95 {
-                                decode_fail += 1;
-                                print!("  LOW");
-                            }
-                        }
-                        Ok(src) => {
-                            decode_fail += 1;
-                            print!(
-                                "  LENGTH MISMATCH vs source ({} != {})",
-                                data.num_frames, src.num_frames
-                            );
-                        }
-                        Err(e) => print!("  (source unreadable: {e})"),
-                    }
-                }
-                println!();
-            }
-            Err(e) => {
-                decode_fail += 1;
-                println!("  decode '{}': FAILED — {e}", z.file);
-            }
-        }
-    }
-
-    let looped = spec.zones.iter().filter(|z| z.loop_end > z.loop_start).count();
-    println!("  looped zones: {looped}");
-
-    if gaps == 0 && missing_files.is_empty() && decode_fail == 0 {
-        println!("PASS");
-        Ok(())
-    } else {
-        println!("PARTIAL");
-        Ok(())
-    }
-}
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let pack = std::env::args().nth(1).expect("usage: check_pack_resolve <pack>");
@@ -172,11 +43,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!(">> engine default articulation = {:?}", engine_default(spec));
 
     // ── Zone-mode packs (CSS/CSB per-articulation packs, Omnisphere) ─────────
-    // Convention-mode `patch.resolve` never fires for these; coverage comes
-    // from the zone map itself. Check per-articulation key coverage, that
-    // every zone's file has a pack entry, and that a few entries decode.
+    // Convention-mode `patch.resolve` never fires for these; the shared CLI
+    // check (`fts signal pack check`) covers zone coverage, entry presence,
+    // and decode probes (+ `--src-root` source A/B).
     if !spec.zones.is_empty() {
-        return check_zone_mode(&patch);
+        let src_root = {
+            let args: Vec<String> = std::env::args().collect();
+            args.iter()
+                .position(|a| a == "--src-root")
+                .and_then(|i| args.get(i + 1))
+                .map(std::path::PathBuf::from)
+        };
+        let pass = signal_sampler::pack_cli::run_check(Path::new(&pack), src_root.as_deref())?;
+        if !pass {
+            std::process::exit(1);
+        }
+        return Ok(());
     }
 
     let section = spec.sections.first().ok_or("no sections")?;

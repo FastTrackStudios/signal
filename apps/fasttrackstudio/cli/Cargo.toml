@@ -23,7 +23,10 @@ name = "fts"
 path = "src/main.rs"
 
 [features]
-default = ["daw", "keyflow", "session"]
+default = ["daw", "keyflow", "session", "pack"]
+# `fts signal pack <...>` — signalpack inspect/edit/build/transcode
+# (signal_sampler::pack_cli's clap tree).
+pack = ["dep:signal-sampler"]
 # `fts daw <...>` — mounts daw::cli's clap tree.
 daw = ["dep:daw", "daw/cli"]
 # `fts keyflow <...>` / `fts kf <...>` — mounts keyflow-cli's clap tree.
@@ -52,6 +55,9 @@ daw = { workspace = true, optional = true }
 
 # fts keyflow
 keyflow-cli = { workspace = true, optional = true }
+
+# fts signal pack — signalpack inspection/mutation CLI
+signal-sampler = { workspace = true, optional = true }
 
 # fts session engine — the same standalone stack apps/fasttrackstudio's
 # session_engine.rs builds, served over a WebSocket instead of in-app.

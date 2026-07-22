@@ -96,6 +96,9 @@ memmap2     = "0.9"
 zstd        = "0.13"
 flacenc     = "0.5.1"
 
+# `fts signal pack` CLI (src/pack_cli.rs) — mounted by fts-cli.
+clap        = { workspace = true }
+
 # Error handling
 thiserror   = { workspace = true }
 eyre        = { workspace = true }

@@ -150,6 +150,8 @@ pub struct SignalPcmPack {
     /// (those were the preload bottleneck on multi-GB packs / external drives).
     /// `Arc` so clones share one mapping.
     mmap: Arc<memmap2::Mmap>,
+    /// Header kind field (5 = FLAC i24 lossless, 6 = Ogg Vorbis proxy).
+    kind: u32,
     entries: HashMap<PathBuf, PackEntry>,
     /// Embedded styx/toml spec text recovered from the pack index.
     embedded_spec: Option<String>,
@@ -165,6 +167,27 @@ pub struct PackEntry {
     sample_rate: u32,
     num_frames: usize,
     samples: usize,
+}
+
+impl PackEntry {
+    pub fn offset(&self) -> u64 {
+        self.offset
+    }
+    pub fn bytes(&self) -> u64 {
+        self.bytes
+    }
+    pub fn channels(&self) -> u16 {
+        self.channels
+    }
+    pub fn sample_rate(&self) -> u32 {
+        self.sample_rate
+    }
+    pub fn num_frames(&self) -> usize {
+        self.num_frames
+    }
+    pub fn samples(&self) -> usize {
+        self.samples
+    }
 }
 
 const SIGNAL_PACK_MAGIC: &[u8; 8] = b"SIGPACK\0";
@@ -942,6 +965,7 @@ impl SignalPcmPack {
         Ok(Self {
             path: path.to_owned(),
             mmap,
+            kind,
             entries,
             embedded_spec,
             embedded_spec_format: spec_format,
@@ -961,6 +985,20 @@ impl SignalPcmPack {
     /// Number of audio entries indexed in the pack.
     pub fn entry_count(&self) -> usize {
         self.entries.len()
+    }
+
+    /// Header kind: 5 = FLAC i24 (lossless), 6 = Ogg Vorbis (proxy).
+    pub fn kind(&self) -> u32 {
+        self.kind
+    }
+
+    /// Human label for [`kind`](Self::kind).
+    pub fn kind_label(&self) -> &'static str {
+        match self.kind {
+            SIGNAL_PACK_KIND_FLAC_I24 => "flac-i24",
+            SIGNAL_PACK_KIND_OGG_VORBIS => "ogg-vorbis",
+            _ => "unknown",
+        }
     }
 
     /// Iterate (source-path, entry) pairs for debug inspection.
@@ -1190,34 +1228,6 @@ pub fn create_signal_pack_with<'a>(
         })
         .collect::<Vec<_>>();
 
-    let mut pack = BufWriter::new(File::create(pack_path)?);
-    pack.write_all(&[0u8; SIGNAL_PACK_HEADER_LEN])?;
-
-    let mut stats = PrepareStats::default();
-    let mut rows = Vec::with_capacity(paths.len());
-    let mut offset = SIGNAL_PACK_HEADER_LEN as u64;
-    for result in packed {
-        match result {
-            Ok(mut row) => {
-                row.offset = offset;
-                pack.write_all(&row.payload)?;
-                offset += row.bytes;
-                stats.bytes += row.uncompressed_bytes as usize;
-                stats.prepared += 1;
-                if let Ok(relative) = row.source.strip_prefix(samples_root) {
-                    row.source = relative.to_owned();
-                }
-                rows.push(row);
-            }
-            Err((path, err)) => {
-                stats.failed += 1;
-                tracing::warn!("signal-sampler: failed to pack {}: {err}", path.display());
-            }
-        }
-    }
-
-    let index_offset = offset;
-    let mut index = Vec::new();
     let (spec_text, spec_format, spec_origin) = match spec {
         PackSpecSource::Path(spec_path) => (
             std::fs::read_to_string(spec_path)?,
@@ -1232,6 +1242,141 @@ pub fn create_signal_pack_with<'a>(
             (text.to_string(), format.to_string(), "<inline>".to_string())
         }
     };
+    write_signal_pack_file(
+        pack_path,
+        &spec_text,
+        &spec_format,
+        &spec_origin,
+        codec,
+        packed,
+        Some(samples_root),
+    )
+}
+
+/// Re-encode an existing pack's audio entries with a different codec, copying
+/// the embedded spec and per-entry index metadata (source frame counts —
+/// loop points stay sample-exact) verbatim. No source samples needed: this is
+/// how a lossless Full pack becomes an Ogg Vorbis Proxy pack (or back).
+pub fn transcode_signal_pack(
+    in_path: &Path,
+    out_path: &Path,
+    codec: PackCodec,
+) -> Result<PrepareStats, SamplerError> {
+    let pack = SignalPcmPack::open(in_path)?;
+    let spec_text = pack
+        .embedded_spec()
+        .ok_or_else(|| invalid_data("pack carries no embedded spec"))?
+        .to_string();
+    let spec_format = pack.embedded_spec_format().unwrap_or("styx").to_string();
+
+    // Deterministic output ordering.
+    let mut entries: Vec<(PathBuf, PackEntry)> = pack
+        .entries
+        .iter()
+        .map(|(k, v)| (k.clone(), v.clone()))
+        .collect();
+    entries.sort_by(|a, b| a.0.cmp(&b.0));
+
+    let total = entries.len();
+    let completed = AtomicUsize::new(0);
+    let packed: Vec<Result<PackIndexRow, (PathBuf, SamplerError)>> = entries
+        .par_iter()
+        .map(|(source, entry)| {
+            let row = (|| {
+                let data = load_pack_sample(&pack.mmap, entry)?;
+                let payload = match codec {
+                    PackCodec::OggVorbis { quality } => encode_ogg_vorbis(
+                        &data.frames,
+                        data.channels,
+                        data.sample_rate,
+                        quality,
+                    )?,
+                    PackCodec::FlacI24 => {
+                        let samples = data
+                            .frames
+                            .iter()
+                            .map(|s| f32_to_i24_i32(*s))
+                            .collect::<Vec<_>>();
+                        encode_flac_i24(&samples, data.channels, data.sample_rate)?
+                    }
+                };
+                Ok(PackIndexRow {
+                    source: source.clone(),
+                    offset: 0,
+                    bytes: payload.len() as u64,
+                    uncompressed_bytes: (entry.samples * 3) as u64,
+                    // Index metadata copied from the source pack — the
+                    // authoritative PCM truth, NOT the re-decode.
+                    channels: entry.channels,
+                    sample_rate: entry.sample_rate,
+                    num_frames: entry.num_frames,
+                    samples: entry.samples,
+                    payload,
+                })
+            })();
+            let done = completed.fetch_add(1, Ordering::Relaxed) + 1;
+            if total >= 100 && (done == total || done.is_multiple_of(100)) {
+                eprintln!("transcoded {done}/{total} samples");
+            }
+            row.map_err(|e: SamplerError| (source.clone(), e))
+        })
+        .collect();
+
+    write_signal_pack_file(
+        out_path,
+        &spec_text,
+        &spec_format,
+        &format!("<transcode:{}>", in_path.display()),
+        codec,
+        packed,
+        None,
+    )
+}
+
+/// Shared pack-file writer: header + payload body + index (embedded spec +
+/// per-entry rows). `samples_root` (when given) relativizes row source paths.
+fn write_signal_pack_file(
+    pack_path: &Path,
+    spec_text: &str,
+    spec_format: &str,
+    spec_origin: &str,
+    codec: PackCodec,
+    packed: Vec<Result<PackIndexRow, (PathBuf, SamplerError)>>,
+    samples_root: Option<&Path>,
+) -> Result<PrepareStats, SamplerError> {
+    if let Some(parent) = pack_path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let mut pack = BufWriter::new(File::create(pack_path)?);
+    pack.write_all(&[0u8; SIGNAL_PACK_HEADER_LEN])?;
+
+    let mut stats = PrepareStats::default();
+    let mut rows = Vec::with_capacity(packed.len());
+    let mut offset = SIGNAL_PACK_HEADER_LEN as u64;
+    for result in packed {
+        match result {
+            Ok(mut row) => {
+                row.offset = offset;
+                pack.write_all(&row.payload)?;
+                offset += row.bytes;
+                stats.bytes += row.uncompressed_bytes as usize;
+                stats.prepared += 1;
+                if let Some(root) = samples_root {
+                    if let Ok(relative) = row.source.strip_prefix(root) {
+                        row.source = relative.to_owned();
+                    }
+                }
+                rows.push(row);
+            }
+            Err((path, err)) => {
+                stats.failed += 1;
+                tracing::warn!("signal-sampler: failed to pack {}: {err}", path.display());
+            }
+        }
+    }
+
+    let index_offset = offset;
+    let mut index = Vec::new();
     writeln!(index, "# signalpack-index-v1")?;
     writeln!(index, "# spec_path\t{spec_origin}")?;
     writeln!(index, "# spec_format\t{spec_format}")?;
@@ -2024,6 +2169,60 @@ mod tests {
         let norm_b: f64 = frames.iter().map(|b| (*b as f64).powi(2)).sum();
         let corr = dot / (norm_a.sqrt() * norm_b.sqrt()).max(f64::EPSILON);
         assert!(corr > 0.98, "decoded audio should correlate with source, got {corr}");
+    }
+
+    #[test]
+    fn transcode_flac_pack_to_ogg_preserves_index_metadata() {
+        let dir = std::env::temp_dir().join("signal-sampler-transcode-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        // Tiny source: one stereo sine WAV + minimal spec.
+        let wav = dir.join("tone.wav");
+        let n_frames = 20_000usize;
+        let mut w = hound::WavWriter::create(
+            &wav,
+            hound::WavSpec {
+                channels: 2,
+                sample_rate: 44_100,
+                bits_per_sample: 32,
+                sample_format: hound::SampleFormat::Float,
+            },
+        )
+        .unwrap();
+        for i in 0..n_frames {
+            let s = ((i as f32) * 0.05).sin() * 0.4;
+            w.write_sample(s).unwrap();
+            w.write_sample(-s).unwrap();
+        }
+        w.finalize().unwrap();
+
+        let flac_pack = dir.join("t.signalpack");
+        let stats = create_signal_pack_with(
+            &flac_pack,
+            PackSpecSource::Text {
+                text: "name \"t\"\n",
+                format: "styx",
+            },
+            &dir,
+            [wav.as_path()].into_iter(),
+            PackCodec::FlacI24,
+        )
+        .unwrap();
+        assert_eq!(stats.prepared, 1);
+
+        let ogg_pack = dir.join("t-proxy.signalpack");
+        let stats = transcode_signal_pack(&flac_pack, &ogg_pack, PackCodec::OGG_VORBIS_Q8).unwrap();
+        assert_eq!((stats.prepared, stats.failed), (1, 0));
+
+        let pack = SignalPcmPack::open(&ogg_pack).unwrap();
+        assert_eq!(pack.kind(), SIGNAL_PACK_KIND_OGG_VORBIS);
+        assert_eq!(pack.embedded_spec().map(str::trim), Some("name \"t\""));
+        let (_, entry) = pack.entries.iter().next().unwrap();
+        // Index carries the SOURCE frame counts, and decode coerces to them.
+        assert_eq!(entry.num_frames, n_frames);
+        let data = load_pack_sample(&pack.mmap, entry).unwrap();
+        assert_eq!(data.num_frames, n_frames);
+        assert_eq!(data.channels, 2);
+        assert_eq!(data.sample_rate, 44_100);
     }
 
     #[test]
