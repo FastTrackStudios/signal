@@ -118,8 +118,14 @@ jobs:
           git diff --name-only "$base" HEAD > /tmp/changed
           echo "diff ${base}..HEAD: $(wc -l < /tmp/changed) files"
 
-          task_paths='^apps/task/|^crates/task/|^features/task/|^libs/architect/|^libs/editor/|^flake\.(nix|lock)$|^\.forgejo/workflows/deploy\.yml$'
-          site_paths='^apps/site/|^libs/editor/|^libs/fts-ui/|^crates/keyflow/|^features/engraver/|^crates/input/input-config-proto/|^features/reaper/reaper-input/config/|^flake\.(nix|lock)$|^\.forgejo/workflows/deploy\.yml$'
+          # NOTE: the workspace-root Cargo.{toml,lock} feed EVERY image
+          # (a lockfile bump can change the built binary), so a change to
+          # them must redeploy — otherwise a deps-only fix silently skips
+          # the gate and prod lags (this is what stranded the dioxus-icons
+          # task-web build fix). Member-crate manifests are already covered
+          # by the path prefixes above.
+          task_paths='^apps/task/|^crates/task/|^features/task/|^libs/architect/|^libs/editor/|^Cargo\.(toml|lock)$|^flake\.(nix|lock)$|^\.forgejo/workflows/deploy\.yml$'
+          site_paths='^apps/site/|^libs/editor/|^libs/fts-ui/|^crates/keyflow/|^features/engraver/|^crates/input/input-config-proto/|^features/reaper/reaper-input/config/|^Cargo\.(toml|lock)$|^flake\.(nix|lock)$|^\.forgejo/workflows/deploy\.yml$'
 
           task=false; site=false
           grep -qE "$task_paths" /tmp/changed && task=true
