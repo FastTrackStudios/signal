@@ -315,6 +315,10 @@ impl Container {
 
     /// Append a child node (block or container).
     #[must_use]
+    #[allow(
+        clippy::should_implement_trait,
+        reason = "builder-DSL method, not std::ops::Add; renaming would touch ~40 call sites across nord.rs/node_render for no behavioral gain"
+    )]
     pub fn add(mut self, child: impl Into<RigNode>) -> Self {
         self.children.push(child.into());
         self

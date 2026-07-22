@@ -226,7 +226,8 @@ pub fn MixerWorkspace() -> Element {
                     continue;
                 }
                 // Snapshot the meter signals (Copy) without a reactive read.
-                let sigs: Vec<(usize, Signal<f32>, Signal<f32>, Signal<f32>)> = entries
+                type MeterSignals = Vec<(usize, Signal<f32>, Signal<f32>, Signal<f32>)>;
+                let sigs: MeterSignals = entries
                     .peek()
                     .iter()
                     .enumerate()

@@ -1,0 +1,24 @@
+[package]
+name = "modulation-plugin"
+version.workspace = true
+edition = "2021"          # matches the nice-plug plugin stack (signal-sampler-clap)
+authors.workspace = true
+license.workspace = true
+description = "FTS Modulation — CLAP/VST3 multi-mode modulation plugin (chorus / flanger / vibrato / tremolo / wah) over the modulation facade"
+
+[lib]
+# cdylib → the loadable CLAP/VST3 binary; lib → tests + a future standalone host.
+crate-type = ["cdylib", "lib"]
+
+[dependencies]
+# Plugin framework. `nice_plug` must be a DIRECT dep: `#[derive(Params)]` and
+# `nice_export_clap!`/`nice_export_vst3!` expand to absolute `::nice_plug::…`
+# paths, so the crate has to be nameable here. `vst3` is on by default.
+nice-plug.workspace = true
+
+# The DSP facade (re-exports chorus-dsp / trem-dsp / wah-dsp as
+# `chorus` / `trem` / `wah`). Never depend on the `*-dsp` crates directly.
+modulation.workspace = true
+
+# The `Processor` trait + `AudioConfig` the modulation chains implement.
+audiocore-dsp.workspace = true

@@ -300,28 +300,28 @@ pub fn ParamInspector(props: ParamInspectorProps) -> Element {
                     column: SortColumn::Block,
                     current_sort: props.sort_column,
                     current_direction: props.sort_direction,
-                    on_sort: props.on_sort_change.clone(),
+                    on_sort: props.on_sort_change,
                 }
                 ColumnHeader {
                     label: "Parameter".to_string(),
                     column: SortColumn::Parameter,
                     current_sort: props.sort_column,
                     current_direction: props.sort_direction,
-                    on_sort: props.on_sort_change.clone(),
+                    on_sort: props.on_sort_change,
                 }
                 ColumnHeader {
                     label: "Value".to_string(),
                     column: SortColumn::Value,
                     current_sort: props.sort_column,
                     current_direction: props.sort_direction,
-                    on_sort: props.on_sort_change.clone(),
+                    on_sort: props.on_sort_change,
                 }
                 ColumnHeader {
                     label: "Source".to_string(),
                     column: SortColumn::Source,
                     current_sort: props.sort_column,
                     current_direction: props.sort_direction,
-                    on_sort: props.on_sort_change.clone(),
+                    on_sort: props.on_sort_change,
                 }
                 span {}
             }
@@ -341,7 +341,7 @@ pub fn ParamInspector(props: ParamInspectorProps) -> Element {
                     ParamRowView {
                         key: "{row.id}",
                         row: row.clone(),
-                        on_value_change: props.on_value_change.clone(),
+                        on_value_change: props.on_value_change,
                     }
                 }
             }

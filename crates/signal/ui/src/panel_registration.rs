@@ -164,7 +164,7 @@ fn SongPartsDockPanel() -> Element {
 
     use crate::views::{SectionEntry, SongEditor};
 
-    let mut song_name = use_signal(|| String::new());
+    let mut song_name = use_signal(String::new);
     let mut sections = use_signal(Vec::<SectionEntry>::new);
     let mut selected_section = use_signal(|| None::<String>);
 

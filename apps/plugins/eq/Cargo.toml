@@ -11,9 +11,11 @@ crate-type = ["cdylib", "lib"]
 
 [dependencies]
 audiocore-core = { workspace = true }
-eq-dsp = { path = "../../crates/eq-dsp" }
-eq-profiles = { path = "../../crates/eq-profiles" }
-eq-ui = { path = "../../crates/eq-ui" }
+eq-dsp = { workspace = true }
+eq-profiles = { workspace = true }
+# The full Dioxus plugin editor (control view, EQ graph, spectrum) —
+# `native` pulls nice-plug-dioxus/Blitz.
+eq-ui = { workspace = true, features = ["native"] }
 audiocore-dsp = { workspace = true }
 nice-plug = { workspace = true }
 spectrum-analyzer = { workspace = true }

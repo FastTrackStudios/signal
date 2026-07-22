@@ -349,11 +349,10 @@ fn walk_for(
     for entry in entries.flatten() {
         let path = entry.path();
         if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
-            let matches_fmt = match (fmt, ext) {
-                (PluginFormat::Clap, "clap") => true,
-                (PluginFormat::Vst3, "vst3") => true,
-                _ => false,
-            };
+            let matches_fmt = matches!(
+                (fmt, ext),
+                (PluginFormat::Clap, "clap") | (PluginFormat::Vst3, "vst3")
+            );
             if matches_fmt {
                 if seen.insert(path.clone()) {
                     let display_name = path

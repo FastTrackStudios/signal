@@ -65,9 +65,9 @@ struct Wire {
 /// Pixel X of the right edge of a block at logical column `col`.
 fn block_right_x(col: usize) -> f32 {
     let grid_col_start = col as f32 * COLS_PER_BLOCK as f32;
-    let px = CELL_GAP as f32 + (grid_col_start + BLOCK_SPAN as f32) * (CELL_SIZE + CELL_GAP) as f32
-        - CELL_GAP as f32;
-    px
+    
+    CELL_GAP as f32 + (grid_col_start + BLOCK_SPAN as f32) * (CELL_SIZE + CELL_GAP) as f32
+        - CELL_GAP as f32
 }
 
 /// Pixel X of the left edge of a block at logical column `col`.

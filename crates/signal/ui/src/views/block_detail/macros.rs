@@ -117,7 +117,7 @@ pub fn BlockMacros(props: BlockMacrosProps) -> Element {
                             } else {
                                 knob.color.as_deref().unwrap_or("#3B82F6")
                             };
-                            let on_change = props.on_macro_change.clone();
+                            let on_change = props.on_macro_change;
                             let binding_count = knob.bindings.len();
                             let is_selector = selector_knob_id.as_deref() == Some(knob_id.as_str());
                             let readout = if is_selector {
@@ -128,12 +128,12 @@ pub fn BlockMacros(props: BlockMacrosProps) -> Element {
                                 format!("{:.0}%", value * 100.0)
                             };
                             rsx! {
+                                Fragment { key: "{knob_id}",
                                 // Separator between shared and group knobs
                                 if i == shared_count && shared_count > 0 {
                                     div { class: "w-px h-16 bg-zinc-700 mx-1 self-center" }
                                 }
                                 div {
-                                    key: "{knob_id}",
                                     class: if is_selected {
                                         "flex flex-col items-center gap-1 p-2 rounded-lg bg-zinc-800/60 border border-zinc-600 cursor-pointer"
                                     } else {
@@ -176,6 +176,7 @@ pub fn BlockMacros(props: BlockMacrosProps) -> Element {
                                             }
                                         }
                                     }
+                                }
                                 }
                             }
                         }

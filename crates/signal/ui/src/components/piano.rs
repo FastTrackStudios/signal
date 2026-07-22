@@ -164,6 +164,13 @@ pub struct WaterfallPainter {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
+impl Default for WaterfallPainter {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
 impl WaterfallPainter {
     pub fn new() -> Self {
         Self {

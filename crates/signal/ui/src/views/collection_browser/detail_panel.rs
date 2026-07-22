@@ -153,7 +153,7 @@ pub(super) fn filter_and_sort(
                 let sub_match = item
                     .subtitle
                     .as_ref()
-                    .map_or(false, |s| s.to_ascii_lowercase().contains(&needle));
+                    .is_some_and(|s| s.to_ascii_lowercase().contains(&needle));
                 let tag_match = item
                     .structured_tags
                     .values()

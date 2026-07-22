@@ -598,9 +598,9 @@ mod tests {
     fn goertzel(signal: &[f64], freq: f64) -> f64 {
         let w = std::f64::consts::TAU * freq / SR;
         let coeff = 2.0 * w.cos();
-        let (mut s0, mut s1, mut s2) = (0.0, 0.0, 0.0);
+        let (mut s1, mut s2) = (0.0, 0.0);
         for &x in signal {
-            s0 = x + coeff * s1 - s2;
+            let s0 = x + coeff * s1 - s2;
             s2 = s1;
             s1 = s0;
         }

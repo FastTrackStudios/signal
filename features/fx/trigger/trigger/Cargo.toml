@@ -1,0 +1,18 @@
+[package]
+name = "trigger"
+version.workspace = true
+edition = "2021"          # matches sibling fx facades (comp, level)
+license.workspace = true
+description = "trigger — facade over trigger-dsp; the legacy FTS-Trigger engine (sidechain bandpass → onset detection → velocity curve → sampler). Plugin UI and preset profiles are opt-in."
+
+[features]
+default = []
+# Opt-in plugin UI — declared now so the facade shape is stable; wired once
+# the Dioxus editor lands (mirrors level).
+ui = []
+# Preset profiles (full control / drum replacer parameter mappings).
+profiles = ["dep:trigger-profiles"]
+
+[dependencies]
+trigger-dsp = { workspace = true }
+trigger-profiles = { workspace = true, optional = true }

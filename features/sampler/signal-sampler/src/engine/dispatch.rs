@@ -547,6 +547,7 @@ impl SampleEngine {
     ///   1. `<base>ped`                              — `lacrm` → `lacrmped`
     ///   2. `<base>` with trailing `m` removed + `ped` — `lacrm` → `lacrped`
     ///   3. any non-Release / non-mechanical articulation containing `ped`
+    ///
     /// Mechanical-pedal articulations (`mech`) are excluded.
     pub(crate) fn find_pedal_pair(&self, base: &str) -> Option<String> {
         let is_body = |id: &str| self.artic_note_span(id) >= Self::PEDAL_BODY_MIN_SPAN;

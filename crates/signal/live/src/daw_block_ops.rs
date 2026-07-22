@@ -71,7 +71,7 @@ pub struct ResolvedFxLoad {
 #[derive(Debug)]
 pub enum ResolvedSignalNode {
     /// A single FX plugin to load.
-    Fx(ResolvedFxLoad),
+    Fx(Box<ResolvedFxLoad>),
     /// A parallel split: each inner chain is one lane, mixed back at the output.
     Split(Vec<ResolvedSignalChain>),
 }
@@ -96,7 +96,7 @@ impl ResolvedSignalChain {
     fn collect_fx_loads<'a>(&'a self, out: &mut Vec<&'a ResolvedFxLoad>) {
         for node in &self.nodes {
             match node {
-                ResolvedSignalNode::Fx(fx) => out.push(fx),
+                ResolvedSignalNode::Fx(fx) => out.push(fx.as_ref()),
                 ResolvedSignalNode::Split(lanes) => {
                     for lane in lanes {
                         lane.collect_fx_loads(out);
@@ -412,7 +412,9 @@ where
                 match node {
                     SignalNode::Block(module_block) => {
                         match self.resolve_module_block(module_block).await {
-                            Ok(resolved) => nodes.push(ResolvedSignalNode::Fx(resolved)),
+                            Ok(resolved) => {
+                                nodes.push(ResolvedSignalNode::Fx(Box::new(resolved)))
+                            }
                             Err(e) => {
                                 eprintln!(
                                     "[signal] warning: skipping block '{}': {e}",
@@ -778,10 +780,14 @@ async fn configure_fx_free(
 /// are the FX node IDs at the current level — either direct FX GUIDs or
 /// container IDs created for split nodes. The caller uses `top_level_node_ids`
 /// to enclose everything in the outer module container.
+/// Results of executing a chain: the flat list of loaded FX plus the
+/// top-level FX node IDs (see [`execute_chain_nodes`] for details).
+type ChainExecResult = Result<(Vec<LoadBlockResult>, Vec<FxNodeId>), String>;
+
 fn execute_chain_nodes<'a>(
     chain: &'a ResolvedSignalChain,
     track: &'a TrackHandle,
-) -> futures::future::BoxFuture<'a, Result<(Vec<LoadBlockResult>, Vec<FxNodeId>), String>> {
+) -> futures::future::BoxFuture<'a, ChainExecResult> {
     Box::pin(async move {
         let mut all_results: Vec<LoadBlockResult> = Vec::new();
         let mut top_node_ids: Vec<FxNodeId> = Vec::new();

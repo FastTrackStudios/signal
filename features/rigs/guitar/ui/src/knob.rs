@@ -82,6 +82,24 @@ fn angle_for_value(v: f64) -> f64 {
     START_ANGLE + v.clamp(0.0, 1.0) * SWEEP
 }
 
+/// A `fn(f32) -> String` formatter override, wrapped so props-diffing
+/// compares it via `fn_addr_eq` instead of a raw (unpredictable) fn-pointer
+/// comparison — see `#[component]`'s derived `PartialEq` on this field.
+#[derive(Clone, Copy)]
+pub struct FmtFn(pub fn(f32) -> String);
+
+impl PartialEq for FmtFn {
+    fn eq(&self, other: &Self) -> bool {
+        std::ptr::fn_addr_eq(self.0, other.0)
+    }
+}
+
+impl FmtFn {
+    fn call(self, v: f32) -> String {
+        (self.0)(v)
+    }
+}
+
 /// A rotary knob over a plain value. `value` is in real units; the arc maps
 /// through `min..max`. Drag vertically (pointer-captured), wheel for steps.
 #[component]
@@ -95,7 +113,7 @@ pub fn Knob(
     /// Hide the numeric readout (tight strips show label only).
     #[props(default)] hide_value: bool,
     /// Value formatter override (default `{:.1}`).
-    #[props(default)] fmt: Option<fn(f32) -> String>,
+    #[props(default)] fmt: Option<FmtFn>,
     /// Accent color override.
     #[props(default)] color: Option<String>,
 ) -> Element {
@@ -125,7 +143,7 @@ pub fn Knob(
 
     let accent = color.unwrap_or_else(|| ACCENT.to_string());
     let display = match fmt {
-        Some(f) => f(value),
+        Some(f) => f.call(value),
         // Adaptive precision: fine params (mix, Q) need two decimals; big
         // ones (ms, Hz) don't.
         None => {

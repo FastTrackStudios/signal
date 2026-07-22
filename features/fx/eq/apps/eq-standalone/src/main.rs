@@ -254,7 +254,10 @@ fn start_system_capture(ui: &Arc<EqUiState>) -> anyhow::Result<cpal::Stream> {
     if let Ok(inputs) = host.input_devices() {
         eprintln!("available audio inputs:");
         for d in inputs {
-            let name = d.name().unwrap_or_else(|_| "<unknown>".into());
+            let name = d
+                .description()
+                .map(|desc| desc.name().to_string())
+                .unwrap_or_else(|_| "<unknown>".into());
             eprintln!("  - {name}");
             let lname = name.to_lowercase();
             if let Some(want) = &env_dev {
@@ -275,13 +278,16 @@ fn start_system_capture(ui: &Arc<EqUiState>) -> anyhow::Result<cpal::Stream> {
         .or(pipewire)
         .or_else(|| host.default_input_device())
         .ok_or_else(|| anyhow::anyhow!("no input device available"))?;
-    let dev_name = device.name().unwrap_or_else(|_| "<unknown>".into());
+    let dev_name = device
+        .description()
+        .map(|desc| desc.name().to_string())
+        .unwrap_or_else(|_| "<unknown>".into());
     eprintln!("capturing from: {dev_name}");
     eprintln!(
         "  ↳ to visualize system audio: open `pavucontrol` → Recording tab and set\n     this app's source to \"Monitor of <your output>\", or connect the sink\n     monitor to this node in `qpwgraph`. Override the device with\n     FTS_EQ_AUDIO_INPUT=\"<name>\"."
     );
     let config = device.default_input_config()?;
-    let sample_rate = config.sample_rate().0 as f32;
+    let sample_rate = config.sample_rate() as f32;
     let channels = config.channels() as usize;
 
     ui.sample_rate.store(sample_rate, Ordering::Relaxed);
@@ -315,7 +321,7 @@ fn start_system_capture(ui: &Arc<EqUiState>) -> anyhow::Result<cpal::Stream> {
         cpal::SampleFormat::F32 => {
             let mut push = downmix_push;
             device.build_input_stream(
-                &config.into(),
+                config.into(),
                 move |data: &[f32], _: &cpal::InputCallbackInfo| push(data),
                 err_fn,
                 None,
@@ -325,7 +331,7 @@ fn start_system_capture(ui: &Arc<EqUiState>) -> anyhow::Result<cpal::Stream> {
             let mut push = downmix_push;
             let mut buf: Vec<f32> = Vec::new();
             device.build_input_stream(
-                &config.into(),
+                config.into(),
                 move |data: &[i16], _: &cpal::InputCallbackInfo| {
                     buf.clear();
                     buf.extend(data.iter().map(|&s| s as f32 / i16::MAX as f32));
@@ -339,7 +345,7 @@ fn start_system_capture(ui: &Arc<EqUiState>) -> anyhow::Result<cpal::Stream> {
             let mut push = downmix_push;
             let mut buf: Vec<f32> = Vec::new();
             device.build_input_stream(
-                &config.into(),
+                config.into(),
                 move |data: &[u16], _: &cpal::InputCallbackInfo| {
                     buf.clear();
                     buf.extend(

@@ -181,7 +181,7 @@ pub fn WirePath(props: WirePathProps) -> Element {
     };
 
     let wire_id = props.wire_id;
-    let on_click = props.on_click.clone();
+    let on_click = props.on_click;
 
     rsx! {
         if wire_id.is_some() && on_click.is_some() {

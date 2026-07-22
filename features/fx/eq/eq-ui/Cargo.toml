@@ -46,7 +46,25 @@ spectrum-analyzer = { workspace = true }
 # including dioxus's built-in task scheduler.
 futures-timer = { version = "3", optional = true }
 
+# The real-editor behavioral tests (tests/gui_editor.rs) mount
+# `control_view::App` — the `native`-gated plugin editor surface — on the
+# dioxus-test harness. Declared explicitly with required-features so a plain
+# `cargo test -p eq-ui` (no features) still builds and just skips it.
+[[test]]
+name = "gui_editor"
+required-features = ["native"]
+
 [dev-dependencies]
+# Headless GUI tests:
+# - tests/gui_smoke.rs — SSR structure tests (plain VirtualDom + dioxus-ssr).
+# - tests/gui_headless.rs — REAL event dispatch on a headless Blitz DOM via
+#   the vendored dioxus-test (libs/vendor/dioxus-test, backported to the
+#   workspace dioxus 0.7.9 + blitz pins — no 0.8-alpha migration needed).
+dioxus = { workspace = true }
+dioxus-ssr = { git = "https://github.com/DioxusLabs/dioxus", rev = "f717a8e184a522d078b70bb4b4d62a5f9a99ddfc", default-features = false }
+dioxus-test = { workspace = true }
+tokio = { workspace = true, features = ["macros", "rt"] }
+test-that = { version = "0.5.2", default-features = false, features = ["regex", "num-traits"] }
 pollster = "0.4"
 # Only the render_smoke GPU test uses wgpu directly; keep it in lockstep with
 # nice-plug-dioxus's wgpu (29) so vello's render_to_texture types line up.

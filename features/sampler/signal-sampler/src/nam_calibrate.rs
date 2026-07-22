@@ -570,8 +570,8 @@ pub fn measure_drive_curve(model: &mut NamModel, di: &DiReference, max_block: us
             let mut pos = 0;
             while pos < di.samples.len() {
                 let n = block.min(di.samples.len() - pos);
-                for i in 0..n {
-                    scratch_in[i] = di.samples[pos + i] * gain;
+                for (i, s) in scratch_in.iter_mut().enumerate().take(n) {
+                    *s = di.samples[pos + i] * gain;
                 }
                 model.process(&scratch_in[..n], &mut scratch_out[..n]);
                 output[pos..pos + n].copy_from_slice(&scratch_out[..n]);
@@ -586,9 +586,9 @@ pub fn measure_drive_curve(model: &mut NamModel, di: &DiReference, max_block: us
 fn goertzel(samples: &[f64], sample_rate: f64, freq: f64) -> f64 {
     let w = 2.0 * std::f64::consts::PI * freq / sample_rate;
     let coeff = 2.0 * w.cos();
-    let (mut s0, mut s1, mut s2) = (0.0f64, 0.0f64, 0.0f64);
+    let (mut s1, mut s2) = (0.0f64, 0.0f64);
     for &x in samples {
-        s0 = x + coeff * s1 - s2;
+        let s0 = x + coeff * s1 - s2;
         s2 = s1;
         s1 = s0;
     }
@@ -610,9 +610,9 @@ pub fn measure_thd(model: &mut NamModel, sample_rate: f64, input_gain_db: f64) -
     let mut pos = 0usize;
     while pos < n {
         let m = block.min(n - pos);
-        for i in 0..m {
+        for (i, s) in inp.iter_mut().enumerate().take(m) {
             let t = (pos + i) as f64 / sample_rate;
-            inp[i] = amp * (2.0 * std::f64::consts::PI * F0 * t).sin();
+            *s = amp * (2.0 * std::f64::consts::PI * F0 * t).sin();
         }
         model.process(&inp[..m], &mut out[..m]);
         output[pos..pos + m].copy_from_slice(&out[..m]);

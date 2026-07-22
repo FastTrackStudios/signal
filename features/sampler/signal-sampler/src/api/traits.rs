@@ -248,8 +248,8 @@ pub struct SampleRef(pub u32);
 /// Streams samples so `note_on` never touches disk.
 ///
 /// **Phase B**: back this with daw's `AudioSource` (mmap WAV / decoded memory)
-/// + prefetch. Today `SampleEngine` owns its own cache (`engine::cache`); this
-/// trait names the seam.
+/// plus prefetch. Today `SampleEngine` owns its own cache (`engine::cache`);
+/// this trait names the seam.
 pub trait Loader: Send + Sync {
     fn preload(&self, profile: PreloadProfile) -> PreloadStats;
     fn slice(&self, id: SampleRef) -> SampleSlice;

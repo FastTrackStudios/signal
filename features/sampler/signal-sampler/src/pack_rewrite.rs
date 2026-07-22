@@ -123,10 +123,10 @@ fn splice_spec(old_index: &[u8], mutate: impl FnOnce(&str) -> String) -> Option<
     let new_spec = new_spec_raw.trim_end_matches('\n');
 
     let mut out = Vec::with_capacity(old_index.len());
-    out.extend_from_slice(text[..after_begin].as_bytes());
+    out.extend_from_slice(&text.as_bytes()[..after_begin]);
     out.extend_from_slice(new_spec.as_bytes());
     out.push(b'\n');
-    out.extend_from_slice(text[absolute_end..].as_bytes());
+    out.extend_from_slice(&text.as_bytes()[absolute_end..]);
     Some(out)
 }
 

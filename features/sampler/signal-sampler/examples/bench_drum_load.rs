@@ -10,11 +10,11 @@
 //! ```
 //!
 //! Phases:
-//!   1. parse+build  — `load_preset` (PresetSpec parse + open N packs, parse
-//!                     their embedded LibrarySpecs, build N engines).
-//!   2. preload      — background FLAC decode of every sample; we poll
-//!                     per-engine `preload_progress` until complete, and also
-//!                     report time-to-first-engine-ready (≈ time-to-playable).
+//!   1. parse+build — `load_preset` (PresetSpec parse + open N packs, parse
+//!      their embedded LibrarySpecs, build N engines).
+//!   2. preload — background FLAC decode of every sample; we poll
+//!      per-engine `preload_progress` until complete, and also
+//!      report time-to-first-engine-ready (≈ time-to-playable).
 
 use std::time::{Duration, Instant};
 
@@ -60,7 +60,7 @@ fn main() {
     // ── Phase 2: preload (background FLAC decode) ──
     let start = Instant::now();
     let mut first_ready: Option<f64> = None;
-    let mut last_loaded = 0usize;
+    let last_loaded;
     let timeout = Duration::from_secs(180);
     loop {
         let mut loaded = 0usize;
@@ -86,7 +86,6 @@ fn main() {
             last_loaded = loaded;
             break;
         }
-        last_loaded = loaded;
         std::thread::sleep(Duration::from_millis(20));
     }
     let preload_ms = start.elapsed().as_secs_f64() * 1000.0;

@@ -44,9 +44,9 @@ struct UserData {
 fn run(feed: AudioFeed, analyzer: Arc<Analyzer>) -> Result<(), pw::Error> {
     pw::init();
 
-    let mainloop = pw::main_loop::MainLoop::new(None)?;
-    let context = pw::context::Context::new(&mainloop)?;
-    let core = context.connect(None)?;
+    let mainloop = pw::main_loop::MainLoopRc::new(None)?;
+    let context = pw::context::ContextRc::new(&mainloop, None)?;
+    let core = context.connect_rc(None)?;
 
     // `stream.capture.sink = true` + AUTOCONNECT → capture the default output's
     // monitor automatically.
@@ -58,7 +58,7 @@ fn run(feed: AudioFeed, analyzer: Arc<Analyzer>) -> Result<(), pw::Error> {
     };
     props.insert("stream.capture.sink", "true");
 
-    let stream = pw::stream::Stream::new(&core, "fts-eq-analyzer", props)?;
+    let stream = pw::stream::StreamRc::new(core, "fts-eq-analyzer", props)?;
 
     let data = UserData {
         feed,

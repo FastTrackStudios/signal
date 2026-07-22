@@ -80,7 +80,7 @@ pub fn ModuleView(
                         label: block.label,
                         block_type: block.block_type,
                         bypassed: block.bypassed,
-                        on_toggle_bypass: on_toggle_bypass.clone(),
+                        on_toggle_bypass: on_toggle_bypass,
                     }
                 }
             }

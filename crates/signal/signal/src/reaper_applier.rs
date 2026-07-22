@@ -43,6 +43,7 @@ struct PreloadedPatchTrack {
 /// The folder rig structure managed by the applier.
 struct FolderRigState {
     /// The "Guitar Rig" folder track.
+    #[allow(dead_code, reason = "kept as the folder-track handle for future folder-level ops (rename/move); not yet read anywhere")]
     folder_track: TrackHandle,
     /// The "Input: Guitar Rig" track that holds sends to patch tracks.
     input_track: TrackHandle,

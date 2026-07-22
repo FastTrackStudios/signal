@@ -212,10 +212,14 @@ fn reverse_is_a_riser() {
 fn feedback_recirculates_and_stays_stable() {
     // Recirculation: with predelay + feedback, energy keeps arriving
     // long after the IR is over.
-    let mut base = ImpulseParams::default();
-    base.feedback = 0.0;
-    let mut fb = ImpulseParams::default();
-    fb.feedback = 0.9;
+    let base = ImpulseParams {
+        feedback: 0.0,
+        ..Default::default()
+    };
+    let fb = ImpulseParams {
+        feedback: 0.9,
+        ..Default::default()
+    };
 
     let render_fb = |p: &ImpulseParams, secs: f64| {
         let mut conv = Convolution::new(SR);
@@ -248,8 +252,10 @@ fn feedback_recirculates_and_stays_stable() {
     );
 
     // Stability: fb = 1.0 for 10 s stays bounded.
-    let mut extreme = ImpulseParams::default();
-    extreme.feedback = 1.0;
+    let extreme = ImpulseParams {
+        feedback: 1.0,
+        ..Default::default()
+    };
     let out = render_fb(&extreme, 10.0);
     let peak = out.iter().fold(0.0f64, |m, s| m.max(s.abs()));
     assert!(peak.is_finite() && peak < 10.0, "fb=1.0 ran away: {peak}");

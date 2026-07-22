@@ -16,7 +16,7 @@ pub fn CreateProfileButton(on_created: Option<EventHandler<()>>) -> Element {
             class: "px-2 py-0.5 text-[10px] rounded bg-blue-600 hover:bg-blue-700 text-white font-medium",
             onclick: move |_| {
                 let signal = signal.clone();
-                let on_created = on_created.clone();
+                let on_created = on_created;
                 spawn(async move {
                     let rigs = signal.rigs().list().await.unwrap_or_default();
                     if let Some(r) = rigs.first() {
@@ -47,7 +47,7 @@ pub fn CreateSongButton(on_created: Option<EventHandler<()>>) -> Element {
             class: "px-2 py-0.5 text-[10px] rounded bg-blue-600 hover:bg-blue-700 text-white font-medium",
             onclick: move |_| {
                 let signal = signal.clone();
-                let on_created = on_created.clone();
+                let on_created = on_created;
                 spawn(async move {
                     let profiles = signal.profiles().list().await.unwrap_or_default();
                     if let Some(prof) = profiles.first() {
@@ -86,7 +86,7 @@ pub fn CreateRigButton(
                     return;
                 }
                 let signal = signal.clone();
-                let on_created = on_created.clone();
+                let on_created = on_created;
                 let rt = rig_type;
                 spawn(async move {
                     let rig = Rig::new(
@@ -124,7 +124,7 @@ pub fn CreateSetlistButton(on_created: Option<EventHandler<()>>) -> Element {
         editing.set(false);
         name_text.set(String::new());
         let signal = signal.clone();
-        let on_created = on_created.clone();
+        let on_created = on_created;
         spawn(async move {
             let songs = signal.songs().list().await.unwrap_or_default();
             if let Some(song) = songs.first() {

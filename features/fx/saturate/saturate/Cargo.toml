@@ -1,0 +1,16 @@
+[package]
+name = "saturate"
+version.workspace = true
+edition = "2021"          # matches sibling fx facades (comp, level)
+license.workspace = true
+description = "saturate — facade over saturate-dsp; musical saturation (tanh/tape/tube) with drive, tone, mix, and output trim. Plugin UI and presets are opt-in."
+
+[features]
+default = []
+# Opt-in plugin UI and preset profiles — declared now so the facade shape is
+# stable; wired once the UI lands (mirrors level).
+ui = []
+profiles = []
+
+[dependencies]
+saturate-dsp = { workspace = true }

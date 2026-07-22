@@ -1778,9 +1778,7 @@ impl GuitarRig {
         let nam_applied = self
             .daw
             .with_plugin_instance(&guid, |inst| {
-                let Some(any) = inst.as_any_mut() else {
-                    return None;
-                };
+                let any = inst.as_any_mut()?;
                 if let Some(nam) = any.downcast_mut::<NamProcessor>() {
                     match param_name {
                         "input_trim" => {

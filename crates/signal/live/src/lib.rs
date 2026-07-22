@@ -259,6 +259,12 @@ where
     St: SceneTemplateRepo + 'static,
     Ra: RackRepo + 'static,
 {
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "one Arc<Repo> per repo trait param on SignalLive<B, M, L, E, R, P, So, Se, St, Ra>; \
+                  each argument is a distinct required dependency, not a group that a builder \
+                  would meaningfully simplify"
+    )]
     pub fn new(
         block_repo: Arc<B>,
         module_repo: Arc<M>,

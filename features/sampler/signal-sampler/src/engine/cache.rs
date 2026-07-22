@@ -21,6 +21,18 @@ use rayon::prelude::*;
 
 use crate::SamplerError;
 
+/// A packed-sample lookup: the shared pack mmap plus the entry's offset/length.
+type PackedSampleRef = (Arc<memmap2::Mmap>, PackEntry);
+
+/// Per-path preload plan: source path, optional prepared-cache entry, the
+/// prepared-cache directory (if any), and the packed-sample lookup (if any).
+type PreloadPlanEntry = (
+    PathBuf,
+    Option<PreparedEntry>,
+    Option<PathBuf>,
+    Option<PackedSampleRef>,
+);
+
 #[derive(Debug, Clone, Copy, Default)]
 pub struct PreloadStats {
     pub loaded: usize,
@@ -304,12 +316,7 @@ impl SampleCache {
     /// into the cache as soon as it's decoded** so the audio thread sees
     /// voices come online incrementally (Kontakt-style streaming preload).
     pub fn preload<'a>(&self, paths: impl Iterator<Item = &'a Path>) -> PreloadStats {
-        let paths: Vec<(
-            PathBuf,
-            Option<PreparedEntry>,
-            Option<PathBuf>,
-            Option<(Arc<memmap2::Mmap>, PackEntry)>,
-        )> = {
+        let paths: Vec<PreloadPlanEntry> = {
             let loaded = self.inner.loaded.read().unwrap_or_else(|e| e.into_inner());
             paths
                 .filter(|p| !loaded.contains_key(*p))
@@ -387,7 +394,7 @@ impl SampleCache {
         // per-engine preload threads all feed the shared pool, so work from
         // every engine interleaves across all cores with no tail imbalance.
         // `should_cancel` (a new preset loaded) short-circuits remaining work.
-        let work: Vec<(PathBuf, Option<(Arc<memmap2::Mmap>, PackEntry)>)> = {
+        let work: Vec<(PathBuf, Option<PackedSampleRef>)> = {
             let loaded = self.inner.loaded.read().unwrap_or_else(|e| e.into_inner());
             paths
                 .filter(|p| !loaded.contains_key(*p))

@@ -18,7 +18,26 @@
     in
     {
       fts.pkgsDx = pkgsDx;
-      fts.dx.cli = pkgsDx.dioxus-cli;
+      # dx at the version the workspace tracks (dioxus 0.8 line). nixpkgs
+      # carries 0.7.9; override src onto the published 0.8.0-alpha.0
+      # crate. Bump together with the dioxus git rev in root Cargo.toml.
+      fts.dx.cli = pkgsDx.dioxus-cli.overrideAttrs (old: rec {
+        version = "0.8.0-alpha.0";
+        src = pkgsDx.fetchCrate {
+          pname = "dioxus-cli";
+          inherit version;
+          hash = "sha256-gEC5MtvkTBAhv2ChvWPQIx4u/OJ5Qx2sN2+epdcXwSA=";
+        };
+        cargoDeps = pkgsDx.rustPlatform.fetchCargoVendor {
+          inherit src;
+          name = "dioxus-cli-${version}-vendor";
+          hash = "sha256-znRYZFhWP5PzS6ftcShzNBvRqJXRjnM10OZ+KzUOOsg=";
+        };
+        # 0.7.9-era patches/checks don't apply to the alpha.
+        patches = [ ];
+        doCheck = false;
+        doInstallCheck = false;
+      });
       fts.dx.binaryen = pkgsDx.binaryen;
 
       # wasm-bindgen-cli matching the workspace Cargo.lock's

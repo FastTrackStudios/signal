@@ -49,7 +49,7 @@ pub fn WireLayer(props: WireLayerProps) -> Element {
                     to: wire.to,
                     color: wire.color.clone(),
                     wire_id: wire.wire_id,
-                    is_selected: selected_wire_id.map_or(false, |id| id == wire.wire_id),
+                    is_selected: selected_wire_id == Some(wire.wire_id),
                     on_click: {
                         move |wire_id: Uuid| {
                             props.on_wire_click.call(wire_id);

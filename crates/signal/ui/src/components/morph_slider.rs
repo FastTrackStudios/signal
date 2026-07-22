@@ -189,7 +189,7 @@ fn render_dropdown(
     on_select: &EventHandler<String>,
     open_signal: &mut Signal<bool>,
 ) -> Element {
-    let on_select = on_select.clone();
+    let on_select = *on_select;
     let mut open_signal = *open_signal;
 
     rsx! {

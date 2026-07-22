@@ -1,0 +1,24 @@
+[package]
+name = "delay-plugin"
+version.workspace = true
+edition = "2021"          # matches the nice-plug plugin stack (level-plugin, tune-plugin)
+authors.workspace = true
+license.workspace = true
+description = "FTS Delay — CLAP/VST3 stereo delay plugin (tape/digital/BBD/... styles, wow/flutter, saturation, ducking) over the delay engine"
+
+[lib]
+# cdylib → the loadable CLAP/VST3 binary; lib → tests + a future standalone host.
+crate-type = ["cdylib", "lib"]
+
+[dependencies]
+# Plugin framework. Must be a direct dep — the export macros expand to
+# absolute `::nice_plug::…` paths.
+nice-plug.workspace = true
+
+# The DSP facade (re-exports delay-dsp). Never depend on delay-dsp directly.
+delay.workspace = true
+
+# The shared DSP contract: `DelayChain` implements
+# `audiocore_dsp::Processor` and is driven via `AudioConfig`, and the
+# facade does not re-export those items — the trait must be in scope here.
+audiocore-dsp.workspace = true

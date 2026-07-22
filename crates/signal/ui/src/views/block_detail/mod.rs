@@ -91,7 +91,7 @@ pub fn BlockDetailPanel(props: BlockDetailPanelProps) -> Element {
                 h3 { class: "text-sm font-semibold text-zinc-200", "Block Detail" }
                 if let Some(ref on_close) = props.on_close {
                     {
-                        let on_close = on_close.clone();
+                        let on_close = *on_close;
                         rsx! {
                             button {
                                 class: "text-zinc-500 hover:text-zinc-300 text-lg leading-none px-1",

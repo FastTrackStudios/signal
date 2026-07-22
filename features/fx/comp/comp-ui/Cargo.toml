@@ -4,10 +4,42 @@ version.workspace = true
 authors.workspace = true
 license.workspace = true
 edition = "2021"          # kept on 2021 — pre-move signal workspace edition; migrate deliberately
-description = "Compressor GUI — transfer curve, gain reduction meters, and profile theme rendering"
+description = "Compressor GUI — control view (knobs + GR meter), params, and profile theme rendering"
+
+[features]
+# Core-only by default in the signal workspace (wasm remotes). The plugin
+# builds enable `native` for the Blitz/nice-plug editor.
+default = []
+# The Blitz/vello plugin editor: control view, nice-plug param tree, param
+# adapter. Off → only the portable core (profile view data model) compiles.
+native = [
+    "dep:nice-plug",
+    "dep:nice-plug-dioxus",
+    "dep:audiocore-core",
+    "dep:fts-ui",
+    "dep:atomic_float",
+]
 
 [dependencies]
-audio-gui = { workspace = true }
-fts-plugin-core = { workspace = true }
-comp-dsp = { path = "../comp-dsp" }
+audiocore-core = { workspace = true, optional = true }
+fts-ui = { workspace = true, optional = true }
+fts-ui-audio = { workspace = true }
+nice-plug = { workspace = true, optional = true }
+nice-plug-dioxus = { workspace = true, optional = true }
+atomic_float = { workspace = true, optional = true }
 comp-profiles = { path = "../comp-profiles" }
+
+# The real-editor behavioral tests (tests/gui_editor.rs) mount
+# `control_view::App` — the `native`-gated plugin editor surface — on the
+# dioxus-test harness. Declared explicitly with required-features so a plain
+# `cargo test -p comp-ui` (no features) still builds and just skips it.
+[[test]]
+name = "gui_editor"
+required-features = ["native"]
+
+[dev-dependencies]
+# Headless GUI tests: REAL event dispatch on a headless Blitz DOM via the
+# vendored dioxus-test (libs/vendor/dioxus-test) — same harness as eq-ui.
+dioxus = { workspace = true }
+dioxus-test = { workspace = true }
+tokio = { workspace = true, features = ["macros", "rt"] }

@@ -24,7 +24,7 @@ use daw_audio_io::pw::{self, ClockSettings, DeviceLatency};
 use ratatui::Frame;
 use ratatui::crossterm::event::{self, Event, KeyCode, KeyEventKind};
 use ratatui::layout::{Constraint, Layout, Rect};
-use ratatui::style::{Color, Modifier, Style, Stylize};
+use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Clear, Gauge, List, ListItem, ListState, Paragraph};
 use signal_sampler::{DeviceInfo, GuitarRig, Library, ProfileRig, RigManager};

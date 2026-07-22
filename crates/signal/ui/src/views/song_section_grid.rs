@@ -59,7 +59,7 @@ pub fn SongSectionGrid(
                     subtitle: None,
                     active: active_section_id
                         .as_ref()
-                        .map_or(false, |aid| aid == &sec.id.to_string()),
+                        .is_some_and(|aid| aid == &sec.id.to_string()),
                     empty: false,
                     preloaded: true,
                     loading: false,

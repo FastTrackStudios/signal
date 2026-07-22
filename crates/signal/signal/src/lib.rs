@@ -118,8 +118,8 @@ pub fn strip_fxchain_wrapper(chunk: &str) -> String {
             .map(|i| &trimmed[i + 1..])
             .unwrap_or(trimmed);
         let inner = after_header.trim_end();
-        if inner.ends_with('>') {
-            inner[..inner.len() - 1].trim_end().to_string()
+        if let Some(stripped) = inner.strip_suffix('>') {
+            stripped.trim_end().to_string()
         } else {
             inner.to_string()
         }

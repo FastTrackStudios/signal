@@ -192,9 +192,9 @@ mod tests {
         let total_samples = 25000; // ~520ms, enough for tap 8 at 400ms
         let mut samples = vec![0.0f64; total_samples];
 
-        for i in 0..total_samples {
+        for (i, sample) in samples.iter_mut().enumerate().take(total_samples) {
             let input = if i == 0 { 1.0 } else { 0.0 };
-            samples[i] = d.tick(input, 0);
+            *sample = d.tick(input, 0);
         }
 
         // Expect peaks near 2400, 4800, 7200, 9600 samples (50ms multiples)
@@ -244,9 +244,9 @@ mod tests {
         let total_samples = 25000;
         let mut samples = vec![0.0f64; total_samples];
 
-        for i in 0..total_samples {
+        for (i, sample) in samples.iter_mut().enumerate().take(total_samples) {
             let input = if i == 0 { 1.0 } else { 0.0 };
-            samples[i] = d.tick(input, 0);
+            *sample = d.tick(input, 0);
         }
 
         // Tap 1 at 50ms (2400 samples) should produce a peak

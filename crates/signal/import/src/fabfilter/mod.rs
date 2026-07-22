@@ -38,12 +38,19 @@ pub struct FabFilterImporter {
     presets_root: PathBuf,
 }
 
-impl FabFilterImporter {
+impl Default for FabFilterImporter {
     /// Create an importer using the default FabFilter preset location.
-    pub fn new() -> Self {
+    fn default() -> Self {
         Self {
             presets_root: default_presets_root(),
         }
+    }
+}
+
+impl FabFilterImporter {
+    /// Create an importer using the default FabFilter preset location.
+    pub fn new() -> Self {
+        Self::default()
     }
 
     /// Create an importer with a custom root directory (useful for testing).

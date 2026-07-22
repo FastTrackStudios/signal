@@ -644,16 +644,11 @@ pub fn MiniKnob(
                         // Send start value so JS can compute clamp bounds
                         let _ = eval.send(start_val as f64);
 
-                        loop {
-                            match eval.recv::<f64>().await {
-                                Ok(acc) => {
-                                    let new_val = start_val + acc as f32 / 150.0;
-                                    drag_value.set(new_val);
-                                    on_change.call(new_val);
-                                }
-                                // "done" sentinel (fails f64 parse) or channel closed
-                                Err(_) => break,
-                            }
+                        // "done" sentinel (fails f64 parse) or channel closed ends the drag.
+                        while let Ok(acc) = eval.recv::<f64>().await {
+                            let new_val = start_val + acc as f32 / 150.0;
+                            drag_value.set(new_val);
+                            on_change.call(new_val);
                         }
 
                         // Drag done — unfreeze, warp to saved CG position, show cursor

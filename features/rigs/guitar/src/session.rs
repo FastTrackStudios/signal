@@ -2560,9 +2560,9 @@ fn detect_pitch(samples: &[f32], rate: f32) -> Option<f32> {
     let mut best_lag = 0usize;
     let mut best = 0.0f32;
     let mut norms = vec![0.0f32; max_lag + 2];
-    for lag in min_lag..max_lag {
+    for (lag, slot) in norms.iter_mut().enumerate().take(max_lag).skip(min_lag) {
         let v = acf(lag);
-        norms[lag] = v;
+        *slot = v;
         if v > best {
             best = v;
             best_lag = lag;
@@ -2654,7 +2654,7 @@ fn spectrum_bins(samples: &[f32], rate: f32, bins: usize) -> Vec<f32> {
     // Log-spaced bins 20 Hz .. 20 kHz, peak magnitude per bin.
     let mut out = vec![-90.0f32; bins];
     let hz_per = rate / n as f32;
-    for b in 0..bins {
+    for (b, slot) in out.iter_mut().enumerate() {
         let f0 = 20.0 * (1000.0f32).powf(b as f32 / bins as f32);
         let f1 = 20.0 * (1000.0f32).powf((b + 1) as f32 / bins as f32);
         let (k0, k1) = (
@@ -2666,7 +2666,7 @@ fn spectrum_bins(samples: &[f32], rate: f32, bins: usize) -> Vec<f32> {
             let mag = (re[k] * re[k] + im[k] * im[k]).sqrt() / (n as f32 / 4.0);
             peak = peak.max(mag);
         }
-        out[b] = if peak > 0.0 {
+        *slot = if peak > 0.0 {
             (20.0 * peak.log10()).clamp(-90.0, 0.0)
         } else {
             -90.0

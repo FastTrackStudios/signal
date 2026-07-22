@@ -39,6 +39,7 @@ enum Mode {
 struct SynthState {
     status: Signal<SynthStatus>,
     presets: Signal<Vec<SynthPreset>>,
+    #[allow(dead_code, reason = "seeded from the rig snapshot but not yet read by any view — module-tree view isn't wired up here yet")]
     tree: Signal<SynthNode>,
     midi: Signal<Vec<MidiEvent>>,
 }
@@ -1436,11 +1437,14 @@ fn EnvBlock(title: String, color: String) -> Element {
 /// arming callback, plus the shared `edit` (A/D/S/R) and `extras` (hold + curve
 /// power) buffers and the current selection — so a graph and its knob row both
 /// mutate one source of truth.
+type BeginEnvDragCallback =
+    Callback<(Signal<Option<std::rc::Rc<MountedData>>>, Handle, f64, f64, f64, f64)>;
+
 #[derive(Clone, Copy)]
 struct EnvHooks {
     amp_svg: Signal<Option<std::rc::Rc<MountedData>>>,
     fenv_svg: Signal<Option<std::rc::Rc<MountedData>>>,
-    begin: Callback<(Signal<Option<std::rc::Rc<MountedData>>>, Handle, f64, f64, f64, f64)>,
+    begin: BeginEnvDragCallback,
     edit: Signal<Vec<SynthLayer>>,
     extras: Signal<Vec<LayerEnvExtra>>,
     sel: Signal<usize>,

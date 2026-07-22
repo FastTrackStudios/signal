@@ -86,7 +86,7 @@ pub fn LevelMeter(props: LevelMeterProps) -> Element {
             // Peak hold indicator
             if let Some(peak) = props.peak {
                 {
-                    let peak_pct = (peak.clamp(0.0, 1.0) * 100.0);
+                    let peak_pct = peak.clamp(0.0, 1.0) * 100.0;
                     let peak_style = if is_vertical {
                         format!("bottom: {peak_pct}%; width: 100%; height: 2px; position: absolute;")
                     } else {

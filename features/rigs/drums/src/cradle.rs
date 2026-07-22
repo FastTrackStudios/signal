@@ -418,7 +418,7 @@ mod tests {
         assert_eq!(m.cables, vec![(1, 2), (2, 3)]);
         assert_eq!(m.strips.len(), 2);
         assert_eq!(m.strips[0].name, "Master Bus");
-        assert!((m.strips[1].level - 0.7071).abs() < 1e-4);
+        assert!((m.strips[1].level - std::f32::consts::FRAC_1_SQRT_2).abs() < 1e-4);
         assert!((m.strips[1].pan + 0.5).abs() < 1e-6);
         assert!(m.strips[1].mute);
         assert!(!m.strips[1].solo);

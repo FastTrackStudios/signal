@@ -13,6 +13,14 @@
 //! installed, fasttrackstudio keeps itself (and the engine binaries it
 //! ships next to) current through this module.
 
+//! Plugin bundle note (issue #31): the FTS plugin suite has its own
+//! release asset (fts-plugins-v*-<platform>.tar.gz) and a working
+//! manifest-driven engine in `fts-installer plugins install|uninstall|
+//! list` (apps/installer/src/plugins.rs). When this updater grows its
+//! network half, the Settings UI gets a Plugins section driving that
+//! same flow: resolve asset by prefix → download+verify → install into
+//! ~/.clap + ~/.vst3 → record MANIFEST/VERSION for update checks.
+
 /// Release feed: codeberg releases API for the monorepo.
 /// (Placeholder — releases are not published yet.)
 pub const FEED_URL: &str = "https://codeberg.org/api/v1/repos/FastTrackStudios/FastTrackStudio/releases?limit=1";
@@ -38,11 +46,13 @@ pub enum UpdateStatus {
     UpToDate,
     #[allow(dead_code)]
     Available(UpdateInfo),
+    #[allow(dead_code, reason = "STUB — no code path produces a network failure yet; the network half is deliberately unimplemented")]
     Failed(String),
 }
 
 /// The update pipeline. One real implementation will exist
 /// ([`CodebergUpdater`]); the trait keeps the UI testable.
+#[allow(dead_code, reason = "STUB trait — download/apply are the not-yet-implemented network/install halves described at the top of this file")]
 pub trait Updater {
     /// Query [`FEED_URL`] and compare against [`current_version`].
     fn check_for_updates(&self) -> UpdateStatus;

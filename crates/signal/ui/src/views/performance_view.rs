@@ -464,7 +464,7 @@ pub fn PerformanceView(props: PerformanceViewProps) -> Element {
                 class: "flex-1 overflow-y-auto",
                 PerfSceneGrid {
                     scenes: props.scenes.clone(),
-                    on_scene_select: props.on_scene_select.clone(),
+                    on_scene_select: props.on_scene_select,
                 }
             }
 
@@ -473,15 +473,15 @@ pub fn PerformanceView(props: PerformanceViewProps) -> Element {
                 value: props.morph_value,
                 scene_a: props.morph_scene_a.clone(),
                 scene_b: props.morph_scene_b.clone(),
-                on_change: props.on_morph_change.clone(),
+                on_change: props.on_morph_change,
             }
 
             // Snapshot bank
             if !props.snapshot_slots.is_empty() {
                 SnapshotBank {
                     slots: props.snapshot_slots.clone(),
-                    on_slot_select: props.on_slot_select.clone(),
-                    on_slot_store: props.on_slot_store.clone(),
+                    on_slot_select: props.on_slot_select,
+                    on_slot_store: props.on_slot_store,
                 }
             }
 
@@ -489,8 +489,8 @@ pub fn PerformanceView(props: PerformanceViewProps) -> Element {
             if let Some(nav) = &props.song_nav {
                 SongNav {
                     state: nav.clone(),
-                    on_prev_section: props.on_prev_section.clone(),
-                    on_next_section: props.on_next_section.clone(),
+                    on_prev_section: props.on_prev_section,
+                    on_next_section: props.on_next_section,
                 }
             }
         }

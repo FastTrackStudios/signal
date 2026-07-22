@@ -1,0 +1,25 @@
+[package]
+name = "trigger-plugin"
+version.workspace = true
+edition = "2021"          # matches the nice-plug plugin stack (level-plugin)
+authors.workspace = true
+license.workspace = true
+description = "FTS Trigger — CLAP/VST3 drum-trigger plugin (audio in → sample-accurate MIDI notes out + passthrough) over the trigger engine"
+
+[lib]
+# cdylib → the loadable CLAP/VST3 binary; lib → tests + a future standalone host.
+crate-type = ["cdylib", "lib"]
+
+[dependencies]
+# Plugin framework. `nice_plug` must be a DIRECT dep: `#[derive(Params)]` and
+# `nice_export_clap!`/`nice_export_vst3!` expand to absolute `::nice_plug::…`
+# paths, so the crate has to be nameable here. `vst3` is on by default.
+nice-plug.workspace = true
+
+# The DSP facade (re-exports trigger-dsp). Never depend on trigger-dsp directly.
+trigger.workspace = true
+# The full Dioxus plugin editor (analysis waveform, params, control view) —
+# `native` pulls nice-plug-dioxus/Blitz.
+trigger-ui = { workspace = true, features = ["native"] }
+# For the editor glue (DioxusState + create_dioxus_editor_with_state).
+nice-plug-dioxus.workspace = true

@@ -70,7 +70,7 @@ pub fn BlockCustomGui(props: BlockCustomGuiProps) -> Element {
                         let param_id = param.id().to_string();
                         let param_name = param.name().to_string();
                         let value = param.value().get();
-                        let on_change = props.on_param_change.clone();
+                        let on_change = props.on_param_change;
                         rsx! {
                             CuratedKnob {
                                 key: "{param_id}",

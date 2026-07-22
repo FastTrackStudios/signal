@@ -411,8 +411,8 @@ fn LibraryBrowser(
                 for lib in libraries {
                     {
                         let lib_id = lib.id;
-                        let tog = on_toggle_library.clone();
-                        let sel = on_select_patch.clone();
+                        let tog = on_toggle_library;
+                        let sel = on_select_patch;
                         rsx! {
                             LibraryRow {
                                 key: "{lib_id}",

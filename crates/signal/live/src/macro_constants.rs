@@ -95,11 +95,11 @@ mod tests {
     #[test]
     fn test_constants_are_reasonable() {
         // Sanity checks for configuration values
-        assert!(performance::MAX_KNOBS_PER_BANK > 0);
-        assert!(performance::RECOMMENDED_UPDATE_FREQUENCY_HZ > 0);
-        assert!(validation::MIN_PARAM_VALUE == 0.0);
-        assert!(validation::MAX_PARAM_VALUE == 1.0);
-        assert!(validation::MIN_KNOB_ID_LENGTH >= 1);
+        const { assert!(performance::MAX_KNOBS_PER_BANK > 0) };
+        const { assert!(performance::RECOMMENDED_UPDATE_FREQUENCY_HZ > 0) };
+        const { assert!(validation::MIN_PARAM_VALUE == 0.0) };
+        const { assert!(validation::MAX_PARAM_VALUE == 1.0) };
+        const { assert!(validation::MIN_KNOB_ID_LENGTH >= 1) };
     }
 
     #[test]

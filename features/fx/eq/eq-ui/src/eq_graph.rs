@@ -251,7 +251,7 @@ pub fn EqGraph(
     // Track-name source. Optional: standalone/plugin inject it via context; if
     // absent, `Auto` simply resolves to off.
     let track_provider =
-        use_hook(|| try_consume_context::<Arc<dyn crate::cheatsheet::TrackInfoProvider>>());
+        use_hook(try_consume_context::<Arc<dyn crate::cheatsheet::TrackInfoProvider>>);
 
     // Empirically-discovered wrapper bounds. The canvas's content_box
     // (cfg.rect_w/rect_h) and the wrapper's element_coordinate space
@@ -635,6 +635,25 @@ pub fn EqGraph(
             onmousedown: move |evt: MouseEvent| {
                 if disabled { return; }
                 let coords = evt.element_coordinates();
+                // Interaction trace (FTS_EQ_TRACE=1): one line per press with
+                // every input the hit-test depends on — the tool for
+                // diagnosing dead clicks in embedded hosts (issue #31).
+                let trace = std::env::var_os("FTS_EQ_TRACE").is_some();
+                if trace {
+                    let (tx, ty) = transform_coords(coords.x, coords.y);
+                    let near = {
+                        let bv = bands.read();
+                        crate::eq_graph_interaction::nearest_band(&bv, mapper, tx, ty, 15.0)
+                    };
+                    eprintln!(
+                        "[EQ-TRACE] mousedown elt=({:.1},{:.1}) xy=({:.1},{:.1}) inside={} graph={}x{} near={:?} btn={:?}",
+                        coords.x, coords.y, tx, ty,
+                        mapper.is_inside(tx, ty),
+                        graph_width as i32, graph_height as i32,
+                        near.map(|(i, d)| (i, d as i32)),
+                        evt.trigger_button(),
+                    );
+                }
                 // Record the max element_coordinate we see — empirically
                 // pins the true wrapper size when blitz's content_box
                 // reporting is slightly off.
@@ -892,7 +911,10 @@ pub fn EqGraph(
                                     "▲ {fr.too_much}"
                                 }
                                 div {
-                                    key: "tl-{fr.lo_hz}",
+                                    // Keys are only allowed on the first node of a
+                                    // multi-node rsx block (dioxus deprecation lint);
+                                    // the `tm-{fr.lo_hz}` key above already uniquely
+                                    // identifies this loop iteration's fragment.
                                     style: format!(
                                         "position:absolute; left:{cx}px; top:{tl_y}px; \
                                          transform:translateX(-50%); z-index:7; \

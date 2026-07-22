@@ -84,7 +84,7 @@ pub fn NodeGraphView(props: NodeGraphViewProps) -> Element {
     let performance_mode = canvas_mode() == CanvasViewMode::Performance;
 
     // Helper to emit graph changes
-    let on_change = props.on_graph_change.clone();
+    let on_change = props.on_graph_change;
     let emit_change = move |g: &NodeGraph| {
         if let Some(ref cb) = on_change {
             cb.call(g.clone());

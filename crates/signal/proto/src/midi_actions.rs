@@ -252,7 +252,7 @@ mod tests {
             let trigger = MidiActionTrigger::cc_ch(0, 101 + i);
             let action = map
                 .find(&trigger)
-                .expect(&format!("CC {} should be bound", 101 + i));
+                .unwrap_or_else(|| panic!("CC {} should be bound", 101 + i));
             assert!(
                 action.starts_with("fts.signal.load_variant."),
                 "CC {} → {action}",

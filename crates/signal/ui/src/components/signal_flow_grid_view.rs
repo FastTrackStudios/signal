@@ -99,8 +99,8 @@ pub fn SignalFlowGridView(
                         GridBlockCell {
                             key: "{block.id}",
                             block: block.clone(),
-                            on_click: on_block_click.clone(),
-                            on_bypass: on_block_bypass.clone(),
+                            on_click: on_block_click,
+                            on_bypass: on_block_bypass,
                         }
                     }
                 }
@@ -136,7 +136,7 @@ pub fn SignalFlowGridView(
             // Module browser modal
             if let Some(ref cb) = on_add_block {
                 {
-                    let cb = cb.clone();
+                    let cb = *cb;
                     rsx! {
                         ModuleBrowserModal {
                             is_open: show_add_modal(),
@@ -222,7 +222,7 @@ fn GridBlockCell(
                 short_label: block.short_label.clone(),
                 bypassed: block.bypassed,
                 block_id,
-                on_bypass: on_bypass.clone(),
+                on_bypass: on_bypass,
                 compact: block.size.width == 1 && block.size.height == 1,
             }
 

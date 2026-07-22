@@ -54,10 +54,15 @@ impl SampleEngine {
         release_frames: usize,
         rr_idx: usize,
     ) -> Option<Voice> {
-        let (path, sampled_note) = match self
-            .patch
-            .resolve(section, artic_id, mic, dynamic, note, direction, rr_idx)
-        {
+        let (path, sampled_note) = match self.patch.resolve(&crate::sample_map::SampleQuery {
+            section_id: section,
+            articulation_id: artic_id,
+            mic_id: mic,
+            dynamic,
+            target_note: note,
+            direction,
+            rr: rr_idx,
+        }) {
             Some(resolved) => resolved,
             None => {
                 self.sample_misses

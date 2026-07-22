@@ -1,0 +1,21 @@
+[package]
+name = "trigger-dsp"
+version.workspace = true
+edition = "2021"          # matches sibling fx DSP crates (comp-dsp, eq-dsp)
+authors.workspace = true
+license.workspace = true
+description = "trigger-dsp — drum trigger engine: transient/onset detection (envelope state machine + spectral flux family), velocity extraction, sidechain filtering, and sample playback. Imported from the legacy FTS-Trigger."
+
+[dependencies]
+# fts-dsp's monorepo successor (AudioConfig, Processor, db, EnvelopeFollower).
+audiocore-dsp = { workspace = true }
+# Sidechain HPF/LPF + multiband crossover filters.
+eq-dsp = { workspace = true }
+# Spectral onset detection, HPSS, fingerprinting. std-only crate (see lib.rs
+# platform note) — same exemption as reverb-dsp.
+rustfft = "6.2"
+
+[dev-dependencies]
+approx = { workspace = true }
+# For the #[ignore] real-drum-multitrack tests (tests/drum_material.rs).
+symphonia = { version = "0.5", features = ["wav", "pcm"] }

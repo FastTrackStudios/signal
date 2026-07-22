@@ -147,8 +147,6 @@ pub fn CreateModal(
     );
 
     let do_submit = {
-        let on_submit = on_submit.clone();
-        let has_templates = has_templates;
         move |_: ()| {
             if name().trim().is_empty() {
                 return;
@@ -259,7 +257,7 @@ pub fn CreateModal(
                             "autofocus": true,
                             oninput: move |e| name.set(e.value().clone()),
                             onkeydown: {
-                                let mut do_submit = do_submit.clone();
+                                let mut do_submit = do_submit;
                                 move |e| {
                                     if e.key() == Key::Enter {
                                         do_submit(());
@@ -344,7 +342,7 @@ pub fn CreateModal(
                                 {btn_class} transition-colors",
                         disabled: !can_submit,
                         onclick: {
-                            let mut do_submit = do_submit.clone();
+                            let mut do_submit = do_submit;
                             move |_| do_submit(())
                         },
                         "Create"
