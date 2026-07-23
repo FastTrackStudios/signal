@@ -1352,7 +1352,19 @@ impl VoicePool {
             return;
         }
         let nmics = outputs.len();
+        let len = outputs[0].len();
         for v in &mut self.voices {
+            // Solo filter: muted voices render into a discard buffer so their
+            // lifecycle (and every soloed note's timing) is unchanged.
+            if self.solo_notes.as_ref().is_some_and(|s| !s.contains(&v.note)) {
+                if self.solo_scratch.len() < len {
+                    self.solo_scratch.resize(len, 0.0);
+                }
+                let scratch = &mut self.solo_scratch[..len];
+                scratch.fill(0.0);
+                v.render_block(scratch);
+                continue;
+            }
             let idx = match v.mic_index {
                 Some(i) if (i as usize) < nmics => i as usize,
                 _ => 0,
@@ -1375,7 +1387,17 @@ impl VoicePool {
             return;
         }
         let nbuses = outputs.len() / nmics;
+        let len = outputs[0].len();
         for v in &mut self.voices {
+            if self.solo_notes.as_ref().is_some_and(|s| !s.contains(&v.note)) {
+                if self.solo_scratch.len() < len {
+                    self.solo_scratch.resize(len, 0.0);
+                }
+                let scratch = &mut self.solo_scratch[..len];
+                scratch.fill(0.0);
+                v.render_block(scratch);
+                continue;
+            }
             let want = match v.artic_class {
                 ArticClass::Longs => route[0],
                 ArticClass::Shorts => route[1],

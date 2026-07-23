@@ -254,6 +254,10 @@ fn main() -> eyre::Result<()> {
         }
         rig.set_solo_notes(ID, None);
 
+        // Metronome click over the full render length.
+        let click = signal_sampler::report::click_track(res.audio.len() / 2, SR, *bpm, 4);
+        write_wav(&PathBuf::from(format!("target/qa_{name}.click.wav")), &click)?;
+
         // Boundary marks: note onsets (first = attack, rest = transitions) and
         // phrase-end note-offs. Frames come straight from the notated grid.
         let mut marks: Vec<Mark> = Vec::new();
@@ -389,6 +393,7 @@ fn main() -> eyre::Result<()> {
             // The QA grid is anchored at qn 0 = frame 0 (same basis as the
             // boundary labels); 4/4 throughout.
             tempo: Some((*bpm, 4)),
+            click_href: Some(format!("qa_{name}.click.wav")),
         };
         let data = signal_sampler::report::render_report_json(
             &format!("qa_{name}"),

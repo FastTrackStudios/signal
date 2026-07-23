@@ -64,6 +64,9 @@ pub struct ReportSources {
     /// Musical grid for the beat ruler: `(bpm, beats_per_bar)`, anchored so
     /// beat 1 of bar 1 is at frame 0. `None` = no ruler (free-time render).
     pub tempo: Option<(f64, u32)>,
+    /// Relative href of a metronome click WAV (same length/rate as the mix),
+    /// toggled on as a second synced audio layer. `None` = no click.
+    pub click_href: Option<String>,
 }
 
 /// Max computed loop-wrap ticks recorded per voice (a 30 s held note with a
@@ -146,6 +149,12 @@ pub fn render_report_json(
     for e in &sources.trace.events {
         match &e.kind {
             TraceKind::VoiceSpawn(v) => {
+                // Hide inaudible layers: the CC1 multi-layer sustains spawn
+                // one voice per dynamic, most at gain≈0 — drop those so only
+                // the layers actually carrying sound draw a row.
+                if v.gain.abs() < 0.004 {
+                    continue;
+                }
                 voices.push(voice_json(e.frame, e.line, v, ends.get(&v.voice_id).copied(), frames));
             }
             TraceKind::NoteOff { note } => {
@@ -189,6 +198,7 @@ pub fn render_report_json(
         "audio_href": sources.audio_href,
         "stems": stems,
         "tempo": sources.tempo.map(|(bpm, bpb)| json!({ "bpm": bpm, "beats_per_bar": bpb })),
+        "click_href": sources.click_href,
         "peaks": { "block": block, "min": mins, "max": maxs },
         "voices": voices,
         "events": events,
@@ -241,6 +251,48 @@ pub fn sample_report_json(name: &str, entries: &[SampleView]) -> Value {
         })
         .collect();
     json!({ "mode": "samples", "name": name, "samples": samples })
+}
+
+/// Generate an interleaved-stereo metronome click over `total_frames`:
+/// a short decaying sine at each beat (higher/louder on the downbeat),
+/// anchored to beat 1 of bar 1 at frame 0. Same rate/length as the mix so
+/// the viewer can overlay it as a second synced audio layer.
+pub fn click_track(
+    total_frames: usize,
+    sample_rate: u32,
+    bpm: f64,
+    beats_per_bar: u32,
+) -> Vec<f32> {
+    let mut out = vec![0.0f32; total_frames * 2];
+    if bpm <= 0.0 {
+        return out;
+    }
+    let fpb = 60.0 / bpm * sample_rate as f64;
+    let bpbar = beats_per_bar.max(1);
+    let click_len = (sample_rate as f64 * 0.035) as usize; // 35 ms blip
+    let sr = sample_rate as f32;
+    let mut beat = 0usize;
+    loop {
+        let start = (beat as f64 * fpb).round() as usize;
+        if start >= total_frames {
+            break;
+        }
+        let downbeat = (beat as u32) % bpbar == 0;
+        let (freq, amp) = if downbeat { (1500.0f32, 0.6) } else { (1000.0f32, 0.4) };
+        for i in 0..click_len {
+            let f = start + i;
+            if f >= total_frames {
+                break;
+            }
+            let t = i as f32 / sr;
+            let env = (-t * 90.0).exp(); // fast decay
+            let s = (t * freq * std::f32::consts::TAU).sin() * env * amp;
+            out[f * 2] += s;
+            out[f * 2 + 1] += s;
+        }
+        beat += 1;
+    }
+    out
 }
 
 /// Write a report HTML file: the shared template + injected JSON.

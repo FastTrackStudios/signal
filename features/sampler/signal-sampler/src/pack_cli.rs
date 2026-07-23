@@ -1486,6 +1486,18 @@ fn render_report(
         stems.push((*note, note_name(*note), fname));
     }
 
+    // Metronome click (only meaningful with a tempo).
+    let click_href = match bpm {
+        Some(b) => {
+            let click =
+                crate::report::click_track(audio.len() / 2, SR, b, beats_per_bar);
+            let fname = format!("{stem_base}.click.wav");
+            write_wav(&wav_path.with_file_name(&fname), &click)?;
+            Some(fname)
+        }
+        None => None,
+    };
+
     let sources = crate::report::ReportSources {
         trace,
         fires,
@@ -1494,6 +1506,7 @@ fn render_report(
         audio_href,
         stems,
         tempo: bpm.map(|b| (b, beats_per_bar)),
+        click_href,
     };
     let name = format!(
         "{} — {notes}",

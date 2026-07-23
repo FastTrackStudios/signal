@@ -96,6 +96,26 @@ function renderMode() {
     DATA.stems.forEach(s => mkbtn(s.label, s.href, s.note));
     top.appendChild(bar);
   }
+  // Click track: a second <audio> kept in sync, toggled as an overlay layer.
+  if (DATA.click_href) {
+    const ct = document.createElement('audio');
+    ct.id = 'clicktrack'; ct.src = DATA.click_href; ct.preload = 'auto';
+    top.appendChild(ct);
+    const cb = document.createElement('button');
+    cb.textContent = '♩ click';
+    cb.style.cssText =
+      'background:#1b1f26;color:#d8dce2;border:1px solid #3a404c;border-radius:3px;' +
+      'padding:2px 8px;font:inherit;cursor:pointer';
+    cb.onclick = () => {
+      const on = ct.dataset.on !== '1';
+      ct.dataset.on = on ? '1' : '0';
+      ct.volume = on ? 1 : 0;
+      cb.style.background = on ? '#31506e' : '#1b1f26';
+      const p = document.getElementById('player');
+      if (p && on && !p.paused) { ct.currentTime = p.currentTime; ct.play().catch(() => {}); }
+    };
+    top.appendChild(cb);
+  }
   const legend = document.getElementById('legend');
   const kinds = new Set(DATA.voices.map(v => v.kind));
   ['transition','fire','noteoff','miss','marker','emitted'].forEach(k => kinds.add(k));
@@ -215,23 +235,45 @@ function renderMode() {
         ctx.fillText(`${nm(v.note)} ${v.articulation}`, x0 + 3, y + ROW_H - 5);
       }
     });
-    // event lane
-    const evY = WAVE_H + AXIS + ROWS * ROW_H + 6;
-    const laneOf = { transition: 0, fire: 1, noteoff: 2, marker: 3, emitted: 3, miss: 4 };
+    // Events annotated in a strip JUST BELOW the note they concern (follow the
+    // action instead of a detached bottom lane). The relevant note is the
+    // transition/fire DESTINATION, else the event's own note.
+    const evNote = e => e.kind === 'transition' || e.kind === 'fire' ? e.to
+      : (e.note != null ? e.note : null);
+    const rowOfNote = (note, frame) => {
+      if (note == null) return null;
+      let best = null;
+      for (const v of voices) {
+        if (v.note !== note) continue;
+        const end = v.end ?? DATA.frames;
+        if (frame >= v.spawn - 4800 && frame <= end + 4800) {
+          if (!best || v.spawn > best.spawn) best = v; // most recent match
+        }
+      }
+      return best ? best._rect[1] : null;
+    };
+    const fallbackY = WAVE_H + AXIS + ROWS * ROW_H + 4;
+    // Stagger sub-lanes so coincident events on the same note don't overlap.
+    const subLane = { transition: 0, fire: 0, noteoff: 1, marker: 1, emitted: 1, miss: 2 };
     for (const e of DATA.events) {
-      const x = X(e.frame), y = evY + (laneOf[e.kind] ?? 4) * 15;
-      e._rect = [x - 3, y, 7, 13];
+      const x = X(e.frame);
+      const rowY = rowOfNote(evNote(e), e.frame);
+      const y = (rowY != null ? rowY + ROW_H - 1 : fallbackY) + (subLane[e.kind] ?? 2) * 4;
+      e._rect = [x - 3, y, 7, 9];
       ctx.fillStyle = COL[e.kind] || '#888';
-      if (e.kind === 'miss') { ctx.fillRect(x - 3, y, 7, 13); }
-      else ctx.fillRect(x - 1, y, 3, 13);
+      if (e.kind === 'miss') ctx.fillRect(x - 3, y, 7, 9);
+      else {
+        // little downward triangle pointing at the note row above
+        ctx.beginPath();
+        ctx.moveTo(x - 3, y + 8); ctx.lineTo(x + 3, y + 8); ctx.lineTo(x, y);
+        ctx.closePath(); ctx.fill();
+      }
+      // fire→arrival span shows the CSS transition latency in-place
       if (e.kind === 'fire' && e.arrival != null) {
-        ctx.fillStyle = COL.fire + '77';
-        ctx.fillRect(x, y + 5, Math.max(X(e.arrival) - x, 1), 3);
+        ctx.fillStyle = COL.fire + '99';
+        ctx.fillRect(x, y + 3, Math.max(X(e.arrival) - x, 1), 2);
       }
     }
-    ctx.fillStyle = COL.axis;
-    ['transition','fire','noteoff','marker','miss'].forEach((k, i) =>
-      ctx.fillText(k, 2, evY + i * 15 + 11));
     // Playhead cursor — full height, drawn last.
     const p = document.getElementById('player');
     if (p && !isNaN(p.currentTime)) {
@@ -344,6 +386,7 @@ function renderMode() {
   (function raf() {
     const p = document.getElementById('player');
     if (p && !p.paused) {
+      syncClick();
       const pf = p.currentTime * DATA.sample_rate;
       if (pf > view.b) {
         const span = view.b - view.a;
@@ -396,10 +439,19 @@ function renderMode() {
   }
   // Redraw the playhead on scrubs via the audio element's own controls.
   const player = document.getElementById('player');
+  const clickOn = () => { const c = document.getElementById('clicktrack'); return c && c.dataset.on === '1'; };
+  function syncClick() {
+    const c = document.getElementById('clicktrack');
+    if (!c || !clickOn()) return;
+    if (Math.abs(c.currentTime - player.currentTime) > 0.03) c.currentTime = player.currentTime;
+    if (!player.paused && c.paused) c.play().catch(() => {});
+    if (player.paused && !c.paused) c.pause();
+  }
   if (player) {
-    player.addEventListener('seeked', draw);
-    player.addEventListener('pause', draw);
-    player.addEventListener('timeupdate', () => { if (player.paused) draw(); });
+    player.addEventListener('seeked', () => { syncClick(); draw(); });
+    player.addEventListener('play', syncClick);
+    player.addEventListener('pause', () => { const c = document.getElementById('clicktrack'); if (c) c.pause(); draw(); });
+    player.addEventListener('timeupdate', () => { syncClick(); if (player.paused) draw(); });
   }
   draw();
 }
