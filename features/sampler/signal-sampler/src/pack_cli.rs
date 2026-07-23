@@ -1399,12 +1399,29 @@ fn render_report(
     beats_per_bar: u32,
     pure: bool,
 ) -> Result<()> {
+    use crate::document::{DocCc, DocNote, DocumentRenderOptions, TempoPoint, TrackDocument};
     const SR: u32 = 48_000;
     const ID: &str = "report";
     const BLOCK: u64 = 256;
+    const SEED: u64 = 0x00DA_11A5_EED0_0001;
     let script = parse_note_script(notes)?;
 
-    // Event timeline: (frame, on?, note, velocity).
+    // What one render pass returns (rebased to the audible window).
+    type PassOut = (
+        Vec<f32>,
+        crate::engine::RenderTrace,
+        Vec<crate::engine::LegatoFireEvent>,
+        Vec<(u64, String, u8, u8)>, // markers (frame, kind, note, line)
+        Vec<crate::engine::EmittedMarker>,
+    );
+
+    // With a tempo, render in DOCUMENT mode so the scheduler PREFIRES each
+    // note — the sample starts BEFORE the beat and its arrival lands ON the
+    // beat (real ARA-style anticipation), exactly what the grid ruler checks
+    // against. Without a tempo, fall back to reactive note-on (free time).
+    let document = bpm.is_some();
+    let bpm_v = bpm.unwrap_or(120.0);
+    // Reactive-path timeline.
     let mut edges: Vec<(u64, bool, u8, u8)> = Vec::new();
     let mut end = 0.0f32;
     for n in &script {
@@ -1412,12 +1429,10 @@ fn render_report(
         edges.push((((n.start + n.dur) * SR as f32) as u64, false, n.note, n.velocity));
         end = end.max(n.start + n.dur);
     }
-    edges.sort_by_key(|e| (e.0, e.1)); // offs before ons at the same frame
+    edges.sort_by_key(|e| (e.0, e.1));
     let total_frames = ((end + tail) * SR as f32) as u64;
 
-    // One render pass with an optional per-note solo (None = full mix).
-    // Solo renders are bit-identical in timing — only muted notes drop out.
-    let render_pass = |solo: Option<std::collections::BTreeSet<u8>>| -> Result<(Vec<f32>, crate::engine::RenderTrace, Vec<crate::engine::LegatoFireEvent>)> {
+    let render_pass = |solo: Option<std::collections::BTreeSet<u8>>| -> Result<PassOut> {
         let rig = crate::SamplerRig::new_offline_with_cache_budget(SR, Some(8 * 1024 * 1024 * 1024));
         rig.load_pack(ID, pack_path)?;
         // note_on dispatches on MIDI channel 0 — an unmapped instrument is
@@ -1427,11 +1442,68 @@ fn render_report(
         rig.set_trace_enabled(ID, true);
         rig.set_legato_fire_log_enabled(ID, true);
         rig.set_solo_notes(ID, solo);
-        rig.cc(ID, 1, cc1);
-        rig.cc(ID, 2, cc2);
         for n in &script {
             rig.warm_note(ID, n.note);
         }
+
+        if document {
+            // Seconds → quarter-notes at the given tempo. Notes touch/overlap
+            // a hair so the engine reads them as one legato line.
+            let sec_to_qn = |s: f32| (s as f64) * bpm_v / 60.0;
+            let notes_doc: Vec<DocNote> = script
+                .iter()
+                .map(|n| DocNote {
+                    start_qn: sec_to_qn(n.start),
+                    end_qn: sec_to_qn(n.start + n.dur) + 1.0 / 64.0,
+                    chan: 0,
+                    pitch: n.note,
+                    vel: n.velocity,
+                })
+                .collect();
+            let doc = TrackDocument {
+                version: 1,
+                seed: SEED,
+                auto_divisi: false,
+                ccs: vec![
+                    DocCc { qn: 0.0, chan: 0, cc: 1, val: cc1 },
+                    DocCc { qn: 0.0, chan: 0, cc: 2, val: cc2 },
+                ],
+                notes: notes_doc,
+                tempo: vec![TempoPoint { qn: 0.0, bpm: bpm_v }],
+            };
+            let res = rig
+                .render_offline_document(ID, &doc, &DocumentRenderOptions::default())
+                .map_err(|e| eyre::eyre!("document render: {e}"))?;
+            // res.audio starts at res.start_frame; trace is engine-absolute.
+            // Rebase everything to the audible window (frame 0 = start_frame).
+            let base = res.start_frame;
+            let mut trace = rig.render_trace(ID);
+            trace.events.retain(|e| e.frame >= base);
+            for e in &mut trace.events {
+                e.frame -= base;
+            }
+            let mut fires = res.transitions.clone();
+            for f in &mut fires {
+                f.frame = f.frame.saturating_sub(base);
+                f.arrival = f.arrival.saturating_sub(base);
+            }
+            let markers: Vec<(u64, String, u8, u8)> = res
+                .markers
+                .iter()
+                .filter(|m| m.frame >= base)
+                .map(|m| (m.frame - base, format!("{:?}", m.kind), m.note, m.line))
+                .collect();
+            let mut emitted = res.emitted_markers.clone();
+            emitted.retain(|m| m.frame >= base);
+            for m in &mut emitted {
+                m.frame -= base;
+            }
+            return Ok((res.audio, trace, fires, markers, emitted));
+        }
+
+        // Reactive (free-time) fallback.
+        rig.cc(ID, 1, cc1);
+        rig.cc(ID, 2, cc2);
         let mut audio = vec![0.0f32; 0];
         let mut cursor = 0u64;
         let mut edge_i = 0;
@@ -1452,7 +1524,7 @@ fn render_report(
             audio.extend_from_slice(&buf);
             cursor += n as u64;
         }
-        Ok((audio, rig.render_trace(ID), rig.legato_fire_log(ID)))
+        Ok((audio, rig.render_trace(ID), rig.legato_fire_log(ID), Vec::new(), Vec::new()))
     };
 
     let write_wav = |path: &Path, audio: &[f32]| -> Result<()> {
@@ -1471,7 +1543,7 @@ fn render_report(
     };
 
     // Full mix (also the source of the trace + fires shown on the timeline).
-    let (audio, trace, fires) = render_pass(None)?;
+    let (audio, trace, fires, markers, emitted) = render_pass(None)?;
     let wav_path = wav.unwrap_or_else(|| out.with_extension("wav"));
     write_wav(&wav_path, &audio)?;
     let audio_href = wav_path.file_name().map(|f| f.to_string_lossy().into_owned());
@@ -1486,7 +1558,7 @@ fn render_report(
         .unwrap_or_else(|| "render".into());
     let mut stems = Vec::new();
     for note in &distinct {
-        let (stem_audio, _, _) =
+        let (stem_audio, _, _, _, _) =
             render_pass(Some(std::iter::once(*note).collect()))?;
         let fname = format!("{stem_base}.n{note}.wav");
         write_wav(&wav_path.with_file_name(&fname), &stem_audio)?;
@@ -1514,8 +1586,8 @@ fn render_report(
     let sources = crate::report::ReportSources {
         trace,
         fires,
-        markers: Vec::new(),
-        emitted: Vec::new(),
+        markers,
+        emitted,
         audio_href,
         stems,
         tempo: bpm.map(|b| (b, beats_per_bar)),
