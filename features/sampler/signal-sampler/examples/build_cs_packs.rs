@@ -372,9 +372,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 (format!("{}mics (\n{rebuilt})\n{}", &b[..bs], &b[be..]), n)
             };
             assert!(n_mics == 1, "{pack_name}: mic {mic:?} not found in engine config");
+            // Keep a config articulation when it belongs to THIS group —
+            // exact membership or prefix match (Pacific groups declare
+            // prefixes; curated config artics like `sus`/`leg` must survive).
             let (body, n_artics) = filter_list_block(&body, "articulations", |e| {
                 entry_field(e, "id")
-                    .map(|id| member_ids.contains(id.as_str()))
+                    .map(|id| {
+                        member_ids.contains(id.as_str())
+                            || group_for(&groups, &artic_to_group, &id) == Some(group.as_str())
+                    })
                     .unwrap_or(false)
             });
 

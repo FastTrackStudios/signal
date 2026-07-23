@@ -128,6 +128,20 @@ enum ZonesCmd {
         #[arg(long)]
         dry_run: bool,
     },
+    /// Normalize Pacific (Performance Samples) articulation ids that bake
+    /// direction/interval/RR/velocity codes into the id string:
+    ///   leg_up2_18      → articulation "leg", direction "up", interval 2
+    ///   legslur_dn3_3   → articulation "legslur", direction "down", interval 3
+    ///   pizzrr3         → articulation "pizz", rr_index 2
+    ///   pluckrr2_64     → articulation "pluck", rr_index 1, vel band 64..
+    /// Idempotent: already-normalized zones are untouched.
+    NormalizePacific {
+        /// A .signalpack or a loose library.styx.
+        target: PathBuf,
+        /// Report what would change without writing.
+        #[arg(long)]
+        dry_run: bool,
+    },
     /// Set scalar fields on matching zones: `--set loop_xfade=4800 …`.
     Set {
         /// A .signalpack (embedded spec is rewritten) or a loose .styx
@@ -195,6 +209,9 @@ pub fn cli_main(argv: impl IntoIterator<Item = OsString>) -> Result<()> {
                     no_validate,
                 },
         } => spec_set(&pack, &spec, no_validate),
+        Cmd::Zones {
+            command: ZonesCmd::NormalizePacific { target, dry_run },
+        } => zones_normalize_pacific(&target, dry_run),
         Cmd::Zones {
             command:
                 ZonesCmd::AppendMissing {
@@ -488,6 +505,117 @@ fn zones_set(
     println!("matched {matched} zone(s), edited {changed}");
     if matched == 0 {
         bail!("no zones matched the filters");
+    }
+    if dry_run {
+        println!("(dry run — nothing written)");
+        return Ok(());
+    }
+    tgt.write(&new_spec)
+}
+
+// ── zones normalize-pacific ──────────────────────────────────────────────────
+
+/// Parsed form of a Pacific baked-suffix articulation id.
+enum PacificId {
+    /// `leg_up2_18` / `legslur_dn3_3` → (family, direction, interval)
+    Legato(String, &'static str, u32),
+    /// `pizzrr3` / `pluckrr2_64` → (family, rr_index, vel_code)
+    RoundRobin(String, u32, Option<u32>),
+}
+
+fn parse_pacific_id(id: &str) -> Option<PacificId> {
+    // leg[variant]_(up|dn)<N>_<velcode>
+    if let Some(rest) = id.strip_prefix("leg") {
+        let mut parts = rest.splitn(3, '_');
+        let variant = parts.next().unwrap_or("");
+        let dir_iv = parts.next()?;
+        let _velcode = parts.next(); // redundant (16+n / n) when present — dropped
+        let (dir, iv) = if let Some(n) = dir_iv.strip_prefix("up") {
+            ("up", n.parse::<u32>().ok()?)
+        } else if let Some(n) = dir_iv.strip_prefix("dn") {
+            ("down", n.parse::<u32>().ok()?)
+        } else {
+            return None;
+        };
+        return Some(PacificId::Legato(format!("leg{variant}"), dir, iv));
+    }
+    // <family>rr<N>[_<velcode>]
+    if let Some(rr_pos) = id.find("rr") {
+        let family = &id[..rr_pos];
+        if family.is_empty() || !family.chars().all(|c| c.is_ascii_alphabetic()) {
+            return None;
+        }
+        let tail = &id[rr_pos + 2..];
+        let (rr_str, vel) = match tail.split_once('_') {
+            Some((rr, v)) => (rr, v.parse::<u32>().ok()),
+            None => (tail, None),
+        };
+        let rr = rr_str.parse::<u32>().ok()?;
+        return Some(PacificId::RoundRobin(family.to_string(), rr, vel));
+    }
+    None
+}
+
+fn zones_normalize_pacific(target: &Path, dry_run: bool) -> Result<()> {
+    let (tgt, spec_text) = Target::open(target)?;
+
+    // First pass: collect velocity-band codes per RR family so band edges can
+    // be derived (codes are band STARTS; e.g. 1/32/64/96 → 0-31/32-63/…).
+    let (_, is, ie, _) = styx_edit::find_list_block(&spec_text, "zones")
+        .ok_or_else(|| eyre::eyre!("spec has no `zones (…)` block"))?;
+    let inner = &spec_text[is..ie];
+    let mut vel_codes: BTreeMap<String, std::collections::BTreeSet<u32>> = BTreeMap::new();
+    for (s, e) in styx_edit::split_entries(inner) {
+        if let Some(id) = styx_edit::entry_field(&inner[s..e], "articulation") {
+            if let Some(PacificId::RoundRobin(fam, _, Some(v))) = parse_pacific_id(&id) {
+                vel_codes.entry(fam).or_default().insert(v);
+            }
+        }
+    }
+    let vel_band = |fam: &str, code: u32| -> (u32, u32) {
+        let codes = &vel_codes[fam];
+        let lo = if code <= 1 { 0 } else { code };
+        let hi = codes
+            .iter()
+            .find(|c| **c > code)
+            .map(|next| next - 1)
+            .unwrap_or(127);
+        (lo, hi)
+    };
+
+    let mut stats: BTreeMap<String, usize> = BTreeMap::new();
+    let (new_spec, changed) = edit_zones(&spec_text, |block| {
+        let id = styx_edit::entry_field(block, "articulation")?;
+        match parse_pacific_id(&id)? {
+            PacificId::Legato(family, dir, interval) => {
+                *stats.entry(format!("{family} (legato)")).or_default() += 1;
+                let mut b = styx_edit::set_entry_field(block, "articulation", &format!("{family:?}"));
+                b = styx_edit::set_entry_field(&b, "direction", &format!("{dir:?}"));
+                b = styx_edit::set_entry_field(&b, "interval", &interval.to_string());
+                b = styx_edit::set_entry_field(&b, "rr_index", "0");
+                Some(b)
+            }
+            PacificId::RoundRobin(family, rr, vel) => {
+                *stats.entry(format!("{family} (rr)")).or_default() += 1;
+                let mut b = styx_edit::set_entry_field(block, "articulation", &format!("{family:?}"));
+                b = styx_edit::set_entry_field(&b, "rr_index", &rr.saturating_sub(1).to_string());
+                if let Some(code) = vel {
+                    let (lo, hi) = vel_band(&family, code);
+                    b = styx_edit::set_entry_field(&b, "vel_min", &lo.to_string());
+                    b = styx_edit::set_entry_field(&b, "vel_max", &hi.to_string());
+                }
+                Some(b)
+            }
+        }
+    })?;
+
+    println!("normalized {changed} zone(s):");
+    for (k, n) in &stats {
+        println!("  {k:<24} {n}");
+    }
+    if changed == 0 {
+        println!("nothing to normalize (already normalized?)");
+        return Ok(());
     }
     if dry_run {
         println!("(dry run — nothing written)");

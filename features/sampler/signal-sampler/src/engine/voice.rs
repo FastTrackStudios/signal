@@ -1076,6 +1076,14 @@ impl VoicePool {
         self.voices.push(voice);
     }
 
+    /// The most recently spawned voice, if any — used to post-configure a
+    /// voice right after a spawn helper ran (e.g. the Pacific release-overlap
+    /// fade). Best-effort: `None` if the incoming voice was dropped by the
+    /// steal policy.
+    pub fn last_spawned_mut(&mut self) -> Option<&mut Voice> {
+        self.voices.last_mut()
+    }
+
     /// Send note-off to all voices playing `note` (except one-shot kinds).
     pub fn note_off(&mut self, note: u8) {
         self.note_off_with_release_frames(note, None);

@@ -1214,6 +1214,10 @@ pub struct ArticulationSpec {
 
     /// ID of the release articulation to trigger on note-off, if any.
     pub release_artic: Option<String>,
+    /// ID of a one-shot ATTACK articulation layered on a fresh note-on of
+    /// this sustain (Pacific atk+sus pairing). The attack voice plays at the
+    /// same CC1 dynamics blend and is independent of legato transitions.
+    pub attack_artic: Option<String>,
     /// Whether separate up/down transition samples exist (legato only).
     pub directional: Option<bool>,
     /// `"full"` = full section range; `"short"` = reduced range.
@@ -1370,6 +1374,29 @@ pub enum ArticulationKind {
 /// Full legato engine specification.
 #[derive(Debug, Clone, Facet)]
 pub struct LegatoEngineSpec {
+    /// Legato model. `@Css` (default): transition-over-sustain with
+    /// velocity-zone pre-delays, OD curves, per-velocity retire fades, −6 dB
+    /// connected-sustain trim + bloom. `@Pacific` (Performance Samples):
+    /// IMMEDIATE interval-addressed transition (no delay machinery at all),
+    /// destination sustain crossfades in at full level over
+    /// [`destination_fade_ms`](Self::destination_fade_ms), the outgoing pair
+    /// fades over [`outgoing_fade_ms`](Self::outgoing_fade_ms), and an
+    /// optional [`release_overlap`](Self::release_overlap) blip of the
+    /// departed note plays under each transition.
+    #[facet(default)]
+    pub style: LegatoStyle,
+    /// Pacific: fade (ms) applied to BOTH the previous transition and the
+    /// previous sustain when a new transition fires (KSP `$thaw1` = 115).
+    #[facet(default = 115)]
+    pub outgoing_fade_ms: u32,
+    /// Pacific: crossfade-in (ms) of the destination sustain under the
+    /// transition sample (KSP fade envelopes ≈ 500 ms).
+    #[facet(default = 500)]
+    pub destination_fade_ms: u32,
+    /// Pacific: play the departed note's release articulation under each
+    /// transition, faded out over `fade_ms` (KSP `legrel` groups, `$amble`
+    /// = 1500 ms). `None` disables the layer.
+    pub release_overlap: Option<ReleaseOverlapSpec>,
     /// Flat zones for libraries with a single legato mode (e.g. brass).
     /// When populated, `expressive` and `low_latency` are typically absent.
     #[facet(default)]
@@ -1456,6 +1483,10 @@ pub struct LegatoEngineSpec {
 impl Default for LegatoEngineSpec {
     fn default() -> Self {
         Self {
+            style: LegatoStyle::default(),
+            outgoing_fade_ms: 115,
+            destination_fade_ms: 500,
+            release_overlap: None,
             zones: Vec::new(),
             expressive: None,
             low_latency: None,
@@ -1623,6 +1654,27 @@ pub struct PortamentoSpec {
     pub trigger_vel_max: u8,
     /// CC controller for portamento volume (default "CC5").
     pub volume_controller: String,
+}
+
+/// Which legato model drives transitions. See [`LegatoEngineSpec::style`].
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Facet)]
+#[repr(u8)]
+pub enum LegatoStyle {
+    /// CSS-family transition-over-sustain with velocity-zone pre-delays.
+    #[default]
+    Css,
+    /// Performance Samples: immediate interval-addressed transitions with a
+    /// full-level destination sustain and optional release-overlap layer.
+    Pacific,
+}
+
+/// Pacific release-overlap layer — the departed note's release articulation
+/// plays under each transition, faded out over `fade_ms`.
+#[derive(Debug, Clone, Facet)]
+pub struct ReleaseOverlapSpec {
+    /// Fade-out (ms) of the overlap voice (KSP `$amble` = 1500).
+    #[facet(default = 1500)]
+    pub fade_ms: u32,
 }
 
 /// Same-note re-trigger (re-bowing / re-tonguing) configuration.

@@ -382,7 +382,17 @@ impl SampleEngine {
         // (real persistent values, indexed by attack-velocity range), so the
         // new pair emerges under them with no inter-note tick. Line-scoped so a
         // unison note held by another divisi line keeps sounding.
-        let (retire_trans_ms, retire_sus_ms) = self.patch.spec.legato_cfg().retire_fades_ms(velocity);
+        let cfg = self.patch.spec.legato_cfg();
+        let pacific = cfg.style == crate::spec::LegatoStyle::Pacific;
+        // Pacific (`$thaw1`): one flat 115 ms fade for BOTH members of the
+        // outgoing pair; CSS: the decoded per-velocity retire tables.
+        let (retire_trans_ms, retire_sus_ms) = if pacific {
+            (cfg.outgoing_fade_ms, cfg.outgoing_fade_ms)
+        } else {
+            cfg.retire_fades_ms(velocity)
+        };
+        let destination_fade_ms = cfg.destination_fade_ms;
+        let release_overlap_ms = cfg.release_overlap.as_ref().map(|r| r.fade_ms);
         let trans_fade = ms_to_frames(retire_trans_ms, self.sample_rate);
         let sus_fade = ms_to_frames(retire_sus_ms, self.sample_rate);
         self.voices
@@ -405,10 +415,19 @@ impl SampleEngine {
         // crossfaded out above (`retire_note_line`).
         if self.patch.is_zoned() {
             self.play_direction = direction.to_string();
-            // 1. One-shot bow-change transition (`%ftriy`).
+            // 1. One-shot bow-change transition (`%ftriy` / Pacific `legato`).
             self.spawn_legato_transition(
                 from_note, to_note, velocity, portamento, sched_lead, ioi_ms,
             );
+            // Pacific release-overlap (`legrel`/`$wbgz2`): the DEPARTED note's
+            // release articulation plays under the transition, fading out over
+            // `$amble` (1.5 s) — the bow-lift of the old note.
+            if pacific {
+                if let Some(fade_ms) = release_overlap_ms {
+                    let fade = ms_to_frames(fade_ms, self.sample_rate);
+                    self.spawn_release_overlap(from_note, fade);
+                }
+            }
             // 2. Main held sustain (`%grhcg`) — full level, declick only,
             //    carrying the −6 dB `$3tsb0` legato makeup. In REACTIVE play
             //    the fire happens AFTER the musical tick (the CSS latency),
@@ -422,10 +441,19 @@ impl SampleEngine {
             //    does in Kontakt.
             let declick = ms_to_frames(SUSTAIN_DECLICK_MS, self.sample_rate);
             let hold = sched_lead.unwrap_or(0) as usize;
-            self.sustain_fade_in = Some((hold, declick));
-            self.legato_sustain = true;
-            self.trigger_zoned_sustain(to_note);
-            self.legato_sustain = false;
+            if pacific {
+                // Pacific `pisus`: the destination sustain crossfades in at
+                // FULL level (no −6 dB `$3tsb0` trim, no bloom) under the
+                // transition, over the KSP's ~500 ms fade envelope.
+                let fade = ms_to_frames(destination_fade_ms, self.sample_rate).max(declick);
+                self.sustain_fade_in = Some((hold, fade));
+                self.trigger_zoned_sustain(to_note);
+            } else {
+                self.sustain_fade_in = Some((hold, declick));
+                self.legato_sustain = true;
+                self.trigger_zoned_sustain(to_note);
+                self.legato_sustain = false;
+            }
             self.sustain_fade_in = None;
             self.line_mut().note = Some(to_note);
             if let Some(i) = log_idx {

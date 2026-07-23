@@ -509,6 +509,91 @@
         assert_eq!(eng.lines[0].note, None);
     }
 
+    /// Pacific-style engine: sustain (`sus` w/ atk+rel links) + destination-
+    /// rooted interval transitions, `legato_engine { style @Pacific }`.
+    fn pacific_legato_engine(notes: &[u8]) -> SampleEngine {
+        let mut styx = String::from(
+            "name \"p\"\n\
+             articulations (\n\
+               {id sus, label Sus, kind @Sustain, release_artic rel, attack_artic atk}\n\
+               {id atk, label Atk, kind @Short}\n\
+               {id rel, label Rel, kind @Release}\n\
+               {id leg, label Leg, kind @Legato, legato_role transition, directional true}\n\
+             )\n\
+             legato_engine {\n\
+               style @Pacific\n\
+               outgoing_fade_ms 115\n\
+               destination_fade_ms 500\n\
+               release_overlap { fade_ms 1500 }\n\
+             }\n\
+             zones (\n",
+        );
+        for &n in notes {
+            for artic in ["sus", "atk", "rel"] {
+                styx.push_str(&format!(
+                    "{{file \"{artic}_{n}.wav\", key_min {n}, key_max {n}, root_key {n}, vel_min 0, vel_max 127, articulation \"{artic}\"}}\n"
+                ));
+            }
+            // Destination-rooted transitions: every interval 1..=12, both dirs.
+            for dir in ["up", "down"] {
+                for iv in 1..=12u8 {
+                    styx.push_str(&format!(
+                        "{{file \"leg_{dir}{iv}_{n}.wav\", key_min {n}, key_max {n}, root_key {n}, vel_min 0, vel_max 127, articulation \"leg\", direction \"{dir}\", interval {iv}}}\n"
+                    ));
+                }
+            }
+        }
+        styx.push_str(")\n");
+        let spec = crate::LibrarySpec::from_styx(&styx).expect("parse pacific styx");
+        let mut patch = crate::PlayerPatch::from_spec(spec);
+        patch.zone_paths = (0..patch.spec.zones.len())
+            .map(|i| std::path::PathBuf::from(format!("p{i}.wav")))
+            .collect();
+        let mut eng = SampleEngine::new(patch, 48_000, "", "");
+        eng.set_articulation("sus");
+        eng
+    }
+
+    #[test]
+    fn pacific_legato_fires_immediately_and_returns_on_release() {
+        let mut eng = pacific_legato_engine(&[60, 62, 64]);
+        eng.set_legato_fire_log_enabled(true);
+
+        // Sustains are legato-capable under @Pacific with NO vibrato pair.
+        assert!(eng.is_legato_capable_artic("sus"));
+
+        eng.note_on(60, 40);
+        assert_eq!(eng.lines[0].note, Some(60));
+
+        // Soft velocity + fast IOI would arm the CSS Overlap-Delay countdown;
+        // Pacific must fire IMMEDIATELY — never Pending. (Gaps > the 30 ms
+        // auto-divisi chord window so the notes read as a line, not a chord.)
+        render_ms(&mut eng, 50);
+        eng.note_on(62, 40);
+        assert!(
+            matches!(eng.lines[0].state, LegatoState::Idle),
+            "pacific transition must not arm a delay countdown"
+        );
+        assert_eq!(eng.lines[0].note, Some(62));
+
+        render_ms(&mut eng, 50);
+        eng.note_on(64, 40);
+        assert_eq!(eng.lines[0].note, Some(64));
+
+        // Return legato: releasing the sounding note falls back to a held one
+        // immediately (also style Pacific → no Pending).
+        eng.note_off(64);
+        assert!(matches!(eng.lines[0].state, LegatoState::Idle));
+        assert_eq!(eng.lines[0].note, Some(62));
+
+        // Fire log: two forward transitions + one return, all reactive.
+        let log = eng.legato_fire_log();
+        assert_eq!(log.len(), 3, "expected 3 legato fires, got {log:?}");
+        assert_eq!((log[0].from_note, log[0].to_note), (60, 62));
+        assert_eq!((log[1].from_note, log[1].to_note), (62, 64));
+        assert_eq!((log[2].from_note, log[2].to_note), (64, 62));
+    }
+
     #[test]
     fn per_line_mono_legato_is_independent() {
         // Two divisi lines on one engine: each keeps its own mono cursor,

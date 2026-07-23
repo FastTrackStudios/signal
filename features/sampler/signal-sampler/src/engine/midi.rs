@@ -58,6 +58,11 @@ impl SampleEngine {
         ) {
             return false;
         }
+        // Pacific-style libraries have no CC2 vibrato pairs at all — any main
+        // sustain is legato-capable when transition zones exist.
+        if self.patch.spec.legato_cfg().style == crate::spec::LegatoStyle::Pacific {
+            return true;
+        }
         self.find_vibrato_pair_id(artic)
             .and_then(|p| self.find_vibrato_pair_id(&p))
             .as_deref()
@@ -312,6 +317,9 @@ impl SampleEngine {
                     None => {
                         self.play_direction = "up".to_string();
                         self.trigger_zoned_sustain(note);
+                        // Pacific atk+sus: layer the one-shot attack on a
+                        // fresh phrase start (no-op without `attack_artic`).
+                        self.spawn_attack_layer(note);
                         let now = self.frames_rendered;
                         let l = self.line_mut();
                         l.note = Some(note);
@@ -844,6 +852,11 @@ impl SampleEngine {
     /// StrictLive → low_latency, NO exceptions (a CC58 "expressive" request
     /// only takes effect once the mode is Lookahead).
     pub(crate) fn legato_timing(&self, velocity: u8, ioi_frames: u64) -> (u32, bool) {
+        // Pacific: transitions fire IMMEDIATELY — no velocity-zone delays, no
+        // Overlap-Delay curves, no portamento model.
+        if self.patch.spec.legato_cfg().style == crate::spec::LegatoStyle::Pacific {
+            return (0, false);
+        }
         let port_thresh = self
             .patch
             .spec
@@ -1226,6 +1239,42 @@ impl SampleEngine {
         if let Some(idx) = self.find_layer_zone(&rel_id, "", &dynamic, note, rr) {
             let release_gain = self.patch.spec.performance.release_gain;
             self.spawn_zone_voice(idx, note, VoiceKind::Release, release_gain, None, 0.0);
+        }
+    }
+
+    /// Pacific release-overlap: spawn the current articulation's release for
+    /// `note` and immediately ramp it to silence over `fade_frames` — the
+    /// KSP's `legrel` layer (`$wbgz2` faded over `$amble`), the departed
+    /// note's bow-lift sounding UNDER the incoming transition.
+    pub(crate) fn spawn_release_overlap(&mut self, note: u8, fade_frames: usize) {
+        self.spawn_release(note);
+        if let Some(v) = self.voices.last_spawned_mut() {
+            if v.note == note {
+                v.ramp_gain(0.0, fade_frames.max(1));
+            }
+        }
+    }
+
+    /// One-shot ATTACK layer spawned with a fresh sustain note-on (Pacific
+    /// atk+sus pairing, `ArticulationSpec.attack_artic`). Plays at the same
+    /// CC1 dynamics blend; no-op when the articulation declares none.
+    pub(crate) fn spawn_attack_layer(&mut self, note: u8) {
+        let atk_id = self
+            .patch
+            .spec
+            .articulation(&self.articulation)
+            .and_then(|a| a.attack_artic.clone());
+        let Some(atk_id) = atk_id else {
+            return;
+        };
+        let (lo, hi, blend) = self.layers_for_artic(&atk_id);
+        let dynamic = if blend >= 0.5 { hi } else { lo };
+        let rr = self
+            .forced_rr
+            .map(|f| f as usize)
+            .unwrap_or(self.zone_rr_counter);
+        if let Some(idx) = self.find_layer_zone(&atk_id, "", &dynamic, note, rr) {
+            self.spawn_zone_voice(idx, note, VoiceKind::Short, 1.0, None, 0.0);
         }
     }
 

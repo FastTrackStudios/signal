@@ -1,8 +1,16 @@
 // Pacific - Ensemble Strings (Performance Samples, perf063) — engine config.
 //
-// Minimal config: sections + mics + performance. Articulation declarations
-// are synthesized per pack by the builder (Pacific ids carry baked-in
-// RR/velocity/release-variant suffixes — pluckrr3_64, leg_up2_18, …).
+// The legato model is the decoded KSP (scratchpad pacific-16v-decode /
+// _ksp once stashed): IMMEDIATE interval-addressed transitions (no delay
+// zones), destination sustain crossfades in at full level, outgoing pair
+// fades 115 ms ($thaw1), optional release-overlap of the departed note
+// fading over 1.5 s ($amble), rebow via `rep` under CC64, 4 CC1-crossfaded
+// dynamic layers (dyn1-4; velocity never selects dynamics).
+//
+// The legato family articulations below assume the NORMALIZED zone ids
+// (fts signal pack zones normalize-pacific): leg zones carry direction +
+// interval fields; suffixed RR families collapse to plain ids (pizz,
+// spicc, pluck, …) which the pack builder still auto-declares.
 //
 // Note ranges measured from the _patches zone maps (MIDI C4 = 60); string
 // section ranges reach extreme highs via FX/gliss content.
@@ -64,4 +72,87 @@ mics (
 performance {
     zone_pitch_tolerance 2
     attack_placement     start_at_tick
+    // Pacific sustains are UNLOOPED performance recordings — no looped
+    // plateau, so no makeup offset.
+    sustain_makeup_db    0.0
+}
+
+dynamics {
+    sustain_controller CC1
+    // KSP maps CC1 1:1 through an identity table into the 4 recorded layers
+    // (dyn1..dyn4) — even 4-way crossfade bands, ~11 CC of overlap.
+    cc1_layers_4 (
+        {label dyn1, cc_range (0  42)}
+        {label dyn2, cc_range (32 74)}
+        {label dyn3, cc_range (64 106)}
+        {label dyn4, cc_range (96 127)}
+    )
+}
+
+// The performance-legato family (post-normalization ids). Other technique
+// families (marc*, trem*, sord*, whisper*, trill*, spicc, pizz, fx*, harp)
+// are auto-declared by the pack builder until curated here.
+articulations (
+    {
+        id            sus
+        label         Sustain
+        kind          @Sustain
+        dynamics      (dyn1 dyn2 dyn3 dyn4)
+        rr            1
+        dyn_ctrl      cc1
+        release_artic rel
+        attack_artic  atk
+        notes         full
+    }
+    {
+        id       atk
+        label    Attack
+        kind     @Short
+        dynamics (dyn1 dyn2 dyn3 dyn4)
+        rr       1
+        dyn_ctrl cc1
+        notes    full
+    }
+    {
+        id       rel
+        label    Release
+        kind     @Release
+        dynamics (dyn1 dyn2 dyn3 dyn4)
+        rr       1
+        dyn_ctrl cc1
+        notes    full
+    }
+    {
+        // Rebow / repetition — the KSP's susrb pair under CC64. Explicit
+        // retrigger role so same-note re-triggers pick these zones.
+        id          rep
+        label       "Re-bow"
+        kind        @Legato
+        legato_role retrigger
+        dynamics    (dyn1 dyn2 dyn3 dyn4)
+        rr          3
+        dyn_ctrl    cc1
+        notes       full
+    }
+    {
+        // Interval-addressed transitions (leg_up/dn normalized to
+        // direction+interval zone fields; destination-rooted).
+        id          leg
+        label       Legato
+        kind        @Legato
+        legato_role transition
+        dynamics    (dyn1 dyn2 dyn3 dyn4)
+        rr          1
+        dyn_ctrl    cc1
+        directional true
+        notes       full
+    }
+)
+
+legato_engine {
+    style               @Pacific
+    outgoing_fade_ms    115    // $thaw1 — old transition+sustain pair fade
+    destination_fade_ms 500    // destination sustain crossfade-in
+    release_overlap { fade_ms 1500 }   // legrel layer, $amble
+    retrigger { trigger sustain_pedal_held, rr 3 }
 }
