@@ -51,6 +51,18 @@ impl PitchShifter {
         cents.abs() < 0.5
     }
 
+    /// Pre-fill the delay line with `history` (the sample frames immediately
+    /// BEFORE the voice's first output frame) so the read heads see real audio
+    /// from the first tick — no empty-buffer startup ramp/jump (which clicks,
+    /// especially on pitch-up where the heads read far back). Feed at most one
+    /// buffer's worth; the newest samples end at the write head.
+    pub fn prime(&mut self, history: &[f32]) {
+        let n = history.len().min(BUFFER_SIZE - 1);
+        for &s in &history[history.len() - n..] {
+            self.write_sample(s as f64);
+        }
+    }
+
     #[inline]
     fn write_sample(&mut self, x: f64) {
         self.write = (self.write + 1) % BUFFER_SIZE;

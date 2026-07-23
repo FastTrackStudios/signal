@@ -505,6 +505,26 @@ impl Voice {
         self
     }
 
+    /// Prime the pitch shifter's delay line with the sample frames immediately
+    /// before the voice's first output frame, so it produces valid audio from
+    /// tick 0 — no empty-buffer startup jump (which clicks). Call once after
+    /// the builder chain (needs `start_frame` set). No-op without a shifter or
+    /// when the voice starts at frame 0.
+    pub fn prime_pitch_shifters(&mut self) {
+        if self.pitch.is_none() || self.start_frame == 0 {
+            return;
+        }
+        let start = self.start_frame;
+        let n = start.min(8191);
+        let data = self.data.clone();
+        let hl: Vec<f32> = (start - n..start).map(|f| data.frame(f).0).collect();
+        let hr: Vec<f32> = (start - n..start).map(|f| data.frame(f).1).collect();
+        if let Some(shift) = self.pitch.as_mut() {
+            shift[0].prime(&hl);
+            shift[1].prime(&hr);
+        }
+    }
+
     /// Set the mic index this voice routes to. `mic_index` indexes into
     /// `LibrarySpec.mics` in declaration order.
     pub fn data_num_frames(&self) -> usize {

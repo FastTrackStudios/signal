@@ -597,9 +597,18 @@ impl SampleEngine {
             .unwrap_or(self.zone_rr_counter);
         self.zone_rr_counter = self.zone_rr_counter.wrapping_add(1);
 
+        let nv_artic = self.articulation.clone();
+
+        // Pure playback: NONVIB ONLY for now — one sustain voice at full level,
+        // no CC2 vibrato pair (the vib layer is deferred). Gets consistent,
+        // simple amplitudes to validate before re-adding the vib crossfade.
+        if self.pure_playback {
+            self.spawn_sustain_layers(&nv_artic, false, 1.0, &direction, note, rr);
+            return;
+        }
+
         // CC2 picks the non-vib vs vib balance (equal-power).
         let (nv_scale, vb_scale) = Self::equal_power(self.cc2_blend());
-        let nv_artic = self.articulation.clone();
         let vib_artic = self.find_vibrato_pair_id(&nv_artic);
 
         self.spawn_sustain_layers(&nv_artic, false, nv_scale, &direction, note, rr);
@@ -959,7 +968,13 @@ impl SampleEngine {
             return;
         }
         let (nv_id, vib_id) = self.legato_pair_ids(from == to);
-        let (nv_scale, vb_scale) = Self::equal_power(self.cc2_blend());
+        // Pure playback: NONVIB transition only (NVLeg), at full level.
+        let (nv_scale, vb_scale) = if self.pure_playback {
+            (1.0, 0.0)
+        } else {
+            Self::equal_power(self.cc2_blend())
+        };
+        let vib_id = if self.pure_playback { None } else { vib_id };
         // The transition must track the CURRENT dynamic, exactly as the sustain
         // layers do (`spawn_sustain_layers`). Without this the transition plays
         // at the recorded sample's full level — so a soft (low-CC1) passage's
@@ -972,7 +987,9 @@ impl SampleEngine {
         // `$3tsb0`). It plays at recorded level × CC1 — the same net level as the
         // legato SUSTAIN it overlays (which nets 0 dB: +6 OUTPUT_MAKEUP − 6
         // $3tsb0). `$3tsb0` lands on the sustain voice via `legato_sustain`.
-        let expr = self.cc1_expression(self.cc1);
+        // Pure playback drops the continuous CC1 loudness sweep — the
+        // transition plays at its recorded level (CC1 still SELECTS the dynamic).
+        let expr = if self.pure_playback { 1.0 } else { self.cc1_expression(self.cc1) };
         let mut spawned = false;
         for (id, scale) in [(nv_id, nv_scale), (vib_id, vb_scale)] {
             let Some(id) = id else { continue };
@@ -1795,6 +1812,7 @@ impl SampleEngine {
             } else {
                 None
             };
+            voice.prime_pitch_shifters();
             self.voices.spawn(voice);
 
             // Render trace: record the FIRST copy (unison detune copies are
@@ -2016,6 +2034,7 @@ impl SampleEngine {
                 } else {
                     voice = voice.with_forward_loop(z.loop_start as usize, z.loop_end as usize);
                 }
+                voice.prime_pitch_shifters();
                 self.voices.spawn(voice);
             }
         }
