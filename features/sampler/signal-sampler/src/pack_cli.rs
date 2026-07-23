@@ -1533,7 +1533,11 @@ fn render_report(
         stems.push((*note, note_name(*note), fname));
     }
 
-    // Metronome click (only meaningful with a tempo).
+    // Metronome click BAKED into a full-length copy of the mix (same buffer,
+    // frame-0 aligned) — so the click can never drift or be "faked": it IS the
+    // rendered audio. The viewer's click toggle just swaps the player source
+    // between the dry mix (`audio_href`) and this baked one (like solo),
+    // never a separate synced <audio> element. Only meaningful with a tempo.
     let click_href = match bpm {
         Some(b) => {
             let click_sample = std::path::Path::new(crate::report::DEFAULT_CLICK_SAMPLE);
@@ -1544,8 +1548,12 @@ fn render_report(
                 beats_per_bar,
                 click_sample.exists().then_some(click_sample),
             );
+            let mut mixed = audio.clone();
+            for (m, c) in mixed.iter_mut().zip(click.iter()) {
+                *m = (*m + c * 0.7).clamp(-1.0, 1.0);
+            }
             let fname = format!("{stem_base}.click.wav");
-            write_wav(&wav_path.with_file_name(&fname), &click)?;
+            write_wav(&wav_path.with_file_name(&fname), &mixed)?;
             Some(fname)
         }
         None => None,
