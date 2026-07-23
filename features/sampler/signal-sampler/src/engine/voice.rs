@@ -233,6 +233,9 @@ pub struct Voice {
     /// sit a fixed dB UNDER the note body that actually sounded — a soft note
     /// is a genuinely quiet recording, so a fixed-level release would drown it.
     env_peak: f32,
+    /// Render-trace correlation id (set at spawn when tracing) — pairs this
+    /// voice's lifetime with its `TraceKind::VoiceSpawn`/`VoiceEnd` events.
+    pub trace_id: Option<u64>,
 }
 
 /// One decoded Kontakt ENV_FLEX amplitude envelope, evaluated per frame and
@@ -410,6 +413,7 @@ impl Voice {
             has_sounded: false,
             quiet_frames: 0,
             env_peak: 0.0,
+            trace_id: None,
         }
     }
 
@@ -467,6 +471,7 @@ impl Voice {
             has_sounded: false,
             quiet_frames: 0,
             env_peak: 0.0,
+            trace_id: None,
         }
     }
 
@@ -1082,6 +1087,13 @@ impl VoicePool {
     /// steal policy.
     pub fn last_spawned_mut(&mut self) -> Option<&mut Voice> {
         self.voices.last_mut()
+    }
+
+    /// Collect the trace ids of all currently-alive traced voices into `out`
+    /// (cleared first). Drives the render-trace VoiceEnd sweep.
+    pub fn alive_trace_ids_into(&self, out: &mut Vec<u64>) {
+        out.clear();
+        out.extend(self.voices.iter().filter_map(|v| v.trace_id));
     }
 
     /// Send note-off to all voices playing `note` (except one-shot kinds).

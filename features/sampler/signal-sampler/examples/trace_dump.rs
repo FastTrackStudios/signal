@@ -171,6 +171,9 @@ fn main() -> eyre::Result<()> {
                     rr,
                 );
             }
+            TraceKind::VoiceEnd { voice_id } => {
+                println!("{:8.3}s  L{}  END    voice #{voice_id}", t(e.frame), e.line);
+            }
         }
     }
 

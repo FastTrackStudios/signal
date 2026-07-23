@@ -501,6 +501,11 @@ pub struct SampleEngine {
     trace: RefCell<RenderTrace>,
     /// Monotonic voice id source for trace correlation.
     next_voice_id: Cell<u64>,
+    /// Trace ids of voices whose VoiceSpawn was recorded and whose VoiceEnd
+    /// hasn't fired yet (the per-block end sweep drains this).
+    traced_alive: RefCell<std::collections::BTreeSet<u64>>,
+    /// Scratch for the end sweep (avoids per-block allocation).
+    trace_alive_scratch: RefCell<Vec<u64>>,
 
     /// Con Sordino bus-level filter (placeholder lowpass — see filter.rs).
     sord_filter: BiquadFilter,
@@ -735,6 +740,8 @@ impl SampleEngine {
             trace_enabled: false,
             trace: RefCell::new(RenderTrace::default()),
             next_voice_id: Cell::new(0),
+            traced_alive: RefCell::new(std::collections::BTreeSet::new()),
+            trace_alive_scratch: RefCell::new(Vec::new()),
             legato_fade_frames,
             cc1_ramp_frames,
             release_frames,
@@ -1089,10 +1096,43 @@ impl SampleEngine {
     /// voice-resolution path (`make_voice`) can record spawns and misses.
     fn trace_push(&self, kind: TraceKind) {
         if self.trace_enabled {
+            if let TraceKind::VoiceSpawn(v) = &kind {
+                self.traced_alive.borrow_mut().insert(v.voice_id);
+            }
             self.trace.borrow_mut().events.push(TraceEvent {
                 frame: self.frames_rendered,
                 line: self.cur_line as u8,
                 kind,
+            });
+        }
+    }
+
+    /// Per-block sweep: emit `TraceKind::VoiceEnd` for every traced voice
+    /// that is no longer alive in the pool (played out, faded, or stolen).
+    /// Block-accurate timestamps; no-op unless tracing is on.
+    fn sweep_traced_voice_ends(&self) {
+        if !self.trace_enabled || self.traced_alive.borrow().is_empty() {
+            return;
+        }
+        let mut scratch = self.trace_alive_scratch.borrow_mut();
+        self.voices.alive_trace_ids_into(&mut scratch);
+        let ended: Vec<u64> = self
+            .traced_alive
+            .borrow()
+            .iter()
+            .copied()
+            .filter(|id| !scratch.contains(id))
+            .collect();
+        if ended.is_empty() {
+            return;
+        }
+        let mut alive = self.traced_alive.borrow_mut();
+        for id in ended {
+            alive.remove(&id);
+            self.trace.borrow_mut().events.push(TraceEvent {
+                frame: self.frames_rendered,
+                line: self.cur_line as u8,
+                kind: TraceKind::VoiceEnd { voice_id: id },
             });
         }
     }
@@ -1128,6 +1168,7 @@ impl SampleEngine {
         self.voices.render(output);
         self.frames_rendered += block_frames as u64;
         self.drain_emitted_markers();
+        self.sweep_traced_voice_ends();
 
         // CSS "Volume" (CC11) — master output level.
         if self.cc11_volume != 1.0 {
@@ -1156,6 +1197,7 @@ impl SampleEngine {
         self.voices.render_multi(outputs);
         self.frames_rendered += block_frames as u64;
         self.drain_emitted_markers();
+        self.sweep_traced_voice_ends();
 
         // CSS "Volume" (CC11) — master output level, all mic buses.
         if self.cc11_volume != 1.0 {

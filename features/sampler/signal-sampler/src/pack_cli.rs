@@ -61,6 +61,48 @@ enum Cmd {
         #[arg(long)]
         src_root: Option<PathBuf>,
     },
+    /// Waveform report for pack samples: loop points, sample window, lead-in/
+    /// arrival markers over each decoded waveform. Self-contained HTML.
+    InspectSamples {
+        pack: PathBuf,
+        /// Only zones of this articulation id.
+        #[arg(long)]
+        articulation: Option<String>,
+        /// Only zones of this mic id.
+        #[arg(long)]
+        mic: Option<String>,
+        /// Note filter: "55,60-64" (matches root_key). Names allowed ("C4").
+        #[arg(long)]
+        notes: Option<String>,
+        /// Max samples in the report.
+        #[arg(long, default_value_t = 12)]
+        limit: usize,
+        #[arg(long)]
+        out: PathBuf,
+    },
+    /// Render a note script through a pack with FULL tracing and write a
+    /// waveform+event-log analysis report (plus the rendered WAV).
+    /// Script: "60@0:2,62@2:1.5,C5@4:2v80" = note[@start_s][:dur_s][vNN].
+    RenderReport {
+        pack: PathBuf,
+        /// Note script (see above). Sequential legato by default.
+        #[arg(long)]
+        notes: String,
+        /// CC1 (dynamics) value held for the whole render.
+        #[arg(long, default_value_t = 90)]
+        cc1: u8,
+        /// CC2 (vibrato) value held for the whole render.
+        #[arg(long, default_value_t = 90)]
+        cc2: u8,
+        #[arg(long)]
+        out: PathBuf,
+        /// WAV path (default: `<out>` with .wav extension).
+        #[arg(long)]
+        wav: Option<PathBuf>,
+        /// Extra seconds rendered after the last note-off (release tails).
+        #[arg(long, default_value_t = 2.0)]
+        tail: f32,
+    },
     /// Decode every entry back to WAVs.
     Extract { pack: PathBuf, out_dir: PathBuf },
     /// Build a pack from a flat samples dir (embeds `<dir>/library.styx`).
@@ -251,6 +293,23 @@ pub fn cli_main(argv: impl IntoIterator<Item = OsString>) -> Result<()> {
                 bail!("check: PARTIAL")
             }
         }
+        Cmd::InspectSamples {
+            pack,
+            articulation,
+            mic,
+            notes,
+            limit,
+            out,
+        } => inspect_samples(&pack, articulation, mic, notes, limit, &out),
+        Cmd::RenderReport {
+            pack,
+            notes,
+            cc1,
+            cc2,
+            out,
+            wav,
+            tail,
+        } => render_report(&pack, &notes, cc1, cc2, &out, wav, tail),
         Cmd::Extract { pack, out_dir } => {
             let stats = extract_signal_pack(&pack, &out_dir)?;
             println!("extracted {} sample(s) ({} failed)", stats.prepared, stats.failed);
@@ -1157,6 +1216,263 @@ fn correlation(a: &[f32], b: &[f32]) -> f64 {
     let na: f64 = a.iter().map(|x| (*x as f64).powi(2)).sum();
     let nb: f64 = b.iter().map(|x| (*x as f64).powi(2)).sum();
     dot / (na.sqrt() * nb.sqrt()).max(f64::EPSILON)
+}
+
+// ── analysis reports ─────────────────────────────────────────────────────────
+
+/// Parse "55,60-64,C4" into a MIDI-note set.
+fn parse_note_set(s: &str) -> Result<std::collections::BTreeSet<u8>> {
+    let mut out = std::collections::BTreeSet::new();
+    for tok in s.split(',').map(str::trim).filter(|t| !t.is_empty()) {
+        if let Some((a, b)) = tok.split_once('-') {
+            let (a, b) = (parse_note(a)?, parse_note(b)?);
+            for n in a.min(b)..=a.max(b) {
+                out.insert(n);
+            }
+        } else {
+            out.insert(parse_note(tok)?);
+        }
+    }
+    Ok(out)
+}
+
+/// "60" or a note name like "C4" / "G#3" (C4 = 60).
+fn parse_note(s: &str) -> Result<u8> {
+    if let Ok(n) = s.parse::<u8>() {
+        return Ok(n);
+    }
+    let b = s.as_bytes();
+    let step = match b.first().map(|c| c.to_ascii_uppercase()) {
+        Some(b'C') => 0i32,
+        Some(b'D') => 2,
+        Some(b'E') => 4,
+        Some(b'F') => 5,
+        Some(b'G') => 7,
+        Some(b'A') => 9,
+        Some(b'B') => 11,
+        _ => bail!("bad note {s:?}"),
+    };
+    let mut i = 1;
+    let mut semis = step;
+    if b.get(i) == Some(&b'#') {
+        semis += 1;
+        i += 1;
+    } else if b.get(i) == Some(&b'b') {
+        semis -= 1;
+        i += 1;
+    }
+    let oct: i32 = s[i..].parse().map_err(|_| eyre::eyre!("bad note {s:?}"))?;
+    Ok(((oct + 1) * 12 + semis).clamp(0, 127) as u8)
+}
+
+fn inspect_samples(
+    pack_path: &Path,
+    articulation: Option<String>,
+    mic: Option<String>,
+    notes: Option<String>,
+    limit: usize,
+    out: &Path,
+) -> Result<()> {
+    let patch = crate::PlayerPatch::from_pack(pack_path)?;
+    let pack = patch.pack.clone().ok_or_else(|| eyre::eyre!("not a pack"))?;
+    let cache = SampleCache::with_pack(pack);
+    let note_set = notes.as_deref().map(parse_note_set).transpose()?;
+
+    let mut entries = Vec::new();
+    for z in &patch.spec.zones {
+        if let Some(a) = &articulation {
+            if &z.articulation != a {
+                continue;
+            }
+        }
+        if let Some(m) = &mic {
+            if &z.mic != m {
+                continue;
+            }
+        }
+        if let Some(set) = &note_set {
+            if !set.contains(&z.root_key) {
+                continue;
+            }
+        }
+        let data = match cache.get(Path::new(&z.file)) {
+            Ok(d) => d,
+            Err(e) => {
+                eprintln!("  skip {} ({e})", z.file);
+                continue;
+            }
+        };
+        entries.push(crate::report::SampleView {
+            title: z.file.clone(),
+            audio: data.frames.as_ref().clone(),
+            channels: data.channels as usize,
+            sample_rate: data.sample_rate,
+            zone: z.clone(),
+        });
+        if entries.len() >= limit {
+            break;
+        }
+    }
+    if entries.is_empty() {
+        bail!("no zones matched the filters");
+    }
+    let name = format!(
+        "{} — samples",
+        pack_path.file_stem().unwrap_or_default().to_string_lossy()
+    );
+    let n = entries.len();
+    let data = crate::report::sample_report_json(&name, &entries);
+    crate::report::write_report_html(out, &data)?;
+    println!("wrote {} ({n} sample(s))", out.display());
+    Ok(())
+}
+
+/// One scripted note: start/dur in seconds.
+struct ScriptNote {
+    note: u8,
+    velocity: u8,
+    start: f32,
+    dur: f32,
+}
+
+/// "60@0:2,62@2:1.5,C5@4:2v80" — note[@start_s][:dur_s][vNN]. Missing start =
+/// previous end; missing dur = 2 s.
+fn parse_note_script(s: &str) -> Result<Vec<ScriptNote>> {
+    let mut out: Vec<ScriptNote> = Vec::new();
+    let mut cursor = 0.0f32;
+    for tok in s.split(',').map(str::trim).filter(|t| !t.is_empty()) {
+        let (tok, velocity) = match tok.rsplit_once('v') {
+            Some((rest, v)) if v.chars().all(|c| c.is_ascii_digit()) && !rest.is_empty() => {
+                (rest, v.parse::<u8>()?)
+            }
+            _ => (tok, 90),
+        };
+        let (note_s, timing) = match tok.split_once('@') {
+            Some((n, t)) => (n, Some(t)),
+            None => (tok, None),
+        };
+        let note = parse_note(note_s)?;
+        let (start, dur) = match timing {
+            Some(t) => match t.split_once(':') {
+                Some((st, d)) => (st.parse::<f32>()?, d.parse::<f32>()?),
+                None => (t.parse::<f32>()?, 2.0),
+            },
+            None => (cursor, 2.0),
+        };
+        cursor = start + dur;
+        out.push(ScriptNote {
+            note,
+            velocity,
+            start,
+            dur,
+        });
+    }
+    if out.is_empty() {
+        bail!("empty note script");
+    }
+    Ok(out)
+}
+
+fn render_report(
+    pack_path: &Path,
+    notes: &str,
+    cc1: u8,
+    cc2: u8,
+    out: &Path,
+    wav: Option<PathBuf>,
+    tail: f32,
+) -> Result<()> {
+    const SR: u32 = 48_000;
+    const ID: &str = "report";
+    let script = parse_note_script(notes)?;
+
+    let rig = crate::SamplerRig::new_offline_with_cache_budget(SR, Some(8 * 1024 * 1024 * 1024));
+    rig.load_pack(ID, pack_path)?;
+    // note_on dispatches on MIDI channel 0 — an instrument that isn't mapped
+    // to it is silent (the MM2 trap).
+    rig.set_midi_channel(ID, 0);
+    rig.set_trace_enabled(ID, true);
+    rig.set_legato_fire_log_enabled(ID, true);
+    rig.cc(ID, 1, cc1);
+    rig.cc(ID, 2, cc2);
+    for n in &script {
+        let w = rig.warm_note(ID, n.note);
+        if w.failed > 0 {
+            eprintln!("warm {}: {} sample(s) failed to load", n.note, w.failed);
+        }
+    }
+
+    // Event timeline: (frame, on?, note, velocity), rendered block-by-block.
+    let mut edges: Vec<(u64, bool, u8, u8)> = Vec::new();
+    let mut end = 0.0f32;
+    for n in &script {
+        edges.push(((n.start * SR as f32) as u64, true, n.note, n.velocity));
+        edges.push((((n.start + n.dur) * SR as f32) as u64, false, n.note, n.velocity));
+        end = end.max(n.start + n.dur);
+    }
+    edges.sort_by_key(|e| (e.0, e.1)); // offs before ons at the same frame
+    let total_frames = ((end + tail) * SR as f32) as u64;
+
+    let mut audio = vec![0.0f32; 0];
+    let mut cursor = 0u64;
+    const BLOCK: u64 = 256;
+    let mut edge_i = 0;
+    while cursor < total_frames {
+        while edge_i < edges.len() && edges[edge_i].0 <= cursor {
+            let (_, on, note, vel) = edges[edge_i];
+            if on {
+                rig.note_on(ID, note, vel);
+            } else {
+                rig.note_off(ID, note);
+            }
+            edge_i += 1;
+        }
+        let n = BLOCK.min(total_frames - cursor) as usize;
+        let mut buf = vec![0.0f32; n * 2];
+        rig.render_offline(&mut buf)
+            .map_err(|e| eyre::eyre!("render: {e}"))?;
+        audio.extend_from_slice(&buf);
+        cursor += n as u64;
+    }
+
+    // WAV next to the report so the viewer's <audio> can play it.
+    let wav_path = wav.unwrap_or_else(|| out.with_extension("wav"));
+    let spec = hound::WavSpec {
+        channels: 2,
+        sample_rate: SR,
+        bits_per_sample: 32,
+        sample_format: hound::SampleFormat::Float,
+    };
+    let mut w = hound::WavWriter::create(&wav_path, spec)?;
+    for s in &audio {
+        w.write_sample(*s)?;
+    }
+    w.finalize()?;
+
+    let audio_href = wav_path
+        .file_name()
+        .map(|f| f.to_string_lossy().into_owned());
+    let sources = crate::report::ReportSources {
+        trace: rig.render_trace(ID),
+        fires: rig.legato_fire_log(ID),
+        markers: Vec::new(),
+        emitted: Vec::new(),
+        audio_href,
+    };
+    let name = format!(
+        "{} — {notes}",
+        pack_path.file_stem().unwrap_or_default().to_string_lossy()
+    );
+    let data = crate::report::render_report_json(&name, &audio, 2, SR, &sources);
+    crate::report::write_report_html(out, &data)?;
+    println!(
+        "wrote {} (+ {}) — {} trace events, {} fires",
+        out.display(),
+        wav_path.display(),
+        sources.trace.events.len(),
+        sources.fires.len()
+    );
+    Ok(())
 }
 
 // ── build ────────────────────────────────────────────────────────────────────

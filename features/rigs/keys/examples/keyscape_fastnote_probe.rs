@@ -102,6 +102,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     bl(e.frame), note, "MISS", articulation, dynamic, rr, reason
                 );
             }
+            TraceKind::VoiceEnd { voice_id } => {
+                println!("{:>7.0} {:>5} {:>12}", bl(e.frame), voice_id, "VOICE-END");
+            }
         }
     }
 

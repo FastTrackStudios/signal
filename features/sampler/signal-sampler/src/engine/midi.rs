@@ -1742,13 +1742,21 @@ impl SampleEngine {
             } else {
                 (0, 0, 0)
             };
+            // Mint the trace id BEFORE the pool consumes the voice so the
+            // VoiceEnd sweep can correlate this voice's lifetime.
+            let trace_voice_id = if k == 0 && self.trace_enabled {
+                let id = self.next_trace_voice_id();
+                voice.trace_id = Some(id);
+                Some(id)
+            } else {
+                None
+            };
             self.voices.spawn(voice);
 
             // Render trace: record the FIRST copy (unison detune copies are
             // acoustically the same spawn) with everything needed to reason
             // about it after the fact — file, pitch, gain, loop window.
-            if k == 0 && self.trace_enabled {
-                let id = self.next_trace_voice_id();
+            if let Some(id) = trace_voice_id {
                 if let Some((file, artic, dynamic, direction, interval)) = trace_zone.clone() {
                     self.trace_push(TraceKind::VoiceSpawn(TraceVoiceSpawn {
                         voice_id: id,

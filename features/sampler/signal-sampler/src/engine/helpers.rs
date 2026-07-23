@@ -150,7 +150,7 @@ impl SampleEngine {
         .with_mic_index(mic_index)
         .with_line(self.cur_line as u8)
         .with_artic_class(artic_class);
-        let voice = if matches!(kind, VoiceKind::Release) {
+        let mut voice = if matches!(kind, VoiceKind::Release) {
             let end = release_lifetime_frames.min(voice.data_num_frames());
             voice.with_sample_window(0, Some(end))
         } else {
@@ -182,6 +182,7 @@ impl SampleEngine {
         );
         if self.trace_enabled {
             let voice_id = self.next_trace_voice_id();
+            voice.trace_id = Some(voice_id);
             self.trace_push(TraceKind::VoiceSpawn(crate::engine::TraceVoiceSpawn {
                 voice_id,
                 voice_kind: kind.trace_name(),

@@ -42,6 +42,10 @@ pub enum TraceKind {
         rr: usize,
         reason: MissReason,
     },
+    /// A traced voice finished (played out, faded to done, or was stolen).
+    /// Frame-stamped by the per-block sweep, so the timestamp is accurate to
+    /// one render block. Correlate with [`VoiceSpawn::voice_id`] for spans.
+    VoiceEnd { voice_id: u64 },
 }
 
 /// Why a [`TraceKind::SampleMiss`] fired.
