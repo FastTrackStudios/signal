@@ -600,10 +600,22 @@ impl SampleEngine {
         let nv_artic = self.articulation.clone();
 
         // Pure playback: NONVIB ONLY for now — one sustain voice at full level,
-        // no CC2 vibrato pair (the vib layer is deferred). Gets consistent,
-        // simple amplitudes to validate before re-adding the vib crossfade.
+        // no CC2 vibrato pair (the vib layer is deferred). The default
+        // articulation is the VIBRATO sustain (Vibsus), so resolve to its
+        // non-vibrato pair (Nonvib) — we want the Nonvib sample, not Vibsus.
         if self.pure_playback {
-            self.spawn_sustain_layers(&nv_artic, false, 1.0, &direction, note, rr);
+            let base_is_vib = self
+                .patch
+                .spec
+                .articulation(&nv_artic)
+                .map(|a| a.is_vibrato())
+                .unwrap_or(false);
+            let nonvib = if base_is_vib {
+                self.find_vibrato_pair_id(&nv_artic).unwrap_or(nv_artic.clone())
+            } else {
+                nv_artic.clone()
+            };
+            self.spawn_sustain_layers(&nonvib, false, 1.0, &direction, note, rr);
             return;
         }
 
