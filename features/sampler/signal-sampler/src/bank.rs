@@ -780,6 +780,10 @@ impl SamplerBank {
         self.with_block(id, |b| b.set_trace_enabled(enabled));
     }
 
+    pub fn set_solo_notes(&mut self, id: &str, notes: Option<std::collections::BTreeSet<u8>>) {
+        self.with_block(id, |b| b.set_solo_notes(notes.clone()));
+    }
+
     /// The structured render trace for an instrument.
     pub fn render_trace(&self, id: &str) -> crate::engine::RenderTrace {
         self.read_block(id, |b| b.render_trace())

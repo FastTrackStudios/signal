@@ -355,6 +355,10 @@ impl SamplerBlock {
         self.engine.set_trace_enabled(enabled);
     }
 
+    pub fn set_solo_notes(&mut self, notes: Option<std::collections::BTreeSet<u8>>) {
+        self.engine.set_solo_notes(notes);
+    }
+
     /// The structured render trace — see [`SampleEngine::render_trace`].
     pub fn render_trace(&self) -> crate::engine::RenderTrace {
         self.engine.render_trace()

@@ -1024,6 +1024,12 @@ pub struct VoicePool {
     stolen: usize,
     max_voices: usize,
     steal_policy: VoiceStealPolicy,
+    /// Solo filter: when `Some`, only voices whose `note` is in the set
+    /// contribute to the output. Muted voices still render (into a discard
+    /// buffer) so their lifecycle — and therefore every other note's legato
+    /// timing — is bit-identical to the full mix. Offline analysis only.
+    solo_notes: Option<std::collections::BTreeSet<u8>>,
+    solo_scratch: Vec<f32>,
 }
 
 impl Default for VoicePool {
@@ -1039,6 +1045,8 @@ impl VoicePool {
             stolen: 0,
             max_voices: MAX_VOICES,
             steal_policy: VoiceStealPolicy::ReleaseFirstQuietest,
+            solo_notes: None,
+            solo_scratch: Vec::new(),
         }
     }
 
@@ -1049,6 +1057,8 @@ impl VoicePool {
             stolen: 0,
             max_voices: max_voices.max(1),
             steal_policy: VoiceStealPolicy::ReleaseFirstQuietest,
+            solo_notes: None,
+            solo_scratch: Vec::new(),
         }
     }
 
@@ -1301,9 +1311,34 @@ impl VoicePool {
     }
 
     /// Render all active voices into an interleaved stereo buffer.
+    /// Set the per-note solo filter (offline analysis). `None` = full mix.
+    pub fn set_solo_notes(&mut self, notes: Option<std::collections::BTreeSet<u8>>) {
+        self.solo_notes = notes;
+    }
+
     pub fn render(&mut self, output: &mut [f32]) {
-        for v in &mut self.voices {
-            v.render_block(output);
+        match &self.solo_notes {
+            None => {
+                for v in &mut self.voices {
+                    v.render_block(output);
+                }
+            }
+            Some(set) => {
+                // Muted voices render into a discard buffer so their lifecycle
+                // (and every soloed note's legato timing) is unchanged.
+                if self.solo_scratch.len() < output.len() {
+                    self.solo_scratch.resize(output.len(), 0.0);
+                }
+                for v in &mut self.voices {
+                    if set.contains(&v.note) {
+                        v.render_block(output);
+                    } else {
+                        let scratch = &mut self.solo_scratch[..output.len()];
+                        scratch.fill(0.0);
+                        v.render_block(scratch);
+                    }
+                }
+            }
         }
         self.voices.retain(|v| !v.is_done());
     }

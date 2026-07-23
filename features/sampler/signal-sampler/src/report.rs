@@ -58,6 +58,12 @@ pub struct ReportSources {
     pub emitted: Vec<EmittedMarker>,
     /// Relative href of the sibling audio file for playback (e.g. "x.wav").
     pub audio_href: Option<String>,
+    /// Solo stems: (note, label, href) — per-note isolated renders the viewer
+    /// can switch the player between. Empty = full mix only.
+    pub stems: Vec<(u8, String, String)>,
+    /// Musical grid for the beat ruler: `(bpm, beats_per_bar)`, anchored so
+    /// beat 1 of bar 1 is at frame 0. `None` = no ruler (free-time render).
+    pub tempo: Option<(f64, u32)>,
 }
 
 /// Max computed loop-wrap ticks recorded per voice (a 30 s held note with a
@@ -169,6 +175,11 @@ pub fn render_report_json(
         events.push(json!({"frame": m.frame, "line": m.line, "kind": "emitted", "note": m.note}));
     }
 
+    let stems: Vec<Value> = sources
+        .stems
+        .iter()
+        .map(|(note, label, href)| json!({ "note": note, "label": label, "href": href }))
+        .collect();
     json!({
         "mode": "render",
         "name": name,
@@ -176,6 +187,8 @@ pub fn render_report_json(
         "channels": channels,
         "frames": frames,
         "audio_href": sources.audio_href,
+        "stems": stems,
+        "tempo": sources.tempo.map(|(bpm, bpb)| json!({ "bpm": bpm, "beats_per_bar": bpb })),
         "peaks": { "block": block, "min": mins, "max": maxs },
         "voices": voices,
         "events": events,

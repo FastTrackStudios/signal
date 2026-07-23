@@ -1055,6 +1055,13 @@ impl SampleEngine {
 
     /// Enable/disable the structured render trace ([`RenderTrace`]) — which
     /// files play, when, loop points, gains, transitions. Clears on enable.
+    /// Per-note solo filter for offline analysis renders — only voices whose
+    /// `note` is in the set are audible; muted voices still advance so legato
+    /// timing is identical. `None` = full mix.
+    pub fn set_solo_notes(&mut self, notes: Option<std::collections::BTreeSet<u8>>) {
+        self.voices.set_solo_notes(notes);
+    }
+
     pub fn set_trace_enabled(&mut self, enabled: bool) {
         self.trace_enabled = enabled;
         let mut trace = self.trace.borrow_mut();

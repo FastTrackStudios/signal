@@ -794,6 +794,15 @@ impl SamplerRig {
         }
     }
 
+    /// Per-note solo filter (offline analysis) — only the given notes are
+    /// audible; muted voices still advance so legato timing is unchanged.
+    /// `None` = full mix.
+    pub fn set_solo_notes(&self, id: &str, notes: Option<std::collections::BTreeSet<u8>>) {
+        if let Ok(mut bank) = self.bank().lock() {
+            bank.set_solo_notes(id, notes);
+        }
+    }
+
     /// The structured render trace for an instrument (frames are engine-local).
     pub fn render_trace(&self, id: &str) -> crate::engine::RenderTrace {
         self.bank()

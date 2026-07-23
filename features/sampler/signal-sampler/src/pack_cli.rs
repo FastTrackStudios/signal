@@ -102,6 +102,12 @@ enum Cmd {
         /// Extra seconds rendered after the last note-off (release tails).
         #[arg(long, default_value_t = 2.0)]
         tail: f32,
+        /// Draw a musical beat ruler at this tempo (beat 1 anchored at t=0).
+        #[arg(long)]
+        bpm: Option<f64>,
+        /// Beats per bar for the ruler (default 4).
+        #[arg(long, default_value_t = 4)]
+        beats_per_bar: u32,
     },
     /// Decode every entry back to WAVs.
     Extract { pack: PathBuf, out_dir: PathBuf },
@@ -309,7 +315,9 @@ pub fn cli_main(argv: impl IntoIterator<Item = OsString>) -> Result<()> {
             out,
             wav,
             tail,
-        } => render_report(&pack, &notes, cc1, cc2, &out, wav, tail),
+            bpm,
+            beats_per_bar,
+        } => render_report(&pack, &notes, cc1, cc2, &out, wav, tail, bpm, beats_per_bar),
         Cmd::Extract { pack, out_dir } => {
             let stats = extract_signal_pack(&pack, &out_dir)?;
             println!("extracted {} sample(s) ({} failed)", stats.prepared, stats.failed);
@@ -1373,6 +1381,7 @@ fn parse_note_script(s: &str) -> Result<Vec<ScriptNote>> {
     Ok(out)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn render_report(
     pack_path: &Path,
     notes: &str,
@@ -1381,28 +1390,15 @@ fn render_report(
     out: &Path,
     wav: Option<PathBuf>,
     tail: f32,
+    bpm: Option<f64>,
+    beats_per_bar: u32,
 ) -> Result<()> {
     const SR: u32 = 48_000;
     const ID: &str = "report";
+    const BLOCK: u64 = 256;
     let script = parse_note_script(notes)?;
 
-    let rig = crate::SamplerRig::new_offline_with_cache_budget(SR, Some(8 * 1024 * 1024 * 1024));
-    rig.load_pack(ID, pack_path)?;
-    // note_on dispatches on MIDI channel 0 — an instrument that isn't mapped
-    // to it is silent (the MM2 trap).
-    rig.set_midi_channel(ID, 0);
-    rig.set_trace_enabled(ID, true);
-    rig.set_legato_fire_log_enabled(ID, true);
-    rig.cc(ID, 1, cc1);
-    rig.cc(ID, 2, cc2);
-    for n in &script {
-        let w = rig.warm_note(ID, n.note);
-        if w.failed > 0 {
-            eprintln!("warm {}: {} sample(s) failed to load", n.note, w.failed);
-        }
-    }
-
-    // Event timeline: (frame, on?, note, velocity), rendered block-by-block.
+    // Event timeline: (frame, on?, note, velocity).
     let mut edges: Vec<(u64, bool, u8, u8)> = Vec::new();
     let mut end = 0.0f32;
     for n in &script {
@@ -1413,51 +1409,91 @@ fn render_report(
     edges.sort_by_key(|e| (e.0, e.1)); // offs before ons at the same frame
     let total_frames = ((end + tail) * SR as f32) as u64;
 
-    let mut audio = vec![0.0f32; 0];
-    let mut cursor = 0u64;
-    const BLOCK: u64 = 256;
-    let mut edge_i = 0;
-    while cursor < total_frames {
-        while edge_i < edges.len() && edges[edge_i].0 <= cursor {
-            let (_, on, note, vel) = edges[edge_i];
-            if on {
-                rig.note_on(ID, note, vel);
-            } else {
-                rig.note_off(ID, note);
-            }
-            edge_i += 1;
+    // One render pass with an optional per-note solo (None = full mix).
+    // Solo renders are bit-identical in timing — only muted notes drop out.
+    let render_pass = |solo: Option<std::collections::BTreeSet<u8>>| -> Result<(Vec<f32>, crate::engine::RenderTrace, Vec<crate::engine::LegatoFireEvent>)> {
+        let rig = crate::SamplerRig::new_offline_with_cache_budget(SR, Some(8 * 1024 * 1024 * 1024));
+        rig.load_pack(ID, pack_path)?;
+        // note_on dispatches on MIDI channel 0 — an unmapped instrument is
+        // silent (the MM2 trap).
+        rig.set_midi_channel(ID, 0);
+        rig.set_trace_enabled(ID, true);
+        rig.set_legato_fire_log_enabled(ID, true);
+        rig.set_solo_notes(ID, solo);
+        rig.cc(ID, 1, cc1);
+        rig.cc(ID, 2, cc2);
+        for n in &script {
+            rig.warm_note(ID, n.note);
         }
-        let n = BLOCK.min(total_frames - cursor) as usize;
-        let mut buf = vec![0.0f32; n * 2];
-        rig.render_offline(&mut buf)
-            .map_err(|e| eyre::eyre!("render: {e}"))?;
-        audio.extend_from_slice(&buf);
-        cursor += n as u64;
-    }
-
-    // WAV next to the report so the viewer's <audio> can play it.
-    let wav_path = wav.unwrap_or_else(|| out.with_extension("wav"));
-    let spec = hound::WavSpec {
-        channels: 2,
-        sample_rate: SR,
-        bits_per_sample: 32,
-        sample_format: hound::SampleFormat::Float,
+        let mut audio = vec![0.0f32; 0];
+        let mut cursor = 0u64;
+        let mut edge_i = 0;
+        while cursor < total_frames {
+            while edge_i < edges.len() && edges[edge_i].0 <= cursor {
+                let (_, on, note, vel) = edges[edge_i];
+                if on {
+                    rig.note_on(ID, note, vel);
+                } else {
+                    rig.note_off(ID, note);
+                }
+                edge_i += 1;
+            }
+            let n = BLOCK.min(total_frames - cursor) as usize;
+            let mut buf = vec![0.0f32; n * 2];
+            rig.render_offline(&mut buf)
+                .map_err(|e| eyre::eyre!("render: {e}"))?;
+            audio.extend_from_slice(&buf);
+            cursor += n as u64;
+        }
+        Ok((audio, rig.render_trace(ID), rig.legato_fire_log(ID)))
     };
-    let mut w = hound::WavWriter::create(&wav_path, spec)?;
-    for s in &audio {
-        w.write_sample(*s)?;
-    }
-    w.finalize()?;
 
-    let audio_href = wav_path
-        .file_name()
-        .map(|f| f.to_string_lossy().into_owned());
+    let write_wav = |path: &Path, audio: &[f32]| -> Result<()> {
+        let spec = hound::WavSpec {
+            channels: 2,
+            sample_rate: SR,
+            bits_per_sample: 32,
+            sample_format: hound::SampleFormat::Float,
+        };
+        let mut w = hound::WavWriter::create(path, spec)?;
+        for s in audio {
+            w.write_sample(*s)?;
+        }
+        w.finalize()?;
+        Ok(())
+    };
+
+    // Full mix (also the source of the trace + fires shown on the timeline).
+    let (audio, trace, fires) = render_pass(None)?;
+    let wav_path = wav.unwrap_or_else(|| out.with_extension("wav"));
+    write_wav(&wav_path, &audio)?;
+    let audio_href = wav_path.file_name().map(|f| f.to_string_lossy().into_owned());
+
+    // Per-note solo stems, one WAV per distinct scripted note.
+    let mut distinct: Vec<u8> = script.iter().map(|n| n.note).collect();
+    distinct.sort_unstable();
+    distinct.dedup();
+    let stem_base = wav_path
+        .file_stem()
+        .map(|s| s.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "render".into());
+    let mut stems = Vec::new();
+    for note in &distinct {
+        let (stem_audio, _, _) =
+            render_pass(Some(std::iter::once(*note).collect()))?;
+        let fname = format!("{stem_base}.n{note}.wav");
+        write_wav(&wav_path.with_file_name(&fname), &stem_audio)?;
+        stems.push((*note, note_name(*note), fname));
+    }
+
     let sources = crate::report::ReportSources {
-        trace: rig.render_trace(ID),
-        fires: rig.legato_fire_log(ID),
+        trace,
+        fires,
         markers: Vec::new(),
         emitted: Vec::new(),
         audio_href,
+        stems,
+        tempo: bpm.map(|b| (b, beats_per_bar)),
     };
     let name = format!(
         "{} — {notes}",
@@ -1466,13 +1502,22 @@ fn render_report(
     let data = crate::report::render_report_json(&name, &audio, 2, SR, &sources);
     crate::report::write_report_html(out, &data)?;
     println!(
-        "wrote {} (+ {}) — {} trace events, {} fires",
+        "wrote {} (+ {} + {} solo stem(s)) — {} trace events, {} fires",
         out.display(),
         wav_path.display(),
+        distinct.len(),
         sources.trace.events.len(),
         sources.fires.len()
     );
     Ok(())
+}
+
+/// MIDI note → name (C4 = 60).
+fn note_name(n: u8) -> String {
+    const NN: [&str; 12] = [
+        "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B",
+    ];
+    format!("{}{}", NN[(n % 12) as usize], (n / 12) as i32 - 1)
 }
 
 // ── build ────────────────────────────────────────────────────────────────────

@@ -73,6 +73,29 @@ function renderMode() {
       style="background:#1b1f26;color:#e6e9ee;border:1px solid #3a404c;padding:2px 6px;font:inherit">
     <span id="pos" class="meta"></span>`;
   top.appendChild(seekbox);
+  // Solo: switch the player between the full mix and per-note isolated stems
+  // (preserving playhead position) — A/B which note carries the artifact.
+  if (DATA.stems && DATA.stems.length) {
+    const bar = document.createElement('span');
+    bar.id = 'solobar';
+    bar.style.cssText = 'display:inline-flex;gap:4px;align-items:center';
+    bar.innerHTML = '<span class="meta">solo:</span>';
+    const mkbtn = (label, href, note) => {
+      const b = document.createElement('button');
+      b.textContent = label;
+      b.dataset.href = href || '';
+      b.dataset.note = note == null ? '' : note;
+      b.style.cssText =
+        'background:#1b1f26;color:#d8dce2;border:1px solid #3a404c;border-radius:3px;' +
+        'padding:2px 8px;font:inherit;cursor:pointer';
+      b.onclick = () => setSolo(b);
+      bar.appendChild(b);
+      return b;
+    };
+    mkbtn('mix', DATA.audio_href, null);
+    DATA.stems.forEach(s => mkbtn(s.label, s.href, s.note));
+    top.appendChild(bar);
+  }
   const legend = document.getElementById('legend');
   const kinds = new Set(DATA.voices.map(v => v.kind));
   ['transition','fire','noteoff','miss','marker','emitted'].forEach(k => kinds.add(k));
@@ -84,6 +107,26 @@ function renderMode() {
   const ctx = canvas.getContext('2d');
   let view = { a: 0, b: DATA.frames };           // visible frame range
   let hover = null;
+  let soloNote = null;                           // null = full mix
+
+  // Switch the audio source to a stem (or the full mix), keeping the playhead
+  // position and play/pause state so an A/B is seamless.
+  window.setSolo = function (btn) {
+    const p = document.getElementById('player');
+    const href = btn.dataset.href;
+    soloNote = btn.dataset.note === '' ? null : parseInt(btn.dataset.note, 10);
+    document.querySelectorAll('#solobar button').forEach(b =>
+      b.style.background = b === btn ? '#31506e' : '#1b1f26');
+    if (p && href && !p.src.endsWith(href)) {
+      const t = p.currentTime, playing = !p.paused;
+      p.src = href;
+      p.addEventListener('loadedmetadata', function once() {
+        p.currentTime = t; if (playing) p.play().catch(() => {});
+        p.removeEventListener('loadedmetadata', once);
+      });
+    }
+    draw();
+  };
 
   // Voice rows: stack per line then spawn order.
   const voices = [...DATA.voices].sort((x, y) => (x.line - y.line) || (x.spawn - y.spawn));
@@ -115,14 +158,36 @@ function renderMode() {
       ctx.rect(x, mid - hi * mid * 0.95, 1, Math.max(1, (hi - lo) * mid * 0.95));
     }
     ctx.fill();
+    const gridH = WAVE_H + AXIS + ROWS * ROW_H + EV_H;
     // time axis
     ctx.fillStyle = COL.axis; ctx.font = '10px monospace';
     const span = (view.b - view.a) / DATA.sample_rate;
     const step = Math.pow(10, Math.floor(Math.log10(span / 8)));
     for (let t = Math.ceil(view.a / DATA.sample_rate / step) * step; t * DATA.sample_rate < view.b; t += step) {
       const x = X(t * DATA.sample_rate);
-      ctx.fillRect(x, 0, 1, WAVE_H + AXIS + ROWS * ROW_H + EV_H);
+      ctx.fillRect(x, 0, 1, gridH);
       ctx.fillText(t.toFixed(step < 1 ? 2 : 0) + 's', x + 3, WAVE_H + 14);
+    }
+    // musical beat/bar ruler — beat 1.1 anchored at frame 0. Bar lines bold +
+    // labeled; beat lines faint. So off-grid onsets are visible against it.
+    if (DATA.tempo) {
+      const { bpm, beats_per_bar } = DATA.tempo;
+      const fpb = 60 / bpm * DATA.sample_rate;          // frames per beat
+      const bpbar = beats_per_bar || 4;
+      const b0 = Math.max(0, Math.floor(view.a / fpb));
+      const b1 = Math.ceil(view.b / fpb);
+      // Skip beat sub-lines when they'd be denser than ~6 px.
+      const drawBeats = fpb / (view.b - view.a) * canvas.width > 6;
+      for (let bi = b0; bi <= b1; bi++) {
+        const x = X(bi * fpb);
+        const isBar = bi % bpbar === 0;
+        if (!isBar && !drawBeats) continue;
+        ctx.fillStyle = isBar ? '#c8b04d' : 'rgba(200,176,77,0.28)';
+        ctx.fillRect(x, WAVE_H, isBar ? 2 : 1, AXIS + ROWS * ROW_H + EV_H);
+        ctx.fillStyle = isBar ? '#e0c860' : 'rgba(200,176,77,0.7)';
+        const bar = Math.floor(bi / bpbar) + 1, beat = (bi % bpbar) + 1;
+        ctx.fillText(isBar ? `${bar}` : `${bar}.${beat}`, x + 2, WAVE_H + 24);
+      }
     }
     // voice rows
     voices.forEach((v, i) => {
@@ -130,8 +195,18 @@ function renderMode() {
       const end = v.end ?? DATA.frames;
       const x0 = X(v.spawn), x1 = Math.max(X(end), x0 + 2);
       v._rect = [x0, y, x1 - x0, ROW_H - 2];
-      ctx.fillStyle = (COL[v.kind] || '#888') + (hover === v ? '' : 'cc');
+      // Brightness ∝ spawn gain — the many gain≈0 CC1 sustain layers fade
+      // back so the one carrying the note stands out. Solo-muted rows dim
+      // further; hover is always full.
+      const muted = soloNote != null && v.note !== soloNote;
+      const gAlpha = Math.min(1, 0.14 + Math.abs(v.gain) * 0.62);
+      ctx.globalAlpha = hover === v ? 1 : (muted ? 0.12 : gAlpha);
+      ctx.fillStyle = COL[v.kind] || '#888';
       ctx.fillRect(x0, y, x1 - x0, ROW_H - 2);
+      // A thin full-opacity baseline keeps even silent rows locatable.
+      ctx.globalAlpha = muted ? 0.2 : 0.5;
+      ctx.fillRect(x0, y + ROW_H - 3, x1 - x0, 1);
+      ctx.globalAlpha = 1;
       // loop wrap ticks
       ctx.fillStyle = COL.wrapTick;
       for (const w of v.wraps) ctx.fillRect(X(w), y, 1, ROW_H - 2);

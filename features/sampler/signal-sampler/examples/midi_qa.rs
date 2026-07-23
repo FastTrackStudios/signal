@@ -239,6 +239,21 @@ fn main() -> eyre::Result<()> {
         // Interleaved → mono.
         let mono: Vec<f32> = res.audio.chunks(2).map(|c| 0.5 * (c[0] + c[1])).collect();
 
+        // Per-note solo stems (deterministic re-render with only one note
+        // audible; legato timing is bit-identical). One WAV per distinct pitch.
+        let mut distinct: Vec<u8> = notes.iter().map(|n| n.pitch).collect();
+        distinct.sort_unstable();
+        distinct.dedup();
+        let mut stems: Vec<(u8, String, String)> = Vec::new();
+        for &pitch in &distinct {
+            rig.set_solo_notes(ID, Some(std::iter::once(pitch).collect()));
+            let sres = rig.render_offline_document(ID, &doc, &opts)?;
+            let fname = format!("qa_{name}.n{pitch}.wav");
+            write_wav(&PathBuf::from(format!("target/{fname}")), &sres.audio)?;
+            stems.push((pitch, nm(pitch), fname));
+        }
+        rig.set_solo_notes(ID, None);
+
         // Boundary marks: note onsets (first = attack, rest = transitions) and
         // phrase-end note-offs. Frames come straight from the notated grid.
         let mut marks: Vec<Mark> = Vec::new();
@@ -370,6 +385,10 @@ fn main() -> eyre::Result<()> {
             markers: rep_markers,
             emitted,
             audio_href: Some(format!("qa_{name}.wav")),
+            stems,
+            // The QA grid is anchored at qn 0 = frame 0 (same basis as the
+            // boundary labels); 4/4 throughout.
+            tempo: Some((*bpm, 4)),
         };
         let data = signal_sampler::report::render_report_json(
             &format!("qa_{name}"),
