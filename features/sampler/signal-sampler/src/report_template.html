@@ -188,7 +188,27 @@ function renderMode() {
   }
 
   const tip = document.getElementById('tip');
+  // Alt-scrub: hold Alt and move across the waveform to hear the audio track
+  // the cursor (tape-style scrubbing) — the fast way to pin a timing issue by
+  // ear. The player follows the pointer; releasing Alt (or leaving the canvas)
+  // pauses.
+  let scrubbing = false;
+  function scrub(ev) {
+    const p = document.getElementById('player');
+    if (!p) return;
+    p.currentTime = Math.max(0, F(ev.offsetX) / DATA.sample_rate);
+    if (p.paused) { p.play().catch(() => {}); }
+    scrubbing = true;
+    draw();
+  }
+  function endScrub() {
+    const p = document.getElementById('player');
+    if (scrubbing && p) p.pause();
+    scrubbing = false;
+  }
   canvas.addEventListener('mousemove', ev => {
+    if (ev.altKey) { scrub(ev); tip.style.display = 'none'; return; }
+    if (scrubbing) endScrub();
     const mx = ev.offsetX, my = ev.offsetY;
     const hit = pick(mx, my);
     if (hit !== hover) { hover = hit; draw(); }
@@ -199,7 +219,8 @@ function renderMode() {
       tip.textContent = hit.id !== undefined ? voiceTip(hit) : eventTip(hit);
     } else tip.style.display = 'none';
   });
-  canvas.addEventListener('mouseleave', () => { tip.style.display = 'none'; });
+  window.addEventListener('keyup', ev => { if (ev.key === 'Alt') endScrub(); });
+  canvas.addEventListener('mouseleave', () => { tip.style.display = 'none'; endScrub(); });
   canvas.addEventListener('click', ev => {
     const hit = pick(ev.offsetX, ev.offsetY);
     if (hit) showDetail(hit);
@@ -270,7 +291,7 @@ function renderMode() {
   canvas.addEventListener('mousedown', ev => { dragX = ev.offsetX; });
   window.addEventListener('mouseup', () => { dragX = null; });
   canvas.addEventListener('mousemove', ev => {
-    if (dragX === null) return;
+    if (dragX === null || ev.altKey) return;
     const df = (dragX - ev.offsetX) / canvas.width * (view.b - view.a);
     if (Math.abs(dragX - ev.offsetX) < 3) return;
     const span = view.b - view.a;
