@@ -64,8 +64,15 @@ function renderMode() {
   if (DATA.audio_href) {
     const a = document.createElement('audio');
     a.controls = true; a.src = DATA.audio_href; a.id = 'player';
+    a.preload = 'auto';
     top.appendChild(a);
   }
+  // Sample-accurate seek box + live readout.
+  const seekbox = document.createElement('span');
+  seekbox.innerHTML = `<input id="seek" size="14" placeholder="1.234s | f59232"
+      style="background:#1b1f26;color:#e6e9ee;border:1px solid #3a404c;padding:2px 6px;font:inherit">
+    <span id="pos" class="meta"></span>`;
+  top.appendChild(seekbox);
   const legend = document.getElementById('legend');
   const kinds = new Set(DATA.voices.map(v => v.kind));
   ['transition','fire','noteoff','miss','marker','emitted'].forEach(k => kinds.add(k));
@@ -150,6 +157,22 @@ function renderMode() {
     ctx.fillStyle = COL.axis;
     ['transition','fire','noteoff','marker','miss'].forEach((k, i) =>
       ctx.fillText(k, 2, evY + i * 15 + 11));
+    // Playhead cursor — full height, drawn last.
+    const p = document.getElementById('player');
+    if (p && !isNaN(p.currentTime)) {
+      const pf = p.currentTime * DATA.sample_rate;
+      if (pf >= view.a && pf <= view.b) {
+        const x = X(pf);
+        ctx.fillStyle = '#ff5252';
+        ctx.fillRect(x, 0, 2, canvas.height);
+        ctx.beginPath();
+        ctx.moveTo(x - 5, 0); ctx.lineTo(x + 7, 0); ctx.lineTo(x + 1, 9);
+        ctx.closePath(); ctx.fill();
+      }
+      const pos = document.getElementById('pos');
+      if (pos) pos.textContent =
+        ` ▶ ${p.currentTime.toFixed(4)}s · frame ${Math.round(pf)}`;
+    }
   }
 
   function pick(mx, my) {
@@ -180,9 +203,61 @@ function renderMode() {
   canvas.addEventListener('click', ev => {
     const hit = pick(ev.offsetX, ev.offsetY);
     if (hit) showDetail(hit);
-    const p = document.getElementById('player');
-    if (p) p.currentTime = F(ev.offsetX) / DATA.sample_rate;
+    // Seek: an event/voice hit seeks to its EXACT frame (sample-accurate);
+    // bare canvas clicks seek to the pixel position.
+    const frame = hit ? (hit.frame ?? hit.spawn) : F(ev.offsetX);
+    seekTo(frame);
   });
+  function seekTo(frame) {
+    const p = document.getElementById('player');
+    if (p && frame != null) p.currentTime = frame / DATA.sample_rate;
+    draw();
+  }
+  // Seek box: "1.234" / "1.234s" = seconds, "f59232" / "59232f" = frames.
+  document.getElementById('seek').addEventListener('keydown', ev => {
+    if (ev.key !== 'Enter') return;
+    const s = ev.target.value.trim().toLowerCase();
+    let frame = null;
+    const fm = s.match(/^f?(\d+)f?$/);
+    if (s.includes('f') && fm) frame = parseInt(fm[1], 10);
+    else {
+      const t = parseFloat(s.replace(/s$/, ''));
+      if (!isNaN(t)) frame = t * DATA.sample_rate;
+    }
+    if (frame != null) {
+      seekTo(frame);
+      // Center the view on the seek target if it's off-screen.
+      if (frame < view.a || frame > view.b) {
+        const span = view.b - view.a;
+        view.a = Math.max(0, frame - span / 2);
+        view.b = Math.min(DATA.frames, view.a + span);
+        draw();
+      }
+    }
+  });
+  // Space = play/pause (unless typing in the seek box).
+  window.addEventListener('keydown', ev => {
+    if (ev.code === 'Space' && ev.target.tagName !== 'INPUT') {
+      ev.preventDefault();
+      const p = document.getElementById('player');
+      if (p) p.paused ? p.play() : p.pause();
+    }
+  });
+  // Live playhead: redraw while playing (and follow the cursor when it
+  // leaves the visible window).
+  (function raf() {
+    const p = document.getElementById('player');
+    if (p && !p.paused) {
+      const pf = p.currentTime * DATA.sample_rate;
+      if (pf > view.b) {
+        const span = view.b - view.a;
+        view.a = Math.min(pf, DATA.frames - span);
+        view.b = view.a + span;
+      }
+      draw();
+    }
+    requestAnimationFrame(raf);
+  })();
   canvas.addEventListener('wheel', ev => {
     ev.preventDefault();
     const f = F(ev.offsetX);
@@ -222,6 +297,13 @@ function renderMode() {
       .filter(([k]) => !k.startsWith('_'))
       .map(([k, v]) => `<tr><td>${k}</td><td>${esc(JSON.stringify(v))}</td></tr>`).join('');
     side.innerHTML = `<h2>${o.id !== undefined ? 'voice #' + o.id : o.kind}</h2><table>${rows}</table>`;
+  }
+  // Redraw the playhead on scrubs via the audio element's own controls.
+  const player = document.getElementById('player');
+  if (player) {
+    player.addEventListener('seeked', draw);
+    player.addEventListener('pause', draw);
+    player.addEventListener('timeupdate', () => { if (player.paused) draw(); });
   }
   draw();
 }
