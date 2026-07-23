@@ -29,6 +29,7 @@
 
 pub mod cache;
 pub mod filter;
+pub mod pitch_shift;
 pub mod rr;
 pub mod trace;
 pub mod voice;

@@ -1067,10 +1067,18 @@ impl SampleEngine {
             0.0
         };
         // The heard-arrival marker is in SAMPLE time (measured `arrival_ms`
-        // when present, metadata `lead_in_ms` otherwise); playback runs at
-        // `rate`, so the surplus skipped off the front must be `sched_lead`
-        // WALL frames short of the arrival in sample frames.
-        let rate = 2.0f64.powf((f64::from(to) - f64::from(z.root_key) + pitch_offset) / 12.0);
+        // when present, metadata `lead_in_ms` otherwise). Playback now runs at
+        // the TRUE speed (tuning × SR-conversion only — the whole-tone
+        // transposition is a time-preserving pitch shift that does NOT change
+        // duration), so lead↔sample conversions and the arrival prediction use
+        // that rate, not the transposition. This is what puts pitch-shifted
+        // (off-grid) transitions back on the musical grid.
+        let sr_scale = self
+            .cache
+            .get_loaded(&self.patch.zone_paths[idx])
+            .map(|d| d.sample_rate as f64 / self.sample_rate as f64)
+            .unwrap_or(1.0);
+        let rate = 2.0f64.powf((z.tune_cents as f64 + self.master_tune_cents()) / 1200.0) * sr_scale;
         // Diagnostic sweep semantics (see `document::arrival_semantics_env`):
         // the effective arrival is re-interpreted between the LT offset and
         // the measured settle. Unset env = the marker as measured. The
@@ -1415,8 +1423,15 @@ impl SampleEngine {
         // note-off/silence) while shifting the recorded transition so it lands
         // on the target (CSS legato samples are source-labelled a grid step away).
         let semitones = note as f64 - root_key as f64 + pitch_offset + artic_transpose;
-        let total_cents = semitones * 100.0 + tune_cents as f64 + self.master_tune_cents();
-        let rate = 2.0f64.powf(total_cents / 1200.0);
+        // Split pitch from playback speed (whole-tone-grid fill): the integer
+        // TRANSPOSITION (note - root_key) becomes a time-preserving pitch
+        // shift on the voice so an off-grid note keeps its recorded arrival
+        // timing; only TUNING (per-zone + master, tiny) rides `rate`, which
+        // now carries just tuning × SR-conversion. `transpose_cents == 0` on
+        // the recorded grid → no shifter, byte-identical to before.
+        let transpose_cents = semitones * 100.0;
+        let tune_cents_total = tune_cents as f64 + self.master_tune_cents();
+        let rate = 2.0f64.powf(tune_cents_total / 1200.0);
 
         // Marker position for playback emission (FILE frames): the zone's
         // heard-arrival CLAIM, exactly the ladder the alignment uses —
@@ -1677,6 +1692,7 @@ impl SampleEngine {
             .with_pan(u_pan)
             .with_attack(attack)
             .with_start_hold(start_hold)
+            .with_pitch_cents(transpose_cents)
             .with_sample_window(start_frame, (sample_end > 0).then_some(sample_end as usize));
             // Playback-emitted arrival marker: attach the zone's heard-
             // arrival position (FILE frames at the SOURCE rate) so the voice
@@ -1907,8 +1923,10 @@ impl SampleEngine {
             } else {
                 note as f64 - z.root_key as f64
             };
-            let total_cents = semitones * 100.0 + z.tune_cents as f64 + self.master_tune_cents();
-            let rate = 2.0f64.powf(total_cents / 1200.0);
+            // Same pitch/speed split as spawn_zone_voice_at: transposition →
+            // time-preserving shifter; tuning → rate.
+            let transpose_cents = semitones * 100.0;
+            let rate = 2.0f64.powf((z.tune_cents as f64 + self.master_tune_cents()) / 1200.0);
             let gain = 10.0f32.powf(z.gain_db / 20.0);
             let mic_index = self.mic_index_for(&mic_id);
 
@@ -1958,6 +1976,7 @@ impl SampleEngine {
                 .with_choke_group(choke_group)
                 .with_pan(u_pan)
                 .with_attack(self.attack_frames)
+                .with_pitch_cents(transpose_cents)
                 .with_sample_window(
                     z.sample_start as usize,
                     (z.sample_end > 0).then_some(z.sample_end as usize),

@@ -236,6 +236,9 @@ pub struct Voice {
     /// Render-trace correlation id (set at spawn when tracing) — pairs this
     /// voice's lifetime with its `TraceKind::VoiceSpawn`/`VoiceEnd` events.
     pub trace_id: Option<u64>,
+    /// Time-preserving pitch shift (L/R), `None` when the note is on the
+    /// recorded grid (`pitch_cents == 0`) — those voices pay nothing.
+    pitch: Option<[crate::engine::pitch_shift::PitchShifter; 2]>,
 }
 
 /// One decoded Kontakt ENV_FLEX amplitude envelope, evaluated per frame and
@@ -414,6 +417,7 @@ impl Voice {
             quiet_frames: 0,
             env_peak: 0.0,
             trace_id: None,
+            pitch: None,
         }
     }
 
@@ -472,6 +476,7 @@ impl Voice {
             quiet_frames: 0,
             env_peak: 0.0,
             trace_id: None,
+            pitch: None,
         }
     }
 
@@ -484,6 +489,19 @@ impl Voice {
     /// both, applies this. `scale == 1.0` (native == output) is a no-op.
     pub fn with_rate_scale(mut self, scale: f64) -> Self {
         self.rate *= scale;
+        self
+    }
+
+    /// Apply a time-preserving pitch shift of `cents` (100 = a semitone),
+    /// decoupled from playback `rate`. Used for whole-tone-grid fill so an
+    /// off-grid note keeps its recorded arrival timing (`rate` carries only
+    /// sample-rate conversion) while pitch moves here. A near-zero shift is a
+    /// no-op — on-grid voices pay nothing.
+    pub fn with_pitch_cents(mut self, cents: f64) -> Self {
+        use crate::engine::pitch_shift::PitchShifter;
+        if !PitchShifter::is_unity(cents) {
+            self.pitch = Some([PitchShifter::new(cents), PitchShifter::new(cents)]);
+        }
         self
     }
 
@@ -854,6 +872,17 @@ impl Voice {
                     }
                 }
             }
+        }
+
+        // Time-preserving pitch shift (whole-tone-grid fill): the sample is
+        // read at true speed above (position advances by SR-conversion only,
+        // so its recorded arrival timing is preserved) and the ±semitone
+        // transposition is applied here, decoupled from playback rate. Applied
+        // after the loop-xfade so the shifter sees a continuous stream across
+        // the seam; before amp so gains/fades are unaffected.
+        if let Some(shift) = &mut self.pitch {
+            l = shift[0].tick(l);
+            r = shift[1].tick(r);
         }
 
         // Decoded ENV_FLEX amplitude envelope. Freezes at the sustain-hold
