@@ -1455,6 +1455,8 @@ fn render_report(
                 version: 1,
                 seed: SEED,
                 auto_divisi: false,
+                // Document mode is always Expressive (velocity drives the
+                // slow/medium/fast zone → 333/250/100 ms); no CC58 needed.
                 ccs: vec![
                     DocCc { qn: 0.0, chan: 0, cc: 1, val: cc1 },
                     DocCc { qn: 0.0, chan: 0, cc: 2, val: cc2 },
