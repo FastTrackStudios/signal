@@ -498,7 +498,40 @@ function renderMode() {
         ? `loop ${v.loop_start}..${v.loop_end} xf ${v.loop_xfade} (${v.wraps.length} wraps)`
         : 'no loop');
   }
-  function eventTip(e) { return e.kind + ' @ ' + fmt(e.frame) + '\n' + JSON.stringify(e, (k, v) => k.startsWith('_') ? undefined : v); }
+  function eventTip(e) {
+    let s = e.kind + ' @ ' + fmt(e.frame);
+    // Timing deltas vs the musical grid: how far this event sits from the
+    // nearest beat, and (for fires/prefires) the prefire lead to arrival.
+    if (DATA.tempo) {
+      const fpb = 60 / DATA.tempo.bpm * DATA.sample_rate;
+      const grid = f => {
+        const b = Math.round(f / fpb);
+        const dms = (f - b * fpb) / DATA.sample_rate * 1000;
+        return `beat ${b + 1} ${dms >= 0 ? '+' : ''}${dms.toFixed(1)}ms`;
+      };
+      s += `\n${grid(e.frame)}`;
+      if (e.kind === 'fire' && e.arrival != null) {
+        s += `\narrival: ${grid(e.arrival)}`;
+        s += `\nprefire lead: ${((e.arrival - e.frame) / DATA.sample_rate * 1000).toFixed(1)}ms before arrival`;
+      }
+    }
+    // Distance to the nearest emitted "heard" marker of the same note — the
+    // real audible arrival vs this intended marker.
+    const note = e.to ?? e.note;
+    if (note != null) {
+      let best = null;
+      for (const o of DATA.events) {
+        if (o.kind === 'emitted' && o.note === note) {
+          if (!best || Math.abs(o.frame - e.frame) < Math.abs(best - e.frame)) best = o.frame;
+        }
+      }
+      if (best != null && best !== e.frame) {
+        s += `\nheard vs this: ${((best - e.frame) / DATA.sample_rate * 1000).toFixed(1)}ms`;
+      }
+    }
+    s += '\n' + JSON.stringify(e, (k, v) => k.startsWith('_') ? undefined : v);
+    return s;
+  }
   function showDetail(o) {
     const side = document.getElementById('side');
     const rows = Object.entries(o)

@@ -1394,7 +1394,7 @@ fn render_report(
     cc2: u8,
     out: &Path,
     wav: Option<PathBuf>,
-    tail: f32,
+    _tail: f32,
     bpm: Option<f64>,
     beats_per_bar: u32,
     pure: bool,
@@ -1402,7 +1402,7 @@ fn render_report(
     use crate::document::{DocCc, DocNote, DocumentRenderOptions, TempoPoint, TrackDocument};
     const SR: u32 = 48_000;
     const ID: &str = "report";
-    const BLOCK: u64 = 256;
+
     const SEED: u64 = 0x00DA_11A5_EED0_0001;
     let script = parse_note_script(notes)?;
 
@@ -1415,22 +1415,12 @@ fn render_report(
         Vec<crate::engine::EmittedMarker>,
     );
 
-    // With a tempo, render in DOCUMENT mode so the scheduler PREFIRES each
-    // note — the sample starts BEFORE the beat and its arrival lands ON the
-    // beat (real ARA-style anticipation), exactly what the grid ruler checks
-    // against. Without a tempo, fall back to reactive note-on (free time).
-    let document = bpm.is_some();
+    // ALWAYS document mode (ARA-style prefire): the scheduler fires each note
+    // early so the sample starts BEFORE the beat and its arrival lands ON the
+    // beat. Live/reactive triggering is intentionally not used here — it was a
+    // constant source of "why is the timing different" confusion. `--bpm` only
+    // sets the grid/ruler reference; the qn conversion defaults to 120.
     let bpm_v = bpm.unwrap_or(120.0);
-    // Reactive-path timeline.
-    let mut edges: Vec<(u64, bool, u8, u8)> = Vec::new();
-    let mut end = 0.0f32;
-    for n in &script {
-        edges.push(((n.start * SR as f32) as u64, true, n.note, n.velocity));
-        edges.push((((n.start + n.dur) * SR as f32) as u64, false, n.note, n.velocity));
-        end = end.max(n.start + n.dur);
-    }
-    edges.sort_by_key(|e| (e.0, e.1));
-    let total_frames = ((end + tail) * SR as f32) as u64;
 
     let render_pass = |solo: Option<std::collections::BTreeSet<u8>>| -> Result<PassOut> {
         let rig = crate::SamplerRig::new_offline_with_cache_budget(SR, Some(8 * 1024 * 1024 * 1024));
@@ -1446,7 +1436,7 @@ fn render_report(
             rig.warm_note(ID, n.note);
         }
 
-        if document {
+        {
             // Seconds → quarter-notes at the given tempo. Notes touch/overlap
             // a hair so the engine reads them as one legato line.
             let sec_to_qn = |s: f32| (s as f64) * bpm_v / 60.0;
@@ -1498,33 +1488,8 @@ fn render_report(
             for m in &mut emitted {
                 m.frame -= base;
             }
-            return Ok((res.audio, trace, fires, markers, emitted));
+            Ok((res.audio, trace, fires, markers, emitted))
         }
-
-        // Reactive (free-time) fallback.
-        rig.cc(ID, 1, cc1);
-        rig.cc(ID, 2, cc2);
-        let mut audio = vec![0.0f32; 0];
-        let mut cursor = 0u64;
-        let mut edge_i = 0;
-        while cursor < total_frames {
-            while edge_i < edges.len() && edges[edge_i].0 <= cursor {
-                let (_, on, note, vel) = edges[edge_i];
-                if on {
-                    rig.note_on(ID, note, vel);
-                } else {
-                    rig.note_off(ID, note);
-                }
-                edge_i += 1;
-            }
-            let n = BLOCK.min(total_frames - cursor) as usize;
-            let mut buf = vec![0.0f32; n * 2];
-            rig.render_offline(&mut buf)
-                .map_err(|e| eyre::eyre!("render: {e}"))?;
-            audio.extend_from_slice(&buf);
-            cursor += n as u64;
-        }
-        Ok((audio, rig.render_trace(ID), rig.legato_fire_log(ID), Vec::new(), Vec::new()))
     };
 
     let write_wav = |path: &Path, audio: &[f32]| -> Result<()> {
