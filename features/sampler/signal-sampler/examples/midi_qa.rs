@@ -254,8 +254,15 @@ fn main() -> eyre::Result<()> {
         }
         rig.set_solo_notes(ID, None);
 
-        // Metronome click over the full render length.
-        let click = signal_sampler::report::click_track(res.audio.len() / 2, SR, *bpm, 4);
+        // Metronome click over the full render length (real click sample).
+        let click_sample = std::path::Path::new(signal_sampler::report::DEFAULT_CLICK_SAMPLE);
+        let click = signal_sampler::report::click_track(
+            res.audio.len() / 2,
+            SR,
+            *bpm,
+            4,
+            click_sample.exists().then_some(click_sample),
+        );
         write_wav(&PathBuf::from(format!("target/qa_{name}.click.wav")), &click)?;
 
         // Boundary marks: note onsets (first = attack, rest = transitions) and

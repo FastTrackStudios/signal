@@ -73,6 +73,34 @@ function renderMode() {
       style="background:#1b1f26;color:#e6e9ee;border:1px solid #3a404c;padding:2px 6px;font:inherit">
     <span id="pos" class="meta"></span>`;
   top.appendChild(seekbox);
+  // Selection controls (shift-drag on the waveform to select a range).
+  const selbox = document.createElement('span');
+  selbox.style.cssText = 'display:inline-flex;gap:4px;align-items:center';
+  const selbtn = (label, fn) => {
+    const b = document.createElement('button');
+    b.textContent = label;
+    b.style.cssText =
+      'background:#1b1f26;color:#d8dce2;border:1px solid #3a404c;border-radius:3px;' +
+      'padding:2px 8px;font:inherit;cursor:pointer';
+    b.onclick = fn;
+    selbox.appendChild(b);
+    return b;
+  };
+  selbox.innerHTML = '<span class="meta">shift-drag to select ·</span>';
+  selbtn('▶ sel', () => playSelection(false));
+  selbtn('⟳ loop', () => playSelection(true));
+  selbtn('✕', () => { sel = null; playRange = null; document.getElementById('selinfo').textContent = ''; draw(); });
+  const selinfo = document.createElement('span');
+  selinfo.id = 'selinfo'; selinfo.className = 'meta';
+  selbox.appendChild(selinfo);
+  top.appendChild(selbox);
+  window.playSelection = function (loop) {
+    if (!sel) return;
+    const p = document.getElementById('player');
+    const start = Math.min(sel.a, sel.b), stop = Math.max(sel.a, sel.b);
+    playRange = { start, end: stop, loop };
+    if (p) { p.currentTime = start / DATA.sample_rate; p.play().catch(() => {}); }
+  };
   // Solo: switch the player between the full mix and per-note isolated stems
   // (preserving playhead position) — A/B which note carries the artifact.
   if (DATA.stems && DATA.stems.length) {
@@ -128,6 +156,9 @@ function renderMode() {
   let view = { a: 0, b: DATA.frames };           // visible frame range
   let hover = null;
   let soloNote = null;                           // null = full mix
+  let sel = null;                                // {a,b} frame selection
+  let selecting = false;
+  let playRange = null;                          // {start,end,loop} active playback bounds
 
   // Switch the audio source to a stem (or the full mix), keeping the playhead
   // position and play/pause state so an A/B is seamless.
@@ -274,6 +305,15 @@ function renderMode() {
         ctx.fillRect(x, y + 3, Math.max(X(e.arrival) - x, 1), 2);
       }
     }
+    // Selection overlay.
+    if (sel) {
+      const sa = X(Math.min(sel.a, sel.b)), sb = X(Math.max(sel.a, sel.b));
+      ctx.fillStyle = 'rgba(80,180,255,0.14)';
+      ctx.fillRect(sa, 0, sb - sa, canvas.height);
+      ctx.fillStyle = 'rgba(80,180,255,0.8)';
+      ctx.fillRect(sa, 0, 1, canvas.height);
+      ctx.fillRect(sb - 1, 0, 1, canvas.height);
+    }
     // Playhead cursor — full height, drawn last.
     const p = document.getElementById('player');
     if (p && !isNaN(p.currentTime)) {
@@ -387,6 +427,14 @@ function renderMode() {
     const p = document.getElementById('player');
     if (p && !p.paused) {
       syncClick();
+      // Enforce the play/loop selection bounds.
+      if (playRange) {
+        const cf = p.currentTime * DATA.sample_rate;
+        if (cf >= playRange.end) {
+          if (playRange.loop) { p.currentTime = playRange.start / DATA.sample_rate; }
+          else { p.pause(); playRange = null; }
+        }
+      }
       const pf = p.currentTime * DATA.sample_rate;
       if (pf > view.b) {
         const span = view.b - view.a;
@@ -406,9 +454,30 @@ function renderMode() {
     draw();
   }, { passive: false });
   let dragX = null;
-  canvas.addEventListener('mousedown', ev => { dragX = ev.offsetX; });
-  window.addEventListener('mouseup', () => { dragX = null; });
+  canvas.addEventListener('mousedown', ev => {
+    if (ev.shiftKey) {                    // shift-drag = range selection
+      selecting = true;
+      const f = F(ev.offsetX);
+      sel = { a: f, b: f };
+      playRange = null;
+      draw();
+    } else {
+      dragX = ev.offsetX;
+    }
+  });
+  window.addEventListener('mouseup', () => { dragX = null; selecting = false; updateSelInfo(); });
+  function updateSelInfo() {
+    const el = document.getElementById('selinfo');
+    if (!el) return;
+    if (!sel) { el.textContent = ''; return; }
+    const a = Math.min(sel.a, sel.b), b = Math.max(sel.a, sel.b);
+    const dur = (b - a) / DATA.sample_rate;
+    let s = ` ${(a / DATA.sample_rate).toFixed(3)}–${(b / DATA.sample_rate).toFixed(3)}s (${(dur * 1000).toFixed(0)} ms`;
+    if (DATA.tempo) s += `, ${(dur / (60 / DATA.tempo.bpm)).toFixed(2)} beats`;
+    el.textContent = s + ')';
+  }
   canvas.addEventListener('mousemove', ev => {
+    if (selecting) { sel.b = F(ev.offsetX); updateSelInfo(); draw(); return; }
     if (dragX === null || ev.altKey) return;
     const df = (dragX - ev.offsetX) / canvas.width * (view.b - view.a);
     if (Math.abs(dragX - ev.offsetX) < 3) return;

@@ -253,15 +253,46 @@ pub fn sample_report_json(name: &str, entries: &[SampleView]) -> Value {
     json!({ "mode": "samples", "name": name, "samples": samples })
 }
 
-/// Generate an interleaved-stereo metronome click over `total_frames`:
-/// a short decaying sine at each beat (higher/louder on the downbeat),
-/// anchored to beat 1 of bar 1 at frame 0. Same rate/length as the mix so
-/// the viewer can overlay it as a second synced audio layer.
+/// Default real click sample (a short percussive click) stamped at each beat
+/// when present; falls back to the synth blip if it can't be decoded.
+pub const DEFAULT_CLICK_SAMPLE: &str =
+    "/run/media/AudioHaven/SlateDigial/Trigger2Library/CLICKS/New Click -  Woodblock-eighth.wav";
+
+/// Decode a click WAV to a mono f32 grain at `sample_rate` (linear-resampled),
+/// trimmed to ~120 ms so beats never overlap. `None` if it can't be read.
+fn load_click_grain(path: &Path, sample_rate: u32) -> Option<Vec<f32>> {
+    let data = crate::engine::cache::load_sample(path).ok()?;
+    let ch = data.channels.max(1) as usize;
+    let src_frames = data.num_frames;
+    let mono: Vec<f32> = (0..src_frames)
+        .map(|f| {
+            (0..ch).map(|c| data.frames[f * ch + c]).sum::<f32>() / ch as f32
+        })
+        .collect();
+    let ratio = data.sample_rate as f64 / sample_rate as f64;
+    let out_len = ((src_frames as f64 / ratio) as usize).min(sample_rate as usize / 8);
+    let mut grain = Vec::with_capacity(out_len);
+    for i in 0..out_len {
+        let sp = i as f64 * ratio;
+        let i0 = sp as usize;
+        let frac = (sp - i0 as f64) as f32;
+        let a = mono.get(i0).copied().unwrap_or(0.0);
+        let b = mono.get(i0 + 1).copied().unwrap_or(a);
+        grain.push(a + (b - a) * frac);
+    }
+    Some(grain)
+}
+
+/// Generate an interleaved-stereo metronome click over `total_frames`,
+/// anchored to beat 1 of bar 1 at frame 0. Uses the real click sample at
+/// `click_sample` (louder on the downbeat) when decodable, else a synth blip.
+/// Same rate/length as the mix so the viewer overlays it as a synced layer.
 pub fn click_track(
     total_frames: usize,
     sample_rate: u32,
     bpm: f64,
     beats_per_bar: u32,
+    click_sample: Option<&Path>,
 ) -> Vec<f32> {
     let mut out = vec![0.0f32; total_frames * 2];
     if bpm <= 0.0 {
@@ -269,8 +300,9 @@ pub fn click_track(
     }
     let fpb = 60.0 / bpm * sample_rate as f64;
     let bpbar = beats_per_bar.max(1);
-    let click_len = (sample_rate as f64 * 0.035) as usize; // 35 ms blip
     let sr = sample_rate as f32;
+    let grain = click_sample.and_then(|p| load_click_grain(p, sample_rate));
+
     let mut beat = 0usize;
     loop {
         let start = (beat as f64 * fpb).round() as usize;
@@ -278,17 +310,34 @@ pub fn click_track(
             break;
         }
         let downbeat = (beat as u32) % bpbar == 0;
-        let (freq, amp) = if downbeat { (1500.0f32, 0.6) } else { (1000.0f32, 0.4) };
-        for i in 0..click_len {
-            let f = start + i;
-            if f >= total_frames {
-                break;
+        let amp = if downbeat { 1.0 } else { 0.55 };
+        match &grain {
+            Some(g) => {
+                for (i, &s) in g.iter().enumerate() {
+                    let f = start + i;
+                    if f >= total_frames {
+                        break;
+                    }
+                    let v = s * amp;
+                    out[f * 2] += v;
+                    out[f * 2 + 1] += v;
+                }
             }
-            let t = i as f32 / sr;
-            let env = (-t * 90.0).exp(); // fast decay
-            let s = (t * freq * std::f32::consts::TAU).sin() * env * amp;
-            out[f * 2] += s;
-            out[f * 2 + 1] += s;
+            None => {
+                // Synth fallback: fast-decaying tone (higher on the downbeat).
+                let (freq, a) = if downbeat { (1500.0f32, 0.6) } else { (1000.0f32, 0.4) };
+                let click_len = (sample_rate as f64 * 0.035) as usize;
+                for i in 0..click_len {
+                    let f = start + i;
+                    if f >= total_frames {
+                        break;
+                    }
+                    let t = i as f32 / sr;
+                    let s = (t * freq * std::f32::consts::TAU).sin() * (-t * 90.0).exp() * a;
+                    out[f * 2] += s;
+                    out[f * 2 + 1] += s;
+                }
+            }
         }
         beat += 1;
     }

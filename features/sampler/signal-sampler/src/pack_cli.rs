@@ -1489,8 +1489,14 @@ fn render_report(
     // Metronome click (only meaningful with a tempo).
     let click_href = match bpm {
         Some(b) => {
-            let click =
-                crate::report::click_track(audio.len() / 2, SR, b, beats_per_bar);
+            let click_sample = std::path::Path::new(crate::report::DEFAULT_CLICK_SAMPLE);
+            let click = crate::report::click_track(
+                audio.len() / 2,
+                SR,
+                b,
+                beats_per_bar,
+                click_sample.exists().then_some(click_sample),
+            );
             let fname = format!("{stem_base}.click.wav");
             write_wav(&wav_path.with_file_name(&fname), &click)?;
             Some(fname)
