@@ -144,7 +144,7 @@ fn parse_groups(text: &str) -> Vec<Group> {
                 .unwrap_or_else(|| panic!("group {name}: no articulations list"));
             let articulations = body[a_inner_s..a_inner_e]
                 .split_whitespace()
-                .map(str::to_string)
+                .map(|t| t.trim_matches('"').to_string())
                 .collect();
             Group {
                 name,

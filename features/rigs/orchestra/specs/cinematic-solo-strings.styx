@@ -1,0 +1,659 @@
+// Cinematic Studio Solo Strings — Library Specification
+//
+// Ported from the legacy sample-collector spec (cinematic-solo-strings.toml)
+// and cross-checked against the extracted zone maps in
+// `_patches/*/library.styx` (cs-series-zonemap.py output). Solo Strings is
+// CSS's sibling solo library, so the CSS engine model (dynamics, legato
+// engine shape, keyswitch layout) carries over with solo-specific values.
+//
+// KNOWN GAP: Solo Strings zone specs currently carry no loop points — no NKI
+// decode is available yet, so sustains rely on the engine's synth-loop path
+// (loop_xfade_ms) rather than authored loop markers.
+//
+// KNOWN GAP (shared CC1 layer tables): the engine keys cc1_layers_N by an
+// articulation's DYNAMICS COUNT, and Solo Strings has label conflicts inside
+// a count: 2-dyn = Nonvib-family (p/f) vs Harm-family (pp/mp); 3-dyn =
+// sustain/legato/trill (p/mf/ff) vs Marcato/Marcrel (mf/f/fff). The tables
+// below carry the majority labels (p/f and p/mf/ff); Harm/Harmrel and
+// Marcato/Marcrel need either per-articulation layer overrides or the
+// index-based blend path before their CC1 crossfade selects real samples.
+
+name    "Cinematic Studio Solo Strings"
+version 1.0
+vendor  "Cinematic Studio"
+
+// ── Sections ──────────────────────────────────────────────────────────────────
+// Whole-tone grid every 2 semitones; sampler pitch-shifts ±1 semitone to fill.
+// Labels match the `_patches` directory names exactly.
+//
+// ASSUMPTION → CORRECTED: the legacy toml listed A#1–G#3 for all four
+// instruments (a copy-paste placeholder — a violin and a cello cannot share a
+// range). Ranges + grids below are measured from the extracted zone maps:
+//   Solo Violin / Violin II: keys 43–85 = G2–C#6, grid (G A B C# D# F)
+//   Solo Viola:              keys 36–72 = C2–C5,  grid (C D E F# G# A#)
+//   Solo Cello:              keys 24–66 = C1–F#4, grid (C D E F# G# A#)
+
+sections (
+    {
+        id          Svi
+        label       "Solo Violin"
+        note_grid   (G A B C# D# F)
+        lowest_note  G2
+        highest_note C#6
+    }
+    {
+        id          Svii
+        label       "Solo Violin II"
+        note_grid   (G A B C# D# F)
+        lowest_note  G2
+        highest_note C#6
+    }
+    {
+        id          Sva
+        label       "Solo Viola"
+        note_grid   (C D E F# G# A#)
+        lowest_note  C2
+        highest_note C5
+    }
+    {
+        id          Sce
+        label       "Solo Cello"
+        note_grid   (C D E F# G# A#)
+        lowest_note  C1
+        highest_note F#4
+    }
+)
+
+// ── Microphone Positions ───────────────────────────────────────────────────────
+// Mix = pre-blended stereo bus of the three separate positions.
+// No Spot mics in Solo Strings (unlike CSS's Spot1/Spot2).
+//
+// `default true` on Mix — only the pre-blended bus loads on open; the
+// separate mics stay unloaded until explicitly requested (same RAM-saving
+// convention as CSS / MM2).
+
+mics (
+    {id Mix,   label Mix,   kind blended,  default true}
+    {id Close, label Close, kind separate}
+    {id Main,  label Main,  kind separate}
+    {id Room,  label Room,  kind separate}
+)
+
+// ── Performance model ─────────────────────────────────────────────────────────
+// No NKI/KSP decode exists for Solo Strings yet, so NONE of the CSS-decoded
+// numbers (master tune +9 cents, 198 ms arco attack, decoded ENV_FLEX
+// envelopes, %g1qri velocity bands) are carried over — the engine's library
+// defaults apply. Only the owner attack-placement policy is set (same as CSS).
+
+performance {
+    // ASSUMPTION: start-on-the-click policy carried over from CSS (owner
+    // policy — fresh attacks start on the tick and speak naturally after it).
+    attack_placement start_at_tick
+}
+
+// ── Dynamic Control Model ─────────────────────────────────────────────────────
+// Sustains: CC1 crossfades between sampled dynamic layers. Velocity irrelevant.
+// Vibrato:  CC2 — IMPORTANT: an ON/OFF SWITCH, not a continuous crossfade.
+//           The manual: "switching between non-vibrato and vibrato is an
+//           on/off function, it is not possible to set the fader halfway."
+//           CC2=0 → Nonvib, CC2=127 → Vibsus.
+// Shorts:   CC1 selects the short-note TYPE; velocity picks the dynamic layer
+//           within it (even split — no KSP %g1qri decode for this library).
+
+dynamics {
+    sustain_controller    CC1
+    vibrato_controller    CC2
+    vibrato_mode          on_off     // solo strings: binary, NOT a crossfade
+    short_note_controller velocity
+
+    // CC1 crossfade zones — ASSUMPTION: equal-thirds approximation from the
+    // legacy toml; the real per-layer CC_VOLUME tables have not been decoded
+    // for Solo Strings (CSS's were, see cinematic-strings.styx).
+    // 2-dyn labels serve the Nonvib family (Nonvib/NVrel/NVLeg/NVLegzero/Port
+    // all ship p+f). Harm/Harmrel ship pp+mp — see the shared-table gap note
+    // at the top of this file.
+    cc1_layers_2 (
+        {label p, cc_range (0  63)}
+        {label f, cc_range (64 127)}
+    )
+    cc1_layers_3 (
+        {label p,  cc_range (0  42)}
+        {label mf, cc_range (33 94)}
+        {label ff, cc_range (85 127)}
+    )
+    cc1_layers_4 (
+        {label pp,  cc_range (0  31)}
+        {label mp,  cc_range (22 73)}
+        {label f,   cc_range (64 104)}
+        {label fff, cc_range (95 127)}
+    )
+
+    // CC1 selects short-note sub-type when in the Staccato/Spiccato group
+    // (same map as CSS, confirmed by the manual).
+    short_note_cc1_map {
+        0-31   Spiccato
+        32-63  Staccatissimo
+        64-95  Staccato
+        96-127 Sfz
+    }
+
+    // CC1 selects pizzicato sub-type when in the Pizzicato group.
+    // Manual values as-documented. NOTE: CSS's A/B found its shipped script
+    // deviates from its manual here (top band → Bartokpizz); no reference
+    // render exists for Solo Strings yet, so the manual map stands.
+    pizzicato_cc1_map {
+        0-41   Pizzicato
+        42-84  Bartokpizz
+        85-127 Clegno
+    }
+}
+
+// ── Articulations ─────────────────────────────────────────────────────────────
+// Dynamics / rr / ranges verified against the extracted zone maps
+// (`_patches/*/library.styx`) — they correct several legacy-toml values:
+// Nonvib family ships 2 dynamics (p f), not 3; Marcato ships rr 1.
+//
+// The legacy toml also declared a Sord* articulation family — the extracted
+// patches contain NO Sord samples: Con Sordino is an IR/DSP emulation in this
+// library (see the Con Sordino note at the bottom), so no Sord articulations
+// are declared.
+
+articulations (
+
+    // ── Sustains ────────────────────────────────────────────────────────────
+
+    {
+        id            Vibsus
+        label         "Vibrato Sustain"
+        kind          @Sustain
+        dynamics      (p mf ff)
+        rr            1
+        dyn_ctrl      cc1
+        release_artic Vsusrel
+        notes         full
+        vibrato      true
+        vibrato_pair Nonvib
+        // No decoded ENV_FLEX for this library — engine family defaults apply.
+    }
+    {
+        id            Nonvib
+        label         "Non-Vibrato Sustain"
+        kind          @Sustain
+        dynamics      (p f)   // zone maps confirm 2 dynamics (toml said 3)
+        rr            1
+        dyn_ctrl      cc1
+        release_artic NVrel
+        notes         full
+        vibrato      false
+        vibrato_pair Vibsus
+        // Filename-token split across instruments (zone-map confirmed):
+        // Solo Violin uses "Nonvib"; Solo Violin II / Viola / Cello use
+        // "NVsus". Declared once here, aliased — same idiom as CSS's
+        // Pizzicato/Pizz.
+        aliases (NVsus)
+    }
+    {
+        id            Marcato
+        label         Marcato
+        kind          @Sustain   // per the legacy toml: CSSS marcato is a long articulation (rr 1, CC1 dynamics) unlike CSS's @Short
+        dynamics      (mf f fff)
+        rr            1          // zone maps confirm rr 1 (CSS ships 2)
+        dyn_ctrl      cc1
+        release_artic Marcrel
+        notes         full
+        // velocity >= 75 adds a subtle accent overlay (manual; same threshold
+        // as CSS) — the overlay is NOT modeled yet.
+        // NOTE: mf/f/fff labels conflict with the shared 3-layer table
+        // (p/mf/ff) — see the gap note at the top of this file.
+    }
+    {
+        id            Harm
+        label         Harmonics
+        kind          @Sustain
+        dynamics      (pp mp)
+        rr            1
+        dyn_ctrl      cc1
+        release_artic Harmrel
+        notes         short   // reduced range: Svi/Svii G2–B4, Sva C2–E4, Sce C1–E4 (zone maps)
+        // ASSUMPTION: CSS needed `transpose -12` (its natural-harmonic zones
+        // were mapped an octave above the sounded pitch, A/B-verified). No
+        // A/B exists for Solo Strings, so no transpose is assumed — revisit
+        // once a reference render is available.
+        vibrato_pair ""   // harmonics have no vibrato pair
+    }
+    {
+        id            Tremolo
+        label         Tremolo
+        kind          @Sustain
+        dynamics      (pp mp f fff)
+        rr            1
+        dyn_ctrl      cc1
+        release_artic Tremrel
+        notes         full
+        // "Measured Tremolo" (CC58=63) is KSP-scripted (tempo-synced
+        // re-triggering, best 150–210 BPM per manual) — engine ignores it.
+        vibrato_pair ""   // no CC2 partner — tremolo is its own colour
+    }
+
+    // ── Trills ──────────────────────────────────────────────────────────────
+    // Vendor trigger: two notes played within ≤25 ms selects the trill
+    // interval — engine behaviour, noted here for reference only.
+
+    {
+        id            HTrills
+        label         "Half-Tone Trills"
+        kind          @Trill
+        dynamics      (p mf ff)
+        rr            1
+        dyn_ctrl      cc1
+        release_artic HTrel
+        notes         full
+    }
+    {
+        id            WTrills
+        label         "Whole-Tone Trills"
+        kind          @Trill
+        dynamics      (p mf ff)
+        rr            1
+        dyn_ctrl      cc1
+        release_artic WTrel
+        notes         full
+    }
+
+    // ── Legato / Transitions ─────────────────────────────────────────────────
+    // Velocity controls transition speed (pre-delay), not which sample plays.
+    // Direction (up/down) is filename-encoded; direction token precedes note.
+    // NOTE: as in CSS, the 1..12 filename suffix on Leg/NVLeg/Port is the
+    // transition INTERVAL in semitones (named note = lower pitch of the
+    // pair), NOT a round-robin index — the zone-map generator folded it into
+    // rr_index, but there is exactly one take per (dyn, dir, interval). Only
+    // the *zero re-trigger sets have real RRs (3).
+    //
+    // Manual: vibrato legato was SLURRED, non-vib legato RE-BOWED — a
+    // genuinely different-sounding transition set, hence separate paths.
+
+    {
+        id          Leg
+        label       "Vibrato Legato"
+        kind        @Legato
+        dynamics    (p mf ff)
+        rr          1
+        dyn_ctrl    cc1
+        directional true
+        notes       full
+        vibrato      true
+        vibrato_pair NVLeg
+        legato_role  transition
+    }
+    {
+        id          Legzero
+        label       "Vibrato Legato Re-trigger"
+        kind        @Legato
+        dynamics    (p mf ff)
+        rr          3
+        dyn_ctrl    cc1
+        directional false
+        notes       full
+        vibrato      true
+        vibrato_pair NVLegzero
+        legato_role  retrigger
+    }
+    {
+        id          NVLeg
+        label       "Non-Vibrato Legato"
+        kind        @Legato
+        dynamics    (p f)   // only 2 layers — fewer than Leg's 3 (zone-map confirmed)
+        rr          1
+        dyn_ctrl    cc1
+        directional true
+        notes       full
+        vibrato      false
+        vibrato_pair Leg
+        legato_role  transition
+    }
+    {
+        id          NVLegzero
+        label       "Non-Vibrato Legato Re-trigger"
+        kind        @Legato
+        dynamics    (p f)
+        rr          3
+        dyn_ctrl    cc1
+        directional false
+        notes       full
+        vibrato      false
+        vibrato_pair Legzero
+        legato_role  retrigger
+    }
+    {
+        id          Port
+        label       Portamento
+        kind        @Legato
+        dynamics    (p f)   // 2 dynamics (CSS Port ships only f)
+        rr          1
+        dyn_ctrl    cc1
+        directional true
+        notes       full
+        legato_role portamento
+    }
+
+    // ── Short Notes ──────────────────────────────────────────────────────────
+    // No KSP velocity-band decode (%g1qri/%bcez1) for this library — shorts
+    // use the engine's even velocity split (enable_velocity_layers unset).
+
+    {
+        id       Staccato
+        label    Staccato
+        kind     @Short
+        dynamics (pp mp f fff)
+        rr       4
+        dyn_ctrl velocity
+        notes    full
+    }
+    {
+        id       Staccatissimo
+        label    Staccatissimo
+        kind     @Short
+        dynamics (pp mp f fff)
+        rr       5
+        dyn_ctrl velocity
+        notes    full
+    }
+    {
+        id       Spiccato
+        label    Spiccato
+        kind     @Short
+        dynamics (pp mp f fff)
+        rr       9   // highest RR count in the library (zone-map confirmed)
+        dyn_ctrl velocity
+        notes    full
+    }
+    {
+        id       Sfz
+        label    Sforzando
+        kind     @Short
+        dynamics (mf f fff)
+        rr       2
+        dyn_ctrl velocity
+        notes    full
+    }
+    {
+        id       Pizzicato
+        label    Pizzicato
+        kind     @Short
+        dynamics (pp mp f fff)
+        rr       4
+        dyn_ctrl velocity
+        notes    full   // near-full: top 1–3 keys shy of the section ceiling per zone maps
+        // All four instruments use the "Pizzicato" token — no "Pizz" alias
+        // needed (unlike CSS).
+    }
+    {
+        id       Bartokpizz
+        label    "Bartók Pizzicato"
+        kind     @Short
+        dynamics (mf fff)   // zone-map confirmed: only 2 dynamics
+        rr       2
+        dyn_ctrl velocity
+        notes    short   // reduced top: Svi/Svii G2–G5, Sva C2–F#4, Sce C1–D4 (zone maps)
+    }
+    {
+        id       Clegno
+        label    "Col Legno"
+        kind     @Short   // percussive one-shot, velocity-layered — same modeling as CSS's corrected Clegno
+        dynamics (pp mp f)
+        rr       4
+        dyn_ctrl velocity
+        notes    full
+    }
+
+    // ── Release Samples ──────────────────────────────────────────────────────
+    // Triggered on note-off. Single sample per note per dynamic (rr=1).
+    // Selected by current CC1 at moment of note-off.
+
+    {
+        id       Vsusrel
+        label    "Vibrato Sustain Release"
+        kind     @Release
+        dynamics (p mf ff)
+        rr       1
+        dyn_ctrl cc1
+        notes    full
+    }
+    {
+        id       NVrel
+        label    "Non-Vibrato Release"
+        kind     @Release
+        dynamics (p f)   // zone-map confirmed (toml said 3)
+        rr       1
+        dyn_ctrl cc1
+        notes    full
+    }
+    {
+        id       Marcrel
+        label    "Marcato Release"
+        kind     @Release
+        dynamics (mf f fff)
+        rr       1
+        dyn_ctrl cc1
+        notes    full
+    }
+    {
+        id       Harmrel
+        label    "Harmonics Release"
+        kind     @Release
+        dynamics (pp mp)
+        rr       1
+        dyn_ctrl cc1
+        notes    short
+    }
+    {
+        id       Tremrel
+        label    "Tremolo Release"
+        kind     @Release
+        dynamics (pp mp f fff)
+        rr       1
+        dyn_ctrl cc1
+        notes    full
+    }
+    {
+        id       HTrel
+        label    "Half-Tone Trill Release"
+        kind     @Release
+        dynamics (p mf ff)
+        rr       1
+        dyn_ctrl cc1
+        notes    full
+    }
+    {
+        id       WTrel
+        label    "Whole-Tone Trill Release"
+        kind     @Release
+        dynamics (p mf ff)
+        rr       1
+        dyn_ctrl cc1
+        notes    full
+    }
+)
+
+// ── Con Sordino ───────────────────────────────────────────────────────────────
+// IR-convolution emulation ("a highly detailed set of custom impulse
+// recordings" — manual); NO separate sample set ships (zone maps contain no
+// Sord* articulations). Activated via CC58 86-90 (On) / 91-95 (Off) or
+// keyswitch; engine applies its sordino DSP to the output bus when active.
+
+// ── Legato Engine ─────────────────────────────────────────────────────────────
+// CSSS names its modes differently from CSS; they map onto the engine's two
+// mode slots:
+//   Standard (2 speeds, manual-recommended) → low_latency
+//   Advanced (3 speeds)                     → expressive
+// A third "Classic" mode (CS2 emulation) exists with undocumented timing —
+// not modeled until a KSP decode lands.
+// No Solo Strings KSP decode yet: overlap-delay / start-offset / retire-fade
+// tables are omitted, so the engine falls back to its CSS-decoded defaults
+// (ASSUMPTION: sibling library, same developer/scripting).
+
+legato_engine {
+    // ADVANCED MODE → expressive slot — three velocity zones (manual values).
+    expressive {
+        enabled_cc58_range 6-10
+        zones (
+            {vel_range (0   64),  label slow,   delay_ms 333}
+            {vel_range (65  100), label medium, delay_ms 250}
+            {vel_range (101 127), label fast,   delay_ms 100}
+        )
+    }
+
+    // STANDARD MODE → low_latency slot — two velocity zones ("just two
+    // speeds: medium and fast" — manual, which also recommends this mode).
+    // ASSUMPTION: 0-64/65-127 split by analogy with Advanced (manual gives
+    // no boundaries for Standard).
+    low_latency {
+        enabled_cc58_range 0-5
+        zones (
+            {vel_range (0  64),  label medium, delay_ms 250}
+            {vel_range (65 127), label fast,   delay_ms 100}
+        )
+    }
+
+    // PORTAMENTO — triggered when legato velocity <= trigger_vel_max.
+    // IMPORTANT difference from CSS: in Solo Strings CC5 is an ON/OFF SWITCH
+    // for portamento, NOT a volume fader (manual). The spec struct only has
+    // a volume_controller slot — recorded here as the portamento CC with the
+    // on/off semantics noted for the engine.
+    portamento {
+        trigger_vel_max   20    // default; configurable 0–127 in the Config screen
+        volume_controller CC5   // CSSS: on/off switch (see note above)
+    }
+
+    // REPEATED NOTES (Legzero/NVLegzero) — same note re-triggered while
+    // CC64 (sustain pedal) held.
+    retrigger {
+        trigger sustain_pedal_held
+        rr      3
+    }
+}
+
+// ── Short Note Timing ─────────────────────────────────────────────────────────
+// All short-note samples have a 60ms pre-delay before rhythmic peak (same
+// value as CSS). Apply -60ms track delay when sequencing shorts.
+
+short_note_timing {
+    pre_delay_ms 60
+}
+
+// ── Keyswitch / CC58 Switching ────────────────────────────────────────────────
+// Velocity-sensitive keyswitches; CC58 is the programmatic equivalent.
+// CC58 ranges are straight from the manual. "Con Sordino On/Off" and
+// "Legato On/Off" are MODE SWITCHES, not articulations. "Measured Tremolo"
+// (CC58=63) is KSP-scripted — engine ignores it.
+
+keyswitch {
+    velocity_sensitive true
+    user_configurable  true
+
+    cc58_map {
+        0-5   "Sustain: Standard Legato"
+        6-10  "Sustain: Advanced Legato"
+        11-15 Spiccato
+        16-20 Staccatissimo
+        21-25 Staccato
+        26-30 Sfz
+        31-35 Pizzicato
+        36-40 Bartokpizz
+        41-45 Clegno
+        46-50 Trills
+        51-55 Harm
+        56-60 Tremolo
+        61-65 "Measured Tremolo"
+        66-70 "Marcato (no overlay)"
+        71-75 "Marcato (with overlay)"
+        76-80 "Legato On"
+        81-85 "Legato Off"
+        86-90 "Con Sordino On"
+        91-95 "Con Sordino Off"
+    }
+
+    // ASSUMPTION: CSSS documents NO default keyswitch-note layout (fully
+    // user-configurable — shift+click a tile, press a key). This layout
+    // mirrors our CSS spec so both libraries play identically from the same
+    // controller; the velocity sub-ranges are exactly per the CSSS manual.
+    // @legato-low = Standard mode, @legato-expressive = Advanced mode.
+    notes (
+        {
+            note "C0"
+            label "Sustain"
+            vel_map {
+                0-64   "Nonvib+@legato-low"
+                65-127 "Nonvib+@legato-expressive"
+            }
+        }
+        {
+            note "C#0"
+            label "Shorts"
+            vel_map {
+                0-32   "Spiccato"
+                33-64  "Staccatissimo"
+                65-96  "Staccato"
+                97-127 "Sfz"
+            }
+        }
+        {
+            note "D0"
+            label "Pizzicato"
+            vel_map {
+                0-41   "Pizzicato"
+                42-84  "Bartokpizz"
+                85-127 "Clegno"
+            }
+        }
+        {
+            note "D#0"
+            label "Trills"
+            vel_map {
+                0-64   "HTrills"
+                65-127 "WTrills"
+            }
+        }
+        {
+            note "E0"
+            label "Harmonics"
+            vel_map { 0-127 "Harm" }
+        }
+        {
+            note "F0"
+            label "Tremolo"
+            vel_map { 0-127 "Tremolo" }
+        }
+        {
+            note "F#0"
+            label "Marcato"
+            vel_map { 0-127 "Marcato" }
+        }
+        {
+            note "G0"
+            label "Con Sordino"
+            vel_map {
+                0-64   "@sordino-off"
+                65-127 "@sordino-on"
+            }
+        }
+        {
+            note "G#0"
+            label "Legato"
+            vel_map {
+                0-64   "@legato-off"
+                65-127 "@legato-on"
+            }
+        }
+        {
+            note "A#0"
+            label "Non-Vibrato"
+            vel_map { 0-127 "Nonvib+@novib" }
+        }
+        {
+            note "B0"
+            label "Marcato KS"
+            vel_map { 0-127 "Marcato" }
+        }
+    )
+}

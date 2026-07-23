@@ -1,0 +1,38 @@
+// Cinematic Studio Piano — per-articulation signalpack grouping.
+//
+// Consumed by the signalpack builder. Each group becomes one pack per
+// (section, mic): `<Section> - <name> - <Mic>.signalpack` (+ proxy variant).
+// `articulations` lists the RAW zone articulation ids folded into the group —
+// release samples ship with their body articulation so every pack is a
+// complete playable unit (note-on body, note-off release).
+//
+// The builder ERRORS on any zone articulation not claimed by a group; the
+// four ids below are exactly the census of the extracted zonemap
+// (_patches/Piano/library.styx): Sustain, Keyup, Suspedal, 1shotFX.
+//
+// Mic coverage varies by group (see cinematic-piano.styx): Sustain/Keyup and
+// Suspedal ship Close + Blumlein only; 1shotFX ships all four mics
+// (Close/Blumlein/Ambient/XY) — the builder simply emits packs for the mics
+// that resolve zones.
+
+library "Cinematic Studio Piano"
+
+groups (
+    {
+        // The playable piano: sustain bodies + their key-release noises.
+        name "Sustain"
+        articulations (Sustain Keyup)
+    }
+    {
+        // Pedal-down sympathetic-resonance layer (fires while CC64 is held).
+        // Split out so the Sustain pack stays playable without it and the
+        // resonance layer can load on demand.
+        name "Pedal Sustain"
+        articulations (Suspedal)
+    }
+    {
+        // One-shot extended-technique effects (the CSP Piano FX patch).
+        name "FX"
+        articulations ("1shotFX")
+    }
+)
