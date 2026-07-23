@@ -48,7 +48,7 @@ const CSS_ROOT: &str =
 /// legato / dynamics. Loaded alongside the zones so articulation switching
 /// works. Lives in the sibling sample-collector repo.
 const CSS_CONFIG: &str =
-    "/run/media/Development/FastTrackStudio/sample-collector/specs/cinematic-strings.styx";
+    "features/rigs/orchestra/specs/cinematic-strings.styx";
 
 /// Articulations to cycle with `[` / `]` — the playable subset of 1st Violins.
 /// `NVLeg` (non-vib legato) is the default base; CC2 blends in the vibrato pair

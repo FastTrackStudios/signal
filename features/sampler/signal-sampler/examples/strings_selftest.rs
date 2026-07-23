@@ -13,7 +13,7 @@ use signal_sampler::SamplerRig;
 const CSS_ROOT: &str =
     "/run/media/AudioHaven/Sampled/Orchestral/Cinematic Series/Cinematic Studio Strings";
 const CSS_CONFIG: &str =
-    "/run/media/Development/FastTrackStudio/sample-collector/specs/cinematic-strings.styx";
+    "features/rigs/orchestra/specs/cinematic-strings.styx";
 const ID: &str = "strings_1v";
 
 fn main() -> eyre::Result<()> {

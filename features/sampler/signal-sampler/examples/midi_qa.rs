@@ -27,7 +27,7 @@ use signal_sampler::document::{DocCc, DocNote, DocumentRenderOptions, TempoPoint
 const CSS_ROOT: &str =
     "/run/media/AudioHaven/Sampled/Orchestral/Cinematic Series/Cinematic Studio Strings";
 const CSS_CONFIG: &str =
-    "/run/media/Development/FastTrackStudio/sample-collector/specs/cinematic-strings.styx";
+    "features/rigs/orchestra/specs/cinematic-strings.styx";
 const ID: &str = "strings_1v";
 const SR: u32 = 48_000;
 const SEED: u64 = 0x000D_A11A_5EED_0001;
@@ -212,6 +212,8 @@ fn main() -> eyre::Result<()> {
 
     for (name, bpm, steps) in &battery {
         let notes = line(steps, 80);
+        // Fresh trace per pattern (enable clears).
+        rig.set_trace_enabled(ID, true);
         let doc = TrackDocument {
             version: 1,
             seed: SEED,
@@ -328,6 +330,59 @@ fn main() -> eyre::Result<()> {
             .map(|(a, b, s)| format!("{a:.6}\t{b:.6}\t{s}\n"))
             .collect();
         std::fs::write(&lbl_path, lbl_body)?;
+
+        // Waveform + full-event-log HTML report next to the WAV.
+        //
+        // Frame bases differ: `res.transitions`/`res.markers` are already in
+        // the AUDIO window, but `render_trace()` frames are engine-lifetime
+        // (this rig renders the whole battery, so pattern N's trace starts
+        // where pattern N-1 ended). Anchor-match the first Transition trace
+        // event against the first fired transition to find the offset.
+        let mut trace = rig.render_trace(ID);
+        let trace_anchor = trace
+            .events
+            .iter()
+            .find(|e| matches!(e.kind, signal_sampler::TraceKind::Transition { .. }))
+            .map(|e| e.frame);
+        let audio_anchor = res.transitions.first().map(|f| f.frame);
+        let offset = match (trace_anchor, audio_anchor) {
+            (Some(te), Some(ae)) => te.saturating_sub(ae),
+            _ => trace.events.first().map(|e| e.frame).unwrap_or(0),
+        };
+        trace.events.retain(|e| e.frame >= offset);
+        for e in &mut trace.events {
+            e.frame -= offset;
+        }
+        let fires = res.transitions.clone();
+        let mut rep_markers: Vec<(u64, String, u8, u8)> = res
+            .markers
+            .iter()
+            .map(|m| (m.frame, format!("{:?}", m.kind), m.note, m.line))
+            .collect();
+        // QA boundary labels (incl. failure tags) as their own markers.
+        for (t, _, s) in &labels {
+            rep_markers.push(((t * SR as f64) as u64, format!("QA {s}"), 0, 0));
+        }
+        let emitted = res.emitted_markers.clone();
+        let sources = signal_sampler::report::ReportSources {
+            trace,
+            fires,
+            markers: rep_markers,
+            emitted,
+            audio_href: Some(format!("qa_{name}.wav")),
+        };
+        let data = signal_sampler::report::render_report_json(
+            &format!("qa_{name}"),
+            &res.audio,
+            2,
+            SR,
+            &sources,
+        );
+        signal_sampler::report::write_report_html(
+            &PathBuf::from(format!("target/qa_{name}.html")),
+            &data,
+        )
+        .map_err(|e| eyre::eyre!("report: {e}"))?;
 
         println!(
             "── {name}: {} notes, {} transitions fired, {} reactive fallbacks, {}s",

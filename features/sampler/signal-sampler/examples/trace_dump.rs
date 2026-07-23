@@ -19,7 +19,7 @@ use signal_sampler::{SamplerRig, TraceKind};
 const CSS_ROOT: &str =
     "/run/media/AudioHaven/Sampled/Orchestral/Cinematic Series/Cinematic Studio Strings";
 const CSS_CONFIG: &str =
-    "/run/media/Development/FastTrackStudio/sample-collector/specs/cinematic-strings.styx";
+    "features/rigs/orchestra/specs/cinematic-strings.styx";
 const ID: &str = "strings_1v";
 const SR: u32 = 48_000;
 const SEED: u64 = 0x0007_7ACE_D00D;
