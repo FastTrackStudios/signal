@@ -1737,12 +1737,13 @@ impl SampleEngine {
             if let Some(layer) = dyn_layer {
                 voice = voice.with_dyn_layer(layer);
             }
-            // Pure playback: no ENV_FLEX amp shaping — the looped sample holds
-            // a flat plateau (a fresh recording's decay is replaced by the loop).
-            if !self.pure_playback {
-                if let Some(flex) = flex_env.clone() {
-                    voice = voice.with_flex_env(flex);
-                }
+            // ENV_FLEX stays in pure playback: its attack segment is a utility
+            // declick (and, with amp_env_hold, it just holds a flat plateau —
+            // it was never the per-note accent; that was the CC1 crossfade +
+            // legato trim/bloom). Pure only disables the CC1 AMPLITUDE
+            // DYNAMICS, not the utility fades / arrival timing.
+            if let Some(flex) = flex_env.clone() {
+                voice = voice.with_flex_env(flex);
             }
             let loop_xfade =
                 ms_to_frames(self.patch.spec.performance.loop_xfade_ms, self.sample_rate);
