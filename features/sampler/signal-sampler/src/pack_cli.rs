@@ -108,6 +108,10 @@ enum Cmd {
         /// Beats per bar for the ruler (default 4).
         #[arg(long, default_value_t = 4)]
         beats_per_bar: u32,
+        /// Pure sample playback — one looped sample per note at straight gain
+        /// (no CC1 layer crossfade, ENV_FLEX, or legato trim/bloom).
+        #[arg(long)]
+        pure: bool,
     },
     /// Decode every entry back to WAVs.
     Extract { pack: PathBuf, out_dir: PathBuf },
@@ -317,7 +321,8 @@ pub fn cli_main(argv: impl IntoIterator<Item = OsString>) -> Result<()> {
             tail,
             bpm,
             beats_per_bar,
-        } => render_report(&pack, &notes, cc1, cc2, &out, wav, tail, bpm, beats_per_bar),
+            pure,
+        } => render_report(&pack, &notes, cc1, cc2, &out, wav, tail, bpm, beats_per_bar, pure),
         Cmd::Extract { pack, out_dir } => {
             let stats = extract_signal_pack(&pack, &out_dir)?;
             println!("extracted {} sample(s) ({} failed)", stats.prepared, stats.failed);
@@ -1392,6 +1397,7 @@ fn render_report(
     tail: f32,
     bpm: Option<f64>,
     beats_per_bar: u32,
+    pure: bool,
 ) -> Result<()> {
     const SR: u32 = 48_000;
     const ID: &str = "report";
@@ -1417,6 +1423,7 @@ fn render_report(
         // note_on dispatches on MIDI channel 0 — an unmapped instrument is
         // silent (the MM2 trap).
         rig.set_midi_channel(ID, 0);
+        rig.set_pure_playback(ID, pure);
         rig.set_trace_enabled(ID, true);
         rig.set_legato_fire_log_enabled(ID, true);
         rig.set_solo_notes(ID, solo);

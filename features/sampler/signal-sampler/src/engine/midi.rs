@@ -747,6 +747,25 @@ impl SampleEngine {
             .articulation(artic)
             .map(|a| a.dynamics.clone())
             .unwrap_or_default();
+
+        // Pure playback: CC1 SELECTS the single dynamic layer nearest the
+        // controller (the `blend >= 0.5` idiom the transition/release paths
+        // already use) and plays that ONE sample at a straight gain — no
+        // multi-layer crossfade, no continuous `cc1_expression` sweep. Tagged
+        // `None` so `update_sustain_gains` never re-levels it.
+        if self.pure_playback {
+            let dynamic = if dyn_labels.len() <= 1 {
+                dyn_labels.first().cloned().unwrap_or_default()
+            } else {
+                let (lo, hi, blend) = self.layers_for_artic(artic);
+                if blend >= 0.5 { hi } else { lo }
+            };
+            if let Some(idx) = self.find_layer_zone(artic, direction, &dynamic, note, rr) {
+                self.spawn_zone_voice(idx, note, VoiceKind::SustainLayer, side_scale, None, 0.0);
+            }
+            return;
+        }
+
         let expr = self.cc1_expression(self.cc1);
         if dyn_labels.len() <= 1 {
             // Single (or no) declared dynamic — one zone, loudness from CC1.
@@ -1553,9 +1572,13 @@ impl SampleEngine {
         // `%ftriy` attack ornament) is NOT the held body, so it takes NO makeup —
         // it plays at recorded level scaled by CC1, same net level as the −6 dB
         // sustain it overlays. Shorts and release tails play the recording as-is.
+        // Pure playback: the looped-plateau makeup (+6 dB) stays — it's a level
+        // correction for the looped body, not naturalism — but the legato
+        // −6 dB connected-sustain TRIM is dropped so every held note enters at
+        // full, flat level (no accent/settle).
         let makeup = if is_sustain_layer {
             let base = db_to_gain(self.patch.spec.performance.sustain_makeup_db);
-            if self.legato_sustain {
+            if self.legato_sustain && !self.pure_playback {
                 base * db_to_gain(self.patch.spec.legato_cfg().sustain_trim_db)
             } else {
                 base
@@ -1570,7 +1593,7 @@ impl SampleEngine {
         // transition's pre-bow plays (slow tempi), and the incoming
         // destination pitch reads early against a vanishing source.
         // Multiplicative on the voice, so CC1/CC2 re-levelling keeps working.
-        let bloom = if is_sustain_layer && self.legato_sustain {
+        let bloom = if is_sustain_layer && self.legato_sustain && !self.pure_playback {
             let cfg = self.patch.spec.legato_cfg();
             let frames = ms_to_frames(cfg.sustain_bloom_ms, self.sample_rate);
             (frames > 0).then(|| (frames, db_to_gain(-cfg.sustain_trim_db)))
@@ -1714,8 +1737,12 @@ impl SampleEngine {
             if let Some(layer) = dyn_layer {
                 voice = voice.with_dyn_layer(layer);
             }
-            if let Some(flex) = flex_env.clone() {
-                voice = voice.with_flex_env(flex);
+            // Pure playback: no ENV_FLEX amp shaping — the looped sample holds
+            // a flat plateau (a fresh recording's decay is replaced by the loop).
+            if !self.pure_playback {
+                if let Some(flex) = flex_env.clone() {
+                    voice = voice.with_flex_env(flex);
+                }
             }
             let loop_xfade =
                 ms_to_frames(self.patch.spec.performance.loop_xfade_ms, self.sample_rate);

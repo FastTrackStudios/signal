@@ -496,6 +496,13 @@ pub struct SampleEngine {
     /// When true, every voice spawn / note-off / transition is appended to
     /// `trace` — the structured render trace (see [`trace`]). Off by default.
     trace_enabled: bool,
+    /// Pure sample-playback mode: strips the naturalism layers so a held note
+    /// is ONE looped sample at a straight gain (no CC1 multi-layer dynamic
+    /// crossfade, no ENV_FLEX amp envelope, no legato −6 dB sustain trim +
+    /// slow bloom). CC1 still SELECTS the dynamic layer. A clean
+    /// Kontakt-CSS-correct baseline to build naturalism back onto. Off by
+    /// default (the full engine behaviour).
+    pure_playback: bool,
     /// Structured render trace: which files played, when, loop points, gains,
     /// transitions. Populated only while `trace_enabled`. Behind a `RefCell`
     /// so the `&self` voice-resolution path can record spawns/misses.
@@ -739,6 +746,7 @@ impl SampleEngine {
             legato_fire_log: Vec::new(),
             last_arrival_prediction: 0,
             trace_enabled: false,
+            pure_playback: false,
             trace: RefCell::new(RenderTrace::default()),
             next_voice_id: Cell::new(0),
             traced_alive: RefCell::new(std::collections::BTreeSet::new()),
@@ -1061,6 +1069,11 @@ impl SampleEngine {
     /// timing is identical. `None` = full mix.
     pub fn set_solo_notes(&mut self, notes: Option<std::collections::BTreeSet<u8>>) {
         self.voices.set_solo_notes(notes);
+    }
+
+    /// Enable/disable pure sample-playback mode (see [`pure_playback`]).
+    pub fn set_pure_playback(&mut self, on: bool) {
+        self.pure_playback = on;
     }
 
     pub fn set_trace_enabled(&mut self, enabled: bool) {

@@ -803,6 +803,15 @@ impl SamplerRig {
         }
     }
 
+    /// Pure sample-playback mode: one looped sample per note at a straight
+    /// gain — no CC1 layer crossfade, ENV_FLEX, or legato trim/bloom. A clean
+    /// Kontakt-CSS baseline for validating raw sample playback.
+    pub fn set_pure_playback(&self, id: &str, on: bool) {
+        if let Ok(mut bank) = self.bank().lock() {
+            bank.set_pure_playback(id, on);
+        }
+    }
+
     /// The structured render trace for an instrument (frames are engine-local).
     pub fn render_trace(&self, id: &str) -> crate::engine::RenderTrace {
         self.bank()

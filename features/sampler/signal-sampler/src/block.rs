@@ -359,6 +359,10 @@ impl SamplerBlock {
         self.engine.set_solo_notes(notes);
     }
 
+    pub fn set_pure_playback(&mut self, on: bool) {
+        self.engine.set_pure_playback(on);
+    }
+
     /// The structured render trace — see [`SampleEngine::render_trace`].
     pub fn render_trace(&self) -> crate::engine::RenderTrace {
         self.engine.render_trace()
