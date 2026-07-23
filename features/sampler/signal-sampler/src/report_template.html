@@ -426,7 +426,7 @@ function renderMode() {
   (function raf() {
     const p = document.getElementById('player');
     if (p && !p.paused) {
-      syncClick();
+      syncClick();  // gross-drift guard only (>150ms)
       // Enforce the play/loop selection bounds.
       if (playRange) {
         const cf = p.currentTime * DATA.sample_rate;
@@ -509,18 +509,28 @@ function renderMode() {
   // Redraw the playhead on scrubs via the audio element's own controls.
   const player = document.getElementById('player');
   const clickOn = () => { const c = document.getElementById('clicktrack'); return c && c.dataset.on === '1'; };
+  // Align the click track ONCE (on play/seek), then let it run free — both
+  // elements play at 1× from the same offset and stay in sync. (Re-seeking
+  // every frame retriggered the click transient — the "thousand clicks/sec".)
+  function alignClick() {
+    const c = document.getElementById('clicktrack');
+    if (!c || !clickOn()) return;
+    c.currentTime = player.currentTime;
+    if (!player.paused) c.play().catch(() => {});
+  }
   function syncClick() {
     const c = document.getElementById('clicktrack');
     if (!c || !clickOn()) return;
-    if (Math.abs(c.currentTime - player.currentTime) > 0.03) c.currentTime = player.currentTime;
+    // Only correct on gross drift (a stall), never for sub-100ms jitter.
+    if (Math.abs(c.currentTime - player.currentTime) > 0.15) c.currentTime = player.currentTime;
     if (!player.paused && c.paused) c.play().catch(() => {});
     if (player.paused && !c.paused) c.pause();
   }
   if (player) {
-    player.addEventListener('seeked', () => { syncClick(); draw(); });
-    player.addEventListener('play', syncClick);
+    player.addEventListener('seeked', () => { alignClick(); draw(); });
+    player.addEventListener('play', alignClick);
     player.addEventListener('pause', () => { const c = document.getElementById('clicktrack'); if (c) c.pause(); draw(); });
-    player.addEventListener('timeupdate', () => { syncClick(); if (player.paused) draw(); });
+    player.addEventListener('timeupdate', () => { if (player.paused) draw(); });
   }
   draw();
 }
