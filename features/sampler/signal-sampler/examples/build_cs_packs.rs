@@ -123,6 +123,11 @@ fn force_mic_default(entry: &str) -> String {
 struct Group {
     name: String,
     articulations: Vec<String>,
+    /// Prefix patterns (Pacific-style libraries whose zonemap bakes RR/vel/
+    /// release-variant suffixes into articulation ids — `normrel4`,
+    /// `pluckrr3_64`). An articulation matches the group with the LONGEST
+    /// matching prefix; exact `articulations` ids always win over prefixes.
+    prefixes: Vec<String>,
 }
 
 fn parse_groups(text: &str) -> Vec<Group> {
@@ -140,18 +145,68 @@ fn parse_groups(text: &str) -> Vec<Group> {
                 .strip_prefix('{')
                 .and_then(|e| e.strip_suffix('}'))
                 .unwrap_or(entry);
-            let (_, a_inner_s, a_inner_e, _) = find_list_block(body, "articulations")
-                .unwrap_or_else(|| panic!("group {name}: no articulations list"));
-            let articulations = body[a_inner_s..a_inner_e]
-                .split_whitespace()
-                .map(|t| t.trim_matches('"').to_string())
-                .collect();
+            let list = |key: &str| -> Vec<String> {
+                find_list_block(body, key)
+                    .map(|(_, s, e, _)| {
+                        body[s..e]
+                            .split_whitespace()
+                            .map(|t| t.trim_matches('"').to_string())
+                            .collect()
+                    })
+                    .unwrap_or_default()
+            };
+            let articulations = list("articulations");
+            let prefixes = list("prefixes");
+            assert!(
+                !articulations.is_empty() || !prefixes.is_empty(),
+                "group {name}: needs an articulations or prefixes list"
+            );
             Group {
                 name,
                 articulations,
+                prefixes,
             }
         })
         .collect()
+}
+
+/// Resolve an articulation id to its group: exact id first, else the group
+/// with the longest matching prefix.
+fn group_for<'g>(groups: &'g [Group], exact: &BTreeMap<&str, &'g str>, artic: &str) -> Option<&'g str> {
+    if let Some(g) = exact.get(artic) {
+        return Some(g);
+    }
+    groups
+        .iter()
+        .flat_map(|g| g.prefixes.iter().map(move |p| (p, g.name.as_str())))
+        .filter(|(p, _)| artic.starts_with(p.as_str()))
+        .max_by_key(|(p, _)| p.len())
+        .map(|(_, name)| name)
+}
+
+/// Synthesize a minimal articulation declaration for a zone articulation id
+/// the engine config does not declare (Pacific-style suffixed ids). Kind is
+/// inferred from the id's tokens; undeclared articulations would otherwise be
+/// silently unplayable (the #1 "pack is silent" gotcha).
+fn synth_artic_kind(id: &str) -> &'static str {
+    if id.contains("rel") {
+        "@Release"
+    } else if id.contains("trill") {
+        "@Trill"
+    } else if id.starts_with("leg") || id.contains("_leg") {
+        "@Legato"
+    } else if id.contains("sus") || id.starts_with("harm") {
+        "@Sustain"
+    } else if id.starts_with("fx") {
+        "@OneShot"
+    } else if ["rep", "atk", "stacc", "spicc", "pizz", "pluck", "snap", "marc"]
+        .iter()
+        .any(|t| id.contains(t))
+    {
+        "@Short"
+    } else {
+        "@Sustain"
+    }
 }
 
 // ── Zone extraction from a per-section spec ───────────────────────────────────
@@ -253,11 +308,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let spec_text = std::fs::read_to_string(patches.join(section).join("library.styx"))?;
         let zones = parse_zones(&spec_text);
 
-        // Every articulation must be claimed by a group — no silent drops.
+        // Every articulation must be claimed by a group (exact or prefix) —
+        // no silent drops.
         let unmapped: BTreeSet<&str> = zones
             .iter()
             .map(|z| z.articulation.as_str())
-            .filter(|a| !artic_to_group.contains_key(a))
+            .filter(|a| group_for(&groups, &artic_to_group, a).is_none())
             .collect();
         assert!(
             unmapped.is_empty(),
@@ -267,7 +323,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // (group, mic) → zones
         let mut buckets: BTreeMap<(String, String), Vec<&ZoneRef>> = BTreeMap::new();
         for z in &zones {
-            let group = artic_to_group[z.articulation.as_str()].to_string();
+            let group = group_for(&groups, &artic_to_group, &z.articulation)
+                .unwrap()
+                .to_string();
             buckets.entry((group, z.mic.clone())).or_default().push(z);
         }
 
@@ -319,7 +377,49 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     .map(|id| member_ids.contains(id.as_str()))
                     .unwrap_or(false)
             });
-            assert!(n_artics > 0, "{pack_name}: no engine-config articulations matched {member_ids:?}");
+
+            // Zone articulation ids the (filtered) config does NOT declare —
+            // synthesize minimal declarations, else those zones are silently
+            // unplayable. Pacific-style suffixed ids always land here; for CS
+            // libraries this is a safety net (and is reported).
+            let declared: BTreeSet<String> = find_list_block(&body, "articulations")
+                .map(|(_, s, e, _)| {
+                    let inner = &body[s..e];
+                    split_entries(inner)
+                        .into_iter()
+                        .filter_map(|(a, b)| entry_field(&inner[a..b], "id"))
+                        .collect()
+                })
+                .unwrap_or_default();
+            let mut undeclared: Vec<&str> = bucket
+                .iter()
+                .map(|z| z.articulation.as_str())
+                .filter(|a| !declared.contains(*a))
+                .collect::<BTreeSet<_>>()
+                .into_iter()
+                .collect();
+            // Sustains first so the engine's default-articulation pick lands
+            // on a body articulation, not a release.
+            undeclared.sort_by_key(|id| (synth_artic_kind(id) != "@Sustain", *id));
+            let body = if undeclared.is_empty() {
+                body
+            } else {
+                let mut synth = String::new();
+                for id in &undeclared {
+                    synth.push_str(&format!(
+                        "    {{ id {id:?}, label {id:?}, kind {} }}\n",
+                        synth_artic_kind(id)
+                    ));
+                }
+                match find_list_block(&body, "articulations") {
+                    Some((_, _, ie, _)) => format!("{}{synth}{}", &body[..ie], &body[ie..]),
+                    None => format!("{body}\narticulations (\n{synth})\n"),
+                }
+            };
+            assert!(
+                n_artics > 0 || !undeclared.is_empty(),
+                "{pack_name}: no engine-config articulations matched {member_ids:?}"
+            );
 
             let mut pack_spec = format!(
                 "name \"{pack_name}\"\nvendor \"{vendor}\"\nversion \"{version}\"\n\n{body}\nzones (\n"

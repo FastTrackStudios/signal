@@ -1,0 +1,66 @@
+// Pacific - Ensemble Strings — pack grouping (prefix matching, longest
+// prefix wins; exact-suffix soup: leg_up2_18, pluckrr3_64, …).
+//
+// String sections: the performance-legato family (sus/atk/rel/rep/leg,
+// plus the Ensemble section's norm* ids) is one "Legato" unit; bodies and
+// their releases fold together per technique. Harp: plucks + their muted
+// releases in one pack; harmonics likewise (normmute*/harmmute* prefixes
+// outrank the shorter norm* prefix).
+
+library "Pacific - Ensemble Strings"
+
+groups (
+    {
+        name "Legato"
+        prefixes (sus atk rel rep leg norm)
+    }
+    {
+        name "Marcato"
+        prefixes (marc)
+    }
+    {
+        name "Tremolo"
+        prefixes (trem)
+    }
+    {
+        name "Con Sordino"
+        prefixes (sord)
+    }
+    {
+        name "Whisper"
+        prefixes (whisper)
+    }
+    {
+        name "Half-Tone Trill"
+        prefixes (trillht)
+    }
+    {
+        name "Whole-Tone Trill"
+        prefixes (trillwt)
+    }
+    {
+        name "Spiccato"
+        prefixes (spicc)
+    }
+    {
+        name "Pizzicato"
+        prefixes (pizz)
+    }
+    {
+        name "FX Long"
+        prefixes (fxlong)
+    }
+    {
+        name "FX Short"
+        prefixes (fxshort)
+    }
+    {
+        // Harp plucks + their muted releases (normmute* outranks norm*).
+        name "Pluck"
+        prefixes (pluck normmute)
+    }
+    {
+        name "Harmonics"
+        prefixes (harmpluck harmmute)
+    }
+)

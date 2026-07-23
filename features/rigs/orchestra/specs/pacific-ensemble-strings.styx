@@ -1,0 +1,67 @@
+// Pacific - Ensemble Strings (Performance Samples, perf063) — engine config.
+//
+// Minimal config: sections + mics + performance. Articulation declarations
+// are synthesized per pack by the builder (Pacific ids carry baked-in
+// RR/velocity/release-variant suffixes — pluckrr3_64, leg_up2_18, …).
+//
+// Note ranges measured from the _patches zone maps (MIDI C4 = 60); string
+// section ranges reach extreme highs via FX/gliss content.
+
+name    "Pacific - Ensemble Strings"
+version "1.0"
+vendor  "Performance Samples"
+
+sections (
+    {
+        id           vln
+        label        Violin
+        lowest_note  C1
+        highest_note D#8
+    }
+    {
+        id           vlo
+        label        "Violin Overtones"
+        lowest_note  G3
+        highest_note F#7
+    }
+    {
+        id           vla
+        label        Viola
+        lowest_note  C1
+        highest_note A#8
+    }
+    {
+        id           vc
+        label        Cello
+        lowest_note  C1
+        highest_note G#8
+    }
+    {
+        id           cb
+        label        Contrabass
+        lowest_note  C1
+        highest_note A8
+    }
+    {
+        id           ens
+        label        Ensemble
+        lowest_note  C1
+        highest_note G7
+    }
+    {
+        id           hp
+        label        Harp
+        lowest_note  C#1
+        highest_note E7
+    }
+)
+
+mics (
+    {id Close,   label Close,   kind separate, default true}
+    {id Ambient, label Ambient, kind separate}
+)
+
+performance {
+    zone_pitch_tolerance 2
+    attack_placement     start_at_tick
+}
