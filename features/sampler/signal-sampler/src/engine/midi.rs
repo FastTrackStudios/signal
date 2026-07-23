@@ -833,11 +833,14 @@ impl SampleEngine {
         }
     }
 
-    /// Start a monophonic legato transition `from` → `to` at `velocity`. The
-    /// note is delayed by the velocity-mapped legato latency (CSS's three
-    /// transition speeds); when it elapses, `render()` calls `fire_legato`,
-    /// which fades the old note and plays the directional transition zone. A
-    /// zero delay (portamento) fires immediately.
+    /// **LIVE / reactive entry** (the live keyboard path — see the two-paths
+    /// doc block on [`PlayMode`](crate::engine::PlayMode)). Start a monophonic
+    /// legato transition `from` → `to` at `velocity`. The note is delayed by
+    /// the velocity-mapped legato latency (CSS's three transition speeds);
+    /// when it elapses, `render()` calls `fire_legato`, which fades the old
+    /// note and plays the directional transition zone. A zero delay
+    /// (portamento) fires immediately. The DOCUMENT path never calls this —
+    /// it prefires via `legato_prefire_line_lead` → `fire_legato_with_lead`.
     pub(crate) fn start_legato_transition(&mut self, from: u8, to: u8, velocity: u8) {
         // Every entry here is the REACTIVE path (live note-on countdown or
         // note-off fallback) — document playback must never reach it (it

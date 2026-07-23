@@ -58,7 +58,15 @@ if (DATA.mode === 'render') renderMode(); else samplesMode();
 // ── render mode ──────────────────────────────────────────────────────────────
 function renderMode() {
   const top = document.getElementById('top');
-  top.innerHTML = `<h1>${esc(DATA.name)}</h1>
+  const modeBadge = DATA.mode_label
+    ? `<span style="background:#31506e;color:#dce7f5;border-radius:3px;padding:2px 8px;
+        font-size:11px;font-weight:bold;letter-spacing:.5px">${esc(DATA.mode_label)}</span>` : '';
+  const rf = DATA.reactive_fallbacks || 0;
+  const rfBadge = rf > 0
+    ? `<span style="background:#8b1a1a;color:#ffd7d7;border-radius:3px;padding:2px 8px;
+        font-size:11px;font-weight:bold">⚠ ${rf} REACTIVE FALLBACK${rf > 1 ? 'S' : ''} — live path leaked into document render</span>`
+    : '';
+  top.innerHTML = `<h1>${esc(DATA.name)}</h1>${modeBadge}${rfBadge}
     <span class="meta">${DATA.sample_rate} Hz · ${DATA.channels} ch · ${fmt(DATA.frames)} ·
     ${DATA.voices.length} voices · ${DATA.events.length} events</span>`;
   if (DATA.audio_href) {

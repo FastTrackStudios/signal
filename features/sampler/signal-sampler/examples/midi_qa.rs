@@ -401,6 +401,8 @@ fn main() -> eyre::Result<()> {
             // boundary labels); 4/4 throughout.
             tempo: Some((*bpm, 4)),
             click_href: Some(format!("qa_{name}.click.wav")),
+            mode_label: "DOCUMENT (prefire)".into(),
+            reactive_fallbacks: res.reactive_fallbacks,
         };
         let data = signal_sampler::report::render_report_json(
             &format!("qa_{name}"),

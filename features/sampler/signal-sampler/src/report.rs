@@ -67,6 +67,13 @@ pub struct ReportSources {
     /// Relative href of a metronome click WAV (same length/rate as the mix),
     /// toggled on as a second synced audio layer. `None` = no click.
     pub click_href: Option<String>,
+    /// Scheduling mode this render used, e.g. "DOCUMENT (prefire)" — shown as
+    /// a header badge so a report is never mistaken for the LIVE/reactive path.
+    pub mode_label: String,
+    /// Reactive legato fires during the render. In DOCUMENT mode this MUST be
+    /// 0 — anything else is the live/reactive path leaking into a document
+    /// render (a missed schedule edge). Surfaced as a red banner when > 0.
+    pub reactive_fallbacks: u64,
 }
 
 /// Max computed loop-wrap ticks recorded per voice (a 30 s held note with a
@@ -199,6 +206,8 @@ pub fn render_report_json(
         "stems": stems,
         "tempo": sources.tempo.map(|(bpm, bpb)| json!({ "bpm": bpm, "beats_per_bar": bpb })),
         "click_href": sources.click_href,
+        "mode_label": sources.mode_label,
+        "reactive_fallbacks": sources.reactive_fallbacks,
         "peaks": { "block": block, "min": mins, "max": maxs },
         "voices": voices,
         "events": events,

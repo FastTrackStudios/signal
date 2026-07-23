@@ -28,6 +28,8 @@ impl SampleEngine {
         self.frames_rendered
     }
 
+    /// **DOCUMENT / prefire entry** (the score-ahead path — see the two-paths
+    /// doc block on [`PlayMode`](crate::engine::PlayMode)).
     /// Document-mode note-on for a legato-followed note: fire the transition
     /// NOW instead of arming the reactive countdown. The document scheduler
     /// calls this `delay_ms` (the spec's expressive velocity→delay) *before*

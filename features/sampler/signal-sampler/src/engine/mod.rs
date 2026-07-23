@@ -133,6 +133,36 @@ enum LegatoState {
     },
 }
 
+/// # The two scheduling paths — READ THIS before touching legato timing
+///
+/// There are exactly two ways notes reach the legato engine, and they must
+/// never be conflated (they were a constant source of "why is the timing
+/// different" confusion):
+///
+/// **LIVE / reactive** ([`StrictLive`](PlayMode::StrictLive)) — real-time
+/// keyboard input. The next note is UNKNOWN, so a transition can only fire
+/// AFTER the new note-on, delayed by its velocity zone. Entry:
+/// `note_on` → (`live_divisi_note_on` |) `note_on_line`'s sounding-line arm
+/// → [`start_legato_transition`](Self::start_legato_transition) → a
+/// `LegatoState::Pending` countdown drained by `advance_legato_countdowns`.
+/// `note_off` may synthesise a fallback transition. Every reactive fire
+/// bumps `reactive_legato_fires`. **This path is what the deployed live rig
+/// (CLAP no-schedule branch, strings-TUI keyboard) plays on — do not break
+/// it.**
+///
+/// **DOCUMENT / prefire** ([`Lookahead`](PlayMode::Lookahead)) — the score is
+/// known ahead (ARA-style: `render_offline_document` / `RealtimeScheduler`).
+/// The scheduler PREFIRES each note so the sample starts BEFORE the beat and
+/// the arrival lands ON it. Entry: the annotator emits `LegatoPrefire` →
+/// `legato_prefire_line_lead` → `fire_legato_with_lead` **directly** — it
+/// never touches `start_legato_transition`, never arms a countdown, never
+/// bumps `reactive_legato_fires`. Invariant: **during a document render
+/// `reactive_fallbacks` MUST be 0** — a non-zero count means a schedule edge
+/// leaked to the reactive path (a bug), and the report flags it in red.
+///
+/// Current CSS-legato work happens ON THE DOCUMENT PATH ONLY; the live path
+/// is kept as-is and revisited later.
+///
 /// Automatic play-mode policy (see `docs/plan/document-mode.md`, "Mode
 /// policy: strict live low-latency by default"): if the engine can see the
 /// future it plays beautifully; if it can't, it plays NOW.

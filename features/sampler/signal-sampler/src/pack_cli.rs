@@ -1413,6 +1413,7 @@ fn render_report(
         Vec<crate::engine::LegatoFireEvent>,
         Vec<(u64, String, u8, u8)>, // markers (frame, kind, note, line)
         Vec<crate::engine::EmittedMarker>,
+        u64, // reactive_fallbacks (must be 0 in document mode)
     );
 
     // ALWAYS document mode (ARA-style prefire): the scheduler fires each note
@@ -1488,7 +1489,7 @@ fn render_report(
             for m in &mut emitted {
                 m.frame -= base;
             }
-            Ok((res.audio, trace, fires, markers, emitted))
+            Ok((res.audio, trace, fires, markers, emitted, res.reactive_fallbacks))
         }
     };
 
@@ -1508,7 +1509,7 @@ fn render_report(
     };
 
     // Full mix (also the source of the trace + fires shown on the timeline).
-    let (audio, trace, fires, markers, emitted) = render_pass(None)?;
+    let (audio, trace, fires, markers, emitted, reactive_fallbacks) = render_pass(None)?;
     let wav_path = wav.unwrap_or_else(|| out.with_extension("wav"));
     write_wav(&wav_path, &audio)?;
     let audio_href = wav_path.file_name().map(|f| f.to_string_lossy().into_owned());
@@ -1523,7 +1524,7 @@ fn render_report(
         .unwrap_or_else(|| "render".into());
     let mut stems = Vec::new();
     for note in &distinct {
-        let (stem_audio, _, _, _, _) =
+        let (stem_audio, _, _, _, _, _) =
             render_pass(Some(std::iter::once(*note).collect()))?;
         let fname = format!("{stem_base}.n{note}.wav");
         write_wav(&wav_path.with_file_name(&fname), &stem_audio)?;
@@ -1557,6 +1558,8 @@ fn render_report(
         stems,
         tempo: bpm.map(|b| (b, beats_per_bar)),
         click_href,
+        mode_label: format!("DOCUMENT (prefire){}", if pure { " · PURE" } else { "" }),
+        reactive_fallbacks,
     };
     let name = format!(
         "{} — {notes}",
