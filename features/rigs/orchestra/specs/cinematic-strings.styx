@@ -81,7 +81,7 @@ performance {
     zone_pitch_tolerance 2     // whole-tone grid → shift ±1..2 to fill
     release_gain         1.0   // release groups ship 0 dB static; the amp env shapes the tail
     attack_ms            198   // "Arco attack" $mmirg=30/127 under Kontakt's cubic law
-    release_ms           400   // $tukcw — note-off overlap fade
+    release_ms           690   // decoded: AHDSR R ceiling 10 s × CC81=90 on the Kontakt log-time axis (GROUP_MODULATORS.md); was 400
     // Fresh attacks START on the click and speak naturally after it —
     // nothing sounds before the beat a note begins on (owner policy;
     // matches what the vendor instrument does live). Legato transitions,
