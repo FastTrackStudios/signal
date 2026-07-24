@@ -75,7 +75,7 @@ mics (
 
 performance {
     sustain_noteoff_ms   400   // $tukcw — held-sustain key-up overlap fade
-    sustain_makeup_db    6.0   // looped-plateau → Kontakt-render level offset (A/B calibrated)
+    sustain_makeup_db    5.0   // looped-plateau → Kontakt-render level offset (A/B calibrated)
     master_tune_cents    9.0   // tune=1.00521 on every playable group (CSS_GROUP_MOD.md §1)
     loop_xfade_ms        150   // synth-loop seam crossfade
     zone_pitch_tolerance 2     // whole-tone grid → shift ±1..2 to fill

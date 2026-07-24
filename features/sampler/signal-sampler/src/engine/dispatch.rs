@@ -362,7 +362,9 @@ impl SampleEngine {
             self.voices.retrigger_fade_note(to_note, fade);
             let trim_zone = self.patch.spec.legato_cfg().velocity_range(velocity) <= 2;
             self.legato_sustain = true;
-            self.legato_trim = trim_zone;
+            // $3tsb0 is chord-only (§11): no −6 dB trim on re-attacks either;
+            // the −3 dB same-pitch dip below is the decoded repeat attenuation.
+            self.legato_trim = false;
             self.legato_attack_dip_db = if trim_zone {
                 crate::engine::css_attack_transient_dip_db(ioi_ms)
             } else {
