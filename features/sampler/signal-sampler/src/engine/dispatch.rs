@@ -868,11 +868,8 @@ impl SampleEngine {
     /// divisi line's dynamics ride its own controller lane. (Live play keeps
     /// everything on line 0, so behavior is unchanged.)
     pub(crate) fn update_sustain_gains(&mut self) {
-        // Pure playback spawns a single untagged sustain voice per note — no
-        // dynamic layers to re-level, so the live CC1/CC2 crossfade is off.
-        if self.pure_playback {
-            return;
-        }
+        // CC1/CC2 dynamic-layer crossfade runs in pure playback too — it is the
+        // CSS `%grhcg`/`%u1bjb` two-sampleset dynamics (pure = exact CSS).
         let cur_line = self.cur_line as u8;
         // CC2 → non-vib/vib balance (equal-power).
         let (nv, vb) = Self::equal_power(self.cc2_blend());

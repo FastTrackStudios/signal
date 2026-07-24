@@ -769,24 +769,12 @@ impl SampleEngine {
             .map(|a| a.dynamics.clone())
             .unwrap_or_default();
 
-        // Pure playback: CC1 SELECTS the single dynamic layer nearest the
-        // controller (the `blend >= 0.5` idiom the transition/release paths
-        // already use) and plays that ONE sample at a straight gain — no
-        // multi-layer crossfade, no continuous `cc1_expression` sweep. Tagged
-        // `None` so `update_sustain_gains` never re-levels it.
-        if self.pure_playback {
-            let dynamic = if dyn_labels.len() <= 1 {
-                dyn_labels.first().cloned().unwrap_or_default()
-            } else {
-                let (lo, hi, blend) = self.layers_for_artic(artic);
-                if blend >= 0.5 { hi } else { lo }
-            };
-            if let Some(idx) = self.find_layer_zone(artic, direction, &dynamic, note, rr) {
-                self.spawn_zone_voice(idx, note, VoiceKind::SustainLayer, side_scale, None, 0.0);
-            }
-            return;
-        }
-
+        // CC1 two-sampleset dynamics (CSS `%grhcg`/`%u1bjb` crossfade) apply in
+        // pure playback too — pure = exact CSS, and this IS CSS (the thing pure
+        // drops is OUR added dynamic-lane naturalism, not the recorded-dynamics
+        // crossfade). Both paths spawn every declared dynamic layer and blend
+        // the active pair equal-power by CC1; `update_sustain_gains` re-levels
+        // them live as CC1 sweeps.
         let expr = self.cc1_expression(self.cc1);
         if dyn_labels.len() <= 1 {
             // Single (or no) declared dynamic — one zone, loudness from CC1.
@@ -1175,8 +1163,13 @@ impl SampleEngine {
                 // keep the arrival on the tick. That silent-gap + head-skip IS
                 // the CSS Overlap-Delay + `$1fvjk` structure, and it masks the
                 // audible NVLeg onset. Never skip past the arrival marker itself.
-                let min_skip =
-                    ms_to_frames(crate::engine::CSS_LT_MIN_SKIP_MS, self.sample_rate) as u64;
+                let kbqnb_hard =
+                    self.patch.spec.legato_cfg().velocity_range(velocity) == 3 && ioi_ms > 50.0;
+                let min_skip_ms = crate::engine::css_lt_min_skip_ms(
+                    kbqnb_hard,
+                    self.patch.spec.zones[idx].interval,
+                );
+                let min_skip = ms_to_frames(min_skip_ms, self.sample_rate) as u64;
                 raw.max(min_skip.min(lead_sample_frames.saturating_sub(1))) as usize
             }
             None => {
