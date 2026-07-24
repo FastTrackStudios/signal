@@ -104,19 +104,30 @@ const SUSTAIN_DECLICK_MS: u32 = 12;
 /// sustain swells up under the transition, filling the bow-change dip and
 /// reaching full at the arrival tick. Two-stage: a fast stage-1 to ~90 % then a
 /// slow stage-2 swell to full.
-const CSS_XTIME_BASE_MS: u32 = 225; // $a3zg3 (XTime), shipped
-const CSS_ATK_FADE_PCT: u32 = 50; // $igmiu — stage-1/stage-2 split %
-const CSS_NODE_VOL_DIV: u32 = 90; // $x444h — stage-1 fade divisor (overshoots linear)
+// Exact shipped anchors from persistent_1.tsv (css-ksp-anchor-values.md).
+const CSS_XTIME_MS: u32 = 225; // $a3zg3 (XTime) — FLAT 225 ms (all IOI anchors = 225)
+const CSS_ATK_FADE_PCT: u32 = 50; // $igmiu — stage split %, kbqnb=0 (soft); 60 hard
 
-/// IOI-scaled crossfade time (`$a3zg3`): slow playing → longer, fast → shorter
-/// (KSP §6). Exact per-IOI anchors live in `persistent_1.tsv` (not decoded);
-/// this is a monotone lerp from a fast floor to the shipped 225 ms base over the
-/// Expressive IOI window (A=200 → C=800 ms, §8).
-fn css_xtime_ms(ioi_ms: f32) -> u32 {
-    let (fast, slow) = (120.0f32, CSS_XTIME_BASE_MS as f32);
-    let t = ((ioi_ms - 200.0) / (800.0 - 200.0)).clamp(0.0, 1.0);
-    (fast + (slow - fast) * t).round() as u32
+/// `$x444h` (Node-Vol) — the stage-1 fade divisor, and the ONLY IOI-scaled
+/// crossfade param (css-ksp-anchor-values.md §3): 90 for IOI<150 ms, lerp
+/// 90→60 over 150-300 ms, then flat 60. A smaller divisor lengthens stage-1
+/// (`$mlnoy = XTime*igmiu/$x444h`) → a more gradual first stage on slow notes.
+fn css_node_vol_div(ioi_ms: f32) -> u32 {
+    if ioi_ms <= 150.0 {
+        90
+    } else if ioi_ms >= 300.0 {
+        60
+    } else {
+        (90.0 - (90.0 - 60.0) * (ioi_ms - 150.0) / 150.0).round() as u32
+    }
 }
+
+/// Portamento micro-glide (CSS `$ma0b1` on, KSP §3.2/§8, shipped): the incoming
+/// note scoops to true pitch over `$1mwwo`=60 ms with a `$ruv02`=10 base bend
+/// (`$jyttf = $ruv02*1000` millicents ⇒ ~10 cents; `$i1kki`=10 = no interval
+/// scaling in the shipped state).
+const CSS_PORTA_BTIME_MS: u32 = 60; // $1mwwo
+const CSS_PORTA_BEND_CENTS: f32 = 10.0; // $ruv02 → $jyttf
 
 /// Attack-transient anti-machine-gun dip (dB, KSP §7.3): a connected note within
 /// `$xu41m` (250 ms) of the previous onset plays quieter — from 0 dB at 250 ms
@@ -536,6 +547,11 @@ pub struct SampleEngine {
     /// (`css_attack_transient_dip_db`, KSP §7.3) — 0 unless the note falls within
     /// 250 ms of the previous onset. Set alongside `legato_trim`.
     legato_attack_dip_db: f32,
+    /// Portamento micro-glide `(start_cents, frames)` for the incoming legato
+    /// voices (CSS `$ma0b1`/`$1mwwo`/`$ruv02`, KSP §3.2) — the arriving note
+    /// starts detuned toward the departed note and scoops to true pitch. Set
+    /// around the legato spawn, applied in `spawn_zone_voice_at`.
+    legato_glide: Option<(f32, usize)>,
 
     /// Notes currently held down: MIDI note → velocity. Shared across lines
     /// (keys are physical); per-line press order lives in `LegatoLine::order`.
@@ -810,6 +826,7 @@ impl SampleEngine {
             legato_sustain: false,
             legato_trim: false,
             legato_attack_dip_db: 0.0,
+            legato_glide: None,
             sord_filter: BiquadFilter::lowpass(filter::SORD_FC, filter::SORD_Q, sample_rate),
             // Pre-size note-keyed maps to the full MIDI range so note-on never
             // reallocates them on the audio thread.

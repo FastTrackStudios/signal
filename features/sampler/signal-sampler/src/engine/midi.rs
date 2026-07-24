@@ -1771,6 +1771,10 @@ impl SampleEngine {
             if let Some((delay, stage1_run, stage1_denom, stage2)) = fade_in_under {
                 voice = voice.with_two_stage_fade_in(delay, stage1_run, stage1_denom, stage2);
             }
+            // Portamento micro-glide on the incoming legato voices (CSS `$ma0b1`).
+            if let Some((start_cents, frames)) = self.legato_glide {
+                voice = voice.with_pitch_glide(start_cents, frames);
+            }
             if let Some((frames, target)) = bloom {
                 voice = voice.with_slow_bloom(frames, target);
             }

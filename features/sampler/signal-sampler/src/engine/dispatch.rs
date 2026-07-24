@@ -419,6 +419,17 @@ impl SampleEngine {
         // crossfaded out above (`retire_note_line`).
         if self.patch.is_zoned() {
             self.play_direction = direction.to_string();
+            // Portamento micro-glide (CSS `$ma0b1`, shipped ON): the incoming
+            // voices scoop to true pitch FROM the direction of the departed note
+            // over `$1mwwo` (~60 ms) — smoothing the pitch handoff so the
+            // transition isn't a discrete step. Not for Pacific (its own model).
+            self.legato_glide = if !pacific && from_note != to_note {
+                let dir = if to_note > from_note { 1.0 } else { -1.0 };
+                let frames = ms_to_frames(crate::engine::CSS_PORTA_BTIME_MS, self.sample_rate);
+                Some((-crate::engine::CSS_PORTA_BEND_CENTS * dir, frames))
+            } else {
+                None
+            };
             // 1. One-shot bow-change transition (`%ftriy` / Pacific `legato`).
             self.spawn_legato_transition(
                 from_note, to_note, velocity, portamento, sched_lead, ioi_ms,
@@ -462,15 +473,15 @@ impl SampleEngine {
                 // to ~90 % then a slow stage-2 to full, over the IOI-scaled
                 // `$a3zg3` crossfade, ending at the tick. Capped at the lead so
                 // fast moves rise over the whole (short) window.
-                let xtime = crate::engine::css_xtime_ms(ioi_ms);
-                let total = ms_to_frames(xtime, self.sample_rate)
+                // $a3zg3 XTime is flat 225 ms (shipped); capped at the lead.
+                let total = ms_to_frames(crate::engine::CSS_XTIME_MS, self.sample_rate)
                     .min(hold)
                     .max(declick);
                 // stage1_run = total*igmiu/100; stage1_denom = total*igmiu/x444h
-                // (the $x444h=90 divisor makes stage-1 overshoot the linear
-                // split → ~90 %); stage2 = total*(100-igmiu)/100.
+                // ($x444h is IOI-scaled 90→60 — a smaller divisor lengthens
+                // stage-1); stage2 = total*(100-igmiu)/100.
                 let igmiu = crate::engine::CSS_ATK_FADE_PCT as usize;
-                let x444h = crate::engine::CSS_NODE_VOL_DIV as usize;
+                let x444h = crate::engine::css_node_vol_div(ioi_ms) as usize;
                 let stage1_run = total * igmiu / 100;
                 let stage1_denom = (total * igmiu / x444h).max(1);
                 let stage2 = total * (100 - igmiu) / 100;
@@ -494,6 +505,7 @@ impl SampleEngine {
                 self.legato_attack_dip_db = 0.0;
             }
             self.sustain_fade_in = None;
+            self.legato_glide = None;
             self.line_mut().note = Some(to_note);
             if let Some(i) = log_idx {
                 self.legato_fire_log[i].arrival = self.last_arrival_prediction;

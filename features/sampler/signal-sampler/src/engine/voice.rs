@@ -137,6 +137,16 @@ pub struct Voice {
     stage1_run: usize,
     stage2_frames: usize,
 
+    /// Portamento micro-glide (CSS `$upjkh`/`$ma0b1`, KSP §3.2/§3.5): the voice
+    /// starts detuned by `glide_cents` (toward the departed note) and ramps to
+    /// true pitch (0) over `glide_frames` (`$1mwwo`≈60 ms), smoothing the pitch
+    /// arrival so the transition isn't a discrete step. Applied as a small rate
+    /// modulation (the pitch drift over 60 ms is far below the timing floor).
+    /// `glide_frames == 0` = no glide.
+    glide_cents: f32,
+    glide_step: f32,
+    glide_frames: usize,
+
     pub state: VoiceState,
     pub kind: VoiceKind,
 
@@ -402,6 +412,9 @@ impl Voice {
             gain_ramp_frames: 0,
             stage1_run: 0,
             stage2_frames: 0,
+            glide_cents: 0.0,
+            glide_step: 0.0,
+            glide_frames: 0,
             state: VoiceState::Playing,
             release_hold: 0,
             pending_fade: 0,
@@ -463,6 +476,9 @@ impl Voice {
             gain_ramp_frames: 0,
             stage1_run: 0,
             stage2_frames: 0,
+            glide_cents: 0.0,
+            glide_step: 0.0,
+            glide_frames: 0,
             state: VoiceState::Playing,
             release_hold: 0,
             pending_fade: 0,
@@ -641,6 +657,18 @@ impl Voice {
         self.gain_ramp_frames = stage1_denom.max(1);
         self.stage1_run = stage1_run;
         self.stage2_frames = stage2_frames;
+        self
+    }
+
+    /// Portamento micro-glide: start `start_cents` detuned (toward the departed
+    /// note) and ramp to true pitch over `frames` (CSS `$1mwwo`≈60 ms). Smooths
+    /// the pitch arrival of a legato transition (`$upjkh`/`$ma0b1`).
+    pub fn with_pitch_glide(mut self, start_cents: f32, frames: usize) -> Self {
+        if frames > 0 && start_cents != 0.0 {
+            self.glide_cents = start_cents;
+            self.glide_frames = frames;
+            self.glide_step = start_cents / frames as f32;
+        }
         self
     }
 
@@ -965,11 +993,24 @@ impl Voice {
         };
         let amp = self.gain * env * flex * bloom;
 
-        // Advance position
-        if self.reverse {
-            self.position -= self.rate;
+        // Advance position. During a portamento glide the read rate is nudged
+        // by `glide_cents` (ramping to 0) so the pitch scoops into true tuning;
+        // the tiny position drift over the ~60 ms glide is inaudible.
+        let step = if self.glide_frames > 0 {
+            let s = self.rate * 2f64.powf(self.glide_cents as f64 / 1200.0);
+            self.glide_cents -= self.glide_step;
+            self.glide_frames -= 1;
+            if self.glide_frames == 0 {
+                self.glide_cents = 0.0;
+            }
+            s
         } else {
-            self.position += self.rate;
+            self.rate
+        };
+        if self.reverse {
+            self.position -= step;
+        } else {
+            self.position += step;
         }
         // Keep looping while Releasing too — a looped body (sustain/legato) must
         // fade out over its loop, not stop looping and run forward into the
