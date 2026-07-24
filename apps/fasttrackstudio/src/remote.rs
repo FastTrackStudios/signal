@@ -146,18 +146,23 @@ fn device_secret_key() -> Option<iroh::SecretKey> {
     Some(key)
 }
 
-/// The app's own iroh endpoint — one per process.
-async fn app_endpoint() -> Option<iroh::Endpoint> {
+/// The app's own iroh endpoint — one per process. A persistent device
+/// key is preferred (stable identity), but dialing needs none — if the
+/// key file can't be created (sandboxed FS surprises) an ephemeral key
+/// keeps p2p working for this launch instead of failing outright.
+async fn app_endpoint() -> Result<iroh::Endpoint, String> {
     static CELL: std::sync::OnceLock<iroh::Endpoint> = std::sync::OnceLock::new();
     if let Some(ep) = CELL.get() {
-        return Some(ep.clone());
+        return Ok(ep.clone());
     }
-    let key = device_secret_key()?;
+    let key = device_secret_key().unwrap_or_else(|| {
+        tracing::warn!("no persistent iroh key — using an ephemeral one for this launch");
+        iroh::SecretKey::generate()
+    });
     let ep = architect::iroh_link::bind_endpoint(key)
         .await
-        .map_err(|e| tracing::error!("iroh bind: {e}"))
-        .ok()?;
-    Some(CELL.get_or_init(|| ep).clone())
+        .map_err(|e| format!("iroh bind: {e}"))?;
+    Ok(CELL.get_or_init(|| ep).clone())
 }
 
 /// Establish one typed client over its own link (a vox caller is
@@ -185,7 +190,7 @@ pub(crate) async fn establish_verbose<C: vox_core::FromVoxLane>(
                 .map_err(|e| format!("vox handshake: {e:?}"))
         }
         EngineTarget::Iroh(id) => {
-            let ep = app_endpoint().await.ok_or("iroh endpoint bind failed")?;
+            let ep = app_endpoint().await?;
             let link = architect::iroh_link::connect(&ep, *id)
                 .await
                 .map_err(|e| format!("iroh connect: {e}"))?;
