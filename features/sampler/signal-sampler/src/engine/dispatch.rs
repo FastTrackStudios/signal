@@ -430,7 +430,13 @@ impl SampleEngine {
         let (retire_trans_ms, retire_sus_ms) = if pacific {
             (cfg.outgoing_fade_ms, cfg.outgoing_fade_ms)
         } else {
-            cfg.retire_fades_ms(velocity)
+            // DECODED §11 retire matrix: at a NEW transition the outgoing pair
+            // fades 250 → 400 ms, IOI-lerped — the 550/500 ms table values are
+            // the RE-BOW (same-pitch re-strike) fades, not the per-transition
+            // retire. The old 500 ms sustain ring into every new note was the
+            // audible "overlap". Lerp axis: short lines fade fast.
+            let f = 250.0 + (400.0 - 250.0) * ((ioi_ms - 150.0) / 350.0).clamp(0.0, 1.0);
+            (f as u32, f as u32)
         };
         let destination_fade_ms = cfg.destination_fade_ms;
         let release_overlap_ms = cfg.release_overlap.as_ref().map(|r| r.fade_ms);
