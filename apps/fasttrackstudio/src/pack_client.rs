@@ -55,6 +55,15 @@ pub(crate) enum DownloadEvent {
 /// Internal sentinel: the transfer loop stopped because of a pause.
 const PAUSED: &str = "__paused__";
 
+/// Packs with a transfer in flight — a second concurrent download of
+/// the same pack would append into the same `.part` and corrupt it
+/// (observed as `hash: No such file` when the first rename won).
+fn in_flight() -> &'static std::sync::Mutex<std::collections::HashSet<String>> {
+    static SET: std::sync::OnceLock<std::sync::Mutex<std::collections::HashSet<String>>> =
+        std::sync::OnceLock::new();
+    SET.get_or_init(Default::default)
+}
+
 /// The mirror's `packs.json` shape — `PackInfo` rows under one key.
 #[derive(facet::Facet)]
 struct MirrorIndex {
@@ -154,7 +163,14 @@ pub(crate) fn start_download(
     let (tx, rx) = futures_channel::mpsc::unbounded();
     let cancel = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
     let cancel_flag = cancel.clone();
+    // One transfer per pack, ever — a duplicate reports and bails
+    // without touching the .part.
+    if !in_flight().lock().map(|mut s| s.insert(info.name.clone())).unwrap_or(false) {
+        let _ = tx.unbounded_send(DownloadEvent::Failed("already downloading".into()));
+        return (rx, cancel);
+    }
     runtime().spawn(async move {
+        let _guard = scopeguard(info.name.clone());
         let result = match &source {
             PackSource::Vox(target) => {
                 download(target, &info, &dest_dir, &tx, &cancel_flag).await
@@ -330,6 +346,20 @@ async fn mirror_download(
     file.flush().map_err(|e| format!("flush: {e}"))?;
     drop(file);
     finish(&part, &final_path, info, done)
+}
+
+/// Drop guard that releases a pack's in-flight slot however the
+/// transfer task ends.
+struct InFlightGuard(String);
+impl Drop for InFlightGuard {
+    fn drop(&mut self) {
+        if let Ok(mut s) = in_flight().lock() {
+            s.remove(&self.0);
+        }
+    }
+}
+fn scopeguard(name: String) -> InFlightGuard {
+    InFlightGuard(name)
 }
 
 fn sha256_file(path: &Path) -> std::io::Result<String> {

@@ -77,7 +77,10 @@ impl KeysRigBackend {
                     let n = p.name.to_ascii_lowercase();
                     n.contains("rhodes") && n.contains("la custom")
                 })
-            });
+            })
+            // Whatever is installed beats nothing (a phone with only the
+            // Wurli downloaded should auto-load the Wurli).
+            .or_else(|| (!presets.is_empty()).then_some(0));
         tracing::info!(
             presets = presets.len(),
             default = default_idx.and_then(|i| presets.get(i)).map(|p| p.name.as_str()).unwrap_or("<first>"),
@@ -122,7 +125,26 @@ impl KeysRigBackend {
             buffer_size: 256,
             ..Default::default()
         };
-        match KeysRig::open(&prefs, &tree) {
+        // Brand the in-flight state and convert panics into a visible
+        // error — phone UIs have no logs, and a silent hang and a
+        // swallowed thread panic are otherwise indistinguishable from
+        // "nothing happened".
+        if let Ok(mut s) = self.inner.state.lock() {
+            s.last_error = Some("opening audio device…".into());
+        }
+        self.inner.events.publish(KeysEvent::Status(KeysRigSvc::status(self)));
+        let opened = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            KeysRig::open(&prefs, &tree)
+        }))
+        .unwrap_or_else(|p| {
+            let msg = p
+                .downcast_ref::<&str>()
+                .map(|s| s.to_string())
+                .or_else(|| p.downcast_ref::<String>().cloned())
+                .unwrap_or_else(|| "<non-string panic>".into());
+            Err(eyre::eyre!("audio open panicked: {msg}"))
+        });
+        match opened {
             Ok(r) => {
                 {
                     let mut rig = self.inner.rig.lock().unwrap();
