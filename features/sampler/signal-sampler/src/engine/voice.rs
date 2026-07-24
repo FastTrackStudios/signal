@@ -1109,7 +1109,12 @@ impl Voice {
         if block_peak >= RETIRE_FLOOR {
             self.has_sounded = true;
             self.quiet_frames = 0;
-        } else if self.has_sounded {
+        } else if self.has_sounded && !matches!(self.state, VoiceState::Playing) {
+            // Only RELEASING tails silence-retire. A HELD voice must survive at
+            // gain ≈ 0: during a CC1 sweep the inactive dynamic layers are
+            // crossfaded to silence and must come BACK when the controller
+            // returns to their range (param-test S14: the held note died
+            // mid-crescendo because the loud layers were retired while quiet).
             self.quiet_frames = self.quiet_frames.saturating_add(frames);
             if self.quiet_frames >= RETIRE_SILENCE_FRAMES {
                 self.state = VoiceState::Done;

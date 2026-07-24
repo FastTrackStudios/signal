@@ -907,8 +907,27 @@ impl SampleEngine {
         // CC2 → non-vib/vib balance (equal-power).
         let (nv, vb) = Self::equal_power(self.cc2_blend());
         let ramp = self.next_cc_ramp.take().unwrap_or(self.cc1_ramp_frames);
-        let nv_artic = self.articulation.clone();
-        let vib_artic = self.find_vibrato_pair_id(&nv_artic);
+        // ORIENT the pair exactly like `trigger_zoned_sustain`: the current
+        // articulation may be the VIBRATO member (CSS default = Vibsus). The
+        // nv-side CC1 table must be the NON-vibrato articulation's — using the
+        // Vibsus 4-layer table for the 3-layer Nonvib voices sent every real
+        // layer to gain 0 once CC1 crossed ~96 (S14: held note died
+        // mid-crescendo).
+        let cur = self.articulation.clone();
+        let base_is_vib = self
+            .patch
+            .spec
+            .articulation(&cur)
+            .map(|a| a.is_vibrato())
+            .unwrap_or(false);
+        let (nv_artic, vib_artic) = if base_is_vib {
+            (
+                self.find_vibrato_pair_id(&cur).unwrap_or_else(|| cur.clone()),
+                Some(cur),
+            )
+        } else {
+            (cur.clone(), self.find_vibrato_pair_id(&cur))
+        };
 
         // Per-side CC1 crossfade across ALL dynamic layers: the active pair
         // (lo,hi) get equal-power gains, every other layer is silent. Held

@@ -156,10 +156,11 @@ pub fn render_report_json(
     for e in &sources.trace.events {
         match &e.kind {
             TraceKind::VoiceSpawn(v) => {
-                // Hide inaudible layers: the CC1 multi-layer sustains spawn
-                // one voice per dynamic, most at gain≈0 — drop those so only
-                // the layers actually carrying sound draw a row.
-                if v.gain.abs() < 0.004 {
+                // Hide inaudible ONE-SHOT layers (gain≈0 spawns that never
+                // re-level). SustainLayer voices are kept even at gain 0 —
+                // a CC1/CC2 sweep re-levels them later, and hiding them
+                // masked the S14 missing-layer bug.
+                if v.gain.abs() < 0.004 && !v.voice_kind.contains("Sustain") {
                     continue;
                 }
                 voices.push(voice_json(e.frame, e.line, v, ends.get(&v.voice_id).copied(), frames));
