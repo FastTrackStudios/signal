@@ -31,6 +31,9 @@ use crate::remote::EngineTarget;
 enum KeysPage {
     Play,
     Library,
+    /// The in-app flight recorder (log_ring) — real-time diagnostics on
+    /// a device with no console.
+    Logs,
 }
 
 /// One pack's download lifecycle, keyed by pack name.
@@ -127,7 +130,11 @@ pub fn KeysShell(on_home: EventHandler<()>) -> Element {
                     }
                 }
                 div { style: "flex: 1;" }
-                for (p, label) in [(KeysPage::Play, "Play"), (KeysPage::Library, "Library")] {
+                for (p, label) in [
+                    (KeysPage::Play, "Play"),
+                    (KeysPage::Library, "Library"),
+                    (KeysPage::Logs, "Logs"),
+                ] {
                     button {
                         style: format!(
                             "appearance: none; border: none; border-radius: 8px; padding: 6px 14px; \
@@ -149,6 +156,7 @@ pub fn KeysShell(on_home: EventHandler<()>) -> Element {
                         downloaded: presets().iter().map(|p| p.name.clone()).collect::<Vec<_>>(),
                     }
                 },
+                KeysPage::Logs => rsx! { LogsPage {} },
             }
         }
     }
@@ -286,6 +294,51 @@ fn PlayPage(status: KeysStatus, presets: Vec<KeysPreset>) -> Element {
                                 },
                             }
                         }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ── Logs ────────────────────────────────────────────────────────────────────
+
+/// The flight recorder: live tracing + panic lines, newest on top, with
+/// a copy-all button for pasting into a bug report.
+#[component]
+fn LogsPage() -> Element {
+    let mut lines = use_signal(crate::log_ring::snapshot);
+    use_future(move || async move {
+        loop {
+            lines.set(crate::log_ring::snapshot());
+            architect::platform::sleep(std::time::Duration::from_millis(1000)).await;
+        }
+    });
+    let mut copied = use_signal(|| false);
+
+    rsx! {
+        div { style: "flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 8px; \
+                      padding: 8px 14px 20px;",
+            button {
+                style: "appearance: none; border: none; border-radius: 10px; padding: 10px; \
+                        background: #101821; color: #38bdf8; font-size: 13px; font-weight: 700;",
+                onclick: move |_| {
+                    let text = lines().join("\n");
+                    #[cfg(target_os = "ios")]
+                    crate::ios_orientation::set_clipboard(&text);
+                    #[cfg(not(target_os = "ios"))]
+                    tracing::info!("logs copy requested ({} bytes)", text.len());
+                    copied.set(true);
+                },
+                if copied() { "Copied ✓" } else { "Copy all logs" }
+            }
+            div { style: "flex: 1; min-height: 0; overflow-y: auto; background: #0a0a0c; \
+                          border: 1px solid #1b1b1f; border-radius: 10px; padding: 8px;",
+                for line in lines().iter().rev() {
+                    div { style: "font-family: ui-monospace, monospace; font-size: 9px; \
+                                  color: #a1a1aa; white-space: pre-wrap; word-break: break-all; \
+                                  border-bottom: 1px solid #131316; padding: 1px 0;",
+                        "{line}"
                     }
                 }
             }

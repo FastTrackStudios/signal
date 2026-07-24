@@ -52,6 +52,18 @@ unsafe fn nsstring(s: &str) -> *mut AnyObject {
     msg_send![class!(NSString), stringWithUTF8String: c.as_ptr()]
 }
 
+/// Copy text to the system pasteboard (the Logs tab's Copy button).
+pub fn set_clipboard(text: &str) {
+    unsafe {
+        let pb: *mut AnyObject = msg_send![class!(UIPasteboard), generalPasteboard];
+        if pb.is_null() {
+            return;
+        }
+        let s = nsstring(text);
+        let _: () = msg_send![pb, setString: s];
+    }
+}
+
 /// The bundle's CFBundleVersion (the TestFlight build number) — shown in
 /// the keys UI so "which build are you on" is never a guessing game.
 pub fn build_number() -> String {

@@ -36,6 +36,11 @@ mod engines;
 #[cfg(all(feature = "session", not(target_arch = "wasm32")))]
 mod guide;
 mod prefs;
+/// In-memory log ring (tracing capture + panic hook) — rendered by the
+/// keys Logs tab on the phone, harmless elsewhere.
+#[allow(dead_code)]
+#[cfg(not(target_arch = "wasm32"))]
+mod log_ring;
 // The shared "dial the engine" plumbing every remote surface uses (rig
 // views + the browser session player).
 #[cfg(any(feature = "signal", feature = "session", feature = "signal-guitar"))]
@@ -119,12 +124,19 @@ fn main() {
     }
 
     #[cfg(not(target_arch = "wasm32"))]
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "info,vox_core=warn,schema_deser=off".into()),
-        )
-        .init();
+    {
+        use tracing_subscriber::layer::SubscriberExt as _;
+        use tracing_subscriber::util::SubscriberInitExt as _;
+        tracing_subscriber::registry()
+            .with(
+                tracing_subscriber::EnvFilter::try_from_default_env()
+                    .unwrap_or_else(|_| "info,vox_core=warn,schema_deser=off".into()),
+            )
+            .with(tracing_subscriber::fmt::layer())
+            .with(log_ring::RingLayer::new())
+            .init();
+        log_ring::install_panic_hook();
+    }
 
     // Session: bring up the in-process engine (standalone daw + setlist
     // service + demo setlist) before the UI. Failure is non-fatal — the
