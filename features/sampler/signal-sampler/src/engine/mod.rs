@@ -613,6 +613,9 @@ pub struct SampleEngine {
     /// Notes currently held down: MIDI note → velocity. Shared across lines
     /// (keys are physical); per-line press order lives in `LegatoLine::order`.
     held_notes: HashMap<u8, u8>,
+    /// Per-note onset frame (engine time) — drives the decoded release-sample
+    /// held-time gain curve (`%ru5pa`, §11: −6 dB at 10 ms held → 0 dB ≥ 1 s).
+    note_on_frame: HashMap<u8, u64>,
     /// Notes for which `trigger_short`'s body voice actually spawned
     /// (i.e. the body sample was decoded and resolve succeeded). Used to
     /// gate the release-tail voice on note-off: if the body never sounded
@@ -896,6 +899,7 @@ impl SampleEngine {
             // Pre-size note-keyed maps to the full MIDI range so note-on never
             // reallocates them on the audio thread.
             held_notes: HashMap::with_capacity(128),
+            note_on_frame: HashMap::with_capacity(128),
             body_voiced: std::collections::HashSet::with_capacity(128),
             deferred_note_off_velocities: HashMap::with_capacity(128),
             frames_rendered: 0,

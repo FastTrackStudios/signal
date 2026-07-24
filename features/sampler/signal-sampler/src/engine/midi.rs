@@ -165,6 +165,7 @@ impl SampleEngine {
         };
         self.set_active_line(li);
         self.held_notes.insert(note, velocity);
+        self.note_on_frame.insert(note, self.frames_rendered);
         let l = self.line_mut();
         l.order.retain(|&n| n != note);
         l.order.push(note);
@@ -293,6 +294,7 @@ impl SampleEngine {
                 Some(ArticulationKind::Short | ArticulationKind::OneShot)
             );
             self.held_notes.insert(note, velocity);
+        self.note_on_frame.insert(note, self.frames_rendered);
 
             // Only TRUE legato articulations take the monophonic transition
             // path: a Legato-kind artic, or a main sustain that has a CC2
@@ -355,6 +357,7 @@ impl SampleEngine {
         let other_held = self.held_notes.keys().any(|&n| n != note);
 
         self.held_notes.insert(note, velocity);
+        self.note_on_frame.insert(note, self.frames_rendered);
         self.deferred_note_off_velocities.remove(&note);
 
         let artic_kind = self
@@ -1364,7 +1367,27 @@ impl SampleEngine {
         // decay — but these samples are normalised loud, so at unity (×makeup)
         // they spike louder than the note itself ("note-off noise"). Trim them.
         if let Some(idx) = self.find_layer_zone(&rel_id, "", &dynamic, note, rr) {
-            let release_gain = self.patch.spec.performance.release_gain;
+            // DECODED release level (§11): base −6.0 dB ($jljyh/$ofpdo) × the
+            // linear held-time curve %ru5pa — a further −6 dB at 10 ms held,
+            // fading to 0 dB extra by ≥ 1 s. Short taps get quiet bow-offs;
+            // long notes get the full (still −6 dB) release tail.
+            let held_ms = self
+                .note_on_frame
+                .get(&note)
+                .map(|&f| {
+                    crate::engine::frames_to_ms(
+                        self.frames_rendered.saturating_sub(f),
+                        self.sample_rate,
+                    )
+                })
+                .unwrap_or(1000.0);
+            let held_db = if held_ms >= 1000.0 {
+                0.0
+            } else {
+                -6.0 * (1.0 - ((held_ms - 10.0).max(0.0) / 990.0))
+            };
+            let release_gain =
+                self.patch.spec.performance.release_gain * db_to_gain(-6.0 + held_db);
             self.spawn_zone_voice(idx, note, VoiceKind::Release, release_gain, None, 0.0);
         }
     }

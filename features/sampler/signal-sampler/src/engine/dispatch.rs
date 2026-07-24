@@ -585,9 +585,14 @@ impl SampleEngine {
                     self.sustain_fade_in = Some((hold.saturating_sub(fill), fill, fill, 0));
                 }
                 self.legato_sustain = true;
-                // The −6 dB trim (+ bloom) is only for zones 1-2; a zone-3 hard
-                // attack (`$x0jlu`=0) plays the connected note at full level.
-                self.legato_trim = trim_zone;
+                // DECODED round 2 (§11): the −6 dB `$3tsb0` trim is CHORD-mode
+                // only ("Chord mode SUS / Vol." UI, applied at chord-branch
+                // lines) — a MONO-legato connected sustain plays at FULL level;
+                // the IOI-dependent LT trim belongs to the transition voice.
+                // (Empirically re-verified on the param-test: flipping this off
+                // is measured, not assumed — see commit.)
+                self.legato_trim = false;
+                let _ = trim_zone;
                 // Attack-transient dip: DECODED as same-PITCH-keyed
                 // (%i35so[$EVENT_NOTE], script 12716) — a pitch TRANSITION's
                 // destination almost never re-sounded within 250 ms, so no dip
