@@ -781,6 +781,19 @@ impl Voice {
     }
 
     /// Schedule a gain ramp to `target` over `frames` frames.
+    /// Retire this voice by HOLDING it at full for `hold_frames`, then fading to
+    /// zero over `fade_frames` (via `release_hold`/`pending_fade`). For the
+    /// document legato retire: the outgoing note holds through the transition's
+    /// pre-bow, then crossfades out ENDING at the arrival tick — complementary
+    /// to the incoming swell, so the old note doesn't bleed through the whole
+    /// fade-in. No-op unless the voice is still Playing.
+    pub fn hold_then_release(&mut self, hold_frames: usize, fade_frames: usize) {
+        if matches!(self.state, VoiceState::Playing) {
+            self.release_hold = hold_frames.max(1);
+            self.pending_fade = fade_frames.max(1);
+        }
+    }
+
     pub fn ramp_gain(&mut self, target: f32, frames: usize) {
         self.target_gain = target;
         self.gain_ramp_frames = frames;
@@ -1369,7 +1382,14 @@ impl VoicePool {
     /// overlapping fades — the previous 30 ms single fade caused the inter-note
     /// tick. `Legato` (transition) voices fade over `trans_fade`; sustain-layer
     /// voices over `sus_fade`.
-    pub fn retire_note_line(&mut self, line: u8, note: u8, trans_fade: usize, sus_fade: usize) {
+    pub fn retire_note_line(
+        &mut self,
+        line: u8,
+        note: u8,
+        trans_fade: usize,
+        sus_fade: usize,
+        hold_frames: usize,
+    ) {
         for v in &mut self.voices {
             if v.note != note || v.line != line {
                 continue;
@@ -1386,11 +1406,17 @@ impl VoicePool {
                 _ => continue,
             };
             let fade = fade.max(1);
-            v.ramp_gain(0.0, fade);
-            v.release_frames = fade;
-            v.state = VoiceState::Releasing {
-                frames_remaining: fade,
-            };
+            if hold_frames > 0 {
+                // Document prefire: hold through the pre-bow, then crossfade out
+                // ending at the tick (complementary to the incoming swell).
+                v.hold_then_release(hold_frames, fade);
+            } else {
+                v.ramp_gain(0.0, fade);
+                v.release_frames = fade;
+                v.state = VoiceState::Releasing {
+                    frames_remaining: fade,
+                };
+            }
         }
     }
 

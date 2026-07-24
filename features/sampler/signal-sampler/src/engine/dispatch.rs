@@ -405,10 +405,36 @@ impl SampleEngine {
         };
         let destination_fade_ms = cfg.destination_fade_ms;
         let release_overlap_ms = cfg.release_overlap.as_ref().map(|r| r.fade_ms);
-        let trans_fade = ms_to_frames(retire_trans_ms, self.sample_rate);
-        let sus_fade = ms_to_frames(retire_sus_ms, self.sample_rate);
-        self.voices
-            .retire_note_line(self.cur_line as u8, from_note, trans_fade, sus_fade);
+        // DOCUMENT prefire: the transition fires `sched_lead` BEFORE the tick, so
+        // the outgoing note must HOLD through the pre-bow and then crossfade out
+        // over the SAME window the incoming sustain swells in — ending AT the
+        // tick — otherwise the old note fades from the fire and bleeds through
+        // the whole incoming fade-in ("hearing the thing before it"). Fade both
+        // members over the crossfade window (complementary equal-power); hold =
+        // lead − window. REACTIVE play (no lead) keeps the CSS fixed retire
+        // fades from the fire (hold 0).
+        let (trans_fade, sus_fade, retire_hold) = match sched_lead {
+            Some(lead) if !pacific => {
+                // Fade the outgoing over the whole lead (NO hold) so its body
+                // DECLINES as the transition sample takes over the (same-pitch)
+                // pre-bow, and is GONE exactly at the tick — no full-level
+                // overlap bump, no bleed past the arrival.
+                let lead = (lead as usize).max(1);
+                (lead, lead, 0)
+            }
+            _ => (
+                ms_to_frames(retire_trans_ms, self.sample_rate),
+                ms_to_frames(retire_sus_ms, self.sample_rate),
+                0,
+            ),
+        };
+        self.voices.retire_note_line(
+            self.cur_line as u8,
+            from_note,
+            trans_fade,
+            sus_fade,
+            retire_hold,
+        );
 
         // Zoned libraries (CSS): the decoded KSP model spawns THREE voices per
         // legato note. We model the two that carry it:
