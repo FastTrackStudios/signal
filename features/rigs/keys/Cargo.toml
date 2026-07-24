@@ -23,6 +23,10 @@ signal-plugin-host.workspace = true
 # + the architect Layer/Services/PubSub machinery to serve it as a vox remote.
 signal-keys-proto.workspace = true
 architect = { workspace = true, features = ["vox", "rig"] }
+# The open/load worker threads enter this runtime so the daw-standalone
+# engine's task spawns have a reactor wherever the backend is hosted
+# (in-process on iOS, engine mode, tests).
+tokio = { workspace = true, features = ["rt-multi-thread"] }
 tracing.workspace = true
 eyre.workspace = true
 

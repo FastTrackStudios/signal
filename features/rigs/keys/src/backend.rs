@@ -64,6 +64,23 @@ impl Default for KeysRigBackend {
     }
 }
 
+/// The backend's own small runtime. The daw-standalone engine spawns
+/// tokio tasks during open/load (prefetch, pumps); the backend drives
+/// those from plain worker threads, which have no ambient runtime —
+/// entering this one gives every spawn a reactor regardless of host
+/// (in-process iOS app, engine mode, tests).
+fn keys_runtime() -> &'static tokio::runtime::Runtime {
+    static RT: std::sync::OnceLock<tokio::runtime::Runtime> = std::sync::OnceLock::new();
+    RT.get_or_init(|| {
+        tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(1)
+            .thread_name("keys-rt")
+            .enable_all()
+            .build()
+            .expect("keys runtime")
+    })
+}
+
 impl KeysRigBackend {
     /// Build the backend and scan the Keyscape library. Does not open audio.
     pub fn new() -> Self {
@@ -287,6 +304,7 @@ impl KeysRigSvc for KeysRigBackend {
         let _ = std::thread::Builder::new()
             .name("keys-open".into())
             .spawn(move || {
+                let _rt = keys_runtime().enter();
                 if b.ensure_open() {
                     b.reattach_midi();
                 }
@@ -354,7 +372,10 @@ impl KeysRigSvc for KeysRigBackend {
         let b = self.clone();
         let _ = std::thread::Builder::new()
             .name("keys-load".into())
-            .spawn(move || b.do_load_preset(index as usize));
+            .spawn(move || {
+                let _rt = keys_runtime().enter();
+                b.do_load_preset(index as usize)
+            });
     }
 
     fn tree(&self) -> KeysNode {
