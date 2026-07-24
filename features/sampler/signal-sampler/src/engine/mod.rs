@@ -178,13 +178,20 @@ fn css_bend_cents(interval: u8, ioi_ms: f32) -> f32 {
 /// down to `$4lqhx` (~−3 dB shipped) at 0 ms — so rapid re-articulations don't
 /// machine-gun. (The `$c2hkn` 1-2 s recovery is approximated by the per-note IOI
 /// mapping: a note is dipped by how close it sits to the previous onset.)
-fn css_attack_transient_dip_db(ioi_ms: f32) -> f32 {
+/// DECODED CORRECTION (script_1.ksp 12716-12731, shipped persistent values):
+/// the window is keyed on `%i35so[$EVENT_NOTE]` — the SAME PITCH's last onset,
+/// not the line IOI — and shipped `$4lqhx`=−30/`$ee3a4`=0 make it a FLAT −3 dB
+/// within `$xu41m`=250 ms of the same pitch (no slope, no recovery ramp since
+/// ee3a4=0). Scale runs never trigger it; only rapid same-pitch repeats do.
+/// Callers pass the SAME-PITCH gap; the line-IOI misuse was corrected at the
+/// call sites (dispatch.rs re-attack path passes the same-note gap).
+fn css_attack_transient_dip_db(same_pitch_gap_ms: f32) -> f32 {
     const WINDOW_MS: f32 = 250.0; // $xu41m
-    const MAX_DIP_DB: f32 = -3.0; // $4lqhx (shipped)
-    if ioi_ms <= 0.0 || ioi_ms >= WINDOW_MS {
-        0.0
+    const DIP_DB: f32 = -3.0; // $4lqhx=-30, flat ($ee3a4=0 → no slope)
+    if same_pitch_gap_ms > 0.0 && same_pitch_gap_ms <= WINDOW_MS {
+        DIP_DB
     } else {
-        MAX_DIP_DB * (1.0 - ioi_ms / WINDOW_MS)
+        0.0
     }
 }
 

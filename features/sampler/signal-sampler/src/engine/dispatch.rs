@@ -588,13 +588,11 @@ impl SampleEngine {
                 // The −6 dB trim (+ bloom) is only for zones 1-2; a zone-3 hard
                 // attack (`$x0jlu`=0) plays the connected note at full level.
                 self.legato_trim = trim_zone;
-                // Anti-machine-gun dip: extra attenuation on notes that fall
-                // within 250 ms of the previous onset (KSP §7.3).
-                self.legato_attack_dip_db = if trim_zone {
-                    crate::engine::css_attack_transient_dip_db(ioi_ms)
-                } else {
-                    0.0
-                };
+                // Attack-transient dip: DECODED as same-PITCH-keyed
+                // (%i35so[$EVENT_NOTE], script 12716) — a pitch TRANSITION's
+                // destination almost never re-sounded within 250 ms, so no dip
+                // here (the re-attack path passes the real same-pitch gap).
+                self.legato_attack_dip_db = 0.0;
                 self.trigger_zoned_sustain(to_note);
                 self.legato_sustain = false;
                 self.legato_trim = false;
