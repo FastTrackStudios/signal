@@ -628,6 +628,31 @@ impl SampleEngine {
         if let Some(vib_id) = vib_id {
             self.spawn_sustain_layers(&vib_id, true, vb_scale, &direction, note, rr);
         }
+
+        // CSS FIRST-NOTE attack ornament (KSP §2 first-note branch): a fresh
+        // note plays a TRANSITION-GROUP voice at offset 0 (`%jcxqm =
+        // play_note(note,…,0,0)`, `$1fvjk = 0` — the full recorded bow attack)
+        // STACKED on the sustain layers. Without it every isolated/first note
+        // sits ~3.5 dB under Kontakt (param-test S13/S08/S09 level ratios
+        // 1.4-1.55). The retrigger (Legzero) sampleset is the bow-attack
+        // recording at the played pitch; recorded level × CC1 expr, no makeup
+        // (same rule as transitions). Connected notes skip this — their onset
+        // is the legato transition.
+        if !self.legato_sustain {
+            let (nv_ret, vib_ret) = self.legato_pair_ids(true);
+            let expr = self.cc1_expression(self.cc1);
+            for (id, scale) in [(nv_ret, nv_scale), (vib_ret, vb_scale)] {
+                let Some(id) = id else { continue };
+                if scale < 0.01 {
+                    continue;
+                }
+                let (lo, hi, blend) = self.layers_for_artic(&id);
+                let dynamic = if blend >= 0.5 { hi } else { lo };
+                if let Some(idx) = self.find_layer_zone(&id, &direction, &dynamic, note, rr) {
+                    self.spawn_zone_voice(idx, note, VoiceKind::Legato, scale * expr, None, 0.0);
+                }
+            }
+        }
     }
 
     /// Trigger a one-shot short note (spiccato / staccato / sfz / pizz / …). The
@@ -1735,22 +1760,21 @@ impl SampleEngine {
             // separate declick attack, which would double the onset.
             0
         } else if is_sustain_layer {
-            // FRESH sustain attack scales with VELOCITY and CC1 (param-test
-            // S13, Kontakt reference @CC1=80: vel40 blooms to 80 % in ~630 ms,
-            // vel90 ~300 ms, vel115 ~280 ms): soft velocity = slower bow bloom,
-            // low CC1 stretches it further. Legato-connected sustains keep the
-            // authored attack (the transition owns their onset).
+            // FRESH sustain attack: the KSP first-note branch plays with NO
+            // scripted fade — only the group FLEX declick (4-20 ms) — and the
+            // recording's own bow swell delivers the bloom (the measured
+            // velocity-dependent rise times ARE the samples). A long engine
+            // attack on top double-models the swell and starves the early
+            // energy (param-test S13: ref 1.5× our level). Velocity/CC1 shape
+            // the onset via layer selection + the attack-transient dip, not an
+            // envelope here. Connected sustains keep the authored attack.
             if self.legato_sustain {
                 self.attack_frames
             } else {
-                let vz = self.patch.spec.legato_cfg().velocity_range(self.last_velocity);
-                let vf = match vz {
-                    1 => 2.5,
-                    2 => 1.0,
-                    _ => 0.6,
-                };
-                let cf = 1.0 + (80.0 - f32::from(self.cc1)).max(0.0) / 80.0;
-                (self.attack_frames as f32 * vf * cf) as usize
+                ms_to_frames(
+                    crate::engine::SUSTAIN_DECLICK_MS.max(20),
+                    self.sample_rate,
+                )
             }
         } else if start_offset > 0 {
             // Deep mid-sample entry (skipped-swell Low-Latency prefire): fade
