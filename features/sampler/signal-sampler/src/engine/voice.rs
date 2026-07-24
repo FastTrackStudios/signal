@@ -138,12 +138,13 @@ pub struct Voice {
     stage2_frames: usize,
 
     /// Portamento micro-glide (CSS `$upjkh`/`$ma0b1`, KSP §3.2/§3.5): the voice
-    /// starts detuned by `glide_cents` (toward the departed note) and ramps to
-    /// true pitch (0) over `glide_frames` (`$1mwwo`≈60 ms), smoothing the pitch
-    /// arrival so the transition isn't a discrete step. Applied as a small rate
-    /// modulation (the pitch drift over 60 ms is far below the timing floor).
-    /// `glide_frames == 0` = no glide.
+    /// ramps its pitch from `glide_cents` to `glide_end` over `glide_frames`
+    /// (`$1mwwo`≈60 ms). Incoming voices ramp `-jyttf → 0` (scoop into pitch);
+    /// outgoing (retiring) voices ramp `0 → +jyttf` (bend toward the new note as
+    /// they fade). Applied as a small rate modulation (the pitch drift over
+    /// 60 ms is far below the timing floor). `glide_frames == 0` = no glide.
     glide_cents: f32,
+    glide_end: f32,
     glide_step: f32,
     glide_frames: usize,
 
@@ -413,6 +414,7 @@ impl Voice {
             stage1_run: 0,
             stage2_frames: 0,
             glide_cents: 0.0,
+            glide_end: 0.0,
             glide_step: 0.0,
             glide_frames: 0,
             state: VoiceState::Playing,
@@ -477,6 +479,7 @@ impl Voice {
             stage1_run: 0,
             stage2_frames: 0,
             glide_cents: 0.0,
+            glide_end: 0.0,
             glide_step: 0.0,
             glide_frames: 0,
             state: VoiceState::Playing,
@@ -660,16 +663,23 @@ impl Voice {
         self
     }
 
-    /// Portamento micro-glide: start `start_cents` detuned (toward the departed
-    /// note) and ramp to true pitch over `frames` (CSS `$1mwwo`≈60 ms). Smooths
-    /// the pitch arrival of a legato transition (`$upjkh`/`$ma0b1`).
-    pub fn with_pitch_glide(mut self, start_cents: f32, frames: usize) -> Self {
-        if frames > 0 && start_cents != 0.0 {
-            self.glide_cents = start_cents;
-            self.glide_frames = frames;
-            self.glide_step = start_cents / frames as f32;
-        }
+    /// Portamento micro-glide: ramp the pitch from `start_cents` to `end_cents`
+    /// over `frames` (CSS `$1mwwo`≈60 ms). Incoming: `(-jyttf, 0)`; outgoing:
+    /// `(0, +jyttf)`. (`$upjkh`/`$ma0b1`.)
+    pub fn with_pitch_glide(mut self, start_cents: f32, end_cents: f32, frames: usize) -> Self {
+        self.set_pitch_glide(start_cents, end_cents, frames);
         self
+    }
+
+    /// Runtime glide setter — also used to bend an already-playing (retiring)
+    /// voice toward the new note.
+    pub fn set_pitch_glide(&mut self, start_cents: f32, end_cents: f32, frames: usize) {
+        if frames > 0 && (start_cents - end_cents).abs() > f32::EPSILON {
+            self.glide_cents = start_cents;
+            self.glide_end = end_cents;
+            self.glide_frames = frames;
+            self.glide_step = (end_cents - start_cents) / frames as f32;
+        }
     }
 
     /// Hold the voice back `frames` frames before it starts playing: silence
@@ -998,10 +1008,10 @@ impl Voice {
         // the tiny position drift over the ~60 ms glide is inaudible.
         let step = if self.glide_frames > 0 {
             let s = self.rate * 2f64.powf(self.glide_cents as f64 / 1200.0);
-            self.glide_cents -= self.glide_step;
+            self.glide_cents += self.glide_step;
             self.glide_frames -= 1;
             if self.glide_frames == 0 {
-                self.glide_cents = 0.0;
+                self.glide_cents = self.glide_end;
             }
             s
         } else {
@@ -1381,6 +1391,24 @@ impl VoicePool {
             v.state = VoiceState::Releasing {
                 frames_remaining: fade,
             };
+        }
+    }
+
+    /// Bend the outgoing (retiring) voices of `note` on `line` from `start_cents`
+    /// to `end_cents` over `frames` — the CSS `$upjkh` outgoing portamento glide
+    /// (the departed note bends toward the new one as it fades).
+    pub fn glide_note_line(
+        &mut self,
+        line: u8,
+        note: u8,
+        start_cents: f32,
+        end_cents: f32,
+        frames: usize,
+    ) {
+        for v in &mut self.voices {
+            if v.note == note && v.line == line && v.kind != VoiceKind::Release {
+                v.set_pitch_glide(start_cents, end_cents, frames);
+            }
         }
     }
 

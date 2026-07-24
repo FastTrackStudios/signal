@@ -388,6 +388,14 @@ impl SampleEngine {
         // zones 1-2 (zone-3 hard attacks are exempt). Computed here before the
         // mutable spawn calls borrow `self`.
         let trim_zone = cfg.velocity_range(velocity) <= 2;
+        // `$kbqnb` hard/fast table: selected when IOI > 50 ms AND the attack is
+        // hard (zone 3). It pins the Atk-Fade split `$igmiu` to 60 % (vs 50 %
+        // soft) — a snappier stage-1 (css-ksp-anchor-values.md §2b).
+        let kbqnb_hard = cfg.velocity_range(velocity) == 3 && ioi_ms > 50.0;
+        // Interval > 12 semitones bypasses the IOI interpolation: the Atk-Fade
+        // split falls back to a fixed 50 % regardless of the hard/soft table
+        // (css-ksp-anchor-values.md §2 interval>12 fallback).
+        let big_leap = to_note.abs_diff(from_note) > 12;
         // Pacific (`$thaw1`): one flat 115 ms fade for BOTH members of the
         // outgoing pair; CSS: the decoded per-velocity retire tables.
         let (retire_trans_ms, retire_sus_ms) = if pacific {
@@ -419,14 +427,28 @@ impl SampleEngine {
         // crossfaded out above (`retire_note_line`).
         if self.patch.is_zoned() {
             self.play_direction = direction.to_string();
-            // Portamento micro-glide (CSS `$ma0b1`, shipped ON): the incoming
-            // voices scoop to true pitch FROM the direction of the departed note
-            // over `$1mwwo` (~60 ms) — smoothing the pitch handoff so the
-            // transition isn't a discrete step. Not for Pacific (its own model).
+            // Portamento micro-glide (CSS `$upjkh`+`$ma0b1`, shipped ON) over
+            // `$1mwwo` (~60 ms). Depth `$jyttf` = the interval/IOI-dependent bend
+            // (0 for a slow whole-tone line — the glide only appears on fast or
+            // small-interval moves). BOTH voices bend: the departing note bends
+            // toward the new one (0 → +jyttf) as it fades, and the incoming note
+            // scoops in from the departed direction (-jyttf → 0), so the pitch
+            // handoff is continuous, not a discrete step. Not for Pacific.
             self.legato_glide = if !pacific && from_note != to_note {
-                let dir = if to_note > from_note { 1.0 } else { -1.0 };
-                let frames = ms_to_frames(crate::engine::CSS_PORTA_BTIME_MS, self.sample_rate);
-                Some((-crate::engine::CSS_PORTA_BEND_CENTS * dir, frames))
+                let interval = to_note.abs_diff(from_note);
+                let bend = crate::engine::css_bend_cents(interval, ioi_ms);
+                if bend > 0.0 {
+                    let dir = if to_note > from_note { 1.0 } else { -1.0 };
+                    let jyttf = bend * dir;
+                    let frames = ms_to_frames(crate::engine::CSS_PORTA_BTIME_MS, self.sample_rate);
+                    // Outgoing ($upjkh): bend the retiring from_note voices.
+                    self.voices
+                        .glide_note_line(self.cur_line as u8, from_note, 0.0, jyttf, frames);
+                    // Incoming ($ma0b1): the new voices scoop from -jyttf to 0.
+                    Some((-jyttf, frames))
+                } else {
+                    None
+                }
             } else {
                 None
             };
@@ -473,21 +495,36 @@ impl SampleEngine {
                 // to ~90 % then a slow stage-2 to full, over the IOI-scaled
                 // `$a3zg3` crossfade, ending at the tick. Capped at the lead so
                 // fast moves rise over the whole (short) window.
-                // $a3zg3 XTime is flat 225 ms (shipped); capped at the lead.
-                let total = ms_to_frames(crate::engine::CSS_XTIME_MS, self.sample_rate)
-                    .min(hold)
-                    .max(declick);
-                // stage1_run = total*igmiu/100; stage1_denom = total*igmiu/x444h
-                // ($x444h is IOI-scaled 90→60 — a smaller divisor lengthens
-                // stage-1); stage2 = total*(100-igmiu)/100.
-                let igmiu = crate::engine::CSS_ATK_FADE_PCT as usize;
-                let x444h = crate::engine::css_node_vol_div(ioi_ms) as usize;
-                let stage1_run = total * igmiu / 100;
-                let stage1_denom = (total * igmiu / x444h).max(1);
-                let stage2 = total * (100 - igmiu) / 100;
-                let audible = stage1_run + stage2;
-                let hold_start = hold.saturating_sub(audible);
-                self.sustain_fade_in = Some((hold_start, stage1_run, stage1_denom, stage2));
+                if self.legato_expressive {
+                    // EXPRESSIVE ($ocjln=6): the two-stage swell. $a3zg3 XTime is
+                    // flat 225 ms (shipped), capped at the lead. stage1_run =
+                    // total*igmiu/100; stage1_denom = total*igmiu/x444h ($x444h
+                    // IOI-scaled 90→60 — a smaller divisor lengthens stage-1);
+                    // stage2 = total*(100-igmiu)/100.
+                    let total = ms_to_frames(crate::engine::CSS_XTIME_MS, self.sample_rate)
+                        .min(hold)
+                        .max(declick);
+                    let igmiu = if big_leap {
+                        50 // interval>12 fallback (fixed, ignores the hard table)
+                    } else if kbqnb_hard {
+                        60
+                    } else {
+                        crate::engine::CSS_ATK_FADE_PCT as usize
+                    };
+                    let x444h = crate::engine::css_node_vol_div(ioi_ms) as usize;
+                    let stage1_run = total * igmiu / 100;
+                    let stage1_denom = (total * igmiu / x444h).max(1);
+                    let stage2 = total * (100 - igmiu) / 100;
+                    let hold_start = hold.saturating_sub(stage1_run + stage2);
+                    self.sustain_fade_in = Some((hold_start, stage1_run, stage1_denom, stage2));
+                } else {
+                    // LOW-LATENCY ($ocjln=0, KSP §3.7): a short SINGLE-stage fade,
+                    // no swell — `(delay, f, f, 0)`.
+                    let fill = ms_to_frames(crate::engine::CSS_LL_XFADE_MS, self.sample_rate)
+                        .min(hold)
+                        .max(declick);
+                    self.sustain_fade_in = Some((hold.saturating_sub(fill), fill, fill, 0));
+                }
                 self.legato_sustain = true;
                 // The −6 dB trim (+ bloom) is only for zones 1-2; a zone-3 hard
                 // attack (`$x0jlu`=0) plays the connected note at full level.

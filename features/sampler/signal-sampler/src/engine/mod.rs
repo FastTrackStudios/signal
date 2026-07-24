@@ -107,6 +107,10 @@ const SUSTAIN_DECLICK_MS: u32 = 12;
 // Exact shipped anchors from persistent_1.tsv (css-ksp-anchor-values.md).
 const CSS_XTIME_MS: u32 = 225; // $a3zg3 (XTime) — FLAT 225 ms (all IOI anchors = 225)
 const CSS_ATK_FADE_PCT: u32 = 50; // $igmiu — stage split %, kbqnb=0 (soft); 60 hard
+/// Low-Latency legato crossfade (`$ocjln=0` standard engine, KSP §3.7): a short
+/// SINGLE-stage fade, no two-stage swell — the snappy, responsive mode selected
+/// by a CC58 0-5 keyswitch (default document legato is Expressive).
+const CSS_LL_XFADE_MS: u32 = 80;
 
 /// `$x444h` (Node-Vol) — the stage-1 fade divisor, and the ONLY IOI-scaled
 /// crossfade param (css-ksp-anchor-values.md §3): 90 for IOI<150 ms, lerp
@@ -127,7 +131,28 @@ fn css_node_vol_div(ioi_ms: f32) -> u32 {
 /// (`$jyttf = $ruv02*1000` millicents ⇒ ~10 cents; `$i1kki`=10 = no interval
 /// scaling in the shipped state).
 const CSS_PORTA_BTIME_MS: u32 = 60; // $1mwwo
-const CSS_PORTA_BEND_CENTS: f32 = 10.0; // $ruv02 → $jyttf
+
+/// Portamento bend depth (cents, unsigned) as a function of interval and IOI
+/// (`$ruv02` interp, css-ksp-anchor-values.md §5a). Breakpoints 75/100/500 ms;
+/// per-interval anchors. Notably interval-2 (whole-tone) bend is 0 for IOI ≥
+/// 500 ms — a slow whole-tone line gets NO glide; the glide only appears on
+/// fast and/or small-interval moves.
+fn css_bend_cents(interval: u8, ioi_ms: f32) -> f32 {
+    let (a, b, c) = match interval {
+        0 | 1 => (40.0, 10.0, 10.0),
+        2 => (30.0, 10.0, 0.0),
+        _ => (20.0, 0.0, 0.0),
+    };
+    if ioi_ms <= 75.0 {
+        a
+    } else if ioi_ms <= 100.0 {
+        a + (b - a) * (ioi_ms - 75.0) / 25.0
+    } else if ioi_ms <= 500.0 {
+        b + (c - b) * (ioi_ms - 100.0) / 400.0
+    } else {
+        c
+    }
+}
 
 /// Attack-transient anti-machine-gun dip (dB, KSP §7.3): a connected note within
 /// `$xu41m` (250 ms) of the previous onset plays quieter — from 0 dB at 250 ms
