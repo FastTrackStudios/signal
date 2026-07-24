@@ -122,7 +122,10 @@ impl KeysRigBackend {
         let prefs = AudioIoPrefs {
             output_device: String::new(),
             sample_rate: 0,
-            buffer_size: 256,
+            // 256 frames on desktop; on iOS the fixed-size request rides a
+            // macOS-only CoreAudio property (AVAudioSession owns the IO
+            // buffer there), so ask for the backend default instead.
+            buffer_size: if cfg!(target_os = "ios") { 0 } else { 256 },
             ..Default::default()
         };
         // Brand the in-flight state and convert panics into a visible
