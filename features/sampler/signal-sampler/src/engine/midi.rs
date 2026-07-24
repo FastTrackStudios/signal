@@ -247,6 +247,7 @@ impl SampleEngine {
     /// [`note_on`](Self::note_on) uses line 0 (live single-line play).
     pub fn note_on_line(&mut self, line: LineId, note: u8, velocity: u8) {
         self.set_active_line(line);
+        self.last_velocity = velocity;
         if velocity == 0 {
             self.note_off_line(line, note);
             return;
@@ -1737,7 +1738,23 @@ impl SampleEngine {
             // separate declick attack, which would double the onset.
             0
         } else if is_sustain_layer {
-            self.attack_frames
+            // FRESH sustain attack scales with VELOCITY and CC1 (param-test
+            // S13, Kontakt reference @CC1=80: vel40 blooms to 80 % in ~630 ms,
+            // vel90 ~300 ms, vel115 ~280 ms): soft velocity = slower bow bloom,
+            // low CC1 stretches it further. Legato-connected sustains keep the
+            // authored attack (the transition owns their onset).
+            if self.legato_sustain {
+                self.attack_frames
+            } else {
+                let vz = self.patch.spec.legato_cfg().velocity_range(self.last_velocity);
+                let vf = match vz {
+                    1 => 2.5,
+                    2 => 1.0,
+                    _ => 0.6,
+                };
+                let cf = 1.0 + (80.0 - f32::from(self.cc1)).max(0.0) / 80.0;
+                (self.attack_frames as f32 * vf * cf) as usize
+            }
         } else if start_offset > 0 {
             // Deep mid-sample entry (skipped-swell Low-Latency prefire): fade
             // in over a longer window, scaled to how far we skipped (capped),

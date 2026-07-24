@@ -667,6 +667,9 @@ pub struct SampleEngine {
     /// CC handlers so a CC2 change re-levels over its decoded 1000 ms lag while
     /// CC1 keeps the 120 ms lag. `None` = the CC1 default.
     next_cc_ramp: Option<usize>,
+    /// Velocity of the most recent note-on — drives the fresh-sustain attack
+    /// scaling (velocity zone × CC1, param-test S13 calibration).
+    last_velocity: u8,
     /// Default release duration (frames) for sustain voices.
     release_frames: usize,
     /// Attack envelope (frames) ramped in on sustain onset. 0 = the sample's
@@ -903,6 +906,7 @@ impl SampleEngine {
             legato_fade_frames,
             cc1_ramp_frames,
             next_cc_ramp: None,
+            last_velocity: 90,
             release_frames,
             attack_frames: spec_attack_frames,
             unison: (1, 0.0, 0.0),
