@@ -18,6 +18,28 @@ use signal_packs_proto::{PackChunk, PackInfo};
 
 use crate::remote::EngineTarget;
 
+/// The hosted pack mirror — plain HTTPS with Range resume, the backup
+/// when no vox pack host (p2p or LAN) is reachable.
+const MIRROR_BASE_URL: &str =
+    "https://fasttrackstudio.app/org/fasttrackstudios/media/packs";
+
+/// Where a download comes from: a vox pack host (studio engine over
+/// iroh/ws) or the HTTPS mirror.
+#[derive(Clone)]
+pub(crate) enum PackSource {
+    Vox(EngineTarget),
+    Mirror,
+}
+
+impl PackSource {
+    pub(crate) fn label(&self) -> String {
+        match self {
+            Self::Vox(t) => t.label(),
+            Self::Mirror => "fasttrackstudio.app mirror".into(),
+        }
+    }
+}
+
 /// One download's progress stream.
 #[derive(Clone, Debug)]
 pub(crate) enum DownloadEvent {
@@ -25,6 +47,12 @@ pub(crate) enum DownloadEvent {
     Progress { done: u64, total: u64 },
     Done(PathBuf),
     Failed(String),
+}
+
+/// The mirror's `packs.json` shape — `PackInfo` rows under one key.
+#[derive(facet::Facet)]
+struct MirrorIndex {
+    packs: Vec<PackInfo>,
 }
 
 /// Where downloaded keys packs land — the same dir the keys rig scans
@@ -76,16 +104,50 @@ pub(crate) fn fetch_packs(
     rx
 }
 
-/// Download `info` into `dest_dir`, resuming any partial file. Events
-/// arrive on the returned channel; the terminal event is `Done`/`Failed`.
+/// List the HTTPS mirror's packs. Resolves to `Err` with the reason on
+/// any network/parse failure.
+pub(crate) fn fetch_mirror_packs(
+) -> futures_channel::oneshot::Receiver<Result<Vec<PackInfo>, String>> {
+    let (tx, rx) = futures_channel::oneshot::channel();
+    runtime().spawn(async move {
+        let attempt = async {
+            let body = reqwest::get(format!("{MIRROR_BASE_URL}/packs.json"))
+                .await
+                .map_err(|e| format!("mirror: {e}"))?
+                .error_for_status()
+                .map_err(|e| format!("mirror: {e}"))?
+                .text()
+                .await
+                .map_err(|e| format!("mirror read: {e}"))?;
+            let index: MirrorIndex =
+                facet_json::from_str(&body).map_err(|e| format!("mirror index: {e}"))?;
+            Ok(index.packs)
+        };
+        let result = match tokio::time::timeout(std::time::Duration::from_secs(20), attempt).await
+        {
+            Ok(r) => r,
+            Err(_) => Err("mirror timed out after 20s".into()),
+        };
+        let _ = tx.send(result);
+    });
+    rx
+}
+
+/// Download `info` from `source` into `dest_dir`, resuming any partial
+/// file. Events arrive on the returned channel; the terminal event is
+/// `Done`/`Failed`.
 pub(crate) fn start_download(
-    target: EngineTarget,
+    source: PackSource,
     info: PackInfo,
     dest_dir: PathBuf,
 ) -> futures_channel::mpsc::UnboundedReceiver<DownloadEvent> {
     let (tx, rx) = futures_channel::mpsc::unbounded();
     runtime().spawn(async move {
-        match download(&target, &info, &dest_dir, &tx).await {
+        let result = match &source {
+            PackSource::Vox(target) => download(target, &info, &dest_dir, &tx).await,
+            PackSource::Mirror => mirror_download(&info, &dest_dir, &tx).await,
+        };
+        match result {
             Ok(path) => {
                 let _ = tx.unbounded_send(DownloadEvent::Done(path));
             }
@@ -97,18 +159,22 @@ pub(crate) fn start_download(
     rx
 }
 
-async fn download(
-    target: &EngineTarget,
-    info: &PackInfo,
-    dest_dir: &Path,
-    events: &futures_channel::mpsc::UnboundedSender<DownloadEvent>,
-) -> Result<PathBuf, String> {
+/// Shared download scaffolding: the destination, the `.part` resume
+/// file (opened append), and how many bytes are already on disk.
+struct Prepared {
+    final_path: PathBuf,
+    part: PathBuf,
+    file: std::fs::File,
+    start: u64,
+}
+
+/// `Ok(Err(path))` = already fully downloaded.
+fn prepare(dest_dir: &Path, info: &PackInfo) -> Result<Result<Prepared, PathBuf>, String> {
     std::fs::create_dir_all(dest_dir).map_err(|e| format!("create {dest_dir:?}: {e}"))?;
     let final_path = dest_dir.join(format!("{}.signalpack", info.name));
     if std::fs::metadata(&final_path).map(|m| m.len()).ok() == Some(info.size_bytes) {
-        return Ok(final_path); // already downloaded
+        return Ok(Err(final_path));
     }
-
     // Resume from the .part file (truncate a stale over-long one).
     let part = dest_dir.join(format!("{}.signalpack.part", info.name));
     let mut start = std::fs::metadata(&part).map(|m| m.len()).unwrap_or(0);
@@ -116,11 +182,43 @@ async fn download(
         let _ = std::fs::remove_file(&part);
         start = 0;
     }
-    let mut file = std::fs::OpenOptions::new()
+    let file = std::fs::OpenOptions::new()
         .create(true)
         .append(true)
         .open(&part)
         .map_err(|e| format!("open {part:?}: {e}"))?;
+    Ok(Ok(Prepared { final_path, part, file, start }))
+}
+
+/// Completeness + integrity gate, then the atomic rename into place.
+fn finish(prep_part: &Path, final_path: &Path, info: &PackInfo, done: u64) -> Result<PathBuf, String> {
+    if done != info.size_bytes {
+        return Err(format!(
+            "incomplete: {done} of {} bytes (rerun to resume)",
+            info.size_bytes
+        ));
+    }
+    if !info.sha256.is_empty() {
+        let actual = sha256_file(prep_part).map_err(|e| format!("hash: {e}"))?;
+        if actual != info.sha256 {
+            let _ = std::fs::remove_file(prep_part);
+            return Err("sha256 mismatch — corrupt download removed, try again".into());
+        }
+    }
+    std::fs::rename(prep_part, final_path).map_err(|e| format!("rename: {e}"))?;
+    Ok(final_path.to_path_buf())
+}
+
+async fn download(
+    target: &EngineTarget,
+    info: &PackInfo,
+    dest_dir: &Path,
+    events: &futures_channel::mpsc::UnboundedSender<DownloadEvent>,
+) -> Result<PathBuf, String> {
+    let Prepared { final_path, part, mut file, start } = match prepare(dest_dir, info)? {
+        Ok(p) => p,
+        Err(done_path) => return Ok(done_path),
+    };
 
     let client: PackLibraryClient = crate::remote::establish_verbose(target)
         .await
@@ -152,19 +250,48 @@ async fn download(
     drain_result?;
     file.flush().map_err(|e| format!("flush: {e}"))?;
     drop(file);
+    finish(&part, &final_path, info, done)
+}
 
-    if done != total {
-        return Err(format!("incomplete: {done} of {total} bytes (rerun to resume)"));
-    }
-    if !info.sha256.is_empty() {
-        let actual = sha256_file(&part).map_err(|e| format!("hash: {e}"))?;
-        if actual != info.sha256 {
-            let _ = std::fs::remove_file(&part);
-            return Err("sha256 mismatch — corrupt download removed, try again".into());
+/// Ranged HTTPS chunk size — big enough to amortise request overhead,
+/// small enough that progress stays live and resume loses little.
+const MIRROR_CHUNK: u64 = 16 * 1024 * 1024;
+
+async fn mirror_download(
+    info: &PackInfo,
+    dest_dir: &Path,
+    events: &futures_channel::mpsc::UnboundedSender<DownloadEvent>,
+) -> Result<PathBuf, String> {
+    let Prepared { final_path, part, mut file, start } = match prepare(dest_dir, info)? {
+        Ok(p) => p,
+        Err(done_path) => return Ok(done_path),
+    };
+    let client = reqwest::Client::new();
+    let url = format!("{MIRROR_BASE_URL}/{}.signalpack", info.name.replace(' ', "%20"));
+    let total = info.size_bytes;
+    let mut done = start;
+    while done < total {
+        let end = (done + MIRROR_CHUNK - 1).min(total - 1);
+        let resp = client
+            .get(&url)
+            .header(reqwest::header::RANGE, format!("bytes={done}-{end}"))
+            .send()
+            .await
+            .map_err(|e| format!("mirror: {e}"))?;
+        if resp.status() != reqwest::StatusCode::PARTIAL_CONTENT {
+            return Err(format!("mirror: HTTP {} (expected 206)", resp.status()));
         }
+        let bytes = resp.bytes().await.map_err(|e| format!("mirror read: {e}"))?;
+        if bytes.is_empty() {
+            return Err("mirror: empty range response".into());
+        }
+        file.write_all(&bytes).map_err(|e| format!("write: {e}"))?;
+        done += bytes.len() as u64;
+        let _ = events.unbounded_send(DownloadEvent::Progress { done, total });
     }
-    std::fs::rename(&part, &final_path).map_err(|e| format!("rename: {e}"))?;
-    Ok(final_path)
+    file.flush().map_err(|e| format!("flush: {e}"))?;
+    drop(file);
+    finish(&part, &final_path, info, done)
 }
 
 fn sha256_file(path: &Path) -> std::io::Result<String> {

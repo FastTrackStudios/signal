@@ -61,9 +61,12 @@ signal-guitar = [
     "dep:vox",
     "dep:facet-json",
     "dep:futures-util",
-    # Pack downloads (pack_client.rs): progress channels + sha256 verify.
+    # Pack downloads (pack_client.rs): progress channels + sha256 verify,
+    # plus the HTTPS mirror fallback (reqwest ranged GETs, facet-json index).
     "dep:futures-channel",
     "dep:sha2",
+    "dep:reqwest",
+    "dep:facet",
     "dep:eyre",
 ]
 # The keys rig on the phone: the in-process sampler engine (signal-keys →
@@ -302,6 +305,9 @@ facet-json = { workspace = true, optional = true }
 futures-util = { workspace = true, optional = true }
 futures-channel = { workspace = true, optional = true }
 sha2 = { workspace = true, optional = true }
+# HTTPS pack-mirror fallback (rustls — no system TLS needed on iOS).
+reqwest = { workspace = true, optional = true }
+facet = { workspace = true, optional = true }
 # Engine mode serves the vox router over axum ws (+ iroh, from the
 # `signal` feature). Native-only extra features on the same architect dep.
 # `host` = the engine-binary bootstrap (architect::host) — runtime + tracing +

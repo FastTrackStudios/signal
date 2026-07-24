@@ -261,28 +261,52 @@ fn LibraryPage(downloaded: Vec<String>) -> Element {
     let mut packs = use_signal(Vec::<PackInfo>::new);
     let mut note = use_signal(String::new);
     let mut downloads = use_signal(HashMap::<String, DlState>::new);
+    // Where the listed packs came from — downloads use the same source.
+    let mut source = use_signal(|| None::<pack_client::PackSource>);
 
     let refresh = use_callback(move |_: ()| {
         note.set("Connecting…".into());
-            spawn(async move {
-                match pack_client::fetch_packs(EngineTarget::current()).await {
-                    Ok(Ok(list)) => {
-                        // The phone wants streaming variants of keys packs.
-                        let keys_proxy: Vec<_> = list
-                            .into_iter()
-                            .filter(|p| p.variant == "proxy" && p.category.starts_with("Keys"))
-                            .collect();
-                        note.set(if keys_proxy.is_empty() {
-                            "Host reachable — no proxy keys packs published.".into()
-                        } else {
-                            String::new()
-                        });
-                        packs.set(keys_proxy);
-                    }
-                    Ok(Err(e)) => note.set(e),
-                    Err(_) => note.set("Connection cancelled.".into()),
+        spawn(async move {
+            // The phone wants streaming variants of keys packs.
+            let keys_proxy = |list: Vec<PackInfo>| -> Vec<PackInfo> {
+                list.into_iter()
+                    .filter(|p| p.variant == "proxy" && p.category.starts_with("Keys"))
+                    .collect()
+            };
+            // Preferred: the vox pack host (studio engine, p2p or LAN).
+            let target = EngineTarget::current();
+            let host_err = match pack_client::fetch_packs(target.clone()).await {
+                Ok(Ok(list)) => {
+                    source.set(Some(pack_client::PackSource::Vox(target.clone())));
+                    let list = keys_proxy(list);
+                    note.set(if list.is_empty() {
+                        "Host reachable — no proxy keys packs published.".into()
+                    } else {
+                        format!("Connected: {}", target.label())
+                    });
+                    packs.set(list);
+                    return;
                 }
-            });
+                Ok(Err(e)) => e,
+                Err(_) => "connection cancelled".into(),
+            };
+            // Backup: the HTTPS mirror on fasttrackstudio.app.
+            match pack_client::fetch_mirror_packs().await {
+                Ok(Ok(list)) => {
+                    source.set(Some(pack_client::PackSource::Mirror));
+                    packs.set(keys_proxy(list));
+                    note.set("Connected: fasttrackstudio.app mirror (host offline)".into());
+                }
+                Ok(Err(mirror_err)) => {
+                    source.set(None);
+                    note.set(format!("{host_err} · {mirror_err}"));
+                }
+                Err(_) => {
+                    source.set(None);
+                    note.set(format!("{host_err} · mirror cancelled"));
+                }
+            }
+        });
     });
 
     // First entry: list immediately when a host is already saved.
@@ -366,8 +390,14 @@ fn LibraryPage(downloaded: Vec<String>) -> Element {
                                                     name.clone(),
                                                     DlState::Running { done: 0, total: info.size_bytes },
                                                 );
+                                                let dl_source = source()
+                                                    .unwrap_or_else(|| {
+                                                        pack_client::PackSource::Vox(
+                                                            EngineTarget::current(),
+                                                        )
+                                                    });
                                                 let mut rx = pack_client::start_download(
-                                                    EngineTarget::current(),
+                                                    dl_source,
                                                     info,
                                                     pack_client::keys_packs_dir(),
                                                 );
