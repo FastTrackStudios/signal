@@ -23,13 +23,30 @@ async fn main() -> eyre::Result<()> {
     let want = args.next();
     let dest = args.next().map(std::path::PathBuf::from);
 
-    let link = vox_websocket::WsLink::connect(&url)
-        .await
-        .map_err(|e| eyre::eyre!("ws connect {url}: {e:?}"))?;
-    let client: PackLibraryClient = vox_core::initiator_on(link)
-        .establish()
-        .await
-        .map_err(|e| eyre::eyre!("vox handshake: {e:?}"))?;
+    // "ws://…" dials the WebSocket; anything else is an iroh endpoint id
+    // (the p2p path the phone takes by default).
+    let client: PackLibraryClient = if url.starts_with("ws") {
+        let link = vox_websocket::WsLink::connect(&url)
+            .await
+            .map_err(|e| eyre::eyre!("ws connect {url}: {e:?}"))?;
+        vox_core::initiator_on(link)
+            .establish()
+            .await
+            .map_err(|e| eyre::eyre!("vox handshake: {e:?}"))?
+    } else {
+        use architect::iroh_link::iroh;
+        let id: iroh::EndpointId = url.trim().parse().map_err(|e| eyre::eyre!("bad iroh id: {e:?}"))?;
+        let ep = architect::iroh_link::bind_endpoint(iroh::SecretKey::generate())
+            .await
+            .map_err(|e| eyre::eyre!("iroh bind: {e:?}"))?;
+        let link = architect::iroh_link::connect(&ep, id)
+            .await
+            .map_err(|e| eyre::eyre!("iroh connect: {e:?}"))?;
+        vox_core::initiator_on(link)
+            .establish()
+            .await
+            .map_err(|e| eyre::eyre!("vox handshake (iroh): {e:?}"))?
+    };
 
     let packs = client.packs().await.map_err(|e| eyre::eyre!("packs: {e:?}"))?;
     println!("{} packs on {url}:", packs.len());
