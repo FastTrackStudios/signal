@@ -132,6 +132,12 @@ fn css_node_vol_div(ioi_ms: f32) -> u32 {
 /// scaling in the shipped state).
 const CSS_PORTA_BTIME_MS: u32 = 60; // $1mwwo
 
+/// CSS `$1fvjk` main-transition (`%jcxqm`) sample-start offset — how far INTO
+/// the transition recording playback begins, skipping the sharp bow-attack head
+/// (css-ksp-anchor-values.md §6: 60 ms for kbqnb=0 / ≤12 st — the common case).
+/// Used as a MINIMUM skip on the document path so the onset is never audible.
+const CSS_LT_MIN_SKIP_MS: u32 = 60;
+
 /// Portamento bend depth (cents, unsigned) as a function of interval and IOI
 /// (`$ruv02` interp, css-ksp-anchor-values.md §5a). Breakpoints 75/100/500 ms;
 /// per-interval anchors. Notably interval-2 (whole-tone) bend is 0 for IOI ≥

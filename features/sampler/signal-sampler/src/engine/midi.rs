@@ -1166,7 +1166,18 @@ impl SampleEngine {
         let start_offset = match sched_lead {
             Some(lead) => {
                 let lead_in_sample = (lead as f64 * rate) as u64;
-                lead_sample_frames.saturating_sub(lead_in_sample) as usize
+                let raw = lead_sample_frames.saturating_sub(lead_in_sample);
+                // Enforce the CSS `$1fvjk` MINIMUM skip (≈60 ms) so we never play
+                // the transition sample's sharp bow-attack HEAD. When `raw` would
+                // start before that (slow/medium legato, where the measured
+                // arrival < lead), skipping deeper shortens the audible pre-bow —
+                // and the `start_hold` formula below auto-grows the SILENT gap to
+                // keep the arrival on the tick. That silent-gap + head-skip IS
+                // the CSS Overlap-Delay + `$1fvjk` structure, and it masks the
+                // audible NVLeg onset. Never skip past the arrival marker itself.
+                let min_skip =
+                    ms_to_frames(crate::engine::CSS_LT_MIN_SKIP_MS, self.sample_rate) as u64;
+                raw.max(min_skip.min(lead_sample_frames.saturating_sub(1))) as usize
             }
             None => {
                 // Reactive (live) path: the real CSS `$1fvjk` — velocity-range
