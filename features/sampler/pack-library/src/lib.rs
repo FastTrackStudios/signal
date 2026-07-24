@@ -69,14 +69,25 @@ impl PackLibraryBackend {
         entries.iter().find(|e| e.info.name == name && e.info.variant == variant).cloned()
     }
 
-    /// Hash every entry without a sha, sidecar-cached (`<pack>.sha256`
+    /// Hash entries without a sha, sidecar-cached (`<pack>.sha256`
     /// holding `<size>:<hex>`; recomputed when the size changed).
+    ///
+    /// Eager hashing covers only the **proxy** variants — the
+    /// distribution set, a few GB. Full packs (the studio's multi-TB
+    /// lossless trees) stay `<pending>` until someone builds their
+    /// sidecars out-of-band; clients skip verification for an empty
+    /// sha rather than forcing the host to read every drive it owns.
     fn spawn_hasher(&self) {
         let entries = self.entries.clone();
         let _ = std::thread::Builder::new().name("pack-hasher".into()).spawn(move || {
             let todo: Vec<Entry> = entries
                 .lock()
-                .map(|e| e.iter().filter(|e| e.info.sha256.is_empty()).cloned().collect())
+                .map(|e| {
+                    e.iter()
+                        .filter(|e| e.info.sha256.is_empty() && e.info.variant == "proxy")
+                        .cloned()
+                        .collect()
+                })
                 .unwrap_or_default();
             for entry in todo {
                 match sidecar_or_compute(&entry.path, entry.info.size_bytes) {
