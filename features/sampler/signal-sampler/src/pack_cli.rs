@@ -113,6 +113,34 @@ enum Cmd {
         #[arg(long)]
         pure: bool,
     },
+    /// Render the SAME line at several legato velocities (slow/medium/fast) and
+    /// write a single wrapper page that toggles between the full reports — so
+    /// the legato-speed timing differences can be seen and heard side-by-side.
+    RenderCompare {
+        pack: PathBuf,
+        /// Note script (velocity is overridden per variant).
+        #[arg(long)]
+        notes: String,
+        #[arg(long, default_value_t = 90)]
+        cc1: u8,
+        #[arg(long, default_value_t = 90)]
+        cc2: u8,
+        /// Wrapper HTML path; variants are written alongside as `<stem>.<label>.html`.
+        #[arg(long)]
+        out: PathBuf,
+        #[arg(long, default_value_t = 2.0)]
+        tail: f32,
+        #[arg(long)]
+        bpm: Option<f64>,
+        #[arg(long, default_value_t = 4)]
+        beats_per_bar: u32,
+        #[arg(long)]
+        pure: bool,
+        /// Comma-separated `label:velocity` variants (velocity drives the
+        /// slow/medium/fast legato zone).
+        #[arg(long, default_value = "slow:40,medium:90,fast:115")]
+        velocities: String,
+    },
     /// Decode every entry back to WAVs.
     Extract { pack: PathBuf, out_dir: PathBuf },
     /// Build a pack from a flat samples dir (embeds `<dir>/library.styx`).
@@ -322,7 +350,21 @@ pub fn cli_main(argv: impl IntoIterator<Item = OsString>) -> Result<()> {
             bpm,
             beats_per_bar,
             pure,
-        } => render_report(&pack, &notes, cc1, cc2, &out, wav, tail, bpm, beats_per_bar, pure),
+        } => render_report(&pack, &notes, cc1, cc2, &out, wav, tail, bpm, beats_per_bar, pure, None),
+        Cmd::RenderCompare {
+            pack,
+            notes,
+            cc1,
+            cc2,
+            out,
+            tail,
+            bpm,
+            beats_per_bar,
+            pure,
+            velocities,
+        } => render_compare(
+            &pack, &notes, cc1, cc2, &out, tail, bpm, beats_per_bar, pure, &velocities,
+        ),
         Cmd::Extract { pack, out_dir } => {
             let stats = extract_signal_pack(&pack, &out_dir)?;
             println!("extracted {} sample(s) ({} failed)", stats.prepared, stats.failed);
@@ -1398,13 +1440,21 @@ fn render_report(
     bpm: Option<f64>,
     beats_per_bar: u32,
     pure: bool,
+    vel_override: Option<u8>,
 ) -> Result<()> {
     use crate::document::{DocCc, DocNote, DocumentRenderOptions, TempoPoint, TrackDocument};
     const SR: u32 = 48_000;
     const ID: &str = "report";
 
     const SEED: u64 = 0x00DA_11A5_EED0_0001;
-    let script = parse_note_script(notes)?;
+    let mut script = parse_note_script(notes)?;
+    // `render-compare` forces one velocity across the whole line so the ONLY
+    // difference between variants is the legato speed zone (slow/medium/fast).
+    if let Some(v) = vel_override {
+        for n in &mut script {
+            n.velocity = v;
+        }
+    }
 
     // What one render pass returns (rebased to the audible window).
     type PassOut = (
@@ -1584,6 +1634,117 @@ fn render_report(
         distinct.len(),
         sources.trace.events.len(),
         sources.fires.len()
+    );
+    Ok(())
+}
+
+/// Render the same line at several legato velocities and write a wrapper page
+/// that toggles between the full per-variant reports (iframe swap) so the
+/// slow/medium/fast timing can be seen and heard side-by-side.
+#[allow(clippy::too_many_arguments)]
+fn render_compare(
+    pack_path: &Path,
+    notes: &str,
+    cc1: u8,
+    cc2: u8,
+    out: &Path,
+    tail: f32,
+    bpm: Option<f64>,
+    beats_per_bar: u32,
+    pure: bool,
+    velocities: &str,
+) -> Result<()> {
+    // Parse "label:vel,label:vel,…".
+    let variants: Vec<(String, u8)> = velocities
+        .split(',')
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(|tok| {
+            let (label, vel) = tok
+                .split_once(':')
+                .ok_or_else(|| eyre::eyre!("variant must be label:velocity, got {tok:?}"))?;
+            Ok((label.to_string(), vel.trim().parse::<u8>()?))
+        })
+        .collect::<Result<_>>()?;
+    if variants.is_empty() {
+        bail!("no variants given");
+    }
+
+    let stem = out
+        .file_stem()
+        .map(|s| s.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "compare".into());
+
+    // Render each variant to its own full report next to the wrapper.
+    let mut entries: Vec<(String, u8, String)> = Vec::new(); // (label, vel, html filename)
+    for (label, vel) in &variants {
+        let html_name = format!("{stem}.{label}.html");
+        let variant_out = out.with_file_name(&html_name);
+        let variant_wav = out.with_file_name(format!("{stem}.{label}.wav"));
+        render_report(
+            pack_path,
+            notes,
+            cc1,
+            cc2,
+            &variant_out,
+            Some(variant_wav),
+            tail,
+            bpm,
+            beats_per_bar,
+            pure,
+            Some(*vel),
+        )?;
+        entries.push((label.clone(), *vel, html_name));
+    }
+
+    // Wrapper: a button per variant swaps the iframe source. Each variant is a
+    // complete, independent report (play / click / zoom / playhead intact).
+    let buttons: String = entries
+        .iter()
+        .enumerate()
+        .map(|(i, (label, vel, href))| {
+            format!(
+                "<button data-src=\"{href}\" onclick=\"pick(this)\"{cls}>{label} · vel {vel}</button>",
+                cls = if i == 0 { " class=\"on\"" } else { "" }
+            )
+        })
+        .collect();
+    let first = &entries[0].2;
+    let title = format!(
+        "{} — legato speed compare",
+        pack_path.file_stem().unwrap_or_default().to_string_lossy()
+    );
+    let html = format!(
+        r#"<!doctype html><html><head><meta charset="utf-8"><title>{title}</title>
+<style>
+  html,body{{margin:0;height:100%;background:#0d0f13;color:#d8dce2;font:13px/1.4 ui-sans-serif,system-ui,sans-serif}}
+  #bar{{display:flex;gap:8px;align-items:center;padding:8px 12px;border-bottom:1px solid #222}}
+  #bar b{{color:#9aa4b2;font-weight:600;margin-right:4px}}
+  #bar button{{background:#1b1f26;color:#d8dce2;border:1px solid #3a404c;border-radius:4px;padding:4px 12px;font:inherit;cursor:pointer}}
+  #bar button.on{{background:#31506e;border-color:#4a7bb0}}
+  #f{{border:0;width:100%;height:calc(100% - 40px);display:block;background:#0d0f13}}
+  .hint{{color:#6b7280;margin-left:auto}}
+</style></head><body>
+<div id="bar"><b>legato:</b>{buttons}<span class="hint">same line, same tempo — only the transition speed changes</span></div>
+<iframe id="f" src="{first}"></iframe>
+<script>
+function pick(b){{
+  document.querySelectorAll('#bar button').forEach(x=>x.classList.toggle('on', x===b));
+  document.getElementById('f').src = b.dataset.src;
+}}
+</script></body></html>
+"#
+    );
+    std::fs::write(out, html).with_context(|| format!("write {}", out.display()))?;
+    println!(
+        "wrote {} — {} variants: {}",
+        out.display(),
+        entries.len(),
+        entries
+            .iter()
+            .map(|(l, v, _)| format!("{l}(v{v})"))
+            .collect::<Vec<_>>()
+            .join(", ")
     );
     Ok(())
 }
