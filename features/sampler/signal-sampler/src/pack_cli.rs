@@ -117,6 +117,12 @@ enum Cmd {
         /// beat grid. `--notes` may be empty when this is set.
         #[arg(long)]
         audio_in: Option<PathBuf>,
+        /// Render a Standard MIDI File instead of `--notes`: notes, note-offs,
+        /// and ALL timed CC events (CC1/CC2 sweeps included) are replayed
+        /// through the document renderer. Tempo comes from the file unless
+        /// `--bpm` overrides the grid.
+        #[arg(long)]
+        midi: Option<PathBuf>,
         /// Header label for the report (e.g. "CSS REFERENCE").
         #[arg(long)]
         label: Option<String>,
@@ -359,10 +365,11 @@ pub fn cli_main(argv: impl IntoIterator<Item = OsString>) -> Result<()> {
             beats_per_bar,
             pure,
             audio_in,
+            midi,
             label,
         } => render_report(
             &pack, &notes, cc1, cc2, &out, wav, tail, bpm, beats_per_bar, pure, None, audio_in,
-            label,
+            midi, label,
         ),
         Cmd::RenderCompare {
             pack,
@@ -1405,6 +1412,111 @@ struct ScriptNote {
 
 /// "60@0:2,62@2:1.5,C5@4:2v80" — note[@start_s][:dur_s][vNN]. Missing start =
 /// previous end; missing dur = 2 s.
+/// Minimal Standard-MIDI-File reader: merged note list (paired on/off) +
+/// timed CC events + the file's first tempo. Format 0/1, running status,
+/// channel-blind (an instrument render). Times in seconds.
+fn parse_smf(path: &Path) -> Result<(Vec<ScriptNote>, Vec<(f32, u8, u8)>, f64)> {
+    let d = std::fs::read(path).with_context(|| format!("read {}", path.display()))?;
+    if d.len() < 14 || &d[0..4] != b"MThd" {
+        bail!("not a Standard MIDI File");
+    }
+    let ntrk = u16::from(d[10]) << 8 | u16::from(d[11]);
+    let tpq = (u16::from(d[12]) << 8 | u16::from(d[13])) as f64;
+    let mut bpm = 120.0f64;
+    let mut notes: Vec<ScriptNote> = Vec::new();
+    let mut ccs: Vec<(f32, u8, u8)> = Vec::new();
+    let mut open: BTreeMap<u8, (f64, u8)> = BTreeMap::new(); // pitch → (tick, vel)
+    let vlq = |d: &[u8], i: &mut usize| -> u64 {
+        let mut v = 0u64;
+        loop {
+            let c = d[*i];
+            *i += 1;
+            v = (v << 7) | u64::from(c & 0x7f);
+            if c & 0x80 == 0 {
+                return v;
+            }
+        }
+    };
+    let mut i = 14usize;
+    let mut trk = 0;
+    while i + 8 <= d.len() && trk < ntrk {
+        if &d[i..i + 4] != b"MTrk" {
+            i += 1;
+            continue;
+        }
+        let len = u32::from_be_bytes([d[i + 4], d[i + 5], d[i + 6], d[i + 7]]) as usize;
+        i += 8;
+        let end = i + len;
+        trk += 1;
+        let mut t = 0f64;
+        let mut status = 0u8;
+        while i < end {
+            t += vlq(&d, &mut i) as f64;
+            let mut st = d[i];
+            if st >= 0x80 {
+                i += 1;
+                if st < 0xF0 {
+                    status = st;
+                }
+            } else {
+                st = status;
+            }
+            match st {
+                0xFF => {
+                    let meta = d[i];
+                    i += 1;
+                    let n = vlq(&d, &mut i) as usize;
+                    if meta == 0x51 && n == 3 {
+                        let us = u32::from(d[i]) << 16 | u32::from(d[i + 1]) << 8 | u32::from(d[i + 2]);
+                        bpm = 60_000_000.0 / f64::from(us);
+                    }
+                    i += n;
+                    if meta == 0x2F {
+                        break;
+                    }
+                }
+                0xF0 | 0xF7 => {
+                    let n = vlq(&d, &mut i) as usize;
+                    i += n;
+                }
+                _ => {
+                    let sec_per_tick = 60.0 / bpm / tpq;
+                    match st & 0xF0 {
+                        0x90 | 0x80 => {
+                            let (p, v) = (d[i], d[i + 1]);
+                            i += 2;
+                            if (st & 0xF0) == 0x90 && v > 0 {
+                                open.insert(p, (t, v));
+                            } else if let Some((t0, vel)) = open.remove(&p) {
+                                notes.push(ScriptNote {
+                                    note: p,
+                                    velocity: vel,
+                                    start: (t0 * sec_per_tick) as f32,
+                                    dur: ((t - t0) * sec_per_tick) as f32,
+                                });
+                            }
+                        }
+                        0xB0 => {
+                            let (cc, v) = (d[i], d[i + 1]);
+                            i += 2;
+                            ccs.push(((t * sec_per_tick) as f32, cc, v));
+                        }
+                        0xC0 | 0xD0 => i += 1,
+                        _ => i += 2,
+                    }
+                }
+            }
+        }
+        i = end;
+    }
+    notes.sort_by(|a, b| a.start.total_cmp(&b.start));
+    ccs.sort_by(|a, b| a.0.total_cmp(&b.0));
+    if notes.is_empty() {
+        bail!("no notes in {}", path.display());
+    }
+    Ok((notes, ccs, bpm))
+}
+
 fn parse_note_script(s: &str) -> Result<Vec<ScriptNote>> {
     let mut out: Vec<ScriptNote> = Vec::new();
     let mut cursor = 0.0f32;
@@ -1455,6 +1567,7 @@ fn render_report(
     pure: bool,
     vel_override: Option<u8>,
     audio_in: Option<PathBuf>,
+    midi: Option<PathBuf>,
     label: Option<String>,
 ) -> Result<()> {
     use crate::document::{DocCc, DocNote, DocumentRenderOptions, TempoPoint, TrackDocument};
@@ -1538,7 +1651,16 @@ fn render_report(
     }
 
     const SEED: u64 = 0x00DA_11A5_EED0_0001;
-    let mut script = parse_note_script(notes)?;
+    // MIDI-file input: notes + note-offs + ALL timed CCs from the SMF (so
+    // mid-render CC1/CC2 sweeps replay exactly); tempo from the file unless
+    // `--bpm` overrides the grid. `--notes` is the hand-script alternative.
+    let (mut script, midi_ccs, bpm) = match midi.as_ref() {
+        Some(p) => {
+            let (s, ccs, file_bpm) = parse_smf(p)?;
+            (s, ccs, Some(bpm.unwrap_or(file_bpm)))
+        }
+        None => (parse_note_script(notes)?, Vec::new(), bpm),
+    };
     // `render-compare` forces one velocity across the whole line so the ONLY
     // difference between variants is the legato speed zone (slow/medium/fast).
     if let Some(v) = vel_override {
@@ -1598,10 +1720,21 @@ fn render_report(
                 auto_divisi: false,
                 // Document mode is always Expressive (velocity drives the
                 // slow/medium/fast zone → 333/250/100 ms); no CC58 needed.
-                ccs: vec![
-                    DocCc { qn: 0.0, chan: 0, cc: 1, val: cc1 },
-                    DocCc { qn: 0.0, chan: 0, cc: 2, val: cc2 },
-                ],
+                // With `--midi`, the file's timed CC events follow the fixed
+                // initial values (sweeps replay exactly).
+                ccs: {
+                    let mut v = vec![
+                        DocCc { qn: 0.0, chan: 0, cc: 1, val: cc1 },
+                        DocCc { qn: 0.0, chan: 0, cc: 2, val: cc2 },
+                    ];
+                    v.extend(midi_ccs.iter().map(|&(sec, cc, val)| DocCc {
+                        qn: sec_to_qn(sec),
+                        chan: 0,
+                        cc,
+                        val,
+                    }));
+                    v
+                },
                 notes: notes_doc,
                 tempo: vec![TempoPoint { qn: 0.0, bpm: bpm_v }],
             };
@@ -1784,6 +1917,7 @@ fn render_compare(
             beats_per_bar,
             pure,
             Some(*vel),
+            None,
             None,
             None,
         )?;
