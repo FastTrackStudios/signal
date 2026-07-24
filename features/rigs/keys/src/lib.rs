@@ -25,11 +25,15 @@ use signal_plugin_host::{
 };
 
 use signal_sampler::MidiMonitor;
-use signal_sampler::node_render::RenderNode;
+use signal_sampler::node_render::{GainCells, RenderNode};
 use signal_sampler::rig_node::Container;
 
 mod backend;
+/// Profiles: the engine/layer mixer shape + the footswitch stacks (scenes)
+/// that recall it. The Worship profile lives here.
+pub mod profile;
 pub use backend::KeysRigBackend;
+pub use profile::{EngineDef, KeysProfile, KeysStackDef, LayerDef, SceneSlot, worship_profile};
 pub use signal_keys_proto as proto;
 
 /// Build a channel-0 `MidiEvent::NoteOn` from raw note/velocity.
@@ -75,6 +79,9 @@ pub struct KeysInstrument {
     /// Master output gain (linear, f32 bits), shared with the owning [`KeysRig`]
     /// so it's adjustable live — a summed multi-layer patch can otherwise clip.
     gain: Arc<std::sync::atomic::AtomicU32>,
+    /// Per-Engine/Layer live fader cells from the compile — the mixer's
+    /// handles on this instrument.
+    cells: GainCells,
 }
 
 impl KeysInstrument {
@@ -88,11 +95,18 @@ impl KeysInstrument {
         sample_rate: u32,
         gain: Arc<std::sync::atomic::AtomicU32>,
     ) -> Self {
+        let (render, cells) = RenderNode::compile_with_cells(tree, sample_rate);
         Self {
-            render: RenderNode::compile(tree, sample_rate),
+            render,
             prepared: false,
             gain,
+            cells,
         }
+    }
+
+    /// The live fader cells for this instrument's engines + layers.
+    pub fn gain_cells(&self) -> GainCells {
+        self.cells.clone()
     }
 }
 
@@ -164,6 +178,8 @@ pub struct KeysRig {
     sample_rate: u32,
     preset_name: String,
     midi_monitor: MidiMonitor,
+    /// Live Engine/Layer fader cells for the loaded program.
+    cells: GainCells,
     /// Master output gain (linear, f32 bits), shared into each hosted
     /// [`KeysInstrument`] so [`set_output_gain`](Self::set_output_gain) is live.
     gain: Arc<std::sync::atomic::AtomicU32>,
@@ -214,6 +230,7 @@ impl KeysRig {
         // Compile + install the preset instrument, sharing the master-gain cell.
         let gain = Arc::new(std::sync::atomic::AtomicU32::new(1.0f32.to_bits()));
         let mut inst = KeysInstrument::with_gain(tree, sample_rate, gain.clone());
+        let cells = inst.gain_cells();
         let _ = inst.prepare(sample_rate as f64, PREPARE_BLOCK);
         daw.insert_plugin_instance(fx_guid.clone(), Box::new(inst));
 
@@ -232,7 +249,14 @@ impl KeysRig {
             preset_name: tree.name.clone(),
             midi_monitor: MidiMonitor::default(),
             gain,
+            cells,
         })
+    }
+
+    /// The live fader cells for the loaded program's engines + layers. A
+    /// mixer writes linear gain here — no rebuild, no audio gap.
+    pub fn gain_cells(&self) -> GainCells {
+        self.cells.clone()
     }
 
     /// Set the master output gain (linear; 1.0 = unity). Takes effect on the
@@ -252,6 +276,8 @@ impl KeysRig {
     /// Swap the playable preset (glitch-free re-insert under the renderer lock).
     pub fn load_preset(&mut self, tree: &Container) {
         let mut inst = KeysInstrument::with_gain(tree, self.sample_rate, self.gain.clone());
+        // The new program owns new cells — hand them out before it goes live.
+        self.cells = inst.gain_cells();
         let _ = inst.prepare(self.sample_rate as f64, PREPARE_BLOCK);
         self.daw
             .insert_plugin_instance(self.fx_guid.clone(), Box::new(inst));

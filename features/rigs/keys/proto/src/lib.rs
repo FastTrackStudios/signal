@@ -37,6 +37,73 @@ pub struct KeysNode {
     pub children: Vec<KeysNode>,
 }
 
+// ── Mixer (engines → layers) ────────────────────────────────────────────────
+
+/// One layer lane in the live mixer — the thing a fader rides and a patch
+/// loads into.
+#[derive(Clone, PartialEq, Debug, Default, Facet)]
+pub struct KeysLayerModel {
+    /// Layer container name ("Keys A", "Organ B", …) — the fader's address.
+    pub name: String,
+    /// The engine this lane belongs to.
+    pub engine: String,
+    /// Patch loaded in the lane (a pack / library stem); empty = an empty lane.
+    pub patch: String,
+    /// Fader position (dB).
+    pub gain_db: f32,
+    pub muted: bool,
+    pub soloed: bool,
+    /// The lane has a sounding backend (its patch resolved and loaded).
+    pub live: bool,
+    /// Key window — `0..=127` is the whole keyboard.
+    pub key_lo: u32,
+    pub key_hi: u32,
+}
+
+/// One engine — an instrument part holding parallel layers.
+#[derive(Clone, PartialEq, Debug, Default, Facet)]
+pub struct KeysEngineModel {
+    pub name: String,
+    /// The engine fader (dB) — rides all its layers.
+    pub gain_db: f32,
+    pub muted: bool,
+    pub layers: Vec<KeysLayerModel>,
+}
+
+/// The whole mixer: what the Control view renders.
+#[derive(Clone, PartialEq, Debug, Default, Facet)]
+pub struct KeysMixer {
+    /// Active profile name.
+    pub profile: String,
+    pub engines: Vec<KeysEngineModel>,
+    /// Master output trim (dB).
+    pub master_db: f32,
+}
+
+// ── Performance (stacks / scenes) ───────────────────────────────────────────
+
+/// One footswitch stack — a named scene over the mixer.
+#[derive(Clone, PartialEq, Debug, Default, Facet)]
+pub struct KeysStack {
+    pub name: String,
+    /// One-line description of the sound.
+    pub blurb: String,
+    /// This stack's scene is the one currently applied.
+    pub is_active: bool,
+}
+
+/// The live performance model: the profile's stacks + grid mode.
+#[derive(Clone, PartialEq, Debug, Default, Facet)]
+pub struct KeysPerform {
+    pub profile_name: String,
+    pub stacks: Vec<KeysStack>,
+    /// Index of the active stack, or `u32::MAX` when none has been pressed.
+    pub active_stack: u32,
+    /// Grid mode: 0 Preset (browse the library), 1 Profile (stacks),
+    /// 2 Setlist (song-adaptive) — mirrors the guitar rig's modes.
+    pub perform_mode: u32,
+}
+
 /// Live transport + meter snapshot — the high-rate poll payload.
 #[derive(Clone, PartialEq, Debug, Default, Facet)]
 pub struct KeysStatus {
@@ -60,7 +127,7 @@ pub mod keys {
 
     use facet::Facet;
 
-    use super::{KeysNode, KeysPreset, KeysStatus};
+    use super::{KeysMixer, KeysNode, KeysPerform, KeysPreset, KeysStatus};
 
     /// One live rig change. Every variant carries full state (idempotent
     /// re-application) so a reconnecting subscriber is correct after the next
@@ -74,6 +141,10 @@ pub mod keys {
         Library(Vec<KeysPreset>),
         /// The loaded composition tree changed (its engine/layer structure).
         Tree(KeysNode),
+        /// The mixer changed (fader / mute / patch assignment).
+        Mixer(KeysMixer),
+        /// The performance model changed (stack pressed, mode switched).
+        Perform(KeysPerform),
         /// Recent MIDI activity (oldest first), for the monitor.
         Midi(Vec<midicore_proto::MidiEvent>),
     }
@@ -96,6 +167,39 @@ pub mod keys {
         fn load_preset(&self, index: u32);
         /// The loaded composition tree (engine → layers → blocks).
         fn tree(&self) -> KeysNode;
+
+        // ── Mixer ───────────────────────────────────────────────────────
+        /// The live mixer: engines, their layers, faders and patches.
+        fn mixer(&self) -> KeysMixer;
+        /// Ride a layer's fader (dB). Live — no rebuild, no audio gap.
+        fn set_layer_gain(&self, layer: String, db: f32);
+        /// Ride an engine's fader (dB) — scales all its layers.
+        fn set_engine_gain(&self, engine: String, db: f32);
+        /// Master output trim (dB).
+        fn set_master_gain(&self, db: f32);
+        /// Mute / unmute one layer (its fader position is remembered).
+        fn set_layer_mute(&self, layer: String, muted: bool);
+        /// Mute / unmute a whole engine.
+        fn set_engine_mute(&self, engine: String, muted: bool);
+        /// Solo a layer (any solo silences every un-soloed lane).
+        fn set_layer_solo(&self, layer: String, soloed: bool);
+        /// Load preset `preset` (from [`presets`](Self::presets)) into
+        /// `layer`. Rebuilds that lane — the patch IS the Sampler block's
+        /// spec, so this is the block/module system's normal load path.
+        fn set_layer_patch(&self, layer: String, preset: u32);
+        /// Empty a layer (silences the lane and frees its samples).
+        fn clear_layer(&self, layer: String);
+
+        // ── Performance ─────────────────────────────────────────────────
+        /// The performance model: stacks + grid mode.
+        fn perform(&self) -> KeysPerform;
+        /// Press a footswitch stack — applies its scene across the mixer.
+        fn press_stack(&self, index: u32);
+        /// Grid mode: 0 Preset, 1 Profile (stacks), 2 Setlist.
+        fn set_perform_mode(&self, mode: u32);
+        /// Store the mixer's current state into stack `index` (write the
+        /// scene from what you're hearing).
+        fn capture_stack(&self, index: u32);
         /// Trigger a note from the UI (velocity 0 = note-off).
         fn trigger(&self, note: u32, velocity: u32);
         /// Enumerate hardware MIDI input ports.

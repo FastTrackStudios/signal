@@ -22,9 +22,13 @@
 //! rather than the realtime callback (which will pre-allocate). MIDI events are
 //! delivered to every node; sources consume note on/off, effects ignore them.
 
+use std::collections::HashMap;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicU32, Ordering};
+
 use crate::rig::{RigBlock, build_block, build_sample_source};
 use crate::soundsource::{Soundsource, SoundsourceKind, SoundsourceLeaf};
-use crate::rig_node::{Combine, Container, RigNode, Zone};
+use crate::rig_node::{Combine, Container, RigNode, Role, Zone};
 use signal_plugin_host::{PluginEvents, PluginInstance, PluginMidiEvent, PluginParamInfo};
 
 /// A compiled leaf's audio backend: **source slots hold their generator
@@ -165,6 +169,11 @@ pub enum RenderNode {
     Gain {
         input: f32,
         output: f32,
+        /// Live fader cell (linear gain in `f32` bits), multiplied on top of
+        /// `output` when present. Engine/Layer containers get one so a mixer
+        /// can ride their faders — and mute them — without recompiling the
+        /// tree (a recompile would re-open every sample pack).
+        cell: Option<Arc<AtomicU32>>,
         inner: Box<RenderNode>,
     },
     /// A subtree whose output also feeds one or more send buses (unity gain).
@@ -194,14 +203,62 @@ struct RenderCtx {
     bus_r: Vec<Vec<f32>>,
 }
 
+/// Live fader cells for a compiled tree, keyed by container name (Engine and
+/// Layer containers get one each). A mixer writes linear gain into these to
+/// ride faders and mute lanes with no recompile — see [`RenderNode::Gain`].
+#[derive(Clone, Default)]
+pub struct GainCells(HashMap<String, Arc<AtomicU32>>);
+
+impl GainCells {
+    /// The cell for `name`, if the tree had such an Engine/Layer container.
+    pub fn get(&self, name: &str) -> Option<&Arc<AtomicU32>> {
+        self.0.get(name)
+    }
+
+    /// Set a container's live gain (linear; `0.0` = muted).
+    pub fn set(&self, name: &str, gain: f32) -> bool {
+        match self.0.get(name) {
+            Some(cell) => {
+                cell.store(gain.max(0.0).to_bits(), Ordering::Relaxed);
+                true
+            }
+            None => false,
+        }
+    }
+
+    /// Every addressable container name.
+    pub fn names(&self) -> impl Iterator<Item = &str> {
+        self.0.keys().map(String::as_str)
+    }
+}
+
 impl RenderNode {
     /// Compile a container tree into a render tree at `sample_rate`,
     /// resolving its ModMatrix routes. A container with a non-full [`Zone`]
     /// is wrapped in [`RenderNode::Zoned`] so only its in-window notes reach it.
     pub fn compile(container: &Container, sample_rate: u32) -> RenderNode {
+        Self::compile_with_cells(container, sample_rate).0
+    }
+
+    /// As [`compile`](Self::compile), also returning the [`GainCells`] for the
+    /// tree's Engine/Layer containers — the mixer's live fader handles.
+    pub fn compile_with_cells(
+        container: &Container,
+        sample_rate: u32,
+    ) -> (RenderNode, GainCells) {
         let mut mc = ModCompiler::new(sample_rate);
         mc.collect_buses(container);
-        let root = Self::compile_container(container, sample_rate, &mut mc);
+        let mut cells = GainCells::default();
+        let root = Self::compile_container_cells(container, sample_rate, &mut mc, &mut cells);
+        (Self::finish(root, mc, container, sample_rate), cells)
+    }
+
+    fn finish(
+        root: RenderNode,
+        mc: ModCompiler,
+        container: &Container,
+        sample_rate: u32,
+    ) -> RenderNode {
         if mc.routes.is_empty() && mc.buses.is_empty() && build_arp(container).is_none() {
             root
         } else {
@@ -223,11 +280,12 @@ impl RenderNode {
     }
 
     /// Compile one container, returning its node; `mc` accumulates leaves,
-    /// modulator scope and resolved routes.
-    fn compile_container(
+    /// modulator scope and resolved routes, `cells` the live fader handles.
+    fn compile_container_cells(
         container: &Container,
         sample_rate: u32,
         mc: &mut ModCompiler,
+        cells: &mut GainCells,
     ) -> RenderNode {
         // A bypassed subtree renders as a pass-through (no leaves, no routes).
         if container.bypassed {
@@ -245,7 +303,7 @@ impl RenderNode {
         let kids = container
             .children
             .iter()
-            .map(|n| Self::compile_node(n, sample_rate, mc))
+            .map(|n| Self::compile_node_cells(n, sample_rate, mc, cells))
             .collect();
         let subtree: Vec<usize> = (subtree_start..mc.leaves.len()).collect();
 
@@ -266,11 +324,20 @@ impl RenderNode {
                 inner: Box::new(base),
             }
         };
-        // Container volumes: input trim + output fader (dB → linear).
-        if container.input_db != 0.0 || container.output_db != 0.0 {
+        // Container volumes: input trim + output fader (dB → linear). Engine
+        // and Layer containers always get a Gain node carrying a live cell,
+        // whatever their authored dB, so a mixer can ride them at run time.
+        let live = matches!(container.role, Role::Engine | Role::Layer);
+        if container.input_db != 0.0 || container.output_db != 0.0 || live {
+            let cell = live.then(|| {
+                let cell = Arc::new(AtomicU32::new(1.0f32.to_bits()));
+                cells.0.insert(container.name.clone(), cell.clone());
+                cell
+            });
             node = RenderNode::Gain {
                 input: 10f32.powf(container.input_db / 20.0),
                 output: 10f32.powf(container.output_db / 20.0),
+                cell,
                 inner: Box::new(node),
             };
         }
@@ -296,7 +363,12 @@ impl RenderNode {
         node
     }
 
-    fn compile_node(node: &RigNode, sample_rate: u32, mc: &mut ModCompiler) -> RenderNode {
+    fn compile_node_cells(
+        node: &RigNode,
+        sample_rate: u32,
+        mc: &mut ModCompiler,
+        cells: &mut GainCells,
+    ) -> RenderNode {
         match node {
             RigNode::Block { block: b } => {
                 let mut inst = build_leaf_backend(b, sample_rate);
@@ -318,7 +390,9 @@ impl RenderNode {
                     None => leaf,
                 }
             }
-            RigNode::Container { container: c } => Self::compile_container(c, sample_rate, mc),
+            RigNode::Container { container: c } => {
+                Self::compile_container_cells(c, sample_rate, mc, cells)
+            }
         }
     }
 
@@ -547,6 +621,7 @@ impl RenderNode {
             RenderNode::Gain {
                 input,
                 output,
+                cell,
                 inner,
             } => {
                 if *input == 1.0 {
@@ -562,10 +637,16 @@ impl RenderNode {
                         .collect();
                     inner.process_inner(&gl, &gr, out_l, out_r, events, ctx);
                 }
-                if *output != 1.0 {
+                // Authored fader × the live cell (mixer rides / mutes).
+                let live = cell
+                    .as_ref()
+                    .map(|c| f32::from_bits(c.load(Ordering::Relaxed)))
+                    .unwrap_or(1.0);
+                let out_gain = *output * live;
+                if out_gain != 1.0 {
                     for f in 0..frames {
-                        out_l[f] *= *output;
-                        out_r[f] *= *output;
+                        out_l[f] *= out_gain;
+                        out_r[f] *= out_gain;
                     }
                 }
             }

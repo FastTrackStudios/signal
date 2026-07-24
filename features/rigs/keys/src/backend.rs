@@ -6,6 +6,7 @@
 //! [`signal_keys_proto::keys::KeysRig`] service + its `#[subscribe]` stream;
 //! mount `router()` (`architect::rig::RigBackend`) on a vox transport.
 
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
@@ -16,7 +17,12 @@ use architect::{HasDispatcher, Layer, PubSub, Services, layers};
 use daw_audio_io::AudioIoPrefs;
 use midicore::MidiEvent;
 use signal_keys_proto::keys::{KeysEvent, KeysRig as KeysRigSvc, KeysRigStreamSource};
-use signal_keys_proto::{KeysNode, KeysPreset, KeysStatus};
+use signal_keys_proto::{
+    KeysEngineModel, KeysLayerModel, KeysMixer, KeysNode, KeysPerform, KeysPreset, KeysStack,
+    KeysStatus,
+};
+
+use crate::profile::{KeysProfile, worship_profile};
 use signal_sampler::rig_node::{RigNode, Role};
 use signal_sampler::{Container, MidiInputHandle};
 
@@ -42,6 +48,92 @@ struct State {
     midi_handle: Option<MidiInputHandle>,
     /// The last audio-open failure, for UIs with no log access (phones).
     last_error: Option<String>,
+    /// The active profile — the engine/layer mixer shape + its stacks.
+    profile: KeysProfile,
+    /// Live mixer state per layer name (fader / mute / solo / patch).
+    lanes: BTreeMap<String, LaneState>,
+    /// Live mixer state per engine name.
+    engines: BTreeMap<String, EngineState>,
+    /// Master trim (dB).
+    master_db: f32,
+    /// Index of the last pressed stack.
+    active_stack: Option<usize>,
+    /// Grid mode: 0 Preset, 1 Profile (stacks), 2 Setlist.
+    perform_mode: u32,
+}
+
+/// Live per-layer mixer state (the profile holds the authored defaults).
+#[derive(Clone, Debug)]
+struct LaneState {
+    engine: String,
+    patch: String,
+    gain_db: f32,
+    muted: bool,
+    soloed: bool,
+}
+
+#[derive(Clone, Debug, Default)]
+struct EngineState {
+    gain_db: f32,
+    muted: bool,
+}
+
+impl State {
+    /// Seed the live mixer from a profile's authored defaults.
+    fn adopt_profile(&mut self, profile: KeysProfile) {
+        self.lanes.clear();
+        self.engines.clear();
+        for engine in &profile.engines {
+            self.engines.insert(
+                engine.name.clone(),
+                EngineState { gain_db: engine.gain_db, muted: false },
+            );
+            for layer in &engine.layers {
+                self.lanes.insert(
+                    layer.name.clone(),
+                    LaneState {
+                        engine: engine.name.clone(),
+                        patch: layer.patch.clone(),
+                        gain_db: layer.gain_db,
+                        muted: false,
+                        soloed: false,
+                    },
+                );
+            }
+        }
+        self.profile = profile;
+    }
+
+    /// Any lane soloed? (Solo silences every un-soloed lane.)
+    fn any_solo(&self) -> bool {
+        self.lanes.values().any(|l| l.soloed)
+    }
+
+    /// The linear gain a lane should be rendering at right now, folding in
+    /// mute, solo-exclusion and its engine's mute. Engine *faders* are their
+    /// own cell, so they're not folded in here.
+    fn lane_gain(&self, name: &str) -> f32 {
+        let Some(lane) = self.lanes.get(name) else { return 0.0 };
+        let engine_muted = self.engines.get(&lane.engine).is_some_and(|e| e.muted);
+        let solo_excluded = self.any_solo() && !lane.soloed;
+        if lane.muted || engine_muted || solo_excluded || lane.patch.is_empty() {
+            0.0
+        } else {
+            db_to_linear(lane.gain_db)
+        }
+    }
+
+    fn engine_gain(&self, name: &str) -> f32 {
+        match self.engines.get(name) {
+            Some(e) if !e.muted => db_to_linear(e.gain_db),
+            Some(_) => 0.0,
+            None => 1.0,
+        }
+    }
+}
+
+fn db_to_linear(db: f32) -> f32 {
+    10f32.powf(db / 20.0)
 }
 
 struct Inner {
@@ -103,10 +195,26 @@ impl KeysRigBackend {
             default = default_idx.and_then(|i| presets.get(i)).map(|p| p.name.as_str()).unwrap_or("<first>"),
             "keys rig: scanned library"
         );
+        // The rig boots as a PROFILE — engines, layers, stacks — not a single
+        // patch. `FTS_KEYS_PROFILE` points at a `.styx` profile; the built-in
+        // Worship profile is the default.
+        let profile = load_profile();
+        let mut state =
+            State { presets, specs, loaded: default_idx, ..State::default() };
+        state.adopt_profile(profile);
+        // Lanes whose authored patch isn't in the library start empty rather
+        // than silently pointing at a missing pack.
+        let known: Vec<String> = state.presets.iter().map(|p| p.name.clone()).collect();
+        for lane in state.lanes.values_mut() {
+            if !lane.patch.is_empty() && !known.contains(&lane.patch) {
+                tracing::info!(patch = %lane.patch, "keys rig: profile patch not in library — lane starts empty");
+                lane.patch.clear();
+            }
+        }
         let backend = Self {
             inner: Arc::new(Inner {
                 rig: Mutex::new(None),
-                state: Mutex::new(State { presets, specs, loaded: default_idx, ..State::default() }),
+                state: Mutex::new(state),
                 events: architect::rig::events_hub(),
                 pump_started: AtomicBool::new(false),
             }),
@@ -122,6 +230,137 @@ impl KeysRigBackend {
         Some(keys_program(&name, spec))
     }
 
+    /// Build the profile's full program: every engine, every layer, each
+    /// lane's patch resolved to its pack/library spec.
+    fn profile_program(&self) -> Option<Container> {
+        let s = self.inner.state.lock().ok()?;
+        if s.profile.engines.is_empty() {
+            return None;
+        }
+        // Patch name → spec path, via the scanned library.
+        let index: BTreeMap<&str, &PathBuf> = s
+            .presets
+            .iter()
+            .zip(s.specs.iter())
+            .map(|(p, spec)| (p.name.as_str(), spec))
+            .collect();
+        // Lanes carry the LIVE patch assignment (a stack recall or a browser
+        // pick), which is what should be rendering — not the authored default.
+        let mut profile = s.profile.clone();
+        for engine in &mut profile.engines {
+            for layer in &mut engine.layers {
+                if let Some(lane) = s.lanes.get(&layer.name) {
+                    layer.patch = lane.patch.clone();
+                }
+            }
+        }
+        Some(profile.build_tree(|patch| {
+            index.get(patch).map(|p| p.to_string_lossy().into_owned())
+        }))
+    }
+
+    /// Push every live fader / mute / solo into the running program's cells.
+    /// Pure atomics — no rebuild, so this is safe at UI drag rate.
+    fn apply_mixer(&self) {
+        let Ok(rig) = self.inner.rig.lock() else { return };
+        let Some(rig) = rig.as_ref() else { return };
+        let cells = rig.gain_cells();
+        let Ok(s) = self.inner.state.lock() else { return };
+        for name in s.lanes.keys() {
+            cells.set(name, s.lane_gain(name));
+        }
+        for name in s.engines.keys() {
+            cells.set(name, s.engine_gain(name));
+        }
+        rig.set_output_gain(db_to_linear(s.master_db));
+    }
+
+    /// Rebuild the playable program from the profile (patch assignment
+    /// changed), then re-apply the mixer to the fresh cells.
+    fn rebuild_program(&self) {
+        let Some(tree) = self.profile_program() else { return };
+        if !self.ensure_open() {
+            self.publish_all();
+            return;
+        }
+        if let Ok(mut rig) = self.inner.rig.lock() {
+            if let Some(rig) = rig.as_mut() {
+                rig.load_preset(&tree);
+            }
+        }
+        if let Ok(mut s) = self.inner.state.lock() {
+            s.tree = Some(tree);
+        }
+        self.apply_mixer();
+        self.publish_all();
+    }
+
+    /// The wire mixer snapshot.
+    fn mixer_model(&self) -> KeysMixer {
+        let Ok(s) = self.inner.state.lock() else { return KeysMixer::default() };
+        let engines = s
+            .profile
+            .engines
+            .iter()
+            .map(|engine| {
+                let est = s.engines.get(&engine.name).cloned().unwrap_or_default();
+                KeysEngineModel {
+                    name: engine.name.clone(),
+                    gain_db: est.gain_db,
+                    muted: est.muted,
+                    layers: engine
+                        .layers
+                        .iter()
+                        .map(|layer| {
+                            let lane = s.lanes.get(&layer.name);
+                            KeysLayerModel {
+                                name: layer.name.clone(),
+                                engine: engine.name.clone(),
+                                patch: lane.map(|l| l.patch.clone()).unwrap_or_default(),
+                                gain_db: lane.map(|l| l.gain_db).unwrap_or(0.0),
+                                muted: lane.is_some_and(|l| l.muted),
+                                soloed: lane.is_some_and(|l| l.soloed),
+                                live: lane.is_some_and(|l| !l.patch.is_empty()),
+                                key_lo: layer.key_lo as u32,
+                                key_hi: layer.key_hi as u32,
+                            }
+                        })
+                        .collect(),
+                }
+            })
+            .collect();
+        KeysMixer { profile: s.profile.name.clone(), engines, master_db: s.master_db }
+    }
+
+    /// The wire performance snapshot.
+    fn perform_model(&self) -> KeysPerform {
+        let Ok(s) = self.inner.state.lock() else { return KeysPerform::default() };
+        KeysPerform {
+            profile_name: s.profile.name.clone(),
+            stacks: s
+                .profile
+                .stacks
+                .iter()
+                .enumerate()
+                .map(|(i, st)| KeysStack {
+                    name: st.name.clone(),
+                    blurb: st.blurb.clone(),
+                    is_active: s.active_stack == Some(i),
+                })
+                .collect(),
+            active_stack: s.active_stack.map(|i| i as u32).unwrap_or(u32::MAX),
+            perform_mode: s.perform_mode,
+        }
+    }
+
+    fn publish_mixer(&self) {
+        self.inner.events.publish(KeysEvent::Mixer(self.mixer_model()));
+    }
+
+    fn publish_perform(&self) {
+        self.inner.events.publish(KeysEvent::Perform(self.perform_model()));
+    }
+
     /// Open audio with the given (or first) preset, if not already open.
     fn ensure_open(&self) -> bool {
         {
@@ -129,8 +368,11 @@ impl KeysRigBackend {
                 return true;
             }
         }
+        // The profile IS the program — engines, layers, every lane's patch.
+        // (A profile-less build falls back to the single-patch program, which
+        // is what the mobile shell's one-pack case wants.)
         let idx = self.inner.state.lock().ok().and_then(|s| s.loaded).unwrap_or(0);
-        let Some(tree) = self.program_for(idx) else {
+        let Some(tree) = self.profile_program().or_else(|| self.program_for(idx)) else {
             if let Ok(mut s) = self.inner.state.lock() {
                 s.last_error = Some("no patches downloaded yet".into());
             }
@@ -252,6 +494,8 @@ impl KeysRigBackend {
         self.inner.events.publish(KeysEvent::Library(KeysRigSvc::presets(self)));
         self.inner.events.publish(KeysEvent::Tree(KeysRigSvc::tree(self)));
         self.inner.events.publish(KeysEvent::Status(KeysRigSvc::status(self)));
+        self.publish_mixer();
+        self.publish_perform();
     }
 
 }
@@ -307,6 +551,8 @@ impl KeysRigSvc for KeysRigBackend {
                 let _rt = keys_runtime().enter();
                 if b.ensure_open() {
                     b.reattach_midi();
+                    // Lanes start at their profile/scene levels, not unity.
+                    b.apply_mixer();
                 }
                 b.publish_all();
             });
@@ -421,6 +667,170 @@ impl KeysRigSvc for KeysRigBackend {
             .and_then(|r| r.as_ref().map(|r| r.midi_monitor().recent()))
             .unwrap_or_default()
     }
+
+    // ── Mixer ────────────────────────────────────────────────────────────
+
+    fn mixer(&self) -> KeysMixer {
+        self.mixer_model()
+    }
+
+    fn set_layer_gain(&self, layer: String, db: f32) {
+        if let Ok(mut s) = self.inner.state.lock() {
+            let Some(lane) = s.lanes.get_mut(&layer) else { return };
+            lane.gain_db = db.clamp(MIN_FADER_DB, MAX_FADER_DB);
+        }
+        self.apply_mixer();
+        self.publish_mixer();
+    }
+
+    fn set_engine_gain(&self, engine: String, db: f32) {
+        if let Ok(mut s) = self.inner.state.lock() {
+            let Some(e) = s.engines.get_mut(&engine) else { return };
+            e.gain_db = db.clamp(MIN_FADER_DB, MAX_FADER_DB);
+        }
+        self.apply_mixer();
+        self.publish_mixer();
+    }
+
+    fn set_master_gain(&self, db: f32) {
+        if let Ok(mut s) = self.inner.state.lock() {
+            s.master_db = db.clamp(MIN_FADER_DB, MAX_FADER_DB);
+        }
+        self.apply_mixer();
+        self.publish_mixer();
+    }
+
+    fn set_layer_mute(&self, layer: String, muted: bool) {
+        if let Ok(mut s) = self.inner.state.lock() {
+            let Some(lane) = s.lanes.get_mut(&layer) else { return };
+            lane.muted = muted;
+        }
+        self.apply_mixer();
+        self.publish_mixer();
+    }
+
+    fn set_engine_mute(&self, engine: String, muted: bool) {
+        if let Ok(mut s) = self.inner.state.lock() {
+            let Some(e) = s.engines.get_mut(&engine) else { return };
+            e.muted = muted;
+        }
+        self.apply_mixer();
+        self.publish_mixer();
+    }
+
+    fn set_layer_solo(&self, layer: String, soloed: bool) {
+        if let Ok(mut s) = self.inner.state.lock() {
+            let Some(lane) = s.lanes.get_mut(&layer) else { return };
+            lane.soloed = soloed;
+        }
+        self.apply_mixer();
+        self.publish_mixer();
+    }
+
+    fn set_layer_patch(&self, layer: String, preset: u32) {
+        {
+            let Ok(mut s) = self.inner.state.lock() else { return };
+            let Some(name) = s.presets.get(preset as usize).map(|p| p.name.clone()) else {
+                return;
+            };
+            let Some(lane) = s.lanes.get_mut(&layer) else { return };
+            if lane.patch == name {
+                return;
+            }
+            lane.patch = name;
+        }
+        // A new sample source in the lane — the program must recompile.
+        let b = self.clone();
+        let _ = std::thread::Builder::new()
+            .name("keys-layer-patch".into())
+            .spawn(move || {
+                let _rt = keys_runtime().enter();
+                b.rebuild_program();
+            });
+    }
+
+    fn clear_layer(&self, layer: String) {
+        {
+            let Ok(mut s) = self.inner.state.lock() else { return };
+            let Some(lane) = s.lanes.get_mut(&layer) else { return };
+            if lane.patch.is_empty() {
+                return;
+            }
+            lane.patch.clear();
+        }
+        let b = self.clone();
+        let _ = std::thread::Builder::new()
+            .name("keys-layer-clear".into())
+            .spawn(move || {
+                let _rt = keys_runtime().enter();
+                b.rebuild_program();
+            });
+    }
+
+    // ── Performance ──────────────────────────────────────────────────────
+
+    fn perform(&self) -> KeysPerform {
+        self.perform_model()
+    }
+
+    fn press_stack(&self, index: u32) {
+        let needs_rebuild = {
+            let Ok(mut s) = self.inner.state.lock() else { return };
+            let Some(stack) = s.profile.stack(index as usize).cloned() else { return };
+            let mut rebuild = false;
+            for slot in &stack.slots {
+                let Some(lane) = s.lanes.get_mut(&slot.layer) else { continue };
+                lane.muted = slot.muted;
+                lane.gain_db = slot.gain_db;
+                // An empty scene patch keeps whatever the lane holds — the
+                // scene rides levels, it doesn't force a reload.
+                if !slot.patch.is_empty() && lane.patch != slot.patch {
+                    lane.patch = slot.patch.clone();
+                    rebuild = true;
+                }
+            }
+            s.active_stack = Some(index as usize);
+            rebuild
+        };
+        if needs_rebuild {
+            let b = self.clone();
+            let _ = std::thread::Builder::new()
+                .name("keys-stack".into())
+                .spawn(move || {
+                    let _rt = keys_runtime().enter();
+                    b.rebuild_program();
+                });
+        } else {
+            // Level-only recall: instant, no audio gap.
+            self.apply_mixer();
+            self.publish_mixer();
+            self.publish_perform();
+        }
+    }
+
+    fn set_perform_mode(&self, mode: u32) {
+        if let Ok(mut s) = self.inner.state.lock() {
+            s.perform_mode = mode;
+        }
+        self.publish_perform();
+    }
+
+    fn capture_stack(&self, index: u32) {
+        if let Ok(mut s) = self.inner.state.lock() {
+            let lanes = s.lanes.clone();
+            let Some(stack) = s.profile.stacks.get_mut(index as usize) else { return };
+            stack.slots = lanes
+                .iter()
+                .map(|(name, lane)| crate::profile::SceneSlot {
+                    layer: name.clone(),
+                    patch: lane.patch.clone(),
+                    gain_db: lane.gain_db,
+                    muted: lane.muted,
+                })
+                .collect();
+        }
+        self.publish_perform();
+    }
 }
 
 impl KeysRigStreamSource for KeysRigBackend {
@@ -443,6 +853,28 @@ impl Services for KeysRigBackend {
 fn note_ev(note: u8, velocity: u8) -> MidiEvent {
     use midicore::{Channel, KeyNumber, Velocity};
     MidiEvent::NoteOn { channel: Channel::new(0), key: KeyNumber::new(note), velocity: Velocity::new(velocity) }
+}
+
+/// Fader travel — matches a console strip (−∞…+6 dB, clamped at −60).
+const MIN_FADER_DB: f32 = -60.0;
+const MAX_FADER_DB: f32 = 6.0;
+
+/// Load the active profile: `FTS_KEYS_PROFILE` (a `.styx` file) if set and
+/// parseable, else the built-in Worship profile.
+fn load_profile() -> KeysProfile {
+    let Ok(path) = std::env::var("FTS_KEYS_PROFILE") else {
+        return worship_profile();
+    };
+    match std::fs::read_to_string(&path).map_err(|e| e.to_string()).and_then(|t| KeysProfile::from_styx_str(&t)) {
+        Ok(p) => {
+            tracing::info!(path, profile = %p.name, "keys rig: loaded profile");
+            p
+        }
+        Err(e) => {
+            tracing::error!(path, "keys rig: profile load failed ({e}); using Worship");
+            worship_profile()
+        }
+    }
 }
 
 /// Build a single-instrument keys program: Preset → Keys engine → Layer A →
