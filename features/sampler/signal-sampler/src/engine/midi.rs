@@ -600,32 +600,32 @@ impl SampleEngine {
 
         let nv_artic = self.articulation.clone();
 
-        // Pure playback: NONVIB ONLY for now — one sustain voice at full level,
-        // no CC2 vibrato pair (the vib layer is deferred). The default
-        // articulation is the VIBRATO sustain (Vibsus), so resolve to its
-        // non-vibrato pair (Nonvib) — we want the Nonvib sample, not Vibsus.
-        if self.pure_playback {
-            let base_is_vib = self
-                .patch
-                .spec
-                .articulation(&nv_artic)
-                .map(|a| a.is_vibrato())
-                .unwrap_or(false);
-            let nonvib = if base_is_vib {
-                self.find_vibrato_pair_id(&nv_artic).unwrap_or(nv_artic.clone())
-            } else {
-                nv_artic.clone()
-            };
-            self.spawn_sustain_layers(&nonvib, false, 1.0, &direction, note, rr);
-            return;
-        }
-
-        // CC2 picks the non-vib vs vib balance (equal-power).
+        // CC2 picks the non-vib vs vib balance (equal-power) — in pure playback
+        // too: the CC2 vibrato crossfade IS CSS (pure = exact CSS; the old
+        // nonvib-only shortcut predated that definition and silenced the vib
+        // sampleset — param-test S07 measured the reference 1.84× louder
+        // because our vib side was missing).
         let (nv_scale, vb_scale) = Self::equal_power(self.cc2_blend());
-        let vib_artic = self.find_vibrato_pair_id(&nv_artic);
-
-        self.spawn_sustain_layers(&nv_artic, false, nv_scale, &direction, note, rr);
-        if let Some(vib_id) = vib_artic {
+        // ORIENT the pair: the default articulation may be the VIBRATO member
+        // (CSS default = Vibsus), so resolve which side is which — CC2=0 must
+        // play the NON-vibrato sampleset regardless of which id is default.
+        let base_is_vib = self
+            .patch
+            .spec
+            .articulation(&nv_artic)
+            .map(|a| a.is_vibrato())
+            .unwrap_or(false);
+        let (nv_id, vib_id) = if base_is_vib {
+            (
+                self.find_vibrato_pair_id(&nv_artic)
+                    .unwrap_or_else(|| nv_artic.clone()),
+                Some(nv_artic.clone()),
+            )
+        } else {
+            (nv_artic.clone(), self.find_vibrato_pair_id(&nv_artic))
+        };
+        self.spawn_sustain_layers(&nv_id, false, nv_scale, &direction, note, rr);
+        if let Some(vib_id) = vib_id {
             self.spawn_sustain_layers(&vib_id, true, vb_scale, &direction, note, rr);
         }
     }
@@ -972,13 +972,9 @@ impl SampleEngine {
             return;
         }
         let (nv_id, vib_id) = self.legato_pair_ids(from == to);
-        // Pure playback: NONVIB transition only (NVLeg), at full level.
-        let (nv_scale, vb_scale) = if self.pure_playback {
-            (1.0, 0.0)
-        } else {
-            Self::equal_power(self.cc2_blend())
-        };
-        let vib_id = if self.pure_playback { None } else { vib_id };
+        // CC2 vibrato blend applies to the transition pair in pure playback too
+        // (pure = exact CSS; the nonvib-only shortcut is gone).
+        let (nv_scale, vb_scale) = Self::equal_power(self.cc2_blend());
         // The transition must track the CURRENT dynamic, exactly as the sustain
         // layers do (`spawn_sustain_layers`). Without this the transition plays
         // at the recorded sample's full level — so a soft (low-CC1) passage's
@@ -991,9 +987,10 @@ impl SampleEngine {
         // `$3tsb0`). It plays at recorded level × CC1 — the same net level as the
         // legato SUSTAIN it overlays (which nets 0 dB: +6 OUTPUT_MAKEUP − 6
         // $3tsb0). `$3tsb0` lands on the sustain voice via `legato_sustain`.
-        // Pure playback drops the continuous CC1 loudness sweep — the
-        // transition plays at its recorded level (CC1 still SELECTS the dynamic).
-        let expr = if self.pure_playback { 1.0 } else { self.cc1_expression(self.cc1) };
+        // `cc1_expression` applies in pure playback too — it is the CSS
+        // bottom-rolloff (calibrated on the reference; the pure expr=1.0 gate
+        // was starving the S05 recalibration on legato lines).
+        let expr = self.cc1_expression(self.cc1);
         let mut spawned = false;
         for (id, scale) in [(nv_id, nv_scale), (vib_id, vb_scale)] {
             let Some(id) = id else { continue };

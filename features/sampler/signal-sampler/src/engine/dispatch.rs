@@ -350,13 +350,28 @@ impl SampleEngine {
     ) {
         // Same-pitch WITHOUT the sustain pedal: CSS's Legzero re-trigger is
         // gated on CC64 held (KSP `retrigger { trigger sustain_pedal_held }`).
-        // Pedal-less repeated notes play a PLAIN RE-ATTACK — retrigger-fade the
-        // still-ringing voices and start a fresh sustain (no transition sample,
-        // no −6 dB connected trim) — matching the Kontakt reference (S10).
+        // Pedal-less repeated notes play a RE-ATTACK (no transition sample —
+        // the KSP re-bow offsets at 18678 are gated on `$zs1l1=1` = pedal
+        // held), but the CONNECTED-note volume math still applies: the
+        // measured Kontakt reference (param-test S10) shows each successive
+        // repeat ~7 dB under the first — the `$3tsb0` −6 dB trim (+ §7.3
+        // attack-transient dip) with the bloom recovery — with deep gaps at
+        // the boundaries from the old voice's retrigger fade.
         if from_note == to_note && !self.cc64_held {
             let fade = ms_to_frames(RETRIGGER_FADE_MS, self.sample_rate);
             self.voices.retrigger_fade_note(to_note, fade);
+            let trim_zone = self.patch.spec.legato_cfg().velocity_range(velocity) <= 2;
+            self.legato_sustain = true;
+            self.legato_trim = trim_zone;
+            self.legato_attack_dip_db = if trim_zone {
+                crate::engine::css_attack_transient_dip_db(ioi_ms)
+            } else {
+                0.0
+            };
             self.trigger_zoned_sustain(to_note);
+            self.legato_sustain = false;
+            self.legato_trim = false;
+            self.legato_attack_dip_db = 0.0;
             self.line_mut().note = Some(to_note);
             return;
         }
