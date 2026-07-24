@@ -384,6 +384,10 @@ impl SampleEngine {
         // unison note held by another divisi line keeps sounding.
         let cfg = self.patch.spec.legato_cfg();
         let pacific = cfg.style == crate::spec::LegatoStyle::Pacific;
+        // −6 dB `$3tsb0` trim applies only to connected notes in velocity
+        // zones 1-2 (zone-3 hard attacks are exempt). Computed here before the
+        // mutable spawn calls borrow `self`.
+        let trim_zone = cfg.velocity_range(velocity) <= 2;
         // Pacific (`$thaw1`): one flat 115 ms fade for BOTH members of the
         // outgoing pair; CSS: the decoded per-velocity retire tables.
         let (retire_trans_ms, retire_sus_ms) = if pacific {
@@ -468,8 +472,12 @@ impl SampleEngine {
                 let hold_start = hold.saturating_sub(fill);
                 self.sustain_fade_in = Some((hold_start, fill));
                 self.legato_sustain = true;
+                // The −6 dB trim (+ bloom) is only for zones 1-2; a zone-3 hard
+                // attack (`$x0jlu`=0) plays the connected note at full level.
+                self.legato_trim = trim_zone;
                 self.trigger_zoned_sustain(to_note);
                 self.legato_sustain = false;
+                self.legato_trim = false;
             }
             self.sustain_fade_in = None;
             self.line_mut().note = Some(to_note);

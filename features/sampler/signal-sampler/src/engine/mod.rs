@@ -498,6 +498,12 @@ pub struct SampleEngine {
     /// note ends up ~6 dB below a fresh first note. `false` = first note /
     /// polyphonic sustain (full `PerformanceSpec::sustain_makeup_db`).
     legato_sustain: bool,
+    /// The `$3tsb0` −6 dB connected-sustain TRIM (+ its bloom) is CONDITIONAL:
+    /// CSS applies it only to connected notes in velocity zones 1-2, and EXEMPTS
+    /// zone-3 hard attacks (`$x0jlu`=0) and the first note of a phrase (KSP §7.2).
+    /// Set alongside `legato_sustain` but only when the attack velocity is in
+    /// zone 1-2; the crossfade-fill still applies to every connected note.
+    legato_trim: bool,
 
     /// Notes currently held down: MIDI note → velocity. Shared across lines
     /// (keys are physical); per-line press order lives in `LegatoLine::order`.
@@ -770,6 +776,7 @@ impl SampleEngine {
             releases_enabled: true,
             sustain_fade_in: None,
             legato_sustain: false,
+            legato_trim: false,
             sord_filter: BiquadFilter::lowpass(filter::SORD_FC, filter::SORD_Q, sample_rate),
             // Pre-size note-keyed maps to the full MIDI range so note-on never
             // reallocates them on the audio thread.

@@ -1604,13 +1604,15 @@ impl SampleEngine {
         // `%ftriy` attack ornament) is NOT the held body, so it takes NO makeup —
         // it plays at recorded level scaled by CC1, same net level as the −6 dB
         // sustain it overlays. Shorts and release tails play the recording as-is.
-        // Pure playback: the looped-plateau makeup (+6 dB) stays — it's a level
-        // correction for the looped body, not naturalism — but the legato
-        // −6 dB connected-sustain TRIM is dropped so every held note enters at
-        // full, flat level (no accent/settle).
+        // The −6 dB `$3tsb0` connected-sustain TRIM is STRUCTURAL legato level
+        // (a connected note sits 6 dB below the fresh first note), NOT CC1
+        // amplitude dynamics — so it stays ON even in pure playback (pure only
+        // disables the CC1 dynamics crossfade). Every legato-connected sustain
+        // enters 6 dB down and blooms back (below); the first note of a phrase
+        // (not `legato_sustain`) keeps the full +6 dB makeup.
         let makeup = if is_sustain_layer {
             let base = db_to_gain(self.patch.spec.performance.sustain_makeup_db);
-            if self.legato_sustain && !self.pure_playback {
+            if self.legato_trim {
                 base * db_to_gain(self.patch.spec.legato_cfg().sustain_trim_db)
             } else {
                 base
@@ -1625,7 +1627,8 @@ impl SampleEngine {
         // transition's pre-bow plays (slow tempi), and the incoming
         // destination pitch reads early against a vanishing source.
         // Multiplicative on the voice, so CC1/CC2 re-levelling keeps working.
-        let bloom = if is_sustain_layer && self.legato_sustain && !self.pure_playback {
+        // Structural (the counterpart of the trim above), so it stays in pure.
+        let bloom = if is_sustain_layer && self.legato_trim {
             let cfg = self.patch.spec.legato_cfg();
             let frames = ms_to_frames(cfg.sustain_bloom_ms, self.sample_rate);
             (frames > 0).then(|| (frames, db_to_gain(-cfg.sustain_trim_db)))
