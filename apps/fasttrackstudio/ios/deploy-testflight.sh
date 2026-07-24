@@ -156,6 +156,10 @@ MARKETING_VER="${MARKETING_VER:-0.0.1}"
 /usr/libexec/PlistBuddy -c "Set :MinimumOSVersion 15.0" "$APP/Info.plist" 2>/dev/null \
     || /usr/libexec/PlistBuddy -c "Add :MinimumOSVersion string 15.0" "$APP/Info.plist"
 /usr/libexec/PlistBuddy -c "Add :NSMicrophoneUsageDescription string 'Processes your guitar signal from the connected audio interface or microphone.'" "$APP/Info.plist" 2>/dev/null || true
+# Local network: pack downloads dial the studio engine peer-to-peer (iroh
+# direct paths / LAN WebSocket); without this key iOS silently drops the
+# traffic and the pack host is unreachable on the same Wi-Fi.
+/usr/libexec/PlistBuddy -c "Add :NSLocalNetworkUsageDescription string 'Connects to your studio engine on the local network to stream and download sound packs.'" "$APP/Info.plist" 2>/dev/null || true
 /usr/libexec/PlistBuddy -c "Add :UIFileSharingEnabled bool true" "$APP/Info.plist" 2>/dev/null || true
 /usr/libexec/PlistBuddy -c "Add :LSSupportsOpeningDocumentsInPlace bool true" "$APP/Info.plist" 2>/dev/null || true
 # TestFlight requires ITSAppUsesNonExemptEncryption declared (false = no

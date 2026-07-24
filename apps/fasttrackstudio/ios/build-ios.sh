@@ -29,6 +29,9 @@ APP="$(cd ../.. && pwd)/target/dx/fasttrackstudio/debug/ios/Fasttrackstudio.app"
 # keeps BOTH portrait and landscape (dx's default) — no orientation patch.
 # Add the mic/audio-interface usage string the rig needs.
 /usr/libexec/PlistBuddy -c "Add :NSMicrophoneUsageDescription string 'Processes your guitar signal from the connected audio interface or microphone.'" "$APP/Info.plist" 2>/dev/null || true
+# Local network: pack downloads dial the studio engine p2p (iroh direct
+# paths / LAN WebSocket) — without this key iOS drops the traffic.
+/usr/libexec/PlistBuddy -c "Add :NSLocalNetworkUsageDescription string 'Connects to your studio engine on the local network to stream and download sound packs.'" "$APP/Info.plist" 2>/dev/null || true
 
 echo "built: $APP"
 

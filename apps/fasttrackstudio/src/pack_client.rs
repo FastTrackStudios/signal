@@ -16,7 +16,7 @@ use std::path::{Path, PathBuf};
 use signal_packs_proto::packs::PackLibraryClient;
 use signal_packs_proto::{PackChunk, PackInfo};
 
-use crate::remote::{establish, EngineTarget};
+use crate::remote::EngineTarget;
 
 /// One download's progress stream.
 #[derive(Clone, Debug)]
@@ -58,13 +58,19 @@ pub(crate) fn fetch_packs(
 ) -> futures_channel::oneshot::Receiver<Result<Vec<PackInfo>, String>> {
     let (tx, rx) = futures_channel::oneshot::channel();
     runtime().spawn(async move {
-        let result = async {
-            let client: PackLibraryClient = establish(&target)
+        let attempt = async {
+            let client: PackLibraryClient = crate::remote::establish_verbose(&target)
                 .await
-                .ok_or_else(|| format!("pack host unreachable ({})", target.label()))?;
+                .map_err(|e| format!("pack host unreachable: {e}"))?;
             client.packs().await.map_err(|e| format!("packs: {e:?}"))
-        }
-        .await;
+        };
+        // Iroh discovery + relay + hole-punch can take a while on a cold
+        // path, but never forever — bound it so the UI gets a real answer.
+        let result = match tokio::time::timeout(std::time::Duration::from_secs(30), attempt).await
+        {
+            Ok(r) => r,
+            Err(_) => Err(format!("pack host timed out after 30s ({})", target.label())),
+        };
         let _ = tx.send(result);
     });
     rx
@@ -116,9 +122,9 @@ async fn download(
         .open(&part)
         .map_err(|e| format!("open {part:?}: {e}"))?;
 
-    let client: PackLibraryClient = establish(target)
+    let client: PackLibraryClient = crate::remote::establish_verbose(target)
         .await
-        .ok_or_else(|| format!("pack host unreachable ({})", target.label()))?;
+        .map_err(|e| format!("pack host unreachable: {e}"))?;
 
     let (tx, mut rx) = vox::channel::<PackChunk>();
     let read_call = client.read(info.name.clone(), info.variant.clone(), start, tx);

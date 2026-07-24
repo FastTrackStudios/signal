@@ -156,29 +156,36 @@ async fn app_endpoint() -> Option<iroh::Endpoint> {
 /// Establish one typed client over its own link (a vox caller is
 /// service-bound once constructed, so sibling services don't share one).
 pub(crate) async fn establish<C: vox_core::FromVoxLane>(target: &EngineTarget) -> Option<C> {
+    establish_verbose(target)
+        .await
+        .map_err(|e| tracing::debug!("establish {}: {e}", target.label()))
+        .ok()
+}
+
+/// [`establish`] with the failure reason kept — surfaces (e.g. in the
+/// phone's pack Library note) instead of vanishing into a debug log.
+pub(crate) async fn establish_verbose<C: vox_core::FromVoxLane>(
+    target: &EngineTarget,
+) -> Result<C, String> {
     match target {
         EngineTarget::Ws(url) => {
             let link = vox_websocket::WsLink::connect(url)
                 .await
-                .map_err(|e| tracing::debug!("ws connect {url}: {e:?}"))
-                .ok()?;
+                .map_err(|e| format!("ws connect {url}: {e:?}"))?;
             vox_core::initiator_on(link)
                 .establish::<C>()
                 .await
-                .map_err(|e| tracing::warn!("vox handshake: {e:?}"))
-                .ok()
+                .map_err(|e| format!("vox handshake: {e:?}"))
         }
         EngineTarget::Iroh(id) => {
-            let ep = app_endpoint().await?;
+            let ep = app_endpoint().await.ok_or("iroh endpoint bind failed")?;
             let link = architect::iroh_link::connect(&ep, *id)
                 .await
-                .map_err(|e| tracing::debug!("iroh connect {id}: {e:?}"))
-                .ok()?;
+                .map_err(|e| format!("iroh connect: {e}"))?;
             vox_core::initiator_on(link)
                 .establish::<C>()
                 .await
-                .map_err(|e| tracing::warn!("vox handshake (iroh): {e:?}"))
-                .ok()
+                .map_err(|e| format!("vox handshake (iroh): {e:?}"))
         }
     }
 }
