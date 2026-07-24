@@ -113,6 +113,19 @@ pub fn KeysShell(on_home: EventHandler<()>) -> Element {
                     "‹ Home"
                 }
                 span { style: "font-size: 16px; font-weight: 700; color: #e4e4e7;", "Keys" }
+                {
+                    #[cfg(target_os = "ios")]
+                    let build = crate::ios_orientation::build_number();
+                    #[cfg(not(target_os = "ios"))]
+                    let build = String::new();
+                    rsx! {
+                        if !build.is_empty() {
+                            span { style: "font-size: 9px; color: #3f3f46; align-self: flex-end; padding-bottom: 2px;",
+                                "b{build}"
+                            }
+                        }
+                    }
+                }
                 div { style: "flex: 1;" }
                 for (p, label) in [(KeysPage::Play, "Play"), (KeysPage::Library, "Library")] {
                     button {

@@ -52,6 +52,27 @@ unsafe fn nsstring(s: &str) -> *mut AnyObject {
     msg_send![class!(NSString), stringWithUTF8String: c.as_ptr()]
 }
 
+/// The bundle's CFBundleVersion (the TestFlight build number) — shown in
+/// the keys UI so "which build are you on" is never a guessing game.
+pub fn build_number() -> String {
+    unsafe {
+        let bundle: *mut AnyObject = msg_send![class!(NSBundle), mainBundle];
+        if bundle.is_null() {
+            return String::new();
+        }
+        let key = nsstring("CFBundleVersion");
+        let value: *mut AnyObject = msg_send![bundle, objectForInfoDictionaryKey: key];
+        if value.is_null() {
+            return String::new();
+        }
+        let utf8: *const std::ffi::c_char = msg_send![value, UTF8String];
+        if utf8.is_null() {
+            return String::new();
+        }
+        std::ffi::CStr::from_ptr(utf8).to_string_lossy().into_owned()
+    }
+}
+
 /// Keep the screen awake (`UIApplication.idleTimerDisabled`) — on while a
 /// pack download runs, since iOS suspends the app (and its sockets) when
 /// the phone locks.
