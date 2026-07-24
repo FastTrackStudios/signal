@@ -1613,7 +1613,12 @@ impl SampleEngine {
         let makeup = if is_sustain_layer {
             let base = db_to_gain(self.patch.spec.performance.sustain_makeup_db);
             if self.legato_trim {
-                base * db_to_gain(self.patch.spec.legato_cfg().sustain_trim_db)
+                // −6 dB `$3tsb0` structural trim + the attack-transient
+                // anti-machine-gun dip (0 unless the note is <250 ms after the
+                // previous onset).
+                base * db_to_gain(
+                    self.patch.spec.legato_cfg().sustain_trim_db + self.legato_attack_dip_db,
+                )
             } else {
                 base
             }
@@ -1763,8 +1768,8 @@ impl SampleEngine {
                     voice = voice.with_arrival_marker(m, self.frames_rendered);
                 }
             }
-            if let Some((delay, fade)) = fade_in_under {
-                voice = voice.with_fade_in_under(delay, fade);
+            if let Some((delay, stage1_run, stage1_denom, stage2)) = fade_in_under {
+                voice = voice.with_two_stage_fade_in(delay, stage1_run, stage1_denom, stage2);
             }
             if let Some((frames, target)) = bloom {
                 voice = voice.with_slow_bloom(frames, target);

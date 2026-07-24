@@ -100,12 +100,38 @@ const RELEASE_MAX_LIFETIME_MS: u32 = 2_000;
 /// at full level — just enough to avoid an onset click without slowing the attack.
 const SUSTAIN_DECLICK_MS: u32 = 12;
 
-/// Legato crossfade fill (ms): how long the DESTINATION sustain swells UP under
-/// the transition so it fills the transition sample's natural bow-change dip and
-/// reaches full level at the arrival tick — the CSS `%grhcg` fade_in over
-/// `$mlnoy`+`$rixqv` (`$a3zg3` crossfade, ~250 ms base, velocity/IOI-scaled).
-/// Capped at the prefire lead so fast moves rise over the whole (short) window.
-const LEGATO_CROSSFADE_FILL_MS: u32 = 220;
+/// CSS Expressive crossfade shape (KSP §3.1/§8, shipped values): the DESTINATION
+/// sustain swells up under the transition, filling the bow-change dip and
+/// reaching full at the arrival tick. Two-stage: a fast stage-1 to ~90 % then a
+/// slow stage-2 swell to full.
+const CSS_XTIME_BASE_MS: u32 = 225; // $a3zg3 (XTime), shipped
+const CSS_ATK_FADE_PCT: u32 = 50; // $igmiu — stage-1/stage-2 split %
+const CSS_NODE_VOL_DIV: u32 = 90; // $x444h — stage-1 fade divisor (overshoots linear)
+
+/// IOI-scaled crossfade time (`$a3zg3`): slow playing → longer, fast → shorter
+/// (KSP §6). Exact per-IOI anchors live in `persistent_1.tsv` (not decoded);
+/// this is a monotone lerp from a fast floor to the shipped 225 ms base over the
+/// Expressive IOI window (A=200 → C=800 ms, §8).
+fn css_xtime_ms(ioi_ms: f32) -> u32 {
+    let (fast, slow) = (120.0f32, CSS_XTIME_BASE_MS as f32);
+    let t = ((ioi_ms - 200.0) / (800.0 - 200.0)).clamp(0.0, 1.0);
+    (fast + (slow - fast) * t).round() as u32
+}
+
+/// Attack-transient anti-machine-gun dip (dB, KSP §7.3): a connected note within
+/// `$xu41m` (250 ms) of the previous onset plays quieter — from 0 dB at 250 ms
+/// down to `$4lqhx` (~−3 dB shipped) at 0 ms — so rapid re-articulations don't
+/// machine-gun. (The `$c2hkn` 1-2 s recovery is approximated by the per-note IOI
+/// mapping: a note is dipped by how close it sits to the previous onset.)
+fn css_attack_transient_dip_db(ioi_ms: f32) -> f32 {
+    const WINDOW_MS: f32 = 250.0; // $xu41m
+    const MAX_DIP_DB: f32 = -3.0; // $4lqhx (shipped)
+    if ioi_ms <= 0.0 || ioi_ms >= WINDOW_MS {
+        0.0
+    } else {
+        MAX_DIP_DB * (1.0 - ioi_ms / WINDOW_MS)
+    }
+}
 
 /// Onset declick (ms) for legato transitions, release tails, and any voice that
 /// starts mid-sample (`start_offset`). Long enough to remove the onset step
@@ -490,7 +516,9 @@ pub struct SampleEngine {
     /// legato handoff (spec §2.1 step 7 / `CSS_W`). Set for the duration of the
     /// legato sustain spawn and cleared immediately after. `None` = normal
     /// attack (first note / polyphonic sustain).
-    sustain_fade_in: Option<(usize, usize)>,
+    /// CSS two-stage destination swell params `(delay, stage1_run, stage1_denom,
+    /// stage2)` in frames (KSP §3). A single-stage fade is `(delay, f, f, 0)`.
+    sustain_fade_in: Option<(usize, usize, usize, usize)>,
     /// When true, sustain-layer voices spawned during this dispatch carry the
     /// −6 dB `$3tsb0` legato makeup (`LegatoEngineSpec::sustain_trim_db`) — the KSP
     /// `change_vol(%grhcg,$3tsb0*100)` on the held legato tone. Set only around
@@ -504,6 +532,10 @@ pub struct SampleEngine {
     /// Set alongside `legato_sustain` but only when the attack velocity is in
     /// zone 1-2; the crossfade-fill still applies to every connected note.
     legato_trim: bool,
+    /// Extra dB dip on the connected note from the attack-transient envelope
+    /// (`css_attack_transient_dip_db`, KSP §7.3) — 0 unless the note falls within
+    /// 250 ms of the previous onset. Set alongside `legato_trim`.
+    legato_attack_dip_db: f32,
 
     /// Notes currently held down: MIDI note → velocity. Shared across lines
     /// (keys are physical); per-line press order lives in `LegatoLine::order`.
@@ -777,6 +809,7 @@ impl SampleEngine {
             sustain_fade_in: None,
             legato_sustain: false,
             legato_trim: false,
+            legato_attack_dip_db: 0.0,
             sord_filter: BiquadFilter::lowpass(filter::SORD_FC, filter::SORD_Q, sample_rate),
             // Pre-size note-keyed maps to the full MIDI range so note-on never
             // reallocates them on the audio thread.

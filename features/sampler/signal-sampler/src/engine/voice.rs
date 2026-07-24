@@ -128,6 +128,15 @@ pub struct Voice {
     /// Gain smoothing — frames to ramp from `gain` to `target_gain`.
     gain_ramp_frames: usize,
 
+    /// CSS two-stage destination swell (`$ocjln=6`, KSP §3.5). When
+    /// `stage1_run > 0`, the gain ramp runs for `stage1_run` frames at the
+    /// `gain_ramp_frames` (stage-1 `$mlnoy`) rate — reaching `stage1_run/$mlnoy`
+    /// of target (the `$x444h`=90 divisor makes stage-1 *overshoot* a linear
+    /// split, ~90 %) — then switches to a slower ramp of `stage2_frames`
+    /// (`$rixqv`) that completes to target. `0` = single-stage (`with_fade_in_under`).
+    stage1_run: usize,
+    stage2_frames: usize,
+
     pub state: VoiceState,
     pub kind: VoiceKind,
 
@@ -391,6 +400,8 @@ impl Voice {
             pan_r: 1.0,
             target_gain: gain,
             gain_ramp_frames: 0,
+            stage1_run: 0,
+            stage2_frames: 0,
             state: VoiceState::Playing,
             release_hold: 0,
             pending_fade: 0,
@@ -450,6 +461,8 @@ impl Voice {
             pan_r: 1.0,
             target_gain: gain,
             gain_ramp_frames: 0,
+            stage1_run: 0,
+            stage2_frames: 0,
             state: VoiceState::Playing,
             release_hold: 0,
             pending_fade: 0,
@@ -607,6 +620,27 @@ impl Voice {
             self.attack_delay = delay_frames;
             self.gain_ramp_frames = fade_frames;
         }
+        self
+    }
+
+    /// CSS two-stage destination swell (KSP §3.1/§3.5): silent for
+    /// `delay_frames`, then a fast stage-1 ramp toward target at the
+    /// `stage1_denom` (`$mlnoy`) rate for `stage1_run` (`$qsazz`) frames —
+    /// reaching ~`stage1_run/stage1_denom` of target — then a slower stage-2
+    /// ramp of `stage2_frames` (`$rixqv`) that completes to target. Falls back
+    /// to a single-stage fade when `stage2_frames == 0`.
+    pub fn with_two_stage_fade_in(
+        mut self,
+        delay_frames: usize,
+        stage1_run: usize,
+        stage1_denom: usize,
+        stage2_frames: usize,
+    ) -> Self {
+        self.gain = 0.0; // target_gain stays at the intended spawn gain
+        self.attack_delay = delay_frames;
+        self.gain_ramp_frames = stage1_denom.max(1);
+        self.stage1_run = stage1_run;
+        self.stage2_frames = stage2_frames;
         self
     }
 
@@ -828,6 +862,16 @@ impl Voice {
         } else if self.gain_ramp_frames > 0 {
             self.gain += (self.target_gain - self.gain) / self.gain_ramp_frames as f32;
             self.gain_ramp_frames -= 1;
+            // Two-stage swell: after `stage1_run` frames of the fast stage-1
+            // ramp (rate = stage-1 `$mlnoy`), switch to the slower stage-2 ramp
+            // (`$rixqv`) that completes to target.
+            if self.stage1_run > 0 {
+                self.stage1_run -= 1;
+                if self.stage1_run == 0 && self.stage2_frames > 0 {
+                    self.gain_ramp_frames = self.stage2_frames;
+                    self.stage2_frames = 0;
+                }
+            }
         } else {
             self.gain = self.target_gain;
         }

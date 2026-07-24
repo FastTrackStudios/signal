@@ -448,36 +448,50 @@ impl SampleEngine {
             if pacific {
                 // Pacific `pisus`: the destination sustain crossfades in at
                 // FULL level (no −6 dB `$3tsb0` trim, no bloom) under the
-                // transition, over the KSP's ~500 ms fade envelope.
+                // transition, over the KSP's ~500 ms fade envelope. Single-stage
+                // = `(delay, f, f, 0)`.
                 let fade = ms_to_frames(destination_fade_ms, self.sample_rate).max(declick);
-                self.sustain_fade_in = Some((hold, fade));
+                self.sustain_fade_in = Some((hold, fade, fade, 0));
                 self.trigger_zoned_sustain(to_note);
             } else {
-                // CSS: fade the destination sustain UP through the crossfade
-                // (KSP `%grhcg` fade_in over `$mlnoy`+`$rixqv`) so it FILLS the
-                // transition sample's natural bow-change dip and reaches full
-                // level AT the tick — instead of holding it silent for the whole
-                // lead and snapping in over a declick at the tick, which left a
-                // ~6 dB amplitude dip just BEFORE the arrival (the transition
-                // alone owned the pre-arrival air, and it dips as the bow
-                // changes). The rise starts within the prefire lead, swelling in
-                // from near-silence, so the destination pitch never reads as an
-                // early arrival — exactly the CSS handoff.
-                let fill = ms_to_frames(
-                    crate::engine::LEGATO_CROSSFADE_FILL_MS,
-                    self.sample_rate,
-                )
-                .min(hold)
-                .max(declick);
-                let hold_start = hold.saturating_sub(fill);
-                self.sustain_fade_in = Some((hold_start, fill));
+                // CSS: fade the destination sustain UP through the crossfade so
+                // it FILLS the transition sample's natural bow-change dip and
+                // reaches full level AT the tick — instead of holding it silent
+                // for the whole lead and snapping in (which left a ~6 dB dip just
+                // before the arrival). Two-stage swell (KSP §3): a fast stage-1
+                // to ~90 % then a slow stage-2 to full, over the IOI-scaled
+                // `$a3zg3` crossfade, ending at the tick. Capped at the lead so
+                // fast moves rise over the whole (short) window.
+                let xtime = crate::engine::css_xtime_ms(ioi_ms);
+                let total = ms_to_frames(xtime, self.sample_rate)
+                    .min(hold)
+                    .max(declick);
+                // stage1_run = total*igmiu/100; stage1_denom = total*igmiu/x444h
+                // (the $x444h=90 divisor makes stage-1 overshoot the linear
+                // split → ~90 %); stage2 = total*(100-igmiu)/100.
+                let igmiu = crate::engine::CSS_ATK_FADE_PCT as usize;
+                let x444h = crate::engine::CSS_NODE_VOL_DIV as usize;
+                let stage1_run = total * igmiu / 100;
+                let stage1_denom = (total * igmiu / x444h).max(1);
+                let stage2 = total * (100 - igmiu) / 100;
+                let audible = stage1_run + stage2;
+                let hold_start = hold.saturating_sub(audible);
+                self.sustain_fade_in = Some((hold_start, stage1_run, stage1_denom, stage2));
                 self.legato_sustain = true;
                 // The −6 dB trim (+ bloom) is only for zones 1-2; a zone-3 hard
                 // attack (`$x0jlu`=0) plays the connected note at full level.
                 self.legato_trim = trim_zone;
+                // Anti-machine-gun dip: extra attenuation on notes that fall
+                // within 250 ms of the previous onset (KSP §7.3).
+                self.legato_attack_dip_db = if trim_zone {
+                    crate::engine::css_attack_transient_dip_db(ioi_ms)
+                } else {
+                    0.0
+                };
                 self.trigger_zoned_sustain(to_note);
                 self.legato_sustain = false;
                 self.legato_trim = false;
+                self.legato_attack_dip_db = 0.0;
             }
             self.sustain_fade_in = None;
             self.line_mut().note = Some(to_note);
