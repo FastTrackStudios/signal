@@ -2306,7 +2306,7 @@ mod tests {
         // without the blocks plays identically).
         assert_eq!(spec.performance.master_tune_cents, 9.0);
         assert_eq!(spec.performance.attack_ms, Some(198));
-        assert_eq!(spec.performance.release_ms, Some(400));
+        assert_eq!(spec.performance.release_ms, Some(690)); // decoded AHDSR R × CC81
         assert_eq!(spec.performance.sustain_noteoff_ms, 400);
         assert_eq!(le.velocity_splits, vec![64, 100]);
         assert_eq!(le.overlap_delay_ms(50.0, 30, false), 77); // soft+fast LL

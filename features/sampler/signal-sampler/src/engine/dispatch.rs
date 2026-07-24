@@ -348,6 +348,18 @@ impl SampleEngine {
         sched_lead: Option<u64>,
         ioi_ms: f32,
     ) {
+        // Same-pitch WITHOUT the sustain pedal: CSS's Legzero re-trigger is
+        // gated on CC64 held (KSP `retrigger { trigger sustain_pedal_held }`).
+        // Pedal-less repeated notes play a PLAIN RE-ATTACK — retrigger-fade the
+        // still-ringing voices and start a fresh sustain (no transition sample,
+        // no −6 dB connected trim) — matching the Kontakt reference (S10).
+        if from_note == to_note && !self.cc64_held {
+            let fade = ms_to_frames(RETRIGGER_FADE_MS, self.sample_rate);
+            self.voices.retrigger_fade_note(to_note, fade);
+            self.trigger_zoned_sustain(to_note);
+            self.line_mut().note = Some(to_note);
+            return;
+        }
         let log_idx = if self.legato_fire_log_enabled
             && self.legato_fire_log.len() < LEGATO_FIRE_LOG_CAP
         {
