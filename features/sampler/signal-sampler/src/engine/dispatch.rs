@@ -449,7 +449,24 @@ impl SampleEngine {
                 self.sustain_fade_in = Some((hold, fade));
                 self.trigger_zoned_sustain(to_note);
             } else {
-                self.sustain_fade_in = Some((hold, declick));
+                // CSS: fade the destination sustain UP through the crossfade
+                // (KSP `%grhcg` fade_in over `$mlnoy`+`$rixqv`) so it FILLS the
+                // transition sample's natural bow-change dip and reaches full
+                // level AT the tick — instead of holding it silent for the whole
+                // lead and snapping in over a declick at the tick, which left a
+                // ~6 dB amplitude dip just BEFORE the arrival (the transition
+                // alone owned the pre-arrival air, and it dips as the bow
+                // changes). The rise starts within the prefire lead, swelling in
+                // from near-silence, so the destination pitch never reads as an
+                // early arrival — exactly the CSS handoff.
+                let fill = ms_to_frames(
+                    crate::engine::LEGATO_CROSSFADE_FILL_MS,
+                    self.sample_rate,
+                )
+                .min(hold)
+                .max(declick);
+                let hold_start = hold.saturating_sub(fill);
+                self.sustain_fade_in = Some((hold_start, fill));
                 self.legato_sustain = true;
                 self.trigger_zoned_sustain(to_note);
                 self.legato_sustain = false;

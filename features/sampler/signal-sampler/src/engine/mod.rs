@@ -100,6 +100,13 @@ const RELEASE_MAX_LIFETIME_MS: u32 = 2_000;
 /// at full level — just enough to avoid an onset click without slowing the attack.
 const SUSTAIN_DECLICK_MS: u32 = 12;
 
+/// Legato crossfade fill (ms): how long the DESTINATION sustain swells UP under
+/// the transition so it fills the transition sample's natural bow-change dip and
+/// reaches full level at the arrival tick — the CSS `%grhcg` fade_in over
+/// `$mlnoy`+`$rixqv` (`$a3zg3` crossfade, ~250 ms base, velocity/IOI-scaled).
+/// Capped at the prefire lead so fast moves rise over the whole (short) window.
+const LEGATO_CROSSFADE_FILL_MS: u32 = 220;
+
 /// Onset declick (ms) for legato transitions, release tails, and any voice that
 /// starts mid-sample (`start_offset`). Long enough to remove the onset step
 /// click, short enough to be inaudible on a recorded bow-change / release.
