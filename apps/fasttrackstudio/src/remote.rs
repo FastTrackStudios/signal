@@ -120,8 +120,15 @@ impl EngineTarget {
 /// localStorage (hex).
 #[cfg(not(target_arch = "wasm32"))]
 fn device_secret_key() -> Option<iroh::SecretKey> {
-    let home = std::env::var_os("HOME")?;
-    let key_path = std::path::Path::new(&home).join(".config/fts").join("iroh.key");
+    // Honor XDG_CONFIG_HOME — on iOS the app roots it under
+    // Documents/FastTrackStudio (the container's ~/.config isn't
+    // writable, so the HOME path would fail to create the key and no
+    // iroh endpoint could ever bind).
+    let base = match std::env::var_os("XDG_CONFIG_HOME") {
+        Some(xdg) => std::path::PathBuf::from(xdg),
+        None => std::path::Path::new(&std::env::var_os("HOME")?).join(".config"),
+    };
+    let key_path = base.join("fts").join("iroh.key");
     architect::iroh_link::load_or_create_secret_key(&key_path)
         .map_err(|e| tracing::error!("iroh key {key_path:?}: {e}"))
         .ok()
