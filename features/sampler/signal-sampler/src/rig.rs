@@ -1019,9 +1019,18 @@ pub(crate) fn build_sample_source(
     }
     // Decode in the background, middle-out from middle C, so the block is
     // playable almost immediately and never blocks the caller (same
-    // pattern as `SamplerBank::load_block`).
+    // pattern as `SamplerBank::load_block`). `FTS_PRELOAD_PROFILE` caps
+    // the eager set (phones: a full piano decoded is more RAM than the
+    // device has); everything past the cap decodes on first note-on.
     let cache = engine.cache_handle();
-    let paths = engine.sample_paths_centered(60);
+    let mut paths = engine.sample_paths_centered(60);
+    if let Some(cap) = std::env::var("FTS_PRELOAD_PROFILE")
+        .ok()
+        .and_then(|s| crate::bank::PreloadProfile::from_name(&s))
+        .and_then(|p| p.preload_cap())
+    {
+        paths.truncate(cap);
+    }
     let label = name.clone();
     if let Err(err) = std::thread::Builder::new()
         .name(format!("signal-preload:{label}"))

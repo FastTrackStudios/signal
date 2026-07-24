@@ -59,6 +59,15 @@ impl PreloadProfile {
         }
     }
 
+    /// How many samples this profile preloads eagerly (`None` = all).
+    pub fn preload_cap(self) -> Option<usize> {
+        match self {
+            Self::FastAudition => Some(FAST_AUDITION_PRELOAD_SAMPLES),
+            Self::Performance => Some(PERFORMANCE_PRELOAD_SAMPLES),
+            _ => None,
+        }
+    }
+
     fn ordered_paths(self, block: &SamplerBlock) -> Vec<PathBuf> {
         let mut paths = match self {
             Self::Full => block.sample_paths_owned(),
