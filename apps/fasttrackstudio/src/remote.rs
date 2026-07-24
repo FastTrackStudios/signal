@@ -54,6 +54,15 @@ pub(crate) fn server_url() -> String {
 
 // ── Engine target (local ws vs remote iroh) ─────────────────────────────────
 
+/// TEMPORARY default pack host for the phone: the studio engine's iroh
+/// endpoint id (durable identity at ~/.local/share/fts-pack-host on the
+/// studio machine), so a fresh install can list + download packs
+/// immediately with zero setup. Remove once a proper host-pairing UX
+/// exists; a ws URL or iroh id saved from the connect UI overrides it.
+#[cfg(target_os = "ios")]
+const DEFAULT_ENGINE_IROH_ID: &str =
+    "9e16e3e074f7f3a94c1d9a95adcab1963c399e967719b7e632069cd75676dd70";
+
 /// A saved remote engine: `SIGNAL_ENGINE_IROH_ID` at runtime (native),
 /// else the id stored from the connect screen. When set, remotes dial
 /// p2p over iroh instead of the WebSocket.
@@ -62,7 +71,16 @@ pub(crate) fn engine_iroh_id() -> Option<iroh::EndpointId> {
     if let Ok(raw) = std::env::var("SIGNAL_ENGINE_IROH_ID") {
         return raw.trim().parse().ok();
     }
-    prefs::get("signal-engine-iroh-id")?.parse().ok()
+    if let Some(saved) = prefs::get("signal-engine-iroh-id") {
+        return saved.parse().ok();
+    }
+    // iPhone with nothing configured: fall back to the studio pack host
+    // — but never shadow an explicitly-saved ws URL.
+    #[cfg(target_os = "ios")]
+    if prefs::get("signal-engine-ws-url").is_none() {
+        return DEFAULT_ENGINE_IROH_ID.parse().ok();
+    }
+    None
 }
 
 // Only the signal rig views expose a connect form today; a session-only
