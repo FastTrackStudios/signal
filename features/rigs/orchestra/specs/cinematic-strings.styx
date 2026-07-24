@@ -204,7 +204,7 @@ dynamics {
     // Continuous CC1 → loudness on top of the layer crossfade: 0 dB from the
     // knee up, linear to floor_db at CC1=0. Calibrated on the reference
     // render (CC1=20 → −3.0 dB, flat from CC1≈45).
-    cc1_expression { knee 45, floor_db -5.4 }
+    cc1_expression { knee 45, floor_db -15.0 }  // calibrated vs Kontakt param-test S05 (CC1=20 → −8.3 dB)
 }
 
 // ── Articulations ─────────────────────────────────────────────────────────────
