@@ -781,6 +781,18 @@ pub fn annotate(doc: &TrackDocument, spec: &LibrarySpec, sample_rate: u32) -> Sc
             let n = &notes[ni];
             let start = qn_to_frame(&doc.tempo, n.src.start_qn, sample_rate);
             let end = qn_to_frame(&doc.tempo, n.src.end_qn, sample_rate);
+            // PHRASE RESET: a note starting well after the previous note-off is
+            // a NEW phrase, not a legato continuation — clear the legato `from`
+            // so a same-pitch note across a gap plays a fresh attack (KSP:
+            // %f4tl5 slot is emptied once the line falls silent; without this
+            // the schedule marked S10's post-gap C4 a re-bow of a note 4 s
+            // gone while the engine treated it fresh — the note dropped).
+            if let Some(off) = prev_off {
+                if start > off + ms_to_frames_i64(500, sample_rate) {
+                    prev_pitch = None;
+                    prev_start = None;
+                }
+            }
             let body_rr = stable_rr_slot(
                 doc.seed,
                 n.src.start_qn,
