@@ -624,23 +624,33 @@ impl SampleEngine {
         } else {
             (nv_artic.clone(), self.find_vibrato_pair_id(&nv_artic))
         };
+        // CSS FIRST-NOTE attack SWAP (decoded round 2, §11): zones 2/3 do NOT
+        // stack an ornament on the body — the body is MUTED 40 ms while the
+        // attack sample plays, then FADES IN over 230 ms (z2) / 180 ms (z3)
+        // underneath it. Zone 1 (soft) plays the plain body only. Our previous
+        // full-gain stacked ornament doubled the same pitch for ~2.5 s — the
+        // audible "phasy overlap". The attack sample is bounded: it rings its
+        // attack (~300 ms) then fades over the re-bow retire time (~550 ms).
+        let fresh_vz = if !self.legato_sustain {
+            self.patch.spec.legato_cfg().velocity_range(self.last_velocity)
+        } else {
+            0
+        };
+        if fresh_vz >= 2 {
+            let mute = ms_to_frames(40, self.sample_rate);
+            let fade = ms_to_frames(if fresh_vz == 3 { 180 } else { 230 }, self.sample_rate);
+            self.sustain_fade_in = Some((mute, fade, fade, 0));
+        }
         self.spawn_sustain_layers(&nv_id, false, nv_scale, &direction, note, rr);
         if let Some(vib_id) = vib_id {
             self.spawn_sustain_layers(&vib_id, true, vb_scale, &direction, note, rr);
         }
-
-        // CSS FIRST-NOTE attack ornament (KSP §2 first-note branch): a fresh
-        // note plays a TRANSITION-GROUP voice at offset 0 (`%jcxqm =
-        // play_note(note,…,0,0)`, `$1fvjk = 0` — the full recorded bow attack)
-        // STACKED on the sustain layers. Without it every isolated/first note
-        // sits ~3.5 dB under Kontakt (param-test S13/S08/S09 level ratios
-        // 1.4-1.55). The retrigger (Legzero) sampleset is the bow-attack
-        // recording at the played pitch; recorded level × CC1 expr, no makeup
-        // (same rule as transitions). Connected notes skip this — their onset
-        // is the legato transition.
-        if !self.legato_sustain {
+        if fresh_vz >= 2 {
+            self.sustain_fade_in = None;
             let (nv_ret, vib_ret) = self.legato_pair_ids(true);
             let expr = self.cc1_expression(self.cc1);
+            let hold = ms_to_frames(300, self.sample_rate);
+            let out = ms_to_frames(550, self.sample_rate);
             for (id, scale) in [(nv_ret, nv_scale), (vib_ret, vb_scale)] {
                 let Some(id) = id else { continue };
                 if scale < 0.01 {
@@ -649,7 +659,14 @@ impl SampleEngine {
                 let (lo, hi, blend) = self.layers_for_artic(&id);
                 let dynamic = if blend >= 0.5 { hi } else { lo };
                 if let Some(idx) = self.find_layer_zone(&id, &direction, &dynamic, note, rr) {
-                    self.spawn_zone_voice(idx, note, VoiceKind::Legato, scale * expr, None, 0.0);
+                    if self.spawn_zone_voice(idx, note, VoiceKind::Legato, scale * expr, None, 0.0)
+                    {
+                        // Bound the attack sample: ring the bow attack, then
+                        // fade — it must not double the established body.
+                        if let Some(v) = self.voices.last_spawned_mut() {
+                            v.hold_then_release(hold, out);
+                        }
+                    }
                 }
             }
         }
