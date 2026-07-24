@@ -140,6 +140,13 @@ jobs:
     runs-on: [self-hosted, nix-host]
     needs: changes
     if: needs.changes.outputs.task == 'true'
+    # Registers a GitHub Deployment so runs show up under the repo's
+    # Deployments panel / Environments tab. The environment URL is the
+    # live app; the deployment goes green only after Verify live passes,
+    # so "Active" in GitHub means the cluster actually serves this sha.
+    environment:
+      name: task-production
+      url: https://task.starcommand.live
     steps:
       # Same forge-fallback as the changes job: the local mirror may not
       # have forge-side merge commits; `origin` of a local-first clone is
@@ -214,6 +221,11 @@ jobs:
     runs-on: [self-hosted, nix-host]
     needs: changes
     if: needs.changes.outputs.site == 'true'
+    # Same as deploy-task: a declared environment makes this run a real
+    # GitHub Deployment, green only after Verify live.
+    environment:
+      name: site-production
+      url: https://fasttrackstudio.app
     steps:
       # Same forge-fallback as the changes job: the local mirror may not
       # have forge-side merge commits; `origin` of a local-first clone is
