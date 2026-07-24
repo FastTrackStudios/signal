@@ -32,6 +32,8 @@ APP="$(cd ../.. && pwd)/target/dx/fasttrackstudio/debug/ios/Fasttrackstudio.app"
 # Local network: pack downloads dial the studio engine p2p (iroh direct
 # paths / LAN WebSocket) — without this key iOS drops the traffic.
 /usr/libexec/PlistBuddy -c "Add :NSLocalNetworkUsageDescription string 'Connects to your studio engine on the local network to stream and download sound packs.'" "$APP/Info.plist" 2>/dev/null || true
+/usr/libexec/PlistBuddy -c "Add :NSBonjourServices array" "$APP/Info.plist" 2>/dev/null || true
+/usr/libexec/PlistBuddy -c "Add :NSBonjourServices:0 string _fts._tcp" "$APP/Info.plist" 2>/dev/null || true
 
 echo "built: $APP"
 

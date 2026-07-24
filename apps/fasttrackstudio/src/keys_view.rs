@@ -56,7 +56,13 @@ fn sync_keep_awake(downloads: &HashMap<String, DlState>) {
 #[component]
 pub fn KeysShell(on_home: EventHandler<()>) -> Element {
     #[cfg(target_os = "ios")]
-    use_hook(crate::ios_orientation::portrait);
+    use_hook(|| {
+        crate::ios_orientation::portrait();
+        // Raise the Local Network prompt before the first p2p dial —
+        // without it iOS silently drops LAN traffic and every transfer
+        // crawls through the relays.
+        crate::ios_orientation::request_local_network();
+    });
 
     let keys = use_hook(try_consume_context::<KeysRigClient>);
     let mut page = use_signal(|| KeysPage::Play);

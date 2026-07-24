@@ -160,6 +160,10 @@ MARKETING_VER="${MARKETING_VER:-0.0.1}"
 # direct paths / LAN WebSocket); without this key iOS silently drops the
 # traffic and the pack host is unreachable on the same Wi-Fi.
 /usr/libexec/PlistBuddy -c "Add :NSLocalNetworkUsageDescription string 'Connects to your studio engine on the local network to stream and download sound packs.'" "$APP/Info.plist" 2>/dev/null || true
+# The Bonjour type the app browses to RAISE the local-network prompt —
+# iroh's raw UDP gets silently filtered instead of prompting without it.
+/usr/libexec/PlistBuddy -c "Add :NSBonjourServices array" "$APP/Info.plist" 2>/dev/null || true
+/usr/libexec/PlistBuddy -c "Add :NSBonjourServices:0 string _fts._tcp" "$APP/Info.plist" 2>/dev/null || true
 /usr/libexec/PlistBuddy -c "Add :UIFileSharingEnabled bool true" "$APP/Info.plist" 2>/dev/null || true
 /usr/libexec/PlistBuddy -c "Add :LSSupportsOpeningDocumentsInPlace bool true" "$APP/Info.plist" 2>/dev/null || true
 # TestFlight requires ITSAppUsesNonExemptEncryption declared (false = no

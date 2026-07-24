@@ -25,6 +25,33 @@ pub fn portrait() {
     request(MASK_PORTRAIT);
 }
 
+/// Force the Local Network permission prompt. iOS only asks when it
+/// notices "local network" API use, and iroh's raw UDP unicast gets
+/// silently filtered instead of prompting on recent iOS — so we kick a
+/// Bonjour browse (the canonical trigger; `NSBonjourServices` lists the
+/// type in Info.plist). The browser object is intentionally leaked so
+/// the search — and the prompt — survive this call. Call once from the
+/// keys surface, on the main thread.
+pub fn request_local_network() {
+    use std::sync::Once;
+    static ONCE: Once = Once::new();
+    ONCE.call_once(|| unsafe {
+        let browser: *mut AnyObject = msg_send![class!(NSNetServiceBrowser), new];
+        if browser.is_null() {
+            return;
+        }
+        let service_type = nsstring("_fts._tcp.");
+        let domain = nsstring("local.");
+        let _: () = msg_send![browser, searchForServicesOfType: service_type, inDomain: domain];
+    });
+}
+
+/// A retained `NSString` from a Rust str (leaked to the objc runtime).
+unsafe fn nsstring(s: &str) -> *mut AnyObject {
+    let c = std::ffi::CString::new(s).unwrap();
+    msg_send![class!(NSString), stringWithUTF8String: c.as_ptr()]
+}
+
 /// Keep the screen awake (`UIApplication.idleTimerDisabled`) — on while a
 /// pack download runs, since iOS suspends the app (and its sockets) when
 /// the phone locks.

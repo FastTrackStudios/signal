@@ -152,8 +152,16 @@ impl KeysRigBackend {
     }
 
     fn do_load_preset(&self, index: usize) {
-        let Some(tree) = self.program_for(index) else { return };
+        let Some(tree) = self.program_for(index) else {
+            if let Ok(mut s) = self.inner.state.lock() {
+                s.last_error = Some(format!("preset {index}: spec missing (re-scan needed?)"));
+            }
+            self.publish_all();
+            return;
+        };
         if !self.ensure_open() {
+            // ensure_open recorded last_error; make sure remotes see it.
+            self.publish_all();
             return;
         }
         if let Ok(mut rig) = self.inner.rig.lock() {
