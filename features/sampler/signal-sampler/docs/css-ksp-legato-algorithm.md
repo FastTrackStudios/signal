@@ -644,3 +644,336 @@ supplementary `%ftriy` fades `$tdjzq/$3ivkj/$u0t23` = 550/500/500.
   keyswitch map; which marketing name each corresponds to
   ("Sustain"/"Legato") was not confirmed from the script and is left
   unnamed here to avoid guessing.
+
+---
+
+## 11. Voice lifecycle / note-off (decoded round 2)
+
+Round-2 decode of what STOPS/FADES each voice and at what level each
+rings. Same sources: `script_1.ksp` line numbers, shipped numbers from
+`persistent_1.tsv`, group data from `groups.json`. Everything below was
+re-verified against the file — including a structural (if/else-matched)
+trace of the whole `on note` / `on release` nesting.
+
+### 11.0 CORRECTION — the 12xxx region is CHORD mode, not legato
+
+`$ra4sw` is the **"Legato / Chord" mode menu** (`1`=Legato, `0`=Chord;
+decl + items 5699-5704). `on note` splits on it:
+
+- `if ($ra4sw=0)` (12063) → **CHORD (polyphonic) path, 12064-17449.**
+  Per-note voices `%1wcdh`(body)/`%auysb`(MIDI id)/`%ftriy`(LT), the
+  same-note re-strike ("connected") logic at 12144, and the `$3tsb0`
+  math all live HERE.
+- `else` (17450) → **LEGATO (mono) path, 17450-20628** — first-note
+  branch `if (%f4tl5[$cztyy]=0 and $4pcsa<2)` 17526-17959, transition
+  branch 17960-20423.
+
+Consequences for earlier sections of this doc:
+
+- **`$3tsb0` (−6.0 dB) is CHORD-MODE ONLY.** Its UI label block is
+  literally `"Chord mode SUS"` / `"Vol."` (719-722). It is applied to
+  the chord body voice (12284→12289), the chord LT voice
+  (`$1z3x0 := $1z3x0+$3tsb0`, 12753), chord sustains (12945, 13004) and
+  chord release-sample gain (21222, debug string "ChordVol."). It never
+  appears in the mono legato path. §7.2's "connected-sustain trim on
+  legato notes" is a chord-mode rule; **do NOT apply −6 dB to legato
+  transition voices** (answers Q1's consequence: no).
+- §7.2/§7.5's cited line 12093/12753 volume math is the chord path; the
+  legato-path equivalents are at 19881-20093 (below).
+
+### 11.1 Q1 — `$dtxpw` is the mono-legato supplementary LT voice
+
+`$dtxpw` (decl 1427) is a **scalar** voice id — the legato-mode twin of
+chord-mode's per-note `%ftriy[note]`. One exists at a time.
+
+- **Played** only in the legato **transition** branch, inside
+  `if ($aguy2=1)` (19177-20154):
+  `$dtxpw := play_note($iikoh,$o1awo,$1fvjk*1000,0)` (19866), then
+  `EVENT_PAR_3 := 99` (19867 — its own release callback is a no-op) and
+  `MARK_1` (19868 — so note-off `by_marks` fades catch it).
+- **What it plays** (19472-19476): upward interval — note
+  `$iikoh = %2t4y1[1-$cztyy]` (source note), velocity
+  `$o1awo = $1e5yd` (=interval, 1-12); downward —
+  `$iikoh = %2t4y1[$cztyy]`, `$o1awo = $1e5yd+12` (13-24). Re-bow:
+  note = `$EVENT_NOTE`, vel = RR 30-32 (19779-19785). I.e. the
+  **interval-keyed legato-transition sample** — velocity encodes
+  interval+direction, groups from the `%4j3ee` allow-table
+  (19249-19420, `$ocjln=0`). The main `%jcxqm[new]` voice played
+  earlier at 18742 is the **destination body** (sustain groups), played
+  muted (`fade_out(...,1,0)` at 18746) and faded in by the crossfade
+  engine.
+- **`change_vol($dtxpw,$1z3x0*100,1)` (20093) applies the LT-voice trim
+  to `$dtxpw` ONLY** — not to `%jcxqm`, not to any sustain, not to the
+  "whole event chain". `$1z3x0` here is:
+  - `$ocjln=0` (20038-20086): the attack-transient env only —
+    `$4lqhx`=−30, `$ee3a4`=0, `$xu41m`=250, `$c2hkn`=2000 (shipped) ⇒
+    **−3.0 dB if this note comes ≤250 ms after the previous onset, else
+    0 dB**. Zone-3 exemption `$x0jlu` requires `$shybn=0`; shipped
+    `$shybn=1`, so zone 3 uses the same env (unlike chord mode's
+    unconditional zone-3 exemption at 12750).
+  - `$ocjln=6` (19884-20019): "LT Vol" IOI-lerp, breakpoints
+    `$14fyb`=150/`$3zzii`=300/`$lvqx4`=500 ms; anchors interval≤2:
+    `$ycnsk`=−90→`$nqjls`=0→`$us1ps`=0 (**−9.0 dB fast → 0 dB slow**);
+    interval>2: `$0uoxp`=−15→`$i0s2b`=0→`$fbfjs`=0 (−1.5 dB → 0). Plus
+    vel-vol `%lwgt4[51]` — computed from knob `$0kd5m` ("LT Vel.Vol.",
+    2968-2970), **shipped 0 ⇒ off** (9168-9172, `$vtafn`=0 too).
+  - `$ocjln` 2/3/4 (20020-20037): `$1z3x0 := $dzd3m` = **−18.0 dB**,
+    plus an unconditional `fade_out($dtxpw,$53oxo*1000,1)` = 1000 ms
+    (20104-20105).
+- **Re-bow special-case** (interval = 0; 20112-20139): the LT voice is
+  started SILENT (`fade_out($dtxpw,1,0)`, 20113) and faded in over
+  `$wtxmh`/`$iluqo`/`$thsyv` = **1 / 1 / 50 ms** per velocity zone
+  (packed-par variants `$ohdjc`/`$5wzgk`/`$t5nah` all ship 0 → plain
+  `fade_in`).
+
+### 11.2 Q2 — the `on release` handler (20771-21759), full decode
+
+Guards: events with `EVENT_PAR_3 = 99` **exit immediately**
+(20772-20774) — that filters `%grhcg`/`%u1bjb`/`%ftriy`/`$dtxpw`/
+`$nqqly` self-releases. Note range gate 20775 explicitly admits
+`$EVENT_NOTE=0` (the `$ntczb` helper, §11.5). `%EVENT_PAR[1]=0` (20786)
+= mono/legato events (mono MIDI events keep par1=0 from 10803; chord
+sets par1=1 at 12065) → the legato branches; `else` (21021) = the chord
+branches (kill `%1wcdh`/`%grhcg`/`%u1bjb`/…/`%ftriy` per note with
+plain `note_off`, 21033-21063).
+
+**(a) Held body/sustain at note-off of the CURRENT legato note**
+(`$EVENT_ID = %f4tl5[$cztyy]`, 20817-20892), pedal up (`$zs1l1=0`):
+
+1. 2 ms settle (`wait(2000)` µs, 20787-20788), force-finish a running
+   crossfade loop (20789-20816: `$u44ap:=0` + immediate
+   `note_off(%jcxqm[1-$cztyy])`).
+2. Mark bookkeeping: if the other slot voice exists,
+   `EVENT_PAR_3 := 3` ("Last") on both the MIDI event and
+   `%jcxqm[$cztyy]` (20819-20822).
+3. **`note_off(%jcxqm[0])` + `note_off(%jcxqm[1])` (20828-20829) — the
+   body voices are HARD note-off'd, NOT script-faded.** The audible
+   tail is the group amp-envelope release stage plus the release
+   SAMPLE. There is no 690 ms body fade in CSS — a long engine-side
+   body fade is exactly the phasy tail the task suspected.
+4. **LT voices** (everything `MARK_1` = `$dtxpw` + first-note overlay
+   `$nqqly`): `$ocjln≠6` → `fade_out(by_marks($MARK_1),$tukcw*1000,1)`
+   with **`$tukcw` = 400 ms shipped** (label "Fade out", 2419-2421;
+   fade at 20831). `$ocjln=6` → IOI-lerped fade of the LAST transition
+   IOI `$d5ans`: `$fjtlu`=150 → `$hbi2j`=281 → `$2ebzd`=281 ms over
+   breakpoints `$ikygg`=75 / `$2b4cs`=150 / `$rzdte`=500 ms
+   (20833-20864 — the §1.7 "retire fades" are these same knobs).
+5. `%2ezeo` (run-mode voices) faded over `$axgbh` only if `<3000`;
+   **shipped `$axgbh`=3000 = sentinel OFF** (20866-20872).
+6. Slots cleared (`$cztyy:=0`, `%f4tl5/%jcxqm/%2t4y1 := 0`,
+   20874-20880), `$ruzcg := 1` (release-trigger request, 20885).
+7. **Mono `%grhcg`/`%u1bjb` (`$ocjln=6` marcato-mod layers, played at
+   17764/17847 with dur 0) are NOT touched at note-off** — their FLEX
+   amp envelopes decay to zero on their own (e.g. "Main marcato mod mp"
+   final segments `[484,1,..],[6516,0,0.05]` ≈ 6.5 s self-decay;
+   groups.json idx 174). Only chord mode note-offs them (21038-21047).
+
+Pedal down (`$zs1l1=1`): nothing is stopped; the event is marked
+`$iwaqn` (20886-20888) and the whole sequence above is deferred to
+CC64-up, which does `note_off(by_marks($iwaqn))` (21801) so the release
+callbacks re-run then.
+
+**(b) The transition voice `%jcxqm`** — killed by the same
+`note_off(%jcxqm[0/1])` in step 3. For `$ocjln=6` ONLY, the current
+transition voice is additionally remembered (`$cpgu3 := %jcxqm[$cztyy]`,
+20825) and, after the release sample is played, **faded over `$ftqcv`**
+(21723-21751, gated `$ji3vf=1` shipped):
+
+| held time of the note | `$ftqcv` |
+|---|---|
+| < `$nmukf`=75 ms | `$nhrkt` = **80 ms** |
+| 75-175 ms (`$ks1cc`=175) | lerp 80 → 500 ms |
+| > 175 ms | `$ur4fp` = **500 ms** |
+| event marked par3=2 (note-in-phrase) | `$a3zg3` = 225 ms (21745-21750) |
+
+`$auan0`=0 shipped ⇒ the release SAMPLE itself is never faded
+(21752-21754).
+
+**(c) The release-sample trigger** (21130-21758). Requirements:
+`$2umbn = %yg1yz[note]` (the note's articulation) ∉ {1,7,5}
+(no releases for staccato/pizz/spiccato), `$ruzcg=1`, `$4p5kj=1`
+(master enable, shipped 1), then per-articulation enable `$cikng`
+(21145-21166; all ship 1). The final go/no-go and gain are decided by
+the event's `EVENT_PAR_3`:
+
+| par3 | meaning | fires? | gain `$gflmk` (dB×10) |
+|---|---|---|---|
+| 1 | "Single" (set on first-note events, 17858) | yes (21258-21317) | `$jljyh` × `%ru5pa[held]`/100; zone 3 additionally requires held ≥ `$5vclc`=0 |
+| 3 | "Last" (set at final note-off, 20820/20911) | yes (21338-21364) | `$ofpdo` × `%ru5pa[held]`/100 |
+| 2 | "note in phrase" (the `$ntczb` helper, §11.5) | yes if `$qlkx3`=1 (21319-21337) | `$tkzx0` flat (no held-time curve) |
+| 5 | "leg0" / re-bow helper | zone 1: no; zones 2/3: only if `$pnsjl`/`$ft4si` > 361 — shipped **−361 ⇒ never** (20992-21011) | (`$ofpdo`×curve + `$pnsjl`/`$ft4si`) |
+| 0 / unset | mid-chain legato-passed note | **no** (no branch sets `$ruzcg`; exit at 21401-21403) | — |
+
+Shipped numbers: `$jljyh` ("Min. vol.", 672-673) = **−6.0 dB**,
+`$ofpdo` ("MV leg.", 679-680) = **−6.0 dB**, `$tkzx0` per articulation:
+legato `$al55n`=**−6.0**, tremolo `$ehjuj`=−3.0, trills `$qtppl`=−3.0,
+marcato-mod/expressive `$mig2e`=**−8.0**, harmonics `$phh04`=−3.0 dB.
+`$kjwp2` ("Env.R1 vol", added at 21420 for `$ocjln=0`) is only ever
+assigned 0 (17533) — effectively 0, UNKNOWN whether another script slot
+can set it.
+
+**Held-time scaling `%ru5pa`** (21171-21196 etc.): index =
+`held_ms/10 − 1` clamped 0-99 (`$lh2xs`=1000 ⇒ the window is the first
+1000 ms), `%ru5pa` shipped = linear 100→1. So the base −6.0 dB is
+scaled: **held 10 ms → ×100% = −6.0 dB; held 500 ms → ×~50% = −3.0 dB;
+held ≥1 s → ×1% ≈ 0 dB.** Short notes get quiet releases; long notes
+get full-level releases.
+
+Mechanics of the trigger: `set_controller(36,$bgt3k)` (21422 — CC36
+carries the current dynamics into the release groups' modulator),
+velocity forced to 1 (`$zjtcc := 1`, 21464), allow only the release
+groups for `$2umbn` (21465-21705: `$ocjln=0` → `%oknf2`+`%v3sej`
+tables; 6 → `%h40z2`; 2 → `%4wxpn`; 4 → `%3j1bc`/`%yfch2` by
+`%vbpn3[note]`; 3 → `%ubjdd`), then
+`$i5yy5 := play_note($bv0ly,1,0,0)` + `change_vol($i5yy5,$gflmk*100,1)`
+(21706-21707). The table→family map is built at init from group
+start-criteria CC110/CC111 (4440-4545); the criteria values aren't in
+the extract, but by name the release families are `vibsus rel *` /
+`nonvib rel *` (legato), `marcato mod rel *`, `tremolo rel *`,
+`half/whole trills rel *`, `harmonics rel *` (groups.json idx 380-556).
+
+**Ambiguity (flagged, not guessed):** at a chain's final note-off,
+par3=3 is set on `%jcxqm[$cztyy]` (20821) *before* its `note_off`
+(20828); since `%jcxqm` voices are deliberately NOT marked 99, their
+release callback re-enters the handler and the par3=3 fallback
+(20985-20990) would fire a second "Last" release. Whether Kontakt
+delivers that callback in this ordering is UNVERIFIED — an engine
+should fire exactly **one** release sample per real note-off.
+
+### 11.3 Q3 — `%ftriy`/`$dtxpw` lifecycle; first-note anatomy
+
+**The 550/500/500 fades (`$tdjzq/$3ivkj/$u0t23`) are re-bow fades,
+triggered at NOTE-ON of a same-pitch re-strike — not at note-off and
+not by the crossfade.** Chord mode: 12144 (`%at25y[note]=note` = key
+already sounding) → fade the note's old `%oycvi`/`%ftriy` over
+550/500/500 ms by velocity zone (12160-12179). Legato mode: re-bow
+branch (`$EVENT_NOTE = $gfkjw`) fades the old `$dtxpw` over the same
+knobs (19227-19237, plus `%tv4ss` fades `$ve35s`/`$mdsyv` = 0 shipped).
+
+Full retire matrix for the supplementary LT voice (legato mode):
+
+| trigger | fade | evidence |
+|---|---|---|
+| next legato transition, `$ocjln=0` | `$cig1o` IOI-lerp: LL (shipped): **250 ms → 400 ms** over IOI 150→300 ms (`$muabx`/`$bj430`=250 → `$elc3z`/`$dkiqi`=400, bp `$2oy2u`=150/`$mde3u`=300, curve `%0hwcy` = linear; EX anchors `$w4sb3`/`$kcot0`=400). `$251z0`=1 ⇒ zone 2 uses the zone-3 row. | compute 17998-18069; apply 19180 |
+| next transition, `$ocjln=6`, voice still queued (hasn't sounded yet) | IOI-lerp `$whxyw`=200 → `$5zana`=225 → `$1du3v`=281 ms (bp `$uk2da`=150/`$krvzl`=250/`$yrqbj`=500); if already sounding: NOT faded here | 19183-19221 |
+| next transition, other articulations | `$4dsk1` = **800 ms** | 19223 |
+| re-bow | **550/500/500 ms** by zone | 19227-19237 |
+| note-off | MARK_1 fade: **400 ms** (`$ocjln≠6`) / 150→281 ms IOI (`=6`) | 20830-20864 |
+| two transitions later (voice from note n−2) | `$eyijx` faded `$jvqtp` = **250 ms** ("Old out") | 19239-19242 |
+| never retriggered on a held note | **rings to natural sample end** at its `$1z3x0` trim | — |
+
+So on a held note the LT/transition voice DOES ring out its full sample
+— but (i) at the trims of §11.1 (0 dB only for slow, soft `$ocjln=0`
+legato; −3/−9/−1.5 dB when fast), and (ii) it IS the bow-change/body
+sample for that transition — the destination body `%jcxqm` starts
+MUTED (18746) and is faded in by the crossfade engine, so there is no
+same-pitch full-gain doubling.
+
+**The FIRST note of a legato phrase has NO transition/LT voice at
+all** — `$dtxpw`/`%ftriy` play only in the transition branch
+(`$aguy2` block 19177+ / chord re-strike block 12294+). First-note
+anatomy (17526-17959, `$ocjln=0`, `$ksywl=1`):
+
+- zone 1: body `%jcxqm := play_note(note,$jpvdn,0,0)` (17596) from the
+  `%d2gsb` groups. That's it.
+- zone 2 (17915-17935): body is INSTANTLY MUTED (`fade_out(...,1,0)`,
+  17916); a separate attack sample `$nqqly := play_note(note,$jabns,
+  0,-1)` (17918; RR `%0bvoe`, par3=99, MARK_1, **dur −1** = auto
+  note-off at key release) carries the attack; after `$mqqoo` = **40
+  ms** the body fades in over `$otlef` = **230 ms** (17931-17934).
+- zone 3 (17936-17957): same shape, `$nvwzk` = **40 ms** wait,
+  `$yqhyd` = **180 ms** fade-in.
+
+So CSS's "first-note ornament" is a swap (attack sample INSTEAD of the
+body for 40 ms, then a 180-230 ms handover), never an addition. An
+engine playing a full ornament sample at full gain ON TOP of the
+sustain has no CSS counterpart — that is the same-pitch doubling/
+phasing. `$nqqly` is retired by: its own dur=−1 auto-release at
+note-off (group release env), plus the MARK_1 400 ms fade.
+
+### 11.4 Q4 — static group volumes (groups.json)
+
+**Every named group ships at 0.0 dB.** Checked all 609 groups
+(`volume` field, linear → dB):
+
+| family (all 5 mics: Spot1/Spot2/Main/Room/Mix) | vol |
+|---|---|
+| sustains: `vibsus ppp/p/mf/ff`, `nonvib p/mf/ff` | 0.0 dB |
+| transitions: `legato p/mf/ff`, `NVlegato p/mf/ff`, `portamento`, `NVportamento` | 0.0 dB |
+| Legzero/first-note: `legato zero p/mf/ff`, `NVlegato zero p/mf/ff` | 0.0 dB |
+| `marcato mod mp/mf/f/fff` (the `$ocjln=6` layers) | 0.0 dB |
+| `marc port`, `marc leg mf/f/fff` | **+0.04 dB** (1.0043-1.0050 linear — negligible) |
+| releases: `vibsus rel *`, `nonvib rel *`, `marcato mod rel *`, `half/whole trills rel *`, `tremolo rel *`, `harmonics rel *`, `marcato vel releases`, `mtrem vel releases` | 0.0 dB |
+| shorts, trems, trills, harmonics, runs (`run sim *` etc.) | 0.0 dB |
+| 222 unnamed padding groups (3 after each family block, no samples referenced by the script tables) | −6.02 dB (unused) |
+
+**Conclusion: there are NO static group-volume deltas to replicate.**
+Transition/retrigger/release groups do NOT sit N dB below sustains.
+All level differences come from (i) the script trims of §11.1-11.3,
+(ii) the per-group FLEX amp envelopes (present in groups.json
+`envelopes[].segments`, e.g. "Main legato mf" `[[80,..],[480,..],
+[1002,0,..]]` — segment semantics only partially decoded, UNKNOWN exact
+release-tail ms), and (iii) the recorded samples + CC1 crossfade
+curves (per-group `mods[]`, which DO differ between sustain and legato
+families). If S08/S09 intervals run ~+2.5 dB hot, the cause is engine-
+side summing (LT voice + body both at full level, or an un-retired
+previous LT voice), not a missing group trim.
+
+### 11.5 Q5 — old-note note-off during legato (the 54 ms case)
+
+When the old key's MIDI note-off arrives after the new note-on:
+
+- `$EVENT_ID = %f4tl5[1-$cztyy]` (20894-20906): **if the crossfade is
+  still running** (`$u44ap>0`), the outgoing `%jcxqm[1-$cztyy]` is
+  `note_off`'d IMMEDIATELY (its scheduled full-crossfade fade is
+  truncated; tail = group release env). If the crossfade already
+  finished — **nothing at all**. Either way `$ruzcg` stays 0 ⇒ the
+  fall-through trigger gate (21132) fails ⇒ **no release sample from
+  the old key's note-off.** Under pedal it is merely marked (20903-4).
+- Even after further transitions (event id no longer in either slot),
+  a legato-passed note's event has par3 = 1 (first note) or 0
+  (mid-chain) — neither has a fallback branch (20979-21017) ⇒ exit.
+
+**BUT the passed note is not release-silent** — its release sample is
+fired earlier, by the NEW note's `on note`, via the `$ntczb` helper
+(18077-18086): `play_note(0, vel, 0, 1)` — a 1 µs note at MIDI note 0,
+`EVENT_PAR_0 = old_note<<7 + zone`, par3 = **2** ("note in phrase";
+or **5** if re-bow). Its instant auto-release re-enters `on release`
+(note 0 admitted at 20775; par0 unpacked 20779-20781), hits the par3=2
+fallback (20979-20980) and plays the **"note in phrase" release for the
+OLD note at flat `$tkzx0` = −6.0 dB** (legato; −8.0 dB expressive;
+21319-21337), roughly at the moment the transition starts (post-OD).
+Re-bow (par3=5) release is shipped OFF (`$pnsjl`/`$ft4si` = −361).
+Chord mode has the same helper at 12146-12149.
+
+So: **suppress release samples on the old key's physical note-off for
+legato-passed notes; instead fire a fixed −6.0 dB release for the old
+note at transition time.**
+
+### 11.6 Engine changes (summary)
+
+1. **Note-off of the last held note**: stop the body voice immediately
+   (tail = group release env, sub-second) — kill the 690 ms body fade.
+   Fade LT/ornament voices **400 ms** (standard) / **150→281 ms**
+   IOI-lerped (expressive). Expressive only: fade the transition voice
+   **80→500 ms** scaled by held-time 75→175 ms.
+2. **Trigger ONE release sample at note-off**: gain −6.0 dB scaled
+   linearly to 0 dB as held time goes 0→1000 ms (`%ru5pa`), vel-1
+   layer, release group set per articulation. That sample carries the
+   tail — not a long body fade.
+3. **Legato-passed notes**: no release sample at their note-off; fire a
+   flat **−6.0 dB** "note in phrase" release at the moment the next
+   transition starts. None on re-bow.
+4. **First note**: NO transition/ornament voice. Zones 2/3 only: mute
+   body 40 ms, play attack sample, fade body in 230 ms (z2) / 180 ms
+   (z3); retire the attack voice at note-off (release env + 400 ms).
+5. **Retire the previous transition voice at every new transition**:
+   250→400 ms (IOI 150→300, shipped LL), 550/500/500 ms on re-bow,
+   250 ms for the n−2 voice; destination body starts muted and fades in
+   via the crossfade engine only.
+6. **Transition-voice level**: recorded level (0 dB) is correct for
+   slow standard legato; apply −3.0 dB when IOI < 250 ms (standard) or
+   −9.0 dB (steps) / −1.5 dB (leaps) lerping to 0 over IOI 150→300 ms
+   (expressive). Do NOT apply the −6 dB `$3tsb0` (chord-mode-only).
+7. **No group-volume deltas**: all CSS groups sit at 0 dB — remove any
+   engine-side static transition/release group trim assumptions.
