@@ -275,6 +275,27 @@ impl KeysRigSvc for KeysRigBackend {
         self.inner.state.lock().map(|s| s.presets.clone()).unwrap_or_default()
     }
 
+    fn rescan(&self) {
+        let (presets, specs) = scan_keyscape();
+        if let Ok(mut s) = self.inner.state.lock() {
+            // Keep the loaded preset marked if it survived the rescan.
+            let loaded_name =
+                s.loaded.and_then(|i| s.presets.get(i)).map(|p| p.name.clone());
+            s.loaded = loaded_name
+                .as_deref()
+                .and_then(|n| presets.iter().position(|p| p.name == n))
+                // Nothing loaded yet — same default as `new()`, so the
+                // first download lands on the LA Custom Rhodes.
+                .or_else(|| presets.iter().position(|p| p.name == "Rhodes - LA Custom"));
+            s.presets = presets;
+            s.specs = specs;
+            if let Some(i) = s.loaded {
+                s.presets[i].loaded = true;
+            }
+        }
+        self.publish_all();
+    }
+
     fn load_preset(&self, index: u32) {
         let b = self.clone();
         let _ = std::thread::Builder::new()

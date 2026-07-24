@@ -27,7 +27,7 @@ cd "$SCRIPT_DIR/.."
 DX_PACKAGE="${DX_PACKAGE:-fasttrackstudio}"
 DX_APP_DIR="${DX_APP_DIR:-apps/fasttrackstudio}"
 # No colon: an explicitly-empty DX_FEATURES (Task, default features) is honored.
-DX_FEATURES="${DX_FEATURES---no-default-features --features signal-guitar}"
+DX_FEATURES="${DX_FEATURES---no-default-features --features signal-guitar,signal-keys-rig}"
 # Bundle id the App Store profile is minted for — must match the built .app's
 # CFBundleIdentifier (from the package's Dioxus.toml).
 DX_BUNDLE_ID="${DX_BUNDLE_ID:-app.fasttrackstudio}"

@@ -1,0 +1,15 @@
+[package]
+name = "signal-pack-library"
+version.workspace = true
+edition = "2021"
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+signal-packs-proto.workspace = true
+architect = { workspace = true, features = ["vox"] }
+vox.workspace = true
+tokio = { workspace = true, features = ["fs", "io-util"] }
+walkdir.workspace = true
+sha2.workspace = true
+tracing.workspace = true

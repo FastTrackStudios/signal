@@ -14,6 +14,8 @@
 //! are provided as context, so every shared component works unchanged.
 
 use dioxus::prelude::*;
+#[cfg(feature = "signal-keys-rig")]
+use crate::keys_view;
 use signal_guitar_ui::proto::audio::AudioSettingsClient;
 use signal_guitar_ui::proto::AudioPrefs;
 use signal_guitar_ui::proto::rig::RigClient;
@@ -29,6 +31,9 @@ enum MobileScreen {
     Signal,
     /// The guitar rig (the one live instrument today).
     Rig,
+    /// The keys rig (sampler engine + downloaded packs).
+    #[cfg(feature = "signal-keys-rig")]
+    Keys,
 }
 
 /// Which rig page is showing (within `RigShell`).
@@ -65,6 +70,8 @@ pub fn MobileApp() -> Element {
                     let _ = provide_context(engine.rig.clone());
                     let _ = provide_context(engine.stream.clone());
                     let _ = provide_context(engine.settings.clone());
+                    #[cfg(feature = "signal-keys-rig")]
+                    let _ = provide_context(engine.keys.clone());
                     rsx! { Router {} }
                 }
                 None => rsx! {
@@ -89,14 +96,25 @@ fn Router() -> Element {
         MobileScreen::Home => rsx! {
             HomePage { on_open: move |s| screen.set(s) }
         },
-        MobileScreen::Signal => rsx! {
-            SignalChooser {
-                on_back: move |_| screen.set(MobileScreen::Home),
-                on_pick_guitar: move |_| screen.set(MobileScreen::Rig),
+        MobileScreen::Signal => {
+            let on_pick_keys = move |_| {
+                #[cfg(feature = "signal-keys-rig")]
+                screen.set(MobileScreen::Keys);
+            };
+            rsx! {
+                SignalChooser {
+                    on_back: move |_| screen.set(MobileScreen::Home),
+                    on_pick_guitar: move |_| screen.set(MobileScreen::Rig),
+                    on_pick_keys,
+                }
             }
-        },
+        }
         MobileScreen::Rig => rsx! {
             RigShell { on_home: move |_| screen.set(MobileScreen::Home) }
+        },
+        #[cfg(feature = "signal-keys-rig")]
+        MobileScreen::Keys => rsx! {
+            keys_view::KeysShell { on_home: move |_| screen.set(MobileScreen::Home) }
         },
     }
 }
@@ -165,10 +183,15 @@ fn SurfaceCard(
     }
 }
 
-/// Instrument chooser under Signal. Guitar is live; the rest await their
-/// mobile ports (their UIs pull desktop-only render deps today).
+/// Instrument chooser under Signal. Guitar is live; keys goes live with the
+/// `signal-keys-rig` feature; the rest await their mobile ports (their UIs
+/// pull desktop-only render deps today).
 #[component]
-fn SignalChooser(on_back: EventHandler<()>, on_pick_guitar: EventHandler<()>) -> Element {
+fn SignalChooser(
+    on_back: EventHandler<()>,
+    on_pick_guitar: EventHandler<()>,
+    on_pick_keys: EventHandler<()>,
+) -> Element {
     use_hook(crate::ios_orientation::portrait);
 
     rsx! {
@@ -189,8 +212,13 @@ fn SignalChooser(on_back: EventHandler<()>, on_pick_guitar: EventHandler<()>) ->
                 live: true,
                 on_open: move |_| on_pick_guitar.call(()),
             }
+            SurfaceCard {
+                title: "Keys",
+                sub: "Sampled pianos & EPs — streamed packs, live on this phone",
+                live: cfg!(feature = "signal-keys-rig"),
+                on_open: move |_| on_pick_keys.call(()),
+            }
             for (title, sub) in [
-                ("Keys", "Sampled pianos, pads & synths"),
                 ("Drums", "Sampled kits & e-drums"),
                 ("Bass", "DI + amp + synth bass"),
                 ("Vocals", "Live vocal FX chain"),

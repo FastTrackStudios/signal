@@ -45,7 +45,7 @@ echo "profile: $PROFILE"
 echo "=== building (device arch) ==="
 "$NIX" develop "$(git rev-parse --show-toplevel)" -c bash -c \
     "unset DEVELOPER_DIR SDKROOT; export PATH=$BIN_IOS:\$PATH; \
-     dx build --platform ios --device --no-default-features --features signal-guitar" \
+     dx build --platform ios --device --no-default-features --features signal-guitar,signal-keys-rig" \
     2>&1 | tail -2
 
 APP="$(git rev-parse --show-toplevel)/target/dx/fasttrackstudio/debug/ios/Fasttrackstudio.app"

@@ -45,6 +45,9 @@ default = ["signal", "session", "charts"]
 signal-guitar = [
     "dep:signal-guitar-proto",
     "dep:signal-guitar-ui",
+    # Pack downloads (pack_client.rs) — list + fetch .signalpacks from a
+    # pack host (the studio engine / a hosted mirror) over ws or iroh.
+    "dep:signal-packs-proto",
     "dep:session-ui",
     "dep:vox-core",
     "dep:vox-websocket",
@@ -58,7 +61,22 @@ signal-guitar = [
     "dep:vox",
     "dep:facet-json",
     "dep:futures-util",
+    # Pack downloads (pack_client.rs): progress channels + sha256 verify.
+    "dep:futures-channel",
+    "dep:sha2",
     "dep:eyre",
+]
+# The keys rig on the phone: the in-process sampler engine (signal-keys →
+# signal-sampler over CoreAudio, MIDI via midir/CoreMIDI) + the wire types
+# for the mobile keys view + pack downloads. iOS-clean by construction: the
+# phone view speaks signal-keys-proto directly and never pulls
+# signal-keys-ui (whose signal-ui Vello/baseview surfaces don't build for
+# iOS). Packs stream in via pack_client.rs and land in
+# Documents/FastTrackStudio/Packs/Keys.
+signal-keys-rig = [
+    "signal-guitar",
+    "dep:signal-keys",
+    "dep:signal-keys-proto",
 ]
 # The Session demo (iOS): setlist sections + a metronome click, WITHOUT the
 # heavy session/daw/reaper/tts stack. Only the iOS-clean cores — session-proto
@@ -94,6 +112,9 @@ signal = [
     "dep:signal-keys",
     "dep:signal-synth-rig",
     "dep:signal-sampler",
+    # Pack distribution: the engine serves its .signalpack library
+    # (native-only dep — no-op on the web build, same trick as above).
+    "dep:signal-pack-library",
     "dep:axum",
     "dep:tower-http",
 ]
@@ -156,6 +177,13 @@ tts = ["session-guide/tts"]
 name = "setlist_probe"
 required-features = ["signal", "session"]
 
+# PackLibrary probe: list a pack host's packs, download one with resume +
+# sha verify. `cargo run -p fasttrackstudio --example pack_probe
+# --no-default-features --features signal-guitar -- ws://127.0.0.1:4040/vox`.
+[[example]]
+name = "pack_probe"
+required-features = ["signal-guitar"]
+
 [dependencies]
 tracing.workspace = true
 
@@ -170,6 +198,7 @@ signal-keys-proto = { workspace = true, optional = true }
 signal-keys-ui = { workspace = true, optional = true }
 signal-synth-proto = { workspace = true, optional = true }
 signal-synth-ui = { workspace = true, optional = true }
+signal-packs-proto = { workspace = true, optional = true }
 
 # Session domain, wire surface — the SetlistService types + generated
 # clients (session-proto) compile everywhere, including the wasm remote.
@@ -259,12 +288,15 @@ signal-drums = { workspace = true, optional = true }
 signal-keys = { workspace = true, optional = true }
 signal-synth-rig = { workspace = true, optional = true }
 signal-sampler = { workspace = true, optional = true }
+signal-pack-library = { workspace = true, optional = true }
 axum = { workspace = true, optional = true }
 tower-http = { workspace = true, optional = true }
 # Watch bridge (engine_watch.rs): facet-json for the WatchState wire form,
 # futures-util for the SSE stream adapter.
 facet-json = { workspace = true, optional = true }
 futures-util = { workspace = true, optional = true }
+futures-channel = { workspace = true, optional = true }
+sha2 = { workspace = true, optional = true }
 # Engine mode serves the vox router over axum ws (+ iroh, from the
 # `signal` feature). Native-only extra features on the same architect dep.
 # `host` = the engine-binary bootstrap (architect::host) — runtime + tracing +

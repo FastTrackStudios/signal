@@ -86,6 +86,9 @@ pub mod keys {
         fn status(&self) -> KeysStatus;
         /// Every preset in the library (the browser).
         fn presets(&self) -> Vec<KeysPreset>;
+        /// Re-scan the pack library (after a download added packs) and
+        /// publish the updated preset list.
+        fn rescan(&self);
         /// Load preset `index` from [`presets`](Self::presets).
         fn load_preset(&self, index: u32);
         /// The loaded composition tree (engine → layers → blocks).

@@ -173,6 +173,13 @@ async fn async_main() {
         .merge_router(keys.router())
         .merge_router(synth.router());
 
+    // ── Pack library ──────────────────────────────────────────────────────
+    // Sample-pack distribution: serves the built `.signalpack` trees
+    // (proxy + full) so remotes — the phone keys rig above all — can list
+    // and download packs over the same `/vox` (and iroh p2p) endpoint.
+    let packs = signal_pack_library::PackLibraryBackend::new();
+    let router = router.merge_router(packs.router());
+
     // ── Session (the setlist player) ─────────────────────────────────────
     // Mount SetlistService (+ its `#[subscribe]` stream sibling) from the
     // in-process session engine bootstrapped in `run()`, so browser/desktop

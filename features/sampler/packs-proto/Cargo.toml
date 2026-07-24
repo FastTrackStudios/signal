@@ -1,0 +1,17 @@
+[package]
+name = "signal-packs-proto"
+version.workspace = true
+edition = "2021"
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+architect.workspace = true
+vox = { workspace = true, optional = true }
+vox-types = { workspace = true, optional = true }
+facet.workspace = true
+thiserror.workspace = true
+
+[features]
+default = ["vox"]
+vox = ["dep:vox", "dep:vox-types", "architect/vox"]

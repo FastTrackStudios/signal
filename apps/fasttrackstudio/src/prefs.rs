@@ -5,6 +5,11 @@
 
 #[cfg(not(target_arch = "wasm32"))]
 fn config_path(key: &str) -> Option<std::path::PathBuf> {
+    // Honor XDG_CONFIG_HOME — on iOS the app roots it under
+    // Documents/FastTrackStudio (the container's ~/.config isn't writable).
+    if let Some(xdg) = std::env::var_os("XDG_CONFIG_HOME") {
+        return Some(std::path::Path::new(&xdg).join("fts").join(key));
+    }
     let home = std::env::var_os("HOME")?;
     Some(std::path::Path::new(&home).join(".config/fts").join(key))
 }

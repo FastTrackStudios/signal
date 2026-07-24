@@ -1,0 +1,113 @@
+//! Network probe for the engine's PackLibrary service — list the host's
+//! packs, optionally download one (with resume) and verify its sha256.
+//!
+//! ```bash
+//! # list
+//! cargo run -p fasttrackstudio --example pack_probe \
+//!     --no-default-features --features signal-guitar -- ws://127.0.0.1:4040/vox
+//! # download
+//! cargo run -p fasttrackstudio --example pack_probe \
+//!     --no-default-features --features signal-guitar -- \
+//!     ws://127.0.0.1:4040/vox "Wurlitzer 200A" /tmp/packs
+//! ```
+
+use std::io::Write as _;
+
+use signal_packs_proto::packs::PackLibraryClient;
+use signal_packs_proto::PackChunk;
+
+#[tokio::main]
+async fn main() -> eyre::Result<()> {
+    let mut args = std::env::args().skip(1);
+    let url = args.next().unwrap_or_else(|| "ws://127.0.0.1:4040/vox".into());
+    let want = args.next();
+    let dest = args.next().map(std::path::PathBuf::from);
+
+    let link = vox_websocket::WsLink::connect(&url)
+        .await
+        .map_err(|e| eyre::eyre!("ws connect {url}: {e:?}"))?;
+    let client: PackLibraryClient = vox_core::initiator_on(link)
+        .establish()
+        .await
+        .map_err(|e| eyre::eyre!("vox handshake: {e:?}"))?;
+
+    let packs = client.packs().await.map_err(|e| eyre::eyre!("packs: {e:?}"))?;
+    println!("{} packs on {url}:", packs.len());
+    for p in &packs {
+        println!(
+            "  [{}] {} / {} — {:.2} GB  sha256={}",
+            p.variant,
+            p.category,
+            p.name,
+            p.size_bytes as f64 / 1e9,
+            if p.sha256.is_empty() { "<pending>" } else { &p.sha256[..16] },
+        );
+    }
+
+    let Some(name) = want else { return Ok(()) };
+    let info = packs
+        .iter()
+        .find(|p| p.name == name && p.variant == "proxy")
+        .or_else(|| packs.iter().find(|p| p.name == name))
+        .ok_or_else(|| eyre::eyre!("no pack named {name:?} on host"))?;
+    let dest = dest.unwrap_or_else(|| "/tmp/packs".into());
+    std::fs::create_dir_all(&dest)?;
+    let part = dest.join(format!("{}.signalpack.part", info.name));
+    let final_path = dest.join(format!("{}.signalpack", info.name));
+    let start = std::fs::metadata(&part).map(|m| m.len()).unwrap_or(0);
+    println!("downloading [{}] {} from byte {start}…", info.variant, info.name);
+    let mut file = std::fs::OpenOptions::new().create(true).append(true).open(&part)?;
+
+    let (tx, mut rx) = vox::channel::<PackChunk>();
+    let read_call = client.read(info.name.clone(), info.variant.clone(), start, tx);
+    let total = info.size_bytes;
+    let mut done = start;
+    let started = std::time::Instant::now();
+    let drain = async {
+        while let Ok(Some(chunk)) = rx.recv().await {
+            let chunk = chunk.get();
+            file.write_all(&chunk.bytes)?;
+            done += chunk.bytes.len() as u64;
+            if done % (64 * 1024 * 1024) < chunk.bytes.len() as u64 {
+                println!(
+                    "  {:.1}% — {:.1} MB/s",
+                    done as f64 * 100.0 / total as f64,
+                    (done - start) as f64 / 1e6 / started.elapsed().as_secs_f64(),
+                );
+            }
+        }
+        Ok::<_, std::io::Error>(())
+    };
+    let (read_result, drain_result) = futures_util::join!(read_call, drain);
+    read_result.map_err(|e| eyre::eyre!("read: {e:?}"))?;
+    drain_result?;
+    file.flush()?;
+    drop(file);
+
+    eyre::ensure!(done == total, "incomplete: {done} of {total} bytes");
+    if !info.sha256.is_empty() {
+        use sha2::Digest as _;
+        use std::io::Read as _;
+        let mut hasher = sha2::Sha256::new();
+        let mut f = std::fs::File::open(&part)?;
+        let mut buf = vec![0u8; 4 * 1024 * 1024];
+        loop {
+            let n = f.read(&mut buf)?;
+            if n == 0 {
+                break;
+            }
+            hasher.update(&buf[..n]);
+        }
+        let hex = format!("{:x}", hasher.finalize());
+        eyre::ensure!(hex == info.sha256, "sha256 mismatch: {hex} != {}", info.sha256);
+        println!("sha256 verified ✓");
+    }
+    std::fs::rename(&part, &final_path)?;
+    println!(
+        "done → {} ({:.2} GB in {:.0?})",
+        final_path.display(),
+        total as f64 / 1e9,
+        started.elapsed(),
+    );
+    Ok(())
+}

@@ -21,7 +21,7 @@ ln -sf /usr/bin/xcodebuild "$BIN_IOS/xcodebuild"
 unset DEVELOPER_DIR SDKROOT
 export PATH="$BIN_IOS:$PATH"
 
-dx build --platform ios --no-default-features --features signal-guitar
+dx build --platform ios --no-default-features --features signal-guitar,signal-keys-rig
 
 APP="$(cd ../.. && pwd)/target/dx/fasttrackstudio/debug/ios/Fasttrackstudio.app"
 

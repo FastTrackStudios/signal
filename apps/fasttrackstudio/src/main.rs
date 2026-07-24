@@ -38,8 +38,14 @@ mod guide;
 mod prefs;
 // The shared "dial the engine" plumbing every remote surface uses (rig
 // views + the browser session player).
-#[cfg(any(feature = "signal", feature = "session"))]
+#[cfg(any(feature = "signal", feature = "session", feature = "signal-guitar"))]
 mod remote;
+/// Pack downloads — list + fetch `.signalpack`s from a pack host (the
+/// studio engine or a hosted mirror) over the shared remote plumbing.
+/// (Dead-code allowed: only the iOS keys shell drives it today.)
+#[allow(dead_code)]
+#[cfg(all(feature = "signal-guitar", not(target_arch = "wasm32")))]
+mod pack_client;
 #[cfg(feature = "signal")]
 mod rig_view;
 // The in-process session player (daw-standalone + audio + guide) is
@@ -79,6 +85,12 @@ mod ios_orientation;
 mod rig_engine;
 #[cfg(all(feature = "signal-guitar", target_os = "ios"))]
 mod mobile_view;
+/// The phone keys rig view (Play + pack Library). Compiled on every
+/// native target so the Linux workspace check covers it; only the iOS
+/// shell mounts it.
+#[allow(dead_code)]
+#[cfg(all(feature = "signal-keys-rig", not(target_arch = "wasm32")))]
+mod keys_view;
 
 fn main() {
     // NVIDIA + Wayland: force the WebKitGTK webview through XWayland before
@@ -140,6 +152,15 @@ fn main() {
             // Documents/FastTrackStudio/signal.
             // SAFETY: single-threaded, before the engine bootstrap spawns.
             unsafe { std::env::set_var("XDG_CONFIG_HOME", &app_root) };
+            // Downloaded keys packs (pack_client.rs) live beside the config,
+            // Files-app visible; the keys rig scans this dir.
+            #[cfg(feature = "signal-keys-rig")]
+            {
+                let packs = app_root.join("Packs/Keys");
+                let _ = std::fs::create_dir_all(&packs);
+                // SAFETY: single-threaded, before the engine bootstrap spawns.
+                unsafe { std::env::set_var("FTS_KEYSCAPE_PACKS", &packs) };
+            }
         }
         ios_audio::configure();
         match rig_engine::bootstrap_blocking() {

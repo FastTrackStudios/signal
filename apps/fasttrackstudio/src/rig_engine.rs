@@ -17,6 +17,8 @@ use architect::rig::RigBackend as _;
 use signal_guitar::proto::audio::AudioSettingsClient;
 use signal_guitar::proto::rig::{Rig as _, RigClient, RigStreamClient};
 use signal_guitar::GuitarRigBackend;
+#[cfg(feature = "signal-keys-rig")]
+use signal_keys_proto::keys::{KeysRigClient, KeysRigStreamClient};
 
 /// The embedded rig: the backend + the established in-process clients.
 #[derive(Clone)]
@@ -24,6 +26,12 @@ pub struct RigEngine {
     pub rig: RigClient,
     pub stream: RigStreamClient,
     pub settings: AudioSettingsClient,
+    /// The in-process keys rig (sampler engine) — dormant until the keys
+    /// view starts it.
+    #[cfg(feature = "signal-keys-rig")]
+    pub keys: KeysRigClient,
+    #[cfg(feature = "signal-keys-rig")]
+    pub keys_stream: KeysRigStreamClient,
     /// Keeps the LocalServer acceptor tasks alive for the app's lifetime.
     _scope: Arc<architect::Scope>,
 }
@@ -61,6 +69,14 @@ pub fn bootstrap_blocking() -> eyre::Result<()> {
         let backend = GuitarRigBackend::new();
         let router = backend.router();
 
+        // The keys rig mounts on the same in-process router — one more
+        // backend + merge_router, exactly the engine_main.rs wiring. It
+        // stays dormant (no audio) until the keys view starts it.
+        #[cfg(feature = "signal-keys-rig")]
+        let keys_backend = signal_keys::KeysRigBackend::new();
+        #[cfg(feature = "signal-keys-rig")]
+        let router = router.merge_router(keys_backend.router());
+
         let scope = architect::Scope::new();
         let server = architect::LocalServer::serve(router, scope.clone());
         let rig: RigClient = server
@@ -75,6 +91,16 @@ pub fn bootstrap_blocking() -> eyre::Result<()> {
             .establish()
             .await
             .map_err(|e| eyre::eyre!("audio settings client: {e:?}"))?;
+        #[cfg(feature = "signal-keys-rig")]
+        let keys: KeysRigClient = server
+            .establish()
+            .await
+            .map_err(|e| eyre::eyre!("keys client: {e:?}"))?;
+        #[cfg(feature = "signal-keys-rig")]
+        let keys_stream: KeysRigStreamClient = server
+            .establish()
+            .await
+            .map_err(|e| eyre::eyre!("keys stream client: {e:?}"))?;
 
         // Open the audio device + load the profile (returns immediately;
         // the open happens on the backend's own thread). On iOS we only
@@ -89,7 +115,16 @@ pub fn bootstrap_blocking() -> eyre::Result<()> {
             backend.start();
         }
 
-        Ok::<_, eyre::Report>(RigEngine { rig, stream, settings, _scope: scope })
+        Ok::<_, eyre::Report>(RigEngine {
+            rig,
+            stream,
+            settings,
+            #[cfg(feature = "signal-keys-rig")]
+            keys,
+            #[cfg(feature = "signal-keys-rig")]
+            keys_stream,
+            _scope: scope,
+        })
     })?;
 
     let _ = ENGINE.set(engine);

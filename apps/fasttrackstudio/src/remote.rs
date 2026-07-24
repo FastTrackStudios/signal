@@ -19,7 +19,10 @@ use crate::prefs;
 pub(crate) fn server_url() -> String {
     std::env::var("SIGNAL_ENGINE_URL")
         .or_else(|_| std::env::var("RIGD_URL"))
-        .unwrap_or_else(|_| "ws://127.0.0.1:4040/vox".to_string())
+        .ok()
+        // No env on iOS — the phone saves the engine URL from its connect UI.
+        .or_else(|| prefs::get("signal-engine-ws-url"))
+        .unwrap_or_else(|| "ws://127.0.0.1:4040/vox".to_string())
 }
 
 #[cfg(target_arch = "wasm32")]
