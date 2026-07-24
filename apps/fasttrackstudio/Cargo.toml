@@ -192,6 +192,11 @@ required-features = ["signal-guitar"]
 name = "iroh_echo"
 required-features = ["signal-guitar"]
 
+# KeysRig service probe (the browser remote's establish, verbosely).
+[[example]]
+name = "keys_probe"
+required-features = ["signal"]
+
 [dependencies]
 tracing.workspace = true
 

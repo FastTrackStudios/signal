@@ -18,8 +18,8 @@ use daw_audio_io::AudioIoPrefs;
 use midicore::MidiEvent;
 use signal_keys_proto::keys::{KeysEvent, KeysRig as KeysRigSvc, KeysRigStreamSource};
 use signal_keys_proto::{
-    KeysEngineModel, KeysLayerModel, KeysMixer, KeysNode, KeysPerform, KeysPreset, KeysStack,
-    KeysStatus,
+    KeysEngineModel, KeysLayerDetail, KeysLayerModel, KeysMacro, KeysMixer, KeysNode, KeysPerform,
+    KeysPreset, KeysStack, KeysStatus,
 };
 
 use crate::profile::{KeysProfile, worship_profile};
@@ -70,6 +70,77 @@ struct LaneState {
     gain_db: f32,
     muted: bool,
     soloed: bool,
+    /// Macro values by id — the layer-zoom Play page's state. Defaults come
+    /// from [`macro_defs`]; only ids in that table are accepted.
+    macros: BTreeMap<String, f32>,
+}
+
+/// One macro's declaration: id, panel, display name, range, unit, and whether
+/// its block has DSP yet (the engine's stack is placeholder-first — see
+/// `signal_synth::engine`).
+struct MacroDef {
+    id: &'static str,
+    name: &'static str,
+    group: &'static str,
+    default: f32,
+    min: f32,
+    max: f32,
+    unit: &'static str,
+    live: bool,
+}
+
+/// The canonical macro surface every Signal Engine layer exposes. Grouped
+/// into the layer-zoom's panels; the order here is the render order.
+///
+/// `live` marks the ones that reach DSP today: the sampler's amp envelope and
+/// unison are real block params, the rest wait on their block's
+/// implementation (filters, vibrato, ambience, FX are placeholders that pass
+/// audio through).
+const MACROS: &[MacroDef] = &[
+    // Source
+    MacroDef { id: "source.level", name: "Level", group: "Source", default: 0.0, min: -24.0, max: 12.0, unit: "dB", live: true },
+    MacroDef { id: "source.pan", name: "Pan", group: "Source", default: 0.0, min: -1.0, max: 1.0, unit: "", live: false },
+    MacroDef { id: "source.transpose", name: "Transpose", group: "Source", default: 0.0, min: -24.0, max: 24.0, unit: "st", live: false },
+    MacroDef { id: "source.unison", name: "Unison", group: "Source", default: 1.0, min: 1.0, max: 8.0, unit: "v", live: true },
+    MacroDef { id: "source.detune", name: "Detune", group: "Source", default: 0.1, min: 0.0, max: 2.0, unit: "", live: true },
+    // Tone
+    MacroDef { id: "tone.warmth", name: "Warmth", group: "Tone", default: 0.5, min: 0.0, max: 1.0, unit: "", live: false },
+    MacroDef { id: "tone.drive", name: "Drive", group: "Tone", default: 0.0, min: 0.0, max: 1.0, unit: "", live: false },
+    MacroDef { id: "tone.body", name: "Body", group: "Tone", default: 0.5, min: 0.0, max: 1.0, unit: "", live: false },
+    // Filter
+    MacroDef { id: "filter.cutoff", name: "Cutoff", group: "Filter", default: 20000.0, min: 20.0, max: 20000.0, unit: "Hz", live: false },
+    MacroDef { id: "filter.reso", name: "Resonance", group: "Filter", default: 0.0, min: 0.0, max: 1.0, unit: "", live: false },
+    MacroDef { id: "filter.env_amt", name: "Env Amount", group: "Filter", default: 0.0, min: -1.0, max: 1.0, unit: "", live: false },
+    // Filter Env
+    MacroDef { id: "fenv.attack", name: "Attack", group: "Filter Env", default: 5.0, min: 0.0, max: 5000.0, unit: "ms", live: false },
+    MacroDef { id: "fenv.decay", name: "Decay", group: "Filter Env", default: 300.0, min: 0.0, max: 5000.0, unit: "ms", live: false },
+    MacroDef { id: "fenv.sustain", name: "Sustain", group: "Filter Env", default: 0.7, min: 0.0, max: 1.0, unit: "", live: false },
+    MacroDef { id: "fenv.release", name: "Release", group: "Filter Env", default: 200.0, min: 0.0, max: 8000.0, unit: "ms", live: false },
+    // Amp Env — the sampler's real attack/release.
+    MacroDef { id: "aenv.attack", name: "Attack", group: "Amp Env", default: 0.0, min: 0.0, max: 5000.0, unit: "ms", live: true },
+    MacroDef { id: "aenv.decay", name: "Decay", group: "Amp Env", default: 0.0, min: 0.0, max: 5000.0, unit: "ms", live: false },
+    MacroDef { id: "aenv.sustain", name: "Sustain", group: "Amp Env", default: 1.0, min: 0.0, max: 1.0, unit: "", live: false },
+    MacroDef { id: "aenv.release", name: "Release", group: "Amp Env", default: 120.0, min: 0.0, max: 8000.0, unit: "ms", live: true },
+    // Vibrato
+    MacroDef { id: "vib.rate", name: "Rate", group: "Vibrato", default: 5.0, min: 0.1, max: 12.0, unit: "Hz", live: false },
+    MacroDef { id: "vib.depth", name: "Depth", group: "Vibrato", default: 0.0, min: 0.0, max: 1.0, unit: "", live: false },
+    MacroDef { id: "vib.delay", name: "Delay", group: "Vibrato", default: 300.0, min: 0.0, max: 3000.0, unit: "ms", live: false },
+    // Ambience
+    MacroDef { id: "amb.size", name: "Size", group: "Ambience", default: 0.5, min: 0.0, max: 1.0, unit: "", live: false },
+    MacroDef { id: "amb.mix", name: "Mix", group: "Ambience", default: 0.15, min: 0.0, max: 1.0, unit: "", live: false },
+    MacroDef { id: "amb.predelay", name: "Pre-delay", group: "Ambience", default: 20.0, min: 0.0, max: 250.0, unit: "ms", live: false },
+    // Effects
+    MacroDef { id: "fx.chorus", name: "Chorus", group: "Effects", default: 0.0, min: 0.0, max: 1.0, unit: "", live: false },
+    MacroDef { id: "fx.delay", name: "Delay", group: "Effects", default: 0.0, min: 0.0, max: 1.0, unit: "", live: false },
+    MacroDef { id: "fx.width", name: "Width", group: "Effects", default: 0.5, min: 0.0, max: 1.0, unit: "", live: false },
+];
+
+fn macro_def(id: &str) -> Option<&'static MacroDef> {
+    MACROS.iter().find(|m| m.id == id)
+}
+
+fn default_macros() -> BTreeMap<String, f32> {
+    MACROS.iter().map(|m| (m.id.to_string(), m.default)).collect()
 }
 
 #[derive(Clone, Debug, Default)]
@@ -97,6 +168,7 @@ impl State {
                         gain_db: layer.gain_db,
                         muted: false,
                         soloed: false,
+                        macros: default_macros(),
                     },
                 );
             }
@@ -749,6 +821,60 @@ impl KeysRigSvc for KeysRigBackend {
             });
     }
 
+    fn layer_detail(&self, layer: String) -> KeysLayerDetail {
+        let Ok(s) = self.inner.state.lock() else { return KeysLayerDetail::default() };
+        let Some(lane) = s.lanes.get(&layer) else { return KeysLayerDetail::default() };
+        let (key_lo, key_hi) = s
+            .profile
+            .layer(&layer)
+            .map(|(_, l)| (l.key_lo as u32, l.key_hi as u32))
+            .unwrap_or((0, 127));
+        let macros = MACROS
+            .iter()
+            .map(|def| KeysMacro {
+                id: def.id.to_string(),
+                name: def.name.to_string(),
+                group: def.group.to_string(),
+                value: lane.macros.get(def.id).copied().unwrap_or(def.default),
+                min: def.min,
+                max: def.max,
+                unit: def.unit.to_string(),
+                live: def.live && !lane.patch.is_empty(),
+            })
+            .collect();
+        // The lane's own subtree of the live program — the Signal Engine
+        // stack this patch is running through.
+        let tree = s
+            .tree
+            .as_ref()
+            .and_then(|t| t.find(&layer).map(|c| node_of(c, "")))
+            .unwrap_or_default();
+        KeysLayerDetail {
+            layer: layer.clone(),
+            engine: lane.engine.clone(),
+            patch: lane.patch.clone(),
+            gain_db: lane.gain_db,
+            muted: lane.muted,
+            key_lo,
+            key_hi,
+            macros,
+            tree,
+        }
+    }
+
+    fn set_layer_macro(&self, layer: String, id: String, value: f32) {
+        let Some(def) = macro_def(&id) else { return };
+        if let Ok(mut s) = self.inner.state.lock() {
+            let Some(lane) = s.lanes.get_mut(&layer) else { return };
+            lane.macros.insert(id, value.clamp(def.min, def.max));
+        }
+        // `source.level` rides the lane fader, which is a live cell.
+        if def.id == "source.level" {
+            self.apply_mixer();
+        }
+        self.publish_mixer();
+    }
+
     fn clear_layer(&self, layer: String) {
         {
             let Ok(mut s) = self.inner.state.lock() else { return };
@@ -897,7 +1023,15 @@ fn keys_program(name: &str, spec: String) -> Container {
 fn scan_keyscape() -> (Vec<KeysPreset>, Vec<PathBuf>) {
     let packs_root =
         std::env::var("FTS_KEYSCAPE_PACKS").unwrap_or_else(|_| KEYSCAPE_PACKS_ROOT.into());
-    let (packs, pack_specs) = scan_packs(&packs_root);
+    let (mut packs, mut pack_specs) = scan_packs(&packs_root);
+    // One engine, one library: the Omnisphere soundsources are loadable into
+    // any lane exactly like a Keyscape pack (they're both just sources for
+    // the Signal Engine's Soundsource block).
+    let omni_root =
+        std::env::var("FTS_OMNISPHERE_PACKS").unwrap_or_else(|_| OMNISPHERE_PACKS_ROOT.into());
+    let (omni, omni_specs) = scan_packs_recursive(&omni_root);
+    packs.extend(omni);
+    pack_specs.extend(omni_specs);
     if !packs.is_empty() {
         return (packs, pack_specs);
     }
@@ -917,6 +1051,45 @@ fn scan_keyscape() -> (Vec<KeysPreset>, Vec<PathBuf>) {
                 presets.push(KeysPreset { kind: kind_of(&name), name, loaded: false });
                 specs.push(styx);
             }
+        }
+    }
+    (presets, specs)
+}
+
+/// Root of the built Omnisphere soundsource packs — the synth half of the
+/// shared library. Override with `FTS_OMNISPHERE_PACKS`.
+const OMNISPHERE_PACKS_ROOT: &str =
+    "/run/media/AudioHaven/Signal/Libraries/Keys/Omnisphere/Packs";
+
+/// Enumerate `*.signalpack` files under `root`, at any depth (the Omnisphere
+/// library nests by family). The file stem is the source name.
+fn scan_packs_recursive(root: &str) -> (Vec<KeysPreset>, Vec<PathBuf>) {
+    let mut presets = Vec::new();
+    let mut specs = Vec::new();
+    let mut stack = vec![PathBuf::from(root)];
+    while let Some(dir) = stack.pop() {
+        let Ok(entries) = std::fs::read_dir(&dir) else { continue };
+        let mut found: Vec<PathBuf> = Vec::new();
+        for e in entries.flatten() {
+            let p = e.path();
+            if p.is_dir() {
+                stack.push(p);
+            } else if p.extension().is_some_and(|x| x.eq_ignore_ascii_case("signalpack")) {
+                found.push(p);
+            }
+        }
+        found.sort();
+        for pack in found {
+            let Some(name) = pack.file_stem().and_then(|s| s.to_str()) else { continue };
+            if name.is_empty() {
+                continue;
+            }
+            presets.push(KeysPreset {
+                kind: "Synth".into(),
+                name: name.to_string(),
+                loaded: false,
+            });
+            specs.push(pack);
         }
     }
     (presets, specs)

@@ -13,10 +13,14 @@
 //! (that would form a `sampler → synth → sampler` cycle), so any caller that
 //! wants the Omnisphere built-ins calls this after `PresetRegistry::with_builtins`.
 
+/// The Signal Engine — the canonical layer program every rig loads
+/// patches into (source stack → filters → amp → FX + modulators).
+pub mod engine;
 pub mod omni;
 pub mod omni_import;
 pub mod pack;
 
+pub use engine::{Source, signal_layer};
 pub use omni::{omnisphere_preset, omnisphere_soundsource_preset};
 
 /// Register the Omnisphere built-in presets into `r`.

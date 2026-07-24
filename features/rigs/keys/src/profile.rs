@@ -183,9 +183,24 @@ impl KeysProfile {
     pub fn build_tree(&self, resolve: impl Fn(&str) -> Option<String>) -> Container {
         let mut engines = Container::parallel("Engines");
         for engine in &self.engines {
-            let mut eng = Container::engine(&engine.name).volume(engine.gain_db);
+            let eng = Container::engine(&engine.name).volume(engine.gain_db);
+            // Layers SUM — an engine's lanes are voices played together, not
+            // a chain (a serial engine would let the last lane overwrite the
+            // ones before it). Same shape as the Nord reference program.
+            let mut voices = Container::parallel(format!("{} Voices", engine.name));
             for layer in &engine.layers {
-                let mut lane = Container::layer(&layer.name).volume(layer.gain_db);
+                // EVERY lane is a Signal Engine layer — the same source →
+                // filters → amp → FX program whether the patch is a Keyscape
+                // piano, an Omnisphere soundsource or a wavetable. That's why
+                // one layer-zoom surface can control all of them.
+                let spec = (!layer.patch.is_empty())
+                    .then(|| resolve(&layer.patch))
+                    .flatten();
+                let mut lane = signal_synth::signal_layer(
+                    &layer.name,
+                    signal_synth::Source::sample(spec),
+                )
+                .volume(layer.gain_db);
                 if !layer.is_full_range() {
                     lane = lane.zone(signal_sampler::rig_node::Zone {
                         key_lo: layer.key_lo,
@@ -193,18 +208,9 @@ impl KeysProfile {
                         ..signal_sampler::rig_node::Zone::full()
                     });
                 }
-                lane = match (!layer.patch.is_empty())
-                    .then(|| resolve(&layer.patch))
-                    .flatten()
-                {
-                    // The patch IS the sample block's spec — the whole
-                    // block/module system underneath, unchanged.
-                    Some(spec) => lane.sample_block(&layer.patch, spec),
-                    None => lane,
-                };
-                eng = eng.add(lane);
+                voices = voices.add(lane);
             }
-            engines = engines.add(eng);
+            engines = engines.add(eng.add(voices));
         }
         Container::preset(&self.name).add(engines).add(
             // Global tail — one shared rotary for the organ, master reverb.
@@ -260,7 +266,11 @@ pub fn worship_profile() -> KeysProfile {
             EngineDef {
                 name: "Pad".into(),
                 gain_db: 0.0,
-                layers: vec![LayerDef::new("Pad", "")],
+                // The wash under everything: the OB-8 big-strings soundsource
+                // that "American Obesity" (the Live Keyboardist pad we've been
+                // auto-loading in the synth rig) is built on. It's an ordinary
+                // source for the Signal Engine, same as a Keyscape pack.
+                layers: vec![LayerDef::new("Pad", "OB-8 PWM Big Strings")],
             },
         ],
         stacks: vec![

@@ -80,6 +80,46 @@ pub struct KeysMixer {
     pub master_db: f32,
 }
 
+// ── Layer zoom (the play surface for one lane) ──────────────────────────────
+
+/// One controllable macro on a layer — the knobs the zoomed-in layer view
+/// renders, grouped into panels (Filter, Amp Env, Vibrato, …).
+#[derive(Clone, PartialEq, Debug, Default, Facet)]
+pub struct KeysMacro {
+    /// Stable id, unique within the layer ("filter.cutoff").
+    pub id: String,
+    /// Display name ("Cutoff").
+    pub name: String,
+    /// Panel this macro belongs to ("Filter") — see the engine's macro groups.
+    pub group: String,
+    pub value: f32,
+    pub min: f32,
+    pub max: f32,
+    /// Display unit ("Hz", "ms", "%", "st"); empty for a bare number.
+    pub unit: String,
+    /// Whether the parameter currently reaches DSP. The engine's block stack
+    /// is placeholder-first, so a macro can be authored + persisted before its
+    /// block has an implementation — the UI dims those instead of lying.
+    pub live: bool,
+}
+
+/// Everything the layer-zoom view needs for one lane.
+#[derive(Clone, PartialEq, Debug, Default, Facet)]
+pub struct KeysLayerDetail {
+    pub layer: String,
+    pub engine: String,
+    /// Loaded patch (pack / library stem); empty = an empty lane.
+    pub patch: String,
+    pub gain_db: f32,
+    pub muted: bool,
+    pub key_lo: u32,
+    pub key_hi: u32,
+    /// The lane's macros, in panel order.
+    pub macros: Vec<KeysMacro>,
+    /// The lane's block tree — the Signal Engine program it's running.
+    pub tree: KeysNode,
+}
+
 // ── Performance (stacks / scenes) ───────────────────────────────────────────
 
 /// One footswitch stack — a named scene over the mixer.
@@ -127,7 +167,9 @@ pub mod keys {
 
     use facet::Facet;
 
-    use super::{KeysMixer, KeysNode, KeysPerform, KeysPreset, KeysStatus};
+    use super::{
+        KeysLayerDetail, KeysMixer, KeysNode, KeysPerform, KeysPreset, KeysStatus,
+    };
 
     /// One live rig change. Every variant carries full state (idempotent
     /// re-application) so a reconnecting subscriber is correct after the next
@@ -189,6 +231,13 @@ pub mod keys {
         fn set_layer_patch(&self, layer: String, preset: u32);
         /// Empty a layer (silences the lane and frees its samples).
         fn clear_layer(&self, layer: String);
+
+        // ── Layer zoom ──────────────────────────────────────────────────
+        /// Everything the zoomed-in layer view renders: macros + the lane's
+        /// Signal Engine program.
+        fn layer_detail(&self, layer: String) -> KeysLayerDetail;
+        /// Set one macro on a layer.
+        fn set_layer_macro(&self, layer: String, id: String, value: f32);
 
         // ── Performance ─────────────────────────────────────────────────
         /// The performance model: stacks + grid mode.

@@ -26,6 +26,9 @@ signal-keys-proto.workspace = true
 facet.workspace = true
 facet-styx.workspace = true
 signal-proto.workspace = true
+# The Signal Engine — every lane is one of its layers (source stack →
+# filters → amp → FX). Keys and Synth are the same engine; this crate owns it.
+signal-synth.workspace = true
 architect = { workspace = true, features = ["vox", "rig"] }
 # The open/load worker threads enter this runtime so the daw-standalone
 # engine's task spawns have a reactor wherever the backend is hosted
@@ -38,5 +41,3 @@ eyre.workspace = true
 ratatui = "0.30"
 libc = "0.2"
 tracing-subscriber.workspace = true
-# The keys_tui example's `--omni` flag imports an Omnisphere patch via synth.
-signal-synth.workspace = true

@@ -37,7 +37,7 @@ use signal_proto::block::BlockType;
 use signal_sampler::rig_node::Container;
 
 /// Send target for every layer's aux route (the Part's 4-slot Aux rack).
-const AUX_RACK: &str = "Aux Rack";
+use crate::engine::AUX_RACK;
 
 // ── Layers ───────────────────────────────────────────────────────────────────
 
@@ -45,51 +45,12 @@ const AUX_RACK: &str = "Aux Rack";
 /// `soundsource` = a library spec path realizing the Sample-mode source;
 /// `None` keeps a placeholder Soundsource block (structure only).
 fn layer(name: &str, soundsource: Option<String>) -> Container {
-    // Oscillator module — Sample or Synth (wavetable) mode source, then the
-    // Oscillator-Zoom sub-modules, all pre-filter (manual UI tab order).
-    let mut osc = Container::module("Oscillator");
-    osc = match soundsource {
-        Some(spec) => osc.sample_block("Soundsource", spec),
-        None => osc.block(BlockType::Sampler, "Soundsource"),
-    };
-    let osc = osc
-        .block(BlockType::Wavetable, "Synth Osc") // Synth mode alternative (638 wavetables)
-        .block(BlockType::Unison, "Unison") // ≤8 voices
-        .block(BlockType::Harmonic, "Harmonia") // 4 extra oscillators
-        .block(BlockType::FmOperator, "FM")
-        .block(BlockType::RingModulator, "Ring Mod")
-        .block(BlockType::Dfs, "Dual Freq Shifter") // NEW v3 (serial/parallel pair)
-        .block(BlockType::Waveshaper, "Waveshaper")
-        .block(BlockType::Granular, "Granular"); // ≤8 grain voices, WILD mode
-
-    Container::layer(name)
-        .param("layer_level", "0")
-        .param("filter_routing", "Series") // Series | Parallel
-        .add(osc)
-        .add(
-            Container::module("Filters")
-                .block(BlockType::Filter, "Filter 1") // 70 types each (v3)
-                .block(BlockType::Filter, "Filter 2"),
-        )
-        .add(Container::module("Amp").block(BlockType::Amp, "Amp"))
-        .add(fx_rack("Layer FX")) // Independent mode: one 4-slot rack per layer
-        .send(AUX_RACK, "To Aux")
-        // Per-layer share of the Part's 12 envelopes (4 Amp + 4 Filter + 4 Mod,
-        // ADSR or Complex MSEG).
-        .modulator(BlockType::Envelope, "Amp Env")
-        .modulator(BlockType::Envelope, "Filter Env")
-        .modulator(BlockType::MultisegEnvelope, "Mod Env")
+    // The Omnisphere layer IS the shared Signal Engine layer — one program,
+    // whatever realizes its source (see ).
+    crate::engine::signal_layer(name, crate::engine::Source::sample(soundsource))
 }
 
-/// A 4-slot FX rack — every Omnisphere rack (Layer / Common / Aux / Master)
-/// is exactly 4 slots; each slot picks from the 93 internal FX units.
-fn fx_rack(name: &str) -> Container {
-    let mut rack = Container::module(name);
-    for slot in 1..=4 {
-        rack = rack.block(BlockType::Custom, format!("{name} Slot {slot}"));
-    }
-    rack
-}
+use crate::engine::fx_rack;
 
 // ── The Part ─────────────────────────────────────────────────────────────────
 
