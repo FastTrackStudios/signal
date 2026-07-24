@@ -583,6 +583,12 @@ pub struct SampleEngine {
     /// starts detuned toward the departed note and scoops to true pitch. Set
     /// around the legato spawn, applied in `spawn_zone_voice_at`.
     legato_glide: Option<(f32, usize)>,
+    /// CSS `%jcxqm` two-stage transition fade-in `(stage1_run, stage1_denom,
+    /// stage2)` in frames — the transition voice EMERGES via the swell, not a
+    /// 25 ms declick (the NVLeg sample has no silent head; it starts ~-16 dB, so
+    /// a fast declick reads as an artificial onset). Set around the transition
+    /// spawn; the `start_hold` provides the silent pre-roll before it.
+    transition_fade: Option<(usize, usize, usize)>,
 
     /// Notes currently held down: MIDI note → velocity. Shared across lines
     /// (keys are physical); per-line press order lives in `LegatoLine::order`.
@@ -858,6 +864,7 @@ impl SampleEngine {
             legato_trim: false,
             legato_attack_dip_db: 0.0,
             legato_glide: None,
+            transition_fade: None,
             sord_filter: BiquadFilter::lowpass(filter::SORD_FC, filter::SORD_Q, sample_rate),
             // Pre-size note-keyed maps to the full MIDI range so note-on never
             // reallocates them on the audio thread.

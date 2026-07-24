@@ -1192,6 +1192,26 @@ impl SampleEngine {
                 off.min(lead_sample_frames) as usize
             }
         };
+        // CSS `%jcxqm` two-stage transition fade-in (document path): the
+        // transition EMERGES via the swell over the window from its audible
+        // start to the arrival, reaching full ON the tick — instead of a 25 ms
+        // declick that reads as an artificial onset (the NVLeg sample has no
+        // silent head). Same shape as the destination swell (igmiu / IOI-scaled
+        // $x444h), capped at the audible window so it lands full at the arrival.
+        self.transition_fade = sched_lead.map(|_| {
+            let arrival_wall = ((lead_sample_frames.saturating_sub(start_offset as u64)) as f64
+                / rate.max(1e-9))
+            .round() as usize;
+            let total = ms_to_frames(crate::engine::CSS_XTIME_MS, self.sample_rate)
+                .min(arrival_wall)
+                .max(ms_to_frames(crate::engine::SUSTAIN_DECLICK_MS, self.sample_rate));
+            let igmiu = crate::engine::CSS_ATK_FADE_PCT as usize;
+            let x444h = crate::engine::css_node_vol_div(ioi_ms) as usize;
+            let s1 = total * igmiu / 100;
+            let s1d = (total * igmiu / x444h).max(1);
+            let s2 = total * (100 - igmiu) / 100;
+            (s1, s1d, s2)
+        });
         // Deterministic heard-arrival prediction (see
         // [`LegatoFireEvent::arrival`]): the in-sample arrival marker
         // (`lead_in_ms`, measured per zone) minus the offset we skip off the
@@ -1221,6 +1241,7 @@ impl SampleEngine {
         );
         self.spawn_arrival_override_ms = None;
         self.spawn_align_lead = restore;
+        self.transition_fade = None;
         if std::env::var_os("SIGNAL_LEGATO_DEBUG").is_some() {
             eprintln!(
                 "LEGATO {}→{} zone={} root={} int={} dir={} lead_ms={} sched={:?} offset={} pitch_off={} spawned={}",
@@ -1715,7 +1736,11 @@ impl SampleEngine {
         // a non-zero sample value and clicks on every note change. Shorts keep
         // their sharp natural attack (they start at true sample-start silence).
         let _ = SUSTAIN_DECLICK_MS;
-        let attack = if is_sustain_layer {
+        let attack = if matches!(kind, VoiceKind::Legato) && self.transition_fade.is_some() {
+            // The two-stage transition swell (below) IS the fade-in — no
+            // separate declick attack, which would double the onset.
+            0
+        } else if is_sustain_layer {
             self.attack_frames
         } else if start_offset > 0 {
             // Deep mid-sample entry (skipped-swell Low-Latency prefire): fade
@@ -1734,6 +1759,10 @@ impl SampleEngine {
         // normal attack for this voice only.
         let fade_in_under = if is_sustain_layer {
             self.sustain_fade_in
+        } else if matches!(kind, VoiceKind::Legato) {
+            // Transition voice: emerge via the two-stage swell (delay 0 — the
+            // `start_hold` above already provides the silent pre-roll).
+            self.transition_fade.map(|(s1, s1d, s2)| (0, s1, s1d, s2))
         } else {
             None
         };
