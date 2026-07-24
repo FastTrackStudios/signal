@@ -2123,6 +2123,10 @@ impl SampleEngine {
                     _ => {}
                 }
                 self.set_active_line(l as LineId);
+                if controller == 2 {
+                    self.next_cc_ramp =
+                        Some(ms_to_frames(crate::engine::CC2_RAMP_MS, self.sample_rate));
+                }
                 self.update_sustain_gains();
             }
             self.set_active_line(0);
@@ -2185,6 +2189,9 @@ impl SampleEngine {
             2 => {
                 self.cc2 = value;
                 self.line_mut().cc2 = value;
+                // CC2 (vibrato crossfade) re-levels over its decoded 1000 ms lag.
+                self.next_cc_ramp =
+                    Some(ms_to_frames(crate::engine::CC2_RAMP_MS, self.sample_rate));
                 self.update_sustain_gains();
             }
             58 => {

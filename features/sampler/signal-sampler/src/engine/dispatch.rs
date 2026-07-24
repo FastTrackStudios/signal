@@ -879,7 +879,7 @@ impl SampleEngine {
         let cur_line = self.cur_line as u8;
         // CC2 → non-vib/vib balance (equal-power).
         let (nv, vb) = Self::equal_power(self.cc2_blend());
-        let ramp = self.cc1_ramp_frames;
+        let ramp = self.next_cc_ramp.take().unwrap_or(self.cc1_ramp_frames);
         let nv_artic = self.articulation.clone();
         let vib_artic = self.find_vibrato_pair_id(&nv_artic);
 

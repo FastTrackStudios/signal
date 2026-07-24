@@ -56,7 +56,12 @@ use voice::{DynLayer, FlexEnv, Voice, VoiceKind, VoicePool, VoiceStealPolicy};
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 /// CC1 gain ramp length (ms). Smooths dynamic crossfade to avoid clicks.
-const CC1_RAMP_MS: u32 = 20;
+/// CC-mod smoothing lags DECODED from the CSS group modulators
+/// (GROUP_MODULATORS.md): every CC1/CC11 volume mod carries `lag_ms = 120`,
+/// every CC2 (vibrato crossfade) mod `lag_ms = 1000`. These are Kontakt's
+/// per-modulator smoothing — the reason CSS CC sweeps are glassy.
+const CC1_RAMP_MS: u32 = 120;
+const CC2_RAMP_MS: u32 = 1000;
 
 /// Default release fade on note-off for sustain voices (ms).
 ///
@@ -658,6 +663,10 @@ pub struct SampleEngine {
     legato_fade_frames: usize,
     /// Ramp length (frames) for CC1 gain updates.
     cc1_ramp_frames: usize,
+    /// One-shot ramp override for the NEXT `update_sustain_gains` — set by the
+    /// CC handlers so a CC2 change re-levels over its decoded 1000 ms lag while
+    /// CC1 keeps the 120 ms lag. `None` = the CC1 default.
+    next_cc_ramp: Option<usize>,
     /// Default release duration (frames) for sustain voices.
     release_frames: usize,
     /// Attack envelope (frames) ramped in on sustain onset. 0 = the sample's
@@ -893,6 +902,7 @@ impl SampleEngine {
             trace_alive_scratch: RefCell::new(Vec::new()),
             legato_fade_frames,
             cc1_ramp_frames,
+            next_cc_ramp: None,
             release_frames,
             attack_frames: spec_attack_frames,
             unison: (1, 0.0, 0.0),
