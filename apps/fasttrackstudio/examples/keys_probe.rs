@@ -54,15 +54,21 @@ async fn main() -> eyre::Result<()> {
     let t0 = std::time::Instant::now();
     let presets = rig.presets().await.map_err(|e| eyre::eyre!("presets: {e:?}"))?;
     println!("presets: {} in {:?}", presets.len(), t0.elapsed());
-    let detail = rig
-        .layer_detail("Pad".into())
-        .await
-        .map_err(|e| eyre::eyre!("layer_detail: {e:?}"))?;
-    println!(
-        "Pad: patch={:?} macros={} tree={}",
-        detail.patch,
-        detail.macros.len(),
-        detail.tree.label
-    );
+    // The Pad lane's modules — American Obesity is OB-8 + a Juno sub, so
+    // module A and B should both be live.
+    for slot in 0..4u32 {
+        let d = rig
+            .layer_detail("Pad".into(), slot)
+            .await
+            .map_err(|e| eyre::eyre!("layer_detail: {e:?}"))?;
+        let m = d.modules.iter().find(|m| m.index == slot);
+        println!(
+            "  Pad module {} → {:<28} macros={} tree={}",
+            m.map(|m| m.slot.clone()).unwrap_or_else(|| slot.to_string()),
+            if d.patch.is_empty() { "—".into() } else { d.patch.clone() },
+            d.macros.len(),
+            d.tree.label,
+        );
+    }
     Ok(())
 }

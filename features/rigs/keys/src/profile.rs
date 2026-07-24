@@ -75,9 +75,14 @@ pub struct KeysStackDef {
 pub struct LayerDef {
     /// Container name — unique across the profile (the fader's address).
     pub name: String,
-    /// Patch loaded at profile-build time. Empty = an empty lane.
+    /// Patch loaded at profile-build time (module A). Empty = an empty lane.
     #[facet(default)]
     pub patch: String,
+    /// Patches for modules B/C/D — a layer holds four modules (Omnisphere's
+    /// Quadzone) and `patch` is module A's. Missing entries are empty
+    /// modules, so a one-patch lane just leaves this out.
+    #[facet(default)]
+    pub extra_modules: Vec<String>,
     /// Authored fader position (dB).
     #[facet(default)]
     pub gain_db: f32,
@@ -94,10 +99,22 @@ impl LayerDef {
         Self {
             name: name.into(),
             patch: patch.into(),
+            extra_modules: Vec::new(),
             gain_db: 0.0,
             key_lo: 0,
             key_hi: 127,
         }
+    }
+
+    /// Every module's patch, module A first, padded to the quad.
+    pub fn module_patches(&self) -> Vec<String> {
+        let mut v = vec![self.patch.clone()];
+        v.extend(self.extra_modules.iter().cloned());
+        // At least the default quad, but a layer may declare more.
+        if v.len() < signal_synth::engine::MODULES_PER_LAYER {
+            v.resize(signal_synth::engine::MODULES_PER_LAYER, String::new());
+        }
+        v
     }
 
     /// Restrict this lane to a key window (a Nord-style split).
@@ -193,14 +210,17 @@ impl KeysProfile {
                 // filters → amp → FX program whether the patch is a Keyscape
                 // piano, an Omnisphere soundsource or a wavetable. That's why
                 // one layer-zoom surface can control all of them.
-                let spec = (!layer.patch.is_empty())
-                    .then(|| resolve(&layer.patch))
-                    .flatten();
-                let mut lane = signal_synth::signal_layer(
-                    &layer.name,
-                    signal_synth::Source::sample(spec),
-                )
-                .volume(layer.gain_db);
+                // Each of the lane's four modules realizes its own source.
+                let sources: Vec<signal_synth::Source> = layer
+                    .module_patches()
+                    .into_iter()
+                    .map(|patch| {
+                        let spec = (!patch.is_empty()).then(|| resolve(&patch)).flatten();
+                        signal_synth::Source::sample(spec)
+                    })
+                    .collect();
+                let mut lane = signal_synth::engine::signal_layer(&layer.name, &sources)
+                    .volume(layer.gain_db);
                 if !layer.is_full_range() {
                     lane = lane.zone(signal_sampler::rig_node::Zone {
                         key_lo: layer.key_lo,
@@ -266,11 +286,19 @@ pub fn worship_profile() -> KeysProfile {
             EngineDef {
                 name: "Pad".into(),
                 gain_db: 0.0,
-                // The wash under everything: the OB-8 big-strings soundsource
-                // that "American Obesity" (the Live Keyboardist pad we've been
-                // auto-loading in the synth rig) is built on. It's an ordinary
-                // source for the Signal Engine, same as a Keyscape pack.
-                layers: vec![LayerDef::new("Pad", "OB-8 PWM Big Strings")],
+                // The wash under everything: "American Obesity" (Live
+                // Keyboardist), rebuilt as one layer of the Signal Engine.
+                // The patch stacks two soundsources — OB-8 PWM Big Strings
+                // over a Juno 60 sub — so it lands as module A + module B,
+                // which is exactly what the quad is for.
+                layers: vec![LayerDef {
+                    name: "Pad".into(),
+                    patch: "OB-8 PWM Big Strings".into(),
+                    extra_modules: vec!["Juno 60 Raw Sub".into()],
+                    gain_db: 0.0,
+                    key_lo: 0,
+                    key_hi: 127,
+                }],
             },
         ],
         stacks: vec![

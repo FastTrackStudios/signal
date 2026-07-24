@@ -58,6 +58,8 @@ pub struct KeysLayerModel {
     /// Key window — `0..=127` is the whole keyboard.
     pub key_lo: u32,
     pub key_hi: u32,
+    /// The lane's modules — what the engine zoom shows a fader per.
+    pub modules: Vec<KeysModule>,
 }
 
 /// One engine — an instrument part holding parallel layers.
@@ -103,12 +105,34 @@ pub struct KeysMacro {
     pub live: bool,
 }
 
+/// One module inside a layer — the engine instance the zoom edits.
+#[derive(Clone, PartialEq, Debug, Default, Facet)]
+pub struct KeysModule {
+    /// 0-based slot index within the layer.
+    pub index: u32,
+    /// Slot label ("A".."D").
+    pub slot: String,
+    /// The source loaded in this module's Source Block; empty = silent.
+    pub patch: String,
+    /// The module has a realized source.
+    pub live: bool,
+    /// The module's own fader (dB) — modules sum inside the layer.
+    pub gain_db: f32,
+    /// Switched off: silent, but its source and settings are kept.
+    pub enabled: bool,
+}
+
 /// Everything the layer-zoom view needs for one lane.
 #[derive(Clone, PartialEq, Debug, Default, Facet)]
 pub struct KeysLayerDetail {
     pub layer: String,
     pub engine: String,
-    /// Loaded patch (pack / library stem); empty = an empty lane.
+    /// The layer's four modules (Omnisphere's Quadzone) — what A/B/C/D
+    /// switches between.
+    pub modules: Vec<KeysModule>,
+    /// Which module the `macros`, `patch` and `tree` below describe.
+    pub module: u32,
+    /// The SELECTED module's source; empty = an empty module.
     pub patch: String,
     pub gain_db: f32,
     pub muted: bool,
@@ -170,6 +194,7 @@ pub mod keys {
     use super::{
         KeysLayerDetail, KeysMixer, KeysNode, KeysPerform, KeysPreset, KeysStatus,
     };
+    // `KeysModule` rides inside `KeysLayerDetail`.
 
     /// One live rig change. Every variant carries full state (idempotent
     /// re-application) so a reconnecting subscriber is correct after the next
@@ -225,19 +250,23 @@ pub mod keys {
         fn set_engine_mute(&self, engine: String, muted: bool);
         /// Solo a layer (any solo silences every un-soloed lane).
         fn set_layer_solo(&self, layer: String, soloed: bool);
-        /// Load preset `preset` (from [`presets`](Self::presets)) into
-        /// `layer`. Rebuilds that lane — the patch IS the Sampler block's
-        /// spec, so this is the block/module system's normal load path.
-        fn set_layer_patch(&self, layer: String, preset: u32);
-        /// Empty a layer (silences the lane and frees its samples).
-        fn clear_layer(&self, layer: String);
+        /// Load preset `preset` (from [`presets`](Self::presets)) into one
+        /// MODULE of `layer` — the source IS that module's Source Block, so
+        /// this is the engine's normal load path.
+        fn set_layer_patch(&self, layer: String, module: u32, preset: u32);
+        /// Empty one module (silences it and frees its samples).
+        fn clear_layer(&self, layer: String, module: u32);
+        /// Ride one module's fader (dB) — live, no rebuild.
+        fn set_module_gain(&self, layer: String, module: u32, db: f32);
+        /// Switch a module on/off (its source stays loaded).
+        fn set_module_enabled(&self, layer: String, module: u32, on: bool);
 
         // ── Layer zoom ──────────────────────────────────────────────────
-        /// Everything the zoomed-in layer view renders: macros + the lane's
-        /// Signal Engine program.
-        fn layer_detail(&self, layer: String) -> KeysLayerDetail;
-        /// Set one macro on a layer.
-        fn set_layer_macro(&self, layer: String, id: String, value: f32);
+        /// Everything the zoomed-in layer view renders for one module:
+        /// its source, macros and slice of the engine program.
+        fn layer_detail(&self, layer: String, module: u32) -> KeysLayerDetail;
+        /// Set one macro on one module of a layer.
+        fn set_layer_macro(&self, layer: String, module: u32, id: String, value: f32);
 
         // ── Performance ─────────────────────────────────────────────────
         /// The performance model: stacks + grid mode.

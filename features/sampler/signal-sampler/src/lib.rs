@@ -535,6 +535,47 @@ impl PlayerPatch {
         out
     }
 
+    /// Sample paths ordered **coverage-first**: one sample for every note
+    /// (nearest `center` first), then each note's second, and so on.
+    ///
+    /// This is the order a *bounded* preload wants.
+    /// [`sample_paths_centered`](Self::sample_paths_centered) sorts purely by
+    /// distance from the centre, so truncating it loads every dynamic of a
+    /// narrow band of keys and leaves the rest of the keyboard with no body
+    /// voice at all. Round-robining across notes spends the same budget on a
+    /// playable instrument: every key sounds, dense velocity layers fill in
+    /// as the budget allows.
+    pub fn sample_paths_playable(&self, center: u8) -> Vec<std::path::PathBuf> {
+        use std::collections::BTreeMap;
+        let center = center as i32;
+        // note → its samples, in declaration order.
+        let mut by_note: BTreeMap<i32, Vec<std::path::PathBuf>> = BTreeMap::new();
+        if self.is_zoned() {
+            for (z, p) in self.spec.zones.iter().zip(self.zone_paths.iter()) {
+                by_note.entry(z.root_key as i32).or_default().push(p.clone());
+            }
+        } else {
+            for (k, p) in self.map.iter() {
+                by_note.entry(k.note as i32).or_default().push(p.clone());
+            }
+        }
+        // Notes nearest the centre get their samples first within each round.
+        let mut notes: Vec<i32> = by_note.keys().copied().collect();
+        notes.sort_by_key(|n| (n - center).abs());
+        let depth = by_note.values().map(|v| v.len()).max().unwrap_or(0);
+        let mut out = Vec::new();
+        for round in 0..depth {
+            for note in &notes {
+                if let Some(p) = by_note.get(note).and_then(|v| v.get(round)) {
+                    out.push(p.clone());
+                }
+            }
+        }
+        out.extend(self.groove_paths.iter().cloned());
+        out.extend(self.wavetable_paths.iter().cloned());
+        out
+    }
+
     pub fn resolve(
         &self,
         query: &crate::sample_map::SampleQuery<'_>,

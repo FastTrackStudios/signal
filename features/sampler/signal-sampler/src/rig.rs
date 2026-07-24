@@ -1023,12 +1023,13 @@ pub(crate) fn build_sample_source(
     // the eager set (phones: a full piano decoded is more RAM than the
     // device has); everything past the cap decodes on first note-on.
     let cache = engine.cache_handle();
-    let mut paths = engine.sample_paths_centered(60);
+    let mut paths = engine.sample_paths_playable(60);
     // ALWAYS bounded: `FTS_PRELOAD_PROFILE` picks the profile, the default
-    // (Performance, 512 samples) applies when it's unset. Preloading a whole
-    // multi-GB library as decoded f32 is not an option — one grand piano is
-    // tens of GB of RAM, and a keys profile holds several lanes at once.
-    // Everything past the cap decodes on first note-on.
+    // (Performance) applies when it's unset. Preloading a whole multi-GB
+    // library as decoded f32 is not an option — one grand piano is tens of
+    // GB, and a profile holds several lanes at once. The order is
+    // coverage-first, so the cap buys a fully playable keyboard (every note
+    // sounds) rather than every velocity layer of a handful of keys.
     if let Some(cap) = std::env::var("FTS_PRELOAD_PROFILE")
         .ok()
         .and_then(|s| crate::bank::PreloadProfile::from_name(&s))

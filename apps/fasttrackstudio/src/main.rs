@@ -190,15 +190,51 @@ fn main() {
 
 /// Desktop: a frameless window — the app draws its own top bar (the
 /// header doubles as title bar: drag surfaces + window controls).
+/// Where the window opens, for multi-monitor desks. Placement is a *runtime*
+/// concern (Dioxus.toml configures bundling, not windows), so it rides on env
+/// vars — set them once in the `dx serve` command and every hot-reload lands
+/// in the same place instead of being dragged back:
+///
+/// - `FTS_WINDOW_POS="6560,0"` — top-left corner in desktop coordinates
+///   (`kscreen-doctor -o` on KDE prints each screen's geometry).
+/// - `FTS_WINDOW_SIZE="2560x1440"` — inner size when not fullscreen.
+/// - `FTS_WINDOW_FULLSCREEN=1` — borderless fullscreen on whichever monitor
+///   the position lands on.
+#[cfg(not(any(target_arch = "wasm32", target_os = "ios")))]
+fn window_placement() -> (Option<(f64, f64)>, Option<(f64, f64)>, bool) {
+    fn pair(var: &str, sep: char) -> Option<(f64, f64)> {
+        let raw = std::env::var(var).ok()?;
+        let (a, b) = raw.split_once(sep)?;
+        Some((a.trim().parse().ok()?, b.trim().parse().ok()?))
+    }
+    let fullscreen = std::env::var("FTS_WINDOW_FULLSCREEN")
+        .map(|v| v != "0" && !v.eq_ignore_ascii_case("false"))
+        .unwrap_or(false);
+    (pair("FTS_WINDOW_POS", ','), pair("FTS_WINDOW_SIZE", 'x'), fullscreen)
+}
+
 #[cfg(not(any(target_arch = "wasm32", target_os = "ios")))]
 fn launch_app() {
-    use dioxus::desktop::tao::dpi::LogicalSize;
+    use dioxus::desktop::tao::dpi::{LogicalPosition, LogicalSize};
+    use dioxus::desktop::tao::window::Fullscreen;
     use dioxus::desktop::{Config, WindowBuilder};
-    let window = WindowBuilder::new()
+    let (pos, size, fullscreen) = window_placement();
+    let mut window = WindowBuilder::new()
         .with_title("FastTrackStudio")
         .with_decorations(false)
-        .with_inner_size(LogicalSize::new(1280.0, 820.0))
+        .with_inner_size(match size {
+            Some((w, h)) => LogicalSize::new(w, h),
+            None => LogicalSize::new(1280.0, 820.0),
+        })
         .with_min_inner_size(LogicalSize::new(720.0, 480.0));
+    // Position first: borderless fullscreen picks the monitor the window is
+    // on, so placing it inside the target screen is what selects that screen.
+    if let Some((x, y)) = pos {
+        window = window.with_position(LogicalPosition::new(x, y));
+    }
+    if fullscreen {
+        window = window.with_fullscreen(Some(Fullscreen::Borderless(None)));
+    }
     dioxus::LaunchBuilder::new()
         .with_cfg(Config::new().with_window(window).with_menu(None))
         .launch(App);

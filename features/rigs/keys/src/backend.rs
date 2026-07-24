@@ -66,13 +66,51 @@ struct State {
 #[derive(Clone, Debug)]
 struct LaneState {
     engine: String,
-    patch: String,
     gain_db: f32,
     muted: bool,
     soloed: bool,
-    /// Macro values by id — the layer-zoom Play page's state. Defaults come
-    /// from [`macro_defs`]; only ids in that table are accepted.
+    /// The lane's four modules (the engine instances). Module A is index 0.
+    modules: Vec<ModuleState>,
+}
+
+/// One module: its Source Block's patch and its own macro values (each
+/// module has its own filter, amp envelope and FX).
+#[derive(Clone, Debug)]
+struct ModuleState {
+    patch: String,
     macros: BTreeMap<String, f32>,
+    gain_db: f32,
+    enabled: bool,
+}
+
+impl Default for ModuleState {
+    fn default() -> Self {
+        Self { patch: String::new(), macros: BTreeMap::new(), gain_db: 0.0, enabled: true }
+    }
+}
+
+impl LaneState {
+    /// Module A's patch — what the mixer shows for the lane.
+    fn primary_patch(&self) -> String {
+        self.modules.first().map(|m| m.patch.clone()).unwrap_or_default()
+    }
+
+    /// Any module sounding?
+    fn any_live(&self) -> bool {
+        self.modules.iter().any(|m| !m.patch.is_empty() && m.enabled)
+    }
+
+    /// The linear gain a module renders at (off / empty = silent).
+    fn module_gain(&self, index: usize) -> f32 {
+        match self.modules.get(index) {
+            Some(m) if m.enabled && !m.patch.is_empty() => db_to_linear(m.gain_db),
+            _ => 0.0,
+        }
+    }
+
+    fn module(&self, index: usize) -> Option<&ModuleState> {
+        self.modules.get(index)
+    }
 }
 
 /// One macro's declaration: id, panel, display name, range, unit, and whether
@@ -97,43 +135,80 @@ struct MacroDef {
 /// implementation (filters, vibrato, ambience, FX are placeholders that pass
 /// audio through).
 const MACROS: &[MacroDef] = &[
-    // Source
+    // ── Source ──────────────────────────────────────────────────────────
     MacroDef { id: "source.level", name: "Level", group: "Source", default: 0.0, min: -24.0, max: 12.0, unit: "dB", live: true },
     MacroDef { id: "source.pan", name: "Pan", group: "Source", default: 0.0, min: -1.0, max: 1.0, unit: "", live: false },
     MacroDef { id: "source.transpose", name: "Transpose", group: "Source", default: 0.0, min: -24.0, max: 24.0, unit: "st", live: false },
+    MacroDef { id: "source.fine", name: "Fine", group: "Source", default: 0.0, min: -100.0, max: 100.0, unit: "c", live: false },
     MacroDef { id: "source.unison", name: "Unison", group: "Source", default: 1.0, min: 1.0, max: 8.0, unit: "v", live: true },
     MacroDef { id: "source.detune", name: "Detune", group: "Source", default: 0.1, min: 0.0, max: 2.0, unit: "", live: true },
-    // Tone
+    // ── Filter ──────────────────────────────────────────────────────────
+    MacroDef { id: "filter.cutoff", name: "Cutoff", group: "Filter", default: 20000.0, min: 20.0, max: 20000.0, unit: "Hz", live: false },
+    MacroDef { id: "filter.reso", name: "Resonance", group: "Filter", default: 0.0, min: 0.0, max: 1.0, unit: "", live: false },
+    MacroDef { id: "filter.env_amt", name: "Env Amt", group: "Filter", default: 0.0, min: -1.0, max: 1.0, unit: "", live: false },
+    MacroDef { id: "filter.keytrack", name: "Key Trk", group: "Filter", default: 0.0, min: 0.0, max: 1.0, unit: "", live: false },
+    MacroDef { id: "filter.drive", name: "Drive", group: "Filter", default: 0.0, min: 0.0, max: 1.0, unit: "", live: false },
+    MacroDef { id: "filter.mix", name: "Mix", group: "Filter", default: 1.0, min: 0.0, max: 1.0, unit: "", live: false },
+    // ── Envelopes 1..4 ──────────────────────────────────────────────────
+    // ENV 1 is bound to the Amp and ENV 2 to the Filter (the bindings the
+    // engine assumes today; unbinding lands with the mod matrix). 3 and 4
+    // are free — route them from the matrix.
+    MacroDef { id: "env1.delay", name: "Delay", group: "Env 1", default: 0.0, min: 0.0, max: 2000.0, unit: "ms", live: false },
+    MacroDef { id: "env1.attack", name: "Attack", group: "Env 1", default: 0.0, min: 0.0, max: 5000.0, unit: "ms", live: true },
+    MacroDef { id: "env1.hold", name: "Hold", group: "Env 1", default: 0.0, min: 0.0, max: 2000.0, unit: "ms", live: false },
+    MacroDef { id: "env1.decay", name: "Decay", group: "Env 1", default: 0.0, min: 0.0, max: 5000.0, unit: "ms", live: false },
+    MacroDef { id: "env1.sustain", name: "Sustain", group: "Env 1", default: 1.0, min: 0.0, max: 1.0, unit: "", live: false },
+    MacroDef { id: "env1.release", name: "Release", group: "Env 1", default: 120.0, min: 0.0, max: 8000.0, unit: "ms", live: true },
+    MacroDef { id: "env2.delay", name: "Delay", group: "Env 2", default: 0.0, min: 0.0, max: 2000.0, unit: "ms", live: false },
+    MacroDef { id: "env2.attack", name: "Attack", group: "Env 2", default: 5.0, min: 0.0, max: 5000.0, unit: "ms", live: false },
+    MacroDef { id: "env2.hold", name: "Hold", group: "Env 2", default: 0.0, min: 0.0, max: 2000.0, unit: "ms", live: false },
+    MacroDef { id: "env2.decay", name: "Decay", group: "Env 2", default: 300.0, min: 0.0, max: 5000.0, unit: "ms", live: false },
+    MacroDef { id: "env2.sustain", name: "Sustain", group: "Env 2", default: 0.7, min: 0.0, max: 1.0, unit: "", live: false },
+    MacroDef { id: "env2.release", name: "Release", group: "Env 2", default: 200.0, min: 0.0, max: 8000.0, unit: "ms", live: false },
+    MacroDef { id: "env3.delay", name: "Delay", group: "Env 3", default: 0.0, min: 0.0, max: 2000.0, unit: "ms", live: false },
+    MacroDef { id: "env3.attack", name: "Attack", group: "Env 3", default: 20.0, min: 0.0, max: 5000.0, unit: "ms", live: false },
+    MacroDef { id: "env3.hold", name: "Hold", group: "Env 3", default: 0.0, min: 0.0, max: 2000.0, unit: "ms", live: false },
+    MacroDef { id: "env3.decay", name: "Decay", group: "Env 3", default: 400.0, min: 0.0, max: 5000.0, unit: "ms", live: false },
+    MacroDef { id: "env3.sustain", name: "Sustain", group: "Env 3", default: 0.5, min: 0.0, max: 1.0, unit: "", live: false },
+    MacroDef { id: "env3.release", name: "Release", group: "Env 3", default: 300.0, min: 0.0, max: 8000.0, unit: "ms", live: false },
+    MacroDef { id: "env4.delay", name: "Delay", group: "Env 4", default: 0.0, min: 0.0, max: 2000.0, unit: "ms", live: false },
+    MacroDef { id: "env4.attack", name: "Attack", group: "Env 4", default: 200.0, min: 0.0, max: 5000.0, unit: "ms", live: false },
+    MacroDef { id: "env4.hold", name: "Hold", group: "Env 4", default: 0.0, min: 0.0, max: 2000.0, unit: "ms", live: false },
+    MacroDef { id: "env4.decay", name: "Decay", group: "Env 4", default: 600.0, min: 0.0, max: 5000.0, unit: "ms", live: false },
+    MacroDef { id: "env4.sustain", name: "Sustain", group: "Env 4", default: 0.6, min: 0.0, max: 1.0, unit: "", live: false },
+    MacroDef { id: "env4.release", name: "Release", group: "Env 4", default: 500.0, min: 0.0, max: 8000.0, unit: "ms", live: false },
+    // ── LFOs 1..4 ───────────────────────────────────────────────────────
+    MacroDef { id: "lfo1.rate", name: "Rate", group: "LFO 1", default: 2.0, min: 0.01, max: 40.0, unit: "Hz", live: false },
+    MacroDef { id: "lfo1.depth", name: "Depth", group: "LFO 1", default: 0.0, min: 0.0, max: 1.0, unit: "", live: false },
+    MacroDef { id: "lfo1.shape", name: "Shape", group: "LFO 1", default: 0.0, min: 0.0, max: 4.0, unit: "", live: false },
+    MacroDef { id: "lfo1.fade", name: "Fade In", group: "LFO 1", default: 0.0, min: 0.0, max: 4000.0, unit: "ms", live: false },
+    MacroDef { id: "lfo2.rate", name: "Rate", group: "LFO 2", default: 0.5, min: 0.01, max: 40.0, unit: "Hz", live: false },
+    MacroDef { id: "lfo2.depth", name: "Depth", group: "LFO 2", default: 0.0, min: 0.0, max: 1.0, unit: "", live: false },
+    MacroDef { id: "lfo2.shape", name: "Shape", group: "LFO 2", default: 1.0, min: 0.0, max: 4.0, unit: "", live: false },
+    MacroDef { id: "lfo2.fade", name: "Fade In", group: "LFO 2", default: 0.0, min: 0.0, max: 4000.0, unit: "ms", live: false },
+    MacroDef { id: "lfo3.rate", name: "Rate", group: "LFO 3", default: 4.0, min: 0.01, max: 40.0, unit: "Hz", live: false },
+    MacroDef { id: "lfo3.depth", name: "Depth", group: "LFO 3", default: 0.0, min: 0.0, max: 1.0, unit: "", live: false },
+    MacroDef { id: "lfo3.shape", name: "Shape", group: "LFO 3", default: 2.0, min: 0.0, max: 4.0, unit: "", live: false },
+    MacroDef { id: "lfo3.fade", name: "Fade In", group: "LFO 3", default: 0.0, min: 0.0, max: 4000.0, unit: "ms", live: false },
+    MacroDef { id: "lfo4.rate", name: "Rate", group: "LFO 4", default: 8.0, min: 0.01, max: 40.0, unit: "Hz", live: false },
+    MacroDef { id: "lfo4.depth", name: "Depth", group: "LFO 4", default: 0.0, min: 0.0, max: 1.0, unit: "", live: false },
+    MacroDef { id: "lfo4.shape", name: "Shape", group: "LFO 4", default: 3.0, min: 0.0, max: 4.0, unit: "", live: false },
+    MacroDef { id: "lfo4.fade", name: "Fade In", group: "LFO 4", default: 0.0, min: 0.0, max: 4000.0, unit: "ms", live: false },
+    // ── Tone / Vibrato / Ambience / Effects (per module) ─────────────────
     MacroDef { id: "tone.warmth", name: "Warmth", group: "Tone", default: 0.5, min: 0.0, max: 1.0, unit: "", live: false },
     MacroDef { id: "tone.drive", name: "Drive", group: "Tone", default: 0.0, min: 0.0, max: 1.0, unit: "", live: false },
     MacroDef { id: "tone.body", name: "Body", group: "Tone", default: 0.5, min: 0.0, max: 1.0, unit: "", live: false },
-    // Filter
-    MacroDef { id: "filter.cutoff", name: "Cutoff", group: "Filter", default: 20000.0, min: 20.0, max: 20000.0, unit: "Hz", live: false },
-    MacroDef { id: "filter.reso", name: "Resonance", group: "Filter", default: 0.0, min: 0.0, max: 1.0, unit: "", live: false },
-    MacroDef { id: "filter.env_amt", name: "Env Amount", group: "Filter", default: 0.0, min: -1.0, max: 1.0, unit: "", live: false },
-    // Filter Env
-    MacroDef { id: "fenv.attack", name: "Attack", group: "Filter Env", default: 5.0, min: 0.0, max: 5000.0, unit: "ms", live: false },
-    MacroDef { id: "fenv.decay", name: "Decay", group: "Filter Env", default: 300.0, min: 0.0, max: 5000.0, unit: "ms", live: false },
-    MacroDef { id: "fenv.sustain", name: "Sustain", group: "Filter Env", default: 0.7, min: 0.0, max: 1.0, unit: "", live: false },
-    MacroDef { id: "fenv.release", name: "Release", group: "Filter Env", default: 200.0, min: 0.0, max: 8000.0, unit: "ms", live: false },
-    // Amp Env — the sampler's real attack/release.
-    MacroDef { id: "aenv.attack", name: "Attack", group: "Amp Env", default: 0.0, min: 0.0, max: 5000.0, unit: "ms", live: true },
-    MacroDef { id: "aenv.decay", name: "Decay", group: "Amp Env", default: 0.0, min: 0.0, max: 5000.0, unit: "ms", live: false },
-    MacroDef { id: "aenv.sustain", name: "Sustain", group: "Amp Env", default: 1.0, min: 0.0, max: 1.0, unit: "", live: false },
-    MacroDef { id: "aenv.release", name: "Release", group: "Amp Env", default: 120.0, min: 0.0, max: 8000.0, unit: "ms", live: true },
-    // Vibrato
     MacroDef { id: "vib.rate", name: "Rate", group: "Vibrato", default: 5.0, min: 0.1, max: 12.0, unit: "Hz", live: false },
     MacroDef { id: "vib.depth", name: "Depth", group: "Vibrato", default: 0.0, min: 0.0, max: 1.0, unit: "", live: false },
     MacroDef { id: "vib.delay", name: "Delay", group: "Vibrato", default: 300.0, min: 0.0, max: 3000.0, unit: "ms", live: false },
-    // Ambience
     MacroDef { id: "amb.size", name: "Size", group: "Ambience", default: 0.5, min: 0.0, max: 1.0, unit: "", live: false },
     MacroDef { id: "amb.mix", name: "Mix", group: "Ambience", default: 0.15, min: 0.0, max: 1.0, unit: "", live: false },
-    MacroDef { id: "amb.predelay", name: "Pre-delay", group: "Ambience", default: 20.0, min: 0.0, max: 250.0, unit: "ms", live: false },
-    // Effects
+    MacroDef { id: "amb.predelay", name: "Pre-dly", group: "Ambience", default: 20.0, min: 0.0, max: 250.0, unit: "ms", live: false },
     MacroDef { id: "fx.chorus", name: "Chorus", group: "Effects", default: 0.0, min: 0.0, max: 1.0, unit: "", live: false },
     MacroDef { id: "fx.delay", name: "Delay", group: "Effects", default: 0.0, min: 0.0, max: 1.0, unit: "", live: false },
     MacroDef { id: "fx.width", name: "Width", group: "Effects", default: 0.5, min: 0.0, max: 1.0, unit: "", live: false },
 ];
+
 
 fn macro_def(id: &str) -> Option<&'static MacroDef> {
     MACROS.iter().find(|m| m.id == id)
@@ -164,11 +239,18 @@ impl State {
                     layer.name.clone(),
                     LaneState {
                         engine: engine.name.clone(),
-                        patch: layer.patch.clone(),
                         gain_db: layer.gain_db,
                         muted: false,
                         soloed: false,
-                        macros: default_macros(),
+                        modules: layer
+                            .module_patches()
+                            .into_iter()
+                            .map(|patch| ModuleState {
+                                patch,
+                                macros: default_macros(),
+                                ..ModuleState::default()
+                            })
+                            .collect(),
                     },
                 );
             }
@@ -188,7 +270,7 @@ impl State {
         let Some(lane) = self.lanes.get(name) else { return 0.0 };
         let engine_muted = self.engines.get(&lane.engine).is_some_and(|e| e.muted);
         let solo_excluded = self.any_solo() && !lane.soloed;
-        if lane.muted || engine_muted || solo_excluded || lane.patch.is_empty() {
+        if lane.muted || engine_muted || solo_excluded || !lane.any_live() {
             0.0
         } else {
             db_to_linear(lane.gain_db)
@@ -278,9 +360,11 @@ impl KeysRigBackend {
         // than silently pointing at a missing pack.
         let known: Vec<String> = state.presets.iter().map(|p| p.name.clone()).collect();
         for lane in state.lanes.values_mut() {
-            if !lane.patch.is_empty() && !known.contains(&lane.patch) {
-                tracing::info!(patch = %lane.patch, "keys rig: profile patch not in library — lane starts empty");
-                lane.patch.clear();
+            for m in lane.modules.iter_mut() {
+                if !m.patch.is_empty() && !known.contains(&m.patch) {
+                    tracing::info!(patch = %m.patch, "keys rig: profile patch not in library — module starts empty");
+                    m.patch.clear();
+                }
             }
         }
         let backend = Self {
@@ -321,9 +405,10 @@ impl KeysRigBackend {
         let mut profile = s.profile.clone();
         for engine in &mut profile.engines {
             for layer in &mut engine.layers {
-                if let Some(lane) = s.lanes.get(&layer.name) {
-                    layer.patch = lane.patch.clone();
-                }
+                let Some(lane) = s.lanes.get(&layer.name) else { continue };
+                let patches: Vec<String> = lane.modules.iter().map(|m| m.patch.clone()).collect();
+                layer.patch = patches.first().cloned().unwrap_or_default();
+                layer.extra_modules = patches.into_iter().skip(1).collect();
             }
         }
         Some(profile.build_tree(|patch| {
@@ -338,8 +423,14 @@ impl KeysRigBackend {
         let Some(rig) = rig.as_ref() else { return };
         let cells = rig.gain_cells();
         let Ok(s) = self.inner.state.lock() else { return };
-        for name in s.lanes.keys() {
+        for (name, lane) in s.lanes.iter() {
             cells.set(name, s.lane_gain(name));
+            // Modules are named "<layer> <slot>" in the tree.
+            for i in 0..lane.modules.len() {
+                let module_name =
+                    format!("{name} {}", signal_synth::engine::module_slot(i));
+                cells.set(&module_name, lane.module_gain(i));
+            }
         }
         for name in s.engines.keys() {
             cells.set(name, s.engine_gain(name));
@@ -388,13 +479,29 @@ impl KeysRigBackend {
                             KeysLayerModel {
                                 name: layer.name.clone(),
                                 engine: engine.name.clone(),
-                                patch: lane.map(|l| l.patch.clone()).unwrap_or_default(),
+                                patch: lane.map(|l| l.primary_patch()).unwrap_or_default(),
                                 gain_db: lane.map(|l| l.gain_db).unwrap_or(0.0),
                                 muted: lane.is_some_and(|l| l.muted),
                                 soloed: lane.is_some_and(|l| l.soloed),
-                                live: lane.is_some_and(|l| !l.patch.is_empty()),
+                                live: lane.is_some_and(|l| l.any_live()),
                                 key_lo: layer.key_lo as u32,
                                 key_hi: layer.key_hi as u32,
+                                modules: lane
+                                    .map(|l| {
+                                        l.modules
+                                            .iter()
+                                            .enumerate()
+                                            .map(|(i, m)| signal_keys_proto::KeysModule {
+                                                index: i as u32,
+                                                slot: signal_synth::engine::module_slot(i),
+                                                patch: m.patch.clone(),
+                                                live: !m.patch.is_empty(),
+                                                gain_db: m.gain_db,
+                                                enabled: m.enabled,
+                                            })
+                                            .collect()
+                                    })
+                                    .unwrap_or_default(),
                             }
                         })
                         .collect(),
@@ -604,6 +711,12 @@ impl RigBackend for KeysRigBackend {
     }
 
     fn on_midi_ports_changed(&self, ports: &[String]) {
+        // Defensive twin of the pump's guard: never drop a live attachment
+        // for an empty scan (transient JACK/ALSA enumeration failure).
+        if ports.is_empty() {
+            tracing::debug!("keys rig: empty MIDI scan ignored — keeping the current attachment");
+            return;
+        }
         // A keyboard plugged in after the rig started is merged into the
         // omni stream without touching the UI.
         tracing::info!(?ports, "keys rig: MIDI ports changed — re-attaching");
@@ -799,17 +912,18 @@ impl KeysRigSvc for KeysRigBackend {
         self.publish_mixer();
     }
 
-    fn set_layer_patch(&self, layer: String, preset: u32) {
+    fn set_layer_patch(&self, layer: String, module: u32, preset: u32) {
         {
             let Ok(mut s) = self.inner.state.lock() else { return };
             let Some(name) = s.presets.get(preset as usize).map(|p| p.name.clone()) else {
                 return;
             };
             let Some(lane) = s.lanes.get_mut(&layer) else { return };
-            if lane.patch == name {
+            let Some(m) = lane.modules.get_mut(module as usize) else { return };
+            if m.patch == name {
                 return;
             }
-            lane.patch = name;
+            m.patch = name;
         }
         // A new sample source in the lane — the program must recompile.
         let b = self.clone();
@@ -821,38 +935,57 @@ impl KeysRigSvc for KeysRigBackend {
             });
     }
 
-    fn layer_detail(&self, layer: String) -> KeysLayerDetail {
+    fn layer_detail(&self, layer: String, module: u32) -> KeysLayerDetail {
         let Ok(s) = self.inner.state.lock() else { return KeysLayerDetail::default() };
         let Some(lane) = s.lanes.get(&layer) else { return KeysLayerDetail::default() };
+        let slot = (module as usize).min(lane.modules.len().saturating_sub(1));
         let (key_lo, key_hi) = s
             .profile
             .layer(&layer)
             .map(|(_, l)| (l.key_lo as u32, l.key_hi as u32))
             .unwrap_or((0, 127));
+        let modules = lane
+            .modules
+            .iter()
+            .enumerate()
+            .map(|(i, m)| signal_keys_proto::KeysModule {
+                index: i as u32,
+                slot: signal_synth::engine::module_slot(i),
+                patch: m.patch.clone(),
+                live: !m.patch.is_empty(),
+                gain_db: m.gain_db,
+                enabled: m.enabled,
+            })
+            .collect();
+        let here = lane.module(slot);
         let macros = MACROS
             .iter()
             .map(|def| KeysMacro {
                 id: def.id.to_string(),
                 name: def.name.to_string(),
                 group: def.group.to_string(),
-                value: lane.macros.get(def.id).copied().unwrap_or(def.default),
+                value: here
+                    .and_then(|m| m.macros.get(def.id).copied())
+                    .unwrap_or(def.default),
                 min: def.min,
                 max: def.max,
                 unit: def.unit.to_string(),
-                live: def.live && !lane.patch.is_empty(),
+                live: def.live && here.is_some_and(|m| !m.patch.is_empty()),
             })
             .collect();
-        // The lane's own subtree of the live program — the Signal Engine
-        // stack this patch is running through.
+        // The selected MODULE's slice of the live program.
+        let module_name = format!("{layer} {}", signal_synth::engine::module_slot(slot));
         let tree = s
             .tree
             .as_ref()
-            .and_then(|t| t.find(&layer).map(|c| node_of(c, "")))
+            .and_then(|t| t.find(&module_name).map(|c| node_of(c, "")))
             .unwrap_or_default();
         KeysLayerDetail {
             layer: layer.clone(),
             engine: lane.engine.clone(),
-            patch: lane.patch.clone(),
+            modules,
+            module: slot as u32,
+            patch: here.map(|m| m.patch.clone()).unwrap_or_default(),
             gain_db: lane.gain_db,
             muted: lane.muted,
             key_lo,
@@ -862,11 +995,12 @@ impl KeysRigSvc for KeysRigBackend {
         }
     }
 
-    fn set_layer_macro(&self, layer: String, id: String, value: f32) {
+    fn set_layer_macro(&self, layer: String, module: u32, id: String, value: f32) {
         let Some(def) = macro_def(&id) else { return };
         if let Ok(mut s) = self.inner.state.lock() {
             let Some(lane) = s.lanes.get_mut(&layer) else { return };
-            lane.macros.insert(id, value.clamp(def.min, def.max));
+            let Some(m) = lane.modules.get_mut(module as usize) else { return };
+            m.macros.insert(id, value.clamp(def.min, def.max));
         }
         // `source.level` rides the lane fader, which is a live cell.
         if def.id == "source.level" {
@@ -875,14 +1009,15 @@ impl KeysRigSvc for KeysRigBackend {
         self.publish_mixer();
     }
 
-    fn clear_layer(&self, layer: String) {
+    fn clear_layer(&self, layer: String, module: u32) {
         {
             let Ok(mut s) = self.inner.state.lock() else { return };
             let Some(lane) = s.lanes.get_mut(&layer) else { return };
-            if lane.patch.is_empty() {
+            let Some(m) = lane.modules.get_mut(module as usize) else { return };
+            if m.patch.is_empty() {
                 return;
             }
-            lane.patch.clear();
+            m.patch.clear();
         }
         let b = self.clone();
         let _ = std::thread::Builder::new()
@@ -891,6 +1026,26 @@ impl KeysRigSvc for KeysRigBackend {
                 let _rt = keys_runtime().enter();
                 b.rebuild_program();
             });
+    }
+
+    fn set_module_gain(&self, layer: String, module: u32, db: f32) {
+        if let Ok(mut s) = self.inner.state.lock() {
+            let Some(lane) = s.lanes.get_mut(&layer) else { return };
+            let Some(m) = lane.modules.get_mut(module as usize) else { return };
+            m.gain_db = db.clamp(MIN_FADER_DB, MAX_FADER_DB);
+        }
+        self.apply_mixer();
+        self.publish_mixer();
+    }
+
+    fn set_module_enabled(&self, layer: String, module: u32, on: bool) {
+        if let Ok(mut s) = self.inner.state.lock() {
+            let Some(lane) = s.lanes.get_mut(&layer) else { return };
+            let Some(m) = lane.modules.get_mut(module as usize) else { return };
+            m.enabled = on;
+        }
+        self.apply_mixer();
+        self.publish_mixer();
     }
 
     // ── Performance ──────────────────────────────────────────────────────
@@ -910,8 +1065,12 @@ impl KeysRigSvc for KeysRigBackend {
                 lane.gain_db = slot.gain_db;
                 // An empty scene patch keeps whatever the lane holds — the
                 // scene rides levels, it doesn't force a reload.
-                if !slot.patch.is_empty() && lane.patch != slot.patch {
-                    lane.patch = slot.patch.clone();
+                if !slot.patch.is_empty()
+                    && lane.modules.first().is_some_and(|m| m.patch != slot.patch)
+                {
+                    if let Some(m) = lane.modules.first_mut() {
+                        m.patch = slot.patch.clone();
+                    }
                     rebuild = true;
                 }
             }
@@ -949,7 +1108,7 @@ impl KeysRigSvc for KeysRigBackend {
                 .iter()
                 .map(|(name, lane)| crate::profile::SceneSlot {
                     layer: name.clone(),
-                    patch: lane.patch.clone(),
+                    patch: lane.primary_patch(),
                     gain_db: lane.gain_db,
                     muted: lane.muted,
                 })

@@ -761,29 +761,7 @@ impl SampleEngine {
         // this, Keyscape Classic ships `clrmchr03` (mechanical) alphabetically
         // before `clrr10` (the actual Rhodes body) and the picker locks onto
         // the mechanical noise.
-        let is_aux_layer = |id: &str| -> bool {
-            let l = id.to_ascii_lowercase();
-            l.contains("mch") || l.contains("mech") || l.contains("ped")
-        };
-        let articulation = patch
-            .spec
-            .articulations
-            .iter()
-            .find(|a| a.kind == ArticulationKind::Sustain && !is_aux_layer(&a.id))
-            .or_else(|| {
-                patch.spec.articulations.iter().find(|a| {
-                    !matches!(a.kind, ArticulationKind::Release | ArticulationKind::Legato)
-                        && !is_aux_layer(&a.id)
-                })
-            })
-            .or_else(|| {
-                patch.spec.articulations.iter().find(|a| {
-                    !matches!(a.kind, ArticulationKind::Release | ArticulationKind::Legato,)
-                })
-            })
-            .or_else(|| patch.spec.articulations.first())
-            .map(|a| a.id.clone())
-            .unwrap_or_default();
+        let articulation = default_articulation(&patch.spec).unwrap_or_default();
 
         let legato_fade_frames =
             ms_to_frames(patch.spec.legato_cfg().transition_fade_ms, sample_rate);
@@ -978,6 +956,12 @@ impl SampleEngine {
     /// background preloader so the most-played range becomes audible first.
     pub fn sample_paths_centered(&self, center: u8) -> Vec<std::path::PathBuf> {
         self.patch.sample_paths_centered(center)
+    }
+
+    /// Coverage-first preload order — see
+    /// [`PlayerPatch::sample_paths_playable`].
+    pub fn sample_paths_playable(&self, center: u8) -> Vec<std::path::PathBuf> {
+        self.patch.sample_paths_playable(center)
     }
 
     /// How many of `total_samples()` are currently decoded into the cache.
@@ -2016,3 +2000,46 @@ fn half_pedal_release_frames(
 
 #[cfg(test)]
 mod tests;
+
+/// Pick the articulation a patch should start on: a *playable* body layer.
+///
+/// Rules, in order — Sustain first, then anything note-on can trigger
+/// (Release/Legato fire from note-off or another voice, so defaulting to one
+/// is silence), skipping mechanical / pedal companion layers, and — the part
+/// that matters most — only ever choosing an articulation that HAS ZONES.
+/// Specs ship declared-but-empty articulations (Keyscape's C7 lists
+/// `grndpnopdl` with zero zones); starting there means every note sounds as
+/// a release click with no body.
+pub fn default_articulation(spec: &crate::spec::LibrarySpec) -> Option<String> {
+    // `pdl` is Keyscape's pedal spelling — "ped" alone misses `grndpnopdl`.
+    let is_aux = |id: &str| {
+        let l = id.to_ascii_lowercase();
+        l.contains("mch") || l.contains("mech") || l.contains("ped") || l.contains("pdl")
+    };
+    let playable = |a: &crate::spec::ArticulationSpec| {
+        !matches!(a.kind, ArticulationKind::Release | ArticulationKind::Legato)
+    };
+    // Convention-mode packs (Keyscape's) declare articulations with NO zones
+    // — the mapping comes from filenames at load. Zone counts are therefore
+    // only a *preference*, never a requirement: rank zoned candidates first,
+    // then the same filters without the zone test.
+    let has_zones = |id: &str| spec.zones.iter().any(|z| z.articulation == id);
+    let pick = |want_zones: bool| -> Option<&crate::spec::ArticulationSpec> {
+        let zoned = |a: &crate::spec::ArticulationSpec| !want_zones || has_zones(&a.id);
+        spec.articulations
+            .iter()
+            .find(|a| a.kind == ArticulationKind::Sustain && !is_aux(&a.id) && zoned(a))
+            .or_else(|| {
+                spec.articulations
+                    .iter()
+                    .find(|a| playable(a) && !is_aux(&a.id) && zoned(a))
+            })
+            .or_else(|| spec.articulations.iter().find(|a| playable(a) && zoned(a)))
+    };
+    pick(true)
+        .or_else(|| pick(false))
+        // Nothing playable at all: take the first declared articulation so a
+        // caller still has an id to work with.
+        .or_else(|| spec.articulations.first())
+        .map(|a| a.id.clone())
+}

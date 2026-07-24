@@ -15,9 +15,11 @@ use signal_ui::components::Piano;
 mod control;
 mod engine_view;
 mod fader;
+mod graphs;
 mod knob;
 mod layer_view;
 mod midi_light;
+mod module_edit;
 mod perform;
 mod routing;
 mod state;
@@ -27,8 +29,10 @@ pub use control::{ControlView, engine_color};
 pub use engine_view::EngineView;
 pub use knob::Knob;
 pub use layer_view::LayerView;
+pub use module_edit::ModuleEdit;
 pub use zoom::{OpenButton, Zoom, ZoomBar};
 pub use fader::{Fader, fmt_db};
+pub use graphs::{Adsr, EnvelopeGraph, FilterCurve};
 pub use midi_light::MidiLight;
 pub use perform::{PerformStrip, stack_color};
 pub use routing::RoutingView;
@@ -157,7 +161,14 @@ pub fn KeysRigRemote() -> Element {
                             },
                         }
                     }
-                    Zoom::Layer(name) => rsx! { LayerView { layer: name, zoom } },
+                    Zoom::Layer(name) => rsx! {
+                        LayerView {
+                            layer: name,
+                            zoom,
+                            mixer: mixer.clone(),
+                            presets: presets.clone(),
+                        }
+                    },
                 },
                 Mode::Session => rsx! { SessionView { state } },
             }

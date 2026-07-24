@@ -142,6 +142,54 @@ pub fn EngineView(
                                         }
                                     }
                                 }
+                                // The lane's modules — see at a glance what
+                                // makes up this layer, and balance them here.
+                                div {
+                                    style: "display: flex; gap: 6px; padding-top: 6px; \
+                                            border-top: 1px solid #1c1c20;",
+                                    for m in layer.modules.iter() {
+                                        {
+                                            let rig_m = rig.clone();
+                                            let lane_m = layer.name.clone();
+                                            let idx = m.index;
+                                            let on = m.enabled;
+                                            let label = if m.patch.is_empty() {
+                                                "—".to_string()
+                                            } else {
+                                                m.patch.clone()
+                                            };
+                                            rsx! {
+                                                div {
+                                                    key: "{m.index}",
+                                                    style: "display: flex; flex-direction: column; \
+                                                            align-items: center; gap: 3px; flex: 1; min-width: 0;",
+                                                    title: "{label}",
+                                                    span {
+                                                        style: format!(
+                                                            "font-size: 9px; font-weight: 700; color: {};",
+                                                            if m.live && on { accent.clone() } else { "#3f3f46".to_string() },
+                                                        ),
+                                                        "{m.slot}"
+                                                    }
+                                                    Fader {
+                                                        db: m.gain_db,
+                                                        height_px: 56,
+                                                        accent: accent.clone(),
+                                                        dimmed: !on || !m.live,
+                                                        on_change: move |db: f32| {
+                                                            let (rig, lane) = (rig_m.clone(), lane_m.clone());
+                                                            spawn(async move {
+                                                                if let Some(r) = rig {
+                                                                    let _ = r.set_module_gain(lane, idx, db).await;
+                                                                }
+                                                            });
+                                                        },
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
                                 button {
                                     style: "appearance: none; border: 1px solid #1f2b3a; border-radius: 8px; \
                                             padding: 6px; background: #0d1319; color: #7dd3fc; font-size: 10px; \

@@ -7,34 +7,11 @@
 
 use std::path::Path;
 
-use signal_sampler::spec::ArticulationKind;
 use signal_sampler::PlayerPatch;
 
 /// Mirror of the engine's default-articulation picker (engine/mod.rs) so we can
 /// report which articulation actually plays by default.
-fn engine_default(spec: &signal_sampler::spec::LibrarySpec) -> Option<String> {
-    let is_aux = |id: &str| {
-        let l = id.to_ascii_lowercase();
-        l.contains("mch") || l.contains("mech") || l.contains("ped")
-    };
-    spec.articulations
-        .iter()
-        .find(|a| a.kind == ArticulationKind::Sustain && !is_aux(&a.id))
-        .or_else(|| {
-            spec.articulations.iter().find(|a| {
-                !matches!(a.kind, ArticulationKind::Release | ArticulationKind::Legato)
-                    && !is_aux(&a.id)
-            })
-        })
-        .or_else(|| {
-            spec.articulations
-                .iter()
-                .find(|a| !matches!(a.kind, ArticulationKind::Release | ArticulationKind::Legato))
-        })
-        .or_else(|| spec.articulations.first())
-        .map(|a| a.id.clone())
-}
-
+use signal_sampler::engine::default_articulation as engine_default;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let pack = std::env::args().nth(1).expect("usage: check_pack_resolve <pack>");
@@ -105,7 +82,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // Check the first (default) articulation — the one the engine plays by default.
-    let art = spec.articulations.first().ok_or("no articulations")?;
+    // Measure the articulation the ENGINE will actually start on, not
+    // whichever happens to be declared first (they differ: Keyscape's C7
+    // lists an empty pedal layer first).
+    let default_id = engine_default(spec).ok_or("no articulations")?;
+    let art = spec
+        .articulations
+        .iter()
+        .find(|a| a.id == default_id)
+        .ok_or("default articulation missing from spec")?;
     let dyns: Vec<String> =
         if art.dynamics.is_empty() { vec![String::new()] } else { art.dynamics.clone() };
 

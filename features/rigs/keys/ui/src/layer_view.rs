@@ -17,8 +17,10 @@ use signal_keys_proto::{KeysLayerDetail, KeysMacro, KeysNode};
 
 use crate::control::engine_color;
 use crate::fader::{Fader, fmt_db};
+use crate::graphs::{Adsr, EnvelopeGraph, FilterCurve};
 use crate::knob::Knob;
 use crate::zoom::{Zoom, ZoomBar};
+use signal_keys_proto::{KeysMixer, KeysPreset};
 
 /// Which page of the layer zoom.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -29,28 +31,48 @@ enum Page {
 
 /// The zoomed layer. Fetches its own detail and refreshes on change.
 #[component]
-pub fn LayerView(layer: String, zoom: Signal<Zoom>) -> Element {
+pub fn LayerView(
+    layer: String,
+    zoom: Signal<Zoom>,
+    /// The mixer, for the engine's sibling lanes (the A/B/C/D switcher).
+    #[props(default)]
+    mixer: KeysMixer,
+    /// The library, for the Source browser.
+    #[props(default)]
+    presets: Vec<KeysPreset>,
+) -> Element {
     let rig = use_hook(try_consume_context::<KeysRigClient>);
     let mut zoom = zoom;
     let mut page = use_signal(|| Page::Play);
     let mut detail = use_signal(KeysLayerDetail::default);
+    // Which module (A/B/C/D) the zoom is editing. Each module is its own
+    // engine instance — own source, filter, envelopes.
+    let mut module = use_signal(|| 0u32);
 
     // Pull the lane's detail; re-pull after every edit (cheap, local call).
     let refresh = use_callback({
         let rig = rig.clone();
         let layer = layer.clone();
         move |_: ()| {
-            let (rig, layer) = (rig.clone(), layer.clone());
+            let (rig, layer, slot) = (rig.clone(), layer.clone(), module());
             spawn(async move {
                 if let Some(r) = rig {
-                    if let Ok(d) = r.layer_detail(layer).await {
+                    if let Ok(d) = r.layer_detail(layer, slot).await {
                         detail.set(d);
                     }
                 }
             });
         }
     });
-    use_hook(move || refresh.call(()));
+    // Re-pull when the lane or the selected module changes.
+    {
+        let layer = layer.clone();
+        use_effect(move || {
+            let _ = &layer;
+            let _ = module();
+            refresh.call(());
+        });
+    }
 
     let d = detail.read().clone();
     let accent = engine_color(&d.engine).to_string();
@@ -65,6 +87,47 @@ pub fn LayerView(layer: String, zoom: Signal<Zoom>) -> Element {
                 on_back: move |_| zoom.set(Zoom::Engine(back_to.clone())),
                 trailing: rsx! {
                     div { style: "display: flex; align-items: center; gap: 6px;",
+                        // The layer's four MODULES — Omnisphere's Quadzone.
+                        // Each is a whole engine: own source, filter, envelopes.
+                        div { style: "display: flex; gap: 3px; padding: 2px; background: #0b0b0e; \
+                                      border: 1px solid #1f1f23; border-radius: 8px;",
+                            for m in d.modules.iter() {
+                                {
+                                    let is_here = m.index == d.module;
+                                    let idx = m.index;
+                                    let title = if m.patch.is_empty() {
+                                        format!("Module {} — empty", m.slot)
+                                    } else {
+                                        format!("Module {} — {}", m.slot, m.patch)
+                                    };
+                                    rsx! {
+                                        button {
+                                            key: "{m.index}",
+                                            style: format!(
+                                                "appearance: none; border: none; border-radius: 6px; \
+                                                 min-width: 30px; padding: 3px 8px; font-size: 10px; \
+                                                 font-weight: 700; background: {}; color: {};",
+                                                if is_here { "#101821" } else { "transparent" },
+                                                if is_here {
+                                                    accent.clone()
+                                                } else if m.live {
+                                                    "#a1a1aa".to_string()
+                                                } else {
+                                                    "#3f3f46".to_string()
+                                                },
+                                            ),
+                                            title: "{title}",
+                                            onclick: move |_| module.set(idx),
+                                            if !m.enabled {
+                                                span { style: "opacity: 0.5;", "{m.slot}" }
+                                            } else {
+                                                span { "{m.slot}" }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
                         span {
                             style: format!(
                                 "padding: 3px 10px; border-radius: 999px; font-size: 11px; \
@@ -90,7 +153,13 @@ pub fn LayerView(layer: String, zoom: Signal<Zoom>) -> Element {
             }
             match page() {
                 Page::Play => rsx! {
-                    PlayPage { detail: d.clone(), accent: accent.clone(), refresh }
+                    PlayPage {
+                        detail: d.clone(),
+                        accent: accent.clone(),
+                        presets: presets.clone(),
+                        module: d.module,
+                        refresh,
+                    }
                 },
                 Page::Edit => rsx! { EditPage { detail: d.clone() } },
             }
@@ -98,107 +167,66 @@ pub fn LayerView(layer: String, zoom: Signal<Zoom>) -> Element {
     }
 }
 
-/// The macro panels + the lane's own fader.
+/// The Play page: the module surface + the soundsource browser overlay.
 #[component]
-fn PlayPage(detail: KeysLayerDetail, accent: String, refresh: Callback<()>) -> Element {
+fn PlayPage(
+    detail: KeysLayerDetail,
+    accent: String,
+    presets: Vec<KeysPreset>,
+    module: u32,
+    refresh: Callback<()>,
+) -> Element {
     let rig = use_hook(try_consume_context::<KeysRigClient>);
-    // Panels in declaration order, de-duplicated.
-    let mut groups: Vec<String> = Vec::new();
-    for m in &detail.macros {
-        if !groups.contains(&m.group) {
-            groups.push(m.group.clone());
-        }
-    }
+    let browsing = use_signal(|| false);
+    let lane = detail.layer.clone();
 
     rsx! {
-        div {
-            style: "flex: 1; min-height: 0; overflow: auto; padding: 14px; display: flex; gap: 14px; \
-                    align-items: flex-start; flex-wrap: wrap;",
-            // Lane strip: the fader that also lives in the mixer.
-            div {
-                style: "display: flex; flex-direction: column; align-items: center; gap: 8px; \
-                        padding: 12px 16px; border: 1px solid #1f1f23; border-radius: 14px; \
-                        background: #0e0e11; min-width: 96px;",
-                span { style: "font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: #52525b;",
-                    "Lane"
-                }
-                Fader {
-                    db: detail.gain_db,
-                    height_px: 150,
-                    accent: accent.clone(),
-                    dimmed: detail.muted,
-                    on_change: {
-                        let rig = rig.clone();
-                        let lane = detail.layer.clone();
-                        move |db: f32| {
-                            let (rig, lane) = (rig.clone(), lane.clone());
-                            spawn(async move {
-                                if let Some(r) = rig { let _ = r.set_layer_gain(lane, db).await; }
-                            });
-                        }
-                    },
-                }
-                span { style: "font-size: 9px; color: #52525b;", {fmt_db(detail.gain_db)} }
-                span { style: "font-size: 9px; color: #3f3f46;",
-                    {format!("keys {}–{}", detail.key_lo, detail.key_hi)}
-                }
+        div { style: "position: relative; flex: 1; min-height: 0; display: flex;",
+            crate::module_edit::ModuleEdit {
+                detail: detail.clone(),
+                accent: accent.clone(),
+                module,
+                browsing,
+                on_macro: {
+                    let (rig, lane) = (rig.clone(), lane.clone());
+                    move |(id, v): (String, f32)| {
+                        let (rig, lane) = (rig.clone(), lane.clone());
+                        spawn(async move {
+                            if let Some(r) = rig { let _ = r.set_layer_macro(lane, module, id, v).await; }
+                        });
+                        refresh.call(());
+                    }
+                },
+                on_enabled: {
+                    let (rig, lane) = (rig.clone(), lane.clone());
+                    move |on: bool| {
+                        let (rig, lane) = (rig.clone(), lane.clone());
+                        spawn(async move {
+                            if let Some(r) = rig { let _ = r.set_module_enabled(lane, module, on).await; }
+                        });
+                        refresh.call(());
+                    }
+                },
+                on_gain: {
+                    let (rig, lane) = (rig.clone(), lane.clone());
+                    move |db: f32| {
+                        let (rig, lane) = (rig.clone(), lane.clone());
+                        spawn(async move {
+                            if let Some(r) = rig { let _ = r.set_module_gain(lane, module, db).await; }
+                        });
+                        refresh.call(());
+                    }
+                },
             }
-            // Macro panels.
-            for group in groups {
-                {
-                    let knobs: Vec<KeysMacro> = detail
-                        .macros
-                        .iter()
-                        .filter(|m| m.group == group)
-                        .cloned()
-                        .collect();
-                    let any_live = knobs.iter().any(|k| k.live);
-                    rsx! {
-                        div {
-                            key: "{group}",
-                            style: "display: flex; flex-direction: column; gap: 8px; padding: 12px; \
-                                    border: 1px solid #1f1f23; border-radius: 14px; background: #0e0e11;",
-                            div { style: "display: flex; align-items: center; gap: 6px;",
-                                span {
-                                    style: format!(
-                                        "width: 6px; height: 6px; border-radius: 999px; background: {};",
-                                        if any_live { accent.clone() } else { "#3f3f46".to_string() },
-                                    ),
-                                }
-                                span { style: "font-size: 10px; font-weight: 700; letter-spacing: 0.08em; \
-                                               text-transform: uppercase; color: #a1a1aa;",
-                                    "{group}"
-                                }
-                            }
-                            div { style: "display: flex; gap: 4px;",
-                                for m in knobs.iter() {
-                                    Knob {
-                                        key: "{m.id}",
-                                        label: m.name.clone(),
-                                        value: m.value,
-                                        min: m.min,
-                                        max: m.max,
-                                        unit: m.unit.clone(),
-                                        live: m.live,
-                                        accent: accent.clone(),
-                                        on_change: {
-                                            let rig = rig.clone();
-                                            let lane = detail.layer.clone();
-                                            let id = m.id.clone();
-                                            move |v: f32| {
-                                                let (rig, lane, id) = (rig.clone(), lane.clone(), id.clone());
-                                                spawn(async move {
-                                                    if let Some(r) = rig {
-                                                        let _ = r.set_layer_macro(lane, id, v).await;
-                                                    }
-                                                });
-                                                refresh.call(());
-                                            }
-                                        },
-                                    }
-                                }
-                            }
-                        }
+            if browsing() {
+                div {
+                    style: "position: absolute; top: 12px; left: 12px; z-index: 50; width: 300px;",
+                    SourceBrowser {
+                        layer: detail.layer.clone(),
+                        module,
+                        presets: presets.clone(),
+                        open: browsing,
+                        refresh,
                     }
                 }
             }
@@ -271,6 +299,90 @@ fn ProgramTree(node: KeysNode) -> Element {
                 div { style: "display: flex; gap: 6px; flex-wrap: wrap;",
                     for child in kids.iter() {
                         ProgramTree { key: "{child.id}", node: child.clone() }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Searchable soundsource browser — the whole library (Keyscape packs and
+/// Omnisphere soundsources alike), filtered as you type. Picking one loads it
+/// into this lane's Soundsource block.
+#[component]
+fn SourceBrowser(
+    layer: String,
+    module: u32,
+    presets: Vec<KeysPreset>,
+    open: Signal<bool>,
+    refresh: Callback<()>,
+) -> Element {
+    let rig = use_hook(try_consume_context::<KeysRigClient>);
+    let mut open = open;
+    let mut query = use_signal(String::new);
+
+    let q = query().to_lowercase();
+    let hits: Vec<(usize, KeysPreset)> = presets
+        .iter()
+        .enumerate()
+        .filter(|(_, p)| q.is_empty() || p.name.to_lowercase().contains(&q))
+        .take(80)
+        .map(|(i, p)| (i, p.clone()))
+        .collect();
+    let total = presets.len();
+
+    rsx! {
+        div {
+            style: "display: flex; flex-direction: column; gap: 6px; padding: 8px; \
+                    border: 1px solid #2b2b31; border-radius: 10px; background: #0b0b0d;",
+            input {
+                style: "background: #131316; border: 1px solid #1f1f23; border-radius: 8px; \
+                        padding: 6px 8px; color: #e4e4e7; font-size: 11px;",
+                placeholder: "search {total} soundsources…",
+                value: "{query}",
+                oninput: move |e| query.set(e.value()),
+            }
+            div {
+                style: "display: flex; flex-direction: column; gap: 1px; max-height: 260px; overflow-y: auto;",
+                button {
+                    style: "appearance: none; text-align: left; border: none; border-radius: 6px; \
+                            padding: 5px 7px; background: transparent; color: #a1a1aa; font-size: 11px;",
+                    onclick: {
+                        let rig = rig.clone();
+                        let layer = layer.clone();
+                        move |_| {
+                            let (rig, layer) = (rig.clone(), layer.clone());
+                            open.set(false);
+                            spawn(async move {
+                                if let Some(r) = rig { let _ = r.clear_layer(layer, module).await; }
+                            });
+                            refresh.call(());
+                        }
+                    },
+                    "— empty —"
+                }
+                for (i, preset) in hits {
+                    button {
+                        key: "{preset.name}",
+                        style: "appearance: none; text-align: left; border: none; border-radius: 6px; \
+                                padding: 5px 7px; background: transparent; color: #e4e4e7; font-size: 11px; \
+                                display: flex; align-items: center; gap: 6px;",
+                        onclick: {
+                            let rig = rig.clone();
+                            let layer = layer.clone();
+                            move |_| {
+                                let (rig, layer) = (rig.clone(), layer.clone());
+                                open.set(false);
+                                spawn(async move {
+                                    if let Some(r) = rig { let _ = r.set_layer_patch(layer, module, i as u32).await; }
+                                });
+                                refresh.call(());
+                            }
+                        },
+                        span { style: "flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;",
+                            "{preset.name}"
+                        }
+                        span { style: "font-size: 8px; color: #52525b;", "{preset.kind}" }
                     }
                 }
             }

@@ -55,11 +55,27 @@ pub fn signal_owned() -> bool {
 /// Start the signal engine: through its systemd unit when installed
 /// (crash-supervised while running; stop stays final), else as a child
 /// process attached to the app.
+/// Is this app a dev build (running out of a `target/` tree) rather than the
+/// installed one?
+///
+/// It decides who serves the engine. A dev build must supervise its **own**
+/// child — same binary, so the vox schema always matches the app, and the
+/// engine dies with the window. Handing off to the systemd unit there would
+/// start the *installed* binary instead: an older engine whose wire types
+/// differ, which surfaces as clients that establish but then fail with
+/// "writer and reader schema kinds differ" (a keys rig that connects and
+/// shows nothing).
+fn is_dev_build() -> bool {
+    std::env::current_exe()
+        .map(|p| p.components().any(|c| c.as_os_str() == "target"))
+        .unwrap_or(false)
+}
+
 pub fn start_signal() -> Result<String, String> {
     if signal_running() {
         return Err("signal engine already running".into());
     }
-    if systemd_available(&SIGNAL_ENGINE) {
+    if systemd_available(&SIGNAL_ENGINE) && !is_dev_build() {
         systemd_start(&SIGNAL_ENGINE).map_err(|e| e.to_string())?;
         tracing::info!("signal engine started (systemd user unit)");
         return Ok(SIGNAL_ENGINE.ws_url());

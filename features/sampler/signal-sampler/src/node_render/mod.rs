@@ -327,7 +327,11 @@ impl RenderNode {
         // Container volumes: input trim + output fader (dB → linear). Engine
         // and Layer containers always get a Gain node carrying a live cell,
         // whatever their authored dB, so a mixer can ride them at run time.
-        let live = matches!(container.role, Role::Engine | Role::Layer);
+        // Engines and Layers always get a live fader; so does any container
+        // the engine marks with `module_level` (its modules), so a mixer can
+        // ride and mute individual modules inside a layer.
+        let live = matches!(container.role, Role::Engine | Role::Layer)
+            || container.params.iter().any(|p| p.name == "module_level");
         if container.input_db != 0.0 || container.output_db != 0.0 || live {
             let cell = live.then(|| {
                 let cell = Arc::new(AtomicU32::new(1.0f32.to_bits()));

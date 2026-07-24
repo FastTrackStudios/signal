@@ -298,7 +298,7 @@ fn PatchPicker(
                         picking.set(None);
                         spawn(async move {
                             if let Some(r) = rig {
-                                let _ = r.clear_layer(layer).await;
+                                let _ = r.clear_layer(layer, 0).await;
                             }
                         });
                     }
@@ -319,7 +319,7 @@ fn PatchPicker(
                             picking.set(None);
                             spawn(async move {
                                 if let Some(r) = rig {
-                                    let _ = r.set_layer_patch(layer, i as u32).await;
+                                    let _ = r.set_layer_patch(layer, 0, i as u32).await;
                                 }
                             });
                         }
