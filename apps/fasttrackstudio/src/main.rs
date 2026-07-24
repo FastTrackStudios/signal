@@ -160,6 +160,10 @@ fn main() {
                 let _ = std::fs::create_dir_all(&packs);
                 // SAFETY: single-threaded, before the engine bootstrap spawns.
                 unsafe { std::env::set_var("FTS_KEYSCAPE_PACKS", &packs) };
+                // Phone RAM: preload only the audition set; everything else
+                // decodes on first note-on instead of ballooning at load.
+                // SAFETY: single-threaded, before the engine bootstrap spawns.
+                unsafe { std::env::set_var("FTS_PRELOAD_PROFILE", "fast-audition") };
             }
         }
         ios_audio::configure();

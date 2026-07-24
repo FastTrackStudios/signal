@@ -199,7 +199,13 @@ impl SamplerBank {
             block_frames: DEFAULT_BLOCK_FRAMES,
             preload_generation: Arc::new(AtomicU64::new(0)),
             cache_budget_bytes,
-            preload_profile: PreloadProfile::default(),
+            // `FTS_PRELOAD_PROFILE` overrides (e.g. "fast-audition" on
+            // phones, where a Performance-sized piano preload is GBs of
+            // decoded PCM); unset/unknown = the normal default.
+            preload_profile: std::env::var("FTS_PRELOAD_PROFILE")
+                .ok()
+                .and_then(|s| PreloadProfile::from_name(&s))
+                .unwrap_or_default(),
         }
     }
 

@@ -45,9 +45,15 @@ impl PackSource {
 pub(crate) enum DownloadEvent {
     /// Bytes on disk so far (monotonic; starts at the resume point).
     Progress { done: u64, total: u64 },
+    /// Paused by the user — the `.part` file stays; a new
+    /// [`start_download`] resumes from it.
+    Paused { done: u64, total: u64 },
     Done(PathBuf),
     Failed(String),
 }
+
+/// Internal sentinel: the transfer loop stopped because of a pause.
+const PAUSED: &str = "__paused__";
 
 /// The mirror's `packs.json` shape — `PackInfo` rows under one key.
 #[derive(facet::Facet)]
@@ -135,28 +141,47 @@ pub(crate) fn fetch_mirror_packs(
 
 /// Download `info` from `source` into `dest_dir`, resuming any partial
 /// file. Events arrive on the returned channel; the terminal event is
-/// `Done`/`Failed`.
+/// `Paused`/`Done`/`Failed`. Flip the returned cancel flag to pause —
+/// the `.part` stays and a fresh `start_download` resumes.
 pub(crate) fn start_download(
     source: PackSource,
     info: PackInfo,
     dest_dir: PathBuf,
-) -> futures_channel::mpsc::UnboundedReceiver<DownloadEvent> {
+) -> (
+    futures_channel::mpsc::UnboundedReceiver<DownloadEvent>,
+    std::sync::Arc<std::sync::atomic::AtomicBool>,
+) {
     let (tx, rx) = futures_channel::mpsc::unbounded();
+    let cancel = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let cancel_flag = cancel.clone();
     runtime().spawn(async move {
         let result = match &source {
-            PackSource::Vox(target) => download(target, &info, &dest_dir, &tx).await,
-            PackSource::Mirror => mirror_download(&info, &dest_dir, &tx).await,
+            PackSource::Vox(target) => {
+                download(target, &info, &dest_dir, &tx, &cancel_flag).await
+            }
+            PackSource::Mirror => mirror_download(&info, &dest_dir, &tx, &cancel_flag).await,
         };
         match result {
             Ok(path) => {
                 let _ = tx.unbounded_send(DownloadEvent::Done(path));
+            }
+            Err(e) if e == PAUSED => {
+                let done = std::fs::metadata(
+                    dest_dir.join(format!("{}.signalpack.part", info.name)),
+                )
+                .map(|m| m.len())
+                .unwrap_or(0);
+                let _ = tx.unbounded_send(DownloadEvent::Paused {
+                    done,
+                    total: info.size_bytes,
+                });
             }
             Err(e) => {
                 let _ = tx.unbounded_send(DownloadEvent::Failed(e));
             }
         }
     });
-    rx
+    (rx, cancel)
 }
 
 /// Shared download scaffolding: the destination, the `.part` resume
@@ -214,6 +239,7 @@ async fn download(
     info: &PackInfo,
     dest_dir: &Path,
     events: &futures_channel::mpsc::UnboundedSender<DownloadEvent>,
+    cancel: &std::sync::atomic::AtomicBool,
 ) -> Result<PathBuf, String> {
     let Prepared { final_path, part, mut file, start } = match prepare(dest_dir, info)? {
         Ok(p) => p,
@@ -231,6 +257,9 @@ async fn download(
     let mut done = start;
     let drain = async {
         while let Ok(Some(chunk)) = rx.recv().await {
+            if cancel.load(std::sync::atomic::Ordering::Relaxed) {
+                return Err(PAUSED.to_string());
+            }
             let chunk = chunk.get();
             if chunk.offset != done {
                 return Err(format!(
@@ -246,6 +275,11 @@ async fn download(
     };
 
     let (read_result, drain_result) = futures_util::join!(read_call, drain);
+    if let Err(e) = &drain_result {
+        if e == PAUSED {
+            return Err(PAUSED.to_string());
+        }
+    }
     read_result.map_err(|e| format!("read: {e:?}"))?;
     drain_result?;
     file.flush().map_err(|e| format!("flush: {e}"))?;
@@ -261,6 +295,7 @@ async fn mirror_download(
     info: &PackInfo,
     dest_dir: &Path,
     events: &futures_channel::mpsc::UnboundedSender<DownloadEvent>,
+    cancel: &std::sync::atomic::AtomicBool,
 ) -> Result<PathBuf, String> {
     let Prepared { final_path, part, mut file, start } = match prepare(dest_dir, info)? {
         Ok(p) => p,
@@ -271,6 +306,9 @@ async fn mirror_download(
     let total = info.size_bytes;
     let mut done = start;
     while done < total {
+        if cancel.load(std::sync::atomic::Ordering::Relaxed) {
+            return Err(PAUSED.to_string());
+        }
         let end = (done + MIRROR_CHUNK - 1).min(total - 1);
         let resp = client
             .get(&url)

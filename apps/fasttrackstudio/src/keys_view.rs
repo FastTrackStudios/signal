@@ -37,8 +37,19 @@ enum KeysPage {
 #[derive(Clone, PartialEq)]
 enum DlState {
     Running { done: u64, total: u64 },
+    Paused { done: u64, total: u64 },
     Done,
     Failed(String),
+}
+
+/// Keep the screen awake exactly while downloads run (iOS suspends the
+/// app — and its sockets — when the phone locks).
+fn sync_keep_awake(downloads: &HashMap<String, DlState>) {
+    let active = downloads.values().any(|d| matches!(d, DlState::Running { .. }));
+    #[cfg(target_os = "ios")]
+    crate::ios_orientation::set_idle_timer_disabled(active);
+    #[cfg(not(target_os = "ios"))]
+    let _ = active;
 }
 
 /// The keys shell: tab bar + page, portrait.
@@ -51,6 +62,19 @@ pub fn KeysShell(on_home: EventHandler<()>) -> Element {
     let mut page = use_signal(|| KeysPage::Play);
     let mut status = use_signal(KeysStatus::default);
     let mut presets = use_signal(Vec::<KeysPreset>::new);
+
+    // The rig is always-on: open audio as soon as the keys surface mounts
+    // (no-op when already running; publishes last_error if the open fails).
+    {
+        let keys = keys.clone();
+        use_hook(move || {
+            if let Some(keys) = keys {
+                spawn(async move {
+                    let _ = keys.start().await;
+                });
+            }
+        });
+    }
 
     // Status + preset poll — local in-process calls, cheap at meter rate.
     {
@@ -149,20 +173,26 @@ fn PlayPage(status: KeysStatus, presets: Vec<KeysPreset>) -> Element {
             div { style: "height: 4px; border-radius: 2px; background: #1b1b1f; overflow: hidden;",
                 div { style: "height: 100%; width: {peak_pct}%; background: #22c55e;" }
             }
-            if !status.running {
-                button {
-                    style: "appearance: none; border: none; border-radius: 12px; padding: 12px; \
-                            background: linear-gradient(135deg, #10283f, #0b3a52); color: #7dd3fc; \
-                            font-size: 14px; font-weight: 700;",
-                    onclick: {
-                        let keys = keys.clone();
-                        move |_| {
-                            if let Some(keys) = keys.clone() {
-                                spawn(async move { let _ = keys.start().await; });
+            // Audio is auto-started; surface the reason + a retry only
+            // when the engine could not open.
+            if let Some(err) = status.last_error.clone() {
+                div { style: "display: flex; flex-direction: column; gap: 8px; padding: 12px; \
+                              border: 1px solid #7f1d1d; border-radius: 12px; background: #1c1012;",
+                    span { style: "font-size: 12px; color: #f87171;", "{err}" }
+                    button {
+                        style: "appearance: none; border: none; border-radius: 10px; padding: 10px; \
+                                background: linear-gradient(135deg, #10283f, #0b3a52); color: #7dd3fc; \
+                                font-size: 13px; font-weight: 700;",
+                        onclick: {
+                            let keys = keys.clone();
+                            move |_| {
+                                if let Some(keys) = keys.clone() {
+                                    spawn(async move { let _ = keys.start().await; });
+                                }
                             }
-                        }
-                    },
-                    "Start audio"
+                        },
+                        "Retry audio"
+                    }
                 }
             }
             // Presets.
@@ -316,6 +346,53 @@ fn LibraryPage(downloaded: Vec<String>) -> Element {
         }
     });
 
+    // Live cancel flags per running download (flip = pause; .part stays).
+    let mut cancels =
+        use_signal(HashMap::<String, std::sync::Arc<std::sync::atomic::AtomicBool>>::new);
+
+    // Start (or resume — the .part file carries the offset) one download.
+    let begin = use_callback({
+        let keys = keys.clone();
+        move |info: PackInfo| {
+            let name = info.name.clone();
+            downloads
+                .write()
+                .insert(name.clone(), DlState::Running { done: 0, total: info.size_bytes });
+            sync_keep_awake(&downloads());
+            let dl_source = source()
+                .unwrap_or_else(|| pack_client::PackSource::Vox(EngineTarget::current()));
+            let (mut rx, cancel) =
+                pack_client::start_download(dl_source, info, pack_client::keys_packs_dir());
+            cancels.write().insert(name.clone(), cancel);
+            let keys = keys.clone();
+            spawn(async move {
+                while let Some(ev) = rx.next().await {
+                    match ev {
+                        DownloadEvent::Progress { done, total } => {
+                            downloads.write().insert(name.clone(), DlState::Running { done, total });
+                        }
+                        DownloadEvent::Paused { done, total } => {
+                            downloads.write().insert(name.clone(), DlState::Paused { done, total });
+                        }
+                        DownloadEvent::Done(_) => {
+                            downloads.write().insert(name.clone(), DlState::Done);
+                            // New pack on disk — teach the rig, then make
+                            // sure audio is up so the patch is playable.
+                            if let Some(keys) = keys.clone() {
+                                let _ = keys.rescan().await;
+                                let _ = keys.start().await;
+                            }
+                        }
+                        DownloadEvent::Failed(e) => {
+                            downloads.write().insert(name.clone(), DlState::Failed(e));
+                        }
+                    }
+                    sync_keep_awake(&downloads());
+                }
+            });
+        }
+    });
+
     let on_save = move |_| {
         let raw = host().trim().to_string();
         if raw.starts_with("ws://") || raw.starts_with("wss://") {
@@ -353,13 +430,18 @@ fn LibraryPage(downloaded: Vec<String>) -> Element {
             if !note().is_empty() {
                 span { style: "font-size: 12px; color: #a1a1aa;", "{note}" }
             }
+            if downloads().values().any(|d| matches!(d, DlState::Running { .. })) {
+                span { style: "font-size: 11px; color: #eab308;",
+                    "Keep the app open while downloading — iOS pauses transfers when the app is backgrounded. (The screen stays awake.)"
+                }
+            }
             for info in packs() {
                 {
                     let name = info.name.clone();
                     let size_gb = info.size_bytes as f64 / 1e9;
                     let dl = downloads().get(&name).cloned();
                     let already = downloaded.contains(&name) || matches!(dl, Some(DlState::Done));
-                    let keys = keys.clone();
+                    let running = matches!(dl, Some(DlState::Running { .. }));
                     rsx! {
                         div { style: "display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; \
                                       background: #131316; border: 1px solid #1f1f23; border-radius: 12px;",
@@ -374,66 +456,36 @@ fn LibraryPage(downloaded: Vec<String>) -> Element {
                                 if already {
                                     span { style: "font-size: 10px; font-weight: 700; color: #22c55e; \
                                                    letter-spacing: 0.1em;", "ON DEVICE" }
-                                } else if !matches!(dl, Some(DlState::Running { .. })) {
+                                } else if running {
+                                    button {
+                                        style: "appearance: none; border: none; border-radius: 8px; \
+                                                padding: 8px 14px; background: #1c1917; color: #eab308; \
+                                                font-size: 12px; font-weight: 700;",
+                                        onclick: {
+                                            let name = name.clone();
+                                            move |_| {
+                                                if let Some(flag) = cancels().get(&name) {
+                                                    flag.store(true, std::sync::atomic::Ordering::Relaxed);
+                                                }
+                                            }
+                                        },
+                                        "Pause"
+                                    }
+                                } else {
                                     button {
                                         style: "appearance: none; border: none; border-radius: 8px; \
                                                 padding: 8px 14px; background: #101821; color: #38bdf8; \
                                                 font-size: 12px; font-weight: 700;",
                                         onclick: {
                                             let info = info.clone();
-                                            let keys = keys.clone();
-                                            move |_| {
-                                                let info = info.clone();
-                                                let keys = keys.clone();
-                                                let name = info.name.clone();
-                                                downloads.write().insert(
-                                                    name.clone(),
-                                                    DlState::Running { done: 0, total: info.size_bytes },
-                                                );
-                                                let dl_source = source()
-                                                    .unwrap_or_else(|| {
-                                                        pack_client::PackSource::Vox(
-                                                            EngineTarget::current(),
-                                                        )
-                                                    });
-                                                let mut rx = pack_client::start_download(
-                                                    dl_source,
-                                                    info,
-                                                    pack_client::keys_packs_dir(),
-                                                );
-                                                spawn(async move {
-                                                    while let Some(ev) = rx.next().await {
-                                                        match ev {
-                                                            DownloadEvent::Progress { done, total } => {
-                                                                downloads.write().insert(
-                                                                    name.clone(),
-                                                                    DlState::Running { done, total },
-                                                                );
-                                                            }
-                                                            DownloadEvent::Done(_) => {
-                                                                downloads.write().insert(name.clone(), DlState::Done);
-                                                                // New pack on disk — teach the rig.
-                                                                if let Some(keys) = keys.clone() {
-                                                                    let _ = keys.rescan().await;
-                                                                }
-                                                            }
-                                                            DownloadEvent::Failed(e) => {
-                                                                downloads.write().insert(
-                                                                    name.clone(),
-                                                                    DlState::Failed(e),
-                                                                );
-                                                            }
-                                                        }
-                                                    }
-                                                });
-                                            }
+                                            move |_| begin.call(info.clone())
                                         },
-                                        "Download"
+                                        if matches!(dl, Some(DlState::Paused { .. })) { "Resume" } else { "Download" }
                                     }
                                 }
                             }
                             match dl {
-                                Some(DlState::Running { done, total }) => {
+                                Some(DlState::Running { done, total }) | Some(DlState::Paused { done, total }) => {
                                     let pct = if total > 0 { done * 100 / total } else { 0 };
                                     rsx! {
                                         div { style: "display: flex; align-items: center; gap: 8px;",
@@ -448,7 +500,7 @@ fn LibraryPage(downloaded: Vec<String>) -> Element {
                                     }
                                 }
                                 Some(DlState::Failed(e)) => rsx! {
-                                    span { style: "font-size: 11px; color: #ef4444;", "{e}" }
+                                    span { style: "font-size: 11px; color: #ef4444;", "{e} — Download resumes from where it stopped." }
                                 },
                                 _ => rsx! {},
                             }

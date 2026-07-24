@@ -25,6 +25,19 @@ pub fn portrait() {
     request(MASK_PORTRAIT);
 }
 
+/// Keep the screen awake (`UIApplication.idleTimerDisabled`) — on while a
+/// pack download runs, since iOS suspends the app (and its sockets) when
+/// the phone locks.
+pub fn set_idle_timer_disabled(disabled: bool) {
+    unsafe {
+        let app: *mut AnyObject = msg_send![class!(UIApplication), sharedApplication];
+        if app.is_null() {
+            return;
+        }
+        let _: () = msg_send![app, setIdleTimerDisabled: disabled];
+    }
+}
+
 /// Ask every window scene to adopt `mask`. No-op if the scene isn't up yet.
 /// Manual retain/release (no ARC) — raw pointers are used immediately and
 /// the one owned object (`prefs`) is released after use.

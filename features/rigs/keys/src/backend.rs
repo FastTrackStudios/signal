@@ -40,6 +40,8 @@ struct State {
     tree: Option<Container>,
     midi_port: Option<String>,
     midi_handle: Option<MidiInputHandle>,
+    /// The last audio-open failure, for UIs with no log access (phones).
+    last_error: Option<String>,
 }
 
 struct Inner {
@@ -108,7 +110,12 @@ impl KeysRigBackend {
             }
         }
         let idx = self.inner.state.lock().ok().and_then(|s| s.loaded).unwrap_or(0);
-        let Some(tree) = self.program_for(idx) else { return false };
+        let Some(tree) = self.program_for(idx) else {
+            if let Ok(mut s) = self.inner.state.lock() {
+                s.last_error = Some("no patches downloaded yet".into());
+            }
+            return false;
+        };
         let prefs = AudioIoPrefs {
             output_device: String::new(),
             sample_rate: 0,
@@ -129,11 +136,16 @@ impl KeysRigBackend {
                         p.loaded = i == idx;
                     }
                     s.tree = Some(tree);
+                    s.last_error = None;
                 }
                 true
             }
             Err(e) => {
                 tracing::error!("keys rig: audio open failed: {e}");
+                if let Ok(mut s) = self.inner.state.lock() {
+                    s.last_error = Some(format!("audio open failed: {e}"));
+                }
+                self.inner.events.publish(KeysEvent::Status(KeysRigSvc::status(self)));
                 false
             }
         }
@@ -268,7 +280,14 @@ impl KeysRigSvc for KeysRigBackend {
         } else {
             0.0
         };
-        KeysStatus { running, loaded_preset, master_peak, voices: 0, midi_port: s.midi_port.clone() }
+        KeysStatus {
+            running,
+            loaded_preset,
+            master_peak,
+            voices: 0,
+            midi_port: s.midi_port.clone(),
+            last_error: s.last_error.clone(),
+        }
     }
 
     fn presets(&self) -> Vec<KeysPreset> {
@@ -285,8 +304,10 @@ impl KeysRigSvc for KeysRigBackend {
                 .as_deref()
                 .and_then(|n| presets.iter().position(|p| p.name == n))
                 // Nothing loaded yet — same default as `new()`, so the
-                // first download lands on the LA Custom Rhodes.
-                .or_else(|| presets.iter().position(|p| p.name == "Rhodes - LA Custom"));
+                // first download lands on the LA Custom Rhodes; failing
+                // that, whatever arrived first is better than nothing.
+                .or_else(|| presets.iter().position(|p| p.name == "Rhodes - LA Custom"))
+                .or_else(|| (!presets.is_empty()).then_some(0));
             s.presets = presets;
             s.specs = specs;
             if let Some(i) = s.loaded {
