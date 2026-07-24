@@ -414,7 +414,10 @@ impl SampleEngine {
         // lead − window. REACTIVE play (no lead) keeps the CSS fixed retire
         // fades from the fire (hold 0).
         let (trans_fade, sus_fade, retire_hold) = match sched_lead {
-            Some(lead) if !pacific => {
+            // lead == 0 (NO-SHIFT / reactive fire-at-tick) falls through to the
+            // CSS fixed retire tables below — a 0-lead window would collapse the
+            // fade to 1 frame and hard-cut the outgoing note.
+            Some(lead) if lead > 0 && !pacific => {
                 // Fade the outgoing over the whole lead (NO hold) so its body
                 // DECLINES as the transition sample takes over the (same-pitch)
                 // pre-bow, and is GONE exactly at the tick — no full-level
@@ -527,8 +530,11 @@ impl SampleEngine {
                     // total*igmiu/100; stage1_denom = total*igmiu/x444h ($x444h
                     // IOI-scaled 90→60 — a smaller divisor lengthens stage-1);
                     // stage2 = total*(100-igmiu)/100.
+                    // Cap by the lead only when there IS one (document prefire
+                    // must land full at the tick). Reactive/no-shift (hold 0)
+                    // swells over the full XTime AFTER the tick, like CSS.
                     let total = ms_to_frames(crate::engine::CSS_XTIME_MS, self.sample_rate)
-                        .min(hold)
+                        .min(if hold > 0 { hold } else { usize::MAX })
                         .max(declick);
                     let igmiu = if big_leap {
                         50 // interval>12 fallback (fixed, ignores the hard table)
