@@ -1152,7 +1152,10 @@ impl SampleEngine {
         //    libraries have no measured lead-in (`lead_sample_frames == 0`) →
         //    offset 0, the pre-`$1fvjk` behaviour.
         let start_offset = match sched_lead {
-            Some(lead) => {
+            // NO-SHIFT mode fires at the tick (lead 0); play from the reactive
+            // `$1fvjk` offset (the `None` arm) so the arrival lands late, not
+            // arrival-aligned. Any lead>0 uses the document skip.
+            Some(lead) if lead > 0 && !crate::document::no_prefire() => {
                 let lead_in_sample = (lead as f64 * rate) as u64;
                 let raw = lead_sample_frames.saturating_sub(lead_in_sample);
                 // Enforce the CSS `$1fvjk` MINIMUM skip (≈60 ms) so we never play
@@ -1172,8 +1175,8 @@ impl SampleEngine {
                 let min_skip = ms_to_frames(min_skip_ms, self.sample_rate) as u64;
                 raw.max(min_skip.min(lead_sample_frames.saturating_sub(1))) as usize
             }
-            None => {
-                // Reactive (live) path: the real CSS `$1fvjk` — velocity-range
+            _ => {
+                // Reactive / NO-SHIFT path: the real CSS `$1fvjk` — velocity-range
                 // base + soft/fast IOI boost (falls back to the legacy IOI
                 // curve when the spec authors no bases).
                 let off_ms = self.patch.spec.legato_cfg().lt_offset_ms(

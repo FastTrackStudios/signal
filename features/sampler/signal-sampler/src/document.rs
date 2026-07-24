@@ -414,6 +414,13 @@ fn artic_for_ks(
 /// (no caching) so one process can render several lanes; unset = `(1, 0)` =
 /// the markers as measured. Offline/diagnostic only — never part of a
 /// shipped configuration.
+/// NO-SHIFT mode (`SIGNAL_NO_PREFIRE`): the document scheduler fires legato
+/// transitions AT the note-on tick instead of pre-rolling them, so the arrival
+/// lands late exactly like reactive CSS. For matching a real Kontakt render.
+pub(crate) fn no_prefire() -> bool {
+    std::env::var_os("SIGNAL_NO_PREFIRE").is_some()
+}
+
 pub(crate) fn arrival_semantics_env() -> (f32, f32) {
     match std::env::var("SIGNAL_ARRIVAL_SEMANTICS") {
         Ok(v) => {
@@ -871,7 +878,14 @@ pub fn annotate(doc: &TrackDocument, spec: &LibrarySpec, sample_rate: u32) -> Sc
                 // line — interpolated across the KSP thresholds, NOT the
                 // velocity zone. Marcato and portamento (vel ≤ threshold) have
                 // no sampled pre-delay → fire on the tick.
-                let lead_ms = if n.is_marcato() || (porta_vel_max > 0 && vel <= porta_vel_max) {
+                let lead_ms = if no_prefire() {
+                    // NO-SHIFT mode: fire the transition AT the note-on (the
+                    // tick), like real reactive CSS — the arrival then lands
+                    // LATE by the sample's own latency (matched against a real
+                    // Kontakt render). The engine plays from the `$1fvjk` offset
+                    // (not the arrival-aligned skip) so the pre-bow is intact.
+                    0
+                } else if n.is_marcato() || (porta_vel_max > 0 && vel <= porta_vel_max) {
                     0
                 } else {
                     let ioi_frames = prev_start.map(|p| (start - p).max(0)).unwrap_or(0);

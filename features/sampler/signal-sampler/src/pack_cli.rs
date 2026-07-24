@@ -112,6 +112,14 @@ enum Cmd {
         /// (no CC1 layer crossfade, ENV_FLEX, or legato trim/bloom).
         #[arg(long)]
         pure: bool,
+        /// Use an EXTERNAL audio file as the waveform (skip the engine render) —
+        /// for showing a reference render (e.g. a real Kontakt bounce) with the
+        /// beat grid. `--notes` may be empty when this is set.
+        #[arg(long)]
+        audio_in: Option<PathBuf>,
+        /// Header label for the report (e.g. "CSS REFERENCE").
+        #[arg(long)]
+        label: Option<String>,
     },
     /// Render the SAME line at several legato velocities (slow/medium/fast) and
     /// write a single wrapper page that toggles between the full reports — so
@@ -350,7 +358,12 @@ pub fn cli_main(argv: impl IntoIterator<Item = OsString>) -> Result<()> {
             bpm,
             beats_per_bar,
             pure,
-        } => render_report(&pack, &notes, cc1, cc2, &out, wav, tail, bpm, beats_per_bar, pure, None),
+            audio_in,
+            label,
+        } => render_report(
+            &pack, &notes, cc1, cc2, &out, wav, tail, bpm, beats_per_bar, pure, None, audio_in,
+            label,
+        ),
         Cmd::RenderCompare {
             pack,
             notes,
@@ -1441,10 +1454,88 @@ fn render_report(
     beats_per_bar: u32,
     pure: bool,
     vel_override: Option<u8>,
+    audio_in: Option<PathBuf>,
+    label: Option<String>,
 ) -> Result<()> {
     use crate::document::{DocCc, DocNote, DocumentRenderOptions, TempoPoint, TrackDocument};
     const SR: u32 = 48_000;
     const ID: &str = "report";
+
+    // External-audio report: show a reference bounce (e.g. a real Kontakt CSS
+    // render) as the waveform with the beat grid — no engine render, no voices.
+    if let Some(audio_path) = audio_in.as_ref() {
+        let data = crate::engine::cache::load_sample(audio_path)
+            .map_err(|e| eyre::eyre!("load {}: {e}", audio_path.display()))?;
+        let ch = data.channels.max(1) as usize;
+        // Interleave to stereo (duplicate mono).
+        let audio: Vec<f32> = if ch >= 2 {
+            (0..data.num_frames)
+                .flat_map(|f| [data.frames[f * ch], data.frames[f * ch + 1]])
+                .collect()
+        } else {
+            data.frames.iter().flat_map(|&s| [s, s]).collect()
+        };
+        let sr = data.sample_rate;
+        let wav_path = wav.unwrap_or_else(|| out.with_extension("wav"));
+        {
+            let mut w = hound::WavWriter::create(
+                &wav_path,
+                hound::WavSpec {
+                    channels: 2,
+                    sample_rate: sr,
+                    bits_per_sample: 32,
+                    sample_format: hound::SampleFormat::Float,
+                },
+            )?;
+            for s in &audio {
+                w.write_sample(*s)?;
+            }
+            w.finalize()?;
+        }
+        let audio_href = wav_path.file_name().map(|f| f.to_string_lossy().into_owned());
+        let click_href = match bpm {
+            Some(b) => {
+                let cs = std::path::Path::new(crate::report::DEFAULT_CLICK_SAMPLE);
+                let click =
+                    crate::report::click_track(audio.len() / 2, sr, b, beats_per_bar, cs.exists().then_some(cs));
+                let stem = wav_path.file_stem().unwrap_or_default().to_string_lossy();
+                let mut mixed = audio.clone();
+                for (m, c) in mixed.iter_mut().zip(click.iter()) {
+                    *m = (*m + c * 0.7).clamp(-1.0, 1.0);
+                }
+                let fname = format!("{stem}.click.wav");
+                let mut w = hound::WavWriter::create(
+                    wav_path.with_file_name(&fname),
+                    hound::WavSpec { channels: 2, sample_rate: sr, bits_per_sample: 32, sample_format: hound::SampleFormat::Float },
+                )?;
+                for s in &mixed { w.write_sample(*s)?; }
+                w.finalize()?;
+                Some(fname)
+            }
+            None => None,
+        };
+        let sources = crate::report::ReportSources {
+            trace: crate::engine::RenderTrace::default(),
+            fires: vec![],
+            markers: vec![],
+            emitted: vec![],
+            audio_href,
+            stems: vec![],
+            tempo: bpm.map(|b| (b, beats_per_bar)),
+            click_href,
+            mode_label: label.unwrap_or_else(|| "REFERENCE".into()),
+            reactive_fallbacks: 0,
+        };
+        let name = format!(
+            "{} — {}",
+            audio_path.file_stem().unwrap_or_default().to_string_lossy(),
+            sources.mode_label
+        );
+        let data_json = crate::report::render_report_json(&name, &audio, 2, sr, &sources);
+        crate::report::write_report_html(out, &data_json)?;
+        println!("wrote {} (external audio {})", out.display(), audio_path.display());
+        return Ok(());
+    }
 
     const SEED: u64 = 0x00DA_11A5_EED0_0001;
     let mut script = parse_note_script(notes)?;
@@ -1693,6 +1784,8 @@ fn render_compare(
             beats_per_bar,
             pure,
             Some(*vel),
+            None,
+            None,
         )?;
         entries.push((label.clone(), *vel, html_name));
     }
