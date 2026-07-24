@@ -18,13 +18,22 @@ use signal_packs_proto::PackChunk;
 
 #[tokio::main]
 async fn main() -> eyre::Result<()> {
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| "warn".into()),
+        )
+        .init();
     let mut args = std::env::args().skip(1);
     let url = args.next().unwrap_or_else(|| "ws://127.0.0.1:4040/vox".into());
     let want = args.next();
     let dest = args.next().map(std::path::PathBuf::from);
 
     // "ws://…" dials the WebSocket; anything else is an iroh endpoint id
-    // (the p2p path the phone takes by default).
+    // (the p2p path the phone takes by default). The iroh endpoint must
+    // outlive the whole session — dropping it closes every connection —
+    // so it lives at fn scope (the app keeps its own in a static).
+    let mut _ep_keepalive: Option<architect::iroh_link::iroh::Endpoint> = None;
     let client: PackLibraryClient = if url.starts_with("ws") {
         let link = vox_websocket::WsLink::connect(&url)
             .await
@@ -42,6 +51,7 @@ async fn main() -> eyre::Result<()> {
         let link = architect::iroh_link::connect(&ep, id)
             .await
             .map_err(|e| eyre::eyre!("iroh connect: {e:?}"))?;
+        _ep_keepalive = Some(ep);
         vox_core::initiator_on(link)
             .establish()
             .await

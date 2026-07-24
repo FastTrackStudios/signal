@@ -184,6 +184,11 @@ required-features = ["signal", "session"]
 name = "pack_probe"
 required-features = ["signal-guitar"]
 
+# Minimal cross-machine iroh transport check (raw framed echo, no vox).
+[[example]]
+name = "iroh_echo"
+required-features = ["signal-guitar"]
+
 [dependencies]
 tracing.workspace = true
 
