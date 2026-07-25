@@ -43,7 +43,7 @@ pub enum RigNode {
 /// Semantic role of a container — a label describing intent. The audio behaviour
 /// is set by [`Combine`], not by this; roles drive display + where shared-vs-
 /// per-child processing is understood to sit.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Facet)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Facet)]
 #[repr(C)]
 pub enum Role {
     /// The whole program (top of the tree).
