@@ -31,11 +31,21 @@ const DEFAULT_BLOCK_FRAMES: usize = 4096;
 const FAST_AUDITION_PRELOAD_SAMPLES: usize = 64;
 const PERFORMANCE_PRELOAD_SAMPLES: usize = 512;
 
+/// How much of a block is preloaded eagerly, and in what order.
+///
+/// The default is deliberately small. A profile is applied PER BLOCK, and an
+/// engine holds many — rigs × layers × modules — so "512 samples" reads as
+/// half a gigabyte per block and tens of gigabytes across a session. 64
+/// coverage-first samples give a fully playable keyboard (every note sounds)
+/// while leaving the process-wide budget for the blocks that come after;
+/// everything else streams in as it is played. Ask for `Performance` or
+/// `Full` explicitly when one instrument is the whole job — an offline
+/// render, a bounce, a single-patch session.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[derive(Default)]
 pub enum PreloadProfile {
-    FastAudition,
     #[default]
+    FastAudition,
     Performance,
     Full,
     DrumKit,

@@ -38,6 +38,9 @@ pub struct PreloadStats {
     pub loaded: usize,
     pub failed: usize,
     pub bytes: usize,
+    /// Samples left on disk because the process-wide preload budget was
+    /// used up — they stream on demand. See [`super::budget`].
+    pub skipped: usize,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -126,6 +129,19 @@ struct CacheInner {
     prepared_dir: Option<PathBuf>,
     /// Read-only after construction.
     pcm_pack: Option<SignalPcmPack>,
+}
+
+impl Drop for CacheInner {
+    fn drop(&mut self) {
+        let bytes: usize = self
+            .loaded
+            .read()
+            .map(|l| l.values().map(|d| d.decoded_bytes()).sum())
+            .unwrap_or(0);
+        if bytes > 0 {
+            super::budget::release(bytes);
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -388,10 +404,20 @@ impl SampleCache {
         let loaded_n = AtomicUsize::new(0);
         let failed_n = AtomicUsize::new(0);
         let bytes_n = AtomicUsize::new(0);
+        let skipped_n = AtomicUsize::new(0);
 
         paths
             .par_iter()
             .for_each(|(path, prepared, prepared_dir, packed)| {
+                // The budget is the engine's hard RAM ceiling: past it, the
+                // rest of this preload streams from disk instead. Reserve the
+                // estimated size FIRST — decodes run in parallel, and charging
+                // afterwards lets a poolful of them overshoot together.
+                let reserved = estimated_decoded_bytes(&self.inner, path, packed.as_ref());
+                if !super::budget::try_reserve(reserved) {
+                    skipped_n.fetch_add(1, Ordering::Relaxed);
+                    return;
+                }
                 let result = match packed {
                     Some((pack_mmap, entry)) => load_pack_sample(pack_mmap, entry),
                     None => match prepared {
@@ -401,6 +427,9 @@ impl SampleCache {
                         None => load_sample(path),
                     },
                 };
+                // The real size is charged by `insert_loaded`, so the
+                // estimate goes back either way.
+                super::budget::release(reserved);
                 match result {
                     Ok(data) => {
                         let bytes = data.decoded_bytes();
@@ -430,6 +459,7 @@ impl SampleCache {
             loaded: loaded_n.load(Ordering::Relaxed),
             failed: failed_n.load(Ordering::Relaxed),
             bytes: bytes_n.load(Ordering::Relaxed),
+            skipped: skipped_n.load(Ordering::Relaxed),
         }
     }
 
@@ -464,15 +494,22 @@ impl SampleCache {
         let loaded_n = AtomicUsize::new(0);
         let failed_n = AtomicUsize::new(0);
         let bytes_n = AtomicUsize::new(0);
+        let skipped_n = AtomicUsize::new(0);
 
         work.par_iter().for_each(|(path, packed)| {
             if should_cancel() {
+                return;
+            }
+            let reserved = estimated_decoded_bytes(&self.inner, path, packed.as_ref());
+            if !super::budget::try_reserve(reserved) {
+                skipped_n.fetch_add(1, Ordering::Relaxed);
                 return;
             }
             let result = match packed {
                 Some((pack_mmap, entry)) => load_pack_sample(pack_mmap, entry),
                 None => decode_path(&self.inner, path),
             };
+            super::budget::release(reserved);
             match result {
                 Ok(data) => {
                     let bytes = data.decoded_bytes();
@@ -497,6 +534,7 @@ impl SampleCache {
             loaded: loaded_n.load(Ordering::Relaxed),
             failed: failed_n.load(Ordering::Relaxed),
             bytes: bytes_n.load(Ordering::Relaxed),
+            skipped: skipped_n.load(Ordering::Relaxed),
         }
     }
 
@@ -554,6 +592,7 @@ impl SampleCache {
                 if loaded.remove(&path).is_some() {
                     evicted += 1;
                     bytes_after = bytes_after.saturating_sub(bytes);
+                    super::budget::release(bytes);
                 }
             }
 
@@ -588,8 +627,15 @@ impl SampleCache {
 
     fn insert_loaded(&self, path: PathBuf, data: Arc<SampleData>, publish: bool) {
         {
+            let bytes = data.decoded_bytes();
             let mut loaded = self.inner.loaded.write().unwrap_or_else(|e| e.into_inner());
-            loaded.insert(path, data);
+            let replaced = loaded.insert(path, data);
+            // The process-wide preload budget is charged here because this is
+            // the one door every decoded sample comes through.
+            if let Some(old) = replaced {
+                super::budget::release(old.decoded_bytes());
+            }
+            super::budget::charge(bytes);
         }
         if publish {
             self.publish_loaded_snapshot();
@@ -601,6 +647,32 @@ impl SampleCache {
             self.inner.loaded_snapshot.store(Arc::new(loaded.clone()));
         }
     }
+}
+
+/// What a sample will cost once decoded, in bytes, without decoding it.
+///
+/// Packs and prepared caches declare their frame count, so the estimate is
+/// exact (f32 per sample). A bare file on disk has no index — 2 MiB is the
+/// house guess, which the real size replaces the moment it lands.
+fn estimated_decoded_bytes(
+    inner: &CacheInner,
+    path: &Path,
+    packed: Option<&PackedSampleRef>,
+) -> usize {
+    const F32: usize = std::mem::size_of::<f32>();
+    const UNKNOWN: usize = 2 * 1024 * 1024;
+    if let Some((_, entry)) = packed {
+        return entry.samples() * F32;
+    }
+    if let Some(pack) = inner.pcm_pack.as_ref() {
+        if let Some(entry) = pack.entry_for_path(path) {
+            return entry.samples() * F32;
+        }
+    }
+    if let Some(entry) = inner.prepared.get(path) {
+        return entry.samples * F32;
+    }
+    UNKNOWN
 }
 
 fn decode_path(inner: &CacheInner, path: &Path) -> Result<SampleData, SamplerError> {

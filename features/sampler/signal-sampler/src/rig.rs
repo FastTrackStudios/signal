@@ -1047,6 +1047,10 @@ pub(crate) fn build_sample_source(
                 library = %label,
                 loaded = stats.loaded,
                 failed = stats.failed,
+                // Left on disk because the process hit its RAM ceiling —
+                // those notes stream when played. See `engine::budget`.
+                skipped = stats.skipped,
+                resident_mb = crate::engine::budget::used_bytes() / (1024 * 1024),
                 "sample block preload complete"
             );
         })

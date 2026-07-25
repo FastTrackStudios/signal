@@ -27,6 +27,7 @@
 //! the velocity-based pre-delay in the spec). When the countdown expires the
 //! old sustain is faded out and the legato transition sample fires.
 
+pub mod budget;
 pub mod cache;
 pub mod filter;
 pub mod pitch_shift;
@@ -1040,6 +1041,7 @@ impl SampleEngine {
                 loaded: 1,
                 bytes: data.decoded_bytes(),
                 failed: 0,
+                skipped: 0,
             },
             Err(_) => PreloadStats {
                 failed: 1,
