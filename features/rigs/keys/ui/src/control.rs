@@ -60,8 +60,27 @@ pub fn ControlView(
     #[props(default)]
     controllers: crate::controllers::Controllers,
 ) -> Element {
+    let mut selection = crate::selection::use_selection();
+    // Escape clears the selection from wherever the pointer happens to be —
+    // the keyboard shortcut for "I am done editing that".
+    use_future(move || async move {
+        let mut esc = dioxus::document::eval(
+            "window.addEventListener('keydown', e => { \
+                 if (e.key === 'Escape') { dioxus.send(true); } \
+             });",
+        );
+        while esc.recv::<bool>().await.is_ok() {
+            selection.set(Selection::None);
+        }
+    });
+
     rsx! {
-        div { style: "flex: 1; min-height: 0; display: flex; flex-direction: column;",
+        div {
+            style: "flex: 1; min-height: 0; display: flex; flex-direction: column;",
+            // Clicking the surface itself puts the selection down. Cards and
+            // strips stop propagation, so only genuinely empty space lands
+            // here.
+            onclick: move |_| selection.set(Selection::None),
             // The engine band. Engines and their lanes are both unbounded, so
             // the band scrolls sideways rather than squeezing cards — and the
             // master sits outside the scroller, because the one fader you must
@@ -566,7 +585,10 @@ fn EngineStrip(
             ),
             // Clicking the card body — anywhere that is not a control — points
             // the browser at this engine. Double-click zooms into it.
-            onclick: move |_| selection.set(Selection::Engine(pick_name.clone())),
+            onclick: move |e: MouseEvent| {
+                e.stop_propagation();
+                selection.set(Selection::Engine(pick_name.clone()));
+            },
             ondoubleclick: move |_| zoom.set(Zoom::Engine(dbl_name.clone())),
             // The engine's level IS the card's left edge.
             EdgeFader {
