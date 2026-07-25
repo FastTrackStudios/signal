@@ -153,6 +153,10 @@ pub struct KeysModule {
     /// Strings"); empty = silent. A module IS its source — the preset name
     /// belongs to the layer that opened it.
     pub patch: String,
+    /// Which **variation** of that source is chosen ("Rock", "Suitcase"),
+    /// empty for the default. Variations share the soundsource and differ in
+    /// what the module does with it.
+    pub variant: String,
     /// The module has a realized source.
     pub live: bool,
     /// The module's own fader (dB) — modules sum inside the layer.
@@ -195,6 +199,24 @@ pub struct KeysLayerDetail {
     pub layer_macros: Vec<KeysMacro>,
     /// The lane's block tree — the Signal Engine program it's running.
     pub tree: KeysNode,
+}
+
+/// Everything the engine's macro surface needs — the level above a layer.
+///
+/// An engine's Global Controls are the same idea as a layer's, one rung up:
+/// absolute while every audible module *in the whole engine* agrees, a bipolar
+/// offset over all of them once they don't. The mixer's macro band renders
+/// this when an engine is selected.
+#[derive(Clone, PartialEq, Debug, Default, Facet)]
+pub struct KeysEngineDetail {
+    pub engine: String,
+    pub gain_db: f32,
+    pub muted: bool,
+    /// The engine's Global Controls, in panel order.
+    pub macros: Vec<KeysMacro>,
+    /// How many of its lanes are currently audible — what the macros reach.
+    pub live_layers: u32,
+    pub layers: u32,
 }
 
 // ── Performance (stacks / scenes) ───────────────────────────────────────────
@@ -245,7 +267,8 @@ pub mod keys {
     use facet::Facet;
 
     use super::{
-        KeysLayerDetail, KeysMixer, KeysNode, KeysPerform, KeysPreset, KeysStatus,
+        KeysEngineDetail, KeysLayerDetail, KeysMixer, KeysNode, KeysPerform, KeysPreset,
+        KeysStatus,
     };
     // `KeysModule` rides inside `KeysLayerDetail`.
 
@@ -307,6 +330,11 @@ pub mod keys {
         /// MODULE of `layer` — the source IS that module's Source Block, so
         /// this is the engine's normal load path.
         fn set_layer_patch(&self, layer: String, module: u32, preset: u32);
+
+        /// Load `preset` into `layer`'s `module` as its `variant`-th
+        /// variation (the same soundsource, voiced differently). Index 0 is
+        /// the first authored variation; the default is `set_layer_patch`.
+        fn set_layer_variant(&self, layer: String, module: u32, preset: u32, variant: u32);
         /// Empty one module (silences it and frees its samples).
         fn clear_layer(&self, layer: String, module: u32);
         /// Ride one module's fader (dB) — live, no rebuild.
@@ -325,6 +353,15 @@ pub mod keys {
         /// audible modules agree on the parameter, a bipolar offset that
         /// scales them around their own settings once they don't.
         fn set_layer_global(&self, layer: String, id: String, value: f32);
+
+        // ── Engine macros ───────────────────────────────────────────────
+        /// The engine's Global Controls — the same surface as a layer's, over
+        /// every audible module in every lane of the engine.
+        fn engine_detail(&self, engine: String) -> KeysEngineDetail;
+        /// Move an ENGINE macro. Same rule as `set_layer_global`, one rung
+        /// up: absolute while the whole engine agrees, a bipolar offset over
+        /// all of it once it doesn't.
+        fn set_engine_global(&self, engine: String, id: String, value: f32);
 
         // ── Performance ─────────────────────────────────────────────────
         /// The performance model: stacks + grid mode.

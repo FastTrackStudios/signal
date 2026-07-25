@@ -19,6 +19,7 @@ mod graphs;
 mod knob;
 mod layer_macros;
 mod layer_view;
+mod macro_panel;
 mod midi_light;
 mod module_edit;
 mod perform;
@@ -32,6 +33,7 @@ pub use control::{ControlView, engine_color};
 pub use engine_view::EngineView;
 pub use knob::Knob;
 pub use layer_view::LayerView;
+pub use macro_panel::MacroPanel;
 pub use module_edit::ModuleEdit;
 pub use zoom::{OpenButton, Zoom};
 pub use fader::{Fader, fmt_db};
@@ -62,6 +64,9 @@ pub fn KeysRigRemote() -> Element {
     // What the browser is pointed at — a path into the rig, set by clicking
     // anything in the mixer.
     let _selection = use_context_provider(|| Signal::new(selection::Selection::default()));
+    // The live state, for the panels that re-pull their own detail when the
+    // rig publishes (the mixer's macro band).
+    use_context_provider(|| state);
     let level = fts_chrome::use_chrome_level(2);
 
     let status = state.status.read().clone();

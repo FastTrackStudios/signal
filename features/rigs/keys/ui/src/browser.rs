@@ -111,7 +111,9 @@ pub fn Browser(state: KeysViewState) -> Element {
                         on_load: {
                             let rig = rig.clone();
                             let sel = sel.clone();
-                            move |i: usize| load_into(rig.clone(), sel.clone(), i)
+                            move |(i, variant): (usize, Option<usize>)| {
+                                load_variant(rig.clone(), sel.clone(), i, variant)
+                            }
                         },
                     }
                 },
@@ -137,6 +139,30 @@ pub fn Browser(state: KeysViewState) -> Element {
             }
         }
     }
+}
+
+/// Load a variation of `index` (or its default, when `variant` is `None`).
+fn load_variant(
+    rig: Option<KeysRigClient>,
+    sel: Selection,
+    index: usize,
+    variant: Option<usize>,
+) {
+    let Some(n) = variant else {
+        load_into(rig, sel, index);
+        return;
+    };
+    let Some(layer) = sel.layer().map(|l| l.to_string()) else {
+        // Variations belong to a lane's module; an engine program has none.
+        load_into(rig, sel, index);
+        return;
+    };
+    let module = sel.module();
+    spawn(async move {
+        if let Some(r) = rig {
+            let _ = r.set_layer_variant(layer, module, index as u32, n as u32).await;
+        }
+    });
 }
 
 /// Load library entry `index` at whatever level is selected.
@@ -412,11 +438,27 @@ fn VariationList(
     accent: String,
     loadable: bool,
     on_back: EventHandler<()>,
-    on_load: EventHandler<usize>,
+    on_load: EventHandler<(usize, Option<usize>)>,
 ) -> Element {
     let library = state.presets.read();
     let Some(preset) = library.get(index).cloned() else {
         return rsx! {};
+    };
+    // Which variation the selected module is holding, so the list says where
+    // you are as well as where you can go.
+    let selection = use_selection();
+    let here = match &*selection.read() {
+        Selection::Layer { layer, .. } | Selection::Module { layer, .. } => state
+            .mixer
+            .read()
+            .engines
+            .iter()
+            .flat_map(|e| e.layers.iter())
+            .find(|l| l.name == *layer)
+            .and_then(|l| l.modules.get(selection.read().module() as usize))
+            .map(|m| m.variant.clone())
+            .unwrap_or_default(),
+        _ => String::new(),
     };
 
     rsx! {
@@ -438,22 +480,26 @@ fn VariationList(
                 style: format!(
                     "width: 100%; appearance: none; text-align: left; border: none; cursor: pointer; \
                      border-radius: 7px; padding: 7px 9px; margin-bottom: 2px; \
-                     background: #101821; color: {accent}; font-size: 11px; font-weight: 600;",
+                     background: {}; color: {}; font-size: 11px; font-weight: 600;",
+                    if here.is_empty() { "#101821" } else { "transparent" },
+                    if here.is_empty() { accent.clone() } else { "#a1a1aa".to_string() },
                 ),
                 disabled: !loadable,
-                onclick: move |_| on_load.call(index),
+                onclick: move |_| on_load.call((index, None)),
                 "Default"
             }
             for (n, variant) in preset.variants.iter().enumerate() {
                 button {
                     key: "{n}",
-                    style: "width: 100%; appearance: none; text-align: left; border: none; \
-                            border-radius: 7px; padding: 7px 9px; margin-bottom: 2px; \
-                            background: transparent; color: #52525b; font-size: 11px;",
-                    // Variations are authored in the pack; loading one needs a
-                    // wire call that does not exist yet.
-                    disabled: true,
-                    title: "Variations load once packs author them",
+                    style: format!(
+                        "width: 100%; appearance: none; text-align: left; border: none; \
+                         cursor: pointer; border-radius: 7px; padding: 7px 9px; \
+                         margin-bottom: 2px; font-size: 11px; background: {}; color: {};",
+                        if *variant == here { "#101821" } else { "transparent" },
+                        if *variant == here { accent.clone() } else { "#e4e4e7".to_string() },
+                    ),
+                    disabled: !loadable,
+                    onclick: move |_| on_load.call((index, Some(n))),
                     "{variant}"
                 }
             }

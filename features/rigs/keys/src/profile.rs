@@ -11,7 +11,7 @@
 //! Profile "Worship"
 //! ├─ Engines (parallel)
 //! │  ├─ Keys   → Keys A · Keys B          (piano / EP)
-//! │  ├─ Synth  → Synth A · Synth B · Synth C
+//! │  ├─ Aux    → Aux A · Aux B · Aux C     (whatever the song needs)
 //! │  ├─ Organ  → Organ A · Organ B        (drawbar upper / lower)
 //! │  └─ Pad    → Pad                      (the wash under everything)
 //! └─ Global    → master FX tail
@@ -131,7 +131,7 @@ impl LayerDef {
 /// One engine: an instrument part holding parallel layers.
 #[derive(Debug, Clone, PartialEq, Facet)]
 pub struct EngineDef {
-    /// Engine container name ("Keys", "Synth", "Organ", "Pad").
+    /// Engine container name ("Keys", "Aux", "Organ", "Pad").
     pub name: String,
     /// The engine's own fader (dB) — rides all its layers.
     #[facet(default)]
@@ -265,12 +265,12 @@ pub fn worship_profile() -> KeysProfile {
                 ],
             },
             EngineDef {
-                name: "Synth".into(),
+                name: "Aux".into(),
                 gain_db: 0.0,
                 layers: vec![
-                    LayerDef::new("Synth A", ""),
-                    LayerDef::new("Synth B", ""),
-                    LayerDef::new("Synth C", ""),
+                    LayerDef::new("Aux A", ""),
+                    LayerDef::new("Aux B", ""),
+                    LayerDef::new("Aux C", ""),
                 ],
             },
             EngineDef {
@@ -298,6 +298,28 @@ pub fn worship_profile() -> KeysProfile {
                     key_hi: 127,
                 }],
             },
+            EngineDef {
+                name: "Drone".into(),
+                gain_db: 0.0,
+                // The bed under a moment — a Pad-Player-style drone that
+                // holds a key while the band moves over it. One lane, because
+                // a drone is one sustained thing; the key it drones on is a
+                // performance decision, not a patch one.
+                //
+                // "MT-240 Moon Drone", not the (nicer) "Jake Drone": the
+                // library has both a soundsource pack AND an Omnisphere patch
+                // by that name, the resolver takes the patch, and that patch
+                // fails to parse. This name exists only as a pack.
+                layers: vec![LayerDef::new("Drone", "MT-240 Moon Drone")],
+            },
+            EngineDef {
+                name: "SFX".into(),
+                gain_db: 0.0,
+                // Risers, impacts, swells — fired, not played, so the lanes
+                // start empty and get filled from the browser for the song at
+                // hand.
+                layers: vec![LayerDef::new("SFX A", ""), LayerDef::new("SFX B", "")],
+            },
         ],
         stacks: vec![
             KeysStackDef {
@@ -306,12 +328,15 @@ pub fn worship_profile() -> KeysProfile {
                 slots: vec![
                     SceneSlot::new("Keys A", "", 0.0),
                     SceneSlot::off("Keys B"),
-                    SceneSlot::off("Synth A"),
-                    SceneSlot::off("Synth B"),
-                    SceneSlot::off("Synth C"),
+                    SceneSlot::off("Aux A"),
+                    SceneSlot::off("Aux B"),
+                    SceneSlot::off("Aux C"),
                     SceneSlot::off("Organ A"),
                     SceneSlot::off("Organ B"),
                     SceneSlot::off("Pad"),
+                    SceneSlot::off("Drone"),
+                    SceneSlot::off("SFX A"),
+                    SceneSlot::off("SFX B"),
                 ],
             },
             KeysStackDef {
@@ -320,12 +345,15 @@ pub fn worship_profile() -> KeysProfile {
                 slots: vec![
                     SceneSlot::new("Keys A", "", -1.0),
                     SceneSlot::off("Keys B"),
-                    SceneSlot::off("Synth A"),
-                    SceneSlot::off("Synth B"),
-                    SceneSlot::off("Synth C"),
+                    SceneSlot::off("Aux A"),
+                    SceneSlot::off("Aux B"),
+                    SceneSlot::off("Aux C"),
                     SceneSlot::off("Organ A"),
                     SceneSlot::off("Organ B"),
                     SceneSlot::new("Pad", "", -8.0),
+                    SceneSlot::off("Drone"),
+                    SceneSlot::off("SFX A"),
+                    SceneSlot::off("SFX B"),
                 ],
             },
             KeysStackDef {
@@ -334,12 +362,15 @@ pub fn worship_profile() -> KeysProfile {
                 slots: vec![
                     SceneSlot::new("Keys A", "", 0.0),
                     SceneSlot::new("Keys B", "", -4.0),
-                    SceneSlot::new("Synth A", "", -6.0),
-                    SceneSlot::off("Synth B"),
-                    SceneSlot::off("Synth C"),
+                    SceneSlot::new("Aux A", "", -6.0),
+                    SceneSlot::off("Aux B"),
+                    SceneSlot::off("Aux C"),
                     SceneSlot::new("Organ A", "", -10.0),
                     SceneSlot::off("Organ B"),
                     SceneSlot::new("Pad", "", -6.0),
+                    SceneSlot::off("Drone"),
+                    SceneSlot::off("SFX A"),
+                    SceneSlot::off("SFX B"),
                 ],
             },
             KeysStackDef {
@@ -348,12 +379,15 @@ pub fn worship_profile() -> KeysProfile {
                 slots: vec![
                     SceneSlot::new("Keys A", "", -4.0),
                     SceneSlot::off("Keys B"),
-                    SceneSlot::new("Synth A", "", 0.0),
-                    SceneSlot::new("Synth B", "", -6.0),
-                    SceneSlot::off("Synth C"),
+                    SceneSlot::new("Aux A", "", 0.0),
+                    SceneSlot::new("Aux B", "", -6.0),
+                    SceneSlot::off("Aux C"),
                     SceneSlot::off("Organ A"),
                     SceneSlot::off("Organ B"),
                     SceneSlot::new("Pad", "", -10.0),
+                    SceneSlot::off("Drone"),
+                    SceneSlot::off("SFX A"),
+                    SceneSlot::off("SFX B"),
                 ],
             },
             KeysStackDef {
@@ -362,12 +396,15 @@ pub fn worship_profile() -> KeysProfile {
                 slots: vec![
                     SceneSlot::off("Keys A"),
                     SceneSlot::off("Keys B"),
-                    SceneSlot::off("Synth A"),
-                    SceneSlot::off("Synth B"),
-                    SceneSlot::new("Synth C", "", -12.0),
+                    SceneSlot::off("Aux A"),
+                    SceneSlot::off("Aux B"),
+                    SceneSlot::new("Aux C", "", -12.0),
                     SceneSlot::off("Organ A"),
                     SceneSlot::off("Organ B"),
                     SceneSlot::new("Pad", "", -4.0),
+                    SceneSlot::new("Drone", "", -8.0),
+                    SceneSlot::off("SFX A"),
+                    SceneSlot::off("SFX B"),
                 ],
             },
         ],
@@ -383,7 +420,7 @@ mod tests {
         let p = worship_profile();
         assert_eq!(p.engines.len(), 4);
         assert_eq!(p.engine("Keys").unwrap().layers.len(), 2);
-        assert_eq!(p.engine("Synth").unwrap().layers.len(), 3);
+        assert_eq!(p.engine("Aux").unwrap().layers.len(), 3);
         assert_eq!(p.engine("Organ").unwrap().layers.len(), 2);
         assert_eq!(p.stacks.len(), 5);
         // Every stack addresses every layer — no lane is left undefined.

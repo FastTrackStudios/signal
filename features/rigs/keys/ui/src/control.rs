@@ -10,10 +10,17 @@
 //! A strip's two ends are its two verbs: the lane's letter at the top takes it
 //! in and out of the patch, and the patch name at the bottom opens the layer
 //! (where the Soundsources panel loads a different sound into it).
+//!
+//! Under the strips sits the **macro band** — the Global Controls of whatever
+//! is selected. Click the Keys card and it is the Keys engine's knobs (one
+//! Filter, one Envelope, one Ambience over every lane it holds); click a lane
+//! and it is that lane's, over its modules. Each level offsets the one below
+//! it, so the same three knobs are a broad stroke at the top and a precise
+//! edit further in.
 
 use dioxus::prelude::*;
 use signal_keys_proto::keys::KeysRigClient;
-use signal_keys_proto::{KeysEngineModel, KeysLayerModel, KeysMixer};
+use signal_keys_proto::{KeysEngineModel, KeysLayerModel, KeysMacro, KeysMixer};
 
 use crate::selection::Selection;
 use signal_ui::components::Piano;
@@ -27,9 +34,14 @@ use crate::zoom::{OpenButton, Zoom};
 pub fn engine_color(name: &str) -> &'static str {
     match name {
         "Keys" => "#34d399",
-        "Synth" => "#a78bfa",
+        // "Aux" is the old Synth engine: everything auxiliary lands there.
+        "Aux" | "Synth" => "#a78bfa",
         "Organ" => "#fb923c",
         "Pad" => "#38bdf8",
+        // A drone is the bed nothing points at — grey keeps it behind the
+        // engines you play. SFX is white: it is a one-shot, not a colour.
+        "Drone" => "#9ca3af",
+        "SFX" => "#e4e4e7",
         _ => "#94a3b8",
     }
 }
@@ -44,16 +56,157 @@ pub fn ControlView(
 ) -> Element {
     rsx! {
         div { style: "flex: 1; min-height: 0; display: flex; flex-direction: column;",
+            // The engine band. Engines and their lanes are both unbounded, so
+            // the band scrolls sideways rather than squeezing cards — and the
+            // master sits outside the scroller, because the one fader you must
+            // always be able to reach is the one that stops the sound.
             div {
-                style: "flex: 1; min-height: 0; overflow: auto; padding: 12px; display: flex; \
-                        align-items: flex-start; gap: 14px;",
-                for engine in mixer.engines.iter() {
-                    EngineStrip { key: "{engine.name}", engine: engine.clone() }
+                style: "flex: 1; min-height: 0; display: flex; align-items: stretch; \
+                        border-bottom: 1px solid #1c1c1f;",
+                div {
+                    // `space-between` spends the slack on the gaps when the
+                    // engines don't fill the width, and gets out of the way
+                    // when they overflow (the first card stays flush left and
+                    // the row scrolls, which `center`/`space-around` would
+                    // break by pushing the start out of reach).
+                    style: "flex: 1; min-width: 0; overflow-x: auto; overflow-y: auto; \
+                            padding: 12px 22px; display: flex; align-items: flex-start; \
+                            justify-content: space-between; gap: 14px;",
+                    for engine in mixer.engines.iter() {
+                        div {
+                            key: "{engine.name}",
+                            style: "flex: 0 0 auto;",
+                            EngineStrip { engine: engine.clone() }
+                        }
+                    }
                 }
-                div { style: "flex: 1;" }
-                MasterStrip { master_db: mixer.master_db }
+                div {
+                    style: "flex: 0 0 auto; display: flex; align-items: flex-start; \
+                            padding: 12px; border-left: 1px solid #1c1c1f; background: #0b0b0e;",
+                    MasterStrip { master_db: mixer.master_db }
+                }
             }
+            MacroBand {}
             KeyboardStrip { mixer: mixer.clone(), held }
+        }
+    }
+}
+
+/// Which node's Global Controls the band shows: `(engine, name, is_engine)`.
+/// A module selection still shows its LAYER — anything deeper is the zoom's
+/// job.
+fn scope_of(selection: &Selection) -> Option<(String, String, bool)> {
+    match selection {
+        Selection::Engine(engine) => Some((engine.clone(), engine.clone(), true)),
+        Selection::Layer { engine, layer } | Selection::Module { engine, layer, .. } => {
+            Some((engine.clone(), layer.clone(), false))
+        }
+        Selection::None => None,
+    }
+}
+
+/// **The macro band** — the selected node's Global Controls, under the strips
+/// that select it.
+///
+/// It follows the selection rather than the zoom: picking a card or a lane is
+/// already how the browser is aimed, so it is also how the knobs are. An
+/// engine's macros drive every module in every one of its lanes; a lane's
+/// drive its own. Both are offsets into the level beneath once that level
+/// stops agreeing with itself — the panels say "offset" and print the spread.
+#[component]
+fn MacroBand() -> Element {
+    let rig = use_hook(try_consume_context::<KeysRigClient>);
+    let state = use_hook(try_consume_context::<crate::state::KeysViewState>);
+    let selection = crate::selection::use_selection();
+    let mut macros = use_signal(Vec::<KeysMacro>::new);
+
+    let scope = scope_of(&selection.read());
+    let accent = scope
+        .as_ref()
+        .map(|(engine, ..)| engine_color(engine).to_string())
+        .unwrap_or_else(|| "#94a3b8".to_string());
+
+    // Re-pull whenever the selection moves or the rig publishes a mixer —
+    // every macro move republishes, so the band reflects what it just did.
+    // Both are read INSIDE the effect: that is what makes it re-run, and what
+    // keeps it from firing on a selection it captured once at mount.
+    {
+        let rig = rig.clone();
+        use_effect(move || {
+            // Track the mixer so a change anywhere refreshes the readouts.
+            if let Some(state) = state {
+                let _ = state.mixer.read();
+            }
+            let scope = scope_of(&selection.read());
+            let rig = rig.clone();
+            spawn(async move {
+                let Some(rig) = rig else { return };
+                match scope {
+                    Some((_, name, true)) => {
+                        if let Ok(d) = rig.engine_detail(name).await {
+                            macros.set(d.macros);
+                        }
+                    }
+                    Some((_, name, false)) => {
+                        if let Ok(d) = rig.layer_detail(name, 0).await {
+                            macros.set(d.layer_macros);
+                        }
+                    }
+                    None => macros.set(Vec::new()),
+                }
+            });
+        });
+    }
+
+    let (label, level) = match &scope {
+        Some((_, name, true)) => (name.clone(), "engine controls".to_string()),
+        Some((_, name, false)) => (name.clone(), "layer controls".to_string()),
+        None => (String::new(), String::new()),
+    };
+    let items = macros.read().clone();
+
+    rsx! {
+        div {
+            style: "flex-shrink: 0; display: flex; flex-direction: column; gap: 8px; \
+                    padding: 10px 12px; border-top: 1px solid #1c1c1f; background: #0a0a0c;",
+            div { style: "display: flex; align-items: baseline; gap: 8px;",
+                if label.is_empty() {
+                    span { style: "font-size: 10px; color: #52525b;",
+                        "Pick an engine or a lane to control it from here."
+                    }
+                } else {
+                    span { style: "font-size: 11px; font-weight: 700; color: {accent};", "{label}" }
+                    span {
+                        style: "font-size: 9px; font-weight: 700; letter-spacing: 0.1em; \
+                                text-transform: uppercase; color: #52525b;",
+                        "{level}"
+                    }
+                }
+            }
+            if !items.is_empty() {
+                crate::macro_panel::MacroPanel {
+                    macros: items,
+                    accent: accent.clone(),
+                    on_change: {
+                        let (rig, scope) = (rig.clone(), scope.clone());
+                        move |(id, v): (String, f32)| {
+                            let (rig, scope) = (rig.clone(), scope.clone());
+                            spawn(async move {
+                                let Some(rig) = rig else { return };
+                                match scope {
+                                    Some((_, name, true)) => {
+                                        let _ = rig.set_engine_global(name, id, v).await;
+                                    }
+                                    Some((_, name, false)) => {
+                                        let _ = rig.set_layer_global(name, id, v).await;
+                                    }
+                                    None => {}
+                                }
+                            });
+                        }
+                    },
+                }
+            }
         }
     }
 }
