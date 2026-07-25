@@ -25,13 +25,17 @@ use signal_keys_proto::KeysMacro;
 use crate::graphs::{
     ModuleCurve, StackedEnvelopes, StackedFilters, StackedUnison, StackedVibrato,
 };
+use crate::knob::Knob;
 use crate::module_edit::{KnobRow, Panel};
 
 /// One card in the band.
 enum Cell {
-    /// A knob group: its macro group, and what it says when the knobs have
-    /// nothing to report.
-    Group(&'static str, &'static str),
+    /// A knob group stacked **vertically** in a thin column: two or three
+    /// knobs that need no width and no picture, read bottom-up (Low under
+    /// Mid under High, the way an EQ is drawn everywhere else). The `bool`
+    /// reverses the macro order so the table's Low-first listing comes out
+    /// High-first on screen.
+    Column(&'static str, &'static str, bool),
     /// A shape and the knobs that move it.
     Shape(Shape),
 }
@@ -48,8 +52,8 @@ const ROW: &[Cell] = &[
     Cell::Shape(Shape::FilterEnv),
     Cell::Shape(Shape::FilterResponse),
     Cell::Shape(Shape::AmpEnv),
-    Cell::Group("Ambience", "reverb amount · length"),
-    Cell::Group("Tone", "EQ — centred is bypassed"),
+    Cell::Column("Ambience", "reverb amount · length", false),
+    Cell::Column("Tone", "EQ — centred is bypassed", true),
 ];
 
 /// The macros of one group.
@@ -212,7 +216,7 @@ pub fn MacroPanel(
                             div {
                                 key: "{i}",
                                 style: format!(
-                                    "flex: 0 1 auto; min-width: 0;{}",
+                                    "flex: 0 1 auto; min-width: 0; display: flex;{}",
                                     match shape.max_width_px() {
                                         0 => String::new(),
                                         px => format!(" max-width: {px}px;"),
@@ -228,45 +232,46 @@ pub fn MacroPanel(
                                 }
                             }
                         },
-                        Cell::Group(name, hint) => {
-                            let items = group(&macros, name);
+                        Cell::Column(name, hint, top_first) => {
+                            let mut items = group(&macros, name);
+                            if *top_first {
+                                items.reverse();
+                            }
                             if items.is_empty() {
                                 rsx! {}
                             } else {
-                                let spread = spread(&macros, name);
                                 rsx! {
-                                    div { key: "{i}", style: "flex: 0 1 auto; min-width: 0;",
+                                    // One knob wide. These are set-and-forget
+                                    // trims, not shapes — they earn a column,
+                                    // not a card's worth of the row.
+                                    div {
+                                        key: "{i}",
+                                        style: "flex: 0 0 auto; max-width: 116px; display: flex;",
                                         Panel {
                                             title: name.to_string(),
                                             accent: accent.clone(),
                                             lit: items.iter().any(|m| m.live),
                                             trailing: offset_badge(varies(&macros, name)),
                                             div {
-                                                style: "display: flex; flex-direction: column; \
-                                                        gap: 10px; min-width: 0;",
-                                                // The room a shape takes, held
-                                                // open so every card's knobs
-                                                // sit on the same line —
-                                                // Ambience and Tone are the two
-                                                // still waiting for a visual.
-                                                div {
-                                                    style: format!(
-                                                        "height: {height_px}px; display: flex; align-items: center;"
-                                                    ),
-                                                    div { style: "flex: 1; height: 1px; background: #1b1b1f;" }
-                                                }
-                                                div {
-                                                    style: "display: flex; flex-direction: column; gap: 6px; \
-                                                            padding-top: 8px; border-top: 1px solid #1c1c21;",
-                                                    KnobRow {
-                                                        macros: items.clone(),
+                                                style: "display: flex; flex-direction: column; gap: 8px; \
+                                                        align-items: center; justify-content: space-between; \
+                                                        flex: 1;",
+                                                title: "{hint}",
+                                                for m in items.iter() {
+                                                    Knob {
+                                                        key: "{m.id}",
+                                                        label: m.name.clone(),
+                                                        value: m.value,
+                                                        min: m.min,
+                                                        max: m.max,
+                                                        unit: m.unit.clone(),
+                                                        live: m.live,
+                                                        bipolar: m.bipolar,
                                                         accent: accent.clone(),
-                                                        on_change: move |(id, v)| on_change.call((id, v)),
-                                                    }
-                                                    span {
-                                                        style: "font-size: 9px; color: #52525b; line-height: 1.4; \
-                                                                overflow: hidden; text-overflow: ellipsis;",
-                                                        if let Some(s) = spread.clone() { "{s}" } else { "{hint}" }
+                                                        on_change: {
+                                                            let id = m.id.clone();
+                                                            move |v: f32| on_change.call((id.clone(), v))
+                                                        },
                                                     }
                                                 }
                                             }

@@ -37,7 +37,11 @@ pub(crate) fn Panel(
 ) -> Element {
     rsx! {
         div {
-            style: "display: flex; flex-direction: column; gap: 12px; padding: 14px 16px; \
+            // `flex: 1` so a panel fills the cell it was given — in the macro
+            // band the cards are flex items, and a card that hugs its content
+            // leaves its knobs floating in a box that is wider than they are.
+            // Grid layouts (the module surface, the layer zoom) ignore it.
+            style: "display: flex; flex: 1; flex-direction: column; gap: 12px; padding: 14px 16px; \
                     border: 1px solid #1c1c21; border-radius: 12px; background: #0d0d10; \
                     min-width: 0;",
             div { style: "display: flex; align-items: center; gap: 8px; min-height: 20px;",

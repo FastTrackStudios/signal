@@ -645,11 +645,6 @@ fn EngineStrip(
                         on_open: move |_| zoom.set(Zoom::Engine(open_name.clone())),
                     }
                 }
-                // Whatever this engine embeds in its card — the Drone's key
-                // selector today; other engines can claim the slot later.
-                if let Some(drone) = engine.drone.clone() {
-                    DroneKeys { engine: engine.name.clone(), drone }
-                }
                 // Layer strips.
                 div { style: "display: flex; gap: 10px; align-items: flex-start;",
                     for layer in engine.layers.iter() {
@@ -659,6 +654,18 @@ fn EngineStrip(
                             accent: accent.to_string(),
                         }
                     }
+                }
+            }
+            // Whatever this engine embeds in its card — the Drone's key
+            // selector today; other engines can claim the slot later. It
+            // extends the card sideways: the strips set the card's height and
+            // nothing embedded is allowed to push it taller.
+            if let Some(drone) = engine.drone.clone() {
+                div {
+                    style: "flex: 0 0 auto; display: flex; align-items: stretch; \
+                            margin-left: 12px; padding-left: 12px; \
+                            border-left: 1px solid #1c1c21;",
+                    DroneKeys { engine: engine.name.clone(), drone }
                 }
             }
         }
@@ -683,11 +690,18 @@ fn DroneKeys(engine: String, drone: signal_keys_proto::KeysDrone) -> Element {
 
     rsx! {
         div {
-            style: "display: flex; flex-direction: column; gap: 8px; padding-top: 4px;",
-            // The twelve keys, laid out like a keyboard octave so the sharps
-            // sit where the fingers expect them.
+            style: "display: flex; flex-direction: column; gap: 6px; width: 132px; \
+                    justify-content: flex-start;",
+            span {
+                style: "font-size: 8px; font-weight: 700; letter-spacing: 0.1em; \
+                        text-transform: uppercase; color: #52525b;",
+                "Key"
+            }
+            // Six rows of two, chromatic: a tall column fits beside the lanes
+            // without making the card taller than they are, and twelve keys
+            // are short enough to scan without a keyboard's geometry.
             div {
-                style: "display: grid; grid-template-columns: repeat(6, 1fr); gap: 3px;",
+                style: "display: grid; grid-template-columns: repeat(2, 1fr); gap: 3px;",
                 for (i, name) in KEYS.iter().enumerate() {
                     {
                         let rig = rig.clone();
