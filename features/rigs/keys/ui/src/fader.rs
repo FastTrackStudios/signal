@@ -52,6 +52,7 @@ pub fn EdgeFader(
     on_change: EventHandler<f32>,
 ) -> Element {
     let mut drag = use_signal(|| None::<(f64, f32)>);
+    let send = crate::throttle::use_throttle(on_change);
 
     let pos = db_to_pos(db);
     let pct = pos * 100.0;
@@ -85,11 +86,17 @@ pub fn EdgeFader(
                     if let Some((y0, p0)) = drag() {
                         let dy = y0 - e.client_coordinates().y;
                         let next = (p0 as f64 + dy / SENSITIVITY).clamp(0.0, 1.0) as f32;
-                        on_change.call(pos_to_db(next));
+                        send.queue(pos_to_db(next));
                     }
                 },
-                onpointerup: move |_| drag.set(None),
-                onpointerleave: move |_| drag.set(None),
+                onpointerup: move |_| {
+                    send.flush();
+                    drag.set(None);
+                },
+                onpointerleave: move |_| {
+                    send.flush();
+                    drag.set(None);
+                },
             }
         }
     }
@@ -121,6 +128,7 @@ pub fn Fader(
 ) -> Element {
     // (start_y, start_pos) while a drag is live.
     let mut drag = use_signal(|| None::<(f64, f32)>);
+    let send = crate::throttle::use_throttle(on_change);
 
     let pos = db_to_pos(db);
     let h = height_px as f32;
@@ -174,11 +182,17 @@ pub fn Fader(
                         if let Some((y0, p0)) = drag() {
                             let dy = y0 - e.client_coordinates().y;
                             let next = (p0 as f64 + dy / SENSITIVITY).clamp(0.0, 1.0) as f32;
-                            on_change.call(pos_to_db(next));
+                            send.queue(pos_to_db(next));
                         }
                     },
-                    onpointerup: move |_| drag.set(None),
-                    onpointerleave: move |_| drag.set(None),
+                    onpointerup: move |_| {
+                        send.flush();
+                        drag.set(None);
+                    },
+                    onpointerleave: move |_| {
+                        send.flush();
+                        drag.set(None);
+                    },
                 }
             }
         }

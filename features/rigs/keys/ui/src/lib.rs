@@ -29,6 +29,7 @@ mod perform;
 mod routing;
 mod selection;
 mod state;
+mod throttle;
 mod time_fx;
 mod zoom;
 

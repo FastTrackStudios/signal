@@ -64,6 +64,8 @@ pub fn Knob(
     on_change: EventHandler<f32>,
 ) -> Element {
     let mut drag = use_signal(|| None::<(f64, f32)>);
+    // A drag is a stream of values; only the newest is worth sending.
+    let send = crate::throttle::use_throttle(on_change);
 
     // A log taper needs a positive floor to divide by; anything else falls
     // back to linear rather than producing NaN.
@@ -157,15 +159,22 @@ pub fn Knob(
                         if let Some((y0, n0)) = drag() {
                             let dy = y0 - e.client_coordinates().y;
                             let next = (n0 as f64 + dy / SENSITIVITY).clamp(0.0, 1.0) as f32;
-                            on_change.call(if log {
+                            send.queue(if log {
                                 min * (max / min).powf(next)
                             } else {
                                 min + next * span
                             });
                         }
                     },
-                    onpointerup: move |_| drag.set(None),
-                    onpointerleave: move |_| drag.set(None),
+                    onpointerup: move |_| {
+                        // The release is the value that counts.
+                        send.flush();
+                        drag.set(None);
+                    },
+                    onpointerleave: move |_| {
+                        send.flush();
+                        drag.set(None);
+                    },
                 }
             }
         }
