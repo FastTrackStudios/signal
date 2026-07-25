@@ -39,10 +39,10 @@ use facet::Facet;
 /// (four modules summing) without the master clipping.
 const DEFAULT_TARGET_LUFS: f64 = -18.0;
 
-/// No pack is trimmed further than this. A pack needing more than 18 dB is
-/// mismatched enough that it wants re-packing, not a bigger number — and a
-/// runaway trim on a bad measurement should not be able to blow up a service.
-const MAX_TRIM_DB: f32 = 18.0;
+/// No pack is trimmed further than this. Measured, the Keyscape C7 Grand sits
+/// 19.7 dB under the Omnisphere pads — so the ceiling has to clear that, while
+/// still stopping a bad measurement from blowing up a service.
+const MAX_TRIM_DB: f32 = 24.0;
 
 /// One pack's level.
 #[derive(Debug, Clone, PartialEq, Default, Facet)]

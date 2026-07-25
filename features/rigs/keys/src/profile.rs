@@ -380,11 +380,11 @@ pub fn worship_profile() -> KeysProfile {
                 // a drone is one sustained thing; the key it drones on is a
                 // performance decision, not a patch one.
                 //
-                // "MT-240 Moon Drone", not the (nicer) "Jake Drone": the
-                // library has both a soundsource pack AND an Omnisphere patch
-                // by that name, the resolver takes the patch, and that patch
-                // fails to parse. This name exists only as a pack.
-                layers: vec![LayerDef::new("Drone", "MT-240 Moon Drone")],
+                // Empty by default: a drone is chosen for a moment, not left
+                // loaded — and preloading a pack nobody asked for costs the
+                // budget a piano could have used. Pick a sound in the browser
+                // and a key on the card.
+                layers: vec![LayerDef::new("Drone", "")],
             },
             EngineDef {
                 name: "SFX".into(),

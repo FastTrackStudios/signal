@@ -391,7 +391,15 @@ impl State {
         for engine in &profile.engines {
             self.engines.insert(
                 engine.name.clone(),
-                EngineState { gain_db: engine.gain_db, ..EngineState::default() },
+                EngineState {
+                    gain_db: engine.gain_db,
+                    // A drone starts silent and empty: it holds a note under
+                    // the band when a player asks for one, and a drone that
+                    // switched itself on at boot would be a fault, not a
+                    // feature.
+                    muted: is_drone(&engine.name),
+                    ..EngineState::default()
+                },
             );
             for layer in &engine.layers {
                 self.lanes.insert(
