@@ -497,7 +497,8 @@ mod tests {
     #[test]
     fn worship_shape() {
         let p = worship_profile();
-        assert_eq!(p.engines.len(), 4);
+        // Keys · Pad · Organ · Aux · Drone · SFX.
+        assert_eq!(p.engines.len(), 6);
         assert_eq!(p.engine("Keys").unwrap().layers.len(), 2);
         assert_eq!(p.engine("Aux").unwrap().layers.len(), 3);
         assert_eq!(p.engine("Organ").unwrap().layers.len(), 2);
