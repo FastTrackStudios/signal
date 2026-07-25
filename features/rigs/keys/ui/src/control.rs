@@ -286,10 +286,12 @@ fn MacroBand() -> Element {
     {
         let rig = rig.clone();
         use_effect(move || {
-            // Track the mixer so a change anywhere refreshes the readouts.
-            if let Some(state) = state {
-                let _ = state.mixer.read();
-            }
+            // Depends on the SELECTION only. It used to track the mixer too,
+            // so that a fader move refreshed the readouts — but a knob write
+            // republishes the mixer, which made every drag tick a fetch and a
+            // full re-render of the band, the curves and both time-FX views.
+            // That was the freeze. The knob paints its own drag locally, so
+            // nothing is waiting on this.
             let scope = MacroScope::of(&selection.read());
             let rig = rig.clone();
             spawn(async move {
