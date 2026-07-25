@@ -102,9 +102,6 @@ pub fn ControlView(
                     MasterStrip { master_db: mixer.master_db }
                 }
             }
-            // The slack lives here, so the engine band ends where its cards
-            // end and the macro band + keyboard stay pinned to the base.
-            div { style: "flex: 1; min-height: 0;" }
             MacroBand {}
             KeyboardStrip { mixer: mixer.clone(), held }
         }
@@ -280,11 +277,13 @@ fn MacroBand() -> Element {
 
     rsx! {
         div {
-            // The band is content-height but capped: the strips above it are
-            // what you perform on, and no amount of visualization is worth
-            // squeezing them off the screen.
-            style: "flex-shrink: 0; max-height: 46vh; overflow: auto; display: flex; \
-                    flex-direction: column; gap: 8px; padding: 10px 12px; \
+            // The band owns the room between the engine strips and the
+            // keyboard: the strips size to their cards, so everything left
+            // over is the band's, which is where the delay and reverb
+            // visualizations go. It scrolls vertically when it outgrows that
+            // room, never sideways — everything the level has fits the width.
+            style: "flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; \
+                    display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; \
                     border-top: 1px solid #1c1c1f; background: #0a0a0c;",
             div { style: "display: flex; align-items: baseline; gap: 8px;",
                 span { style: "font-size: 11px; font-weight: 700; color: {accent};", "{label}" }

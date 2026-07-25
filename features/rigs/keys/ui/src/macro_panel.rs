@@ -142,9 +142,10 @@ pub fn ShapeCard(
 /// One scope's Global Controls: the three shapes across the top, the knob-row
 /// groups under them.
 ///
-/// The shapes get the width because they are what you look at rather than
-/// read; the small groups scroll sideways beneath, in the mixer's own
-/// left-to-right language.
+/// **Both rows are one row.** Nothing here scrolls sideways and nothing wraps
+/// to a second line — every macro the level has is on screen at once, columns
+/// sharing the width equally and shrinking together. A band you have to scroll
+/// is a band you stop reading.
 #[component]
 pub fn MacroPanel(
     macros: Vec<KeysMacro>,
@@ -161,8 +162,12 @@ pub fn MacroPanel(
     rsx! {
         div { style: "display: flex; flex-direction: column; gap: 12px; min-width: 0;",
             div {
+                // `minmax(0, 1fr)`, not `auto-fit`: three columns, always,
+                // that shrink instead of dropping to a second row. A grid
+                // track's default `min-width: auto` would refuse to go below
+                // its content and push the last card off the edge.
                 style: "display: grid; gap: 12px; align-items: start; \
-                        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));",
+                        grid-template-columns: repeat(3, minmax(0, 1fr));",
                 for (i, shape) in SHAPES.into_iter().enumerate() {
                     ShapeCard {
                         key: "{i}",
@@ -176,8 +181,7 @@ pub fn MacroPanel(
                 }
             }
             div {
-                style: "display: flex; gap: 12px; align-items: stretch; overflow-x: auto; \
-                        padding-bottom: 4px;",
+                style: "display: flex; gap: 12px; align-items: stretch; min-width: 0;",
                 for (name, hint) in GROUPS.iter() {
                     {
                         let items = group(&macros, name);
@@ -186,13 +190,17 @@ pub fn MacroPanel(
                         } else {
                             let spread = spread(&macros, name);
                             rsx! {
-                                div { key: "{name}", style: "flex: 0 0 auto;",
+                                // `flex: 1 1 0` with `min-width: 0`: every
+                                // group takes an equal share of the row and
+                                // gives it back when the window narrows. The
+                                // knobs inside wrap rather than overflow.
+                                div { key: "{name}", style: "flex: 1 1 0; min-width: 0;",
                                     Panel {
                                         title: name.to_string(),
                                         accent: accent.clone(),
                                         lit: items.iter().any(|m| m.live),
                                         trailing: offset_badge(varies(&macros, name)),
-                                        div { style: "display: flex; flex-direction: column; gap: 8px;",
+                                        div { style: "display: flex; flex-direction: column; gap: 8px; min-width: 0;",
                                             KnobRow {
                                                 macros: items.clone(),
                                                 accent: accent.clone(),
@@ -200,7 +208,7 @@ pub fn MacroPanel(
                                             }
                                             span {
                                                 style: "font-size: 9px; color: #52525b; line-height: 1.4; \
-                                                        white-space: nowrap;",
+                                                        overflow: hidden; text-overflow: ellipsis;",
                                                 if let Some(s) = spread.clone() { "{s}" } else { "{hint}" }
                                             }
                                         }
