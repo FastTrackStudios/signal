@@ -113,7 +113,7 @@ fn dump_rhodes() {
         match cache.get(&p) {
             Ok(data) => {
                 let mut peak = 0.0f32;
-                for s in data.frames.iter() {
+                for s in data.to_f32().iter() {
                     peak = peak.max(s.abs());
                 }
                 let secs = data.num_frames as f32 / data.sample_rate as f32;

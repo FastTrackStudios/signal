@@ -74,9 +74,10 @@ fn decode_minimal_16bit_stereo_aiff() {
     assert_eq!(data.channels, 2);
     assert_eq!(data.sample_rate, 44100);
     assert_eq!(data.num_frames, 4);
-    assert_eq!(data.frames.len(), 8);
-    assert!((data.frames[0]).abs() < 1e-6);
-    assert!((data.frames[2] - 0.5).abs() < 1e-3);
-    assert!((data.frames[3] + 0.5).abs() < 1e-3);
-    assert!((data.frames[4] + 1.0).abs() < 1e-3);
+    assert_eq!(data.len(), 8);
+    let pcm = data.to_f32();
+    assert!((pcm[0]).abs() < 1e-6);
+    assert!((pcm[2] - 0.5).abs() < 1e-3);
+    assert!((pcm[3] + 0.5).abs() < 1e-3);
+    assert!((pcm[4] + 1.0).abs() < 1e-3);
 }

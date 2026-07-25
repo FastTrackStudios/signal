@@ -14,6 +14,28 @@
 //!               → SamplerRig  (daw-backed: SamplerBank on daw's AudioEngine)
 //! ```
 //!
+//! # Memory model
+//!
+//! A sampled piano is tens of gigabytes; keeping it playable is a question of
+//! never holding it. Three mechanisms, in the order they save you:
+//!
+//! 1. **Raw-PCM packs** (`.signalpack` kinds `pcm-i16` / `pcm-i24`) are read
+//!    straight out of the file mapping — no decode, no allocation, and
+//!    residency is page cache the kernel evicts under pressure. Build one
+//!    with `fts signal pack transcode <in> <out> --codec pcm16`. A full
+//!    Keyscape instrument costs ~1 MB of process memory this way, against
+//!    ~750 MB decoded.
+//! 2. **The stream cache** does the same for FLAC/Ogg packs: the first load
+//!    writes the decoded audio out as raw i16 and maps it back, and every
+//!    load after that (this run and later runs) skips the decoder entirely.
+//!    Opt in with `FTS_STREAM_CACHE_DIR=<dir>` — see [`engine::stream_cache`].
+//! 3. **The preload budget** ([`engine::budget`]) is the backstop: one
+//!    process-wide ceiling on decoded bytes, past which preloads stop and
+//!    samples stream on demand. Default 15% of RAM, capped at 4 GB.
+//!
+//! Mapped samples are warmed on preload — head faulted in, tail read ahead —
+//! so the audio thread never takes a disk read inside the callback.
+//!
 //! # Library specs
 //!
 //! A library spec is a `.styx` file that describes:

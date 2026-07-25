@@ -143,11 +143,16 @@ pub fn charge(bytes: usize) {
     }
 }
 
+/// What `used` becomes after releasing `bytes` — never wraps.
+fn after_release(cur: u64, bytes: usize) -> u64 {
+    cur.saturating_sub(bytes as u64)
+}
+
 /// Release decoded bytes on eviction or cache drop.
 pub fn release(bytes: usize) {
     let mut cur = USED.load(Ordering::Relaxed);
     loop {
-        let next = cur.saturating_sub(bytes as u64);
+        let next = after_release(cur, bytes);
         match USED.compare_exchange_weak(cur, next, Ordering::Relaxed, Ordering::Relaxed) {
             Ok(_) => break,
             Err(actual) => cur = actual,
@@ -167,14 +172,19 @@ mod tests {
     use super::*;
 
     #[test]
-    fn charge_and_release_are_symmetric() {
+    fn charge_and_release_move_the_total_by_what_they_say() {
+        // Deltas, not absolutes: other tests in this binary share the counter.
         let before = used_bytes();
-        charge(1024);
-        assert_eq!(used_bytes(), before + 1024);
-        release(1024);
-        assert_eq!(used_bytes(), before);
-        // Releasing more than was charged floors at zero instead of wrapping.
-        release(usize::MAX);
-        assert_eq!(used_bytes(), 0);
+        charge(4096);
+        assert!(used_bytes() >= before + 4096);
+        release(4096);
+        assert!(used_bytes() < before + 4096);
+    }
+
+    #[test]
+    fn releasing_more_than_was_charged_floors_at_zero() {
+        assert_eq!(after_release(10, 4), 6);
+        assert_eq!(after_release(10, usize::MAX), 0);
+        assert_eq!(after_release(0, 1), 0);
     }
 }

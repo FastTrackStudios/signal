@@ -37,10 +37,10 @@ pub(crate) fn Panel(
 ) -> Element {
     rsx! {
         div {
-            style: "display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; \
+            style: "display: flex; flex-direction: column; gap: 12px; padding: 14px 16px; \
                     border: 1px solid #1c1c21; border-radius: 12px; background: #0d0d10; \
                     min-width: 0;",
-            div { style: "display: flex; align-items: center; gap: 6px; min-height: 18px;",
+            div { style: "display: flex; align-items: center; gap: 8px; min-height: 20px;",
                 span {
                     style: format!(
                         "width: 6px; height: 6px; border-radius: 999px; background: {};",
@@ -68,7 +68,9 @@ pub(crate) fn KnobRow(
     on_change: EventHandler<(String, f32)>,
 ) -> Element {
     rsx! {
-        div { style: "display: flex; gap: 2px; flex-wrap: wrap;",
+        // Knobs are 62px tiles around a 44px dial, so the gutter reads wider
+        // than the number: 10px here lands ~28px between dials.
+        div { style: "display: flex; column-gap: 10px; row-gap: 14px; flex-wrap: wrap;",
             for m in macros.iter() {
                 Knob {
                     key: "{m.id}",
@@ -159,9 +161,9 @@ pub fn ModuleEdit(
 
     rsx! {
         div {
-            style: "flex: 1; min-height: 0; overflow: auto; padding: 12px; display: grid; \
+            style: "flex: 1; min-height: 0; overflow: auto; padding: 16px 18px 24px; display: grid; \
                     grid-template-columns: minmax(240px, 0.7fr) minmax(320px, 1.3fr) minmax(340px, 1.6fr); \
-                    gap: 12px; align-content: start;",
+                    gap: 16px; align-content: start;",
 
             // ── SOURCE ──────────────────────────────────────────────────
             Panel {
@@ -173,19 +175,23 @@ pub fn ModuleEdit(
                         {format!("module {}", here.as_ref().map(|m| m.slot.clone()).unwrap_or_default())}
                     }
                 },
-                div { style: "display: flex; flex-direction: column; gap: 8px;",
-                    span {
-                        style: format!(
-                            "font-size: 13px; font-weight: 600; line-height: 1.25; color: {};",
-                            if has_source { "#e4e4e7" } else { "#52525b" },
-                        ),
-                        if has_source { "{detail.patch}" } else { "— empty —" }
-                    }
-                    // The preset the layer was opened from, when there is
-                    // one — the module itself is its soundsource.
-                    if !detail.preset.is_empty() {
-                        span { style: "font-size: 10px; color: #71717a; line-height: 1.2;",
-                            "from {detail.preset}"
+                div { style: "display: flex; flex-direction: column; gap: 12px;",
+                    // Patch name + its origin are one block — they stay tight
+                    // to each other and take the panel gap as a group.
+                    div { style: "display: flex; flex-direction: column; gap: 4px;",
+                        span {
+                            style: format!(
+                                "font-size: 13px; font-weight: 600; line-height: 1.25; color: {};",
+                                if has_source { "#e4e4e7" } else { "#52525b" },
+                            ),
+                            if has_source { "{detail.patch}" } else { "— empty —" }
+                        }
+                        // The preset the layer was opened from, when there is
+                        // one — the module itself is its soundsource.
+                        if !detail.preset.is_empty() {
+                            span { style: "font-size: 10px; color: #71717a; line-height: 1.2;",
+                                "from {detail.preset}"
+                            }
                         }
                     }
                     button {
@@ -230,12 +236,13 @@ pub fn ModuleEdit(
                 title: "Filter".to_string(),
                 accent: accent.clone(),
                 lit: live("filter.cutoff"),
-                div { style: "display: flex; flex-direction: column; gap: 8px;",
+                div { style: "display: flex; flex-direction: column; gap: 12px;",
                     FilterCurve {
                         cutoff_hz: val("filter.cutoff"),
                         resonance: val("filter.reso"),
                         accent: accent.clone(),
                         live: live("filter.cutoff"),
+                        flat: true,
                         on_change: move |(what, v): (&'static str, f32)| {
                             let id = if what == "cutoff" { "filter.cutoff" } else { "filter.reso" };
                             on_macro.call((id.to_string(), v));

@@ -29,6 +29,20 @@ enum Grab {
 const W: f64 = 600.0;
 const H: f64 = 190.0;
 const PAD: f64 = 6.0;
+
+/// A graph's own card chrome. `flat: true` drops it — the graph is sitting
+/// inside a `Panel` that already draws the box and owns the title, and two
+/// nested cards read as noise rather than structure.
+fn chrome(flat: bool, gap_px: u32) -> String {
+    if flat {
+        format!("display: flex; flex-direction: column; gap: {gap_px}px;")
+    } else {
+        format!(
+            "display: flex; flex-direction: column; gap: {gap_px}px; padding: 14px; \
+             border: 1px solid #1f1f23; border-radius: 14px; background: #0e0e11;"
+        )
+    }
+}
 /// Seconds of envelope that fill the graph width — segments scale within it.
 const FULL_SPAN_MS: f64 = 4000.0;
 
@@ -47,6 +61,8 @@ pub fn EnvelopeGraph(
     adsr: Adsr,
     #[props(default = "#38bdf8".to_string())] accent: String,
     #[props(default = true)] live: bool,
+    /// Drop the card chrome — the graph is inside a `Panel`.
+    #[props(default = false)] flat: bool,
     /// `(macro-id-suffix, value)` — "attack" | "decay" | "sustain" | "release".
     on_change: EventHandler<(&'static str, f32)>,
 ) -> Element {
@@ -70,12 +86,12 @@ pub fn EnvelopeGraph(
     );
     let fill = format!("{path} L {PAD:.1} {y0:.1} Z");
     let stroke = if live { accent.clone() } else { "#52525b".to_string() };
+    let box_style = chrome(flat, 10);
 
     rsx! {
         div {
-            style: "display: flex; flex-direction: column; gap: 6px; padding: 12px; \
-                    border: 1px solid #1f1f23; border-radius: 14px; background: #0e0e11;",
-            div { style: "display: flex; align-items: center; gap: 6px;",
+            style: "{box_style}",
+            div { style: "display: flex; align-items: center; gap: 8px;",
                 span {
                     style: format!("width: 6px; height: 6px; border-radius: 999px; background: {stroke};"),
                 }
@@ -182,6 +198,9 @@ pub fn FilterCurve(
     resonance: f32,
     #[props(default = "#a78bfa".to_string())] accent: String,
     #[props(default = true)] live: bool,
+    /// Drop the card chrome and the duplicated title — the graph is inside a
+    /// `Panel` that already says "Filter"; only the readout is kept.
+    #[props(default = false)] flat: bool,
     /// `("cutoff" | "reso", value)`.
     on_change: EventHandler<(&'static str, f32)>,
 ) -> Element {
@@ -219,17 +238,19 @@ pub fn FilterCurve(
         d.push(' ');
     }
     let cx = x_of(cutoff);
+    let box_style = chrome(flat, 10);
 
     rsx! {
         div {
-            style: "display: flex; flex-direction: column; gap: 6px; padding: 12px; \
-                    border: 1px solid #1f1f23; border-radius: 14px; background: #0e0e11;",
-            div { style: "display: flex; align-items: center; gap: 6px;",
-                span { style: format!("width: 6px; height: 6px; border-radius: 999px; background: {stroke};") }
-                span {
-                    style: "font-size: 10px; font-weight: 700; letter-spacing: 0.08em; \
-                            text-transform: uppercase; color: #a1a1aa;",
-                    "Filter"
+            style: "{box_style}",
+            div { style: "display: flex; align-items: center; gap: 8px;",
+                if !flat {
+                    span { style: format!("width: 6px; height: 6px; border-radius: 999px; background: {stroke};") }
+                    span {
+                        style: "font-size: 10px; font-weight: 700; letter-spacing: 0.08em; \
+                                text-transform: uppercase; color: #a1a1aa;",
+                        "Filter"
+                    }
                 }
                 div { style: "flex: 1;" }
                 span { style: "font-size: 9px; color: #52525b; font-variant-numeric: tabular-nums;",
@@ -369,20 +390,24 @@ pub fn StackedEnvelopes(
     /// Filter card wants only its own; a combined view passes both.
     #[props(default = true)] amp: bool,
     #[props(default = false)] both: bool,
+    /// Drop the card chrome and header — the caption above owns the title.
+    #[props(default = false)] flat: bool,
 ) -> Element {
     let h = height_px as f64;
+    let box_style = chrome(flat, 10);
     rsx! {
         div {
-            style: "display: flex; flex-direction: column; gap: 8px; padding: 14px; \
-                    border: 1px solid #1f1f23; border-radius: 14px; background: #0e0e11;",
-            div { style: "display: flex; align-items: center; gap: 8px;",
-                span {
-                    style: "font-size: 11px; font-weight: 700; letter-spacing: 0.08em; \
-                            text-transform: uppercase; color: #d4d4d8;",
-                    if both { "Envelopes" } else if amp { "Amp Envelope" } else { "Filter Envelope" }
-                }
-                span { style: "font-size: 9px; color: #52525b;",
-                    if both { "amp solid · filter dashed" } else { "one curve per module" }
+            style: "{box_style}",
+            if !flat {
+                div { style: "display: flex; align-items: center; gap: 8px;",
+                    span {
+                        style: "font-size: 11px; font-weight: 700; letter-spacing: 0.08em; \
+                                text-transform: uppercase; color: #d4d4d8;",
+                        if both { "Envelopes" } else if amp { "Amp Envelope" } else { "Filter Envelope" }
+                    }
+                    span { style: "font-size: 9px; color: #52525b;",
+                        if both { "amp solid · filter dashed" } else { "one curve per module" }
+                    }
                 }
             }
             svg {
@@ -431,8 +456,11 @@ pub fn StackedEnvelopes(
 pub fn StackedFilters(
     curves: Vec<ModuleCurve>,
     #[props(default = 260)] height_px: u32,
+    /// Drop the card chrome and header — the `Panel` owns the title.
+    #[props(default = false)] flat: bool,
 ) -> Element {
     let h = height_px as f64;
+    let box_style = chrome(flat, 10);
     fn x_of(f: f64) -> f64 {
         const LO: f64 = 2.995_732_273_553_991;
         const HI: f64 = 9.903_487_552_536_127;
@@ -446,15 +474,16 @@ pub fn StackedFilters(
     }
     rsx! {
         div {
-            style: "display: flex; flex-direction: column; gap: 8px; padding: 14px; \
-                    border: 1px solid #1f1f23; border-radius: 14px; background: #0e0e11;",
-            div { style: "display: flex; align-items: center; gap: 8px;",
-                span {
-                    style: "font-size: 11px; font-weight: 700; letter-spacing: 0.08em; \
-                            text-transform: uppercase; color: #d4d4d8;",
-                    "Filter"
+            style: "{box_style}",
+            if !flat {
+                div { style: "display: flex; align-items: center; gap: 8px;",
+                    span {
+                        style: "font-size: 11px; font-weight: 700; letter-spacing: 0.08em; \
+                                text-transform: uppercase; color: #d4d4d8;",
+                        "Filter"
+                    }
+                    span { style: "font-size: 9px; color: #52525b;", "20 Hz – 20 kHz" }
                 }
-                span { style: "font-size: 9px; color: #52525b;", "20 Hz – 20 kHz" }
             }
             svg {
                 width: "100%", height: "{h}", view_box: "0 0 {W} {h}",

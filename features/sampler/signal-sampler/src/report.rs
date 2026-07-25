@@ -276,7 +276,7 @@ fn load_click_grain(path: &Path, sample_rate: u32) -> Option<Vec<f32>> {
     let src_frames = data.num_frames;
     let mono: Vec<f32> = (0..src_frames)
         .map(|f| {
-            (0..ch).map(|c| data.frames[f * ch + c]).sum::<f32>() / ch as f32
+            (0..ch).map(|c| data.pcm.sample(f * ch + c)).sum::<f32>() / ch as f32
         })
         .collect();
     let ratio = data.sample_rate as f64 / sample_rate as f64;

@@ -21,9 +21,9 @@ fn decode_real_stylus_loop() {
     assert!(data.channels == 1 || data.channels == 2);
     assert_eq!(data.sample_rate, 44100);
     assert!(data.num_frames > 0);
-    assert_eq!(data.frames.len(), data.num_frames * data.channels as usize);
-    let peak = data
-        .frames
+    assert_eq!(data.len(), data.num_frames * data.channels as usize);
+    let pcm = data.to_f32();
+    let peak = pcm
         .iter()
         .copied()
         .fold(0.0_f32, |a, b| a.max(b.abs()));

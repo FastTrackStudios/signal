@@ -423,7 +423,11 @@ fn parse_codec(name: &str, quality: f32) -> Result<PackCodec> {
     match name {
         "flac" => Ok(PackCodec::FlacI24),
         "ogg" | "vorbis" | "ogg-vorbis" => Ok(PackCodec::OggVorbis { quality }),
-        other => bail!("unknown codec {other:?} (flac | ogg)"),
+        // Raw PCM: larger on disk, free in RAM — voices read it straight out
+        // of the mapping instead of decoding it into the heap.
+        "pcm16" | "pcm-i16" | "i16" => Ok(PackCodec::PcmI16),
+        "pcm24" | "pcm-i24" | "i24" => Ok(PackCodec::PcmI24),
+        other => bail!("unknown codec {other:?} (flac | ogg | pcm16 | pcm24)"),
     }
 }
 
@@ -1252,7 +1256,7 @@ pub fn run_check(pack_path: &Path, src_root: Option<&Path>) -> Result<bool> {
                 if let Some(root) = src_root {
                     match load_sample(&root.join(&z.file)) {
                         Ok(src) if src.num_frames == data.num_frames => {
-                            let corr = correlation(&data.frames, &src.frames);
+                            let corr = correlation(&data.to_f32(), &src.to_f32());
                             print!("  corr={corr:.5}");
                             if corr < 0.95 {
                                 decode_fail += 1;
@@ -1379,7 +1383,7 @@ fn inspect_samples(
         };
         entries.push(crate::report::SampleView {
             title: z.file.clone(),
-            audio: data.frames.as_ref().clone(),
+            audio: data.to_f32().into_owned(),
             channels: data.channels as usize,
             sample_rate: data.sample_rate,
             zone: z.clone(),
@@ -1580,13 +1584,14 @@ fn render_report(
         let data = crate::engine::cache::load_sample(audio_path)
             .map_err(|e| eyre::eyre!("load {}: {e}", audio_path.display()))?;
         let ch = data.channels.max(1) as usize;
+        let pcm = data.to_f32();
         // Interleave to stereo (duplicate mono).
         let audio: Vec<f32> = if ch >= 2 {
             (0..data.num_frames)
-                .flat_map(|f| [data.frames[f * ch], data.frames[f * ch + 1]])
+                .flat_map(|f| [pcm[f * ch], pcm[f * ch + 1]])
                 .collect()
         } else {
-            data.frames.iter().flat_map(|&s| [s, s]).collect()
+            pcm.iter().flat_map(|&s| [s, s]).collect()
         };
         let sr = data.sample_rate;
         let wav_path = wav.unwrap_or_else(|| out.with_extension("wav"));
