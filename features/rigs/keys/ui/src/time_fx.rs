@@ -19,6 +19,9 @@
 //! dB-linear tail to its RT60 on a log time axis.
 
 use dioxus::prelude::*;
+use signal_keys_proto::KeysMacro;
+
+use crate::module_edit::KnobRow;
 
 /// One lane's time-domain settings, as the mixer reports them.
 #[derive(Clone, PartialEq, Debug)]
@@ -60,9 +63,14 @@ fn t60_secs(decay: f32, size: f32) -> f64 {
     base * (0.6 + 0.8 * size.clamp(0.0, 1.0) as f64)
 }
 
-const W: f64 = 1000.0;
-const H: f64 = 150.0;
-const PAD: f64 = 8.0;
+/// The guitar rig's panels are 460×56. Same width — a delay ruler does not
+/// get more readable by being stretched across a 2560px window — and twice
+/// the height, which is what the extra lanes need.
+const W: f64 = 460.0;
+const H: f64 = 112.0;
+const PAD: f64 = 6.0;
+/// Keeps a view from sprawling when the band is wide.
+const MAX_W: &str = "520px";
 
 /// The stroke/fill weights for a lane: focused lanes are the subject, the
 /// rest are context.
@@ -80,7 +88,16 @@ fn weights(focus: bool) -> (&'static str, &'static str, &'static str) {
 /// against a song: a lane whose repeats land on the off-beat is visible as
 /// taps that sit between the gridlines.
 #[component]
-pub fn DelayView(lanes: Vec<FxLane>, #[props(default = 120.0)] tempo_bpm: f32) -> Element {
+pub fn DelayView(
+    lanes: Vec<FxLane>,
+    #[props(default = 120.0)] tempo_bpm: f32,
+    /// The selected scope's Delay macros — the knobs that move what the view
+    /// draws. Same controls the guitar rig puts under its delay lanes.
+    #[props(default)]
+    macros: Vec<KeysMacro>,
+    #[props(default = "#38bdf8".to_string())] accent: String,
+    on_change: EventHandler<(String, f32)>,
+) -> Element {
     let quarter_ms = 60_000.0 / tempo_bpm.max(20.0);
     // Eight beats of window: two bars of 4/4, enough to see a dotted-eighth
     // pattern resolve without squashing a slow half-note delay.
@@ -89,7 +106,9 @@ pub fn DelayView(lanes: Vec<FxLane>, #[props(default = 120.0)] tempo_bpm: f32) -
     let audible: Vec<&FxLane> = lanes.iter().filter(|l| !l.silent_delay()).collect();
 
     rsx! {
-        div { style: "display: flex; flex-direction: column; gap: 4px; min-width: 0;",
+        div {
+            style: "display: flex; flex-direction: column; gap: 6px; min-width: 0; \
+                    max-width: {MAX_W}; flex: 1 1 0;",
             div { style: "display: flex; align-items: baseline; gap: 8px;",
                 span {
                     style: "font-size: 9px; font-weight: 700; letter-spacing: 0.1em; \
@@ -105,9 +124,9 @@ pub fn DelayView(lanes: Vec<FxLane>, #[props(default = 120.0)] tempo_bpm: f32) -
                 }
             }
             svg {
-                width: "100%", height: "100%", view_box: "0 0 {W} {H}",
+                width: "100%", height: "{H}", view_box: "0 0 {W} {H}",
                 preserve_aspect_ratio: "none",
-                style: "display: block; width: 100%; min-height: 0;",
+                style: "display: block; width: 100%;",
                 // Beat grid — bar lines brighter than beats.
                 for beat in 0..=8 {
                     line {
@@ -185,13 +204,27 @@ pub fn DelayView(lanes: Vec<FxLane>, #[props(default = 120.0)] tempo_bpm: f32) -
                     }
                 }
             }
+            if !macros.is_empty() {
+                KnobRow {
+                    macros: macros.clone(),
+                    accent: accent.clone(),
+                    on_change: move |(id, v): (String, f32)| on_change.call((id, v)),
+                }
+            }
         }
     }
 }
 
 /// **Reverb** — every lane's tail on one log time axis (0.1–20 s).
 #[component]
-pub fn ReverbView(lanes: Vec<FxLane>) -> Element {
+pub fn ReverbView(
+    lanes: Vec<FxLane>,
+    /// The selected scope's Ambience macros.
+    #[props(default)]
+    macros: Vec<KeysMacro>,
+    #[props(default = "#38bdf8".to_string())] accent: String,
+    on_change: EventHandler<(String, f32)>,
+) -> Element {
     let x_of = |t: f64| -> f64 {
         let (lo, hi) = (0.1f64, 20.0f64);
         PAD + ((t.max(lo) / lo).ln() / (hi / lo).ln()).clamp(0.0, 1.0) * (W - 2.0 * PAD)
@@ -201,7 +234,9 @@ pub fn ReverbView(lanes: Vec<FxLane>) -> Element {
         &[(0.25, "¼s"), (0.5, "½s"), (1.0, "1s"), (2.0, "2s"), (4.0, "4s"), (8.0, "8s"), (16.0, "16s")];
 
     rsx! {
-        div { style: "display: flex; flex-direction: column; gap: 4px; min-width: 0;",
+        div {
+            style: "display: flex; flex-direction: column; gap: 6px; min-width: 0; \
+                    max-width: {MAX_W}; flex: 1 1 0;",
             div { style: "display: flex; align-items: baseline; gap: 8px;",
                 span {
                     style: "font-size: 9px; font-weight: 700; letter-spacing: 0.1em; \
@@ -215,9 +250,9 @@ pub fn ReverbView(lanes: Vec<FxLane>) -> Element {
                 }
             }
             svg {
-                width: "100%", height: "100%", view_box: "0 0 {W} {H}",
+                width: "100%", height: "{H}", view_box: "0 0 {W} {H}",
                 preserve_aspect_ratio: "none",
-                style: "display: block; width: 100%; min-height: 0;",
+                style: "display: block; width: 100%;",
                 for (i, (t, label)) in MARKS.iter().enumerate() {
                     g { key: "mark-{i}",
                         line {
@@ -282,6 +317,13 @@ pub fn ReverbView(lanes: Vec<FxLane>) -> Element {
                             }
                         }
                     }
+                }
+            }
+            if !macros.is_empty() {
+                KnobRow {
+                    macros: macros.clone(),
+                    accent: accent.clone(),
+                    on_change: move |(id, v): (String, f32)| on_change.call((id, v)),
                 }
             }
         }
