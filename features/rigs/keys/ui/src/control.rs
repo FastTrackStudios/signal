@@ -198,6 +198,7 @@ fn rig_time_fx(mixer: &KeysMixer, scope: &MacroScope) -> Vec<crate::time_fx::FxL
                 color: color.clone(),
                 focus: scope.reaches(&engine.name, &layer.name),
                 delay_ms: m.dly_time_ms,
+                div: m.dly_div,
                 feedback: m.dly_feedback,
                 delay_mix: m.dly_mix,
                 decay: m.amb_decay,
@@ -241,6 +242,11 @@ fn rig_curves(mixer: &KeysMixer, scope: &MacroScope) -> Vec<ModuleCurve> {
                     },
                     cutoff_hz: m.cutoff_hz,
                     resonance: m.resonance,
+                    unison: m.unison,
+                    detune: m.detune,
+                    vib_rate: m.vib_rate,
+                    vib_depth: m.vib_depth,
+                    vib_delay_ms: m.vib_delay_ms,
                     dim: !m.enabled || layer.muted || engine.muted,
                     focus,
                 });
@@ -333,17 +339,6 @@ fn MacroBand() -> Element {
             style: "flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; \
                     display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; \
                     border-top: 1px solid #1c1c1f; background: #0a0a0c;",
-            div { style: "display: flex; align-items: baseline; gap: 8px;",
-                span { style: "font-size: 11px; font-weight: 700; color: {accent};", "{label}" }
-                span {
-                    style: "font-size: 9px; font-weight: 700; letter-spacing: 0.1em; \
-                            text-transform: uppercase; color: #52525b;",
-                    "{level}"
-                }
-                span { style: "font-size: 9px; color: #3f3f46;",
-                    {format!("{sounds} sound{}", if sounds == 1 { "" } else { "s" })}
-                }
-            }
             // The time-domain picture, above the knobs that shape it: one
             // delay and one reverb, every loaded lane drawn on each in its
             // engine's colour, the selected scope's lanes solid.
@@ -353,7 +348,7 @@ fn MacroBand() -> Element {
                 crate::time_fx::DelayView {
                     lanes: fx_lanes.clone(),
                     macros: dly_macros,
-                    accent: accent.clone(),
+                    accent: "#38bdf8".to_string(),
                     on_change: {
                         let (rig, scope) = (rig.clone(), scope.clone());
                         move |(id, v): (String, f32)| set_scope_macro(rig.clone(), scope.clone(), id, v)
@@ -362,7 +357,7 @@ fn MacroBand() -> Element {
                 crate::time_fx::ReverbView {
                     lanes: fx_lanes,
                     macros: amb_macros,
-                    accent: accent.clone(),
+                    accent: "#a78bfa".to_string(),
                     on_change: {
                         let (rig, scope) = (rig.clone(), scope.clone());
                         move |(id, v): (String, f32)| set_scope_macro(rig.clone(), scope.clone(), id, v)
@@ -521,7 +516,7 @@ fn EngineStrip(
     let mut zoom = crate::zoom::use_zoom();
     let mut selection = crate::selection::use_selection();
     // What the engine is actually putting out — its card's bottom edge.
-    let peak = peak_of(&engine.name);
+    let peak = peak_of("engine", &engine.name);
     let picked = *selection.read() == Selection::Engine(engine.name.clone());
     let pick_name = engine.name.clone();
     let accent = engine_color(&engine.name);
@@ -650,6 +645,11 @@ fn EngineStrip(
                         on_open: move |_| zoom.set(Zoom::Engine(open_name.clone())),
                     }
                 }
+                // Whatever this engine embeds in its card — the Drone's key
+                // selector today; other engines can claim the slot later.
+                if let Some(drone) = engine.drone.clone() {
+                    DroneKeys { engine: engine.name.clone(), drone }
+                }
                 // Layer strips.
                 div { style: "display: flex; gap: 10px; align-items: flex-start;",
                     for layer in engine.layers.iter() {
@@ -658,6 +658,99 @@ fn EngineStrip(
                             layer: layer.clone(),
                             accent: accent.to_string(),
                         }
+                    }
+                }
+            }
+        }
+    }
+}
+
+
+/// **A drone engine's key selector** — the card-embedded control that replaces
+/// playing it.
+///
+/// The Drone engine is a pad player: pick a key, switch it on, and it holds
+/// that note under the song until you switch it off. It never reads the
+/// keyboard, so nothing here is a lane you ride — it is a note you choose.
+#[component]
+fn DroneKeys(engine: String, drone: signal_keys_proto::KeysDrone) -> Element {
+    const KEYS: [&str; 12] =
+        ["C", "C♯", "D", "E♭", "E", "F", "F♯", "G", "A♭", "A", "B♭", "B"];
+    let rig = use_hook(try_consume_context::<KeysRigClient>);
+    let accent = engine_color(&engine);
+    let playing = drone.playing;
+    let key = drone.key.min(11) as usize;
+
+    rsx! {
+        div {
+            style: "display: flex; flex-direction: column; gap: 8px; padding-top: 4px;",
+            // The twelve keys, laid out like a keyboard octave so the sharps
+            // sit where the fingers expect them.
+            div {
+                style: "display: grid; grid-template-columns: repeat(6, 1fr); gap: 3px;",
+                for (i, name) in KEYS.iter().enumerate() {
+                    {
+                        let rig = rig.clone();
+                        let engine = engine.clone();
+                        let here = i == key;
+                        let black = matches!(i, 1 | 3 | 6 | 8 | 10);
+                        rsx! {
+                            button {
+                                key: "{i}",
+                                style: format!(
+                                    "appearance: none; border: 1px solid {}; border-radius: 6px; \
+                                     padding: 5px 0; cursor: pointer; font-size: 10px; \
+                                     font-weight: 700; background: {}; color: {};",
+                                    if here { accent } else { "#26262b" },
+                                    if here {
+                                        "#101216".to_string()
+                                    } else if black {
+                                        "#0c0c0f".to_string()
+                                    } else {
+                                        "#131316".to_string()
+                                    },
+                                    if here { accent } else { "#71717a" },
+                                ),
+                                onclick: move |e: MouseEvent| {
+                                    e.stop_propagation();
+                                    let (rig, engine) = (rig.clone(), engine.clone());
+                                    spawn(async move {
+                                        if let Some(r) = rig {
+                                            let _ = r.set_drone(engine, i as u32, playing).await;
+                                        }
+                                    });
+                                },
+                                "{name}"
+                            }
+                        }
+                    }
+                }
+            }
+            // Hold / release: the drone's only other verb.
+            {
+                let rig = rig.clone();
+                let engine_hold = engine.clone();
+                rsx! {
+                    button {
+                        style: format!(
+                            "appearance: none; border: 1px solid {}; border-radius: 8px; \
+                             padding: 7px 0; cursor: pointer; font-size: 10px; font-weight: 800; \
+                             letter-spacing: 0.08em; background: {}; color: {};",
+                            if playing { accent } else { "#26262b" },
+                            if playing { "#101216" } else { "#0f0f12" },
+                            if playing { accent } else { "#52525b" },
+                        ),
+                        title: "The drone holds until you stop it — it takes no MIDI",
+                        onclick: move |e: MouseEvent| {
+                            e.stop_propagation();
+                            let (rig, engine) = (rig.clone(), engine_hold.clone());
+                            spawn(async move {
+                                if let Some(r) = rig {
+                                    let _ = r.set_drone(engine, key as u32, !playing).await;
+                                }
+                            });
+                        },
+                        if playing { "HOLDING {KEYS[key]}" } else { "HOLD {KEYS[key]}" }
                     }
                 }
             }
@@ -687,7 +780,7 @@ fn LayerStrip(layer: KeysLayerModel, accent: String) -> Element {
     let mut zoom = crate::zoom::use_zoom();
     let mut selection = crate::selection::use_selection();
     // The lane's own level, metered along the bottom of its letter.
-    let peak = peak_of(&layer.name);
+    let peak = peak_of("layer", &layer.name);
     let picked = matches!(
         &*selection.read(),
         Selection::Layer { layer: l, .. } | Selection::Module { layer: l, .. } if *l == layer.name

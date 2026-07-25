@@ -245,6 +245,9 @@ const MACROS: &[MacroDef] = &[
     // The delay is its own section, not an Effects amount: it is the other
     // half of the time-domain picture the band draws, and it needs a time and
     // a feedback to draw at all.
+    // 0 = free (use `dly.time`); 1..7 are note divisions against the tempo —
+    // a delay is set musically far more often than in milliseconds.
+    MacroDef { id: "dly.div", name: "Div", group: "Delay", default: 3.0, min: 0.0, max: 7.0, unit: "", live: false },
     MacroDef { id: "dly.time", name: "Time", group: "Delay", default: 375.0, min: 20.0, max: 2000.0, unit: "ms", live: false },
     MacroDef { id: "dly.feedback", name: "Feedback", group: "Delay", default: 0.35, min: 0.0, max: 0.95, unit: "", live: false },
     MacroDef { id: "dly.mix", name: "Mix", group: "Delay", default: 0.0, min: 0.0, max: 1.0, unit: "", live: false },
@@ -310,6 +313,7 @@ const GLOBALS: &[GlobalDef] = &[
     GlobalDef { key: "amb.length", name: "Length", group: "Ambience", target: Some("amb.size"), default: 0.5, min: 0.0, max: 1.0, unit: "", live: false },
     GlobalDef { key: "amb.decay", name: "Decay", group: "Ambience", target: Some("amb.decay"), default: 0.45, min: 0.02, max: 1.0, unit: "", live: false },
     // ── Delay, at every level: the rig's tail, an engine's, a lane's ─────
+    GlobalDef { key: "dly.div", name: "Div", group: "Delay", target: Some("dly.div"), default: 3.0, min: 0.0, max: 7.0, unit: "", live: false },
     GlobalDef { key: "dly.time", name: "Time", group: "Delay", target: Some("dly.time"), default: 375.0, min: 20.0, max: 2000.0, unit: "ms", live: false },
     GlobalDef { key: "dly.feedback", name: "Feedback", group: "Delay", target: Some("dly.feedback"), default: 0.35, min: 0.0, max: 0.95, unit: "", live: false },
     GlobalDef { key: "dly.mix", name: "Mix", group: "Delay", target: Some("dly.mix"), default: 0.0, min: 0.0, max: 1.0, unit: "", live: false },
@@ -364,6 +368,9 @@ fn default_macros() -> BTreeMap<String, f32> {
 struct EngineState {
     gain_db: f32,
     muted: bool,
+    /// A drone engine's held note: pitch class (0 = C), the octave it sounds
+    /// in, and whether it is sounding. `None` for engines that are played.
+    drone: Option<signal_keys_proto::KeysDrone>,
     /// Engine macro values that belong to the engine itself (its Tone,
     /// Limiter, FX bypass) — the ones with no module target.
     globals: BTreeMap<String, f32>,
@@ -865,17 +872,21 @@ impl KeysRigBackend {
         let Some(rig) = rig.as_ref() else { return };
         let cells = rig.gain_cells();
         let Ok(s) = self.inner.state.lock() else { return };
+        // Address by (role, name), never name alone: a one-lane engine is
+        // named after its lane ("Pad" holding "Pad"), and a flat name map gave
+        // both the same cell — the engine's trim, written second, put the
+        // lane's mute and solo straight back.
         for (name, lane) in s.lanes.iter() {
-            cells.set(name, s.lane_gain(name));
+            cells.set(Role::Layer, name, s.lane_gain(name));
             // Modules are named "<layer> <slot>" in the tree.
             for i in 0..lane.modules.len() {
                 let module_name =
                     format!("{name} {}", signal_synth::engine::module_slot(i));
-                cells.set(&module_name, lane.module_gain(i));
+                cells.set(Role::Module, &module_name, lane.module_gain(i));
             }
         }
         for name in s.engines.keys() {
-            cells.set(name, s.engine_gain(name));
+            cells.set(Role::Engine, name, s.engine_gain(name));
         }
         rig.set_output_gain(db_to_linear(s.master_db));
     }
@@ -1014,6 +1025,11 @@ impl KeysRigBackend {
                 let est = s.engines.get(&engine.name).cloned().unwrap_or_default();
                 KeysEngineModel {
                     name: engine.name.clone(),
+                    // A drone engine carries its key selector; the card
+                    // embeds it instead of the usual played-engine chrome.
+                    drone: est.drone.clone().or_else(|| {
+                        is_drone(&engine.name).then(signal_keys_proto::KeysDrone::default)
+                    }),
                     gain_db: est.gain_db,
                     muted: est.muted,
                     layers: engine
@@ -1050,12 +1066,18 @@ impl KeysRigBackend {
                                                 cutoff_hz: Self::module_value(lane, i, "filter.cutoff"),
                                                 resonance: Self::module_value(lane, i, "filter.reso"),
                                                 dly_time_ms: Self::module_value(lane, i, "dly.time"),
+                                                dly_div: Self::module_value(lane, i, "dly.div"),
                                                 dly_feedback: Self::module_value(lane, i, "dly.feedback"),
                                                 dly_mix: Self::module_value(lane, i, "dly.mix"),
                                                 amb_size: Self::module_value(lane, i, "amb.size"),
                                                 amb_mix: Self::module_value(lane, i, "amb.mix"),
                                                 amb_predelay_ms: Self::module_value(lane, i, "amb.predelay"),
                                                 amb_decay: Self::module_value(lane, i, "amb.decay"),
+                                                unison: Self::module_value(lane, i, "source.unison"),
+                                                detune: Self::module_value(lane, i, "source.detune"),
+                                                vib_rate: Self::module_value(lane, i, "vib.rate"),
+                                                vib_depth: Self::module_value(lane, i, "vib.depth"),
+                                                vib_delay_ms: Self::module_value(lane, i, "vib.delay"),
                                             })
                                             .collect()
                                     })
@@ -1326,7 +1348,11 @@ impl KeysRigSvc for KeysRigBackend {
                         let meters = r
                             .cell_peaks()
                             .into_iter()
-                            .map(|(name, peak)| KeysMeter { name, peak })
+                            .map(|(role, name, peak)| KeysMeter {
+                                kind: role.tag().to_lowercase(),
+                                name,
+                                peak,
+                            })
                             .collect();
                         (r.output_peak(), meters)
                     })
@@ -1556,12 +1582,18 @@ impl KeysRigSvc for KeysRigBackend {
                 cutoff_hz: Self::module_value(lane, i, "filter.cutoff"),
                 resonance: Self::module_value(lane, i, "filter.reso"),
                 dly_time_ms: Self::module_value(lane, i, "dly.time"),
+                dly_div: Self::module_value(lane, i, "dly.div"),
                 dly_feedback: Self::module_value(lane, i, "dly.feedback"),
                 dly_mix: Self::module_value(lane, i, "dly.mix"),
                 amb_size: Self::module_value(lane, i, "amb.size"),
                 amb_mix: Self::module_value(lane, i, "amb.mix"),
                 amb_predelay_ms: Self::module_value(lane, i, "amb.predelay"),
                 amb_decay: Self::module_value(lane, i, "amb.decay"),
+                unison: Self::module_value(lane, i, "source.unison"),
+                detune: Self::module_value(lane, i, "source.detune"),
+                vib_rate: Self::module_value(lane, i, "vib.rate"),
+                vib_depth: Self::module_value(lane, i, "vib.depth"),
+                vib_delay_ms: Self::module_value(lane, i, "vib.delay"),
             })
             .collect();
         let here = lane.module(slot);
@@ -1750,6 +1782,24 @@ impl KeysRigSvc for KeysRigBackend {
         if def.id == "source.level" {
             self.apply_mixer();
         }
+        self.publish_mixer();
+    }
+
+    fn set_drone(&self, engine: String, key: u32, playing: bool) {
+        if let Ok(mut s) = self.inner.state.lock() {
+            let est = s.engines.entry(engine.clone()).or_default();
+            let mut d = est.drone.clone().unwrap_or_default();
+            d.key = key.min(11);
+            d.playing = playing;
+            // Under the band, not in it: a drone an octave down stays out of
+            // the way of whatever is being played over it.
+            if d.octave == 0 {
+                d.octave = 3;
+            }
+            est.drone = Some(d);
+        }
+        // Nothing sounds yet — the drone's voice is not wired to the engine,
+        // so this is the state the note will be driven from.
         self.publish_mixer();
     }
 
@@ -2161,6 +2211,12 @@ fn scan_packs(root: &str) -> (Vec<KeysPreset>, Vec<PathBuf>) {
 }
 
 /// Broad category for grouping in the browser.
+/// Whether an engine is a drone — a pad player rather than something the
+/// keyboard reaches. Named, because the profile has no flag for it yet.
+fn is_drone(engine: &str) -> bool {
+    engine.eq_ignore_ascii_case("drone")
+}
+
 fn kind_of(name: &str) -> String {
     let n = name.to_ascii_lowercase();
     if n.contains("grand") || (n.contains("piano") && !n.contains("e piano")) { "Grand".into() }

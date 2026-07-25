@@ -9,16 +9,22 @@
 //! doesn't (the backend's `drive_global`). So the band is the same component
 //! at every level; only the macros handed to it change.
 //!
-//! **Filter response, filter envelope and amp envelope are cards, not knob
-//! rows**: one card per shape, the shape drawn wide and shallow with the knobs
-//! that move it directly underneath. Every sound in the rig is on those axes
-//! at once — the ones the selection reaches at full strength, the rest behind
-//! them — so turning a knob shows a whole family moving together.
+//! **Every group that can be drawn is a card, not a knob row**: unison,
+//! vibrato, the filter's response and envelope, the amp envelope — one card
+//! per shape, drawn wide and shallow with the knobs that move it directly
+//! underneath. Every sound in the rig is on those axes at once (the ones the
+//! selection reaches at full strength, the rest behind them), so turning a
+//! knob shows a whole family moving together.
+//!
+//! Every shape is the same height, and the groups still waiting for one hold
+//! that height open — the knob rows across the band sit on one line.
 
 use dioxus::prelude::*;
 use signal_keys_proto::KeysMacro;
 
-use crate::graphs::{ModuleCurve, StackedEnvelopes, StackedFilters};
+use crate::graphs::{
+    ModuleCurve, StackedEnvelopes, StackedFilters, StackedUnison, StackedVibrato,
+};
 use crate::module_edit::{KnobRow, Panel};
 
 /// One card in the band.
@@ -37,8 +43,8 @@ enum Cell {
 /// The shapes sit in the middle so the two envelopes are never far from the
 /// filter between them — you read the whole voice across one row.
 const ROW: &[Cell] = &[
-    Cell::Group("Unison", "voices · detune"),
-    Cell::Group("Vibrato", "pitch pulse"),
+    Cell::Shape(Shape::Unison),
+    Cell::Shape(Shape::Vibrato),
     Cell::Shape(Shape::FilterEnv),
     Cell::Shape(Shape::FilterResponse),
     Cell::Shape(Shape::AmpEnv),
@@ -76,6 +82,10 @@ fn offset_badge(on: bool) -> Element {
 /// Which shape a card draws — and, with it, which knobs sit under it.
 #[derive(Clone, Copy, PartialEq)]
 pub enum Shape {
+    /// The unison stack: one line per voice, spread by detune.
+    Unison,
+    /// The vibrato: the line the pitch walks.
+    Vibrato,
     /// The filter's response across the spectrum.
     FilterResponse,
     /// The filter envelope — how that response moves while a note is held.
@@ -85,9 +95,22 @@ pub enum Shape {
 }
 
 impl Shape {
+    /// How wide this card is allowed to get. A shape with two knobs under it
+    /// has no business taking the room a four-knob envelope needs — capped,
+    /// they sit as narrow columns and hand the slack to the shapes that use
+    /// it. `0` means no ceiling.
+    fn max_width_px(self) -> u32 {
+        match self {
+            Shape::Unison | Shape::Vibrato => 210,
+            _ => 0,
+        }
+    }
+
     /// `(card title, macro group)`.
     fn parts(self) -> (&'static str, &'static str) {
         match self {
+            Shape::Unison => ("Unison", "Unison"),
+            Shape::Vibrato => ("Vibrato", "Vibrato"),
             Shape::FilterResponse => ("Filter", "Filter"),
             Shape::FilterEnv => ("Filter Envelope", "Filter Env"),
             Shape::AmpEnv => ("Amp Envelope", "Amp Env"),
@@ -125,6 +148,12 @@ pub fn ShapeCard(
             trailing: offset_badge(varies(&macros, group_name)),
             div { style: "display: flex; flex-direction: column; gap: 10px;",
                 match shape {
+                    Shape::Unison => rsx! {
+                        StackedUnison { curves: curves.clone(), height_px, flat: true }
+                    },
+                    Shape::Vibrato => rsx! {
+                        StackedVibrato { curves: curves.clone(), height_px, flat: true }
+                    },
                     Shape::FilterResponse => rsx! {
                         StackedFilters { curves: curves.clone(), height_px, flat: true }
                     },
@@ -180,7 +209,15 @@ pub fn MacroPanel(
                 {
                     match cell {
                         Cell::Shape(shape) => rsx! {
-                            div { key: "{i}", style: "flex: 0 1 auto; min-width: 0;",
+                            div {
+                                key: "{i}",
+                                style: format!(
+                                    "flex: 0 1 auto; min-width: 0;{}",
+                                    match shape.max_width_px() {
+                                        0 => String::new(),
+                                        px => format!(" max-width: {px}px;"),
+                                    },
+                                ),
                                 ShapeCard {
                                     shape: *shape,
                                     macros: macros.clone(),
@@ -204,16 +241,33 @@ pub fn MacroPanel(
                                             accent: accent.clone(),
                                             lit: items.iter().any(|m| m.live),
                                             trailing: offset_badge(varies(&macros, name)),
-                                            div { style: "display: flex; flex-direction: column; gap: 8px; min-width: 0;",
-                                                KnobRow {
-                                                    macros: items.clone(),
-                                                    accent: accent.clone(),
-                                                    on_change: move |(id, v)| on_change.call((id, v)),
+                                            div {
+                                                style: "display: flex; flex-direction: column; \
+                                                        gap: 10px; min-width: 0;",
+                                                // The room a shape takes, held
+                                                // open so every card's knobs
+                                                // sit on the same line —
+                                                // Ambience and Tone are the two
+                                                // still waiting for a visual.
+                                                div {
+                                                    style: format!(
+                                                        "height: {height_px}px; display: flex; align-items: center;"
+                                                    ),
+                                                    div { style: "flex: 1; height: 1px; background: #1b1b1f;" }
                                                 }
-                                                span {
-                                                    style: "font-size: 9px; color: #52525b; line-height: 1.4; \
-                                                            overflow: hidden; text-overflow: ellipsis;",
-                                                    if let Some(s) = spread.clone() { "{s}" } else { "{hint}" }
+                                                div {
+                                                    style: "display: flex; flex-direction: column; gap: 6px; \
+                                                            padding-top: 8px; border-top: 1px solid #1c1c21;",
+                                                    KnobRow {
+                                                        macros: items.clone(),
+                                                        accent: accent.clone(),
+                                                        on_change: move |(id, v)| on_change.call((id, v)),
+                                                    }
+                                                    span {
+                                                        style: "font-size: 9px; color: #52525b; line-height: 1.4; \
+                                                                overflow: hidden; text-overflow: ellipsis;",
+                                                        if let Some(s) = spread.clone() { "{s}" } else { "{hint}" }
+                                                    }
                                                 }
                                             }
                                         }

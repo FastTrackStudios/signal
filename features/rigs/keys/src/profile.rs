@@ -11,7 +11,7 @@
 //! Profile "Worship"
 //! ├─ Engines (parallel)
 //! │  ├─ Keys   → Keys A · Keys B          (piano / EP)
-//! │  ├─ Pad    → Pad                      (the wash under everything)
+//! │  ├─ Pad    → Pad · Shimmer            (the wash, and its sparkle)
 //! │  ├─ Organ  → Organ A · Organ B        (drawbar upper / lower)
 //! │  ├─ Aux    → Aux A · Aux B · Aux C    (whatever the song needs)
 //! │  ├─ Drone  → Drone                    (the bed a moment sits on)
@@ -340,14 +340,20 @@ pub fn worship_profile() -> KeysProfile {
                 // The patch stacks two soundsources — OB-8 PWM Big Strings
                 // over a Juno 60 sub — so it lands as module A + module B,
                 // which is exactly what the quad is for.
-                layers: vec![LayerDef {
-                    name: "Pad".into(),
-                    patch: "OB-8 PWM Big Strings".into(),
-                    extra_modules: vec!["Juno 60 Raw Sub".into()],
-                    gain_db: 0.0,
-                    key_lo: 0,
-                    key_hi: 127,
-                }],
+                layers: vec![
+                    LayerDef {
+                        name: "Pad".into(),
+                        patch: "OB-8 PWM Big Strings".into(),
+                        extra_modules: vec!["Juno 60 Raw Sub".into()],
+                        gain_db: 0.0,
+                        key_lo: 0,
+                        key_hi: 127,
+                    },
+                    // The bright half of the wash — the octave-up sparkle that
+                    // sits over the pad rather than inside it, so it can be
+                    // ridden (or dropped) on its own.
+                    LayerDef::new("Shimmer", ""),
+                ],
             },
             EngineDef {
                 name: "Organ".into(),
@@ -402,6 +408,7 @@ pub fn worship_profile() -> KeysProfile {
                     SceneSlot::off("Organ A"),
                     SceneSlot::off("Organ B"),
                     SceneSlot::off("Pad"),
+                    SceneSlot::off("Shimmer"),
                     SceneSlot::off("Drone"),
                     SceneSlot::off("SFX A"),
                     SceneSlot::off("SFX B"),
@@ -419,6 +426,7 @@ pub fn worship_profile() -> KeysProfile {
                     SceneSlot::off("Organ A"),
                     SceneSlot::off("Organ B"),
                     SceneSlot::new("Pad", "", -8.0),
+                    SceneSlot::off("Shimmer"),
                     SceneSlot::off("Drone"),
                     SceneSlot::off("SFX A"),
                     SceneSlot::off("SFX B"),
@@ -436,6 +444,7 @@ pub fn worship_profile() -> KeysProfile {
                     SceneSlot::new("Organ A", "", -10.0),
                     SceneSlot::off("Organ B"),
                     SceneSlot::new("Pad", "", -6.0),
+                    SceneSlot::off("Shimmer"),
                     SceneSlot::off("Drone"),
                     SceneSlot::off("SFX A"),
                     SceneSlot::off("SFX B"),
@@ -453,6 +462,7 @@ pub fn worship_profile() -> KeysProfile {
                     SceneSlot::off("Organ A"),
                     SceneSlot::off("Organ B"),
                     SceneSlot::new("Pad", "", -10.0),
+                    SceneSlot::off("Shimmer"),
                     SceneSlot::off("Drone"),
                     SceneSlot::off("SFX A"),
                     SceneSlot::off("SFX B"),
@@ -470,6 +480,7 @@ pub fn worship_profile() -> KeysProfile {
                     SceneSlot::off("Organ A"),
                     SceneSlot::off("Organ B"),
                     SceneSlot::new("Pad", "", -4.0),
+                    SceneSlot::off("Shimmer"),
                     SceneSlot::new("Drone", "", -8.0),
                     SceneSlot::off("SFX A"),
                     SceneSlot::off("SFX B"),
@@ -510,11 +521,32 @@ mod tests {
         let tree = p.build_tree(|_| None);
         let (_, cells) =
             signal_sampler::node_render::RenderNode::compile_with_cells(&tree, 48_000);
+        use signal_sampler::rig_node::Role;
+        use std::sync::Arc;
         for name in p.layer_names() {
-            assert!(cells.get(&name).is_some(), "no gain cell for {name}");
+            assert!(
+                cells.get(Role::Layer, &name).is_some(),
+                "no gain cell for lane {name}"
+            );
         }
         for engine in &p.engines {
-            assert!(cells.get(&engine.name).is_some(), "no gain cell for {}", engine.name);
+            assert!(
+                cells.get(Role::Engine, &engine.name).is_some(),
+                "no gain cell for engine {}",
+                engine.name
+            );
+        }
+        // A one-lane engine named after its lane ("Pad" holding "Pad") must
+        // still be two cells — see the render tree's like-named test.
+        for engine in p.engines.iter().filter(|e| e.layers.iter().any(|l| l.name == e.name)) {
+            assert!(
+                !Arc::ptr_eq(
+                    cells.get(Role::Engine, &engine.name).expect("engine cell"),
+                    cells.get(Role::Layer, &engine.name).expect("lane cell"),
+                ),
+                "{} shares one cell with its lane",
+                engine.name
+            );
         }
     }
 

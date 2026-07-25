@@ -81,10 +81,30 @@ pub struct KeysLayerModel {
     pub modules: Vec<KeysModule>,
 }
 
+/// **A drone engine's state** — the card-embedded control some engines carry
+/// instead of being played.
+///
+/// A drone is not an instrument you perform: you pick a key, switch it on and
+/// it holds that note under the song until you switch it off. It takes no
+/// MIDI, so the keyboard belongs entirely to the engines above it.
+#[derive(Clone, PartialEq, Debug, Default, Facet)]
+pub struct KeysDrone {
+    /// Pitch class being held, 0 = C … 11 = B.
+    pub key: u32,
+    /// Sounding right now.
+    pub playing: bool,
+    /// Octave the drone sounds in (MIDI octave number).
+    pub octave: i32,
+}
+
 /// One engine — an instrument part holding parallel layers.
 #[derive(Clone, PartialEq, Debug, Default, Facet)]
 pub struct KeysEngineModel {
     pub name: String,
+    /// Set when this engine is a drone — the mixer card embeds its key
+    /// selector instead of treating it like a played engine.
+    #[facet(default)]
+    pub drone: Option<KeysDrone>,
     /// The engine fader (dB) — rides all its layers.
     pub gain_db: f32,
     pub muted: bool,
@@ -176,6 +196,10 @@ pub struct KeysModule {
     /// size, mix, pre-delay (ms) and decay.
     #[facet(default)]
     pub dly_time_ms: f32,
+    /// Note division the delay is synced to: 0 free (use `dly_time_ms`),
+    /// else 1/64 … 1/1 in the visualizer's table.
+    #[facet(default)]
+    pub dly_div: f32,
     #[facet(default)]
     pub dly_feedback: f32,
     #[facet(default)]
@@ -188,6 +212,21 @@ pub struct KeysModule {
     pub amb_predelay_ms: f32,
     #[facet(default)]
     pub amb_decay: f32,
+    /// **Unison**: how many voices this module stacks and how far apart they
+    /// are pulled. The band draws them as lines around the note, so a Global
+    /// Control's effect on the whole rig's width is visible at a glance.
+    #[facet(default)]
+    pub unison: f32,
+    #[facet(default)]
+    pub detune: f32,
+    /// **Vibrato**: how fast the pitch pulses (Hz), how far (0..1), and how
+    /// long it waits before it starts (ms) — drawn as the line it makes.
+    #[facet(default)]
+    pub vib_rate: f32,
+    #[facet(default)]
+    pub vib_depth: f32,
+    #[facet(default)]
+    pub vib_delay_ms: f32,
 }
 
 /// Everything the layer-zoom view needs for one lane.
@@ -265,6 +304,11 @@ pub struct KeysPerform {
 /// named exactly as its fader is addressed ("Keys", "Keys A", "Keys A A").
 #[derive(Clone, PartialEq, Debug, Default, Facet)]
 pub struct KeysMeter {
+    /// Which level this is: `"engine"`, `"layer"` or `"module"`. Half of the
+    /// address — a one-lane engine is named after its lane ("Pad" holding
+    /// "Pad"), so a name on its own does not say which meter you are reading.
+    #[facet(default)]
+    pub kind: String,
     /// Container name — the same address [`KeysRig::set_layer_gain`] takes.
     pub name: String,
     /// Post-fader peak (linear 0..~1), already ballistically decayed by the
@@ -368,6 +412,11 @@ pub mod keys {
         /// variation (the same soundsource, voiced differently). Index 0 is
         /// the first authored variation; the default is `set_layer_patch`.
         fn set_layer_variant(&self, layer: String, module: u32, preset: u32, variant: u32);
+
+        /// Set a drone engine's key (0 = C … 11 = B) and whether it sounds.
+        /// A drone holds its note until it is switched off; it never reads
+        /// the keyboard.
+        fn set_drone(&self, engine: String, key: u32, playing: bool);
 
         /// Reorder the profile's engines — the order the mixer reads left to
         /// right. Engines the list omits keep their relative order behind the

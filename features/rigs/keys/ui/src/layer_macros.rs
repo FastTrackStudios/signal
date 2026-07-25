@@ -42,6 +42,11 @@ fn curves(detail: &KeysLayerDetail) -> Vec<ModuleCurve> {
             },
             cutoff_hz: m.cutoff_hz,
             resonance: m.resonance,
+            unison: m.unison,
+            detune: m.detune,
+            vib_rate: m.vib_rate,
+            vib_depth: m.vib_depth,
+            vib_delay_ms: m.vib_delay_ms,
             dim: !m.enabled || !m.live,
             // Everything here belongs to the lane being edited — the zoom has
             // nothing out of scope to push into the background.
@@ -53,8 +58,6 @@ fn curves(detail: &KeysLayerDetail) -> Vec<ModuleCurve> {
 /// The panels below the Filter and Amp cards — those two own their own
 /// graphs and knob rows.
 const GROUPS: &[(&str, &str)] = &[
-    ("Vibrato", "pitch pulse across the layer"),
-    ("Unison", "voices · detune"),
     ("Ambience", "reverb amount · length"),
     ("Tone", "the layer's EQ — centred is bypassed"),
     ("Effects", "layer output"),
@@ -167,6 +170,8 @@ pub fn LayerMacros(
                 style: "display: grid; gap: 16px; \
                         grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));",
                 for (i, shape) in [
+                    crate::macro_panel::Shape::Unison,
+                    crate::macro_panel::Shape::Vibrato,
                     crate::macro_panel::Shape::FilterResponse,
                     crate::macro_panel::Shape::FilterEnv,
                     crate::macro_panel::Shape::AmpEnv,

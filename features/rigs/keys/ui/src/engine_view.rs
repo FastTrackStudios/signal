@@ -73,7 +73,7 @@ pub fn EngineView(engine: KeysEngineModel, zoom: Signal<Zoom>) -> Element {
                         let rig_mute = rig.clone();
                         let muted = layer.muted;
                         let mute_lane = layer.name.clone();
-                        let peak = crate::meter::peak_of(&layer.name);
+                        let peak = crate::meter::peak_of("layer", &layer.name);
                         rsx! {
                             div {
                                 key: "{layer.name}",

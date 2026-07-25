@@ -332,6 +332,13 @@ pub struct ModuleCurve {
     /// Filter response.
     pub cutoff_hz: f32,
     pub resonance: f32,
+    /// Unison: stacked voices and how far they are pulled apart.
+    pub unison: f32,
+    pub detune: f32,
+    /// Vibrato: rate (Hz), depth (0..1) and the delay before it starts (ms).
+    pub vib_rate: f32,
+    pub vib_depth: f32,
+    pub vib_delay_ms: f32,
     /// Silent modules draw faintly instead of vanishing.
     pub dim: bool,
     /// Inside what the knobs above are driving. The mixer's band draws
@@ -424,6 +431,220 @@ pub fn StackedEnvelopes(
                                         d: "{d}", fill: "none", stroke: "{c.color}",
                                         stroke_width: "1.5", stroke_opacity: "{op}",
                                         stroke_dasharray: "6 4", stroke_linejoin: "round",
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// **Vibrato** — the line the pitch actually walks, per sound.
+///
+/// Flat while the vibrato waits out its delay, then the wobble fades in and
+/// runs at its rate: `rate` sets how many cycles cross the card, `depth` how
+/// far the line swings from the note, and the delay how much of the card goes
+/// by before any of it starts. A sound with no depth is a straight line, so
+/// "off" reads as off without a number.
+///
+/// Like the LFO fade-in in Vital, the swing ramps rather than snapping on —
+/// a vibrato that arrives at full width on its first cycle is not a vibrato
+/// anyone plays.
+#[component]
+pub fn StackedVibrato(
+    curves: Vec<ModuleCurve>,
+    #[props(default = 108)] height_px: u32,
+    #[props(default = false)] flat: bool,
+) -> Element {
+    /// Seconds across the card — two of them, so a 5 Hz vibrato reads as a
+    /// texture and a 0.5 Hz one as a slow sway.
+    const SPAN_S: f64 = 2.0;
+    /// How long the swing takes to reach full width once it starts.
+    const FADE_S: f64 = 0.35;
+    let h = height_px as f64;
+    let box_style = chrome(flat, 10);
+    let mid = h / 2.0;
+
+    rsx! {
+        div {
+            style: "{box_style}",
+            svg {
+                width: "100%", height: "{h}", view_box: "0 0 {W} {h}",
+                preserve_aspect_ratio: "none",
+                style: "display: block; width: 100%;",
+                // The note: what the line pulls away from.
+                line {
+                    x1: "{PAD}", y1: "{mid}", x2: "{W - PAD}", y2: "{mid}",
+                    stroke: "#1b1b1f", stroke_width: "1",
+                }
+                for (ci, c) in curves.iter().enumerate() {
+                    {
+                        let (op, width, _) = ink(c);
+                        let depth = c.vib_depth.clamp(0.0, 1.0) as f64;
+                        let rate = c.vib_rate.clamp(0.0, 20.0) as f64;
+                        let delay_s = (c.vib_delay_ms.max(0.0) as f64) / 1000.0;
+                        // Brighter the deeper it swings — a hint of a vibrato
+                        // should look like a hint.
+                        let base: f64 = op.parse().unwrap_or(1.0) * (0.4 + 0.6 * depth);
+                        let swing = depth * (h / 2.0 - PAD) * 0.9;
+
+                        let steps = 160;
+                        let mut d = String::new();
+                        for i in 0..=steps {
+                            let f = i as f64 / steps as f64;
+                            let t = f * SPAN_S;
+                            let x = PAD + f * (W - 2.0 * PAD);
+                            // Wait out the delay, then fade the swing in.
+                            let live = (t - delay_s).max(0.0);
+                            let ramp = if FADE_S > 0.0 { (live / FADE_S).min(1.0) } else { 1.0 };
+                            let y = mid
+                                - (live * rate * std::f64::consts::TAU).sin() * swing * ramp;
+                            d.push_str(&format!("{} {x:.1} {y:.1} ", if i == 0 { "M" } else { "L" }));
+                        }
+                        rsx! {
+                            path {
+                                key: "{ci}",
+                                d: "{d}", fill: "none", stroke: "{c.color}",
+                                stroke_width: "{width}", stroke_opacity: "{base}",
+                                stroke_linejoin: "round", stroke_linecap: "round",
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Where a unison stack's voices sit, in cents either side of the note.
+///
+/// Vital's layout (`SynthOscillator::setPhaseIncMults`): the voices are laid
+/// out in sharp/flat **pairs**, walking outward from the note —
+///
+/// ```text
+/// t = (2i + bump) / max(1, voices - 1)      bump = 1 when `voices` is even
+/// cents = powerScale(t, power) * range
+/// ```
+///
+/// so an odd stack puts a voice exactly on the note and an even one straddles
+/// it. `powerScale(t, p) = (e^(p·t) − 1) / (e^p − 1)` bunches the inner voices
+/// toward the centre and throws the outer ones wide, which is what makes a
+/// detuned stack shimmer instead of beating evenly. Vital's default power is
+/// 1.5 and its range 2 semitones; ours is the same shape driven by the
+/// `source.detune` macro.
+fn unison_offsets(voices: f32, detune: f32) -> Vec<f32> {
+    /// Vital's `detune_power` default — the curve the voices spread along.
+    const POWER: f32 = 1.5;
+    /// Semitones at full detune (Vital's `detune_range` default).
+    const RANGE_ST: f32 = 2.0;
+    /// The `source.detune` macro's ceiling.
+    const FULL: f32 = 2.0;
+
+    let n = voices.round().clamp(1.0, 16.0) as u32;
+    let cents = (detune / FULL).clamp(0.0, 1.0) * RANGE_ST * 100.0;
+    let divisor = (n.saturating_sub(1)).max(1) as f32;
+    let bump = if n % 2 == 0 { 1.0 } else { 0.0 };
+    let power_scale = |t: f32| {
+        if POWER.abs() < 0.01 {
+            t
+        } else {
+            ((POWER * t).exp() - 1.0) / (POWER.exp() - 1.0)
+        }
+    };
+
+    let mut out = Vec::with_capacity(n as usize);
+    // An odd stack spends its first voice on the note itself — that is the
+    // `t = 0` step, so its pairs start one step out.
+    let first = if n % 2 == 1 {
+        out.push(0.0);
+        1
+    } else {
+        0
+    };
+    for i in first..=(n / 2) {
+        if out.len() >= n as usize {
+            break;
+        }
+        let t = (2.0 * i as f32 + bump) / divisor;
+        let c = power_scale(t) * cents;
+        out.push(c);
+        out.push(-c);
+    }
+    out
+}
+
+/// **Unison** — every sound's stacked voices as lines around the note.
+///
+/// One line per voice, the note itself down the middle, detune pushing them
+/// apart. A line brightens with how much of the stack it carries: the centre
+/// voice is the loudest, the outer ones sit behind it (Vital's blend gives the
+/// detuned voices about 0.6 of the centre's amplitude), and a sound the
+/// selection doesn't reach fades into the background like every other curve
+/// here.
+#[component]
+pub fn StackedUnison(
+    curves: Vec<ModuleCurve>,
+    #[props(default = 108)] height_px: u32,
+    #[props(default = false)] flat: bool,
+) -> Element {
+    /// Half the axis, in cents — a 2-semitone spread each way, with room.
+    const SPAN_CENTS: f32 = 240.0;
+    let h = height_px as f64;
+    let box_style = chrome(flat, 10);
+    let mid = W / 2.0;
+
+    rsx! {
+        div {
+            style: "{box_style}",
+            svg {
+                width: "100%", height: "{h}", view_box: "0 0 {W} {h}",
+                preserve_aspect_ratio: "none",
+                style: "display: block; width: 100%;",
+                // The note: the line everything is spread around.
+                line {
+                    x1: "{mid}", y1: "{PAD}", x2: "{mid}", y2: "{h - PAD}",
+                    stroke: "#1b1b1f", stroke_width: "1",
+                }
+                for (ci, c) in curves.iter().enumerate() {
+                    {
+                        let (op, width, _) = ink(c);
+                        let offsets = unison_offsets(c.unison, c.detune);
+                        // The stack's own opacity scale: a wide stack is a
+                        // brighter thing than a single voice, and each voice
+                        // away from the centre carries a little less of it.
+                        // …and how *hot* the stack is: a single voice sitting
+                        // on the note is a quiet thing; eight voices pulled two
+                        // semitones apart is the loudest thing in the band, and
+                        // the drawing should say so before you read a number.
+                        let voices = c.unison.round().clamp(1.0, 16.0) as f64;
+                        let spread = (c.detune / 2.0).clamp(0.0, 1.0) as f64;
+                        let heat = 0.45 + 0.35 * ((voices - 1.0) / 7.0).min(1.0) + 0.2 * spread;
+                        let base: f64 = op.parse().unwrap_or(1.0) * heat;
+                        rsx! {
+                            g { key: "{ci}",
+                                for (vi, cents) in offsets.iter().enumerate() {
+                                    {
+                                        let t = (cents / SPAN_CENTS).clamp(-1.0, 1.0) as f64;
+                                        let x = mid + t * (W / 2.0 - PAD);
+                                        // Centre voice full height, detuned
+                                        // voices shorter and dimmer — Vital's
+                                        // 0.6 blend, drawn.
+                                        let centre = vi == 0 && offsets.len() % 2 == 1;
+                                        let amp = if centre { 1.0 } else { 0.6 };
+                                        let top = PAD + (1.0 - amp) * (h - 2.0 * PAD) * 0.55;
+                                        rsx! {
+                                            line {
+                                                key: "{vi}",
+                                                x1: "{x}", y1: "{top}", x2: "{x}", y2: "{h - PAD}",
+                                                stroke: "{c.color}",
+                                                stroke_width: if centre { width } else { "1.5" },
+                                                stroke_opacity: "{base * amp}",
+                                                stroke_linecap: "round",
+                                            }
+                                        }
                                     }
                                 }
                             }

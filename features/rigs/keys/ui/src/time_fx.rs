@@ -35,6 +35,8 @@ pub struct FxLane {
     /// Delay: time between repeats, how much survives each one, how much of
     /// it is heard.
     pub delay_ms: f32,
+    /// Note division the delay is synced to (0 = free, use `delay_ms`).
+    pub div: f32,
     pub feedback: f32,
     pub delay_mix: f32,
     /// Reverb: how long the tail runs, how big the space is, how much of it
@@ -45,10 +47,42 @@ pub struct FxLane {
     pub predelay_ms: f32,
 }
 
+/// Note divisions a delay can lock to, as a factor of a quarter note. The
+/// dotted eighth (0.75) is there because it is the sound: repeats that fall
+/// between the eighths and push a part forward.
+const DIVS: &[(f64, &str)] = &[
+    (0.25, "1/16"),
+    (0.5, "1/8"),
+    (0.75, "1/8."),
+    (1.0, "1/4"),
+    (1.5, "1/4."),
+    (2.0, "1/2"),
+    (4.0, "1/1"),
+];
+
 impl FxLane {
+    /// The gap between repeats: a synced delay follows the tempo, a free one
+    /// keeps its milliseconds.
+    fn step_ms(&self, quarter_ms: f32) -> f32 {
+        let idx = self.div.round().max(0.0) as usize;
+        match idx.checked_sub(1).and_then(|i| DIVS.get(i)) {
+            Some((factor, _)) => quarter_ms * *factor as f32,
+            None => self.delay_ms,
+        }
+    }
+
+    /// How this lane's timing reads in the label.
+    fn timing(&self, quarter_ms: f32) -> String {
+        let idx = self.div.round().max(0.0) as usize;
+        match idx.checked_sub(1).and_then(|i| DIVS.get(i)) {
+            Some((_, label)) => label.to_string(),
+            None => format!("{:.0}ms", self.step_ms(quarter_ms)),
+        }
+    }
+
     /// Nothing audible to draw.
     fn silent_delay(&self) -> bool {
-        self.delay_mix <= 0.001 || self.delay_ms <= 0.0
+        self.delay_mix <= 0.001
     }
 
     fn silent_verb(&self) -> bool {
@@ -112,7 +146,7 @@ pub fn DelayView(
             div { style: "display: flex; align-items: baseline; gap: 8px;",
                 span {
                     style: "font-size: 9px; font-weight: 700; letter-spacing: 0.1em; \
-                            text-transform: uppercase; color: #71717a;",
+                            text-transform: uppercase; color: {accent};",
                     "Delay"
                 }
                 span { style: "font-size: 8px; color: #3f3f46;",
@@ -155,11 +189,12 @@ pub fn DelayView(
                         let span = H - 2.0 * PAD;
                         // The tap train: each repeat keeps `fb` of the last.
                         let mut taps: Vec<(f64, f64)> = Vec::new();
-                        let (mut amp, mut t) = (lane.delay_mix.clamp(0.0, 1.0) as f64, lane.delay_ms);
+                        let step = lane.step_ms(quarter_ms).max(1.0);
+                        let (mut amp, mut t) = (lane.delay_mix.clamp(0.0, 1.0) as f64, step);
                         while (t as f64) <= win_ms as f64 && amp > 0.01 && taps.len() < 48 {
                             taps.push((x_of(t), amp));
                             amp *= fb as f64;
-                            t += lane.delay_ms;
+                            t += step;
                         }
                         // A line through the tap peaks — the decay envelope,
                         // which is what tells two lanes apart at a glance.
@@ -195,7 +230,7 @@ pub fn DelayView(
                                         text {
                                             x: "{x + 5.0:.1}", y: "{floor - a * span - 4.0:.1}",
                                             fill: "{lane.color}", font_size: "9", font_weight: "700",
-                                            "{lane.label}"
+                                            {format!("{} · {}", lane.label, lane.timing(quarter_ms))}
                                         }
                                     }
                                 }
@@ -240,7 +275,7 @@ pub fn ReverbView(
             div { style: "display: flex; align-items: baseline; gap: 8px;",
                 span {
                     style: "font-size: 9px; font-weight: 700; letter-spacing: 0.1em; \
-                            text-transform: uppercase; color: #71717a;",
+                            text-transform: uppercase; color: {accent};",
                     "Reverb"
                 }
                 span { style: "font-size: 8px; color: #3f3f46;", "0.1 – 20 s" }

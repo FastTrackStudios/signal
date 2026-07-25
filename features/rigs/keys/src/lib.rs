@@ -26,7 +26,7 @@ use signal_plugin_host::{
 
 use signal_sampler::MidiMonitor;
 use signal_sampler::node_render::{GainCells, RenderNode};
-use signal_sampler::rig_node::Container;
+use signal_sampler::rig_node::{Container, Role};
 
 mod backend;
 pub mod variations;
@@ -351,9 +351,10 @@ impl KeysRig {
     }
 
     /// Every metered container in the loaded program — engines, layers and
-    /// modules — with its post-fader peak (linear). The mixer's meters: the
-    /// same names its faders address.
-    pub fn cell_peaks(&self) -> Vec<(String, f32)> {
+    /// modules — with its post-fader peak (linear). The mixer's meters, at the
+    /// same `(role, name)` addresses its faders use: an engine and a lane can
+    /// share a name, so neither half of that pair is an address on its own.
+    pub fn cell_peaks(&self) -> Vec<(Role, String, f32)> {
         self.cells.peaks()
     }
 }
