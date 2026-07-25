@@ -2272,10 +2272,13 @@ mod tests {
         let targets = KeysRigBackend::scope_targets(&s, &KeysRigBackend::all_lanes(&s));
         let def = global_def("r.filter.cutoff").expect("rig cutoff");
 
-        let span = KeysRigBackend::drive_global(&mut s, def, "filter.cutoff", &targets, None, 0.5)
+        // Downward: the profile's other lanes sit wide open at 20 kHz, so
+        // upward there is nowhere to go — the ceiling is the group's leader.
+        let span = KeysRigBackend::drive_global(&mut s, def, "filter.cutoff", &targets, None, -0.5)
             .expect("a disagreeing rig holds its baseline");
         let (keys, pad) = (cutoff(&s, "Keys A"), cutoff(&s, "Pad"));
-        assert!(keys > 2000.0 && pad > 8000.0, "both engines travelled: {keys} {pad}");
+        assert!(keys < 2000.0 && pad < 8000.0, "both engines travelled: {keys} {pad}");
+        assert!((pad / keys - 4.0).abs() < 1e-2, "and kept their spacing: {keys} {pad}");
 
         let back =
             KeysRigBackend::drive_global(&mut s, def, "filter.cutoff", &targets, Some(span), 0.0);

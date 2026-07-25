@@ -63,7 +63,11 @@ pub fn ControlView(
             // master sits outside the scroller, because the one fader you must
             // always be able to reach is the one that stops the sound.
             div {
-                style: "flex: 1; min-height: 0; display: flex; align-items: stretch; \
+                // Sized to the cards, not to the window: `flex: 1` here made
+                // the section (and the master's column beside it) run all the
+                // way down to the macro band. It still shrinks and scrolls
+                // when the cards are taller than the room available.
+                style: "flex: 0 1 auto; min-height: 0; display: flex; align-items: stretch; \
                         border-bottom: 1px solid #1c1c1f;",
                 div {
                     // `space-between` spends the slack on the gaps when the
@@ -98,6 +102,9 @@ pub fn ControlView(
                     MasterStrip { master_db: mixer.master_db }
                 }
             }
+            // The slack lives here, so the engine band ends where its cards
+            // end and the macro band + keyboard stay pinned to the base.
+            div { style: "flex: 1; min-height: 0;" }
             MacroBand {}
             KeyboardStrip { mixer: mixer.clone(), held }
         }
@@ -273,8 +280,12 @@ fn MacroBand() -> Element {
 
     rsx! {
         div {
-            style: "flex-shrink: 0; display: flex; flex-direction: column; gap: 8px; \
-                    padding: 10px 12px; border-top: 1px solid #1c1c1f; background: #0a0a0c;",
+            // The band is content-height but capped: the strips above it are
+            // what you perform on, and no amount of visualization is worth
+            // squeezing them off the screen.
+            style: "flex-shrink: 0; max-height: 46vh; overflow: auto; display: flex; \
+                    flex-direction: column; gap: 8px; padding: 10px 12px; \
+                    border-top: 1px solid #1c1c1f; background: #0a0a0c;",
             div { style: "display: flex; align-items: baseline; gap: 8px;",
                 span { style: "font-size: 11px; font-weight: 700; color: {accent};", "{label}" }
                 span {

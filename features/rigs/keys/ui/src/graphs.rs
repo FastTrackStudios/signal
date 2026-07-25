@@ -365,38 +365,6 @@ fn env_path(a: &Adsr, h: f64) -> String {
     format!("M {PAD:.1} {y0:.1} L {xa:.1} {ytop:.1} L {xd:.1} {sus_y:.1} L {xs:.1} {sus_y:.1} L {xr:.1} {y0:.1}")
 }
 
-/// Legend chips — module slot in its colour.
-#[component]
-fn Legend(curves: Vec<ModuleCurve>, note: String) -> Element {
-    rsx! {
-        div { style: "display: flex; align-items: center; gap: 10px; flex-wrap: wrap;",
-            for c in curves.iter() {
-                div {
-                    key: "{c.slot}",
-                    style: "display: flex; align-items: center; gap: 4px;",
-                    span {
-                        style: format!(
-                            "width: 10px; height: 3px; border-radius: 2px; background: {}; opacity: {};",
-                            c.color,
-                            ink(c).0,
-                        ),
-                    }
-                    span {
-                        style: format!(
-                            "font-size: 9px; font-weight: {}; color: {};",
-                            if c.focus { "700" } else { "600" },
-                            if c.focus && !c.dim { "#a1a1aa" } else { "#52525b" },
-                        ),
-                        "{c.slot}"
-                    }
-                }
-            }
-            div { style: "flex: 1;" }
-            span { style: "font-size: 9px; color: #3f3f46;", "{note}" }
-        }
-    }
-}
-
 /// **Amp + Filter envelopes of every module, on one set of axes.** Amp is
 /// solid, filter dashed; a layer macro moves them all and the relationship
 /// between them stays visible.
@@ -463,7 +431,6 @@ pub fn StackedEnvelopes(
                     }
                 }
             }
-            Legend { curves: curves.clone(), note: "0 – 4 s".to_string() }
         }
     }
 }
@@ -547,7 +514,6 @@ pub fn StackedFilters(
                     }
                 }
             }
-            Legend { curves: curves.clone(), note: "cutoff marked per module".to_string() }
         }
     }
 }

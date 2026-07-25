@@ -33,7 +33,7 @@ pub use control::{ControlView, engine_color};
 pub use engine_view::EngineView;
 pub use knob::Knob;
 pub use layer_view::LayerView;
-pub use macro_panel::MacroPanel;
+pub use macro_panel::{MacroPanel, Shape, ShapeCard};
 pub use module_edit::ModuleEdit;
 pub use zoom::{OpenButton, Zoom};
 pub use fader::{Fader, fmt_db};

@@ -161,25 +161,28 @@ pub fn LayerMacros(
                 }
             }
 
-            // ── Filter and Amp: the same two cards the mixer's band shows,
-            // with room to breathe. One Filter block — response and envelope
-            // above, every knob that moves them below.
+            // ── The shapes: the same three cards the mixer's band shows,
+            // with room to breathe.
             div {
                 style: "display: grid; gap: 16px; \
-                        grid-template-columns: repeat(auto-fit, minmax(460px, 1fr));",
-                crate::macro_panel::FilterCard {
-                    macros: detail.layer_macros.clone(),
-                    curves: curves(&detail),
-                    accent: accent.clone(),
-                    height_px: 260,
-                    on_change: move |(id, v)| on_global.call((id, v)),
-                }
-                crate::macro_panel::AmpCard {
-                    macros: detail.layer_macros.clone(),
-                    curves: curves(&detail),
-                    accent: accent.clone(),
-                    height_px: 260,
-                    on_change: move |(id, v)| on_global.call((id, v)),
+                        grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));",
+                for (i, shape) in [
+                    crate::macro_panel::Shape::FilterResponse,
+                    crate::macro_panel::Shape::FilterEnv,
+                    crate::macro_panel::Shape::AmpEnv,
+                ]
+                .into_iter()
+                .enumerate()
+                {
+                    crate::macro_panel::ShapeCard {
+                        key: "{i}",
+                        shape,
+                        macros: detail.layer_macros.clone(),
+                        curves: curves(&detail),
+                        accent: accent.clone(),
+                        height_px: 180,
+                        on_change: move |(id, v)| on_global.call((id, v)),
+                    }
                 }
             }
 
