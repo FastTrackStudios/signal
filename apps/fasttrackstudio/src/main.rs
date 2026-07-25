@@ -312,6 +312,27 @@ impl Workspace {
             .map(|(_, l)| l)
             .unwrap_or("?")
     }
+
+    /// The rail glyph. The rail is icon-only, so this is how a workspace is
+    /// recognised — labels are tooltips.
+    fn icon(self) -> fts_chrome::Icon {
+        use fts_chrome::Icon;
+        match self {
+            Self::Home => Icon::Home,
+            #[cfg(feature = "signal")]
+            Self::Signal => Icon::Signal,
+            #[cfg(feature = "session")]
+            Self::Session => Icon::Session,
+            #[cfg(all(feature = "session", not(target_arch = "wasm32")))]
+            Self::Arrangement => Icon::Arrangement,
+            #[cfg(all(feature = "session", not(target_arch = "wasm32")))]
+            Self::Mixer => Icon::Mixer,
+            #[cfg(all(feature = "session", not(target_arch = "wasm32")))]
+            Self::LyricSync => Icon::Lyrics,
+            #[cfg(feature = "charts")]
+            Self::Charts => Icon::Charts,
+        }
+    }
 }
 
 // ── Landing / last-workspace persistence ────────────────────────────────────
@@ -353,7 +374,47 @@ fn initial_workspace() -> Option<Workspace> {
 #[component]
 fn App() -> Element {
     let mut current = use_signal(initial_workspace);
-    let mut settings_open = use_signal(|| false);
+    // The app owns the chrome: one bar, the workspace rail, and the panel
+    // rail every level publishes into (fts_chrome). Level 0 is the app's own
+    // contribution — the workspace crumb and the engines/settings panels.
+    let _chrome = fts_chrome::provide_chrome();
+    let level = fts_chrome::use_chrome_level(0);
+    let chrome = level.chrome();
+
+    let go = use_callback(move |w: Workspace| {
+        current.set(Some(w));
+        store_last_workspace(w);
+    });
+    let here = current().unwrap_or(Workspace::Home);
+
+    // The workspace crumb carries every other workspace as its menu, so the
+    // rail's icons are never the only way to change place.
+    level.crumbs(vec![fts_chrome::Crumb::here(here.label()).with_menu(
+        Workspace::all()
+            .into_iter()
+            .map(|(w, label)| {
+                (label.to_string(), w == here, Callback::new(move |_| go.call(w)))
+            })
+            .collect(),
+    )]);
+    level.panels(vec![
+        fts_chrome::PanelSpec::new("engines", "Engines", fts_chrome::Icon::Engine).width(300),
+        fts_chrome::PanelSpec::new("settings", "Settings", fts_chrome::Icon::Settings).width(300),
+    ]);
+
+    let rail_items: Vec<fts_chrome::RailItem> = Workspace::all()
+        .into_iter()
+        .map(|(w, label)| {
+            fts_chrome::RailItem::new(
+                label,
+                label,
+                w.icon(),
+                current() == Some(w),
+                Callback::new(move |_| go.call(w)),
+            )
+        })
+        .collect();
+    let sub_rail = chrome.sub_rail.read().clone();
 
     rsx! {
         // Global reset: the frameless WebView keeps the platform's default 8px
@@ -362,52 +423,37 @@ fn App() -> Element {
         document::Style { {"html,body{margin:0;padding:0;height:100%;background:#0a0a0a;overflow:hidden;}*{box-sizing:border-box;}"} }
         SessionChrome {}
         ResizeHandles {}
-        div {
-            style: "display: flex; flex-direction: column; height: 100vh; background: #0a0a0a; color: #e4e4e7; font-family: sans-serif;",
-            // Workspace bar — the app-level switcher (domain views own
-            // their internal navigation).
-            // The header IS the title bar (the native decorations are off
-            // on desktop): the wordmark and the flexible gap are drag
-            // surfaces, double-click toggles maximize, and the window
-            // controls live at the far right.
-            header {
-                style: "display: flex; align-items: center; gap: 8px; padding: 6px 0 6px 12px; border-bottom: 1px solid #27272a; user-select: none;",
-                span {
-                    style: "font-weight: 700; letter-spacing: 1px; font-size: 13px; cursor: default;",
-                    onmousedown: move |_| drag_window(),
-                    ondoubleclick: move |_| toggle_maximize(),
-                    "FASTTRACKSTUDIO"
+        // ONE bar over two rails (fts_chrome::AppFrame). The bar is also the
+        // title bar — the native decorations are off on desktop, so its slack
+        // is the drag surface and the window controls sit at its right end.
+        fts_chrome::AppFrame {
+            top: rsx! {
+                fts_chrome::TopBar {
+                    leading: rsx! {
+                        span {
+                            style: "font-weight: 700; letter-spacing: 1px; font-size: 12px; \
+                                    color: #71717a; cursor: default; padding-right: 2px;",
+                            onmousedown: move |_| drag_window(),
+                            ondoubleclick: move |_| toggle_maximize(),
+                            "FTS"
+                        }
+                    },
+                    trailing: rsx! { WindowControls {} },
+                    on_drag: move |_| drag_window(),
+                    on_expand: move |_| toggle_maximize(),
                 }
-                for (w, label) in Workspace::all() {
-                    button {
-                        style: if current() == Some(w) {
-                            "padding: 4px 12px; border-radius: 6px; background: #e4e4e7; color: #0a0a0a; font-weight: 600; border: none; font-size: 12px;"
-                        } else {
-                            "padding: 4px 12px; border-radius: 6px; background: transparent; color: #a1a1aa; border: 1px solid #27272a; font-size: 12px;"
-                        },
-                        onclick: move |_| {
-                            current.set(Some(w));
-                            store_last_workspace(w);
-                        },
-                        "{label}"
-                    }
+            },
+            rail: rsx! {
+                fts_chrome::IconRail { items: rail_items, sub: sub_rail }
+            },
+            // App-level flyouts. Views render their own inside their layout.
+            panel: rsx! {
+                fts_chrome::PanelHost { id: "engines".to_string(),
+                    div { style: "padding: 12px;", EnginesArea {} }
                 }
-                div {
-                    style: "flex: 1; align-self: stretch;",
-                    onmousedown: move |_| drag_window(),
-                    ondoubleclick: move |_| toggle_maximize(),
-                }
-                EnginesArea {}
-                button {
-                    style: "padding: 4px 10px; border-radius: 6px; background: transparent; color: #a1a1aa; border: 1px solid #27272a; font-size: 12px;",
-                    onclick: move |_| settings_open.toggle(),
-                    "Settings"
-                }
-                WindowControls {}
-            }
-            if settings_open() {
-                SettingsPanel {}
-            }
+                fts_chrome::PanelHost { id: "settings".to_string(), SettingsPanel {} }
+            },
+            right: rsx! { fts_chrome::PanelRail {} },
             main { style: "flex: 1; min-height: 0; display: flex;",
                 match current() {
                     Some(Workspace::Home) | None => rsx! {
@@ -481,23 +527,24 @@ fn toggle_maximize() {
 #[cfg(not(any(target_arch = "wasm32", target_os = "ios")))]
 #[component]
 fn WindowControls() -> Element {
-    const BTN: &str = "width: 40px; align-self: stretch; display: flex; align-items: center; justify-content: center; background: transparent; border: none; color: #a1a1aa; font-size: 13px; cursor: default; padding: 0;";
+    use fts_chrome::{Icon, WindowButton};
     rsx! {
-        div { style: "display: flex; align-self: stretch; margin-left: 4px;",
-            button {
-                style: BTN,
-                onclick: move |_| dioxus::desktop::window().set_minimized(true),
-                "–"
+        div { style: "display: flex; align-items: center; gap: 2px; margin-left: 2px;",
+            WindowButton {
+                icon: Icon::Minimize,
+                title: "Minimize".to_string(),
+                on_click: move |_| dioxus::desktop::window().set_minimized(true),
             }
-            button {
-                style: BTN,
-                onclick: move |_| toggle_maximize(),
-                "▢"
+            WindowButton {
+                icon: Icon::Maximize,
+                title: "Maximize".to_string(),
+                on_click: move |_| toggle_maximize(),
             }
-            button {
-                style: BTN,
-                onclick: move |_| dioxus::desktop::window().close(),
-                "✕"
+            WindowButton {
+                icon: Icon::Close,
+                title: "Close".to_string(),
+                danger: true,
+                on_click: move |_| dioxus::desktop::window().close(),
             }
         }
     }
@@ -743,8 +790,9 @@ fn SettingsPanel() -> Element {
     let mut update_msg = use_signal(String::new);
 
     rsx! {
-        div { style: "display: flex; align-items: center; gap: 12px; padding: 8px 12px; border-bottom: 1px solid #27272a; background: #111113; font-size: 12px;",
-            span { style: "font-weight: 600;", "Settings" }
+        div {
+            style: "display: flex; flex-direction: column; align-items: flex-start; gap: 12px; \
+                    padding: 12px; font-size: 12px;",
             span { style: "color: #a1a1aa;", "FastTrackStudio v{env!(\"CARGO_PKG_VERSION\")}" }
             UpdateCheck { msg: update_msg }
             if !update_msg().is_empty() {

@@ -86,6 +86,18 @@ impl RigKind {
         }
     }
 
+    /// The rail glyph.
+    fn icon(self) -> fts_chrome::Icon {
+        use fts_chrome::Icon;
+        match self {
+            RigKind::Guitar => Icon::Guitar,
+            RigKind::Bass => Icon::Bass,
+            RigKind::Drums => Icon::Drums,
+            RigKind::Keys => Icon::Keys,
+            RigKind::Synth => Icon::Synth,
+        }
+    }
+
     /// One-line description for the picker card.
     fn blurb(self) -> &'static str {
         match self {
@@ -127,31 +139,58 @@ fn store_last_rig(rig: Option<RigKind>) {
 #[component]
 pub fn SignalWorkspace() -> Element {
     let mut selected = use_signal(load_last_rig);
+    // Level 1 of the chrome: which rig. The rig list is the left rail's
+    // sub-rail and the crumb's menu — the `‹ Rigs` bar this used to draw was
+    // a whole bar spent on one button.
+    let level = fts_chrome::use_chrome_level(1);
+    let chrome = level.chrome();
+
+    let pick = use_callback(move |rig: Option<RigKind>| {
+        selected.set(rig);
+        store_last_rig(rig);
+    });
+
+    chrome.set_sub_rail(
+        RigKind::ALL
+            .iter()
+            .copied()
+            .map(|k| {
+                fts_chrome::RailItem::new(
+                    k.slug(),
+                    k.label(),
+                    k.icon(),
+                    selected() == Some(k),
+                    Callback::new(move |_| pick.call(Some(k))),
+                )
+            })
+            .collect(),
+    );
+    // The sub-rail belongs to Signal — leaving the workspace takes it away.
+    use_drop(move || chrome.set_sub_rail(Vec::new()));
 
     let Some(kind) = selected() else {
+        level.crumbs(vec![fts_chrome::Crumb::here("Rigs")]);
         return rsx! {
-            RigPicker {
-                on_pick: move |rig| {
-                    selected.set(Some(rig));
-                    store_last_rig(Some(rig));
-                },
-            }
+            RigPicker { on_pick: move |rig| pick.call(Some(rig)) }
         };
     };
-    // Shared chrome for every rig — only the inner view differs.
+
+    // The rig crumb picks any sibling rig, and "Rigs" goes back to the picker.
+    level.crumbs(vec![
+        fts_chrome::Crumb::new("Rigs", Callback::new(move |_| pick.call(None))),
+        fts_chrome::Crumb::here(kind.label()).with_menu(
+            RigKind::ALL
+                .iter()
+                .copied()
+                .map(|k| {
+                    (k.label().to_string(), k == kind, Callback::new(move |_| pick.call(Some(k))))
+                })
+                .collect(),
+        ),
+    ]);
+
     rsx! {
         div { style: "flex: 1; min-height: 0; display: flex; flex-direction: column;",
-            div { style: "display: flex; align-items: center; gap: 8px; padding: 4px 12px; border-bottom: 1px solid #1c1c1f; font-size: 11px;",
-                button {
-                    style: "padding: 2px 8px; border-radius: 5px; background: transparent; color: #a1a1aa; border: 1px solid #27272a; font-size: 11px; cursor: pointer;",
-                    onclick: move |_| {
-                        selected.set(None);
-                        store_last_rig(None);
-                    },
-                    "‹ Rigs"
-                }
-                span { style: "color: #71717a;", "{kind.label()}" }
-            }
             match kind {
                 RigKind::Guitar => rsx! { GuitarRigView {} },
                 RigKind::Bass => rsx! { BassRigView {} },

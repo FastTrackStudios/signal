@@ -7,7 +7,7 @@ use signal_keys_proto::{KeysEngineModel, KeysPreset};
 
 use crate::control::engine_color;
 use crate::fader::{Fader, fmt_db};
-use crate::zoom::{OpenButton, Zoom, ZoomBar};
+use crate::zoom::{OpenButton, Zoom};
 
 #[component]
 pub fn EngineView(
@@ -19,38 +19,47 @@ pub fn EngineView(
     let mut zoom = zoom;
     let accent = engine_color(&engine.name).to_string();
     let live = engine.layers.iter().filter(|l| l.live && !l.muted).count();
+    // Level 3: this zoom's crumb. "Mixer" is the way back up — there is no
+    // Back button anywhere in the app any more, only the trail.
+    let level = fts_chrome::use_chrome_level(3);
+    level.crumbs(vec![
+        fts_chrome::Crumb::new("Mixer", Callback::new(move |_| zoom.set(Zoom::Mixer))),
+        fts_chrome::Crumb::here(engine.name.clone()),
+    ]);
+    level.status(vec![fts_chrome::StatusItem::text(format!(
+        "{live} of {} lanes live",
+        engine.layers.len()
+    ))]);
 
     rsx! {
         div { style: "flex: 1; min-height: 0; display: flex; flex-direction: column;",
-            ZoomBar {
-                crumbs: vec![engine.name.clone()],
-                on_back: move |_| zoom.set(Zoom::Mixer),
-                trailing: rsx! {
-                    div { style: "display: flex; align-items: center; gap: 10px;",
-                        span { style: "font-size: 10px; color: #52525b;",
-                            {format!("{live} of {} lanes live", engine.layers.len())}
-                        }
-                        span { style: "font-size: 10px; color: #71717a;", "Engine" }
-                        div { style: "width: 120px;",
-                            Fader {
-                                db: engine.gain_db,
-                                height_px: 26,
-                                accent: accent.clone(),
-                                dimmed: engine.muted,
-                                on_change: {
-                                    let rig = rig.clone();
-                                    let name = engine.name.clone();
-                                    move |db: f32| {
-                                        let (rig, name) = (rig.clone(), name.clone());
-                                        spawn(async move {
-                                            if let Some(r) = rig { let _ = r.set_engine_gain(name, db).await; }
-                                        });
-                                    }
-                                },
+            // The engine's own fader: content, not chrome — it scrolls with
+            // the lanes it sums.
+            div {
+                style: "display: flex; align-items: center; gap: 12px; padding: 14px 16px 0;",
+                span {
+                    style: "font-size: 10px; font-weight: 700; letter-spacing: 0.1em; \
+                            text-transform: uppercase; color: #71717a;",
+                    "Engine level"
+                }
+                div { style: "width: 140px;",
+                    Fader {
+                        db: engine.gain_db,
+                        height_px: 26,
+                        accent: accent.clone(),
+                        dimmed: engine.muted,
+                        on_change: {
+                            let rig = rig.clone();
+                            let name = engine.name.clone();
+                            move |db: f32| {
+                                let (rig, name) = (rig.clone(), name.clone());
+                                spawn(async move {
+                                    if let Some(r) = rig { let _ = r.set_engine_gain(name, db).await; }
+                                });
                             }
-                        }
+                        },
                     }
-                },
+                }
             }
             div {
                 style: "flex: 1; min-height: 0; overflow: auto; padding: 16px; \

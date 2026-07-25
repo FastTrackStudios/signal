@@ -2,14 +2,14 @@
 //! rig. Renders purely from `signal-keys-proto` via the generated vox clients
 //! (provided in Dioxus context by the host). Inline styles only (Blitz-safe).
 //!
-//! Layout mirrors the guitar rig: a top bar (profile · patch lens · meters),
-//! three pages behind mode tabs — **Routing** (the composition tree),
-//! **Control** (the mixer: engines, layer faders, patch pickers) and
-//! **Session** (keyboard + MIDI monitor) — and the **Perform strip** with the
-//! profile's footswitch stacks pinned to the bottom of all of them.
+//! The rig draws no bar: it publishes its readouts and panels into the app
+//! chrome (`fts_chrome`) and renders one surface — the mixer at three zooms
+//! (mixer → engine → layer). Routing, the MIDI monitor and the on-screen
+//! keyboard are right-rail panels, so they open beside what you are playing
+//! instead of replacing it. The **Perform strip** (the profile's footswitch
+//! stacks) stays pinned to the bottom of every zoom.
 
 use dioxus::prelude::*;
-use midicore_ui::MidiMonitorPanel;
 use signal_ui::components::Piano;
 
 mod control;
@@ -31,10 +31,10 @@ pub use engine_view::EngineView;
 pub use knob::Knob;
 pub use layer_view::LayerView;
 pub use module_edit::ModuleEdit;
-pub use zoom::{OpenButton, Zoom, ZoomBar};
+pub use zoom::{OpenButton, Zoom};
 pub use fader::{Fader, fmt_db};
 pub use graphs::{Adsr, EnvelopeGraph, FilterCurve};
-pub use midi_light::MidiLight;
+pub use midi_light::MidiPanel;
 pub use perform::{PerformStrip, stack_color};
 pub use routing::RoutingView;
 pub use state::{KeysViewState, held_notes, use_keys_state};
@@ -42,26 +42,21 @@ pub use state::{KeysViewState, held_notes, use_keys_state};
 // The wire contract, re-exported for convenience.
 pub use signal_keys_proto as proto;
 
-/// Which page is showing.
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum Mode {
-    /// Wire the rig: the composition tree.
-    Routing,
-    /// Play & shape it: the mixer (default).
-    Control,
-    /// Keyboard, MIDI monitor, integration.
-    Session,
-}
-
 /// The keys-rig remote view. Mount inside a host that has provided
 /// `KeysRigClient` + `KeysRigStreamClient` in context.
+///
+/// The rig draws no bar of its own: it publishes its readouts and its panels
+/// into the app chrome (`fts_chrome`), and the mixer/engine/layer zoom is the
+/// whole surface. Routing, the MIDI monitor and the keyboard used to be page
+/// modes — pages you had to leave the mixer to reach; they are right-rail
+/// panels now, so they open *beside* what you are playing.
 #[component]
 pub fn KeysRigRemote() -> Element {
     let (state, _rig) = use_keys_state();
-    let mut mode = use_signal(|| Mode::Control);
     // Control-view depth: mixer → engine → layer. Shared through context so
     // the cards can open themselves.
     let zoom = use_context_provider(|| Signal::new(Zoom::Mixer));
+    let level = fts_chrome::use_chrome_level(2);
 
     let status = state.status.read().clone();
     let mixer = state.mixer.read().clone();
@@ -87,117 +82,92 @@ pub fn KeysRigRemote() -> Element {
         .flat_map(|e| e.layers.iter())
         .filter(|l| l.live && !l.muted)
         .count();
+    let (midi_lit, midi_color) = midi_light::use_midi_glow(&midi);
+
+    // What the rig's bar used to say, said in the app bar instead.
+    level.status(vec![
+        fts_chrome::StatusItem::pill(lens_label.clone(), lens_fg, lens_bg),
+        fts_chrome::StatusItem::text(format!(
+            "{live_lanes} lane{} live",
+            if live_lanes == 1 { "" } else { "s" }
+        )),
+        fts_chrome::StatusItem::dot(midi_lit, midi_color),
+        fts_chrome::StatusItem::dot(running, "#22c55e"),
+        fts_chrome::StatusItem::meter(status.master_peak, "#22c55e"),
+    ]);
+    // The old Routing and Session pages, as panels.
+    level.panels(vec![
+        fts_chrome::PanelSpec::new("keys.routing", "Routing", fts_chrome::Icon::Routing).width(360),
+        fts_chrome::PanelSpec::new("keys.midi", "MIDI", fts_chrome::Icon::Midi).width(360),
+        fts_chrome::PanelSpec::new("keys.keyboard", "Keyboard", fts_chrome::Icon::Perform)
+            .width(420),
+    ]);
+    let _ = master_pct;
 
     rsx! {
         div {
             style: "display: flex; flex-direction: column; flex: 1; min-height: 0; \
                     color: #e4e4e7; font-family: sans-serif; background: #08080a;",
-            // ── top bar ──
-            div {
-                style: "display: flex; align-items: center; gap: 10px; padding: 7px 12px; \
-                        border-bottom: 1px solid #1c1c1f;",
-                span { style: "font-size: 13px; font-weight: 700;", "Keys" }
-                span {
-                    style: format!(
-                        "padding: 3px 10px; border-radius: 999px; background: {lens_bg}; color: {lens_fg}; \
-                         font-size: 11px; font-weight: 700; letter-spacing: 0.05em;",
-                    ),
-                    "{lens_label}"
-                }
-                span { style: "font-size: 10px; color: #52525b;",
-                    {format!("{live_lanes} lane{} live", if live_lanes == 1 { "" } else { "s" })}
-                }
-                div { style: "flex: 1;" }
-                // Mode tabs.
-                for (m, label) in [
-                    (Mode::Routing, "Routing"),
-                    (Mode::Control, "Control"),
-                    (Mode::Session, "Session"),
-                ] {
-                    button {
-                        key: "{label}",
-                        style: format!(
-                            "appearance: none; border: none; border-radius: 7px; padding: 4px 12px; \
-                             font-size: 11px; font-weight: 600; background: {}; color: {};",
-                            if mode() == m { "#101821" } else { "transparent" },
-                            if mode() == m { "#38bdf8" } else { "#52525b" },
-                        ),
-                        onclick: move |_| mode.set(m),
-                        "{label}"
+            div { style: "display: flex; flex: 1; min-height: 0;",
+                div { style: "display: flex; flex-direction: column; flex: 1; min-width: 0; min-height: 0;",
+                    match zoom() {
+                        Zoom::Mixer => rsx! {
+                            ControlView { mixer: mixer.clone(), presets: presets.clone() }
+                        },
+                        Zoom::Engine(name) => {
+                            match mixer.engines.iter().find(|e| e.name == name) {
+                                Some(engine) => rsx! {
+                                    EngineView {
+                                        engine: engine.clone(),
+                                        presets: presets.clone(),
+                                        zoom,
+                                    }
+                                },
+                                None => rsx! {
+                                    ControlView { mixer: mixer.clone(), presets: presets.clone() }
+                                },
+                            }
+                        }
+                        Zoom::Layer(name) => rsx! {
+                            LayerView {
+                                layer: name,
+                                zoom,
+                                mixer: mixer.clone(),
+                                presets: presets.clone(),
+                            }
+                        },
                     }
                 }
-                // MIDI activity light — click for the monitor + port picker.
-                MidiLight { midi: midi.clone(), port: status.midi_port.clone() }
-                div { style: "width: 4px;" }
-                // Engine LED + master meter.
-                span {
-                    style: format!(
-                        "width: 7px; height: 7px; border-radius: 999px; background: {}; box-shadow: 0 0 6px {};",
-                        if running { "#22c55e" } else { "#3f3f46" },
-                        if running { "#22c55e88" } else { "transparent" },
-                    ),
+                // The rig's panels, flush against the app's right rail.
+                fts_chrome::PanelHost { id: "keys.routing".to_string(),
+                    RoutingView { tree: tree.clone() }
                 }
-                div { style: "width: 80px; height: 8px; background: #18181b; border-radius: 2px; overflow: hidden;",
-                    div { style: "height: 100%; width: {master_pct}%; background: #22c55e;" }
+                fts_chrome::PanelHost { id: "keys.midi".to_string(),
+                    midi_light::MidiPanel { midi: midi.clone(), port: status.midi_port.clone() }
+                }
+                fts_chrome::PanelHost { id: "keys.keyboard".to_string(),
+                    KeyboardPanel { state }
                 }
             }
-            // ── page ──
-            match mode() {
-                Mode::Routing => rsx! { RoutingView { tree: tree.clone() } },
-                Mode::Control => match zoom() {
-                    Zoom::Mixer => rsx! {
-                        ControlView { mixer: mixer.clone(), presets: presets.clone() }
-                    },
-                    Zoom::Engine(name) => {
-                        match mixer.engines.iter().find(|e| e.name == name) {
-                            Some(engine) => rsx! {
-                                EngineView {
-                                    engine: engine.clone(),
-                                    presets: presets.clone(),
-                                    zoom,
-                                }
-                            },
-                            None => rsx! {
-                                ControlView { mixer: mixer.clone(), presets: presets.clone() }
-                            },
-                        }
-                    }
-                    Zoom::Layer(name) => rsx! {
-                        LayerView {
-                            layer: name,
-                            zoom,
-                            mixer: mixer.clone(),
-                            presets: presets.clone(),
-                        }
-                    },
-                },
-                Mode::Session => rsx! { SessionView { state } },
-            }
-            // ── perform strip (every page) ──
+            // ── perform strip (every zoom) ──
             PerformStrip { perform: perform.clone() }
         }
     }
 }
 
-/// Session page: the playable keyboard + the MIDI monitor. (The setlist /
-/// DAW-sync surface lands here next.)
+/// The keyboard panel: play the rig from the screen when the controller is
+/// not to hand. (The setlist / DAW-sync surface lands here next.)
 #[component]
-fn SessionView(state: KeysViewState) -> Element {
+fn KeyboardPanel(state: KeysViewState) -> Element {
     let rig = use_hook(try_consume_context::<signal_keys_proto::keys::KeysRigClient>);
     let midi = state.midi.read().clone();
-    let midi_count = midi.len() as u64;
     let lit = held_notes(&midi);
 
     rsx! {
         div {
             style: "flex: 1; min-height: 0; overflow: auto; padding: 12px; \
                     display: flex; flex-direction: column; gap: 12px;",
-            MidiMonitorPanel { events: midi, count: midi_count, title: "MIDI monitor".to_string() }
             div {
-                span {
-                    style: "font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: #52525b;",
-                    "Keyboard"
-                }
                 {
                     let rig_on = rig.clone();
                     let rig_off = rig.clone();

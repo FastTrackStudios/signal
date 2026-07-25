@@ -122,15 +122,14 @@ pub fn ModuleEdit(
     detail: KeysLayerDetail,
     accent: String,
     module: u32,
-    /// Opens the soundsource browser (owned by the parent so it can overlay).
-    browsing: Signal<bool>,
     on_macro: EventHandler<(String, f32)>,
     on_enabled: EventHandler<bool>,
     on_gain: EventHandler<f32>,
 ) -> Element {
     let env_slot = use_signal(|| 0u32);
     let lfo_slot = use_signal(|| 0u32);
-    let mut browsing = browsing;
+    // The library is a chrome panel — this button is its handle.
+    let chrome = fts_chrome::use_chrome();
 
     let group = |name: &str| -> Vec<KeysMacro> {
         detail.macros.iter().filter(|m| m.group == name).cloned().collect()
@@ -198,7 +197,7 @@ pub fn ModuleEdit(
                         style: "appearance: none; border: 1px solid #1f2b3a; border-radius: 8px; \
                                 padding: 7px; background: #0d1319; color: #7dd3fc; font-size: 10px; \
                                 font-weight: 700; letter-spacing: 0.06em;",
-                        onclick: move |_| browsing.toggle(),
+                        onclick: move |_| chrome.toggle_panel("keys.browser"),
                         "BROWSE SOUNDSOURCES"
                     }
                     div { style: "display: flex; align-items: center; gap: 8px;",

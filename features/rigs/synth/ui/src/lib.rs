@@ -110,7 +110,7 @@ fn use_synth_state() -> (SynthState, Option<SynthRigClient>) {
 #[component]
 pub fn SynthRigRemote() -> Element {
     let (state, rig) = use_synth_state();
-    let mut mode = use_signal(|| Mode::Play);
+    let mode = use_signal(|| Mode::Play);
     let status = state.status.read().clone();
     let presets = state.presets.read().clone();
     let midi = state.midi.read().clone();
@@ -138,37 +138,40 @@ pub fn SynthRigRemote() -> Element {
     let vol_milli = (status.volume.clamp(0.0, 1.0) * 1000.0) as u32;
     let vol_pct = (status.volume.clamp(0.0, 1.0) * 100.0) as u32;
 
+    // PLAY / SETUP / EDIT / BROWSE are the app bar's tabs now, and the preset
+    // and meters are its readouts — the rig keeps only its volume control.
+    let level = fts_chrome::use_chrome_level(2);
+    level.status(vec![
+        fts_chrome::StatusItem::text(status.loaded_preset.clone().unwrap_or_else(|| "—".into())),
+        fts_chrome::StatusItem::meter(
+            status.master_peak,
+            if clipping { "#ef4444" } else { "#22c55e" },
+        ),
+    ]);
+    level.tabs(
+        [
+            ("play", "Play", Mode::Play),
+            ("setup", "Setup", Mode::Setup),
+            ("edit", "Edit", Mode::Edit),
+            ("browse", "Browse", Mode::Browse),
+        ]
+        .into_iter()
+        .map(|(id, label, m)| {
+            let mut pick = mode;
+            fts_chrome::ChromeTab::new(
+                id,
+                label,
+                mode() == m,
+                Callback::new(move |_| pick.set(m)),
+            )
+        })
+        .collect(),
+    );
+    let _ = master_pct;
+
     rsx! {
         div { style: "display:flex; flex-direction:column; gap:0; flex:1; min-height:0; color:#e4e4e7; font-family:sans-serif;",
-            // ── top bar ──
-            div { style: "display:flex; align-items:center; gap:10px; padding:6px 12px; border-bottom:1px solid #1c1c1f;",
-                span { style: "font-weight:700; font-size:13px;", "Synth" }
-                span { style: "font-size:11px; color:#a1a1aa;", {status.loaded_preset.clone().unwrap_or_else(|| "—".into())} }
-                // PLAY / SETUP / EDIT mode toggle
-                div { style: "display:flex; gap:2px; margin-left:6px; background:#18181b; border:1px solid #27272a; border-radius:6px; padding:2px;",
-                    button {
-                        style: mode_btn(mode() == Mode::Play),
-                        onclick: move |_| mode.set(Mode::Play),
-                        "PLAY"
-                    }
-                    button {
-                        style: mode_btn(mode() == Mode::Setup),
-                        onclick: move |_| mode.set(Mode::Setup),
-                        "SETUP"
-                    }
-                    button {
-                        style: mode_btn(mode() == Mode::Edit),
-                        onclick: move |_| mode.set(Mode::Edit),
-                        "EDIT"
-                    }
-                    button {
-                        style: mode_btn(mode() == Mode::Browse),
-                        onclick: move |_| mode.set(Mode::Browse),
-                        "BROWSE"
-                    }
-                }
-                div { style: "flex:1;" }
-                // volume slider
+            div { style: "display:flex; align-items:center; gap:10px; padding:10px 14px 4px;",
                 span { style: "font-size:10px; color:#71717a;", "VOL {vol_pct}%" }
                 {
                     let rig_vol = rig.clone();
@@ -185,10 +188,6 @@ pub fn SynthRigRemote() -> Element {
                             spawn(async move { if let Some(r) = rig { let _ = r.set_volume(v).await; } });
                         },
                     } }
-                }
-                // master meter (red at clip)
-                div { style: "width:80px; height:8px; background:#18181b; border-radius:2px; overflow:hidden;",
-                    div { style: format!("height:100%; width:{master_pct}%; background:{};", if clipping { "#ef4444" } else { "#22c55e" }) }
                 }
             }
             if mode() == Mode::Setup {
@@ -253,11 +252,6 @@ pub fn SynthRigRemote() -> Element {
             }
         }
     }
-}
-
-fn mode_btn(active: bool) -> String {
-    let (bg, fg) = if active { ("#0c2733", "#e4e4e7") } else { ("transparent", "#71717a") };
-    format!("padding:3px 12px; border:none; border-radius:4px; background:{bg}; color:{fg}; font-size:10px; font-weight:700; letter-spacing:0.05em; cursor:pointer;")
 }
 
 // ── Edit page (Vital-style single-layer editor) ───────────────────────────────

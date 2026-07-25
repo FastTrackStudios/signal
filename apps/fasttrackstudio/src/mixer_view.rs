@@ -253,15 +253,11 @@ pub fn MixerWorkspace() -> Element {
             theme: ThemeContext::new(),
             div {
                 style: "flex:1; min-height:0; display:flex; flex-direction:column;",
-                // Toolbar with the REAPER hand-off.
+                // The REAPER hand-off. The workspace is named by the app
+                // bar's crumb, so this is an action row, not a title bar.
                 div {
                     style: "flex:0 0 auto; display:flex; align-items:center; gap:8px; \
-                            padding:6px 12px; border-bottom:1px solid #27272a; background:#0b0b0d;",
-                    span {
-                        style: "font-size:11px; font-weight:700; letter-spacing:0.06em; \
-                                text-transform:uppercase; color:#a1a1aa;",
-                        "Mixer"
-                    }
+                            padding:10px 14px 4px;",
                     div { style: "flex:1;" }
                     button {
                         onclick: move |_| open_in_reaper(),

@@ -19,7 +19,7 @@ use signal_keys_proto::keys::KeysRigClient;
 use signal_keys_proto::{KeysLayerDetail, KeysNode};
 
 use crate::control::engine_color;
-use crate::zoom::{Zoom, ZoomBar};
+use crate::zoom::Zoom;
 use signal_keys_proto::{KeysMixer, KeysPreset};
 
 /// Which page of the layer zoom.
@@ -45,12 +45,12 @@ pub fn LayerView(
     presets: Vec<KeysPreset>,
 ) -> Element {
     let rig = use_hook(try_consume_context::<KeysRigClient>);
-    let mut zoom = zoom;
+    let zoom = zoom;
     let mut page = use_signal(|| Page::Layer);
     let mut detail = use_signal(KeysLayerDetail::default);
     // Which module (A/B/C/D) the zoom is editing. Each module is its own
     // engine instance — own source, filter, envelopes.
-    let mut module = use_signal(|| 0u32);
+    let module = use_signal(|| 0u32);
 
     // Pull the lane's detail; re-pull after every edit (cheap, local call).
     let refresh = use_callback({
@@ -83,108 +83,122 @@ pub fn LayerView(
     // The back target: up one level, to this lane's engine.
     let back_to = d.engine.clone();
 
+    // ── the chrome, level 3: engine ▸ lane ▸ module ─────────────────────
+    //
+    // Every control the zoom bar used to hold is here: the lane crumb picks a
+    // sibling lane, the module crumb is the A/B/C/D switcher, the pages are
+    // the bar's tabs and the patch is a readout. Clicking a parent crumb is
+    // what "back" means now.
+    let level = fts_chrome::use_chrome_level(3);
+    let lanes: Vec<(String, bool, Callback<()>)> = mixer
+        .engines
+        .iter()
+        .filter(|e| e.name == d.engine)
+        .flat_map(|e| e.layers.iter())
+        .map(|l| {
+            let name = l.name.clone();
+            let is_here = name == d.layer;
+            let target = name.clone();
+            let mut zoom_to = zoom;
+            (
+                name,
+                is_here,
+                Callback::new(move |_| zoom_to.set(Zoom::Layer(target.clone()))),
+            )
+        })
+        .collect();
+    let modules: Vec<(String, bool, Callback<()>)> = d
+        .modules
+        .iter()
+        .map(|m| {
+            let idx = m.index;
+            let label = if m.patch.is_empty() {
+                format!("{} — empty", m.slot)
+            } else {
+                format!("{} — {}", m.slot, m.patch)
+            };
+            let mut pick = module;
+            (label, m.index == d.module, Callback::new(move |_| pick.set(idx)))
+        })
+        .collect();
+    let module_label = d
+        .modules
+        .iter()
+        .find(|m| m.index == d.module)
+        .map(|m| format!("Module {}", m.slot))
+        .unwrap_or_else(|| "Module".to_string());
+    {
+        let up = back_to.clone();
+        let mut zoom_up = zoom;
+        level.crumbs(vec![
+            fts_chrome::Crumb::new(
+                d.engine.clone(),
+                Callback::new(move |_| zoom_up.set(Zoom::Engine(up.clone()))),
+            ),
+            fts_chrome::Crumb::here(d.layer.clone()).with_menu(lanes),
+            fts_chrome::Crumb::here(module_label).with_menu(modules),
+        ]);
+    }
+    level.tabs(vec![
+        fts_chrome::ChromeTab::new(
+            "layer",
+            "Layer",
+            page() == Page::Layer,
+            Callback::new(move |_| page.set(Page::Layer)),
+        ),
+        fts_chrome::ChromeTab::new(
+            "module",
+            "Module",
+            page() == Page::Module,
+            Callback::new(move |_| page.set(Page::Module)),
+        ),
+        fts_chrome::ChromeTab::new(
+            "edit",
+            "Edit",
+            page() == Page::Edit,
+            Callback::new(move |_| page.set(Page::Edit)),
+        ),
+    ]);
+    level.status(vec![fts_chrome::StatusItem::pill(patch.clone(), accent.clone(), "#101821")]);
+    level.panels(vec![
+        fts_chrome::PanelSpec::new("keys.browser", "Soundsources", fts_chrome::Icon::Browser)
+            .width(340),
+    ]);
+
     rsx! {
-        div { style: "flex: 1; min-height: 0; display: flex; flex-direction: column;",
-            ZoomBar {
-                crumbs: vec![d.engine.clone(), d.layer.clone()],
-                on_back: move |_| zoom.set(Zoom::Engine(back_to.clone())),
-                trailing: rsx! {
-                    div { style: "display: flex; align-items: center; gap: 14px;",
-                        // The layer's four MODULES — Omnisphere's Quadzone.
-                        // Each is a whole engine: own source, filter, envelopes.
-                        div { style: "display: flex; gap: 4px; padding: 3px; background: #0b0b0e; \
-                                      border: 1px solid #1f1f23; border-radius: 8px;",
-                            for m in d.modules.iter() {
-                                {
-                                    let is_here = m.index == d.module;
-                                    let idx = m.index;
-                                    let title = if m.patch.is_empty() {
-                                        format!("Module {} — empty", m.slot)
-                                    } else {
-                                        format!("Module {} — {}", m.slot, m.patch)
-                                    };
-                                    rsx! {
-                                        button {
-                                            key: "{m.index}",
-                                            style: format!(
-                                                "appearance: none; border: none; border-radius: 6px; \
-                                                 min-width: 30px; padding: 3px 8px; font-size: 10px; \
-                                                 font-weight: 700; background: {}; color: {};",
-                                                if is_here { "#101821" } else { "transparent" },
-                                                if is_here {
-                                                    accent.clone()
-                                                } else if m.live {
-                                                    "#a1a1aa".to_string()
-                                                } else {
-                                                    "#3f3f46".to_string()
-                                                },
-                                            ),
-                                            title: "{title}",
-                                            onclick: move |_| module.set(idx),
-                                            if !m.enabled {
-                                                span { style: "opacity: 0.5;", "{m.slot}" }
-                                            } else {
-                                                span { "{m.slot}" }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
+        div { style: "flex: 1; min-height: 0; display: flex;",
+            div { style: "display: flex; flex-direction: column; flex: 1; min-width: 0; min-height: 0;",
+                match page() {
+                    Page::Layer => rsx! {
+                        LayerPage {
+                            detail: d.clone(),
+                            accent: accent.clone(),
+                            page,
+                            module,
+                            refresh,
                         }
-                        span {
-                            style: format!(
-                                "padding: 4px 12px; border-radius: 999px; font-size: 11px; \
-                                 font-weight: 600; background: #101821; color: {accent}; \
-                                 max-width: 260px; overflow: hidden; text-overflow: ellipsis; \
-                                 white-space: nowrap;",
-                            ),
-                            "{patch}"
+                    },
+                    Page::Module => rsx! {
+                        PlayPage {
+                            detail: d.clone(),
+                            accent: accent.clone(),
+                            module: d.module,
+                            refresh,
                         }
-                        // Page tabs share the module switcher's segmented shell
-                        // so the bar reads as two controls, not five buttons.
-                        div { style: "display: flex; gap: 4px; padding: 3px; background: #0b0b0e; \
-                                      border: 1px solid #1f1f23; border-radius: 8px;",
-                            for (p, label) in [
-                                (Page::Layer, "Layer"),
-                                (Page::Module, "Module"),
-                                (Page::Edit, "Edit"),
-                            ] {
-                                button {
-                                    key: "{label}",
-                                    style: format!(
-                                        "appearance: none; border: none; border-radius: 6px; padding: 4px 12px; \
-                                         font-size: 11px; font-weight: 600; background: {}; color: {};",
-                                        if page() == p { "#101821" } else { "transparent" },
-                                        if page() == p { "#38bdf8" } else { "#52525b" },
-                                    ),
-                                    onclick: move |_| page.set(p),
-                                    "{label}"
-                                }
-                            }
-                        }
-                    }
-                },
+                    },
+                    Page::Edit => rsx! { EditPage { detail: d.clone() } },
+                }
             }
-            match page() {
-                Page::Layer => rsx! {
-                    LayerPage {
-                        detail: d.clone(),
-                        accent: accent.clone(),
-                        page,
-                        module,
-                        refresh,
-                    }
-                },
-                Page::Module => rsx! {
-                    PlayPage {
-                        detail: d.clone(),
-                        accent: accent.clone(),
-                        presets: presets.clone(),
-                        module: d.module,
-                        refresh,
-                    }
-                },
-                Page::Edit => rsx! { EditPage { detail: d.clone() } },
+            // The library, as a panel: it used to be an overlay floating over
+            // the module page, so auditioning meant covering the controls you
+            // were auditioning with.
+            fts_chrome::PanelHost { id: "keys.browser".to_string(),
+                SourceBrowser {
+                    layer: d.layer.clone(),
+                    module: d.module,
+                    presets: presets.clone(),
+                    refresh,
+                }
             }
         }
     }
@@ -247,26 +261,24 @@ fn LayerPage(
     }
 }
 
-/// The Play page: the module surface + the soundsource browser overlay.
+/// The Play page: the module surface. The library it loads from is the
+/// chrome's Soundsources panel.
 #[component]
 fn PlayPage(
     detail: KeysLayerDetail,
     accent: String,
-    presets: Vec<KeysPreset>,
     module: u32,
     refresh: Callback<()>,
 ) -> Element {
     let rig = use_hook(try_consume_context::<KeysRigClient>);
-    let browsing = use_signal(|| false);
     let lane = detail.layer.clone();
 
     rsx! {
-        div { style: "position: relative; flex: 1; min-height: 0; display: flex;",
+        div { style: "flex: 1; min-height: 0; display: flex;",
             crate::module_edit::ModuleEdit {
                 detail: detail.clone(),
                 accent: accent.clone(),
                 module,
-                browsing,
                 on_macro: {
                     let (rig, lane) = (rig.clone(), lane.clone());
                     move |(id, v): (String, f32)| {
@@ -297,18 +309,6 @@ fn PlayPage(
                         refresh.call(());
                     }
                 },
-            }
-            if browsing() {
-                div {
-                    style: "position: absolute; top: 12px; left: 12px; z-index: 50; width: 300px;",
-                    SourceBrowser {
-                        layer: detail.layer.clone(),
-                        module,
-                        presets: presets.clone(),
-                        open: browsing,
-                        refresh,
-                    }
-                }
             }
         }
     }
@@ -398,11 +398,9 @@ fn SourceBrowser(
     layer: String,
     module: u32,
     presets: Vec<KeysPreset>,
-    open: Signal<bool>,
     refresh: Callback<()>,
 ) -> Element {
     let rig = use_hook(try_consume_context::<KeysRigClient>);
-    let mut open = open;
     let mut query = use_signal(String::new);
 
     let q = query().to_lowercase();
@@ -417,8 +415,7 @@ fn SourceBrowser(
 
     rsx! {
         div {
-            style: "display: flex; flex-direction: column; gap: 10px; padding: 12px; \
-                    border: 1px solid #2b2b31; border-radius: 10px; background: #0b0b0d;",
+            style: "display: flex; flex-direction: column; gap: 10px; padding: 12px;",
             input {
                 style: "background: #131316; border: 1px solid #1f1f23; border-radius: 8px; \
                         padding: 8px 10px; color: #e4e4e7; font-size: 11px;",
@@ -427,7 +424,7 @@ fn SourceBrowser(
                 oninput: move |e| query.set(e.value()),
             }
             div {
-                style: "display: flex; flex-direction: column; gap: 1px; max-height: 260px; overflow-y: auto;",
+                style: "display: flex; flex-direction: column; gap: 1px; flex: 1; min-height: 0; overflow-y: auto;",
                 button {
                     style: "appearance: none; text-align: left; border: none; border-radius: 6px; \
                             padding: 7px 9px; background: transparent; color: #a1a1aa; font-size: 11px;",
@@ -436,7 +433,6 @@ fn SourceBrowser(
                         let layer = layer.clone();
                         move |_| {
                             let (rig, layer) = (rig.clone(), layer.clone());
-                            open.set(false);
                             spawn(async move {
                                 if let Some(r) = rig { let _ = r.clear_layer(layer, module).await; }
                             });
@@ -457,7 +453,6 @@ fn SourceBrowser(
                             let layer = layer.clone();
                             move |_| {
                                 let (rig, layer) = (rig.clone(), layer.clone());
-                                open.set(false);
                                 spawn(async move {
                                     if let Some(r) = rig { let _ = r.set_layer_patch(layer, module, i as u32).await; }
                                 });

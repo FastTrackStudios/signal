@@ -202,6 +202,7 @@ tracing.workspace = true
 
 # Signal domain (the rig)
 signal-guitar-proto = { workspace = true, optional = true }
+fts-chrome.workspace = true
 signal-guitar-ui = { workspace = true, optional = true }
 signal-bass-proto = { workspace = true, optional = true }
 signal-bass-ui = { workspace = true, optional = true }

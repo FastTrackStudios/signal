@@ -1,9 +1,9 @@
-//! MIDI activity light — the "is anything reaching the rig?" answer, always
-//! visible in the top bar.
+//! MIDI input — the "is anything reaching the rig?" answer.
 //!
-//! Dark = nothing arriving. Flashing = events landing. Solid = notes held.
-//! Click it for the full monitor: the port picker (what the rig is listening
-//! to) and the live event list.
+//! The activity light is a status readout in the app bar (dark = nothing
+//! arriving, blue = events landing, green = notes held); the monitor and port
+//! picker are a right-rail panel. Before the chrome, this was a bar widget
+//! with a popover hanging off it.
 
 use dioxus::prelude::*;
 use midicore_proto::MidiEvent;
@@ -12,19 +12,9 @@ use signal_keys_proto::keys::KeysRigClient;
 
 use crate::state::held_notes;
 
-/// The light + its popover.
-#[component]
-pub fn MidiLight(
-    /// Recent events (oldest first) — the monitor's contents.
-    midi: Vec<MidiEvent>,
-    /// The port the rig is attached to (`None` = omni / all inputs).
-    port: Option<String>,
-) -> Element {
-    let rig = use_hook(try_consume_context::<KeysRigClient>);
-    let mut open = use_signal(|| false);
-
-    // Flash on any new event: remember how many we'd seen, light briefly
-    // whenever that count moves.
+/// The activity light's colour, flashing on every event that lands and going
+/// solid while notes are held. A hook: the flash is a timer.
+pub fn use_midi_glow(midi: &[MidiEvent]) -> (bool, &'static str) {
     let mut seen = use_signal(|| 0usize);
     let mut flash = use_signal(|| false);
     let count = midi.len();
@@ -38,28 +28,32 @@ pub fn MidiLight(
             });
         }
     });
-
-    let held = held_notes(&midi);
-    let solid = !held.is_empty();
-    let lit = solid || flash();
-    let (dot, glow) = if solid {
-        ("#4ade80", "#4ade8099")
-    } else if lit {
-        ("#38bdf8", "#38bdf899")
+    let solid = !held_notes(midi).is_empty();
+    if solid {
+        (true, "#4ade80")
+    } else if flash() {
+        (true, "#38bdf8")
     } else {
-        ("#3f3f46", "transparent")
-    };
+        (false, "#3f3f46")
+    }
+}
+
+/// The MIDI panel: what the rig is listening to, and what is arriving.
+#[component]
+pub fn MidiPanel(
+    /// Recent events (oldest first) — the monitor's contents.
+    midi: Vec<MidiEvent>,
+    /// The port the rig is attached to (`None` = omni / all inputs).
+    port: Option<String>,
+) -> Element {
+    let rig = use_hook(try_consume_context::<KeysRigClient>);
     let label = port.clone().unwrap_or_else(|| "all inputs".into());
 
-    // Ports, fetched when the popover opens.
     let ports = use_resource({
         let rig = rig.clone();
         move || {
             let rig = rig.clone();
             async move {
-                if !open() {
-                    return Vec::new();
-                }
                 match rig {
                     Some(r) => r.midi_ports().await.unwrap_or_default(),
                     None => Vec::new(),
@@ -69,28 +63,11 @@ pub fn MidiLight(
     });
 
     rsx! {
-        div { style: "position: relative;",
-            button {
-                style: "appearance: none; display: flex; align-items: center; gap: 6px; \
-                        border: 1px solid #26262b; border-radius: 999px; padding: 3px 9px 3px 7px; \
-                        background: #101013; color: #71717a; font-size: 10px; font-weight: 600;",
-                title: "MIDI — click for the monitor",
-                onclick: move |_| open.toggle(),
-                span {
-                    style: format!(
-                        "width: 8px; height: 8px; border-radius: 999px; background: {dot}; \
-                         box-shadow: 0 0 8px {glow};",
-                    ),
-                }
-                "MIDI"
-            }
-            if open() {
-                div {
-                    style: "position: absolute; top: calc(100% + 6px); right: 0; z-index: 60; width: 340px; \
-                            display: flex; flex-direction: column; gap: 8px; padding: 10px; \
-                            background: #0b0b0d; border: 1px solid #2b2b31; border-radius: 12px; \
-                            box-shadow: 0 16px 40px #000d;",
-                    div { style: "display: flex; align-items: center; gap: 8px;",
+        div {
+            style: "display: flex; flex-direction: column; gap: 12px; padding: 12px;",
+            {
+                rsx! {
+                    div { style: "display: flex; align-items: center; gap: 8px; flex-wrap: wrap;",
                         span { style: "font-size: 11px; font-weight: 700; color: #e4e4e7;", "MIDI input" }
                         div { style: "flex: 1;" }
                         span { style: "font-size: 10px; color: #38bdf8;", "{label}" }

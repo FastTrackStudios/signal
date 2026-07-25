@@ -95,28 +95,24 @@ pub fn BassRigRemote() -> Element {
     let midi = state.midi.read().clone();
     let midi_count = midi.len() as u64;
 
-    let in_pct = (status.input_peak.clamp(0.0, 1.0) * 100.0) as u32;
-    let out_pct = (status.output_peak.clamp(0.0, 1.0) * 100.0) as u32;
     let trim = status.master_trim_db;
+
+    // The rig's readouts live in the app bar (fts_chrome); what stays here is
+    // control — the master trim and the engine's own start/stop, which are
+    // things you *do*, not things you read.
+    let level = fts_chrome::use_chrome_level(2);
+    level.status(vec![
+        fts_chrome::StatusItem::dot(status.running, "#22c55e"),
+        fts_chrome::StatusItem::text(status.active_preset.clone().unwrap_or_else(|| "—".into())),
+        fts_chrome::StatusItem::text("IN"),
+        fts_chrome::StatusItem::meter(status.input_peak, "#38bdf8"),
+        fts_chrome::StatusItem::text("OUT"),
+        fts_chrome::StatusItem::meter(status.output_peak, "#22c55e"),
+    ]);
 
     rsx! {
         div { style: "display:flex; flex-direction:column; gap:0; flex:1; min-height:0; color:#e4e4e7; font-family:sans-serif;",
-            // ── top bar: transport + meters + master trim ──
-            div { style: "display:flex; align-items:center; gap:10px; padding:6px 12px; border-bottom:1px solid #1c1c1f;",
-                span { style: "font-weight:700; font-size:13px;", "Bass" }
-                span { style: if status.running { "width:8px; height:8px; border-radius:999px; background:#22c55e;" } else { "width:8px; height:8px; border-radius:999px; background:#52525b;" } }
-                span { style: "font-size:11px; color:#a1a1aa;", {status.active_preset.clone().unwrap_or_else(|| "—".into())} }
-                div { style: "flex:1;" }
-                // in / out meters
-                span { style: "font-size:9px; color:#71717a;", "IN" }
-                div { style: "width:70px; height:8px; background:#18181b; border-radius:2px; overflow:hidden;",
-                    div { style: "height:100%; width:{in_pct}%; background:#38bdf8;" }
-                }
-                span { style: "font-size:9px; color:#71717a;", "OUT" }
-                div { style: "width:70px; height:8px; background:#18181b; border-radius:2px; overflow:hidden;",
-                    div { style: "height:100%; width:{out_pct}%; background:#22c55e;" }
-                }
-                // master trim
+            div { style: "display:flex; align-items:center; gap:10px; padding:10px 14px 4px;",
                 span { style: "font-size:9px; color:#71717a;", "TRIM {trim:+.1} dB" }
                 {
                     let rig = rig.clone();
@@ -135,6 +131,7 @@ pub fn BassRigRemote() -> Element {
                         },
                     } }
                 }
+                div { style: "flex:1;" }
                 {
                     let rig = rig.clone();
                     let running = status.running;

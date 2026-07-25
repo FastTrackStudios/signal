@@ -11,6 +11,7 @@ authors.workspace = true
 
 [dependencies]
 dioxus.workspace = true
+fts-chrome.workspace = true
 signal-bass-proto.workspace = true
 # The shared MIDI monitor panel + the MidiEvent wire type it renders.
 midicore-ui.workspace = true
