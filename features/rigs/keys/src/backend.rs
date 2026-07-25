@@ -77,7 +77,11 @@ struct LaneState {
 /// module has its own filter, amp envelope and FX).
 #[derive(Clone, Debug)]
 struct ModuleState {
+    /// The soundsource in the Source Block — what actually loads.
     patch: String,
+    /// The module preset this module came from ("American Obesity"), when it
+    /// was opened from one. This is the name the UI shows for the module.
+    preset: String,
     macros: BTreeMap<String, f32>,
     gain_db: f32,
     enabled: bool,
@@ -85,14 +89,28 @@ struct ModuleState {
 
 impl Default for ModuleState {
     fn default() -> Self {
-        Self { patch: String::new(), macros: BTreeMap::new(), gain_db: 0.0, enabled: true }
+        Self {
+            patch: String::new(),
+            preset: String::new(),
+            macros: BTreeMap::new(),
+            gain_db: 0.0,
+            enabled: true,
+        }
+    }
+}
+
+impl ModuleState {
+    /// What this module IS: the module preset it was opened from, else the
+    /// bare soundsource sitting in its Source Block.
+    fn display(&self) -> String {
+        if self.preset.is_empty() { self.patch.clone() } else { self.preset.clone() }
     }
 }
 
 impl LaneState {
-    /// Module A's patch — what the mixer shows for the lane.
+    /// Module A's name — what the mixer shows for the lane.
     fn primary_patch(&self) -> String {
-        self.modules.first().map(|m| m.patch.clone()).unwrap_or_default()
+        self.modules.first().map(|m| m.display()).unwrap_or_default()
     }
 
     /// Any module sounding?
@@ -441,21 +459,114 @@ impl KeysRigBackend {
     /// Rebuild the playable program from the profile (patch assignment
     /// changed), then re-apply the mixer to the fresh cells.
     fn rebuild_program(&self) {
+        // Breadcrumbs: a rebuild touches the state lock, the rig lock and the
+        // audio device in that order, so a stall is only diagnosable if the
+        // log says which step it reached.
+        tracing::debug!("keys rig: rebuild — building program");
         let Some(tree) = self.profile_program() else { return };
+        tracing::debug!("keys rig: rebuild — ensuring audio");
         if !self.ensure_open() {
             self.publish_all();
             return;
         }
+        tracing::debug!("keys rig: rebuild — loading preset");
         if let Ok(mut rig) = self.inner.rig.lock() {
             if let Some(rig) = rig.as_mut() {
                 rig.load_preset(&tree);
             }
         }
+        tracing::debug!("keys rig: rebuild — publishing");
         if let Ok(mut s) = self.inner.state.lock() {
             s.tree = Some(tree);
         }
         self.apply_mixer();
         self.publish_all();
+        tracing::debug!("keys rig: rebuild — done");
+    }
+
+    /// Open an authored Omnisphere patch as a **module preset**: it lands on
+    /// `start` and, if it has more than one layer, fills the modules after it
+    /// — each carrying its own source, filter, envelopes and unison. Modules
+    /// the patch doesn't reach are left alone, so a one-layer preset only
+    /// touches the module you dropped it on.
+    fn load_omni_patch(&self, layer: &str, start: usize, file: &std::path::Path) {
+        let imported = match signal_synth::engine::import_omni_patch(file) {
+            Ok(p) => p,
+            Err(e) => {
+                tracing::error!(?file, "keys rig: patch import failed: {e}");
+                if let Ok(mut s) = self.inner.state.lock() {
+                    s.last_error = Some(format!("patch import failed: {e}"));
+                }
+                self.publish_all();
+                return;
+            }
+        };
+        {
+            let Ok(mut s) = self.inner.state.lock() else { return };
+            // Soundsource names resolve against the same library the modules
+            // load from; an unknown one leaves that module empty.
+            let known: Vec<String> = s.presets.iter().map(|p| p.name.clone()).collect();
+            let Some(lane) = s.lanes.get_mut(layer) else { return };
+            for (i, m) in imported.modules.iter().enumerate() {
+                let at = start + i;
+                while lane.modules.len() <= at {
+                    lane.modules.push(ModuleState::default());
+                }
+                let slot = &mut lane.modules[at];
+                slot.patch = known
+                    .iter()
+                    .find(|k| k.eq_ignore_ascii_case(&m.source))
+                    .cloned()
+                    .unwrap_or_default();
+                slot.preset = imported.name.clone();
+                slot.gain_db = m.level_db.clamp(MIN_FADER_DB, MAX_FADER_DB);
+                slot.enabled = true;
+                let set = |macros: &mut BTreeMap<String, f32>, id: &str, v: f32| {
+                    if let Some(def) = macro_def(id) {
+                        macros.insert(id.to_string(), v.clamp(def.min, def.max));
+                    }
+                };
+                set(&mut slot.macros, "filter.cutoff", m.cutoff_hz);
+                set(&mut slot.macros, "filter.reso", m.resonance);
+                set(&mut slot.macros, "filter.env_amt", m.filter_env_depth);
+                set(&mut slot.macros, "source.unison", m.unison as f32);
+                set(&mut slot.macros, "source.detune", m.detune);
+                if let Some((a, d, sus, r)) = m.amp_env {
+                    set(&mut slot.macros, "env1.attack", a);
+                    set(&mut slot.macros, "env1.decay", d);
+                    set(&mut slot.macros, "env1.sustain", sus);
+                    set(&mut slot.macros, "env1.release", r);
+                }
+                if let Some((a, d, sus, r)) = m.filter_env {
+                    set(&mut slot.macros, "env2.attack", a);
+                    set(&mut slot.macros, "env2.decay", d);
+                    set(&mut slot.macros, "env2.sustain", sus);
+                    set(&mut slot.macros, "env2.release", r);
+                }
+                // Omnisphere's LFOs are per-part, so every module of the
+                // patch gets the same four.
+                for (n, (rate, depth, shape)) in imported.lfos.iter().enumerate() {
+                    let id = format!("lfo{}", n + 1);
+                    set(&mut slot.macros, &format!("{id}.rate"), *rate);
+                    set(&mut slot.macros, &format!("{id}.depth"), *depth);
+                    set(&mut slot.macros, &format!("{id}.shape"), *shape);
+                }
+            }
+            tracing::info!(
+                layer,
+                patch = %imported.name,
+                start,
+                modules = imported.modules.len(),
+                "keys rig: opened module preset"
+            );
+        }
+        let b = self.clone();
+        let _ = std::thread::Builder::new()
+            .name("keys-patch-open".into())
+            .spawn(move || {
+                let _rt = keys_runtime().enter();
+                b.rebuild_program();
+            });
     }
 
     /// The wire mixer snapshot.
@@ -494,7 +605,8 @@ impl KeysRigBackend {
                                             .map(|(i, m)| signal_keys_proto::KeysModule {
                                                 index: i as u32,
                                                 slot: signal_synth::engine::module_slot(i),
-                                                patch: m.patch.clone(),
+                                                patch: m.display(),
+                                                source: m.patch.clone(),
                                                 live: !m.patch.is_empty(),
                                                 gain_db: m.gain_db,
                                                 enabled: m.enabled,
@@ -913,6 +1025,20 @@ impl KeysRigSvc for KeysRigBackend {
     }
 
     fn set_layer_patch(&self, layer: String, module: u32, preset: u32) {
+        // An authored patch (.prt_omn) is a MODULE PRESET, not a bare source:
+        // it carries filter, envelopes and unison, and a multi-layer patch
+        // spills onto the modules after the one you dropped it on.
+        let patch_file = self
+            .inner
+            .state
+            .lock()
+            .ok()
+            .and_then(|s| s.specs.get(preset as usize).cloned())
+            .filter(|p| p.extension().is_some_and(|x| x.eq_ignore_ascii_case("prt_omn")));
+        if let Some(file) = patch_file {
+            self.load_omni_patch(&layer, module as usize, &file);
+            return;
+        }
         {
             let Ok(mut s) = self.inner.state.lock() else { return };
             let Some(name) = s.presets.get(preset as usize).map(|p| p.name.clone()) else {
@@ -920,10 +1046,11 @@ impl KeysRigSvc for KeysRigBackend {
             };
             let Some(lane) = s.lanes.get_mut(&layer) else { return };
             let Some(m) = lane.modules.get_mut(module as usize) else { return };
-            if m.patch == name {
+            if m.patch == name && m.preset.is_empty() {
                 return;
             }
             m.patch = name;
+            m.preset.clear();
         }
         // A new sample source in the lane — the program must recompile.
         let b = self.clone();
@@ -951,7 +1078,8 @@ impl KeysRigSvc for KeysRigBackend {
             .map(|(i, m)| signal_keys_proto::KeysModule {
                 index: i as u32,
                 slot: signal_synth::engine::module_slot(i),
-                patch: m.patch.clone(),
+                patch: m.display(),
+                source: m.patch.clone(),
                 live: !m.patch.is_empty(),
                 gain_db: m.gain_db,
                 enabled: m.enabled,
@@ -985,7 +1113,8 @@ impl KeysRigSvc for KeysRigBackend {
             engine: lane.engine.clone(),
             modules,
             module: slot as u32,
-            patch: here.map(|m| m.patch.clone()).unwrap_or_default(),
+            patch: here.map(|m| m.display()).unwrap_or_default(),
+            source: here.map(|m| m.patch.clone()).unwrap_or_default(),
             gain_db: lane.gain_db,
             muted: lane.muted,
             key_lo,
@@ -1014,10 +1143,11 @@ impl KeysRigSvc for KeysRigBackend {
             let Ok(mut s) = self.inner.state.lock() else { return };
             let Some(lane) = s.lanes.get_mut(&layer) else { return };
             let Some(m) = lane.modules.get_mut(module as usize) else { return };
-            if m.patch.is_empty() {
+            if m.patch.is_empty() && m.preset.is_empty() {
                 return;
             }
             m.patch.clear();
+            m.preset.clear();
         }
         let b = self.clone();
         let _ = std::thread::Builder::new()
@@ -1070,6 +1200,7 @@ impl KeysRigSvc for KeysRigBackend {
                 {
                     if let Some(m) = lane.modules.first_mut() {
                         m.patch = slot.patch.clone();
+                        m.preset.clear();
                     }
                     rebuild = true;
                 }
@@ -1191,6 +1322,13 @@ fn scan_keyscape() -> (Vec<KeysPreset>, Vec<PathBuf>) {
     let (omni, omni_specs) = scan_packs_recursive(&omni_root);
     packs.extend(omni);
     pack_specs.extend(omni_specs);
+    // Authored Omnisphere patches — these open into a whole layer.
+    let patch_root = std::env::var("FTS_OMNISPHERE_PATCHES")
+        .unwrap_or_else(|_| OMNISPHERE_PATCH_ROOT.into());
+    let (patches, patch_specs) = scan_omni_patches(&patch_root);
+    tracing::info!(patches = patches.len(), "keys rig: omnisphere patches");
+    packs.extend(patches);
+    pack_specs.extend(patch_specs);
     if !packs.is_empty() {
         return (packs, pack_specs);
     }
@@ -1210,6 +1348,45 @@ fn scan_keyscape() -> (Vec<KeysPreset>, Vec<PathBuf>) {
                 presets.push(KeysPreset { kind: kind_of(&name), name, loaded: false });
                 specs.push(styx);
             }
+        }
+    }
+    (presets, specs)
+}
+
+/// Root of the Omnisphere patch library (`.prt_omn` presets — the authored
+/// patches, as opposed to raw soundsources). Override with
+/// `FTS_OMNISPHERE_PATCHES`.
+const OMNISPHERE_PATCH_ROOT: &str =
+    "/run/media/AudioHaven/Sampled/Synth/Spectrasonics-Patches/Omnisphere/Settings Library/Patches";
+
+/// Enumerate `.prt_omn` patches under `root` — the **module presets**: an
+/// authored voice (source + filter + envelopes + unison) that loads onto a
+/// module, spilling onto the next ones when the patch has several layers.
+fn scan_omni_patches(root: &str) -> (Vec<KeysPreset>, Vec<PathBuf>) {
+    let mut presets = Vec::new();
+    let mut specs = Vec::new();
+    let mut stack = vec![PathBuf::from(root)];
+    while let Some(dir) = stack.pop() {
+        let Ok(entries) = std::fs::read_dir(&dir) else { continue };
+        let mut found: Vec<PathBuf> = Vec::new();
+        for e in entries.flatten() {
+            let p = e.path();
+            if p.is_dir() {
+                stack.push(p);
+            } else if p.extension().is_some_and(|x| x.eq_ignore_ascii_case("prt_omn")) {
+                found.push(p);
+            }
+        }
+        found.sort();
+        for patch in found {
+            let Some(name) = patch.file_stem().and_then(|s| s.to_str()) else { continue };
+            // Factory names carry a library prefix ("KEY │ American Obesity").
+            let display = name.rsplit('│').next().unwrap_or(name).trim().to_string();
+            if display.is_empty() {
+                continue;
+            }
+            presets.push(KeysPreset { kind: "Module".into(), name: display, loaded: false });
+            specs.push(patch);
         }
     }
     (presets, specs)

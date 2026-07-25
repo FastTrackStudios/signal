@@ -125,8 +125,8 @@ pub fn ModuleEdit(
     on_enabled: EventHandler<bool>,
     on_gain: EventHandler<f32>,
 ) -> Element {
-    let mut env_slot = use_signal(|| 0u32);
-    let mut lfo_slot = use_signal(|| 0u32);
+    let env_slot = use_signal(|| 0u32);
+    let lfo_slot = use_signal(|| 0u32);
     let mut browsing = browsing;
 
     let group = |name: &str| -> Vec<KeysMacro> {
@@ -159,7 +159,7 @@ pub fn ModuleEdit(
     rsx! {
         div {
             style: "flex: 1; min-height: 0; overflow: auto; padding: 12px; display: grid; \
-                    grid-template-columns: 260px minmax(280px, 1fr) minmax(300px, 1.2fr); \
+                    grid-template-columns: minmax(240px, 0.7fr) minmax(320px, 1.3fr) minmax(340px, 1.6fr); \
                     gap: 12px; align-content: start;",
 
             // ── SOURCE ──────────────────────────────────────────────────
@@ -179,6 +179,13 @@ pub fn ModuleEdit(
                             if has_source { "#e4e4e7" } else { "#52525b" },
                         ),
                         if has_source { "{detail.patch}" } else { "— empty —" }
+                    }
+                    // When the module came from a preset, name the soundsource
+                    // underneath it — the preset is what the module IS.
+                    if has_source && detail.source != detail.patch {
+                        span { style: "font-size: 10px; color: #71717a; line-height: 1.2;",
+                            "◦ {detail.source}"
+                        }
                     }
                     button {
                         style: "appearance: none; border: 1px solid #1f2b3a; border-radius: 8px; \
@@ -365,7 +372,9 @@ fn LfoShape(shape: f32, depth: f32, accent: String) -> Element {
     }
     rsx! {
         svg {
-            width: "{W}", height: "{H}", view_box: "0 0 {W} {H}",
+            // Stretch to the panel — the window is wide, the graph should be.
+            width: "100%", height: "{H}", view_box: "0 0 {W} {H}",
+            preserve_aspect_ratio: "none",
             line {
                 x1: "{PAD}", y1: "{H / 2.0}", x2: "{W - PAD}", y2: "{H / 2.0}",
                 stroke: "#1b1b1f", stroke_width: "1",

@@ -21,6 +21,7 @@ fn walk<'a>(c: &'a Container, out: &mut Vec<&'a Container>) {
 fn main() {
     let path = std::env::args().nth(1).expect("usage: dump_patch <patch.prt_omn>");
     let index = SoundsourceIndex::scan_default();
+    dump_raw(std::path::Path::new(&path));
     let tree = load_patch_file(std::path::Path::new(&path), &index).expect("import");
     println!("patch: {}", tree.name);
 
@@ -67,5 +68,25 @@ fn main() {
         for rt in &c.mod_routes {
             println!("  route: {} -> {}  depth={:.3}", rt.source, rt.target, rt.depth);
         }
+    }
+}
+
+/// Raw parse view — the layers as the importer sees them, plus the part LFOs
+/// and mod matrix (what a module preset has to carry).
+fn dump_raw(path: &std::path::Path) {
+    let xml = std::fs::read_to_string(path).expect("read");
+    let p = signal_synth::omni_import::parse_patch(&xml).expect("parse");
+    println!("\n--- raw parse: {} ({} layers) ---", p.name, p.layers.len());
+    for (i, l) in p.layers.iter().enumerate() {
+        println!(
+            "  L{i}: ss={:?} lib={:?} lvl={:.3} filt={}({:.3}/{:.3}) act={} uni={}x{:.2} amp={:?} fenv={:?} fdepth={:.3} fx={:?}",
+            l.soundsource, l.ss_library, l.level, l.filter_name, l.filter_freq, l.filter_res,
+            l.filter_active, l.unison_count, l.unison_detune, l.amp_env, l.filter_env,
+            l.filter_env_depth, l.fx,
+        );
+    }
+    println!("  lfos: {:?}", p.lfos);
+    for r in &p.mod_routes {
+        println!("  route {} -> {} @ {:.3}", r.source, r.target, r.depth);
     }
 }

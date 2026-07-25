@@ -47,7 +47,8 @@ pub struct KeysLayerModel {
     pub name: String,
     /// The engine this lane belongs to.
     pub engine: String,
-    /// Patch loaded in the lane (a pack / library stem); empty = an empty lane.
+    /// What the lane is playing — module A's module preset, else its
+    /// soundsource; empty = an empty lane.
     pub patch: String,
     /// Fader position (dB).
     pub gain_db: f32,
@@ -112,8 +113,12 @@ pub struct KeysModule {
     pub index: u32,
     /// Slot label ("A".."D").
     pub slot: String,
-    /// The source loaded in this module's Source Block; empty = silent.
+    /// What this module IS — the module preset's name when one was opened
+    /// ("American Obesity"), otherwise its bare soundsource. This is the
+    /// label every mixer / lane / tab shows.
     pub patch: String,
+    /// The soundsource actually loaded in the Source Block; empty = silent.
+    pub source: String,
     /// The module has a realized source.
     pub live: bool,
     /// The module's own fader (dB) — modules sum inside the layer.
@@ -132,8 +137,10 @@ pub struct KeysLayerDetail {
     pub modules: Vec<KeysModule>,
     /// Which module the `macros`, `patch` and `tree` below describe.
     pub module: u32,
-    /// The SELECTED module's source; empty = an empty module.
+    /// The SELECTED module's name — its module preset, else its soundsource.
     pub patch: String,
+    /// The SELECTED module's soundsource (what the Source Block loaded).
+    pub source: String,
     pub gain_db: f32,
     pub muted: bool,
     pub key_lo: u32,

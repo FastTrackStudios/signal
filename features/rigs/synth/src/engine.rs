@@ -153,6 +153,98 @@ pub const MACRO_GROUPS: [&str; 8] = [
     "Source", "Tone", "Filter", "Filter Env", "Amp Env", "Vibrato", "Ambience", "Effects",
 ];
 
+/// One module's worth of imported settings — an Omnisphere layer flattened
+/// onto the Signal Engine's macro surface.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct ImportedModule {
+    /// Soundsource name as the patch names it (resolve against the library).
+    pub source: String,
+    /// Module level in dB.
+    pub level_db: f32,
+    /// Filter cutoff (Hz), resonance 0..1, envelope depth −1..1.
+    pub cutoff_hz: f32,
+    pub resonance: f32,
+    pub filter_env_depth: f32,
+    /// Amp / filter envelopes as `(attack_ms, decay_ms, sustain, release_ms)`.
+    pub amp_env: Option<(f32, f32, f32, f32)>,
+    pub filter_env: Option<(f32, f32, f32, f32)>,
+    /// Unison voices + detune.
+    pub unison: u32,
+    pub detune: f32,
+    /// The layer's FX rack slot names ("No Effect" filtered out).
+    pub fx: Vec<String>,
+}
+
+/// A patch flattened into modules — what "open this preset into a layer"
+/// produces.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct ImportedPatch {
+    pub name: String,
+    pub modules: Vec<ImportedModule>,
+    /// The patch's LFOs as `(rate_hz, depth, shape)` — Omnisphere's LFOs are
+    /// per-part, so every module of the patch shares them. `shape` indexes
+    /// sine / triangle / square / saw / random, matching the LFO panel.
+    pub lfos: Vec<(f32, f32, f32)>,
+}
+
+/// Omnisphere's normalized LFO rate → Hz. Approximate (an exponential over
+/// the free-run range) until it's swept against the real engine like the
+/// filter knee was.
+fn omni_lfo_hz(v: f32) -> f32 {
+    0.05 * 2f32.powf(9.6 * v.clamp(0.0, 1.0))
+}
+
+/// Read an Omnisphere `.prt_omn` patch and flatten its layers onto module
+/// settings. Each Omnisphere layer becomes one module — the same mapping the
+/// engine already uses structurally, now carrying the patch's values.
+pub fn import_omni_patch(path: &std::path::Path) -> Result<ImportedPatch, String> {
+    let xml = std::fs::read_to_string(path).map_err(|e| format!("read {path:?}: {e}"))?;
+    let patch = crate::omni_import::parse_patch(&xml)?;
+    // Omnisphere times are seconds; the macro surface is milliseconds.
+    let secs = |t: (f32, f32, f32, f32)| (t.0 * 1000.0, t.1 * 1000.0, t.2, t.3 * 1000.0);
+    let modules = patch
+        .layers
+        .iter()
+        .map(|l| ImportedModule {
+            source: l.soundsource.clone(),
+            // `level` is normalized; unity sits at 1.0.
+            level_db: if l.level > 0.0 { 20.0 * l.level.log10() } else { -60.0 },
+            cutoff_hz: crate::omni_import::omni_cutoff_hz(l.filter_freq),
+            resonance: l.filter_res,
+            filter_env_depth: l.filter_env_depth,
+            amp_env: l.amp_env.map(secs),
+            filter_env: l.filter_env.map(secs),
+            unison: l.unison_count.max(1),
+            detune: l.unison_detune,
+            fx: l
+                .fx
+                .iter()
+                .filter(|f| !f.is_empty() && f.as_str() != "No Effect")
+                .cloned()
+                .collect(),
+        })
+        .collect();
+    // The mod matrix carries the LFO depths: an LFO with no route is idle,
+    // however its rate reads.
+    let lfos = patch
+        .lfos
+        .iter()
+        .enumerate()
+        .take(4)
+        .map(|(i, (rate, kind, _synced, _retrig))| {
+            let tag = format!("LFO{}", i + 1);
+            let depth = patch
+                .mod_routes
+                .iter()
+                .filter(|r| r.source.starts_with(&tag))
+                .map(|r| r.depth.abs())
+                .fold(0.0f32, f32::max);
+            (omni_lfo_hz(*rate), depth.clamp(0.0, 1.0), (kind * 4.0).clamp(0.0, 4.0))
+        })
+        .collect();
+    Ok(ImportedPatch { name: patch.name.clone(), modules, lfos })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

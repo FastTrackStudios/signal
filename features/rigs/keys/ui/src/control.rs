@@ -307,7 +307,8 @@ fn PatchPicker(
             }
             for (i, preset) in presets.iter().enumerate() {
                 button {
-                    key: "{preset.name}",
+                    // Library names repeat across banks — key by index.
+                    key: "{i}",
                     style: "appearance: none; text-align: left; border: none; border-radius: 6px; \
                             padding: 6px 8px; background: transparent; color: #e4e4e7; font-size: 11px; \
                             display: flex; flex-direction: column; gap: 1px;",

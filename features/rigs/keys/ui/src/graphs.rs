@@ -26,8 +26,8 @@ enum Grab {
     Release,
 }
 
-const W: f64 = 260.0;
-const H: f64 = 96.0;
+const W: f64 = 600.0;
+const H: f64 = 190.0;
 const PAD: f64 = 6.0;
 /// Seconds of envelope that fill the graph width — segments scale within it.
 const FULL_SPAN_MS: f64 = 4000.0;
@@ -51,6 +51,9 @@ pub fn EnvelopeGraph(
     on_change: EventHandler<(&'static str, f32)>,
 ) -> Element {
     let mut grab = use_signal(|| None::<Grab>);
+    // (pointer x, pointer y, values at grab) while a drag is live. Deltas —
+    // not absolute positions — so a stretched SVG still tracks the pointer.
+    let mut drag = use_signal(|| None::<(f64, f64, Adsr)>);
 
     // Geometry: attack ends at xa, decay at xd, sustain holds to xs, release
     // lands at xr. Sustain level sets the plateau height.
@@ -87,8 +90,12 @@ pub fn EnvelopeGraph(
                 }
             }
             svg {
-                width: "{W}", height: "{H}", view_box: "0 0 {W} {H}",
-                style: "touch-action: none; cursor: crosshair;",
+                // Stretches to the panel: the viewBox is the drawing space,
+                // CSS decides the size. Drags are delta-based, so the scale
+                // factor never has to be reconstructed.
+                width: "100%", height: "{H}", view_box: "0 0 {W} {H}",
+                preserve_aspect_ratio: "none",
+                style: "touch-action: none; cursor: crosshair; display: block; width: 100%;",
                 // Grid.
                 for frac in [0.25f64, 0.5, 0.75] {
                     line {
@@ -104,48 +111,62 @@ pub fn EnvelopeGraph(
                 circle {
                     cx: "{xa}", cy: "{ytop}", r: "5", fill: "#0e0e11", stroke: "{stroke}", stroke_width: "2",
                     style: "cursor: ew-resize;",
-                    onpointerdown: move |_| grab.set(Some(Grab::Attack)),
+                    onpointerdown: move |e: PointerEvent| {
+                        grab.set(Some(Grab::Attack));
+                        drag.set(Some((e.client_coordinates().x, e.client_coordinates().y, adsr)));
+                    },
                 }
                 circle {
                     cx: "{xd}", cy: "{sus_y}", r: "5", fill: "#0e0e11", stroke: "{stroke}", stroke_width: "2",
                     style: "cursor: move;",
-                    onpointerdown: move |_| grab.set(Some(Grab::Decay)),
+                    onpointerdown: move |e: PointerEvent| {
+                        grab.set(Some(Grab::Decay));
+                        drag.set(Some((e.client_coordinates().x, e.client_coordinates().y, adsr)));
+                    },
                 }
                 circle {
                     cx: "{xs}", cy: "{sus_y}", r: "4", fill: "{stroke}", fill_opacity: "0.5",
                     style: "cursor: ns-resize;",
-                    onpointerdown: move |_| grab.set(Some(Grab::Sustain)),
+                    onpointerdown: move |e: PointerEvent| {
+                        grab.set(Some(Grab::Sustain));
+                        drag.set(Some((e.client_coordinates().x, e.client_coordinates().y, adsr)));
+                    },
                 }
                 circle {
                     cx: "{xr}", cy: "{y0}", r: "5", fill: "#0e0e11", stroke: "{stroke}", stroke_width: "2",
                     style: "cursor: ew-resize;",
-                    onpointerdown: move |_| grab.set(Some(Grab::Release)),
+                    onpointerdown: move |e: PointerEvent| {
+                        grab.set(Some(Grab::Release));
+                        drag.set(Some((e.client_coordinates().x, e.client_coordinates().y, adsr)));
+                    },
                 }
             }
-            // Drag shield — maps pointer position back onto the grabbed value.
+            // Drag shield: pointer deltas → value changes. 400 px of travel
+            // sweeps a segment's full range; vertical drag sets sustain.
             if grab().is_some() {
                 div {
                     style: "position: fixed; inset: 0; z-index: 999;",
                     onpointermove: move |e: PointerEvent| {
-                        let el = e.element_coordinates();
-                        let (px, py) = (el.x, el.y);
+                        let Some((x0, y0, start)) = drag() else { return };
+                        let dx = (e.client_coordinates().x - x0) as f32;
+                        let dy = (e.client_coordinates().y - y0) as f32;
+                        let time = |base: f32, max: f32| (base + dx / 400.0 * max).clamp(0.0, max);
+                        let level = |base: f32| (base - dy / 200.0).clamp(0.0, 1.0);
                         match grab() {
-                            Some(Grab::Attack) => on_change.call(("attack", ms_for(px))),
+                            Some(Grab::Attack) => on_change.call(("attack", time(start.attack_ms, 5000.0))),
                             Some(Grab::Decay) => {
-                                on_change.call(("decay", ms_for(px - xa).max(0.0)));
-                                let s = 1.0 - ((py - PAD) / (H - 2.0 * PAD)).clamp(0.0, 1.0);
-                                on_change.call(("sustain", s as f32));
+                                on_change.call(("decay", time(start.decay_ms, 5000.0)));
+                                on_change.call(("sustain", level(start.sustain)));
                             }
-                            Some(Grab::Sustain) => {
-                                let s = 1.0 - ((py - PAD) / (H - 2.0 * PAD)).clamp(0.0, 1.0);
-                                on_change.call(("sustain", s as f32));
+                            Some(Grab::Sustain) => on_change.call(("sustain", level(start.sustain))),
+                            Some(Grab::Release) => {
+                                on_change.call(("release", time(start.release_ms, 8000.0)))
                             }
-                            Some(Grab::Release) => on_change.call(("release", ms_for(px - xs).max(0.0))),
                             None => {}
                         }
                     },
-                    onpointerup: move |_| grab.set(None),
-                    onpointerleave: move |_| grab.set(None),
+                    onpointerup: move |_| { grab.set(None); drag.set(None); },
+                    onpointerleave: move |_| { grab.set(None); drag.set(None); },
                 }
             }
         }
@@ -164,7 +185,8 @@ pub fn FilterCurve(
     /// `("cutoff" | "reso", value)`.
     on_change: EventHandler<(&'static str, f32)>,
 ) -> Element {
-    let mut dragging = use_signal(|| false);
+    // (pointer x, pointer y, cutoff, resonance) at grab.
+    let mut dragging = use_signal(|| None::<(f64, f64)>);
     let stroke = if live { accent.clone() } else { "#52525b".to_string() };
 
     // Log axis 20 Hz … 20 kHz. `fn` items (not closures) so the drag shield's
@@ -221,9 +243,12 @@ pub fn FilterCurve(
                 }
             }
             svg {
-                width: "{W}", height: "{H}", view_box: "0 0 {W} {H}",
-                style: "touch-action: none; cursor: ew-resize;",
-                onpointerdown: move |_| dragging.set(true),
+                width: "100%", height: "{H}", view_box: "0 0 {W} {H}",
+                preserve_aspect_ratio: "none",
+                style: "touch-action: none; cursor: ew-resize; display: block; width: 100%;",
+                onpointerdown: move |e: PointerEvent| {
+                    dragging.set(Some((e.client_coordinates().x, e.client_coordinates().y)));
+                },
                 for frac in [0.25f64, 0.5, 0.75] {
                     line {
                         x1: "{PAD}", y1: "{PAD + frac * (H - 2.0 * PAD)}",
@@ -236,17 +261,24 @@ pub fn FilterCurve(
                        stroke: "{stroke}", stroke_width: "1", stroke_dasharray: "3 3", opacity: "0.5" }
                 circle { cx: "{cx}", cy: "{PAD + 8.0}", r: "5", fill: "#0e0e11", stroke: "{stroke}", stroke_width: "2" }
             }
-            if dragging() {
+            if dragging().is_some() {
                 div {
                     style: "position: fixed; inset: 0; z-index: 999;",
                     onpointermove: move |e: PointerEvent| {
-                        let el = e.element_coordinates();
-                        on_change.call(("cutoff", f_of(el.x) as f32));
-                        let r = 1.0 - ((el.y - PAD) / (H - 2.0 * PAD)).clamp(0.0, 1.0);
+                        let Some((x0, y0)) = dragging() else { return };
+                        let dx = e.client_coordinates().x - x0;
+                        let dy = e.client_coordinates().y - y0;
+                        // Horizontal = cutoff on a log axis (600 px ≈ the
+                        // whole 20 Hz … 20 kHz sweep); vertical = resonance.
+                        let octaves = dx / 600.0 * 10.0;
+                        let next = (cutoff * 2f64.powf(octaves)).clamp(20.0, 20_000.0);
+                        on_change.call(("cutoff", next as f32));
+                        let r = (res - dy / 200.0).clamp(0.0, 1.0);
                         on_change.call(("reso", r as f32));
+                        dragging.set(Some((e.client_coordinates().x, e.client_coordinates().y)));
                     },
-                    onpointerup: move |_| dragging.set(false),
-                    onpointerleave: move |_| dragging.set(false),
+                    onpointerup: move |_| dragging.set(None),
+                    onpointerleave: move |_| dragging.set(None),
                 }
             }
         }

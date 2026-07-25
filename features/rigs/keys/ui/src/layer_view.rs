@@ -13,12 +13,9 @@
 
 use dioxus::prelude::*;
 use signal_keys_proto::keys::KeysRigClient;
-use signal_keys_proto::{KeysLayerDetail, KeysMacro, KeysNode};
+use signal_keys_proto::{KeysLayerDetail, KeysNode};
 
 use crate::control::engine_color;
-use crate::fader::{Fader, fmt_db};
-use crate::graphs::{Adsr, EnvelopeGraph, FilterCurve};
-use crate::knob::Knob;
 use crate::zoom::{Zoom, ZoomBar};
 use signal_keys_proto::{KeysMixer, KeysPreset};
 
@@ -363,7 +360,8 @@ fn SourceBrowser(
                 }
                 for (i, preset) in hits {
                     button {
-                        key: "{preset.name}",
+                        // Library names repeat across banks — key by index.
+                        key: "{i}",
                         style: "appearance: none; text-align: left; border: none; border-radius: 6px; \
                                 padding: 5px 7px; background: transparent; color: #e4e4e7; font-size: 11px; \
                                 display: flex; align-items: center; gap: 6px;",
