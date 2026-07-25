@@ -64,33 +64,19 @@ pub fn use_keys_state() -> (KeysViewState, Option<KeysRigClient>) {
         });
     }
 
-    // Live updates.
-    //
-    // `use_stream` does not reconnect: when a subscription ends — the engine
-    // restarting, a server-side error, or this subscriber being dropped for
-    // lagging behind a burst — the resource simply resolves. The UI carries
-    // on rendering with whatever it last heard, which looks like a working
-    // app with frozen meters, and is the worst way for a rig to fail on
-    // stage. So the end of a stream bumps a generation, the hook re-runs and
-    // subscribes again; the pause before it keeps a dead engine from becoming
-    // a hot loop.
-    let mut generation = use_signal(|| 0u32);
+    // Live updates. `use_stream` re-establishes the subscription itself when
+    // it ends, so a restarted engine — or a burst that drops this subscriber —
+    // heals without the view knowing.
     {
         let stream = stream.clone();
         architect::use_stream(
             move |sink| {
-                // Read inside the subscribe closure: this is what makes the
-                // hook re-run when the generation moves.
-                let _ = generation();
                 let stream = stream.clone();
                 async move {
-                    let ok = match stream {
+                    match stream {
                         Some(s) => s.events(sink).await.is_ok(),
                         None => false,
-                    };
-                    architect::platform::sleep(std::time::Duration::from_millis(750)).await;
-                    generation += 1;
-                    ok
+                    }
                 }
             },
             move |ev: KeysEvent| {
