@@ -60,9 +60,33 @@ fn main() -> eyre::Result<()> {
     }
     let read_ms = t1.elapsed().as_secs_f64() * 1000.0;
 
+    // What the samples themselves say they are holding, right now.
+    let live = |cache: &SampleCache| -> (usize, usize, usize) {
+        let (mut streamed, mut other, mut bytes) = (0, 0, 0);
+        for p in &paths {
+            if let Some(d) = cache.get_loaded(p) {
+                bytes += d.decoded_bytes();
+                if d.is_streamed() { streamed += 1 } else { other += 1 }
+            }
+        }
+        (streamed, other, bytes)
+    };
+    let (streamed, decoded, live_bytes) = live(&cache);
     println!("loaded  {} failed {} skipped {}", stats.loaded, stats.failed, stats.skipped);
+    println!("mode    {streamed} streamed · {decoded} decoded whole");
+    println!("live    {:.1} MB held by the samples", live_bytes as f64 / 1048576.0);
     println!("charged {:.1} MB (sampler's own accounting)", (budget::used_bytes() - before_charge) as f64 / 1048576.0);
     println!("anon    {:.1} MB → {:.1} MB  (Δ {:+.1} MB)", before_anon, rss_anon_mb(), rss_anon_mb() - before_anon);
     println!("preload {load_ms:.0} ms · full read {read_ms:.0} ms · checksum {acc:.3}");
+    // Streamed samples shed their chunks once nobody is reading them: what is
+    // left after a few seconds idle is the steady-state cost of having the
+    // library open.
+    std::thread::sleep(std::time::Duration::from_secs(6));
+    let (_, _, idle_bytes) = live(&cache);
+    println!(
+        "idle    {:.1} MB held by the samples · anon {:.1} MB",
+        idle_bytes as f64 / 1048576.0,
+        rss_anon_mb(),
+    );
     Ok(())
 }

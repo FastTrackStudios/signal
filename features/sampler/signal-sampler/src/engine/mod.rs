@@ -29,6 +29,8 @@
 
 pub mod budget;
 pub mod cache;
+pub mod flac_index;
+pub mod stream;
 pub mod stream_cache;
 pub mod filter;
 pub mod pitch_shift;

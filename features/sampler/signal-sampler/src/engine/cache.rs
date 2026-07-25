@@ -80,6 +80,10 @@ pub enum Pcm {
     /// 16-bit PCM, converted per read. Half the memory of `F32` for the
     /// decoded-and-resident case.
     I16(Arc<Vec<i16>>),
+    /// **Streamed**: the sample stays compressed in its mapped pack; a head
+    /// is resident and the rest is decoded a chunk at a time as the voice
+    /// plays it. See [`super::stream`].
+    Streamed(Arc<super::stream::StreamedSample>),
     /// **Direct from disk**: a window into a memory-mapped file. Nothing is
     /// decoded and nothing is allocated; reads touch page-cache pages.
     Mapped {
@@ -128,6 +132,7 @@ impl Pcm {
         match self {
             Self::F32(v) => v.len(),
             Self::I16(v) => v.len(),
+            Self::Streamed(s) => s.num_frames * s.channels.max(1) as usize,
             Self::Mapped { samples, .. } => *samples,
         }
     }
@@ -143,6 +148,7 @@ impl Pcm {
         match self {
             Self::F32(v) => v.get(index).copied().unwrap_or(0.0),
             Self::I16(v) => v.get(index).map(|s| *s as f32 * I16_SCALE).unwrap_or(0.0),
+            Self::Streamed(s) => s.sample(index),
             Self::Mapped { map, offset, samples, fmt } => {
                 if index >= *samples {
                     return 0.0;
@@ -176,6 +182,8 @@ impl Pcm {
         match self {
             Self::F32(v) => v.len() * std::mem::size_of::<f32>(),
             Self::I16(v) => v.len() * std::mem::size_of::<i16>(),
+            // Head plus whatever chunks are under playheads right now.
+            Self::Streamed(s) => s.resident_bytes(),
             Self::Mapped { .. } => 0,
         }
     }
@@ -228,6 +236,13 @@ impl SampleData {
         Self { pcm: Pcm::Mapped { map, offset, samples, fmt }, channels, sample_rate, num_frames }
     }
 
+    /// A sample that stays compressed in its pack and streams as it plays.
+    pub fn streamed(sample: Arc<super::stream::StreamedSample>) -> Self {
+        let (channels, sample_rate, num_frames) =
+            (sample.channels, sample.sample_rate, sample.num_frames);
+        Self { pcm: Pcm::Streamed(sample), channels, sample_rate, num_frames }
+    }
+
     /// Anonymous bytes this sample costs; see [`Pcm::resident_bytes`].
     pub fn decoded_bytes(&self) -> usize {
         self.pcm.resident_bytes()
@@ -237,6 +252,11 @@ impl SampleData {
     #[inline]
     pub fn len(&self) -> usize {
         self.pcm.len()
+    }
+
+    /// Whether this sample is streamed from its pack rather than resident.
+    pub fn is_streamed(&self) -> bool {
+        matches!(self.pcm, Pcm::Streamed(_))
     }
 
     #[inline]
@@ -1434,6 +1454,30 @@ fn path_suffixes(path: &Path) -> Vec<PathBuf> {
     suffixes
 }
 
+
+/// Whether a pack entry should stream rather than decode whole.
+///
+/// Streaming costs a little CPU per chunk and a background thread, which is
+/// not worth it for a short one-shot: below the threshold a sample is smaller
+/// decoded than the machinery around it. `FTS_STREAM=off` decodes everything
+/// (offline renders, analysis tools); `FTS_STREAM=on` streams everything it
+/// can.
+fn should_stream(entry: &PackEntry) -> bool {
+    if entry.mapped_fmt().is_some() {
+        return false; // raw PCM already reads from the mapping
+    }
+    match std::env::var("FTS_STREAM").ok().as_deref() {
+        Some("off" | "0" | "false") => return false,
+        Some("on" | "1" | "true") => return true,
+        _ => {}
+    }
+    // Only worth it when the sample outlives its own head: anything shorter
+    // is already fully covered by the head, so streaming it would add a
+    // decoder and save nothing.
+    let head = super::stream::HEAD_FRAMES as usize * entry.channels.max(1) as usize;
+    entry.samples >= head * 2
+}
+
 /// Read a pack entry.
 ///
 /// Raw-PCM entries are **mapped, not decoded**: the returned `SampleData`
@@ -1460,6 +1504,22 @@ fn load_pack_sample(
             entry.sample_rate,
             entry.num_frames,
         ));
+    }
+    // FLAC entries big enough to be worth it are STREAMED: head resident,
+    // the rest decoded a chunk at a time straight out of the pack. This is
+    // the Kontakt/Omnisphere model — the library stays compressed on disk and
+    // never lands in the heap.
+    if should_stream(entry) {
+        if let Some(streamed) = super::stream::StreamedSample::open(
+            Arc::clone(map),
+            entry.offset as usize,
+            entry.bytes as usize,
+            entry.channels,
+            entry.sample_rate,
+            entry.num_frames,
+        ) {
+            return Ok(SampleData::streamed(streamed));
+        }
     }
     let pack_data: &[u8] = map;
     let start = entry.offset as usize;
@@ -2142,6 +2202,15 @@ fn encode_flac_via_cli(samples_i16: &[i16], channels: u16, sample_rate: u32) -> 
         return None;
     }
     Some(out)
+}
+
+#[cfg(test)]
+pub(crate) fn encode_flac_i24_for_test(
+    samples: &[i32],
+    channels: u16,
+    sample_rate: u32,
+) -> Result<Vec<u8>, SamplerError> {
+    encode_flac_i24(samples, channels, sample_rate)
 }
 
 fn encode_flac_i24(

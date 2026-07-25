@@ -17,8 +17,15 @@
 //! # Memory model
 //!
 //! A sampled piano is tens of gigabytes; keeping it playable is a question of
-//! never holding it. Three mechanisms, in the order they save you:
+//! never holding it. Four mechanisms, in the order they save you:
 //!
+//! 0. **Streaming** ([`engine::stream`]) is the default for FLAC pack
+//!    entries: a 0.25 s head stays resident as 16-bit PCM and the rest is
+//!    decoded a chunk at a time, straight out of the mapped pack, by a
+//!    background thread. The library stays compressed on disk — no
+//!    conversion, no second copy — and a whole Keyscape instrument costs
+//!    ~17 MB instead of 744 MB. `FTS_STREAM=off` decodes whole instead
+//!    (offline renders, analysis).
 //! 1. **Raw-PCM packs** (`.signalpack` kinds `pcm-i16` / `pcm-i24`) are read
 //!    straight out of the file mapping — no decode, no allocation, and
 //!    residency is page cache the kernel evicts under pressure. Build one
