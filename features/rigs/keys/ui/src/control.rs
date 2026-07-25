@@ -28,7 +28,7 @@ use crate::selection::Selection;
 use signal_ui::components::Piano;
 
 use crate::fader::{EdgeFader, Fader, fmt_db};
-use crate::meter::{EdgeMeter, use_peak};
+use crate::meter::{EdgeMeter, peak_of};
 use crate::zoom::{OpenButton, Zoom};
 
 /// Accent per engine — the same color language the Perform strip uses.
@@ -170,6 +170,19 @@ impl MacroScope {
 /// at full strength, the rest behind. That is the whole reason the shapes are
 /// stacked rather than paged — you turn one knob and watch a family of curves
 /// move together, and you can see what you are *not* moving.
+/// Write a macro at whatever level is selected — the same three-way the macro
+/// panel does, shared with the delay/reverb knobs beside the views.
+fn set_scope_macro(rig: Option<KeysRigClient>, scope: MacroScope, id: String, v: f32) {
+    spawn(async move {
+        let Some(rig) = rig else { return };
+        let _ = match scope {
+            MacroScope::Rig => rig.set_rig_global(id, v).await,
+            MacroScope::Engine(engine) => rig.set_engine_global(engine, id, v).await,
+            MacroScope::Layer { layer, .. } => rig.set_layer_global(layer, id, v).await,
+        };
+    });
+}
+
 /// **Every lane's delay and reverb**, for the time-domain views. One entry per
 /// loaded lane (not per module): a lane's send is a lane-level decision, and
 /// six engines of per-module tails would be unreadable. Module A speaks for
@@ -303,6 +316,12 @@ fn MacroBand() -> Element {
         .unwrap_or_default();
     let sounds = curves.iter().filter(|c| c.focus && !c.dim).count();
     let fx_lanes = state.map(|s| rig_time_fx(&s.mixer.read(), &scope)).unwrap_or_default();
+    // The time-domain groups get their own knobs beside their pictures; the
+    // macro panel below still holds everything else.
+    let dly_macros: Vec<KeysMacro> =
+        items.iter().filter(|m| m.group == "Delay").cloned().collect();
+    let amb_macros: Vec<KeysMacro> =
+        items.iter().filter(|m| m.group == "Ambience").cloned().collect();
 
     rsx! {
         div {
@@ -329,10 +348,26 @@ fn MacroBand() -> Element {
             // delay and one reverb, every loaded lane drawn on each in its
             // engine's colour, the selected scope's lanes solid.
             div {
-                style: "flex: 1; min-height: 120px; display: flex; flex-direction: column; \
-                        gap: 10px; padding: 4px 2px 2px;",
-                crate::time_fx::DelayView { lanes: fx_lanes.clone() }
-                crate::time_fx::ReverbView { lanes: fx_lanes }
+                style: "display: flex; flex-wrap: wrap; gap: 18px; padding: 4px 2px 2px; \
+                        align-items: flex-start;",
+                crate::time_fx::DelayView {
+                    lanes: fx_lanes.clone(),
+                    macros: dly_macros,
+                    accent: accent.clone(),
+                    on_change: {
+                        let (rig, scope) = (rig.clone(), scope.clone());
+                        move |(id, v): (String, f32)| set_scope_macro(rig.clone(), scope.clone(), id, v)
+                    },
+                }
+                crate::time_fx::ReverbView {
+                    lanes: fx_lanes,
+                    macros: amb_macros,
+                    accent: accent.clone(),
+                    on_change: {
+                        let (rig, scope) = (rig.clone(), scope.clone());
+                        move |(id, v): (String, f32)| set_scope_macro(rig.clone(), scope.clone(), id, v)
+                    },
+                }
             }
             crate::macro_panel::MacroPanel {
                 macros: items,
@@ -486,7 +521,7 @@ fn EngineStrip(
     let mut zoom = crate::zoom::use_zoom();
     let mut selection = crate::selection::use_selection();
     // What the engine is actually putting out — its card's bottom edge.
-    let peak = use_peak(&engine.name);
+    let peak = peak_of(&engine.name);
     let picked = *selection.read() == Selection::Engine(engine.name.clone());
     let pick_name = engine.name.clone();
     let accent = engine_color(&engine.name);
@@ -652,7 +687,7 @@ fn LayerStrip(layer: KeysLayerModel, accent: String) -> Element {
     let mut zoom = crate::zoom::use_zoom();
     let mut selection = crate::selection::use_selection();
     // The lane's own level, metered along the bottom of its letter.
-    let peak = use_peak(&layer.name);
+    let peak = peak_of(&layer.name);
     let picked = matches!(
         &*selection.read(),
         Selection::Layer { layer: l, .. } | Selection::Module { layer: l, .. } if *l == layer.name

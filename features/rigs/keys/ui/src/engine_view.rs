@@ -73,16 +73,25 @@ pub fn EngineView(engine: KeysEngineModel, zoom: Signal<Zoom>) -> Element {
                         let rig_mute = rig.clone();
                         let muted = layer.muted;
                         let mute_lane = layer.name.clone();
+                        let peak = crate::meter::peak_of(&layer.name);
                         rsx! {
                             div {
                                 key: "{layer.name}",
-                                style: "display: flex; flex-direction: column; gap: 10px; padding: 14px; \
-                                        width: 210px; border: 1px solid #1f1f23; border-radius: 14px; \
-                                        background: #0e0e11; cursor: pointer;",
+                                style: "position: relative; display: flex; flex-direction: column; gap: 10px; \
+                                        padding: 14px 14px 16px; width: 210px; border: 1px solid #1f1f23; \
+                                        border-radius: 14px; background: #0e0e11; cursor: pointer;",
                                 ondoubleclick: {
                                     let open_lane = open_lane.clone();
                                     move |_| zoom.set(Zoom::Layer(open_lane.clone()))
                                 },
+                                // The lane's level, along the bottom of its card —
+                                // the same edge the mixer meters a lane on.
+                                crate::meter::EdgeMeter {
+                                    peak,
+                                    radius_px: 14,
+                                    accent: accent.clone(),
+                                    dimmed: layer.muted || !layer.live,
+                                }
                                 div { style: "display: flex; align-items: center; gap: 8px;",
                                     span { style: "font-size: 13px; font-weight: 700; color: #e4e4e7;", "{layer.name}" }
                                     div { style: "flex: 1;" }

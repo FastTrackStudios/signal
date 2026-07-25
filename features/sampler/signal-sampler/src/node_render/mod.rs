@@ -174,6 +174,11 @@ pub enum RenderNode {
         /// can ride their faders — and mute them — without recompiling the
         /// tree (a recompile would re-open every sample pack).
         cell: Option<Arc<AtomicU32>>,
+        /// Post-fader peak cell (linear, `f32` bits) — what this container is
+        /// actually putting out, for a meter beside its fader. Written on the
+        /// audio thread with its own decay (see [`METER_RELEASE_S`]) so any
+        /// number of readers can sample it without stealing each other's peak.
+        meter: Option<Arc<AtomicU32>>,
         inner: Box<RenderNode>,
     },
     /// A subtree whose output also feeds one or more send buses (unity gain).
@@ -203,21 +208,34 @@ struct RenderCtx {
     bus_r: Vec<Vec<f32>>,
 }
 
-/// Live fader cells for a compiled tree, keyed by container name (Engine and
-/// Layer containers get one each). A mixer writes linear gain into these to
-/// ride faders and mute lanes with no recompile — see [`RenderNode::Gain`].
+/// Meter release: how long a peak takes to fall by `1/e`. The audio thread
+/// applies it per block, so a meter reads the same however often it is polled.
+const METER_RELEASE_S: f32 = 0.3;
+/// Rate the block-rate meter decay is figured at. The render tree doesn't
+/// carry the device rate down to a [`RenderNode::Gain`]; being a factor of two
+/// out only makes the fall-back visibly faster or slower, never wrong.
+const METER_RATE_HZ: f32 = 48_000.0;
+
+/// Live fader + meter cells for a compiled tree, keyed by container name
+/// (Engine, Layer and module containers get one each). A mixer writes linear
+/// gain into the fader cells to ride faders and mute lanes with no recompile,
+/// and reads the meter cells to draw what each container is putting out —
+/// see [`RenderNode::Gain`].
 #[derive(Clone, Default)]
-pub struct GainCells(HashMap<String, Arc<AtomicU32>>);
+pub struct GainCells {
+    gains: HashMap<String, Arc<AtomicU32>>,
+    peaks: HashMap<String, Arc<AtomicU32>>,
+}
 
 impl GainCells {
     /// The cell for `name`, if the tree had such an Engine/Layer container.
     pub fn get(&self, name: &str) -> Option<&Arc<AtomicU32>> {
-        self.0.get(name)
+        self.gains.get(name)
     }
 
     /// Set a container's live gain (linear; `0.0` = muted).
     pub fn set(&self, name: &str, gain: f32) -> bool {
-        match self.0.get(name) {
+        match self.gains.get(name) {
             Some(cell) => {
                 cell.store(gain.max(0.0).to_bits(), Ordering::Relaxed);
                 true
@@ -228,7 +246,25 @@ impl GainCells {
 
     /// Every addressable container name.
     pub fn names(&self) -> impl Iterator<Item = &str> {
-        self.0.keys().map(String::as_str)
+        self.gains.keys().map(String::as_str)
+    }
+
+    /// A container's post-fader peak (linear, already decaying) — `0.0` when
+    /// the tree has no such container.
+    pub fn peak(&self, name: &str) -> f32 {
+        self.peaks
+            .get(name)
+            .map(|c| f32::from_bits(c.load(Ordering::Relaxed)))
+            .unwrap_or(0.0)
+    }
+
+    /// Every metered container and its current peak — the payload a mixer
+    /// publishes at meter rate.
+    pub fn peaks(&self) -> Vec<(String, f32)> {
+        self.peaks
+            .iter()
+            .map(|(name, cell)| (name.clone(), f32::from_bits(cell.load(Ordering::Relaxed))))
+            .collect()
     }
 }
 
@@ -335,13 +371,21 @@ impl RenderNode {
         if container.input_db != 0.0 || container.output_db != 0.0 || live {
             let cell = live.then(|| {
                 let cell = Arc::new(AtomicU32::new(1.0f32.to_bits()));
-                cells.0.insert(container.name.clone(), cell.clone());
+                cells.gains.insert(container.name.clone(), cell.clone());
+                cell
+            });
+            // Anything with a live fader also gets a meter: the pair is what a
+            // mixer strip is — what you set, beside what came out.
+            let meter = live.then(|| {
+                let cell = Arc::new(AtomicU32::new(0.0f32.to_bits()));
+                cells.peaks.insert(container.name.clone(), cell.clone());
                 cell
             });
             node = RenderNode::Gain {
                 input: 10f32.powf(container.input_db / 20.0),
                 output: 10f32.powf(container.output_db / 20.0),
                 cell,
+                meter,
                 inner: Box::new(node),
             };
         }
@@ -626,6 +670,7 @@ impl RenderNode {
                 input,
                 output,
                 cell,
+                meter,
                 inner,
             } => {
                 if *input == 1.0 {
@@ -652,6 +697,19 @@ impl RenderNode {
                         out_l[f] *= out_gain;
                         out_r[f] *= out_gain;
                     }
+                }
+                // Post-fader peak, decayed on the audio thread: a mixer that
+                // polls at 30 Hz and one that polls at 5 Hz see the same
+                // ballistics, and neither steals the other's reading.
+                if let Some(m) = meter {
+                    let mut peak = 0.0f32;
+                    for f in 0..frames {
+                        peak = peak.max(out_l[f].abs()).max(out_r[f].abs());
+                    }
+                    let held = f32::from_bits(m.load(Ordering::Relaxed));
+                    let decayed =
+                        held * (-(frames as f32) / (METER_RELEASE_S * METER_RATE_HZ)).exp();
+                    m.store(peak.max(decayed).to_bits(), Ordering::Relaxed);
                 }
             }
             RenderNode::SendTap { buses, inner } => {
@@ -793,6 +851,55 @@ mod tests {
         assert!(
             rms(&l) > 1e-3,
             "audio flows osc → filter (default open) → out"
+        );
+    }
+
+    /// Every container with a live fader also meters: an engine and its layer
+    /// report a post-fader peak while a note sounds, and the peak falls back
+    /// on its own once the audio stops (so a mixer polling at any rate sees
+    /// the same ballistics, and no reader steals another's reading).
+    #[test]
+    fn engine_and_layer_containers_meter_their_output() {
+        let tree = Container::engine("Keys").add(
+            Container::layer("Keys A").add(Container::module("Osc").block(BlockType::Oscillator, "Osc")),
+        );
+        let (mut rn, cells) = RenderNode::compile_with_cells(&tree, 48_000);
+        rn.prepare(48_000.0, 256);
+        assert_eq!(cells.peak("Keys"), 0.0, "silence before the first block");
+
+        let (mut l, mut r) = (vec![0.0; 256], vec![0.0; 256]);
+        let midi = [note_on(69, 110)];
+        let ev = PluginEvents {
+            params: &[],
+            midi: &midi,
+            note_expressions: &[],
+        };
+        rn.render(&mut l, &mut r, &ev);
+
+        let (engine, layer) = (cells.peak("Keys"), cells.peak("Keys A"));
+        assert!(engine > 1e-3, "the engine meters its output, peak={engine}");
+        assert!(layer > 1e-3, "and so does the lane under it, peak={layer}");
+        // Reading twice is not destructive — two panels can both draw it.
+        assert_eq!(engine, cells.peak("Keys"), "peaks are read, not taken");
+        assert_eq!(
+            cells.peaks().len(),
+            cells.names().count(),
+            "every fader-addressable container has a meter"
+        );
+
+        // Pull the engine's fader to silence: the meter is post-fader, so it
+        // falls back on its own rather than sticking at the last hit.
+        cells.set("Keys", 0.0);
+        let held = PluginEvents { params: &[], midi: &[], note_expressions: &[] };
+        for _ in 0..200 {
+            rn.render(&mut l, &mut r, &held);
+        }
+        assert!(rms(&l) < 1e-6, "a muted engine is silent");
+        assert!(
+            cells.peak("Keys") < engine * 0.5,
+            "and its meter decays: {} → {}",
+            engine,
+            cells.peak("Keys")
         );
     }
 

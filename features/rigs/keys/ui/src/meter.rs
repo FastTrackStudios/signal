@@ -116,9 +116,15 @@ pub fn fmt_dbfs(peak: f32) -> String {
 /// The live peak of one metered container (engine / layer / module), by the
 /// same name its fader is addressed with. `0.0` when the rig isn't running or
 /// the host provided no state context.
-pub fn use_peak(name: &str) -> f32 {
-    let state = use_hook(try_consume_context::<crate::state::KeysViewState>);
-    let Some(state) = state else { return 0.0 };
+///
+/// Deliberately **not** a hook — lanes are drawn in a loop whose length
+/// changes with the patch, and a hook there would shift every later hook's
+/// index. Reading the signal still subscribes the calling component, which is
+/// what makes the meter move.
+pub fn peak_of(name: &str) -> f32 {
+    let Some(state) = try_consume_context::<crate::state::KeysViewState>() else {
+        return 0.0;
+    };
     let status = state.status.read();
     status
         .meters
