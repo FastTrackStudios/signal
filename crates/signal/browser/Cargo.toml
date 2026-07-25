@@ -5,13 +5,23 @@ edition = "2021"          # kept on 2021 — pre-move signal workspace edition; 
 license.workspace = true
 authors.workspace = true
 
+[features]
+default = ["native"]
+# Filesystem pack scanning. Off for browser builds.
+native = ["dep:signal", "dep:signal-sampler", "dep:walkdir", "dep:rayon"]
+
 [dependencies]
-signal.workspace = true
+# Headless types + grid conversion are wasm-safe: they only touch the
+# proto data model. The on-disk pack registry is not — it walks the
+# filesystem in parallel — so it and everything it needs live behind
+# `native`, which is on by default for desktop/CLI consumers.
+signal = { workspace = true, optional = true }
+signal-proto.workspace = true
 signal-grid.workspace = true
-signal-sampler.workspace = true
+signal-sampler = { workspace = true, optional = true }
 uuid = { version = "1", features = ["v4"] }
-walkdir = "2"
-rayon = "1"
+walkdir = { version = "2", optional = true }
+rayon = { version = "1", optional = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }

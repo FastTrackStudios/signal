@@ -12,7 +12,7 @@
 use std::path::{Path, PathBuf};
 
 use rayon::prelude::*;
-use signal::tagging::{StructuredTag, TagSet};
+use signal_proto::tagging::{StructuredTag, TagSet};
 use signal_sampler::{LibrarySpec, read_pack_header};
 
 use crate::types::{ColumnItem, DetailData};
@@ -273,7 +273,7 @@ fn build_engine_entry(path: &Path, root: &Path) -> Result<PackEntry, signal_samp
     let mut tags = TagSet::new();
     if !spec.engine_type.is_empty() {
         tags.insert(StructuredTag::new(
-            signal::tagging::TagCategory::Instrument,
+            signal_proto::tagging::TagCategory::Instrument,
             spec.engine_type.clone(),
         ));
     }
@@ -390,13 +390,13 @@ fn build_pack_entry(path: &Path, root: &Path) -> Result<PackEntry, signal_sample
     // filter chips work uniformly across older and newer packs.
     if !spec.instrument.is_empty() && tag_missing(&tags, "instrument", &spec.instrument) {
         tags.insert(StructuredTag::new(
-            signal::tagging::TagCategory::Instrument,
+            signal_proto::tagging::TagCategory::Instrument,
             spec.instrument.clone(),
         ));
     }
     if !spec.vendor.is_empty() && tag_missing(&tags, "vendor", &spec.vendor) {
         tags.insert(StructuredTag::new(
-            signal::tagging::TagCategory::Vendor,
+            signal_proto::tagging::TagCategory::Vendor,
             spec.vendor.clone(),
         ));
     }

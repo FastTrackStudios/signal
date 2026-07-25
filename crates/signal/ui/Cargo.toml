@@ -38,7 +38,7 @@ dock-proto.workspace = true
 # (browser rig remote) drops them and keeps the wasm-clean widgets (piano, etc.).
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 signal.workspace = true
-signal-browser.workspace = true
+signal-browser = { workspace = true, features = ["native"] }
 signal-controller.workspace = true
 signal-daw-bridge.workspace = true
 audiocore-gui.workspace = true

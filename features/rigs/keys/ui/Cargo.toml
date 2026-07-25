@@ -12,5 +12,7 @@ signal-keys-proto.workspace = true
 midicore-ui.workspace = true
 midicore-proto.workspace = true
 signal-ui = { workspace = true, features = ["web"] }
-signal-browser.workspace = true
+# Headless types only — the filesystem pack scanner and the live
+# controller queries stay out of the browser build.
+signal-browser = { workspace = true, default-features = false }
 architect = { workspace = true, features = ["atom", "vox", "platform"] }

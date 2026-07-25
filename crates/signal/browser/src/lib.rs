@@ -9,13 +9,18 @@
 //! Rendering (the `RigGridPanel` component, etc.) lives in `signal-ui`
 //! and consumes the headless types defined here.
 
+/// Queries against a live signal controller — native only.
+#[cfg(feature = "native")]
 pub mod data_fetching;
 pub mod grid_conversion;
+/// On-disk pack scanning — native only (walks the filesystem).
+#[cfg(feature = "native")]
 pub mod pack_registry;
 pub mod types;
 
 // Public surface used by signal-ui (mirrors what the old
 // `views/collection_browser/mod.rs` re-exported).
+#[cfg(feature = "native")]
 pub use data_fetching::rig_type_to_engine_type;
 pub use grid_conversion::{
     ParamLookup, engines_to_grid_slots, module_chains_to_grid_slots, signal_chain_to_grid_slots,
@@ -26,7 +31,7 @@ pub use types::{
 };
 
 /// Re-export of the project-wide tagging schema used throughout this crate.
-pub use signal::tagging::{StructuredTag, TagCategory, TagSet};
+pub use signal_proto::tagging::{StructuredTag, TagCategory, TagSet};
 
 /// Alias matching the legacy `EngineParamLookup` name some consumers use.
 pub use grid_conversion::ParamLookup as EngineParamLookup;
