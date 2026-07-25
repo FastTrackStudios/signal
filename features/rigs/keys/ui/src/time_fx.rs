@@ -10,9 +10,10 @@
 //! a glance that the pad's tail is what is washing over the downbeat.
 //!
 //! The selection decides **focus**, not membership: the lanes the knobs reach
-//! draw solid and labelled, everything else stays faint behind them. Nothing
-//! disappears when you pick a lane — the point of the view is the relationship
-//! between the tails.
+//! draw solid, everything else stays faint behind them. Nothing disappears
+//! when you pick a lane — the point of the view is the relationship between
+//! the tails, and colour says whose is whose without a word of text on top of
+//! the picture.
 //!
 //! Maths follows the guitar rig's panels (`signal-guitar-ui`): a delay is a
 //! decaying tap train (`amp *= feedback` every `time`), a reverb is a
@@ -71,15 +72,6 @@ impl FxLane {
         }
     }
 
-    /// How this lane's timing reads in the label.
-    fn timing(&self, quarter_ms: f32) -> String {
-        let idx = self.div.round().max(0.0) as usize;
-        match idx.checked_sub(1).and_then(|i| DIVS.get(i)) {
-            Some((_, label)) => label.to_string(),
-            None => format!("{:.0}ms", self.step_ms(quarter_ms)),
-        }
-    }
-
     /// Nothing audible to draw.
     fn silent_delay(&self) -> bool {
         self.delay_mix <= 0.001
@@ -116,6 +108,33 @@ fn weights(focus: bool) -> (&'static str, &'static str, &'static str) {
     }
 }
 
+/// The section's bypass — the same lamp an engine card carries, so "is this
+/// thing in the signal path" reads identically wherever you are looking.
+#[component]
+fn BypassLamp(
+    id: String,
+    bypassed: bool,
+    accent: String,
+    on_change: EventHandler<(String, f32)>,
+) -> Element {
+    rsx! {
+        button {
+            style: format!(
+                "appearance: none; width: 14px; height: 14px; border-radius: 999px; padding: 0; \
+                 cursor: pointer; border: 2px solid {}; background: {}; box-shadow: {};",
+                if bypassed { "#3f3f46".to_string() } else { accent.clone() },
+                if bypassed { "#131316".to_string() } else { accent.clone() },
+                if bypassed { "none".to_string() } else { format!("0 0 7px {accent}99") },
+            ),
+            title: if bypassed { "Bypassed — click to engage" } else { "Engaged — click to bypass" },
+            onclick: move |e: MouseEvent| {
+                e.stop_propagation();
+                on_change.call((id.clone(), if bypassed { 0.0 } else { 1.0 }));
+            },
+        }
+    }
+}
+
 /// **Delay** — every lane's repeats on one time ruler, in beats.
 ///
 /// The ruler is beats rather than seconds because that is how a delay is set
@@ -144,6 +163,12 @@ pub fn DelayView(
             style: "display: flex; flex-direction: column; gap: 6px; min-width: 0; \
                     max-width: {MAX_W}; flex: 1 1 0;",
             div { style: "display: flex; align-items: baseline; gap: 8px;",
+                BypassLamp {
+                    id: macros.iter().find(|m| m.id.ends_with("dly.bypass")).map(|m| m.id.clone()).unwrap_or_default(),
+                    bypassed: macros.iter().find(|m| m.id.ends_with("dly.bypass")).map(|m| m.value >= 0.5).unwrap_or(false),
+                    accent: accent.clone(),
+                    on_change: move |(id, v): (String, f32)| on_change.call((id, v)),
+                }
                 span {
                     style: "font-size: 9px; font-weight: 700; letter-spacing: 0.1em; \
                             text-transform: uppercase; color: {accent};",
@@ -232,15 +257,6 @@ pub fn DelayView(
                                         fill: "{lane.color}", fill_opacity: "{stroke_op}", rx: "1",
                                     }
                                 }
-                                if lane.focus {
-                                    if let Some((x, a)) = taps.first() {
-                                        text {
-                                            x: "{x + 5.0:.1}", y: "{floor - a * span - 4.0:.1}",
-                                            fill: "{lane.color}", font_size: "9", font_weight: "700",
-                                            {format!("{} · {}", lane.label, lane.timing(quarter_ms))}
-                                        }
-                                    }
-                                }
                             }
                         }
                     }
@@ -250,7 +266,11 @@ pub fn DelayView(
                 KnobRow {
                     // The algorithm is the section's title, not one of its
                     // knobs — the picker above owns it.
-                    macros: macros.iter().filter(|m| !m.id.ends_with(".algo")).cloned().collect(),
+                    macros: macros
+                        .iter()
+                        .filter(|m| !m.id.ends_with(".algo") && !m.id.ends_with(".bypass"))
+                        .cloned()
+                        .collect(),
                     accent: accent.clone(),
                     on_change: move |(id, v): (String, f32)| on_change.call((id, v)),
                 }
@@ -282,6 +302,12 @@ pub fn ReverbView(
             style: "display: flex; flex-direction: column; gap: 6px; min-width: 0; \
                     max-width: {MAX_W}; flex: 1 1 0;",
             div { style: "display: flex; align-items: baseline; gap: 8px;",
+                BypassLamp {
+                    id: macros.iter().find(|m| m.id.ends_with("amb.bypass")).map(|m| m.id.clone()).unwrap_or_default(),
+                    bypassed: macros.iter().find(|m| m.id.ends_with("amb.bypass")).map(|m| m.value >= 0.5).unwrap_or(false),
+                    accent: accent.clone(),
+                    on_change: move |(id, v): (String, f32)| on_change.call((id, v)),
+                }
                 span {
                     style: "font-size: 9px; font-weight: 700; letter-spacing: 0.1em; \
                             text-transform: uppercase; color: {accent};",
@@ -357,14 +383,6 @@ pub fn ReverbView(
                                     stroke: "{lane.color}", stroke_opacity: "{stroke_op}",
                                     stroke_width: "1", stroke_dasharray: "2 3",
                                 }
-                                if lane.focus {
-                                    text {
-                                        x: "{x_of(pre + t60) - 4.0:.1}", y: "{PAD + 12.0}",
-                                        fill: "{lane.color}", font_size: "9", font_weight: "700",
-                                        text_anchor: "end",
-                                        {format!("{} · {:.1}s", lane.label, t60)}
-                                    }
-                                }
                             }
                         }
                     }
@@ -374,7 +392,11 @@ pub fn ReverbView(
                 KnobRow {
                     // The algorithm is the section's title, not one of its
                     // knobs — the picker above owns it.
-                    macros: macros.iter().filter(|m| !m.id.ends_with(".algo")).cloned().collect(),
+                    macros: macros
+                        .iter()
+                        .filter(|m| !m.id.ends_with(".algo") && !m.id.ends_with(".bypass"))
+                        .cloned()
+                        .collect(),
                     accent: accent.clone(),
                     on_change: move |(id, v): (String, f32)| on_change.call((id, v)),
                 }

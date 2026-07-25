@@ -278,7 +278,6 @@ fn MacroBand() -> Element {
 
     let scope = MacroScope::of(&selection.read());
     let accent = scope.accent();
-    let (label, level) = scope.heading();
 
     // Re-pull whenever the selection moves or the rig publishes a mixer —
     // every macro move republishes, so the band reflects what it just did.
@@ -323,7 +322,6 @@ fn MacroBand() -> Element {
     let curves = state
         .map(|s| rig_curves(&s.mixer.read(), &scope))
         .unwrap_or_default();
-    let sounds = curves.iter().filter(|c| c.focus && !c.dim).count();
     let fx_lanes = state.map(|s| rig_time_fx(&s.mixer.read(), &scope)).unwrap_or_default();
     // The time-domain groups get their own knobs beside their pictures; the
     // macro panel below still holds everything else.
