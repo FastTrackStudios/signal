@@ -107,6 +107,11 @@ pub struct Voice {
     loop_range: Option<(usize, usize)>,
     reverse: bool,
     alternating_loop: bool,
+    /// Holds the loop region of a STREAMED sample resident while this voice
+    /// sounds. A loop reads the same frames forever and wraps backwards, so
+    /// nothing else in the streamer would keep them — see
+    /// [`crate::engine::stream::LoopPin`]. `None` for resident samples.
+    stream_pin: Option<crate::engine::stream::LoopPin>,
 
     /// Seamless forward-loop crossfade length in frames. As the read
     /// approaches `loop_end`, the pre-`loop_start` material is blended in over
@@ -404,6 +409,7 @@ impl Voice {
             loop_range: None,
             reverse: false,
             alternating_loop: false,
+            stream_pin: None,
             loop_xfade: 0,
             rate,
             gain,
@@ -469,6 +475,7 @@ impl Voice {
             loop_range: None,
             reverse: false,
             alternating_loop: false,
+            stream_pin: None,
             loop_xfade: 0,
             rate,
             gain,
@@ -738,6 +745,9 @@ impl Voice {
         self.start_frame = start;
         self.position = start as f64;
         self.end_frame = end;
+        // A streamed sample only has its head resident; a window that starts
+        // past it needs the chunk fetched before the voice arrives.
+        self.data.prefetch_at(start);
         self
     }
 
@@ -746,6 +756,10 @@ impl Voice {
         let end = loop_end.min(self.end_frame);
         if end > start + 1 {
             self.loop_range = Some((start, end));
+            // A streamed sample must be told: the loop is read for as long as
+            // the note is held, and the wrap jumps backwards past anything a
+            // forward prefetch would fetch.
+            self.stream_pin = self.data.pin_region(start, end);
         }
         self
     }
@@ -777,6 +791,9 @@ impl Voice {
         self.reverse = true;
         self.loop_range = None;
         self.position = self.end_frame.saturating_sub(1) as f64;
+        // Reverse walks *away* from what prefetching fetches, so the window
+        // is pinned for the life of the voice instead.
+        self.stream_pin = self.data.pin_region(self.start_frame, self.end_frame);
         self
     }
 

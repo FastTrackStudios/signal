@@ -408,7 +408,12 @@ impl SamplerBank {
     ) -> eyre::Result<PendingPreload> {
         let block = SamplerBlock::from_pack(pack_path, self.sample_rate)?;
         let cache = block.cache_handle();
-        let paths = self.preload_profile.ordered_paths(&block);
+        // Streaming packs warm every zone's head; see `rig::build_sample_source`.
+        let paths = if cache.is_streamable() {
+            block.sample_paths_owned()
+        } else {
+            self.preload_profile.ordered_paths(&block)
+        };
         let synth_spec = Self::synth_default_engine_spec(&block.name.clone());
         let instance = EngineInstance::new(synth_spec, block, self.block_frames);
         self.instruments.insert(

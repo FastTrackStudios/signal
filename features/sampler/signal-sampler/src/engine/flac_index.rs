@@ -26,13 +26,25 @@ pub struct FramePoint {
     pub first_frame: u32,
 }
 
-/// A parsed FLAC stream: its metadata header, and where every audio frame is.
+/// A parsed FLAC stream: its metadata header, and where its audio frames are.
+///
+/// The frame map is built **lazily**. Scanning is linear in bytes, and a
+/// library is gigabytes: indexing every entry up front at load turns "open
+/// the piano" into "read the whole piano", which is exactly the work
+/// streaming exists to avoid. Instead the scan runs only as far as the audio
+/// asked for so far, and extends when a later chunk is wanted.
 #[derive(Debug)]
 pub struct FlacIndex {
     /// `fLaC` + metadata blocks — the prefix every synthesised chunk needs.
     pub header: Box<[u8]>,
-    /// Frame boundaries, ascending by sample position.
-    pub points: Vec<FramePoint>,
+    /// Frame boundaries found so far, ascending by sample position.
+    points: std::sync::Mutex<Vec<FramePoint>>,
+    /// Byte offset (into the whole stream) where scanning stopped.
+    scanned_to: std::sync::Mutex<usize>,
+    /// Where the audio starts — the end of the metadata blocks.
+    audio_at: usize,
+    /// Block size when the stream is fixed-strategy, else 0.
+    fixed_block: u64,
     /// Total sample frames (per channel), from STREAMINFO.
     pub total_frames: u64,
     pub channels: u16,
@@ -84,24 +96,44 @@ impl FlacIndex {
             | (info[16] as u64) << 8
             | info[17] as u64;
 
-        let header = bytes[..at].to_vec().into_boxed_slice();
-        let audio = &bytes[at..];
-        // Our packs encode with a FIXED blocking strategy, so a frame's
-        // "number" counts frames and the sample position is number × block
-        // size. Variable-strategy streams carry the sample number directly.
-        let fixed_block = if min_block == max_block { min_block as u64 } else { 0 };
+        let index = Self {
+            header: bytes[..at].to_vec().into_boxed_slice(),
+            points: std::sync::Mutex::new(Vec::new()),
+            scanned_to: std::sync::Mutex::new(at),
+            audio_at: at,
+            // Our packs encode with a FIXED blocking strategy, so a frame's
+            // "number" counts frames and the sample position is number ×
+            // block size. Variable-strategy streams carry the sample number.
+            fixed_block: if min_block == max_block { min_block as u64 } else { 0 },
+            total_frames,
+            channels,
+            sample_rate,
+            bits_per_sample,
+        };
+        // One frame proves it really is a frame stream.
+        index.scan_to(bytes, 1);
+        if index.points.lock().map(|p| p.is_empty()).unwrap_or(true) {
+            return None;
+        }
+        Some(index)
+    }
 
-        let mut points = Vec::new();
-        let mut pos = 0usize;
-        while pos + 2 < audio.len() {
-            let Some(fh) = FrameHeader::parse(&audio[pos..]) else {
-                pos += 1;
+    /// Extend the frame map until it covers `frame`, or the stream ends.
+    fn scan_to(&self, bytes: &[u8], frame: u32) {
+        let Ok(mut points) = self.points.lock() else { return };
+        if points.last().is_some_and(|p| p.first_frame >= frame) {
+            return;
+        }
+        let Ok(mut pos) = self.scanned_to.lock() else { return };
+        while *pos + 2 < bytes.len() {
+            let Some(fh) = FrameHeader::parse(&bytes[*pos..]) else {
+                *pos += 1;
                 continue;
             };
             let first_frame = if fh.variable_blocking {
                 fh.number
-            } else if fixed_block > 0 {
-                fh.number * fixed_block
+            } else if self.fixed_block > 0 {
+                fh.number * self.fixed_block
             } else {
                 fh.number * fh.block_size as u64
             };
@@ -113,52 +145,51 @@ impl FlacIndex {
             let plausible = points
                 .last()
                 .map(|prev: &FramePoint| first_frame > prev.first_frame as u64)
-                .unwrap_or(first_frame == 0)
-                && (fixed_block == 0 || first_frame % fixed_block == 0);
+                .unwrap_or(true)
+                && (self.fixed_block == 0 || first_frame % self.fixed_block == 0);
             if !plausible {
-                pos += 1;
+                *pos += 1;
                 continue;
             }
             points.push(FramePoint {
-                offset: (at + pos) as u32,
+                offset: *pos as u32,
                 first_frame: first_frame.min(u32::MAX as u64) as u32,
             });
-            // Frames are variable length and there is no length field, so the
-            // next sync has to be found by scanning. Skipping the header we
-            // just validated is enough to avoid re-finding the same frame.
-            pos += fh.len.max(4);
+            // Frames are variable length with no length field, so the next
+            // sync has to be found by scanning; skipping the header we just
+            // validated is enough not to re-find this one.
+            *pos += fh.len.max(4);
+            if first_frame >= frame as u64 {
+                return;
+            }
         }
-        if points.is_empty() {
-            return None;
-        }
-        Some(Self {
-            header,
-            points,
-            total_frames,
-            channels,
-            sample_rate,
-            bits_per_sample,
-        })
+    }
+
+    /// Total sample frames (per channel), from STREAMINFO.
+    pub fn total_frames(&self) -> u64 {
+        self.total_frames
     }
 
     /// Bytes covering `frames` starting at `from_frame`, as a standalone FLAC
     /// stream, plus the sample position the stream actually starts at (frame
     /// boundaries rarely line up with the request).
     pub fn chunk(&self, bytes: &[u8], from_frame: u32, frames: u32) -> Option<(Vec<u8>, u32)> {
-        let start_i = match self.points.binary_search_by_key(&from_frame, |p| p.first_frame) {
+        let want_end = from_frame.saturating_add(frames);
+        // Make sure the map reaches past what is being asked for, so the end
+        // boundary is a real frame and not "the rest of the file".
+        self.scan_to(bytes, want_end.saturating_add(1));
+        let points = self.points.lock().ok()?;
+        let start_i = match points.binary_search_by_key(&from_frame, |p| p.first_frame) {
             Ok(i) => i,
             Err(0) => 0,
             Err(i) => i - 1,
         };
-        let want_end = from_frame.saturating_add(frames);
-        let end_i = self
-            .points
+        let end_i = points
             .iter()
             .position(|p| p.first_frame >= want_end)
-            .unwrap_or(self.points.len());
-        let start = self.points[start_i];
-        let end_byte = self
-            .points
+            .unwrap_or(points.len());
+        let start = *points.get(start_i)?;
+        let end_byte = points
             .get(end_i)
             .map(|p| p.offset as usize)
             .unwrap_or(bytes.len());

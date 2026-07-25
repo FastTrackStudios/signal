@@ -1557,6 +1557,8 @@ impl SampleEngine {
             self.cache_misses
                 .set(self.cache_misses.get().saturating_add(1));
             self.record_cache_miss(&path);
+            // Warm it off-thread so the next hit of this note sounds.
+            self.cache.warm_async(&path);
             return false;
         };
         let num_frames = data.num_frames;

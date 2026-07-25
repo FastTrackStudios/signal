@@ -254,6 +254,26 @@ impl SampleData {
         self.pcm.len()
     }
 
+    /// Keep `from..to` resident while the returned pin lives. `None` unless
+    /// the sample is streamed — a resident sample is already all there.
+    pub fn pin_region(
+        &self,
+        from_frame: usize,
+        to_frame: usize,
+    ) -> Option<super::stream::LoopPin> {
+        match &self.pcm {
+            Pcm::Streamed(s) => Some(s.pin(from_frame, to_frame)),
+            _ => None,
+        }
+    }
+
+    /// Warm the region a voice is about to read. No-op unless streamed.
+    pub fn prefetch_at(&self, frame: usize) {
+        if let Pcm::Streamed(s) = &self.pcm {
+            s.prefetch_at(frame);
+        }
+    }
+
     /// Whether this sample is streamed from its pack rather than resident.
     pub fn is_streamed(&self) -> bool {
         matches!(self.pcm, Pcm::Streamed(_))
@@ -585,6 +605,35 @@ impl SampleCache {
                 pcm_pack,
             }),
         }
+    }
+
+    /// Load `path` in the background if it isn't cached yet.
+    ///
+    /// The audio thread drops a voice whose sample isn't resident — it can't
+    /// decode, and it won't block. Without this that note stays silent
+    /// forever; with it, the miss warms the sample and the next hit plays.
+    /// Preloading is still what makes the *first* hit sound.
+    pub fn warm_async(&self, path: &Path) {
+        if self.inner.loaded_snapshot.load().contains_key(path) {
+            return;
+        }
+        warm_queue().send(self.clone_handle(), path.to_owned());
+    }
+
+    /// Whether this cache's samples stream (a FLAC pack) or must be decoded
+    /// whole. Streaming changes what a preload *costs*: a head instead of the
+    /// entire sample, so every zone can be warmed instead of a capped subset.
+    pub fn is_streamable(&self) -> bool {
+        self.inner
+            .pcm_pack
+            .as_ref()
+            .map(|pack| {
+                pack.entries_iter()
+                    .next()
+                    .map(|(_, e)| e.mapped_fmt().is_none() && should_stream(e))
+                    .unwrap_or(false)
+            })
+            .unwrap_or(false)
     }
 
     /// Cheap clone of the cache handle — shares the underlying storage.
@@ -1409,6 +1458,11 @@ impl SignalPcmPack {
         self.entries.iter()
     }
 
+    /// The pack's mapping, for readers that stream out of it.
+    pub fn mmap_handle(&self) -> Arc<memmap2::Mmap> {
+        Arc::clone(&self.mmap)
+    }
+
     /// Pack file path.
     pub fn path(&self) -> &Path {
         &self.path
@@ -1454,6 +1508,57 @@ fn path_suffixes(path: &Path) -> Vec<PathBuf> {
     suffixes
 }
 
+
+
+/// Background loader for cache misses. One thread, deduplicated, so a held
+/// chord of unloaded notes queues each sample once.
+struct WarmQueue {
+    queue: std::sync::Mutex<(Vec<(SampleCache, PathBuf)>, std::collections::HashSet<PathBuf>)>,
+    wake: std::sync::Condvar,
+}
+
+impl WarmQueue {
+    fn send(&self, cache: SampleCache, path: PathBuf) {
+        if let Ok(mut q) = self.queue.lock() {
+            if q.1.insert(path.clone()) {
+                q.0.push((cache, path));
+                self.wake.notify_one();
+            }
+        }
+    }
+
+    fn run(&self) {
+        loop {
+            let batch = {
+                let Ok(mut q) = self.queue.lock() else { return };
+                while q.0.is_empty() {
+                    let Ok(next) = self.wake.wait(q) else { return };
+                    q = next;
+                }
+                let taken = std::mem::take(&mut q.0);
+                q.1.clear();
+                taken
+            };
+            for (cache, path) in batch {
+                let _ = cache.get(&path);
+            }
+        }
+    }
+}
+
+fn warm_queue() -> &'static WarmQueue {
+    static QUEUE: std::sync::OnceLock<WarmQueue> = std::sync::OnceLock::new();
+    QUEUE.get_or_init(|| {
+        let q = WarmQueue {
+            queue: std::sync::Mutex::new((Vec::new(), std::collections::HashSet::new())),
+            wake: std::sync::Condvar::new(),
+        };
+        let _ = std::thread::Builder::new()
+            .name("signal-warm".into())
+            .spawn(|| warm_queue().run());
+        q
+    })
+}
 
 /// Whether a pack entry should stream rather than decode whole.
 ///

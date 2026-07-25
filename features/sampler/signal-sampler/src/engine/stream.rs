@@ -37,6 +37,11 @@ pub const HEAD_FRAMES: u32 = 12_000;
 /// One decoded chunk: interleaved 16-bit PCM.
 type Chunk = Arc<[i16]>;
 
+/// 64-bit words in the wanted-chunk bitmask — 512 chunks, over two minutes of
+/// audio. Beyond that a sample plays from its head and whatever the linear
+/// prefetch reaches.
+const WANTED_WORDS: usize = 8;
+
 /// A sample that lives compressed in a pack and is decoded a chunk at a time.
 pub struct StreamedSample {
     /// The pack mapping and this entry's byte range within it.
@@ -51,8 +56,11 @@ pub struct StreamedSample {
     pub num_frames: usize,
     /// Decoded chunks by index, published for lock-free audio-thread reads.
     chunks: ArcSwap<HashMap<u32, Chunk>>,
-    /// Chunks the audio thread has asked for and the streamer hasn't filled.
-    wanted: Mutex<Vec<u32>>,
+    /// Chunks the audio thread has asked for and the streamer hasn't filled,
+    /// as a bitmask so the request path never takes a lock. A request that
+    /// has to contend with the decoder is a request that gets dropped, and a
+    /// dropped request is a hole in the audio at the next chunk boundary.
+    wanted: [AtomicU64; WANTED_WORDS],
     /// Set while this sample is queued with the streamer.
     queued: AtomicBool,
     /// Rolling counter used to evict the chunks nobody is reading.
@@ -62,7 +70,39 @@ pub struct StreamedSample {
     /// to samples nobody is playing are dropped — otherwise "resident" would
     /// mean *ever played* instead of *playing*.
     last_touch: AtomicU64,
+    /// Chunks a sounding voice depends on, by refcount. A looping voice reads
+    /// the same region forever without ever *requesting* it, so without pins
+    /// the eviction and the idle sweep both take that region away underneath
+    /// it and the note goes silent. Pinned chunks are never evicted, never
+    /// swept, and are fetched the moment the pin is taken.
+    pins: Mutex<HashMap<u32, u32>>,
 }
+
+/// Keeps a region of a streamed sample resident for as long as it is held.
+/// Dropped with the voice.
+pub struct LoopPin {
+    sample: Arc<StreamedSample>,
+    chunks: Vec<u32>,
+}
+
+impl Drop for LoopPin {
+    fn drop(&mut self) {
+        if let Ok(mut pins) = self.sample.pins.lock() {
+            for chunk in &self.chunks {
+                if let Some(count) = pins.get_mut(chunk) {
+                    *count = count.saturating_sub(1);
+                    if *count == 0 {
+                        pins.remove(chunk);
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Most chunks one pin may hold — ~16 s of audio. A loop longer than that
+/// falls back to ordinary prefetching for its tail.
+const MAX_PINNED_CHUNKS: usize = 64;
 
 impl std::fmt::Debug for StreamedSample {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -100,26 +140,76 @@ impl StreamedSample {
             sample_rate,
             num_frames,
             chunks: ArcSwap::from_pointee(HashMap::new()),
-            wanted: Mutex::new(Vec::new()),
+            wanted: [const { AtomicU64::new(0) }; WANTED_WORDS],
             queued: AtomicBool::new(false),
             tick: AtomicU64::new(0),
             last_used: Mutex::new(HashMap::new()),
             last_touch: AtomicU64::new(sweep_tick()),
+            pins: Mutex::new(HashMap::new()),
         });
         streamer().register(Arc::downgrade(&sample));
         Some(sample)
     }
 
-    /// Drop every decoded chunk, keeping the head. Called by the sweep when
-    /// no voice has touched this sample recently.
+    /// Keep `from_frame..to_frame` resident until the returned pin drops.
+    ///
+    /// Called when a voice starts a loop: the wrap reads backwards, which no
+    /// forward prefetch predicts, and the region is read over and over
+    /// without generating a single request.
+    pub fn pin(self: &Arc<Self>, from_frame: usize, to_frame: usize) -> LoopPin {
+        let first = (from_frame as u32) / CHUNK_FRAMES;
+        let last = (to_frame.max(from_frame) as u32) / CHUNK_FRAMES;
+        let chunks: Vec<u32> =
+            (first..=last).take(MAX_PINNED_CHUNKS).collect();
+        if let Ok(mut pins) = self.pins.lock() {
+            for chunk in &chunks {
+                *pins.entry(*chunk).or_insert(0) += 1;
+            }
+        }
+        // Fetch them now rather than when the voice arrives at them.
+        for chunk in &chunks {
+            self.request(*chunk);
+        }
+        LoopPin { sample: Arc::clone(self), chunks }
+    }
+
+    /// Ask for the chunk at `frame` and the one after it, without pinning.
+    /// A voice that starts anywhere but the head — a sample-start offset, a
+    /// round-robin window, a legato entry point — would otherwise begin on a
+    /// miss.
+    pub fn prefetch_at(self: &Arc<Self>, frame: usize) {
+        let chunk = (frame as u32) / CHUNK_FRAMES;
+        self.request(chunk);
+        self.request(chunk + 1);
+    }
+
+    /// Whether any voice is holding a region of this sample.
+    fn is_pinned(&self) -> bool {
+        self.pins.lock().map(|p| !p.is_empty()).unwrap_or(true)
+    }
+
+    /// Drop every decoded chunk except the pinned ones, keeping the head.
+    /// Called by the sweep when no voice has touched this sample recently.
     fn shed_chunks(&self) {
         if self.chunks.load().is_empty() {
             return;
         }
-        self.chunks.store(Arc::new(HashMap::new()));
-        if let Ok(mut used) = self.last_used.lock() {
-            used.clear();
+        let pinned = self.pins.lock().map(|p| p.clone()).unwrap_or_default();
+        if pinned.is_empty() {
+            self.chunks.store(Arc::new(HashMap::new()));
+            if let Ok(mut used) = self.last_used.lock() {
+                used.clear();
+            }
+            return;
         }
+        let kept: HashMap<u32, Chunk> = self
+            .chunks
+            .load()
+            .iter()
+            .filter(|(k, _)| pinned.contains_key(k))
+            .map(|(k, v)| (*k, Arc::clone(v)))
+            .collect();
+        self.chunks.store(Arc::new(kept));
     }
 
     /// Anonymous bytes this sample holds right now: its head plus whatever
@@ -167,35 +257,53 @@ impl StreamedSample {
     }
 
     /// Note the chunk as wanted and make sure the streamer knows about us.
+    /// Lock-free: safe to call from the audio thread, and never dropped.
     fn request(self: &Arc<Self>, chunk_no: u32) {
         if chunk_no as usize * CHUNK_FRAMES as usize >= self.num_frames {
             return;
         }
-        self.last_touch.store(sweep_tick(), Ordering::Relaxed);
-        if let Ok(mut wanted) = self.wanted.try_lock() {
-            if !wanted.contains(&chunk_no) {
-                wanted.push(chunk_no);
-            }
-        } else {
-            // The streamer is holding it; it will pick this up next pass.
+        let (word, bit) = (chunk_no as usize / 64, chunk_no as usize % 64);
+        if word >= WANTED_WORDS {
             return;
         }
+        self.last_touch.store(sweep_tick(), Ordering::Relaxed);
+        self.wanted[word].fetch_or(1 << bit, Ordering::Release);
         if !self.queued.swap(true, Ordering::AcqRel) {
             streamer().enqueue(Arc::downgrade(self));
         }
     }
 
+    /// Take the wanted set, clearing it.
+    fn take_wanted(&self) -> Vec<u32> {
+        let mut out = Vec::new();
+        for (w, word) in self.wanted.iter().enumerate() {
+            let mut bits = word.swap(0, Ordering::Acquire);
+            while bits != 0 {
+                let bit = bits.trailing_zeros() as usize;
+                bits &= bits - 1;
+                out.push((w * 64 + bit) as u32);
+            }
+        }
+        out
+    }
+
+    /// Anything still asked for after a fill?
+    fn has_wanted(&self) -> bool {
+        self.wanted.iter().any(|w| w.load(Ordering::Acquire) != 0)
+    }
+
     /// Decode everything the audio thread has asked for. Runs on the streamer
     /// thread.
-    fn fill(&self) {
-        let wanted: Vec<u32> = {
-            let Ok(mut w) = self.wanted.lock() else { return };
-            std::mem::take(&mut *w)
-        };
+    fn fill(self: &Arc<Self>) {
+        let wanted = self.take_wanted();
         if wanted.is_empty() {
+            self.queued.store(false, Ordering::Release);
             return;
         }
-        let Some(stream) = self.map.get(self.offset..self.offset + self.bytes) else { return };
+        let Some(stream) = self.map.get(self.offset..self.offset + self.bytes) else {
+            tracing::warn!(offset = self.offset, bytes = self.bytes, "stream: entry out of range");
+            return;
+        };
         let mut next = HashMap::clone(&self.chunks.load());
         let tick = self.tick.fetch_add(1, Ordering::Relaxed);
         for chunk_no in wanted {
@@ -206,6 +314,7 @@ impl StreamedSample {
             let Some(pcm) =
                 decode_chunk(stream, &self.index, from, CHUNK_FRAMES, self.channels)
             else {
+                tracing::warn!(chunk_no, from, "stream: chunk decode failed");
                 continue;
             };
             next.insert(chunk_no, Arc::from(pcm));
@@ -216,18 +325,29 @@ impl StreamedSample {
         // Evict the chunks nobody has touched lately. Voices hold their own
         // `Arc` to a chunk only for the length of one read, so dropping here
         // frees memory promptly without ever cutting audio short.
-        if next.len() > MAX_RESIDENT_CHUNKS {
+        let pinned = self.pins.lock().map(|p| p.clone()).unwrap_or_default();
+        let budget = MAX_RESIDENT_CHUNKS + pinned.len();
+        if next.len() > budget {
             if let Ok(used) = self.last_used.lock() {
-                let mut by_age: Vec<(u32, u64)> =
-                    next.keys().map(|k| (*k, used.get(k).copied().unwrap_or(0))).collect();
+                let mut by_age: Vec<(u32, u64)> = next
+                    .keys()
+                    .filter(|k| !pinned.contains_key(*k))
+                    .map(|k| (*k, used.get(k).copied().unwrap_or(0)))
+                    .collect();
                 by_age.sort_by_key(|(_, t)| *t);
-                for (chunk_no, _) in by_age.iter().take(next.len() - MAX_RESIDENT_CHUNKS) {
+                for (chunk_no, _) in by_age.iter().take(next.len() - budget) {
                     next.remove(chunk_no);
                 }
             }
         }
         self.chunks.store(Arc::new(next));
+        // Requests that arrived while this fill was running must not be
+        // stranded: clear the flag first, then re-queue if anything is
+        // outstanding. The other order loses whatever landed in between.
         self.queued.store(false, Ordering::Release);
+        if self.has_wanted() && !self.queued.swap(true, Ordering::AcqRel) {
+            streamer().enqueue(Arc::downgrade(self));
+        }
     }
 }
 
@@ -297,9 +417,17 @@ fn streamer() -> &'static Streamer {
             wake: Condvar::new(),
             registry: Mutex::new(Vec::new()),
         };
-        let _ = std::thread::Builder::new()
-            .name("signal-streamer".into())
-            .spawn(|| streamer().run());
+        // A pool, not a thread: one decoder is fine until the machine is
+        // busy, and then it is the difference between a held note and a
+        // dropout. Two to four workers drain the same queue.
+        let workers = std::thread::available_parallelism()
+            .map(|n| (n.get() / 4).clamp(2, 4))
+            .unwrap_or(2);
+        for i in 0..workers {
+            let _ = std::thread::Builder::new()
+                .name(format!("signal-streamer-{i}"))
+                .spawn(|| streamer().run());
+        }
         s
     })
 }
@@ -319,7 +447,10 @@ impl Streamer {
         let Ok(mut registry) = self.registry.lock() else { return };
         registry.retain(|weak| {
             let Some(sample) = weak.upgrade() else { return false };
-            if now.saturating_sub(sample.last_touch.load(Ordering::Relaxed)) >= 2 {
+            let idle = now.saturating_sub(sample.last_touch.load(Ordering::Relaxed)) >= 2;
+            // A pinned sample is being played right now, however quiet its
+            // request traffic is.
+            if idle && !sample.is_pinned() {
                 sample.shed_chunks();
             }
             true
@@ -349,6 +480,7 @@ impl Streamer {
                 std::mem::take(&mut *q)
             };
             if batch.is_empty() {
+                // Whichever worker wakes on the timeout does the sweep.
                 self.sweep();
                 continue;
             }
@@ -357,7 +489,13 @@ impl Streamer {
                     sample.fill();
                 }
             }
-            self.sweep();
+            // NO sweep here. The sweep's clock is what decides "nobody has
+            // read this lately", so it has to advance with TIME — ticking it
+            // once per batch made it advance every few milliseconds, and a
+            // chunk was shed almost as soon as it arrived. That is a note
+            // that plays its head and then fizzles out.
+            //
+            // Only the idle timeout below ticks it.
         }
     }
 }
@@ -374,10 +512,16 @@ fn return_never() -> ! {
 mod tests {
     use super::*;
 
+    /// Both streaming tests share one background streamer, so running them
+    /// side by side makes fill latency (not correctness) the thing under
+    /// test. Serialise them.
+    static SERIAL: Mutex<()> = Mutex::new(());
+
     /// A streamed sample must read back the same audio as decoding the whole
     /// file — head, chunk boundaries and all — while holding only its head.
     #[test]
     fn streams_a_flac_entry_chunk_by_chunk() {
+        let _serial = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
         // A few seconds of tone, encoded the way the packer encodes.
         let (sr, ch, secs) = (48_000u32, 2u16, 4.0f64);
         let n = (sr as f64 * secs) as usize;
@@ -445,7 +589,7 @@ mod tests {
             let mut got = s.sample(i);
             if got == 0.0 && pcm[i] != 0.0 {
                 // A miss: wait for the fill, then read again.
-                for _ in 0..50 {
+                for _ in 0..200 {
                     std::thread::sleep(std::time::Duration::from_millis(2));
                     got = s.sample(i);
                     if got != 0.0 {
@@ -464,5 +608,72 @@ mod tests {
             s.resident_bytes()
         );
         let _ = std::fs::remove_file(&tmp);
+    }
+
+    /// A held, looping note over a STREAMED sample must keep sounding. The
+    /// loop wraps backwards, which linear prefetch never sees coming, and the
+    /// loop region has to stay resident for as long as the voice holds it —
+    /// this is the case that goes silent if chunks are evicted underneath a
+    /// sustaining voice.
+    #[test]
+    fn a_looping_voice_keeps_sounding_over_a_streamed_sample() {
+        let _serial = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+        use crate::engine::voice::{Voice, VoiceKind};
+        use crate::engine::cache::SampleData;
+
+        let (sr, ch) = (48_000u32, 2u16);
+        let n = (sr as f64 * 6.0) as usize; // 6 s, well past head + chunks
+        let pcm: Vec<f32> = (0..n)
+            .flat_map(|i| {
+                let t = i as f64 / sr as f64;
+                let v = (t * 220.0 * std::f64::consts::TAU).sin() as f32 * 0.8;
+                [v, -v]
+            })
+            .collect();
+        let ints: Vec<i32> =
+            pcm.iter().map(|s| (s.clamp(-1.0, 1.0) * 8_388_607.0) as i32).collect();
+        let Ok(flac) = crate::engine::cache::encode_flac_i24_for_test(&ints, ch, sr) else {
+            return;
+        };
+        let tmp = std::env::temp_dir().join(format!("fts-loop-{}.flac", std::process::id()));
+        std::fs::write(&tmp, &flac).expect("write");
+        let file = std::fs::File::open(&tmp).expect("open");
+        let map = Arc::new(unsafe { memmap2::Mmap::map(&file) }.expect("map"));
+        let streamed =
+            StreamedSample::open(map, 0, flac.len(), ch, sr, n).expect("stream");
+        let data = Arc::new(SampleData::streamed(streamed));
+
+        // Loop the 3rd..5th second — entirely past the head, and longer than
+        // one chunk, so it spans several.
+        let (loop_start, loop_end) = (sr as usize * 3, sr as usize * 5);
+        let mut voice = Voice::with_rate(data, 60, VoiceKind::Zoned, 1.0, 1.0, 8)
+            .with_forward_loop(loop_start, loop_end);
+
+        // Play 30 seconds — many loop passes, and long enough that the idle
+        // sweep runs several times underneath.
+        let mut block = vec![0.0f32; 512 * 2];
+        let blocks = (sr as usize * 30) / 512;
+        let mut silent_runs = 0usize;
+        let mut worst_run = 0usize;
+        for _ in 0..blocks {
+            block.fill(0.0);
+            voice.render_block(&mut block);
+            let peak = block.iter().fold(0.0f32, |a, b| a.max(b.abs()));
+            if peak < 1e-4 {
+                silent_runs += 1;
+                worst_run = worst_run.max(silent_runs);
+            } else {
+                silent_runs = 0;
+            }
+            // Real time: the streamer gets the same wall clock a live rig
+            // would give it (512 frames ≈ 10.7 ms).
+            std::thread::sleep(std::time::Duration::from_micros(10_667));
+        }
+        let _ = std::fs::remove_file(&tmp);
+        assert!(
+            worst_run <= 2,
+            "held loop went silent for {worst_run} blocks in a row ({} ms)",
+            worst_run * 512 * 1000 / sr as usize,
+        );
     }
 }

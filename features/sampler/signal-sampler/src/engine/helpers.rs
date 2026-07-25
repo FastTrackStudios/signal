@@ -88,7 +88,10 @@ impl SampleEngine {
         };
 
         // Audio-thread fast path: skip silently when not yet preloaded.
-        let Some(data) = self.cache.get_loaded(&path) else {
+        let Some(data) = self.cache.get_loaded(&path).or_else(|| {
+            self.cache.warm_async(&path);
+            None
+        }) else {
             self.cache_misses
                 .set(self.cache_misses.get().saturating_add(1));
             self.record_cache_miss(&path);

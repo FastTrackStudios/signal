@@ -1024,19 +1024,25 @@ pub(crate) fn build_sample_source(
     // device has); everything past the cap decodes on first note-on.
     let cache = engine.cache_handle();
     let mut paths = engine.sample_paths_playable(60);
-    // ALWAYS bounded: `FTS_PRELOAD_PROFILE` picks the profile, the default
-    // (Performance) applies when it's unset. Preloading a whole multi-GB
-    // library as decoded f32 is not an option — one grand piano is tens of
-    // GB, and a profile holds several lanes at once. The order is
-    // coverage-first, so the cap buys a fully playable keyboard (every note
-    // sounds) rather than every velocity layer of a handful of keys.
-    if let Some(cap) = std::env::var("FTS_PRELOAD_PROFILE")
-        .ok()
-        .and_then(|s| crate::bank::PreloadProfile::from_name(&s))
-        .unwrap_or_default()
-        .preload_cap()
-    {
-        paths.truncate(cap);
+    // A STREAMING pack preloads every zone, because a preload is now a head
+    // (~48 KB) and an index, not a decoded sample. That is the whole point of
+    // Kontakt's preload buffers: every zone is ready, nothing is resident.
+    // Capping a streaming pack is how you get a piano where only the middle
+    // two octaves sound — a cache miss does not decode, it drops the voice.
+    //
+    // Everything else stays bounded by `FTS_PRELOAD_PROFILE` (default
+    // FastAudition): decoding a whole multi-GB library as f32 is not an
+    // option, and the coverage-first order buys a playable keyboard rather
+    // than every velocity layer of a handful of keys.
+    if !cache.is_streamable() {
+        if let Some(cap) = std::env::var("FTS_PRELOAD_PROFILE")
+            .ok()
+            .and_then(|s| crate::bank::PreloadProfile::from_name(&s))
+            .unwrap_or_default()
+            .preload_cap()
+        {
+            paths.truncate(cap);
+        }
     }
     let label = name.clone();
     if let Err(err) = std::thread::Builder::new()
