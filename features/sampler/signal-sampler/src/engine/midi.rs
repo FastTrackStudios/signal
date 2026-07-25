@@ -2298,7 +2298,10 @@ impl SampleEngine {
                 // full-span bodies — pedal NOISE (`lacrped`) is handled
                 // separately below so it never masquerades as the body.
                 if !was_held && self.cc64_held {
-                    let restored = self.voices.repedal_releasing();
+                    // Only notes whose keys are still down: a note released
+                    // before the pedal arrived is already damped.
+                    let held: Vec<u8> = self.held_notes.keys().copied().collect();
+                    let restored = self.voices.repedal_held(&|n| held.contains(&n));
                     if restored > 0 {
                         tracing::debug!(restored, "pedal down repedal");
                     }

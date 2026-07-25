@@ -18,6 +18,7 @@
 //! source until the engine grows into the structure.
 
 use signal_proto::block::BlockType;
+use signal_sampler::rig::RigBlock;
 use signal_sampler::rig_node::Container;
 
 /// Send target for a layer's aux route — a rig that offers an Aux rack names
@@ -84,32 +85,148 @@ pub const MODULE_SLOTS: [&str; MODULES_PER_LAYER] = ["A", "B", "C", "D"];
 /// patch plays the wavetable. The oscillator-zoom extras (Harmonia, FM, Ring
 /// Mod, granular…) join as they land as real processors, or as alternative
 /// Source Blocks.
+/// What one module is *set to* — the values behind its macro panel.
+///
+/// A module is built from these, so the Filter block and the envelopes are
+/// real DSP with real numbers rather than a structure waiting for them: the
+/// Filter block gets its cutoff and resonance, the Amp Env drives the Amp's
+/// gain, and the Filter Env drives the cutoff by the module's env amount.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ModuleSettings {
+    pub source: Source,
+    /// Filter cutoff in Hz and resonance 0..1.
+    pub cutoff_hz: f32,
+    pub resonance: f32,
+    /// How far the Filter Env opens the cutoff, −1..1 of the normalized range.
+    pub filter_env_depth: f32,
+    /// Amp and Filter envelopes as `(attack_ms, decay_ms, sustain, release_ms)`.
+    pub amp_env: (f32, f32, f32, f32),
+    pub filter_env: (f32, f32, f32, f32),
+    /// Unison voices + detune, for sampler sources that support them.
+    pub unison: u32,
+    pub detune: f32,
+}
+
+impl Default for ModuleSettings {
+    fn default() -> Self {
+        Self {
+            source: Source::Empty,
+            // Wide open: a module with no filter move sounds like its source.
+            cutoff_hz: 20_000.0,
+            resonance: 0.0,
+            filter_env_depth: 0.0,
+            amp_env: (0.0, 0.0, 1.0, 120.0),
+            filter_env: (0.0, 0.0, 1.0, 120.0),
+            unison: 1,
+            detune: 0.1,
+        }
+    }
+}
+
+impl ModuleSettings {
+    /// Settings for a bare source, everything else at its default.
+    pub fn from_source(source: Source) -> Self {
+        Self { source, ..Self::default() }
+    }
+}
+
+/// An envelope modulator carrying its times (the block params the mod engine
+/// reads: seconds, sustain 0..1).
+fn envelope(name: &str, (a, d, s, r): (f32, f32, f32, f32)) -> RigBlock {
+    RigBlock::of_type(BlockType::Envelope)
+        .named(name)
+        .with_param("attack", format!("{:.4}", a.max(0.0) / 1000.0))
+        .with_param("decay", format!("{:.4}", d.max(0.0) / 1000.0))
+        .with_param("sustain", format!("{:.4}", s.clamp(0.0, 1.0)))
+        .with_param("release", format!("{:.4}", r.max(0.0) / 1000.0))
+}
+
 pub fn signal_module(name: &str, source: Source) -> Container {
-    let src = match source {
+    signal_module_with(name, &ModuleSettings::from_source(source))
+}
+
+/// Build one module from its settings — the version that carries sound.
+pub fn signal_module_with(name: &str, set: &ModuleSettings) -> Container {
+    with_module_envelopes(module_shell(name, set), set)
+}
+
+/// The module's structure, before its envelope routes.
+fn module_shell(name: &str, set: &ModuleSettings) -> Container {
+    let src = match &set.source {
         // The sampler: a Keyscape piano, an Omnisphere soundsource, a kit.
-        Source::Sample(spec) => Container::module("Source").sample_block("Soundsource", spec),
+        Source::Sample(spec) => {
+            let mut block = RigBlock::sample_lib(spec.clone()).named("Soundsource");
+            // The sampler's own per-voice amplitude envelope: the attack and
+            // release a note actually gets.
+            block = block
+                .with_param("amp_attack", format!("{:.4}", set.amp_env.0.max(0.0) / 1000.0))
+                .with_param("amp_release", format!("{:.4}", set.amp_env.3.max(0.0) / 1000.0));
+            if set.unison > 1 {
+                block = block
+                    .with_param("unison", set.unison.to_string())
+                    .with_param("detune", format!("{:.3}", set.detune));
+            }
+            Container::module("Source").add(block)
+        }
         // Synthesis: the native oscillator is the generator.
         Source::Synth => Container::module("Source").block(BlockType::Oscillator, "Soundsource"),
         // Nothing loaded — a placeholder that passes audio (silent lane).
         Source::Empty => Container::module("Source").block(BlockType::Sampler, "Soundsource"),
     };
+    // Cutoff and resonance are normalized on the block (the filter's own
+    // scale); Hz is what a player reads.
+    let cutoff_norm = signal_sampler::native::NativeFilter::norm_from_cutoff(set.cutoff_hz);
+    let filters = Container::module("Filters")
+        .add(
+            RigBlock::of_type(BlockType::Filter)
+                .named("Filter 1")
+                .with_param("cutoff", format!("{cutoff_norm:.4}"))
+                .with_param("resonance", format!("{:.4}", set.resonance.clamp(0.0, 1.0))),
+        )
+        .block(BlockType::Filter, "Filter 2");
+
     Container::module(name)
         .param("module_level", "0")
         .param("filter_routing", "Series")
         .add(src)
-        .add(
-            Container::module("Filters")
-                .block(BlockType::Filter, "Filter 1")
-                .block(BlockType::Filter, "Filter 2"),
-        )
-        .add(Container::module("Amp").block(BlockType::Amp, "Amp"))
+        .add(filters)
+        // The Amp's gain param is normalized: unity at 0.5. A synth module
+        // starts at zero and is opened by its envelope; a sampler's Amp is
+        // just a gain stage at unity, because its voices carry their own
+        // envelopes.
+        .add(Container::module("Amp").add(
+            RigBlock::of_type(BlockType::Amp).named("Amp").with_param(
+                "gain",
+                if matches!(set.source, Source::Sample(_)) { "0.5" } else { "0.0" },
+            ),
+        ))
         .add(fx_rack("FX"))
         // Each module routes to the Part's aux rack independently (rigs
         // without an Aux Rack container simply drop the send).
         .send(AUX_RACK, "To Aux")
-        .modulator(BlockType::Envelope, "Amp Env")
-        .modulator(BlockType::Envelope, "Filter Env")
+        .modulator_block(envelope("Amp Env", set.amp_env))
+        .modulator_block(envelope("Filter Env", set.filter_env))
         .modulator(BlockType::MultisegEnvelope, "Mod Env")
+}
+
+/// Attach the module's envelope routes — but only where a module-level
+/// envelope is the right thing.
+///
+/// The mod engine's envelopes are **per module**, not per voice. On a
+/// synthesised source that is exactly right: one oscillator, one envelope.
+/// On a SAMPLER it is wrong and audible — a polyphonic instrument would be
+/// gated by a single envelope, so the last note-off closes the module over
+/// everything still sounding (a held pad dies when you stop playing, and the
+/// release of one note takes the others with it). A sampler's amplitude
+/// envelope belongs to its voices, and it has one: `amp_attack` /
+/// `amp_release` on the Source block above.
+fn with_module_envelopes(module: Container, set: &ModuleSettings) -> Container {
+    if matches!(set.source, Source::Sample(_)) {
+        return module;
+    }
+    module
+        .route("Amp Env", "Amp.gain", 0.5)
+        .route("Filter Env", "Filter 1.cutoff", set.filter_env_depth.clamp(-1.0, 1.0))
 }
 
 /// Build one **layer**: four modules in parallel (they sum — a layer is a
@@ -118,12 +235,17 @@ pub fn signal_module(name: &str, source: Source) -> Container {
 /// `sources[i]` realizes module `MODULE_SLOTS[i]`; `Source::Empty` leaves a
 /// structured but silent module, so the shape is always the full quad.
 pub fn signal_layer(name: &str, sources: &[Source]) -> Container {
+    let settings: Vec<ModuleSettings> =
+        sources.iter().cloned().map(ModuleSettings::from_source).collect();
+    signal_layer_with(name, &settings)
+}
+
+/// A layer whose modules carry their settings — the version the rig builds
+/// when its macros have been moved.
+pub fn signal_layer_with(name: &str, settings: &[ModuleSettings]) -> Container {
     let mut modules = Container::parallel(format!("{name} Modules"));
-    for (i, source) in sources.iter().enumerate() {
-        modules = modules.add(signal_module(
-            &format!("{name} {}", module_slot(i)),
-            source.clone(),
-        ));
+    for (i, set) in settings.iter().enumerate() {
+        modules = modules.add(signal_module_with(&format!("{name} {}", module_slot(i)), set));
     }
     Container::layer(name).add(modules)
 }

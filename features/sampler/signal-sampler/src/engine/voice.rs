@@ -1356,10 +1356,19 @@ impl VoicePool {
         }
     }
 
-    pub fn repedal_releasing(&mut self) -> usize {
+    /// Pedal down: catch the notes whose keys are **still held**.
+    ///
+    /// A damper pedal lifts the dampers off strings that are ringing because
+    /// the key is down. A note the player already let go of has been damped;
+    /// the pedal arriving afterwards does not bring it back. Restoring every
+    /// releasing voice made a late pedal freeze the release tails of notes
+    /// that were over — the note hangs on instead of dying away.
+    ///
+    /// `held` is the set of keys currently down.
+    pub fn repedal_held(&mut self, held: &dyn Fn(u8) -> bool) -> usize {
         let mut restored = 0;
         for voice in &mut self.voices {
-            if matches!(voice.state, VoiceState::Releasing { .. }) {
+            if matches!(voice.state, VoiceState::Releasing { .. }) && held(voice.note) {
                 voice.repedal();
                 if matches!(voice.state, VoiceState::Playing) {
                     restored += 1;
@@ -1909,6 +1918,53 @@ mod tests {
         assert!(voice.is_done());
     }
 
+
+    /// The sustain pedal catches strings whose keys are still down, and only
+    /// those. A note the player already let go of is damped — a pedal press
+    /// afterwards must not freeze its release tail.
+    #[test]
+    fn pedal_down_catches_held_notes_and_leaves_released_ones_dying() {
+        let data = Arc::new(SampleData::from_f32(vec![0.5; 4096], 1, 48_000, 4096));
+        let mut pool = VoicePool::new();
+        for note in [60u8, 64] {
+            pool.spawn(Voice::with_rate(
+                Arc::clone(&data),
+                note,
+                VoiceKind::Zoned,
+                1.0,
+                1.0,
+                8,
+            ));
+        }
+        // Both notes are let go: every voice enters its release.
+        for v in pool.voices_mut() {
+            v.note_off();
+        }
+        assert!(
+            pool.voices_mut()
+                .iter()
+                .all(|v| matches!(v.state, VoiceState::Releasing { .. }))
+        );
+
+        // The player is still holding 60 (its key is down); 64 was released.
+        let restored = pool.repedal_held(&|n| n == 60);
+        assert_eq!(restored, 1, "only the held key is caught");
+        let held_state = pool
+            .voices_mut()
+            .iter()
+            .find(|v| v.note == 60)
+            .map(|v| matches!(v.state, VoiceState::Playing))
+            .expect("60");
+        let released_state = pool
+            .voices_mut()
+            .iter()
+            .find(|v| v.note == 64)
+            .map(|v| matches!(v.state, VoiceState::Releasing { .. }))
+            .expect("64");
+        assert!(held_state, "held note sustains");
+        assert!(released_state, "released note keeps dying away");
+    }
+
     #[test]
     fn forward_loop_wraps_while_playing() {
         let data = Arc::new(SampleData::from_f32(vec![0.0, 1.0, 2.0, 3.0], 1, 48_000, 4));
@@ -1966,14 +2022,15 @@ mod tests {
     }
 
     #[test]
-    fn repedal_restores_releasing_sustain_voices() {
+    fn repedal_restores_releasing_sustain_voices_whose_key_is_down() {
         let mut pool = VoicePool::new();
         pool.spawn(voice(1.0));
 
         pool.note_off(60);
         assert!(matches!(pool.voices[0].state, VoiceState::Releasing { .. }));
 
-        assert_eq!(pool.repedal_releasing(), 1);
+        // Key still down when the pedal arrives → caught.
+        assert_eq!(pool.repedal_held(&|_| true), 1);
         assert_eq!(pool.voices[0].state, VoiceState::Playing);
     }
 
