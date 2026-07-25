@@ -56,12 +56,24 @@ pub fn Knob(
     /// a label under a dial wastes the height they don't have and the width
     /// they do.
     #[props(default = false)] inline: bool,
+    /// **Logarithmic travel.** A cutoff sweeping 20 Hz – 20 kHz linearly puts
+    /// everything below 2 kHz in the first tenth of the knob: the useful half
+    /// of a filter is unusable. On a log taper each octave gets equal travel,
+    /// which is how the ear hears it and how the value is dialled.
+    #[props(default = false)] log: bool,
     on_change: EventHandler<f32>,
 ) -> Element {
     let mut drag = use_signal(|| None::<(f64, f32)>);
 
+    // A log taper needs a positive floor to divide by; anything else falls
+    // back to linear rather than producing NaN.
+    let log = log && min > 0.0 && max > min;
     let span = (max - min).max(1e-6);
-    let norm = ((value - min) / span).clamp(0.0, 1.0);
+    let norm = if log {
+        ((value.max(min) / min).ln() / (max / min).ln()).clamp(0.0, 1.0)
+    } else {
+        ((value - min) / span).clamp(0.0, 1.0)
+    };
     let end = START_ANGLE + SWEEP * norm as f64;
     let (cx, cy, r) = (22.0, 22.0, 16.0);
     let track = arc_path(cx, cy, r, START_ANGLE, START_ANGLE + SWEEP);
@@ -145,7 +157,11 @@ pub fn Knob(
                         if let Some((y0, n0)) = drag() {
                             let dy = y0 - e.client_coordinates().y;
                             let next = (n0 as f64 + dy / SENSITIVITY).clamp(0.0, 1.0) as f32;
-                            on_change.call(min + next * span);
+                            on_change.call(if log {
+                                min * (max / min).powf(next)
+                            } else {
+                                min + next * span
+                            });
                         }
                     },
                     onpointerup: move |_| drag.set(None),

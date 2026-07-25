@@ -85,6 +85,9 @@ pub(crate) fn KnobRow(
                     unit: m.unit.clone(),
                     live: m.live,
                     bipolar: m.bipolar,
+                    // Frequencies are heard in octaves, so they are dialled in
+                    // octaves: cutoffs, LFO and vibrato rates.
+                    log: m.unit == "Hz" && m.min > 0.0,
                     accent: accent.clone(),
                     on_change: {
                         let id = m.id.clone();

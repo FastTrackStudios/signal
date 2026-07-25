@@ -297,6 +297,10 @@ pub fn MacroPanel(
                                                         unit: m.unit.clone(),
                                                         live: m.live,
                                                         bipolar: m.bipolar,
+                                                        // Octaves, not hertz:
+                                                        // see Knob's `log`.
+                                                        log: m.unit == "Hz"
+                                                            && m.min > 0.0,
                                                         accent: accent.clone(),
                                                         inline: true,
                                                         on_change: {
