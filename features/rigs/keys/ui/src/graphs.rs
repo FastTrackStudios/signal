@@ -334,6 +334,23 @@ pub struct ModuleCurve {
     pub resonance: f32,
     /// Silent modules draw faintly instead of vanishing.
     pub dim: bool,
+    /// Inside what the knobs above are driving. The mixer's band draws
+    /// **every** sound in the rig on one set of axes, so the ones the current
+    /// selection reaches are drawn at full strength and the rest sit behind
+    /// them — you see what you are about to move, in the company of what you
+    /// are not.
+    pub focus: bool,
+}
+
+/// How strongly a curve is drawn: `(stroke opacity, stroke width, fill
+/// opacity)`. Four states, in falling order of "does this concern me".
+fn ink(c: &ModuleCurve) -> (&'static str, &'static str, &'static str) {
+    match (c.focus, c.dim) {
+        (true, false) => ("1", "2.25", "0.07"),
+        (true, true) => ("0.4", "1.5", "0.03"),
+        (false, false) => ("0.4", "1.5", "0.03"),
+        (false, true) => ("0.16", "1", "0"),
+    }
 }
 
 /// The ADSR path for an overlay (same geometry as [`EnvelopeGraph`], scaled to
@@ -361,13 +378,14 @@ fn Legend(curves: Vec<ModuleCurve>, note: String) -> Element {
                         style: format!(
                             "width: 10px; height: 3px; border-radius: 2px; background: {}; opacity: {};",
                             c.color,
-                            if c.dim { "0.35" } else { "1" },
+                            ink(c).0,
                         ),
                     }
                     span {
                         style: format!(
-                            "font-size: 9px; font-weight: 700; color: {};",
-                            if c.dim { "#52525b" } else { "#a1a1aa" },
+                            "font-size: 9px; font-weight: {}; color: {};",
+                            if c.focus { "700" } else { "600" },
+                            if c.focus && !c.dim { "#a1a1aa" } else { "#52525b" },
                         ),
                         "{c.slot}"
                     }
@@ -425,12 +443,12 @@ pub fn StackedEnvelopes(
                     {
                         let solid = env_path(if both || amp { &c.amp } else { &c.filter }, h);
                         let dashed = both.then(|| env_path(&c.filter, h));
-                        let op = if c.dim { "0.3" } else { "1" };
+                        let (op, width, fill) = ink(c);
                         rsx! {
                             g { key: "{c.slot}",
                                 path {
-                                    d: "{solid}", fill: "{c.color}", fill_opacity: "0.07",
-                                    stroke: "{c.color}", stroke_width: "2", stroke_opacity: "{op}",
+                                    d: "{solid}", fill: "{c.color}", fill_opacity: "{fill}",
+                                    stroke: "{c.color}", stroke_width: "{width}", stroke_opacity: "{op}",
                                     stroke_linejoin: "round", stroke_linecap: "round",
                                 }
                                 if let Some(d) = dashed {
@@ -511,16 +529,17 @@ pub fn StackedFilters(
                             d.push_str(&format!("{} {x:.1} {y:.1} ", if i == 0 { "M" } else { "L" }));
                         }
                         let cx = x_of(cutoff);
-                        let op = if c.dim { "0.3" } else { "1" };
+                        let (op, width, _) = ink(c);
                         rsx! {
                             g { key: "{c.slot}",
                                 path {
-                                    d: "{d}", fill: "none", stroke: "{c.color}", stroke_width: "2",
+                                    d: "{d}", fill: "none", stroke: "{c.color}", stroke_width: "{width}",
                                     stroke_opacity: "{op}", stroke_linejoin: "round",
                                 }
                                 line {
                                     x1: "{cx}", y1: "{PAD}", x2: "{cx}", y2: "{h - PAD}",
-                                    stroke: "{c.color}", stroke_width: "1", stroke_opacity: "0.35",
+                                    stroke: "{c.color}", stroke_width: "1",
+                                    stroke_opacity: if c.focus { "0.35" } else { "0.15" },
                                     stroke_dasharray: "3 4",
                                 }
                             }

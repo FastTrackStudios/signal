@@ -183,6 +183,72 @@ impl KeysProfile {
         self.engines.iter_mut().find(|e| e.name == name)
     }
 
+    /// Reorder the engines: named ones take the given order, engines the list
+    /// does not mention keep their relative place behind them (a stable sort),
+    /// so a partial order is a promotion rather than a truncation.
+    pub fn apply_order(&mut self, order: &[String]) {
+        let rank = |name: &str| order.iter().position(|n| n == name).unwrap_or(usize::MAX);
+        self.engines.sort_by_key(|e| rank(&e.name));
+    }
+
+    /// The current engine order, left to right.
+    pub fn engine_order(&self) -> Vec<String> {
+        self.engines.iter().map(|e| e.name.clone()).collect()
+    }
+
+    /// Where this profile is saved: `$FTS_KEYS_PROFILE` when the rig was
+    /// pointed at a file, else `~/.config/signal/keys/profiles/<name>.styx`.
+    pub fn config_path(name: &str) -> Option<std::path::PathBuf> {
+        if let Ok(p) = std::env::var("FTS_KEYS_PROFILE") {
+            return Some(std::path::PathBuf::from(p));
+        }
+        let base = std::env::var("XDG_CONFIG_HOME").map(std::path::PathBuf::from).ok().or_else(
+            || std::env::var("HOME").ok().map(|h| std::path::PathBuf::from(h).join(".config")),
+        )?;
+        let file = name.trim();
+        let file = if file.is_empty() { "Worship" } else { file };
+        Some(base.join("signal/keys/profiles").join(format!("{file}.styx")))
+    }
+
+    /// Write the profile back to disk — the edits a player makes to their
+    /// mixer (engine order today; lanes and scenes as they become editable)
+    /// belong to the profile, not to the session.
+    ///
+    /// Best-effort: a rig that cannot write its config still plays, and losing
+    /// a reorder is not worth failing a service for.
+    pub fn save(&self) {
+        let Some(path) = Self::config_path(&self.name) else { return };
+        if let Some(dir) = path.parent() {
+            if let Err(e) = std::fs::create_dir_all(dir) {
+                tracing::warn!(?path, "keys profile not saved: {e}");
+                return;
+            }
+        }
+        match self.to_styx_string() {
+            Ok(text) => match std::fs::write(&path, text) {
+                Ok(()) => tracing::info!(?path, profile = %self.name, "keys profile saved"),
+                Err(e) => tracing::warn!(?path, "keys profile not saved: {e}"),
+            },
+            Err(e) => tracing::warn!("keys profile not serializable: {e}"),
+        }
+    }
+
+    /// Read a saved profile by name, if one has been written.
+    pub fn load_saved(name: &str) -> Option<Self> {
+        let path = Self::config_path(name)?;
+        let text = std::fs::read_to_string(&path).ok()?;
+        match Self::from_styx_str(&text) {
+            Ok(p) => {
+                tracing::info!(?path, profile = %p.name, "keys profile loaded from disk");
+                Some(p)
+            }
+            Err(e) => {
+                tracing::error!(?path, "saved keys profile is unreadable ({e}); using the built-in");
+                None
+            }
+        }
+    }
+
     /// Every layer name, in engine order — the mixer's column order.
     pub fn layer_names(&self) -> Vec<String> {
         self.engines
@@ -458,5 +524,36 @@ mod tests {
         let text = p.to_styx_string().expect("serialize");
         let back = KeysProfile::from_styx_str(&text).expect("parse");
         assert_eq!(p, back);
+    }
+}
+
+#[cfg(test)]
+mod order_tests {
+    use super::*;
+
+    /// A saved order survives a round-trip through styx, and an engine the
+    /// saved file never heard of still shows up (behind the ones it names).
+    #[test]
+    fn order_round_trips_and_tolerates_new_engines() {
+        let mut p = worship_profile();
+        p.apply_order(&["SFX".into(), "Drone".into()]);
+        assert_eq!(&p.engine_order()[..2], &["SFX".to_string(), "Drone".to_string()]);
+
+        let text = p.to_styx_string().expect("serialize");
+        let back = KeysProfile::from_styx_str(&text).expect("parse");
+        assert_eq!(back.engine_order(), p.engine_order());
+
+        // A profile that gains an engine later keeps the saved order and
+        // appends the newcomer rather than dropping it.
+        let saved_order = vec!["SFX".to_string(), "Drone".to_string()];
+        let mut fresh = worship_profile();
+        fresh.engines.push(EngineDef {
+            name: "Brass".into(),
+            gain_db: 0.0,
+            layers: vec![LayerDef::new("Brass A", "")],
+        });
+        fresh.apply_order(&saved_order);
+        assert_eq!(&fresh.engine_order()[..2], &["SFX".to_string(), "Drone".to_string()]);
+        assert!(fresh.engine("Brass").is_some());
     }
 }

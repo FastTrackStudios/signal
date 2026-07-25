@@ -17,7 +17,7 @@ use dioxus::prelude::*;
 use signal_keys_proto::{KeysLayerDetail, KeysMacro};
 
 use crate::fader::{Fader, fmt_db};
-use crate::graphs::{Adsr, ModuleCurve, StackedEnvelopes, StackedFilters, module_color};
+use crate::graphs::{Adsr, ModuleCurve, module_color};
 use crate::module_edit::{KnobRow, Panel};
 
 /// Every module as an overlay curve — its envelopes, its filter, its colour.
@@ -43,6 +43,9 @@ fn curves(detail: &KeysLayerDetail) -> Vec<ModuleCurve> {
             cutoff_hz: m.cutoff_hz,
             resonance: m.resonance,
             dim: !m.enabled || !m.live,
+            // Everything here belongs to the lane being edited — the zoom has
+            // nothing out of scope to push into the background.
+            focus: true,
         })
         .collect()
 }
@@ -158,76 +161,25 @@ pub fn LayerMacros(
                 }
             }
 
-            // ── Filter and Amp: the whole section on one card each ──────
+            // ── Filter and Amp: the same two cards the mixer's band shows,
+            // with room to breathe. One Filter block — response and envelope
+            // above, every knob that moves them below.
             div {
                 style: "display: grid; gap: 16px; \
                         grid-template-columns: repeat(auto-fit, minmax(460px, 1fr));",
-
-                // FILTER — the modules' response, their filter envelopes,
-                // and both knob rows that drive them.
-                Panel {
-                    title: "Filter".to_string(),
+                crate::macro_panel::FilterCard {
+                    macros: detail.layer_macros.clone(),
+                    curves: curves(&detail),
                     accent: accent.clone(),
-                    lit: group("Filter").iter().any(|m| m.live),
-                    trailing: rsx! {
-                        if varies("Filter") || varies("Filter Env") {
-                            span { style: "font-size: 9px; color: #fbbf24;", "offset" }
-                        }
-                    },
-                    div { style: "display: flex; flex-direction: column; gap: 16px;",
-                        div { style: "display: flex; flex-direction: column; gap: 12px;",
-                            StackedFilters { curves: curves(&detail), height_px: 300, flat: true }
-                            KnobRow {
-                                macros: group("Filter"),
-                                accent: accent.clone(),
-                                on_change: move |(id, v)| on_global.call((id, v)),
-                            }
-                            if let Some(s) = spread("Filter") {
-                                span { style: "font-size: 9px; color: #52525b;", "modules: {s}" }
-                            }
-                        }
-                        div {
-                            style: "display: flex; flex-direction: column; gap: 12px; \
-                                    padding-top: 16px; border-top: 1px solid #1c1c21;",
-                            span {
-                                style: "font-size: 9px; font-weight: 700; letter-spacing: 0.1em; \
-                                        text-transform: uppercase; color: #71717a;",
-                                "Filter Envelope"
-                            }
-                            StackedEnvelopes { curves: curves(&detail), height_px: 170, amp: false, flat: true }
-                            KnobRow {
-                                macros: group("Filter Env"),
-                                accent: accent.clone(),
-                                on_change: move |(id, v)| on_global.call((id, v)),
-                            }
-                            if let Some(s) = spread("Filter Env") {
-                                span { style: "font-size: 9px; color: #52525b;", "modules: {s}" }
-                            }
-                        }
-                    }
+                    height_px: 260,
+                    on_change: move |(id, v)| on_global.call((id, v)),
                 }
-
-                // AMP — the modules' amplitude envelopes and their controls.
-                Panel {
-                    title: "Amp".to_string(),
+                crate::macro_panel::AmpCard {
+                    macros: detail.layer_macros.clone(),
+                    curves: curves(&detail),
                     accent: accent.clone(),
-                    lit: group("Amp Env").iter().any(|m| m.live),
-                    trailing: rsx! {
-                        if varies("Amp Env") {
-                            span { style: "font-size: 9px; color: #fbbf24;", "offset" }
-                        }
-                    },
-                    div { style: "display: flex; flex-direction: column; gap: 12px;",
-                        StackedEnvelopes { curves: curves(&detail), height_px: 300, amp: true, flat: true }
-                        KnobRow {
-                            macros: group("Amp Env"),
-                            accent: accent.clone(),
-                            on_change: move |(id, v)| on_global.call((id, v)),
-                        }
-                        if let Some(s) = spread("Amp Env") {
-                            span { style: "font-size: 9px; color: #52525b;", "modules: {s}" }
-                        }
-                    }
+                    height_px: 260,
+                    on_change: move |(id, v)| on_global.call((id, v)),
                 }
             }
 

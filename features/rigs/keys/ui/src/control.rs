@@ -22,6 +22,8 @@ use dioxus::prelude::*;
 use signal_keys_proto::keys::KeysRigClient;
 use signal_keys_proto::{KeysEngineModel, KeysLayerModel, KeysMacro, KeysMixer};
 
+use crate::graphs::{Adsr, ModuleCurve};
+
 use crate::selection::Selection;
 use signal_ui::components::Piano;
 
@@ -145,6 +147,62 @@ impl MacroScope {
             MacroScope::Layer { engine, .. } => engine_color(engine).to_string(),
         }
     }
+
+    /// Whether this scope's knobs reach a given lane.
+    fn reaches(&self, engine: &str, layer: &str) -> bool {
+        match self {
+            MacroScope::Rig => true,
+            MacroScope::Engine(e) => e == engine,
+            MacroScope::Layer { layer: l, .. } => l == layer,
+        }
+    }
+}
+
+/// **Every sound in the rig, as a curve** — its amp and filter envelopes and
+/// its filter response, coloured by the engine it belongs to.
+///
+/// The band draws all of them at once, always: the ones the selection reaches
+/// at full strength, the rest behind. That is the whole reason the shapes are
+/// stacked rather than paged — you turn one knob and watch a family of curves
+/// move together, and you can see what you are *not* moving.
+fn rig_curves(mixer: &KeysMixer, scope: &MacroScope) -> Vec<ModuleCurve> {
+    let mut curves = Vec::new();
+    for engine in mixer.engines.iter() {
+        let color = engine_color(&engine.name).to_string();
+        for layer in engine.layers.iter() {
+            let focus = scope.reaches(&engine.name, &layer.name);
+            let many = layer.modules.iter().filter(|m| m.live).count() > 1;
+            for m in layer.modules.iter().filter(|m| m.live) {
+                curves.push(ModuleCurve {
+                    // The legend names the lane, and the slot too when a lane
+                    // has more than one sound in it.
+                    slot: if many {
+                        format!("{}·{}", layer.name, m.slot)
+                    } else {
+                        layer.name.clone()
+                    },
+                    color: color.clone(),
+                    amp: Adsr {
+                        attack_ms: m.amp_env.attack_ms,
+                        decay_ms: m.amp_env.decay_ms,
+                        sustain: m.amp_env.sustain,
+                        release_ms: m.amp_env.release_ms,
+                    },
+                    filter: Adsr {
+                        attack_ms: m.filter_env.attack_ms,
+                        decay_ms: m.filter_env.decay_ms,
+                        sustain: m.filter_env.sustain,
+                        release_ms: m.filter_env.release_ms,
+                    },
+                    cutoff_hz: m.cutoff_hz,
+                    resonance: m.resonance,
+                    dim: !m.enabled || layer.muted || engine.muted,
+                    focus,
+                });
+            }
+        }
+    }
+    curves
 }
 
 /// **The macro band** — Global Controls, always. Under the strips that aim
@@ -205,6 +263,13 @@ fn MacroBand() -> Element {
     }
 
     let items = macros.read().clone();
+    // Every sound in the rig, drawn behind the knobs that move it. Read from
+    // the live mixer, so the curves follow a fader, a mute or a patch load
+    // without the band asking for anything.
+    let curves = state
+        .map(|s| rig_curves(&s.mixer.read(), &scope))
+        .unwrap_or_default();
+    let sounds = curves.iter().filter(|c| c.focus && !c.dim).count();
 
     rsx! {
         div {
@@ -217,9 +282,13 @@ fn MacroBand() -> Element {
                             text-transform: uppercase; color: #52525b;",
                     "{level}"
                 }
+                span { style: "font-size: 9px; color: #3f3f46;",
+                    {format!("{sounds} sound{}", if sounds == 1 { "" } else { "s" })}
+                }
             }
             crate::macro_panel::MacroPanel {
                 macros: items,
+                curves,
                 accent: accent.clone(),
                 on_change: {
                     let (rig, scope) = (rig.clone(), scope.clone());

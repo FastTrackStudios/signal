@@ -1717,10 +1717,10 @@ impl KeysRigSvc for KeysRigBackend {
             // Rank by the requested order; anything unnamed keeps its place
             // behind the named ones, so a caller can promote one engine
             // without having to restate the whole mixer.
-            let rank = |name: &str| {
-                engines.iter().position(|n| n == name).unwrap_or(usize::MAX)
-            };
-            s.profile.engines.sort_by_key(|e| rank(&e.name));
+            s.profile.apply_order(&engines);
+            // The order belongs to the profile, so it is written with it —
+            // a mixer the player rearranged comes back rearranged.
+            s.profile.save();
         }
         // Engines sum in parallel, so order is presentation only — the tree
         // does not need rebuilding and nothing stops sounding.
@@ -1897,7 +1897,19 @@ const MAX_FADER_DB: f32 = 6.0;
 /// parseable, else the built-in Worship profile.
 fn load_profile() -> KeysProfile {
     let Ok(path) = std::env::var("FTS_KEYS_PROFILE") else {
-        return worship_profile();
+        // The player's own copy, if they have edited their mixer. Its engines
+        // are re-aligned to the built-in's, so a profile saved before an
+        // engine existed still gets it — the saved file decides the ORDER of
+        // what it knows, the built-in decides what there is.
+        let built_in = worship_profile();
+        return match KeysProfile::load_saved(&built_in.name) {
+            Some(saved) => {
+                let mut merged = built_in;
+                merged.apply_order(&saved.engine_order());
+                merged
+            }
+            None => built_in,
+        };
     };
     match std::fs::read_to_string(&path).map_err(|e| e.to_string()).and_then(|t| KeysProfile::from_styx_str(&t)) {
         Ok(p) => {
