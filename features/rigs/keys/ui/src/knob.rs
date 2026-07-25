@@ -76,8 +76,8 @@ pub fn Knob(
 
     rsx! {
         div {
-            style: "display: flex; flex-direction: column; align-items: center; gap: 2px; \
-                    width: 62px; touch-action: none;",
+            style: "display: flex; flex-direction: column; align-items: center; gap: 4px; \
+                    width: 62px; padding: 2px 0; touch-action: none;",
             svg {
                 width: "44", height: "44", view_box: "0 0 44 44",
                 onpointerdown: move |e: PointerEvent| {

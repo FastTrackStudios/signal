@@ -78,26 +78,30 @@ pub fn ZoomBar(
 ) -> Element {
     rsx! {
         div {
-            style: "display: flex; align-items: center; gap: 8px; padding: 8px 14px; \
+            style: "display: flex; align-items: center; gap: 10px; padding: 10px 18px; \
                     border-bottom: 1px solid #1c1c1f; background: #0b0b0e;",
             button {
                 style: "appearance: none; background: transparent; border: none; color: #71717a; \
-                        font-size: 12px; font-weight: 600; padding: 2px 6px 2px 0;",
+                        font-size: 12px; font-weight: 600; padding: 2px 10px 2px 0;",
                 onclick: move |_| on_back.call(()),
                 "‹ Back"
             }
-            for (i, crumb) in crumbs.iter().enumerate() {
-                if i > 0 {
-                    span { style: "color: #3f3f46; font-size: 11px;", "/" }
-                }
-                span {
-                    style: format!(
-                        "font-size: {}; font-weight: {}; color: {};",
-                        if i + 1 == crumbs.len() { "13px" } else { "12px" },
-                        if i + 1 == crumbs.len() { "700" } else { "500" },
-                        if i + 1 == crumbs.len() { "#e4e4e7" } else { "#71717a" },
-                    ),
-                    "{crumb}"
+            // The trail is one unit — its separators sit closer than the gap
+            // between the trail and the controls either side of it.
+            div { style: "display: flex; align-items: center; gap: 6px;",
+                for (i, crumb) in crumbs.iter().enumerate() {
+                    if i > 0 {
+                        span { style: "color: #3f3f46; font-size: 11px;", "/" }
+                    }
+                    span {
+                        style: format!(
+                            "font-size: {}; font-weight: {}; color: {};",
+                            if i + 1 == crumbs.len() { "13px" } else { "12px" },
+                            if i + 1 == crumbs.len() { "700" } else { "500" },
+                            if i + 1 == crumbs.len() { "#e4e4e7" } else { "#71717a" },
+                        ),
+                        "{crumb}"
+                    }
                 }
             }
             div { style: "flex: 1;" }

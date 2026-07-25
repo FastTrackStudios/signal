@@ -267,12 +267,13 @@ pub fn ModuleEdit(
                         SlotTabs { count: 4, selected: env_slot, accent: accent.clone() }
                     }
                 },
-                div { style: "display: flex; flex-direction: column; gap: 8px;",
+                div { style: "display: flex; flex-direction: column; gap: 12px;",
                     EnvelopeGraph {
                         title: format!("Env {}", env_slot() + 1),
                         adsr: env,
                         accent: accent.clone(),
                         live: live(&format!("{env_id}.attack")),
+                        flat: true,
                         on_change: {
                             let env_id = env_id.clone();
                             move |(seg, v): (&'static str, f32)| {
@@ -315,7 +316,7 @@ pub fn ModuleEdit(
                 title: "LFOs".to_string(),
                 accent: accent.clone(),
                 trailing: rsx! { SlotTabs { count: 4, selected: lfo_slot, accent: accent.clone() } },
-                div { style: "display: flex; flex-direction: column; gap: 8px;",
+                div { style: "display: flex; flex-direction: column; gap: 12px;",
                     LfoShape {
                         shape: val(&format!("lfo{}.shape", lfo_slot() + 1)),
                         depth: val(&format!("lfo{}.depth", lfo_slot() + 1)),

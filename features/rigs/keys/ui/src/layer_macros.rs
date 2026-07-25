@@ -81,14 +81,18 @@ pub fn LayerMacros(
     };
     let varies = |name: &str| detail.layer_macros.iter().any(|m| m.group == name && m.bipolar);
 
+    // One spacing scale for the page: 4 inside a label block, 8/12 inside a
+    // panel, 16 between panels, 24 between the three bands (modules ·
+    // Filter+Amp · Global Controls). Everything at 12 was why nothing read as
+    // grouped.
     rsx! {
         div {
-            style: "flex: 1; min-height: 0; overflow: auto; padding: 12px; display: flex; \
-                    flex-direction: column; gap: 12px;",
+            style: "flex: 1; min-height: 0; overflow: auto; padding: 16px 18px 24px; display: flex; \
+                    flex-direction: column; gap: 24px;",
 
             // ── The modules these macros drive ──────────────────────────
             div {
-                style: "display: flex; gap: 10px; align-items: stretch; flex-wrap: wrap;",
+                style: "display: flex; gap: 12px; align-items: stretch; flex-wrap: wrap;",
                 for m in detail.modules.iter() {
                     {
                         let idx = m.index;
@@ -98,12 +102,12 @@ pub fn LayerMacros(
                             div {
                                 key: "{m.index}",
                                 style: format!(
-                                    "display: flex; gap: 10px; padding: 10px 12px; min-width: 210px; \
+                                    "display: flex; gap: 14px; padding: 12px 14px; min-width: 230px; \
                                      border: 1px solid {}; border-radius: 12px; background: #0d0d10;",
                                     if m.live && on { "#1f2b3a" } else { "#1c1c21" },
                                 ),
-                                div { style: "display: flex; flex-direction: column; gap: 4px; min-width: 0; flex: 1;",
-                                    div { style: "display: flex; align-items: center; gap: 6px;",
+                                div { style: "display: flex; flex-direction: column; gap: 6px; min-width: 0; flex: 1;",
+                                    div { style: "display: flex; align-items: center; gap: 8px;",
                                         span {
                                             style: format!(
                                                 "font-size: 10px; font-weight: 700; color: {};",
@@ -156,7 +160,7 @@ pub fn LayerMacros(
 
             // ── Filter and Amp: the whole section on one card each ──────
             div {
-                style: "display: grid; gap: 12px; \
+                style: "display: grid; gap: 16px; \
                         grid-template-columns: repeat(auto-fit, minmax(460px, 1fr));",
 
                 // FILTER — the modules' response, their filter envelopes,
@@ -166,42 +170,38 @@ pub fn LayerMacros(
                     accent: accent.clone(),
                     lit: group("Filter").iter().any(|m| m.live),
                     trailing: rsx! {
-                        span {
-                            style: format!(
-                                "font-size: 9px; color: {};",
-                                if varies("Filter") || varies("Filter Env") { "#fbbf24" } else { "#52525b" },
-                            ),
-                            if varies("Filter") || varies("Filter Env") { "offset" } else { "" }
+                        if varies("Filter") || varies("Filter Env") {
+                            span { style: "font-size: 9px; color: #fbbf24;", "offset" }
                         }
                     },
-                    div { style: "display: flex; flex-direction: column; gap: 10px;",
-                        StackedFilters { curves: curves(&detail), height_px: 300 }
-                        div { style: "display: flex; flex-direction: column; gap: 4px;",
+                    div { style: "display: flex; flex-direction: column; gap: 16px;",
+                        div { style: "display: flex; flex-direction: column; gap: 12px;",
+                            StackedFilters { curves: curves(&detail), height_px: 300, flat: true }
                             KnobRow {
                                 macros: group("Filter"),
                                 accent: accent.clone(),
                                 on_change: move |(id, v)| on_global.call((id, v)),
                             }
-                            span { style: "font-size: 9px; color: #3f3f46;",
-                                if let Some(s) = spread("Filter") { "modules: {s}" } else { "" }
+                            if let Some(s) = spread("Filter") {
+                                span { style: "font-size: 9px; color: #52525b;", "modules: {s}" }
                             }
                         }
                         div {
-                            style: "display: flex; flex-direction: column; gap: 4px; \
-                                    padding-top: 8px; border-top: 1px solid #1c1c21;",
+                            style: "display: flex; flex-direction: column; gap: 12px; \
+                                    padding-top: 16px; border-top: 1px solid #1c1c21;",
                             span {
                                 style: "font-size: 9px; font-weight: 700; letter-spacing: 0.1em; \
                                         text-transform: uppercase; color: #71717a;",
                                 "Filter Envelope"
                             }
-                            StackedEnvelopes { curves: curves(&detail), height_px: 170, amp: false }
+                            StackedEnvelopes { curves: curves(&detail), height_px: 170, amp: false, flat: true }
                             KnobRow {
                                 macros: group("Filter Env"),
                                 accent: accent.clone(),
                                 on_change: move |(id, v)| on_global.call((id, v)),
                             }
-                            span { style: "font-size: 9px; color: #3f3f46;",
-                                if let Some(s) = spread("Filter Env") { "modules: {s}" } else { "" }
+                            if let Some(s) = spread("Filter Env") {
+                                span { style: "font-size: 9px; color: #52525b;", "modules: {s}" }
                             }
                         }
                     }
@@ -213,34 +213,32 @@ pub fn LayerMacros(
                     accent: accent.clone(),
                     lit: group("Amp Env").iter().any(|m| m.live),
                     trailing: rsx! {
-                        span {
-                            style: format!(
-                                "font-size: 9px; color: {};",
-                                if varies("Amp Env") { "#fbbf24" } else { "#52525b" },
-                            ),
-                            if varies("Amp Env") { "offset" } else { "" }
+                        if varies("Amp Env") {
+                            span { style: "font-size: 9px; color: #fbbf24;", "offset" }
                         }
                     },
-                    div { style: "display: flex; flex-direction: column; gap: 10px;",
-                        StackedEnvelopes { curves: curves(&detail), height_px: 300, amp: true }
-                        div { style: "display: flex; flex-direction: column; gap: 4px;",
-                            KnobRow {
-                                macros: group("Amp Env"),
-                                accent: accent.clone(),
-                                on_change: move |(id, v)| on_global.call((id, v)),
-                            }
-                            span { style: "font-size: 9px; color: #3f3f46;",
-                                if let Some(s) = spread("Amp Env") { "modules: {s}" } else { "" }
-                            }
+                    div { style: "display: flex; flex-direction: column; gap: 12px;",
+                        StackedEnvelopes { curves: curves(&detail), height_px: 300, amp: true, flat: true }
+                        KnobRow {
+                            macros: group("Amp Env"),
+                            accent: accent.clone(),
+                            on_change: move |(id, v)| on_global.call((id, v)),
+                        }
+                        if let Some(s) = spread("Amp Env") {
+                            span { style: "font-size: 9px; color: #52525b;", "modules: {s}" }
                         }
                     }
                 }
             }
 
             // ── The Global Controls ─────────────────────────────────────
+            //
+            // `auto-fill`, not `auto-fit`: a panel holding three knobs should
+            // stay knob-width and leave the rest of the row empty, instead of
+            // stretching to the window with its controls stranded at the left.
             div {
-                style: "display: grid; gap: 12px; align-content: start; \
-                        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));",
+                style: "display: grid; gap: 16px; align-content: start; \
+                        grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));",
                 for (name, hint) in GROUPS.iter() {
                     {
                         let macros = group(name);
@@ -256,21 +254,17 @@ pub fn LayerMacros(
                                     accent: accent.clone(),
                                     lit: macros.iter().any(|m| m.live),
                                     trailing: rsx! {
-                                        span {
-                                            style: format!(
-                                                "font-size: 9px; color: {};",
-                                                if bipolar { "#fbbf24" } else { "#52525b" },
-                                            ),
-                                            if bipolar { "offset" } else { "" }
+                                        if bipolar {
+                                            span { style: "font-size: 9px; color: #fbbf24;", "offset" }
                                         }
                                     },
-                                    div { style: "display: flex; flex-direction: column; gap: 6px;",
+                                    div { style: "display: flex; flex-direction: column; gap: 12px;",
                                         KnobRow {
                                             macros: macros.clone(),
                                             accent: accent.clone(),
                                             on_change: move |(id, v)| on_global.call((id, v)),
                                         }
-                                        span { style: "font-size: 9px; color: #3f3f46; line-height: 1.3;",
+                                        span { style: "font-size: 9px; color: #52525b; line-height: 1.4;",
                                             if let Some(s) = spread.clone() { "modules: {s}" } else { "{hint}" }
                                         }
                                     }

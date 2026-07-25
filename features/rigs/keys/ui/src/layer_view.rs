@@ -89,10 +89,10 @@ pub fn LayerView(
                 crumbs: vec![d.engine.clone(), d.layer.clone()],
                 on_back: move |_| zoom.set(Zoom::Engine(back_to.clone())),
                 trailing: rsx! {
-                    div { style: "display: flex; align-items: center; gap: 6px;",
+                    div { style: "display: flex; align-items: center; gap: 14px;",
                         // The layer's four MODULES — Omnisphere's Quadzone.
                         // Each is a whole engine: own source, filter, envelopes.
-                        div { style: "display: flex; gap: 3px; padding: 2px; background: #0b0b0e; \
+                        div { style: "display: flex; gap: 4px; padding: 3px; background: #0b0b0e; \
                                       border: 1px solid #1f1f23; border-radius: 8px;",
                             for m in d.modules.iter() {
                                 {
@@ -133,26 +133,33 @@ pub fn LayerView(
                         }
                         span {
                             style: format!(
-                                "padding: 3px 10px; border-radius: 999px; font-size: 11px; \
-                                 font-weight: 600; background: #101821; color: {accent};",
+                                "padding: 4px 12px; border-radius: 999px; font-size: 11px; \
+                                 font-weight: 600; background: #101821; color: {accent}; \
+                                 max-width: 260px; overflow: hidden; text-overflow: ellipsis; \
+                                 white-space: nowrap;",
                             ),
                             "{patch}"
                         }
-                        for (p, label) in [
-                            (Page::Layer, "Layer"),
-                            (Page::Module, "Module"),
-                            (Page::Edit, "Edit"),
-                        ] {
-                            button {
-                                key: "{label}",
-                                style: format!(
-                                    "appearance: none; border: none; border-radius: 7px; padding: 4px 12px; \
-                                     font-size: 11px; font-weight: 600; background: {}; color: {};",
-                                    if page() == p { "#101821" } else { "transparent" },
-                                    if page() == p { "#38bdf8" } else { "#52525b" },
-                                ),
-                                onclick: move |_| page.set(p),
-                                "{label}"
+                        // Page tabs share the module switcher's segmented shell
+                        // so the bar reads as two controls, not five buttons.
+                        div { style: "display: flex; gap: 4px; padding: 3px; background: #0b0b0e; \
+                                      border: 1px solid #1f1f23; border-radius: 8px;",
+                            for (p, label) in [
+                                (Page::Layer, "Layer"),
+                                (Page::Module, "Module"),
+                                (Page::Edit, "Edit"),
+                            ] {
+                                button {
+                                    key: "{label}",
+                                    style: format!(
+                                        "appearance: none; border: none; border-radius: 6px; padding: 4px 12px; \
+                                         font-size: 11px; font-weight: 600; background: {}; color: {};",
+                                        if page() == p { "#101821" } else { "transparent" },
+                                        if page() == p { "#38bdf8" } else { "#52525b" },
+                                    ),
+                                    onclick: move |_| page.set(p),
+                                    "{label}"
+                                }
                             }
                         }
                     }
@@ -314,10 +321,10 @@ fn PlayPage(
 fn EditPage(detail: KeysLayerDetail) -> Element {
     rsx! {
         div {
-            style: "flex: 1; min-height: 0; overflow: auto; padding: 14px; display: flex; \
-                    flex-direction: column; gap: 12px;",
+            style: "flex: 1; min-height: 0; overflow: auto; padding: 16px 18px 24px; display: flex; \
+                    flex-direction: column; gap: 16px;",
             div {
-                style: "display: flex; align-items: center; gap: 10px; padding: 10px 12px; \
+                style: "display: flex; align-items: center; gap: 12px; padding: 12px 14px; \
                         border: 1px solid #1f1f23; border-radius: 12px; background: #0e0e11;",
                 span { style: "font-size: 11px; font-weight: 700; color: #e4e4e7;", "Source" }
                 span { style: "font-size: 11px; color: #7dd3fc;",
@@ -328,10 +335,14 @@ fn EditPage(detail: KeysLayerDetail) -> Element {
                     "Articulations · zones · round-robins land here (Signal Editor)"
                 }
             }
-            span { style: "font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: #52525b;",
-                "Engine program"
+            // Caption and tree are one block — the caption belongs to what it
+            // labels, not to the gap above it.
+            div { style: "display: flex; flex-direction: column; gap: 8px;",
+                span { style: "font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: #52525b;",
+                    "Engine program"
+                }
+                ProgramTree { node: detail.tree.clone() }
             }
-            ProgramTree { node: detail.tree.clone() }
         }
     }
 }
@@ -406,11 +417,11 @@ fn SourceBrowser(
 
     rsx! {
         div {
-            style: "display: flex; flex-direction: column; gap: 6px; padding: 8px; \
+            style: "display: flex; flex-direction: column; gap: 10px; padding: 12px; \
                     border: 1px solid #2b2b31; border-radius: 10px; background: #0b0b0d;",
             input {
                 style: "background: #131316; border: 1px solid #1f1f23; border-radius: 8px; \
-                        padding: 6px 8px; color: #e4e4e7; font-size: 11px;",
+                        padding: 8px 10px; color: #e4e4e7; font-size: 11px;",
                 placeholder: "search {total} soundsources…",
                 value: "{query}",
                 oninput: move |e| query.set(e.value()),
@@ -419,7 +430,7 @@ fn SourceBrowser(
                 style: "display: flex; flex-direction: column; gap: 1px; max-height: 260px; overflow-y: auto;",
                 button {
                     style: "appearance: none; text-align: left; border: none; border-radius: 6px; \
-                            padding: 5px 7px; background: transparent; color: #a1a1aa; font-size: 11px;",
+                            padding: 7px 9px; background: transparent; color: #a1a1aa; font-size: 11px;",
                     onclick: {
                         let rig = rig.clone();
                         let layer = layer.clone();
@@ -439,7 +450,7 @@ fn SourceBrowser(
                         // Library names repeat across banks — key by index.
                         key: "{i}",
                         style: "appearance: none; text-align: left; border: none; border-radius: 6px; \
-                                padding: 5px 7px; background: transparent; color: #e4e4e7; font-size: 11px; \
+                                padding: 7px 9px; background: transparent; color: #e4e4e7; font-size: 11px; \
                                 display: flex; align-items: center; gap: 6px;",
                         onclick: {
                             let rig = rig.clone();
