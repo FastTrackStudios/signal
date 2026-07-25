@@ -29,6 +29,12 @@ pub struct KeysPreset {
     /// browser filters by the selected engine's tag, so picking a lane in Keys
     /// never shows you Omnisphere pads.
     pub tags: Vec<String>,
+    /// **Variations on this preset.** A library entry is a default with
+    /// alternatives behind it — "C7 Grand" is the preset, "Felt", "Close
+    /// Mic'd", "Lid Down" are variations of it. The browser navigates into
+    /// them; loading the entry itself loads the default. Empty until a pack
+    /// authors variations.
+    pub variants: Vec<String>,
 }
 
 /// A node in the loaded composition tree (engine → layers → blocks) — the

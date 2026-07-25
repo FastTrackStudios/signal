@@ -67,7 +67,6 @@ pub fn KeysRigRemote() -> Element {
     let status = state.status.read().clone();
     let mixer = state.mixer.read().clone();
     let perform = state.perform.read().clone();
-    let presets = state.presets.read().clone();
     let tree = state.tree.read().clone();
     let midi = state.midi.read().clone();
 
@@ -115,7 +114,7 @@ pub fn KeysRigRemote() -> Element {
                     color: #e4e4e7; font-family: sans-serif; background: #08080a;",
             div { style: "display: flex; flex: 1; min-height: 0;",
                 // The browser — one sidebar, pointed at the selection.
-                Browser { presets: presets.clone() }
+                Browser { state }
                 div { style: "display: flex; flex-direction: column; flex: 1; min-width: 0; min-height: 0;",
                     match zoom() {
                         Zoom::Mixer => rsx! {
@@ -124,11 +123,7 @@ pub fn KeysRigRemote() -> Element {
                         Zoom::Engine(name) => {
                             match mixer.engines.iter().find(|e| e.name == name) {
                                 Some(engine) => rsx! {
-                                    EngineView {
-                                        engine: engine.clone(),
-                                        presets: presets.clone(),
-                                        zoom,
-                                    }
+                                    EngineView { engine: engine.clone(), zoom }
                                 },
                                 None => rsx! {
                                     ControlView { mixer: mixer.clone(), held: held.clone() }
@@ -136,12 +131,7 @@ pub fn KeysRigRemote() -> Element {
                             }
                         }
                         Zoom::Layer(name) => rsx! {
-                            LayerView {
-                                layer: name,
-                                zoom,
-                                mixer: mixer.clone(),
-                                presets: presets.clone(),
-                            }
+                            LayerView { layer: name, zoom, mixer: mixer.clone() }
                         },
                     }
                 }

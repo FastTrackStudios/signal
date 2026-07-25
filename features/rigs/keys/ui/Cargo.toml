@@ -12,4 +12,5 @@ signal-keys-proto.workspace = true
 midicore-ui.workspace = true
 midicore-proto.workspace = true
 signal-ui = { workspace = true, features = ["web"] }
+signal-browser.workspace = true
 architect = { workspace = true, features = ["atom", "vox", "platform"] }

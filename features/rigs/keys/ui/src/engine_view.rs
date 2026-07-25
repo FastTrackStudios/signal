@@ -3,18 +3,14 @@
 
 use dioxus::prelude::*;
 use signal_keys_proto::keys::KeysRigClient;
-use signal_keys_proto::{KeysEngineModel, KeysPreset};
+use signal_keys_proto::KeysEngineModel;
 
 use crate::control::engine_color;
 use crate::fader::{Fader, fmt_db};
 use crate::zoom::{OpenButton, Zoom};
 
 #[component]
-pub fn EngineView(
-    engine: KeysEngineModel,
-    presets: Vec<KeysPreset>,
-    zoom: Signal<Zoom>,
-) -> Element {
+pub fn EngineView(engine: KeysEngineModel, zoom: Signal<Zoom>) -> Element {
     let rig = use_hook(try_consume_context::<KeysRigClient>);
     let mut zoom = zoom;
     let accent = engine_color(&engine.name).to_string();
@@ -214,11 +210,6 @@ pub fn EngineView(
                                 }
                             }
                         }
-                    }
-                }
-                if !presets.is_empty() {
-                    span { style: "font-size: 10px; color: #3f3f46; align-self: flex-end;",
-                        {format!("{} patches in the library", presets.len())}
                     }
                 }
             }

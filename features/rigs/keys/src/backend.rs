@@ -1673,6 +1673,7 @@ fn scan_keyscape() -> (Vec<KeysPreset>, Vec<PathBuf>) {
                     loaded: false,
                     scope: "layer".into(),
                     tags,
+                    variants: Vec::new(),
                 });
                 specs.push(styx);
             }
@@ -1721,6 +1722,7 @@ fn scan_omni_patches(root: &str) -> (Vec<KeysPreset>, Vec<PathBuf>) {
                 loaded: false,
                 scope: "layer".into(),
                 tags,
+                variants: Vec::new(),
             });
             specs.push(patch);
         }
@@ -1764,6 +1766,7 @@ fn scan_packs_recursive(root: &str) -> (Vec<KeysPreset>, Vec<PathBuf>) {
                 loaded: false,
                 scope: "module".into(),
                 tags,
+                variants: Vec::new(),
             });
             specs.push(pack);
         }
@@ -1796,6 +1799,7 @@ fn scan_packs(root: &str) -> (Vec<KeysPreset>, Vec<PathBuf>) {
                 loaded: false,
                 scope: "layer".into(),
                 tags,
+                variants: Vec::new(),
             });
             specs.push(pack);
         }

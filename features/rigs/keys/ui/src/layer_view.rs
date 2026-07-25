@@ -20,7 +20,7 @@ use signal_keys_proto::{KeysLayerDetail, KeysNode};
 
 use crate::control::engine_color;
 use crate::zoom::Zoom;
-use signal_keys_proto::{KeysMixer, KeysPreset};
+use signal_keys_proto::KeysMixer;
 
 /// Which page of the layer zoom.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -40,9 +40,6 @@ pub fn LayerView(
     /// The mixer, for the engine's sibling lanes (the A/B/C/D switcher).
     #[props(default)]
     mixer: KeysMixer,
-    /// The library, for the Source browser.
-    #[props(default)]
-    presets: Vec<KeysPreset>,
 ) -> Element {
     let rig = use_hook(try_consume_context::<KeysRigClient>);
     let zoom = zoom;
