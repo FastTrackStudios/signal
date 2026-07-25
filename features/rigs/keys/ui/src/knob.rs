@@ -51,6 +51,11 @@ pub fn Knob(
     /// behave this way once the layers disagree).
     #[props(default = false)] bipolar: bool,
     #[props(default = "#38bdf8".to_string())] accent: String,
+    /// **Inline row** instead of a stacked tile: label left, dial in the
+    /// middle, value right. The band's thin columns read as a list that way —
+    /// a label under a dial wastes the height they don't have and the width
+    /// they do.
+    #[props(default = false)] inline: bool,
     on_change: EventHandler<f32>,
 ) -> Element {
     let mut drag = use_signal(|| None::<(f64, f32)>);
@@ -74,10 +79,42 @@ pub fn Knob(
     let (bx, by) = arc_point(cx, cy, 5.0, end);
     let color = if live { accent.clone() } else { "#52525b".to_string() };
 
+    let root_style = if inline {
+        "display: flex; flex-direction: row; align-items: center; gap: 8px; \
+         width: 100%; padding: 2px 0; touch-action: none;"
+    } else {
+        "display: flex; flex-direction: column; align-items: center; gap: 4px; \
+         width: 62px; padding: 2px 0; touch-action: none;"
+    };
+    let label_span = rsx! {
+        span {
+            style: format!(
+                "font-size: 9px; font-weight: 600; color: {}; line-height: 1.1; {}",
+                if live { "#d4d4d8" } else { "#52525b" },
+                if inline { "flex: 1; text-align: left;" } else { "text-align: center;" },
+            ),
+            "{label}"
+        }
+    };
+    let value_span = rsx! {
+        span {
+            style: "font-size: 9px; font-variant-numeric: tabular-nums; color: #71717a;",
+            if bipolar {
+                {format!("{:+.0}%", value * 100.0)}
+            } else {
+                {format!("{}{}", fmt_value(value, &unit), if unit == "dB" || unit.is_empty() { String::new() } else { format!(" {unit}") })}
+            }
+        }
+    };
+
     rsx! {
         div {
-            style: "display: flex; flex-direction: column; align-items: center; gap: 4px; \
-                    width: 62px; padding: 2px 0; touch-action: none;",
+            style: "{root_style}",
+            // Inline puts the name ahead of the dial; stacked keeps the dial
+            // first and hangs its name and value beneath.
+            if inline {
+                {label_span.clone()}
+            }
             svg {
                 width: "44", height: "44", view_box: "0 0 44 44",
                 onpointerdown: move |e: PointerEvent| {
@@ -97,21 +134,10 @@ pub fn Knob(
                     stroke: "{color}", stroke_width: "2", stroke_linecap: "round",
                 }
             }
-            span {
-                style: format!(
-                    "font-size: 9px; font-weight: 600; color: {}; text-align: center; line-height: 1.1;",
-                    if live { "#d4d4d8" } else { "#52525b" },
-                ),
-                "{label}"
+            if !inline {
+                {label_span}
             }
-            span {
-                style: "font-size: 9px; font-variant-numeric: tabular-nums; color: #71717a;",
-                if bipolar {
-                    {format!("{:+.0}%", value * 100.0)}
-                } else {
-                    {format!("{}{}", fmt_value(value, &unit), if unit == "dB" || unit.is_empty() { String::new() } else { format!(" {unit}") })}
-                }
-            }
+            {value_span}
             if drag().is_some() {
                 div {
                     style: "position: fixed; inset: 0; z-index: 999; cursor: ns-resize;",

@@ -57,6 +57,19 @@ pub struct PackLevel {
     pub trim_db: Option<f32>,
 }
 
+/// **Measured levels that ship with the rig**, so a fresh install is level
+/// before anyone writes a config file. Measured with
+/// `signal-sampler --example pack_lufs` (see `crates/signal/docs/pack-levels.md`)
+/// — the same chord at the same velocity through each pack.
+///
+/// Keyed by pack file stem, which is what a module's `patch` holds.
+const BUILT_IN: &[(&str, f64)] = &[
+    ("LA Custom C7 Grand", -37.73),
+    ("Rhodes - LA Custom", -27.99),
+    ("OB-8 PWM Big Strings", -17.07),
+    ("Microcosm Pad 1", -39.58),
+];
+
 /// The level book.
 #[derive(Debug, Clone, PartialEq, Facet)]
 pub struct PackLevels {
@@ -101,13 +114,19 @@ impl PackLevels {
         }
     }
 
-    /// Trim for one pack, in dB. Unknown packs are left alone.
+    /// Trim for one pack, in dB. The file wins where it has an entry; the
+    /// shipped measurements cover the rest; anything unmeasured is left alone.
     fn trim_for(&self, name: &str) -> f32 {
-        let Some(entry) = self.packs.iter().find(|p| p.name == name) else { return 0.0 };
-        let trim = match (entry.trim_db, entry.lufs) {
-            (Some(t), _) => t,
-            (None, Some(lufs)) => (self.target_lufs - lufs) as f32,
-            (None, None) => 0.0,
+        let trim = match self.packs.iter().find(|p| p.name == name) {
+            Some(entry) => match (entry.trim_db, entry.lufs) {
+                (Some(t), _) => t,
+                (None, Some(lufs)) => (self.target_lufs - lufs) as f32,
+                (None, None) => 0.0,
+            },
+            None => match BUILT_IN.iter().find(|(pack, _)| *pack == name) {
+                Some((_, lufs)) => (self.target_lufs - lufs) as f32,
+                None => 0.0,
+            },
         };
         trim.clamp(-MAX_TRIM_DB, MAX_TRIM_DB)
     }
@@ -165,8 +184,19 @@ mod tests {
         assert!((levels.trim_for("Loud") + 6.0).abs() < 0.001);
         assert_eq!(levels.trim_for("Broken"), MAX_TRIM_DB);
         assert!((levels.trim_for("Judged") + 2.0).abs() < 0.001);
-        // An unlisted pack is left exactly as it was mastered.
-        assert_eq!(levels.trim_for("Unmeasured"), 0.0);
+        // An unlisted, unshipped pack is left exactly as it was mastered.
+        assert_eq!(levels.trim_for("Some Unmeasured Pack"), 0.0);
+    }
+
+    /// A rig with no config file still plays the Keyscape libraries level.
+    #[test]
+    fn shipped_measurements_apply_without_a_file() {
+        let empty = PackLevels::default();
+        assert!((empty.trim_for("LA Custom C7 Grand") - 19.73).abs() < 0.01);
+        assert!((empty.trim_for("Rhodes - LA Custom") - 9.99).abs() < 0.01);
+        // The pad is already at target — near enough to leave alone.
+        assert!(empty.trim_for("OB-8 PWM Big Strings").abs() < 1.0);
+        assert_eq!(empty.trim_for("Some Unmeasured Pack"), 0.0);
     }
 }
 
@@ -174,20 +204,21 @@ mod tests {
 mod styx_shape {
     use super::*;
 
-    /// Prints the canonical file the loader accepts — run with `--nocapture`
-    /// when hand-writing `pack-levels.styx`.
+    /// The hand-written form the docs give, parsed. Guards the format people
+    /// actually type — a wrong shape here is a silently un-normalized rig.
+    ///
+    /// Note what is NOT asserted: a serializer round-trip. `facet_styx` writes
+    /// `@` for an absent `Option` and then refuses to read it back, so an
+    /// absent field must be omitted rather than written out.
     #[test]
-    fn round_trips() {
-        let levels = PackLevels {
-            target_lufs: -18.0,
-            packs: vec![
-                PackLevel { name: "Keyscape LA Custom C7 Grand".into(), lufs: None, trim_db: Some(10.0) },
-                PackLevel { name: "OB-8 PWM Big Strings".into(), lufs: Some(-16.2), trim_db: None },
-            ],
-        };
-        let text = facet_styx::to_string(&levels).expect("serialize");
-        println!("---\n{text}\n---");
-        let back: PackLevels = facet_styx::from_str(&text).expect("parse");
-        assert_eq!(back, levels);
+    fn documented_form_parses() {
+        let text = r#"target_lufs -18
+
+packs ({name "LA Custom C7 Grand", lufs -37.73} {name "Rhodes - LA Custom", trim_db 10})
+"#;
+        let levels: PackLevels = facet_styx::from_str(text).expect("parse");
+        assert_eq!(levels.target_lufs, -18.0);
+        assert!((levels.trim_for("LA Custom C7 Grand") - 19.73).abs() < 0.01);
+        assert!((levels.trim_for("Rhodes - LA Custom") - 10.0).abs() < 0.01);
     }
 }

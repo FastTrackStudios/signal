@@ -33,11 +33,11 @@ use crate::module_edit::{KnobRow, Panel};
 
 /// One card in the band.
 enum Cell {
-    /// A knob group stacked **vertically** in a thin column: two or three
-    /// knobs that need no width and no picture, read bottom-up (Low under
-    /// Mid under High, the way an EQ is drawn everywhere else). The `bool`
-    /// reverses the macro order so the table's Low-first listing comes out
-    /// High-first on screen.
+    /// A knob group stacked **vertically**, one knob per row: name left, dial
+    /// centre, value right. For the groups with no picture — read bottom-up
+    /// (Low under Mid under High, the way an EQ is drawn everywhere else).
+    /// The `bool` reverses the macro order so the table's Low-first listing
+    /// comes out High-first on screen.
     Column(&'static str, &'static str, bool),
     /// A shape and the knobs that move it.
     Shape(Shape),
@@ -260,12 +260,16 @@ pub fn MacroPanel(
                                 rsx! {}
                             } else {
                                 rsx! {
-                                    // One knob wide. These are set-and-forget
-                                    // trims, not shapes — they earn a column,
-                                    // not a card's worth of the row.
+                                    // A list, not a card: each knob is a row —
+                                    // name on the left, dial in the middle,
+                                    // value on the right. These are
+                                    // set-and-forget trims, so they read like
+                                    // settings rather than performance
+                                    // controls, and the width they cost buys
+                                    // labels you can actually read.
                                     div {
                                         key: "{i}",
-                                        style: "flex: 0 0 auto; max-width: 116px; display: flex;",
+                                        style: "flex: 0 0 auto; width: 186px; display: flex;",
                                         Panel {
                                             title: name.to_string(),
                                             accent: accent.clone(),
@@ -280,7 +284,7 @@ pub fn MacroPanel(
                                                 // rows do instead of bunching at
                                                 // the top.
                                                 style: "display: flex; flex-direction: column; gap: 6px; \
-                                                        align-items: center; justify-content: space-between; \
+                                                        align-items: stretch; justify-content: space-between; \
                                                         flex: 1; min-height: 0; overflow: hidden;",
                                                 title: "{hint}",
                                                 for m in items.iter() {
@@ -294,6 +298,7 @@ pub fn MacroPanel(
                                                         live: m.live,
                                                         bipolar: m.bipolar,
                                                         accent: accent.clone(),
+                                                        inline: true,
                                                         on_change: {
                                                             let id = m.id.clone();
                                                             move |v: f32| on_change.call((id.clone(), v))
