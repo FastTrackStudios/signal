@@ -149,6 +149,13 @@ pub fn DelayView(
                             text-transform: uppercase; color: {accent};",
                     "Delay"
                 }
+                crate::algos::AlgoPicker {
+                    id: macros.iter().find(|m| m.id.ends_with("dly.algo")).map(|m| m.id.clone()).unwrap_or_default(),
+                    value: macros.iter().find(|m| m.id.ends_with("dly.algo")).map(|m| m.value).unwrap_or(0.0),
+                    options: crate::algos::DELAY_ALGOS.to_vec(),
+                    accent: accent.clone(),
+                    on_change: move |(id, v): (String, f32)| on_change.call((id, v)),
+                }
                 span { style: "font-size: 8px; color: #3f3f46;",
                     {format!("{:.0} bpm · 8 beats", tempo_bpm)}
                 }
@@ -241,7 +248,9 @@ pub fn DelayView(
             }
             if !macros.is_empty() {
                 KnobRow {
-                    macros: macros.clone(),
+                    // The algorithm is the section's title, not one of its
+                    // knobs — the picker above owns it.
+                    macros: macros.iter().filter(|m| !m.id.ends_with(".algo")).cloned().collect(),
                     accent: accent.clone(),
                     on_change: move |(id, v): (String, f32)| on_change.call((id, v)),
                 }
@@ -277,6 +286,13 @@ pub fn ReverbView(
                     style: "font-size: 9px; font-weight: 700; letter-spacing: 0.1em; \
                             text-transform: uppercase; color: {accent};",
                     "Reverb"
+                }
+                crate::algos::AlgoPicker {
+                    id: macros.iter().find(|m| m.id.ends_with("amb.algo")).map(|m| m.id.clone()).unwrap_or_default(),
+                    value: macros.iter().find(|m| m.id.ends_with("amb.algo")).map(|m| m.value).unwrap_or(1.0),
+                    options: crate::algos::VERB_ALGOS.to_vec(),
+                    accent: accent.clone(),
+                    on_change: move |(id, v): (String, f32)| on_change.call((id, v)),
                 }
                 span { style: "font-size: 8px; color: #3f3f46;", "0.1 – 20 s" }
                 div { style: "flex: 1;" }
@@ -356,7 +372,9 @@ pub fn ReverbView(
             }
             if !macros.is_empty() {
                 KnobRow {
-                    macros: macros.clone(),
+                    // The algorithm is the section's title, not one of its
+                    // knobs — the picker above owns it.
+                    macros: macros.iter().filter(|m| !m.id.ends_with(".algo")).cloned().collect(),
                     accent: accent.clone(),
                     on_change: move |(id, v): (String, f32)| on_change.call((id, v)),
                 }

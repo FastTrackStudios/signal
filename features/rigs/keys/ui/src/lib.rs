@@ -11,6 +11,7 @@
 
 use dioxus::prelude::*;
 
+mod algos;
 mod browser;
 mod control;
 mod controllers;

@@ -243,6 +243,7 @@ const MACROS: &[MacroDef] = &[
     MacroDef { id: "vib.rate", name: "Rate", group: "Vibrato", default: 5.0, min: 0.1, max: 12.0, unit: "Hz", live: false },
     MacroDef { id: "vib.depth", name: "Depth", group: "Vibrato", default: 0.0, min: 0.0, max: 1.0, unit: "", live: false },
     MacroDef { id: "vib.delay", name: "Delay", group: "Vibrato", default: 300.0, min: 0.0, max: 3000.0, unit: "ms", live: false },
+    MacroDef { id: "amb.algo", name: "Algorithm", group: "Ambience", default: 1.0, min: 0.0, max: 14.0, unit: "", live: false },
     MacroDef { id: "amb.size", name: "Size", group: "Ambience", default: 0.5, min: 0.0, max: 1.0, unit: "", live: false },
     MacroDef { id: "amb.mix", name: "Mix", group: "Ambience", default: 0.15, min: 0.0, max: 1.0, unit: "", live: false },
     MacroDef { id: "amb.predelay", name: "Pre-dly", group: "Ambience", default: 20.0, min: 0.0, max: 250.0, unit: "ms", live: false },
@@ -252,6 +253,9 @@ const MACROS: &[MacroDef] = &[
     // a feedback to draw at all.
     // 0 = free (use `dly.time`); 1..7 are note divisions against the tempo —
     // a delay is set musically far more often than in milliseconds.
+    // Machine / algorithm: an index into the rig's tables (see
+    // signal-keys-ui's `algos`), the same shape the guitar rig's picker writes.
+    MacroDef { id: "dly.algo", name: "Machine", group: "Delay", default: 0.0, min: 0.0, max: 12.0, unit: "", live: false },
     MacroDef { id: "dly.div", name: "Div", group: "Delay", default: 3.0, min: 0.0, max: 7.0, unit: "", live: false },
     MacroDef { id: "dly.time", name: "Time", group: "Delay", default: 375.0, min: 20.0, max: 2000.0, unit: "ms", live: false },
     MacroDef { id: "dly.feedback", name: "Feedback", group: "Delay", default: 0.35, min: 0.0, max: 0.95, unit: "", live: false },
@@ -314,10 +318,12 @@ const GLOBALS: &[GlobalDef] = &[
     GlobalDef { key: "uni.voices", name: "Voices", group: "Unison", target: Some("source.unison"), default: 1.0, min: 1.0, max: 8.0, unit: "v", live: true },
     GlobalDef { key: "uni.detune", name: "Detune", group: "Unison", target: Some("source.detune"), default: 0.1, min: 0.0, max: 2.0, unit: "", live: true },
     // ── Ambience ─────────────────────────────────────────────────────────
+    GlobalDef { key: "amb.algo", name: "Algorithm", group: "Ambience", target: Some("amb.algo"), default: 1.0, min: 0.0, max: 14.0, unit: "", live: false },
     GlobalDef { key: "amb.amount", name: "Amount", group: "Ambience", target: Some("amb.mix"), default: 0.15, min: 0.0, max: 1.0, unit: "", live: false },
     GlobalDef { key: "amb.length", name: "Length", group: "Ambience", target: Some("amb.size"), default: 0.5, min: 0.0, max: 1.0, unit: "", live: false },
     GlobalDef { key: "amb.decay", name: "Decay", group: "Ambience", target: Some("amb.decay"), default: 0.45, min: 0.02, max: 1.0, unit: "", live: false },
     // ── Delay, at every level: the rig's tail, an engine's, a lane's ─────
+    GlobalDef { key: "dly.algo", name: "Machine", group: "Delay", target: Some("dly.algo"), default: 0.0, min: 0.0, max: 12.0, unit: "", live: false },
     GlobalDef { key: "dly.div", name: "Div", group: "Delay", target: Some("dly.div"), default: 3.0, min: 0.0, max: 7.0, unit: "", live: false },
     GlobalDef { key: "dly.time", name: "Time", group: "Delay", target: Some("dly.time"), default: 375.0, min: 20.0, max: 2000.0, unit: "ms", live: false },
     GlobalDef { key: "dly.feedback", name: "Feedback", group: "Delay", target: Some("dly.feedback"), default: 0.35, min: 0.0, max: 0.95, unit: "", live: false },
