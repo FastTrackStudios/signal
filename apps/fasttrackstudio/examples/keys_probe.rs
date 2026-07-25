@@ -36,6 +36,11 @@ async fn main() -> eyre::Result<()> {
         .map_err(|e| eyre::eyre!("KeysRigStream handshake: {e:?}"))?;
     println!("KeysRigStream established ✓");
 
+    if std::env::args().any(|a| a == "--start") {
+        println!("start() …");
+        rig.start().await.map_err(|e| eyre::eyre!("start: {e:?}"))?;
+        println!("start() returned ✓");
+    }
     let status = rig.status().await.map_err(|e| eyre::eyre!("status: {e:?}"))?;
     println!(
         "running={} patch={:?} midi={:?} err={:?}",
@@ -56,7 +61,7 @@ async fn main() -> eyre::Result<()> {
     println!("presets: {} in {:?}", presets.len(), t0.elapsed());
     // Optional: load a module preset by name onto Pad module A, the way the
     // layer browser does — `keys_probe <url> "American Obesity"`.
-    if let Some(want) = std::env::args().nth(2) {
+    if let Some(want) = std::env::args().skip(2).find(|a| !a.starts_with("--")) {
         let hit = presets
             .iter()
             .position(|p| p.name.eq_ignore_ascii_case(&want))
@@ -68,9 +73,16 @@ async fn main() -> eyre::Result<()> {
         tokio::time::sleep(std::time::Duration::from_secs(6)).await;
     }
 
-    // The Pad lane's modules — American Obesity is OB-8 + a Juno sub, so
-    // module A and B should both be live.
-    for slot in 0..4u32 {
+    // The Pad lane's modules — a lane holds exactly what its patch uses.
+    let slots: Vec<u32> = rig
+        .layer_detail("Pad".into(), 0)
+        .await
+        .map_err(|e| eyre::eyre!("layer_detail: {e:?}"))?
+        .modules
+        .iter()
+        .map(|m| m.index)
+        .collect();
+    for slot in slots {
         let d = rig
             .layer_detail("Pad".into(), slot)
             .await
@@ -93,8 +105,8 @@ async fn main() -> eyre::Result<()> {
             show("env1.release"),
         );
         println!(
-            "        source={:<28} lfo1={:.2}Hz d={:.2} sh={:.0}  fenv_amt={:.2}",
-            if d.source.is_empty() { "—".into() } else { d.source.clone() },
+            "        preset={:<28} lfo1={:.2}Hz d={:.2} sh={:.0}  fenv_amt={:.2}",
+            if d.preset.is_empty() { "—".into() } else { d.preset.clone() },
             show("lfo1.rate"),
             show("lfo1.depth"),
             show("lfo1.shape"),
@@ -121,18 +133,23 @@ async fn main() -> eyre::Result<()> {
     // Drive one: cutoff. The Pad's modules disagree (44 vs 60 Hz), so this
     // should read back as an offset that scaled both.
     if std::env::args().any(|a| a == "--drive") {
-        rig.set_layer_global("Pad".into(), "l.filter.cutoff".into(), 0.5)
-            .await
-            .map_err(|e| eyre::eyre!("set_layer_global: {e:?}"))?;
-        let d = rig.layer_detail("Pad".into(), 0).await.map_err(|e| eyre::eyre!("{e:?}"))?;
-        let cut = d.layer_macros.iter().find(|m| m.id == "l.filter.cutoff").unwrap();
-        println!("  after +0.5 → value={:.3} bipolar={} spread={}", cut.value, cut.bipolar, cut.spread);
-        rig.set_layer_global("Pad".into(), "l.filter.cutoff".into(), 0.0)
-            .await
-            .map_err(|e| eyre::eyre!("{e:?}"))?;
-        let d = rig.layer_detail("Pad".into(), 0).await.map_err(|e| eyre::eyre!("{e:?}"))?;
-        let cut = d.layer_macros.iter().find(|m| m.id == "l.filter.cutoff").unwrap();
-        println!("  back to centre → spread={} (must equal the original)", cut.spread);
+        // Sweep out to the ceiling and back: the modules must keep their
+        // spacing the whole way, and land exactly where they started.
+        for v in [0.5f32, 1.0, 0.5, 0.0] {
+            rig.set_layer_global("Pad".into(), "l.filter.cutoff".into(), v)
+                .await
+                .map_err(|e| eyre::eyre!("set_layer_global: {e:?}"))?;
+            let d = rig.layer_detail("Pad".into(), 0).await.map_err(|e| eyre::eyre!("{e:?}"))?;
+            let cut = d.layer_macros.iter().find(|m| m.id == "l.filter.cutoff").unwrap();
+            let each: Vec<String> =
+                d.modules.iter().map(|m| format!("{}={:.0}", m.slot, m.cutoff_hz)).collect();
+            println!(
+                "  cutoff {v:+.2} → bipolar={} spread={:<22} {}",
+                cut.bipolar,
+                cut.spread,
+                each.join(" "),
+            );
+        }
     }
     Ok(())
 }

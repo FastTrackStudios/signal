@@ -108,12 +108,10 @@ impl LayerDef {
 
     /// Every module's patch, module A first, padded to the quad.
     pub fn module_patches(&self) -> Vec<String> {
+        // Exactly what the layer declares — a patch that uses two modules
+        // gets two, and more can be added at any time.
         let mut v = vec![self.patch.clone()];
         v.extend(self.extra_modules.iter().cloned());
-        // At least the default quad, but a layer may declare more.
-        if v.len() < signal_synth::engine::MODULES_PER_LAYER {
-            v.resize(signal_synth::engine::MODULES_PER_LAYER, String::new());
-        }
         v
     }
 

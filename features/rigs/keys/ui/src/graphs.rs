@@ -365,6 +365,10 @@ fn Legend(curves: Vec<ModuleCurve>, note: String) -> Element {
 pub fn StackedEnvelopes(
     curves: Vec<ModuleCurve>,
     #[props(default = 260)] height_px: u32,
+    /// `true` draws the amp envelopes, `false` the filter envelopes. The
+    /// Filter card wants only its own; a combined view passes both.
+    #[props(default = true)] amp: bool,
+    #[props(default = false)] both: bool,
 ) -> Element {
     let h = height_px as f64;
     rsx! {
@@ -375,9 +379,11 @@ pub fn StackedEnvelopes(
                 span {
                     style: "font-size: 11px; font-weight: 700; letter-spacing: 0.08em; \
                             text-transform: uppercase; color: #d4d4d8;",
-                    "Envelopes"
+                    if both { "Envelopes" } else if amp { "Amp Envelope" } else { "Filter Envelope" }
                 }
-                span { style: "font-size: 9px; color: #52525b;", "amp solid · filter dashed" }
+                span { style: "font-size: 9px; color: #52525b;",
+                    if both { "amp solid · filter dashed" } else { "one curve per module" }
+                }
             }
             svg {
                 width: "100%", height: "{h}", view_box: "0 0 {W} {h}",
@@ -392,20 +398,22 @@ pub fn StackedEnvelopes(
                 }
                 for c in curves.iter() {
                     {
-                        let amp = env_path(&c.amp, h);
-                        let filt = env_path(&c.filter, h);
+                        let solid = env_path(if both || amp { &c.amp } else { &c.filter }, h);
+                        let dashed = both.then(|| env_path(&c.filter, h));
                         let op = if c.dim { "0.3" } else { "1" };
                         rsx! {
                             g { key: "{c.slot}",
                                 path {
-                                    d: "{amp}", fill: "{c.color}", fill_opacity: "0.07",
+                                    d: "{solid}", fill: "{c.color}", fill_opacity: "0.07",
                                     stroke: "{c.color}", stroke_width: "2", stroke_opacity: "{op}",
                                     stroke_linejoin: "round", stroke_linecap: "round",
                                 }
-                                path {
-                                    d: "{filt}", fill: "none", stroke: "{c.color}",
-                                    stroke_width: "1.5", stroke_opacity: "{op}",
-                                    stroke_dasharray: "6 4", stroke_linejoin: "round",
+                                if let Some(d) = dashed {
+                                    path {
+                                        d: "{d}", fill: "none", stroke: "{c.color}",
+                                        stroke_width: "1.5", stroke_opacity: "{op}",
+                                        stroke_dasharray: "6 4", stroke_linejoin: "round",
+                                    }
                                 }
                             }
                         }

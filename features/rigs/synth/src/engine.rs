@@ -128,12 +128,10 @@ pub fn signal_layer(name: &str, sources: &[Source]) -> Container {
     Container::layer(name).add(modules)
 }
 
-/// A layer whose module A holds `source` and B/C/D are empty — the common
-/// "one patch in this lane" case.
+/// A layer holding a single module — the common "one patch in this lane"
+/// case. More modules are added by handing `signal_layer` more sources.
 pub fn signal_layer_single(name: &str, source: Source) -> Container {
-    let mut sources = vec![source];
-    sources.resize(MODULES_PER_LAYER, Source::Empty);
-    signal_layer(name, &sources)
+    signal_layer(name, &[source])
 }
 
 /// A 4-slot FX rack — every rack in the engine (Layer / Common / Aux /
@@ -202,9 +200,12 @@ pub fn import_omni_patch(path: &std::path::Path) -> Result<ImportedPatch, String
     let patch = crate::omni_import::parse_patch(&xml)?;
     // Omnisphere times are seconds; the macro surface is milliseconds.
     let secs = |t: (f32, f32, f32, f32)| (t.0 * 1000.0, t.1 * 1000.0, t.2, t.3 * 1000.0);
+    // A patch declares up to four layers but only uses the ones with a
+    // soundsource — an empty slot is not a module, it is nothing.
     let modules = patch
         .layers
         .iter()
+        .filter(|l| !l.soundsource.trim().is_empty())
         .map(|l| ImportedModule {
             source: l.soundsource.clone(),
             // `level` is normalized; unity sits at 1.0.
@@ -269,13 +270,13 @@ mod tests {
     }
 
     #[test]
-    fn a_layer_holds_four_modules() {
+    fn a_layer_holds_exactly_its_sources() {
+        // One source, one module — no empty slots padding it out to a quad.
         let l = signal_layer_single("Keys A", Source::Sample("/tmp/a.signalpack".into()));
         assert_eq!(l.role, Role::Layer);
-        for slot in MODULE_SLOTS {
-            assert!(l.find(&format!("Keys A {slot}")).is_some(), "module {slot}");
-        }
-        // Not limited to four — a layer takes as many sources as it's given.
+        assert!(l.find("Keys A A").is_some(), "module A");
+        assert!(l.find("Keys A B").is_none(), "no padded module B");
+        // Not limited to four either — a layer takes as many as it is given.
         let big: Vec<Source> = (0..6).map(|_| Source::Empty).collect();
         let l = signal_layer("Wide", &big);
         assert!(l.find("Wide F").is_some(), "sixth module");

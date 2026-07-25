@@ -47,12 +47,9 @@ fn curves(detail: &KeysLayerDetail) -> Vec<ModuleCurve> {
         .collect()
 }
 
-/// The panels, in order. `Filter` / `Amp Env` / … match the backend's
-/// `LAYER_MACROS` groups.
+/// The panels below the Filter and Amp cards — those two own their own
+/// graphs and knob rows.
 const GROUPS: &[(&str, &str)] = &[
-    ("Filter", "cutoff · resonance · envelope amount"),
-    ("Amp Env", "the modules' amplitude ADSR"),
-    ("Filter Env", "the modules' filter ADSR"),
     ("Vibrato", "pitch pulse across the layer"),
     ("Unison", "voices · detune"),
     ("Ambience", "reverb amount · length"),
@@ -97,7 +94,6 @@ pub fn LayerMacros(
                         let idx = m.index;
                         let on = m.enabled;
                         let name = if m.patch.is_empty() { "— empty —".to_string() } else { m.patch.clone() };
-                        let source = m.source.clone();
                         rsx! {
                             div {
                                 key: "{m.index}",
@@ -143,13 +139,6 @@ pub fn LayerMacros(
                                         ),
                                         "{name}"
                                     }
-                                    if !source.is_empty() && source != name {
-                                        span {
-                                            style: "font-size: 9px; color: #71717a; overflow: hidden; \
-                                                    text-overflow: ellipsis; white-space: nowrap;",
-                                            "◦ {source}"
-                                        }
-                                    }
                                     span { style: "font-size: 9px; color: #52525b;", {fmt_db(m.gain_db)} }
                                 }
                                 Fader {
@@ -165,12 +154,87 @@ pub fn LayerMacros(
                 }
             }
 
-            // ── The layer on one set of axes ────────────────────────────
+            // ── Filter and Amp: the whole section on one card each ──────
             div {
                 style: "display: grid; gap: 12px; \
-                        grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));",
-                StackedEnvelopes { curves: curves(&detail) }
-                StackedFilters { curves: curves(&detail) }
+                        grid-template-columns: repeat(auto-fit, minmax(460px, 1fr));",
+
+                // FILTER — the modules' response, their filter envelopes,
+                // and both knob rows that drive them.
+                Panel {
+                    title: "Filter".to_string(),
+                    accent: accent.clone(),
+                    lit: group("Filter").iter().any(|m| m.live),
+                    trailing: rsx! {
+                        span {
+                            style: format!(
+                                "font-size: 9px; color: {};",
+                                if varies("Filter") || varies("Filter Env") { "#fbbf24" } else { "#52525b" },
+                            ),
+                            if varies("Filter") || varies("Filter Env") { "offset" } else { "" }
+                        }
+                    },
+                    div { style: "display: flex; flex-direction: column; gap: 10px;",
+                        StackedFilters { curves: curves(&detail), height_px: 300 }
+                        div { style: "display: flex; flex-direction: column; gap: 4px;",
+                            KnobRow {
+                                macros: group("Filter"),
+                                accent: accent.clone(),
+                                on_change: move |(id, v)| on_global.call((id, v)),
+                            }
+                            span { style: "font-size: 9px; color: #3f3f46;",
+                                if let Some(s) = spread("Filter") { "modules: {s}" } else { "" }
+                            }
+                        }
+                        div {
+                            style: "display: flex; flex-direction: column; gap: 4px; \
+                                    padding-top: 8px; border-top: 1px solid #1c1c21;",
+                            span {
+                                style: "font-size: 9px; font-weight: 700; letter-spacing: 0.1em; \
+                                        text-transform: uppercase; color: #71717a;",
+                                "Filter Envelope"
+                            }
+                            StackedEnvelopes { curves: curves(&detail), height_px: 170, amp: false }
+                            KnobRow {
+                                macros: group("Filter Env"),
+                                accent: accent.clone(),
+                                on_change: move |(id, v)| on_global.call((id, v)),
+                            }
+                            span { style: "font-size: 9px; color: #3f3f46;",
+                                if let Some(s) = spread("Filter Env") { "modules: {s}" } else { "" }
+                            }
+                        }
+                    }
+                }
+
+                // AMP — the modules' amplitude envelopes and their controls.
+                Panel {
+                    title: "Amp".to_string(),
+                    accent: accent.clone(),
+                    lit: group("Amp Env").iter().any(|m| m.live),
+                    trailing: rsx! {
+                        span {
+                            style: format!(
+                                "font-size: 9px; color: {};",
+                                if varies("Amp Env") { "#fbbf24" } else { "#52525b" },
+                            ),
+                            if varies("Amp Env") { "offset" } else { "" }
+                        }
+                    },
+                    div { style: "display: flex; flex-direction: column; gap: 10px;",
+                        StackedEnvelopes { curves: curves(&detail), height_px: 300, amp: true }
+                        div { style: "display: flex; flex-direction: column; gap: 4px;",
+                            KnobRow {
+                                macros: group("Amp Env"),
+                                accent: accent.clone(),
+                                on_change: move |(id, v)| on_global.call((id, v)),
+                            }
+                            span { style: "font-size: 9px; color: #3f3f46;",
+                                if let Some(s) = spread("Amp Env") { "modules: {s}" } else { "" }
+                            }
+                        }
+                    }
+                }
             }
 
             // ── The Global Controls ─────────────────────────────────────

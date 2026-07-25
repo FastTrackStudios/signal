@@ -181,11 +181,11 @@ pub fn ModuleEdit(
                         ),
                         if has_source { "{detail.patch}" } else { "— empty —" }
                     }
-                    // When the module came from a preset, name the soundsource
-                    // underneath it — the preset is what the module IS.
-                    if has_source && detail.source != detail.patch {
+                    // The preset the layer was opened from, when there is
+                    // one — the module itself is its soundsource.
+                    if !detail.preset.is_empty() {
                         span { style: "font-size: 10px; color: #71717a; line-height: 1.2;",
-                            "◦ {detail.source}"
+                            "from {detail.preset}"
                         }
                     }
                     button {

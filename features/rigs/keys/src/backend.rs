@@ -71,6 +71,9 @@ struct LaneState {
     soloed: bool,
     /// The lane's four modules (the engine instances). Module A is index 0.
     modules: Vec<ModuleState>,
+    /// The module preset this lane was opened from ("American Obesity"), or
+    /// empty when its modules were assembled by hand.
+    preset: String,
     /// Layer macro values that belong to the layer itself (Tone, Limiter, FX
     /// bypass) — the ones with no module target.
     globals: BTreeMap<String, f32>,
@@ -84,11 +87,9 @@ struct LaneState {
 /// module has its own filter, amp envelope and FX).
 #[derive(Clone, Debug)]
 struct ModuleState {
-    /// The soundsource in the Source Block — what actually loads.
+    /// The soundsource in the Source Block — what actually loads, and what
+    /// the module is called.
     patch: String,
-    /// The module preset this module came from ("American Obesity"), when it
-    /// was opened from one. This is the name the UI shows for the module.
-    preset: String,
     macros: BTreeMap<String, f32>,
     gain_db: f32,
     enabled: bool,
@@ -98,7 +99,6 @@ impl Default for ModuleState {
     fn default() -> Self {
         Self {
             patch: String::new(),
-            preset: String::new(),
             macros: BTreeMap::new(),
             gain_db: 0.0,
             enabled: true,
@@ -106,18 +106,14 @@ impl Default for ModuleState {
     }
 }
 
-impl ModuleState {
-    /// What this module IS: the module preset it was opened from, else the
-    /// bare soundsource sitting in its Source Block.
-    fn display(&self) -> String {
-        if self.preset.is_empty() { self.patch.clone() } else { self.preset.clone() }
-    }
-}
-
 impl LaneState {
-    /// Module A's name — what the mixer shows for the lane.
+    /// What the mixer shows for the lane: the module preset it was opened
+    /// from, else module A's soundsource.
     fn primary_patch(&self) -> String {
-        self.modules.first().map(|m| m.display()).unwrap_or_default()
+        if !self.preset.is_empty() {
+            return self.preset.clone();
+        }
+        self.modules.first().map(|m| m.patch.clone()).unwrap_or_default()
     }
 
     /// Any module sounding?
@@ -347,6 +343,7 @@ impl State {
                                 ..ModuleState::default()
                             })
                             .collect(),
+                        preset: String::new(),
                         globals: BTreeMap::new(),
                         spans: BTreeMap::new(),
                     },
@@ -480,7 +477,11 @@ impl KeysRigBackend {
                     audible.iter().map(|i| Self::module_value(lane, *i, target)).collect();
                 let lo = values.iter().copied().fold(f32::INFINITY, f32::min);
                 let hi = values.iter().copied().fold(f32::NEG_INFINITY, f32::max);
-                let agree = values.is_empty() || (hi - lo).abs() <= (def.max - def.min) * 1e-4;
+                // Once a knob is off centre it STAYS an offset. Sweeping to
+                // an extreme can make the modules read alike for a moment;
+                // that must not throw away what they came from.
+                let agree = !lane.spans.contains_key(def.id)
+                    && (values.is_empty() || (hi - lo).abs() <= (def.max - def.min) * 1e-4);
                 if agree {
                     let value = values.first().copied().unwrap_or(def.default);
                     KeysMacro {
@@ -679,6 +680,11 @@ impl KeysRigBackend {
             // load from; an unknown one leaves that module empty.
             let known: Vec<String> = s.presets.iter().map(|p| p.name.clone()).collect();
             let Some(lane) = s.lanes.get_mut(layer) else { return };
+            // Opening a preset names the LANE — the modules keep their own
+            // soundsource names.
+            if start == 0 {
+                lane.preset = imported.name.clone();
+            }
             for (i, m) in imported.modules.iter().enumerate() {
                 let at = start + i;
                 while lane.modules.len() <= at {
@@ -690,7 +696,6 @@ impl KeysRigBackend {
                     .find(|k| k.eq_ignore_ascii_case(&m.source))
                     .cloned()
                     .unwrap_or_default();
-                slot.preset = imported.name.clone();
                 slot.gain_db = m.level_db.clamp(MIN_FADER_DB, MAX_FADER_DB);
                 slot.enabled = true;
                 let set = |macros: &mut BTreeMap<String, f32>, id: &str, v: f32| {
@@ -723,6 +728,12 @@ impl KeysRigBackend {
                     set(&mut slot.macros, &format!("{id}.depth"), *depth);
                     set(&mut slot.macros, &format!("{id}.shape"), *shape);
                 }
+            }
+            // The lane holds exactly the modules the preset uses — an
+            // unused slot is nothing, and more can be added any time.
+            if start == 0 {
+                lane.modules.truncate(imported.modules.len().max(1));
+                lane.spans.clear();
             }
             tracing::info!(
                 layer,
@@ -763,6 +774,7 @@ impl KeysRigBackend {
                                 name: layer.name.clone(),
                                 engine: engine.name.clone(),
                                 patch: lane.map(|l| l.primary_patch()).unwrap_or_default(),
+                                preset: lane.map(|l| l.preset.clone()).unwrap_or_default(),
                                 gain_db: lane.map(|l| l.gain_db).unwrap_or(0.0),
                                 muted: lane.is_some_and(|l| l.muted),
                                 soloed: lane.is_some_and(|l| l.soloed),
@@ -777,8 +789,7 @@ impl KeysRigBackend {
                                             .map(|(i, m)| signal_keys_proto::KeysModule {
                                                 index: i as u32,
                                                 slot: signal_synth::engine::module_slot(i),
-                                                patch: m.display(),
-                                                source: m.patch.clone(),
+                                                patch: m.patch.clone(),
                                                 live: !m.patch.is_empty(),
                                                 gain_db: m.gain_db,
                                                 enabled: m.enabled,
@@ -1042,6 +1053,7 @@ impl KeysRigSvc for KeysRigBackend {
     }
 
     fn status(&self) -> KeysStatus {
+        tracing::debug!("keys rpc: status →");
         let running = self.inner.rig.lock().map(|r| r.is_some()).unwrap_or(false);
         let s = self.inner.state.lock().unwrap();
         let loaded_preset = s.loaded.and_then(|i| s.presets.get(i)).map(|p| p.name.clone());
@@ -1061,6 +1073,7 @@ impl KeysRigSvc for KeysRigBackend {
     }
 
     fn presets(&self) -> Vec<KeysPreset> {
+        tracing::debug!("keys rpc: presets →");
         self.inner.state.lock().map(|s| s.presets.clone()).unwrap_or_default()
     }
 
@@ -1098,6 +1111,7 @@ impl KeysRigSvc for KeysRigBackend {
     }
 
     fn tree(&self) -> KeysNode {
+        tracing::debug!("keys rpc: tree →");
         self.inner
             .state
             .lock()
@@ -1144,6 +1158,7 @@ impl KeysRigSvc for KeysRigBackend {
     // ── Mixer ────────────────────────────────────────────────────────────
 
     fn mixer(&self) -> KeysMixer {
+        tracing::debug!("keys rpc: mixer →");
         self.mixer_model()
     }
 
@@ -1222,11 +1237,13 @@ impl KeysRigSvc for KeysRigBackend {
             };
             let Some(lane) = s.lanes.get_mut(&layer) else { return };
             let Some(m) = lane.modules.get_mut(module as usize) else { return };
-            if m.patch == name && m.preset.is_empty() {
+            if m.patch == name {
                 return;
             }
             m.patch = name;
-            m.preset.clear();
+            // A hand-picked source means the lane is no longer just the
+            // preset it was opened from.
+            lane.preset.clear();
         }
         // A new sample source in the lane — the program must recompile.
         let b = self.clone();
@@ -1239,6 +1256,7 @@ impl KeysRigSvc for KeysRigBackend {
     }
 
     fn layer_detail(&self, layer: String, module: u32) -> KeysLayerDetail {
+        tracing::debug!(%layer, module, "keys rpc: layer_detail →");
         let Ok(s) = self.inner.state.lock() else { return KeysLayerDetail::default() };
         let Some(lane) = s.lanes.get(&layer) else { return KeysLayerDetail::default() };
         let slot = (module as usize).min(lane.modules.len().saturating_sub(1));
@@ -1254,8 +1272,7 @@ impl KeysRigSvc for KeysRigBackend {
             .map(|(i, m)| signal_keys_proto::KeysModule {
                 index: i as u32,
                 slot: signal_synth::engine::module_slot(i),
-                patch: m.display(),
-                source: m.patch.clone(),
+                patch: m.patch.clone(),
                 live: !m.patch.is_empty(),
                 gain_db: m.gain_db,
                 enabled: m.enabled,
@@ -1296,8 +1313,8 @@ impl KeysRigSvc for KeysRigBackend {
             engine: lane.engine.clone(),
             modules,
             module: slot as u32,
-            patch: here.map(|m| m.display()).unwrap_or_default(),
-            source: here.map(|m| m.patch.clone()).unwrap_or_default(),
+            patch: here.map(|m| m.patch.clone()).unwrap_or_default(),
+            preset: lane.preset.clone(),
             gain_db: lane.gain_db,
             muted: lane.muted,
             key_lo,
@@ -1333,7 +1350,10 @@ impl KeysRigSvc for KeysRigBackend {
                 audible.iter().map(|i| Self::module_value(lane, *i, target)).collect();
             let lo = values.iter().copied().fold(f32::INFINITY, f32::min);
             let hi = values.iter().copied().fold(f32::NEG_INFINITY, f32::max);
-            let agree = values.is_empty() || (hi - lo).abs() <= (def.max - def.min) * 1e-4;
+            // A knob that is already an offset keeps being one — see the
+            // read model.
+            let agree = !lane.spans.contains_key(&id)
+                && (values.is_empty() || (hi - lo).abs() <= (def.max - def.min) * 1e-4);
             let tdef = macro_def(target);
             let (tmin, tmax) = tdef.map(|d| (d.min, d.max)).unwrap_or((def.min, def.max));
             if agree {
@@ -1357,19 +1377,35 @@ impl KeysRigSvc for KeysRigBackend {
                         })
                         .collect(),
                 };
-                // Frequencies and times scale by RATIO — a layer an octave
-                // below another stays an octave below as the Global Control
-                // opens them. Everything else scales linearly.
+                // The offset moves the whole GROUP, keeping the modules'
+                // relationship intact: the module nearest the edge reaches it
+                // at ±100%, and every other module travels by the same ratio
+                // (frequencies, times) or the same amount (everything else).
+                // Nothing converges, so sweeping out and back is lossless.
                 let ratio = matches!(tdef.map(|d| d.unit), Some("Hz") | Some("ms"));
+                let k = offset.abs();
+                let edge = if offset >= 0.0 { tmax } else { tmin };
+                let leader = base
+                    .iter()
+                    .flatten()
+                    .copied()
+                    .fold(None::<f32>, |acc, b| {
+                        Some(match acc {
+                            None => b,
+                            // Whichever module would hit the edge first.
+                            Some(a) => if offset >= 0.0 { a.max(b) } else { a.min(b) },
+                        })
+                    })
+                    .unwrap_or(0.0);
+                let scale = if ratio && leader > 0.0 && edge > 0.0 {
+                    (edge / leader).powf(k)
+                } else {
+                    1.0
+                };
+                let shift = (edge - leader) * k;
                 for (i, b) in base.iter().enumerate() {
                     let Some(b) = b else { continue };
-                    let edge = if offset >= 0.0 { tmax } else { tmin };
-                    let k = offset.abs();
-                    let v = if ratio && *b > 0.0 && edge > 0.0 {
-                        b * (edge / b).powf(k)
-                    } else {
-                        b + (edge - b) * k
-                    };
+                    let v = if ratio && leader > 0.0 && edge > 0.0 { b * scale } else { b + shift };
                     if let Some(m) = lane.modules.get_mut(i) {
                         m.macros.insert(target.to_string(), v.clamp(tmin, tmax));
                     }
@@ -1426,11 +1462,11 @@ impl KeysRigSvc for KeysRigBackend {
             let Ok(mut s) = self.inner.state.lock() else { return };
             let Some(lane) = s.lanes.get_mut(&layer) else { return };
             let Some(m) = lane.modules.get_mut(module as usize) else { return };
-            if m.patch.is_empty() && m.preset.is_empty() {
+            if m.patch.is_empty() {
                 return;
             }
             m.patch.clear();
-            m.preset.clear();
+            lane.preset.clear();
         }
         let b = self.clone();
         let _ = std::thread::Builder::new()
@@ -1464,6 +1500,7 @@ impl KeysRigSvc for KeysRigBackend {
     // ── Performance ──────────────────────────────────────────────────────
 
     fn perform(&self) -> KeysPerform {
+        tracing::debug!("keys rpc: perform →");
         self.perform_model()
     }
 
@@ -1483,8 +1520,8 @@ impl KeysRigSvc for KeysRigBackend {
                 {
                     if let Some(m) = lane.modules.first_mut() {
                         m.patch = slot.patch.clone();
-                        m.preset.clear();
                     }
+                    lane.preset.clear();
                     rebuild = true;
                 }
             }
