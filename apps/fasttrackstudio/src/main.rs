@@ -188,6 +188,11 @@ fn main() {
     launch_app();
 }
 
+/// Window position, inner size, and whether to go borderless
+/// fullscreen — each `None` meaning "let the platform decide".
+#[cfg(not(any(target_arch = "wasm32", target_os = "ios")))]
+type WindowPlacement = (Option<(f64, f64)>, Option<(f64, f64)>, bool);
+
 /// Desktop: a frameless window — the app draws its own top bar (the
 /// header doubles as title bar: drag surfaces + window controls).
 /// Where the window opens, for multi-monitor desks. Placement is a *runtime*
@@ -201,7 +206,7 @@ fn main() {
 /// - `FTS_WINDOW_FULLSCREEN=1` — borderless fullscreen on whichever monitor
 ///   the position lands on.
 #[cfg(not(any(target_arch = "wasm32", target_os = "ios")))]
-fn window_placement() -> (Option<(f64, f64)>, Option<(f64, f64)>, bool) {
+fn window_placement() -> WindowPlacement {
     fn pair(var: &str, sep: char) -> Option<(f64, f64)> {
         let raw = std::env::var(var).ok()?;
         let (a, b) = raw.split_once(sep)?;

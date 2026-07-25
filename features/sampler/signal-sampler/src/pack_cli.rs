@@ -1206,7 +1206,7 @@ pub fn run_check(pack_path: &Path, src_root: Option<&Path>) -> Result<bool> {
             keys.insert(k);
         }
     }
-    let tol = spec.performance.zone_pitch_tolerance.max(1) as u8;
+    let tol = spec.performance.zone_pitch_tolerance.max(1);
     let mut gaps = 0usize;
     for (artic, keys) in &by_artic {
         let (lo, hi) = (*keys.first().unwrap(), *keys.last().unwrap());
@@ -1416,10 +1416,14 @@ struct ScriptNote {
 
 /// "60@0:2,62@2:1.5,C5@4:2v80" — note[@start_s][:dur_s][vNN]. Missing start =
 /// previous end; missing dur = 2 s.
+/// What [`parse_smf`] yields: merged notes, timed CC events as
+/// `(seconds, controller, value)`, and the file's first tempo in BPM.
+type Smf = (Vec<ScriptNote>, Vec<(f32, u8, u8)>, f64);
+
 /// Minimal Standard-MIDI-File reader: merged note list (paired on/off) +
 /// timed CC events + the file's first tempo. Format 0/1, running status,
 /// channel-blind (an instrument render). Times in seconds.
-fn parse_smf(path: &Path) -> Result<(Vec<ScriptNote>, Vec<(f32, u8, u8)>, f64)> {
+fn parse_smf(path: &Path) -> Result<Smf> {
     let d = std::fs::read(path).with_context(|| format!("read {}", path.display()))?;
     if d.len() < 14 || &d[0..4] != b"MThd" {
         bail!("not a Standard MIDI File");

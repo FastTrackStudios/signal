@@ -73,7 +73,7 @@ fn machine_ram_mb() -> Option<u64> {
         let text = std::fs::read_to_string("/proc/meminfo").ok()?;
         let line = text.lines().find(|l| l.starts_with("MemTotal:"))?;
         let kb: u64 = line.split_whitespace().nth(1)?.parse().ok()?;
-        return Some(kb / 1024);
+        Some(kb / 1024)
     }
     #[cfg(not(target_os = "linux"))]
     {

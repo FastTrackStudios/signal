@@ -1132,7 +1132,7 @@ impl KeysRigBackend {
                     // A drone engine carries its key selector; the card
                     // embeds it instead of the usual played-engine chrome.
                     drone: est.drone.clone().or_else(|| {
-                        is_drone(&engine.name).then(|| signal_keys_proto::KeysDrone {
+                        is_drone(&engine.name).then_some(signal_keys_proto::KeysDrone {
                             key: 0,
                             playing: false,
                             octave: 3,
@@ -1794,7 +1794,7 @@ impl KeysRigSvc for KeysRigBackend {
                 self.publish_mixer();
                 return;
             };
-            let targets = Self::scope_targets(&s, &[layer.clone()]);
+            let targets = Self::scope_targets(&s, std::slice::from_ref(&layer));
             let span = s.lanes.get(&layer).and_then(|l| l.spans.get(&id).cloned());
             let next = Self::drive_global(&mut s, def, target, &targets, span, value);
             if let Some(lane) = s.lanes.get_mut(&layer) {
@@ -1805,7 +1805,7 @@ impl KeysRigSvc for KeysRigBackend {
             }
             // The engine's knob for the same parameter now describes a patch
             // that moved under it.
-            Self::rebase_others(&mut s, &[engine.clone()], &[layer.clone()], target, &id);
+            Self::rebase_others(&mut s, std::slice::from_ref(&engine), std::slice::from_ref(&layer), target, &id);
             // Unison changes the program's voice count — that needs a build.
             rebuild = Self::macro_is_dsp(target);
         }
@@ -1862,7 +1862,7 @@ impl KeysRigSvc for KeysRigBackend {
                 };
             }
             // Every lane knob for this parameter has been moved from under it.
-            Self::rebase_others(&mut s, &[engine.clone()], &lanes, target, &id);
+            Self::rebase_others(&mut s, std::slice::from_ref(&engine), &lanes, target, &id);
             rebuild = Self::macro_is_dsp(target);
         }
         self.after_global(rebuild);
@@ -1910,7 +1910,7 @@ impl KeysRigSvc for KeysRigBackend {
             let engine = lane.engine.clone();
             // A hand edit re-bases every Global Control above it that drives
             // this parameter — their baselines described a patch that is gone.
-            Self::rebase_others(&mut s, &[engine.clone()], &[layer.clone()], def.id, "");
+            Self::rebase_others(&mut s, std::slice::from_ref(&engine), std::slice::from_ref(&layer), def.id, "");
             let Some(m) =
                 s.lanes.get_mut(&layer).and_then(|l| l.modules.get_mut(module as usize))
             else {
@@ -2265,7 +2265,7 @@ fn scan_omni_patches(root: &str) -> (Vec<KeysPreset>, Vec<PathBuf>) {
                 loaded: false,
                 scope: "layer".into(),
                 tags,
-                variants: crate::variations::variation_names(&name),
+                variants: crate::variations::variation_names(name),
             });
             specs.push(patch);
         }
@@ -2309,7 +2309,7 @@ fn scan_packs_recursive(root: &str) -> (Vec<KeysPreset>, Vec<PathBuf>) {
                 loaded: false,
                 scope: "module".into(),
                 tags,
-                variants: crate::variations::variation_names(&name),
+                variants: crate::variations::variation_names(name),
             });
             specs.push(pack);
         }

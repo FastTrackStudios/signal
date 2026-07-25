@@ -560,7 +560,7 @@ mod tests {
         let far = (HEAD_FRAMES as usize + CHUNK_FRAMES as usize + 500) * ch as usize;
         let _ = s.sample(far);
         for _ in 0..200 {
-            if s.chunks.load().len() > 0 {
+            if !s.chunks.load().is_empty() {
                 break;
             }
             std::thread::sleep(std::time::Duration::from_millis(10));

@@ -124,7 +124,6 @@ pub fn omnisphere_soundsource_preset() -> Option<Container> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use signal_sampler::rig_node::Role;
 
     #[test]
     fn part_has_four_modules_each_with_one_source() {

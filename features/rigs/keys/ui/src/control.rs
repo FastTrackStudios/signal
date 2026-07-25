@@ -157,6 +157,10 @@ impl MacroScope {
     }
 
     /// What the band is called, and what level it is.
+    // Written for the macro band's header; the band currently takes its
+    // title from the strip instead. `expect` (not `allow`) so wiring it
+    // up clears the attribute automatically.
+    #[expect(dead_code, reason = "macro-band header, not wired up yet")]
     fn heading(&self) -> (String, &'static str) {
         match self {
             MacroScope::Rig => ("All engines".to_string(), "rig controls"),

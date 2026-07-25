@@ -711,7 +711,7 @@ pub fn annotate(doc: &TrackDocument, spec: &LibrarySpec, sample_rate: u32) -> Sc
             });
             // Default true (Expressive) for document; only an explicit
             // Low-Latency keyswitch (CC58 in ll_range) drops it to false.
-            notes[ni].legato_expressive = mode_v.map_or(true, |v| !in_range(ll_range, v));
+            notes[ni].legato_expressive = mode_v.is_none_or(|v| !in_range(ll_range, v));
         }
     }
 

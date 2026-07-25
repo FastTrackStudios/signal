@@ -50,6 +50,9 @@ fn x_for(ms: f64) -> f64 {
     PAD + (ms / FULL_SPAN_MS).clamp(0.0, 1.0) * (W - 2.0 * PAD)
 }
 
+/// Inverse of [`x_for`] — pointer x back to milliseconds, for
+/// drag-to-edit on the envelope. Unused until that lands.
+#[expect(dead_code, reason = "pointer→time mapping for envelope dragging")]
 fn ms_for(x: f64) -> f32 {
     (((x - PAD) / (W - 2.0 * PAD)).clamp(0.0, 1.0) * FULL_SPAN_MS) as f32
 }
@@ -546,7 +549,7 @@ fn unison_offsets(voices: f32, detune: f32) -> Vec<f32> {
     let n = voices.round().clamp(1.0, 16.0) as u32;
     let cents = (detune / FULL).clamp(0.0, 1.0) * RANGE_ST * 100.0;
     let divisor = (n.saturating_sub(1)).max(1) as f32;
-    let bump = if n % 2 == 0 { 1.0 } else { 0.0 };
+    let bump = if n.is_multiple_of(2) { 1.0 } else { 0.0 };
     let power_scale = |t: f32| {
         if POWER.abs() < 0.01 {
             t

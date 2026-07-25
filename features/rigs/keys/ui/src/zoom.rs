@@ -30,7 +30,7 @@ pub enum Zoom {
 /// hook order between renders and panic.
 pub fn use_zoom() -> Signal<Zoom> {
     let local = use_signal(Zoom::default);
-    let shared = use_hook(|| try_consume_context::<Signal<Zoom>>());
+    let shared = use_hook(try_consume_context::<Signal<Zoom>>);
     shared.unwrap_or(local)
 }
 

@@ -2,7 +2,6 @@
 //! its chunks, at realtime pace.
 
 use std::path::Path;
-use std::sync::Arc;
 
 use signal_sampler::engine::cache::SignalPcmPack;
 use signal_sampler::engine::stream::StreamedSample;
@@ -39,10 +38,8 @@ fn main() -> eyre::Result<()> {
     for block in 0..120 {
         let mut nonzero = 0;
         for _ in 0..512 {
-            if frame * ch < entry.num_frames() * ch {
-                if s.sample(frame * ch) != 0.0 {
-                    nonzero += 1;
-                }
+            if frame * ch < entry.num_frames() * ch && s.sample(frame * ch) != 0.0 {
+                nonzero += 1;
             }
             frame += 1;
         }

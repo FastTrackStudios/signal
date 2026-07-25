@@ -319,7 +319,7 @@ pub fn click_track(
         if start >= total_frames {
             break;
         }
-        let downbeat = (beat as u32) % bpbar == 0;
+        let downbeat = (beat as u32).is_multiple_of(bpbar);
         let amp = if downbeat { 1.0 } else { 0.55 };
         match &grain {
             Some(g) => {

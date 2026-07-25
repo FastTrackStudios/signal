@@ -291,10 +291,10 @@ async fn download(
     };
 
     let (read_result, drain_result) = futures_util::join!(read_call, drain);
-    if let Err(e) = &drain_result {
-        if e == PAUSED {
-            return Err(PAUSED.to_string());
-        }
+    if let Err(e) = &drain_result
+        && e == PAUSED
+    {
+        return Err(PAUSED.to_string());
     }
     read_result.map_err(|e| format!("read: {e:?}"))?;
     drain_result?;

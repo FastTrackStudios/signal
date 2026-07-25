@@ -26,7 +26,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     rig.set_default_instrument(ID);
 
     let mut buf = vec![0.0f32; 512 * 2];
-    let mut settle = |rig: &SamplerRig, buf: &mut Vec<f32>, blocks: usize| -> f32 {
+    let settle = |rig: &SamplerRig, buf: &mut Vec<f32>, blocks: usize| -> f32 {
         let mut peak = 0.0f32;
         for _ in 0..blocks {
             buf.fill(0.0);

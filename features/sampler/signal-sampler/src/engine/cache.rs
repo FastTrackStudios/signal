@@ -1510,10 +1510,14 @@ fn path_suffixes(path: &Path) -> Vec<PathBuf> {
 
 
 
+/// The queue's two halves: work still to do, and the set of paths
+/// already queued so a held chord doesn't enqueue one sample twice.
+type WarmPending = (Vec<(SampleCache, PathBuf)>, std::collections::HashSet<PathBuf>);
+
 /// Background loader for cache misses. One thread, deduplicated, so a held
 /// chord of unloaded notes queues each sample once.
 struct WarmQueue {
-    queue: std::sync::Mutex<(Vec<(SampleCache, PathBuf)>, std::collections::HashSet<PathBuf>)>,
+    queue: std::sync::Mutex<WarmPending>,
     wake: std::sync::Condvar,
 }
 
