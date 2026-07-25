@@ -170,6 +170,24 @@ pub struct KeysModule {
     /// The module's filter, for the layer's overlay: cutoff (Hz) + resonance.
     pub cutoff_hz: f32,
     pub resonance: f32,
+    /// The module's **time-domain FX**, so the mixer can draw every loaded
+    /// lane's delay and reverb at once rather than only the selected one:
+    /// delay time (ms), feedback (0..1) and mix (0..1), then the ambience's
+    /// size, mix, pre-delay (ms) and decay.
+    #[facet(default)]
+    pub dly_time_ms: f32,
+    #[facet(default)]
+    pub dly_feedback: f32,
+    #[facet(default)]
+    pub dly_mix: f32,
+    #[facet(default)]
+    pub amb_size: f32,
+    #[facet(default)]
+    pub amb_mix: f32,
+    #[facet(default)]
+    pub amb_predelay_ms: f32,
+    #[facet(default)]
+    pub amb_decay: f32,
 }
 
 /// Everything the layer-zoom view needs for one lane.
@@ -243,6 +261,17 @@ pub struct KeysPerform {
     pub perform_mode: u32,
 }
 
+/// One metered node's post-fader output — an engine, a layer or a module,
+/// named exactly as its fader is addressed ("Keys", "Keys A", "Keys A A").
+#[derive(Clone, PartialEq, Debug, Default, Facet)]
+pub struct KeysMeter {
+    /// Container name — the same address [`KeysRig::set_layer_gain`] takes.
+    pub name: String,
+    /// Post-fader peak (linear 0..~1), already ballistically decayed by the
+    /// audio thread, so a slow poller sees the same fall-back as a fast one.
+    pub peak: f32,
+}
+
 /// Live transport + meter snapshot — the high-rate poll payload.
 #[derive(Clone, PartialEq, Debug, Default, Facet)]
 pub struct KeysStatus {
@@ -251,6 +280,10 @@ pub struct KeysStatus {
     pub loaded_preset: Option<String>,
     /// Master output peak (linear 0..~1).
     pub master_peak: f32,
+    /// Per-engine / per-layer / per-module peaks — the mixer's meters. Empty
+    /// while the rig isn't running.
+    #[facet(default)]
+    pub meters: Vec<KeysMeter>,
     /// Active voices.
     pub voices: u32,
     /// The attached MIDI input port name, if any (None = omni / all).

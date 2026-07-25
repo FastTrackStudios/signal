@@ -28,6 +28,7 @@ use crate::selection::Selection;
 use signal_ui::components::Piano;
 
 use crate::fader::{EdgeFader, Fader, fmt_db};
+use crate::meter::{EdgeMeter, use_peak};
 use crate::zoom::{OpenButton, Zoom};
 
 /// Accent per engine — the same color language the Perform strip uses.
@@ -169,6 +170,33 @@ impl MacroScope {
 /// at full strength, the rest behind. That is the whole reason the shapes are
 /// stacked rather than paged — you turn one knob and watch a family of curves
 /// move together, and you can see what you are *not* moving.
+/// **Every lane's delay and reverb**, for the time-domain views. One entry per
+/// loaded lane (not per module): a lane's send is a lane-level decision, and
+/// six engines of per-module tails would be unreadable. Module A speaks for
+/// the lane, which is also the module a lane preset fills first.
+fn rig_time_fx(mixer: &KeysMixer, scope: &MacroScope) -> Vec<crate::time_fx::FxLane> {
+    let mut lanes = Vec::new();
+    for engine in mixer.engines.iter() {
+        let color = engine_color(&engine.name).to_string();
+        for layer in engine.layers.iter() {
+            let Some(m) = layer.modules.iter().find(|m| m.live) else { continue };
+            lanes.push(crate::time_fx::FxLane {
+                label: layer.name.clone(),
+                color: color.clone(),
+                focus: scope.reaches(&engine.name, &layer.name),
+                delay_ms: m.dly_time_ms,
+                feedback: m.dly_feedback,
+                delay_mix: m.dly_mix,
+                decay: m.amb_decay,
+                size: m.amb_size,
+                verb_mix: m.amb_mix,
+                predelay_ms: m.amb_predelay_ms,
+            });
+        }
+    }
+    lanes
+}
+
 fn rig_curves(mixer: &KeysMixer, scope: &MacroScope) -> Vec<ModuleCurve> {
     let mut curves = Vec::new();
     for engine in mixer.engines.iter() {
@@ -274,6 +302,7 @@ fn MacroBand() -> Element {
         .map(|s| rig_curves(&s.mixer.read(), &scope))
         .unwrap_or_default();
     let sounds = curves.iter().filter(|c| c.focus && !c.dim).count();
+    let fx_lanes = state.map(|s| rig_time_fx(&s.mixer.read(), &scope)).unwrap_or_default();
 
     rsx! {
         div {
@@ -295,6 +324,15 @@ fn MacroBand() -> Element {
                 span { style: "font-size: 9px; color: #3f3f46;",
                     {format!("{sounds} sound{}", if sounds == 1 { "" } else { "s" })}
                 }
+            }
+            // The time-domain picture, above the knobs that shape it: one
+            // delay and one reverb, every loaded lane drawn on each in its
+            // engine's colour, the selected scope's lanes solid.
+            div {
+                style: "flex: 1; min-height: 120px; display: flex; flex-direction: column; \
+                        gap: 10px; padding: 4px 2px 2px;",
+                crate::time_fx::DelayView { lanes: fx_lanes.clone() }
+                crate::time_fx::ReverbView { lanes: fx_lanes }
             }
             crate::macro_panel::MacroPanel {
                 macros: items,
@@ -447,6 +485,8 @@ fn EngineStrip(
     let rig = use_hook(try_consume_context::<KeysRigClient>);
     let mut zoom = crate::zoom::use_zoom();
     let mut selection = crate::selection::use_selection();
+    // What the engine is actually putting out — its card's bottom edge.
+    let peak = use_peak(&engine.name);
     let picked = *selection.read() == Selection::Engine(engine.name.clone());
     let pick_name = engine.name.clone();
     let accent = engine_color(&engine.name);
@@ -501,6 +541,14 @@ fn EngineStrip(
                         });
                     }
                 },
+            }
+            // …and the level it is REACHING is the card's bottom edge: the
+            // fader you set down one side, what came out along the base.
+            EdgeMeter {
+                peak,
+                accent: accent.to_string(),
+                dimmed: muted,
+                left_px: 9,
             }
             div { style: "display: flex; flex-direction: column; gap: 10px; min-width: 0;",
                 // Engine header: the bypass lamp, the name, the way in.
@@ -603,6 +651,8 @@ fn LayerStrip(layer: KeysLayerModel, accent: String) -> Element {
     let rig = use_hook(try_consume_context::<KeysRigClient>);
     let mut zoom = crate::zoom::use_zoom();
     let mut selection = crate::selection::use_selection();
+    // The lane's own level, metered along the bottom of its letter.
+    let peak = use_peak(&layer.name);
     let picked = matches!(
         &*selection.read(),
         Selection::Layer { layer: l, .. } | Selection::Module { layer: l, .. } if *l == layer.name
@@ -641,11 +691,13 @@ fn LayerStrip(layer: KeysLayerModel, accent: String) -> Element {
                 zoom.set(Zoom::Layer(dbl_lane.clone()));
             },
             // The lane's letter IS its on/off — the top of the strip, where a
-            // hand lands without looking.
+            // hand lands without looking — and its bottom edge is the lane's
+            // meter, so the switch tells you whether the lane is sounding.
+            div { style: "position: relative; display: flex;",
             button {
                 style: format!(
-                    "appearance: none; border: 1px solid {}; border-radius: 8px; cursor: pointer; \
-                     padding: 7px 0; font-size: 14px; font-weight: 800; letter-spacing: 0.06em; \
+                    "appearance: none; flex: 1; border: 1px solid {}; border-radius: 8px; cursor: pointer; \
+                     padding: 7px 0 9px; font-size: 14px; font-weight: 800; letter-spacing: 0.06em; \
                      background: {}; color: {};",
                     if on && layer.live { accent.clone() } else { "#26262b".to_string() },
                     if on && layer.live { "#101821".to_string() } else { "#0f0f12".to_string() },
@@ -672,6 +724,13 @@ fn LayerStrip(layer: KeysLayerModel, accent: String) -> Element {
                     }
                 },
                 "{letter}"
+            }
+                EdgeMeter {
+                    peak,
+                    radius_px: 8,
+                    accent: accent.clone(),
+                    dimmed: layer.muted || !layer.live,
+                }
             }
             // Fader, with mute and solo stacked down its right.
             div { style: "display: flex; align-items: flex-start; gap: 8px; justify-content: center;",

@@ -18,8 +18,8 @@ use daw_audio_io::AudioIoPrefs;
 use midicore::MidiEvent;
 use signal_keys_proto::keys::{KeysEvent, KeysRig as KeysRigSvc, KeysRigStreamSource};
 use signal_keys_proto::{
-    KeysEngineDetail, KeysEngineModel, KeysLayerDetail, KeysLayerModel, KeysMacro, KeysMixer,
-    KeysNode, KeysPerform, KeysPreset, KeysStack, KeysStatus,
+    KeysEngineDetail, KeysEngineModel, KeysLayerDetail, KeysLayerModel, KeysMacro, KeysMeter,
+    KeysMixer, KeysNode, KeysPerform, KeysPreset, KeysStack, KeysStatus,
 };
 
 use crate::profile::{KeysProfile, worship_profile};
@@ -241,6 +241,13 @@ const MACROS: &[MacroDef] = &[
     MacroDef { id: "amb.size", name: "Size", group: "Ambience", default: 0.5, min: 0.0, max: 1.0, unit: "", live: false },
     MacroDef { id: "amb.mix", name: "Mix", group: "Ambience", default: 0.15, min: 0.0, max: 1.0, unit: "", live: false },
     MacroDef { id: "amb.predelay", name: "Pre-dly", group: "Ambience", default: 20.0, min: 0.0, max: 250.0, unit: "ms", live: false },
+    MacroDef { id: "amb.decay", name: "Decay", group: "Ambience", default: 0.45, min: 0.02, max: 1.0, unit: "", live: false },
+    // The delay is its own section, not an Effects amount: it is the other
+    // half of the time-domain picture the band draws, and it needs a time and
+    // a feedback to draw at all.
+    MacroDef { id: "dly.time", name: "Time", group: "Delay", default: 375.0, min: 20.0, max: 2000.0, unit: "ms", live: false },
+    MacroDef { id: "dly.feedback", name: "Feedback", group: "Delay", default: 0.35, min: 0.0, max: 0.95, unit: "", live: false },
+    MacroDef { id: "dly.mix", name: "Mix", group: "Delay", default: 0.0, min: 0.0, max: 1.0, unit: "", live: false },
     MacroDef { id: "fx.chorus", name: "Chorus", group: "Effects", default: 0.0, min: 0.0, max: 1.0, unit: "", live: false },
     MacroDef { id: "fx.delay", name: "Delay", group: "Effects", default: 0.0, min: 0.0, max: 1.0, unit: "", live: false },
     MacroDef { id: "fx.width", name: "Width", group: "Effects", default: 0.5, min: 0.0, max: 1.0, unit: "", live: false },
@@ -301,6 +308,11 @@ const GLOBALS: &[GlobalDef] = &[
     // ── Ambience ─────────────────────────────────────────────────────────
     GlobalDef { key: "amb.amount", name: "Amount", group: "Ambience", target: Some("amb.mix"), default: 0.15, min: 0.0, max: 1.0, unit: "", live: false },
     GlobalDef { key: "amb.length", name: "Length", group: "Ambience", target: Some("amb.size"), default: 0.5, min: 0.0, max: 1.0, unit: "", live: false },
+    GlobalDef { key: "amb.decay", name: "Decay", group: "Ambience", target: Some("amb.decay"), default: 0.45, min: 0.02, max: 1.0, unit: "", live: false },
+    // ── Delay, at every level: the rig's tail, an engine's, a lane's ─────
+    GlobalDef { key: "dly.time", name: "Time", group: "Delay", target: Some("dly.time"), default: 375.0, min: 20.0, max: 2000.0, unit: "ms", live: false },
+    GlobalDef { key: "dly.feedback", name: "Feedback", group: "Delay", target: Some("dly.feedback"), default: 0.35, min: 0.0, max: 0.95, unit: "", live: false },
+    GlobalDef { key: "dly.mix", name: "Mix", group: "Delay", target: Some("dly.mix"), default: 0.0, min: 0.0, max: 1.0, unit: "", live: false },
     // ── Tone: the scope's EQ, centred = bypassed ─────────────────────────
     GlobalDef { key: "tone.low", name: "Low", group: "Tone", target: None, default: 0.0, min: -12.0, max: 12.0, unit: "dB", live: false },
     GlobalDef { key: "tone.mid", name: "Mid", group: "Tone", target: None, default: 0.0, min: -12.0, max: 12.0, unit: "dB", live: false },
@@ -1037,6 +1049,13 @@ impl KeysRigBackend {
                                                 filter_env: Self::module_env(lane, i, "env2"),
                                                 cutoff_hz: Self::module_value(lane, i, "filter.cutoff"),
                                                 resonance: Self::module_value(lane, i, "filter.reso"),
+                                                dly_time_ms: Self::module_value(lane, i, "dly.time"),
+                                                dly_feedback: Self::module_value(lane, i, "dly.feedback"),
+                                                dly_mix: Self::module_value(lane, i, "dly.mix"),
+                                                amb_size: Self::module_value(lane, i, "amb.size"),
+                                                amb_mix: Self::module_value(lane, i, "amb.mix"),
+                                                amb_predelay_ms: Self::module_value(lane, i, "amb.predelay"),
+                                                amb_decay: Self::module_value(lane, i, "amb.decay"),
                                             })
                                             .collect()
                                     })
@@ -1297,15 +1316,30 @@ impl KeysRigSvc for KeysRigBackend {
         let running = self.inner.rig.lock().map(|r| r.is_some()).unwrap_or(false);
         let s = self.inner.state.lock().unwrap();
         let loaded_preset = s.loaded.and_then(|i| s.presets.get(i)).map(|p| p.name.clone());
-        let master_peak = if running {
-            self.inner.rig.lock().ok().and_then(|r| r.as_ref().map(|r| r.output_peak())).unwrap_or(0.0)
+        let (master_peak, meters) = if running {
+            self.inner
+                .rig
+                .lock()
+                .ok()
+                .and_then(|r| {
+                    r.as_ref().map(|r| {
+                        let meters = r
+                            .cell_peaks()
+                            .into_iter()
+                            .map(|(name, peak)| KeysMeter { name, peak })
+                            .collect();
+                        (r.output_peak(), meters)
+                    })
+                })
+                .unwrap_or_default()
         } else {
-            0.0
+            (0.0, Vec::new())
         };
         KeysStatus {
             running,
             loaded_preset,
             master_peak,
+            meters,
             voices: 0,
             midi_port: s.midi_port.clone(),
             last_error: s.last_error.clone(),
@@ -1521,6 +1555,13 @@ impl KeysRigSvc for KeysRigBackend {
                 filter_env: Self::module_env(lane, i, "env2"),
                 cutoff_hz: Self::module_value(lane, i, "filter.cutoff"),
                 resonance: Self::module_value(lane, i, "filter.reso"),
+                dly_time_ms: Self::module_value(lane, i, "dly.time"),
+                dly_feedback: Self::module_value(lane, i, "dly.feedback"),
+                dly_mix: Self::module_value(lane, i, "dly.mix"),
+                amb_size: Self::module_value(lane, i, "amb.size"),
+                amb_mix: Self::module_value(lane, i, "amb.mix"),
+                amb_predelay_ms: Self::module_value(lane, i, "amb.predelay"),
+                amb_decay: Self::module_value(lane, i, "amb.decay"),
             })
             .collect();
         let here = lane.module(slot);

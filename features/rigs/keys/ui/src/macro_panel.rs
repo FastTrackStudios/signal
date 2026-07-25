@@ -21,14 +21,29 @@ use signal_keys_proto::KeysMacro;
 use crate::graphs::{ModuleCurve, StackedEnvelopes, StackedFilters};
 use crate::module_edit::{KnobRow, Panel};
 
-/// Panel order for the *small* groups — everything that is a knob row rather
-/// than a shape, with what each says when its knobs have nothing to report.
-const GROUPS: &[(&str, &str)] = &[
-    ("Vibrato", "pitch pulse"),
-    ("Unison", "voices · detune"),
-    ("Ambience", "reverb amount · length"),
-    ("Tone", "EQ — centred is bypassed"),
-    ("Effects", "output"),
+/// One card in the band.
+enum Cell {
+    /// A knob group: its macro group, and what it says when the knobs have
+    /// nothing to report.
+    Group(&'static str, &'static str),
+    /// A shape and the knobs that move it.
+    Shape(Shape),
+}
+
+/// **The band, left to right.** Signal order, near enough: what makes the
+/// voice (Unison, Vibrato), what shapes it (the filter's envelope, the filter,
+/// the amp's envelope), then what it goes out through (Ambience, Tone).
+///
+/// The shapes sit in the middle so the two envelopes are never far from the
+/// filter between them — you read the whole voice across one row.
+const ROW: &[Cell] = &[
+    Cell::Group("Unison", "voices · detune"),
+    Cell::Group("Vibrato", "pitch pulse"),
+    Cell::Shape(Shape::FilterEnv),
+    Cell::Shape(Shape::FilterResponse),
+    Cell::Shape(Shape::AmpEnv),
+    Cell::Group("Ambience", "reverb amount · length"),
+    Cell::Group("Tone", "EQ — centred is bypassed"),
 ];
 
 /// The macros of one group.
@@ -139,13 +154,11 @@ pub fn ShapeCard(
     }
 }
 
-/// One scope's Global Controls: the three shapes across the top, the knob-row
-/// groups under them.
+/// One scope's Global Controls — **one row, in [`ROW`] order**.
 ///
-/// **Both rows are one row.** Nothing here scrolls sideways and nothing wraps
-/// to a second line — every macro the level has is on screen at once, columns
-/// sharing the width equally and shrinking together. A band you have to scroll
-/// is a band you stop reading.
+/// Every card is only as wide as the knobs under it: a shape's graph has no
+/// intrinsic width, so it takes whatever its knob row asks for and no more.
+/// That is what makes seven cards fit a row instead of three cards eating it.
 #[component]
 pub fn MacroPanel(
     macros: Vec<KeysMacro>,
@@ -158,58 +171,50 @@ pub fn MacroPanel(
     #[props(default = 108)] height_px: u32,
     on_change: EventHandler<(String, f32)>,
 ) -> Element {
-    const SHAPES: [Shape; 3] = [Shape::FilterResponse, Shape::FilterEnv, Shape::AmpEnv];
     rsx! {
-        div { style: "display: flex; flex-direction: column; gap: 12px; min-width: 0;",
-            div {
-                // `minmax(0, 1fr)`, not `auto-fit`: three columns, always,
-                // that shrink instead of dropping to a second row. A grid
-                // track's default `min-width: auto` would refuse to go below
-                // its content and push the last card off the edge.
-                style: "display: grid; gap: 12px; align-items: start; \
-                        grid-template-columns: repeat(3, minmax(0, 1fr));",
-                for (i, shape) in SHAPES.into_iter().enumerate() {
-                    ShapeCard {
-                        key: "{i}",
-                        shape,
-                        macros: macros.clone(),
-                        curves: curves.clone(),
-                        accent: accent.clone(),
-                        height_px,
-                        on_change: move |(id, v)| on_change.call((id, v)),
-                    }
-                }
-            }
-            div {
-                style: "display: flex; gap: 12px; align-items: stretch; min-width: 0;",
-                for (name, hint) in GROUPS.iter() {
-                    {
-                        let items = group(&macros, name);
-                        if items.is_empty() {
-                            rsx! {}
-                        } else {
-                            let spread = spread(&macros, name);
-                            rsx! {
-                                // `flex: 1 1 0` with `min-width: 0`: every
-                                // group takes an equal share of the row and
-                                // gives it back when the window narrows. The
-                                // knobs inside wrap rather than overflow.
-                                div { key: "{name}", style: "flex: 1 1 0; min-width: 0;",
-                                    Panel {
-                                        title: name.to_string(),
-                                        accent: accent.clone(),
-                                        lit: items.iter().any(|m| m.live),
-                                        trailing: offset_badge(varies(&macros, name)),
-                                        div { style: "display: flex; flex-direction: column; gap: 8px; min-width: 0;",
-                                            KnobRow {
-                                                macros: items.clone(),
-                                                accent: accent.clone(),
-                                                on_change: move |(id, v)| on_change.call((id, v)),
-                                            }
-                                            span {
-                                                style: "font-size: 9px; color: #52525b; line-height: 1.4; \
-                                                        overflow: hidden; text-overflow: ellipsis;",
-                                                if let Some(s) = spread.clone() { "{s}" } else { "{hint}" }
+        div {
+            // `flex: 0 1 auto` per card: sized to its own knobs, giving width
+            // back only when the window is too narrow for all seven.
+            style: "display: flex; gap: 12px; align-items: stretch; min-width: 0;",
+            for (i, cell) in ROW.iter().enumerate() {
+                {
+                    match cell {
+                        Cell::Shape(shape) => rsx! {
+                            div { key: "{i}", style: "flex: 0 1 auto; min-width: 0;",
+                                ShapeCard {
+                                    shape: *shape,
+                                    macros: macros.clone(),
+                                    curves: curves.clone(),
+                                    accent: accent.clone(),
+                                    height_px,
+                                    on_change: move |(id, v)| on_change.call((id, v)),
+                                }
+                            }
+                        },
+                        Cell::Group(name, hint) => {
+                            let items = group(&macros, name);
+                            if items.is_empty() {
+                                rsx! {}
+                            } else {
+                                let spread = spread(&macros, name);
+                                rsx! {
+                                    div { key: "{i}", style: "flex: 0 1 auto; min-width: 0;",
+                                        Panel {
+                                            title: name.to_string(),
+                                            accent: accent.clone(),
+                                            lit: items.iter().any(|m| m.live),
+                                            trailing: offset_badge(varies(&macros, name)),
+                                            div { style: "display: flex; flex-direction: column; gap: 8px; min-width: 0;",
+                                                KnobRow {
+                                                    macros: items.clone(),
+                                                    accent: accent.clone(),
+                                                    on_change: move |(id, v)| on_change.call((id, v)),
+                                                }
+                                                span {
+                                                    style: "font-size: 9px; color: #52525b; line-height: 1.4; \
+                                                            overflow: hidden; text-overflow: ellipsis;",
+                                                    if let Some(s) = spread.clone() { "{s}" } else { "{hint}" }
+                                                }
                                             }
                                         }
                                     }

@@ -349,6 +349,13 @@ impl KeysRig {
             .map(|c| c.peak(0).max(c.peak(1)))
             .unwrap_or(0.0)
     }
+
+    /// Every metered container in the loaded program — engines, layers and
+    /// modules — with its post-fader peak (linear). The mixer's meters: the
+    /// same names its faders address.
+    pub fn cell_peaks(&self) -> Vec<(String, f32)> {
+        self.cells.peaks()
+    }
 }
 
 #[cfg(test)]
