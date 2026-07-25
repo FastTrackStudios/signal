@@ -29,6 +29,7 @@ use signal_sampler::node_render::{GainCells, RenderNode};
 use signal_sampler::rig_node::{Container, Role};
 
 mod backend;
+pub mod normalize;
 pub mod variations;
 /// Profiles: the engine/layer mixer shape + the footswitch stacks (scenes)
 /// that recall it. The Worship profile lives here.

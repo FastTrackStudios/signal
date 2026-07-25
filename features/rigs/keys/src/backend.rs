@@ -140,7 +140,12 @@ impl LaneState {
     /// The linear gain a module renders at (off / empty = silent).
     fn module_gain(&self, index: usize) -> f32 {
         match self.modules.get(index) {
-            Some(m) if m.enabled && !m.patch.is_empty() => db_to_linear(m.gain_db),
+            Some(m) if m.enabled && !m.patch.is_empty() => {
+                // Pack normalization: the library's own mastering level is
+                // corrected here so the fader above it is a mix decision
+                // rather than a calibration one.
+                db_to_linear(m.gain_db + crate::normalize::trim_db(&m.patch))
+            }
             _ => 0.0,
         }
     }

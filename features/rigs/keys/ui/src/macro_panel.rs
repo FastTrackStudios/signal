@@ -16,8 +16,11 @@
 //! selection reaches at full strength, the rest behind them), so turning a
 //! knob shows a whole family moving together.
 //!
-//! Every shape is the same height, and the groups still waiting for one hold
-//! that height open — the knob rows across the band sit on one line.
+//! **The row is one fixed height** ([`card_height_px`]), not the tallest card's
+//! height: Ambience and Tone are thin knob columns with no picture, and left to
+//! themselves a stack of three knobs is taller than a graph card and drags the
+//! whole band — and the mixer above it — down. Pinned, every card's knobs sit
+//! on one line and the band costs the same room whatever is selected.
 
 use dioxus::prelude::*;
 use signal_keys_proto::KeysMacro;
