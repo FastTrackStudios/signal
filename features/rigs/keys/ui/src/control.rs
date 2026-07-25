@@ -56,6 +56,9 @@ pub fn ControlView(
     /// Notes currently held, for the keyboard at the base.
     #[props(default)]
     held: Vec<u8>,
+    /// Wheel + pedal positions, for the strip beside the keys.
+    #[props(default)]
+    controllers: crate::controllers::Controllers,
 ) -> Element {
     rsx! {
         div { style: "flex: 1; min-height: 0; display: flex; flex-direction: column;",
@@ -104,7 +107,7 @@ pub fn ControlView(
                 }
             }
             MacroBand {}
-            KeyboardStrip { mixer: mixer.clone(), held }
+            KeyboardStrip { mixer: mixer.clone(), held, controllers }
         }
     }
 }
@@ -397,7 +400,11 @@ fn MacroBand() -> Element {
 /// The mixer says how loud each lane is; this says *where* it is. Splits and
 /// zones land here as the mapping surface grows.
 #[component]
-fn KeyboardStrip(mixer: KeysMixer, held: Vec<u8>) -> Element {
+fn KeyboardStrip(
+    mixer: KeysMixer,
+    held: Vec<u8>,
+    #[props(default)] controllers: crate::controllers::Controllers,
+) -> Element {
     const LO: u8 = 21;
     const HI: u8 = 108;
     let rig = use_hook(try_consume_context::<KeysRigClient>);
@@ -427,6 +434,11 @@ fn KeyboardStrip(mixer: KeysMixer, held: Vec<u8>) -> Element {
         div {
             style: "flex-shrink: 0; display: flex; flex-direction: column; gap: 6px; \
                     padding: 10px 12px 12px; border-top: 1px solid #1c1c1f; background: #0b0b0e;",
+            div { style: "display: flex; align-items: flex-end; gap: 14px; min-width: 0;",
+            // Pedals and wheels, laid out as the hardware is: feet at the far
+            // left, then the left hand's wheels, then the keys.
+            crate::controllers::ControllerStrip { controllers, height_px: 108 }
+            div { style: "flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px;",
             // Split bands, aligned to the keys beneath them.
             div { style: "position: relative; height: {14 * bands.len().max(1)}px;",
                 for (i, (letter, patch, color, from, to)) in bands.iter().enumerate() {
@@ -476,6 +488,8 @@ fn KeyboardStrip(mixer: KeysMixer, held: Vec<u8>) -> Element {
                         });
                     }
                 },
+            }
+            }
             }
         }
     }

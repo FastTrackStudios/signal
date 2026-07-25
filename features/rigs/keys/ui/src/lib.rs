@@ -13,6 +13,7 @@ use dioxus::prelude::*;
 
 mod browser;
 mod control;
+mod controllers;
 mod engine_view;
 mod fader;
 mod graphs;
@@ -114,6 +115,8 @@ pub fn KeysRigRemote() -> Element {
         fts_chrome::PanelSpec::new("keys.midi", "MIDI", fts_chrome::Icon::Midi).width(360),
     ]);
     let held = held_notes(&midi);
+    // Where the wheels and pedals are sitting, for the strip beside the keys.
+    let controllers = controllers::Controllers::from_midi(&midi);
     let _ = master_pct;
 
     rsx! {
@@ -126,7 +129,7 @@ pub fn KeysRigRemote() -> Element {
                 div { style: "display: flex; flex-direction: column; flex: 1; min-width: 0; min-height: 0;",
                     match zoom() {
                         Zoom::Mixer => rsx! {
-                            ControlView { mixer: mixer.clone(), held: held.clone() }
+                            ControlView { mixer: mixer.clone(), held: held.clone(), controllers }
                         },
                         Zoom::Engine(name) => {
                             match mixer.engines.iter().find(|e| e.name == name) {
@@ -134,7 +137,7 @@ pub fn KeysRigRemote() -> Element {
                                     EngineView { engine: engine.clone(), zoom }
                                 },
                                 None => rsx! {
-                                    ControlView { mixer: mixer.clone(), held: held.clone() }
+                                    ControlView { mixer: mixer.clone(), held: held.clone(), controllers }
                                 },
                             }
                         }

@@ -253,9 +253,16 @@ pub fn MacroPanel(
                                             lit: items.iter().any(|m| m.live),
                                             trailing: offset_badge(varies(&macros, name)),
                                             div {
-                                                style: "display: flex; flex-direction: column; gap: 8px; \
+                                                // `space-between` over the full
+                                                // height, with a gap that keeps
+                                                // the knobs apart even when the
+                                                // card is short: the column ends
+                                                // where the shape cards' knob
+                                                // rows do instead of bunching at
+                                                // the top.
+                                                style: "display: flex; flex-direction: column; gap: 18px; \
                                                         align-items: center; justify-content: space-between; \
-                                                        flex: 1;",
+                                                        flex: 1; height: 100%;",
                                                 title: "{hint}",
                                                 for m in items.iter() {
                                                     Knob {
