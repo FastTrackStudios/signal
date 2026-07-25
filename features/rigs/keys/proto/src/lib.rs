@@ -79,6 +79,9 @@ pub struct KeysLayerModel {
     pub key_hi: u32,
     /// The lane's modules — what the engine zoom shows a fader per.
     pub modules: Vec<KeysModule>,
+    /// Kept out of the engine + rig Global Controls: a global filter sweep or
+    /// envelope move doesn't reach this lane. It still has its own macros.
+    pub exclude_global: bool,
 }
 
 /// **A drone engine's state** — the card-embedded control some engines carry
@@ -403,6 +406,10 @@ pub mod keys {
         fn set_engine_mute(&self, engine: String, muted: bool);
         /// Solo a layer (any solo silences every un-soloed lane).
         fn set_layer_solo(&self, layer: String, soloed: bool);
+
+        /// Keep a lane out of (or put it back into) the engine and rig
+        /// Global Controls.
+        fn set_layer_exclude_global(&self, layer: String, excluded: bool);
         /// Load preset `preset` (from [`presets`](Self::presets)) into one
         /// MODULE of `layer` — the source IS that module's Source Block, so
         /// this is the engine's normal load path.
@@ -416,7 +423,7 @@ pub mod keys {
         /// Set a drone engine's key (0 = C … 11 = B) and whether it sounds.
         /// A drone holds its note until it is switched off; it never reads
         /// the keyboard.
-        fn set_drone(&self, engine: String, key: u32, playing: bool);
+        fn set_drone(&self, engine: String, key: u32, octave: i32, playing: bool);
 
         /// Reorder the profile's engines — the order the mixer reads left to
         /// right. Engines the list omits keep their relative order behind the

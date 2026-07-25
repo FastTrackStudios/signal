@@ -94,6 +94,14 @@ pub struct LayerDef {
     /// Highest key this lane sounds — the default covers the whole keyboard.
     #[facet(default = 127)]
     pub key_hi: u8,
+    /// Keep this lane OUT of the engine and rig Global Controls.
+    ///
+    /// A global filter sweep or envelope change is a performance move over
+    /// the sound as a whole, and there is usually one lane you don't want it
+    /// touching — the piano under everything else. An excluded lane still has
+    /// its own macros; it just isn't in the scope the globals drive.
+    #[facet(default)]
+    pub exclude_global: bool,
 }
 
 impl LayerDef {
@@ -105,7 +113,15 @@ impl LayerDef {
             gain_db: 0.0,
             key_lo: 0,
             key_hi: 127,
+            exclude_global: false,
         }
+    }
+
+    /// Keep this lane out of the engine and rig Global Controls.
+    #[must_use]
+    pub fn excluded_from_globals(mut self) -> Self {
+        self.exclude_global = true;
+        self
     }
 
     /// Every module's patch, module A first, padded to the quad.
@@ -264,6 +280,17 @@ impl KeysProfile {
     /// unresolvable render as silent lanes, so a profile is playable before
     /// every pack is downloaded.
     pub fn build_tree(&self, resolve: impl Fn(&str) -> Option<String>) -> Container {
+        self.build_tree_with(resolve, |_, _| signal_synth::engine::ModuleSettings::default())
+    }
+
+    /// As [`build_tree`](Self::build_tree), with the live macro values for
+    /// each `(layer, module)` — what makes the Filter block and the envelopes
+    /// carry the rig's actual settings.
+    pub fn build_tree_with(
+        &self,
+        resolve: impl Fn(&str) -> Option<String>,
+        module_set: impl Fn(&str, usize) -> signal_synth::engine::ModuleSettings,
+    ) -> Container {
         let mut engines = Container::parallel("Engines");
         for engine in &self.engines {
             let eng = Container::engine(&engine.name).volume(engine.gain_db);
@@ -285,7 +312,19 @@ impl KeysProfile {
                         signal_synth::Source::sample(spec)
                     })
                     .collect();
-                let mut lane = signal_synth::engine::signal_layer(&layer.name, &sources)
+                // The lane's macro values ride along when the rig has them —
+                // that is what makes the Filter block and the envelopes real
+                // DSP with real numbers rather than defaults.
+                let settings: Vec<signal_synth::engine::ModuleSettings> = sources
+                    .iter()
+                    .enumerate()
+                    .map(|(i, source)| {
+                        let mut set = module_set(&layer.name, i);
+                        set.source = source.clone();
+                        set
+                    })
+                    .collect();
+                let mut lane = signal_synth::engine::signal_layer_with(&layer.name, &settings)
                     .volume(layer.gain_db);
                 if !layer.is_full_range() {
                     lane = lane.zone(signal_sampler::rig_node::Zone {
@@ -328,7 +367,10 @@ pub fn worship_profile() -> KeysProfile {
                 name: "Keys".into(),
                 gain_db: 0.0,
                 layers: vec![
-                    LayerDef::new("Keys A", "LA Custom C7 Grand"),
+                    // The piano under everything: excluded from the engine
+                    // and rig globals by default, so a filter sweep or an
+                    // envelope change over the rig leaves it alone.
+                    LayerDef::new("Keys A", "LA Custom C7 Grand").excluded_from_globals(),
                     LayerDef::new("Keys B", "Rhodes - LA Custom"),
                 ],
             },
@@ -348,6 +390,7 @@ pub fn worship_profile() -> KeysProfile {
                         gain_db: 0.0,
                         key_lo: 0,
                         key_hi: 127,
+                        exclude_global: false,
                     },
                     // The bright half of the wash — the octave-up sparkle that
                     // sits over the pad rather than inside it, so it can be

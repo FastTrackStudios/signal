@@ -685,98 +685,145 @@ fn EngineStrip(
 }
 
 
-/// **A drone engine's key selector** — the card-embedded control that replaces
+/// **A drone engine's controls** — the card-embedded panel that replaces
 /// playing it.
 ///
-/// The Drone engine is a pad player: pick a key, switch it on, and it holds
-/// that note under the song until you switch it off. It never reads the
-/// keyboard, so nothing here is a lane you ride — it is a note you choose.
+/// A drone is chosen, not performed: a key, the octave it sits in, and
+/// whether it is holding. Dropdowns rather than a grid of twelve buttons —
+/// the card has one narrow column to spend, and a picker leaves room for the
+/// parameters a pad player actually reaches for as they land.
 #[component]
 fn DroneKeys(engine: String, drone: signal_keys_proto::KeysDrone) -> Element {
     const KEYS: [&str; 12] =
         ["C", "C♯", "D", "E♭", "E", "F", "F♯", "G", "A♭", "A", "B♭", "B"];
     let rig = use_hook(try_consume_context::<KeysRigClient>);
-    let accent = engine_color(&engine);
+    let accent = engine_color(&engine).to_string();
     let playing = drone.playing;
     let key = drone.key.min(11) as usize;
+    let octave = drone.octave.clamp(1, 5);
+
+    // Every change is the whole state: the drone has three fields and sending
+    // them together keeps the card and the engine from disagreeing.
+    let send = {
+        let (rig, engine) = (rig.clone(), engine.clone());
+        move |(k, o, p): (u32, i32, bool)| {
+            let (rig, engine) = (rig.clone(), engine.clone());
+            spawn(async move {
+                if let Some(r) = rig {
+                    let _ = r.set_drone(engine, k, o, p).await;
+                }
+            });
+        }
+    };
 
     rsx! {
         div {
-            style: "display: flex; flex-direction: column; gap: 6px; width: 132px; \
-                    justify-content: flex-start;",
-            span {
-                style: "font-size: 8px; font-weight: 700; letter-spacing: 0.1em; \
-                        text-transform: uppercase; color: #52525b;",
-                "Key"
-            }
-            // Six rows of two, chromatic: a tall column fits beside the lanes
-            // without making the card taller than they are, and twelve keys
-            // are short enough to scan without a keyboard's geometry.
-            div {
-                style: "display: grid; grid-template-columns: repeat(2, 1fr); gap: 3px;",
-                for (i, name) in KEYS.iter().enumerate() {
-                    {
-                        let rig = rig.clone();
-                        let engine = engine.clone();
-                        let here = i == key;
-                        let black = matches!(i, 1 | 3 | 6 | 8 | 10);
-                        rsx! {
-                            button {
-                                key: "{i}",
-                                style: format!(
-                                    "appearance: none; border: 1px solid {}; border-radius: 6px; \
-                                     padding: 5px 0; cursor: pointer; font-size: 10px; \
-                                     font-weight: 700; background: {}; color: {};",
-                                    if here { accent } else { "#26262b" },
-                                    if here {
-                                        "#101216".to_string()
-                                    } else if black {
-                                        "#0c0c0f".to_string()
-                                    } else {
-                                        "#131316".to_string()
-                                    },
-                                    if here { accent } else { "#71717a" },
-                                ),
-                                onclick: move |e: MouseEvent| {
-                                    e.stop_propagation();
-                                    let (rig, engine) = (rig.clone(), engine.clone());
-                                    spawn(async move {
-                                        if let Some(r) = rig {
-                                            let _ = r.set_drone(engine, i as u32, playing).await;
-                                        }
-                                    });
-                                },
-                                "{name}"
-                            }
-                        }
+            style: "display: flex; flex-direction: column; gap: 8px; width: 124px;",
+            {
+                let send_key = send.clone();
+                let send_oct = send.clone();
+                rsx! {
+                    DroneField {
+                        label: "Key".to_string(),
+                        current: KEYS[key].to_string(),
+                        options: KEYS.iter().map(|k| k.to_string()).collect::<Vec<_>>(),
+                        selected: key,
+                        accent: accent.clone(),
+                        on_pick: move |i: usize| send_key((i as u32, octave, playing)),
+                    }
+                    DroneField {
+                        label: "Octave".to_string(),
+                        current: format!("{octave}"),
+                        options: (1..=5).map(|o| o.to_string()).collect::<Vec<_>>(),
+                        selected: (octave - 1).max(0) as usize,
+                        accent: accent.clone(),
+                        on_pick: move |i: usize| send_oct((key as u32, i as i32 + 1, playing)),
                     }
                 }
             }
-            // Hold / release: the drone's only other verb.
+            // Hold: the drone's only verb.
             {
-                let rig = rig.clone();
-                let engine_hold = engine.clone();
+                let send_hold = send.clone();
                 rsx! {
                     button {
                         style: format!(
                             "appearance: none; border: 1px solid {}; border-radius: 8px; \
                              padding: 7px 0; cursor: pointer; font-size: 10px; font-weight: 800; \
                              letter-spacing: 0.08em; background: {}; color: {};",
-                            if playing { accent } else { "#26262b" },
+                            if playing { accent.clone() } else { "#26262b".to_string() },
                             if playing { "#101216" } else { "#0f0f12" },
-                            if playing { accent } else { "#52525b" },
+                            if playing { accent.clone() } else { "#52525b".to_string() },
                         ),
                         title: "The drone holds until you stop it — it takes no MIDI",
                         onclick: move |e: MouseEvent| {
                             e.stop_propagation();
-                            let (rig, engine) = (rig.clone(), engine_hold.clone());
-                            spawn(async move {
-                                if let Some(r) = rig {
-                                    let _ = r.set_drone(engine, key as u32, !playing).await;
-                                }
-                            });
+                            send_hold((key as u32, octave, !playing));
                         },
-                        if playing { "HOLDING {KEYS[key]}" } else { "HOLD {KEYS[key]}" }
+                        if playing { "HOLDING" } else { "HOLD" }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// One labelled dropdown in the drone panel.
+#[component]
+fn DroneField(
+    label: String,
+    current: String,
+    options: Vec<String>,
+    selected: usize,
+    accent: String,
+    on_pick: EventHandler<usize>,
+) -> Element {
+    let mut open = use_signal(|| false);
+
+    rsx! {
+        div { style: "display: flex; align-items: center; gap: 6px; position: relative;",
+            span { style: "flex: 1; font-size: 9px; color: #52525b;", "{label}" }
+            button {
+                style: format!(
+                    "appearance: none; min-width: 52px; border: 1px solid #26262b; \
+                     border-radius: 6px; padding: 3px 8px; cursor: pointer; background: #101216; \
+                     color: {accent}; font-size: 11px; font-weight: 700; text-align: left;",
+                ),
+                onclick: move |e: MouseEvent| {
+                    e.stop_propagation();
+                    open.toggle();
+                },
+                "{current}"
+            }
+            if open() {
+                div {
+                    style: "position: absolute; top: 100%; right: 0; z-index: 60; margin-top: 3px; \
+                            max-height: 168px; overflow-y: auto; display: flex; \
+                            flex-direction: column; gap: 1px; padding: 4px; min-width: 62px; \
+                            border: 1px solid #2b2b31; border-radius: 8px; background: #0c0c0f; \
+                            box-shadow: 0 12px 28px #000c;",
+                    for (i, option) in options.iter().enumerate() {
+                        {
+                            let here = i == selected;
+                            let accent = accent.clone();
+                            rsx! {
+                                button {
+                                    key: "{i}",
+                                    style: format!(
+                                        "appearance: none; border: none; border-radius: 5px; \
+                                         padding: 4px 8px; cursor: pointer; text-align: left; \
+                                         font-size: 11px; font-weight: 600; background: {}; color: {};",
+                                        if here { "#101821" } else { "transparent" },
+                                        if here { accent } else { "#a1a1aa".to_string() },
+                                    ),
+                                    onclick: move |e: MouseEvent| {
+                                        e.stop_propagation();
+                                        open.set(false);
+                                        on_pick.call(i);
+                                    },
+                                    "{option}"
+                                }
+                            }
+                        }
                     }
                 }
             }

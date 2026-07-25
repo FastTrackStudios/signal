@@ -185,9 +185,9 @@ const MACROS: &[MacroDef] = &[
     MacroDef { id: "source.unison", name: "Unison", group: "Source", default: 1.0, min: 1.0, max: 8.0, unit: "v", live: true },
     MacroDef { id: "source.detune", name: "Detune", group: "Source", default: 0.1, min: 0.0, max: 2.0, unit: "", live: true },
     // ── Filter ──────────────────────────────────────────────────────────
-    MacroDef { id: "filter.cutoff", name: "Cutoff", group: "Filter", default: 20000.0, min: 20.0, max: 20000.0, unit: "Hz", live: false },
-    MacroDef { id: "filter.reso", name: "Resonance", group: "Filter", default: 0.0, min: 0.0, max: 1.0, unit: "", live: false },
-    MacroDef { id: "filter.env_amt", name: "Env Amt", group: "Filter", default: 0.0, min: -1.0, max: 1.0, unit: "", live: false },
+    MacroDef { id: "filter.cutoff", name: "Cutoff", group: "Filter", default: 20000.0, min: 20.0, max: 20000.0, unit: "Hz", live: true },
+    MacroDef { id: "filter.reso", name: "Resonance", group: "Filter", default: 0.0, min: 0.0, max: 1.0, unit: "", live: true },
+    MacroDef { id: "filter.env_amt", name: "Env Amt", group: "Filter", default: 0.0, min: -1.0, max: 1.0, unit: "", live: true },
     MacroDef { id: "filter.keytrack", name: "Key Trk", group: "Filter", default: 0.0, min: 0.0, max: 1.0, unit: "", live: false },
     MacroDef { id: "filter.drive", name: "Drive", group: "Filter", default: 0.0, min: 0.0, max: 1.0, unit: "", live: false },
     MacroDef { id: "filter.mix", name: "Mix", group: "Filter", default: 1.0, min: 0.0, max: 1.0, unit: "", live: false },
@@ -198,15 +198,15 @@ const MACROS: &[MacroDef] = &[
     MacroDef { id: "env1.delay", name: "Delay", group: "Env 1", default: 0.0, min: 0.0, max: 2000.0, unit: "ms", live: false },
     MacroDef { id: "env1.attack", name: "Attack", group: "Env 1", default: 0.0, min: 0.0, max: 5000.0, unit: "ms", live: true },
     MacroDef { id: "env1.hold", name: "Hold", group: "Env 1", default: 0.0, min: 0.0, max: 2000.0, unit: "ms", live: false },
-    MacroDef { id: "env1.decay", name: "Decay", group: "Env 1", default: 0.0, min: 0.0, max: 5000.0, unit: "ms", live: false },
-    MacroDef { id: "env1.sustain", name: "Sustain", group: "Env 1", default: 1.0, min: 0.0, max: 1.0, unit: "", live: false },
+    MacroDef { id: "env1.decay", name: "Decay", group: "Env 1", default: 0.0, min: 0.0, max: 5000.0, unit: "ms", live: true },
+    MacroDef { id: "env1.sustain", name: "Sustain", group: "Env 1", default: 1.0, min: 0.0, max: 1.0, unit: "", live: true },
     MacroDef { id: "env1.release", name: "Release", group: "Env 1", default: 120.0, min: 0.0, max: 8000.0, unit: "ms", live: true },
     MacroDef { id: "env2.delay", name: "Delay", group: "Env 2", default: 0.0, min: 0.0, max: 2000.0, unit: "ms", live: false },
-    MacroDef { id: "env2.attack", name: "Attack", group: "Env 2", default: 5.0, min: 0.0, max: 5000.0, unit: "ms", live: false },
+    MacroDef { id: "env2.attack", name: "Attack", group: "Env 2", default: 5.0, min: 0.0, max: 5000.0, unit: "ms", live: true },
     MacroDef { id: "env2.hold", name: "Hold", group: "Env 2", default: 0.0, min: 0.0, max: 2000.0, unit: "ms", live: false },
-    MacroDef { id: "env2.decay", name: "Decay", group: "Env 2", default: 300.0, min: 0.0, max: 5000.0, unit: "ms", live: false },
-    MacroDef { id: "env2.sustain", name: "Sustain", group: "Env 2", default: 0.7, min: 0.0, max: 1.0, unit: "", live: false },
-    MacroDef { id: "env2.release", name: "Release", group: "Env 2", default: 200.0, min: 0.0, max: 8000.0, unit: "ms", live: false },
+    MacroDef { id: "env2.decay", name: "Decay", group: "Env 2", default: 300.0, min: 0.0, max: 5000.0, unit: "ms", live: true },
+    MacroDef { id: "env2.sustain", name: "Sustain", group: "Env 2", default: 0.7, min: 0.0, max: 1.0, unit: "", live: true },
+    MacroDef { id: "env2.release", name: "Release", group: "Env 2", default: 200.0, min: 0.0, max: 8000.0, unit: "ms", live: true },
     MacroDef { id: "env3.delay", name: "Delay", group: "Env 3", default: 0.0, min: 0.0, max: 2000.0, unit: "ms", live: false },
     MacroDef { id: "env3.attack", name: "Attack", group: "Env 3", default: 20.0, min: 0.0, max: 5000.0, unit: "ms", live: false },
     MacroDef { id: "env3.hold", name: "Hold", group: "Env 3", default: 0.0, min: 0.0, max: 2000.0, unit: "ms", live: false },
@@ -476,6 +476,9 @@ struct Inner {
     state: Mutex<State>,
     events: PubSub<KeysEvent>,
     pump_started: AtomicBool,
+    /// Bumped by every DSP-parameter edit; a coalescing rebuild only runs if
+    /// it is still the latest when its wait is up (see `rebuild_soon`).
+    rebuild_gen: std::sync::atomic::AtomicU64,
 }
 
 /// The keys-rig backend handle. Cheap to clone (all state shared).
@@ -534,9 +537,23 @@ impl KeysRigBackend {
     /// both levels — a module that is off, empty or fully down is not driven.
     /// Mute is a performance state, not a patch state, so a muted lane still
     /// follows the engine (turn the engine back up and the patch is coherent).
+    /// Whether this lane is kept out of the engine + rig Global Controls.
+    fn lane_excluded(s: &State, layer: &str) -> bool {
+        s.profile
+            .engines
+            .iter()
+            .flat_map(|e| e.layers.iter())
+            .find(|l| l.name == layer)
+            .map(|l| l.exclude_global)
+            .unwrap_or(false)
+    }
+
     fn scope_targets(s: &State, lanes: &[String]) -> Vec<(String, usize)> {
         lanes
             .iter()
+            // A lane can be kept out of the globals entirely — the piano you
+            // don't want a filter sweep landing on. It keeps its own macros.
+            .filter(|name| !Self::lane_excluded(s, name))
             .filter_map(|name| s.lanes.get(name).map(|lane| (name, lane)))
             .flat_map(|(name, lane)| {
                 (0..lane.modules.len())
@@ -749,15 +766,44 @@ impl KeysRigBackend {
 
     /// What a Global Control move needs afterwards: a program build when the
     /// voice count changed, otherwise just the live cells and a publish.
+    /// Whether this macro is baked into the program and so needs a rebuild
+    /// to be heard: the filter's settings, the envelopes' times, unison.
+    fn macro_is_dsp(id: &str) -> bool {
+        id.starts_with("filter.")
+            || id.starts_with("env1.")
+            || id.starts_with("env2.")
+            || id == "source.unison"
+            || id == "source.detune"
+    }
+
+    /// Rebuild the program shortly, once the knob stops moving.
+    ///
+    /// Filter and envelope values are block params, so hearing them means
+    /// rebuilding — and a rebuild re-opens the lane's packs. Rebuilding per
+    /// drag event would make a knob sweep unusable, so each edit bumps a
+    /// generation and only the last one standing does the work.
+    fn rebuild_soon(&self) {
+        use std::sync::atomic::Ordering;
+        let gen = self.inner.rebuild_gen.fetch_add(1, Ordering::AcqRel) + 1;
+        let b = self.clone();
+        let _ = std::thread::Builder::new()
+            .name("keys-param-rebuild".into())
+            .spawn(move || {
+                std::thread::sleep(std::time::Duration::from_millis(180));
+                if b.inner.rebuild_gen.load(Ordering::Acquire) != gen {
+                    return; // a later edit owns the rebuild
+                }
+                let _rt = keys_runtime().enter();
+                b.rebuild_program();
+            });
+    }
+
     fn after_global(&self, rebuild: bool) {
         if rebuild {
-            let b = self.clone();
-            let _ = std::thread::Builder::new()
-                .name("keys-global".into())
-                .spawn(move || {
-                    let _rt = keys_runtime().enter();
-                    b.rebuild_program();
-                });
+            // Coalesced: a global sweep moves every lane's parameter at drag
+            // rate, and each one is a program rebuild.
+            self.rebuild_soon();
+            self.publish_mixer();
         } else {
             self.apply_mixer();
             self.publish_mixer();
@@ -846,6 +892,7 @@ impl KeysRigBackend {
                 state: Mutex::new(state),
                 events: architect::rig::events_hub(),
                 pump_started: AtomicBool::new(false),
+                rebuild_gen: std::sync::atomic::AtomicU64::new(0),
             }),
         };
         backend.spawn_meter_pump("keys-meter-pump");
@@ -884,9 +931,42 @@ impl KeysRigBackend {
                 layer.extra_modules = patches.into_iter().skip(1).collect();
             }
         }
-        Some(profile.build_tree(|patch| {
-            index.get(patch).map(|p| p.to_string_lossy().into_owned())
-        }))
+        // Each module's macros ride into the tree: the Filter block gets its
+        // cutoff and resonance, the Amp Env and Filter Env their times. This
+        // is what makes those blocks sound rather than sit there.
+        let lanes = s.lanes.clone();
+        Some(profile.build_tree_with(
+            |patch| index.get(patch).map(|p| p.to_string_lossy().into_owned()),
+            |layer, module| {
+                let mut set = signal_synth::engine::ModuleSettings::default();
+                let Some(lane) = lanes.get(layer) else { return set };
+                let v = |id: &str| {
+                    lane.modules
+                        .get(module)
+                        .and_then(|m| m.macros.get(id).copied())
+                        .or_else(|| macro_def(id).map(|d| d.default))
+                        .unwrap_or(0.0)
+                };
+                set.cutoff_hz = v("filter.cutoff");
+                set.resonance = v("filter.reso");
+                set.filter_env_depth = v("filter.env_amt");
+                set.amp_env = (
+                    v("env1.attack"),
+                    v("env1.decay"),
+                    v("env1.sustain"),
+                    v("env1.release"),
+                );
+                set.filter_env = (
+                    v("env2.attack"),
+                    v("env2.decay"),
+                    v("env2.sustain"),
+                    v("env2.release"),
+                );
+                set.unison = v("source.unison").max(1.0) as u32;
+                set.detune = v("source.detune");
+                set
+            },
+        ))
     }
 
     /// Push every live fader / mute / solo into the running program's cells.
@@ -1052,7 +1132,11 @@ impl KeysRigBackend {
                     // A drone engine carries its key selector; the card
                     // embeds it instead of the usual played-engine chrome.
                     drone: est.drone.clone().or_else(|| {
-                        is_drone(&engine.name).then(signal_keys_proto::KeysDrone::default)
+                        is_drone(&engine.name).then(|| signal_keys_proto::KeysDrone {
+                            key: 0,
+                            playing: false,
+                            octave: 3,
+                        })
                     }),
                     gain_db: est.gain_db,
                     muted: est.muted,
@@ -1068,6 +1152,7 @@ impl KeysRigBackend {
                                 preset: lane.map(|l| l.preset.clone()).unwrap_or_default(),
                                 gain_db: lane.map(|l| l.gain_db).unwrap_or(0.0),
                                 muted: lane.is_some_and(|l| l.muted),
+                                exclude_global: layer.exclude_global,
                                 soloed: lane.is_some_and(|l| l.soloed),
                                 live: lane.is_some_and(|l| l.any_live()),
                                 key_lo: layer.key_lo as u32,
@@ -1530,6 +1615,37 @@ impl KeysRigSvc for KeysRigBackend {
         self.publish_mixer();
     }
 
+    fn set_layer_exclude_global(&self, layer: String, excluded: bool) {
+        {
+            let Ok(mut s) = self.inner.state.lock() else { return };
+            let Some(def) = s
+                .profile
+                .engines
+                .iter_mut()
+                .flat_map(|e| e.layers.iter_mut())
+                .find(|l| l.name == layer)
+            else {
+                return;
+            };
+            if def.exclude_global == excluded {
+                return;
+            }
+            def.exclude_global = excluded;
+            // The globals' baselines were taken over a different set of
+            // lanes; they have to be re-taken over the new one.
+            for engine in Self::all_engines(&s) {
+                if let Some(e) = s.engines.get_mut(&engine) {
+                    e.spans.clear();
+                }
+            }
+            s.rig_spans.clear();
+        }
+        if let Ok(s) = self.inner.state.lock() {
+            s.profile.save();
+        }
+        self.publish_mixer();
+    }
+
     fn set_layer_solo(&self, layer: String, soloed: bool) {
         if let Ok(mut s) = self.inner.state.lock() {
             let Some(lane) = s.lanes.get_mut(&layer) else { return };
@@ -1691,7 +1807,7 @@ impl KeysRigSvc for KeysRigBackend {
             // that moved under it.
             Self::rebase_others(&mut s, &[engine.clone()], &[layer.clone()], target, &id);
             // Unison changes the program's voice count — that needs a build.
-            rebuild = target == "source.unison";
+            rebuild = Self::macro_is_dsp(target);
         }
         self.after_global(rebuild);
     }
@@ -1747,7 +1863,7 @@ impl KeysRigSvc for KeysRigBackend {
             }
             // Every lane knob for this parameter has been moved from under it.
             Self::rebase_others(&mut s, &[engine.clone()], &lanes, target, &id);
-            rebuild = target == "source.unison";
+            rebuild = Self::macro_is_dsp(target);
         }
         self.after_global(rebuild);
     }
@@ -1782,7 +1898,7 @@ impl KeysRigSvc for KeysRigBackend {
             // Every engine and lane knob for this parameter has been moved
             // from under it.
             Self::rebase_others(&mut s, &engines, &lanes, target, &id);
-            rebuild = target == "source.unison";
+            rebuild = Self::macro_is_dsp(target);
         }
         self.after_global(rebuild);
     }
@@ -1806,20 +1922,21 @@ impl KeysRigSvc for KeysRigBackend {
         if def.id == "source.level" {
             self.apply_mixer();
         }
+        if Self::macro_is_dsp(def.id) {
+            self.rebuild_soon();
+        }
         self.publish_mixer();
     }
 
-    fn set_drone(&self, engine: String, key: u32, playing: bool) {
+    fn set_drone(&self, engine: String, key: u32, octave: i32, playing: bool) {
         if let Ok(mut s) = self.inner.state.lock() {
             let est = s.engines.entry(engine.clone()).or_default();
             let mut d = est.drone.clone().unwrap_or_default();
             d.key = key.min(11);
             d.playing = playing;
-            // Under the band, not in it: a drone an octave down stays out of
-            // the way of whatever is being played over it.
-            if d.octave == 0 {
-                d.octave = 3;
-            }
+            // Under the band, not in it — and never so low it is mud or so
+            // high it is a part.
+            d.octave = octave.clamp(1, 5);
             est.drone = Some(d);
         }
         // Nothing sounds yet — the drone's voice is not wired to the engine,
