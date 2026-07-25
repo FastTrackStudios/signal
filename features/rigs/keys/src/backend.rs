@@ -1665,7 +1665,15 @@ fn scan_keyscape() -> (Vec<KeysPreset>, Vec<PathBuf>) {
                 if name.is_empty() {
                     continue;
                 }
-                presets.push(KeysPreset { kind: kind_of(&name), name, loaded: false });
+                let kind = kind_of(&name);
+                let tags = tags_for(&kind, &name);
+                presets.push(KeysPreset {
+                    kind,
+                    name,
+                    loaded: false,
+                    scope: "layer".into(),
+                    tags,
+                });
                 specs.push(styx);
             }
         }
@@ -1705,7 +1713,15 @@ fn scan_omni_patches(root: &str) -> (Vec<KeysPreset>, Vec<PathBuf>) {
             if display.is_empty() {
                 continue;
             }
-            presets.push(KeysPreset { kind: "Module".into(), name: display, loaded: false });
+            // An Omnisphere patch is authored across a layer's modules.
+            let tags = tags_for("Synth", &display);
+            presets.push(KeysPreset {
+                kind: "Patch".into(),
+                name: display,
+                loaded: false,
+                scope: "layer".into(),
+                tags,
+            });
             specs.push(patch);
         }
     }
@@ -1740,10 +1756,14 @@ fn scan_packs_recursive(root: &str) -> (Vec<KeysPreset>, Vec<PathBuf>) {
             if name.is_empty() {
                 continue;
             }
+            // A soundsource fills one module, not a whole lane.
+            let tags = tags_for("Synth", name);
             presets.push(KeysPreset {
-                kind: "Synth".into(),
+                kind: "Soundsource".into(),
                 name: name.to_string(),
                 loaded: false,
+                scope: "module".into(),
+                tags,
             });
             specs.push(pack);
         }
@@ -1768,7 +1788,15 @@ fn scan_packs(root: &str) -> (Vec<KeysPreset>, Vec<PathBuf>) {
             if name.is_empty() {
                 continue;
             }
-            presets.push(KeysPreset { kind: kind_of(&name), name, loaded: false });
+            let kind = kind_of(&name);
+            let tags = tags_for(&kind, &name);
+            presets.push(KeysPreset {
+                kind,
+                name,
+                loaded: false,
+                scope: "layer".into(),
+                tags,
+            });
             specs.push(pack);
         }
     }
@@ -1785,6 +1813,25 @@ fn kind_of(name: &str) -> String {
     else if n.contains("mks") || n.contains("mk-80") || n.contains("e piano") || n.contains("electric") { "Electric".into() }
     else if n.contains("toy") || n.contains("celeste") || n.contains("glock") || n.contains("bell") { "Toy/Bell".into() }
     else { "Other".into() }
+}
+
+/// Which engines a preset belongs to. A library instrument is Keys work; the
+/// Omnisphere side is Synth, and the names that read as organ or pad get those
+/// engines too, so a Pad lane's browser is pads rather than the whole library.
+fn tags_for(kind: &str, name: &str) -> Vec<String> {
+    let n = name.to_ascii_lowercase();
+    let mut tags = Vec::new();
+    if n.contains("organ") || n.contains("b3") || n.contains("farf") || n.contains("vox ") {
+        tags.push("Organ".to_string());
+    }
+    if n.contains("pad") || n.contains("string") || n.contains("atmos") || n.contains("choir") {
+        tags.push("Pad".to_string());
+    }
+    match kind {
+        "Synth" | "Patch" | "Soundsource" => tags.push("Synth".to_string()),
+        _ => tags.push("Keys".to_string()),
+    }
+    tags
 }
 
 fn slug(s: &str) -> String {

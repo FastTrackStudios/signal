@@ -128,8 +128,6 @@ pub fn ModuleEdit(
 ) -> Element {
     let env_slot = use_signal(|| 0u32);
     let lfo_slot = use_signal(|| 0u32);
-    // The library is a chrome panel — this button is its handle.
-    let chrome = fts_chrome::use_chrome();
 
     let group = |name: &str| -> Vec<KeysMacro> {
         detail.macros.iter().filter(|m| m.group == name).cloned().collect()
@@ -192,13 +190,6 @@ pub fn ModuleEdit(
                                 "from {detail.preset}"
                             }
                         }
-                    }
-                    button {
-                        style: "appearance: none; border: 1px solid #1f2b3a; border-radius: 8px; \
-                                padding: 7px; background: #0d1319; color: #7dd3fc; font-size: 10px; \
-                                font-weight: 700; letter-spacing: 0.06em;",
-                        onclick: move |_| chrome.toggle_panel("keys.browser"),
-                        "BROWSE SOUNDSOURCES"
                     }
                     div { style: "display: flex; align-items: center; gap: 8px;",
                         button {

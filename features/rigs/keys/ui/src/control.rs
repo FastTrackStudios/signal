@@ -14,6 +14,8 @@
 use dioxus::prelude::*;
 use signal_keys_proto::keys::KeysRigClient;
 use signal_keys_proto::{KeysEngineModel, KeysLayerModel, KeysMixer};
+
+use crate::selection::Selection;
 use signal_ui::components::Piano;
 
 use crate::fader::{EdgeFader, Fader, fmt_db};
@@ -171,6 +173,9 @@ fn white_fraction(note: u8, past: bool) -> f32 {
 fn EngineStrip(engine: KeysEngineModel) -> Element {
     let rig = use_hook(try_consume_context::<KeysRigClient>);
     let mut zoom = crate::zoom::use_zoom();
+    let mut selection = crate::selection::use_selection();
+    let picked = *selection.read() == Selection::Engine(engine.name.clone());
+    let pick_name = engine.name.clone();
     let accent = engine_color(&engine.name);
     let muted = engine.muted;
     let name = engine.name.clone();
@@ -180,11 +185,14 @@ fn EngineStrip(engine: KeysEngineModel) -> Element {
     rsx! {
         div {
             style: format!(
-                "position: relative; display: flex; padding: 10px 10px 10px 20px; \
-                 border: 1px solid {}; border-radius: 12px; background: #0e0e11;",
-                if muted { "#1f1f23" } else { "#26262d" },
+                "position: relative; display: flex; padding: 10px 10px 10px 20px; cursor: pointer; \
+                 border: 1px solid {}; border-radius: 12px; background: {};",
+                if picked { accent } else if muted { "#1f1f23" } else { "#26262d" },
+                if picked { "#101216" } else { "#0e0e11" },
             ),
-            // Double-clicking the card body (not a control) zooms in.
+            // Clicking the card body — anywhere that is not a control — points
+            // the browser at this engine. Double-click zooms into it.
+            onclick: move |_| selection.set(Selection::Engine(pick_name.clone())),
             ondoubleclick: move |_| zoom.set(Zoom::Engine(dbl_name.clone())),
             // The engine's level IS the card's left edge.
             EdgeFader {
@@ -278,6 +286,12 @@ fn lane_letter(lane: &str, engine: &str) -> String {
 fn LayerStrip(layer: KeysLayerModel, accent: String) -> Element {
     let rig = use_hook(try_consume_context::<KeysRigClient>);
     let mut zoom = crate::zoom::use_zoom();
+    let mut selection = crate::selection::use_selection();
+    let picked = matches!(
+        &*selection.read(),
+        Selection::Layer { layer: l, .. } | Selection::Module { layer: l, .. } if *l == layer.name
+    );
+    let pick = Selection::Layer { engine: layer.engine.clone(), layer: layer.name.clone() };
     let open_lane = layer.name.clone();
     let dbl_lane = layer.name.clone();
     let patch_label = if layer.patch.is_empty() { "empty".to_string() } else { layer.patch.clone() };
@@ -293,9 +307,23 @@ fn LayerStrip(layer: KeysLayerModel, accent: String) -> Element {
 
     rsx! {
         div {
-            style: "position: relative; display: flex; flex-direction: column; align-items: stretch; \
-                    gap: 8px; width: 124px;",
-            ondoubleclick: move |_| zoom.set(Zoom::Layer(dbl_lane.clone())),
+            style: format!(
+                "position: relative; display: flex; flex-direction: column; align-items: stretch; \
+                 gap: 8px; width: 124px; padding: 6px; border-radius: 10px; cursor: pointer; \
+                 background: {}; border: 1px solid {};",
+                if picked { "#101216" } else { "transparent" },
+                if picked { accent.clone() } else { "transparent".to_string() },
+            ),
+            // Picking the lane points the browser at it; the letter and the
+            // patch name keep their own jobs (they stop propagation below).
+            onclick: move |e: MouseEvent| {
+                e.stop_propagation();
+                selection.set(pick.clone());
+            },
+            ondoubleclick: move |e: MouseEvent| {
+                e.stop_propagation();
+                zoom.set(Zoom::Layer(dbl_lane.clone()));
+            },
             // The lane's letter IS its on/off — the top of the strip, where a
             // hand lands without looking.
             button {

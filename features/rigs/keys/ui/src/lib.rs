@@ -11,6 +11,7 @@
 
 use dioxus::prelude::*;
 
+mod browser;
 mod control;
 mod engine_view;
 mod fader;
@@ -22,9 +23,11 @@ mod midi_light;
 mod module_edit;
 mod perform;
 mod routing;
+mod selection;
 mod state;
 mod zoom;
 
+pub use browser::Browser;
 pub use control::{ControlView, engine_color};
 pub use engine_view::EngineView;
 pub use knob::Knob;
@@ -36,6 +39,7 @@ pub use graphs::{Adsr, EnvelopeGraph, FilterCurve};
 pub use midi_light::MidiPanel;
 pub use perform::{PerformStrip, stack_color};
 pub use routing::RoutingView;
+pub use selection::{Selection, use_selection};
 pub use state::{KeysViewState, held_notes, use_keys_state};
 
 // The wire contract, re-exported for convenience.
@@ -55,6 +59,9 @@ pub fn KeysRigRemote() -> Element {
     // Control-view depth: mixer → engine → layer. Shared through context so
     // the cards can open themselves.
     let zoom = use_context_provider(|| Signal::new(Zoom::Mixer));
+    // What the browser is pointed at — a path into the rig, set by clicking
+    // anything in the mixer.
+    let _selection = use_context_provider(|| Signal::new(selection::Selection::default()));
     let level = fts_chrome::use_chrome_level(2);
 
     let status = state.status.read().clone();
@@ -107,6 +114,8 @@ pub fn KeysRigRemote() -> Element {
             style: "display: flex; flex-direction: column; flex: 1; min-height: 0; \
                     color: #e4e4e7; font-family: sans-serif; background: #08080a;",
             div { style: "display: flex; flex: 1; min-height: 0;",
+                // The browser — one sidebar, pointed at the selection.
+                Browser { presets: presets.clone() }
                 div { style: "display: flex; flex-direction: column; flex: 1; min-width: 0; min-height: 0;",
                     match zoom() {
                         Zoom::Mixer => rsx! {

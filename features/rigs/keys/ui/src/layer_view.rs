@@ -90,6 +90,25 @@ pub fn LayerView(
     // the bar's tabs and the patch is a readout. Clicking a parent crumb is
     // what "back" means now.
     let level = fts_chrome::use_chrome_level(3);
+    // The browser follows the zoom: inside a lane it lists what fits the
+    // module you are editing.
+    let mut selection = crate::selection::use_selection();
+    {
+        let (engine, lane, slot) = (d.engine.clone(), d.layer.clone(), d.module);
+        use_effect(move || {
+            if engine.is_empty() {
+                return;
+            }
+            let next = crate::selection::Selection::Module {
+                engine: engine.clone(),
+                layer: lane.clone(),
+                module: slot,
+            };
+            if *selection.peek() != next {
+                selection.set(next);
+            }
+        });
+    }
     let lanes: Vec<(String, bool, Callback<()>)> = mixer
         .engines
         .iter()
@@ -160,10 +179,6 @@ pub fn LayerView(
         ),
     ]);
     level.status(vec![fts_chrome::StatusItem::pill(patch.clone(), accent.clone(), "#101821")]);
-    level.panels(vec![
-        fts_chrome::PanelSpec::new("keys.browser", "Soundsources", fts_chrome::Icon::Browser)
-            .width(340),
-    ]);
 
     rsx! {
         div { style: "flex: 1; min-height: 0; display: flex;",
@@ -187,17 +202,6 @@ pub fn LayerView(
                         }
                     },
                     Page::Edit => rsx! { EditPage { detail: d.clone() } },
-                }
-            }
-            // The library, as a panel: it used to be an overlay floating over
-            // the module page, so auditioning meant covering the controls you
-            // were auditioning with.
-            fts_chrome::PanelHost { id: "keys.browser".to_string(),
-                SourceBrowser {
-                    layer: d.layer.clone(),
-                    module: d.module,
-                    presets: presets.clone(),
-                    refresh,
                 }
             }
         }
@@ -383,86 +387,6 @@ fn ProgramTree(node: KeysNode) -> Element {
                 div { style: "display: flex; gap: 6px; flex-wrap: wrap;",
                     for child in kids.iter() {
                         ProgramTree { key: "{child.id}", node: child.clone() }
-                    }
-                }
-            }
-        }
-    }
-}
-
-/// Searchable soundsource browser — the whole library (Keyscape packs and
-/// Omnisphere soundsources alike), filtered as you type. Picking one loads it
-/// into this lane's Soundsource block.
-#[component]
-fn SourceBrowser(
-    layer: String,
-    module: u32,
-    presets: Vec<KeysPreset>,
-    refresh: Callback<()>,
-) -> Element {
-    let rig = use_hook(try_consume_context::<KeysRigClient>);
-    let mut query = use_signal(String::new);
-
-    let q = query().to_lowercase();
-    let hits: Vec<(usize, KeysPreset)> = presets
-        .iter()
-        .enumerate()
-        .filter(|(_, p)| q.is_empty() || p.name.to_lowercase().contains(&q))
-        .take(80)
-        .map(|(i, p)| (i, p.clone()))
-        .collect();
-    let total = presets.len();
-
-    rsx! {
-        div {
-            style: "display: flex; flex-direction: column; gap: 10px; padding: 12px;",
-            input {
-                style: "background: #131316; border: 1px solid #1f1f23; border-radius: 8px; \
-                        padding: 8px 10px; color: #e4e4e7; font-size: 11px;",
-                placeholder: "search {total} soundsources…",
-                value: "{query}",
-                oninput: move |e| query.set(e.value()),
-            }
-            div {
-                style: "display: flex; flex-direction: column; gap: 1px; flex: 1; min-height: 0; overflow-y: auto;",
-                button {
-                    style: "appearance: none; text-align: left; border: none; border-radius: 6px; \
-                            padding: 7px 9px; background: transparent; color: #a1a1aa; font-size: 11px;",
-                    onclick: {
-                        let rig = rig.clone();
-                        let layer = layer.clone();
-                        move |_| {
-                            let (rig, layer) = (rig.clone(), layer.clone());
-                            spawn(async move {
-                                if let Some(r) = rig { let _ = r.clear_layer(layer, module).await; }
-                            });
-                            refresh.call(());
-                        }
-                    },
-                    "— empty —"
-                }
-                for (i, preset) in hits {
-                    button {
-                        // Library names repeat across banks — key by index.
-                        key: "{i}",
-                        style: "appearance: none; text-align: left; border: none; border-radius: 6px; \
-                                padding: 7px 9px; background: transparent; color: #e4e4e7; font-size: 11px; \
-                                display: flex; align-items: center; gap: 6px;",
-                        onclick: {
-                            let rig = rig.clone();
-                            let layer = layer.clone();
-                            move |_| {
-                                let (rig, layer) = (rig.clone(), layer.clone());
-                                spawn(async move {
-                                    if let Some(r) = rig { let _ = r.set_layer_patch(layer, module, i as u32).await; }
-                                });
-                                refresh.call(());
-                            }
-                        },
-                        span { style: "flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;",
-                            "{preset.name}"
-                        }
-                        span { style: "font-size: 8px; color: #52525b;", "{preset.kind}" }
                     }
                 }
             }

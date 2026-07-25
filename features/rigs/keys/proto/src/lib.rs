@@ -19,6 +19,16 @@ pub struct KeysPreset {
     pub kind: String,
     /// Whether this is the currently-loaded preset.
     pub loaded: bool,
+    /// The deepest level this preset makes sense at: `"engine"` (a whole
+    /// instrument program), `"layer"` (what one lane plays) or `"module"` (a
+    /// single soundsource inside a lane). The browser shows a level's presets
+    /// **and everything below it** — a soundsource is a legitimate thing to
+    /// load into a layer, it just fills one module of it.
+    pub scope: String,
+    /// Engines this preset belongs to ("Keys", "Synth", "Organ", "Pad") — the
+    /// browser filters by the selected engine's tag, so picking a lane in Keys
+    /// never shows you Omnisphere pads.
+    pub tags: Vec<String>,
 }
 
 /// A node in the loaded composition tree (engine → layers → blocks) — the
