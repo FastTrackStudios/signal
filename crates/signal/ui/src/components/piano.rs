@@ -65,6 +65,29 @@ const FALL_H: f64 = 180.0;
 const KEY_R: f64 = 3.0;
 /// Corner radius for waterfall note blocks.
 const NOTE_R: f64 = 4.0;
+/// The felt strip above the keys, and the shadow it casts down onto them —
+/// the detail that reads as "keybed" rather than "row of rectangles".
+const FELT_H: f64 = 3.0;
+const FELT_SHADOW_H: f64 = 7.0;
+
+/// A key's outline: square at the top, rounded where a finger lands.
+///
+/// Modern keybeds (Ableton, Arturia, Vital) do not outline keys — the top of
+/// a key runs under the felt and the separation between keys is a dark gap,
+/// not a stroke. Drawn as a path because `rx` on a `rect` rounds all four
+/// corners, which reads as a row of pills.
+fn key_path(x: f64, y: f64, w: f64, h: f64, r: f64) -> String {
+    let (x2, y2) = (x + w, y + h);
+    format!(
+        "M {x:.2} {y:.2} L {x2:.2} {y:.2} L {x2:.2} {:.2} \
+         A {r:.2} {r:.2} 0 0 1 {:.2} {y2:.2} L {:.2} {y2:.2} \
+         A {r:.2} {r:.2} 0 0 1 {x:.2} {:.2} Z",
+        y2 - r,
+        x2 - r,
+        x + r,
+        y2 - r,
+    )
+}
 
 // ── Note theory helpers ───────────────────────────────────────────────────────
 
@@ -426,8 +449,10 @@ pub fn Piano(
     // Keys-only when no waterfall: drop the falling-note zone so the keyboard
     // fills the height, and lay keys at the top (y=0) instead of below FALL_H.
     let fall_h = if waterfall { FALL_H } else { 0.0 };
-    let svg_h = fall_h + WH;
-    let key_y = fall_h;
+    // The felt sits over the bottom of the waterfall zone when there is one,
+    // and needs its own strip of height when there isn't.
+    let key_y = if waterfall { fall_h } else { FELT_H };
+    let svg_h = key_y + WH;
 
     let notes: Vec<u8> = (start_note..=end_note).collect();
     let white_notes: Vec<u8> = notes.iter().copied().filter(|&n| !is_black(n)).collect();
@@ -563,11 +588,15 @@ pub fn Piano(
                         }
                     })}
                     {svg_note_blocks}
-                    rect {
-                        x: "0", y: "{fall_h - 2.0}",
-                        width: "{svg_w}", height: "2",
-                        fill: "#2a2a3a",
-                    }
+                }
+
+                // ── Felt + the shadow it casts on the keys ──────────────
+                // Drawn before the keys so the keys' rounded fronts stay clean.
+                rect {
+                    x: "0", y: "{key_y - FELT_H}",
+                    width: "{svg_w}", height: "{FELT_H}",
+                    fill: "{accent}", fill_opacity: "0.55",
+                    pointer_events: "none",
                 }
 
                 // ── White keys ──────────────────────────────────────────
@@ -584,11 +613,15 @@ pub fn Piano(
                     let fill = if pressed {
                         accent.clone()
                     } else if mapped {
-                        "#cbd5f5".to_string()
+                        "#d5dbf6".to_string()
                     } else {
-                        "#f0f0f2".to_string()
+                        "#f4f4f7".to_string()
                     };
                     let note_clone = note;
+                    // The gap between keys is the separation — no stroke.
+                    let kx = x + 0.7;
+                    let kw = WW - 1.4;
+                    let body = key_path(kx, y, kw, WH, KEY_R);
 
                     let label = labels.get(&note).cloned().unwrap_or_else(|| {
                         if show_labels && is_c {
@@ -600,38 +633,48 @@ pub fn Piano(
 
                     rsx! {
                         g { key: "wk-{note}",
-                            rect {
-                                x: "{x + 0.5}",
-                                y: "{y}",
-                                width: "{WW - 1.0}",
-                                height: "{WH}",
-                                rx: "{KEY_R}",
+                            path {
+                                d: "{body}",
                                 fill: "{fill}",
-                                stroke: "#999",
-                                stroke_width: "0.5",
                                 cursor: "pointer",
                                 onpointerdown: move |e| { e.stop_propagation(); on_note_on.call(note_clone); },
                                 onpointerup:   move |e| { e.stop_propagation(); on_note_off.call(note_clone); },
                                 onpointerleave: move |e| { e.stop_propagation(); on_note_off.call(note_clone); },
                             }
+                            // Shading down the key: darker where it meets the
+                            // felt, brightest at the front lip.
+                            rect {
+                                x: "{kx}", y: "{y}",
+                                width: "{kw}", height: "{WH * 0.30}",
+                                fill: "#000",
+                                fill_opacity: if pressed { "0.22" } else { "0.09" },
+                                pointer_events: "none",
+                            }
+                            rect {
+                                x: "{kx}", y: "{y + WH - 7.0}",
+                                width: "{kw}", height: "3",
+                                fill: "#fff",
+                                fill_opacity: if pressed { "0.18" } else { "0.7" },
+                                pointer_events: "none",
+                            }
                             if pressed {
+                                // A held key glows from its front edge.
                                 rect {
-                                    x: "{x + 0.5}", y: "{y}",
-                                    width: "{WW - 1.0}", height: "{WH}",
-                                    rx: "{KEY_R}",
+                                    x: "{kx}", y: "{y + WH * 0.45}",
+                                    width: "{kw}", height: "{WH * 0.55}",
                                     fill: "{accent}",
-                                    fill_opacity: "0.3",
+                                    fill_opacity: "0.55",
                                     pointer_events: "none",
                                 }
                             }
                             if !label.is_empty() {
                                 text {
                                     x: "{x + WW / 2.0}",
-                                    y: "{y + WH - 8.0}",
+                                    y: "{y + WH - 12.0}",
                                     text_anchor: "middle",
                                     font_size: "9",
                                     font_family: "-apple-system, sans-serif",
-                                    fill: if pressed { "white" } else { "#888" },
+                                    fill: if pressed { "white" } else { "#9a9aa6" },
                                     pointer_events: "none",
                                     "{label}"
                                 }
@@ -649,50 +692,54 @@ pub fn Piano(
                     let fill = if pressed {
                         accent.clone()
                     } else if mapped {
-                        "#3b4a8c".to_string()
+                        "#39406e".to_string()
                     } else {
-                        "#18181b".to_string()
+                        "#16161a".to_string()
                     };
                     let note_clone = note;
+                    let body = key_path(x, y, BW, BH, KEY_R - 0.5);
+                    let shadow = key_path(x + 1.6, y, BW, BH + 1.5, KEY_R - 0.5);
 
                     Some(rsx! {
                         g { key: "bk-{note}",
-                            // Drop shadow
-                            rect {
-                                x: "{x + 1.5}", y: "{y + 2.0}",
-                                width: "{BW}", height: "{BH}",
-                                rx: "{KEY_R}",
-                                fill: "black", fill_opacity: "0.45",
+                            // The shadow a raised black key casts on the white
+                            // keys either side of it.
+                            path {
+                                d: "{shadow}",
+                                fill: "#000", fill_opacity: "0.38",
                                 pointer_events: "none",
                             }
-                            // Key body
-                            rect {
-                                x: "{x}", y: "{y}",
-                                width: "{BW}", height: "{BH}",
-                                rx: "{KEY_R}",
+                            path {
+                                d: "{body}",
                                 fill: "{fill}",
                                 cursor: "pointer",
                                 onpointerdown: move |e| { e.stop_propagation(); on_note_on.call(note_clone); },
                                 onpointerup:   move |e| { e.stop_propagation(); on_note_off.call(note_clone); },
                                 onpointerleave: move |e| { e.stop_propagation(); on_note_off.call(note_clone); },
                             }
-                            // Highlight stripe
+                            // The lit top edge of the key's moulding.
                             rect {
-                                x: "{x + 2.5}", y: "{y + 3.0}",
-                                width: "{BW - 5.0}", height: "14",
-                                rx: "2",
-                                fill: if pressed { "white" } else { "#2e2e38" },
-                                fill_opacity: if pressed { "0.35" } else { "1.0" },
+                                x: "{x}", y: "{y}",
+                                width: "{BW}", height: "2",
+                                fill: "#fff",
+                                fill_opacity: if pressed { "0.35" } else { "0.14" },
                                 pointer_events: "none",
                             }
-                            // Pressed accent glow
+                            // The front face catches the light.
+                            rect {
+                                x: "{x + 1.5}", y: "{y + BH - 12.0}",
+                                width: "{BW - 3.0}", height: "9",
+                                rx: "2",
+                                fill: if pressed { "{accent}" } else { "#2a2a33" },
+                                fill_opacity: if pressed { "0.9" } else { "0.85" },
+                                pointer_events: "none",
+                            }
                             if pressed {
                                 rect {
-                                    x: "{x + 1.0}", y: "{y}",
-                                    width: "{BW - 2.0}", height: "{BH}",
-                                    rx: "{KEY_R}",
+                                    x: "{x}", y: "{y + BH * 0.4}",
+                                    width: "{BW}", height: "{BH * 0.6}",
                                     fill: "{accent}",
-                                    fill_opacity: "0.45",
+                                    fill_opacity: "0.5",
                                     pointer_events: "none",
                                 }
                             }
@@ -712,6 +759,15 @@ pub fn Piano(
                         }
                     })
                 })}
+
+                // The felt's shadow lands on the keys, so it is drawn over
+                // them — last, and never in the way of a pointer.
+                rect {
+                    x: "0", y: "{key_y}",
+                    width: "{svg_w}", height: "{FELT_SHADOW_H}",
+                    fill: "#000", fill_opacity: "0.3",
+                    pointer_events: "none",
+                }
             }
 
             // ── Vello waterfall overlay ─────────────────────────────────

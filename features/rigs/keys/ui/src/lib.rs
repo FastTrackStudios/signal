@@ -10,7 +10,6 @@
 //! stacks) stays pinned to the bottom of every zoom.
 
 use dioxus::prelude::*;
-use signal_ui::components::Piano;
 
 mod control;
 mod engine_view;
@@ -99,9 +98,8 @@ pub fn KeysRigRemote() -> Element {
     level.panels(vec![
         fts_chrome::PanelSpec::new("keys.routing", "Routing", fts_chrome::Icon::Routing).width(360),
         fts_chrome::PanelSpec::new("keys.midi", "MIDI", fts_chrome::Icon::Midi).width(360),
-        fts_chrome::PanelSpec::new("keys.keyboard", "Keyboard", fts_chrome::Icon::Perform)
-            .width(420),
     ]);
+    let held = held_notes(&midi);
     let _ = master_pct;
 
     rsx! {
@@ -112,7 +110,7 @@ pub fn KeysRigRemote() -> Element {
                 div { style: "display: flex; flex-direction: column; flex: 1; min-width: 0; min-height: 0;",
                     match zoom() {
                         Zoom::Mixer => rsx! {
-                            ControlView { mixer: mixer.clone(), presets: presets.clone() }
+                            ControlView { mixer: mixer.clone(), held: held.clone() }
                         },
                         Zoom::Engine(name) => {
                             match mixer.engines.iter().find(|e| e.name == name) {
@@ -124,7 +122,7 @@ pub fn KeysRigRemote() -> Element {
                                     }
                                 },
                                 None => rsx! {
-                                    ControlView { mixer: mixer.clone(), presets: presets.clone() }
+                                    ControlView { mixer: mixer.clone(), held: held.clone() }
                                 },
                             }
                         }
@@ -145,57 +143,9 @@ pub fn KeysRigRemote() -> Element {
                 fts_chrome::PanelHost { id: "keys.midi".to_string(),
                     midi_light::MidiPanel { midi: midi.clone(), port: status.midi_port.clone() }
                 }
-                fts_chrome::PanelHost { id: "keys.keyboard".to_string(),
-                    KeyboardPanel { state }
-                }
             }
             // ── perform strip (every zoom) ──
             PerformStrip { perform: perform.clone() }
-        }
-    }
-}
-
-/// The keyboard panel: play the rig from the screen when the controller is
-/// not to hand. (The setlist / DAW-sync surface lands here next.)
-#[component]
-fn KeyboardPanel(state: KeysViewState) -> Element {
-    let rig = use_hook(try_consume_context::<signal_keys_proto::keys::KeysRigClient>);
-    let midi = state.midi.read().clone();
-    let lit = held_notes(&midi);
-
-    rsx! {
-        div {
-            style: "flex: 1; min-height: 0; overflow: auto; padding: 12px; \
-                    display: flex; flex-direction: column; gap: 12px;",
-            div {
-                {
-                    let rig_on = rig.clone();
-                    let rig_off = rig.clone();
-                    rsx! {
-                        Piano {
-                            start_note: 21,
-                            end_note: 108,
-                            active_notes: lit,
-                            show_labels: false,
-                            waterfall: false,
-                            accent_color: "#a78bfa".to_string(),
-                            height: "132px",
-                            on_note_on: move |n: u8| {
-                                let rig = rig_on.clone();
-                                spawn(async move {
-                                    if let Some(r) = rig { let _ = r.trigger(n as u32, 100).await; }
-                                });
-                            },
-                            on_note_off: move |n: u8| {
-                                let rig = rig_off.clone();
-                                spawn(async move {
-                                    if let Some(r) = rig { let _ = r.trigger(n as u32, 0).await; }
-                                });
-                            },
-                        }
-                    }
-                }
-            }
         }
     }
 }
