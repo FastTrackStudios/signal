@@ -267,8 +267,8 @@ pub mod keys {
     use facet::Facet;
 
     use super::{
-        KeysEngineDetail, KeysLayerDetail, KeysMixer, KeysNode, KeysPerform, KeysPreset,
-        KeysStatus,
+        KeysEngineDetail, KeysLayerDetail, KeysMacro, KeysMixer, KeysNode, KeysPerform,
+        KeysPreset, KeysStatus,
     };
     // `KeysModule` rides inside `KeysLayerDetail`.
 
@@ -335,6 +335,13 @@ pub mod keys {
         /// variation (the same soundsource, voiced differently). Index 0 is
         /// the first authored variation; the default is `set_layer_patch`.
         fn set_layer_variant(&self, layer: String, module: u32, preset: u32, variant: u32);
+
+        /// Reorder the profile's engines — the order the mixer reads left to
+        /// right. Engines the list omits keep their relative order behind the
+        /// ones it names, so a partial list is a promotion rather than a
+        /// truncation. Engines sum in parallel, so this is a layout decision,
+        /// not an audio one.
+        fn set_engine_order(&self, engines: Vec<String>);
         /// Empty one module (silences it and frees its samples).
         fn clear_layer(&self, layer: String, module: u32);
         /// Ride one module's fader (dB) — live, no rebuild.
@@ -358,6 +365,12 @@ pub mod keys {
         /// The engine's Global Controls — the same surface as a layer's, over
         /// every audible module in every lane of the engine.
         fn engine_detail(&self, engine: String) -> KeysEngineDetail;
+        /// The RIG's Global Controls — the level above the engines. Every
+        /// engine exposes the same macro surface, so one panel drives all of
+        /// them at once: the mixer shows these when nothing is selected.
+        fn rig_macros(&self) -> Vec<KeysMacro>;
+        /// Move a RIG macro. Same rule again, over the whole profile.
+        fn set_rig_global(&self, id: String, value: f32);
         /// Move an ENGINE macro. Same rule as `set_layer_global`, one rung
         /// up: absolute while the whole engine agrees, a bipolar offset over
         /// all of it once it doesn't.

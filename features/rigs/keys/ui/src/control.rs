@@ -72,11 +72,21 @@ pub fn ControlView(
                     style: "flex: 1; min-width: 0; overflow-x: auto; overflow-y: auto; \
                             padding: 12px 22px; display: flex; align-items: flex-start; \
                             justify-content: space-between; gap: 14px;",
-                    for engine in mixer.engines.iter() {
-                        div {
-                            key: "{engine.name}",
-                            style: "flex: 0 0 auto;",
-                            EngineStrip { engine: engine.clone() }
+                    {
+                        let order: Vec<String> =
+                            mixer.engines.iter().map(|e| e.name.clone()).collect();
+                        rsx! {
+                            for (i, engine) in mixer.engines.iter().enumerate() {
+                                div {
+                                    key: "{engine.name}",
+                                    style: "flex: 0 0 auto;",
+                                    EngineStrip {
+                                        engine: engine.clone(),
+                                        order: order.clone(),
+                                        index: i,
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -92,27 +102,61 @@ pub fn ControlView(
     }
 }
 
-/// Which node's Global Controls the band shows: `(engine, name, is_engine)`.
-/// A module selection still shows its LAYER — anything deeper is the zoom's
+/// Which node's Global Controls the band shows. Every level exposes the same
+/// macro surface, so there is always one to show — with nothing selected it
+/// is the **rig's**, driving every engine at once.
+///
+/// A module selection still shows its LAYER: anything deeper is the zoom's
 /// job.
-fn scope_of(selection: &Selection) -> Option<(String, String, bool)> {
-    match selection {
-        Selection::Engine(engine) => Some((engine.clone(), engine.clone(), true)),
-        Selection::Layer { engine, layer } | Selection::Module { engine, layer, .. } => {
-            Some((engine.clone(), layer.clone(), false))
+#[derive(Clone, PartialEq)]
+enum MacroScope {
+    /// The whole rig — every module under every engine.
+    Rig,
+    Engine(String),
+    Layer { engine: String, layer: String },
+}
+
+impl MacroScope {
+    fn of(selection: &Selection) -> Self {
+        match selection {
+            Selection::None => MacroScope::Rig,
+            Selection::Engine(engine) => MacroScope::Engine(engine.clone()),
+            Selection::Layer { engine, layer } | Selection::Module { engine, layer, .. } => {
+                MacroScope::Layer { engine: engine.clone(), layer: layer.clone() }
+            }
         }
-        Selection::None => None,
+    }
+
+    /// What the band is called, and what level it is.
+    fn heading(&self) -> (String, &'static str) {
+        match self {
+            MacroScope::Rig => ("All engines".to_string(), "rig controls"),
+            MacroScope::Engine(engine) => (engine.clone(), "engine controls"),
+            MacroScope::Layer { layer, .. } => (layer.clone(), "layer controls"),
+        }
+    }
+
+    /// The colour of the thing being driven — the rig is nobody's engine, so
+    /// it takes the master strip's neutral white.
+    fn accent(&self) -> String {
+        match self {
+            MacroScope::Rig => "#e4e4e7".to_string(),
+            MacroScope::Engine(engine) => engine_color(engine).to_string(),
+            MacroScope::Layer { engine, .. } => engine_color(engine).to_string(),
+        }
     }
 }
 
-/// **The macro band** — the selected node's Global Controls, under the strips
-/// that select it.
+/// **The macro band** — Global Controls, always. Under the strips that aim
+/// them.
 ///
 /// It follows the selection rather than the zoom: picking a card or a lane is
-/// already how the browser is aimed, so it is also how the knobs are. An
-/// engine's macros drive every module in every one of its lanes; a lane's
-/// drive its own. Both are offsets into the level beneath once that level
-/// stops agreeing with itself — the panels say "offset" and print the spread.
+/// already how the browser is aimed, so it is also how the knobs are. With
+/// nothing selected it drives the whole rig — every engine runs the same
+/// macro surface, so one Filter, one Envelope, one Ambience over all of them
+/// is a real control, not a placeholder. Each level is an offset into the one
+/// beneath once that level stops agreeing with itself: the panels say
+/// "offset" and print the spread.
 #[component]
 fn MacroBand() -> Element {
     let rig = use_hook(try_consume_context::<KeysRigClient>);
@@ -120,11 +164,9 @@ fn MacroBand() -> Element {
     let selection = crate::selection::use_selection();
     let mut macros = use_signal(Vec::<KeysMacro>::new);
 
-    let scope = scope_of(&selection.read());
-    let accent = scope
-        .as_ref()
-        .map(|(engine, ..)| engine_color(engine).to_string())
-        .unwrap_or_else(|| "#94a3b8".to_string());
+    let scope = MacroScope::of(&selection.read());
+    let accent = scope.accent();
+    let (label, level) = scope.heading();
 
     // Re-pull whenever the selection moves or the rig publishes a mixer —
     // every macro move republishes, so the band reflects what it just did.
@@ -137,32 +179,31 @@ fn MacroBand() -> Element {
             if let Some(state) = state {
                 let _ = state.mixer.read();
             }
-            let scope = scope_of(&selection.read());
+            let scope = MacroScope::of(&selection.read());
             let rig = rig.clone();
             spawn(async move {
                 let Some(rig) = rig else { return };
                 match scope {
-                    Some((_, name, true)) => {
-                        if let Ok(d) = rig.engine_detail(name).await {
+                    MacroScope::Rig => {
+                        if let Ok(m) = rig.rig_macros().await {
+                            macros.set(m);
+                        }
+                    }
+                    MacroScope::Engine(engine) => {
+                        if let Ok(d) = rig.engine_detail(engine).await {
                             macros.set(d.macros);
                         }
                     }
-                    Some((_, name, false)) => {
-                        if let Ok(d) = rig.layer_detail(name, 0).await {
+                    MacroScope::Layer { layer, .. } => {
+                        if let Ok(d) = rig.layer_detail(layer, 0).await {
                             macros.set(d.layer_macros);
                         }
                     }
-                    None => macros.set(Vec::new()),
                 }
             });
         });
     }
 
-    let (label, level) = match &scope {
-        Some((_, name, true)) => (name.clone(), "engine controls".to_string()),
-        Some((_, name, false)) => (name.clone(), "layer controls".to_string()),
-        None => (String::new(), String::new()),
-    };
     let items = macros.read().clone();
 
     rsx! {
@@ -170,42 +211,34 @@ fn MacroBand() -> Element {
             style: "flex-shrink: 0; display: flex; flex-direction: column; gap: 8px; \
                     padding: 10px 12px; border-top: 1px solid #1c1c1f; background: #0a0a0c;",
             div { style: "display: flex; align-items: baseline; gap: 8px;",
-                if label.is_empty() {
-                    span { style: "font-size: 10px; color: #52525b;",
-                        "Pick an engine or a lane to control it from here."
-                    }
-                } else {
-                    span { style: "font-size: 11px; font-weight: 700; color: {accent};", "{label}" }
-                    span {
-                        style: "font-size: 9px; font-weight: 700; letter-spacing: 0.1em; \
-                                text-transform: uppercase; color: #52525b;",
-                        "{level}"
-                    }
+                span { style: "font-size: 11px; font-weight: 700; color: {accent};", "{label}" }
+                span {
+                    style: "font-size: 9px; font-weight: 700; letter-spacing: 0.1em; \
+                            text-transform: uppercase; color: #52525b;",
+                    "{level}"
                 }
             }
-            if !items.is_empty() {
-                crate::macro_panel::MacroPanel {
-                    macros: items,
-                    accent: accent.clone(),
-                    on_change: {
+            crate::macro_panel::MacroPanel {
+                macros: items,
+                accent: accent.clone(),
+                on_change: {
+                    let (rig, scope) = (rig.clone(), scope.clone());
+                    move |(id, v): (String, f32)| {
                         let (rig, scope) = (rig.clone(), scope.clone());
-                        move |(id, v): (String, f32)| {
-                            let (rig, scope) = (rig.clone(), scope.clone());
-                            spawn(async move {
-                                let Some(rig) = rig else { return };
-                                match scope {
-                                    Some((_, name, true)) => {
-                                        let _ = rig.set_engine_global(name, id, v).await;
-                                    }
-                                    Some((_, name, false)) => {
-                                        let _ = rig.set_layer_global(name, id, v).await;
-                                    }
-                                    None => {}
+                        spawn(async move {
+                            let Some(rig) = rig else { return };
+                            let _ = match scope {
+                                MacroScope::Rig => rig.set_rig_global(id, v).await,
+                                MacroScope::Engine(engine) => {
+                                    rig.set_engine_global(engine, id, v).await
                                 }
-                            });
-                        }
-                    },
-                }
+                                MacroScope::Layer { layer, .. } => {
+                                    rig.set_layer_global(layer, id, v).await
+                                }
+                            };
+                        });
+                    }
+                },
             }
         }
     }
@@ -323,7 +356,15 @@ fn white_fraction(note: u8, past: bool) -> f32 {
 /// which read as a fourth control per engine and cost a whole band of height.
 /// It is a trim you set once, not a lane you ride — so it became the outline.
 #[component]
-fn EngineStrip(engine: KeysEngineModel) -> Element {
+fn EngineStrip(
+    engine: KeysEngineModel,
+    /// Every engine name in mixer order, and this one's place in it — a card
+    /// can only be moved relative to its siblings.
+    #[props(default)]
+    order: Vec<String>,
+    #[props(default)]
+    index: usize,
+) -> Element {
     let rig = use_hook(try_consume_context::<KeysRigClient>);
     let mut zoom = crate::zoom::use_zoom();
     let mut selection = crate::selection::use_selection();
@@ -334,6 +375,23 @@ fn EngineStrip(engine: KeysEngineModel) -> Element {
     let name = engine.name.clone();
     let open_name = engine.name.clone();
     let dbl_name = engine.name.clone();
+    let first = index == 0;
+    let last = order.is_empty() || index + 1 >= order.len();
+    // Moving a card is a swap with its neighbour, sent as the whole order.
+    let reorder = {
+        let rig = rig.clone();
+        let order = order.clone();
+        move |to: usize| {
+            let (rig, mut order) = (rig.clone(), order.clone());
+            if to >= order.len() {
+                return;
+            }
+            order.swap(index, to);
+            spawn(async move {
+                if let Some(r) = rig { let _ = r.set_engine_order(order).await; }
+            });
+        }
+    };
 
     rsx! {
         div {
@@ -399,6 +457,32 @@ fn EngineStrip(engine: KeysEngineModel) -> Element {
                         "{engine.name}"
                     }
                     div { style: "flex: 1;" }
+                    {
+                        let back = reorder.clone();
+                        let fwd = reorder.clone();
+                        rsx! {
+                            button {
+                                style: move_style(first),
+                                title: "Move left",
+                                disabled: first,
+                                onclick: move |e: MouseEvent| {
+                                    e.stop_propagation();
+                                    back(index.saturating_sub(1));
+                                },
+                                "‹"
+                            }
+                            button {
+                                style: move_style(last),
+                                title: "Move right",
+                                disabled: last,
+                                onclick: move |e: MouseEvent| {
+                                    e.stop_propagation();
+                                    fwd(index + 1);
+                                },
+                                "›"
+                            }
+                        }
+                    }
                     OpenButton {
                         title: format!("Open {}", engine.name),
                         on_open: move |_| zoom.set(Zoom::Engine(open_name.clone())),
@@ -619,6 +703,16 @@ fn MasterStrip(master_db: f32) -> Element {
             span { style: "font-size: 9px; color: #52525b;", {fmt_db(master_db)} }
         }
     }
+}
+
+/// The engine card's move chevrons — quiet, and gone at the ends of the row.
+fn move_style(at_end: bool) -> String {
+    format!(
+        "appearance: none; border: none; background: transparent; padding: 0 3px; \
+         font-size: 12px; line-height: 1; color: {}; cursor: {};",
+        if at_end { "#26262b" } else { "#52525b" },
+        if at_end { "default" } else { "pointer" },
+    )
 }
 
 fn mute_style(on: bool) -> String {

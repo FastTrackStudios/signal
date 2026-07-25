@@ -56,6 +56,12 @@ struct State {
     engines: BTreeMap<String, EngineState>,
     /// Master trim (dB).
     master_db: f32,
+    /// The RIG's own Global Controls — the level above the engines, over
+    /// every module in the profile. Every engine exposes the same macro
+    /// surface, so one panel drives all of them.
+    rig_globals: BTreeMap<String, f32>,
+    /// The rig level's live bipolar offsets — see [`LaneState::spans`].
+    rig_spans: BTreeMap<String, (f32, Baseline)>,
     /// Index of the last pressed stack.
     active_stack: Option<usize>,
     /// Grid mode: 0 Preset, 1 Profile (stacks), 2 Setlist.
@@ -304,26 +310,20 @@ const GLOBALS: &[GlobalDef] = &[
     GlobalDef { key: "limiter", name: "Limiter", group: "Effects", target: None, default: 0.0, min: 0.0, max: 1.0, unit: "", live: false },
 ];
 
-/// Id prefixes for the two levels a Global Control lives at. The wire ids are
-/// `l.filter.cutoff` (layer) and `e.filter.cutoff` (engine).
+/// Id prefixes for the three levels a Global Control lives at. The wire ids
+/// are `l.filter.cutoff` (layer), `e.filter.cutoff` (engine) and
+/// `r.filter.cutoff` (the whole rig).
 const LAYER: &str = "l.";
 const ENGINE: &str = "e.";
+const RIG: &str = "r.";
 
-/// The definition behind a Global Control id, at either level.
+/// The definition behind a Global Control id, at any level.
 fn global_def(id: &str) -> Option<&'static GlobalDef> {
-    let key = id.strip_prefix(LAYER).or_else(|| id.strip_prefix(ENGINE))?;
+    let key = id
+        .strip_prefix(LAYER)
+        .or_else(|| id.strip_prefix(ENGINE))
+        .or_else(|| id.strip_prefix(RIG))?;
     GLOBALS.iter().find(|g| g.key == key)
-}
-
-/// The Global Control ids — at both levels — that drive `target`. Editing a
-/// module by hand (or moving a Global one rung down) invalidates their
-/// baselines: they describe a patch that no longer exists.
-fn globals_driving(target: &str) -> Vec<(String, String)> {
-    GLOBALS
-        .iter()
-        .filter(|g| g.target == Some(target))
-        .map(|g| (format!("{LAYER}{}", g.key), format!("{ENGINE}{}", g.key)))
-        .collect()
 }
 
 /// How a value reads back in the UI's spread text.
@@ -511,6 +511,20 @@ impl KeysRigBackend {
             .filter(|e| e.name == engine)
             .flat_map(|e| e.layers.iter().map(|l| l.name.clone()))
             .collect()
+    }
+
+    /// Every lane in the profile, in profile order — the rig level's scope.
+    fn all_lanes(s: &State) -> Vec<String> {
+        s.profile
+            .engines
+            .iter()
+            .flat_map(|e| e.layers.iter().map(|l| l.name.clone()))
+            .collect()
+    }
+
+    /// Every engine name, in profile order.
+    fn all_engines(s: &State) -> Vec<String> {
+        s.profile.engines.iter().map(|e| e.name.clone()).collect()
     }
 
     /// A scope's Global Controls as the UI sees them: absolute and 1:1 while
@@ -709,12 +723,29 @@ impl KeysRigBackend {
 
     /// Re-base every *other* Global Control that drives `target`: a hand edit
     /// — or a Global at another level — leaves their baselines describing a
-    /// patch that no longer exists. `skip` is the id doing the driving.
-    fn rebase_others(s: &mut State, engine: &str, lanes: &[String], target: &str, skip: &str) {
-        for (layer_id, engine_id) in globals_driving(target) {
+    /// patch that no longer exists. `skip` is the id doing the driving, and
+    /// the rig level is always re-based (it sits above everything).
+    fn rebase_others(
+        s: &mut State,
+        engines: &[String],
+        lanes: &[String],
+        target: &str,
+        skip: &str,
+    ) {
+        for g in GLOBALS.iter().filter(|g| g.target == Some(target)) {
+            let (rig_id, engine_id, layer_id) = (
+                format!("{RIG}{}", g.key),
+                format!("{ENGINE}{}", g.key),
+                format!("{LAYER}{}", g.key),
+            );
+            if rig_id != skip {
+                s.rig_spans.remove(&rig_id);
+            }
             if engine_id != skip {
-                if let Some(e) = s.engines.get_mut(engine) {
-                    e.spans.remove(&engine_id);
+                for name in engines {
+                    if let Some(e) = s.engines.get_mut(name) {
+                        e.spans.remove(&engine_id);
+                    }
                 }
             }
             if layer_id != skip {
@@ -1561,7 +1592,7 @@ impl KeysRigSvc for KeysRigBackend {
             }
             // The engine's knob for the same parameter now describes a patch
             // that moved under it.
-            Self::rebase_others(&mut s, &engine, &[layer.clone()], target, &id);
+            Self::rebase_others(&mut s, &[engine.clone()], &[layer.clone()], target, &id);
             // Unison changes the program's voice count — that needs a build.
             rebuild = target == "source.unison";
         }
@@ -1618,7 +1649,42 @@ impl KeysRigSvc for KeysRigBackend {
                 };
             }
             // Every lane knob for this parameter has been moved from under it.
-            Self::rebase_others(&mut s, &engine, &lanes, target, &id);
+            Self::rebase_others(&mut s, &[engine.clone()], &lanes, target, &id);
+            rebuild = target == "source.unison";
+        }
+        self.after_global(rebuild);
+    }
+
+    fn rig_macros(&self) -> Vec<KeysMacro> {
+        let Ok(s) = self.inner.state.lock() else { return Vec::new() };
+        let targets = Self::scope_targets(&s, &Self::all_lanes(&s));
+        Self::global_models(&s, RIG, &targets, &s.rig_globals, &s.rig_spans)
+    }
+
+    /// Move a rig Global Control — the same rule over the whole profile.
+    fn set_rig_global(&self, id: String, value: f32) {
+        let Some(def) = global_def(&id) else { return };
+        let rebuild;
+        {
+            let Ok(mut s) = self.inner.state.lock() else { return };
+            let Some(target) = def.target else {
+                s.rig_globals.insert(id, value.clamp(def.min, def.max));
+                drop(s);
+                self.publish_mixer();
+                return;
+            };
+            let lanes = Self::all_lanes(&s);
+            let engines = Self::all_engines(&s);
+            let targets = Self::scope_targets(&s, &lanes);
+            let span = s.rig_spans.get(&id).cloned();
+            let next = Self::drive_global(&mut s, def, target, &targets, span, value);
+            match next {
+                Some(span) => s.rig_spans.insert(id.clone(), span),
+                None => s.rig_spans.remove(&id),
+            };
+            // Every engine and lane knob for this parameter has been moved
+            // from under it.
+            Self::rebase_others(&mut s, &engines, &lanes, target, &id);
             rebuild = target == "source.unison";
         }
         self.after_global(rebuild);
@@ -1631,7 +1697,7 @@ impl KeysRigSvc for KeysRigBackend {
             let engine = lane.engine.clone();
             // A hand edit re-bases every Global Control above it that drives
             // this parameter — their baselines described a patch that is gone.
-            Self::rebase_others(&mut s, &engine, &[layer.clone()], def.id, "");
+            Self::rebase_others(&mut s, &[engine.clone()], &[layer.clone()], def.id, "");
             let Some(m) =
                 s.lanes.get_mut(&layer).and_then(|l| l.modules.get_mut(module as usize))
             else {
@@ -1643,6 +1709,21 @@ impl KeysRigSvc for KeysRigBackend {
         if def.id == "source.level" {
             self.apply_mixer();
         }
+        self.publish_mixer();
+    }
+
+    fn set_engine_order(&self, engines: Vec<String>) {
+        if let Ok(mut s) = self.inner.state.lock() {
+            // Rank by the requested order; anything unnamed keeps its place
+            // behind the named ones, so a caller can promote one engine
+            // without having to restate the whole mixer.
+            let rank = |name: &str| {
+                engines.iter().position(|n| n == name).unwrap_or(usize::MAX)
+            };
+            s.profile.engines.sort_by_key(|e| rank(&e.name));
+        }
+        // Engines sum in parallel, so order is presentation only — the tree
+        // does not need rebuilding and nothing stops sounding.
         self.publish_mixer();
     }
 
@@ -2172,6 +2253,26 @@ mod tests {
     }
 
     #[test]
+    fn a_rig_knob_reaches_every_engine() {
+        // Two engines, one lane each, disagreeing — the rig level should
+        // still move both together and hand them back at the detent.
+        let mut s = keys_state(&[("Keys A", 2000.0), ("Pad", 8000.0)]);
+        let targets = KeysRigBackend::scope_targets(&s, &KeysRigBackend::all_lanes(&s));
+        let def = global_def("r.filter.cutoff").expect("rig cutoff");
+
+        let span = KeysRigBackend::drive_global(&mut s, def, "filter.cutoff", &targets, None, 0.5)
+            .expect("a disagreeing rig holds its baseline");
+        let (keys, pad) = (cutoff(&s, "Keys A"), cutoff(&s, "Pad"));
+        assert!(keys > 2000.0 && pad > 8000.0, "both engines travelled: {keys} {pad}");
+
+        let back =
+            KeysRigBackend::drive_global(&mut s, def, "filter.cutoff", &targets, Some(span), 0.0);
+        assert!(back.is_none());
+        assert!((cutoff(&s, "Keys A") - 2000.0).abs() < 1e-2);
+        assert!((cutoff(&s, "Pad") - 8000.0).abs() < 1e-2);
+    }
+
+    #[test]
     fn an_edit_underneath_rebases_the_engine_knob() {
         let mut s = keys_state(&[("Keys A", 2000.0), ("Keys B", 8000.0)]);
         s.engines
@@ -2180,7 +2281,13 @@ mod tests {
             .spans
             .insert("e.filter.cutoff".into(), (0.5, vec![("Keys A".into(), 0, 2000.0)]));
 
-        KeysRigBackend::rebase_others(&mut s, "Keys", &["Keys A".to_string()], "filter.cutoff", "");
+        KeysRigBackend::rebase_others(
+            &mut s,
+            &["Keys".to_string()],
+            &["Keys A".to_string()],
+            "filter.cutoff",
+            "",
+        );
 
         assert!(
             s.engines.get("Keys").expect("engine").spans.is_empty(),

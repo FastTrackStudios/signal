@@ -11,9 +11,11 @@
 //! Profile "Worship"
 //! ├─ Engines (parallel)
 //! │  ├─ Keys   → Keys A · Keys B          (piano / EP)
-//! │  ├─ Aux    → Aux A · Aux B · Aux C     (whatever the song needs)
+//! │  ├─ Pad    → Pad                      (the wash under everything)
 //! │  ├─ Organ  → Organ A · Organ B        (drawbar upper / lower)
-//! │  └─ Pad    → Pad                      (the wash under everything)
+//! │  ├─ Aux    → Aux A · Aux B · Aux C    (whatever the song needs)
+//! │  ├─ Drone  → Drone                    (the bed a moment sits on)
+//! │  └─ SFX    → SFX A · SFX B            (risers, impacts — fired)
 //! └─ Global    → master FX tail
 //!
 //! Stacks: Spotlight · Verse · Energy · Hooks · Underscore
@@ -265,23 +267,6 @@ pub fn worship_profile() -> KeysProfile {
                 ],
             },
             EngineDef {
-                name: "Aux".into(),
-                gain_db: 0.0,
-                layers: vec![
-                    LayerDef::new("Aux A", ""),
-                    LayerDef::new("Aux B", ""),
-                    LayerDef::new("Aux C", ""),
-                ],
-            },
-            EngineDef {
-                name: "Organ".into(),
-                gain_db: 0.0,
-                layers: vec![
-                    LayerDef::new("Organ A", ""),
-                    LayerDef::new("Organ B", ""),
-                ],
-            },
-            EngineDef {
                 name: "Pad".into(),
                 gain_db: 0.0,
                 // The wash under everything: "American Obesity" (Live
@@ -297,6 +282,23 @@ pub fn worship_profile() -> KeysProfile {
                     key_lo: 0,
                     key_hi: 127,
                 }],
+            },
+            EngineDef {
+                name: "Organ".into(),
+                gain_db: 0.0,
+                layers: vec![
+                    LayerDef::new("Organ A", ""),
+                    LayerDef::new("Organ B", ""),
+                ],
+            },
+            EngineDef {
+                name: "Aux".into(),
+                gain_db: 0.0,
+                layers: vec![
+                    LayerDef::new("Aux A", ""),
+                    LayerDef::new("Aux B", ""),
+                    LayerDef::new("Aux C", ""),
+                ],
             },
             EngineDef {
                 name: "Drone".into(),
