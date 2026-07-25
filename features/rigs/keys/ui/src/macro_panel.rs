@@ -56,6 +56,15 @@ const ROW: &[Cell] = &[
     Cell::Column("Tone", "EQ — centred is bypassed", true),
 ];
 
+/// **The band's one card height**, from the graph height inside the shape
+/// cards: panel padding and header, the graph, the divider, a knob row and its
+/// readout. Every card is pinned to it — a column of three knobs is otherwise
+/// taller than a graph card, and one tall card drags the whole row (and the
+/// mixer above it) down with it.
+fn card_height_px(graph_px: u32) -> u32 {
+    graph_px + 160
+}
+
 /// The macros of one group.
 fn group(macros: &[KeysMacro], name: &str) -> Vec<KeysMacro> {
     macros.iter().filter(|m| m.group == name).cloned().collect()
@@ -150,7 +159,9 @@ pub fn ShapeCard(
             accent: accent.clone(),
             lit: items.iter().any(|m| m.live),
             trailing: offset_badge(varies(&macros, group_name)),
-            div { style: "display: flex; flex-direction: column; gap: 10px;",
+            div {
+                style: "display: flex; flex-direction: column; gap: 10px; \
+                        min-height: 0; overflow: hidden;",
                 match shape {
                     Shape::Unison => rsx! {
                         StackedUnison { curves: curves.clone(), height_px, flat: true }
@@ -207,8 +218,13 @@ pub fn MacroPanel(
     rsx! {
         div {
             // `flex: 0 1 auto` per card: sized to its own knobs, giving width
-            // back only when the window is too narrow for all seven.
-            style: "display: flex; gap: 12px; align-items: stretch; min-width: 0;",
+            // back only when the window is too narrow for all seven. The
+            // height is fixed for every card, so the row never grows because
+            // one card has more to say.
+            style: format!(
+                "display: flex; gap: 12px; align-items: stretch; min-width: 0; height: {}px;",
+                card_height_px(height_px),
+            ),
             for (i, cell) in ROW.iter().enumerate() {
                 {
                     match cell {
@@ -260,9 +276,9 @@ pub fn MacroPanel(
                                                 // where the shape cards' knob
                                                 // rows do instead of bunching at
                                                 // the top.
-                                                style: "display: flex; flex-direction: column; gap: 18px; \
+                                                style: "display: flex; flex-direction: column; gap: 6px; \
                                                         align-items: center; justify-content: space-between; \
-                                                        flex: 1; height: 100%;",
+                                                        flex: 1; min-height: 0; overflow: hidden;",
                                                 title: "{hint}",
                                                 for m in items.iter() {
                                                     Knob {

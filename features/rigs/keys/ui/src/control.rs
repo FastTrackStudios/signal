@@ -437,7 +437,7 @@ fn KeyboardStrip(
             div { style: "display: flex; align-items: flex-end; gap: 14px; min-width: 0;",
             // Pedals and wheels, laid out as the hardware is: feet at the far
             // left, then the left hand's wheels, then the keys.
-            crate::controllers::ControllerStrip { controllers, height_px: 108 }
+            crate::controllers::ControllerStrip { controllers, height_px: 82 }
             div { style: "flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px;",
             // Split bands, aligned to the keys beneath them.
             div { style: "position: relative; height: {14 * bands.len().max(1)}px;",
