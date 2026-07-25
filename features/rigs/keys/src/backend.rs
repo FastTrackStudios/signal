@@ -71,6 +71,13 @@ struct LaneState {
     soloed: bool,
     /// The lane's four modules (the engine instances). Module A is index 0.
     modules: Vec<ModuleState>,
+    /// Layer macro values that belong to the layer itself (Tone, Limiter, FX
+    /// bypass) — the ones with no module target.
+    globals: BTreeMap<String, f32>,
+    /// Live bipolar offsets: layer macro id → (offset −1..1, the module
+    /// values it started from). The baseline is what the detent returns to,
+    /// so a Global Control never destroys the patch's own settings.
+    spans: BTreeMap<String, (f32, Vec<Option<f32>>)>,
 }
 
 /// One module: its Source Block's patch and its own macro values (each
@@ -228,6 +235,77 @@ const MACROS: &[MacroDef] = &[
 ];
 
 
+/// One **Global Control** on a layer — Omnisphere's Main-page model: a knob
+/// that drives the same parameter on every audible module beneath it.
+///
+/// `target` names the module macro it reaches. A `None` target is the layer's
+/// own value (its EQ / limiter sit at the layer output, not inside a module),
+/// which is exactly how Omnisphere treats TONE and the LIMITER: part-level,
+/// after every layer has summed.
+struct LayerMacroDef {
+    id: &'static str,
+    name: &'static str,
+    group: &'static str,
+    /// The module macro this drives, or `None` for a layer-owned parameter.
+    target: Option<&'static str>,
+    default: f32,
+    min: f32,
+    max: f32,
+    unit: &'static str,
+    live: bool,
+}
+
+/// The layer's Global Controls, in panel order — Filter, Envelope (Amp +
+/// Filter ADSR), Vibrato, Unison, Ambience, then the layer's own Tone /
+/// Effects / Limiter.
+const LAYER_MACROS: &[LayerMacroDef] = &[
+    // ── Filter ───────────────────────────────────────────────────────────
+    LayerMacroDef { id: "l.filter.cutoff", name: "Cutoff", group: "Filter", target: Some("filter.cutoff"), default: 20000.0, min: 20.0, max: 20000.0, unit: "Hz", live: false },
+    LayerMacroDef { id: "l.filter.reso", name: "Resonance", group: "Filter", target: Some("filter.reso"), default: 0.0, min: 0.0, max: 1.0, unit: "", live: false },
+    LayerMacroDef { id: "l.filter.env", name: "Env Amt", group: "Filter", target: Some("filter.env_amt"), default: 0.0, min: -1.0, max: 1.0, unit: "", live: false },
+    // ── Envelope: the Amp ADSR (ENV 1) then the Filter ADSR (ENV 2) ──────
+    LayerMacroDef { id: "l.amp.attack", name: "A", group: "Amp Env", target: Some("env1.attack"), default: 0.0, min: 0.0, max: 5000.0, unit: "ms", live: true },
+    LayerMacroDef { id: "l.amp.decay", name: "D", group: "Amp Env", target: Some("env1.decay"), default: 0.0, min: 0.0, max: 5000.0, unit: "ms", live: false },
+    LayerMacroDef { id: "l.amp.sustain", name: "S", group: "Amp Env", target: Some("env1.sustain"), default: 1.0, min: 0.0, max: 1.0, unit: "", live: false },
+    LayerMacroDef { id: "l.amp.release", name: "R", group: "Amp Env", target: Some("env1.release"), default: 120.0, min: 0.0, max: 8000.0, unit: "ms", live: true },
+    LayerMacroDef { id: "l.fenv.attack", name: "A", group: "Filter Env", target: Some("env2.attack"), default: 0.0, min: 0.0, max: 5000.0, unit: "ms", live: false },
+    LayerMacroDef { id: "l.fenv.decay", name: "D", group: "Filter Env", target: Some("env2.decay"), default: 0.0, min: 0.0, max: 5000.0, unit: "ms", live: false },
+    LayerMacroDef { id: "l.fenv.sustain", name: "S", group: "Filter Env", target: Some("env2.sustain"), default: 1.0, min: 0.0, max: 1.0, unit: "", live: false },
+    LayerMacroDef { id: "l.fenv.release", name: "R", group: "Filter Env", target: Some("env2.release"), default: 120.0, min: 0.0, max: 8000.0, unit: "ms", live: false },
+    // ── Vibrato ──────────────────────────────────────────────────────────
+    LayerMacroDef { id: "l.vib.rate", name: "Rate", group: "Vibrato", target: Some("vib.rate"), default: 5.0, min: 0.1, max: 12.0, unit: "Hz", live: false },
+    LayerMacroDef { id: "l.vib.depth", name: "Depth", group: "Vibrato", target: Some("vib.depth"), default: 0.0, min: 0.0, max: 1.0, unit: "", live: false },
+    // ── Unison ───────────────────────────────────────────────────────────
+    LayerMacroDef { id: "l.uni.voices", name: "Voices", group: "Unison", target: Some("source.unison"), default: 1.0, min: 1.0, max: 8.0, unit: "v", live: true },
+    LayerMacroDef { id: "l.uni.detune", name: "Detune", group: "Unison", target: Some("source.detune"), default: 0.1, min: 0.0, max: 2.0, unit: "", live: true },
+    // ── Ambience ─────────────────────────────────────────────────────────
+    LayerMacroDef { id: "l.amb.amount", name: "Amount", group: "Ambience", target: Some("amb.mix"), default: 0.15, min: 0.0, max: 1.0, unit: "", live: false },
+    LayerMacroDef { id: "l.amb.length", name: "Length", group: "Ambience", target: Some("amb.size"), default: 0.5, min: 0.0, max: 1.0, unit: "", live: false },
+    // ── Tone: the layer's EQ, centred = bypassed ─────────────────────────
+    LayerMacroDef { id: "l.tone.low", name: "Low", group: "Tone", target: None, default: 0.0, min: -12.0, max: 12.0, unit: "dB", live: false },
+    LayerMacroDef { id: "l.tone.mid", name: "Mid", group: "Tone", target: None, default: 0.0, min: -12.0, max: 12.0, unit: "dB", live: false },
+    LayerMacroDef { id: "l.tone.high", name: "High", group: "Tone", target: None, default: 0.0, min: -12.0, max: 12.0, unit: "dB", live: false },
+    // ── Effects + Limiter, at the layer output ───────────────────────────
+    LayerMacroDef { id: "l.fx.bypass", name: "Bypass", group: "Effects", target: None, default: 0.0, min: 0.0, max: 1.0, unit: "", live: false },
+    LayerMacroDef { id: "l.limiter", name: "Limiter", group: "Effects", target: None, default: 0.0, min: 0.0, max: 1.0, unit: "", live: false },
+];
+
+fn layer_macro_def(id: &str) -> Option<&'static LayerMacroDef> {
+    LAYER_MACROS.iter().find(|m| m.id == id)
+}
+
+/// How a value reads back in the UI's spread text.
+fn fmt_value(v: f32, unit: &str) -> String {
+    match unit {
+        "Hz" if v >= 1000.0 => format!("{:.1} kHz", v / 1000.0),
+        "Hz" => format!("{v:.0} Hz"),
+        "ms" if v >= 1000.0 => format!("{:.2} s", v / 1000.0),
+        "ms" => format!("{v:.0} ms"),
+        "" => format!("{v:.2}"),
+        u => format!("{v:.1} {u}"),
+    }
+}
+
 fn macro_def(id: &str) -> Option<&'static MacroDef> {
     MACROS.iter().find(|m| m.id == id)
 }
@@ -269,6 +347,8 @@ impl State {
                                 ..ModuleState::default()
                             })
                             .collect(),
+                        globals: BTreeMap::new(),
+                        spans: BTreeMap::new(),
                     },
                 );
             }
@@ -346,6 +426,98 @@ fn keys_runtime() -> &'static tokio::runtime::Runtime {
 }
 
 impl KeysRigBackend {
+    /// The audible modules of a lane — Omnisphere's rule for its Global
+    /// Controls: a module that is off, empty or fully down is not driven.
+    fn audible_modules(lane: &LaneState) -> Vec<usize> {
+        (0..lane.modules.len()).filter(|i| lane.module_gain(*i) > 0.0).collect()
+    }
+
+    /// What a module currently holds for `id` (its own value, else the
+    /// macro's default).
+    fn module_value(lane: &LaneState, index: usize, id: &str) -> f32 {
+        lane.modules
+            .get(index)
+            .and_then(|m| m.macros.get(id).copied())
+            .or_else(|| macro_def(id).map(|d| d.default))
+            .unwrap_or(0.0)
+    }
+
+    /// A module's envelope in macro units (its own values, else defaults).
+    fn module_env(lane: &LaneState, index: usize, prefix: &str) -> signal_keys_proto::KeysEnv {
+        let v = |seg: &str| Self::module_value(lane, index, &format!("{prefix}.{seg}"));
+        signal_keys_proto::KeysEnv {
+            attack_ms: v("attack"),
+            decay_ms: v("decay"),
+            sustain: v("sustain"),
+            release_ms: v("release"),
+        }
+    }
+
+    /// The layer's Global Controls as the UI sees them: absolute and 1:1
+    /// while the audible modules agree, a bipolar offset once they don't.
+    fn layer_macro_models(lane: &LaneState) -> Vec<KeysMacro> {
+        let audible = Self::audible_modules(lane);
+        LAYER_MACROS
+            .iter()
+            .map(|def| {
+                let Some(target) = def.target else {
+                    // The layer's own parameter — always absolute.
+                    let value = lane.globals.get(def.id).copied().unwrap_or(def.default);
+                    return KeysMacro {
+                        id: def.id.to_string(),
+                        name: def.name.to_string(),
+                        group: def.group.to_string(),
+                        value,
+                        min: def.min,
+                        max: def.max,
+                        unit: def.unit.to_string(),
+                        live: def.live,
+                        bipolar: false,
+                        spread: String::new(),
+                    };
+                };
+                let values: Vec<f32> =
+                    audible.iter().map(|i| Self::module_value(lane, *i, target)).collect();
+                let lo = values.iter().copied().fold(f32::INFINITY, f32::min);
+                let hi = values.iter().copied().fold(f32::NEG_INFINITY, f32::max);
+                let agree = values.is_empty() || (hi - lo).abs() <= (def.max - def.min) * 1e-4;
+                if agree {
+                    let value = values.first().copied().unwrap_or(def.default);
+                    KeysMacro {
+                        id: def.id.to_string(),
+                        name: def.name.to_string(),
+                        group: def.group.to_string(),
+                        value,
+                        min: def.min,
+                        max: def.max,
+                        unit: def.unit.to_string(),
+                        live: def.live && !audible.is_empty(),
+                        bipolar: false,
+                        spread: fmt_value(value, def.unit),
+                    }
+                } else {
+                    let offset = lane.spans.get(def.id).map(|(o, _)| *o).unwrap_or(0.0);
+                    KeysMacro {
+                        id: def.id.to_string(),
+                        name: def.name.to_string(),
+                        group: def.group.to_string(),
+                        value: offset,
+                        min: -1.0,
+                        max: 1.0,
+                        unit: String::new(),
+                        live: def.live,
+                        bipolar: true,
+                        spread: format!(
+                            "{} – {}",
+                            fmt_value(lo, def.unit),
+                            fmt_value(hi, def.unit)
+                        ),
+                    }
+                }
+            })
+            .collect()
+    }
+
     /// Build the backend and scan the Keyscape library. Does not open audio.
     pub fn new() -> Self {
         let (presets, specs) = scan_keyscape();
@@ -598,8 +770,8 @@ impl KeysRigBackend {
                                 key_lo: layer.key_lo as u32,
                                 key_hi: layer.key_hi as u32,
                                 modules: lane
-                                    .map(|l| {
-                                        l.modules
+                                    .map(|lane| {
+                                        lane.modules
                                             .iter()
                                             .enumerate()
                                             .map(|(i, m)| signal_keys_proto::KeysModule {
@@ -610,6 +782,10 @@ impl KeysRigBackend {
                                                 live: !m.patch.is_empty(),
                                                 gain_db: m.gain_db,
                                                 enabled: m.enabled,
+                                                amp_env: Self::module_env(lane, i, "env1"),
+                                                filter_env: Self::module_env(lane, i, "env2"),
+                                                cutoff_hz: Self::module_value(lane, i, "filter.cutoff"),
+                                                resonance: Self::module_value(lane, i, "filter.reso"),
                                             })
                                             .collect()
                                     })
@@ -1083,6 +1259,10 @@ impl KeysRigSvc for KeysRigBackend {
                 live: !m.patch.is_empty(),
                 gain_db: m.gain_db,
                 enabled: m.enabled,
+                amp_env: Self::module_env(lane, i, "env1"),
+                filter_env: Self::module_env(lane, i, "env2"),
+                cutoff_hz: Self::module_value(lane, i, "filter.cutoff"),
+                resonance: Self::module_value(lane, i, "filter.reso"),
             })
             .collect();
         let here = lane.module(slot);
@@ -1099,6 +1279,8 @@ impl KeysRigSvc for KeysRigBackend {
                 max: def.max,
                 unit: def.unit.to_string(),
                 live: def.live && here.is_some_and(|m| !m.patch.is_empty()),
+                bipolar: false,
+                spread: String::new(),
             })
             .collect();
         // The selected MODULE's slice of the live program.
@@ -1108,6 +1290,7 @@ impl KeysRigSvc for KeysRigBackend {
             .as_ref()
             .and_then(|t| t.find(&module_name).map(|c| node_of(c, "")))
             .unwrap_or_default();
+        let layer_macros = Self::layer_macro_models(lane);
         KeysLayerDetail {
             layer: layer.clone(),
             engine: lane.engine.clone(),
@@ -1120,7 +1303,97 @@ impl KeysRigSvc for KeysRigBackend {
             key_lo,
             key_hi,
             macros,
+            layer_macros,
             tree,
+        }
+    }
+
+    /// Move a layer Global Control.
+    ///
+    /// Absolute while the audible modules agree — the knob writes that value
+    /// straight through, exactly like editing each module by hand. Once they
+    /// differ the knob is a bipolar offset: it scales every audible module
+    /// from the settings it had when the knob left centre, toward the
+    /// parameter's floor (−1) or ceiling (+1). Return to centre and the
+    /// patch's own values come back untouched.
+    fn set_layer_global(&self, layer: String, id: String, value: f32) {
+        let Some(def) = layer_macro_def(&id) else { return };
+        let rebuild;
+        {
+            let Ok(mut s) = self.inner.state.lock() else { return };
+            let Some(lane) = s.lanes.get_mut(&layer) else { return };
+            let Some(target) = def.target else {
+                lane.globals.insert(id, value.clamp(def.min, def.max));
+                drop(s);
+                self.publish_mixer();
+                return;
+            };
+            let audible = Self::audible_modules(lane);
+            let values: Vec<f32> =
+                audible.iter().map(|i| Self::module_value(lane, *i, target)).collect();
+            let lo = values.iter().copied().fold(f32::INFINITY, f32::min);
+            let hi = values.iter().copied().fold(f32::NEG_INFINITY, f32::max);
+            let agree = values.is_empty() || (hi - lo).abs() <= (def.max - def.min) * 1e-4;
+            let tdef = macro_def(target);
+            let (tmin, tmax) = tdef.map(|d| (d.min, d.max)).unwrap_or((def.min, def.max));
+            if agree {
+                // 1:1 — and the span is meaningless now, so drop it.
+                lane.spans.remove(&id);
+                let v = value.clamp(tmin, tmax);
+                for i in audible {
+                    if let Some(m) = lane.modules.get_mut(i) {
+                        m.macros.insert(target.to_string(), v);
+                    }
+                }
+            } else {
+                let offset = value.clamp(-1.0, 1.0);
+                // The baseline is captured once, when the knob leaves centre,
+                // and reused until it comes back.
+                let base = match lane.spans.get(&id) {
+                    Some((_, base)) => base.clone(),
+                    None => (0..lane.modules.len())
+                        .map(|i| {
+                            audible.contains(&i).then(|| Self::module_value(lane, i, target))
+                        })
+                        .collect(),
+                };
+                // Frequencies and times scale by RATIO — a layer an octave
+                // below another stays an octave below as the Global Control
+                // opens them. Everything else scales linearly.
+                let ratio = matches!(tdef.map(|d| d.unit), Some("Hz") | Some("ms"));
+                for (i, b) in base.iter().enumerate() {
+                    let Some(b) = b else { continue };
+                    let edge = if offset >= 0.0 { tmax } else { tmin };
+                    let k = offset.abs();
+                    let v = if ratio && *b > 0.0 && edge > 0.0 {
+                        b * (edge / b).powf(k)
+                    } else {
+                        b + (edge - b) * k
+                    };
+                    if let Some(m) = lane.modules.get_mut(i) {
+                        m.macros.insert(target.to_string(), v.clamp(tmin, tmax));
+                    }
+                }
+                if offset.abs() < 1e-4 {
+                    lane.spans.remove(&id);
+                } else {
+                    lane.spans.insert(id, (offset, base));
+                }
+            }
+            // Unison changes the program's voice count — that needs a build.
+            rebuild = target == "source.unison";
+        }
+        if rebuild {
+            let b = self.clone();
+            let _ = std::thread::Builder::new()
+                .name("keys-layer-global".into())
+                .spawn(move || {
+                    let _rt = keys_runtime().enter();
+                    b.rebuild_program();
+                });
+        } else {
+            self.apply_mixer();
+            self.publish_mixer();
         }
     }
 
@@ -1128,6 +1401,16 @@ impl KeysRigSvc for KeysRigBackend {
         let Some(def) = macro_def(&id) else { return };
         if let Ok(mut s) = self.inner.state.lock() {
             let Some(lane) = s.lanes.get_mut(&layer) else { return };
+            // A hand edit re-bases the layer's Global Control for this
+            // parameter — its old baseline described a patch that is gone.
+            let stale: Vec<String> = LAYER_MACROS
+                .iter()
+                .filter(|l| l.target == Some(def.id))
+                .map(|l| l.id.to_string())
+                .collect();
+            for k in stale {
+                lane.spans.remove(&k);
+            }
             let Some(m) = lane.modules.get_mut(module as usize) else { return };
             m.macros.insert(id, value.clamp(def.min, def.max));
         }

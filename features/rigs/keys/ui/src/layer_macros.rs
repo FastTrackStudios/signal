@@ -1,0 +1,221 @@
+//! **Layer macros** — the layer's Global Controls, Omnisphere's Main page.
+//!
+//! One Filter, one Envelope pair, Vibrato, Unison and Ambience that reach
+//! *every audible module beneath the layer*, plus the layer's own Tone EQ,
+//! Limiter and FX bypass (those sit at the layer output, after the modules
+//! have summed).
+//!
+//! A control is **absolute** while the audible modules agree on the
+//! parameter — the knob is 1:1 with it. The moment they differ it becomes a
+//! **bipolar offset**: centre is the modules' own settings, and turning it
+//! scales all of them toward the parameter's floor or ceiling together. Come
+//! back to centre and the patch is exactly as it was. The spread under each
+//! section says what the modules currently hold ("0.4 – 2.1 kHz"), so a
+//! centred knob is never a mystery.
+
+use dioxus::prelude::*;
+use signal_keys_proto::{KeysLayerDetail, KeysMacro};
+
+use crate::fader::{Fader, fmt_db};
+use crate::graphs::{Adsr, ModuleCurve, StackedEnvelopes, StackedFilters, module_color};
+use crate::module_edit::{KnobRow, Panel};
+
+/// Every module as an overlay curve — its envelopes, its filter, its colour.
+fn curves(detail: &KeysLayerDetail) -> Vec<ModuleCurve> {
+    detail
+        .modules
+        .iter()
+        .map(|m| ModuleCurve {
+            slot: m.slot.clone(),
+            color: module_color(m.index).to_string(),
+            amp: Adsr {
+                attack_ms: m.amp_env.attack_ms,
+                decay_ms: m.amp_env.decay_ms,
+                sustain: m.amp_env.sustain,
+                release_ms: m.amp_env.release_ms,
+            },
+            filter: Adsr {
+                attack_ms: m.filter_env.attack_ms,
+                decay_ms: m.filter_env.decay_ms,
+                sustain: m.filter_env.sustain,
+                release_ms: m.filter_env.release_ms,
+            },
+            cutoff_hz: m.cutoff_hz,
+            resonance: m.resonance,
+            dim: !m.enabled || !m.live,
+        })
+        .collect()
+}
+
+/// The panels, in order. `Filter` / `Amp Env` / … match the backend's
+/// `LAYER_MACROS` groups.
+const GROUPS: &[(&str, &str)] = &[
+    ("Filter", "cutoff · resonance · envelope amount"),
+    ("Amp Env", "the modules' amplitude ADSR"),
+    ("Filter Env", "the modules' filter ADSR"),
+    ("Vibrato", "pitch pulse across the layer"),
+    ("Unison", "voices · detune"),
+    ("Ambience", "reverb amount · length"),
+    ("Tone", "the layer's EQ — centred is bypassed"),
+    ("Effects", "layer output"),
+];
+
+/// The layer's Global Controls + the module strip they act on.
+#[component]
+pub fn LayerMacros(
+    detail: KeysLayerDetail,
+    accent: String,
+    on_global: EventHandler<(String, f32)>,
+    on_module_gain: EventHandler<(u32, f32)>,
+    on_module_enabled: EventHandler<(u32, bool)>,
+    /// Zoom into a module (the surface these macros are driving).
+    on_open_module: EventHandler<u32>,
+) -> Element {
+    let group = |name: &str| -> Vec<KeysMacro> {
+        detail.layer_macros.iter().filter(|m| m.group == name).cloned().collect()
+    };
+    // One spread line per panel: the first spanning macro speaks for it.
+    let spread = |name: &str| -> Option<String> {
+        detail
+            .layer_macros
+            .iter()
+            .find(|m| m.group == name && !m.spread.is_empty())
+            .map(|m| m.spread.clone())
+    };
+    let varies = |name: &str| detail.layer_macros.iter().any(|m| m.group == name && m.bipolar);
+
+    rsx! {
+        div {
+            style: "flex: 1; min-height: 0; overflow: auto; padding: 12px; display: flex; \
+                    flex-direction: column; gap: 12px;",
+
+            // ── The modules these macros drive ──────────────────────────
+            div {
+                style: "display: flex; gap: 10px; align-items: stretch; flex-wrap: wrap;",
+                for m in detail.modules.iter() {
+                    {
+                        let idx = m.index;
+                        let on = m.enabled;
+                        let name = if m.patch.is_empty() { "— empty —".to_string() } else { m.patch.clone() };
+                        let source = m.source.clone();
+                        rsx! {
+                            div {
+                                key: "{m.index}",
+                                style: format!(
+                                    "display: flex; gap: 10px; padding: 10px 12px; min-width: 210px; \
+                                     border: 1px solid {}; border-radius: 12px; background: #0d0d10;",
+                                    if m.live && on { "#1f2b3a" } else { "#1c1c21" },
+                                ),
+                                div { style: "display: flex; flex-direction: column; gap: 4px; min-width: 0; flex: 1;",
+                                    div { style: "display: flex; align-items: center; gap: 6px;",
+                                        span {
+                                            style: format!(
+                                                "font-size: 10px; font-weight: 700; color: {};",
+                                                if m.live && on { accent.clone() } else { "#3f3f46".to_string() },
+                                            ),
+                                            "{m.slot}"
+                                        }
+                                        button {
+                                            style: format!(
+                                                "appearance: none; border: 1px solid {}; border-radius: 5px; \
+                                                 padding: 1px 7px; font-size: 8px; font-weight: 700; \
+                                                 background: {}; color: {};",
+                                                if on { "#166534" } else { "#3f3f46" },
+                                                if on { "#0f2417" } else { "#131316" },
+                                                if on { "#4ade80" } else { "#52525b" },
+                                            ),
+                                            onclick: move |_| on_module_enabled.call((idx, !on)),
+                                            if on { "ON" } else { "OFF" }
+                                        }
+                                        div { style: "flex: 1;" }
+                                        button {
+                                            style: "appearance: none; border: none; background: transparent; \
+                                                    color: #52525b; font-size: 9px; font-weight: 700;",
+                                            onclick: move |_| on_open_module.call(idx),
+                                            "EDIT →"
+                                        }
+                                    }
+                                    span {
+                                        style: format!(
+                                            "font-size: 11px; font-weight: 600; line-height: 1.2; color: {}; \
+                                             overflow: hidden; text-overflow: ellipsis; white-space: nowrap;",
+                                            if m.live { "#e4e4e7" } else { "#52525b" },
+                                        ),
+                                        "{name}"
+                                    }
+                                    if !source.is_empty() && source != name {
+                                        span {
+                                            style: "font-size: 9px; color: #71717a; overflow: hidden; \
+                                                    text-overflow: ellipsis; white-space: nowrap;",
+                                            "◦ {source}"
+                                        }
+                                    }
+                                    span { style: "font-size: 9px; color: #52525b;", {fmt_db(m.gain_db)} }
+                                }
+                                Fader {
+                                    db: m.gain_db,
+                                    height_px: 74,
+                                    accent: accent.clone(),
+                                    dimmed: !on || !m.live,
+                                    on_change: move |db: f32| on_module_gain.call((idx, db)),
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // ── The layer on one set of axes ────────────────────────────
+            div {
+                style: "display: grid; gap: 12px; \
+                        grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));",
+                StackedEnvelopes { curves: curves(&detail) }
+                StackedFilters { curves: curves(&detail) }
+            }
+
+            // ── The Global Controls ─────────────────────────────────────
+            div {
+                style: "display: grid; gap: 12px; align-content: start; \
+                        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));",
+                for (name, hint) in GROUPS.iter() {
+                    {
+                        let macros = group(name);
+                        if macros.is_empty() {
+                            rsx! {}
+                        } else {
+                            let spread = spread(name);
+                            let bipolar = varies(name);
+                            rsx! {
+                                Panel {
+                                    key: "{name}",
+                                    title: name.to_string(),
+                                    accent: accent.clone(),
+                                    lit: macros.iter().any(|m| m.live),
+                                    trailing: rsx! {
+                                        span {
+                                            style: format!(
+                                                "font-size: 9px; color: {};",
+                                                if bipolar { "#fbbf24" } else { "#52525b" },
+                                            ),
+                                            if bipolar { "offset" } else { "" }
+                                        }
+                                    },
+                                    div { style: "display: flex; flex-direction: column; gap: 6px;",
+                                        KnobRow {
+                                            macros: macros.clone(),
+                                            accent: accent.clone(),
+                                            on_change: move |(id, v)| on_global.call((id, v)),
+                                        }
+                                        span { style: "font-size: 9px; color: #3f3f46; line-height: 1.3;",
+                                            if let Some(s) = spread.clone() { "modules: {s}" } else { "{hint}" }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

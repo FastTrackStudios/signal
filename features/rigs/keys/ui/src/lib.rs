@@ -17,6 +17,7 @@ mod engine_view;
 mod fader;
 mod graphs;
 mod knob;
+mod layer_macros;
 mod layer_view;
 mod midi_light;
 mod module_edit;

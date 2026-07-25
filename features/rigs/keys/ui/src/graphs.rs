@@ -284,3 +284,214 @@ pub fn FilterCurve(
         }
     }
 }
+
+// ── Layer overlays ──────────────────────────────────────────────────────────
+//
+// The layer view draws every module on one pair of axes: envelopes together,
+// filters together, a colour per module. That is the whole point of the layer
+// macros — you turn one knob and watch the shapes move *relative to each
+// other*, which is invisible when each module is a separate page.
+
+/// A module's colour on the layer overlays. Stable by slot index, so module A
+/// is the same colour everywhere it appears.
+pub fn module_color(index: u32) -> &'static str {
+    const PALETTE: &[&str] = &["#38bdf8", "#f472b6", "#fbbf24", "#4ade80", "#a78bfa", "#fb7185"];
+    PALETTE[(index as usize) % PALETTE.len()]
+}
+
+/// One module's contribution to an overlay.
+#[derive(Clone, PartialEq, Debug, Default)]
+pub struct ModuleCurve {
+    /// Slot label ("A") — the legend.
+    pub slot: String,
+    pub color: String,
+    /// Amp envelope, filter envelope.
+    pub amp: Adsr,
+    pub filter: Adsr,
+    /// Filter response.
+    pub cutoff_hz: f32,
+    pub resonance: f32,
+    /// Silent modules draw faintly instead of vanishing.
+    pub dim: bool,
+}
+
+/// The ADSR path for an overlay (same geometry as [`EnvelopeGraph`], scaled to
+/// `h`).
+fn env_path(a: &Adsr, h: f64) -> String {
+    let xa = x_for(a.attack_ms as f64);
+    let xd = x_for((a.attack_ms + a.decay_ms) as f64);
+    let sus_y = PAD + (1.0 - a.sustain.clamp(0.0, 1.0) as f64) * (h - 2.0 * PAD);
+    let xs = (xd + 34.0).min(W - PAD - 20.0);
+    let xr = (xs + x_for(a.release_ms as f64) - PAD).min(W - PAD);
+    let (y0, ytop) = (h - PAD, PAD);
+    format!("M {PAD:.1} {y0:.1} L {xa:.1} {ytop:.1} L {xd:.1} {sus_y:.1} L {xs:.1} {sus_y:.1} L {xr:.1} {y0:.1}")
+}
+
+/// Legend chips — module slot in its colour.
+#[component]
+fn Legend(curves: Vec<ModuleCurve>, note: String) -> Element {
+    rsx! {
+        div { style: "display: flex; align-items: center; gap: 10px; flex-wrap: wrap;",
+            for c in curves.iter() {
+                div {
+                    key: "{c.slot}",
+                    style: "display: flex; align-items: center; gap: 4px;",
+                    span {
+                        style: format!(
+                            "width: 10px; height: 3px; border-radius: 2px; background: {}; opacity: {};",
+                            c.color,
+                            if c.dim { "0.35" } else { "1" },
+                        ),
+                    }
+                    span {
+                        style: format!(
+                            "font-size: 9px; font-weight: 700; color: {};",
+                            if c.dim { "#52525b" } else { "#a1a1aa" },
+                        ),
+                        "{c.slot}"
+                    }
+                }
+            }
+            div { style: "flex: 1;" }
+            span { style: "font-size: 9px; color: #3f3f46;", "{note}" }
+        }
+    }
+}
+
+/// **Amp + Filter envelopes of every module, on one set of axes.** Amp is
+/// solid, filter dashed; a layer macro moves them all and the relationship
+/// between them stays visible.
+#[component]
+pub fn StackedEnvelopes(
+    curves: Vec<ModuleCurve>,
+    #[props(default = 260)] height_px: u32,
+) -> Element {
+    let h = height_px as f64;
+    rsx! {
+        div {
+            style: "display: flex; flex-direction: column; gap: 8px; padding: 14px; \
+                    border: 1px solid #1f1f23; border-radius: 14px; background: #0e0e11;",
+            div { style: "display: flex; align-items: center; gap: 8px;",
+                span {
+                    style: "font-size: 11px; font-weight: 700; letter-spacing: 0.08em; \
+                            text-transform: uppercase; color: #d4d4d8;",
+                    "Envelopes"
+                }
+                span { style: "font-size: 9px; color: #52525b;", "amp solid · filter dashed" }
+            }
+            svg {
+                width: "100%", height: "{h}", view_box: "0 0 {W} {h}",
+                preserve_aspect_ratio: "none",
+                style: "display: block; width: 100%;",
+                for frac in [0.25f64, 0.5, 0.75] {
+                    line {
+                        x1: "{PAD}", y1: "{PAD + frac * (h - 2.0 * PAD)}",
+                        x2: "{W - PAD}", y2: "{PAD + frac * (h - 2.0 * PAD)}",
+                        stroke: "#1b1b1f", stroke_width: "1",
+                    }
+                }
+                for c in curves.iter() {
+                    {
+                        let amp = env_path(&c.amp, h);
+                        let filt = env_path(&c.filter, h);
+                        let op = if c.dim { "0.3" } else { "1" };
+                        rsx! {
+                            g { key: "{c.slot}",
+                                path {
+                                    d: "{amp}", fill: "{c.color}", fill_opacity: "0.07",
+                                    stroke: "{c.color}", stroke_width: "2", stroke_opacity: "{op}",
+                                    stroke_linejoin: "round", stroke_linecap: "round",
+                                }
+                                path {
+                                    d: "{filt}", fill: "none", stroke: "{c.color}",
+                                    stroke_width: "1.5", stroke_opacity: "{op}",
+                                    stroke_dasharray: "6 4", stroke_linejoin: "round",
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            Legend { curves: curves.clone(), note: "0 – 4 s".to_string() }
+        }
+    }
+}
+
+/// **Every module's filter response on one axis** — see the layer's cutoffs
+/// move together (and keep their spacing) as the Global Control turns.
+#[component]
+pub fn StackedFilters(
+    curves: Vec<ModuleCurve>,
+    #[props(default = 260)] height_px: u32,
+) -> Element {
+    let h = height_px as f64;
+    fn x_of(f: f64) -> f64 {
+        const LO: f64 = 2.995_732_273_553_991;
+        const HI: f64 = 9.903_487_552_536_127;
+        PAD + ((f.max(20.0).ln() - LO) / (HI - LO)) * (W - 2.0 * PAD)
+    }
+    fn f_of(x: f64) -> f64 {
+        const LO: f64 = 2.995_732_273_553_991;
+        const HI: f64 = 9.903_487_552_536_127;
+        let t = ((x - PAD) / (W - 2.0 * PAD)).clamp(0.0, 1.0);
+        (LO + t * (HI - LO)).exp()
+    }
+    rsx! {
+        div {
+            style: "display: flex; flex-direction: column; gap: 8px; padding: 14px; \
+                    border: 1px solid #1f1f23; border-radius: 14px; background: #0e0e11;",
+            div { style: "display: flex; align-items: center; gap: 8px;",
+                span {
+                    style: "font-size: 11px; font-weight: 700; letter-spacing: 0.08em; \
+                            text-transform: uppercase; color: #d4d4d8;",
+                    "Filter"
+                }
+                span { style: "font-size: 9px; color: #52525b;", "20 Hz – 20 kHz" }
+            }
+            svg {
+                width: "100%", height: "{h}", view_box: "0 0 {W} {h}",
+                preserve_aspect_ratio: "none",
+                style: "display: block; width: 100%;",
+                // Decade grid.
+                for f in [100.0f64, 1000.0, 10000.0] {
+                    line {
+                        x1: "{x_of(f)}", y1: "{PAD}", x2: "{x_of(f)}", y2: "{h - PAD}",
+                        stroke: "#1b1b1f", stroke_width: "1",
+                    }
+                }
+                for c in curves.iter() {
+                    {
+                        let cutoff = c.cutoff_hz as f64;
+                        let res = c.resonance.clamp(0.0, 1.0) as f64;
+                        let mut d = String::new();
+                        let steps = 90;
+                        for i in 0..=steps {
+                            let x = PAD + (i as f64 / steps as f64) * (W - 2.0 * PAD);
+                            let r = f_of(x) / cutoff.max(20.0);
+                            let mag = 1.0 / (1.0 + r.powi(4)).sqrt();
+                            let bump = res * 0.9 * (-((r.ln()).powi(2)) * 6.0).exp();
+                            let y = PAD + (1.0 - (mag + bump).clamp(0.0, 1.35) / 1.35) * (h - 2.0 * PAD);
+                            d.push_str(&format!("{} {x:.1} {y:.1} ", if i == 0 { "M" } else { "L" }));
+                        }
+                        let cx = x_of(cutoff);
+                        let op = if c.dim { "0.3" } else { "1" };
+                        rsx! {
+                            g { key: "{c.slot}",
+                                path {
+                                    d: "{d}", fill: "none", stroke: "{c.color}", stroke_width: "2",
+                                    stroke_opacity: "{op}", stroke_linejoin: "round",
+                                }
+                                line {
+                                    x1: "{cx}", y1: "{PAD}", x2: "{cx}", y2: "{h - PAD}",
+                                    stroke: "{c.color}", stroke_width: "1", stroke_opacity: "0.35",
+                                    stroke_dasharray: "3 4",
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            Legend { curves: curves.clone(), note: "cutoff marked per module".to_string() }
+        }
+    }
+}

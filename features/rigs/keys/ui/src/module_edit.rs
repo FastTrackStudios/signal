@@ -26,7 +26,7 @@ use crate::knob::Knob;
 
 /// Panel chrome — every section shares it so the page reads as one surface.
 #[component]
-fn Panel(
+pub(crate) fn Panel(
     title: String,
     accent: String,
     /// Optional right-hand slot (selectors, badges).
@@ -62,7 +62,7 @@ fn Panel(
 
 /// A row of knobs for one macro group.
 #[component]
-fn KnobRow(
+pub(crate) fn KnobRow(
     macros: Vec<KeysMacro>,
     accent: String,
     on_change: EventHandler<(String, f32)>,
@@ -78,6 +78,7 @@ fn KnobRow(
                     max: m.max,
                     unit: m.unit.clone(),
                     live: m.live,
+                    bipolar: m.bipolar,
                     accent: accent.clone(),
                     on_change: {
                         let id = m.id.clone();

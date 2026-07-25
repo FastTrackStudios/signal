@@ -46,6 +46,10 @@ pub fn Knob(
     max: f32,
     unit: String,
     #[props(default = true)] live: bool,
+    /// A **bipolar offset** knob: the fill runs from the centre detent, which
+    /// is where the modules' own settings live (Omnisphere's Global Controls
+    /// behave this way once the layers disagree).
+    #[props(default = false)] bipolar: bool,
     #[props(default = "#38bdf8".to_string())] accent: String,
     on_change: EventHandler<f32>,
 ) -> Element {
@@ -56,7 +60,16 @@ pub fn Knob(
     let end = START_ANGLE + SWEEP * norm as f64;
     let (cx, cy, r) = (22.0, 22.0, 16.0);
     let track = arc_path(cx, cy, r, START_ANGLE, START_ANGLE + SWEEP);
-    let fill = arc_path(cx, cy, r, START_ANGLE, end.max(START_ANGLE + 0.1));
+    let centre = START_ANGLE + SWEEP / 2.0;
+    let fill = if bipolar {
+        let (from, to) = if end >= centre { (centre, end) } else { (end, centre) };
+        arc_path(cx, cy, r, from, (to).max(from + 0.1))
+    } else {
+        arc_path(cx, cy, r, START_ANGLE, end.max(START_ANGLE + 0.1))
+    };
+    // The detent tick — what the knob returns to.
+    let (dx1, dy1) = arc_point(cx, cy, r - 4.0, centre);
+    let (dx2, dy2) = arc_point(cx, cy, r + 3.0, centre);
     let (ix, iy) = arc_point(cx, cy, r - 5.0, end);
     let (bx, by) = arc_point(cx, cy, 5.0, end);
     let color = if live { accent.clone() } else { "#52525b".to_string() };
@@ -72,6 +85,12 @@ pub fn Knob(
                 },
                 path { d: "{track}", fill: "none", stroke: "#26262b", stroke_width: "3", stroke_linecap: "round" }
                 path { d: "{fill}", fill: "none", stroke: "{color}", stroke_width: "3", stroke_linecap: "round" }
+                if bipolar {
+                    line {
+                        x1: "{dx1}", y1: "{dy1}", x2: "{dx2}", y2: "{dy2}",
+                        stroke: "#3f3f46", stroke_width: "1",
+                    }
+                }
                 circle { cx: "{cx}", cy: "{cy}", r: "11", fill: "#1a1a1e", stroke: "#2c2c32" }
                 line {
                     x1: "{bx}", y1: "{by}", x2: "{ix}", y2: "{iy}",
@@ -87,7 +106,11 @@ pub fn Knob(
             }
             span {
                 style: "font-size: 9px; font-variant-numeric: tabular-nums; color: #71717a;",
-                {format!("{}{}", fmt_value(value, &unit), if unit == "dB" || unit.is_empty() { String::new() } else { format!(" {unit}") })}
+                if bipolar {
+                    {format!("{:+.0}%", value * 100.0)}
+                } else {
+                    {format!("{}{}", fmt_value(value, &unit), if unit == "dB" || unit.is_empty() { String::new() } else { format!(" {unit}") })}
+                }
             }
             if drag().is_some() {
                 div {

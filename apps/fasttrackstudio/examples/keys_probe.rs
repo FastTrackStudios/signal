@@ -101,5 +101,38 @@ async fn main() -> eyre::Result<()> {
             show("filter.env_amt"),
         );
     }
+    // The layer's Global Controls: absolute while the modules agree, a
+    // bipolar offset once they don't.
+    let d = rig
+        .layer_detail("Pad".into(), 0)
+        .await
+        .map_err(|e| eyre::eyre!("layer_detail: {e:?}"))?;
+    println!("\nPad layer macros:");
+    for m in &d.layer_macros {
+        println!(
+            "  {:<10} {:<10} {:>9.3}{}  {}",
+            m.group,
+            m.name,
+            m.value,
+            if m.bipolar { " (offset)" } else { "         " },
+            m.spread,
+        );
+    }
+    // Drive one: cutoff. The Pad's modules disagree (44 vs 60 Hz), so this
+    // should read back as an offset that scaled both.
+    if std::env::args().any(|a| a == "--drive") {
+        rig.set_layer_global("Pad".into(), "l.filter.cutoff".into(), 0.5)
+            .await
+            .map_err(|e| eyre::eyre!("set_layer_global: {e:?}"))?;
+        let d = rig.layer_detail("Pad".into(), 0).await.map_err(|e| eyre::eyre!("{e:?}"))?;
+        let cut = d.layer_macros.iter().find(|m| m.id == "l.filter.cutoff").unwrap();
+        println!("  after +0.5 → value={:.3} bipolar={} spread={}", cut.value, cut.bipolar, cut.spread);
+        rig.set_layer_global("Pad".into(), "l.filter.cutoff".into(), 0.0)
+            .await
+            .map_err(|e| eyre::eyre!("{e:?}"))?;
+        let d = rig.layer_detail("Pad".into(), 0).await.map_err(|e| eyre::eyre!("{e:?}"))?;
+        let cut = d.layer_macros.iter().find(|m| m.id == "l.filter.cutoff").unwrap();
+        println!("  back to centre → spread={} (must equal the original)", cut.spread);
+    }
     Ok(())
 }

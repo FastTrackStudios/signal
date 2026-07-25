@@ -104,6 +104,24 @@ pub struct KeysMacro {
     /// is placeholder-first, so a macro can be authored + persisted before its
     /// block has an implementation — the UI dims those instead of lying.
     pub live: bool,
+    /// A layer macro whose modules disagree: the knob is a **bipolar offset**
+    /// (`min`/`max` are −1..1, centre = the modules' own settings) instead of
+    /// an absolute value. Omnisphere's Global Controls behave the same way —
+    /// unipolar and 1:1 while the layers match, scaling around the patch's
+    /// values once they differ.
+    pub bipolar: bool,
+    /// Layer macros only: what the modules beneath currently hold, as text
+    /// ("0.4–2.1 kHz" / "1.6 s"), so a bipolar knob can still say what it is.
+    pub spread: String,
+}
+
+/// An ADSR in macro units — milliseconds and 0..1 sustain.
+#[derive(Clone, PartialEq, Debug, Default, Facet)]
+pub struct KeysEnv {
+    pub attack_ms: f32,
+    pub decay_ms: f32,
+    pub sustain: f32,
+    pub release_ms: f32,
 }
 
 /// One module inside a layer — the engine instance the zoom edits.
@@ -125,6 +143,13 @@ pub struct KeysModule {
     pub gain_db: f32,
     /// Switched off: silent, but its source and settings are kept.
     pub enabled: bool,
+    /// The module's amp (ENV 1) and filter (ENV 2) envelopes, so the layer
+    /// can draw every module's shape on one pair of axes.
+    pub amp_env: KeysEnv,
+    pub filter_env: KeysEnv,
+    /// The module's filter, for the layer's overlay: cutoff (Hz) + resonance.
+    pub cutoff_hz: f32,
+    pub resonance: f32,
 }
 
 /// Everything the layer-zoom view needs for one lane.
@@ -145,8 +170,12 @@ pub struct KeysLayerDetail {
     pub muted: bool,
     pub key_lo: u32,
     pub key_hi: u32,
-    /// The lane's macros, in panel order.
+    /// The SELECTED MODULE's macros, in panel order.
     pub macros: Vec<KeysMacro>,
+    /// The LAYER's macros — Omnisphere's Global Controls: one Filter,
+    /// Envelope, Vibrato, Unison, Ambience, Tone and Effects surface that
+    /// drives every audible module beneath (see `set_layer_global`).
+    pub layer_macros: Vec<KeysMacro>,
     /// The lane's block tree — the Signal Engine program it's running.
     pub tree: KeysNode,
 }
@@ -274,6 +303,11 @@ pub mod keys {
         fn layer_detail(&self, layer: String, module: u32) -> KeysLayerDetail;
         /// Set one macro on one module of a layer.
         fn set_layer_macro(&self, layer: String, module: u32, id: String, value: f32);
+
+        /// Move a LAYER macro — the Global Control. Absolute while the
+        /// audible modules agree on the parameter, a bipolar offset that
+        /// scales them around their own settings once they don't.
+        fn set_layer_global(&self, layer: String, id: String, value: f32);
 
         // ── Performance ─────────────────────────────────────────────────
         /// The performance model: stacks + grid mode.

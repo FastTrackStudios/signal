@@ -5,7 +5,10 @@
 //! editor for a Keyscape piano, an Omnisphere soundsource and a wavetable
 //! alike. Pages:
 //!
-//! - **Play** — the macro panels (Source · Tone · Filter · Filter Env ·
+//! - **Layer** — the Global Controls: one Filter / Envelope / Vibrato /
+//!   Unison / Ambience that drive every audible module beneath, plus the
+//!   layer's own Tone and Limiter.
+//! - **Module** — the macro panels (Source · Tone · Filter · Filter Env ·
 //!   Amp Env · Vibrato · Ambience · Effects). The knobs a player reaches for
 //!   mid-set.
 //! - **Edit** — the Signal Editor: the lane's articulations / zones and the
@@ -22,7 +25,10 @@ use signal_keys_proto::{KeysMixer, KeysPreset};
 /// Which page of the layer zoom.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Page {
-    Play,
+    /// The layer's Global Controls — Omnisphere's Main page.
+    Layer,
+    /// One module's whole surface.
+    Module,
     Edit,
 }
 
@@ -40,7 +46,7 @@ pub fn LayerView(
 ) -> Element {
     let rig = use_hook(try_consume_context::<KeysRigClient>);
     let mut zoom = zoom;
-    let mut page = use_signal(|| Page::Play);
+    let mut page = use_signal(|| Page::Layer);
     let mut detail = use_signal(KeysLayerDetail::default);
     // Which module (A/B/C/D) the zoom is editing. Each module is its own
     // engine instance — own source, filter, envelopes.
@@ -132,7 +138,11 @@ pub fn LayerView(
                             ),
                             "{patch}"
                         }
-                        for (p, label) in [(Page::Play, "Play"), (Page::Edit, "Edit")] {
+                        for (p, label) in [
+                            (Page::Layer, "Layer"),
+                            (Page::Module, "Module"),
+                            (Page::Edit, "Edit"),
+                        ] {
                             button {
                                 key: "{label}",
                                 style: format!(
@@ -149,7 +159,16 @@ pub fn LayerView(
                 },
             }
             match page() {
-                Page::Play => rsx! {
+                Page::Layer => rsx! {
+                    LayerPage {
+                        detail: d.clone(),
+                        accent: accent.clone(),
+                        page,
+                        module,
+                        refresh,
+                    }
+                },
+                Page::Module => rsx! {
                     PlayPage {
                         detail: d.clone(),
                         accent: accent.clone(),
@@ -160,6 +179,63 @@ pub fn LayerView(
                 },
                 Page::Edit => rsx! { EditPage { detail: d.clone() } },
             }
+        }
+    }
+}
+
+/// The **Layer page** — the Global Controls, and the module strip they act
+/// on. Editing a module here jumps to that module's surface.
+#[component]
+fn LayerPage(
+    detail: KeysLayerDetail,
+    accent: String,
+    page: Signal<Page>,
+    module: Signal<u32>,
+    refresh: Callback<()>,
+) -> Element {
+    let rig = use_hook(try_consume_context::<KeysRigClient>);
+    let lane = detail.layer.clone();
+    let mut page = page;
+    let mut module = module;
+
+    rsx! {
+        crate::layer_macros::LayerMacros {
+            detail: detail.clone(),
+            accent: accent.clone(),
+            on_global: {
+                let (rig, lane) = (rig.clone(), lane.clone());
+                move |(id, v): (String, f32)| {
+                    let (rig, lane) = (rig.clone(), lane.clone());
+                    spawn(async move {
+                        if let Some(r) = rig { let _ = r.set_layer_global(lane, id, v).await; }
+                    });
+                    refresh.call(());
+                }
+            },
+            on_module_gain: {
+                let (rig, lane) = (rig.clone(), lane.clone());
+                move |(idx, db): (u32, f32)| {
+                    let (rig, lane) = (rig.clone(), lane.clone());
+                    spawn(async move {
+                        if let Some(r) = rig { let _ = r.set_module_gain(lane, idx, db).await; }
+                    });
+                    refresh.call(());
+                }
+            },
+            on_module_enabled: {
+                let (rig, lane) = (rig.clone(), lane.clone());
+                move |(idx, on): (u32, bool)| {
+                    let (rig, lane) = (rig.clone(), lane.clone());
+                    spawn(async move {
+                        if let Some(r) = rig { let _ = r.set_module_enabled(lane, idx, on).await; }
+                    });
+                    refresh.call(());
+                }
+            },
+            on_open_module: move |idx: u32| {
+                module.set(idx);
+                page.set(Page::Module);
+            },
         }
     }
 }
