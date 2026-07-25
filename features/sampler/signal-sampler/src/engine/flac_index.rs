@@ -41,8 +41,6 @@ pub struct FlacIndex {
     points: std::sync::Mutex<Vec<FramePoint>>,
     /// Byte offset (into the whole stream) where scanning stopped.
     scanned_to: std::sync::Mutex<usize>,
-    /// Where the audio starts — the end of the metadata blocks.
-    audio_at: usize,
     /// Block size when the stream is fixed-strategy, else 0.
     fixed_block: u64,
     /// Total sample frames (per channel), from STREAMINFO.
@@ -100,7 +98,6 @@ impl FlacIndex {
             header: bytes[..at].to_vec().into_boxed_slice(),
             points: std::sync::Mutex::new(Vec::new()),
             scanned_to: std::sync::Mutex::new(at),
-            audio_at: at,
             // Our packs encode with a FIXED blocking strategy, so a frame's
             // "number" counts frames and the sample position is number ×
             // block size. Variable-strategy streams carry the sample number.
