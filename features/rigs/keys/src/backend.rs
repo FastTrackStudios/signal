@@ -23,6 +23,7 @@ use signal_keys_proto::{
 };
 
 use crate::profile::{KeysProfile, worship_profile};
+use signal_rig_host::mixer::{self as rig_mixer, db_to_linear};
 use signal_sampler::rig_node::{RigNode, Role};
 use signal_sampler::{Container, MidiInputHandle};
 
@@ -450,25 +451,21 @@ impl State {
     fn lane_gain(&self, name: &str) -> f32 {
         let Some(lane) = self.lanes.get(name) else { return 0.0 };
         let engine_muted = self.engines.get(&lane.engine).is_some_and(|e| e.muted);
-        let solo_excluded = self.any_solo() && !lane.soloed;
-        if lane.muted || engine_muted || solo_excluded || !lane.any_live() {
-            0.0
-        } else {
-            db_to_linear(lane.gain_db)
-        }
+        let mix = rig_mixer::LaneMix {
+            gain_db: lane.gain_db,
+            muted: lane.muted,
+            soloed: lane.soloed,
+            live: lane.any_live(),
+        };
+        rig_mixer::lane_gain(&mix, engine_muted, self.any_solo())
     }
 
     fn engine_gain(&self, name: &str) -> f32 {
         match self.engines.get(name) {
-            Some(e) if !e.muted => db_to_linear(e.gain_db),
-            Some(_) => 0.0,
+            Some(e) => rig_mixer::group_gain(e.gain_db, e.muted),
             None => 1.0,
         }
     }
-}
-
-fn db_to_linear(db: f32) -> f32 {
-    10f32.powf(db / 20.0)
 }
 
 struct Inner {

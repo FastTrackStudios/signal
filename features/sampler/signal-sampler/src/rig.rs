@@ -76,14 +76,6 @@ const MAX_CHAIN_SLOTS: usize = 24;
 /// elsewhere.
 pub type ModelId = u32;
 
-fn db_to_lin(db: f32) -> f32 {
-    if db == 0.0 {
-        1.0
-    } else {
-        10f32.powf(db / 20.0)
-    }
-}
-
 /// How a block's [`BlockType`] is **implemented** — the realization axis
 /// (orthogonal to the semantic `block_type`). Each block type can have several
 /// implementations; a [`RigBlock`] picks one by which asset it carries.
@@ -1499,7 +1491,7 @@ impl GuitarRig {
     pub fn set_output_trim_db(&self, db: f32) {
         self.swap.lock().unwrap().output_trim_db = db;
         // Output trim → the track's post-fader gain (linear).
-        let out_lin = db_to_lin(db) as f64;
+        let out_lin = signal_rig_host::mixer::db_to_linear(db) as f64;
         let _ = <Standalone as Tracks>::set_volume(
             &self.daw,
             ProjectContext::Current,
@@ -1952,7 +1944,8 @@ mod tests {
 
     #[test]
     fn db_to_lin_is_unity_at_zero() {
-        assert_eq!(db_to_lin(0.0), 1.0);
-        assert!((db_to_lin(-6.0206) - 0.5).abs() < 1e-4);
+        use signal_rig_host::mixer::db_to_linear;
+        assert_eq!(db_to_linear(0.0), 1.0);
+        assert!((db_to_linear(-6.0206) - 0.5).abs() < 1e-4);
     }
 }

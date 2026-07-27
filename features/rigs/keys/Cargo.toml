@@ -15,6 +15,8 @@ pipewire = ["signal-sampler/pipewire", "midicore/midir-pipewire"]
 # Shared sampler core — the keys rig composes the engine's node-render tree,
 # nord presets, and rig system. Keys is a thin instrument handle on top.
 signal-sampler.workspace = true
+# Cross-rig utilities: shared mixer math (mute/solo folding, dB→linear).
+signal-rig-host.workspace = true
 daw.workspace = true
 daw-audio-io = { workspace = true, features = ["monitor"] }
 midicore = { workspace = true, features = ["vox", "midir"] }

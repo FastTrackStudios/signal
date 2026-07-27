@@ -45,6 +45,7 @@ use daw_audio_io::AudioIoPrefs;
 use daw_audio_io::duplex::EngineStats;
 
 pub mod lock;
+pub mod mixer;
 pub mod store;
 
 /// A realtime engine the host can run on — implemented by daw's cpal

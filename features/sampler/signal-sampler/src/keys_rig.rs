@@ -15,6 +15,7 @@
 
 use std::sync::Arc;
 
+use daw::service::{ProjectContext, TrackRef, Tracks};
 use daw::standalone::Standalone;
 use daw::standalone::metering::Meters;
 use daw_audio_io::AudioIoPrefs;
@@ -174,8 +175,8 @@ pub struct KeysRig {
     midi_monitor: MidiMonitor,
     /// Live Engine/Layer fader cells for the loaded program.
     cells: GainCells,
-    /// Master output gain (linear, f32 bits), shared into each hosted
-    /// [`KeysInstrument`] so [`set_output_gain`](Self::set_output_gain) is live.
+    /// Mirror of the master output gain (linear, f32 bits) — the gain itself
+    /// is the keys track's daw fader, so it survives preset swaps for free.
     gain: Arc<std::sync::atomic::AtomicU32>,
 }
 
@@ -194,9 +195,11 @@ impl KeysRig {
         let meters = host.install_meters(1);
         let daw = host.daw().clone();
 
-        // Compile + install the preset instrument, sharing the master-gain cell.
+        // Compile + install the preset instrument. The master gain is the
+        // track's daw fader (not baked into the instrument), so it applies
+        // post-instrument and carries across preset swaps.
         let gain = Arc::new(std::sync::atomic::AtomicU32::new(1.0f32.to_bits()));
-        let mut inst = KeysInstrument::with_gain(tree, sample_rate, gain.clone());
+        let mut inst = KeysInstrument::new(tree, sample_rate);
         let cells = inst.gain_cells();
         let _ = inst.prepare(sample_rate as f64, PREPARE_BLOCK);
         daw.insert_plugin_instance(fx_guid.clone(), Box::new(inst));
@@ -224,12 +227,18 @@ impl KeysRig {
         self.cells.clone()
     }
 
-    /// Set the master output gain (linear; 1.0 = unity). Takes effect on the
-    /// next block — no re-host — and survives preset swaps.
+    /// Set the master output gain (linear; 1.0 = unity). Applied as the keys
+    /// track's daw fader — takes effect on the next block, no re-host, and
+    /// survives preset swaps.
     pub fn set_output_gain(&self, gain: f32) {
-        self.gain.store(
-            gain.max(0.0).to_bits(),
-            std::sync::atomic::Ordering::Relaxed,
+        let gain = gain.max(0.0);
+        self.gain
+            .store(gain.to_bits(), std::sync::atomic::Ordering::Relaxed);
+        let _ = <Standalone as Tracks>::set_volume(
+            &self.daw,
+            ProjectContext::Current,
+            TrackRef::guid(self.track_guid.as_str()),
+            gain as f64,
         );
     }
 
@@ -238,9 +247,10 @@ impl KeysRig {
         f32::from_bits(self.gain.load(std::sync::atomic::Ordering::Relaxed))
     }
 
-    /// Swap the playable preset (glitch-free re-insert under the renderer lock).
+    /// Swap the playable preset (glitch-free re-insert under the renderer
+    /// lock). The master gain lives on the track fader, so it carries over.
     pub fn load_preset(&mut self, tree: &Container) {
-        let mut inst = KeysInstrument::with_gain(tree, self.sample_rate, self.gain.clone());
+        let mut inst = KeysInstrument::new(tree, self.sample_rate);
         // The new program owns new cells — hand them out before it goes live.
         self.cells = inst.gain_cells();
         let _ = inst.prepare(self.sample_rate as f64, PREPARE_BLOCK);
