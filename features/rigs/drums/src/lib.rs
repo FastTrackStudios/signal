@@ -43,7 +43,7 @@ pub fn attach_converted_kit(
 }
 
 /// Load a full drum kit from a `.signalpreset` (one engine per piece +
-/// GM `note_routing` + the send-based multi-mic [`DrumMixer`]) and route it to
+/// GM `note_routing` + the send-based multi-mic `DrumMixer`) and route it to
 /// the GM percussion channel. This is the loader for the native GGD-style kits
 /// (e.g. Modern & Massive 2), whose `.signalpreset` files already carry the
 /// note map and per-piece mic sets — unlike [`load_kit`], which loads a single

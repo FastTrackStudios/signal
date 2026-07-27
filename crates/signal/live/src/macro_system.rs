@@ -21,7 +21,7 @@
 //! 3. **Macro Recorder** (`macro_recorder`)
 //!    - Real-time capture of knob movements with timestamps
 //!    - Enables performance automation recording & playback
-//!    - Lock-free reads via Arc<Mutex> for thread safety
+//!    - Lock-free reads via Arc`<Mutex>` for thread safety
 //!
 //! # Data Flow
 //!

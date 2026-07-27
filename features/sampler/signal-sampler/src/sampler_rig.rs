@@ -4,7 +4,7 @@
 //! [`SamplerRig`] is the daw-backed replacement for the retired `SamplerPlayer`
 //! (`player.rs`, deleted): same load / MIDI / drum-mixer / preload / stats surface,
 //! but the cpal output stream + bespoke render callback are gone. Instead a
-//! single **bank track** in a tiny daw project carries a [`BankInstrument`]
+//! single **bank track** in a tiny daw project carries a `BankInstrument`
 //! (a [`SamplerBank`] wrapped as a [`PluginInstance`]); daw's renderer runs
 //! that instrument every block on daw's [`AudioEngine`], and the bank's
 //! existing engine / preset / drum-mixer machinery is reused verbatim — no
@@ -14,7 +14,7 @@
 //!
 //! - **Live** ([`SamplerRig::new`] / [`open`](SamplerRig::open) / device
 //!   variants): opens daw's output-only [`AudioEngine`], seeds a one-track
-//!   project, and installs the [`BankInstrument`]. MIDI is delivered to the
+//!   project, and installs the `BankInstrument`. MIDI is delivered to the
 //!   bank by pushing it onto the bank track's live-MIDI queue
 //!   ([`Standalone::push_note_on`] / `push_note_off` / `push_cc`); daw's
 //!   renderer drains that queue each block and hands it to the instrument,
@@ -340,10 +340,10 @@ struct Inner {
     project_guid: String,
 
     /// The signal-domain engine/preset/drum-mixer/preload/stats machinery,
-    /// shared with the bank track's [`BankInstrument`] (live) or driven
+    /// shared with the bank track's `BankInstrument` (live) or driven
     /// directly (offline). This is the bank-backed surface's home.
     bank: Arc<Mutex<SamplerBank>>,
-    /// daw track guid carrying the [`BankInstrument`] (live mode). `None`
+    /// daw track guid carrying the `BankInstrument` (live mode). `None`
     /// offline.
     bank_track: Option<String>,
     stats: Arc<BankStats>,
@@ -638,7 +638,7 @@ impl SamplerRig {
             .load_preset_spec(id_prefix, &preset, dir)
     }
 
-    /// Load a preset from an in-memory [`PresetSpec`] (engine paths resolve
+    /// Load a preset from an in-memory `PresetSpec` (engine paths resolve
     /// against `preset_dir`; absolute paths pass through). Lets callers swap a
     /// single engine ref and reload — the kit-designer's per-piece swap.
     pub fn load_preset_spec(
@@ -1241,7 +1241,7 @@ impl SamplerRig {
         Ok(Some(slot))
     }
 
-    /// Install an already-built [`HostedPlugin`] (e.g. a built-in signal-fx
+    /// Install an already-built `HostedPlugin` (e.g. a built-in signal-fx
     /// processor) into a drum-mixer channel/bus/master FX chain.
     pub fn install_mixer_plugin(
         &self,

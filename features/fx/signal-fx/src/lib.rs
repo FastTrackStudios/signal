@@ -6,7 +6,7 @@
 //! processor to the daw `PluginInstance` contract (`prepare` / `process_block`
 //! / params) and exposes a small controllable parameter set.
 //!
-//! **Param wiring.** Each wrapper declares a [`ParamSpec`] table (stable id +
+//! **Param wiring.** Each wrapper declares a `ParamSpec` table (stable id +
 //! name + range). Runtime writes (mod matrix / UI) arrive by id through
 //! `process_block`'s events; build-time `RigBlock` params are applied by name
 //! via [`set_named`](NativeReverb::set_named), which the native-block registry
@@ -949,7 +949,7 @@ impl NativeReverb {
         }
     }
 
-    /// Apply a build-time parameter by name (see [`REVERB_PARAMS`]).
+    /// Apply a build-time parameter by name (see `REVERB_PARAMS`).
     pub fn set_named(&mut self, name: &str, value: f64) {
         if let Some(id) = param_id(REVERB_PARAMS, name) {
             self.set(id, value);

@@ -11,17 +11,17 @@
 //! the sampler + daw use, so a NAM amp, a cab IR, a built-in DSP, and a hosted
 //! CLAP/VST3 plugin are all just blocks; daw runs them with one engine. The
 //! [`Rig`] is realized as ONE input-armed daw track whose FX chain is the
-//! active patch (the existing [`GuitarRig`](crate::GuitarRig)).
+//! active patch (the existing [`GuitarRig`]).
 //!
 //! # Foundation status (this layer)
 //!
 //! - **REAL**:
 //!   - Every primitive id ([`PatchId`]/[`BlockId`]/[`ProfileId`]/[`SnapshotId`]/
-//!     [`ParamRef`]) — built on Phase A [`Interned`](super::prim::Interned).
+//!     [`ParamRef`]) — built on Phase A [`Interned`].
 //!   - The [`Block`] trait + [`BlockRole`], and the working [`Amp`] (NAM),
 //!     [`Cabinet`] (IR/NAM), [`Plugin`] (hosted) impls — each wraps an existing
-//!     `PluginInstance` ([`NamProcessor`](crate::NamProcessor) /
-//!     [`Convolver`](crate::Convolver) / a hosted box). `as_plugin()` hands the
+//!     `PluginInstance` ([`NamProcessor`] /
+//!     [`Convolver`] / a hosted box). `as_plugin()` hands the
 //!     inner instance straight to daw's renderer.
 //!   - [`block::amp_nam`] / [`block::cab_ir`] / [`block::cab_nam`] /
 //!     [`block::plugin`] constructors that actually load DSP off disk.
@@ -30,20 +30,20 @@
 //!     [`Profile::from_styx`] (reusing [`RigProfile::from_styx_file`]) +
 //!     `From<&RigProfile>` adapter and `Profile::to_rig_profile` round-trip.
 //!   - [`DawRig`] — a working [`Rig`] impl wrapping the existing
-//!     [`ProfileRig`](crate::ProfileRig)/[`GuitarRig`](crate::GuitarRig):
+//!     [`ProfileRig`]/[`GuitarRig`]:
 //!     patch select/next/prev, input/output peak, bypass, trims are all the
 //!     existing instant, click-free machinery.
 //!   - [`PatchStepper`] — a real [`Controller`] (footswitches cycle patches)
 //!     and [`ProgramChangeMap`] (PC# → patch).
 //!
 //! - **Phase-B REAL** (this phase wired the live machinery):
-//!   - **Live block addressing** — [`GuitarRig`](crate::GuitarRig) now records a
+//!   - **Live block addressing** — [`GuitarRig`] now records a
 //!     stable `block_id` per chain slot and exposes
 //!     [`with_active_block_instance`](crate::GuitarRig::with_active_block_instance),
 //!     [`set_active_block_param`](crate::GuitarRig::set_active_block_param), and
 //!     [`set_block_slot_bypass`](crate::GuitarRig::set_block_slot_bypass).
 //!     [`DawRig`] routes `BlockId` → the right slot through these (via
-//!     [`ProfileRig`](crate::ProfileRig)).
+//!     [`ProfileRig`]).
 //!   - [`Rig::set_param`] — NAM `input_trim` / `output_trim` set the live
 //!     `NamProcessor` in place (downcast under daw's renderer lock); hosted
 //!     plugins route through daw `FxParams::set`. (IR cabs have no continuous
@@ -63,7 +63,7 @@
 //!
 //! - **Still approximate / open**:
 //!   - [`DawRig::open`]'s install path goes through the *path-based*
-//!     [`RigProfile`](crate::RigProfile), which can't carry a [`ParallelSum`]
+//!     [`RigProfile`], which can't carry a [`ParallelSum`]
 //!     box yet — so `lower_parallels` is exercised at the [`Chain`] level and in
 //!     tests, but `open` itself still flattens parallels. Nested parallels are
 //!     rejected; the daw-send-bus variant (for a multi-track rig) is future.
@@ -71,7 +71,7 @@
 //!   - The tuner is a single-window time-domain detector (good for tuning, not
 //!     a reference analyzer; no octave-error guard beyond the confidence gate).
 //!
-//! The existing `GuitarRig` / `ProfileRig` / `RigProfile` / `FxBackend` /
+//! The existing [`GuitarRig`] / [`ProfileRig`] / `RigProfile` / `FxBackend` /
 //! `NamProcessor` / `Convolver` stay untouched — this is additive.
 
 use std::path::Path;
@@ -468,7 +468,7 @@ impl Block for Plugin {
 /// ## Why an in-track summing block, not daw send-buses
 ///
 /// The drum-mixer mapping (`sampler_rig::from_mixer_layout`) lowers parallel
-/// paths to daw [`Routing::add_send`] + bus tracks because those tracks are
+/// paths to daw `Routing::add_send` + bus tracks because those tracks are
 /// *always present*. The live rig is a **single input-armed track whose FX
 /// chain is swapped per patch** ([`GuitarRig`]): a per-patch parallel section
 /// can't be a project-global bus track without rebuilding the routing graph on
@@ -847,7 +847,7 @@ impl Chain {
         Ok(Chain { nodes: out })
     }
 
-    /// Whether any node is a [`Node::Parallel`] (needs [`lower_parallels`] to
+    /// Whether any node is a [`Node::Parallel`] (needs `lower_parallels` to
     /// realize on the live rig).
     pub fn has_parallel(&self) -> bool {
         self.nodes
@@ -1399,7 +1399,7 @@ pub trait Rig: Send {
 /// The working [`Rig`] impl — wraps the existing [`ProfileRig`] (which wraps
 /// [`GuitarRig`]). Patch switching, metering, bypass, and trims are all the
 /// existing instant, click-free machinery; this is the doc's `DawRig`
-/// (§9: "the existing `GuitarRig` generalized to the `Rig` trait").
+/// (§9: "the existing [`GuitarRig`] generalized to the `Rig` trait").
 ///
 /// REAL: patches / active_patch / select_patch / next / prev / input_peak /
 /// output_peak / set_bypass / set_input_trim / set_output_trim. **Phase B**:
@@ -1425,7 +1425,7 @@ impl DawRig {
     /// tests with `SIGNAL_SAMPLER_RIG_AUDIO` like the other rig tests.
     ///
     /// Parallel sections in a patch's [`Chain`] are lowered to daw sends + a
-    /// summed bus track by [`build_parallel_project`] before the chain installs
+    /// summed bus track by `build_parallel_project` before the chain installs
     /// — see that function for what's supported (2-lane common case).
     pub fn open(prefs: &RigAudioPrefs, profile: &Profile) -> Result<Self, String> {
         let rig = GuitarRig::open(prefs).map_err(|e| e.to_string())?;
@@ -1458,7 +1458,7 @@ impl DawRig {
 
     /// Wrap an already-built [`ProfileRig`] (e.g. from the native app) as a
     /// [`Rig`]. Patch ids are read from the profile names. Snapshots are not
-    /// carried (the `ProfileRig` data type has none) — pass a [`Profile`] via
+    /// carried (the [`ProfileRig`] data type has none) — pass a [`Profile`] via
     /// [`open`](Self::open) for snapshot support.
     pub fn from_profile_rig(inner: ProfileRig) -> Self {
         let patch_ids: Vec<PatchId> = inner
@@ -1477,7 +1477,7 @@ impl DawRig {
     }
 
     /// The most recently tapped tempo (BPM), or 0.0 if fewer than two taps have
-    /// landed. Feeds time-based blocks once a [`Delay`] block ships (Phase B+).
+    /// landed. Feeds time-based blocks once a `Delay` block ships (Phase B+).
     pub fn tempo_bpm(&self) -> f32 {
         self.tempo_bpm
     }

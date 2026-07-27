@@ -1,7 +1,7 @@
 //! Filesystem-direct pack discovery — no DB.
 //!
 //! Walks a library root, opens each `.signalpack` header (no audio decode),
-//! and produces [`PackEntry`] values containing everything the browser needs
+//! and produces `PackEntry` values containing everything the browser needs
 //! to render a tag-filterable list. Convertible to [`ColumnItem`] so the
 //! same `signal-browser` consumers (Dioxus collection_browser, ratatui TUI)
 //! can render packs without knowing they came from disk.

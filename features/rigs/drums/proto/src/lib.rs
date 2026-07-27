@@ -240,8 +240,8 @@ pub mod drum {
         fn import_mm2_mix(&self, name: String);
         /// Trigger a pad from the UI: note-on at `velocity`.
         fn trigger(&self, note: u32, velocity: u32);
-        /// The drum mixer surface: one [`StripKind::Piece`] per kit piece
-        /// (kick, snare, …) followed by the shared [`StripKind::Bus`] strips.
+        /// The drum mixer surface: one `StripKind::Piece` per kit piece
+        /// (kick, snare, …) followed by the shared `StripKind::Bus` strips.
         fn mixer(&self) -> Vec<MixerStrip>;
         /// Set a kit piece's fader (dB) — scales all the piece's mics together.
         fn set_piece_gain(&self, idx: u32, db: f32);
@@ -252,7 +252,7 @@ pub mod drum {
         /// Solo/unsolo a bus strip.
         fn set_bus_solo(&self, idx: u32, soloed: bool);
         /// Set a piece's bus-send level (dB) — e.g. how much kick goes to the
-        /// overhead / room bus. `idx` is the global [`SendInfo::idx`].
+        /// overhead / room bus. `idx` is the global `SendInfo::idx`.
         fn set_send_level(&self, idx: u32, db: f32);
         /// A one-shot high-rate meter snapshot (peaks). The live feed is the
         /// [`DrumEvent::Meters`] stream; this seeds it.

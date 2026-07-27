@@ -90,11 +90,11 @@ impl RigAudioPrefs {
     }
 }
 
-/// Convert the rig's device prefs into daw's engine-global [`AudioIoPrefs`].
+/// Convert the rig's device prefs into daw's engine-global `AudioIoPrefs`.
 ///
 /// The rig is always duplex (live monitoring needs the input), so `want_input`
 /// is forced on. The per-track input *channel* lives on [`RigAudioPrefs`] but
-/// not on [`AudioIoPrefs`] (which is engine-global) — it's applied to the rig
+/// not on `AudioIoPrefs` (which is engine-global) — it's applied to the rig
 /// track's `RecordInput` separately, in `GuitarRig::open`.
 impl From<&RigAudioPrefs> for daw_audio_io::AudioIoPrefs {
     fn from(p: &RigAudioPrefs) -> Self {

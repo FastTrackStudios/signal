@@ -4,7 +4,7 @@
 //! `VelCurve`s), §9 (`Loader`). Phase A defined the declarative model and the
 //! trait surface with opaque placeholders; **Phase B builds the model from
 //! signal's existing [`LibrarySpec`] / [`PlayerPatch`] and binds
-//! [`ZoneLayers`] / [`Loader`] to the real [`SampleCache`].**
+//! [`ZoneLayers`] / `Loader` to the real [`SampleCache`].**
 //!
 //! Nothing here re-implements decoding, caching, or resolution — it *adapts*:
 //!
@@ -13,7 +13,7 @@
 //! | [`InstrumentModel`] | built `From<&LibrarySpec>` / `From<&PlayerPatch>` |
 //! | [`Legato`] `VelCurve`s | sampled from [`LegatoModeSpec::delay_for_velocity`] |
 //! | [`ZoneLayers`] | [`CacheZoneLayers`] → `PlayerPatch::resolve_zone` + cache |
-//! | [`Loader`] | [`CacheLoader`] → `SampleCache::preload` / `get` |
+//! | `Loader` | [`CacheLoader`] → `SampleCache::preload` / `get` |
 //! | [`SampleSlice`] | an index into the layers' coordinate table; PCM via [`CacheZoneLayers::pcm`] |
 //!
 //! ## REAL vs Phase-C
@@ -325,7 +325,7 @@ fn dyn_repr_velocity(i: usize, n: usize) -> u8 {
 
 // ── Loader bound to the real cache ───────────────────────────────────────
 
-/// A real [`Loader`] backed by the [`SampleCache`]: `preload` warms every
+/// A real `Loader` backed by the [`SampleCache`]: `preload` warms every
 /// sample path the patch knows about (delegating to `SampleCache::preload`),
 /// `slice` returns an addressing handle. IO stays off the hot path exactly as
 /// the design doc §9 requires — `note_on`/`render` only ever touch
@@ -379,7 +379,7 @@ impl From<&LibrarySpec> for InstrumentModel {
     /// dynamics axis, and per-velocity legato [`VelCurve`]s.
     ///
     /// Mapping:
-    /// - `mics` ← `spec.mics[].id` ([`Mic`] per [`MicSpec`], `loaded` ← `default`).
+    /// - `mics` ← `spec.mics[].id` ([`Mic`] per `MicSpec`, `loaded` ← `default`).
     /// - `dynamics` axis ← `spec.dynamics.sustain_controller` (e.g. `"CC1"`).
     /// - one [`Articulation`] per [`ArticulationSpec`]; `select` is
     ///   [`Select::keyswitch`] when the keyswitch map names it, else
@@ -660,7 +660,7 @@ fn trigger_for_kind(kind: &ArticulationKind) -> Trigger {
 // ── Model ⟷ engine bridge ────────────────────────────────────────────────
 
 impl super::engine::EngineInstrument {
-    /// Build a playing [`EngineInstrument`] **and** the matching declarative
+    /// Build a playing `EngineInstrument` **and** the matching declarative
     /// [`InstrumentModel`] from one [`PlayerPatch`] — they are siblings off a
     /// single source of truth.
     ///

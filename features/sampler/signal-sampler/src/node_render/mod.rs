@@ -10,8 +10,8 @@
 //! each block type's DSP is implemented.
 //!
 //! **Control-rate modulation (the ModMatrix).** Containers carry
-//! [`ModRoute`]s (`source → "Block.param"` at a depth). At compile time each
-//! route is resolved: the source becomes a [`ModSource`] (a modulator block —
+//! `ModRoute`s (`source → "Block.param"` at a depth). At compile time each
+//! route is resolved: the source becomes a `ModSource` (a modulator block —
 //! LFO/Envelope — or a MIDI performance source), the target becomes a
 //! `(leaf, param id)` pair via the backend's reported parameter names. At
 //! render time the engine ticks every source once per block and applies
@@ -35,7 +35,7 @@ use signal_plugin_host::{PluginEvents, PluginInstance, PluginMidiEvent, PluginPa
 /// directly** (no [`SoundsourceLeaf`] adapter round-trip inside the tree);
 /// processors and hosted plugins keep the general [`PluginInstance`] leaf
 /// role. The adapter remains only at graph boundaries that need a true
-/// `PluginInstance` (FX chains — see [`build_block`]).
+/// `PluginInstance` (FX chains — see `build_block`).
 pub enum LeafBackend {
     /// A generator (Oscillator / Wavetable / Sample / PhysicalModel / Audio).
     Source(Box<dyn Soundsource>),
@@ -130,7 +130,7 @@ pub(crate) fn build_leaf_backend(block: &RigBlock, sample_rate: u32) -> Option<L
 /// [`PluginInstance`], or `None` when the block is a placeholder or an
 /// unimplemented `Native` type (→ pass-through). Sources are wrapped in the
 /// generic [`SoundsourceLeaf`] — this is the graph-boundary form; the
-/// compiled tree itself uses [`build_leaf_backend`] and holds sources
+/// compiled tree itself uses `build_leaf_backend` and holds sources
 /// directly.
 pub fn build_node_backend(block: &RigBlock, sample_rate: u32) -> Option<Box<dyn PluginInstance>> {
     build_leaf_backend(block, sample_rate).map(|backend| match backend {
@@ -176,7 +176,7 @@ pub enum RenderNode {
         cell: Option<Arc<AtomicU32>>,
         /// Post-fader peak cell (linear, `f32` bits) — what this container is
         /// actually putting out, for a meter beside its fader. Written on the
-        /// audio thread with its own decay (see [`METER_RELEASE_S`]) so any
+        /// audio thread with its own decay (see `METER_RELEASE_S`) so any
         /// number of readers can sample it without stealing each other's peak.
         meter: Option<Arc<AtomicU32>>,
         inner: Box<RenderNode>,

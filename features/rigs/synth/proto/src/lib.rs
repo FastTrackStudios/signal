@@ -27,7 +27,7 @@ pub struct SynthPreset {
 /// projection of `signal_browser::pack_registry::PackEntry` for the BROWSE view.
 /// Metadata only (no audio): the UI fetches every item once and filters
 /// client-side. `tags` are encoded `"category:value"` keys
-/// ([`signal_proto::tagging::StructuredTag::encode`]); re-parse them with
+/// (`signal_proto::tagging::StructuredTag::encode`); re-parse them with
 /// `StructuredTag::parse` into a `TagSet` to reuse the faceted-filter engine.
 #[derive(Clone, PartialEq, Debug, Default, Facet)]
 pub struct BrowseItem {

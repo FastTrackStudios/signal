@@ -65,7 +65,7 @@ impl<S: SignalApi> ModulePresetOps<S> {
 
     /// Update a specific snapshot's module content and bump its version.
     ///
-    /// Mirrors [`BlockPresetOps::update_snapshot_params`] for the module layer.
+    /// Mirrors [`crate::ops::BlockPresetOps::update_snapshot_params`] for the module layer.
     pub async fn update_snapshot_module(
         &self,
         preset_id: impl Into<ModulePresetId>,

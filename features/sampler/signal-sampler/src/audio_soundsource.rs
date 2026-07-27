@@ -1,4 +1,4 @@
-//! The **Audio** [`Soundsource`](crate::soundsource::Soundsource) — emits the
+//! The **Audio** [`Soundsource`] — emits the
 //! layer's *input* as the source, rather than synthesizing or sampling.
 //!
 //! This is the **guitar-rig** case: the live DI feeds straight into the

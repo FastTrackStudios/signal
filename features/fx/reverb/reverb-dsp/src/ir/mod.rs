@@ -1,6 +1,6 @@
 //! Impulse-response loading, transformation, library and async engine.
 //!
-//! Mirrors the design of REEV-R (https://github.com/tiagolr/reevr):
+//! Mirrors the design of REEV-R (<https://github.com/tiagolr/reevr>):
 //! load an IR from disk, apply non-destructive transforms (trim,
 //! stretch, reverse, attack/decay envelope, predelay, gain), then push
 //! the processed stereo buffer into the Convolution algorithm.

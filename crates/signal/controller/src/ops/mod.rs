@@ -1,7 +1,7 @@
 //! Namespace handles for the signal controller API.
 //!
 //! Each handle groups related operations on a single entity type.
-//! Obtain a handle via the corresponding accessor on [`SignalController`]:
+//! Obtain a handle via the corresponding accessor on [`crate::SignalController`]:
 //!
 //! ```ignore
 //! let profiles = ctrl.profiles();

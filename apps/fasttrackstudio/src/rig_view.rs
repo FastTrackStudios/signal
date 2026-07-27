@@ -4,7 +4,7 @@
 //! far; the rest of the swarm — tracks, keys, drums, bass, vocals — are
 //! listed as coming). The guitar rig connects to a running signal engine
 //! over a vox WebSocket (ws://127.0.0.1:4040/vox by default) and mounts
-//! the same [`GuitarRigRemote`] the browser remote uses — the desktop
+//! the same `GuitarRigRemote` the browser remote uses — the desktop
 //! app is just another remote of the headless core. Connection lifecycle
 //! is lifted from `apps/signal-web`: retry until the core answers,
 //! watchdog-ping while connected, and on engine death tear down +
@@ -408,7 +408,7 @@ fn GuitarRigView() -> Element {
 
 /// The bass rig remote: connect over the shared `/vox` endpoint (same engine,
 /// same router as guitar), provide the two clients in context, and mount
-/// [`BassRigRemote`]. Auto-starts the local engine if nothing answers, like
+/// `BassRigRemote`. Auto-starts the local engine if nothing answers, like
 /// the other rigs.
 #[component]
 fn BassRigView() -> Element {
@@ -491,7 +491,7 @@ fn BassRigView() -> Element {
 
 /// The drum rig remote: connect over the shared `/vox` endpoint (same engine,
 /// same router as guitar), provide the two clients in context, and mount
-/// [`DrumRigRemote`]. On the local engine we auto-start it if nothing answers,
+/// `DrumRigRemote`. On the local engine we auto-start it if nothing answers,
 /// exactly like [`GuitarRigView`].
 #[component]
 fn DrumRigView() -> Element {
@@ -573,7 +573,7 @@ fn DrumRigView() -> Element {
 }
 
 /// The keys rig remote: connect over the shared `/vox` endpoint, provide the
-/// two clients in context, and mount [`KeysRigRemote`]. Auto-starts the local
+/// two clients in context, and mount `KeysRigRemote`. Auto-starts the local
 /// engine if nothing answers, like the other rigs.
 #[component]
 fn KeysRigView() -> Element {
@@ -655,7 +655,7 @@ fn KeysRigView() -> Element {
 }
 
 /// The synth rig remote: connect over the shared `/vox` endpoint, provide the
-/// two clients in context, and mount [`SynthRigRemote`]. Auto-starts the local
+/// two clients in context, and mount `SynthRigRemote`. Auto-starts the local
 /// engine if nothing answers, like the other rigs.
 #[component]
 fn SynthRigView() -> Element {

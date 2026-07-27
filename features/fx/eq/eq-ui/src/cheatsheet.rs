@@ -1,6 +1,6 @@
 //! EQ cheat-sheet data + track-name matching.
 //!
-//! Three kinds of guidance, unified behind [`OverlaySource`]:
+//! Three kinds of guidance, unified behind `OverlaySource`:
 //! - **Per-instrument** frequency zones (Hyperbits "EQ cheat sheet"), auto-selected
 //!   from the track name (e.g. a track called "Kick In" → the kick profile).
 //! - **General** sweet-spot chart (Hyperbits "Finding the EQ sweet spot") — one

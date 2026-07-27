@@ -3,7 +3,7 @@
 //! Converts vendor plugin presets (FabFilter, rfxchain, etc.) into Signal's
 //! `Preset` / `Snapshot` model. Each vendor importer produces an
 //! `ImportedPresetCollection` which the orchestrator converts and persists
-//! via [`SignalController`](signal_controller::SignalController).
+//! via [`signal_controller::SignalController`].
 //!
 //! # Architecture position
 //!

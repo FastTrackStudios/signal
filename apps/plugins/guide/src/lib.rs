@@ -9,7 +9,7 @@
 //! seeks/loops (the engine detects discontinuities itself).
 //!
 //! No audio input; stereo generator output. Click sounds are the engine's
-//! synthesized defaults ([`SampleBank::synthesize_defaults`]) — audible with
+//! synthesized defaults (`SampleBank::synthesize_defaults`) — audible with
 //! zero assets on disk.
 //!
 //! ## v0 scope — click only

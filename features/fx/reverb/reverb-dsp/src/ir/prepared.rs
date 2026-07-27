@@ -24,7 +24,7 @@ pub const SPECTRUM_LEN: usize = FFT_LEN / 2 + 1;
 /// Single-channel pre-FFT'd IR.
 #[derive(Clone)]
 pub struct PreparedIr {
-    /// One Vec<Complex> per partition. Length = ceil(ir_len / BLOCK).
+    /// One `Vec<Complex>` per partition. Length = ceil(ir_len / BLOCK).
     pub partitions: Vec<Vec<Complex<f64>>>,
     /// Compensation gain to apply to the IFFT output.
     pub gain: f64,

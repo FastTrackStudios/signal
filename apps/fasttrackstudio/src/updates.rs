@@ -14,7 +14,7 @@
 //! ships next to) current through this module.
 
 //! Plugin bundle note (issue #31): the FTS plugin suite has its own
-//! release asset (fts-plugins-v*-<platform>.tar.gz) and a working
+//! release asset (`fts-plugins-v*-<platform>.tar.gz`) and a working
 //! manifest-driven engine in `fts-installer plugins install|uninstall|
 //! list` (apps/installer/src/plugins.rs). When this updater grows its
 //! network half, the Settings UI gets a Plugins section driving that

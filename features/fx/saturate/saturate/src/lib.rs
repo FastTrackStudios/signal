@@ -1,4 +1,4 @@
-//! saturate — the public facade over [`saturate-dsp`].
+//! saturate — the public facade over the `saturate-dsp` crate.
 //!
 //! Apps and plugin shells depend on this crate, never on `saturate-dsp`
 //! directly (mirrors the level/comp facade pattern).

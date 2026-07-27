@@ -1,5 +1,5 @@
 //! The watch remote's wire DTOs — a tiny JSON projection of
-//! [`PerformanceModel`](crate::PerformanceModel) served by the engine's
+//! [`PerformanceModel`] served by the engine's
 //! `/watch/v1` HTTP+SSE bridge (watchOS can't speak vox over WebSocket;
 //! Apple TN3135 forbids it outside audio-streaming sessions).
 //!

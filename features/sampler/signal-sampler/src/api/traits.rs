@@ -2,11 +2,11 @@
 //!
 //! [`Instrument`] is *the* business-logic seam: notes in, mics out,
 //! articulation control, plus the metadata a host needs. The extension traits
-//! ([`Voicer`], [`PerformanceScript`], [`MicMixer`], [`Modulator`], [`Effect`],
+//! ([`Voicer`], `PerformanceScript`, [`MicMixer`], [`Modulator`], [`Effect`],
 //! [`Loader`], [`Authorization`]) capture the exotic 10%.
 //!
 //! Phase A wires only [`Instrument`] (on `SampleEngine`, see
-//! [`super::engine`]) and a real [`PerformanceScript`] pipeline. The rest get
+//! [`super::engine`]) and a real `PerformanceScript` pipeline. The rest get
 //! the trait + a trivial default impl so the surface compiles and is usable;
 //! the deep impls are Phase-B TODOs.
 

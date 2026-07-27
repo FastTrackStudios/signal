@@ -10,7 +10,7 @@
 //!    Builds a [`RigTemplate`] for track creation and collects module refs
 //!    for the FX loading phase.
 //! 2. **Execute** — call [`instantiate_rig`] to create the REAPER track
-//!    hierarchy, then call [`load_module_to_track`] for each module ref.
+//!    hierarchy, then call `load_module_to_track` for each module ref.
 
 use daw::rpc::Project;
 use signal_proto::{

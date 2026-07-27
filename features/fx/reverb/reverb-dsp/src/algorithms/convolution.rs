@@ -29,8 +29,8 @@
 //!   (JAES 1995). Uniform partitioned convolution algorithm.
 //! - Stockham, "High Speed Convolution and Correlation" (1966) —
 //!   overlap-save FFT convolution baseline.
-//! - https://github.com/HiFi-LoFi/FFTConvolver (open-source reference).
-//! - https://github.com/tiagolr/reevr — modulated-convolution design
+//! - <https://github.com/HiFi-LoFi/FFTConvolver> (open-source reference).
+//! - <https://github.com/tiagolr/reevr> — modulated-convolution design
 //!   the mod-source option mirrors.
 
 use std::f64::consts::{FRAC_PI_2, PI};
@@ -563,7 +563,7 @@ impl Convolution {
     /// Slot-addressed audio-thread-safe IR replacement. No allocations
     /// beyond the input-history resize (which only happens when the
     /// partition count changes). A `reshape`-tagged pair is routed to
-    /// [`Self::swap_reshaped`] (no param reset); a fresh load resets the
+    /// `Self::swap_reshaped` (no param reset); a fresh load resets the
     /// impulse shaping params per the MX manual and retains the raw IR
     /// (when carried) as the re-shape original.
     pub fn swap_prepared_pair_slot(&mut self, pair: PreparedIrPair, slot: IrSlot) {

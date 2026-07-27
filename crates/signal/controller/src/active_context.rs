@@ -5,7 +5,7 @@
 //! (patch, scene, or section) without the action needing to know which mode
 //! is active.
 //!
-//! The context is owned by [`SignalController`] and shared across all clones
+//! The context is owned by [`crate::SignalController`] and shared across all clones
 //! via `Arc<RwLock<..>>`. UI navigation sets the context; action handlers read it.
 
 use signal_proto::{profile::ProfileId, rig::RigId, song::SongId};

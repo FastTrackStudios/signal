@@ -10,9 +10,12 @@
 //!   - Parallel springs with different lengths/chirp for stereo width
 //!
 //! Signal flow per spring:
+//!
+//! ```text
 //!   Input → (+) → [Spectral Delay Filter] → Output tap
 //!            ↑                              ↓
 //!            +-- [× gain] ← [LP] ← [Modulated Delay] ←+
+//! ```
 //!
 //! The spectral delay filter creates frequency-dependent group delay:
 //! low frequencies arrive first, highs arrive later → characteristic chirp.

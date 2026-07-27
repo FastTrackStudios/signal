@@ -7,10 +7,10 @@
 //! ## Design
 //!
 //! The applier is a **pure function pair**:
-//! - [`modules_for_scene`] — derives which `ModuleType`s are active in a scene
+//! - `modules_for_scene` — derives which `ModuleType`s are active in a scene
 //! - [`apply_scene_switch`] — diffs two sets and drives the `DawBridge`
 //!
-//! This keeps the logic testable in isolation: tests inject a [`MockDawBridge`]
+//! This keeps the logic testable in isolation: tests inject a `MockDawBridge`
 //! and verify which modules were enabled/disabled.
 
 use signal_proto::module_type::ModuleType;

@@ -929,7 +929,7 @@ impl SamplerBank {
         Ok(())
     }
 
-    /// Load a [`PresetSpec`] — instantiates each engine ref under
+    /// Load a `PresetSpec` — instantiates each engine ref under
     /// `<id_prefix>:<engine_id>`, registers a `PresetRuntime` for the
     /// routing graph, populates note routing, and spawns a coordinator
     /// thread that preloads engines in drum priority order.

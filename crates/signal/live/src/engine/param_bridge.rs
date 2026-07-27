@@ -119,7 +119,7 @@ pub fn graph_to_snapshot(
 /// Extract [`DawStateChunk`]s from a resolved graph.
 ///
 /// Walks all engines → layers → modules → blocks and collects binary state
-/// data from any [`ResolvedBlock`] that carries `state_data`. Each chunk is
+/// data from any `ResolvedBlock` that carries `state_data`. Each chunk is
 /// tagged with the provided `fx_id` and the block's label.
 ///
 /// Returns an empty `Vec` when no blocks carry state data (the normal case

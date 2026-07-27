@@ -3,14 +3,14 @@
 //! This is the audio-side, styx-driven projection of the Signal domain model
 //! (`DOMAIN.md`) for the live rig — no storage stack, no UUIDs, names are the
 //! references. The three layers it adds on top of [`RigProfile`] /
-//! [`RigPatch`](crate::rig_profile::RigPatch):
+//! [`RigPatch`]:
 //!
 //! | Domain term | Type here | Holds |
 //! |---|---|---|
 //! | **Preset** (a playable tone) | [`RigPreset`] | named [`RigScene`]s |
 //! | **Preset Snapshot** (a variant) | [`RigScene`] | an FX [`chain`](RigScene::chain) |
 //! | **Profile** (sound switching) | [`RigProfile`] | `RigPatch`es → a preset scene |
-//! | **Patch** (a Profile entry) | [`RigPatch`](crate::rig_profile::RigPatch) | points at `preset` + `scene` |
+//! | **Patch** (a Profile entry) | [`RigPatch`] | points at `preset` + `scene` |
 //! | **Song** (a performance) | [`RigSong`] | [`RigSection`]s → a patch |
 //! | **Scene** (a Song entry) | [`RigSection`] | points at a profile `patch` |
 //!

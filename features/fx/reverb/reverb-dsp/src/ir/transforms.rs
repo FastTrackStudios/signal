@@ -2,7 +2,7 @@
 //! shaping, predelay, gain — applied to an [`IrAsset`] to produce a
 //! stereo pair ready for convolution.
 //!
-//! Inspired by REEV-R (https://github.com/tiagolr/reevr): stretch,
+//! Inspired by REEV-R (<https://github.com/tiagolr/reevr>): stretch,
 //! trim, reverse, attack and decay, plus IR predelay.
 
 use super::asset::IrAsset;

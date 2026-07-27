@@ -857,7 +857,7 @@ impl ProfileRig {
     }
 
     /// Update the *configured* bypass of the active patch's block addressed by
-    /// live slot id — so the global FX-bypass cycle ([`apply_fx_bypass`]) and
+    /// live slot id — so the global FX-bypass cycle (`apply_fx_bypass`) and
     /// re-activation restore the user's runtime toggles, not the profile's
     /// build-time defaults. Engine state is untouched; pair with
     /// [`set_block_bypass`](Self::set_block_bypass).

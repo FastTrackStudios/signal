@@ -5,10 +5,10 @@
 //! are kept in the research docs, not in production code.
 //!
 //! History buffer structure (4 doubles per channel):
-//! - hist[0]: Most recent smoothed result (becomes hist0 in next sample)
-//! - hist[1]: Previous smoothed result (becomes hist1)
-//! - hist[2]: Two samples ago (becomes hist2)
-//! - hist[3]: Three samples ago (becomes hist3)
+//! - `hist[0]`: Most recent smoothed result (becomes hist0 in next sample)
+//! - `hist[1]`: Previous smoothed result (becomes hist1)
+//! - `hist[2]`: Two samples ago (becomes hist2)
+//! - `hist[3]`: Three samples ago (becomes hist3)
 
 /// Hermite cubic smoother with change detection
 #[derive(Clone)]

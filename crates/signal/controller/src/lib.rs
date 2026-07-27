@@ -297,7 +297,7 @@ where
 
     // region: --- Builder integration
 
-    /// Save all entities from a [`BuiltRig`] in dependency order.
+    /// Save all entities from a [`signal_proto::builder::BuiltRig`] in dependency order.
     ///
     /// Saves: block presets → module → layer → engine → rig → profile.
     pub async fn save_built_rig(

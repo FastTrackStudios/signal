@@ -5,7 +5,7 @@
 //! whose record input is a hardware channel (`RecordInput::Audio { channel }`),
 //! whose FX chain is the active patch's chain ([NAM amp, cab IR, optional hosted
 //! CLAP/VST3]), routed to master. signal builds and drives this project;
-//! daw's [`AudioEngine`] opens the output device + a live input stream and, every
+//! daw's `AudioEngine` opens the output device + a live input stream and, every
 //! block, mixes the armed input channel into the track's bus, runs its FX chain,
 //! and outputs the result. daw's engine carries no rig concept — it is a pure
 //! realtime processor; the project/track/slot/meter wiring below is signal's own
@@ -32,7 +32,7 @@
 //!
 //! daw's renderer writes one post-fader peak per track into a [`Meters`] bank;
 //! that is the **output** meter. The first reserved fx slot is an
-//! [`InputProbe`] pass-through that records the **input** peak it sees
+//! `InputProbe` pass-through that records the **input** peak it sees
 //! (post-input-trim, pre-amp) into a shared atomic.
 
 use std::path::Path;
@@ -73,7 +73,7 @@ use crate::rig_prefs::RigAudioPrefs;
 const MAX_BLOCK: usize = FX_PREPARE_BLOCK as usize;
 
 /// Fixed number of FX slots reserved on the rig track. Slot 0 is the
-/// [`InputProbe`] (input meter); slots `1..=MAX_CHAIN_SLOTS` carry the active
+/// `InputProbe` (input meter); slots `1..=MAX_CHAIN_SLOTS` carry the active
 /// chain's blocks (identity pass-throughs fill unused ones). Reserving a
 /// constant count keeps the project's `fx_chain` (guids) immutable, so patch
 /// switches never rebuild the renderer's snapshot — the swap is pure box-insert.
@@ -522,7 +522,7 @@ pub struct DeviceInfo {
 
 // ── Shared meter state written by audio-thread plugin instances ──────────────
 
-/// Shared atomic the [`InputProbe`] writes the per-block input peak into, read
+/// Shared atomic the `InputProbe` writes the per-block input peak into, read
 /// by the UI input meter. Held by both the rig (reader) and the probe instance
 /// (audio-thread writer).
 #[derive(Debug, Default)]
@@ -1099,7 +1099,7 @@ struct SwapState {
 }
 
 /// A live guitar rig: a single input-armed daw track whose FX chain is the
-/// active patch, running on daw's realtime [`AudioEngine`].
+/// active patch, running on daw's realtime `AudioEngine`.
 pub struct GuitarRig {
     daw: Standalone,
     // The realtime engine (duplex pw_filter or cpal); drop = stop audio.
@@ -1115,7 +1115,7 @@ pub struct GuitarRig {
     track_guid: String,
     /// Fixed fx-guids for the chain slots (constant for the project's life).
     slot_guids: Vec<String>,
-    /// Input-meter atomic written by the [`InputProbe`] at slot 0.
+    /// Input-meter atomic written by the `InputProbe` at slot 0.
     input_meter: Arc<InputMeterShared>,
 
     pub sample_rate: u32,
@@ -1162,7 +1162,7 @@ impl GuitarRig {
 
     /// Open the rig from [`RigAudioPrefs`]. Builds a one-track daw project (the
     /// track armed to monitor `prefs.input_channel`), starts daw's realtime
-    /// [`AudioEngine`] with live input, reserves the track's FX slots, and
+    /// `AudioEngine` with live input, reserves the track's FX slots, and
     /// begins transport so the renderer runs every block.
     pub fn open(prefs: &RigAudioPrefs) -> eyre::Result<Self> {
         // Low latency under JACK/PipeWire: ask PipeWire for the quantum before
@@ -1368,8 +1368,8 @@ impl GuitarRig {
 
     /// Like [`install_chain`](Self::install_chain) but records an explicit
     /// stable id for each block (parallel to `blocks`), so the live-rig layer
-    /// can address a running block by id ([`with_active_block_instance`],
-    /// [`set_block_slot_bypass`]). `block_ids` shorter than `blocks` falls back
+    /// can address a running block by id (`with_active_block_instance`,
+    /// `set_block_slot_bypass`). `block_ids` shorter than `blocks` falls back
     /// to file-stem ids for the remainder.
     pub fn install_chain_with_ids(
         &mut self,
@@ -1604,7 +1604,7 @@ impl GuitarRig {
         self.swap.lock().unwrap().output_trim_db
     }
 
-    /// Post-input peak (linear) — from the [`InputProbe`] at slot 0.
+    /// Post-input peak (linear) — from the `InputProbe` at slot 0.
     pub fn input_peak(&self) -> f32 {
         self.input_meter.load()
     }
@@ -1638,7 +1638,7 @@ impl GuitarRig {
 
     /// A snapshot of the most-recent mono input samples (post-input-trim,
     /// pre-amp), newest-last, for pitch detection (the tuner). Up to
-    /// [`TUNER_WINDOW`] frames. Empty until the first block runs.
+    /// `TUNER_WINDOW` frames. Empty until the first block runs.
     pub fn input_samples(&self) -> Vec<f32> {
         self.input_meter.snapshot_samples()
     }

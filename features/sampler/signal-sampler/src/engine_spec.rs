@@ -1,6 +1,6 @@
 //! `.signalengine` file format — Engine = source + per-mic Layers.
 //!
-//! An Engine is a complete playable sound generator: one [`SamplerBlock`]
+//! An Engine is a complete playable sound generator: one `SamplerBlock`
 //! source plus N Layers, each subscribing to a mic from the source pack.
 //! Layers carry per-mic gain/pan and an optional FX chain (which is empty
 //! in factory Engines and gets populated when a user saves a processed

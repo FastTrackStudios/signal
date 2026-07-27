@@ -242,7 +242,7 @@ enum LegatoState {
 /// keyboard input. The next note is UNKNOWN, so a transition can only fire
 /// AFTER the new note-on, delayed by its velocity zone. Entry:
 /// `note_on` → (`live_divisi_note_on` |) `note_on_line`'s sounding-line arm
-/// → [`start_legato_transition`](Self::start_legato_transition) → a
+/// → `start_legato_transition` → a
 /// `LegatoState::Pending` countdown drained by `advance_legato_countdowns`.
 /// `note_off` may synthesise a fallback transition. Every reactive fire
 /// bumps `reactive_legato_fires`. **This path is what the deployed live rig
@@ -921,7 +921,7 @@ impl SampleEngine {
     }
 
     /// Mic ids in declaration order, parallel to the multi-buffer slice
-    /// expected by [`render_multi`]. Empty when the library has no `mics`.
+    /// expected by `render_multi`. Empty when the library has no `mics`.
     pub fn mic_ids(&self) -> &[String] {
         &self.mic_ids
     }
@@ -1225,7 +1225,7 @@ impl SampleEngine {
         self.voices.set_solo_notes(notes);
     }
 
-    /// Enable/disable pure sample-playback mode (see [`pure_playback`]).
+    /// Enable/disable pure sample-playback mode (see `pure_playback`).
     pub fn set_pure_playback(&mut self, on: bool) {
         self.pure_playback = on;
     }

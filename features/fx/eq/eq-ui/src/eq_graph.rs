@@ -44,7 +44,7 @@ fn now_ms() -> f64 {
 /// How the cheat-sheet overlay profile is chosen.
 #[derive(Clone, Copy)]
 pub enum OverlayChoice {
-    /// Resolve from the host track name via the injected [`TrackInfoProvider`].
+    /// Resolve from the host track name via the injected `TrackInfoProvider`.
     Auto,
     /// Hidden.
     Off,

@@ -4,7 +4,7 @@
 //! principle: **the common 90% is declarative data; the exotic 10% is a trait
 //! you implement.** This module defines the contract; the existing
 //! [`SampleEngine`](crate::SampleEngine) is the first working
-//! [`Instrument`](traits::Instrument) implementation (see [`engine`]).
+//! [`Instrument`] implementation (see [`engine`]).
 //!
 //! ## Phase A status (this layer)
 //! - **Real**: all primitives ([`prim`]); the declarative model types

@@ -13,7 +13,7 @@
 //! [`AudioSoundsource`](crate::AudioSoundsource) — implement `Soundsource`
 //! **natively**; the single generic [`SoundsourceLeaf`] adapter is what turns
 //! any of them into a render-tree
-//! [`PluginInstance`](signal_plugin_host::PluginInstance) leaf.
+//! [`PluginInstance`] leaf.
 
 use signal_plugin_host::{
     PluginDescriptor, PluginError, PluginEvents, PluginFormat, PluginInstance, PluginParamInfo,

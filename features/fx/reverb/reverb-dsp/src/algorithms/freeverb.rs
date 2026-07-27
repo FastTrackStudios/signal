@@ -6,8 +6,8 @@
 //! Dreampoint (~2000); long-standing reference implementation.
 //!
 //! References:
-//! - https://github.com/sinshu/freeverb (mirror of original sources)
-//! - https://ccrma.stanford.edu/~jos/pasp/Freeverb.html (J. O. Smith)
+//! - <https://github.com/sinshu/freeverb> (mirror of original sources)
+//! - <https://ccrma.stanford.edu/~jos/pasp/Freeverb.html> (J. O. Smith)
 //!
 //! The published constants are tuned for 44.1 kHz. We scale them to the
 //! actual sample rate at construction.

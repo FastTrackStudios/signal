@@ -74,7 +74,7 @@ impl AmpEngine {
         Ok(())
     }
 
-    /// The active patch's chain as [`RigBlock`]s — the amp/cab/FX blocks to
+    /// The active patch's chain as `RigBlock`s — the amp/cab/FX blocks to
     /// render in the signal grid. Empty block names are filled with the model
     /// name so the grid always has a label. Empty if no model is loaded.
     // r[impl guitar.amp.chain-blocks]

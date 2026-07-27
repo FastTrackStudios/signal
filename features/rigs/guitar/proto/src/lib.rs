@@ -439,7 +439,7 @@ pub mod audio {
         fn devices(&self) -> AudioDevices;
         /// The persisted I/O preferences.
         fn prefs(&self) -> AudioPrefs;
-        /// Persist edited preferences (takes effect on the next [`rig::Rig::start`]).
+        /// Persist edited preferences (takes effect on the next `rig::Rig::start`).
         fn save_prefs(&self, prefs: AudioPrefs);
     }
 }

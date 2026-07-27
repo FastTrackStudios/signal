@@ -2099,7 +2099,7 @@ pub struct GrooveSpec {
     /// to one MIDI key starting at `slice_base_note` (default C2 = 36).
     #[facet(default)]
     pub slices: Vec<SliceMarker>,
-    /// MIDI note that the first slice (slices[0]) maps to. Defaults
+    /// MIDI note that the first slice (`slices[0]`) maps to. Defaults
     /// to 36 (C2) — Stylus RMX's standard slice base.
     #[facet(default)]
     pub slice_base_note: u8,
