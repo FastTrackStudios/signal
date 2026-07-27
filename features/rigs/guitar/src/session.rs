@@ -58,7 +58,6 @@ struct TapTracker {
 /// hold at 500 ms fires the hold-layer action); CC 106–110 = the
 /// hold-layer functions directly. Momentary switches repeat while held —
 /// edge-detect on value.
-#[derive(Default)]
 pub struct MeterPump {
     /// The open MIDI capture (all input ports merged); `None` until a port
     /// exists. Reopened by the hot-plug scan.
@@ -66,14 +65,27 @@ pub struct MeterPump {
     /// Input-port names at the last hot-plug scan — a change reopens.
     midi_ports: Vec<String>,
     tick: u64,
-    sw_down: [Option<std::time::Instant>; 5],
-    sw_hold_fired: [bool; 5],
-    cc_down: [bool; 10],
+    /// Footswitch tap/hold/edge state (the shared gesture engine).
+    switches: FootswitchEngine,
+}
+
+impl Default for MeterPump {
+    fn default() -> Self {
+        Self {
+            midi: None,
+            midi_ports: Vec::new(),
+            tick: 0,
+            // 5 gesture switches + 5 direct slots, holds at the 500 ms
+            // pedalboard convention (mirrors the UI's hold threshold).
+            switches: FootswitchEngine::new(5, 5, std::time::Duration::from_millis(500)),
+        }
+    }
 }
 
 /// Shared live rig (a [`ProfileRig`] wrapping the [`GuitarRig`]).
 type SharedRig = Arc<Mutex<Option<ProfileRig>>>;
 
+use signal_rig_host::gestures::{FootswitchAction, FootswitchEngine, FootswitchMap};
 use signal_rig_host::lock::{LockExt, panic_message};
 
 /// The headless rig session: live audio + profile/footswitch state, shared
@@ -244,56 +256,38 @@ impl GuitarRigBackend {
                     }
                 }
             }
-            for (cc, val) in events {
-                // Remappable mapping (midi.styx): gesture switches
-                // (tap/hold) + direct hold-layer slots.
-                let map = self.midi_map.lock_ok().clone();
-                let gesture = map.tap_ccs.iter().position(|c| *c == cc as u32);
-                let direct = map.direct.iter().find(|d| d.cc == cc as u32).map(|d| d.slot);
-                let Some(idx) = gesture.or_else(|| direct.map(|s| s as usize + 5)) else {
-                    continue;
-                };
-                let idx = idx.min(pump.cc_down.len() - 1);
-                let down = val > 0;
-                if down == pump.cc_down[idx] {
-                    continue; // momentary repeat — not an edge
+            // Remappable mapping (midi.styx) → the shared gesture engine:
+            // gesture switches (tap on short release, hold at 500 ms) +
+            // direct hold-layer slots (fire on press).
+            let map = {
+                let m = self.midi_map.lock_ok();
+                FootswitchMap {
+                    tap_ccs: m.tap_ccs.clone(),
+                    direct: m.direct.iter().map(|d| (d.cc, d.slot)).collect(),
                 }
-                pump.cc_down[idx] = down;
-                match gesture {
-                    // Gesture switches: tap on short release,
-                    // hold-layer action at 500 ms (mirrors the UI).
-                    Some(sw) if sw < 5 => {
-                        if down {
-                            pump.sw_down[sw] = Some(std::time::Instant::now());
-                            pump.sw_hold_fired[sw] = false;
-                        } else {
-                            if !pump.sw_hold_fired[sw] {
-                                tracing::info!("footswitch {} tap", sw + 1);
-                                match sw {
-                                    4 => Rig::tap_tempo(self),
-                                    s => Rig::press_stack(self, s as u32),
-                                }
-                            }
-                            pump.sw_down[sw] = None;
-                        }
+            };
+            let mut actions: Vec<FootswitchAction> = events
+                .into_iter()
+                .filter_map(|(cc, val)| pump.switches.on_cc(&map, cc, val))
+                .collect();
+            actions.extend(pump.switches.poll_holds());
+            for action in actions {
+                match action {
+                    FootswitchAction::Tap(4) => {
+                        tracing::info!("footswitch 5 tap");
+                        Rig::tap_tempo(self);
                     }
-                    _ => {
-                        if down {
-                            if let Some(slot) = direct {
-                                tracing::info!("footswitch direct cc {cc} → slot {slot}");
-                                self.hold_layer_action(slot as usize);
-                            }
-                        }
+                    FootswitchAction::Tap(sw) => {
+                        tracing::info!("footswitch {} tap", sw + 1);
+                        Rig::press_stack(self, sw as u32);
                     }
-                }
-            }
-            // Holds: fire the hold-layer action at 500 ms.
-            for sw in 0..5 {
-                if let Some(t) = pump.sw_down[sw] {
-                    if !pump.sw_hold_fired[sw] && t.elapsed().as_millis() >= 500 {
-                        pump.sw_hold_fired[sw] = true;
+                    FootswitchAction::Hold(sw) => {
                         tracing::info!("footswitch {} hold", sw + 1);
                         self.hold_layer_action(sw);
+                    }
+                    FootswitchAction::Direct(slot) => {
+                        tracing::info!("footswitch direct → slot {slot}");
+                        self.hold_layer_action(slot as usize);
                     }
                 }
             }

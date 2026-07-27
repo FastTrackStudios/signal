@@ -44,6 +44,7 @@ use daw::standalone::transport_engine::{PlayStateRepr, TransportShared};
 use daw_audio_io::AudioIoPrefs;
 use daw_audio_io::duplex::EngineStats;
 
+pub mod gestures;
 pub mod lock;
 pub mod mixer;
 pub mod store;
