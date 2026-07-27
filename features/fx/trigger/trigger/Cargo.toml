@@ -10,9 +10,10 @@ default = []
 # Opt-in plugin UI — declared now so the facade shape is stable; wired once
 # the Dioxus editor lands (mirrors level).
 ui = []
-# Preset profiles (full control / drum replacer parameter mappings).
-profiles = ["dep:trigger-profiles"]
+# Preset profiles (full control / drum replacer parameter mappings). Wired
+# once a real profiles crate exists (the shared abstraction lives in
+# eq-profiles::core).
+profiles = []
 
 [dependencies]
 trigger-dsp = { workspace = true }
-trigger-profiles = { workspace = true, optional = true }

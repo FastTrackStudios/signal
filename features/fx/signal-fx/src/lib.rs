@@ -22,10 +22,6 @@ pub use factory::NativeFxFactory;
 
 // ── Param helpers ──────────────────────────────────────────────────────────
 
-/// Hard cap on time-effect (reverb/delay) dry-wet mix for now (10%).
-/// Full wet/dry travel — the merged MX/reverb engines are pedal-parity, so
-/// the mix knob covers the whole range (defaults stay subtle).
-const TIME_MIX_MAX: f64 = 1.0;
 
 /// One controllable parameter: stable id, display name, range, default.
 struct ParamSpec {
@@ -660,7 +656,7 @@ const REVERB_PARAMS: &[ParamSpec] = &[
     ParamSpec { id: 3, name: "routing", min: 0.0, max: 5.0, default: 0.0 },
     ParamSpec { id: 4, name: "algo_b", min: 0.0, max: 14.0, default: 2.0 },
     ParamSpec { id: 5, name: "decay_b", min: 0.0, max: 1.0, default: 0.45 },
-    ParamSpec { id: 6, name: "mix_b", min: 0.0, max: 0.10, default: 0.08 },
+    ParamSpec { id: 6, name: "mix_b", min: 0.0, max: 1.0, default: 0.08 },
     // Per-slot wet pan (-1..+1) and wet tremolo (shared A knob set).
     ParamSpec { id: 7, name: "pan_a", min: -1.0, max: 1.0, default: 0.0 },
     ParamSpec { id: 8, name: "pan_b", min: -1.0, max: 1.0, default: 0.0 },
@@ -759,7 +755,7 @@ impl NativeReverb {
     fn set(&mut self, id: u32, v: f64) {
         // Ids 0-2 address reverb A; 3+ are the dual-routing block.
         match id {
-            0 => self.rev.a.mix = v.min(TIME_MIX_MAX),
+            0 => self.rev.a.mix = v.clamp(0.0, 1.0),
             1 => {
                 self.rev.a.params.decay = v;
                 self.rev.a.update_params();
@@ -782,7 +778,7 @@ impl NativeReverb {
                 self.rev.b.params.decay = v;
                 self.rev.b.update_params();
             }
-            6 => self.rev.b.mix = v.min(TIME_MIX_MAX),
+            6 => self.rev.b.mix = v.clamp(0.0, 1.0),
             7 => self.rev.a.pan = v.clamp(-1.0, 1.0),
             8 => self.rev.b.pan = v.clamp(-1.0, 1.0),
             9 => {
@@ -1057,7 +1053,9 @@ impl PluginInstance for NativeReverb {
 
 const DELAY_PARAMS: &[ParamSpec] = &[
     ParamSpec { id: 0, name: "mix", min: 0.0, max: 1.0, default: 0.08 },
-    ParamSpec { id: 1, name: "time", min: 20.0, max: 2500.0, default: 400.0 },
+    // 2 ms floor: the Lo-Fi machine is spec'd down to 2 ms (chorus/flange/
+    // realtime-lofi use); every style re-clamps to its own range anyway.
+    ParamSpec { id: 1, name: "time", min: 2.0, max: 2500.0, default: 400.0 },
     ParamSpec { id: 2, name: "feedback", min: 0.0, max: 0.95, default: 0.30 },
     // TimeLine MX parity params (style index: see delay::DelayStyle).
     ParamSpec { id: 3, name: "style", min: 0.0, max: 12.0, default: 1.0 },
@@ -1083,7 +1081,7 @@ const DELAY_PARAMS: &[ParamSpec] = &[
     // Ids 0-16 keep addressing delay A.
     ParamSpec { id: 17, name: "routing", min: 0.0, max: 5.0, default: 0.0 },
     ParamSpec { id: 18, name: "style_b", min: 0.0, max: 12.0, default: 1.0 },
-    ParamSpec { id: 19, name: "time_b", min: 20.0, max: 2500.0, default: 300.0 },
+    ParamSpec { id: 19, name: "time_b", min: 2.0, max: 2500.0, default: 300.0 },
     ParamSpec { id: 20, name: "feedback_b", min: 0.0, max: 0.95, default: 0.30 },
     ParamSpec { id: 21, name: "mix_b", min: 0.0, max: 1.0, default: 0.08 },
     // Spectral machine (grain_shape: 0 Soft/1 Swell/2 SoftPluck/
@@ -1156,7 +1154,7 @@ impl NativeDelay {
         // Ids 0-16 address delay A; 17+ are the dual-routing block.
         let a = &mut self.dly.a;
         match id {
-            0 => a.mix = v.min(TIME_MIX_MAX),
+            0 => a.mix = v.clamp(0.0, 1.0),
             1 => {
                 a.delay_l.time_ms = v;
                 a.delay_r.time_ms = v;
@@ -1239,7 +1237,7 @@ impl NativeDelay {
                 self.dly.b.delay_l.feedback = v;
                 self.dly.b.delay_r.feedback = v;
             }
-            21 => self.dly.b.mix = v.min(TIME_MIX_MAX),
+            21 => self.dly.b.mix = v.clamp(0.0, 1.0),
             22 => {
                 let shape = match v.round().max(0.0) as usize {
                     1 => delay::GrainShape::Swell,
