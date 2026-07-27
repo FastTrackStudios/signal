@@ -51,14 +51,12 @@ use std::sync::{Arc, Mutex};
 use midicore::MidiMonitor;
 
 use daw::service::{
-    FxChainContext, FxChains, ProjectContext, ProjectInfo, RouteRef, Routing, SendMode, TrackRef,
-    Tracks,
+    FxChainContext, FxChains, ProjectContext, RouteRef, Routing, SendMode, TrackRef, Tracks,
 };
 use daw::standalone::Standalone;
-use daw::standalone::audio_engine::AudioEngine;
 use daw::standalone::metering::{Meters, linear_to_db};
-use daw::standalone::transport_engine::{PlayStateRepr, TransportShared};
 use daw_audio_io::AudioIoPrefs;
+use signal_rig_host::{RigHost, RigProject};
 use signal_plugin_host::{
     PluginDescriptor, PluginError, PluginEvents, PluginFormat, PluginInstance, PluginParamInfo,
 };
@@ -331,10 +329,9 @@ pub struct BusTrack {
 struct Inner {
     /// `None` in offline mode (no device opened).
     daw: Option<Standalone>,
-    /// Engine owns the cpal output stream; drop = stop. `None` offline.
-    _engine: Option<AudioEngine>,
-    #[allow(dead_code)]
-    shared: Option<Arc<TransportShared>>,
+    /// The shared daw host (project + output engine + transport); drop =
+    /// stop audio. `None` offline.
+    _host: Option<RigHost>,
     meters: Mutex<Arc<Meters>>,
     #[allow(dead_code)]
     project_guid: String,
@@ -431,58 +428,19 @@ impl SamplerRig {
         prefs: &AudioIoPrefs,
         cache_budget_bytes: Option<usize>,
     ) -> eyre::Result<Self> {
-        // Low-latency quantum under JACK/PipeWire (same as GuitarRig::open).
-        #[cfg(feature = "jack")]
-        {
-            if prefs.buffer_size != 0 && std::env::var_os("PIPEWIRE_LATENCY").is_none() {
-                let rate = if prefs.sample_rate != 0 {
-                    prefs.sample_rate
-                } else {
-                    48_000
-                };
-                let buf = prefs.buffer_size;
-                unsafe { std::env::set_var("PIPEWIRE_LATENCY", format!("{buf}/{rate}")) };
-                tracing::info!(quantum = %format!("{buf}/{rate}"), "sampler rig: requesting PipeWire low-latency quantum");
-            }
-        }
+        // Seed the project and reserve one bank track + fx slot for the
+        // BankInstrument.
+        let project = RigProject::new(SAMPLER_PROJECT_NAME);
+        let bank_track = project.add_track(BANK_TRACK_NAME)?;
+        let bank_fx_guid = project.add_fx_slot(&bank_track, "sampler-bank")?;
 
-        let daw = Standalone::new();
-        let project_guid = crate::rig::uuid_string();
-        daw.seed_project(ProjectInfo {
-            guid: project_guid.clone(),
-            name: SAMPLER_PROJECT_NAME.to_string(),
-            path: String::new(),
-        });
-        daw.set_current_project(&project_guid);
-
-        // One bank track that carries the BankInstrument.
-        let bank_track =
-            <Standalone as Tracks>::add(&daw, ProjectContext::Current, BANK_TRACK_NAME, None)
-                .map_err(|e| eyre::eyre!("sampler rig: add bank track failed: {e}"))?;
-        let fx_ctx = FxChainContext::track(bank_track.clone());
-        let idx = <Standalone as FxChains>::add(&daw, fx_ctx.clone(), "sampler-bank")
-            .map_err(|e| eyre::eyre!("sampler rig: reserve bank fx slot failed: {e}"))?;
-        let bank_fx_guid = <Standalone as FxChains>::get(&daw, fx_ctx, idx)
-            .map(|fx| fx.guid)
-            .ok_or_else(|| eyre::eyre!("sampler rig: bank fx slot vanished after add"))?;
-
-        // Output-only engine (a sampler generates, never records).
-        let mut io = prefs.clone();
-        io.want_input = false;
-        let req_rate = if prefs.sample_rate != 0 {
-            prefs.sample_rate
-        } else {
-            48_000
-        };
-        let shared = Arc::new(TransportShared::new(req_rate, 120.0));
-        let engine =
-            AudioEngine::with_project_prefs(daw.clone(), project_guid.clone(), shared.clone(), &io)
-                .map_err(|e| eyre::eyre!("sampler rig: audio engine failed: {e}"))?;
-        let sample_rate = engine.sample_rate();
-
-        // One meter cell for the bank track.
-        let meters = Meters::new(1);
-        daw.set_meters(meters.clone());
+        // Output-only engine (a sampler generates, never records) + one meter
+        // cell for the bank track.
+        let host = project.start_output(prefs)?;
+        let sample_rate = host.sample_rate();
+        let meters = host.install_meters(1);
+        let daw = host.daw().clone();
+        let project_guid = host.project_guid().to_string();
 
         // Build + install the bank instrument.
         let bank = Arc::new(Mutex::new(SamplerBank::with_cache_budget(
@@ -494,7 +452,7 @@ impl SamplerRig {
         let _ = inst.prepare(sample_rate as f64, PREPARE_BLOCK);
         daw.insert_plugin_instance(bank_fx_guid, Box::new(inst));
 
-        shared.set_play_state(PlayStateRepr::Playing);
+        host.play();
 
         tracing::info!(
             sample_rate,
@@ -505,8 +463,7 @@ impl SamplerRig {
         Ok(Self {
             inner: Arc::new(Inner {
                 daw: Some(daw),
-                _engine: Some(engine),
-                shared: Some(shared),
+                _host: Some(host),
                 meters: Mutex::new(meters),
                 project_guid,
                 bank,
@@ -535,8 +492,7 @@ impl SamplerRig {
         Self {
             inner: Arc::new(Inner {
                 daw: None,
-                _engine: None,
-                shared: None,
+                _host: None,
                 meters: Mutex::new(Meters::new(0)),
                 project_guid: String::new(),
                 bank: Arc::new(Mutex::new(SamplerBank::with_cache_budget(

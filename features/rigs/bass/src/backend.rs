@@ -17,7 +17,7 @@
 //!   program change / footswitch CCs (`midi.styx`).
 
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
+use std::sync::{Arc, Mutex};
 
 use architect::dispatch::CurrentThreadDispatcher;
 use architect::rig::RigBackend;
@@ -35,17 +35,7 @@ use crate::library::{BassLastState, BassLibrary, BassMidiMapDef, BassPresetDef};
 /// `<config>/signal/rigs/bass-rig.styx` by `RigManager`).
 const AUDIO_RIG_NAME: &str = "Bass Rig";
 
-/// Poison-tolerant locking: a panic in one service call must never take the
-/// rest of the rig down with it (the guarded state is plain data).
-trait LockExt<T> {
-    fn lock_ok(&self) -> MutexGuard<'_, T>;
-}
-
-impl<T> LockExt<T> for Mutex<T> {
-    fn lock_ok(&self) -> MutexGuard<'_, T> {
-        self.lock().unwrap_or_else(PoisonError::into_inner)
-    }
-}
+use signal_rig_host::lock::LockExt;
 
 /// Meter-pump loop state, kept outside the tick so a caught panic in one
 /// iteration doesn't reset CC edge detection.

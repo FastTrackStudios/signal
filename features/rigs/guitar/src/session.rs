@@ -9,7 +9,7 @@
 //! Moved out of `apps/desktop/src/main.rs` — this is rig domain logic, not
 //! app wiring.
 
-use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
+use std::sync::{Arc, Mutex};
 
 use architect::dispatch::CurrentThreadDispatcher;
 use architect::rig::RigBackend;
@@ -74,28 +74,7 @@ pub struct MeterPump {
 /// Shared live rig (a [`ProfileRig`] wrapping the [`GuitarRig`]).
 type SharedRig = Arc<Mutex<Option<ProfileRig>>>;
 
-/// Poison-tolerant locking, used for every mutex in this file: a panic in
-/// one service call must never take the rest of the rig down with it (the
-/// guarded state is plain data — recovering the inner value is safe, and
-/// far better mid-service than footswitches going dead).
-trait LockExt<T> {
-    fn lock_ok(&self) -> MutexGuard<'_, T>;
-}
-
-impl<T> LockExt<T> for Mutex<T> {
-    fn lock_ok(&self) -> MutexGuard<'_, T> {
-        self.lock().unwrap_or_else(PoisonError::into_inner)
-    }
-}
-
-/// Best-effort text from a caught panic payload.
-fn panic_message(panic: &(dyn std::any::Any + Send)) -> &str {
-    panic
-        .downcast_ref::<&str>()
-        .copied()
-        .or_else(|| panic.downcast_ref::<String>().map(String::as_str))
-        .unwrap_or("<non-string payload>")
-}
+use signal_rig_host::lock::{LockExt, panic_message};
 
 /// The headless rig session: live audio + profile/footswitch state, shared
 /// behind `Arc`s so service calls can arrive from any thread. `ProfileRig` is

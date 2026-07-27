@@ -83,6 +83,7 @@ pub mod document_rt;
 pub mod engine;
 pub mod engine_spec;
 pub mod instrument;
+pub mod keys_rig;
 pub mod loudness;
 pub mod midi;
 pub mod mixer;
@@ -126,6 +127,7 @@ pub use engine::trace::{RenderTrace, TraceEvent, TraceKind, VoiceSpawn};
 pub use engine::{ArticClass, EmittedMarker, LegatoFireEvent, LineId, PlayMode, SampleEngine};
 pub use engine_spec::{BlockRef, EngineLayerSpec, EngineSpec, FxChainSlot, PortSpec, VoiceConfig};
 pub use instrument::SamplerInstrument;
+pub use keys_rig::{KeysInstrument, KeysRig};
 pub use mixer::{
     Bus, BusStrip, ChannelStrip, DirectChannel, DrumMixer, EngineStrip, FxBackend, FxSlotStrip,
     FxTarget, MixerLayout, MixerMeters, Send as MixerSend, SendStrip,

@@ -16,6 +16,8 @@ pipewire = ["midicore/midir-pipewire"]
 # The shared sampler core — GuitarRig / ProfileRig / RigProfile / RigBlock /
 # RigAudioPrefs. The bass rig is a preset layer on the same duplex engine.
 signal-sampler.workspace = true
+# Cross-rig utilities: poison-tolerant locking.
+signal-rig-host.workspace = true
 
 # The wire contract this crate's headless backend implements; front-ends
 # consume the same crate's clients.
