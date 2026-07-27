@@ -1,25 +1,8 @@
 //! Macro knob for the layer-zoom panels — a 270° arc with the same drag feel
 //! as the guitar rig's knob (150 px per sweep), sized for dense panels.
 
-use std::f64::consts::PI;
-
 use dioxus::prelude::*;
-
-const START_ANGLE: f64 = 135.0;
-const SWEEP: f64 = 270.0;
-const SENSITIVITY: f64 = 150.0;
-
-fn arc_point(cx: f64, cy: f64, r: f64, deg: f64) -> (f64, f64) {
-    let rad = deg * PI / 180.0;
-    (cx + r * rad.cos(), cy + r * rad.sin())
-}
-
-fn arc_path(cx: f64, cy: f64, r: f64, from: f64, to: f64) -> String {
-    let (x1, y1) = arc_point(cx, cy, r, from);
-    let (x2, y2) = arc_point(cx, cy, r, to);
-    let large = if (to - from).abs() > 180.0 { 1 } else { 0 };
-    format!("M {x1:.1} {y1:.1} A {r:.1} {r:.1} 0 {large} 1 {x2:.1} {y2:.1}")
-}
+use signal_widgets::arc::{SENSITIVITY, START_ANGLE, SWEEP, arc_path, arc_point};
 
 /// Format a macro value for its unit.
 pub fn fmt_value(value: f32, unit: &str) -> String {

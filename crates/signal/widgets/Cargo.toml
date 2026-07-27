@@ -1,0 +1,10 @@
+[package]
+name = "signal-widgets"
+version.workspace = true
+edition = "2021"          # kept on 2021 — pre-move signal workspace edition; migrate deliberately
+license.workspace = true
+authors.workspace = true
+description = "Shared Blitz-safe Dioxus widgets for signal rig UIs — knob, arc geometry"
+
+[dependencies]
+dioxus.workspace = true
