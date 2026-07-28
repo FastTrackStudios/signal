@@ -578,15 +578,15 @@ impl DrumRigBackend {
             let piece = mix.pieces.get(ch.piece).map(|p| p.state).unwrap_or_default();
             let track = project.track(&ch.track);
             let _ = track.set_volume(vol(piece.gain_db + ch.state.gain_db));
-            let _ = track.mute(piece.muted || ch.state.muted);
-            let _ = track.solo(piece.soloed || ch.state.soloed);
+            let _ = track.set_muted(piece.muted || ch.state.muted);
+            let _ = track.set_soloed(piece.soloed || ch.state.soloed);
         }
         for snd in &mix.sends {
             let piece = mix.pieces.get(snd.piece).map(|p| p.state).unwrap_or_default();
             let track = project.track(&snd.track);
             let _ = track.set_volume(vol(piece.gain_db));
-            let _ = track.mute(piece.muted || snd.muted);
-            let _ = track.solo(piece.soloed || snd.soloed);
+            let _ = track.set_muted(piece.muted || snd.muted);
+            let _ = track.set_soloed(piece.soloed || snd.soloed);
             // The send level rides the route, not the track fader.
             let _ = daw.routing_direct().set_volume(
                 project.context(),
@@ -603,8 +603,8 @@ impl DrumRigBackend {
             });
             let track = project.track(&bus.track);
             let _ = track.set_volume(vol(bus.state.gain_db));
-            let _ = track.mute(bus.state.muted);
-            let _ = track.solo(bus.state.soloed || (any_solo && sender_solo));
+            let _ = track.set_muted(bus.state.muted);
+            let _ = track.set_soloed(bus.state.soloed || (any_solo && sender_solo));
         }
     }
 

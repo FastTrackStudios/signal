@@ -392,7 +392,7 @@ impl KeysRig {
             // Rebuild the whole track set on the running project.
             self.daw
                 .current()
-                .remove_all_tracks()
+                .remove_all()
                 .map_err(|e| eyre::eyre!("keys rig: clear tracks failed: {e}"))?;
             let lanes = build_lane_tracks(&self.daw, program)?;
             let track_count = 1 + lanes.engines.len() + lanes.layers.len();
@@ -432,14 +432,14 @@ impl KeysRig {
     /// Mute a lane (daw track mute; muting an engine folder mutes its sum).
     pub fn set_lane_mute(&self, role: Role, name: &str, muted: bool) {
         if let Some(guid) = self.lane_guid(role, name) {
-            let _ = self.daw.current().track(guid).mute(muted);
+            let _ = self.daw.current().track(guid).set_muted(muted);
         }
     }
 
     /// Solo a lane (daw folder-aware solo: ancestors pass, siblings drop).
     pub fn set_lane_solo(&self, role: Role, name: &str, soloed: bool) {
         if let Some(guid) = self.lane_guid(role, name) {
-            let _ = self.daw.current().track(guid).solo(soloed);
+            let _ = self.daw.current().track(guid).set_soloed(soloed);
         }
     }
 

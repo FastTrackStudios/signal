@@ -1779,7 +1779,7 @@ impl SamplerRig {
                         let _ = t.set_pan(pan as f64);
                     }
                     if er.mute {
-                        let _ = t.mute(true);
+                        let _ = t.set_muted(true);
                     }
                 }
                 mics.push(KitMic {
