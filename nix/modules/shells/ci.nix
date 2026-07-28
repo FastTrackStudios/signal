@@ -24,7 +24,15 @@
       # from a hook — see the stall note above).
       ++ lib.optionals (config.fts.cargoRail != null) [ config.fts.cargoRail ]
       ++ config.fts.buildInputs
-      ++ [ pkgs.pkg-config pkgs.rustPlatform.bindgenHook pkgs.tailwindcss_4 ];
+      # `just` so the workflow can invoke `just css` instead of
+      # repeating the tailwindcss commands — the recipe stays the one
+      # definition of how those sheets get built.
+      ++ [
+        pkgs.pkg-config
+        pkgs.rustPlatform.bindgenHook
+        pkgs.tailwindcss_4
+        pkgs.just
+      ];
 
       # Seeded cargo-home bins (dx for the web-bundle steps) resolve
       # from PATH — never installed from here. APPEND, don't prepend:
