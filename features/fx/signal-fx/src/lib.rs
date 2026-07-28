@@ -1156,10 +1156,13 @@ const DELAY_PARAMS: &[ParamSpec] = &[
     ParamSpec { id: 27, name: "stretch", min: 0.0, max: 1.0, default: 0.0 },
     ParamSpec { id: 28, name: "octave", min: 0.0, max: 1.0, default: 0.0 },
     // Lo-Fi machine (filter_shape: 0 Off .. 8 Intercom; grit rides the
-    // shared "drive" engine field via id 29).
+    // shared "drive" engine field via id 29). sample_rate is the MX
+    // 21-step menu index: 0 = 750 Hz ... 20 = 96 kHz, geometrically
+    // spaced (the manual gives endpoints + step count), converted to a
+    // divisor against the host rate.
     ParamSpec { id: 29, name: "grit", min: 0.0, max: 1.0, default: 0.0 },
     ParamSpec { id: 30, name: "bit_depth", min: 4.0, max: 32.0, default: 12.0 },
-    ParamSpec { id: 31, name: "sr_div", min: 1.0, max: 64.0, default: 4.0 },
+    ParamSpec { id: 31, name: "sample_rate", min: 0.0, max: 20.0, default: 11.0 },
     ParamSpec { id: 32, name: "lofi_mix", min: 0.0, max: 1.0, default: 1.0 },
     ParamSpec { id: 33, name: "vinyl", min: 0.0, max: 1.0, default: 0.0 },
     ParamSpec { id: 34, name: "filter_shape", min: 0.0, max: 8.0, default: 0.0 },
@@ -1416,8 +1419,14 @@ impl NativeDelay {
                 a.delay_r.lofi_bit_depth = v;
             }
             31 => {
-                a.delay_l.lofi_sr_div = v;
-                a.delay_r.lofi_sr_div = v;
+                // Step index -> absolute Hz (750 Hz .. 96 kHz geometric)
+                // -> hold divisor at the host rate. Steps at or above
+                // the host rate mean "no reduction" (divisor 1).
+                let step = v.clamp(0.0, 20.0);
+                let hz = 750.0 * (96000.0f64 / 750.0).powf(step / 20.0);
+                let div = (self.sample_rate / hz).max(1.0);
+                a.delay_l.lofi_sr_div = div;
+                a.delay_r.lofi_sr_div = div;
             }
             32 => {
                 a.delay_l.lofi_mix = v;
