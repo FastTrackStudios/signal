@@ -173,6 +173,9 @@ pub struct ReverbChain {
     /// When attached, dirty impulse shaping params are re-baked off
     /// the audio thread and hot-swapped back via `prepared_ir_rx`.
     reshape_tx: Option<Sender<ReshapeJob>>,
+    /// Disposal channel for audio-thread IR swaps (re-applied to fresh
+    /// algorithms). `None` = drop inline.
+    ir_trash_tx: Option<Sender<crate::ir::IrTrash>>,
 
     /// Voice value last applied to the variant pairing (Plate/Spring),
     /// so an explicit `set_variant` isn't clobbered on every
@@ -303,6 +306,7 @@ impl ReverbChain {
             ir_swap_rx: None,
             prepared_ir_rx: None,
             reshape_tx: None,
+            ir_trash_tx: None,
             applied_voice: ReverbVoice::default(),
             mid_eq: Biquad::new(),
             swell_env: {
@@ -329,6 +333,14 @@ impl ReverbChain {
     /// glitch-free runtime IR changes.
     pub fn set_prepared_ir_receiver(&mut self, rx: Receiver<PreparedIrPair>) {
         self.prepared_ir_rx = Some(rx);
+    }
+
+    /// Attach a disposal channel for buffers displaced by audio-thread
+    /// IR swaps. Stored on the chain and re-applied whenever the
+    /// algorithm is recreated.
+    pub fn set_ir_trash_sender(&mut self, tx: Sender<crate::ir::IrTrash>) {
+        self.algorithm.set_ir_trash_sender(tx.clone());
+        self.ir_trash_tx = Some(tx);
     }
 
     /// Attach an [`crate::ir::ImpulseReshaper`]'s submission handle.
@@ -415,6 +427,9 @@ impl ReverbChain {
             self.algorithm_type = algo;
             self.variant = variant;
             self.algorithm = algorithms::create(algo, variant, self.sample_rate);
+            if let Some(tx) = &self.ir_trash_tx {
+                self.algorithm.set_ir_trash_sender(tx.clone());
+            }
             // Fresh algorithm state — land on the target params directly
             // instead of ramping from wherever the old algorithm was.
             let p = self.effective_params();

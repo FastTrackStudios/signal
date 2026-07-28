@@ -728,6 +728,12 @@ pub struct NativeReverb {
     prepared: bool,
     scratch_l: Vec<f64>,
     scratch_r: Vec<f64>,
+    /// Impulse re-prepare worker (native only): re-bakes the IR off the
+    /// audio thread when imp_* shaping params change and takes the
+    /// displaced buffers for off-thread deallocation. Without it the
+    /// Impulse live params would mark slots dirty and never re-prepare.
+    #[cfg(not(target_arch = "wasm32"))]
+    reshaper: Option<reverb::ir::ImpulseReshaper>,
 }
 
 impl NativeReverb {
@@ -747,6 +753,8 @@ impl NativeReverb {
         Self {
             rev,
             prepared: false,
+            #[cfg(not(target_arch = "wasm32"))]
+            reshaper: None,
             scratch_l: Vec::new(),
             scratch_r: Vec::new(),
         }
@@ -1013,6 +1021,17 @@ impl PluginInstance for NativeReverb {
             max_buffer_size: block_size.max(1) as usize,
         });
         self.rev.reset();
+        // Impulse live-param pipeline (chain A, where the MX engine
+        // params are addressed): worker re-prepares shaped IRs and
+        // disposes swap garbage off the audio thread.
+        #[cfg(not(target_arch = "wasm32"))]
+        if self.reshaper.is_none() {
+            let (reshaper, rx) = reverb::ir::ImpulseReshaper::new();
+            self.rev.a.set_prepared_ir_receiver(rx);
+            self.rev.a.set_reshape_sender(reshaper.sender());
+            self.rev.a.set_ir_trash_sender(reshaper.trash_sender());
+            self.reshaper = Some(reshaper);
+        }
         self.scratch_l = vec![0.0; block_size.max(1) as usize];
         self.scratch_r = vec![0.0; block_size.max(1) as usize];
         self.prepared = true;

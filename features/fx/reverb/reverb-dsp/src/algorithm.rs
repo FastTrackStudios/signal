@@ -558,6 +558,16 @@ pub trait ReverbAlgorithm: Send {
 
     /// Slot-addressed prepared-IR swap. Default: slot A falls through to
     /// [`Self::try_load_prepared_ir`], slot B is rejected.
+    /// Attach a disposal channel for buffers displaced by audio-thread
+    /// IR swaps (see [`crate::ir::IrTrash`]). Returns false when the
+    /// algorithm has no swap path (everything but Convolution).
+    fn set_ir_trash_sender(
+        &mut self,
+        _tx: crossbeam_channel::Sender<crate::ir::IrTrash>,
+    ) -> bool {
+        false
+    }
+
     fn try_load_prepared_ir_slot(
         &mut self,
         pair: crate::ir::PreparedIrPair,

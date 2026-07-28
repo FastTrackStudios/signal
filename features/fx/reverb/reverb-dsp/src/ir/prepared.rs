@@ -136,3 +136,11 @@ impl PreparedIrPair {
         }
     }
 }
+
+/// Buffers displaced by an audio-thread IR swap, routed to a worker for
+/// deallocation (dropping them on the audio thread would free there).
+/// Dropping the enum is the disposal.
+pub enum IrTrash {
+    Prepared(PreparedIr),
+    Raw(std::sync::Arc<Vec<f64>>),
+}
