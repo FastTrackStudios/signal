@@ -717,6 +717,11 @@ const REVERB_PARAMS: &[ParamSpec] = &[
     // Tone tilt (−1 dark … +1 bright) — the high-pass-ish control.
     ParamSpec { id: 42, name: "tone", min: -1.0, max: 1.0, default: 0.0 },
     ParamSpec { id: 43, name: "predelay", min: 0.0, max: 200.0, default: 0.0 },
+    // INFINITE footswitch: engage (0/1) + per-preset mode
+    // (0 Freeze / 1 Infinite / 2 Off). Latch-vs-momentary is the
+    // footswitch controller's concern; `freeze` covers both.
+    ParamSpec { id: 44, name: "freeze", min: 0.0, max: 1.0, default: 0.0 },
+    ParamSpec { id: 45, name: "inf_mode", min: 0.0, max: 2.0, default: 0.0 },
 ];
 
 /// Native Reverb block — wraps [`reverb::DualReverb`] (two full chains +
@@ -953,6 +958,14 @@ impl NativeReverb {
                 c.update_params();
             }
             43 => c.predelay_ms = v,
+            44 => c.freeze = v > 0.5,
+            45 => {
+                c.infinite_mode = match v.round().max(0.0) as usize {
+                    1 => reverb::InfiniteMode::Infinite,
+                    2 => reverb::InfiniteMode::Off,
+                    _ => reverb::InfiniteMode::Freeze,
+                }
+            }
             _ => {}
         }
     }

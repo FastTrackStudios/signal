@@ -24,7 +24,19 @@ use crate::primitives::tilt_eq::TiltEq;
 ///
 /// Signal flow:
 ///   Input → Input HP/LP → Pre-Delay → Algorithm (with freeze override)
-///        → Wet Saturation → Output Low/High-Cut → Tilt EQ
+//// BigSky MX INFINITE footswitch behavior (per-preset `Inf Mode`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum InfiniteMode {
+    /// Capture and sustain the current reverb; new playing stays dry.
+    #[default]
+    Freeze,
+    /// Sustain indefinitely while new input keeps entering the wash.
+    Infinite,
+    /// Footswitch disabled.
+    Off,
+}
+
+//        → Wet Saturation → Output Low/High-Cut → Tilt EQ
 ///        → Width → Ducker → Mix
 pub struct ReverbChain {
     // Algorithm
@@ -157,6 +169,11 @@ pub struct ReverbChain {
     pub duck_release_ms: f64,
     /// Freeze / infinite hold (kills new input, forces max feedback).
     pub freeze: bool,
+    /// What engaging `freeze` does (BigSky MX INFINITE modes): `Freeze`
+    /// captures the current tail and mutes new input into the reverb;
+    /// `Infinite` pins the decay while input keeps feeding the wash;
+    /// `Off` disables the footswitch entirely.
+    pub infinite_mode: InfiniteMode,
 
     /// Receiver for processed IRs from a background loader. Drained at
     /// the top of each `process()` call; the most recent IR wins.
@@ -303,6 +320,7 @@ impl ReverbChain {
             duck_attack_ms: 5.0,
             duck_release_ms: 120.0,
             freeze: false,
+            infinite_mode: InfiniteMode::Freeze,
             ir_swap_rx: None,
             prepared_ir_rx: None,
             reshape_tx: None,
@@ -459,11 +477,17 @@ impl ReverbChain {
         self.variant
     }
 
-    /// Compute params that get sent to the algorithm. Freeze forces decay=1.0
-    /// and bumps damping toward neutral so the tail sustains.
+    /// True while the INFINITE footswitch state should sustain the tail
+    /// (`freeze` engaged and the mode isn't `Off`).
+    fn infinite_engaged(&self) -> bool {
+        self.freeze && self.infinite_mode != InfiniteMode::Off
+    }
+
+    /// Compute params that get sent to the algorithm. An engaged
+    /// Freeze/Infinite forces decay=1.0 so the tail sustains.
     fn effective_params(&self) -> AlgorithmParams {
         let mut p = self.params;
-        if self.freeze {
+        if self.infinite_engaged() {
             p.decay = 1.0;
         }
         // Classic voice re-tune for the engines without a second
@@ -840,8 +864,12 @@ impl Processor for ReverbChain {
                 let filt_l = self.input_lp.tick(self.input_hp.tick(dry_l, 0), 0);
                 let filt_r = self.input_lp.tick(self.input_hp.tick(dry_r, 1), 1);
 
-                // Freeze: kill input to algorithm but keep feedback running
-                let (alg_in_l, alg_in_r) = if self.freeze {
+                // Freeze: kill input to the algorithm but keep feedback
+                // running. Infinite keeps feeding input into the
+                // sustained wash instead.
+                let (alg_in_l, alg_in_r) = if self.freeze
+                    && self.infinite_mode == InfiniteMode::Freeze
+                {
                     (0.0, 0.0)
                 } else if self.predelay_samples > 0 {
                     self.predelay.write(filt_l);
@@ -1554,6 +1582,91 @@ mod tests {
         assert!(
             bright_hf > dark_hf,
             "Bright tilt should keep more HF energy than dark: bright={bright_hf}, dark={dark_hf}"
+        );
+    }
+
+    #[test]
+    fn infinite_mode_keeps_feeding_input() {
+        let sr = 48000.0;
+        let cfg = audiocore_dsp::AudioConfig {
+            sample_rate: sr,
+            max_buffer_size: 256,
+        };
+        let run = |mode: InfiniteMode| -> f64 {
+            let mut c = ReverbChain::new();
+            c.mix = 1.0;
+            c.params.decay = 0.4;
+            c.update(cfg);
+            // Excite, engage the footswitch, then keep playing.
+            let mut buf_l = [0.0f64; 256];
+            let mut buf_r = [0.0f64; 256];
+            let mut feed = |c: &mut ReverbChain, level: f64, blocks: usize| -> f64 {
+                let mut energy = 0.0;
+                for b in 0..blocks {
+                    for i in 0..256 {
+                        let t = (b * 256 + i) as f64;
+                        let x = (core::f64::consts::TAU * 220.0 * t / sr).sin() * level;
+                        buf_l[i] = x;
+                        buf_r[i] = x;
+                    }
+                    c.process(&mut buf_l, &mut buf_r);
+                    energy += buf_l.iter().map(|x| x * x).sum::<f64>();
+                }
+                energy
+            };
+            feed(&mut c, 0.5, 40);
+            c.freeze = true;
+            c.infinite_mode = mode;
+            c.update(cfg);
+            // While held: play MUCH louder. Freeze must ignore it;
+            // Infinite must fold it into the wash.
+            feed(&mut c, 0.9, 40)
+        };
+        let frozen = run(InfiniteMode::Freeze);
+        let infinite = run(InfiniteMode::Infinite);
+        assert!(
+            infinite > frozen * 1.3,
+            "Infinite should keep absorbing input: {infinite} vs frozen {frozen}"
+        );
+    }
+
+    #[test]
+    fn infinite_mode_off_disables_the_switch() {
+        let sr = 48000.0;
+        let cfg = audiocore_dsp::AudioConfig {
+            sample_rate: sr,
+            max_buffer_size: 256,
+        };
+        let mut c = ReverbChain::new();
+        c.mix = 1.0;
+        c.params.decay = 0.3;
+        c.infinite_mode = InfiniteMode::Off;
+        c.freeze = true; // footswitch held, but mode Off = no-op
+        c.update(cfg);
+        let mut buf_l = [0.0f64; 256];
+        let mut buf_r = [0.0f64; 256];
+        // One burst block, then silence: the tail must DECAY.
+        for i in 0..256 {
+            buf_l[i] = if i < 64 { 0.8 } else { 0.0 };
+            buf_r[i] = buf_l[i];
+        }
+        c.process(&mut buf_l, &mut buf_r);
+        let mut early = 0.0;
+        let mut late = 0.0;
+        for b in 0..80 {
+            buf_l.fill(0.0);
+            buf_r.fill(0.0);
+            c.process(&mut buf_l, &mut buf_r);
+            let e: f64 = buf_l.iter().map(|x| x * x).sum();
+            if b < 10 {
+                early += e;
+            } else if b >= 70 {
+                late += e;
+            }
+        }
+        assert!(
+            late < early * 0.5,
+            "mode Off must not sustain: early {early} late {late}"
         );
     }
 }

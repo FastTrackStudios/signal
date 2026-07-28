@@ -35,5 +35,5 @@ pub use algorithm::{
     MagnetoParams, NonLinearParams, ReverbAlgorithm, ReverbVoice, ShimmerFeedbackMode,
     ShimmerParams, SwellType,
 };
-pub use chain::ReverbChain;
+pub use chain::{InfiniteMode, ReverbChain};
 pub use dual::{DualReverb, DualRouting};
