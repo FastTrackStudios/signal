@@ -15,7 +15,7 @@
 
 use std::sync::Arc;
 
-use daw::service::{ProjectContext, TrackRef, Tracks};
+use daw::service::handle::DawHandle as _;
 use daw::standalone::Standalone;
 use daw::standalone::metering::Meters;
 use daw_audio_io::AudioIoPrefs;
@@ -302,12 +302,7 @@ impl KeysRig {
     // r[impl keys.rig.lane-tracks]
     pub fn open_lanes(prefs: &AudioIoPrefs, program: &LaneProgram) -> eyre::Result<Self> {
         let project = RigProject::new(KEYS_PROJECT_NAME);
-        let lanes = build_lane_tracks(
-            project.daw(),
-            program,
-            |name| project.add_track(name),
-            |track, label| project.add_fx_slot(track, label),
-        )?;
+        let lanes = build_lane_tracks(project.daw(), program)?;
         let track_count = 1 + lanes.engines.len() + lanes.layers.len();
         let host = project.start_output(prefs)?;
         let sample_rate = host.sample_rate();
@@ -395,15 +390,11 @@ impl KeysRig {
         };
         if !same_shape {
             // Rebuild the whole track set on the running project.
-            use daw::service::{ProjectContext, Tracks};
-            <Standalone as Tracks>::remove_all(&self.daw, ProjectContext::Current)
+            self.daw
+                .current()
+                .remove_all_tracks()
                 .map_err(|e| eyre::eyre!("keys rig: clear tracks failed: {e}"))?;
-            let lanes = build_lane_tracks(
-                &self.daw,
-                program,
-                |name| self._host.add_track(name),
-                |track, label| self._host.add_fx_slot(track, label),
-            )?;
+            let lanes = build_lane_tracks(&self.daw, program)?;
             let track_count = 1 + lanes.engines.len() + lanes.layers.len();
             self.meters = self._host.install_meters(track_count);
             self.hosting = Hosting::Lanes(lanes);
@@ -434,36 +425,21 @@ impl KeysRig {
     /// Set a lane's fader (linear; the daw track volume).
     pub fn set_lane_volume(&self, role: Role, name: &str, linear: f32) {
         if let Some(guid) = self.lane_guid(role, name) {
-            let _ = <Standalone as Tracks>::set_volume(
-                &self.daw,
-                ProjectContext::Current,
-                TrackRef::guid(guid),
-                linear.max(0.0) as f64,
-            );
+            let _ = self.daw.current().track(guid).set_volume(linear.max(0.0) as f64);
         }
     }
 
     /// Mute a lane (daw track mute; muting an engine folder mutes its sum).
     pub fn set_lane_mute(&self, role: Role, name: &str, muted: bool) {
         if let Some(guid) = self.lane_guid(role, name) {
-            let _ = <Standalone as Tracks>::set_muted(
-                &self.daw,
-                ProjectContext::Current,
-                TrackRef::guid(guid),
-                muted,
-            );
+            let _ = self.daw.current().track(guid).mute(muted);
         }
     }
 
     /// Solo a lane (daw folder-aware solo: ancestors pass, siblings drop).
     pub fn set_lane_solo(&self, role: Role, name: &str, soloed: bool) {
         if let Some(guid) = self.lane_guid(role, name) {
-            let _ = <Standalone as Tracks>::set_soloed(
-                &self.daw,
-                ProjectContext::Current,
-                TrackRef::guid(guid),
-                soloed,
-            );
+            let _ = self.daw.current().track(guid).solo(soloed);
         }
     }
 
@@ -492,15 +468,10 @@ impl KeysRig {
         self.gain
             .store(gain.to_bits(), std::sync::atomic::Ordering::Relaxed);
         let guid = match &self.hosting {
-            Hosting::Single { track_guid, .. } => track_guid.clone(),
-            Hosting::Lanes(l) => l.rig_guid.clone(),
+            Hosting::Single { track_guid, .. } => track_guid,
+            Hosting::Lanes(l) => &l.rig_guid,
         };
-        let _ = <Standalone as Tracks>::set_volume(
-            &self.daw,
-            ProjectContext::Current,
-            TrackRef::guid(guid.as_str()),
-            gain as f64,
-        );
+        let _ = self.daw.current().track(guid).set_volume(gain as f64);
     }
 
     /// Current master output gain (linear).
@@ -645,78 +616,56 @@ impl KeysRig {
 
 /// Build the lane track set on a seeded project: the rig folder, engine
 /// folders, layer tracks (each with one reserved FX slot), and the tail FX
-/// slot on the rig track. REAPER folder convention: positive depth opens a
-/// folder, a negative depth on the last child closes `|depth|` levels.
-fn build_lane_tracks(
-    daw: &Standalone,
-    program: &LaneProgram,
-    mut add_track: impl FnMut(&str) -> eyre::Result<String>,
-    mut add_fx_slot: impl FnMut(&str, &str) -> eyre::Result<String>,
-) -> eyre::Result<LaneHost> {
-    let set_depth = |guid: &str, depth: i32| {
-        <Standalone as Tracks>::set_folder_depth(
-            daw,
-            ProjectContext::Current,
-            TrackRef::guid(guid),
-            depth,
-        )
-        .map_err(|e| eyre::eyre!("keys rig: set folder depth failed: {e}"))
-    };
+/// slot on the rig track. The daw handle layer's [`TrackTree`] owns the
+/// REAPER folder-depth bookkeeping; an engine folder that ends up with no
+/// layers collapses to a plain (silent) track automatically.
+///
+/// [`TrackTree`]: daw::service::handle::TrackTree
+fn build_lane_tracks(daw: &Standalone, program: &LaneProgram) -> eyre::Result<LaneHost> {
+    let project = daw.current();
+    let mut tree = project.tree();
+    let err = |what: &str, e: daw::service::DawError| eyre::eyre!("keys rig: {what} failed: {e}");
 
     // Meter cells are indexed by project track order.
     let mut meter = 0usize;
-    let rig_guid = add_track(if program.name.is_empty() { "Keys Rig" } else { &program.name })?;
-    set_depth(&rig_guid, 1)?;
+    let rig_name = if program.name.is_empty() { "Keys Rig" } else { &program.name };
+    let rig = tree.folder(rig_name).map_err(|e| err("rig folder", e))?;
     let tail_fx = match &program.tail {
-        Some(_) => Some(add_fx_slot(&rig_guid, "keys-tail")?),
+        Some(_) => Some(
+            rig.add_fx_slot("keys-tail")
+                .map_err(|e| err("tail fx slot", e))?
+                .into_guid(),
+        ),
         None => None,
     };
+    let rig_guid = rig.guid().to_string();
     meter += 1;
 
     let mut engines = Vec::new();
     let mut layers = Vec::new();
-    let last_engine_with_layers = program
-        .engines
-        .iter()
-        .rposition(|e| !e.layers.is_empty());
-    for (ei, engine) in program.engines.iter().enumerate() {
-        let engine_guid = add_track(&engine.name)?;
-        let is_last = Some(ei) == last_engine_with_layers
-            && program.engines[ei + 1..].iter().all(|e| e.layers.is_empty());
-        if engine.layers.is_empty() {
-            // A childless engine is a plain (silent) track, not a folder —
-            // an unclosed folder would swallow the next engine's tracks. If
-            // it's the very last track it closes the rig folder instead.
-            if ei + 1 == program.engines.len() && last_engine_with_layers.is_none() {
-                set_depth(&engine_guid, -1)?;
-            }
-            engines.push((engine.name.clone(), engine_guid, meter));
-            meter += 1;
-            continue;
-        }
-        set_depth(&engine_guid, 1)?;
-        engines.push((engine.name.clone(), engine_guid.clone(), meter));
+    for engine in &program.engines {
+        let eng = tree.folder(&engine.name).map_err(|e| err("engine folder", e))?;
+        engines.push((engine.name.clone(), eng.guid().to_string(), meter));
         meter += 1;
-        for (li, layer) in engine.layers.iter().enumerate() {
-            let guid = add_track(&layer.name)?;
-            let fx = add_fx_slot(&guid, "keys-lane")?;
-            let last_layer = li + 1 == engine.layers.len();
-            if last_layer {
-                // Close this engine; the final layer overall also closes the
-                // rig folder.
-                set_depth(&guid, if is_last { -2 } else { -1 })?;
-            }
+        for layer in &engine.layers {
+            let track = tree.track(&layer.name).map_err(|e| err("layer track", e))?;
+            let fx = track
+                .add_fx_slot("keys-lane")
+                .map_err(|e| err("lane fx slot", e))?
+                .into_guid();
             layers.push(LaneTrack {
                 engine: engine.name.clone(),
                 name: layer.name.clone(),
-                guid,
+                guid: track.guid().to_string(),
                 fx,
                 meter,
                 cells: GainCells::default(),
             });
             meter += 1;
         }
+        tree.end().map_err(|e| err("close engine folder", e))?;
     }
+    tree.finish().map_err(|e| err("close rig folder", e))?;
 
     Ok(LaneHost { rig_guid, tail_fx, engines, layers })
 }
@@ -755,13 +704,7 @@ mod tests {
             tail: Some(Container::module("Global")),
         };
         let project = RigProject::new("Lane Layout Test");
-        let lanes = build_lane_tracks(
-            project.daw(),
-            &program,
-            |name| project.add_track(name),
-            |track, label| project.add_fx_slot(track, label),
-        )
-        .expect("lane tracks build");
+        let lanes = build_lane_tracks(project.daw(), &program).expect("lane tracks build");
 
         assert_eq!(lanes.engines.len(), 2);
         assert_eq!(lanes.layers.len(), 3);

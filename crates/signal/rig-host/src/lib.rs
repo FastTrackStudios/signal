@@ -32,9 +32,8 @@
 
 use std::sync::{Arc, Mutex};
 
-use daw::service::{
-    FxChainContext, FxChains, ProjectContext, ProjectInfo, RecordInput, TrackRef, Tracks,
-};
+use daw::service::handle::DawHandle as _;
+use daw::service::ProjectInfo;
 use daw::standalone::Standalone;
 use daw::standalone::audio_engine::AudioEngine;
 #[cfg(all(feature = "pipewire", target_os = "linux"))]
@@ -151,13 +150,11 @@ impl RigProject {
     /// Arm `track` to monitor hardware input `channel` — what makes daw's
     /// engine open a live input stream and feed the track's bus.
     pub fn arm_input(&self, track_guid: &str, channel: u32) -> eyre::Result<()> {
-        <Standalone as Tracks>::set_record_input(
-            &self.daw,
-            ProjectContext::Current,
-            TrackRef::guid(track_guid),
-            RecordInput::Audio { channel },
-        )
-        .map_err(|e| eyre::eyre!("rig host: set record input failed: {e}"))
+        self.daw
+            .current()
+            .track(track_guid)
+            .arm_audio_input(channel)
+            .map_err(|e| eyre::eyre!("rig host: set record input failed: {e}"))
     }
 
     /// Reserve one FX slot on `track` (the add + guid-fetch dance); returns
@@ -285,17 +282,18 @@ impl<E: HostedEngine> RigHost<E> {
 }
 
 fn add_track(daw: &Standalone, name: &str) -> eyre::Result<String> {
-    <Standalone as Tracks>::add(daw, ProjectContext::Current, name, None)
+    daw.current()
+        .add_track(name)
+        .map(|t| t.guid().to_string())
         .map_err(|e| eyre::eyre!("rig host: add track '{name}' failed: {e}"))
 }
 
 fn add_fx_slot(daw: &Standalone, track_guid: &str, label: &str) -> eyre::Result<String> {
-    let fx_ctx = FxChainContext::track(track_guid.to_string());
-    let idx = <Standalone as FxChains>::add(daw, fx_ctx.clone(), label)
-        .map_err(|e| eyre::eyre!("rig host: reserve fx slot '{label}' failed: {e}"))?;
-    <Standalone as FxChains>::get(daw, fx_ctx, idx)
-        .map(|fx| fx.guid)
-        .ok_or_else(|| eyre::eyre!("rig host: fx slot '{label}' vanished after add"))
+    daw.current()
+        .track(track_guid)
+        .add_fx_slot(label)
+        .map(|slot| slot.into_guid())
+        .map_err(|e| eyre::eyre!("rig host: reserve fx slot '{label}' failed: {e}"))
 }
 
 /// Low latency under the JACK/PipeWire shim: ask PipeWire for the quantum

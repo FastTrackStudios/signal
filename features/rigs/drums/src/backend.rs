@@ -475,10 +475,10 @@ impl DrumRigBackend {
     /// track), and its FX chain is inserted as extra fx slots on that track.
     /// The Master Bus chain has no daw master fx chain yet — logged, skipped.
     fn apply_mix(&self, rig: &SamplerRig, mixer: &crate::cradle::Mixer) {
-        use daw::service::{FxChainContext, FxChains};
-        use daw::standalone::Standalone;
+        use daw::service::handle::DawHandle as _;
         let sr = rig.sample_rate() as f64;
         let Some(daw) = rig.daw_handle() else { return };
+        let project = daw.current();
         let mut fx_applied = 0usize;
         let (channels, buses, piece_labels) = {
             let s = self.inner.state.lock().unwrap();
@@ -489,17 +489,12 @@ impl DrumRigBackend {
             )
         };
         let add_fx = |track: &str, label: &str, plugin: Box<dyn signal_plugin_host::PluginInstance>| {
-            let fx_ctx = FxChainContext::track(track.to_string());
-            let Ok(idx) = <Standalone as FxChains>::add(&daw, fx_ctx.clone(), label) else {
-                return false;
-            };
-            let Some(guid) = <Standalone as FxChains>::get(&daw, fx_ctx, idx).map(|fx| fx.guid)
-            else {
+            let Ok(slot) = project.track(track).add_fx_slot(label) else {
                 return false;
             };
             let mut boxed = plugin;
             let _ = signal_plugin_host::PluginInstance::prepare(boxed.as_mut(), sr, 1024);
-            daw.insert_plugin_instance(guid, boxed);
+            daw.insert_plugin_instance(slot.into_guid(), boxed);
             true
         };
         for (ci, ch) in channels.iter().enumerate() {
@@ -567,7 +562,8 @@ impl DrumRigBackend {
     /// (a send destination is not an ancestor, so the renderer's solo mask
     /// alone would silence it).
     fn apply_kit_mixer(&self) {
-        use daw::service::{ProjectContext, RouteLocation, RouteRef, Routing, TrackRef, Tracks};
+        use daw::service::handle::DawHandle as _;
+        use daw::service::{RouteLocation, RouteRef, Routing, TrackRef};
         use daw::standalone::Standalone;
         let daw = {
             let rig = self.inner.rig.lock().unwrap();
@@ -575,54 +571,27 @@ impl DrumRigBackend {
             let Some(daw) = rig.daw_handle() else { return };
             daw
         };
+        let project = daw.current();
         let s = self.inner.state.lock().unwrap();
         let mix = &s.mix;
-        let ctx = ProjectContext::Current;
         let vol = |db: f32| db_to_linear(db) as f64;
         for ch in &mix.channels {
             let piece = mix.pieces.get(ch.piece).map(|p| p.state).unwrap_or_default();
-            let _ = <Standalone as Tracks>::set_volume(
-                &daw,
-                ctx.clone(),
-                TrackRef::guid(&ch.track),
-                vol(piece.gain_db + ch.state.gain_db),
-            );
-            let _ = <Standalone as Tracks>::set_muted(
-                &daw,
-                ctx.clone(),
-                TrackRef::guid(&ch.track),
-                piece.muted || ch.state.muted,
-            );
-            let _ = <Standalone as Tracks>::set_soloed(
-                &daw,
-                ctx.clone(),
-                TrackRef::guid(&ch.track),
-                piece.soloed || ch.state.soloed,
-            );
+            let track = project.track(&ch.track);
+            let _ = track.set_volume(vol(piece.gain_db + ch.state.gain_db));
+            let _ = track.mute(piece.muted || ch.state.muted);
+            let _ = track.solo(piece.soloed || ch.state.soloed);
         }
         for snd in &mix.sends {
             let piece = mix.pieces.get(snd.piece).map(|p| p.state).unwrap_or_default();
-            let _ = <Standalone as Tracks>::set_volume(
-                &daw,
-                ctx.clone(),
-                TrackRef::guid(&snd.track),
-                vol(piece.gain_db),
-            );
-            let _ = <Standalone as Tracks>::set_muted(
-                &daw,
-                ctx.clone(),
-                TrackRef::guid(&snd.track),
-                piece.muted || snd.muted,
-            );
-            let _ = <Standalone as Tracks>::set_soloed(
-                &daw,
-                ctx.clone(),
-                TrackRef::guid(&snd.track),
-                piece.soloed || snd.soloed,
-            );
+            let track = project.track(&snd.track);
+            let _ = track.set_volume(vol(piece.gain_db));
+            let _ = track.mute(piece.muted || snd.muted);
+            let _ = track.solo(piece.soloed || snd.soloed);
+            // The send level rides the route, not the track fader.
             let _ = <Standalone as Routing>::set_volume(
                 &daw,
-                ctx.clone(),
+                project.context(),
                 RouteLocation::send(TrackRef::guid(&snd.track), RouteRef::Index(0)),
                 vol(snd.level_db),
             );
@@ -634,24 +603,10 @@ impl DrumRigBackend {
                     && (snd.soloed
                         || mix.pieces.get(snd.piece).map(|p| p.state.soloed).unwrap_or(false))
             });
-            let _ = <Standalone as Tracks>::set_volume(
-                &daw,
-                ctx.clone(),
-                TrackRef::guid(&bus.track),
-                vol(bus.state.gain_db),
-            );
-            let _ = <Standalone as Tracks>::set_muted(
-                &daw,
-                ctx.clone(),
-                TrackRef::guid(&bus.track),
-                bus.state.muted,
-            );
-            let _ = <Standalone as Tracks>::set_soloed(
-                &daw,
-                ctx.clone(),
-                TrackRef::guid(&bus.track),
-                bus.state.soloed || (any_solo && sender_solo),
-            );
+            let track = project.track(&bus.track);
+            let _ = track.set_volume(vol(bus.state.gain_db));
+            let _ = track.mute(bus.state.muted);
+            let _ = track.solo(bus.state.soloed || (any_solo && sender_solo));
         }
     }
 

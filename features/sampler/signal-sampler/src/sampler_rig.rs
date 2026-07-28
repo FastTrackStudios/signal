@@ -51,7 +51,7 @@ use std::sync::{Arc, Mutex};
 use midicore::MidiMonitor;
 
 use daw::service::{
-    FxChainContext, FxChains, ProjectContext, RouteRef, Routing, SendMode, TrackRef, Tracks,
+    FxChainContext, FxChains, ProjectContext, TrackRef, Tracks,
 };
 use daw::standalone::Standalone;
 use daw::standalone::metering::{Meters, linear_to_db};
@@ -1542,34 +1542,21 @@ impl SamplerRig {
     }
 
     fn route_to_bus(&self, source_track: &str, bus_track: &str) -> eyre::Result<()> {
+        use daw::service::handle::DawHandle as _;
         let daw = self
             .inner
             .daw
             .as_ref()
             .ok_or_else(|| eyre::eyre!("routing requires a live rig"))?;
-        let ctx = ProjectContext::Current;
-        let idx = <Standalone as Routing>::add_send(
-            daw,
-            ctx.clone(),
-            TrackRef::guid(source_track),
-            TrackRef::guid(bus_track),
-        )
-        .ok_or_else(|| eyre::eyre!("sampler rig: add_send {source_track} → {bus_track} failed"))?;
-        <Standalone as Routing>::set_send_mode(
-            daw,
-            ctx.clone(),
-            TrackRef::guid(source_track),
-            RouteRef::Index(idx),
-            SendMode::PostFx,
-        )
-        .map_err(|e| eyre::eyre!("sampler rig: set_send_mode failed: {e}"))?;
-        <Standalone as Routing>::set_parent_send_enabled(
-            daw,
-            ctx,
-            TrackRef::guid(source_track),
-            false,
-        )
-        .map_err(|e| eyre::eyre!("sampler rig: disable parent send failed: {e}"))?;
+        // Bus-mic routing: post-FX tap into the shared bus, and the send
+        // REPLACES the master send (the bus is the track's only output).
+        daw.current()
+            .track(source_track)
+            .send_to(bus_track)
+            .post_fx()
+            .replace_master_send()
+            .apply()
+            .map_err(|e| eyre::eyre!("sampler rig: route {source_track} → {bus_track}: {e}"))?;
         Ok(())
     }
 
@@ -1783,29 +1770,16 @@ impl SamplerRig {
                     self.route_to_bus(&track.track_guid, &bus_guid)?;
                 }
                 if let Some(daw) = self.inner.daw.as_ref() {
+                    use daw::service::handle::DawHandle as _;
+                    let t = daw.current().track(&track.track_guid);
                     if gain_db != 0.0 {
-                        let _ = <Standalone as Tracks>::set_volume(
-                            daw,
-                            ProjectContext::Current,
-                            TrackRef::guid(&track.track_guid),
-                            10f64.powf(gain_db as f64 / 20.0),
-                        );
+                        let _ = t.set_volume(10f64.powf(gain_db as f64 / 20.0));
                     }
                     if pan != 0.0 {
-                        let _ = <Standalone as Tracks>::set_pan(
-                            daw,
-                            ProjectContext::Current,
-                            TrackRef::guid(&track.track_guid),
-                            pan as f64,
-                        );
+                        let _ = t.set_pan(pan as f64);
                     }
                     if er.mute {
-                        let _ = <Standalone as Tracks>::set_muted(
-                            daw,
-                            ProjectContext::Current,
-                            TrackRef::guid(&track.track_guid),
-                            true,
-                        );
+                        let _ = t.mute(true);
                     }
                 }
                 mics.push(KitMic {
@@ -2206,6 +2180,7 @@ fn warm_document(
 
 #[cfg(test)]
 mod tests {
+    use daw::service::Routing;
     use super::*;
     use crate::mixer::mic_is_bus;
 
