@@ -14,6 +14,7 @@
 //!   megaphone, ...) applied to the mixed signal AND the vinyl noise,
 //!   per the spec.
 
+use crate::tilt::DecayTilt;
 use audiocore_dsp::biquad::{Biquad, FilterType};
 use audiocore_dsp::delay_line::DelayLine;
 use audiocore_dsp::envelope::EnvelopeFollower;
@@ -214,7 +215,7 @@ pub struct LoFiDelay {
     /// Decay EQ tilt (-1.0 = darken repeats, 0 = neutral, +1.0 = brighten).
     pub decay_tilt: f64,
 
-    decay_eq: Biquad,
+    decay_tilt_eq: DecayTilt,
     delay: DelayLine,
     hicut: Biquad,
     locut: Biquad,
@@ -261,7 +262,7 @@ impl LoFiDelay {
             locut_freq: 0.0,
             filter_q: 0.707,
             decay_tilt: 0.0,
-            decay_eq: Biquad::new(),
+            decay_tilt_eq: DecayTilt::new(),
             delay: DelayLine::new(48000 * 5 + 1024),
             hicut: Biquad::new(),
             locut: Biquad::new(),
@@ -314,23 +315,9 @@ impl LoFiDelay {
         self.wet_env.set_times_ms(5.0, 300.0, sample_rate);
 
         // Decay EQ: tilt filter in feedback path
-        if self.decay_tilt.abs() > 0.01 {
-            if self.decay_tilt < 0.0 {
-                let freq = 20000.0 * (1.0 + self.decay_tilt).max(0.05);
-                self.decay_eq
-                    .set(FilterType::Lowpass, freq, 0.707, sample_rate);
-            } else {
-                let freq = 20.0 + self.decay_tilt * 2000.0;
-                self.decay_eq
-                    .set(FilterType::Highpass, freq, 0.707, sample_rate);
-            }
-        }
+        self.decay_tilt_eq.configure(self.decay_tilt, sample_rate);
 
-        self.smoother.set_time(0.15, sample_rate);
-        let target = self.time_ms * 0.001 * sample_rate;
-        if self.smoother.value() == 0.0 {
-            self.smoother.set_immediate(target);
-        }
+        self.smoother.set_time_seeded(0.15, sample_rate, self.time_ms * 0.001 * sample_rate);
     }
 
     /// Quantize to simulated bit depth.
@@ -384,9 +371,7 @@ impl LoFiDelay {
             fb = self.locut.tick(fb, ch);
         }
 
-        if self.decay_tilt.abs() > 0.01 {
-            fb = self.decay_eq.tick(fb, ch);
-        }
+        fb = self.decay_tilt_eq.tick(fb, ch);
 
         fb = fb.clamp(-1.5, 1.5);
 
@@ -421,7 +406,7 @@ impl LoFiDelay {
         self.delay.clear();
         self.hicut.reset();
         self.locut.reset();
-        self.decay_eq.reset();
+        self.decay_tilt_eq.reset();
         self.shape_hp.reset();
         self.shape_peak.reset();
         self.shape_lp.reset();

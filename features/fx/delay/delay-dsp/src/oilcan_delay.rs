@@ -17,6 +17,7 @@
 //! Plus: very low bandwidth (murk LP), heavy dual-LFO wobble, light
 //! constant saturation, allpass regen splatter.
 
+use crate::tilt::DecayTilt;
 use audiocore_dsp::biquad::{Biquad, FilterType};
 use audiocore_dsp::delay_line::DelayLine;
 use audiocore_dsp::prng::XorShift32;
@@ -54,7 +55,7 @@ pub struct OilCanDelay {
 
     delay: DelayLine,
     lp: Biquad,
-    decay_eq: Biquad,
+    decay_tilt_eq: DecayTilt,
     // Small fixed allpass for the regen "splatter".
     splatter: DelayLine,
     splatter_g: f64,
@@ -96,7 +97,7 @@ impl OilCanDelay {
             decay_tilt: 0.0,
             delay: DelayLine::new(48000 * 2),
             lp: Biquad::new(),
-            decay_eq: Biquad::new(),
+            decay_tilt_eq: DecayTilt::new(),
             splatter: DelayLine::new(512),
             splatter_g: 0.45,
             feedback_sample: 0.0,
@@ -125,23 +126,9 @@ impl OilCanDelay {
         self.lp
             .set(FilterType::Lowpass, self.tone_hz.clamp(500.0, 8000.0), 0.707, sample_rate);
 
-        if self.decay_tilt.abs() > 0.01 {
-            if self.decay_tilt < 0.0 {
-                let freq = 20000.0 * (1.0 + self.decay_tilt).max(0.05);
-                self.decay_eq
-                    .set(FilterType::Lowpass, freq, 0.707, sample_rate);
-            } else {
-                let freq = 20.0 + self.decay_tilt * 2000.0;
-                self.decay_eq
-                    .set(FilterType::Highpass, freq, 0.707, sample_rate);
-            }
-        }
+        self.decay_tilt_eq.configure(self.decay_tilt, sample_rate);
 
-        self.smoother.set_time(0.15, sample_rate);
-        let target = self.time_ms * 0.001 * sample_rate;
-        if self.smoother.value() == 0.0 {
-            self.smoother.set_immediate(target);
-        }
+        self.smoother.set_time_seeded(0.15, sample_rate, self.time_ms * 0.001 * sample_rate);
     }
 
     #[inline]
@@ -206,9 +193,7 @@ impl OilCanDelay {
         fb = self.lp.tick(fb, ch);
         fb = sin_clip(fb * 1.2) / 1.2;
         fb = self.splatter_tick(fb);
-        if self.decay_tilt.abs() > 0.01 {
-            fb = self.decay_eq.tick(fb, ch);
-        }
+        fb = self.decay_tilt_eq.tick(fb, ch);
         fb = fb.clamp(-1.5, 1.5);
 
         self.delay.write(input + fb);
@@ -225,7 +210,7 @@ impl OilCanDelay {
         self.delay.clear();
         self.splatter.clear();
         self.lp.reset();
-        self.decay_eq.reset();
+        self.decay_tilt_eq.reset();
         self.feedback_sample = 0.0;
         self.smoother.reset(0.0);
         self.wow_phase = 0.0;

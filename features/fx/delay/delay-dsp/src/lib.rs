@@ -25,6 +25,7 @@ pub mod rhythm_delay;
 pub mod shimmer_delay;
 pub mod spectral_delay;
 pub mod tape_delay;
+pub mod tilt;
 
 pub use chain::{DelayChain, HeadMode, TapDivision};
 pub use dual::{DualDelay, DualRouting};

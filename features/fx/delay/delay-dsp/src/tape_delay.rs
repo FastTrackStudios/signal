@@ -6,6 +6,7 @@
 //! Supports up to 3 read heads (RE-201 Space Echo style). All heads read from
 //! the same delay buffer with shared wow/flutter modulation.
 
+use crate::tilt::DecayTilt;
 use audiocore_dsp::biquad::{Biquad, FilterType};
 use audiocore_dsp::dc_blocker::DcBlocker;
 use audiocore_dsp::delay_line::DelayLine;
@@ -178,7 +179,7 @@ pub struct TapeDelay {
     pub low_contour: f64,
 
     // Internal state
-    decay_eq: Biquad,
+    decay_tilt_eq: DecayTilt,
     delay: DelayLine,
     wow: Wow,
     flutter: Flutter,
@@ -248,7 +249,7 @@ impl TapeDelay {
             crinkle: 0.0,
             tape_speed: TapeSpeed::Normal,
             low_contour: 0.0,
-            decay_eq: Biquad::new(),
+            decay_tilt_eq: DecayTilt::new(),
             delay: DelayLine::new(48000 * 5 + 1024),
             wow: Wow::new(),
             flutter: Flutter::new(),
@@ -304,17 +305,7 @@ impl TapeDelay {
         }
 
         // Decay EQ: tilt filter in feedback path
-        if self.decay_tilt.abs() > 0.01 {
-            if self.decay_tilt < 0.0 {
-                let freq = 20000.0 * (1.0 + self.decay_tilt).max(0.05);
-                self.decay_eq
-                    .set(FilterType::Lowpass, freq, 0.707, sample_rate);
-            } else {
-                let freq = 20.0 + self.decay_tilt * 2000.0;
-                self.decay_eq
-                    .set(FilterType::Highpass, freq, 0.707, sample_rate);
-            }
-        }
+        self.decay_tilt_eq.configure(self.decay_tilt, sample_rate);
 
         // Tape age: playback-path HF loss, exponential 18 kHz -> ~2.2 kHz.
         // Fast transport keeps ~25% more bandwidth at the same age.
@@ -336,7 +327,8 @@ impl TapeDelay {
         }
 
         // Smooth delay time changes (~150ms time constant, from qdelay)
-        self.smoother.set_time(0.15, sample_rate);
+        self.smoother
+            .set_time_seeded(0.15, sample_rate, self.time_ms * 0.001 * sample_rate);
 
         // Gain-ish params get a short 5ms smoothing to kill zipper noise
         // on automation; cutoffs get 20ms with periodic coeff refresh.
@@ -350,11 +342,6 @@ impl TapeDelay {
         self.locut_smoother.set_epsilon(1.0);
 
         self.dc_blocker.set_cutoff(10.0, sample_rate);
-
-        let target = self.time_ms * 0.001 * sample_rate;
-        if self.smoother.value() == 0.0 {
-            self.smoother.set_immediate(target);
-        }
     }
 
     /// Advance a cutoff smoother, treating 0 (= filter disabled) as a hard
@@ -504,9 +491,7 @@ impl TapeDelay {
             fb = self.locut.tick(fb, ch);
         }
 
-        if self.decay_tilt.abs() > 0.01 {
-            fb = self.decay_eq.tick(fb, ch);
-        }
+        fb = self.decay_tilt_eq.tick(fb, ch);
 
         // Low-end contour: in-loop high-pass, progressively thins the
         // repeats' low end each generation.
@@ -596,7 +581,7 @@ impl TapeDelay {
         self.flutter.reset();
         self.hicut.reset();
         self.locut.reset();
-        self.decay_eq.reset();
+        self.decay_tilt_eq.reset();
         self.dc_blocker.reset();
         self.age_filter.reset();
         self.contour_hp.reset();

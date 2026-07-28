@@ -9,6 +9,7 @@
 //! `latency()` samples early so pitched and unpitched paths stay
 //! time-aligned.
 
+use crate::tilt::DecayTilt;
 use audiocore_dsp::biquad::{Biquad, FilterType};
 use audiocore_dsp::dc_blocker::DcBlocker;
 use audiocore_dsp::delay_line::DelayLine;
@@ -32,7 +33,7 @@ pub struct ShimmerDelay {
     /// Decay EQ tilt (-1.0 = darken repeats, 0 = neutral, +1.0 = brighten).
     pub decay_tilt: f64,
 
-    decay_eq: Biquad,
+    decay_tilt_eq: DecayTilt,
     delay: DelayLine,
     hicut: Biquad,
     dc_blocker: DcBlocker,
@@ -67,7 +68,7 @@ impl ShimmerDelay {
             hicut_freq: 8000.0,
             filter_q: 0.707,
             decay_tilt: 0.0,
-            decay_eq: Biquad::new(),
+            decay_tilt_eq: DecayTilt::new(),
             delay: DelayLine::new(48000 * 5 + 1024),
             hicut: Biquad::new(),
             dc_blocker: DcBlocker::new(),
@@ -97,17 +98,7 @@ impl ShimmerDelay {
         }
 
         // Decay EQ: tilt filter in feedback path
-        if self.decay_tilt.abs() > 0.01 {
-            if self.decay_tilt < 0.0 {
-                let freq = 20000.0 * (1.0 + self.decay_tilt).max(0.05);
-                self.decay_eq
-                    .set(FilterType::Lowpass, freq, 0.707, sample_rate);
-            } else {
-                let freq = 20.0 + self.decay_tilt * 2000.0;
-                self.decay_eq
-                    .set(FilterType::Highpass, freq, 0.707, sample_rate);
-            }
-        }
+        self.decay_tilt_eq.configure(self.decay_tilt, sample_rate);
 
         // WSOLA grain: derived from grain_ms but bounded — the splice
         // correlation search cost grows with grain size. Reconfigure only
@@ -121,12 +112,9 @@ impl ShimmerDelay {
             self.shifter_latency = self.shifter.latency() as f64;
         }
 
-        self.smoother.set_time(0.15, sample_rate);
         self.dc_blocker.set_cutoff(10.0, sample_rate);
-        let target = self.time_ms * 0.001 * sample_rate;
-        if self.smoother.value() == 0.0 {
-            self.smoother.set_immediate(target);
-        }
+        self.smoother
+            .set_time_seeded(0.15, sample_rate, self.time_ms * 0.001 * sample_rate);
     }
 
     pub fn tick(&mut self, input: f64, ch: usize) -> f64 {
@@ -157,9 +145,7 @@ impl ShimmerDelay {
             fb = self.hicut.tick(fb, ch);
         }
 
-        if self.decay_tilt.abs() > 0.01 {
-            fb = self.decay_eq.tick(fb, ch);
-        }
+        fb = self.decay_tilt_eq.tick(fb, ch);
 
         // Self-limiting feedback (from PitchDelay)
         if fb.abs() > 0.001 {
@@ -182,7 +168,7 @@ impl ShimmerDelay {
     pub fn reset(&mut self) {
         self.delay.clear();
         self.hicut.reset();
-        self.decay_eq.reset();
+        self.decay_tilt_eq.reset();
         self.dc_blocker.reset();
         self.feedback_sample = 0.0;
         self.smoother.reset(0.0);

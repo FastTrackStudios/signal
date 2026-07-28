@@ -23,6 +23,7 @@
 //! // interpretation: matches the described behavior; the MX itself
 //! // is FFT-based.
 
+use crate::tilt::DecayTilt;
 use audiocore_dsp::biquad::{Biquad, FilterType};
 use audiocore_dsp::delay_line::DelayLine;
 use audiocore_dsp::prng::XorShift32;
@@ -131,7 +132,7 @@ pub struct SpectralDelay {
     grains: [Grain; NUM_GRAINS],
     spawn_countdown: f64,
     hicut: Biquad,
-    decay_eq: Biquad,
+    decay_tilt_eq: DecayTilt,
     // Fixed regeneration voicing: phase-dispersion allpass pair + a
     // gentle high shelf, so repeats evolve like the MX's FFT footprint.
     // interpretation — behavior match, not the hardware algorithm.
@@ -170,7 +171,7 @@ impl SpectralDelay {
             grains: std::array::from_fn(|_| Grain::idle()),
             spawn_countdown: 0.0,
             hicut: Biquad::new(),
-            decay_eq: Biquad::new(),
+            decay_tilt_eq: DecayTilt::new(),
             disp_state: [[0.0; 2]; 2],
             disp_shelf: Biquad::new(),
             feedback_sample: 0.0,
@@ -193,23 +194,9 @@ impl SpectralDelay {
             self.hicut
                 .set(FilterType::Lowpass, self.hicut_freq, 0.707, sample_rate);
         }
-        if self.decay_tilt.abs() > 0.01 {
-            if self.decay_tilt < 0.0 {
-                let freq = 20000.0 * (1.0 + self.decay_tilt).max(0.05);
-                self.decay_eq
-                    .set(FilterType::Lowpass, freq, 0.707, sample_rate);
-            } else {
-                let freq = 20.0 + self.decay_tilt * 2000.0;
-                self.decay_eq
-                    .set(FilterType::Highpass, freq, 0.707, sample_rate);
-            }
-        }
+        self.decay_tilt_eq.configure(self.decay_tilt, sample_rate);
 
-        self.smoother.set_time(0.15, sample_rate);
-        let target = self.time_ms * 0.001 * sample_rate;
-        if self.smoother.value() == 0.0 {
-            self.smoother.set_immediate(target);
-        }
+        self.smoother.set_time_seeded(0.15, sample_rate, self.time_ms * 0.001 * sample_rate);
 
         // Fixed regen voicing: gentle -1.5 dB shelf above ~4 kHz.
         self.disp_shelf.set(
@@ -442,9 +429,7 @@ impl SpectralDelay {
         if self.hicut_freq > 0.0 {
             fb = self.hicut.tick(fb, ch);
         }
-        if self.decay_tilt.abs() > 0.01 {
-            fb = self.decay_eq.tick(fb, ch);
-        }
+        fb = self.decay_tilt_eq.tick(fb, ch);
         fb = fb.clamp(-1.5, 1.5);
 
         self.delay.write(input + fb);
@@ -462,7 +447,7 @@ impl SpectralDelay {
         self.grains = std::array::from_fn(|_| Grain::idle());
         self.spawn_countdown = 0.0;
         self.hicut.reset();
-        self.decay_eq.reset();
+        self.decay_tilt_eq.reset();
         self.disp_state = [[0.0; 2]; 2];
         self.disp_shelf.reset();
         self.feedback_sample = 0.0;

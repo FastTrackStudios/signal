@@ -10,6 +10,7 @@
 //! in the stereo field per its `pan` (the chain routes Drum through one
 //! stereo engine); the mono [`DrumDelay::tick`] ignores pan.
 
+use crate::tilt::DecayTilt;
 use audiocore_dsp::biquad::{Biquad, FilterType};
 use audiocore_dsp::delay_line::DelayLine;
 use audiocore_dsp::prng::XorShift32;
@@ -101,7 +102,7 @@ pub struct DrumDelay {
 
     delay: DelayLine,
     lo_cut_filter: Biquad,
-    decay_eq: Biquad,
+    decay_tilt_eq: DecayTilt,
     feedback_sample: f64,
     sample_rate: f64,
     smoother: ParamSmoother,
@@ -142,7 +143,7 @@ impl DrumDelay {
             decay_tilt: 0.0,
             delay: DelayLine::new(48000 * 3),
             lo_cut_filter: Biquad::new(),
-            decay_eq: Biquad::new(),
+            decay_tilt_eq: DecayTilt::new(),
             feedback_sample: 0.0,
             sample_rate: 48000.0,
             smoother: ParamSmoother::new(0.0),
@@ -176,23 +177,9 @@ impl DrumDelay {
                 .set(FilterType::Highpass, freq, 0.707, sample_rate);
         }
 
-        if self.decay_tilt.abs() > 0.01 {
-            if self.decay_tilt < 0.0 {
-                let freq = 20000.0 * (1.0 + self.decay_tilt).max(0.05);
-                self.decay_eq
-                    .set(FilterType::Lowpass, freq, 0.707, sample_rate);
-            } else {
-                let freq = 20.0 + self.decay_tilt * 2000.0;
-                self.decay_eq
-                    .set(FilterType::Highpass, freq, 0.707, sample_rate);
-            }
-        }
+        self.decay_tilt_eq.configure(self.decay_tilt, sample_rate);
 
-        self.smoother.set_time(0.15, sample_rate);
-        let target = self.time_ms * 0.001 * sample_rate;
-        if self.smoother.value() == 0.0 {
-            self.smoother.set_immediate(target);
-        }
+        self.smoother.set_time_seeded(0.15, sample_rate, self.time_ms * 0.001 * sample_rate);
     }
 
     /// Advance the time smoother + motor wobble; returns the smoothed
@@ -221,9 +208,7 @@ impl DrumDelay {
         if self.lo_cut > 0.01 {
             fb = self.lo_cut_filter.tick(fb, ch);
         }
-        if self.decay_tilt.abs() > 0.01 {
-            fb = self.decay_eq.tick(fb, ch);
-        }
+        fb = self.decay_tilt_eq.tick(fb, ch);
         fb = fb.clamp(-1.5, 1.5);
 
         self.delay.write(input + fb);
@@ -294,7 +279,7 @@ impl DrumDelay {
     pub fn reset(&mut self) {
         self.delay.clear();
         self.lo_cut_filter.reset();
-        self.decay_eq.reset();
+        self.decay_tilt_eq.reset();
         self.feedback_sample = 0.0;
         self.smoother.reset(0.0);
         self.wobble_phase = 0.0;

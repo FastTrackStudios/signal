@@ -3,6 +3,7 @@
 //! Two alternating grains, each `time_ms` long. While one records,
 //! the other plays back reversed. Raised cosine crossfade between grains.
 
+use crate::tilt::DecayTilt;
 use audiocore_dsp::biquad::{Biquad, FilterType};
 use audiocore_dsp::delay_line::DelayLine;
 
@@ -21,7 +22,7 @@ pub struct ReverseDelay {
     /// Decay EQ tilt (-1.0 = darken repeats, 0 = neutral, +1.0 = brighten).
     pub decay_tilt: f64,
 
-    decay_eq: Biquad,
+    decay_tilt_eq: DecayTilt,
     delay: DelayLine,
     hicut: Biquad,
     feedback_sample: f64,
@@ -49,7 +50,7 @@ impl ReverseDelay {
             hicut_freq: 0.0,
             filter_q: 0.707,
             decay_tilt: 0.0,
-            decay_eq: Biquad::new(),
+            decay_tilt_eq: DecayTilt::new(),
             delay: DelayLine::new(48000 * 5 + 1024),
             hicut: Biquad::new(),
             feedback_sample: 0.0,
@@ -76,17 +77,7 @@ impl ReverseDelay {
         }
 
         // Decay EQ: tilt filter in feedback path
-        if self.decay_tilt.abs() > 0.01 {
-            if self.decay_tilt < 0.0 {
-                let freq = 20000.0 * (1.0 + self.decay_tilt).max(0.05);
-                self.decay_eq
-                    .set(FilterType::Lowpass, freq, 0.707, sample_rate);
-            } else {
-                let freq = 20.0 + self.decay_tilt * 2000.0;
-                self.decay_eq
-                    .set(FilterType::Highpass, freq, 0.707, sample_rate);
-            }
-        }
+        self.decay_tilt_eq.configure(self.decay_tilt, sample_rate);
 
         self.grain_samples = ((self.time_ms * 0.001 * sample_rate) as usize).max(64);
     }
@@ -123,9 +114,7 @@ impl ReverseDelay {
             fb = self.hicut.tick(fb, ch);
         }
 
-        if self.decay_tilt.abs() > 0.01 {
-            fb = self.decay_eq.tick(fb, ch);
-        }
+        fb = self.decay_tilt_eq.tick(fb, ch);
 
         fb = fb.clamp(-1.5, 1.5);
         self.feedback_sample = fb;
@@ -176,7 +165,7 @@ impl ReverseDelay {
     pub fn reset(&mut self) {
         self.delay.clear();
         self.hicut.reset();
-        self.decay_eq.reset();
+        self.decay_tilt_eq.reset();
         self.feedback_sample = 0.0;
         self.grain_pos = 0;
     }

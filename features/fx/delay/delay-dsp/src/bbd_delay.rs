@@ -16,6 +16,7 @@
 //! clock IS low (e.g. 4096 stages / 800 ms ≈ 5.1 kHz), and the write path
 //! is deliberately not oversampled.
 
+use crate::tilt::DecayTilt;
 use audiocore_dsp::biquad::{Biquad, FilterType};
 use audiocore_dsp::denormal::flush;
 use audiocore_dsp::prng::XorShift32;
@@ -74,7 +75,7 @@ pub struct BbdDelay {
     /// Decay EQ tilt (-1.0 = darken repeats, 0 = neutral, +1.0 = brighten).
     pub decay_tilt: f64,
 
-    decay_eq: Biquad,
+    decay_tilt_eq: DecayTilt,
     // Virtual-clock stage buffer.
     stages: Box<[f64]>,
     /// Fractional write position in stage units, wrapped to [0, capacity).
@@ -116,7 +117,7 @@ impl BbdDelay {
             lfo_phase_offset: 0.0,
             voice: BbdVoice::Mx,
             decay_tilt: 0.0,
-            decay_eq: Biquad::new(),
+            decay_tilt_eq: DecayTilt::new(),
             stages: vec![0.0; STAGE_CAPACITY].into_boxed_slice(),
             write_phase: 0.0,
             prev_write_in: 0.0,
@@ -156,25 +157,11 @@ impl BbdDelay {
             .set(FilterType::Lowpass, tone_freq, q, sample_rate);
 
         // Decay EQ: tilt filter in feedback path
-        if self.decay_tilt.abs() > 0.01 {
-            if self.decay_tilt < 0.0 {
-                let freq = 20000.0 * (1.0 + self.decay_tilt).max(0.05);
-                self.decay_eq
-                    .set(FilterType::Lowpass, freq, 0.707, sample_rate);
-            } else {
-                let freq = 20.0 + self.decay_tilt * 2000.0;
-                self.decay_eq
-                    .set(FilterType::Highpass, freq, 0.707, sample_rate);
-            }
-        }
+        self.decay_tilt_eq.configure(self.decay_tilt, sample_rate);
 
         // Smooth delay-time (= clock-rate) changes; the sweep itself is
         // what produces the analog pitch-bend character.
-        self.smoother.set_time(0.15, sample_rate);
-        let target = self.time_ms * 0.001 * sample_rate;
-        if self.smoother.value() == 0.0 {
-            self.smoother.set_immediate(target);
-        }
+        self.smoother.set_time_seeded(0.15, sample_rate, self.time_ms * 0.001 * sample_rate);
     }
 
     /// Cubic read from the circular stage buffer at a fractional position.
@@ -246,9 +233,7 @@ impl BbdDelay {
         // Feedback path: tone filter (analog-voiced) → tilt → limit
         let mut fb = output * self.feedback;
         fb = self.tone_filter.tick(fb, ch);
-        if self.decay_tilt.abs() > 0.01 {
-            fb = self.decay_eq.tick(fb, ch);
-        }
+        fb = self.decay_tilt_eq.tick(fb, ch);
         fb = fb.clamp(-1.5, 1.5);
 
         // Write side: advance the clock and fill every stage boundary the
@@ -288,7 +273,7 @@ impl BbdDelay {
         self.aa_filter.reset();
         self.recon_filter.reset();
         self.tone_filter.reset();
-        self.decay_eq.reset();
+        self.decay_tilt_eq.reset();
         self.feedback_sample = 0.0;
         self.smoother.reset(0.0);
         self.lfo_phase = 0.0;
