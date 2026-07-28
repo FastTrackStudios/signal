@@ -18,6 +18,7 @@ use crate::algorithm::{AlgorithmParams, ReverbAlgorithm};
 use crate::primitives::allpass_diffuser::AllpassDiffuser;
 use crate::primitives::fdn::{Fdn, MixMatrix};
 use crate::primitives::modulated_allpass::ModulatedAllpass;
+use crate::primitives::barr_loop::BarrLoop;
 use crate::primitives::multitap_delay::{MultitapDelay, Tap};
 use crate::primitives::one_pole::Lp1;
 
@@ -33,6 +34,12 @@ pub struct Room {
     // Input diffusion
     diffuser_l: AllpassDiffuser,
     diffuser_r: AllpassDiffuser,
+    /// Classic-voice late core: the Keith Barr single-loop ring
+    /// (sparser, ringier, early-'80s). Swapped in by `set_vintage`.
+    barr: BarrLoop,
+    vintage: bool,
+    /// Cached decay for the Barr ring's T60 mapping.
+    last_decay: f64,
 
     // Late reverb — 8-line FDN per side
     fdn_l: Fdn,
@@ -78,6 +85,9 @@ impl Room {
             er_level: 0.5,
             diffuser_l: AllpassDiffuser::with_defaults(sample_rate, 0.4),
             diffuser_r: AllpassDiffuser::with_defaults(sample_rate, 0.4),
+            barr: BarrLoop::new(sample_rate),
+            vintage: false,
+            last_decay: 0.5,
             fdn_l: Self::make_fdn(sample_rate, 0.5, false),
             fdn_r: Self::make_fdn(sample_rate, 0.5, true),
             mod_ap_l,
@@ -272,6 +282,7 @@ impl Room {
 
 impl ReverbAlgorithm for Room {
     fn reset(&mut self) {
+        self.barr.reset();
         self.er_l.reset();
         self.er_r.reset();
         self.diffuser_l.reset();
@@ -295,7 +306,25 @@ impl ReverbAlgorithm for Room {
         *self = Self::new(sample_rate);
     }
 
+    fn set_vintage(&mut self, on: bool) -> bool {
+        self.vintage = on;
+        self.fdn_l.set_vintage_reads(on, self.sample_rate);
+        self.fdn_r.set_vintage_reads(on, self.sample_rate);
+        true
+    }
+
     fn set_params(&mut self, params: &AlgorithmParams) {
+        // Keep the Classic-voice Barr ring in sync.
+        self.last_decay = params.decay;
+        let barr_t60 = if params.decay >= 0.999 {
+            1.0e6
+        } else {
+            0.3 * 40.0f64.powf(params.decay)
+        };
+        self.barr.set_t60(barr_t60);
+        self.barr
+            .set_damping(1500.0 + (1.0 - params.damping) * 8000.0);
+
         // Size → scale all delay lengths (0.1x closet to 1.5x large studio)
         let new_size = 0.1 + params.size * 1.4;
         if (new_size - self.size).abs() > 0.01 {
@@ -375,9 +404,14 @@ impl ReverbAlgorithm for Room {
         let diff_l = self.diffuser_l.tick(left);
         let diff_r = self.diffuser_r.tick(right);
 
-        // FDN late reverb (independent L/R for stereo)
-        let mut late_l = self.fdn_l.tick(diff_l);
-        let mut late_r = self.fdn_r.tick(diff_r);
+        // Late core: the FDN pair (MX) or the Barr single-loop ring
+        // (Classic voice — sparser, ringier, one modulated allpass
+        // keeping the ring alive).
+        let (mut late_l, mut late_r) = if self.vintage {
+            self.barr.tick((diff_l + diff_r) * 0.5)
+        } else {
+            (self.fdn_l.tick(diff_l), self.fdn_r.tick(diff_r))
+        };
 
         // Modulated allpass in feedback path (subtle chorus in tail)
         for i in 0..FDN_MOD_AP_COUNT {

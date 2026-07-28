@@ -88,6 +88,7 @@ impl WahChain {
             y: 0.0,
             tension: 0.0,
             curve_type: CurveType::HalfSine,
+            clear_tails: false,
         });
         pat.add_point(Point {
             id: 0,
@@ -95,6 +96,7 @@ impl WahChain {
             y: 1.0,
             tension: 0.0,
             curve_type: CurveType::HalfSine,
+            clear_tails: false,
         });
         pat.add_point(Point {
             id: 0,
@@ -102,6 +104,7 @@ impl WahChain {
             y: 0.0,
             tension: 0.0,
             curve_type: CurveType::HalfSine,
+            clear_tails: false,
         });
         modulator.patterns.set_active(0);
 

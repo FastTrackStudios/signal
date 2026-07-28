@@ -14,12 +14,30 @@ use audiocore_dsp::one_pole::OnePoleHp;
 use audiocore_dsp::grain_pitch::GrainPitchShifter;
 
 /// Vowel formant frequencies for "ah", "ee", "oh", "oo"
-const VOWEL_FORMANTS: [[f64; 3]; 4] = [
-    [800.0, 1200.0, 2500.0], // "ah"
-    [300.0, 2300.0, 3000.0], // "ee"
-    [500.0, 1000.0, 2500.0], // "oh"
-    [300.0, 800.0, 2300.0],  // "oo"
+/// Measured tenor vowel formants (Csound's appendix tables — F, dB
+/// amplitude relative to F1, bandwidth): five formants per vowel; the
+/// fixed 2.6–3.6 kHz F3–F5 cluster is the "singer's formant" that
+/// reads as SUNG rather than filtered — it survives the vowel morph.
+/// Rows: "ah", "e", "oh", "oo" (the morph axis).
+const VOWEL_F: [[f64; 5]; 4] = [
+    [650.0, 1080.0, 2650.0, 2900.0, 3250.0],
+    [400.0, 1700.0, 2600.0, 3200.0, 3580.0],
+    [400.0, 800.0, 2600.0, 2800.0, 3000.0],
+    [350.0, 600.0, 2700.0, 2900.0, 3300.0],
 ];
+const VOWEL_A_DB: [[f64; 5]; 4] = [
+    [0.0, -6.0, -7.0, -8.0, -22.0],
+    [0.0, -14.0, -12.0, -14.0, -20.0],
+    [0.0, -10.0, -12.0, -12.0, -26.0],
+    [0.0, -20.0, -17.0, -14.0, -26.0],
+];
+const VOWEL_BW: [[f64; 5]; 4] = [
+    [80.0, 90.0, 120.0, 130.0, 140.0],
+    [70.0, 80.0, 100.0, 120.0, 120.0],
+    [70.0, 80.0, 100.0, 130.0, 135.0],
+    [40.0, 60.0, 100.0, 120.0, 120.0],
+];
+const N_FORMANTS: usize = 5;
 
 pub struct Chorale {
     // Reverb core
@@ -31,8 +49,8 @@ pub struct Chorale {
     shifter_l: GrainPitchShifter,
     shifter_r: GrainPitchShifter,
     // Formant filter bank (3 resonant peaks per channel)
-    formants_l: [Biquad; 3],
-    formants_r: [Biquad; 3],
+    formants_l: [Biquad; N_FORMANTS],
+    formants_r: [Biquad; N_FORMANTS],
     // Feedback — per-channel damping (a shared filter would smear L/R
     // state together) and DC blocking on the pitch-shifted loop.
     fb_damp_l: Lp1,
@@ -85,8 +103,8 @@ impl Chorale {
             diffuser_r: AllpassDiffuser::with_defaults(sample_rate, 0.7),
             shifter_l: GrainPitchShifter::new(grain),
             shifter_r: GrainPitchShifter::new(grain),
-            formants_l: [Biquad::new(), Biquad::new(), Biquad::new()],
-            formants_r: [Biquad::new(), Biquad::new(), Biquad::new()],
+            formants_l: core::array::from_fn(|_| Biquad::new()),
+            formants_r: core::array::from_fn(|_| Biquad::new()),
             fb_damp_l: Lp1::new(),
             fb_damp_r: Lp1::new(),
             fb_dc_l: DcBlocker::new(),
@@ -149,17 +167,24 @@ impl Chorale {
         };
 
         #[allow(clippy::needless_range_loop)]
-        for i in 0..3 {
-            let base = VOWEL_FORMANTS[lo][i] * (1.0 - frac) + VOWEL_FORMANTS[hi][i] * frac;
+        for i in 0..N_FORMANTS {
+            // Morph F / amplitude / bandwidth in log-frequency space
+            // between the measured vowel columns.
+            let f = (VOWEL_F[lo][i].ln() * (1.0 - frac) + VOWEL_F[hi][i].ln() * frac).exp();
+            let amp = VOWEL_A_DB[lo][i] * (1.0 - frac) + VOWEL_A_DB[hi][i] * frac;
+            let bw = VOWEL_BW[lo][i] * (1.0 - frac) + VOWEL_BW[hi][i] * frac;
             // Per-channel formant drift from the mod randomization.
-            let freq_l = base * voice_scale * (1.0 + self.rand_formant[0]);
-            let freq_r = base * voice_scale * (1.0 + self.rand_formant[1]);
-            // +12 dB / Q 5 peaks inside the feedback loop pushed loop gain
-            // near unity at the formant centers — a 33 dB isolated tail
-            // mode (metallic ringing). Mild (8 dB / Q 3) keeps the vowel
-            // color with the mode down (IR-metric verified); Medium/High
-            // raise intensity but stay under that ceiling.
-            let (q, gain_db) = self.mx.resonance.q_gain();
+            let freq_l = f * voice_scale * (1.0 + self.rand_formant[0]);
+            let freq_r = f * voice_scale * (1.0 + self.rand_formant[1]);
+            // Resonance selector sets the peak intensity ceiling; the
+            // measured per-formant amplitudes ride under it (softened
+            // ×0.35 — the tables are synthesis output levels, we're
+            // voicing a reverb wet path). Q from the measured
+            // bandwidths, scaled by the selector, kept under the known
+            // loop-gain ringing ceiling.
+            let (q_scale, base_gain) = self.mx.resonance.q_gain();
+            let gain_db = (base_gain + amp * 0.35).max(1.0);
+            let q = (f / bw * q_scale / 3.0).clamp(1.5, 9.0);
             self.formants_l[i].set(FilterType::Peak { gain_db }, freq_l, q, sample_rate);
             self.formants_r[i].set(FilterType::Peak { gain_db }, freq_r, q, sample_rate);
         }

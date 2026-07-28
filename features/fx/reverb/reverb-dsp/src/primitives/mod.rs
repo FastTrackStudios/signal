@@ -2,6 +2,7 @@
 
 pub mod allpass;
 pub mod allpass_diffuser;
+pub mod barr_loop;
 pub mod biquad;
 pub mod fdn;
 pub mod hadamard;

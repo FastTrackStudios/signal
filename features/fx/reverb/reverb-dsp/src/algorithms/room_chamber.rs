@@ -286,6 +286,18 @@ impl ReverbAlgorithm for RoomChamber {
     fn set_chamber_params(&mut self, params: &ChamberParams) -> bool {
         self.color = params.color;
         let sr = self.sample_rate;
+        // In-loop per-line shelves: the Color deepens with every pass
+        // (the chamber's speakers/mics color each round trip), on top
+        // of the wet-bus EQ below.
+        let (lo_db, hi_db) = match params.color {
+            ChamberColor::Neutral => (0.0, 0.0),
+            ChamberColor::Clear => (-3.5, 0.0),
+            ChamberColor::Smooth => (1.2, 1.2),
+            ChamberColor::Crisp => (-5.0, 1.2),
+            ChamberColor::Deep => (-1.5, -2.5),
+        };
+        self.fdn_l.set_loop_shelves(280.0, lo_db, 3500.0, hi_db, sr);
+        self.fdn_r.set_loop_shelves(280.0, lo_db, 3500.0, hi_db, sr);
         match params.color {
             ChamberColor::Neutral => {}
             ChamberColor::Clear => {
@@ -302,6 +314,12 @@ impl ReverbAlgorithm for RoomChamber {
                     .set(FilterType::Peak { gain_db: 5.0 }, 800.0, 1.0, sr)
             }
         }
+        true
+    }
+
+    fn set_vintage(&mut self, on: bool) -> bool {
+        self.fdn_l.set_vintage_reads(on, self.sample_rate);
+        self.fdn_r.set_vintage_reads(on, self.sample_rate);
         true
     }
 

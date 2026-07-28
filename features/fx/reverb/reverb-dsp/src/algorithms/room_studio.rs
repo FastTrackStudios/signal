@@ -277,6 +277,12 @@ impl ReverbAlgorithm for RoomStudio {
         *self = Self::new(sample_rate);
     }
 
+    fn set_vintage(&mut self, on: bool) -> bool {
+        self.fdn_l.set_vintage_reads(on, self.sample_rate);
+        self.fdn_r.set_vintage_reads(on, self.sample_rate);
+        true
+    }
+
     fn set_params(&mut self, params: &AlgorithmParams) {
         // Size — small to medium studio
         let new_size = 0.15 + params.size * 0.85; // 0.15x to 1.0x

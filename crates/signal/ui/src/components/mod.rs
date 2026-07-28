@@ -37,7 +37,7 @@ mod signal_chain_grid;
 mod signal_flow_grid_view;
 
 // Re-exports: primitives
-pub use audio_controls::{Knob, KnobSize, XYPad};
+pub use audio_controls::{Knob, KnobSize, PatternEditor, XYPad};
 pub use audio_viz::{LevelMeter, LevelMeterOrientation, SpectrumAnalyzer, WaveformDisplay};
 pub use context_menu::{ContextMenu, ContextMenuItem, ContextMenuSeparator};
 pub use dialog::{Dialog, DialogClose, DialogDescription, DialogFooter, DialogHeader, DialogTitle};

@@ -3,6 +3,7 @@
 pub mod envelope;
 pub mod follower;
 pub mod lfo;
+pub mod pattern;
 pub mod random;
 
 use facet::Facet;
@@ -11,6 +12,7 @@ use serde::{Deserialize, Serialize};
 pub use envelope::{EnvelopeConfig, EnvelopeMode};
 pub use follower::{FollowerConfig, FollowerInput};
 pub use lfo::{LfoConfig, LfoWaveform, RetriggerMode, TempoDiv};
+pub use pattern::{PatternConfig, PatternPoint};
 pub use random::RandomConfig;
 
 /// Source of modulation signal.
@@ -31,6 +33,8 @@ pub enum ModulationSource {
     Follower(FollowerConfig),
     /// Random — procedural random modulation.
     Random(RandomConfig),
+    /// Drawn multi-segment pattern (ShaperBox-style MSEG).
+    Pattern(PatternConfig),
 }
 
 impl ModulationSource {
@@ -43,6 +47,7 @@ impl ModulationSource {
             Self::Macro { .. } => "Macro",
             Self::Follower(_) => "Follower",
             Self::Random(_) => "Random",
+            Self::Pattern(_) => "Pattern",
         }
     }
 }

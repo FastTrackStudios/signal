@@ -237,6 +237,12 @@ impl ReverbAlgorithm for HallArena {
         *self = Self::new(sample_rate);
     }
 
+    fn set_vintage(&mut self, on: bool) -> bool {
+        self.fdn_l.set_vintage_reads(on, self.sample_rate);
+        self.fdn_r.set_vintage_reads(on, self.sample_rate);
+        true
+    }
+
     fn set_params(&mut self, params: &AlgorithmParams) {
         // Size — arena ranges from large venue to stadium
         let new_size = 1.5 + params.size * 3.5; // 1.5x to 5.0x
@@ -247,29 +253,39 @@ impl ReverbAlgorithm for HallArena {
             self.setup_mod_allpass(params.modulation);
         }
 
-        // Decay — arenas can sustain very long (huge air volume)
-        let decay_gain = 0.75 + params.decay * 0.245; // 0.75 to 0.995
-        self.fdn_l.set_decay(decay_gain);
-        self.fdn_r.set_decay(decay_gain);
+        // Exact per-line T60 decay (Jot shelf): decay knob maps to a
+        // midband T60, the Low End multiplier stretches/tames the DC
+        // target and damping + the high multiplier set the Nyquist
+        // target. decay pinned at 1.0 (freeze) holds ~forever.
+        let t60 = if params.decay >= 0.999 {
+            1.0e6
+        } else {
+            1.0 * 40.0f64.powf(params.decay)
+        };
+        let t60_dc = (t60 * params.low_decay_mult.max(0.05)).max(0.05);
+        let hf_ratio = ((0.15 + 0.85 * (1.0 - params.damping))
+            * params.high_decay_mult.max(0.05))
+        .clamp(0.02, 1.5);
+        let t60_ny = (t60 * hf_ratio).max(0.02);
+        self.fdn_l.set_t60(t60_dc, t60_ny, self.sample_rate);
+        self.fdn_r.set_t60(t60_dc, t60_ny, self.sample_rate);
 
-        // Damping — air absorption increases with distance
-        let damp_freq = 1500.0 + (1.0 - params.damping) * 10500.0;
-        self.fdn_l.set_damping(damp_freq, self.sample_rate);
-        self.fdn_r.set_damping(damp_freq, self.sample_rate);
+        // In-loop allpasses (zita-style ±): hall density builds with
+        // every recirculation instead of only at the input diffuser.
+        self.fdn_l.set_loop_allpass(0.6);
+        self.fdn_r.set_loop_allpass(0.6);
 
-        // Multi-band decay
-        self.fdn_l.set_band_decay(
-            params.band_crossover_hz,
-            params.low_decay_mult,
-            params.high_decay_mult,
-            self.sample_rate,
-        );
-        self.fdn_r.set_band_decay(
-            params.band_crossover_hz,
-            params.low_decay_mult,
-            params.high_decay_mult,
-            self.sample_rate,
-        );
+        // Artifact-free tail animation: slow orthogonal rotation of the
+        // feedback mix (no decay error, no pitch wobble).
+        self.fdn_l
+            .set_rotation(0.3 + params.modulation * 0.5, params.modulation * 0.12, self.sample_rate);
+        self.fdn_r
+            .set_rotation((0.3 + params.modulation * 0.5) * 1.13, params.modulation * 0.12, self.sample_rate);
+
+        // Arena-scale tail animation: random-walk delay jitter
+        // (reverbsc-style) — huge but unchorused.
+        self.fdn_l.set_jitter(1.2, self.sample_rate);
+        self.fdn_r.set_jitter(1.2, self.sample_rate);
 
         // Air absorption LP
         let air_freq = 3000.0 + (1.0 - params.damping) * 9000.0;

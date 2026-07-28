@@ -15,6 +15,7 @@ use crate::target::ParamTarget;
 
 use super::envelope_state::EnvelopeState;
 use super::lfo_state::LfoState;
+use super::pattern_state::PatternState;
 
 /// Context passed to each tick of the modulation processor.
 #[derive(Debug, Clone, Copy)]
@@ -144,6 +145,7 @@ impl RandomState {
 #[derive(Debug, Clone)]
 enum SourceState {
     Lfo(LfoState),
+    Pattern(PatternState),
     Envelope(EnvelopeState),
     Follower(FollowerState),
     Random(RandomState),
@@ -184,6 +186,9 @@ impl ModulationProcessor {
             .iter()
             .map(|route| match &route.source {
                 ModulationSource::Lfo(config) => SourceState::Lfo(LfoState::from_config(config)),
+                ModulationSource::Pattern(config) => {
+                    SourceState::Pattern(PatternState::from_config(config))
+                }
                 ModulationSource::Envelope(_) => SourceState::Envelope(EnvelopeState::new()),
                 ModulationSource::Follower(_) => SourceState::Follower(FollowerState::new()),
                 ModulationSource::Random(config) => {
@@ -234,6 +239,12 @@ impl ModulationProcessor {
                     // LFO tick returns bipolar [-1, 1]
                     let waveform_val = state.tick(ctx.dt, config, ctx.bpm);
                     waveform_val * config.depth as f64
+                }
+
+                (ModulationSource::Pattern(config), SourceState::Pattern(ref mut state)) => {
+                    // Pattern tick returns unipolar [0, 1], map to bipolar
+                    let v = state.tick(ctx.dt, config, ctx.bpm);
+                    (v * 2.0 - 1.0) * config.depth as f64
                 }
 
                 (ModulationSource::Envelope(config), SourceState::Envelope(ref mut state)) => {
@@ -334,10 +345,18 @@ impl ModulationProcessor {
     /// Retrigger all LFOs that have retrigger mode set.
     pub fn retrigger_lfos(&mut self) {
         for (i, state) in self.states.iter_mut().enumerate() {
-            if let SourceState::Lfo(ref mut lfo) = state {
-                if let ModulationSource::Lfo(config) = &self.routes[i].source {
-                    lfo.retrigger(config);
+            match state {
+                SourceState::Lfo(ref mut lfo) => {
+                    if let ModulationSource::Lfo(config) = &self.routes[i].source {
+                        lfo.retrigger(config);
+                    }
                 }
+                SourceState::Pattern(ref mut pat) => {
+                    if let ModulationSource::Pattern(config) = &self.routes[i].source {
+                        pat.retrigger(config);
+                    }
+                }
+                _ => {}
             }
         }
     }
@@ -349,6 +368,11 @@ impl ModulationProcessor {
                 SourceState::Lfo(ref mut lfo) => {
                     if let ModulationSource::Lfo(config) = &self.routes[i].source {
                         lfo.reset(config.phase_offset);
+                    }
+                }
+                SourceState::Pattern(ref mut pat) => {
+                    if let ModulationSource::Pattern(config) = &self.routes[i].source {
+                        pat.reset(config.phase_offset);
                     }
                 }
                 SourceState::Envelope(ref mut env) => {

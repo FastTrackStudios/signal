@@ -317,6 +317,61 @@ fn edc_crossing(left: &[f64], right: &[f64], db: f64) -> Option<usize> {
 /// The audible meat of the tail: from the -15 dB to the -50 dB point of
 /// the decay curve. Windows fixed in absolute time land in the dead zone
 /// of short IRs and bias tail metrics.
+/// Early Decay Time: RT extrapolated from the 0 → −10 dB EDC segment
+/// (ISO 3382). Tracks PERCEIVED reverberance better than T30 — the
+/// BigSky dial-in metric for "how long does it feel".
+#[allow(dead_code)]
+fn edt(left: &[f64], right: &[f64], sample_rate: f64) -> Option<f64> {
+    let n = left.len().min(right.len());
+    let mut edc = vec![0.0f64; n];
+    let mut acc = 0.0;
+    for i in (0..n).rev() {
+        acc += left[i] * left[i] + right[i] * right[i];
+        edc[i] = acc;
+    }
+    let total = edc[0];
+    if total <= 0.0 {
+        return None;
+    }
+    let t10 = edc
+        .iter()
+        .position(|&e| 10.0 * (e / total).log10() <= -10.0)?;
+    Some(6.0 * t10 as f64 / sample_rate)
+}
+
+/// Clarity index C_te (dB): early-vs-late energy split at `te` seconds
+/// (0.050 for speech C50, 0.080 for music C80).
+#[allow(dead_code)]
+fn clarity_db(left: &[f64], right: &[f64], te: f64, sample_rate: f64) -> f64 {
+    let split = (te * sample_rate) as usize;
+    let n = left.len().min(right.len());
+    let energy = |a: usize, b: usize| -> f64 {
+        (a..b.min(n))
+            .map(|i| left[i] * left[i] + right[i] * right[i])
+            .sum()
+    };
+    let early = energy(0, split);
+    let late = energy(split, n).max(1e-30);
+    10.0 * (early / late).log10()
+}
+
+/// Spectral centroid (Hz) of the late tail — the decay-brightness
+/// trajectory metric for damping dial-in.
+#[allow(dead_code)]
+fn late_centroid(left: &[f64], right: &[f64], sample_rate: f64) -> Option<f64> {
+    let (start, end) = tail_window(left, right)?;
+    let spec = welch_spectrum(left, start, end);
+    let bins = spec.len();
+    let mut num = 0.0;
+    let mut den = 0.0;
+    for (k, &p) in spec.iter().enumerate() {
+        let f = k as f64 * sample_rate / (2.0 * bins as f64);
+        num += f * p;
+        den += p;
+    }
+    (den > 0.0).then(|| num / den)
+}
+
 fn tail_window(left: &[f64], right: &[f64]) -> Option<(usize, usize)> {
     let start = edc_crossing(left, right, -15.0)?;
     let end = edc_crossing(left, right, -50.0).unwrap_or(left.len());
@@ -597,5 +652,28 @@ fn ir_metrics() {
         failures.is_empty(),
         "IR metric failures:\n  {}",
         failures.join("\n  ")
+    );
+}
+
+#[test]
+fn dial_in_metrics_are_sane_on_hall() {
+    // Smoke-check the A/B dial-in metrics on a rendered Hall IR: EDT in
+    // a plausible band, C80 finite and negative-ish for a long tail,
+    // late centroid inside the audio band and below the early-spectrum
+    // brightness (damping darkens the tail).
+    let ir = render_ir(AlgorithmType::Hall, 0);
+    let sr = 48000.0;
+    let edt_s = edt(&ir.left, &ir.right, sr).expect("EDT reachable");
+    assert!(
+        (0.05..30.0).contains(&edt_s),
+        "EDT out of range: {edt_s} s"
+    );
+    let c80 = clarity_db(&ir.left, &ir.right, 0.080, sr);
+    assert!(c80.is_finite());
+    assert!(c80 < 20.0, "C80 suspiciously clear for a hall: {c80} dB");
+    let centroid = late_centroid(&ir.left, &ir.right, sr).expect("centroid");
+    assert!(
+        (80.0..8000.0).contains(&centroid),
+        "late centroid out of band: {centroid} Hz"
     );
 }

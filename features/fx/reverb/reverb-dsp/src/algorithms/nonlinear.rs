@@ -49,6 +49,11 @@ pub struct NonLinear {
     late_env: f64,
     /// PRE-DELAY remap: shaped output recirculated into the generator.
     nl_fb_state: f64,
+    /// Swoosh voicing: a lowpass whose cutoff RISES through the window
+    /// (dark → bright as the backward swell builds — the tap-bank
+    /// per-tap filter idea mapped onto our envelope reader).
+    swoosh_lp: crate::primitives::one_pole::Lp1,
+    swoosh_countdown: u32,
     sample_rate: f64,
 }
 
@@ -70,6 +75,8 @@ impl NonLinear {
             late_fdn: Self::make_late_fdn(sample_rate),
             late_env: 0.0,
             nl_fb_state: 0.0,
+            swoosh_lp: crate::primitives::one_pole::Lp1::new(),
+            swoosh_countdown: 0,
             sample_rate,
         }
     }
@@ -103,14 +110,19 @@ impl NonLinear {
                 position
             }
             EnvelopeShape::Gate => {
-                // Full level, then release. The hold point follows the
-                // explicit gate-speed param: hold = 0.5 + 0.4 * speed
-                // (speed 1.0 = the legacy 0.9 hold).
+                // Even profile with an ABRUPT cut (RMX16 lineage): full
+                // level until the hold point, then a short half-cosine
+                // knee (~8% of the window) instead of a linear fade —
+                // reads as a gate, not a decay, without clicking.
                 let hold = 0.5 + 0.4 * self.mx.gate_speed.clamp(0.0, 1.0);
+                const KNEE: f64 = 0.08;
                 if position < hold {
                     1.0
+                } else if position < hold + KNEE {
+                    0.5 * (1.0
+                        + (std::f64::consts::PI * (position - hold) / KNEE).cos())
                 } else {
-                    ((1.0 - position) / (1.0 - hold).max(1e-6)).max(0.0)
+                    0.0
                 }
             }
             EnvelopeShape::Swoosh => {
@@ -151,6 +163,8 @@ impl ReverbAlgorithm for NonLinear {
         self.late_fdn.reset();
         self.late_env = 0.0;
         self.nl_fb_state = 0.0;
+        self.swoosh_lp.reset();
+        self.swoosh_countdown = 0;
     }
 
     fn set_sample_rate(&mut self, sample_rate: f64) {
@@ -232,6 +246,18 @@ impl ReverbAlgorithm for NonLinear {
 
         let mut out_l = self.env_buffer_l.read(1) * gain;
         let mut out_r = self.env_buffer_r.read(1) * gain;
+
+        // Swoosh: rising lowpass across the window (400 Hz → 8 kHz).
+        if self.shape == EnvelopeShape::Swoosh {
+            if self.swoosh_countdown == 0 {
+                self.swoosh_countdown = 64;
+                let cutoff = 400.0 * (8000.0f64 / 400.0).powf(position.clamp(0.0, 1.0));
+                self.swoosh_lp.set_freq(cutoff, self.sample_rate);
+            }
+            self.swoosh_countdown -= 1;
+            out_l = self.swoosh_lp.tick(out_l);
+            out_r = self.swoosh_lp.tick(out_r);
+        }
 
         // ── Chop: amplitude modulation on the decay (BigSky MX) ─────
         // Raised-cosine tremolo; depth 0 is bit-transparent.

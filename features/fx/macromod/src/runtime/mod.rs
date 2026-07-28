@@ -12,11 +12,13 @@
 
 pub mod envelope_state;
 pub mod lfo_state;
+pub mod pattern_state;
 pub mod processor;
 pub mod waveform;
 
 pub use envelope_state::{EnvelopeStage, EnvelopeState};
 pub use lfo_state::LfoState;
+pub use pattern_state::PatternState;
 pub use processor::{
     FollowerState, ModulationOutput, ModulationProcessor, RandomState, TickContext,
 };

@@ -3,7 +3,9 @@
 //! All values use a 0.0–1.0 normalized range with display formatting
 //! handled by the consuming view.
 
+mod pattern_editor;
 mod xy_pad;
 
 pub use signal_grid_ui::{Knob, KnobSize};
+pub use pattern_editor::PatternEditor;
 pub use xy_pad::XYPad;

@@ -268,6 +268,11 @@ pub enum ImpulseDirection {
 /// (mix, which lives on the chain, is preserved).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ImpulseParams {
+    /// Decay EQ: low-band end gain in dB (−24..+12) at ~250 Hz —
+    /// negative shortens the low decay, positive stretches it.
+    pub decay_lo_db: f64,
+    /// Decay EQ: high-band end gain in dB (−24..+12) at ~4 kHz.
+    pub decay_hi_db: f64,
     /// Fraction of the IR that plays back (0.01..1.0).
     pub decay: f64,
     /// How `decay` < 1.0 shortens the tail.
@@ -287,6 +292,8 @@ pub struct ImpulseParams {
 impl Default for ImpulseParams {
     fn default() -> Self {
         Self {
+            decay_lo_db: 0.0,
+            decay_hi_db: 0.0,
             decay: 1.0,
             tail: ImpulseTail::Envelope,
             attack: 0.0,
@@ -300,13 +307,16 @@ impl Default for ImpulseParams {
 impl ImpulseParams {
     /// The shaping subset (everything except `feedback`) — equality on
     /// this tuple decides whether a re-preparation is needed.
-    pub fn shape_key(&self) -> (u64, ImpulseTail, u64, u64, ImpulseDirection) {
+    #[allow(clippy::type_complexity)]
+    pub fn shape_key(&self) -> (u64, ImpulseTail, u64, u64, ImpulseDirection, u64, u64) {
         (
             self.decay.clamp(0.01, 1.0).to_bits(),
             self.tail,
             self.attack.clamp(0.0, 1.0).to_bits(),
             self.stretch.clamp(0.25, 4.0).to_bits(),
             self.direction,
+            self.decay_lo_db.clamp(-24.0, 12.0).to_bits(),
+            self.decay_hi_db.clamp(-24.0, 12.0).to_bits(),
         )
     }
 
@@ -317,6 +327,8 @@ impl ImpulseParams {
             && self.attack <= 1e-9
             && (self.stretch - 1.0).abs() <= 1e-9
             && self.direction == ImpulseDirection::Forward
+            && self.decay_lo_db.abs() <= 0.05
+            && self.decay_hi_db.abs() <= 0.05
     }
 }
 
@@ -800,6 +812,29 @@ pub trait ReverbAlgorithm: Send {
         false
     }
 
+    /// True-stereo (4-leg) IR load: LL/RR drive the direct convolvers,
+    /// LR/RL the cross-feed pair. Slot A only. No-op outside
+    /// Convolution.
+    fn try_load_ir_true_stereo(
+        &mut self,
+        ll: &[f64],
+        lr: &[f64],
+        rl: &[f64],
+        rr: &[f64],
+    ) -> bool {
+        let _ = (ll, lr, rl, rr);
+        false
+    }
+
+    /// Cross-leg reshape originals (LR, RL) for a true-stereo slot A
+    /// impulse, if loaded.
+    #[allow(clippy::type_complexity)]
+    fn impulse_reshape_cross_source(
+        &self,
+    ) -> Option<(std::sync::Arc<Vec<f64>>, std::sync::Arc<Vec<f64>>)> {
+        None
+    }
+
     /// Slot-addressed IR load for dual-IR algorithms. Default: slot A
     /// falls through to [`Self::try_load_ir`], slot B is rejected.
     fn try_load_ir_slot(&mut self, left: &[f64], right: &[f64], slot: IrSlot) -> bool {
@@ -849,6 +884,13 @@ pub trait ReverbAlgorithm: Send {
 
     /// Push Magneto engine params. No-op outside Magneto; returns
     /// `true` if accepted.
+    /// Engage the Classic-voice vintage texture (truncated common-mode
+    /// chorus reads, era voicings). Returns false when the algorithm
+    /// has no vintage path.
+    fn set_vintage(&mut self, _on: bool) -> bool {
+        false
+    }
+
     /// Push Spring params. No-op outside the Spring engines.
     fn set_spring_params(&mut self, _params: &SpringParams) -> bool {
         false

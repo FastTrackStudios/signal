@@ -240,6 +240,12 @@ impl ReverbAlgorithm for HallCathedral {
         *self = Self::new(sample_rate);
     }
 
+    fn set_vintage(&mut self, on: bool) -> bool {
+        self.fdn_l.set_vintage_reads(on, self.sample_rate);
+        self.fdn_r.set_vintage_reads(on, self.sample_rate);
+        true
+    }
+
     fn set_params(&mut self, params: &AlgorithmParams) {
         // Size — cathedral ranges from large church to massive basilica
         let new_size = 1.0 + params.size * 2.5; // 1.0x to 3.5x
@@ -250,29 +256,34 @@ impl ReverbAlgorithm for HallCathedral {
             self.setup_mod_allpass(params.modulation);
         }
 
-        // Decay — cathedral can sustain much longer (stone walls)
-        let decay_gain = 0.7 + params.decay * 0.295; // 0.7 to 0.995
-        self.fdn_l.set_decay(decay_gain);
-        self.fdn_r.set_decay(decay_gain);
+        // Exact per-line T60 decay (Jot shelf): decay knob maps to a
+        // midband T60, the Low End multiplier stretches/tames the DC
+        // target and damping + the high multiplier set the Nyquist
+        // target. decay pinned at 1.0 (freeze) holds ~forever.
+        let t60 = if params.decay >= 0.999 {
+            1.0e6
+        } else {
+            0.8 * 50.0f64.powf(params.decay)
+        };
+        let t60_dc = (t60 * params.low_decay_mult.max(0.05)).max(0.05);
+        let hf_ratio = ((0.15 + 0.85 * (1.0 - params.damping))
+            * params.high_decay_mult.max(0.05))
+        .clamp(0.02, 1.5);
+        let t60_ny = (t60 * hf_ratio).max(0.02);
+        self.fdn_l.set_t60(t60_dc, t60_ny, self.sample_rate);
+        self.fdn_r.set_t60(t60_dc, t60_ny, self.sample_rate);
 
-        // Damping — hard stone surfaces = less HF loss
-        let damp_freq = 2000.0 + (1.0 - params.damping) * 16000.0;
-        self.fdn_l.set_damping(damp_freq, self.sample_rate);
-        self.fdn_r.set_damping(damp_freq, self.sample_rate);
+        // In-loop allpasses (zita-style ±): hall density builds with
+        // every recirculation instead of only at the input diffuser.
+        self.fdn_l.set_loop_allpass(0.55);
+        self.fdn_r.set_loop_allpass(0.55);
 
-        // Multi-band decay
-        self.fdn_l.set_band_decay(
-            params.band_crossover_hz,
-            params.low_decay_mult,
-            params.high_decay_mult,
-            self.sample_rate,
-        );
-        self.fdn_r.set_band_decay(
-            params.band_crossover_hz,
-            params.low_decay_mult,
-            params.high_decay_mult,
-            self.sample_rate,
-        );
+        // Artifact-free tail animation: slow orthogonal rotation of the
+        // feedback mix (no decay error, no pitch wobble).
+        self.fdn_l
+            .set_rotation(0.35 + params.modulation * 0.6, params.modulation * 0.2, self.sample_rate);
+        self.fdn_r
+            .set_rotation((0.35 + params.modulation * 0.6) * 1.13, params.modulation * 0.2, self.sample_rate);
 
         // Diffusion — more stages, cathedral scatters heavily
         let stages = (params.diffusion * 12.0) as usize;

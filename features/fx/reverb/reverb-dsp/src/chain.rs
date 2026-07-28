@@ -15,6 +15,7 @@ use crate::algorithms;
 use crate::ir::engine::{ProcessedIr, ReshapeJob};
 use crate::ir::prepared::PreparedIrPair;
 use audiocore_dsp::envelope::EnvelopeFollower;
+use fts_modulation::{EnvFollower, Modulator, TransportInfo};
 use audiocore_dsp::smoothing::ParamSmoother;
 
 use crate::primitives::saturation::Saturator;
@@ -52,6 +53,9 @@ pub struct ChainParamSurface {
     pub magneto: MagnetoParams,
     pub nonlinear: NonLinearParams,
     pub predelay_ms: f64,
+    /// Tempo-synced pre-delay: when set (in beats) and `tempo_bpm` is
+    /// known, overrides `predelay_ms` (e.g. 0.25 = a 16th note).
+    pub predelay_sync_beats: Option<f64>,
     pub mix: f64,
     pub width: f64,
     pub pan: f64,
@@ -176,6 +180,9 @@ pub struct ReverbChain {
     // Global controls
     /// Pre-delay in milliseconds (0-500).
     pub predelay_ms: f64,
+    /// Tempo-synced pre-delay: when set (in beats) and `tempo_bpm` is
+    /// known, overrides `predelay_ms` (e.g. 0.25 = a 16th note).
+    pub predelay_sync_beats: Option<f64>,
     /// Dry/wet mix (0.0 = fully dry, 1.0 = fully wet).
     pub mix: f64,
     /// Stereo width (0.0 = mono, 1.0 = normal, 2.0 = extra wide).
@@ -237,6 +244,23 @@ pub struct ReverbChain {
     /// Disposal channel for audio-thread IR swaps (re-applied to fresh
     /// algorithms). `None` = drop inline.
     ir_trash_tx: Option<Sender<crate::ir::IrTrash>>,
+
+    /// MSEG pattern modulators (fts-modulation, the tiagolr-style
+    /// pipeline: 12-pattern bank + Sync/Free/MIDI/Audio triggers +
+    /// smoothing + anticlick): `send` gates the signal INTO the
+    /// algorithm, `wet` gates the reverb output. A pattern point
+    /// flagged `clear_tails` hard-resets the algorithm as it is
+    /// crossed. Tempo for synced lanes comes from `tempo_bpm`; the
+    /// chain advances its own transport position.
+    send_mod: Option<Box<Modulator>>,
+    wet_mod: Option<Box<Modulator>>,
+    /// Envelope-follower lane on the wet output: rides (or, inverted,
+    /// ducks) the reverb with the dry input's envelope.
+    wet_follower: Option<Box<EnvFollower>>,
+    send_prev_phase: f64,
+    wet_prev_phase: f64,
+    transport_qn: f64,
+    pub tempo_bpm: Option<f64>,
 
     /// Voice value last applied to the variant pairing (Plate/Spring),
     /// so an explicit `set_variant` isn't clobbered on every
@@ -349,6 +373,7 @@ impl ReverbChain {
             voice: ReverbVoice::default(),
             hall: HallParams::default(),
             predelay_ms: 0.0,
+            predelay_sync_beats: None,
             mix: 0.5,
             width: 1.0,
             pan: 0.0,
@@ -371,6 +396,13 @@ impl ReverbChain {
             prepared_ir_rx: None,
             reshape_tx: None,
             ir_trash_tx: None,
+            send_mod: None,
+            wet_mod: None,
+            wet_follower: None,
+            send_prev_phase: 0.0,
+            wet_prev_phase: 0.0,
+            transport_qn: 0.0,
+            tempo_bpm: None,
             applied_voice: ReverbVoice::default(),
             mid_eq: Biquad::new(),
             swell_env: {
@@ -397,6 +429,44 @@ impl ReverbChain {
     /// glitch-free runtime IR changes.
     pub fn set_prepared_ir_receiver(&mut self, rx: Receiver<PreparedIrPair>) {
         self.prepared_ir_rx = Some(rx);
+    }
+
+    /// Install (or clear) the send-pattern modulator: rhythmically
+    /// gates the signal feeding the algorithm (pumping/gated-input
+    /// reverb).
+    pub fn set_send_modulator(&mut self, m: Option<Box<Modulator>>) {
+        self.send_mod = m;
+        if let Some(m) = &mut self.send_mod {
+            m.update(self.sample_rate);
+        }
+    }
+
+    /// Install (or clear) the wet-pattern modulator: rhythmically
+    /// gates the reverb output.
+    pub fn set_wet_modulator(&mut self, m: Option<Box<Modulator>>) {
+        self.wet_mod = m;
+        if let Some(m) = &mut self.wet_mod {
+            m.update(self.sample_rate);
+        }
+    }
+
+    /// Install (or clear) the wet envelope follower: the dry input's
+    /// envelope rides the reverb output (invert = ducking reverb).
+    pub fn set_wet_follower(&mut self, f: Option<Box<EnvFollower>>) {
+        self.wet_follower = f;
+        if let Some(f) = &mut self.wet_follower {
+            f.update(self.sample_rate);
+        }
+    }
+
+    /// MIDI trigger both lanes (Midi trigger mode restarts the cycle).
+    pub fn midi_trigger_patterns(&mut self) {
+        if let Some(m) = &mut self.send_mod {
+            m.midi_trigger();
+        }
+        if let Some(m) = &mut self.wet_mod {
+            m.midi_trigger();
+        }
     }
 
     /// Attach a disposal channel for buffers displaced by audio-thread
@@ -429,6 +499,10 @@ impl ReverbChain {
                     right,
                     transforms: crate::ir::IrTransforms::from_impulse(&self.impulse),
                     sample_rate: self.sample_rate,
+                    cross: match slot {
+                        IrSlot::A => self.algorithm.impulse_reshape_cross_source(),
+                        IrSlot::B => None,
+                    },
                 };
                 if tx.send(job).is_err() {
                     self.reshape_tx = None;
@@ -506,6 +580,13 @@ impl ReverbChain {
             self.algorithm.set_magneto_params(&self.effective_magneto());
         self.algorithm.set_chamber_params(&self.chamber);
         self.algorithm.set_spring_params(&self.spring);
+        self.algorithm.set_vintage(
+            self.voice == ReverbVoice::Classic
+                && matches!(
+                    self.algorithm_type,
+                    AlgorithmType::Hall | AlgorithmType::Room | AlgorithmType::Shimmer
+                ),
+        );
             self.algorithm.set_nonlinear_params(&self.effective_nonlinear());
         }
     }
@@ -542,6 +623,7 @@ impl ReverbChain {
             magneto: self.magneto,
             nonlinear: self.nonlinear,
             predelay_ms: self.predelay_ms,
+            predelay_sync_beats: self.predelay_sync_beats,
             mix: self.mix,
             width: self.width,
             pan: self.pan,
@@ -579,6 +661,7 @@ impl ReverbChain {
         self.magneto = s.magneto;
         self.nonlinear = s.nonlinear;
         self.predelay_ms = s.predelay_ms;
+        self.predelay_sync_beats = s.predelay_sync_beats;
         self.mix = s.mix;
         self.width = s.width;
         self.pan = s.pan;
@@ -597,6 +680,24 @@ impl ReverbChain {
         self.duck_release_ms = s.duck_release_ms;
         self.freeze = s.freeze;
         self.infinite_mode = s.infinite_mode;
+    }
+
+    /// Input bandwidth including the Classic-voice vintage cap: the
+    /// early-'80s color is bandwidth + interpolation grain, not just
+    /// EQ (VintageVerb's lesson) — Classic on the retuned engines caps
+    /// the input at ~9 kHz before the user's own input LP.
+    fn effective_input_lp(&self) -> f64 {
+        let user = self.input_lp_freq.min(20000.0);
+        let vintage_capped = self.voice == ReverbVoice::Classic
+            && matches!(
+                self.algorithm_type,
+                AlgorithmType::Hall | AlgorithmType::Room | AlgorithmType::Shimmer
+            );
+        if vintage_capped {
+            user.min(9000.0)
+        } else {
+            user
+        }
     }
 
     /// Magneto's knob remap: PRE-DELAY drives the engine's feedback.
@@ -757,6 +858,13 @@ impl ReverbChain {
         self.algorithm.set_magneto_params(&self.effective_magneto());
         self.algorithm.set_chamber_params(&self.chamber);
         self.algorithm.set_spring_params(&self.spring);
+        self.algorithm.set_vintage(
+            self.voice == ReverbVoice::Classic
+                && matches!(
+                    self.algorithm_type,
+                    AlgorithmType::Hall | AlgorithmType::Room | AlgorithmType::Shimmer
+                ),
+        );
         self.algorithm.set_nonlinear_params(&self.effective_nonlinear());
         self.algorithm.set_cloud_params(&self.cloud);
         self.algorithm.set_bloom_params(&self.bloom);
@@ -813,7 +921,7 @@ impl Processor for ReverbChain {
         );
         self.input_lp.set(
             FilterType::Lowpass,
-            self.input_lp_freq.min(20000.0),
+            self.effective_input_lp(),
             0.707,
             config.sample_rate,
         );
@@ -877,6 +985,13 @@ impl Processor for ReverbChain {
         self.algorithm.set_magneto_params(&self.effective_magneto());
         self.algorithm.set_chamber_params(&self.chamber);
         self.algorithm.set_spring_params(&self.spring);
+        self.algorithm.set_vintage(
+            self.voice == ReverbVoice::Classic
+                && matches!(
+                    self.algorithm_type,
+                    AlgorithmType::Hall | AlgorithmType::Room | AlgorithmType::Shimmer
+                ),
+        );
         self.algorithm.set_nonlinear_params(&self.effective_nonlinear());
         self.algorithm.set_cloud_params(&self.cloud);
         self.algorithm.set_bloom_params(&self.bloom);
@@ -933,7 +1048,14 @@ impl Processor for ReverbChain {
             }
             let mut loaded = false;
             for ir in [latest_a, latest_b].into_iter().flatten() {
-                loaded |= self.algorithm.try_load_ir_slot(&ir.left, &ir.right, ir.slot);
+                loaded |= match (&ir.cross, ir.slot) {
+                    // True-stereo loads (slot A only) carry LR/RL legs.
+                    (Some((lr, rl)), IrSlot::A) => self
+                        .algorithm
+                        .try_load_ir_true_stereo(&ir.left, lr, rl, &ir.right)
+                        || self.algorithm.try_load_ir_slot(&ir.left, &ir.right, ir.slot),
+                    _ => self.algorithm.try_load_ir_slot(&ir.left, &ir.right, ir.slot),
+                };
             }
             if loaded {
                 self.reset_impulse_after_load();
@@ -950,8 +1072,25 @@ impl Processor for ReverbChain {
         ) {
             self.predelay_samples = 0;
         } else {
-            self.predelay_samples = (self.predelay_ms * 0.001 * self.sample_rate) as usize;
+            // Tempo sync wins over the ms knob when both are set.
+            let ms = match (self.predelay_sync_beats, self.tempo_bpm) {
+                (Some(beats), Some(bpm)) if beats > 0.0 && bpm > 0.0 => {
+                    (beats * 60_000.0 / bpm).min(490.0)
+                }
+                _ => self.predelay_ms,
+            };
+            self.predelay_samples = (ms * 0.001 * self.sample_rate) as usize;
         }
+
+        // Re-apply the input LP here too: the Classic-voice vintage cap
+        // must engage when the voice changes via update_params, not
+        // only on the next full config update.
+        self.input_lp.set(
+            FilterType::Lowpass,
+            self.effective_input_lp(),
+            0.707,
+            self.sample_rate,
+        );
         let duck_thresh = self.duck_threshold.max(1.0e-6);
 
         // Hall Mid EQ + Swell engage flags (chain-level Hall params).
@@ -1031,7 +1170,7 @@ impl Processor for ReverbChain {
                 // Freeze: kill input to the algorithm but keep feedback
                 // running. Infinite keeps feeding input into the
                 // sustained wash instead.
-                let (alg_in_l, alg_in_r) = if self.freeze
+                let (mut alg_in_l, mut alg_in_r) = if self.freeze
                     && self.infinite_mode == InfiniteMode::Freeze
                 {
                     (0.0, 0.0)
@@ -1042,6 +1181,25 @@ impl Processor for ReverbChain {
                 } else {
                     (filt_l, filt_r)
                 };
+
+                // Send pattern: rhythmic gate on the algorithm input.
+                // The modulator's Audio trigger listens to the dry
+                // input; clear-tails points hard-reset the algorithm.
+                if let Some(m) = &mut self.send_mod {
+                    let transport = TransportInfo {
+                        position_qn: self.transport_qn,
+                        tempo_bpm: self.tempo_bpm.unwrap_or(120.0),
+                        playing: true,
+                    };
+                    let g = m.tick(&transport, dry_l + dry_r);
+                    let phase = m.trigger.phase();
+                    if m.patterns.active().clear_crossed(self.send_prev_phase, phase) {
+                        self.algorithm.reset();
+                    }
+                    self.send_prev_phase = phase;
+                    alg_in_l *= g;
+                    alg_in_r *= g;
+                }
 
                 // Algorithm
                 let (mut wet_l, mut wet_r) = self.algorithm.tick(alg_in_l, alg_in_r);
@@ -1088,6 +1246,34 @@ impl Processor for ReverbChain {
                     final_l *= gl;
                     final_r *= gr;
                 }
+
+                // Wet pattern: rhythmic gate on the reverb output.
+                if let Some(m) = &mut self.wet_mod {
+                    let transport = TransportInfo {
+                        position_qn: self.transport_qn,
+                        tempo_bpm: self.tempo_bpm.unwrap_or(120.0),
+                        playing: true,
+                    };
+                    let g = m.tick(&transport, dry_l + dry_r);
+                    let phase = m.trigger.phase();
+                    if m.patterns.active().clear_crossed(self.wet_prev_phase, phase) {
+                        self.algorithm.reset();
+                    }
+                    self.wet_prev_phase = phase;
+                    final_l *= g;
+                    final_r *= g;
+                }
+
+                // Follower lane: dry envelope rides/ducks the wet.
+                if let Some(f) = &mut self.wet_follower {
+                    let g = f.tick((dry_l + dry_r) * 0.5);
+                    final_l *= g;
+                    final_r *= g;
+                }
+
+                // Advance the chain's transport clock.
+                self.transport_qn +=
+                    self.tempo_bpm.unwrap_or(120.0) / 60.0 / self.sample_rate;
 
                 // Wet tremolo (sine, wet path only). Phase advances only
                 // while the ramped depth is non-zero, so depth 0 stays
@@ -1378,6 +1564,7 @@ mod tests {
             source_frames: 1000,
             source_channels: 2,
             slot: IrSlot::A,
+            cross: None,
         })
         .unwrap();
 
@@ -1473,27 +1660,49 @@ mod tests {
                 .collect()
         };
 
-        let mut l1 = sine(0);
+        // Pre-roll several blocks so the tail is fully developed before
+        // the reference slope is measured (the Hall T60 at default
+        // decay is now seconds long — measuring during buildup would
+        // understate the natural slope).
+        let mut off = 0;
+        for _ in 0..40 {
+            let mut lp = sine(off);
+            let mut rp = lp.clone();
+            c.process(&mut lp, &mut rp);
+            off += n;
+        }
+
+        let mut l1 = sine(off);
         let mut r1 = l1.clone();
         c.process(&mut l1, &mut r1);
+        off += n;
         // Natural signal slope, measured after the reverb has built up.
         let before = max_step(&l1[4800..]);
 
         mutate(&mut c);
         c.update_params();
 
-        let mut l2 = sine(n);
+        let mut l2 = sine(off);
         let mut r2 = l2.clone();
         c.process(&mut l2, &mut r2);
         // The 30 ms ramp lives inside the first ~1440 samples + margin.
         let after = max_step(&l2[..2400]);
+        // Post-ramp steady slope at the NEW setting — the level-shift-
+        // immune reference (a tilt swing legitimately scales the wet
+        // level, and with it the natural slope).
+        let settled = max_step(&l2[4800..]);
 
         for &v in l2.iter() {
             assert!(v.is_finite());
         }
+        // ×2.5: a saturation engage legitimately has a ramp window
+        // slightly steeper than its own compressed settled slope; a
+        // hard step still lands well above this.
+        let reference = before.max(settled);
         assert!(
-            after < before * 3.0 + 0.02,
-            "param step should be ramped, not stepped: before={before}, after={after}"
+            after < reference * 2.5 + 0.02,
+            "param step should be ramped, not stepped: \
+             before={before}, after={after}, settled={settled}"
         );
     }
 
