@@ -188,3 +188,75 @@ fn emphasis_eq_targets_the_drive() {
         "the emphasized region must distort much harder: {thd_emphasized:.4} vs {thd_plain:.4}"
     );
 }
+
+#[test]
+fn models_have_distinct_measured_characters() {
+    // Same drive, different models: the harmonic READBACK must show
+    // distinct signatures — Console (class-AB) odd-dominant, Tube
+    // even-rich, Fuzz filthy.
+    let h_of = |model: f64| -> (f64, f64) {
+        let mut s = NativeSaturate::new(SR);
+        s.set_named("model", model);
+        s.set_named("drive", 15.0);
+        let h2 = s.param_value(SATURATE_HARMONIC_BASE + 1).unwrap();
+        let h3 = s.param_value(SATURATE_HARMONIC_BASE + 2).unwrap();
+        (h2, h3)
+    };
+    let (h2_console, h3_console) = h_of(5.0);
+    let (h2_tube, _) = h_of(2.0);
+    let (h2_fuzz, h3_fuzz) = h_of(6.0);
+    assert!(
+        h2_console < h3_console * 0.1,
+        "Console is odd-dominant: h2={h2_console:.4} h3={h3_console:.4}"
+    );
+    assert!(
+        h2_tube > h2_console * 5.0,
+        "Tube is even-rich vs Console: {h2_tube:.4} vs {h2_console:.5}"
+    );
+    assert!(
+        h2_fuzz > 0.01 && h3_fuzz > 0.01,
+        "Fuzz has everything: h2={h2_fuzz:.4} h3={h3_fuzz:.4}"
+    );
+}
+
+#[test]
+fn tube_sag_makes_even_harmonics_program_dependent() {
+    // The bloom: with sag, a LOUD passage generates proportionally
+    // more 2nd harmonic than a quiet one — static bias can't do that.
+    let h2_at = |amp: f64| -> f64 {
+        let mut s = NativeSaturate::new(SR);
+        s.set_named("model", 2.0); // Tube (sag 0.6)
+        s.set_named("drive", 12.0);
+        s.set_named("q_point", 0.0); // no static bias — sag only
+        s.set_named("auto_gain", 0.0);
+        let input = sine(500.0, amp);
+        let (l, _) = process(&mut s, &input, &input);
+        let late = &l[N / 2..];
+        tone(late, 1000.0) / tone(late, 500.0)
+    };
+    let quiet = h2_at(0.05);
+    let loud = h2_at(0.6);
+    assert!(
+        loud > quiet * 3.0,
+        "sag blooms: loud h2/h1={loud:.4} vs quiet {quiet:.5}"
+    );
+}
+
+#[test]
+fn tape_model_voices_the_top_and_bottom() {
+    // Tape: head bump lifts ~60 Hz, HF loss shades 16 kHz+.
+    let g_at = |freq: f64| -> f64 {
+        let mut s = NativeSaturate::new(SR);
+        s.set_named("model", 3.0);
+        s.set_named("drive", 3.0);
+        s.set_named("auto_gain", 0.0);
+        let input = sine(freq, 0.2);
+        let (l, _) = process(&mut s, &input, &input);
+        20.0 * (rms(&l[N / 2..]) / rms(&input[N / 2..])).log10()
+    };
+    let bump = g_at(60.0);
+    let mid = g_at(1000.0);
+    let top = g_at(16_000.0);
+    assert!(bump > mid + 1.0, "head bump lifts the lows: {bump:+.1} vs {mid:+.1}");
+    assert!(top < mid - 1.5, "HF loss shades the top: {top:+.1} vs {mid:+.1}");
+}

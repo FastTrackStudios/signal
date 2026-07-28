@@ -1041,6 +1041,12 @@ const SATURATE_PARAMS: &[ParamSpec] = &[
     ParamSpec { id: 9, name: "output", min: -24.0, max: 24.0, default: 0.0 },
     // 0 off / 1 delta (hear only the added distortion).
     ParamSpec { id: 10, name: "listen", min: 0.0, max: 1.0, default: 0.0 },
+    // Top-level algorithm: 0 Custom, 1 Preamp (class-A), 2 Tube,
+    // 3 Tape, 4 Transformer, 5 Console, 6 Fuzz. Selecting a model
+    // configures shapers/bias/sag/voicing; further tweaks = Custom.
+    ParamSpec { id: 11, name: "model", min: 0.0, max: 6.0, default: 1.0 },
+    // Bias sag (tube bloom): program level pulls the Q point.
+    ParamSpec { id: 12, name: "sag", min: 0.0, max: 1.0, default: 0.0 },
 ];
 
 /// Harmonic readback ids `h1`..`h8` — same contract as the preamp.
@@ -1078,6 +1084,11 @@ pub struct NativeSaturate {
     mix: f64,
     output_gain: f64,
     listen_delta: bool,
+    /// Model voicing filters: tape head bump + HF loss, transformer
+    /// LF-weighted drive tilt (engaged per model, identity otherwise).
+    voice_bump: SatBiquad,
+    voice_hf: SatBiquad,
+    voice_on: (bool, bool),
     // RMS trackers for auto gain (in vs post-shaper).
     in_ms: f64,
     out_ms: f64,
@@ -1140,6 +1151,9 @@ impl NativeSaturate {
             mix: 1.0,
             output_gain: 1.0,
             listen_delta: false,
+            voice_bump: SatBiquad::new(),
+            voice_hf: SatBiquad::new(),
+            voice_on: (false, false),
             in_ms: 0.0,
             out_ms: 0.0,
             agc_gain: 1.0,
@@ -1222,6 +1236,13 @@ impl NativeSaturate {
             8 => self.mix = v.clamp(0.0, 1.0),
             9 => self.output_gain = audiocore_dsp::db::db_to_linear(v.clamp(-24.0, 24.0)),
             10 => self.listen_delta = v >= 0.5,
+            11 => self.apply_model(v as u32),
+            12 => {
+                for p in &mut self.pre {
+                    p.sag = v.clamp(0.0, 1.0) as f32;
+                }
+                self.harmonics_dirty = true;
+            }
             i if (SATURATE_EQ_BASE..SATURATE_EQ_BASE + (EQ_BANDS * EQ_FIELDS) as u32)
                 .contains(&i) =>
             {
@@ -1259,6 +1280,51 @@ impl NativeSaturate {
         if id <= 3 {
             self.harmonics_dirty = true;
         }
+    }
+
+    /// Voice the chain as one of the named algorithms. Shapers, bias,
+    /// sag, tilt, and the model filters all move; every one of them
+    /// remains individually overridable afterwards (= Custom).
+    fn apply_model(&mut self, model: u32) {
+        use saturate_dsp::preamp::SideShaper as S;
+        let sr = self.sample_rate;
+        self.voice_on = (false, false);
+        let (pos, neg, q, sag, tilt) = match model {
+            // Preamp: the class-A story — transformer iron, biased.
+            1 => (S::Transformer, S::Transformer, 0.25, 0.1, 0.0),
+            // Tube: soft triode both sides, strong sag = bloom.
+            2 => (S::Tube, S::Tube, 0.15, 0.6, 0.0),
+            // Tape: tanh-family compression, head bump + HF loss.
+            3 => {
+                self.voice_bump.set(
+                    SatFilterType::Peak { gain_db: 2.5 },
+                    60.0,
+                    0.8,
+                    sr,
+                );
+                self.voice_hf.set(SatFilterType::Lowpass, 14_000.0, 0.707, sr);
+                self.voice_on = (true, true);
+                (S::Transformer, S::Transformer, 0.0, 0.2, 0.0)
+            }
+            // Transformer: iron knee, lows driven into the core first
+            // (negative tilt = drive lows harder, mirrored out).
+            4 => (S::Transformer, S::Transformer, 0.0, 0.0, -6.0),
+            // Console: firm symmetric class-AB op-amp rails.
+            5 => (S::OpAmp, S::OpAmp, 0.0, 0.0, 0.0),
+            // Fuzz: hard + diode asymmetric mayhem.
+            6 => (S::Hard, S::Diode, 0.4, 0.3, 0.0),
+            // Custom: leave everything as-is.
+            _ => return,
+        };
+        for p in &mut self.pre {
+            p.positive = pos;
+            p.negative = neg;
+            p.q_point = q as f32;
+            p.sag = sag as f32;
+        }
+        self.emphasis_db = tilt;
+        self.update_filters();
+        self.harmonics_dirty = true;
     }
 
     pub fn set_named(&mut self, name: &str, value: f64) {
@@ -1315,6 +1381,18 @@ impl PluginInstance for NativeSaturate {
         match id {
             0 | 9 => Some(format!("{value:+.1} dB")),
             6 => Some(format!("{}x", 1usize << (value as u32).min(3))),
+            11 => Some(
+                match value as u32 {
+                    1 => "Preamp",
+                    2 => "Tube",
+                    3 => "Tape",
+                    4 => "Transformer",
+                    5 => "Console",
+                    6 => "Fuzz",
+                    _ => "Custom",
+                }
+                .into(),
+            ),
             _ => None,
         }
     }
@@ -1415,6 +1493,19 @@ impl PluginInstance for NativeSaturate {
                 self.agc_gain += (target - self.agc_gain) * 0.0005;
                 l[i] *= self.agc_gain;
                 r[i] *= self.agc_gain;
+            }
+        }
+        // Model voicing (tape head bump + HF loss).
+        if self.voice_on.0 {
+            for i in 0..n {
+                l[i] = self.voice_bump.tick(l[i], 0);
+                r[i] = self.voice_bump.tick(r[i], 1);
+            }
+        }
+        if self.voice_on.1 {
+            for i in 0..n {
+                l[i] = self.voice_hf.tick(l[i], 0);
+                r[i] = self.voice_hf.tick(r[i], 1);
             }
         }
         // Mirror EQ: the inverse curve restores the tonal balance.

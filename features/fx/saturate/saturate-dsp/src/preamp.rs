@@ -95,6 +95,11 @@ pub struct ClassAPreamp {
     pub positive: SideShaper,
     /// Negative-half transfer.
     pub negative: SideShaper,
+    /// Bias sag (0..1): the operating point droops with program level
+    /// (cathode/supply sag in a real tube stage) — louder passages get
+    /// MORE asymmetry, so even harmonics bloom dynamically instead of
+    /// sitting at a static level.
+    pub sag: f32,
     /// Dry/wet (1 = fully processed).
     pub mix: f32,
     /// Output trim (linear).
@@ -103,6 +108,9 @@ pub struct ClassAPreamp {
     dc_x1: [f32; MAX_CHANNELS],
     dc_y1: [f32; MAX_CHANNELS],
     dc_r: f32,
+    /// Sag envelope (per channel, ~30 ms ballistics).
+    sag_env: [f32; MAX_CHANNELS],
+    sag_coeff: f32,
     sample_rate: f32,
 }
 
@@ -113,11 +121,14 @@ impl ClassAPreamp {
             q_point: 0.0,
             positive: SideShaper::Clean,
             negative: SideShaper::Clean,
+            sag: 0.0,
             mix: 1.0,
             output_gain: 1.0,
             dc_x1: [0.0; MAX_CHANNELS],
             dc_y1: [0.0; MAX_CHANNELS],
             dc_r: 0.0,
+            sag_env: [0.0; MAX_CHANNELS],
+            sag_coeff: 0.0,
             sample_rate: 48_000.0,
         };
         p.set_sample_rate(sample_rate);
@@ -127,6 +138,8 @@ impl ClassAPreamp {
     pub fn set_sample_rate(&mut self, sample_rate: f32) {
         self.sample_rate = sample_rate.max(1.0);
         self.dc_r = 1.0 - core::f32::consts::TAU * DC_BLOCK_HZ / self.sample_rate;
+        // ~30 ms sag ballistics.
+        self.sag_coeff = 1.0 - (-1.0 / (0.030 * self.sample_rate)).exp();
     }
 
     /// The static (stateless) transfer: bias, side-split shaping. The
@@ -151,8 +164,16 @@ impl ClassAPreamp {
     /// Process one sample on channel `ch`.
     #[inline]
     pub fn process(&mut self, ch: usize, input: f32) -> f32 {
+        // Sag: program level pulls the operating point off center.
+        let bias = if self.sag > 0.0 {
+            let e = &mut self.sag_env[ch];
+            *e += (input.abs() * self.drive - *e) * self.sag_coeff;
+            self.q_point + self.sag * (*e).min(2.0) * 0.4
+        } else {
+            self.q_point
+        };
         let shaped = {
-            let v = input * self.drive + self.q_point;
+            let v = input * self.drive + bias;
             if v >= 0.0 {
                 self.positive.shape(v)
             } else {
@@ -172,6 +193,7 @@ impl ClassAPreamp {
     pub fn reset(&mut self) {
         self.dc_x1 = [0.0; MAX_CHANNELS];
         self.dc_y1 = [0.0; MAX_CHANNELS];
+        self.sag_env = [0.0; MAX_CHANNELS];
     }
 }
 
