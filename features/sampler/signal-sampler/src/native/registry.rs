@@ -185,7 +185,9 @@ pub(crate) fn build_native_source(
     sample_rate: u32,
 ) -> Option<Box<dyn Soundsource>> {
     match block.block_type {
-        BlockType::Oscillator => Some(Box::new(NativeOscillator::new(sample_rate))),
+        BlockType::Oscillator => Some(Box::new(
+            NativeOscillator::new(sample_rate).with_block_params(block),
+        )),
         BlockType::Wavetable => Some(Box::new(
             NativeWavetable::new(sample_rate).with_config(wavetable_config(block)),
         )),

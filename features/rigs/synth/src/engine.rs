@@ -168,20 +168,46 @@ fn module_shell(name: &str, set: &ModuleSettings) -> Container {
             }
             Container::module("Source").add(block)
         }
-        // Synthesis: the native oscillator is the generator.
-        Source::Synth => Container::module("Source").block(BlockType::Oscillator, "Soundsource"),
+        // Synthesis: the native oscillator is a true per-voice synth —
+        // each note owns its amp/filter envelopes and lowpass, so the
+        // module's settings ride on the oscillator block itself.
+        Source::Synth => {
+            let cutoff_norm = signal_sampler::native::NativeFilter::norm_from_cutoff(set.cutoff_hz);
+            let block = RigBlock::of_type(BlockType::Oscillator)
+                .named("Soundsource")
+                .with_param("amp_attack", format!("{:.3}", set.amp_env.0.max(0.0)))
+                .with_param("amp_decay", format!("{:.3}", set.amp_env.1.max(0.0)))
+                .with_param("amp_sustain", format!("{:.4}", set.amp_env.2.clamp(0.0, 1.0)))
+                .with_param("amp_release", format!("{:.3}", set.amp_env.3.max(0.0)))
+                .with_param("filter_attack", format!("{:.3}", set.filter_env.0.max(0.0)))
+                .with_param("filter_decay", format!("{:.3}", set.filter_env.1.max(0.0)))
+                .with_param("filter_sustain", format!("{:.4}", set.filter_env.2.clamp(0.0, 1.0)))
+                .with_param("filter_release", format!("{:.3}", set.filter_env.3.max(0.0)))
+                .with_param("cutoff", format!("{cutoff_norm:.4}"))
+                .with_param("resonance", format!("{:.4}", set.resonance.clamp(0.0, 1.0)))
+                .with_param("env_amt", format!("{:.4}", set.filter_env_depth.clamp(-1.0, 1.0)));
+            Container::module("Source").add(block)
+        }
         // Nothing loaded — a placeholder that passes audio (silent lane).
         Source::Empty => Container::module("Source").block(BlockType::Sampler, "Soundsource"),
     };
     // Cutoff and resonance are normalized on the block (the filter's own
-    // scale); Hz is what a player reads.
-    let cutoff_norm = signal_sampler::native::NativeFilter::norm_from_cutoff(set.cutoff_hz);
+    // scale); Hz is what a player reads. A SYNTH module filters per voice
+    // (inside the oscillator), so its chain filter sits wide open; a sampler
+    // module keeps the chain filter as its tone control.
+    let chain_cutoff = if matches!(set.source, Source::Synth) {
+        1.0
+    } else {
+        signal_sampler::native::NativeFilter::norm_from_cutoff(set.cutoff_hz)
+    };
+    let chain_res =
+        if matches!(set.source, Source::Synth) { 0.0 } else { set.resonance.clamp(0.0, 1.0) };
     let filters = Container::module("Filters")
         .add(
             RigBlock::of_type(BlockType::Filter)
                 .named("Filter 1")
-                .with_param("cutoff", format!("{cutoff_norm:.4}"))
-                .with_param("resonance", format!("{:.4}", set.resonance.clamp(0.0, 1.0))),
+                .with_param("cutoff", format!("{chain_cutoff:.4}"))
+                .with_param("resonance", format!("{chain_res:.4}")),
         )
         .block(BlockType::Filter, "Filter 2");
 
@@ -195,10 +221,9 @@ fn module_shell(name: &str, set: &ModuleSettings) -> Container {
         // just a gain stage at unity, because its voices carry their own
         // envelopes.
         .add(Container::module("Amp").add(
-            RigBlock::of_type(BlockType::Amp).named("Amp").with_param(
-                "gain",
-                if matches!(set.source, Source::Sample(_)) { "0.5" } else { "0.0" },
-            ),
+            // Unity for every source: the voice's own amp envelope shapes
+            // the level (the old synth-only closed-Amp + env route is gone).
+            RigBlock::of_type(BlockType::Amp).named("Amp").with_param("gain", "0.5"),
         ))
         .add(fx_rack("FX"))
         // Each module routes to the Part's aux rack independently (rigs
@@ -220,13 +245,13 @@ fn module_shell(name: &str, set: &ModuleSettings) -> Container {
 /// release of one note takes the others with it). A sampler's amplitude
 /// envelope belongs to its voices, and it has one: `amp_attack` /
 /// `amp_release` on the Source block above.
-fn with_module_envelopes(module: Container, set: &ModuleSettings) -> Container {
-    if matches!(set.source, Source::Sample(_)) {
-        return module;
-    }
+fn with_module_envelopes(module: Container, _set: &ModuleSettings) -> Container {
+    // Envelopes are PER-VOICE now, inside each source (the sampler's voices
+    // carry their own amp envelope; the oscillator carries amp + filter
+    // envelopes and a per-voice lowpass). The old paraphonic routes —
+    // a shared Amp Env onto the module Amp's gain, a shared Filter Env onto
+    // the module filter's cutoff — double-enveloped the sum, so they're gone.
     module
-        .route("Amp Env", "Amp.gain", 0.5)
-        .route("Filter Env", "Filter 1.cutoff", set.filter_env_depth.clamp(-1.0, 1.0))
 }
 
 /// Build one **layer**: four modules in parallel (they sum — a layer is a
@@ -371,6 +396,71 @@ pub fn import_omni_patch(path: &std::path::Path) -> Result<ImportedPatch, String
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// End-to-end through the full compiled module chain (per-voice synth →
+    /// open chain filter → unity Amp): notes sound, the pitch wheel bends
+    /// them, and the mod wheel brings in vibrato.
+    #[test]
+    fn synth_module_plays_bends_and_vibratos() {
+        use signal_plugin_host::{PluginEvents, PluginMidiEvent};
+        use signal_sampler::RenderNode;
+
+        let note_on = |note: u8, vel: u8| {
+            use signal_sampler::midicore::{Channel, KeyNumber, MidiEvent, Velocity};
+            PluginMidiEvent {
+                offset: 0,
+                message: MidiEvent::NoteOn {
+                    channel: Channel::new(0),
+                    key: KeyNumber::new(note),
+                    velocity: Velocity::new(vel),
+                },
+            }
+        };
+        let bend_full = || {
+            use signal_sampler::midicore::{Channel, MidiEvent, PitchBend};
+            PluginMidiEvent {
+                offset: 0,
+                message: MidiEvent::PitchBend {
+                    channel: Channel::new(0),
+                    bend: PitchBend::new(16_383),
+                },
+            }
+        };
+
+        let set = ModuleSettings { source: Source::Synth, ..ModuleSettings::default() };
+        let tree = signal_layer_with("S", &[set]);
+        let mut rn = RenderNode::compile(&tree, 48_000);
+        rn.prepare(48_000.0, 512);
+
+        let mut run = |rn: &mut RenderNode, midi: &[PluginMidiEvent], frames: usize| {
+            let (mut l, mut r) = (vec![0.0f32; frames], vec![0.0f32; frames]);
+            let ev = PluginEvents { params: &[], midi, note_expressions: &[] };
+            rn.render(&mut l, &mut r, &ev);
+            l
+        };
+        let freq = |s: &[f32]| {
+            s.windows(2).filter(|w| (w[0] <= 0.0) != (w[1] <= 0.0)).count() as f32 / 2.0
+                / (s.len() as f32 / 48_000.0)
+        };
+
+        // A4 sounds through the whole chain (unity Amp — the old closed
+        // synth Amp + env route would render silence here).
+        let _ = run(&mut rn, &[note_on(69, 100)], 4800);
+        let steady = run(&mut rn, &[], 48_000);
+        let rms = (steady.iter().map(|x| x * x).sum::<f32>() / steady.len() as f32).sqrt();
+        assert!(rms > 1e-3, "synth module sounds, rms={rms}");
+        let f0 = freq(&steady);
+        assert!((f0 - 440.0).abs() < 6.0, "A4 at 440, got {f0}");
+
+        // Pitch wheel: full bend ≈ +2 semitones.
+        let _ = run(&mut rn, &[bend_full()], 2400);
+        let bent = freq(&run(&mut rn, &[], 48_000));
+        let ratio = bent / f0;
+        assert!(
+            (ratio - 2f32.powf(2.0 / 12.0)).abs() < 0.015,
+            "full bend ≈ +2 st through the tree: ratio={ratio}"
+        );
+    }
     use signal_sampler::rig_node::Role;
 
     #[test]

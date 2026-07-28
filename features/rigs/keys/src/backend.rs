@@ -245,8 +245,8 @@ const MACROS: &[MacroDef] = &[
     MacroDef { id: "tone.warmth", name: "Warmth", group: "Tone", default: 0.5, min: 0.0, max: 1.0, unit: "", live: false },
     MacroDef { id: "tone.drive", name: "Drive", group: "Tone", default: 0.0, min: 0.0, max: 1.0, unit: "", live: false },
     MacroDef { id: "tone.body", name: "Body", group: "Tone", default: 0.5, min: 0.0, max: 1.0, unit: "", live: false },
-    MacroDef { id: "vib.rate", name: "Rate", group: "Vibrato", default: 5.0, min: 0.1, max: 12.0, unit: "Hz", live: false },
-    MacroDef { id: "vib.depth", name: "Depth", group: "Vibrato", default: 0.0, min: 0.0, max: 1.0, unit: "", live: false },
+    MacroDef { id: "vib.rate", name: "Rate", group: "Vibrato", default: 5.0, min: 0.1, max: 12.0, unit: "Hz", live: true },
+    MacroDef { id: "vib.depth", name: "Depth", group: "Vibrato", default: 0.0, min: 0.0, max: 1.0, unit: "", live: true },
     MacroDef { id: "vib.delay", name: "Delay", group: "Vibrato", default: 300.0, min: 0.0, max: 3000.0, unit: "ms", live: false },
     MacroDef { id: "amb.bypass", name: "Bypass", group: "Ambience", default: 0.0, min: 0.0, max: 1.0, unit: "", live: false },
     MacroDef { id: "amb.algo", name: "Algorithm", group: "Ambience", default: 1.0, min: 0.0, max: 14.0, unit: "", live: false },
@@ -773,6 +773,7 @@ impl KeysRigBackend {
         id.starts_with("filter.")
             || id.starts_with("env1.")
             || id.starts_with("env2.")
+            || id.starts_with("vib.")
             || id == "source.unison"
             || id == "source.detune"
     }
@@ -780,7 +781,7 @@ impl KeysRigBackend {
     /// One module's DSP values, read from live state (own macros, else the
     /// macro defaults) — everything [`push_module_dsp`](Self::push_module_dsp)
     /// writes into the running engine.
-    fn module_dsp_values(&self, layer: &str, module: usize) -> Option<[f32; 13]> {
+    fn module_dsp_values(&self, layer: &str, module: usize) -> Option<[f32; 15]> {
         let s = self.inner.state.lock().ok()?;
         let lane = s.lanes.get(layer)?;
         if lane.modules.get(module).is_none() {
@@ -801,6 +802,8 @@ impl KeysRigBackend {
             v("env2.release"),
             v("source.unison"),
             v("source.detune"),
+            v("vib.rate"),
+            v("vib.depth"),
         ])
     }
 
@@ -815,7 +818,8 @@ impl KeysRigBackend {
     fn push_module_dsp(&self, layer: &str, module_idx: usize) -> bool {
         use signal_sampler::native::AdsrParams;
         let Some(vals) = self.module_dsp_values(layer, module_idx) else { return false };
-        let [cutoff_hz, reso, env_amt, a1, d1, s1, r1, a2, d2, s2, r2, unison, detune] = vals;
+        let [cutoff_hz, reso, env_amt, a1, d1, s1, r1, a2, d2, s2, r2, unison, detune, vib_rate, vib_depth] =
+            vals;
         let module = format!("{layer} {}", signal_synth::engine::module_slot(module_idx));
         let Ok(rig) = self.inner.rig.lock() else { return false };
         let Some(rig) = rig.as_ref() else { return false };
@@ -851,6 +855,39 @@ impl KeysRigBackend {
                 "cutoff",
                 env_amt.clamp(-1.0, 1.0),
             );
+            // Per-voice synth engine (the oscillator source): full amp +
+            // filter ADSRs, its own lowpass, vibrato. Times map onto the
+            // voice's 8 s segment range, normalized.
+            let seg = |ms: f32| ((ms.max(0.0) / 1000.0) / 8.0).clamp(0.0, 1.0) as f64;
+            applied |= render.set_leaf_param(&module, "Soundsource", "amp_attack", seg(a1));
+            render.set_leaf_param(&module, "Soundsource", "amp_decay", seg(d1));
+            render.set_leaf_param(&module, "Soundsource", "amp_sustain", s1.clamp(0.0, 1.0) as f64);
+            render.set_leaf_param(&module, "Soundsource", "amp_release", seg(r1));
+            render.set_leaf_param(&module, "Soundsource", "filter_attack", seg(a2));
+            render.set_leaf_param(&module, "Soundsource", "filter_decay", seg(d2));
+            render.set_leaf_param(&module, "Soundsource", "filter_sustain", s2.clamp(0.0, 1.0) as f64);
+            render.set_leaf_param(&module, "Soundsource", "filter_release", seg(r2));
+            render.set_leaf_param(&module, "Soundsource", "cutoff", cutoff_norm);
+            render.set_leaf_param(&module, "Soundsource", "resonance", reso.clamp(0.0, 1.0) as f64);
+            render.set_leaf_param(
+                &module,
+                "Soundsource",
+                "env_amt",
+                ((env_amt.clamp(-1.0, 1.0) + 1.0) / 2.0) as f64,
+            );
+            render.set_leaf_param(
+                &module,
+                "Soundsource",
+                "vib_rate",
+                (vib_rate.clamp(0.1, 12.0) / 12.0) as f64,
+            );
+            render.set_leaf_param(
+                &module,
+                "Soundsource",
+                "vib_depth",
+                vib_depth.clamp(0.0, 1.0) as f64,
+            );
+
             // Sampler source: per-voice amp attack/release + unison.
             applied |= render.with_sampler_source(&module, "Soundsource", |sampler| {
                 let engine = sampler.engine_mut();
