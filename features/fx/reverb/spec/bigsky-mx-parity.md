@@ -755,3 +755,27 @@ worker), and the per-engine A/B dial-in passes.
 
 Remaining: Hall/Room/Shimmer Classic voices as real second implementations, and the
 per-engine hardware A/B dial-in passes.
+
+## Status update — 2026-07-28 REEV-R gap-list close-out
+
+- **Pattern lanes migrated to `fts-modulation`** (crates/audiocore): the chain's
+  send/wet MSEG lanes now run the full tiagolr-style pipeline — 12-pattern bank,
+  9 curve types, Sync/Free/MIDI/Audio trigger modes, RC smoothing, anticlick —
+  instead of the ad-hoc MsegLane (deleted). Pattern points gained `clear_tails`
+  (wrap-aware `Pattern::clear_crossed` hard-resets the algorithm as the point is
+  crossed).
+- **Envelope-follower lane** (`fts_modulation::EnvFollower`): attack/hold/release,
+  detector low/high-cut pre-filters, threshold gate, program-dependent
+  auto-release, invert-to-duck; mountable on the wet output via
+  `ReverbChain::set_wet_follower`.
+- **Tempo-synced pre-delay**: `predelay_sync_beats` overrides the ms knob from
+  the chain tempo.
+- **True-stereo (4-leg) IRs**: LL/LR/RL/RR partitioned convolvers; auto-detected
+  from 4-channel files ([LL, LR, RL, RR]) or `_L`/`-L`/` L` + `_R` stereo file
+  pairs; carried through the prepared-relay AND the Impulse-reshape worker so all
+  four legs stay shaped in lockstep; zero cost while disengaged.
+- Band-split wet was judged already covered by the chain's input HP/LP; MIDI/CC
+  OUT remains a plugin-host-layer concern.
+
+Remaining: Hall/Room/Shimmer Classic voices as real second implementations, and
+the per-engine hardware A/B dial-in passes.
