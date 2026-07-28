@@ -22,6 +22,41 @@ use audiocore_dsp::dc_blocker::DcBlocker;
 use audiocore_dsp::delay_line::DelayLine;
 
 /// Dattorro plate reverb — complete published topology.
+/// Steel-plate dispersion: a cascade of identical first-order
+/// allpasses with negative coefficient. Group delay at DC is
+/// (1−a)/(1+a) per stage vs (1+a)/(1−a) at Nyquist — lows lag, highs
+/// arrive first, the plate's signature DOWNWARD chirp on transients
+/// (bending waves travel faster at high frequency in stiff plates).
+struct Dispersion {
+    state: Vec<f64>,
+    coeff: f64,
+}
+
+impl Dispersion {
+    fn new(stages: usize, coeff: f64) -> Self {
+        Self {
+            state: vec![0.0; stages],
+            coeff,
+        }
+    }
+
+    #[inline]
+    fn tick(&mut self, mut x: f64) -> f64 {
+        let a = self.coeff;
+        for st in &mut self.state {
+            // First-order allpass H(z) = (a + z⁻¹)/(1 + a·z⁻¹).
+            let y = a * x + *st;
+            *st = x - a * y;
+            x = y;
+        }
+        x
+    }
+
+    fn reset(&mut self) {
+        self.state.fill(0.0);
+    }
+}
+
 pub struct Plate {
     // Input bandwidth control (1-pole LP)
     bandwidth: Lp1,
@@ -50,6 +85,13 @@ pub struct Plate {
     decay: f64,
     decay_diffusion_1: f64,
     decay_diffusion_2: f64,
+    /// Input dispersion (96 stages, a = −0.55 ≈ 6 ms LF-vs-HF spread).
+    dispersion: Dispersion,
+    /// Decoupled low-frequency decay: one-pole crossover per tank with
+    /// its own feedback multiplier (low_decay_mult from Low End).
+    lf_split_a: Lp1,
+    lf_split_b: Lp1,
+    low_decay_mult: f64,
 
     // Cached scale factor
     s: f64,
@@ -136,6 +178,10 @@ impl Plate {
             decay: 0.7,
             decay_diffusion_1: 0.7,
             decay_diffusion_2: 0.5,
+            dispersion: Dispersion::new(96, -0.55),
+            lf_split_a: Lp1::new(),
+            lf_split_b: Lp1::new(),
+            low_decay_mult: 1.0,
             s,
             sample_rate,
         };
@@ -156,6 +202,9 @@ impl Plate {
 
 impl ReverbAlgorithm for Plate {
     fn reset(&mut self) {
+        self.dispersion.reset();
+        self.lf_split_a.reset();
+        self.lf_split_b.reset();
         self.bandwidth.reset();
         self.dc_a.reset();
         self.dc_b.reset();
@@ -187,6 +236,15 @@ impl ReverbAlgorithm for Plate {
         let freq = 2000.0 + (1.0 - params.damping) * 14000.0;
         self.tank_a_damp.set_freq(freq, self.sample_rate);
         self.tank_b_damp.set_freq(freq, self.sample_rate);
+
+        // Decoupled LF decay (real plates: low decay can run longer or
+        // shorter than the mids — ValhallaPlate's core lesson). The Low
+        // End param scales the sub-crossover feedback independently.
+        self.low_decay_mult = params.low_decay_mult.clamp(0.25, 1.4);
+        self.lf_split_a
+            .set_freq(params.band_crossover_hz.max(80.0), self.sample_rate);
+        self.lf_split_b
+            .set_freq(params.band_crossover_hz.max(80.0), self.sample_rate);
 
         // Input bandwidth (tone control)
         let bw_freq = 4000.0 + (1.0 - params.damping * 0.5) * 12000.0;
@@ -222,7 +280,9 @@ impl ReverbAlgorithm for Plate {
         let input = (left + right) * 0.5;
         let bw = self.bandwidth.tick(input);
 
-        let mut x = bw;
+        // Plate dispersion: downward-chirped transients before the
+        // diffusers (highs reach the pickups first on real steel).
+        let mut x = self.dispersion.tick(bw);
         for d in &mut self.input_diffuser {
             x = d.tick(x);
         }
@@ -239,7 +299,12 @@ impl ReverbAlgorithm for Plate {
 
         // ---- Tank A processing ----
         // decay_diffusion_1 AP (modulated)
-        let a_ap1_out = self.tank_a_ap1.tick(x + fb_a * self.decay);
+        let fb_a = {
+            let low = self.lf_split_a.tick(fb_a);
+            low * (self.decay * self.low_decay_mult).min(0.997)
+                + (fb_a - low) * self.decay
+        };
+        let a_ap1_out = self.tank_a_ap1.tick(x + fb_a);
         // delay_4
         self.tank_a_delay1.write(a_ap1_out);
         let a_d1_out = self.tank_a_delay1.read((4453.0 * s) as usize);
@@ -251,7 +316,12 @@ impl ReverbAlgorithm for Plate {
         self.tank_a_delay2.write(a_ap2_out);
 
         // ---- Tank B processing ----
-        let b_ap1_out = self.tank_b_ap1.tick(x + fb_b * self.decay);
+        let fb_b = {
+            let low = self.lf_split_b.tick(fb_b);
+            low * (self.decay * self.low_decay_mult).min(0.997)
+                + (fb_b - low) * self.decay
+        };
+        let b_ap1_out = self.tank_b_ap1.tick(x + fb_b);
         self.tank_b_delay1.write(b_ap1_out);
         let b_d1_out = self.tank_b_delay1.read((4217.0 * s) as usize);
         let b_damped = self.tank_b_damp.tick(b_d1_out) * self.decay;
