@@ -77,8 +77,16 @@
         pname = "task-webapp";
         appDir = "apps/task/web";
         dxName = "task-app-web";
+        # assets/tailwind.css is generated, not committed. task-app-web's
+        # build.rs regenerates it too, but dx reads assets/ before cargo
+        # runs, so build it up front — from the ONE shared input at
+        # apps/task/tailwind.css (was a per-app copy under web/).
+        #
+        # Run it FROM apps/task: Tailwind v4's automatic content detection
+        # is rooted at the working directory, so cwd changes the emitted
+        # sheet. Every caller uses apps/task/ — see apps/task/tailwind_build.rs.
         preBuild = ''
-          tailwindcss -i apps/task/web/tailwind.css -o apps/task/web/assets/tailwind.css
+          (cd apps/task && tailwindcss -i tailwind.css -o web/assets/tailwind.css)
         '';
       };
 

@@ -89,7 +89,11 @@ else
         cd $ROOT
         $STAGE_WEB
         cd '$ROOT/$DX_APP_DIR'
-        ${DX_TAILWIND:+tailwindcss -i '$DX_TAILWIND' -o assets/tailwind.css}
+        # DX_TAILWIND is relative to DX_APP_DIR. Build it from the input's
+        # own directory: Tailwind v4's automatic content detection is rooted
+        # at the working directory, so the wrong cwd silently drops rules.
+        # Matches apps/task/tailwind_build.rs.
+        ${DX_TAILWIND:+(cd \"\$(dirname '$DX_TAILWIND')\" && tailwindcss -i \"\$(basename '$DX_TAILWIND')\" -o '$ROOT/$DX_APP_DIR/assets/tailwind.css')}
         dx build --platform macos --release $FEATURES
     " > /tmp/fts-macos-build.log 2>&1 || true
     tail -3 /tmp/fts-macos-build.log

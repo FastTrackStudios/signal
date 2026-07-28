@@ -118,10 +118,15 @@ APP_GLOB="$ROOT/target/dx/$DX_PACKAGE/release/ios/"*.app
 if [ "${SKIP_BUILD:-}" = "1" ] && [ -d $APP_GLOB ]; then
     echo "SKIP_BUILD=1 — reusing existing app"
 else
+    # DX_TAILWIND is relative to DX_APP_DIR. Tailwind v4's automatic content
+    # detection is rooted at the WORKING DIRECTORY, so the sheet must be
+    # built from the input's own directory or it silently loses rules —
+    # hence the `cd $(dirname …)`. Keep in step with
+    # apps/task/tailwind_build.rs, which pins the same cwd.
     "$NIX" develop "$ROOT" -c bash -c \
         "$XCODE_ENV; export PATH=$BIN_IOS:\$PATH; \
          cd '$ROOT/$DX_APP_DIR'; \
-         ${DX_TAILWIND:+tailwindcss -i '$DX_TAILWIND' -o assets/tailwind.css;} \
+         ${DX_TAILWIND:+(cd \"\$(dirname '$DX_TAILWIND')\" \&\& tailwindcss -i \"\$(basename '$DX_TAILWIND')\" -o '$ROOT/$DX_APP_DIR/assets/tailwind.css');} \
          dx build --platform ios --device --release $DX_FEATURES" \
         > /tmp/fts-build.log 2>&1 || true
     tail -2 /tmp/fts-build.log
