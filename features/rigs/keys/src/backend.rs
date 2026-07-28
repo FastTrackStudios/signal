@@ -69,6 +69,10 @@ struct State {
     perform_mode: u32,
 }
 
+/// What the program builders read: the live profile, the patch-name →
+/// spec-path index, and the lane snapshot.
+type ProfileInputs = (KeysProfile, BTreeMap<String, PathBuf>, BTreeMap<String, LaneState>);
+
 /// Live per-layer mixer state (the profile holds the authored defaults).
 #[derive(Clone, Debug)]
 struct LaneState {
@@ -905,7 +909,7 @@ impl KeysRigBackend {
 
     /// The live profile + patch-spec index + lane snapshot behind both
     /// program builders (single tree and lane program).
-    fn profile_inputs(&self) -> Option<(KeysProfile, BTreeMap<String, PathBuf>, BTreeMap<String, LaneState>)> {
+    fn profile_inputs(&self) -> Option<ProfileInputs> {
         let s = self.inner.state.lock().ok()?;
         if s.profile.engines.is_empty() {
             return None;
