@@ -404,6 +404,7 @@ impl NativeEq {
             d.params.q = q;
             d.params.base_gain_db = gain;
             d.params.range_db = range * self.gain_scale;
+            d.params.placement = eq::band::Placement::from_index(self.placements[band]);
             d.detector.params.threshold_db = if auto { 0.0 } else { thr };
             d.detector.params.auto = auto;
             d.detector.params.relative = relative;

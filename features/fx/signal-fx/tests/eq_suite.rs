@@ -237,3 +237,132 @@ fn idle_eq_is_a_bit_exact_copy() {
         "after disabling every feature the EQ must return to the copy path"
     );
 }
+
+#[test]
+fn side_of_transients_high_shelf_combo() {
+    // THE combo: transient mode + a high-shelf band assigned to the
+    // TRANSIENT stream with SIDE placement, boosting +9 dB.
+    // Signal: mono steady tone (pure mid) + wide high-frequency clicks
+    // (pure side: L = +click, R = −click). Only the clicks' side
+    // content may grow; the mono tone must stay bit-identical in mid.
+    let mut eq = NativeEq::new(SR);
+    eq.set_named("transient_mode", 1.0);
+    eq.set_named("b1_used", 1.0);
+    eq.set_named("b1_on", 1.0);
+    eq.set_named("b1_shape", 2.0); // HighShelf (canonical)
+    eq.set_named("b1_freq", 3000.0);
+    eq.set_named("b1_q", 0.707);
+    eq.set_named("b1_gain", 9.0);
+    eq.set_named("b1_stream", 1.0); // transient stream only
+    eq.set_named("b1_placement", 4.0); // Side
+
+    let n = 96_000;
+    let mut in_l = vec![0.0f32; n];
+    let mut in_r = vec![0.0f32; n];
+    for i in 0..n {
+        let tone = 0.2 * (core::f64::consts::TAU * 220.0 * i as f64 / SR).sin();
+        // 8 kHz click bursts, opposite polarity L/R → pure side.
+        let click = if i % 12000 < 96 {
+            0.4 * (core::f64::consts::TAU * 8000.0 * i as f64 / SR).sin()
+        } else {
+            0.0
+        };
+        in_l[i] = (tone + click) as f32;
+        in_r[i] = (tone - click) as f32;
+    }
+
+    eq.prepare(SR, 512).unwrap();
+    let mut out_l = vec![0.0f32; n];
+    let mut out_r = vec![0.0f32; n];
+    for (i, chunk) in in_l.chunks(512).enumerate() {
+        let start = i * 512;
+        eq.process_block(
+            chunk,
+            &in_r[start..start + chunk.len()],
+            &mut out_l[start..start + chunk.len()],
+            &mut out_r[start..start + chunk.len()],
+            &no_events(),
+        )
+        .unwrap();
+    }
+
+    // Side energy during clicks must rise ≈ +9 dB.
+    let side = |l: &[f32], r: &[f32], i: usize| 0.5 * (f64::from(l[i]) - f64::from(r[i]));
+    let mid = |l: &[f32], r: &[f32], i: usize| 0.5 * (f64::from(l[i]) + f64::from(r[i]));
+    let click_idx: Vec<usize> = (24_000..n).filter(|i| i % 12000 < 96).collect();
+    let tone_idx: Vec<usize> = (24_000..n).filter(|i| i % 12000 > 6000).collect();
+    let e = |f: &dyn Fn(usize) -> f64, idx: &[usize]| -> f64 {
+        (idx.iter().map(|&i| f(i).powi(2)).sum::<f64>() / idx.len() as f64).sqrt()
+    };
+    let side_in = e(&|i| side(&in_l, &in_r, i), &click_idx);
+    let side_out = e(&|i| side(&out_l, &out_r, i), &click_idx);
+    let side_gain = 20.0 * (side_out / side_in).log10();
+    assert!(
+        side_gain > 6.0,
+        "side content of high transients should be boosted: {side_gain:+.1} dB"
+    );
+
+    // Mono tone (mid, steady) untouched.
+    let mid_in = e(&|i| mid(&in_l, &in_r, i), &tone_idx);
+    let mid_out = e(&|i| mid(&out_l, &out_r, i), &tone_idx);
+    let mid_gain = 20.0 * (mid_out / mid_in).log10();
+    assert!(
+        mid_gain.abs() < 0.5,
+        "mono steady tone must pass untouched: {mid_gain:+.2} dB"
+    );
+}
+
+#[test]
+fn mid_placement_dynamic_band_ducks_center_only() {
+    // Dynamic band on MID placement: loud mono content ducks, side
+    // content sails through — "duck just the center".
+    let mut eq = NativeEq::new(SR);
+    eq.set_named("b1_used", 1.0);
+    eq.set_named("b1_on", 1.0);
+    eq.set_named("b1_freq", 1000.0);
+    eq.set_named("b1_q", 1.0);
+    eq.set_named("b1_dyn_range", -12.0);
+    eq.set_named("b1_dyn_auto", 0.0);
+    eq.set_named("b1_dyn_thr", -20.0);
+    eq.set_named("b1_dyn_atk", 20.0);
+    eq.set_named("b1_placement", 3.0); // Mid
+
+    let n = 96_000;
+    let mut in_l = vec![0.0f32; n];
+    let mut in_r = vec![0.0f32; n];
+    for i in 0..n {
+        // Loud mono 1 kHz + quiet wide 1.5 kHz (opposite polarity).
+        let mono = 0.5 * (core::f64::consts::TAU * 1000.0 * i as f64 / SR).sin();
+        let wide = 0.05 * (core::f64::consts::TAU * 1500.0 * i as f64 / SR).sin();
+        in_l[i] = (mono + wide) as f32;
+        in_r[i] = (mono - wide) as f32;
+    }
+    eq.prepare(SR, 512).unwrap();
+    let mut out_l = vec![0.0f32; n];
+    let mut out_r = vec![0.0f32; n];
+    for (i, chunk) in in_l.chunks(512).enumerate() {
+        let start = i * 512;
+        eq.process_block(
+            chunk,
+            &in_r[start..start + chunk.len()],
+            &mut out_l[start..start + chunk.len()],
+            &mut out_r[start..start + chunk.len()],
+            &no_events(),
+        )
+        .unwrap();
+    }
+    let mid_e = |l: &[f32], r: &[f32]| -> f64 {
+        (24_000..n)
+            .map(|i| (0.5 * (f64::from(l[i]) + f64::from(r[i]))).powi(2))
+            .sum::<f64>()
+    };
+    let side_e = |l: &[f32], r: &[f32]| -> f64 {
+        (24_000..n)
+            .map(|i| (0.5 * (f64::from(l[i]) - f64::from(r[i]))).powi(2))
+            .sum::<f64>()
+    };
+    let mid_g = 10.0 * (mid_e(&out_l, &out_r) / mid_e(&in_l, &in_r)).log10();
+    let side_g = 10.0 * (side_e(&out_l, &out_r) / side_e(&in_l, &in_r)).log10();
+    assert!(mid_g < -6.0, "loud center should duck: {mid_g:+.1} dB");
+    assert!(side_g.abs() < 1.0, "side content untouched: {side_g:+.2} dB");
+}

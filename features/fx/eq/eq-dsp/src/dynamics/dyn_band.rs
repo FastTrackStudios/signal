@@ -7,6 +7,7 @@
 
 use super::detector::Detector;
 use super::svf::{Svf, SvfShape};
+use crate::band::Placement;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DynShape {
@@ -39,6 +40,10 @@ pub struct DynBandParams {
     pub side_mode: SideMode,
     pub side_lo_hz: f64,
     pub side_hi_hz: f64,
+    /// Which part of the stereo image the band (and its detector)
+    /// works on — Mid lets you duck just the center, Side just the
+    /// width, etc.
+    pub placement: Placement,
     pub enabled: bool,
 }
 
@@ -53,6 +58,7 @@ impl Default for DynBandParams {
             side_mode: SideMode::BandLinked,
             side_lo_hz: 20.0,
             side_hi_hz: 20000.0,
+            placement: Placement::Stereo,
             enabled: true,
         }
     }
@@ -143,11 +149,22 @@ impl DynBand {
         if !self.params.enabled {
             return;
         }
+        // The stereo component this band works on — the detector
+        // listens to the SAME component (a Side band triggers on side
+        // energy, a Mid band on center energy), except in Wide/external
+        // configurations where the caller-provided signal wins.
+        let component = match self.params.placement {
+            Placement::Stereo => side,
+            Placement::Left => *left,
+            Placement::Right => *right,
+            Placement::Mid => 0.5 * (*left + *right),
+            Placement::Side => 0.5 * (*left - *right),
+        };
         // Side path: band-limit, detect.
         let filtered_side = match self.params.side_mode {
             SideMode::Wide => side,
             _ => {
-                let hp = self.side_hp.tick(0, side);
+                let hp = self.side_hp.tick(0, component);
                 self.side_lp.tick(0, hp)
             }
         };
@@ -158,8 +175,28 @@ impl DynBand {
         self.applied_gain_db += (target - self.applied_gain_db) * self.gain_smooth_coeff;
         self.filter.set_gain_db(self.applied_gain_db);
 
-        *left = self.filter.tick(0, *left);
-        *right = self.filter.tick(1, *right);
+        match self.params.placement {
+            Placement::Stereo => {
+                *left = self.filter.tick(0, *left);
+                *right = self.filter.tick(1, *right);
+            }
+            Placement::Left => *left = self.filter.tick(0, *left),
+            Placement::Right => *right = self.filter.tick(1, *right),
+            Placement::Mid => {
+                let m = 0.5 * (*left + *right);
+                let s = 0.5 * (*left - *right);
+                let m = self.filter.tick(0, m);
+                *left = m + s;
+                *right = m - s;
+            }
+            Placement::Side => {
+                let m = 0.5 * (*left + *right);
+                let s = 0.5 * (*left - *right);
+                let s = self.filter.tick(0, s);
+                *left = m + s;
+                *right = m - s;
+            }
+        }
     }
 
     pub fn reset(&mut self) {
