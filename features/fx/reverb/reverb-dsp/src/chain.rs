@@ -15,7 +15,7 @@ use crate::algorithms;
 use crate::ir::engine::{ProcessedIr, ReshapeJob};
 use crate::ir::prepared::PreparedIrPair;
 use audiocore_dsp::envelope::EnvelopeFollower;
-use audiocore_dsp::mseg::MsegLane;
+use fts_modulation::{Modulator, TransportInfo};
 use audiocore_dsp::smoothing::ParamSmoother;
 
 use crate::primitives::saturation::Saturator;
@@ -239,13 +239,18 @@ pub struct ReverbChain {
     /// algorithms). `None` = drop inline.
     ir_trash_tx: Option<Sender<crate::ir::IrTrash>>,
 
-    /// MSEG pattern lanes (gain-domain rhythmic modulation): `send`
-    /// gates the signal INTO the algorithm, `wet` gates the reverb
-    /// output. A pattern point flagged `clear_tails` hard-resets the
-    /// algorithm as it is crossed. Tempo for synced lanes comes from
-    /// `tempo_bpm`.
-    send_lane: Option<MsegLane>,
-    wet_lane: Option<MsegLane>,
+    /// MSEG pattern modulators (fts-modulation, the tiagolr-style
+    /// pipeline: 12-pattern bank + Sync/Free/MIDI/Audio triggers +
+    /// smoothing + anticlick): `send` gates the signal INTO the
+    /// algorithm, `wet` gates the reverb output. A pattern point
+    /// flagged `clear_tails` hard-resets the algorithm as it is
+    /// crossed. Tempo for synced lanes comes from `tempo_bpm`; the
+    /// chain advances its own transport position.
+    send_mod: Option<Box<Modulator>>,
+    wet_mod: Option<Box<Modulator>>,
+    send_prev_phase: f64,
+    wet_prev_phase: f64,
+    transport_qn: f64,
     pub tempo_bpm: Option<f64>,
 
     /// Voice value last applied to the variant pairing (Plate/Spring),
@@ -381,8 +386,11 @@ impl ReverbChain {
             prepared_ir_rx: None,
             reshape_tx: None,
             ir_trash_tx: None,
-            send_lane: None,
-            wet_lane: None,
+            send_mod: None,
+            wet_mod: None,
+            send_prev_phase: 0.0,
+            wet_prev_phase: 0.0,
+            transport_qn: 0.0,
             tempo_bpm: None,
             applied_voice: ReverbVoice::default(),
             mid_eq: Biquad::new(),
@@ -412,21 +420,32 @@ impl ReverbChain {
         self.prepared_ir_rx = Some(rx);
     }
 
-    /// Install (or clear) the send-pattern lane: rhythmically gates
-    /// the signal feeding the algorithm (pumping/gated-input reverb).
-    pub fn set_send_pattern(&mut self, lane: Option<MsegLane>) {
-        self.send_lane = lane;
-        if let Some(l) = &mut self.send_lane {
-            l.configure(self.sample_rate);
+    /// Install (or clear) the send-pattern modulator: rhythmically
+    /// gates the signal feeding the algorithm (pumping/gated-input
+    /// reverb).
+    pub fn set_send_modulator(&mut self, m: Option<Box<Modulator>>) {
+        self.send_mod = m;
+        if let Some(m) = &mut self.send_mod {
+            m.update(self.sample_rate);
         }
     }
 
-    /// Install (or clear) the wet-pattern lane: rhythmically gates the
-    /// reverb output.
-    pub fn set_wet_pattern(&mut self, lane: Option<MsegLane>) {
-        self.wet_lane = lane;
-        if let Some(l) = &mut self.wet_lane {
-            l.configure(self.sample_rate);
+    /// Install (or clear) the wet-pattern modulator: rhythmically
+    /// gates the reverb output.
+    pub fn set_wet_modulator(&mut self, m: Option<Box<Modulator>>) {
+        self.wet_mod = m;
+        if let Some(m) = &mut self.wet_mod {
+            m.update(self.sample_rate);
+        }
+    }
+
+    /// MIDI trigger both lanes (Midi trigger mode restarts the cycle).
+    pub fn midi_trigger_patterns(&mut self) {
+        if let Some(m) = &mut self.send_mod {
+            m.midi_trigger();
+        }
+        if let Some(m) = &mut self.wet_mod {
+            m.midi_trigger();
         }
     }
 
@@ -1124,13 +1143,22 @@ impl Processor for ReverbChain {
                 };
 
                 // Send pattern: rhythmic gate on the algorithm input.
-                if let Some(lane) = &mut self.send_lane {
-                    let (g, clear) = lane.tick(self.sample_rate, self.tempo_bpm);
-                    alg_in_l *= g;
-                    alg_in_r *= g;
-                    if clear {
+                // The modulator's Audio trigger listens to the dry
+                // input; clear-tails points hard-reset the algorithm.
+                if let Some(m) = &mut self.send_mod {
+                    let transport = TransportInfo {
+                        position_qn: self.transport_qn,
+                        tempo_bpm: self.tempo_bpm.unwrap_or(120.0),
+                        playing: true,
+                    };
+                    let g = m.tick(&transport, dry_l + dry_r);
+                    let phase = m.trigger.phase();
+                    if m.patterns.active().clear_crossed(self.send_prev_phase, phase) {
                         self.algorithm.reset();
                     }
+                    self.send_prev_phase = phase;
+                    alg_in_l *= g;
+                    alg_in_r *= g;
                 }
 
                 // Algorithm
@@ -1180,14 +1208,25 @@ impl Processor for ReverbChain {
                 }
 
                 // Wet pattern: rhythmic gate on the reverb output.
-                if let Some(lane) = &mut self.wet_lane {
-                    let (g, clear) = lane.tick(self.sample_rate, self.tempo_bpm);
-                    final_l *= g;
-                    final_r *= g;
-                    if clear {
+                if let Some(m) = &mut self.wet_mod {
+                    let transport = TransportInfo {
+                        position_qn: self.transport_qn,
+                        tempo_bpm: self.tempo_bpm.unwrap_or(120.0),
+                        playing: true,
+                    };
+                    let g = m.tick(&transport, dry_l + dry_r);
+                    let phase = m.trigger.phase();
+                    if m.patterns.active().clear_crossed(self.wet_prev_phase, phase) {
                         self.algorithm.reset();
                     }
+                    self.wet_prev_phase = phase;
+                    final_l *= g;
+                    final_r *= g;
                 }
+
+                // Advance the chain's transport clock.
+                self.transport_qn +=
+                    self.tempo_bpm.unwrap_or(120.0) / 60.0 / self.sample_rate;
 
                 // Wet tremolo (sine, wet path only). Phase advances only
                 // while the ramped depth is non-zero, so depth 0 stays
