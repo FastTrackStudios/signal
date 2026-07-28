@@ -781,10 +781,7 @@ impl Processor for DelayChain {
 
             // Stereo width (mid-side)
             if (width - 1.0).abs() > 0.001 {
-                let mid = (wet_l + wet_r) * 0.5;
-                let side = (wet_l - wet_r) * 0.5;
-                wet_l = mid + side * width;
-                wet_r = mid - side * width;
+                (wet_l, wet_r) = audiocore_dsp::stereo::width(wet_l, wet_r, width);
             }
 
             // --- Per-line pan (equal power). Defaults (-1, +1) are the

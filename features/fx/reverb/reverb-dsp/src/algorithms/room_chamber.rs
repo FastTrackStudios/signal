@@ -7,7 +7,8 @@
 //!   - Bright, present character
 //!   - Fast density saturation (small volume fills quickly)
 
-use crate::algorithm::{AlgorithmParams, ReverbAlgorithm};
+use crate::algorithm::{AlgorithmParams, ChamberColor, ChamberParams, ReverbAlgorithm};
+use audiocore_dsp::biquad::{Biquad, FilterType};
 use crate::primitives::allpass_diffuser::AllpassDiffuser;
 use crate::primitives::fdn::{Fdn, MixMatrix};
 use crate::primitives::modulated_allpass::ModulatedAllpass;
@@ -33,6 +34,10 @@ pub struct RoomChamber {
     tone_lp_l: Lp1,
     tone_lp_r: Lp1,
 
+    /// Color: fixed post-tonality profile on the wet output (2-ch).
+    color: ChamberColor,
+    color_eq: Biquad,
+
     sample_rate: f64,
     size: f64,
     late_level: f64,
@@ -54,6 +59,8 @@ impl RoomChamber {
             er_l: MultitapDelay::new(max_er),
             er_r: MultitapDelay::new(max_er),
             er_level: 0.6, // Prominent ER in small space
+            color: ChamberColor::Neutral,
+            color_eq: Biquad::new(),
             diffuser_l: AllpassDiffuser::with_defaults(sample_rate, 0.2),
             diffuser_r: AllpassDiffuser::with_defaults(sample_rate, 0.2),
             fdn_l: Self::make_fdn(sample_rate, 0.25, false),
@@ -276,6 +283,28 @@ impl ReverbAlgorithm for RoomChamber {
         *self = Self::new(sample_rate);
     }
 
+    fn set_chamber_params(&mut self, params: &ChamberParams) -> bool {
+        self.color = params.color;
+        let sr = self.sample_rate;
+        match params.color {
+            ChamberColor::Neutral => {}
+            ChamberColor::Clear => {
+                self.color_eq
+                    .set(FilterType::LowShelf { gain_db: -6.0 }, 250.0, 0.707, sr)
+            }
+            ChamberColor::Smooth => {
+                self.color_eq
+                    .set(FilterType::Peak { gain_db: -5.0 }, 900.0, 0.8, sr)
+            }
+            ChamberColor::Crisp => self.color_eq.set(FilterType::Highpass, 350.0, 0.707, sr),
+            ChamberColor::Deep => {
+                self.color_eq
+                    .set(FilterType::Peak { gain_db: 5.0 }, 800.0, 1.0, sr)
+            }
+        }
+        true
+    }
+
     fn set_params(&mut self, params: &AlgorithmParams) {
         // Size — chamber is small: closet to small room
         let new_size = 0.05 + params.size * 0.5; // 0.05x to 0.55x
@@ -354,6 +383,12 @@ impl ReverbAlgorithm for RoomChamber {
         late_l = self.tone_lp_l.tick(late_l) * self.late_level;
         late_r = self.tone_lp_r.tick(late_r) * self.late_level;
 
-        (er_l + late_l, er_r + late_r)
+        let mut out_l = er_l + late_l;
+        let mut out_r = er_r + late_r;
+        if self.color != ChamberColor::Neutral {
+            out_l = self.color_eq.tick(out_l, 0);
+            out_r = self.color_eq.tick(out_r, 1);
+        }
+        (out_l, out_r)
     }
 }

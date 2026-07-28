@@ -10,7 +10,7 @@
 //! samples early so the first repeat still lands at the delay time
 //! (exact at unity speed, ± half a grain while heads drift).
 
-use audiocore_dsp::biquad::{Biquad, FilterType};
+use crate::tilt::DecayTilt;
 use audiocore_dsp::dc_blocker::DcBlocker;
 use audiocore_dsp::delay_line::DelayLine;
 use audiocore_dsp::smoothing::ParamSmoother;
@@ -99,12 +99,16 @@ pub struct PitchDelay {
     pub slice: Option<IceSlice>,
     /// Dry↔ice balance on the delay line, pre-feedback (1.0 = all ice).
     pub blend: f64,
+    /// Delay-line modulation LFO rate in Hz.
+    pub mod_rate_hz: f64,
+    /// Delay-line modulation depth (0.0–1.0; full scale ≈ ±3 ms).
+    pub mod_depth: f64,
     /// Crossfade grain size in milliseconds (when `slice` is `None`).
     pub grain_ms: f64,
     /// Decay EQ tilt (-1.0 = darken repeats, 0 = neutral, +1.0 = brighten).
     pub decay_tilt: f64,
 
-    decay_eq: Biquad,
+    decay_tilt_eq: DecayTilt,
     delay: DelayLine,
     shifter: GranularShifter,
     /// Shifter grain size actually in effect (samples).
@@ -113,6 +117,7 @@ pub struct PitchDelay {
     feedback_sample: f64,
     sample_rate: f64,
     smoother: ParamSmoother,
+    lfo_phase: f64,
 }
 
 impl PitchDelay {
@@ -129,9 +134,11 @@ impl PitchDelay {
             interval: IceInterval::Free,
             slice: None,
             blend: 1.0,
+            mod_rate_hz: 0.6,
+            mod_depth: 0.0,
             grain_ms: 30.0,
             decay_tilt: 0.0,
-            decay_eq: Biquad::new(),
+            decay_tilt_eq: DecayTilt::new(),
             delay: DelayLine::new(buf_len),
             shifter,
             grain_samples: 30.0 * 48.0,
@@ -139,6 +146,7 @@ impl PitchDelay {
             feedback_sample: 0.0,
             sample_rate: 48000.0,
             smoother: ParamSmoother::new(0.0),
+            lfo_phase: 0.0,
         }
     }
 
@@ -172,24 +180,11 @@ impl PitchDelay {
         }
 
         // Decay EQ: tilt filter in feedback path
-        if self.decay_tilt.abs() > 0.01 {
-            if self.decay_tilt < 0.0 {
-                let freq = 20000.0 * (1.0 + self.decay_tilt).max(0.05);
-                self.decay_eq
-                    .set(FilterType::Lowpass, freq, 0.707, sample_rate);
-            } else {
-                let freq = 20.0 + self.decay_tilt * 2000.0;
-                self.decay_eq
-                    .set(FilterType::Highpass, freq, 0.707, sample_rate);
-            }
-        }
+        self.decay_tilt_eq.configure(self.decay_tilt, sample_rate);
 
-        self.smoother.set_time(0.15, sample_rate);
         self.dc_blocker.set_cutoff(10.0, sample_rate);
-        let target = self.time_ms * 0.001 * sample_rate;
-        if self.smoother.value() == 0.0 {
-            self.smoother.set_immediate(target);
-        }
+        self.smoother
+            .set_time_seeded(0.15, sample_rate, self.time_ms * 0.001 * sample_rate);
     }
 
     // r[impl delay.pitch.tick]
@@ -198,7 +193,17 @@ impl PitchDelay {
         // Smooth delay time
         let target_delay = self.time_ms * 0.001 * self.sample_rate;
         self.smoother.set_target(target_delay);
-        let smooth_delay = self.smoother.tick();
+        let mut smooth_delay = self.smoother.tick();
+        if self.mod_depth > 0.0 {
+            self.lfo_phase += self.mod_rate_hz / self.sample_rate;
+            if self.lfo_phase >= 1.0 {
+                self.lfo_phase -= 1.0;
+            }
+            smooth_delay += (self.lfo_phase * core::f64::consts::TAU).sin()
+                * self.mod_depth
+                * 0.003
+                * self.sample_rate;
+        }
 
         let max_read = self.delay.len() as f64 - 4.0;
 
@@ -222,9 +227,7 @@ impl PitchDelay {
 
         // Feedback with self-limiting
         let mut fb = output * self.feedback;
-        if self.decay_tilt.abs() > 0.01 {
-            fb = self.decay_eq.tick(fb, 0);
-        }
+        fb = self.decay_tilt_eq.tick(fb, 0);
         let limited_fb = if fb.abs() > 0.001 {
             fb * (3.0 - fb.abs() * 2.0).max(0.0) / 3.0
         } else {
@@ -246,11 +249,12 @@ impl PitchDelay {
 
     pub fn reset(&mut self) {
         self.delay.clear();
-        self.decay_eq.reset();
+        self.decay_tilt_eq.reset();
         self.shifter.reset();
         self.dc_blocker.reset();
         self.feedback_sample = 0.0;
         self.smoother.reset(0.0);
+        self.lfo_phase = 0.0;
     }
 }
 

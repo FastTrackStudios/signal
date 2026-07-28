@@ -10,6 +10,7 @@
 //! in the stereo field per its `pan` (the chain routes Drum through one
 //! stereo engine); the mono [`DrumDelay::tick`] ignores pan.
 
+use crate::tilt::DecayTilt;
 use audiocore_dsp::biquad::{Biquad, FilterType};
 use audiocore_dsp::delay_line::DelayLine;
 use audiocore_dsp::prng::XorShift32;
@@ -94,6 +95,12 @@ pub struct DrumDelay {
     /// Low-frequency shaping of the echoes: 0 = full low end,
     /// 1 = heavily thinned (progressive high-pass up to ~500 Hz).
     pub lo_cut: f64,
+    /// Head-alignment high-end fidelity (TimeLine FILTER knob): lowpass
+    /// on everything recorded to the drum, 0 = disabled. Repeats darken
+    /// progressively as they recirculate, like a worn/misaligned head.
+    pub hicut_freq: f64,
+    /// Soft-clip drive in the record path (TimeLine GRIT), 0.0–1.0.
+    pub grit: f64,
     /// Drum-motor wobble depth (0.0–1.0).
     pub wobble: f64,
     /// Decay EQ tilt (shared engine param; applied in the feedback path).
@@ -101,7 +108,8 @@ pub struct DrumDelay {
 
     delay: DelayLine,
     lo_cut_filter: Biquad,
-    decay_eq: Biquad,
+    hicut_filter: Biquad,
+    decay_tilt_eq: DecayTilt,
     feedback_sample: f64,
     sample_rate: f64,
     smoother: ParamSmoother,
@@ -138,11 +146,14 @@ impl DrumDelay {
             feedback: 0.4,
             heads,
             lo_cut: 0.2,
+            hicut_freq: 0.0,
+            grit: 0.0,
             wobble: 0.15,
             decay_tilt: 0.0,
             delay: DelayLine::new(48000 * 3),
             lo_cut_filter: Biquad::new(),
-            decay_eq: Biquad::new(),
+            hicut_filter: Biquad::new(),
+            decay_tilt_eq: DecayTilt::new(),
             feedback_sample: 0.0,
             sample_rate: 48000.0,
             smoother: ParamSmoother::new(0.0),
@@ -175,24 +186,14 @@ impl DrumDelay {
             self.lo_cut_filter
                 .set(FilterType::Highpass, freq, 0.707, sample_rate);
         }
-
-        if self.decay_tilt.abs() > 0.01 {
-            if self.decay_tilt < 0.0 {
-                let freq = 20000.0 * (1.0 + self.decay_tilt).max(0.05);
-                self.decay_eq
-                    .set(FilterType::Lowpass, freq, 0.707, sample_rate);
-            } else {
-                let freq = 20.0 + self.decay_tilt * 2000.0;
-                self.decay_eq
-                    .set(FilterType::Highpass, freq, 0.707, sample_rate);
-            }
+        if self.hicut_freq > 0.0 {
+            self.hicut_filter
+                .set(FilterType::Lowpass, self.hicut_freq, 0.707, sample_rate);
         }
 
-        self.smoother.set_time(0.15, sample_rate);
-        let target = self.time_ms * 0.001 * sample_rate;
-        if self.smoother.value() == 0.0 {
-            self.smoother.set_immediate(target);
-        }
+        self.decay_tilt_eq.configure(self.decay_tilt, sample_rate);
+
+        self.smoother.set_time_seeded(0.15, sample_rate, self.time_ms * 0.001 * sample_rate);
     }
 
     /// Advance the time smoother + motor wobble; returns the smoothed
@@ -214,19 +215,29 @@ impl DrumDelay {
         smooth_delay * (1.0 + self.wobble_current * self.wobble * 0.003)
     }
 
-    /// Filter + clamp the feedback sum and write the delay line.
+    /// Filter + clamp the feedback sum and write the delay line. The
+    /// record path saturates (GRIT) then band-limits (FILTER = head
+    /// alignment) everything hitting the drum, so both the first echo
+    /// and every regeneration carry the character, compounding per pass.
     #[inline]
     fn recirculate(&mut self, input: f64, fb_sum: f64, ch: usize) {
         let mut fb = fb_sum * self.feedback;
         if self.lo_cut > 0.01 {
             fb = self.lo_cut_filter.tick(fb, ch);
         }
-        if self.decay_tilt.abs() > 0.01 {
-            fb = self.decay_eq.tick(fb, ch);
-        }
+        fb = self.decay_tilt_eq.tick(fb, ch);
         fb = fb.clamp(-1.5, 1.5);
 
-        self.delay.write(input + fb);
+        let mut record = input + fb;
+        if self.grit > 0.001 {
+            let drive = 1.0 + self.grit * 5.0;
+            record = (record * drive).tanh() / drive.tanh();
+        }
+        if self.hicut_freq > 0.0 {
+            record = self.hicut_filter.tick(record, ch);
+        }
+
+        self.delay.write(record);
         self.feedback_sample = fb;
     }
 
@@ -294,7 +305,8 @@ impl DrumDelay {
     pub fn reset(&mut self) {
         self.delay.clear();
         self.lo_cut_filter.reset();
-        self.decay_eq.reset();
+        self.hicut_filter.reset();
+        self.decay_tilt_eq.reset();
         self.feedback_sample = 0.0;
         self.smoother.reset(0.0);
         self.wobble_phase = 0.0;
@@ -361,5 +373,69 @@ mod tests {
             let out = d.tick(input, 0);
             assert!(out.is_finite(), "NaN at {i}");
         }
+    }
+
+    #[test]
+    fn filter_darkens_repeats() {
+        let hf = |hicut: f64| -> f64 {
+            let mut d = DrumDelay::new();
+            d.time_ms = 300.0;
+            d.feedback = 0.5;
+            d.wobble = 0.0;
+            d.lo_cut = 0.0;
+            d.hicut_freq = hicut;
+            d.update(SR);
+            let mut seed = 0xABCD_1234u32;
+            let out: Vec<f64> = (0..96000)
+                .map(|i| {
+                    seed = seed.wrapping_mul(747796405).wrapping_add(2891336453);
+                    let noise = (seed >> 9) as f64 / (1u32 << 23) as f64 - 1.0;
+                    let input = if i < 4800 { noise * 0.5 } else { 0.0 };
+                    d.tick(input, 0)
+                })
+                .skip(20000)
+                .collect();
+            out.windows(2).map(|w| (w[1] - w[0]) * (w[1] - w[0])).sum()
+        };
+        let open = hf(0.0);
+        let filtered = hf(2000.0);
+        assert!(
+            filtered < open * 0.5,
+            "FILTER should darken drum repeats: {filtered} vs {open}"
+        );
+    }
+
+    #[test]
+    fn grit_colors_the_repeats() {
+        let run = |grit: f64| -> Vec<f64> {
+            let mut d = DrumDelay::new();
+            d.time_ms = 300.0;
+            d.feedback = 0.4;
+            d.wobble = 0.0;
+            d.grit = grit;
+            d.update(SR);
+            (0..48000)
+                .map(|i| {
+                    let input = if i < 9600 {
+                        (core::f64::consts::TAU * 220.0 * i as f64 / SR).sin() * 0.8
+                    } else {
+                        0.0
+                    };
+                    d.tick(input, 0)
+                })
+                .collect()
+        };
+        let clean = run(0.0);
+        let dirty = run(1.0);
+        let ref_energy: f64 = clean.iter().map(|x| x * x).sum();
+        let diff: f64 = clean
+            .iter()
+            .zip(&dirty)
+            .map(|(a, b)| (a - b) * (a - b))
+            .sum();
+        assert!(
+            diff > ref_energy * 0.001,
+            "grit should color the record path: {diff} vs {ref_energy}"
+        );
     }
 }

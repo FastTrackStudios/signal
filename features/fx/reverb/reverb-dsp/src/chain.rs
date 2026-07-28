@@ -6,7 +6,7 @@ use audiocore_dsp::delay_line::DelayLine;
 use audiocore_dsp::{AudioConfig, Processor};
 use crossbeam_channel::{Receiver, Sender, TryRecvError};
 
-use crate::algorithm::{
+use crate::algorithm::{ChamberParams, SpringParams, 
     AlgorithmParams, AlgorithmType, BloomParams, ChoraleParams, CloudParams,
     ConvolutionModParams, HallParams, ImpulseParams, IrSlot, MagnetoParams, NonLinearParams,
     ReverbAlgorithm, ReverbVoice, ShimmerParams, SwellType,
@@ -19,6 +19,58 @@ use audiocore_dsp::smoothing::ParamSmoother;
 
 use crate::primitives::saturation::Saturator;
 use crate::primitives::tilt_eq::TiltEq;
+
+/// BigSky MX INFINITE footswitch behavior (per-preset `Inf Mode`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum InfiniteMode {
+    /// Capture and sustain the current reverb; new playing stays dry.
+    #[default]
+    Freeze,
+    /// Sustain indefinitely while new input keeps entering the wash.
+    Infinite,
+    /// Footswitch disabled.
+    Off,
+}
+
+/// The chain's copyable parameter surface — everything BigSky MX
+/// "copy settings" carries between dual slots (NOT the algorithm
+/// selection or internal state). One list, used by both
+/// [`ReverbChain::param_surface`] and [`ReverbChain::apply_surface`],
+/// so a new chain param only needs adding here to travel.
+#[derive(Debug, Clone, Copy)]
+pub struct ChainParamSurface {
+    pub params: AlgorithmParams,
+    pub conv_mod: ConvolutionModParams,
+    pub shimmer: ShimmerParams,
+    pub cloud: CloudParams,
+    pub bloom: BloomParams,
+    pub chorale: ChoraleParams,
+    pub chamber: ChamberParams,
+    pub spring: SpringParams,
+    pub voice: ReverbVoice,
+    pub hall: HallParams,
+    pub magneto: MagnetoParams,
+    pub nonlinear: NonLinearParams,
+    pub predelay_ms: f64,
+    pub mix: f64,
+    pub width: f64,
+    pub pan: f64,
+    pub trem_rate_hz: f64,
+    pub trem_depth: f64,
+    pub input_hp_freq: f64,
+    pub input_lp_freq: f64,
+    pub output_hp_freq: f64,
+    pub output_lp_freq: f64,
+    pub output_tilt_db: f64,
+    pub output_tilt_pivot: f64,
+    pub saturation: f64,
+    pub duck_amount: f64,
+    pub duck_threshold: f64,
+    pub duck_attack_ms: f64,
+    pub duck_release_ms: f64,
+    pub freeze: bool,
+    pub infinite_mode: InfiniteMode,
+}
 
 /// Full reverb processing chain.
 ///
@@ -97,6 +149,10 @@ pub struct ReverbChain {
     pub shimmer: ShimmerParams,
     /// BigSky MX Magneto params (ping pong). Only consumed by Magneto.
     pub magneto: MagnetoParams,
+    /// Chamber Color (applies to the Chamber engine).
+    pub chamber: ChamberParams,
+    /// Spring Dwell + Number of Springs (applies to the Spring engines).
+    pub spring: SpringParams,
     /// BigSky MX NonLinear params (chop / gate speed / late stage).
     /// Only consumed by NonLinear; defaults are transparent.
     pub nonlinear: NonLinearParams,
@@ -157,6 +213,11 @@ pub struct ReverbChain {
     pub duck_release_ms: f64,
     /// Freeze / infinite hold (kills new input, forces max feedback).
     pub freeze: bool,
+    /// What engaging `freeze` does (BigSky MX INFINITE modes): `Freeze`
+    /// captures the current tail and mutes new input into the reverb;
+    /// `Infinite` pins the decay while input keeps feeding the wash;
+    /// `Off` disables the footswitch entirely.
+    pub infinite_mode: InfiniteMode,
 
     /// Receiver for processed IRs from a background loader. Drained at
     /// the top of each `process()` call; the most recent IR wins.
@@ -173,6 +234,9 @@ pub struct ReverbChain {
     /// When attached, dirty impulse shaping params are re-baked off
     /// the audio thread and hot-swapped back via `prepared_ir_rx`.
     reshape_tx: Option<Sender<ReshapeJob>>,
+    /// Disposal channel for audio-thread IR swaps (re-applied to fresh
+    /// algorithms). `None` = drop inline.
+    ir_trash_tx: Option<Sender<crate::ir::IrTrash>>,
 
     /// Voice value last applied to the variant pairing (Plate/Spring),
     /// so an explicit `set_variant` isn't clobbered on every
@@ -276,6 +340,8 @@ impl ReverbChain {
             impulse: ImpulseParams::default(),
             shimmer: ShimmerParams::default(),
             magneto: MagnetoParams::default(),
+            chamber: ChamberParams::default(),
+            spring: SpringParams::default(),
             nonlinear: NonLinearParams::default(),
             cloud: CloudParams::default(),
             bloom: BloomParams::default(),
@@ -300,9 +366,11 @@ impl ReverbChain {
             duck_attack_ms: 5.0,
             duck_release_ms: 120.0,
             freeze: false,
+            infinite_mode: InfiniteMode::Freeze,
             ir_swap_rx: None,
             prepared_ir_rx: None,
             reshape_tx: None,
+            ir_trash_tx: None,
             applied_voice: ReverbVoice::default(),
             mid_eq: Biquad::new(),
             swell_env: {
@@ -329,6 +397,14 @@ impl ReverbChain {
     /// glitch-free runtime IR changes.
     pub fn set_prepared_ir_receiver(&mut self, rx: Receiver<PreparedIrPair>) {
         self.prepared_ir_rx = Some(rx);
+    }
+
+    /// Attach a disposal channel for buffers displaced by audio-thread
+    /// IR swaps. Stored on the chain and re-applied whenever the
+    /// algorithm is recreated.
+    pub fn set_ir_trash_sender(&mut self, tx: Sender<crate::ir::IrTrash>) {
+        self.algorithm.set_ir_trash_sender(tx.clone());
+        self.ir_trash_tx = Some(tx);
     }
 
     /// Attach an [`crate::ir::ImpulseReshaper`]'s submission handle.
@@ -415,6 +491,9 @@ impl ReverbChain {
             self.algorithm_type = algo;
             self.variant = variant;
             self.algorithm = algorithms::create(algo, variant, self.sample_rate);
+            if let Some(tx) = &self.ir_trash_tx {
+                self.algorithm.set_ir_trash_sender(tx.clone());
+            }
             // Fresh algorithm state — land on the target params directly
             // instead of ramping from wherever the old algorithm was.
             let p = self.effective_params();
@@ -424,8 +503,10 @@ impl ReverbChain {
             // Fresh algorithm — convolution mod options land instantly.
             self.algorithm.set_conv_mod_params(&self.conv_mod, true);
             self.algorithm.set_shimmer_params(&self.shimmer);
-            self.algorithm.set_magneto_params(&self.magneto);
-            self.algorithm.set_nonlinear_params(&self.nonlinear);
+            self.algorithm.set_magneto_params(&self.effective_magneto());
+        self.algorithm.set_chamber_params(&self.chamber);
+        self.algorithm.set_spring_params(&self.spring);
+            self.algorithm.set_nonlinear_params(&self.effective_nonlinear());
         }
     }
 
@@ -444,11 +525,111 @@ impl ReverbChain {
         self.variant
     }
 
-    /// Compute params that get sent to the algorithm. Freeze forces decay=1.0
-    /// and bumps damping toward neutral so the tail sustains.
+    /// Snapshot the copyable parameter surface (see
+    /// [`ChainParamSurface`]).
+    pub fn param_surface(&self) -> ChainParamSurface {
+        ChainParamSurface {
+            params: self.params,
+            conv_mod: self.conv_mod,
+            shimmer: self.shimmer,
+            cloud: self.cloud,
+            bloom: self.bloom,
+            chorale: self.chorale,
+            chamber: self.chamber,
+            spring: self.spring,
+            voice: self.voice,
+            hall: self.hall,
+            magneto: self.magneto,
+            nonlinear: self.nonlinear,
+            predelay_ms: self.predelay_ms,
+            mix: self.mix,
+            width: self.width,
+            pan: self.pan,
+            trem_rate_hz: self.trem_rate_hz,
+            trem_depth: self.trem_depth,
+            input_hp_freq: self.input_hp_freq,
+            input_lp_freq: self.input_lp_freq,
+            output_hp_freq: self.output_hp_freq,
+            output_lp_freq: self.output_lp_freq,
+            output_tilt_db: self.output_tilt_db,
+            output_tilt_pivot: self.output_tilt_pivot,
+            saturation: self.saturation,
+            duck_amount: self.duck_amount,
+            duck_threshold: self.duck_threshold,
+            duck_attack_ms: self.duck_attack_ms,
+            duck_release_ms: self.duck_release_ms,
+            freeze: self.freeze,
+            infinite_mode: self.infinite_mode,
+        }
+    }
+
+    /// Apply a copied parameter surface. Call `update_params()`
+    /// afterwards so filters and smoothers pick the values up.
+    pub fn apply_surface(&mut self, s: &ChainParamSurface) {
+        self.params = s.params;
+        self.conv_mod = s.conv_mod;
+        self.shimmer = s.shimmer;
+        self.cloud = s.cloud;
+        self.bloom = s.bloom;
+        self.chorale = s.chorale;
+        self.chamber = s.chamber;
+        self.spring = s.spring;
+        self.voice = s.voice;
+        self.hall = s.hall;
+        self.magneto = s.magneto;
+        self.nonlinear = s.nonlinear;
+        self.predelay_ms = s.predelay_ms;
+        self.mix = s.mix;
+        self.width = s.width;
+        self.pan = s.pan;
+        self.trem_rate_hz = s.trem_rate_hz;
+        self.trem_depth = s.trem_depth;
+        self.input_hp_freq = s.input_hp_freq;
+        self.input_lp_freq = s.input_lp_freq;
+        self.output_hp_freq = s.output_hp_freq;
+        self.output_lp_freq = s.output_lp_freq;
+        self.output_tilt_db = s.output_tilt_db;
+        self.output_tilt_pivot = s.output_tilt_pivot;
+        self.saturation = s.saturation;
+        self.duck_amount = s.duck_amount;
+        self.duck_threshold = s.duck_threshold;
+        self.duck_attack_ms = s.duck_attack_ms;
+        self.duck_release_ms = s.duck_release_ms;
+        self.freeze = s.freeze;
+        self.infinite_mode = s.infinite_mode;
+    }
+
+    /// Magneto's knob remap: PRE-DELAY drives the engine's feedback.
+    /// Compute the params to push, folding the remap in whenever the
+    /// Magneto engine is active.
+    fn effective_magneto(&self) -> MagnetoParams {
+        let mut m = self.magneto;
+        if self.algorithm_type == AlgorithmType::Magneto {
+            m.feedback = (self.predelay_ms / 200.0).clamp(0.0, 1.0);
+        }
+        m
+    }
+
+    /// NonLinear shares the PRE-DELAY→feedback knob remap.
+    fn effective_nonlinear(&self) -> NonLinearParams {
+        let mut n = self.nonlinear;
+        if self.algorithm_type == AlgorithmType::NonLinear {
+            n.feedback = (self.predelay_ms / 200.0).clamp(0.0, 1.0);
+        }
+        n
+    }
+
+    /// True while the INFINITE footswitch state should sustain the tail
+    /// (`freeze` engaged and the mode isn't `Off`).
+    fn infinite_engaged(&self) -> bool {
+        self.freeze && self.infinite_mode != InfiniteMode::Off
+    }
+
+    /// Compute params that get sent to the algorithm. An engaged
+    /// Freeze/Infinite forces decay=1.0 so the tail sustains.
     fn effective_params(&self) -> AlgorithmParams {
         let mut p = self.params;
-        if self.freeze {
+        if self.infinite_engaged() {
             p.decay = 1.0;
         }
         // Classic voice re-tune for the engines without a second
@@ -573,8 +754,10 @@ impl ReverbChain {
         self.pump_reshapes();
         // Per-engine MX params — each is a no-op outside its algorithm.
         self.algorithm.set_shimmer_params(&self.shimmer);
-        self.algorithm.set_magneto_params(&self.magneto);
-        self.algorithm.set_nonlinear_params(&self.nonlinear);
+        self.algorithm.set_magneto_params(&self.effective_magneto());
+        self.algorithm.set_chamber_params(&self.chamber);
+        self.algorithm.set_spring_params(&self.spring);
+        self.algorithm.set_nonlinear_params(&self.effective_nonlinear());
         self.algorithm.set_cloud_params(&self.cloud);
         self.algorithm.set_bloom_params(&self.bloom);
         self.algorithm.set_chorale_params(&self.chorale);
@@ -613,7 +796,14 @@ impl Processor for ReverbChain {
 
         let max_predelay = (config.sample_rate * 0.5) as usize;
         self.predelay = DelayLine::new(max_predelay + 1);
-        self.predelay_samples = (self.predelay_ms * 0.001 * config.sample_rate) as usize;
+        self.predelay_samples = if matches!(
+            self.algorithm_type,
+            AlgorithmType::Magneto | AlgorithmType::NonLinear
+        ) {
+            0
+        } else {
+            (self.predelay_ms * 0.001 * config.sample_rate) as usize
+        };
 
         self.input_hp.set(
             FilterType::Highpass,
@@ -684,8 +874,10 @@ impl Processor for ReverbChain {
         self.algorithm.set_impulse_params(&self.impulse, true);
         self.pump_reshapes();
         self.algorithm.set_shimmer_params(&self.shimmer);
-        self.algorithm.set_magneto_params(&self.magneto);
-        self.algorithm.set_nonlinear_params(&self.nonlinear);
+        self.algorithm.set_magneto_params(&self.effective_magneto());
+        self.algorithm.set_chamber_params(&self.chamber);
+        self.algorithm.set_spring_params(&self.spring);
+        self.algorithm.set_nonlinear_params(&self.effective_nonlinear());
         self.algorithm.set_cloud_params(&self.cloud);
         self.algorithm.set_bloom_params(&self.bloom);
         self.algorithm.set_chorale_params(&self.chorale);
@@ -748,7 +940,18 @@ impl Processor for ReverbChain {
             }
         }
 
-        self.predelay_samples = (self.predelay_ms * 0.001 * self.sample_rate) as usize;
+        // Magneto knob remap (manual): PRE-DELAY becomes the engine's
+        // feedback (see `effective_magneto`) and the chain's own
+        // pre-delay line disengages (DECAY -> last-head time happens
+        // inside the engine).
+        if matches!(
+            self.algorithm_type,
+            AlgorithmType::Magneto | AlgorithmType::NonLinear
+        ) {
+            self.predelay_samples = 0;
+        } else {
+            self.predelay_samples = (self.predelay_ms * 0.001 * self.sample_rate) as usize;
+        }
         let duck_thresh = self.duck_threshold.max(1.0e-6);
 
         // Hall Mid EQ + Swell engage flags (chain-level Hall params).
@@ -825,8 +1028,12 @@ impl Processor for ReverbChain {
                 let filt_l = self.input_lp.tick(self.input_hp.tick(dry_l, 0), 0);
                 let filt_r = self.input_lp.tick(self.input_hp.tick(dry_r, 1), 1);
 
-                // Freeze: kill input to algorithm but keep feedback running
-                let (alg_in_l, alg_in_r) = if self.freeze {
+                // Freeze: kill input to the algorithm but keep feedback
+                // running. Infinite keeps feeding input into the
+                // sustained wash instead.
+                let (alg_in_l, alg_in_r) = if self.freeze
+                    && self.infinite_mode == InfiniteMode::Freeze
+                {
                     (0.0, 0.0)
                 } else if self.predelay_samples > 0 {
                     self.predelay.write(filt_l);
@@ -867,9 +1074,7 @@ impl Processor for ReverbChain {
 
                 // Width (mid-side)
                 let (mut final_l, mut final_r) = if (width - 1.0).abs() > 0.001 {
-                    let mid = (wet_l + wet_r) * 0.5;
-                    let side = (wet_l - wet_r) * 0.5;
-                    (mid + side * width, mid - side * width)
+                    audiocore_dsp::stereo::width(wet_l, wet_r, width)
                 } else {
                     (wet_l, wet_r)
                 };
@@ -879,9 +1084,9 @@ impl Processor for ReverbChain {
                 // leaving decay audible on the far side).
                 let pan = self.pan_smoother.tick();
                 if pan.abs() > 1e-6 {
-                    let theta = (pan.clamp(-1.0, 1.0) + 1.0) * std::f64::consts::FRAC_PI_4;
-                    final_l *= std::f64::consts::SQRT_2 * theta.cos();
-                    final_r *= std::f64::consts::SQRT_2 * theta.sin();
+                    let (gl, gr) = audiocore_dsp::stereo::pan_equal_power(pan);
+                    final_l *= gl;
+                    final_r *= gr;
                 }
 
                 // Wet tremolo (sine, wet path only). Phase advances only
@@ -1539,6 +1744,91 @@ mod tests {
         assert!(
             bright_hf > dark_hf,
             "Bright tilt should keep more HF energy than dark: bright={bright_hf}, dark={dark_hf}"
+        );
+    }
+
+    #[test]
+    fn infinite_mode_keeps_feeding_input() {
+        let sr = 48000.0;
+        let cfg = audiocore_dsp::AudioConfig {
+            sample_rate: sr,
+            max_buffer_size: 256,
+        };
+        let run = |mode: InfiniteMode| -> f64 {
+            let mut c = ReverbChain::new();
+            c.mix = 1.0;
+            c.params.decay = 0.4;
+            c.update(cfg);
+            // Excite, engage the footswitch, then keep playing.
+            let mut buf_l = [0.0f64; 256];
+            let mut buf_r = [0.0f64; 256];
+            let mut feed = |c: &mut ReverbChain, level: f64, blocks: usize| -> f64 {
+                let mut energy = 0.0;
+                for b in 0..blocks {
+                    for i in 0..256 {
+                        let t = (b * 256 + i) as f64;
+                        let x = (core::f64::consts::TAU * 220.0 * t / sr).sin() * level;
+                        buf_l[i] = x;
+                        buf_r[i] = x;
+                    }
+                    c.process(&mut buf_l, &mut buf_r);
+                    energy += buf_l.iter().map(|x| x * x).sum::<f64>();
+                }
+                energy
+            };
+            feed(&mut c, 0.5, 40);
+            c.freeze = true;
+            c.infinite_mode = mode;
+            c.update(cfg);
+            // While held: play MUCH louder. Freeze must ignore it;
+            // Infinite must fold it into the wash.
+            feed(&mut c, 0.9, 40)
+        };
+        let frozen = run(InfiniteMode::Freeze);
+        let infinite = run(InfiniteMode::Infinite);
+        assert!(
+            infinite > frozen * 1.3,
+            "Infinite should keep absorbing input: {infinite} vs frozen {frozen}"
+        );
+    }
+
+    #[test]
+    fn infinite_mode_off_disables_the_switch() {
+        let sr = 48000.0;
+        let cfg = audiocore_dsp::AudioConfig {
+            sample_rate: sr,
+            max_buffer_size: 256,
+        };
+        let mut c = ReverbChain::new();
+        c.mix = 1.0;
+        c.params.decay = 0.3;
+        c.infinite_mode = InfiniteMode::Off;
+        c.freeze = true; // footswitch held, but mode Off = no-op
+        c.update(cfg);
+        let mut buf_l = [0.0f64; 256];
+        let mut buf_r = [0.0f64; 256];
+        // One burst block, then silence: the tail must DECAY.
+        for i in 0..256 {
+            buf_l[i] = if i < 64 { 0.8 } else { 0.0 };
+            buf_r[i] = buf_l[i];
+        }
+        c.process(&mut buf_l, &mut buf_r);
+        let mut early = 0.0;
+        let mut late = 0.0;
+        for b in 0..80 {
+            buf_l.fill(0.0);
+            buf_r.fill(0.0);
+            c.process(&mut buf_l, &mut buf_r);
+            let e: f64 = buf_l.iter().map(|x| x * x).sum();
+            if b < 10 {
+                early += e;
+            } else if b >= 70 {
+                late += e;
+            }
+        }
+        assert!(
+            late < early * 0.5,
+            "mode Off must not sustain: early {early} late {late}"
         );
     }
 }

@@ -4,13 +4,18 @@
 //! machine where the echoes are progressively diffused, blurring
 //! the boundary between delay and reverb.
 
-use crate::algorithm::{AlgorithmParams, MagnetoParams, ReverbAlgorithm};
+use crate::algorithm::{AlgorithmParams, MagnetoParams, MagnetoSpacing, ReverbAlgorithm};
 use crate::primitives::allpass_diffuser::AllpassDiffuser;
 use crate::primitives::one_pole::Lp1;
 use audiocore_dsp::delay_line::DelayLine;
 
-/// Number of virtual tape heads.
-const NUM_HEADS: usize = 4;
+/// Maximum virtual tape heads (menu: 1 / 2 / 3 / 4 / 6).
+const NUM_HEADS: usize = 6;
+/// Uneven spacing: irregular head positions as fractions of the
+/// last-head delay ("more complex, less overtly rhythmic").
+const UNEVEN_POS: [f64; 6] = [0.14, 0.27, 0.43, 0.58, 0.81, 1.0];
+/// Per-head output gains (progressively quieter).
+const HEAD_GAINS: [f64; 6] = [0.8, 0.6, 0.45, 0.35, 0.28, 0.22];
 
 pub struct Magneto {
     // Main tape delay line (shared by all heads)
@@ -21,8 +26,13 @@ pub struct Magneto {
     head_gains: [f64; NUM_HEADS],
     // Progressive diffusion per head (more diffusion on later heads)
     head_diffusers: [AllpassDiffuser; NUM_HEADS],
-    // Feedback path
+    // Feedback path (driven by the PRE-DELAY knob remap).
     feedback: f64,
+    /// Active head count (1/2/3/4/6).
+    active_heads: usize,
+    spacing: MagnetoSpacing,
+    /// Last-head delay in seconds (DECAY knob remap, up to 1.5 s).
+    last_delay_s: f64,
     fb_damp_l: Lp1,
     fb_damp_r: Lp1,
     fb_state_l: f64,
@@ -51,10 +61,13 @@ impl Magneto {
         let mut magneto = Self {
             tape_l: DelayLine::new(max_delay + 1),
             tape_r: DelayLine::new(max_delay + 1),
-            head_delays: [base_delay, base_delay * 2, base_delay * 3, base_delay * 4],
-            head_gains: [0.8, 0.6, 0.4, 0.25],
+            head_delays: std::array::from_fn(|i| base_delay * (i + 1)),
+            head_gains: HEAD_GAINS,
             head_diffusers,
             feedback: 0.4,
+            active_heads: 4,
+            spacing: MagnetoSpacing::Even,
+            last_delay_s: 0.6,
             fb_damp_l: Lp1::new(),
             fb_damp_r: Lp1::new(),
             fb_state_l: 0.0,
@@ -68,6 +81,26 @@ impl Magneto {
         magneto.fb_damp_r.set_freq(4000.0, sample_rate);
 
         magneto
+    }
+
+    /// Lay the active heads along the tape per the spacing mode; the
+    /// last active head always lands at `last_delay_s`.
+    fn reposition_heads(&mut self) {
+        let n = self.active_heads.clamp(1, NUM_HEADS);
+        let last = (self.last_delay_s * self.sample_rate)
+            .min((self.tape_l.len() - 1) as f64)
+            .max(1.0);
+        for i in 0..NUM_HEADS {
+            let frac = match self.spacing {
+                MagnetoSpacing::Even => (i + 1) as f64 / n as f64,
+                MagnetoSpacing::Uneven => {
+                    // Take the last n entries of the irregular grid so
+                    // the final head stays at the full delay time.
+                    UNEVEN_POS[NUM_HEADS - n + i.min(n - 1)]
+                }
+            };
+            self.head_delays[i] = ((last * frac.min(1.0)) as usize).max(1);
+        }
     }
 
     /// Soft tape saturation.
@@ -100,16 +133,11 @@ impl ReverbAlgorithm for Magneto {
     }
 
     fn set_params(&mut self, params: &AlgorithmParams) {
-        // Size -> head spacing
-        let base = (0.05 + params.size * 0.35) * self.sample_rate;
-        for i in 0..NUM_HEADS {
-            self.head_delays[i] = ((base * (i + 1) as f64) as usize)
-                .min(self.tape_l.len() - 1)
-                .max(1);
-        }
-
-        // Decay -> feedback
-        self.feedback = 0.2 + params.decay * 0.6;
+        // Knob remap (manual): DECAY -> delay time of the LAST head, up
+        // to 1500 ms. Feedback comes from MagnetoParams (the PRE-DELAY
+        // remap), not from decay.
+        self.last_delay_s = 0.1 + params.decay * 1.4;
+        self.reposition_heads();
 
         // Diffusion -> how much each head is diffused
         for (i, diff) in self.head_diffusers.iter_mut().enumerate() {
@@ -138,6 +166,10 @@ impl ReverbAlgorithm for Magneto {
 
     fn set_magneto_params(&mut self, params: &MagnetoParams) -> bool {
         self.ping_pong = params.ping_pong;
+        self.active_heads = params.heads.count();
+        self.spacing = params.spacing;
+        self.feedback = params.feedback.clamp(0.0, 1.0) * 0.85;
+        self.reposition_heads();
         true
     }
 
@@ -149,10 +181,13 @@ impl ReverbAlgorithm for Magneto {
         self.tape_l.write(in_l);
         self.tape_r.write(in_r);
 
-        // Read from each head with progressive diffusion
+        // Read from each active head with progressive diffusion
         let mut out_l = 0.0;
         let mut out_r = 0.0;
-        for i in 0..NUM_HEADS {
+        let mut fb_l = 0.0;
+        let mut fb_r = 0.0;
+        let n = self.active_heads.clamp(1, NUM_HEADS);
+        for i in 0..n {
             let raw_l = self.tape_l.read(self.head_delays[i]);
             let raw_r = self.tape_r.read(self.head_delays[i]);
 
@@ -175,11 +210,19 @@ impl ReverbAlgorithm for Magneto {
                 out_l += diff_l * self.head_gains[i];
                 out_r += diff_r * self.head_gains[i];
             }
+
+            // Feedback tap: last head with Even spacing, last TWO
+            // heads with Uneven (the manual's spacing side-effect).
+            let takes_fb = i + 1 == n
+                || (self.spacing == MagnetoSpacing::Uneven && n >= 2 && i + 2 == n);
+            if takes_fb {
+                fb_l += diff_l;
+                fb_r += diff_r;
+            }
         }
 
-        // Feedback from last head
-        self.fb_state_l = self.fb_damp_l.tick(out_l);
-        self.fb_state_r = self.fb_damp_r.tick(out_r);
+        self.fb_state_l = self.fb_damp_l.tick(fb_l);
+        self.fb_state_r = self.fb_damp_r.tick(fb_r);
 
         (out_l * 0.5, out_r * 0.5)
     }

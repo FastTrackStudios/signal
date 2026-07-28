@@ -367,10 +367,186 @@ pub struct ShimmerParams {
 }
 
 /// BigSky MX Magneto engine params (beyond the shared set).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct MagnetoParams {
     /// Taps alternate hard L/R (center clarity + width).
     pub ping_pong: bool,
+    /// Number of tape heads: 1 / 2 / 3 / 4 / 6 (menu order).
+    pub heads: MagnetoHeads,
+    /// Even = equidistant heads (equal delay times, overtly rhythmic);
+    /// Uneven = irregular spacing + feedback from the last TWO heads.
+    pub spacing: MagnetoSpacing,
+    /// Feedback into the tape input (0.0–1.0). This is the engine's
+    /// PRE-DELAY knob remap — the chain routes `predelay_ms` here and
+    /// bypasses its own pre-delay line for Magneto.
+    pub feedback: f64,
+}
+
+/// Magneto head-count menu (1 / 2 / 3 / 4 / 6).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum MagnetoHeads {
+    One,
+    Two,
+    Three,
+    #[default]
+    Four,
+    Six,
+}
+
+impl MagnetoHeads {
+    pub const COUNT: usize = 5;
+
+    pub fn from_index(i: usize) -> Self {
+        match i {
+            0 => Self::One,
+            1 => Self::Two,
+            2 => Self::Three,
+            4 => Self::Six,
+            _ => Self::Four,
+        }
+    }
+
+    pub fn count(self) -> usize {
+        match self {
+            Self::One => 1,
+            Self::Two => 2,
+            Self::Three => 3,
+            Self::Four => 4,
+            Self::Six => 6,
+        }
+    }
+}
+
+/// Magneto head spacing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum MagnetoSpacing {
+    #[default]
+    Even,
+    Uneven,
+}
+
+/// BigSky MX Spring "Dwell": drive stages of the spring-tank preamp.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum SpringDwell {
+    /// The cleanest spring tones.
+    #[default]
+    Clean,
+    /// More gain, typical of combo amps with onboard spring.
+    Combo,
+    /// Increased gain AND harmonic content entering the tank.
+    Tube,
+    /// Expanded preamp gain for maximum trashiness.
+    Overdrive,
+}
+
+impl SpringDwell {
+    pub const COUNT: usize = 4;
+
+    pub fn from_index(i: usize) -> Self {
+        match i {
+            1 => Self::Combo,
+            2 => Self::Tube,
+            3 => Self::Overdrive,
+            _ => Self::Clean,
+        }
+    }
+
+    /// Preamp drive into the tank (1.0 = unity/clean).
+    pub fn drive(self) -> f64 {
+        match self {
+            Self::Clean => 1.0,
+            Self::Combo => 1.7,
+            Self::Tube => 2.6,
+            Self::Overdrive => 4.5,
+        }
+    }
+}
+
+/// BigSky MX Spring engine params.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SpringParams {
+    pub dwell: SpringDwell,
+    /// Springs in the tank (1–3).
+    pub springs: u8,
+}
+
+impl Default for SpringParams {
+    fn default() -> Self {
+        Self {
+            dwell: SpringDwell::Clean,
+            springs: 2,
+        }
+    }
+}
+
+/// BigSky MX NonLinear envelope shapes (manual menu order, CC 0–5).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NlShape {
+    /// Exponential backward swell.
+    Swoosh,
+    /// Linear backward ramp-up then cut.
+    Reverse,
+    /// Triangle: up then down.
+    Ramp,
+    /// Even amplitude with abrupt cut-off.
+    Gate,
+    /// Bell-curve profile.
+    Gauss,
+    /// Inverted bell.
+    Bounce,
+}
+
+impl NlShape {
+    pub const COUNT: usize = 6;
+
+    pub fn from_index(i: usize) -> Self {
+        match i {
+            0 => Self::Swoosh,
+            1 => Self::Reverse,
+            2 => Self::Ramp,
+            3 => Self::Gate,
+            4 => Self::Gauss,
+            _ => Self::Bounce,
+        }
+    }
+}
+
+/// BigSky MX Chamber "Color": five fixed post-tonality profiles
+/// capturing "the speakers and mics used in the chamber recording
+/// process". Not a continuous control.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ChamberColor {
+    /// Wide-range flat response — natural tone.
+    #[default]
+    Neutral,
+    /// Reduced low end (avoids mud with bass-heavy sources).
+    Clear,
+    /// Reduced mid response ("smile" EQ).
+    Smooth,
+    /// High-passed, very bright.
+    Crisp,
+    /// Emphasized mids — vocal qualities.
+    Deep,
+}
+
+impl ChamberColor {
+    pub const COUNT: usize = 5;
+
+    pub fn from_index(i: usize) -> Self {
+        match i {
+            1 => Self::Clear,
+            2 => Self::Smooth,
+            3 => Self::Crisp,
+            4 => Self::Deep,
+            _ => Self::Neutral,
+        }
+    }
+}
+
+/// BigSky MX Chamber engine params.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct ChamberParams {
+    pub color: ChamberColor,
 }
 
 /// BigSky MX NonLinear engine params: Chop (amplitude mod on the decay),
@@ -379,6 +555,13 @@ pub struct MagnetoParams {
 /// legacy 90% hold point).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct NonLinearParams {
+    /// Envelope shape (manual menu order). `None` = legacy `extra_a`
+    /// threshold mapping.
+    pub shape: Option<NlShape>,
+    /// Feedback from the nonlinear generator back to the input, before
+    /// the late stage (0..1). This is the engine's PRE-DELAY knob
+    /// remap — the chain routes `predelay_ms` here for NonLinear.
+    pub feedback: f64,
     /// Chop LFO rate in Hz (0.1..15).
     pub chop_rate_hz: f64,
     /// Chop depth (0..1). 0 = off (transparent).
@@ -399,6 +582,8 @@ pub struct NonLinearParams {
 impl Default for NonLinearParams {
     fn default() -> Self {
         Self {
+            shape: None,
+            feedback: 0.0,
             chop_rate_hz: 4.0,
             chop_depth: 0.0,
             gate_speed: 1.0,
@@ -439,14 +624,77 @@ impl Default for BloomParams {
     }
 }
 
+/// BigSky MX Chorale vowel programs (manual menu order, CC 0–6).
+/// Combination entries morph slowly between their vowels; `Random`
+/// wanders the whole formant space.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ChoraleVowel {
+    Aahhoo,
+    Aahh,
+    Aahhoh,
+    Oh,
+    Ooohoh,
+    Ooo,
+    Random,
+}
+
+impl ChoraleVowel {
+    pub const COUNT: usize = 7;
+
+    pub fn from_index(i: usize) -> Self {
+        match i {
+            0 => Self::Aahhoo,
+            1 => Self::Aahh,
+            2 => Self::Aahhoh,
+            3 => Self::Oh,
+            4 => Self::Ooohoh,
+            5 => Self::Ooo,
+            _ => Self::Random,
+        }
+    }
+}
+
+/// BigSky MX Chorale "Resonance": intensity of the vowel via the
+/// vocal-filter Q.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ChoraleResonance {
+    /// Subtle vocal quality.
+    #[default]
+    Mild,
+    /// Increased intensity.
+    Medium,
+    /// Most resonant.
+    High,
+}
+
+impl ChoraleResonance {
+    pub fn from_index(i: usize) -> Self {
+        match i {
+            1 => Self::Medium,
+            2 => Self::High,
+            _ => Self::Mild,
+        }
+    }
+
+    /// (Q, peak dB) for the formant filters.
+    pub fn q_gain(self) -> (f64, f64) {
+        match self {
+            Self::Mild => (3.0, 8.0),
+            Self::Medium => (4.5, 10.0),
+            Self::High => (6.5, 12.0),
+        }
+    }
+}
+
 /// Chorale choir range (BigSky MX "Choir Voice").
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ChoirVoice {
-    /// Lower range — the legacy voicing.
+    /// Mid-to-high chorale range — the legacy voicing.
     #[default]
     Tenor,
-    /// Higher range: formant centers shifted up.
-    Soprano,
+    /// Low chorale range: formant centers shifted DOWN (the pedal's
+    /// second range is Baritone, not up).
+    Baritone,
 }
 
 /// BigSky MX Chorale engine params (beyond the shared set).
@@ -455,6 +703,11 @@ pub struct ChoraleParams {
     /// Choir voice level (0..1). `None` = legacy `extra_a` mapping.
     pub choir_level: Option<f64>,
     pub voice: ChoirVoice,
+    /// Vowel program (manual menu). `None` = legacy continuous
+    /// `extra_b` morph.
+    pub vowel: Option<ChoraleVowel>,
+    /// Formant-resonance intensity (vocal-filter Q).
+    pub resonance: ChoraleResonance,
     /// Per-voice pitch/timbre randomization (0..1): more mod = more
     /// distinct singers (decorrelated vibrato + formant drift).
     /// 0 = off (transparent).
@@ -558,6 +811,16 @@ pub trait ReverbAlgorithm: Send {
 
     /// Slot-addressed prepared-IR swap. Default: slot A falls through to
     /// [`Self::try_load_prepared_ir`], slot B is rejected.
+    /// Attach a disposal channel for buffers displaced by audio-thread
+    /// IR swaps (see [`crate::ir::IrTrash`]). Returns false when the
+    /// algorithm has no swap path (everything but Convolution).
+    fn set_ir_trash_sender(
+        &mut self,
+        _tx: crossbeam_channel::Sender<crate::ir::IrTrash>,
+    ) -> bool {
+        false
+    }
+
     fn try_load_prepared_ir_slot(
         &mut self,
         pair: crate::ir::PreparedIrPair,
@@ -586,6 +849,16 @@ pub trait ReverbAlgorithm: Send {
 
     /// Push Magneto engine params. No-op outside Magneto; returns
     /// `true` if accepted.
+    /// Push Spring params. No-op outside the Spring engines.
+    fn set_spring_params(&mut self, _params: &SpringParams) -> bool {
+        false
+    }
+
+    /// Push Chamber params. No-op outside the Chamber engine.
+    fn set_chamber_params(&mut self, _params: &ChamberParams) -> bool {
+        false
+    }
+
     fn set_magneto_params(&mut self, params: &MagnetoParams) -> bool {
         let _ = params;
         false

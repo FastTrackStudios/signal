@@ -5,14 +5,15 @@
 //! a concrete delay type, enabling runtime style switching.
 
 use crate::bbd_delay::BbdDelay;
-use crate::clean_delay::CleanDelay;
-use crate::drum_delay::{DrumDelay, DrumHead, HeadPlayback, GOLDEN_HEADS};
+use crate::clean_delay::{CleanDelay, DigitalVoice};
+use crate::drum_delay::{DrumDelay, DrumHead, DrumSpacing, HeadPlayback, GOLDEN_HEADS};
 use crate::filter_delay::{FilterDelay, FilterLfoShape, FilterLocation};
 use crate::lofi_delay::{LoFiDelay, LoFiFilterShape};
 use crate::modulation::WobbleShape;
-use crate::multitap_delay::{FeedbackMode, MultiTapDelay, Tap, MAX_TAPS};
+use crate::multitap_delay::{FeedbackMode, MultiTapDelay, Tap, TapGrid, TapPreset, MAX_TAPS};
 use crate::oilcan_delay::{OilCanDelay, OilCanHeads};
 use crate::pitch_delay::{IceInterval, IceSlice, PitchDelay};
+use crate::reverb_delay::ReverbDelay;
 use crate::reverse_delay::ReverseDelay;
 use crate::rhythm_delay::RhythmDelay;
 use crate::shimmer_delay::ShimmerDelay;
@@ -26,7 +27,8 @@ use crate::tape_delay::{SaturationType, TapeDelay, TapeSpeed, TapeVoice};
 /// `Bbd`≈dBucket, `LoFi`≈Lo-Fi, `Reverse`≈Reverse, `Pitch`≈Ice,
 /// `Rhythm`≈TimeLine-v1 Pattern (fixed patterns), `Drum`≈Drum,
 /// `OilCan`≈Oil Can, `MultiTap`≈MultiTap (editable taps),
-/// `Spectral`≈Spectral, `Filter`≈Filter (+folded-in Trem).
+/// `Spectral`≈Spectral, `Filter`≈Filter (+folded-in Trem),
+/// `Reverb`≈Reverb (bonus machine: TIME = pre-delay, REPEATS = decay).
 /// `Shimmer` has no TimeLine counterpart.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DelayStyle {
@@ -43,10 +45,11 @@ pub enum DelayStyle {
     MultiTap,
     Spectral,
     Filter,
+    Reverb,
 }
 
 impl DelayStyle {
-    pub const COUNT: usize = 13;
+    pub const COUNT: usize = 14;
 
     pub fn from_index(i: usize) -> Self {
         match i {
@@ -63,6 +66,7 @@ impl DelayStyle {
             10 => Self::MultiTap,
             11 => Self::Spectral,
             12 => Self::Filter,
+            13 => Self::Reverb,
             _ => Self::Tape,
         }
     }
@@ -82,6 +86,7 @@ impl DelayStyle {
             Self::MultiTap => 10,
             Self::Spectral => 11,
             Self::Filter => 12,
+            Self::Reverb => 13,
         }
     }
 
@@ -100,6 +105,7 @@ impl DelayStyle {
             Self::MultiTap => "MultiTap",
             Self::Spectral => "Spectral",
             Self::Filter => "Filter",
+            Self::Reverb => "Reverb",
         }
     }
 
@@ -110,6 +116,8 @@ impl DelayStyle {
             Self::Drum => (200.0, 2000.0),
             Self::OilCan => (200.0, 800.0),
             Self::LoFi => (2.0, 2500.0),
+            // TIME = pre-delay on the Reverb machine.
+            Self::Reverb => (2.0, 2500.0),
             _ => (60.0, 2500.0),
         }
     }
@@ -129,6 +137,7 @@ enum EngineInner {
     MultiTap(MultiTapDelay),
     Spectral(SpectralDelay),
     Filter(FilterDelay),
+    Reverb(ReverbDelay),
 }
 
 /// Unified delay engine wrapping all delay styles.
@@ -211,6 +220,10 @@ pub struct DelayEngine {
     pub lofi_vinyl: f64,
     /// Output device voicing (telephone/victrola/...). LoFi only.
     pub lofi_filter_shape: LoFiFilterShape,
+    /// Delay-line mod LFO rate in Hz. LoFi only.
+    pub lofi_mod_rate: f64,
+    /// Delay-line mod depth (0.0–1.0). LoFi only.
+    pub lofi_mod_depth: f64,
 
     // ── Shimmer-specific ───────────────────────────────────────────
     /// Pitch ratio (0.5–4.0). Shimmer only.
@@ -218,9 +231,24 @@ pub struct DelayEngine {
     /// Shimmer mix (0.0–1.0). Shimmer only.
     pub shimmer_mix: f64,
 
+    // ── Digital-specific ───────────────────────────────────────────
+    /// Classic voice's morphing FILTER position (0 full-bw → 1 tape).
+    /// Digital only.
+    pub digital_morph: f64,
+    /// Delay-line mod LFO rate in Hz. Digital only.
+    pub digital_mod_rate: f64,
+    /// Delay-line mod depth (0.0–1.0). Digital only.
+    pub digital_mod_depth: f64,
+
     // ── Reverse-specific ───────────────────────────────────────────
     /// Crossfade overlap (0.0–0.5). Reverse only.
     pub reverse_crossfade: f64,
+    /// Smear: allpass diffusion on the reversed audio (0.0–1.0). Reverse only.
+    pub reverse_smear: f64,
+    /// Delay-line mod LFO rate in Hz. Reverse only.
+    pub reverse_mod_rate: f64,
+    /// Delay-line mod depth (0.0–1.0). Reverse only.
+    pub reverse_mod_depth: f64,
 
     // ── Pitch-specific (TimeLine MX "Ice") ─────────────────────────
     /// Playback speed ratio (used when `pitch_interval` is Free). Pitch only.
@@ -231,6 +259,10 @@ pub struct DelayEngine {
     pub pitch_slice: Option<IceSlice>,
     /// Dry↔ice blend on the delay line, pre-feedback. Pitch only.
     pub pitch_blend: f64,
+    /// Delay-line mod LFO rate in Hz. Pitch only.
+    pub pitch_mod_rate: f64,
+    /// Delay-line mod depth (0.0–1.0). Pitch only.
+    pub pitch_mod_depth: f64,
 
     // ── Rhythm-specific ──────────────────────────────────────────
     /// Tap levels for rhythm mode (8 taps at 1x–8x base time).
@@ -280,10 +312,15 @@ pub struct DelayEngine {
     pub oilcan_tone: f64,
     /// Rotation-speed randomization (time-domain dirt, 0.0-1.0). OilCan only.
     pub oilcan_grit: f64,
+    /// Rotation LFO base rate in Hz (Mod Speed). OilCan only.
+    pub oilcan_mod_rate: f64,
 
     // ── MultiTap-specific ──────────────────────────────────────────
     /// User tap pattern. MultiTap only.
     pub multitap_taps: [Tap; MAX_TAPS],
+    /// Step grid (16th / triplet / free-256) used when editing taps by
+    /// step and recalled with Classic patterns. MultiTap only.
+    pub multitap_grid: TapGrid,
     /// Feedback topology (Input = shared line, Parallel = 8 independent
     /// lines). MultiTap only.
     pub multitap_feedback_mode: FeedbackMode,
@@ -304,8 +341,17 @@ pub struct DelayEngine {
     pub spectral_spread: f64,
     /// Grain envelope shape. Spectral only.
     pub spectral_shape: GrainShape,
+    /// Post-granular Clouds-diffuser crossfade (0–1). Spectral only
+    /// (FTS voicing extra, no hardware counterpart).
+    pub spectral_diffusion: f64,
     /// Grain playback direction. Spectral only.
     pub spectral_direction: GrainDirection,
+
+    // ── Reverb-machine-specific ────────────────────────────────────
+    /// Wet tremolo rate in Hz (Mod Speed on the Reverb machine).
+    pub reverb_trem_rate: f64,
+    /// Wet tremolo depth (Mod Depth on the Reverb machine), 0.0–1.0.
+    pub reverb_trem_depth: f64,
 
     // ── Filter-specific ────────────────────────────────────────────
     /// LFO waveform. Filter only.
@@ -369,13 +415,23 @@ impl DelayEngine {
             lofi_mix: 1.0,
             lofi_vinyl: 0.0,
             lofi_filter_shape: LoFiFilterShape::Off,
+            lofi_mod_rate: 0.6,
+            lofi_mod_depth: 0.0,
             shimmer_pitch: 2.0,
             shimmer_mix: 0.5,
+            digital_morph: 0.0,
+            digital_mod_rate: 0.6,
+            digital_mod_depth: 0.0,
             reverse_crossfade: 0.1,
+            reverse_smear: 0.0,
+            reverse_mod_rate: 0.8,
+            reverse_mod_depth: 0.0,
             pitch_speed: 1.0,
             pitch_interval: IceInterval::Free,
             pitch_slice: None,
             pitch_blend: 1.0,
+            pitch_mod_rate: 0.6,
+            pitch_mod_depth: 0.0,
             rhythm_taps: [1.0, 0.7, 0.5, 0.35, 0.25, 0.18, 0.12, 0.08],
             decay_tilt: 0.0,
             wow_shape: WobbleShape::Sine,
@@ -395,7 +451,11 @@ impl DelayEngine {
             oilcan_wobble: 0.6,
             oilcan_tone: 2500.0,
             oilcan_grit: 0.1,
+            oilcan_mod_rate: 0.9,
+            reverb_trem_rate: 4.0,
+            reverb_trem_depth: 0.0,
             multitap_taps: crate::multitap_delay::TapPreset::Quarters.taps(),
+            multitap_grid: TapGrid::default(),
             multitap_feedback_mode: FeedbackMode::Input,
             multitap_mod_rate_hz: 0.5,
             multitap_mod_depth: 0.0,
@@ -403,6 +463,7 @@ impl DelayEngine {
             spectral_stretch: 0.0,
             spectral_octave: 0.0,
             spectral_spread: 0.0,
+            spectral_diffusion: 0.5,
             spectral_shape: GrainShape::Soft,
             spectral_direction: GrainDirection::Forward,
             filter_lfo_shape: FilterLfoShape::SinePos,
@@ -440,6 +501,27 @@ impl DelayEngine {
         }
     }
 
+    /// Apply a Drum head-spacing preset: rewrites the four heads'
+    /// positions in place, keeping each head's playback/feedback/pan.
+    /// Engine-side so it survives `update()`'s head sync (setting
+    /// spacing on the inner `DrumDelay` directly would be clobbered).
+    pub fn set_drum_spacing(&mut self, spacing: DrumSpacing) {
+        for (head, pos) in self.drum_heads.iter_mut().zip(spacing.positions()) {
+            head.position = pos;
+        }
+    }
+
+    /// Recall a MultiTap Classic pattern (1–16): rewrites the engine's
+    /// tap pattern and auto-sets the 16th grid + `Input` feedback like
+    /// the MX does on recall. Engine-side so it survives `update()`'s
+    /// tap sync (the inner `MultiTapDelay::apply_classic` would be
+    /// clobbered by the next param push).
+    pub fn apply_multitap_classic(&mut self, n: u8) {
+        self.multitap_taps = TapPreset::classic(n);
+        self.multitap_grid = TapGrid::Sixteenth;
+        self.multitap_feedback_mode = FeedbackMode::Input;
+    }
+
     /// Switch to a new delay style. Resets internal state.
     pub fn set_style(&mut self, style: DelayStyle) {
         if self.style == style {
@@ -460,6 +542,7 @@ impl DelayEngine {
             DelayStyle::MultiTap => EngineInner::MultiTap(MultiTapDelay::new()),
             DelayStyle::Spectral => EngineInner::Spectral(SpectralDelay::new()),
             DelayStyle::Filter => EngineInner::Filter(FilterDelay::new()),
+            DelayStyle::Reverb => EngineInner::Reverb(ReverbDelay::new()),
         };
     }
 
@@ -512,6 +595,10 @@ impl DelayEngine {
                 d.feedback = self_feedback;
                 d.hicut_freq = self_hicut;
                 d.locut_freq = self_locut;
+                d.voice = DigitalVoice::from_index(self.voice as usize);
+                d.filter_morph = self.digital_morph;
+                d.mod_rate_hz = self.digital_mod_rate;
+                d.mod_depth = self.digital_mod_depth;
                 d.decay_tilt = self_tilt;
                 d.update(sample_rate);
             }
@@ -537,6 +624,8 @@ impl DelayEngine {
             EngineInner::LoFi(d) => {
                 d.time_ms = self.time_ms;
                 d.feedback = self_feedback;
+                d.mod_rate_hz = self.lofi_mod_rate;
+                d.mod_depth = self.lofi_mod_depth;
                 d.hicut_freq = self_hicut;
                 d.locut_freq = self_locut;
                 d.bit_depth = self.lofi_bit_depth;
@@ -563,12 +652,17 @@ impl DelayEngine {
                 d.feedback = self_feedback;
                 d.hicut_freq = self_hicut;
                 d.grain_crossfade = self.reverse_crossfade;
+                d.smear = self.reverse_smear;
+                d.mod_rate_hz = self.reverse_mod_rate;
+                d.mod_depth = self.reverse_mod_depth;
                 d.decay_tilt = self_tilt;
                 d.update(sample_rate);
             }
             EngineInner::Pitch(d) => {
                 d.time_ms = self.time_ms;
                 d.feedback = self_feedback;
+                d.mod_rate_hz = self.pitch_mod_rate;
+                d.mod_depth = self.pitch_mod_depth;
                 d.speed = self.pitch_speed;
                 d.interval = self.pitch_interval;
                 d.slice = self.pitch_slice;
@@ -590,6 +684,8 @@ impl DelayEngine {
                 d.feedback = self_feedback;
                 d.heads = self.drum_heads;
                 d.lo_cut = if self.frozen { 0.0 } else { self.drum_lo_cut };
+                d.hicut_freq = self_hicut;
+                d.grit = if self.frozen { 0.0 } else { self.drive };
                 d.wobble = self.drum_wobble;
                 d.decay_tilt = self_tilt;
                 d.update(sample_rate);
@@ -599,6 +695,7 @@ impl DelayEngine {
                 d.feedback = self_feedback;
                 d.heads = self.oilcan_heads;
                 d.wobble = self.oilcan_wobble;
+                d.mod_rate = self.oilcan_mod_rate;
                 d.tone_hz = if self.frozen { 8000.0 } else { self.oilcan_tone };
                 d.grit = self.oilcan_grit;
                 d.decay_tilt = self_tilt;
@@ -610,6 +707,7 @@ impl DelayEngine {
                 d.hicut_freq = self_hicut;
                 d.locut_freq = self_locut;
                 d.taps = self.multitap_taps;
+                d.grid = self.multitap_grid;
                 d.feedback_mode = self.multitap_feedback_mode;
                 d.mod_rate_hz = self.multitap_mod_rate_hz;
                 d.mod_depth = self.multitap_mod_depth;
@@ -625,6 +723,7 @@ impl DelayEngine {
                 d.octave = self.spectral_octave;
                 d.spread = self.spectral_spread;
                 d.shape = self.spectral_shape;
+                d.diffusion = self.spectral_diffusion;
                 d.direction = self.spectral_direction;
                 d.decay_tilt = self_tilt;
                 d.update(sample_rate);
@@ -641,6 +740,16 @@ impl DelayEngine {
                 d.trem_depth = self.filter_trem_depth;
                 d.trem_speed = self.filter_trem_speed;
                 d.trem_shape = self.filter_trem_shape;
+                d.decay_tilt = self_tilt;
+                d.update(sample_rate);
+            }
+            EngineInner::Reverb(d) => {
+                d.time_ms = self.time_ms;
+                d.feedback = feedback;
+                d.hicut_freq = self_hicut;
+                d.grit = if self.frozen { 0.0 } else { self.drive };
+                d.trem_rate_hz = self.reverb_trem_rate;
+                d.trem_depth = self.reverb_trem_depth;
                 d.decay_tilt = self_tilt;
                 d.update(sample_rate);
             }
@@ -700,6 +809,10 @@ impl DelayEngine {
                 d.tick(input, ch)
             }
             EngineInner::Filter(d) => {
+                d.feedback = fb;
+                d.tick(input, ch)
+            }
+            EngineInner::Reverb(d) => {
                 d.feedback = fb;
                 d.tick(input, ch)
             }
@@ -779,6 +892,11 @@ impl DelayEngine {
                 d.feedback = fb;
                 d.tick(input, ch)
             }
+            EngineInner::Reverb(d) => {
+                d.time_ms = time_ms;
+                d.feedback = fb;
+                d.tick(input, ch)
+            }
         }
     }
 
@@ -836,6 +954,7 @@ impl DelayEngine {
             EngineInner::MultiTap(d) => d.last_feedback(),
             EngineInner::Spectral(d) => d.last_feedback(),
             EngineInner::Filter(d) => d.last_feedback(),
+            EngineInner::Reverb(d) => d.last_feedback(),
         }
     }
 
@@ -854,6 +973,7 @@ impl DelayEngine {
             EngineInner::MultiTap(d) => d.reset(),
             EngineInner::Spectral(d) => d.reset(),
             EngineInner::Filter(d) => d.reset(),
+            EngineInner::Reverb(d) => d.reset(),
         }
     }
 }
@@ -936,6 +1056,48 @@ mod tests {
         for i in 0..DelayStyle::COUNT {
             let style = DelayStyle::from_index(i);
             assert_eq!(style.to_index(), i);
+        }
+    }
+
+    #[test]
+    fn drum_spacing_survives_update() {
+        let mut e = DelayEngine::new();
+        e.set_style(DelayStyle::Drum);
+        e.set_drum_spacing(DrumSpacing::Even);
+        e.update(SR);
+        e.update(SR); // a second sync must not clobber the spacing
+
+        let expected = DrumSpacing::Even.positions();
+        match &e.inner {
+            EngineInner::Drum(d) => {
+                for (head, want) in d.heads.iter().zip(expected) {
+                    assert_eq!(head.position, want);
+                }
+            }
+            _ => panic!("expected drum engine"),
+        }
+    }
+
+    #[test]
+    fn multitap_classic_reaches_inner_engine() {
+        let mut e = DelayEngine::new();
+        e.set_style(DelayStyle::MultiTap);
+        // Start from a non-default grid/feedback so the recall is visible.
+        e.multitap_grid = TapGrid::Off;
+        e.multitap_feedback_mode = FeedbackMode::Parallel;
+        e.apply_multitap_classic(1);
+        e.update(SR);
+        e.update(SR);
+
+        match &e.inner {
+            EngineInner::MultiTap(d) => {
+                assert_eq!(d.grid, TapGrid::Sixteenth);
+                assert_eq!(d.feedback_mode, FeedbackMode::Input);
+                let want = TapPreset::classic(1);
+                assert_eq!(d.taps[0].position, want[0].position);
+                assert_eq!(d.taps[1].pan, want[1].pan);
+            }
+            _ => panic!("expected multitap engine"),
         }
     }
 }

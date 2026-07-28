@@ -3,7 +3,7 @@
 //! Based on Strymon BigSky Non-Linear: applies envelope shaping
 //! to a reverb tail, creating reverse, gated, swell, and ramp effects.
 
-use crate::algorithm::{AlgorithmParams, NonLinearParams, ReverbAlgorithm};
+use crate::algorithm::{NlShape, AlgorithmParams, NonLinearParams, ReverbAlgorithm};
 use crate::primitives::allpass_diffuser::AllpassDiffuser;
 use crate::primitives::fdn::{Fdn, MixMatrix};
 use audiocore_dsp::delay_line::DelayLine;
@@ -11,6 +11,10 @@ use audiocore_dsp::delay_line::DelayLine;
 /// Envelope shape for the reverb tail.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum EnvelopeShape {
+    /// Bell-curve profile.
+    Gauss,
+    /// Inverted bell.
+    Bounce,
     /// Reverse ramp — reverb builds to a peak then cuts.
     Reverse,
     /// Gate — full level then abrupt cutoff.
@@ -43,6 +47,8 @@ pub struct NonLinear {
     late_fdn: Fdn,
     /// One-pole swell state for the late stage onset (late_speed).
     late_env: f64,
+    /// PRE-DELAY remap: shaped output recirculated into the generator.
+    nl_fb_state: f64,
     sample_rate: f64,
 }
 
@@ -63,6 +69,7 @@ impl NonLinear {
             chop_phase: 0.0,
             late_fdn: Self::make_late_fdn(sample_rate),
             late_env: 0.0,
+            nl_fb_state: 0.0,
             sample_rate,
         }
     }
@@ -118,6 +125,16 @@ impl NonLinear {
                     (1.0 - position) * 2.0
                 }
             }
+            EnvelopeShape::Gauss => {
+                // Bell curve centered mid-window.
+                let d = position - 0.5;
+                (-d * d / (2.0 * 0.17 * 0.17)).exp()
+            }
+            EnvelopeShape::Bounce => {
+                // Inverted bell: full at the edges, dipped mid-window.
+                let d = position - 0.5;
+                1.0 - 0.92 * (-d * d / (2.0 * 0.15 * 0.15)).exp()
+            }
         }
     }
 }
@@ -133,6 +150,7 @@ impl ReverbAlgorithm for NonLinear {
         self.chop_phase = 0.0;
         self.late_fdn.reset();
         self.late_env = 0.0;
+        self.nl_fb_state = 0.0;
     }
 
     fn set_sample_rate(&mut self, sample_rate: f64) {
@@ -142,18 +160,30 @@ impl ReverbAlgorithm for NonLinear {
     }
 
     fn set_params(&mut self, params: &AlgorithmParams) {
-        // Size -> envelope length
-        self.env_length = ((0.1 + params.size * 1.9) * self.sample_rate) as usize;
+        // Knob remap (manual): DECAY sets the time of the NONLINEAR
+        // portion (the shaped-envelope window).
+        self.env_length = ((0.1 + params.decay * 1.9) * self.sample_rate) as usize;
 
-        // Shape selection (extra_a: 0=reverse, 0.33=gate, 0.66=swoosh, 1.0=ramp)
-        self.shape = if params.extra_a < 0.25 {
-            EnvelopeShape::Reverse
-        } else if params.extra_a < 0.5 {
-            EnvelopeShape::Gate
-        } else if params.extra_a < 0.75 {
-            EnvelopeShape::Swoosh
-        } else {
-            EnvelopeShape::Ramp
+        // Shape: the named selector wins; without it fall back to the
+        // legacy extra_a thresholds.
+        self.shape = match self.mx.shape {
+            Some(NlShape::Swoosh) => EnvelopeShape::Swoosh,
+            Some(NlShape::Reverse) => EnvelopeShape::Reverse,
+            Some(NlShape::Ramp) => EnvelopeShape::Ramp,
+            Some(NlShape::Gate) => EnvelopeShape::Gate,
+            Some(NlShape::Gauss) => EnvelopeShape::Gauss,
+            Some(NlShape::Bounce) => EnvelopeShape::Bounce,
+            None => {
+                if params.extra_a < 0.25 {
+                    EnvelopeShape::Reverse
+                } else if params.extra_a < 0.5 {
+                    EnvelopeShape::Gate
+                } else if params.extra_a < 0.75 {
+                    EnvelopeShape::Swoosh
+                } else {
+                    EnvelopeShape::Ramp
+                }
+            }
         };
 
         // Diffusion
@@ -182,7 +212,10 @@ impl ReverbAlgorithm for NonLinear {
 
     #[inline]
     fn tick(&mut self, left: f64, right: f64) -> (f64, f64) {
-        let input = (left + right) * 0.5;
+        // PRE-DELAY remap: shaped nonlinear output feeds back into the
+        // generator input (before the late stage) — repeating shapes.
+        let fb = self.mx.feedback.clamp(0.0, 1.0) * 0.9;
+        let input = (left + right) * 0.5 + self.nl_fb_state * fb;
 
         // Generate dense reverb
         let diff = self.diffuser_l.tick(input);
@@ -235,6 +268,7 @@ impl ReverbAlgorithm for NonLinear {
         }
 
         self.env_write_count = self.env_write_count.wrapping_add(1);
+        self.nl_fb_state = ((out_l + out_r) * 0.5).clamp(-2.0, 2.0);
 
         (out_l, out_r)
     }

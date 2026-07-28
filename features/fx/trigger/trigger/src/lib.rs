@@ -16,8 +16,3 @@
 
 pub use trigger_dsp as dsp;
 pub use trigger_dsp::*;
-
-/// Preset profiles (full control + simplified drum replacer). Currently the
-/// legacy stub skeleton — parameter mappings land with the plugin editor.
-#[cfg(feature = "profiles")]
-pub use trigger_profiles as profiles;

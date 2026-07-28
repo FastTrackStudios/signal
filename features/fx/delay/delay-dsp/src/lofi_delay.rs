@@ -14,6 +14,7 @@
 //!   megaphone, ...) applied to the mixed signal AND the vinyl noise,
 //!   per the spec.
 
+use crate::tilt::DecayTilt;
 use audiocore_dsp::biquad::{Biquad, FilterType};
 use audiocore_dsp::delay_line::DelayLine;
 use audiocore_dsp::envelope::EnvelopeFollower;
@@ -213,8 +214,12 @@ pub struct LoFiDelay {
     pub filter_q: f64,
     /// Decay EQ tilt (-1.0 = darken repeats, 0 = neutral, +1.0 = brighten).
     pub decay_tilt: f64,
+    /// Delay-line modulation LFO rate in Hz.
+    pub mod_rate_hz: f64,
+    /// Delay-line modulation depth (0.0–1.0; full scale ≈ ±3 ms).
+    pub mod_depth: f64,
 
-    decay_eq: Biquad,
+    decay_tilt_eq: DecayTilt,
     delay: DelayLine,
     hicut: Biquad,
     locut: Biquad,
@@ -228,6 +233,7 @@ pub struct LoFiDelay {
     feedback_sample: f64,
     sample_rate: f64,
     smoother: ParamSmoother,
+    lfo_phase: f64,
     // Sample-rate reduction state
     sr_counter: f64,
     sr_hold: f64,
@@ -261,7 +267,9 @@ impl LoFiDelay {
             locut_freq: 0.0,
             filter_q: 0.707,
             decay_tilt: 0.0,
-            decay_eq: Biquad::new(),
+            mod_rate_hz: 0.6,
+            mod_depth: 0.0,
+            decay_tilt_eq: DecayTilt::new(),
             delay: DelayLine::new(48000 * 5 + 1024),
             hicut: Biquad::new(),
             locut: Biquad::new(),
@@ -273,6 +281,7 @@ impl LoFiDelay {
             feedback_sample: 0.0,
             sample_rate: 48000.0,
             smoother: ParamSmoother::new(0.0),
+            lfo_phase: 0.0,
             sr_counter: 0.0,
             sr_hold: 0.0,
             rng: XorShift32::new(0xCAFE_BABE),
@@ -314,23 +323,9 @@ impl LoFiDelay {
         self.wet_env.set_times_ms(5.0, 300.0, sample_rate);
 
         // Decay EQ: tilt filter in feedback path
-        if self.decay_tilt.abs() > 0.01 {
-            if self.decay_tilt < 0.0 {
-                let freq = 20000.0 * (1.0 + self.decay_tilt).max(0.05);
-                self.decay_eq
-                    .set(FilterType::Lowpass, freq, 0.707, sample_rate);
-            } else {
-                let freq = 20.0 + self.decay_tilt * 2000.0;
-                self.decay_eq
-                    .set(FilterType::Highpass, freq, 0.707, sample_rate);
-            }
-        }
+        self.decay_tilt_eq.configure(self.decay_tilt, sample_rate);
 
-        self.smoother.set_time(0.15, sample_rate);
-        let target = self.time_ms * 0.001 * sample_rate;
-        if self.smoother.value() == 0.0 {
-            self.smoother.set_immediate(target);
-        }
+        self.smoother.set_time_seeded(0.15, sample_rate, self.time_ms * 0.001 * sample_rate);
     }
 
     /// Quantize to simulated bit depth.
@@ -343,7 +338,17 @@ impl LoFiDelay {
     pub fn tick(&mut self, input: f64, ch: usize) -> f64 {
         let target_delay = self.time_ms * 0.001 * self.sample_rate;
         self.smoother.set_target(target_delay);
-        let smooth_delay = self.smoother.tick();
+        let mut smooth_delay = self.smoother.tick();
+        if self.mod_depth > 0.0 {
+            self.lfo_phase += self.mod_rate_hz / self.sample_rate;
+            if self.lfo_phase >= 1.0 {
+                self.lfo_phase -= 1.0;
+            }
+            smooth_delay += (self.lfo_phase * core::f64::consts::TAU).sin()
+                * self.mod_depth
+                * 0.003
+                * self.sample_rate;
+        }
 
         let max_read = self.delay.len() as f64 - 4.0;
         let read_pos = smooth_delay.clamp(1.0, max_read);
@@ -384,9 +389,7 @@ impl LoFiDelay {
             fb = self.locut.tick(fb, ch);
         }
 
-        if self.decay_tilt.abs() > 0.01 {
-            fb = self.decay_eq.tick(fb, ch);
-        }
+        fb = self.decay_tilt_eq.tick(fb, ch);
 
         fb = fb.clamp(-1.5, 1.5);
 
@@ -421,7 +424,7 @@ impl LoFiDelay {
         self.delay.clear();
         self.hicut.reset();
         self.locut.reset();
-        self.decay_eq.reset();
+        self.decay_tilt_eq.reset();
         self.shape_hp.reset();
         self.shape_peak.reset();
         self.shape_lp.reset();
@@ -429,6 +432,7 @@ impl LoFiDelay {
         self.wet_env.reset(0.0);
         self.feedback_sample = 0.0;
         self.smoother.reset(0.0);
+        self.lfo_phase = 0.0;
         self.sr_counter = 0.0;
         self.sr_hold = 0.0;
     }

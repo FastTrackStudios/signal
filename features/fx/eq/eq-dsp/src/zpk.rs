@@ -219,7 +219,9 @@ pub fn pair_conjugates(zpk: &Zpk) -> Vec<(Vec<Complex>, Vec<Complex>, f64)> {
                 std::cmp::Ordering::Greater
             };
         }
-        a.im.abs().partial_cmp(&b.im.abs()).unwrap()
+        a.im.abs()
+            .partial_cmp(&b.im.abs())
+            .unwrap_or(core::cmp::Ordering::Equal)
     });
 
     zeros.sort_by(|a, b| {
@@ -232,7 +234,9 @@ pub fn pair_conjugates(zpk: &Zpk) -> Vec<(Vec<Complex>, Vec<Complex>, f64)> {
                 std::cmp::Ordering::Greater
             };
         }
-        a.im.abs().partial_cmp(&b.im.abs()).unwrap()
+        a.im.abs()
+            .partial_cmp(&b.im.abs())
+            .unwrap_or(core::cmp::Ordering::Equal)
     });
 
     let pole_pairs = group_conjugate_pairs(&poles);

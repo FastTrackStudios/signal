@@ -22,10 +22,6 @@ pub use factory::NativeFxFactory;
 
 // ── Param helpers ──────────────────────────────────────────────────────────
 
-/// Hard cap on time-effect (reverb/delay) dry-wet mix for now (10%).
-/// Full wet/dry travel — the merged MX/reverb engines are pedal-parity, so
-/// the mix knob covers the whole range (defaults stay subtle).
-const TIME_MIX_MAX: f64 = 1.0;
 
 /// One controllable parameter: stable id, display name, range, default.
 struct ParamSpec {
@@ -660,7 +656,7 @@ const REVERB_PARAMS: &[ParamSpec] = &[
     ParamSpec { id: 3, name: "routing", min: 0.0, max: 5.0, default: 0.0 },
     ParamSpec { id: 4, name: "algo_b", min: 0.0, max: 14.0, default: 2.0 },
     ParamSpec { id: 5, name: "decay_b", min: 0.0, max: 1.0, default: 0.45 },
-    ParamSpec { id: 6, name: "mix_b", min: 0.0, max: 0.10, default: 0.08 },
+    ParamSpec { id: 6, name: "mix_b", min: 0.0, max: 1.0, default: 0.08 },
     // Per-slot wet pan (-1..+1) and wet tremolo (shared A knob set).
     ParamSpec { id: 7, name: "pan_a", min: -1.0, max: 1.0, default: 0.0 },
     ParamSpec { id: 8, name: "pan_b", min: -1.0, max: 1.0, default: 0.0 },
@@ -696,7 +692,7 @@ const REVERB_PARAMS: &[ParamSpec] = &[
     // BigSky MX input-analysis generators: Cloud Ensemble (pitch-tracked
     // synthetic string layer), Bloom Harmonics (overtone generator on
     // the trail), Chorale Choir level / Voice (0 Tenor / 1 Soprano) /
-    // Mod (per-voice randomization).
+    // Mod (per-voice randomization). cho_voice: 0 Tenor / 1 Baritone.
     ParamSpec { id: 29, name: "cloud_ensemble", min: 0.0, max: 1.0, default: 0.0 },
     ParamSpec { id: 30, name: "bloom_harmonics", min: 0.0, max: 1.0, default: 0.0 },
     ParamSpec { id: 31, name: "cho_choir", min: 0.0, max: 1.0, default: 0.3 },
@@ -721,6 +717,39 @@ const REVERB_PARAMS: &[ParamSpec] = &[
     // Tone tilt (−1 dark … +1 bright) — the high-pass-ish control.
     ParamSpec { id: 42, name: "tone", min: -1.0, max: 1.0, default: 0.0 },
     ParamSpec { id: 43, name: "predelay", min: 0.0, max: 200.0, default: 0.0 },
+    // INFINITE footswitch: engage (0/1) + per-preset mode
+    // (0 Freeze / 1 Infinite / 2 Off). Latch-vs-momentary is the
+    // footswitch controller's concern; `freeze` covers both.
+    ParamSpec { id: 44, name: "freeze", min: 0.0, max: 1.0, default: 0.0 },
+    ParamSpec { id: 45, name: "inf_mode", min: 0.0, max: 2.0, default: 0.0 },
+    // Chamber Color (0 Neutral / 1 Clear / 2 Smooth / 3 Crisp / 4 Deep).
+    ParamSpec { id: 46, name: "chamber_color", min: 0.0, max: 4.0, default: 0.0 },
+    // Magneto: head count menu (0 One / 1 Two / 2 Three / 3 Four /
+    // 4 Six) + spacing (0 Even / 1 Uneven). With Magneto active the
+    // pedal remaps predelay -> engine feedback and decay -> last-head
+    // time; the chain handles that from the existing decay/predelay ids.
+    ParamSpec { id: 47, name: "mag_heads", min: 0.0, max: 4.0, default: 3.0 },
+    ParamSpec { id: 48, name: "mag_spacing", min: 0.0, max: 1.0, default: 0.0 },
+    // NonLinear Shape (manual order: 0 Swoosh / 1 Reverse / 2 Ramp /
+    // 3 Gate / 4 Gauss / 5 Bounce). With NonLinear active the pedal
+    // remaps decay -> nonlinear-window time and predelay -> generator
+    // feedback; the chain handles both from the existing ids.
+    ParamSpec { id: 49, name: "nl_shape", min: 0.0, max: 5.0, default: 0.0 },
+    // Spring: Dwell drive stage (0 Clean / 1 Combo / 2 Tube /
+    // 3 Overdrive) + Number of Springs (0 One / 1 Two / 2 Three).
+    ParamSpec { id: 50, name: "spring_dwell", min: 0.0, max: 3.0, default: 0.0 },
+    ParamSpec { id: 51, name: "spring_num", min: 0.0, max: 2.0, default: 1.0 },
+    // Common per-reverb params the MX menu carries on most engines:
+    // Diffusion (ER softening/density) and Low End (low-frequency
+    // content + decay profile; 0.5 = neutral, above = lows ring longer
+    // / "larger spaces", below = lows tamed).
+    ParamSpec { id: 52, name: "diffusion", min: 0.0, max: 1.0, default: 0.5 },
+    ParamSpec { id: 53, name: "low_end", min: 0.0, max: 1.0, default: 0.5 },
+    // Chorale: vowel program (0 AAHHOO / 1 AAHH / 2 AAHHOH / 3 OH /
+    // 4 OOOHOH / 5 OOO / 6 Random) + Resonance (0 Mild / 1 Medium /
+    // 2 High).
+    ParamSpec { id: 54, name: "cho_vowel", min: 0.0, max: 6.0, default: 1.0 },
+    ParamSpec { id: 55, name: "cho_resonance", min: 0.0, max: 2.0, default: 0.0 },
 ];
 
 /// Native Reverb block — wraps [`reverb::DualReverb`] (two full chains +
@@ -732,6 +761,15 @@ pub struct NativeReverb {
     prepared: bool,
     scratch_l: Vec<f64>,
     scratch_r: Vec<f64>,
+    /// Impulse re-prepare workers (native only), one per chain: re-bake
+    /// the IR off the audio thread when imp_* shaping params change and
+    /// take the displaced buffers for off-thread deallocation. Without
+    /// them the Impulse live params would mark slots dirty and never
+    /// re-prepare.
+    #[cfg(not(target_arch = "wasm32"))]
+    reshaper_a: Option<reverb::ir::ImpulseReshaper>,
+    #[cfg(not(target_arch = "wasm32"))]
+    reshaper_b: Option<reverb::ir::ImpulseReshaper>,
 }
 
 impl NativeReverb {
@@ -751,27 +789,25 @@ impl NativeReverb {
         Self {
             rev,
             prepared: false,
+            #[cfg(not(target_arch = "wasm32"))]
+            reshaper_a: None,
+            #[cfg(not(target_arch = "wasm32"))]
+            reshaper_b: None,
             scratch_l: Vec::new(),
             scratch_r: Vec::new(),
         }
     }
 
     fn set(&mut self, id: u32, v: f64) {
-        // Ids 0-2 address reverb A; 3+ are the dual-routing block.
+        // Ids < 100: chain A + the dual block. Ids 100+: the same
+        // chain-scoped param on chain B (`r2_*` names, id − 100).
         match id {
-            0 => self.rev.a.mix = v.min(TIME_MIX_MAX),
-            1 => {
-                self.rev.a.params.decay = v;
-                self.rev.a.update_params();
-            }
-            2 => {
-                self.rev.a.params.size = v;
-                self.rev.a.update_params();
-            }
             3 => {
                 self.rev.routing =
                     reverb::DualRouting::from_index(v.round().max(0.0) as usize)
             }
+            // Legacy dual block (kept for preset compat; equivalent to
+            // r2_algorithm / r2_decay / r2_mix / r2_pan).
             4 => self
                 .rev
                 .b
@@ -782,175 +818,253 @@ impl NativeReverb {
                 self.rev.b.params.decay = v;
                 self.rev.b.update_params();
             }
-            6 => self.rev.b.mix = v.min(TIME_MIX_MAX),
-            7 => self.rev.a.pan = v.clamp(-1.0, 1.0),
+            6 => self.rev.b.mix = v.clamp(0.0, 1.0),
             8 => self.rev.b.pan = v.clamp(-1.0, 1.0),
-            9 => {
-                self.rev.a.trem_rate_hz = v;
-                self.rev.b.trem_rate_hz = v;
+            _ if id >= 100 => Self::set_chain(&mut self.rev.b, id - 100, v),
+            _ => Self::set_chain(&mut self.rev.a, id, v),
+        }
+    }
+
+    /// Apply a chain-scoped param (everything in `REVERB_PARAMS` except
+    /// the dual block) to one `ReverbChain`. Chain A hears these at
+    /// their base ids, chain B at id + 100 (`r2_*`).
+    fn set_chain(c: &mut reverb::ReverbChain, id: u32, v: f64) {
+        match id {
+            0 => c.mix = v.clamp(0.0, 1.0),
+            1 => {
+                c.params.decay = v;
+                c.update_params();
             }
-            10 => {
-                self.rev.a.trem_depth = v.clamp(0.0, 1.0);
-                self.rev.b.trem_depth = v.clamp(0.0, 1.0);
+            2 => {
+                c.params.size = v;
+                c.update_params();
             }
+            7 => c.pan = v.clamp(-1.0, 1.0),
+            9 => c.trem_rate_hz = v,
+            10 => c.trem_depth = v.clamp(0.0, 1.0),
             11 => {
-                self.rev.a.impulse.decay = v.clamp(0.01, 1.0);
-                self.rev.a.update_params();
+                c.impulse.decay = v.clamp(0.01, 1.0);
+                c.update_params();
             }
             12 => {
-                self.rev.a.impulse.tail = if v >= 0.5 {
+                c.impulse.tail = if v >= 0.5 {
                     reverb::ImpulseTail::Gate
                 } else {
                     reverb::ImpulseTail::Envelope
                 };
-                self.rev.a.update_params();
+                c.update_params();
             }
             13 => {
-                self.rev.a.impulse.attack = v.clamp(0.0, 1.0);
-                self.rev.a.update_params();
+                c.impulse.attack = v.clamp(0.0, 1.0);
+                c.update_params();
             }
             14 => {
-                self.rev.a.impulse.stretch = v.clamp(0.25, 4.0);
-                self.rev.a.update_params();
+                c.impulse.stretch = v.clamp(0.25, 4.0);
+                c.update_params();
             }
             15 => {
-                self.rev.a.impulse.direction = if v >= 0.5 {
+                c.impulse.direction = if v >= 0.5 {
                     reverb::ImpulseDirection::Reverse
                 } else {
                     reverb::ImpulseDirection::Forward
                 };
-                self.rev.a.update_params();
+                c.update_params();
             }
             16 => {
-                self.rev.a.impulse.feedback = v.clamp(0.0, 1.0);
-                self.rev.a.update_params();
+                c.impulse.feedback = v.clamp(0.0, 1.0);
+                c.update_params();
             }
             17 => {
-                self.rev.a.shimmer.shift1_semitones = Some(v.clamp(-12.0, 12.0));
-                self.rev.a.update_params();
+                c.shimmer.shift1_semitones = Some(v.clamp(-12.0, 12.0));
+                c.update_params();
             }
             18 => {
-                self.rev.a.shimmer.shift2_semitones = Some(v.clamp(-12.0, 12.0));
-                self.rev.a.update_params();
+                c.shimmer.shift2_semitones = Some(v.clamp(-12.0, 12.0));
+                c.update_params();
             }
             19 => {
-                self.rev.a.shimmer.voice2 = v >= 0.5;
-                self.rev.a.update_params();
+                c.shimmer.voice2 = v >= 0.5;
+                c.update_params();
             }
             20 => {
-                self.rev.a.shimmer.amount = Some(v.clamp(0.0, 1.0));
-                self.rev.a.update_params();
+                c.shimmer.amount = Some(v.clamp(0.0, 1.0));
+                c.update_params();
             }
             21 => {
-                self.rev.a.shimmer.feedback_mode =
+                c.shimmer.feedback_mode =
                     reverb::ShimmerFeedbackMode::from_index(v.round().max(0.0) as usize);
-                self.rev.a.update_params();
+                c.update_params();
             }
             22 => {
-                self.rev.a.magneto.ping_pong = v >= 0.5;
-                self.rev.a.update_params();
+                c.magneto.ping_pong = v >= 0.5;
+                c.update_params();
             }
             23 => {
-                self.rev.a.nonlinear.chop_rate_hz = v.clamp(0.1, 15.0);
-                self.rev.a.update_params();
+                c.nonlinear.chop_rate_hz = v.clamp(0.1, 15.0);
+                c.update_params();
             }
             24 => {
-                self.rev.a.nonlinear.chop_depth = v.clamp(0.0, 1.0);
-                self.rev.a.update_params();
+                c.nonlinear.chop_depth = v.clamp(0.0, 1.0);
+                c.update_params();
             }
             25 => {
-                self.rev.a.nonlinear.gate_speed = v.clamp(0.0, 1.0);
-                self.rev.a.update_params();
+                c.nonlinear.gate_speed = v.clamp(0.0, 1.0);
+                c.update_params();
             }
             26 => {
-                self.rev.a.nonlinear.late_speed = v.clamp(0.0, 1.0);
-                self.rev.a.update_params();
+                c.nonlinear.late_speed = v.clamp(0.0, 1.0);
+                c.update_params();
             }
             27 => {
-                self.rev.a.nonlinear.late_decay = v.clamp(0.0, 1.0);
-                self.rev.a.update_params();
+                c.nonlinear.late_decay = v.clamp(0.0, 1.0);
+                c.update_params();
             }
             28 => {
-                self.rev.a.nonlinear.late_level = v.clamp(0.0, 1.0);
-                self.rev.a.update_params();
+                c.nonlinear.late_level = v.clamp(0.0, 1.0);
+                c.update_params();
             }
             29 => {
-                self.rev.a.cloud.ensemble = v.clamp(0.0, 1.0);
-                self.rev.a.update_params();
+                c.cloud.ensemble = v.clamp(0.0, 1.0);
+                c.update_params();
             }
             30 => {
-                self.rev.a.bloom.harmonics = v.clamp(0.0, 1.0);
-                self.rev.a.update_params();
+                c.bloom.harmonics = v.clamp(0.0, 1.0);
+                c.update_params();
             }
             31 => {
-                self.rev.a.chorale.choir_level = Some(v.clamp(0.0, 1.0));
-                self.rev.a.update_params();
+                c.chorale.choir_level = Some(v.clamp(0.0, 1.0));
+                c.update_params();
             }
             32 => {
-                self.rev.a.chorale.voice = if v >= 0.5 {
-                    reverb::ChoirVoice::Soprano
+                c.chorale.voice = if v >= 0.5 {
+                    reverb::ChoirVoice::Baritone
                 } else {
                     reverb::ChoirVoice::Tenor
                 };
-                self.rev.a.update_params();
+                c.update_params();
             }
             33 => {
-                self.rev.a.chorale.mod_amount = v.clamp(0.0, 1.0);
-                self.rev.a.update_params();
+                c.chorale.mod_amount = v.clamp(0.0, 1.0);
+                c.update_params();
             }
             34 => {
-                self.rev.a.voice = if v >= 0.5 {
+                c.voice = if v >= 0.5 {
                     reverb::ReverbVoice::Classic
                 } else {
                     reverb::ReverbVoice::Mx
                 };
-                self.rev.a.update_params();
+                c.update_params();
             }
             35 => {
-                self.rev.a.hall.mid_db = v.clamp(-6.0, 6.0);
-                self.rev.a.update_params();
+                c.hall.mid_db = v.clamp(-6.0, 6.0);
+                c.update_params();
             }
             36 => {
-                self.rev.a.hall.swell_rise = v.clamp(0.0, 1.0);
-                self.rev.a.update_params();
+                c.hall.swell_rise = v.clamp(0.0, 1.0);
+                c.update_params();
             }
             37 => {
-                self.rev.a.hall.swell_type = if v >= 0.5 {
+                c.hall.swell_type = if v >= 0.5 {
                     reverb::SwellType::WetPlusDry
                 } else {
                     reverb::SwellType::Wet
                 };
-                self.rev.a.update_params();
+                c.update_params();
             }
             38 => {
-                self.rev.a.set_size_index(v.round().max(0.0) as usize);
+                c.set_size_index(v.round().max(0.0) as usize);
             }
-            // Chain-A tone/space controls (39+ — see REVERB_PARAMS).
             39 => {
-                self.rev
-                    .a
-                    .set_algorithm(reverb::AlgorithmType::from_index(v.round().max(0.0) as usize));
-                self.rev.a.update_params();
+                c.set_algorithm(reverb::AlgorithmType::from_index(v.round().max(0.0) as usize));
+                c.update_params();
             }
             40 => {
-                self.rev.a.params.modulation = v;
-                self.rev.a.update_params();
+                c.params.modulation = v;
+                c.update_params();
             }
             41 => {
-                self.rev.a.params.damping = v;
-                self.rev.a.update_params();
+                c.params.damping = v;
+                c.update_params();
             }
             42 => {
-                self.rev.a.params.tone = v;
-                self.rev.a.update_params();
+                c.params.tone = v;
+                c.update_params();
             }
-            43 => self.rev.a.predelay_ms = v,
+            43 => c.predelay_ms = v,
+            44 => c.freeze = v > 0.5,
+            45 => {
+                c.infinite_mode = match v.round().max(0.0) as usize {
+                    1 => reverb::InfiniteMode::Infinite,
+                    2 => reverb::InfiniteMode::Off,
+                    _ => reverb::InfiniteMode::Freeze,
+                }
+            }
+            46 => {
+                c.chamber.color = reverb::ChamberColor::from_index(v.round().max(0.0) as usize);
+                c.update_params();
+            }
+            47 => {
+                c.magneto.heads = reverb::MagnetoHeads::from_index(v.round().max(0.0) as usize);
+                c.update_params();
+            }
+            48 => {
+                c.magneto.spacing = if v > 0.5 {
+                    reverb::MagnetoSpacing::Uneven
+                } else {
+                    reverb::MagnetoSpacing::Even
+                };
+                c.update_params();
+            }
+            49 => {
+                c.nonlinear.shape = Some(reverb::NlShape::from_index(v.round().max(0.0) as usize));
+                c.update_params();
+            }
+            50 => {
+                c.spring.dwell = reverb::SpringDwell::from_index(v.round().max(0.0) as usize);
+                c.update_params();
+            }
+            51 => {
+                c.spring.springs = v.round().max(0.0) as u8 + 1;
+                c.update_params();
+            }
+            52 => {
+                c.params.diffusion = v.clamp(0.0, 1.0);
+                c.update_params();
+            }
+            54 => {
+                c.chorale.vowel =
+                    Some(reverb::ChoraleVowel::from_index(v.round().max(0.0) as usize));
+                c.update_params();
+            }
+            55 => {
+                c.chorale.resonance =
+                    reverb::ChoraleResonance::from_index(v.round().max(0.0) as usize);
+                c.update_params();
+            }
+            53 => {
+                // 0 -> lows tamed (0.5x), 0.5 -> neutral, 1 -> lows
+                // bloom (1.6x) — the "impression of larger spaces".
+                let v = v.clamp(0.0, 1.0);
+                c.params.low_decay_mult = if v < 0.5 {
+                    0.5 + v
+                } else {
+                    1.0 + (v - 0.5) * 1.2
+                };
+                c.update_params();
+            }
             _ => {}
         }
     }
 
     /// Apply a build-time parameter by name (see `REVERB_PARAMS`).
+    /// `r2_<name>` addresses the same chain-scoped param on reverb 2.
     pub fn set_named(&mut self, name: &str, value: f64) {
+        if let Some(base) = name.strip_prefix("r2_") {
+            if let Some(id) = param_id(REVERB_PARAMS, base) {
+                self.set(id + 100, value);
+            }
+            return;
+        }
         if let Some(id) = param_id(REVERB_PARAMS, name) {
             self.set(id, value);
         }
@@ -997,7 +1111,23 @@ impl PluginInstance for NativeReverb {
         descriptor("signal.fx.reverb", "Reverb")
     }
     fn params(&mut self) -> Vec<PluginParamInfo> {
-        param_infos(REVERB_PARAMS)
+        let mut infos = param_infos(REVERB_PARAMS);
+        // Mirror every chain-scoped param for reverb 2 at id + 100
+        // (`r2_*`), so a dual preset can run two full MX engines. The
+        // dual block (routing + the legacy b params) stays single.
+        infos.extend(
+            REVERB_PARAMS
+                .iter()
+                .filter(|s| !matches!(s.id, 3..=6 | 8))
+                .map(|s| PluginParamInfo {
+                    id: s.id + 100,
+                    name: format!("r2_{}", s.name),
+                    min: s.min,
+                    max: s.max,
+                    default: s.default,
+                }),
+        );
+        infos
     }
     fn param_value(&mut self, _id: u32) -> Option<f64> {
         None
@@ -1017,6 +1147,27 @@ impl PluginInstance for NativeReverb {
             max_buffer_size: block_size.max(1) as usize,
         });
         self.rev.reset();
+        // Impulse live-param pipeline, one worker per chain (the r2_*
+        // mirror block can host a second Impulse engine): workers
+        // re-prepare shaped IRs and dispose swap garbage off the audio
+        // thread.
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            if self.reshaper_a.is_none() {
+                let (reshaper, rx) = reverb::ir::ImpulseReshaper::new();
+                self.rev.a.set_prepared_ir_receiver(rx);
+                self.rev.a.set_reshape_sender(reshaper.sender());
+                self.rev.a.set_ir_trash_sender(reshaper.trash_sender());
+                self.reshaper_a = Some(reshaper);
+            }
+            if self.reshaper_b.is_none() {
+                let (reshaper, rx) = reverb::ir::ImpulseReshaper::new();
+                self.rev.b.set_prepared_ir_receiver(rx);
+                self.rev.b.set_reshape_sender(reshaper.sender());
+                self.rev.b.set_ir_trash_sender(reshaper.trash_sender());
+                self.reshaper_b = Some(reshaper);
+            }
+        }
         self.scratch_l = vec![0.0; block_size.max(1) as usize];
         self.scratch_r = vec![0.0; block_size.max(1) as usize];
         self.prepared = true;
@@ -1057,10 +1208,12 @@ impl PluginInstance for NativeReverb {
 
 const DELAY_PARAMS: &[ParamSpec] = &[
     ParamSpec { id: 0, name: "mix", min: 0.0, max: 1.0, default: 0.08 },
-    ParamSpec { id: 1, name: "time", min: 20.0, max: 2500.0, default: 400.0 },
+    // 2 ms floor: the Lo-Fi machine is spec'd down to 2 ms (chorus/flange/
+    // realtime-lofi use); every style re-clamps to its own range anyway.
+    ParamSpec { id: 1, name: "time", min: 2.0, max: 2500.0, default: 400.0 },
     ParamSpec { id: 2, name: "feedback", min: 0.0, max: 0.95, default: 0.30 },
     // TimeLine MX parity params (style index: see delay::DelayStyle).
-    ParamSpec { id: 3, name: "style", min: 0.0, max: 12.0, default: 1.0 },
+    ParamSpec { id: 3, name: "style", min: 0.0, max: 13.0, default: 1.0 },
     ParamSpec { id: 4, name: "swell", min: 0.0, max: 4.0, default: 0.0 },
     ParamSpec { id: 5, name: "freeze", min: 0.0, max: 1.0, default: 0.0 },
     ParamSpec { id: 6, name: "tempo_bpm", min: 0.0, max: 300.0, default: 0.0 },
@@ -1082,25 +1235,30 @@ const DELAY_PARAMS: &[ParamSpec] = &[
     // 2 Series 2>1 / 3 Parallel / 4 Split / 5 Split Swap) + delay B.
     // Ids 0-16 keep addressing delay A.
     ParamSpec { id: 17, name: "routing", min: 0.0, max: 5.0, default: 0.0 },
-    ParamSpec { id: 18, name: "style_b", min: 0.0, max: 12.0, default: 1.0 },
-    ParamSpec { id: 19, name: "time_b", min: 20.0, max: 2500.0, default: 300.0 },
+    ParamSpec { id: 18, name: "style_b", min: 0.0, max: 13.0, default: 1.0 },
+    ParamSpec { id: 19, name: "time_b", min: 2.0, max: 2500.0, default: 300.0 },
     ParamSpec { id: 20, name: "feedback_b", min: 0.0, max: 0.95, default: 0.30 },
     ParamSpec { id: 21, name: "mix_b", min: 0.0, max: 1.0, default: 0.08 },
     // Spectral machine (grain_shape: 0 Soft/1 Swell/2 SoftPluck/
-    // 3 Pluck/4 Bounce; direction: 0 Fwd/1 Rev/2 Both; density = n in
-    // Synced(1/n); density_ms >= 6 switches to free 6-250 ms).
+    // 3 Pluck/4 Bounce; direction: 0 Fwd/1 Rev/2 Both; density = the
+    // MX 15-step synced menu index (CC 0-14, 1/1 .. 1/32 of the repeat
+    // incl. off-grid ratios); density_ms >= 6 switches to free
+    // 6-250 ms).
     ParamSpec { id: 22, name: "grain_shape", min: 0.0, max: 4.0, default: 0.0 },
     ParamSpec { id: 23, name: "direction", min: 0.0, max: 2.0, default: 0.0 },
-    ParamSpec { id: 24, name: "density", min: 1.0, max: 32.0, default: 8.0 },
+    ParamSpec { id: 24, name: "density", min: 0.0, max: 14.0, default: 9.0 },
     ParamSpec { id: 25, name: "density_ms", min: 0.0, max: 250.0, default: 0.0 },
     ParamSpec { id: 26, name: "spread", min: 0.0, max: 1.0, default: 0.0 },
     ParamSpec { id: 27, name: "stretch", min: 0.0, max: 1.0, default: 0.0 },
     ParamSpec { id: 28, name: "octave", min: 0.0, max: 1.0, default: 0.0 },
     // Lo-Fi machine (filter_shape: 0 Off .. 8 Intercom; grit rides the
-    // shared "drive" engine field via id 29).
+    // shared "drive" engine field via id 29). sample_rate is the MX
+    // 21-step menu index: 0 = 750 Hz ... 20 = 96 kHz, geometrically
+    // spaced (the manual gives endpoints + step count), converted to a
+    // divisor against the host rate.
     ParamSpec { id: 29, name: "grit", min: 0.0, max: 1.0, default: 0.0 },
     ParamSpec { id: 30, name: "bit_depth", min: 4.0, max: 32.0, default: 12.0 },
-    ParamSpec { id: 31, name: "sr_div", min: 1.0, max: 64.0, default: 4.0 },
+    ParamSpec { id: 31, name: "sample_rate", min: 0.0, max: 20.0, default: 11.0 },
     ParamSpec { id: 32, name: "lofi_mix", min: 0.0, max: 1.0, default: 1.0 },
     ParamSpec { id: 33, name: "vinyl", min: 0.0, max: 1.0, default: 0.0 },
     ParamSpec { id: 34, name: "filter_shape", min: 0.0, max: 8.0, default: 0.0 },
@@ -1112,6 +1270,47 @@ const DELAY_PARAMS: &[ParamSpec] = &[
     ParamSpec { id: 35, name: "tap_div_l", min: 0.0, max: 7.0, default: 7.0 },
     ParamSpec { id: 36, name: "tap_div_r", min: 0.0, max: 7.0, default: 7.0 },
     ParamSpec { id: 37, name: "pan", min: -1.0, max: 1.0, default: 0.0 },
+    // Common Mod Speed/Depth (TimeLine PARAM-menu mod): one knob pair
+    // drives whichever machine is active (each engine keeps per-machine
+    // fields; the Reverb machine routes these to its wet tremolo).
+    ParamSpec { id: 38, name: "mod_rate", min: 0.05, max: 8.0, default: 0.6 },
+    ParamSpec { id: 39, name: "mod_depth", min: 0.0, max: 1.0, default: 0.0 },
+    // Reverse machine: Smear (diffusion on the reversed audio).
+    ParamSpec { id: 40, name: "rev_smear", min: 0.0, max: 1.0, default: 0.0 },
+    // Digital Classic voice: morphing FILTER (0 full-bw -> 1 tape).
+    ParamSpec { id: 41, name: "dig_morph", min: 0.0, max: 1.0, default: 0.0 },
+    // Ducking (TimeLine Duck Sens 0-18, Duck Release 0.05-1.00 s).
+    ParamSpec { id: 42, name: "duck_sens", min: 0.0, max: 18.0, default: 0.0 },
+    ParamSpec { id: 43, name: "duck_release", min: 0.05, max: 1.0, default: 0.2 },
+    // Drum machine: head spacing (0 Even / 1 Triplet / 2 Golden /
+    // 3 Silver) + Lo Cut.
+    ParamSpec { id: 44, name: "drum_spacing", min: 0.0, max: 3.0, default: 2.0 },
+    ParamSpec { id: 45, name: "drum_locut", min: 0.0, max: 1.0, default: 0.2 },
+    // Oil Can: head mode (0 Long / 1 Short / 2 Both).
+    ParamSpec { id: 46, name: "oilcan_heads", min: 0.0, max: 2.0, default: 0.0 },
+    // Per-delay wet output level (TimeLine Output Level).
+    ParamSpec { id: 47, name: "output_level", min: 0.0, max: 1.0, default: 1.0 },
+    // Filter machine (swept filter + trem on repeats).
+    ParamSpec { id: 48, name: "flt_shape", min: 0.0, max: 10.0, default: 0.0 },
+    ParamSpec { id: 49, name: "flt_speed", min: 0.03125, max: 32.0, default: 1.0 },
+    ParamSpec { id: 50, name: "flt_depth", min: 0.0, max: 1.0, default: 0.5 },
+    ParamSpec { id: 51, name: "flt_center", min: 100.0, max: 8000.0, default: 1200.0 },
+    ParamSpec { id: 52, name: "flt_q", min: 0.5, max: 10.0, default: 2.0 },
+    ParamSpec { id: 53, name: "flt_location", min: 0.0, max: 1.0, default: 1.0 },
+    ParamSpec { id: 54, name: "flt_trem_depth", min: 0.0, max: 1.0, default: 0.0 },
+    ParamSpec { id: 55, name: "flt_trem_speed", min: 0.03125, max: 32.0, default: 1.0 },
+    // MultiTap: Classic pattern recall (0 = custom, 1-16 = Classic n),
+    // feedback topology (0 Input / 1 Parallel), step grid
+    // (0 16th / 1 Triplet / 2 Off-256).
+    ParamSpec { id: 56, name: "mtap_pattern", min: 0.0, max: 16.0, default: 0.0 },
+    ParamSpec { id: 57, name: "mtap_fb_mode", min: 0.0, max: 1.0, default: 0.0 },
+    ParamSpec { id: 58, name: "mtap_grid", min: 0.0, max: 2.0, default: 0.0 },
+    // Filter-machine tremolo waveform (manual list: 0 Triangle /
+    // 1 Square / 2 Sine / 3 Ramp / 4 Saw).
+    ParamSpec { id: 59, name: "flt_trem_shape", min: 0.0, max: 4.0, default: 2.0 },
+    // Spectral post-granular diffusion (FTS voicing extra beyond the
+    // hardware surface — Clouds allpass-chain crossfade on the cloud).
+    ParamSpec { id: 60, name: "spec_diffusion", min: 0.0, max: 1.0, default: 0.5 },
 ];
 
 /// Native Delay block — wraps [`delay::DualDelay`] (two full chains +
@@ -1156,7 +1355,7 @@ impl NativeDelay {
         // Ids 0-16 address delay A; 17+ are the dual-routing block.
         let a = &mut self.dly.a;
         match id {
-            0 => a.mix = v.min(TIME_MIX_MAX),
+            0 => a.mix = v.clamp(0.0, 1.0),
             1 => {
                 a.delay_l.time_ms = v;
                 a.delay_r.time_ms = v;
@@ -1239,7 +1438,7 @@ impl NativeDelay {
                 self.dly.b.delay_l.feedback = v;
                 self.dly.b.delay_r.feedback = v;
             }
-            21 => self.dly.b.mix = v.min(TIME_MIX_MAX),
+            21 => self.dly.b.mix = v.clamp(0.0, 1.0),
             22 => {
                 let shape = match v.round().max(0.0) as usize {
                     1 => delay::GrainShape::Swell,
@@ -1261,8 +1460,31 @@ impl NativeDelay {
                 a.delay_r.spectral_direction = dir;
             }
             24 => {
-                let n = v.clamp(1.0, 32.0);
-                let d = delay::DensityMode::Synced(1.0 / n);
+                // MX synced-density menu: 15 steps from 1/1 down to
+                // 1/32 of the repeat time, including the off-grid
+                // ratios the walkthrough demos (2/3, 3/8, ...).
+                // // interpretation: the manual gives only the
+                // endpoints + step count; intermediate ratios are a
+                // musical fill to be dialed in against hardware.
+                const SYNCED_STEPS: [f64; 15] = [
+                    1.0,
+                    3.0 / 4.0,
+                    2.0 / 3.0,
+                    1.0 / 2.0,
+                    3.0 / 8.0,
+                    1.0 / 3.0,
+                    1.0 / 4.0,
+                    3.0 / 16.0,
+                    1.0 / 6.0,
+                    1.0 / 8.0,
+                    1.0 / 12.0,
+                    1.0 / 16.0,
+                    1.0 / 20.0,
+                    1.0 / 24.0,
+                    1.0 / 32.0,
+                ];
+                let i = (v.round().max(0.0) as usize).min(SYNCED_STEPS.len() - 1);
+                let d = delay::DensityMode::Synced(SYNCED_STEPS[i]);
                 a.delay_l.spectral_density = d;
                 a.delay_r.spectral_density = d;
             }
@@ -1296,8 +1518,14 @@ impl NativeDelay {
                 a.delay_r.lofi_bit_depth = v;
             }
             31 => {
-                a.delay_l.lofi_sr_div = v;
-                a.delay_r.lofi_sr_div = v;
+                // Step index -> absolute Hz (750 Hz .. 96 kHz geometric)
+                // -> hold divisor at the host rate. Steps at or above
+                // the host rate mean "no reduction" (divisor 1).
+                let step = v.clamp(0.0, 20.0);
+                let hz = 750.0 * (96000.0f64 / 750.0).powf(step / 20.0);
+                let div = (self.sample_rate / hz).max(1.0);
+                a.delay_l.lofi_sr_div = div;
+                a.delay_r.lofi_sr_div = div;
             }
             32 => {
                 a.delay_l.lofi_mix = v;
@@ -1311,6 +1539,145 @@ impl NativeDelay {
                 let shape = delay::LoFiFilterShape::from_index(v.round().max(0.0) as usize);
                 a.delay_l.lofi_filter_shape = shape;
                 a.delay_r.lofi_filter_shape = shape;
+            }
+            38 => {
+                for e in [&mut a.delay_l, &mut a.delay_r] {
+                    e.digital_mod_rate = v;
+                    e.reverse_mod_rate = v;
+                    e.lofi_mod_rate = v;
+                    e.pitch_mod_rate = v;
+                    e.bbd_mod_rate = v;
+                    e.oilcan_mod_rate = v;
+                    e.multitap_mod_rate_hz = v;
+                    e.reverb_trem_rate = v;
+                }
+            }
+            39 => {
+                let d = v.clamp(0.0, 1.0);
+                for e in [&mut a.delay_l, &mut a.delay_r] {
+                    e.digital_mod_depth = d;
+                    e.reverse_mod_depth = d;
+                    e.lofi_mod_depth = d;
+                    e.pitch_mod_depth = d;
+                    e.bbd_mod_depth = d;
+                    e.multitap_mod_depth = d;
+                    e.reverb_trem_depth = d;
+                }
+            }
+            40 => {
+                a.delay_l.reverse_smear = v;
+                a.delay_r.reverse_smear = v;
+            }
+            41 => {
+                a.delay_l.digital_morph = v;
+                a.delay_r.digital_morph = v;
+            }
+            42 => {
+                a.ducking_enabled = v > 0.05;
+                a.ducker.amount = (v / 18.0).clamp(0.0, 1.0);
+            }
+            43 => a.ducker.release_ms = v.clamp(0.05, 1.0) * 1000.0,
+            44 => {
+                let spacing = match v.round().max(0.0) as usize {
+                    0 => delay::DrumSpacing::Even,
+                    1 => delay::DrumSpacing::Triplet,
+                    3 => delay::DrumSpacing::Silver,
+                    _ => delay::DrumSpacing::Golden,
+                };
+                a.delay_l.set_drum_spacing(spacing);
+                a.delay_r.set_drum_spacing(spacing);
+            }
+            45 => {
+                a.delay_l.drum_lo_cut = v;
+                a.delay_r.drum_lo_cut = v;
+            }
+            46 => {
+                let heads = match v.round().max(0.0) as usize {
+                    1 => delay::OilCanHeads::Short,
+                    2 => delay::OilCanHeads::Both,
+                    _ => delay::OilCanHeads::Long,
+                };
+                a.delay_l.oilcan_heads = heads;
+                a.delay_r.oilcan_heads = heads;
+            }
+            47 => a.output_level = v.clamp(0.0, 1.0),
+            48 => {
+                let shape = delay::FilterLfoShape::from_index(v.round().max(0.0) as usize);
+                a.delay_l.filter_lfo_shape = shape;
+                a.delay_r.filter_lfo_shape = shape;
+            }
+            49 => {
+                a.delay_l.filter_lfo_speed = v;
+                a.delay_r.filter_lfo_speed = v;
+            }
+            50 => {
+                a.delay_l.filter_depth = v;
+                a.delay_r.filter_depth = v;
+            }
+            51 => {
+                a.delay_l.filter_center = v;
+                a.delay_r.filter_center = v;
+            }
+            52 => {
+                a.delay_l.filter_q = v;
+                a.delay_r.filter_q = v;
+            }
+            53 => {
+                let loc = if v > 0.5 {
+                    delay::FilterLocation::Post
+                } else {
+                    delay::FilterLocation::Pre
+                };
+                a.delay_l.filter_location = loc;
+                a.delay_r.filter_location = loc;
+            }
+            54 => {
+                a.delay_l.filter_trem_depth = v;
+                a.delay_r.filter_trem_depth = v;
+            }
+            55 => {
+                a.delay_l.filter_trem_speed = v;
+                a.delay_r.filter_trem_speed = v;
+            }
+            56 => {
+                let n = v.round().max(0.0) as u8;
+                if n >= 1 {
+                    a.delay_l.apply_multitap_classic(n);
+                    a.delay_r.apply_multitap_classic(n);
+                }
+            }
+            57 => {
+                let mode = if v > 0.5 {
+                    delay::FeedbackMode::Parallel
+                } else {
+                    delay::FeedbackMode::Input
+                };
+                a.delay_l.multitap_feedback_mode = mode;
+                a.delay_r.multitap_feedback_mode = mode;
+            }
+            58 => {
+                let grid = match v.round().max(0.0) as usize {
+                    1 => delay::TapGrid::Triplet,
+                    2 => delay::TapGrid::Off,
+                    _ => delay::TapGrid::Sixteenth,
+                };
+                a.delay_l.multitap_grid = grid;
+                a.delay_r.multitap_grid = grid;
+            }
+            60 => {
+                a.delay_l.spectral_diffusion = v.clamp(0.0, 1.0);
+                a.delay_r.spectral_diffusion = v.clamp(0.0, 1.0);
+            }
+            59 => {
+                let shape = match v.round().max(0.0) as usize {
+                    0 => delay::FilterLfoShape::TrianglePos,
+                    1 => delay::FilterLfoShape::SquarePos,
+                    3 => delay::FilterLfoShape::Ramp,
+                    4 => delay::FilterLfoShape::Saw,
+                    _ => delay::FilterLfoShape::SinePos,
+                };
+                a.delay_l.filter_trem_shape = shape;
+                a.delay_r.filter_trem_shape = shape;
             }
             _ => {}
         }
@@ -2004,5 +2371,28 @@ mod param_table_tests {
                 "reverb param {name:?} missing from REVERB_PARAMS"
             );
         }
+    }
+
+    /// The `r2_*` mirror block must land chain-scoped params on chain B
+    /// and leave chain A untouched (and vice versa).
+    #[test]
+    fn reverb_r2_params_reach_chain_b() {
+        let mut r = NativeReverb::new(48000.0);
+        r.set_named("cloud_ensemble", 0.8);
+        r.set_named("r2_cloud_ensemble", 0.3);
+        assert!((r.rev.a.cloud.ensemble - 0.8).abs() < 1e-9);
+        assert!((r.rev.b.cloud.ensemble - 0.3).abs() < 1e-9);
+
+        r.set_named("r2_mix", 0.77);
+        assert!((r.rev.b.mix - 0.77).abs() < 1e-9);
+
+        r.set_named("r2_algorithm", 6.0); // Shimmer
+        assert_eq!(r.rev.b.algorithm_type(), reverb::AlgorithmType::Shimmer);
+        assert_ne!(r.rev.a.algorithm_type(), reverb::AlgorithmType::Shimmer);
+
+        // The advertised param list contains the mirrors exactly once.
+        let infos = r.params();
+        let r2: Vec<_> = infos.iter().filter(|i| i.name.starts_with("r2_")).collect();
+        assert_eq!(r2.len(), REVERB_PARAMS.len() - 5);
     }
 }

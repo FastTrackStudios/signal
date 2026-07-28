@@ -16,6 +16,9 @@
 //! clock IS low (e.g. 4096 stages / 800 ms ≈ 5.1 kHz), and the write path
 //! is deliberately not oversampled.
 
+use crate::bbd_core::{BbdCore, StageShaper};
+use crate::modulation::CompanderEnv;
+use crate::tilt::DecayTilt;
 use audiocore_dsp::biquad::{Biquad, FilterType};
 use audiocore_dsp::denormal::flush;
 use audiocore_dsp::prng::XorShift32;
@@ -42,8 +45,44 @@ impl BbdVoice {
     }
 }
 
-/// Stage buffer capacity: max voice stages + guard for cubic reads.
-const STAGE_CAPACITY: usize = 8192 + 8;
+/// Per-bucket charge degradation (the bucket-loss model), hooked into
+/// the Holters–Parker core's write path as a [`StageShaper`].
+struct BucketLoss {
+    /// Severity for the current audio sample (set from the knob +
+    /// clock ratio each tick).
+    sev: f64,
+    lp: f64,
+    rng: XorShift32,
+}
+
+impl BucketLoss {
+    fn new() -> Self {
+        Self {
+            sev: 0.0,
+            lp: 0.0,
+            rng: XorShift32::new(0xB0CC_E77E),
+        }
+    }
+
+    fn reset(&mut self) {
+        self.lp = 0.0;
+    }
+}
+
+impl StageShaper for BucketLoss {
+    #[inline]
+    fn shape(&mut self, v: f64) -> f64 {
+        if self.sev <= 0.001 {
+            return v;
+        }
+        // HF droop: blend toward a one-pole of the written charge.
+        self.lp = flush(self.lp + (v - self.lp) * (1.0 - self.sev * 0.6));
+        let drooped = v + (self.lp - v) * self.sev * 0.7;
+        // Charge-transfer nonlinearity + noise floor.
+        let nl = drooped - self.sev * 0.35 * drooped * drooped * drooped;
+        nl + self.rng.next_bipolar() * self.sev * 0.002
+    }
+}
 
 /// BBD/Analog delay with variable-clock stage buffer.
 pub struct BbdDelay {
@@ -74,18 +113,16 @@ pub struct BbdDelay {
     /// Decay EQ tilt (-1.0 = darken repeats, 0 = neutral, +1.0 = brighten).
     pub decay_tilt: f64,
 
-    decay_eq: Biquad,
-    // Virtual-clock stage buffer.
-    stages: Box<[f64]>,
-    /// Fractional write position in stage units, wrapped to [0, capacity).
-    write_phase: f64,
-    /// Previous (input+feedback) value for write-side interpolation.
-    prev_write_in: f64,
-    /// Charge-droop lowpass state for the bucket-loss model.
-    loss_lp: f64,
-    // Anti-aliasing (input) and reconstruction (output) filters
-    aa_filter: Biquad,
-    recon_filter: Biquad,
+    decay_tilt_eq: DecayTilt,
+    /// Holters–Parker combined BBD core: clocked bucket queue with the
+    /// AA/reconstruction filter banks evaluated at exact clock
+    /// instants. Replaces the old interpolated stage buffer + biquads.
+    core: BbdCore,
+    loss: BucketLoss,
+    /// Previous feedback value — the loop closes with one sample of
+    /// latency because the core consumes input and produces output in
+    /// one interleaved pass.
+    fb_prev: f64,
     // Feedback tone filter
     tone_filter: Biquad,
     feedback_sample: f64,
@@ -95,6 +132,18 @@ pub struct BbdDelay {
     rng: XorShift32,
     /// Smoothed jitter so clock noise wobbles instead of stepping.
     jitter_state: f64,
+    /// NE570-style 2:1 compander (Raffel–Smith DAFx-10): compress into
+    /// the buckets, expand at the reconstruction output. The averagers'
+    /// mismatch against the DELAYED envelope is the authentic
+    /// bucket-loss "breathing" on repeats, compounding per pass.
+    comp_env: CompanderEnv,
+    exp_env: CompanderEnv,
+    /// Level-independent cubic THD constants (paper fit: a=1/8, b=1/18
+    /// for 4096 stages; scaled by the voice's stage count).
+    thd_a: f64,
+    thd_b: f64,
+    /// DC blocker after the x² term of the THD polynomial.
+    thd_dc: audiocore_dsp::dc_blocker::DcBlocker,
 }
 
 impl Default for BbdDelay {
@@ -116,13 +165,10 @@ impl BbdDelay {
             lfo_phase_offset: 0.0,
             voice: BbdVoice::Mx,
             decay_tilt: 0.0,
-            decay_eq: Biquad::new(),
-            stages: vec![0.0; STAGE_CAPACITY].into_boxed_slice(),
-            write_phase: 0.0,
-            prev_write_in: 0.0,
-            loss_lp: 0.0,
-            aa_filter: Biquad::new(),
-            recon_filter: Biquad::new(),
+            decay_tilt_eq: DecayTilt::new(),
+            core: BbdCore::new(),
+            loss: BucketLoss::new(),
+            fb_prev: 0.0,
             tone_filter: Biquad::new(),
             feedback_sample: 0.0,
             sample_rate: 48000.0,
@@ -130,22 +176,37 @@ impl BbdDelay {
             lfo_phase: 0.0,
             rng: XorShift32::new(0xDEAD_BEEF),
             jitter_state: 0.0,
+            comp_env: CompanderEnv::new(),
+            exp_env: CompanderEnv::new(),
+            thd_a: 0.125,
+            thd_b: 1.0 / 18.0,
+            thd_dc: audiocore_dsp::dc_blocker::DcBlocker::new(),
         }
     }
 
     pub fn update(&mut self, sample_rate: f64) {
+        self.comp_env.configure(sample_rate);
+        self.exp_env.configure(sample_rate);
+        // THD scales with stage count (~1% per 1024 stages,
+        // level-independent — the giveaway BBD flavor; NOT clipping).
+        let stage_scale = self.voice.stages() / 4096.0;
+        self.thd_a = 0.125 * stage_scale;
+        self.thd_b = (1.0 / 18.0) * stage_scale;
+        self.thd_dc.set_cutoff(10.0, sample_rate);
         self.sample_rate = sample_rate;
 
-        // Voice bandwidth: Mx (Brig) is cleaner up top than Classic.
-        let aa_freq = match self.voice {
-            BbdVoice::Mx => 12_000.0f64,
-            BbdVoice::Classic => 10_000.0,
-        }
-        .min(sample_rate * 0.45);
-        self.aa_filter
-            .set(FilterType::Lowpass, aa_freq, 0.707, sample_rate);
-        self.recon_filter
-            .set(FilterType::Lowpass, aa_freq, 0.707, sample_rate);
+        // Holters–Parker core: stage count from the voice; the Juno
+        // filter cutoffs scale with the nominal clock (2·stages/delay,
+        // referenced to the ≈100 kHz clock the filters were designed
+        // at), so long delays darken like the hardware and the Mx
+        // voice's doubled clock keeps it brighter than Classic at the
+        // same time setting.
+        let n_stages = self.voice.stages();
+        let delay_sec = (self.time_ms * 0.001).max(0.001);
+        let clock_hz = 2.0 * n_stages / delay_sec;
+        let cutoff_scale = (clock_hz / 100_000.0).clamp(0.22, 1.15);
+        self.core
+            .configure(sample_rate, n_stages as usize, cutoff_scale);
 
         // Analog-voiced tone: Q rises as the cutoff drops, so maximum
         // filtering has a resonant bump before the rolloff.
@@ -156,66 +217,17 @@ impl BbdDelay {
             .set(FilterType::Lowpass, tone_freq, q, sample_rate);
 
         // Decay EQ: tilt filter in feedback path
-        if self.decay_tilt.abs() > 0.01 {
-            if self.decay_tilt < 0.0 {
-                let freq = 20000.0 * (1.0 + self.decay_tilt).max(0.05);
-                self.decay_eq
-                    .set(FilterType::Lowpass, freq, 0.707, sample_rate);
-            } else {
-                let freq = 20.0 + self.decay_tilt * 2000.0;
-                self.decay_eq
-                    .set(FilterType::Highpass, freq, 0.707, sample_rate);
-            }
-        }
+        self.decay_tilt_eq.configure(self.decay_tilt, sample_rate);
 
         // Smooth delay-time (= clock-rate) changes; the sweep itself is
         // what produces the analog pitch-bend character.
-        self.smoother.set_time(0.15, sample_rate);
-        let target = self.time_ms * 0.001 * sample_rate;
-        if self.smoother.value() == 0.0 {
-            self.smoother.set_immediate(target);
-        }
-    }
-
-    /// Cubic read from the circular stage buffer at a fractional position.
-    fn read_stages(&self, pos: f64) -> f64 {
-        let cap = STAGE_CAPACITY as f64;
-        let p = pos.rem_euclid(cap);
-        let i = p as usize;
-        let frac = p - i as f64;
-        let at = |k: usize| self.stages[(i + k) % STAGE_CAPACITY];
-        // Catmull-Rom over 4 neighbors (y0 behind the read point).
-        let y0 = self.stages[(i + STAGE_CAPACITY - 1) % STAGE_CAPACITY];
-        let (y1, y2, y3) = (at(0), at(1), at(2));
-        let a0 = -0.5 * y0 + 1.5 * y1 - 1.5 * y2 + 0.5 * y3;
-        let a1 = y0 - 2.5 * y1 + 2.0 * y2 - 0.5 * y3;
-        let a2 = -0.5 * y0 + 0.5 * y2;
-        ((a0 * frac + a1) * frac + a2) * frac + y1
-    }
-
-    /// Per-stage-write charge degradation for the bucket-loss model.
-    #[inline]
-    fn degrade(&mut self, v: f64, clock_ratio: f64) -> f64 {
-        if self.bucket_loss <= 0.001 {
-            return v;
-        }
-        // Slower clock (clock_ratio < 1 stage/sample) = more droop.
-        let sev = self.bucket_loss * (0.35 + 0.65 * (1.0 - clock_ratio.min(1.0)));
-        // HF droop: blend toward a one-pole of the written signal.
-        self.loss_lp = flush(self.loss_lp + (v - self.loss_lp) * (1.0 - sev * 0.6));
-        let drooped = v + (self.loss_lp - v) * sev * 0.7;
-        // Charge-transfer nonlinearity + noise floor.
-        let nl = drooped - sev * 0.35 * drooped * drooped * drooped;
-        nl + self.rng.next_bipolar() * sev * 0.002
+        self.smoother.set_time_seeded(0.15, sample_rate, self.time_ms * 0.001 * sample_rate);
     }
 
     pub fn tick(&mut self, input: f64, ch: usize) -> f64 {
-        // Anti-aliasing filter on input
-        let filtered_input = self.aa_filter.tick(input, ch);
-
         let target_delay = self.time_ms * 0.001 * self.sample_rate;
         self.smoother.set_target(target_delay);
-        let smooth_delay = self.smoother.tick().max(1.0);
+        let smooth_delay = self.smoother.tick().max(16.0);
 
         // LFO + jitter modulate the CLOCK RATE (true BBD behavior: pitch
         // wobble on everything in the buckets, not a moving read tap).
@@ -231,46 +243,40 @@ impl BbdDelay {
         let jitter = self.jitter_state * self.clock_jitter * 0.01;
 
         let n_stages = self.voice.stages();
-        // Stages advanced per host sample: clock_hz / sample_rate.
-        let base_ratio = n_stages / smooth_delay;
-        let ratio = (base_ratio * (1.0 + lfo * self.mod_depth * 0.04 + jitter))
-            .clamp(0.01, 4.0);
+        let clock_factor = (1.0 + lfo * self.mod_depth * 0.04 + jitter).clamp(0.25, 4.0);
+        self.core.set_clock_samples(smooth_delay / clock_factor);
 
-        // Read head trails the write head by exactly N stages.
-        let out_pos = self.write_phase - n_stages;
-        let raw_output = self.read_stages(out_pos);
+        // Bucket-loss severity: slower clock (fewer stage writes per
+        // host sample) = more droop per stage.
+        let ratio = (n_stages / smooth_delay).min(1.0);
+        self.loss.sev = if self.bucket_loss <= 0.001 {
+            0.0
+        } else {
+            self.bucket_loss * (0.35 + 0.65 * (1.0 - ratio))
+        };
 
-        // Reconstruction filter
-        let output = self.recon_filter.tick(raw_output, ch);
+        // Loop front half: compander compress + the BBD's
+        // level-independent cubic THD (f(x) = x − a·x² − b·x³,
+        // DC-blocked) + charge noise (~−60 dB, inside the loop so
+        // feedback > 1 self-oscillates from the floor). The Holters–
+        // Parker core then handles AA filtering, the clocked buckets
+        // (per-write bucket loss via the shaper), and reconstruction.
+        let compressed = self.comp_env.compress(input + self.fb_prev);
+        let x = compressed.clamp(-1.5, 1.5);
+        let shaped = x - self.thd_a * x * x - self.thd_b * x * x * x;
+        let write_in = self.thd_dc.tick(shaped) + self.rng.next_bipolar() * 1.0e-3;
 
-        // Feedback path: tone filter (analog-voiced) → tilt → limit
+        let raw = self.core.process(write_in, &mut self.loss);
+        let output = self.exp_env.expand(raw);
+
+        // Feedback path: tone filter (analog-voiced) → tilt → limit.
+        // Closes with one sample of loop latency (the core consumes
+        // input and produces output in one interleaved pass).
         let mut fb = output * self.feedback;
         fb = self.tone_filter.tick(fb, ch);
-        if self.decay_tilt.abs() > 0.01 {
-            fb = self.decay_eq.tick(fb, ch);
-        }
+        fb = self.decay_tilt_eq.tick(fb, ch);
         fb = fb.clamp(-1.5, 1.5);
-
-        // Write side: advance the clock and fill every stage boundary the
-        // write head crosses this host sample, linearly interpolating the
-        // (input + feedback) signal at each crossing. ratio > 1 writes
-        // multiple stages per sample; ratio < 1 leaves stages holding
-        // charge across samples (the authentic aliasing source).
-        let write_in = filtered_input + fb;
-        let old_phase = self.write_phase;
-        let new_phase = old_phase + ratio;
-        let mut boundary = old_phase.floor() + 1.0;
-        while boundary <= new_phase {
-            let t = (boundary - old_phase) / ratio;
-            let v = self.prev_write_in + t * (write_in - self.prev_write_in);
-            let v = self.degrade(v, ratio);
-            let idx = (boundary as usize) % STAGE_CAPACITY;
-            self.stages[idx] = v;
-            boundary += 1.0;
-        }
-        self.write_phase = new_phase.rem_euclid(STAGE_CAPACITY as f64);
-        self.prev_write_in = write_in;
-
+        self.fb_prev = fb;
         self.feedback_sample = fb;
         output
     }
@@ -280,15 +286,15 @@ impl BbdDelay {
     }
 
     pub fn reset(&mut self) {
-        self.stages.fill(0.0);
-        self.write_phase = 0.0;
-        self.prev_write_in = 0.0;
-        self.loss_lp = 0.0;
+        self.core.reset();
+        self.loss.reset();
+        self.fb_prev = 0.0;
         self.jitter_state = 0.0;
-        self.aa_filter.reset();
-        self.recon_filter.reset();
+        self.comp_env.reset();
+        self.exp_env.reset();
+        self.thd_dc.reset();
         self.tone_filter.reset();
-        self.decay_eq.reset();
+        self.decay_tilt_eq.reset();
         self.feedback_sample = 0.0;
         self.smoother.reset(0.0);
         self.lfo_phase = 0.0;
@@ -313,31 +319,45 @@ mod tests {
 
     #[test]
     fn silence_in_silence_out() {
-        let mut d = make(100.0);
+        // The loop carries an analog noise floor (~−60 dB inside,
+        // expander-gated at the output) — silence in means a residual
+        // hiss floor out, far below audibility but not digital zero.
+        let mut d = make(200.0);
+        let mut peak = 0.0f64;
         for _ in 0..48000 {
-            let out = d.tick(0.0, 0);
-            assert!(out.abs() < 1e-6, "Expected silence: {out}");
+            peak = peak.max(d.tick(0.0, 0).abs());
         }
+        assert!(peak < 1.0e-3, "noise floor too hot: {peak}");
     }
 
     #[test]
     fn impulse_delayed() {
-        let mut d = make(100.0);
-        let mut peak_pos = 0;
-        let mut peak_val = 0.0f64;
-        for i in 0..10000 {
-            let input = if i == 0 { 1.0 } else { 0.0 };
-            let out = d.tick(input, 0);
-            if out.abs() > peak_val {
-                peak_val = out.abs();
-                peak_pos = i;
+        // A short burst (physical transient — the compander's 1 ms
+        // attack needs real signal duration; a 1-sample impulse is
+        // legitimately crushed by an expander) must come back at the
+        // delay time at significant level.
+        let mut d = make(150.0);
+        let burst = (0.003 * SR) as usize;
+        let expected = (150.0 * SR / 1000.0) as i64;
+        let mut peak = 0.0f64;
+        let mut peak_idx = 0i64;
+        for i in 0..24000 {
+            let input = if i < burst {
+                (core::f64::consts::TAU * 1000.0 * i as f64 / SR).sin() * 0.8
+            } else {
+                0.0
+            };
+            let out = d.tick(input, 0).abs();
+            if i as i64 > burst as i64 + 100 && out > peak {
+                peak = out;
+                peak_idx = i as i64;
             }
         }
         assert!(
-            peak_pos > 4700 && peak_pos < 5100,
-            "Peak at {peak_pos}, expected near 4800"
+            (peak_idx - expected).unsigned_abs() < 500,
+            "peak at {peak_idx}, expected near {expected}"
         );
-        assert!(peak_val > 0.1, "Peak should be significant: {peak_val}");
+        assert!(peak > 0.2, "Peak should be significant: {peak}");
     }
 
     #[test]
@@ -605,5 +625,27 @@ mod tests {
             diff(&mod_a, &mod_b) > 0.1,
             "modulation + phase offset should decorrelate the channels"
         );
+    }
+
+    #[test]
+    fn overdriven_feedback_self_oscillates_from_the_noise_floor() {
+        // With loop gain > 1 a real BBD sings: the in-loop charge noise
+        // seeds runaway regeneration (bounded by the loop clamp). A
+        // noiseless digital loop would stay at exact zero forever.
+        let mut d = make(120.0);
+        d.feedback = 1.1;
+        d.update(SR);
+        let mut late = 0.0f64;
+        for i in 0..(6 * 48000) {
+            let out = d.tick(0.0, 0);
+            if i > 5 * 48000 {
+                late += out * out;
+            }
+        }
+        assert!(
+            late > 1e-4,
+            "feedback > 1 should self-oscillate from the noise floor: {late}"
+        );
+        assert!(late.is_finite());
     }
 }
