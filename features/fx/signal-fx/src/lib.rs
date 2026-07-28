@@ -722,6 +722,14 @@ const REVERB_PARAMS: &[ParamSpec] = &[
     // footswitch controller's concern; `freeze` covers both.
     ParamSpec { id: 44, name: "freeze", min: 0.0, max: 1.0, default: 0.0 },
     ParamSpec { id: 45, name: "inf_mode", min: 0.0, max: 2.0, default: 0.0 },
+    // Chamber Color (0 Neutral / 1 Clear / 2 Smooth / 3 Crisp / 4 Deep).
+    ParamSpec { id: 46, name: "chamber_color", min: 0.0, max: 4.0, default: 0.0 },
+    // Magneto: head count menu (0 One / 1 Two / 2 Three / 3 Four /
+    // 4 Six) + spacing (0 Even / 1 Uneven). With Magneto active the
+    // pedal remaps predelay -> engine feedback and decay -> last-head
+    // time; the chain handles that from the existing decay/predelay ids.
+    ParamSpec { id: 47, name: "mag_heads", min: 0.0, max: 4.0, default: 3.0 },
+    ParamSpec { id: 48, name: "mag_spacing", min: 0.0, max: 1.0, default: 0.0 },
 ];
 
 /// Native Reverb block — wraps [`reverb::DualReverb`] (two full chains +
@@ -965,6 +973,22 @@ impl NativeReverb {
                     2 => reverb::InfiniteMode::Off,
                     _ => reverb::InfiniteMode::Freeze,
                 }
+            }
+            46 => {
+                c.chamber.color = reverb::ChamberColor::from_index(v.round().max(0.0) as usize);
+                c.update_params();
+            }
+            47 => {
+                c.magneto.heads = reverb::MagnetoHeads::from_index(v.round().max(0.0) as usize);
+                c.update_params();
+            }
+            48 => {
+                c.magneto.spacing = if v > 0.5 {
+                    reverb::MagnetoSpacing::Uneven
+                } else {
+                    reverb::MagnetoSpacing::Even
+                };
+                c.update_params();
             }
             _ => {}
         }

@@ -293,6 +293,10 @@ mod tests {
         d.routing = routing;
         d.a.set_algorithm(AlgorithmType::Magneto);
         d.a.mix = 1.0;
+        // Magneto knob remap: PRE-DELAY drives the engine's feedback —
+        // give the taps some recirculation so the series/parallel
+        // energy contrast is audible.
+        d.a.predelay_ms = 120.0;
         d.b.set_algorithm(AlgorithmType::Hall);
         d.b.mix = 1.0;
         d.b.params.decay = 0.8;

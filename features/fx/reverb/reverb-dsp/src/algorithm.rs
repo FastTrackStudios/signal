@@ -367,10 +367,100 @@ pub struct ShimmerParams {
 }
 
 /// BigSky MX Magneto engine params (beyond the shared set).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct MagnetoParams {
     /// Taps alternate hard L/R (center clarity + width).
     pub ping_pong: bool,
+    /// Number of tape heads: 1 / 2 / 3 / 4 / 6 (menu order).
+    pub heads: MagnetoHeads,
+    /// Even = equidistant heads (equal delay times, overtly rhythmic);
+    /// Uneven = irregular spacing + feedback from the last TWO heads.
+    pub spacing: MagnetoSpacing,
+    /// Feedback into the tape input (0.0–1.0). This is the engine's
+    /// PRE-DELAY knob remap — the chain routes `predelay_ms` here and
+    /// bypasses its own pre-delay line for Magneto.
+    pub feedback: f64,
+}
+
+/// Magneto head-count menu (1 / 2 / 3 / 4 / 6).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum MagnetoHeads {
+    One,
+    Two,
+    Three,
+    #[default]
+    Four,
+    Six,
+}
+
+impl MagnetoHeads {
+    pub const COUNT: usize = 5;
+
+    pub fn from_index(i: usize) -> Self {
+        match i {
+            0 => Self::One,
+            1 => Self::Two,
+            2 => Self::Three,
+            4 => Self::Six,
+            _ => Self::Four,
+        }
+    }
+
+    pub fn count(self) -> usize {
+        match self {
+            Self::One => 1,
+            Self::Two => 2,
+            Self::Three => 3,
+            Self::Four => 4,
+            Self::Six => 6,
+        }
+    }
+}
+
+/// Magneto head spacing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum MagnetoSpacing {
+    #[default]
+    Even,
+    Uneven,
+}
+
+/// BigSky MX Chamber "Color": five fixed post-tonality profiles
+/// capturing "the speakers and mics used in the chamber recording
+/// process". Not a continuous control.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ChamberColor {
+    /// Wide-range flat response — natural tone.
+    #[default]
+    Neutral,
+    /// Reduced low end (avoids mud with bass-heavy sources).
+    Clear,
+    /// Reduced mid response ("smile" EQ).
+    Smooth,
+    /// High-passed, very bright.
+    Crisp,
+    /// Emphasized mids — vocal qualities.
+    Deep,
+}
+
+impl ChamberColor {
+    pub const COUNT: usize = 5;
+
+    pub fn from_index(i: usize) -> Self {
+        match i {
+            1 => Self::Clear,
+            2 => Self::Smooth,
+            3 => Self::Crisp,
+            4 => Self::Deep,
+            _ => Self::Neutral,
+        }
+    }
+}
+
+/// BigSky MX Chamber engine params.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct ChamberParams {
+    pub color: ChamberColor,
 }
 
 /// BigSky MX NonLinear engine params: Chop (amplitude mod on the decay),
@@ -596,6 +686,11 @@ pub trait ReverbAlgorithm: Send {
 
     /// Push Magneto engine params. No-op outside Magneto; returns
     /// `true` if accepted.
+    /// Push Chamber params. No-op outside the Chamber engine.
+    fn set_chamber_params(&mut self, _params: &ChamberParams) -> bool {
+        false
+    }
+
     fn set_magneto_params(&mut self, params: &MagnetoParams) -> bool {
         let _ = params;
         false

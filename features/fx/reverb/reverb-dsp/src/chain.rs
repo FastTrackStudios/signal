@@ -6,7 +6,7 @@ use audiocore_dsp::delay_line::DelayLine;
 use audiocore_dsp::{AudioConfig, Processor};
 use crossbeam_channel::{Receiver, Sender, TryRecvError};
 
-use crate::algorithm::{
+use crate::algorithm::{ChamberParams, 
     AlgorithmParams, AlgorithmType, BloomParams, ChoraleParams, CloudParams,
     ConvolutionModParams, HallParams, ImpulseParams, IrSlot, MagnetoParams, NonLinearParams,
     ReverbAlgorithm, ReverbVoice, ShimmerParams, SwellType,
@@ -109,6 +109,8 @@ pub struct ReverbChain {
     pub shimmer: ShimmerParams,
     /// BigSky MX Magneto params (ping pong). Only consumed by Magneto.
     pub magneto: MagnetoParams,
+    /// Chamber Color (applies to the Chamber engine).
+    pub chamber: ChamberParams,
     /// BigSky MX NonLinear params (chop / gate speed / late stage).
     /// Only consumed by NonLinear; defaults are transparent.
     pub nonlinear: NonLinearParams,
@@ -296,6 +298,7 @@ impl ReverbChain {
             impulse: ImpulseParams::default(),
             shimmer: ShimmerParams::default(),
             magneto: MagnetoParams::default(),
+            chamber: ChamberParams::default(),
             nonlinear: NonLinearParams::default(),
             cloud: CloudParams::default(),
             bloom: BloomParams::default(),
@@ -457,7 +460,8 @@ impl ReverbChain {
             // Fresh algorithm — convolution mod options land instantly.
             self.algorithm.set_conv_mod_params(&self.conv_mod, true);
             self.algorithm.set_shimmer_params(&self.shimmer);
-            self.algorithm.set_magneto_params(&self.magneto);
+            self.algorithm.set_magneto_params(&self.effective_magneto());
+        self.algorithm.set_chamber_params(&self.chamber);
             self.algorithm.set_nonlinear_params(&self.nonlinear);
         }
     }
@@ -475,6 +479,17 @@ impl ReverbChain {
     /// Get the current variant index.
     pub fn variant(&self) -> usize {
         self.variant
+    }
+
+    /// Magneto's knob remap: PRE-DELAY drives the engine's feedback.
+    /// Compute the params to push, folding the remap in whenever the
+    /// Magneto engine is active.
+    fn effective_magneto(&self) -> MagnetoParams {
+        let mut m = self.magneto;
+        if self.algorithm_type == AlgorithmType::Magneto {
+            m.feedback = (self.predelay_ms / 200.0).clamp(0.0, 1.0);
+        }
+        m
     }
 
     /// True while the INFINITE footswitch state should sustain the tail
@@ -612,7 +627,8 @@ impl ReverbChain {
         self.pump_reshapes();
         // Per-engine MX params — each is a no-op outside its algorithm.
         self.algorithm.set_shimmer_params(&self.shimmer);
-        self.algorithm.set_magneto_params(&self.magneto);
+        self.algorithm.set_magneto_params(&self.effective_magneto());
+        self.algorithm.set_chamber_params(&self.chamber);
         self.algorithm.set_nonlinear_params(&self.nonlinear);
         self.algorithm.set_cloud_params(&self.cloud);
         self.algorithm.set_bloom_params(&self.bloom);
@@ -652,7 +668,11 @@ impl Processor for ReverbChain {
 
         let max_predelay = (config.sample_rate * 0.5) as usize;
         self.predelay = DelayLine::new(max_predelay + 1);
-        self.predelay_samples = (self.predelay_ms * 0.001 * config.sample_rate) as usize;
+        self.predelay_samples = if self.algorithm_type == AlgorithmType::Magneto {
+            0
+        } else {
+            (self.predelay_ms * 0.001 * config.sample_rate) as usize
+        };
 
         self.input_hp.set(
             FilterType::Highpass,
@@ -723,7 +743,8 @@ impl Processor for ReverbChain {
         self.algorithm.set_impulse_params(&self.impulse, true);
         self.pump_reshapes();
         self.algorithm.set_shimmer_params(&self.shimmer);
-        self.algorithm.set_magneto_params(&self.magneto);
+        self.algorithm.set_magneto_params(&self.effective_magneto());
+        self.algorithm.set_chamber_params(&self.chamber);
         self.algorithm.set_nonlinear_params(&self.nonlinear);
         self.algorithm.set_cloud_params(&self.cloud);
         self.algorithm.set_bloom_params(&self.bloom);
@@ -787,7 +808,15 @@ impl Processor for ReverbChain {
             }
         }
 
-        self.predelay_samples = (self.predelay_ms * 0.001 * self.sample_rate) as usize;
+        // Magneto knob remap (manual): PRE-DELAY becomes the engine's
+        // feedback (see `effective_magneto`) and the chain's own
+        // pre-delay line disengages (DECAY -> last-head time happens
+        // inside the engine).
+        if self.algorithm_type == AlgorithmType::Magneto {
+            self.predelay_samples = 0;
+        } else {
+            self.predelay_samples = (self.predelay_ms * 0.001 * self.sample_rate) as usize;
+        }
         let duck_thresh = self.duck_threshold.max(1.0e-6);
 
         // Hall Mid EQ + Swell engage flags (chain-level Hall params).
