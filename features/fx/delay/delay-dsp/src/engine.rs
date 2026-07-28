@@ -341,6 +341,9 @@ pub struct DelayEngine {
     pub spectral_spread: f64,
     /// Grain envelope shape. Spectral only.
     pub spectral_shape: GrainShape,
+    /// Post-granular Clouds-diffuser crossfade (0–1). Spectral only
+    /// (FTS voicing extra, no hardware counterpart).
+    pub spectral_diffusion: f64,
     /// Grain playback direction. Spectral only.
     pub spectral_direction: GrainDirection,
 
@@ -460,6 +463,7 @@ impl DelayEngine {
             spectral_stretch: 0.0,
             spectral_octave: 0.0,
             spectral_spread: 0.0,
+            spectral_diffusion: 0.5,
             spectral_shape: GrainShape::Soft,
             spectral_direction: GrainDirection::Forward,
             filter_lfo_shape: FilterLfoShape::SinePos,
@@ -719,6 +723,7 @@ impl DelayEngine {
                 d.octave = self.spectral_octave;
                 d.spread = self.spectral_spread;
                 d.shape = self.spectral_shape;
+                d.diffusion = self.spectral_diffusion;
                 d.direction = self.spectral_direction;
                 d.decay_tilt = self_tilt;
                 d.update(sample_rate);

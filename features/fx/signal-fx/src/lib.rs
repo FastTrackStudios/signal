@@ -1308,6 +1308,9 @@ const DELAY_PARAMS: &[ParamSpec] = &[
     // Filter-machine tremolo waveform (manual list: 0 Triangle /
     // 1 Square / 2 Sine / 3 Ramp / 4 Saw).
     ParamSpec { id: 59, name: "flt_trem_shape", min: 0.0, max: 4.0, default: 2.0 },
+    // Spectral post-granular diffusion (FTS voicing extra beyond the
+    // hardware surface — Clouds allpass-chain crossfade on the cloud).
+    ParamSpec { id: 60, name: "spec_diffusion", min: 0.0, max: 1.0, default: 0.5 },
 ];
 
 /// Native Delay block — wraps [`delay::DualDelay`] (two full chains +
@@ -1660,6 +1663,10 @@ impl NativeDelay {
                 };
                 a.delay_l.multitap_grid = grid;
                 a.delay_r.multitap_grid = grid;
+            }
+            60 => {
+                a.delay_l.spectral_diffusion = v.clamp(0.0, 1.0);
+                a.delay_r.spectral_diffusion = v.clamp(0.0, 1.0);
             }
             59 => {
                 let shape = match v.round().max(0.0) as usize {

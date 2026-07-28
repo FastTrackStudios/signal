@@ -96,6 +96,64 @@ impl Grain {
     }
 }
 
+/// Post-granular diffuser translated from Mutable Instruments Clouds
+/// (`clouds/dsp/fx/diffuser.h`, MIT, © Émilie Gillet): four series
+/// Schroeder allpasses per channel, k = 0.625, with the original delay
+/// constants (spec'd at Clouds' 32 kHz internal rate, rescaled to the
+/// host rate; the L/R sets differ slightly for decorrelation). A large
+/// part of the hardware granular "expensive" smear.
+struct CloudsDiffuser {
+    lines: [DelayLine; 4],
+    delays: [f64; 4],
+}
+
+/// Per-channel allpass delays in samples at 32 kHz (Clouds constants).
+const DIFFUSER_L_32K: [f64; 4] = [126.0, 180.0, 269.0, 444.0];
+const DIFFUSER_R_32K: [f64; 4] = [151.0, 205.0, 245.0, 405.0];
+const DIFFUSER_K: f64 = 0.625;
+
+impl CloudsDiffuser {
+    fn new(base_32k: &[f64; 4], sample_rate: f64) -> Self {
+        let scale = sample_rate / 32_000.0;
+        let delays = core::array::from_fn(|i| base_32k[i] * scale);
+        Self {
+            lines: core::array::from_fn(|i| {
+                DelayLine::new((base_32k[i] * scale) as usize + 8)
+            }),
+            delays,
+        }
+    }
+
+    fn resize(&mut self, base_32k: &[f64; 4], sample_rate: f64) {
+        let scale = sample_rate / 32_000.0;
+        for i in 0..4 {
+            self.delays[i] = base_32k[i] * scale;
+            let needed = self.delays[i] as usize + 8;
+            if self.lines[i].len() < needed {
+                self.lines[i] = DelayLine::new(needed);
+            }
+        }
+    }
+
+    #[inline]
+    fn tick(&mut self, input: f64) -> f64 {
+        let mut x = input;
+        for i in 0..4 {
+            let delayed = self.lines[i].read_linear(self.delays[i]);
+            let v = x - DIFFUSER_K * delayed;
+            self.lines[i].write(v);
+            x = delayed + DIFFUSER_K * v;
+        }
+        x
+    }
+
+    fn reset(&mut self) {
+        for l in &mut self.lines {
+            l.clear();
+        }
+    }
+}
+
 /// Grain-spawn density mode.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum DensityMode {
@@ -126,6 +184,11 @@ pub struct SpectralDelay {
     pub shape: GrainShape,
     /// Grain playback direction.
     pub direction: GrainDirection,
+    /// Post-granular diffusion (0.0–1.0): dry↔diffused crossfade of
+    /// the grain cloud through the Clouds allpass chain. FTS voicing
+    /// extra (no hardware param); approximates the MX's FFT-domain
+    /// smear. Default 0.5.
+    pub diffusion: f64,
     /// High-cut in the feedback path (0 = off).
     pub hicut_freq: f64,
     /// Decay EQ tilt (shared engine param).
@@ -140,6 +203,8 @@ pub struct SpectralDelay {
     // gentle high shelf, so repeats evolve like the MX's FFT footprint.
     // interpretation — behavior match, not the hardware algorithm.
     disp_state: [[f64; 2]; 2],
+    diffuser_l: CloudsDiffuser,
+    diffuser_r: CloudsDiffuser,
     disp_shelf: Biquad,
     feedback_sample: f64,
     sample_rate: f64,
@@ -169,6 +234,7 @@ impl SpectralDelay {
             shape: GrainShape::Soft,
             direction: GrainDirection::Forward,
             hicut_freq: 0.0,
+            diffusion: 0.5,
             decay_tilt: 0.0,
             delay: DelayLine::new(48000 * 3 + 1024),
             grains: std::array::from_fn(|_| Grain::idle()),
@@ -176,6 +242,8 @@ impl SpectralDelay {
             hicut: Biquad::new(),
             decay_tilt_eq: DecayTilt::new(),
             disp_state: [[0.0; 2]; 2],
+            diffuser_l: CloudsDiffuser::new(&DIFFUSER_L_32K, 48000.0),
+            diffuser_r: CloudsDiffuser::new(&DIFFUSER_R_32K, 48000.0),
             disp_shelf: Biquad::new(),
             feedback_sample: 0.0,
             sample_rate: 48000.0,
@@ -185,6 +253,8 @@ impl SpectralDelay {
     }
 
     pub fn update(&mut self, sample_rate: f64) {
+        self.diffuser_l.resize(&DIFFUSER_L_32K, sample_rate);
+        self.diffuser_r.resize(&DIFFUSER_R_32K, sample_rate);
         self.sample_rate = sample_rate;
         self.time_ms = self.time_ms.clamp(Self::MIN_TIME_MS, Self::MAX_TIME_MS);
 
@@ -414,6 +484,20 @@ impl SpectralDelay {
             wet_r /= norm;
         }
 
+        // Clouds-style post-granular diffusion: crossfade the cloud
+        // through the allpass chain (out = in + amount·(diffused − in),
+        // the Clouds mix law). The feedback tap below stays undiffused
+        // so regeneration keeps its rhythmic anchor.
+        let amount = self.diffusion.clamp(0.0, 1.0);
+        if amount > 0.001 {
+            let dl = self.diffuser_l.tick(wet_l);
+            wet_l += amount * (dl - wet_l);
+            if stereo {
+                let dr = self.diffuser_r.tick(wet_r);
+                wet_r += amount * (dr - wet_r);
+            }
+        }
+
         // Feedback from a plain (non-granular) tap so regeneration stays
         // rhythmically anchored.
         let mut fb = self
@@ -453,6 +537,8 @@ impl SpectralDelay {
     }
 
     pub fn reset(&mut self) {
+        self.diffuser_l.reset();
+        self.diffuser_r.reset();
         self.delay.clear();
         self.grains = std::array::from_fn(|_| Grain::idle());
         self.spawn_countdown = 0.0;
@@ -689,5 +775,64 @@ mod tests {
             energy += out * out;
         }
         assert!(energy > 0.001, "free-running density should produce grains");
+    }
+
+    #[test]
+    fn diffusion_smears_and_decorrelates_the_cloud() {
+        let run = |diffusion: f64| -> (Vec<f64>, Vec<f64>) {
+            let mut d = SpectralDelay::new();
+            d.time_ms = 150.0;
+            d.feedback = 0.0;
+            d.spread = 0.0;
+            d.diffusion = diffusion;
+            d.update(SR);
+            let mut l = Vec::new();
+            let mut r = Vec::new();
+            for i in 0..48000 {
+                let input = if i < 480 { 0.8 } else { 0.0 };
+                let (ol, or_) = d.tick_stereo(input);
+                l.push(ol);
+                r.push(or_);
+            }
+            (l, r)
+        };
+
+        // RMS temporal width grows with diffusion.
+        let width = |x: &[f64]| -> f64 {
+            let mut w = 0.0;
+            let mut t1 = 0.0;
+            let mut t2 = 0.0;
+            for (i, v) in x.iter().enumerate() {
+                let e = v * v;
+                w += e;
+                t1 += e * i as f64;
+                t2 += e * (i as f64) * (i as f64);
+            }
+            let mean = t1 / w.max(1e-12);
+            (t2 / w.max(1e-12) - mean * mean).max(0.0).sqrt()
+        };
+        let (dry_l, dry_r) = run(0.0);
+        let (wet_l, wet_r) = run(1.0);
+        assert!(
+            width(&wet_l) > width(&dry_l) * 1.05,
+            "diffusion should smear the cloud in time: {} vs {}",
+            width(&wet_l),
+            width(&dry_l)
+        );
+
+        // With spread 0 the undiffused cloud is dual-mono; the L/R
+        // diffuser chains differ, so diffusion must decorrelate.
+        let corr = |a: &[f64], b: &[f64]| -> f64 {
+            let dot: f64 = a.iter().zip(b).map(|(x, y)| x * y).sum();
+            let ea: f64 = a.iter().map(|x| x * x).sum();
+            let eb: f64 = b.iter().map(|x| x * x).sum();
+            dot / (ea * eb).sqrt().max(1e-12)
+        };
+        assert!(corr(&dry_l, &dry_r) > 0.999, "spread 0 should be dual-mono");
+        assert!(
+            corr(&wet_l, &wet_r) < 0.98,
+            "diffusion should decorrelate L/R: {}",
+            corr(&wet_l, &wet_r)
+        );
     }
 }
