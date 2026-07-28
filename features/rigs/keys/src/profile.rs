@@ -299,49 +299,97 @@ impl KeysProfile {
             // ones before it). Same shape as the Nord reference program.
             let mut voices = Container::parallel(format!("{} Voices", engine.name));
             for layer in &engine.layers {
-                // EVERY lane is a Signal Engine layer — the same source →
-                // filters → amp → FX program whether the patch is a Keyscape
-                // piano, an Omnisphere soundsource or a wavetable. That's why
-                // one layer-zoom surface can control all of them.
-                // Each of the lane's four modules realizes its own source.
-                let sources: Vec<signal_synth::Source> = layer
-                    .module_patches()
-                    .into_iter()
-                    .map(|patch| {
-                        let spec = (!patch.is_empty()).then(|| resolve(&patch)).flatten();
-                        signal_synth::Source::sample(spec)
-                    })
-                    .collect();
-                // The lane's macro values ride along when the rig has them —
-                // that is what makes the Filter block and the envelopes real
-                // DSP with real numbers rather than defaults.
-                let settings: Vec<signal_synth::engine::ModuleSettings> = sources
-                    .iter()
-                    .enumerate()
-                    .map(|(i, source)| {
-                        let mut set = module_set(&layer.name, i);
-                        set.source = source.clone();
-                        set
-                    })
-                    .collect();
-                let mut lane = signal_synth::engine::signal_layer_with(&layer.name, &settings)
-                    .volume(layer.gain_db);
-                if !layer.is_full_range() {
-                    lane = lane.zone(signal_sampler::rig_node::Zone {
-                        key_lo: layer.key_lo,
-                        key_hi: layer.key_hi,
-                        ..signal_sampler::rig_node::Zone::full()
-                    });
-                }
+                // The authored fader rides in as the tree default (the live
+                // mixer's cells overwrite it once running).
+                let lane =
+                    Self::lane_container(layer, &resolve, &module_set).volume(layer.gain_db);
                 voices = voices.add(lane);
             }
             engines = engines.add(eng.add(voices));
         }
-        Container::preset(&self.name).add(engines).add(
-            // Global tail — one shared rotary for the organ, master reverb.
-            Container::module("Global")
-                .add(Container::module("Master Reverb").block(BlockType::Reverb, "Reverb")),
-        )
+        Container::preset(&self.name)
+            .add(engines)
+            .add(Self::global_tail())
+    }
+
+    /// One layer's composition subtree — the same lane whether it renders
+    /// inside the single program tree or as its own daw track.
+    ///
+    /// EVERY lane is a Signal Engine layer — the same source → filters → amp
+    /// → FX program whether the patch is a Keyscape piano, an Omnisphere
+    /// soundsource or a wavetable. That's why one layer-zoom surface can
+    /// control all of them. Each of the lane's four modules realizes its own
+    /// source; the lane's macro values ride along when the rig has them.
+    fn lane_container(
+        layer: &LayerDef,
+        resolve: &impl Fn(&str) -> Option<String>,
+        module_set: &impl Fn(&str, usize) -> signal_synth::engine::ModuleSettings,
+    ) -> Container {
+        let sources: Vec<signal_synth::Source> = layer
+            .module_patches()
+            .into_iter()
+            .map(|patch| {
+                let spec = (!patch.is_empty()).then(|| resolve(&patch)).flatten();
+                signal_synth::Source::sample(spec)
+            })
+            .collect();
+        let settings: Vec<signal_synth::engine::ModuleSettings> = sources
+            .iter()
+            .enumerate()
+            .map(|(i, source)| {
+                let mut set = module_set(&layer.name, i);
+                set.source = source.clone();
+                set
+            })
+            .collect();
+        let mut lane = signal_synth::engine::signal_layer_with(&layer.name, &settings);
+        if !layer.is_full_range() {
+            lane = lane.zone(signal_sampler::rig_node::Zone {
+                key_lo: layer.key_lo,
+                key_hi: layer.key_hi,
+                ..signal_sampler::rig_node::Zone::full()
+            });
+        }
+        lane
+    }
+
+    /// The rig's global tail — one shared rotary for the organ, master reverb.
+    fn global_tail() -> Container {
+        Container::module("Global")
+            .add(Container::module("Master Reverb").block(BlockType::Reverb, "Reverb"))
+    }
+
+    /// Build the profile as a per-lane daw-track program: one subtree per
+    /// layer (its fader/mute/solo become daw track ops on its own track),
+    /// engines as folder tracks, and the global tail as rig-folder FX.
+    ///
+    /// Lane and engine faders deliberately do NOT ride into the subtrees —
+    /// in lane mode they are daw track volumes, applied by the backend.
+    pub fn build_lane_program(
+        &self,
+        resolve: impl Fn(&str) -> Option<String>,
+        module_set: impl Fn(&str, usize) -> signal_synth::engine::ModuleSettings,
+    ) -> signal_sampler::keys_rig::LaneProgram {
+        use signal_sampler::keys_rig::{LaneEngine, LaneLayer, LaneProgram};
+        LaneProgram {
+            name: self.name.clone(),
+            engines: self
+                .engines
+                .iter()
+                .map(|engine| LaneEngine {
+                    name: engine.name.clone(),
+                    layers: engine
+                        .layers
+                        .iter()
+                        .map(|layer| LaneLayer {
+                            name: layer.name.clone(),
+                            tree: Self::lane_container(layer, &resolve, &module_set),
+                        })
+                        .collect(),
+                })
+                .collect(),
+            tail: Some(Self::global_tail()),
+        }
     }
 
     /// Scene lookup for a stack index.
