@@ -603,3 +603,35 @@ time, at the manual's exact value steps.
     filter shapes, grit-before-S/H aliasing, 2 ms minimum time.
 23. **Common** — tap divisions incl. Golden/Silver/Free, Swell mix-dependent behavior,
     High Pass, Freeze/Infinite, per-machine time ranges.
+
+---
+
+## Status update — 2026-07-27 implementation pass
+
+Landed in delay-dsp/signal-fx (see git log for details):
+
+- **REVERB machine** (queue #1): `DelayStyle::Reverb` (index 13) — pre-delay TIME,
+  decay REPEATS (0.15 s → 40 s, infinite at max), FILTER = regen bandwidth, GRIT =
+  distortion in+out, Mod = wet tremolo. Compact diffuser→Householder-FDN core.
+- **REVERSE rebuilt** (#2): the old cycler read at a frozen absolute position (not
+  reversed at all); now true −1× reads, onset-synced windows (performance-repeatable),
+  Smear (allpass diffusion), Mod. 
+- **DIGITAL voices** (#3): 24/96 / ADM (real 1-bit adaptive-delta codec @8×, error
+  grows with frequency) / 12-Bit (µ-law compand + darkening) / Classic (rounder +
+  morphing FILTER full-bw→analog→tape), all in-loop; plus rack-style Mod.
+- **DRUM filter + grit** (#4): record-path head-alignment lowpass + soft-clip drive.
+- **OIL CAN filter + mod** (#5): 300–12 kHz travel morphing to resonant low-thinned
+  bandpass below ~1.2 kHz, filter moved to record path (murk at Repeats 0); Mod Speed
+  control with spring-loaded (slow-then-accelerate) wow phase.
+- **Common Mod layer** (#6): LoFi + Ice gained delay-line Mod (Spectral deferred to its
+  density rework).
+- **Plumbing** (#9/#10): Drum spacing + MultiTap grid/Classic recall are engine-level
+  and survive `update()`; Triplet positions confirmed correct against the manual.
+- **Exposure** (#13/#16 partial): DELAY_PARAMS ids 38–58 — common Mod, Reverse Smear,
+  Digital morph, Duck Sens/Release at spec ranges, Drum spacing/Lo Cut, Oil Can heads,
+  Output Level, full Filter-machine surface, MultiTap pattern/fb-mode/grid.
+
+Still open: #7 Param1/2 assignment decision, #11 Filter SVF types + attack-sync
+polarity, #12 Spectral FFT character + grains-per-beat density, #14 dual-B machine
+params (delay side), #15 LoFi absolute-Hz mapping, #17 Repeat-Dynamics scoping,
+#18 enum-order note, and the per-machine A/B dial-in passes (#19–23).

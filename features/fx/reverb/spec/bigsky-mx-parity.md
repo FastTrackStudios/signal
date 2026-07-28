@@ -712,3 +712,27 @@ our param-id mapping. "Ours" = REVERB_PARAMS id (A-chain unless noted).
 
 1. ⚠️ MX-Small "reduced headroom + subtle tube saturation" — verify the
    Lexicon-voice pair covers the saturation nuance. Otherwise complete.
+
+---
+
+## Status update — 2026-07-27 implementation pass
+
+- **Chain-B MX params**: every chain-scoped REVERB_PARAMS entry now mirrors to chain B
+  at id + 100 with an `r2_` name prefix — dual presets can run two fully-parameterized
+  MX engines. Wet trem became per-chain.
+- **Infinite three-way**: `InfiniteMode` (Freeze / Infinite / Off) on ReverbChain;
+  `freeze` + `inf_mode` exposed as ids 44/45 (with r2 mirrors). Latch/momentary stays a
+  footswitch-controller concern.
+- **Impulse pipeline production wiring**: NativeReverb now attaches an ImpulseReshaper
+  (worker re-prepare) on chain A — previously the imp_* live params marked slots dirty
+  but never re-prepared outside tests.
+- **RT safety**: IR hot-swaps no longer allocate or free on the audio thread
+  (displaced buffers go through an `IrTrash` disposal channel to the reshape worker;
+  the FFT input-history ring is grow-only).
+- **mix_b 0.10 cap bug** fixed (now 0–1).
+
+Still open: Chamber Color selector, Magneto knob remap at the param layer +
+heads/spacing exposure, NonLinear Gauss/Bounce shapes + full shape count, Chorale
+Resonance, Spring Dwell / #Springs named params, Param 1/2 assignment layer, per-engine
+Low End as a first-class param, chain-B impulse reshaper (B slot currently shares no
+worker), and the per-engine A/B dial-in passes.
