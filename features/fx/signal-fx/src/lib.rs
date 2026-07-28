@@ -871,6 +871,154 @@ impl PluginInstance for NativeEq {
 }
 
 
+
+// ── Class-A Preamp ─────────────────────────────────────────────────────────
+
+const PREAMP_PARAMS: &[ParamSpec] = &[
+    ParamSpec { id: 0, name: "drive", min: 0.0, max: 24.0, default: 6.0 },
+    ParamSpec { id: 1, name: "q_point", min: -1.0, max: 1.0, default: 0.0 },
+    ParamSpec { id: 2, name: "pos_shaper", min: 0.0, max: 5.0, default: 3.0 },
+    ParamSpec { id: 3, name: "neg_shaper", min: 0.0, max: 5.0, default: 3.0 },
+    ParamSpec { id: 4, name: "mix", min: 0.0, max: 1.0, default: 1.0 },
+    ParamSpec { id: 5, name: "output", min: -24.0, max: 24.0, default: 0.0 },
+];
+
+/// Harmonic readback ids: `h1`..`h8` (ids 100..107) return the
+/// measured harmonic magnitudes of the CURRENT settings, normalized to
+/// H1 — the UI's harmonic visualization polls these. The transfer
+/// curve for the indicative sine display comes from
+/// `saturate_dsp::preamp::analysis::transfer_curve` on a mirror.
+pub const PREAMP_HARMONIC_BASE: u32 = 100;
+pub const PREAMP_HARMONICS: usize = 8;
+
+/// Native Class-A preamp — asymmetric saturation with a Q-point bias,
+/// independent per-side shapers, and a 1073-style output DC blocker.
+pub struct NativePreamp {
+    pre: [saturate_dsp::preamp::ClassAPreamp; 2],
+    harmonics: [f32; PREAMP_HARMONICS],
+    harmonics_dirty: bool,
+    prepared: bool,
+}
+
+impl NativePreamp {
+    pub fn new(sample_rate: f64) -> Self {
+        let mk = || saturate_dsp::preamp::ClassAPreamp::new(sample_rate.max(1.0) as f32);
+        let mut p = Self {
+            pre: [mk(), mk()],
+            harmonics: [0.0; PREAMP_HARMONICS],
+            harmonics_dirty: true,
+            prepared: false,
+        };
+        for spec in PREAMP_PARAMS {
+            p.set(spec.id, spec.default);
+        }
+        p
+    }
+
+    fn set(&mut self, id: u32, v: f64) {
+        let v = v as f32;
+        for pre in &mut self.pre {
+            match id {
+                0 => pre.drive = 10.0f32.powf(v.clamp(0.0, 24.0) / 20.0),
+                1 => pre.q_point = v.clamp(-1.0, 1.0),
+                2 => pre.positive = saturate_dsp::preamp::SideShaper::from_index(v as u32),
+                3 => pre.negative = saturate_dsp::preamp::SideShaper::from_index(v as u32),
+                4 => pre.mix = v.clamp(0.0, 1.0),
+                5 => pre.output_gain = 10.0f32.powf(v.clamp(-24.0, 24.0) / 20.0),
+                _ => {}
+            }
+        }
+        if id <= 3 {
+            self.harmonics_dirty = true;
+        }
+    }
+
+    pub fn set_named(&mut self, name: &str, value: f64) {
+        if let Some(id) = param_id(PREAMP_PARAMS, name) {
+            self.set(id, value);
+        }
+    }
+
+    /// Current measured harmonic spectrum (H1..H8, linear re H1).
+    pub fn harmonics(&mut self) -> [f32; PREAMP_HARMONICS] {
+        if self.harmonics_dirty {
+            saturate_dsp::preamp::analysis::harmonic_spectrum(&self.pre[0], &mut self.harmonics);
+            self.harmonics_dirty = false;
+        }
+        self.harmonics
+    }
+}
+
+impl PluginInstance for NativePreamp {
+    fn descriptor(&self) -> PluginDescriptor {
+        descriptor("signal.fx.preamp", "Preamp")
+    }
+    fn params(&mut self) -> Vec<PluginParamInfo> {
+        param_infos(PREAMP_PARAMS)
+    }
+    fn param_value(&mut self, id: u32) -> Option<f64> {
+        if (PREAMP_HARMONIC_BASE..PREAMP_HARMONIC_BASE + PREAMP_HARMONICS as u32).contains(&id) {
+            let h = self.harmonics();
+            return Some(f64::from(h[(id - PREAMP_HARMONIC_BASE) as usize]));
+        }
+        None
+    }
+    fn value_to_text(&mut self, id: u32, value: f64) -> Option<String> {
+        let shaper = |v: f64| -> &'static str {
+            match v as u32 {
+                1 => "Op-Amp",
+                2 => "Tube",
+                3 => "Transformer",
+                4 => "Diode",
+                5 => "Hard",
+                _ => "Clean",
+            }
+        };
+        match id {
+            0 | 5 => Some(format!("{value:+.1} dB")),
+            2 | 3 => Some(shaper(value).into()),
+            _ => None,
+        }
+    }
+    fn text_to_value(&mut self, _id: u32, _text: &str) -> Option<f64> {
+        None
+    }
+    fn latency(&mut self) -> u32 {
+        0
+    }
+    fn prepare(&mut self, sample_rate: f64, _block_size: u32) -> Result<(), PluginError> {
+        for pre in &mut self.pre {
+            pre.set_sample_rate(sample_rate.max(1.0) as f32);
+            pre.reset();
+        }
+        self.prepared = true;
+        Ok(())
+    }
+    fn is_prepared(&self) -> bool {
+        self.prepared
+    }
+    fn process_block(
+        &mut self,
+        in_l: &[f32],
+        in_r: &[f32],
+        out_l: &mut [f32],
+        out_r: &mut [f32],
+        events: &PluginEvents<'_>,
+    ) -> Result<(), PluginError> {
+        for &(id, value) in events.params {
+            self.set(id, value);
+        }
+        for i in 0..in_l.len().min(out_l.len()) {
+            out_l[i] = self.pre[0].process(0, in_l[i]);
+            out_r[i] = self.pre[1].process(1, in_r[i]);
+        }
+        Ok(())
+    }
+    fn deactivate(&mut self) {
+        self.prepared = false;
+    }
+}
+
 // ── Compressor ─────────────────────────────────────────────────────────────
 
 /// Live compressor telemetry — the rolling waveform + GR the FTS-Comp

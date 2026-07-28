@@ -8,6 +8,7 @@ description = "Built-in FX for signal — PluginInstance wrappers over the vendo
 [dependencies]
 hound = "3.5"
 signal-plugin-host = { workspace = true }
+saturate-dsp = { workspace = true, features = ["analysis"] }
 audiocore-dsp = { workspace = true }
 # FX facades (never the -dsp crates directly).
 eq = { workspace = true }
