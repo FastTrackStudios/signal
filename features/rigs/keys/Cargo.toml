@@ -12,6 +12,7 @@ authors.workspace = true
 pipewire = ["signal-sampler/pipewire", "midicore/midir-pipewire"]
 
 [dependencies]
+signal-rigs-proto.workspace = true
 # Shared sampler core — the keys rig composes the engine's node-render tree,
 # nord presets, and rig system. Keys is a thin instrument handle on top.
 signal-sampler.workspace = true

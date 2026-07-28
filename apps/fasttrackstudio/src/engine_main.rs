@@ -173,6 +173,26 @@ async fn async_main() {
         .merge_router(keys.router())
         .merge_router(synth.router());
 
+    // The shared RigCore surface (start/stop/presets/load/MIDI) — ONE trait,
+    // mounted once per rig under an instance scope. Clients pick a rig with
+    // `architect::scope_client!(client, "keys")`; the per-rig protos keep
+    // only what is genuinely that rig's own.
+    use architect::Layer as _;
+    use signal_rigs_proto::rig_core::prelude::RigCoreService;
+    macro_rules! mount_core {
+        ($router:expr, $scope:literal, $backend:expr) => {
+            $router.merge_router_scoped(
+                $scope,
+                architect::layers![RigCoreService].provide($backend),
+            )
+        };
+    }
+    let router = mount_core!(router, "guitar", guitar.clone());
+    let router = mount_core!(router, "bass", bass.clone());
+    let router = mount_core!(router, "drums", drums.clone());
+    let router = mount_core!(router, "keys", keys.clone());
+    let router = mount_core!(router, "synth", synth.clone());
+
     // ── Pack library ──────────────────────────────────────────────────────
     // Sample-pack distribution: serves the built `.signalpack` trees
     // (proxy + full) so remotes — the phone keys rig above all — can list

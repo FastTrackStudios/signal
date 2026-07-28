@@ -1216,6 +1216,37 @@ impl DrumRig for DrumRigBackend {
     }
 }
 
+// ── shared RigCore (mounted instance-scoped as "drums") ──────────────────────
+impl signal_rigs_proto::rig_core::RigCore for DrumRigBackend {
+    fn start(&self) {
+        DrumRig::start(self);
+    }
+    fn stop(&self) {
+        DrumRig::stop(self);
+    }
+    fn running(&self) -> bool {
+        architect::rig::RigBackend::is_running(self)
+    }
+    fn presets(&self) -> Vec<signal_rigs_proto::RigPresetInfo> {
+        DrumRig::kits(self)
+            .into_iter()
+            .map(|k| signal_rigs_proto::RigPresetInfo { name: k.name, loaded: k.loaded })
+            .collect()
+    }
+    fn load_preset(&self, index: u32) {
+        DrumRig::load_kit(self, index);
+    }
+    fn midi_ports(&self) -> Vec<String> {
+        DrumRig::midi_ports(self)
+    }
+    fn set_midi_port(&self, name: String) {
+        DrumRig::set_midi_port(self, name);
+    }
+    fn midi_recent(&self) -> Vec<String> {
+        DrumRig::midi_recent(self).iter().map(|e| format!("{e:?}")).collect()
+    }
+}
+
 impl DrumRigStreamSource for DrumRigBackend {
     fn events_hub(&self) -> &PubSub<DrumEvent> {
         &self.inner.events

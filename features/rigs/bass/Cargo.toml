@@ -13,6 +13,7 @@ authors.workspace = true
 pipewire = ["midicore/midir-pipewire"]
 
 [dependencies]
+signal-rigs-proto.workspace = true
 # The shared sampler core — GuitarRig / ProfileRig / RigProfile / RigBlock /
 # RigAudioPrefs. The bass rig is a preset layer on the same duplex engine.
 signal-sampler.workspace = true

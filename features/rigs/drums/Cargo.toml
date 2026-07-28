@@ -11,6 +11,7 @@ authors.workspace = true
 pipewire = ["midicore/midir-pipewire"]
 
 [dependencies]
+signal-rigs-proto.workspace = true
 # Drums are plain sample zones on the shared engine — no drum-specific DSP.
 signal-sampler.workspace = true
 # Cross-rig utilities: shared mixer math (dB→linear).

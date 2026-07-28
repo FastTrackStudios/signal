@@ -692,6 +692,37 @@ impl BassRigSvc for BassRigBackend {
     }
 }
 
+// ── shared RigCore (mounted instance-scoped as "bass") ───────────────────────
+impl signal_rigs_proto::rig_core::RigCore for BassRigBackend {
+    fn start(&self) {
+        BassRigSvc::start(self);
+    }
+    fn stop(&self) {
+        BassRigSvc::stop(self);
+    }
+    fn running(&self) -> bool {
+        architect::rig::RigBackend::is_running(self)
+    }
+    fn presets(&self) -> Vec<signal_rigs_proto::RigPresetInfo> {
+        BassRigSvc::presets(self)
+            .into_iter()
+            .map(|p| signal_rigs_proto::RigPresetInfo { loaded: p.active, name: p.name })
+            .collect()
+    }
+    fn load_preset(&self, index: u32) {
+        BassRigSvc::select_preset(self, index);
+    }
+    fn midi_ports(&self) -> Vec<String> {
+        BassRigSvc::midi_ports(self)
+    }
+    fn set_midi_port(&self, name: String) {
+        BassRigSvc::set_midi_port(self, name);
+    }
+    fn midi_recent(&self) -> Vec<String> {
+        BassRigSvc::midi_recent(self).iter().map(|e| format!("{e:?}")).collect()
+    }
+}
+
 impl BassRigStreamSource for BassRigBackend {
     fn events_hub(&self) -> &PubSub<BassEvent> {
         &self.inner.events

@@ -2187,6 +2187,37 @@ impl KeysRigSvc for KeysRigBackend {
     }
 }
 
+// ── shared RigCore (mounted instance-scoped as "keys") ───────────────────────
+impl signal_rigs_proto::rig_core::RigCore for KeysRigBackend {
+    fn start(&self) {
+        KeysRigSvc::start(self);
+    }
+    fn stop(&self) {
+        KeysRigSvc::stop(self);
+    }
+    fn running(&self) -> bool {
+        architect::rig::RigBackend::is_running(self)
+    }
+    fn presets(&self) -> Vec<signal_rigs_proto::RigPresetInfo> {
+        KeysRigSvc::presets(self)
+            .into_iter()
+            .map(|p| signal_rigs_proto::RigPresetInfo { name: p.name, loaded: p.loaded })
+            .collect()
+    }
+    fn load_preset(&self, index: u32) {
+        KeysRigSvc::load_preset(self, index);
+    }
+    fn midi_ports(&self) -> Vec<String> {
+        KeysRigSvc::midi_ports(self)
+    }
+    fn set_midi_port(&self, name: String) {
+        KeysRigSvc::set_midi_port(self, name);
+    }
+    fn midi_recent(&self) -> Vec<String> {
+        KeysRigSvc::midi_recent(self).iter().map(|e| format!("{e:?}")).collect()
+    }
+}
+
 impl KeysRigStreamSource for KeysRigBackend {
     fn events_hub(&self) -> &PubSub<KeysEvent> {
         &self.inner.events

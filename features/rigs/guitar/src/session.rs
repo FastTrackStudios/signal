@@ -2449,6 +2449,42 @@ impl Rig for GuitarRigBackend {
     }
 }
 
+// ── shared RigCore (mounted instance-scoped as "guitar") ─────────────────────
+impl signal_rigs_proto::rig_core::RigCore for GuitarRigBackend {
+    fn start(&self) {
+        Rig::start(self);
+    }
+    fn stop(&self) {
+        Rig::stop(self);
+    }
+    fn running(&self) -> bool {
+        architect::rig::RigBackend::is_running(self)
+    }
+    fn presets(&self) -> Vec<signal_rigs_proto::RigPresetInfo> {
+        let active = Rig::status(self).active_patch.unwrap_or_default();
+        Rig::patches(self)
+            .into_iter()
+            .map(|p| signal_rigs_proto::RigPresetInfo {
+                loaded: p.name == active,
+                name: p.name,
+            })
+            .collect()
+    }
+    fn load_preset(&self, index: u32) {
+        Rig::select_patch(self, index);
+    }
+    fn midi_ports(&self) -> Vec<String> {
+        architect::rig::RigBackend::midi_ports(self)
+    }
+    fn set_midi_port(&self, _name: String) {
+        // The guitar rig is omni (all footswitch ports merged) — no port
+        // filter to set.
+    }
+    fn midi_recent(&self) -> Vec<String> {
+        Rig::midi_recent(self)
+    }
+}
+
 impl RigStreamSource for GuitarRigBackend {
     fn events_hub(&self) -> &PubSub<RigEvent> {
         &self.events

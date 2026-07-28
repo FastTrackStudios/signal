@@ -1129,3 +1129,34 @@ mod tests {
         );
     }
 }
+
+// ── shared RigCore (mounted instance-scoped as "synth") ──────────────────────
+impl signal_rigs_proto::rig_core::RigCore for SynthRigBackend {
+    fn start(&self) {
+        SynthRigSvc::start(self);
+    }
+    fn stop(&self) {
+        SynthRigSvc::stop(self);
+    }
+    fn running(&self) -> bool {
+        architect::rig::RigBackend::is_running(self)
+    }
+    fn presets(&self) -> Vec<signal_rigs_proto::RigPresetInfo> {
+        SynthRigSvc::presets(self)
+            .into_iter()
+            .map(|p| signal_rigs_proto::RigPresetInfo { name: p.name, loaded: p.loaded })
+            .collect()
+    }
+    fn load_preset(&self, index: u32) {
+        SynthRigSvc::load_preset(self, index);
+    }
+    fn midi_ports(&self) -> Vec<String> {
+        SynthRigSvc::midi_ports(self)
+    }
+    fn set_midi_port(&self, name: String) {
+        SynthRigSvc::set_midi_port(self, name);
+    }
+    fn midi_recent(&self) -> Vec<String> {
+        SynthRigSvc::midi_recent(self).iter().map(|e| format!("{e:?}")).collect()
+    }
+}
