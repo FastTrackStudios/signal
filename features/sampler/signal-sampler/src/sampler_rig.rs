@@ -1,19 +1,19 @@
 //! Live **sample-instrument** rig — the MIDI analog of [`GuitarRig`](crate::rig::GuitarRig),
-//! running signal's [`SampleEngine`]s ON daw's realtime [`AudioEngine`].
+//! running signal's [`SampleEngine`]s ON daw's realtime [`AudioEngine`](daw::standalone::audio_engine::AudioEngine).
 //!
 //! [`SamplerRig`] is the daw-backed replacement for the retired `SamplerPlayer`
 //! (`player.rs`, deleted): same load / MIDI / drum-mixer / preload / stats surface,
 //! but the cpal output stream + bespoke render callback are gone. Instead a
 //! single **bank track** in a tiny daw project carries a `BankInstrument`
 //! (a [`SamplerBank`] wrapped as a [`PluginInstance`]); daw's renderer runs
-//! that instrument every block on daw's [`AudioEngine`], and the bank's
+//! that instrument every block on daw's [`AudioEngine`](daw::standalone::audio_engine::AudioEngine), and the bank's
 //! existing engine / preset / drum-mixer machinery is reused verbatim — no
 //! mixer or voice engine is re-implemented here.
 //!
 //! ## Two modes
 //!
 //! - **Live** ([`SamplerRig::new`] / [`open`](SamplerRig::open) / device
-//!   variants): opens daw's output-only [`AudioEngine`], seeds a one-track
+//!   variants): opens daw's output-only [`AudioEngine`](daw::standalone::audio_engine::AudioEngine), seeds a one-track
 //!   project, and installs the `BankInstrument`. MIDI is delivered to the
 //!   bank by pushing it onto the bank track's live-MIDI queue
 //!   ([`Standalone::push_note_on`] / `push_note_off` / `push_cc`); daw's
@@ -381,7 +381,7 @@ struct TrackTables {
     buses: HashMap<String, BusTrack>,
 }
 
-/// A live sample-instrument rig backed by daw's [`AudioEngine`] — the
+/// A live sample-instrument rig backed by daw's [`AudioEngine`](daw::standalone::audio_engine::AudioEngine) — the
 /// daw-native replacement for the retired `SamplerPlayer`. Cheap
 /// to clone; all clones share one audio engine + bank.
 #[derive(Clone)]

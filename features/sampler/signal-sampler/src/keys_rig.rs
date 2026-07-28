@@ -7,7 +7,7 @@
 //!
 //! Same engine pattern as [`SamplerRig`](crate::SamplerRig): an output-only daw
 //! project with one track (bootstrapped by the shared
-//! [`RigHost`](signal_rig_host::RigHost)); the preset is wrapped as a
+//! [`RigHost`]); the preset is wrapped as a
 //! [`KeysInstrument`] (`PluginInstance`) inserted into that track's fx slot, and
 //! hardware/UI MIDI is pushed into daw's live-MIDI ring keyed by the track — so
 //! the renderer hands it to the instrument each block. Swapping the preset is a
