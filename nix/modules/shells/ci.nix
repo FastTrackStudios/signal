@@ -5,10 +5,11 @@
 # headers + the env the build scripts need, nothing else. Workflows
 # enter it via `nix develop .#ci`.
 #
-# tailwindcss IS here, despite "CI drives plain cargo": the Task app
-# crates' build.rs generates apps/task/*/assets/tailwind.css, which is
-# gitignored build output that `asset!()` demands at compile time, so
-# plain cargo now genuinely needs the binary. It is a single prebuilt
+# tailwindcss IS here, despite "CI drives plain cargo": the Task apps'
+# assets/tailwind.css is gitignored build output that `asset!()` demands
+# at compile time. `dx` generates it during a normal dx build, but CI
+# drives plain cargo, so the workflow runs `just css` first — which
+# needs this binary. It is a single prebuilt
 # store path, not a from-source cargo-install, so it does not
 # reintroduce the stall described above.
 { ... }:
