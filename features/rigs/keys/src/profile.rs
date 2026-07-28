@@ -21,7 +21,7 @@
 //! Stacks: Spotlight · Verse · Energy · Hooks · Underscore
 //! ```
 //!
-//! The tree this builds is an ordinary [`Container`] program — the same one
+//! The tree this builds is an ordinary [`Container`](signal_sampler::Container) program — the same one
 //! the sampler renders, so layers inherit zones (key/velocity splits), sends,
 //! modulators and the block/module system for free. Layer faders are live
 //! [`GainCells`](signal_sampler::node_render::GainCells), addressed by the
