@@ -15,7 +15,8 @@ use architect::{HasDispatcher, Layer, PubSub, Services, layers};
 use midicore::{Channel, DrumMap, DrumMapConverter, KeyNumber, MidiEvent, MidiMonitor, Velocity};
 use signal_drums_proto::drum::{DrumEvent, DrumRig, DrumRigStreamSource};
 use signal_drums_proto::{DrumStatus, InputMap, KitInfo, MixerStrip, PieceInfo, StripKind};
-use signal_sampler::{FxTarget, MidiInputHandle, PreloadProfile, PresetSpec, SamplerRig};
+use signal_rig_host::mixer::db_to_linear;
+use signal_sampler::{MidiInputHandle, PreloadProfile, PresetSpec, SamplerRig};
 
 use crate::GM_DRUM_CHANNEL;
 
@@ -48,7 +49,125 @@ struct State {
     engines: Vec<(String, PathBuf)>,
     input_map: InputMap,
     midi_port: Option<String>,
+    /// Per-strip mixer state over the kit's daw tracks (the backend owns the
+    /// strip model; every fader/mute/solo lands on a daw track / send).
+    mix: KitMix,
     midi_handle: Option<MidiInputHandle>,
+}
+
+/// One strip's fader/mute/solo.
+#[derive(Clone, Copy, Debug, Default)]
+struct StripState {
+    gain_db: f32,
+    muted: bool,
+    soloed: bool,
+}
+
+/// A close-mic channel over its daw track.
+#[derive(Clone, Debug)]
+struct ChanRef {
+    piece: usize,
+    mic: String,
+    track: String,
+    meter: usize,
+    state: StripState,
+}
+
+/// A bus-mic send over its daw track (one send, route index 0, into `bus`).
+#[derive(Clone, Debug)]
+struct SendRef {
+    piece: usize,
+    #[allow(dead_code)]
+    mic: String,
+    track: String,
+    meter: usize,
+    bus: usize,
+    level_db: f32,
+    muted: bool,
+    soloed: bool,
+}
+
+/// A shared bus over its daw track.
+#[derive(Clone, Debug)]
+struct BusRef {
+    label: String,
+    track: String,
+    meter: usize,
+    state: StripState,
+}
+
+/// One piece strip (the folder-level fader over its mic tracks).
+#[derive(Clone, Debug)]
+struct PieceStrip {
+    id: String,
+    label: String,
+    state: StripState,
+}
+
+/// The whole kit mixer as daw-track references — rebuilt on every kit load.
+#[derive(Clone, Debug, Default)]
+struct KitMix {
+    pieces: Vec<PieceStrip>,
+    channels: Vec<ChanRef>,
+    sends: Vec<SendRef>,
+    buses: Vec<BusRef>,
+}
+
+impl KitMix {
+    /// Build the strip model from the loaded kit's track set.
+    fn from_kit(kit: &signal_sampler::kit_tracks::KitState) -> Self {
+        let mut mix = KitMix::default();
+        let bus_index: std::collections::HashMap<&str, usize> = kit
+            .buses
+            .iter()
+            .enumerate()
+            .map(|(i, (id, _, _))| (id.as_str(), i))
+            .collect();
+        for (pi, piece) in kit.pieces.iter().enumerate() {
+            mix.pieces.push(PieceStrip {
+                id: piece.id.clone(),
+                label: crate::library::slot_label(&piece.id),
+                state: StripState { muted: piece.muted, ..StripState::default() },
+            });
+            for mic in &piece.mics {
+                match &mic.bus {
+                    None => mix.channels.push(ChanRef {
+                        piece: pi,
+                        mic: mic.mic.clone(),
+                        track: mic.track_guid.clone(),
+                        meter: mic.meter_index,
+                        state: StripState::default(),
+                    }),
+                    Some(bus) => mix.sends.push(SendRef {
+                        piece: pi,
+                        mic: mic.mic.clone(),
+                        track: mic.track_guid.clone(),
+                        meter: mic.meter_index,
+                        bus: bus_index.get(bus.as_str()).copied().unwrap_or(0),
+                        level_db: 0.0,
+                        muted: false,
+                        soloed: false,
+                    }),
+                }
+            }
+        }
+        for (label, track, meter) in &kit.buses {
+            mix.buses.push(BusRef {
+                label: label.clone(),
+                track: track.clone(),
+                meter: *meter,
+                state: StripState::default(),
+            });
+        }
+        mix
+    }
+
+    fn any_solo(&self) -> bool {
+        self.pieces.iter().any(|p| p.state.soloed)
+            || self.channels.iter().any(|c| c.state.soloed)
+            || self.sends.iter().any(|s| s.soloed)
+            || self.buses.iter().any(|b| b.state.soloed)
+    }
 }
 
 struct Inner {
@@ -196,7 +315,7 @@ impl DrumRigBackend {
         let (piece_ids, pieces) = {
             let rig = self.inner.rig.lock().unwrap();
             let Some(rig) = rig.as_ref() else { return };
-            match crate::load_preset_kit(rig, KIT, &path) {
+            match crate::load_kit_tracks(rig, KIT, &path) {
                 Ok(ids) => {
                     let pieces = pieces_from_preset(&path, &ids);
                     (ids, pieces)
@@ -207,6 +326,7 @@ impl DrumRigBackend {
                 }
             }
         };
+        self.rebuild_mix_state();
 
         let engines = engines_from_preset(&path);
         if let Ok(mut s) = self.inner.state.lock() {
@@ -251,11 +371,8 @@ impl DrumRigBackend {
         {
             let rig = self.inner.rig.lock().unwrap();
             let Some(rig) = rig.as_ref() else { return };
-            rig.set_preload_profile(PreloadProfile::DrumKit);
-            match rig.load_preset_spec(KIT, &spec, &dir) {
+            match crate::load_kit_tracks_spec(rig, KIT, &spec, &dir) {
                 Ok(ids) => {
-                    rig.set_midi_channel(KIT, GM_DRUM_CHANNEL);
-                    rig.set_default_instrument(KIT);
                     let abs = {
                         let p = PathBuf::from(&engine_path);
                         if p.is_absolute() { p } else { dir.join(p) }
@@ -268,6 +385,7 @@ impl DrumRigBackend {
                             e.1 = abs;
                         }
                     }
+                    self.rebuild_mix_state();
                 }
                 Err(e) => {
                     tracing::error!("drum swap: reload failed: {e}");
@@ -319,10 +437,9 @@ impl DrumRigBackend {
         let (piece_ids, pieces) = {
             let rig = self.inner.rig.lock().unwrap();
             let Some(rig) = rig.as_ref() else { return };
-            match crate::load_preset_kit(rig, KIT, &path) {
+            match crate::load_kit_tracks(rig, KIT, &path) {
                 Ok(ids) => {
                     let pieces = pieces_from_preset(&path, &ids);
-                    self.apply_mix(rig, &mixer);
                     (ids, pieces)
                 }
                 Err(e) => {
@@ -331,6 +448,13 @@ impl DrumRigBackend {
                 }
             }
         };
+        self.rebuild_mix_state();
+        {
+            let rig = self.inner.rig.lock().unwrap();
+            if let Some(rig) = rig.as_ref() {
+                self.apply_mix(rig, &mixer);
+            }
+        }
         let engines = engines_from_preset(&path);
         if let Ok(mut s) = self.inner.state.lock() {
             for (i, k) in s.kits.iter_mut().enumerate() {
@@ -346,53 +470,189 @@ impl DrumRigBackend {
         self.publish_all();
     }
 
-    /// Apply a parsed MM2 mix onto the already-loaded kit (caller holds the rig
-    /// lock; the kit was just reloaded clean). Sets each MM2 strip's fader level
-    /// and installs its FX chain on the matching channel/bus/master.
+    /// Apply a parsed MM2 mix onto the already-loaded per-track kit: each
+    /// matching strip's fader level lands in the strip model (then on its daw
+    /// track), and its FX chain is inserted as extra fx slots on that track.
+    /// The Master Bus chain has no daw master fx chain yet — logged, skipped.
     fn apply_mix(&self, rig: &SamplerRig, mixer: &crate::cradle::Mixer) {
+        use daw::service::{FxChainContext, FxChains};
+        use daw::standalone::Standalone;
         let sr = rig.sample_rate() as f64;
-        let Some(layout) = rig.drum_mixer_layout(KIT) else { return };
+        let Some(daw) = rig.daw_handle() else { return };
         let mut fx_applied = 0usize;
-        for eng in &layout.engines {
-            for ch in &eng.channels {
-                let piece = crate::library::slot_label(&eng.label);
-                let target = if ch.mic_label.is_empty() {
-                    piece
-                } else {
-                    format!("{} {}", piece, ch.mic_label)
-                };
-                let Some(strip) = crate::mm2fx::match_strip(mixer, &target) else { continue };
-                rig.set_mixer_channel_gain_db(KIT, ch.channel_idx, crate::mm2fx::level_to_db(strip.level));
-                for fx in strip.fx_slots() {
-                    if let Some(p) = crate::mm2fx::build_processor(&fx, sr) {
-                        if rig.install_mixer_plugin(KIT, FxTarget::Channel(ch.channel_idx), p).is_ok() {
-                            fx_applied += 1;
-                        }
+        let (channels, buses, piece_labels) = {
+            let s = self.inner.state.lock().unwrap();
+            (
+                s.mix.channels.clone(),
+                s.mix.buses.clone(),
+                s.mix.pieces.iter().map(|p| p.label.clone()).collect::<Vec<_>>(),
+            )
+        };
+        let add_fx = |track: &str, label: &str, plugin: Box<dyn signal_plugin_host::PluginInstance>| {
+            let fx_ctx = FxChainContext::track(track.to_string());
+            let Ok(idx) = <Standalone as FxChains>::add(&daw, fx_ctx.clone(), label) else {
+                return false;
+            };
+            let Some(guid) = <Standalone as FxChains>::get(&daw, fx_ctx, idx).map(|fx| fx.guid)
+            else {
+                return false;
+            };
+            let mut boxed = plugin;
+            let _ = signal_plugin_host::PluginInstance::prepare(boxed.as_mut(), sr, 1024);
+            daw.insert_plugin_instance(guid, boxed);
+            true
+        };
+        for (ci, ch) in channels.iter().enumerate() {
+            let piece = piece_labels.get(ch.piece).cloned().unwrap_or_default();
+            let target = if ch.mic.is_empty() {
+                piece
+            } else {
+                format!("{} {}", piece, ch.mic)
+            };
+            let Some(strip) = crate::mm2fx::match_strip(mixer, &target) else { continue };
+            let db = crate::mm2fx::level_to_db(strip.level);
+            if let Ok(mut st) = self.inner.state.lock() {
+                if let Some(c) = st.mix.channels.get_mut(ci) {
+                    c.state.gain_db = db;
+                }
+            }
+            for fx in strip.fx_slots() {
+                if let Some(p) = crate::mm2fx::build_instance(&fx, sr) {
+                    if add_fx(&ch.track, &format!("mm2-{target}"), p) {
+                        fx_applied += 1;
                     }
                 }
             }
         }
-        for bus in &layout.buses {
+        for (bi, bus) in buses.iter().enumerate() {
             let Some(strip) = crate::mm2fx::match_strip(mixer, &bus.label) else { continue };
-            rig.set_mixer_bus_gain_db(KIT, bus.bus_idx, crate::mm2fx::level_to_db(strip.level));
+            let db = crate::mm2fx::level_to_db(strip.level);
+            if let Ok(mut st) = self.inner.state.lock() {
+                if let Some(b) = st.mix.buses.get_mut(bi) {
+                    b.state.gain_db = db;
+                }
+            }
             for fx in strip.fx_slots() {
-                if let Some(p) = crate::mm2fx::build_processor(&fx, sr) {
-                    if rig.install_mixer_plugin(KIT, FxTarget::Bus(bus.bus_idx), p).is_ok() {
+                if let Some(p) = crate::mm2fx::build_instance(&fx, sr) {
+                    if add_fx(&bus.track, &format!("mm2-{}", bus.label), p) {
                         fx_applied += 1;
                     }
                 }
             }
         }
-        if let Some(strip) = crate::mm2fx::match_strip(mixer, "Master Bus") {
-            for fx in strip.fx_slots() {
-                if let Some(p) = crate::mm2fx::build_processor(&fx, sr) {
-                    if rig.install_mixer_plugin(KIT, FxTarget::Master, p).is_ok() {
-                        fx_applied += 1;
-                    }
-                }
-            }
+        if crate::mm2fx::match_strip(mixer, "Master Bus").is_some() {
+            tracing::warn!("mm2 import: Master Bus FX not applied (no daw master fx chain yet)");
         }
+        self.apply_kit_mixer();
         tracing::info!(fx_applied, strips = mixer.strips.len(), "mm2 import: applied mix");
+    }
+
+    /// Rebuild the strip model from the freshly loaded kit's tracks.
+    fn rebuild_mix_state(&self) {
+        let mix = {
+            let rig = self.inner.rig.lock().unwrap();
+            let Some(rig) = rig.as_ref() else { return };
+            rig.with_kit(KitMix::from_kit)
+        };
+        if let (Some(mix), Ok(mut s)) = (mix, self.inner.state.lock()) {
+            s.mix = mix;
+        }
+        self.apply_kit_mixer();
+    }
+
+    /// Push the whole strip model onto the daw tracks: close mics get
+    /// piece+channel fader/mute/solo folded; bus mics carry the piece fader
+    /// on the track and the send level on the route; buses get their own
+    /// strip. Buses are solo-passed whenever one of their senders is soloed
+    /// (a send destination is not an ancestor, so the renderer's solo mask
+    /// alone would silence it).
+    fn apply_kit_mixer(&self) {
+        use daw::service::{ProjectContext, RouteLocation, RouteRef, Routing, TrackRef, Tracks};
+        use daw::standalone::Standalone;
+        let daw = {
+            let rig = self.inner.rig.lock().unwrap();
+            let Some(rig) = rig.as_ref() else { return };
+            let Some(daw) = rig.daw_handle() else { return };
+            daw
+        };
+        let s = self.inner.state.lock().unwrap();
+        let mix = &s.mix;
+        let ctx = ProjectContext::Current;
+        let vol = |db: f32| db_to_linear(db) as f64;
+        for ch in &mix.channels {
+            let piece = mix.pieces.get(ch.piece).map(|p| p.state).unwrap_or_default();
+            let _ = <Standalone as Tracks>::set_volume(
+                &daw,
+                ctx.clone(),
+                TrackRef::guid(&ch.track),
+                vol(piece.gain_db + ch.state.gain_db),
+            );
+            let _ = <Standalone as Tracks>::set_muted(
+                &daw,
+                ctx.clone(),
+                TrackRef::guid(&ch.track),
+                piece.muted || ch.state.muted,
+            );
+            let _ = <Standalone as Tracks>::set_soloed(
+                &daw,
+                ctx.clone(),
+                TrackRef::guid(&ch.track),
+                piece.soloed || ch.state.soloed,
+            );
+        }
+        for snd in &mix.sends {
+            let piece = mix.pieces.get(snd.piece).map(|p| p.state).unwrap_or_default();
+            let _ = <Standalone as Tracks>::set_volume(
+                &daw,
+                ctx.clone(),
+                TrackRef::guid(&snd.track),
+                vol(piece.gain_db),
+            );
+            let _ = <Standalone as Tracks>::set_muted(
+                &daw,
+                ctx.clone(),
+                TrackRef::guid(&snd.track),
+                piece.muted || snd.muted,
+            );
+            let _ = <Standalone as Tracks>::set_soloed(
+                &daw,
+                ctx.clone(),
+                TrackRef::guid(&snd.track),
+                piece.soloed || snd.soloed,
+            );
+            let _ = <Standalone as Routing>::set_volume(
+                &daw,
+                ctx.clone(),
+                RouteLocation::send(TrackRef::guid(&snd.track), RouteRef::Index(0)),
+                vol(snd.level_db),
+            );
+        }
+        let any_solo = mix.any_solo();
+        for (bi, bus) in mix.buses.iter().enumerate() {
+            let sender_solo = mix.sends.iter().any(|snd| {
+                snd.bus == bi
+                    && (snd.soloed
+                        || mix.pieces.get(snd.piece).map(|p| p.state.soloed).unwrap_or(false))
+            });
+            let _ = <Standalone as Tracks>::set_volume(
+                &daw,
+                ctx.clone(),
+                TrackRef::guid(&bus.track),
+                vol(bus.state.gain_db),
+            );
+            let _ = <Standalone as Tracks>::set_muted(
+                &daw,
+                ctx.clone(),
+                TrackRef::guid(&bus.track),
+                bus.state.muted,
+            );
+            let _ = <Standalone as Tracks>::set_soloed(
+                &daw,
+                ctx.clone(),
+                TrackRef::guid(&bus.track),
+                bus.state.soloed || (any_solo && sender_solo),
+            );
+        }
     }
 
     fn reattach_midi(&self) {
@@ -430,7 +690,7 @@ impl DrumRigBackend {
                 let inner = self.inner.clone();
                 let mut conv =
                     to_drum_map(map).map(|from| DrumMapConverter::new(from, DrumMap::Mm2));
-                rig.attach_midi_transformed(sel, move |ev| {
+                rig.attach_midi_kit(sel, move |ev| {
                     inner.monitor.record(&ev);
                     // Flash the played key on the Light Guide (the raw/physical
                     // key the player pressed — for a Direct-mapped keyboard
@@ -568,12 +828,21 @@ impl DrumRig for DrumRigBackend {
         if running {
             let rig = self.inner.rig.lock().unwrap();
             if let Some(rig) = rig.as_ref() {
-                if let Some(m) = rig.drum_mixer_meters(KIT) {
-                    master_peak = m.master_peak();
+                // Master ≈ the loudest strip (close mics + buses); the daw
+                // master has no meter cell of its own yet.
+                let meters = rig.meters_bank();
+                let peak = |idx: usize| {
+                    meters.cell(idx).map(|c| c.peak(0).max(c.peak(1))).unwrap_or(0.0)
+                };
+                for ch in &s.mix.channels {
+                    master_peak = master_peak.max(peak(ch.meter));
                 }
-                voices = rig.active_voices(KIT) as u32;
-                for id in &s.piece_ids {
-                    let (l, t) = rig.preload_progress(id);
+                for bus in &s.mix.buses {
+                    master_peak = master_peak.max(peak(bus.meter));
+                }
+                voices = rig.kit_voices() as u32;
+                for piece in &s.mix.pieces {
+                    let (l, t) = rig.kit_piece_progress(&format!("{KIT}:{}", piece.id));
                     loaded_n += l;
                     total_n += t;
                 }
@@ -605,11 +874,10 @@ impl DrumRig for DrumRigBackend {
     fn pieces(&self) -> Vec<PieceInfo> {
         let mut pieces = self.inner.state.lock().map(|s| s.pieces.clone()).unwrap_or_default();
         // Freshen preload counts.
-        let s = self.inner.state.lock().unwrap();
         if let Ok(rig) = self.inner.rig.lock() {
             if let Some(rig) = rig.as_ref() {
-                for (p, id) in pieces.iter_mut().zip(s.piece_ids.iter()) {
-                    let (l, t) = rig.preload_progress(id);
+                for p in pieces.iter_mut() {
+                    let (l, t) = rig.kit_piece_progress(&p.id);
                     p.loaded_samples = l as u32;
                     p.total_samples = t as u32;
                 }
@@ -698,7 +966,7 @@ impl DrumRig for DrumRigBackend {
         // sees it). Velocity 0 is a note-off (running-status convention).
         if let Ok(rig) = self.inner.rig.lock() {
             if let Some(rig) = rig.as_ref() {
-                rig.midi_message(GM_DRUM_CHANNEL, 0x90, note, velocity);
+                rig.kit_note(note, velocity);
             }
         }
         let channel = Channel::new(GM_DRUM_CHANNEL);
@@ -719,60 +987,79 @@ impl DrumRig for DrumRigBackend {
     }
 
     fn mixer(&self) -> Vec<MixerStrip> {
-        let rig = self.inner.rig.lock().unwrap();
-        let Some(rig) = rig.as_ref() else { return Vec::new() };
-        let Some(layout) = rig.drum_mixer_layout(KIT) else { return Vec::new() };
-        let meters = rig.drum_mixer_meters(KIT);
+        let meters = {
+            let rig = self.inner.rig.lock().unwrap();
+            let Some(rig) = rig.as_ref() else { return Vec::new() };
+            rig.meters_bank()
+        };
+        let peak =
+            |idx: usize| meters.cell(idx).map(|c| c.peak(0).max(c.peak(1))).unwrap_or(0.0);
+        let s = self.inner.state.lock().unwrap();
+        let mix = &s.mix;
         let mut strips = Vec::new();
-        // Hierarchy: each piece is a folder (its fader sums the mics) followed
-        // by its mic channels (Kick In 1/2/Sub …); then the shared OH/room
-        // buses. Same order as `meters()` so peak indices line up.
-        for eng in &layout.engines {
-            let sends = eng
+        // Hierarchy: each piece is a folder-level strip (its fader rides all
+        // its mic tracks) followed by its close-mic channels; then the shared
+        // OH/room buses. Same order as `meters()` so peak indices line up.
+        for (pi, piece) in mix.pieces.iter().enumerate() {
+            let sends = mix
                 .sends
                 .iter()
-                .map(|s| signal_drums_proto::SendInfo {
-                    idx: s.send_idx as u32,
-                    bus_label: s.bus_label.clone(),
-                    level_db: s.level_db,
+                .enumerate()
+                .filter(|(_, snd)| snd.piece == pi)
+                .map(|(si, snd)| signal_drums_proto::SendInfo {
+                    idx: si as u32,
+                    bus_label: mix
+                        .buses
+                        .get(snd.bus)
+                        .map(|b| b.label.clone())
+                        .unwrap_or_default(),
+                    level_db: snd.level_db,
                 })
                 .collect();
-            let piece_label = crate::library::slot_label(&eng.label);
+            // Piece peak = the loudest of its mic tracks this block.
+            let piece_peak = mix
+                .channels
+                .iter()
+                .filter(|c| c.piece == pi)
+                .map(|c| c.meter)
+                .chain(mix.sends.iter().filter(|sd| sd.piece == pi).map(|sd| sd.meter))
+                .map(peak)
+                .fold(0.0f32, f32::max);
             strips.push(MixerStrip {
                 kind: StripKind::Piece,
-                idx: eng.engine_idx as u32,
-                label: piece_label.clone(),
+                idx: pi as u32,
+                label: piece.label.clone(),
                 group: String::new(),
-                gain_db: eng.piece_gain_db,
-                muted: eng.piece_muted,
-                soloed: eng.piece_soloed,
-                peak: meters.as_ref().map(|m| m.piece_peak(eng.engine_idx)).unwrap_or(0.0),
+                gain_db: piece.state.gain_db,
+                muted: piece.state.muted,
+                soloed: piece.state.soloed,
+                peak: piece_peak,
                 sends,
             });
-            for ch in &eng.channels {
+            for (ci, ch) in mix.channels.iter().enumerate().filter(|(_, c)| c.piece == pi) {
                 strips.push(MixerStrip {
                     kind: StripKind::Channel,
-                    idx: ch.channel_idx as u32,
-                    label: if ch.mic_label.is_empty() { piece_label.clone() } else { ch.mic_label.clone() },
-                    group: piece_label.clone(),
-                    gain_db: ch.gain_db,
-                    muted: ch.muted,
-                    soloed: ch.soloed,
-                    peak: meters.as_ref().map(|m| m.channel_peak(ch.channel_idx)).unwrap_or(0.0),
+                    idx: ci as u32,
+                    label: if ch.mic.is_empty() { piece.label.clone() } else { ch.mic.clone() },
+                    group: piece.label.clone(),
+                    gain_db: ch.state.gain_db,
+                    muted: ch.state.muted,
+                    soloed: ch.state.soloed,
+                    peak: peak(ch.meter),
                     sends: Vec::new(),
                 });
             }
         }
-        for bus in &layout.buses {
+        for (bi, bus) in mix.buses.iter().enumerate() {
             strips.push(MixerStrip {
                 kind: StripKind::Bus,
-                idx: bus.bus_idx as u32,
+                idx: bi as u32,
                 label: bus.label.clone(),
                 group: String::new(),
-                gain_db: bus.gain_db,
-                muted: bus.muted,
-                soloed: bus.soloed,
-                peak: meters.as_ref().map(|m| m.bus_peak(bus.bus_idx)).unwrap_or(0.0),
+                gain_db: bus.state.gain_db,
+                muted: bus.state.muted,
+                soloed: bus.state.soloed,
+                peak: peak(bus.meter),
                 sends: Vec::new(),
             });
         }
@@ -780,105 +1067,128 @@ impl DrumRig for DrumRigBackend {
     }
 
     fn meters(&self) -> signal_drums_proto::MeterSnapshot {
-        let rig = self.inner.rig.lock().unwrap();
-        let Some(rig) = rig.as_ref() else { return Default::default() };
-        let Some(m) = rig.drum_mixer_meters(KIT) else { return Default::default() };
-        // Positionally aligned with `mixer()`: per engine [piece, channels…],
+        let (meters, voices) = {
+            let rig = self.inner.rig.lock().unwrap();
+            let Some(rig) = rig.as_ref() else { return Default::default() };
+            (rig.meters_bank(), rig.kit_voices() as u32)
+        };
+        let peak =
+            |idx: usize| meters.cell(idx).map(|c| c.peak(0).max(c.peak(1))).unwrap_or(0.0);
+        let s = self.inner.state.lock().unwrap();
+        let mix = &s.mix;
+        // Positionally aligned with `mixer()`: per piece [piece, channels…],
         // then buses.
         let mut strips = Vec::new();
-        if let Some(layout) = rig.drum_mixer_layout(KIT) {
-            for eng in &layout.engines {
-                strips.push(m.piece_peak(eng.engine_idx));
-                for ch in &eng.channels {
-                    strips.push(m.channel_peak(ch.channel_idx));
-                }
-            }
-            for bus in &layout.buses {
-                strips.push(m.bus_peak(bus.bus_idx));
+        let mut master = 0.0f32;
+        for (pi, _) in mix.pieces.iter().enumerate() {
+            let piece_peak = mix
+                .channels
+                .iter()
+                .filter(|c| c.piece == pi)
+                .map(|c| c.meter)
+                .chain(mix.sends.iter().filter(|sd| sd.piece == pi).map(|sd| sd.meter))
+                .map(peak)
+                .fold(0.0f32, f32::max);
+            strips.push(piece_peak);
+            for ch in mix.channels.iter().filter(|c| c.piece == pi) {
+                let p = peak(ch.meter);
+                master = master.max(p);
+                strips.push(p);
             }
         }
-        signal_drums_proto::MeterSnapshot {
-            master: m.master_peak(),
-            strips,
-            voices: rig.active_voices(KIT) as u32,
+        for bus in &mix.buses {
+            let p = peak(bus.meter);
+            master = master.max(p);
+            strips.push(p);
         }
+        signal_drums_proto::MeterSnapshot { master, strips, voices }
     }
 
     fn set_piece_gain(&self, idx: u32, db: f32) {
         // Continuous control — no Mixer echo (the UI tracks it optimistically);
         // echoing at drag rate is what made the fader jitter.
-        if let Ok(rig) = self.inner.rig.lock() {
-            if let Some(rig) = rig.as_ref() {
-                rig.set_mixer_piece_gain_db(KIT, idx as usize, db);
+        if let Ok(mut s) = self.inner.state.lock() {
+            if let Some(p) = s.mix.pieces.get_mut(idx as usize) {
+                p.state.gain_db = db;
             }
         }
+        self.apply_kit_mixer();
     }
     fn set_piece_mute(&self, idx: u32, muted: bool) {
-        if let Ok(rig) = self.inner.rig.lock() {
-            if let Some(rig) = rig.as_ref() {
-                rig.set_mixer_piece_mute(KIT, idx as usize, muted);
+        if let Ok(mut s) = self.inner.state.lock() {
+            if let Some(p) = s.mix.pieces.get_mut(idx as usize) {
+                p.state.muted = muted;
             }
         }
+        self.apply_kit_mixer();
         self.inner.events.publish(DrumEvent::Mixer(DrumRig::mixer(self)));
     }
     fn set_piece_solo(&self, idx: u32, soloed: bool) {
-        if let Ok(rig) = self.inner.rig.lock() {
-            if let Some(rig) = rig.as_ref() {
-                rig.set_mixer_piece_solo(KIT, idx as usize, soloed);
+        if let Ok(mut s) = self.inner.state.lock() {
+            if let Some(p) = s.mix.pieces.get_mut(idx as usize) {
+                p.state.soloed = soloed;
             }
         }
+        self.apply_kit_mixer();
         self.inner.events.publish(DrumEvent::Mixer(DrumRig::mixer(self)));
     }
     fn set_bus_solo(&self, idx: u32, soloed: bool) {
-        if let Ok(rig) = self.inner.rig.lock() {
-            if let Some(rig) = rig.as_ref() {
-                rig.set_mixer_bus_solo(KIT, idx as usize, soloed);
+        if let Ok(mut s) = self.inner.state.lock() {
+            if let Some(b) = s.mix.buses.get_mut(idx as usize) {
+                b.state.soloed = soloed;
             }
         }
+        self.apply_kit_mixer();
         self.inner.events.publish(DrumEvent::Mixer(DrumRig::mixer(self)));
     }
     fn set_send_level(&self, idx: u32, db: f32) {
         // Continuous — no Mixer echo (see set_piece_gain).
-        if let Ok(rig) = self.inner.rig.lock() {
-            if let Some(rig) = rig.as_ref() {
-                rig.set_mixer_send_level_db(KIT, idx as usize, db);
+        if let Ok(mut s) = self.inner.state.lock() {
+            if let Some(snd) = s.mix.sends.get_mut(idx as usize) {
+                snd.level_db = db;
             }
         }
+        self.apply_kit_mixer();
     }
     fn set_channel_gain(&self, idx: u32, db: f32) {
-        if let Ok(rig) = self.inner.rig.lock() {
-            if let Some(rig) = rig.as_ref() {
-                rig.set_mixer_channel_gain_db(KIT, idx as usize, db);
+        if let Ok(mut s) = self.inner.state.lock() {
+            if let Some(c) = s.mix.channels.get_mut(idx as usize) {
+                c.state.gain_db = db;
             }
         }
+        self.apply_kit_mixer();
     }
     fn set_channel_mute(&self, idx: u32, muted: bool) {
-        if let Ok(rig) = self.inner.rig.lock() {
-            if let Some(rig) = rig.as_ref() {
-                rig.set_mixer_channel_mute(KIT, idx as usize, muted);
+        if let Ok(mut s) = self.inner.state.lock() {
+            if let Some(c) = s.mix.channels.get_mut(idx as usize) {
+                c.state.muted = muted;
             }
         }
+        self.apply_kit_mixer();
     }
     fn set_channel_solo(&self, idx: u32, soloed: bool) {
-        if let Ok(rig) = self.inner.rig.lock() {
-            if let Some(rig) = rig.as_ref() {
-                rig.set_mixer_channel_solo(KIT, idx as usize, soloed);
+        if let Ok(mut s) = self.inner.state.lock() {
+            if let Some(c) = s.mix.channels.get_mut(idx as usize) {
+                c.state.soloed = soloed;
             }
         }
+        self.apply_kit_mixer();
     }
     fn set_bus_gain(&self, idx: u32, db: f32) {
-        if let Ok(rig) = self.inner.rig.lock() {
-            if let Some(rig) = rig.as_ref() {
-                rig.set_mixer_bus_gain_db(KIT, idx as usize, db);
+        if let Ok(mut s) = self.inner.state.lock() {
+            if let Some(b) = s.mix.buses.get_mut(idx as usize) {
+                b.state.gain_db = db;
             }
         }
+        self.apply_kit_mixer();
     }
     fn set_bus_mute(&self, idx: u32, muted: bool) {
-        if let Ok(rig) = self.inner.rig.lock() {
-            if let Some(rig) = rig.as_ref() {
-                rig.set_mixer_bus_mute(KIT, idx as usize, muted);
+        if let Ok(mut s) = self.inner.state.lock() {
+            if let Some(b) = s.mix.buses.get_mut(idx as usize) {
+                b.state.muted = muted;
             }
         }
+        self.apply_kit_mixer();
     }
 
     fn midi_ports(&self) -> Vec<String> {

@@ -10,7 +10,7 @@
 use std::path::Path;
 
 use signal_sampler::midicore::{self, DrumMap, DrumMapConverter};
-use signal_sampler::{InstrumentId, PreloadProfile, SamplerRig};
+use signal_sampler::{InstrumentId, PreloadProfile, PresetSpec, SamplerRig};
 
 mod backend;
 pub mod cradle;
@@ -58,6 +58,33 @@ pub fn attach_converted_kit(
 /// therefore plays without extra wiring.
 // r[impl drums.kit.gm-channel]
 // r[impl drums.kit.sample-zones]
+/// Load a `.signalpreset` kit as per-track daw tracks (the fully daw-based
+/// mixer): parse the preset, then hand it to
+/// [`SamplerRig::load_kit_tracks`]. MIDI reaches the kit through its routing
+/// table ([`SamplerRig::kit_dispatch`]), not a bank channel.
+pub fn load_kit_tracks(
+    rig: &SamplerRig,
+    id: &str,
+    preset: impl AsRef<Path>,
+) -> Result<Vec<InstrumentId>, String> {
+    rig.set_preload_profile(PreloadProfile::DrumKit);
+    let path = preset.as_ref();
+    let spec = PresetSpec::from_file(path).map_err(|e| e.to_string())?;
+    let dir = path.parent().unwrap_or(Path::new("")).to_path_buf();
+    rig.load_kit_tracks(id, &spec, &dir).map_err(|e| e.to_string())
+}
+
+/// As [`load_kit_tracks`] from an in-memory spec (the kit-designer swap path).
+pub fn load_kit_tracks_spec(
+    rig: &SamplerRig,
+    id: &str,
+    spec: &PresetSpec,
+    dir: &Path,
+) -> Result<Vec<InstrumentId>, String> {
+    rig.set_preload_profile(PreloadProfile::DrumKit);
+    rig.load_kit_tracks(id, spec, dir).map_err(|e| e.to_string())
+}
+
 pub fn load_preset_kit(
     rig: &SamplerRig,
     id: &str,

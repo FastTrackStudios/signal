@@ -44,7 +44,7 @@
 //!   [`SendMode::PostFx`], and its parent-send to master is disabled.
 
 use std::collections::HashMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
@@ -352,6 +352,10 @@ struct Inner {
     /// [`SamplerRig::attach_midi`]).
     midi_monitor: MidiMonitor,
 
+    /// Per-track kit hosting (the fully daw-based drum mixer), when a kit
+    /// was loaded via [`SamplerRig::load_kit_tracks`].
+    kit: Mutex<Option<crate::kit_tracks::KitState>>,
+
     /// Stem routing: articulation class → output bus id for
     /// [`SamplerRig::render_offline_document_buses`]. Default: every class →
     /// `"main"` (single bus, bit-identical to the plain document render).
@@ -471,6 +475,7 @@ impl SamplerRig {
                 stats,
                 tracks: Mutex::new(TrackTables::default()),
                 midi_monitor: MidiMonitor::default(),
+                kit: Mutex::new(None),
                 class_routing: Mutex::new(default_class_routing()),
                 sample_rate,
             }),
@@ -503,6 +508,7 @@ impl SamplerRig {
                 stats: Arc::new(BankStats::default()),
                 tracks: Mutex::new(TrackTables::default()),
                 midi_monitor: MidiMonitor::default(),
+                kit: Mutex::new(None),
                 class_routing: Mutex::new(default_class_routing()),
                 sample_rate,
             }),
@@ -1649,6 +1655,410 @@ impl SamplerRig {
                 daw.push_cc(&guid, controller, value);
             }
         }
+    }
+
+    // ── Per-track kit hosting (the fully daw-based drum mixer) ───────────────
+
+    /// The daw service handle (live mode) — the backend drives strip
+    /// fader/mute/solo directly via the `Tracks` service by guid.
+    pub fn daw_handle(&self) -> Option<Standalone> {
+        self.inner.daw.clone()
+    }
+
+    /// Load a `.signalpreset` kit as per-track daw tracks: each piece's close
+    /// mics become instrument tracks direct to master; bus mics become
+    /// instrument tracks sending into shared bus tracks. Replaces any
+    /// previously loaded per-track kit. Returns the piece ids
+    /// (`"<prefix>:<engine id>"`), preset order.
+    pub fn load_kit_tracks(
+        &self,
+        id_prefix: &str,
+        preset: &crate::preset_spec::PresetSpec,
+        preset_dir: &Path,
+    ) -> eyre::Result<Vec<InstrumentId>> {
+        use crate::kit_tracks::{KitMic, KitPiece, KitRouting, KitState};
+
+        if self.inner.daw.is_none() {
+            eyre::bail!("load_kit_tracks requires a live (device-backed) rig");
+        }
+        self.unload_kit_tracks()?;
+
+        let sample_rate = self.inner.sample_rate;
+        let mut pieces: Vec<KitPiece> = Vec::new();
+        let mut piece_ids = Vec::new();
+        let mut preload: Vec<(String, crate::engine::cache::SampleCache, Vec<PathBuf>, u8)> =
+            Vec::new();
+
+        for er in &preset.engines {
+            let engine_path = crate::bank::resolve_relative(&er.engine, preset_dir);
+            let engine_dir = engine_path.parent().unwrap_or(Path::new(""));
+            let engine_spec = crate::engine_spec::EngineSpec::from_file(&engine_path)?;
+            let pack_path = crate::bank::resolve_relative(&engine_spec.block.pack, engine_dir);
+            let patch = crate::PlayerPatch::from_pack(&pack_path)?;
+            let section = patch
+                .spec
+                .sections
+                .first()
+                .map(|s| s.id.clone())
+                .unwrap_or_default();
+            let mut mic_ids: Vec<String> =
+                patch.spec.mics.iter().map(|m| m.id.clone()).collect();
+            if mic_ids.is_empty() {
+                mic_ids.push(String::new());
+            }
+
+            // Overrides: gain/pan land on the mic tracks (daw faders);
+            // transpose folds into the piece's dispatch offset.
+            let mut gain_db = 0.0f32;
+            let mut pan = 0.0f32;
+            let mut transpose = er.transpose as i16;
+            for ov in engine_spec.block.overrides.iter().chain(er.overrides.iter()) {
+                match ov.param.as_str() {
+                    "gain_db" | "gain" => gain_db += ov.value,
+                    "pan" => pan = ov.value,
+                    "transpose" => transpose += ov.value.round() as i16,
+                    other => {
+                        tracing::warn!(piece = %er.id, param = other, "kit tracks: unmapped override ignored");
+                    }
+                }
+            }
+
+            let label = if engine_spec.name.is_empty() {
+                er.id.clone()
+            } else {
+                engine_spec.name.clone()
+            };
+            let piece_id: InstrumentId = format!("{id_prefix}:{}", er.id);
+            piece_ids.push(piece_id.clone());
+
+            let mut mics = Vec::new();
+            for mic_id in mic_ids {
+                let mut engine =
+                    SampleEngine::new(patch.clone(), sample_rate, section.clone(), mic_id.clone());
+                // Restrict this engine to its mic's zones — one engine per
+                // mic, RR-correlated (deterministic selection, identical
+                // trigger streams).
+                engine.set_solo_mic(Some(mic_id.clone()));
+                if !er.articulation.is_empty() {
+                    engine.pin_articulation(Some(er.articulation.clone()));
+                }
+                if !er.choke_group.is_empty() {
+                    engine.set_choke_group(Some(&er.choke_group), &er.choke_on);
+                }
+                // Mic-filtered preload set (zone paths whose zone is this
+                // mic's), so N mic engines cost the same RAM as one
+                // multi-mic engine.
+                let paths: Vec<PathBuf> = if patch.zone_paths.is_empty() {
+                    engine.sample_paths_owned()
+                } else {
+                    patch
+                        .spec
+                        .zones
+                        .iter()
+                        .zip(patch.zone_paths.iter())
+                        .filter(|(z, _)| z.mic == mic_id)
+                        .map(|(_, p)| p.clone())
+                        .collect()
+                };
+                let prio = PreloadProfile::default().engine_priority(&engine_spec.engine_type);
+                preload.push((
+                    format!("{piece_id}:{mic_id}"),
+                    engine.cache_handle(),
+                    paths,
+                    prio,
+                ));
+
+                let shared: crate::kit_tracks::SharedEngine = Arc::new(Mutex::new(engine));
+                let instrument_id = format!("{piece_id}:{mic_id}");
+                let display = if mic_id.is_empty() {
+                    label.clone()
+                } else {
+                    format!("{label} {mic_id}")
+                };
+                let bus = crate::mixer::mic_is_bus(&mic_id).then(|| mic_id.clone());
+                let track =
+                    self.add_kit_mic_track(&instrument_id, &display, shared.clone(), &er.id)?;
+                if let Some(bus_id) = &bus {
+                    let bus_guid = self.ensure_bus_track(bus_id)?;
+                    self.route_to_bus(&track.track_guid, &bus_guid)?;
+                }
+                if let Some(daw) = self.inner.daw.as_ref() {
+                    if gain_db != 0.0 {
+                        let _ = <Standalone as Tracks>::set_volume(
+                            daw,
+                            ProjectContext::Current,
+                            TrackRef::guid(&track.track_guid),
+                            10f64.powf(gain_db as f64 / 20.0),
+                        );
+                    }
+                    if pan != 0.0 {
+                        let _ = <Standalone as Tracks>::set_pan(
+                            daw,
+                            ProjectContext::Current,
+                            TrackRef::guid(&track.track_guid),
+                            pan as f64,
+                        );
+                    }
+                    if er.mute {
+                        let _ = <Standalone as Tracks>::set_muted(
+                            daw,
+                            ProjectContext::Current,
+                            TrackRef::guid(&track.track_guid),
+                            true,
+                        );
+                    }
+                }
+                mics.push(KitMic {
+                    mic: mic_id,
+                    instrument_id,
+                    track_guid: track.track_guid,
+                    fx_guid: track.fx_guid,
+                    meter_index: track.meter_index,
+                    bus,
+                    engine: shared,
+                });
+            }
+            pieces.push(KitPiece {
+                id: er.id.clone(),
+                label,
+                transpose: transpose.clamp(i8::MIN as i16, i8::MAX as i16) as i8,
+                muted: er.mute,
+                mics,
+            });
+        }
+
+        // Bus list for the snapshot.
+        let buses = {
+            let tables = self
+                .inner
+                .tracks
+                .lock()
+                .map_err(|_| eyre::eyre!("track table poisoned"))?;
+            let mut buses: Vec<(String, String, usize)> = tables
+                .buses
+                .values()
+                .map(|b| (b.id.clone(), b.track_guid.clone(), b.meter_index))
+                .collect();
+            buses.sort_by_key(|(_, _, m)| *m);
+            buses
+        };
+
+        // Priority-ordered background preload (kick/snare first), one pass.
+        preload.sort_by_key(|(_, _, _, p)| *p);
+        let kit_label = preset.name.clone();
+        if let Err(err) = std::thread::Builder::new()
+            .name(format!("signal-preload-kit:{kit_label}"))
+            .spawn(move || {
+                for (id, cache, paths, _) in preload {
+                    let stats = cache.preload(paths.iter().map(|p| p.as_path()));
+                    tracing::debug!(mic = %id, loaded = stats.loaded, skipped = stats.skipped, "kit mic preload done");
+                }
+                tracing::info!(kit = %kit_label, "kit preload complete");
+            })
+        {
+            tracing::warn!(err = %err, "failed to spawn kit preload thread");
+        }
+
+        let state = KitState {
+            prefix: id_prefix.to_string(),
+            name: preset.name.clone(),
+            routing: KitRouting::from_preset(preset),
+            pieces,
+            buses,
+        };
+        if let Ok(mut kit) = self.inner.kit.lock() {
+            *kit = Some(state);
+        }
+        Ok(piece_ids)
+    }
+
+    /// Remove the current per-track kit's tracks (mics + buses), if any.
+    pub fn unload_kit_tracks(&self) -> eyre::Result<()> {
+        let Some(state) = self.inner.kit.lock().ok().and_then(|mut k| k.take()) else {
+            return Ok(());
+        };
+        let Some(daw) = self.inner.daw.as_ref() else { return Ok(()) };
+        let mut tables = self
+            .inner
+            .tracks
+            .lock()
+            .map_err(|_| eyre::eyre!("track table poisoned"))?;
+        for piece in &state.pieces {
+            for mic in &piece.mics {
+                let _ = <Standalone as Tracks>::remove(
+                    daw,
+                    ProjectContext::Current,
+                    TrackRef::guid(&mic.track_guid),
+                );
+                tables.instruments.remove(&mic.instrument_id);
+                tables.order.retain(|id| id != &mic.instrument_id);
+            }
+        }
+        for (bus_id, guid, _) in &state.buses {
+            let _ = <Standalone as Tracks>::remove(
+                daw,
+                ProjectContext::Current,
+                TrackRef::guid(guid),
+            );
+            tables.buses.remove(bus_id);
+        }
+        // Meter indices are compacted on the next load (resize_meters).
+        drop(tables);
+        let tables = self.inner.tracks.lock().expect("track table poisoned");
+        self.resize_meters(&tables);
+        Ok(())
+    }
+
+    fn add_kit_mic_track(
+        &self,
+        id: &str,
+        name: &str,
+        engine: crate::kit_tracks::SharedEngine,
+        piece: &str,
+    ) -> eyre::Result<InstrumentTrack> {
+        let daw = self
+            .inner
+            .daw
+            .as_ref()
+            .ok_or_else(|| eyre::eyre!("kit tracks require a live rig"))?;
+        let mut tables = self
+            .inner
+            .tracks
+            .lock()
+            .map_err(|_| eyre::eyre!("track table poisoned"))?;
+        let meter_index = 1 + Self::track_count(&tables);
+        let track_guid = <Standalone as Tracks>::add(daw, ProjectContext::Current, name, None)
+            .map_err(|e| eyre::eyre!("sampler rig: add kit track {name:?} failed: {e}"))?;
+        let fx_ctx = FxChainContext::track(track_guid.clone());
+        let idx = <Standalone as FxChains>::add(daw, fx_ctx.clone(), &format!("kit-{id}"))
+            .map_err(|e| eyre::eyre!("sampler rig: reserve kit fx slot failed: {e}"))?;
+        let fx_guid = <Standalone as FxChains>::get(daw, fx_ctx, idx)
+            .map(|fx| fx.guid)
+            .ok_or_else(|| eyre::eyre!("sampler rig: kit fx slot vanished after add"))?;
+
+        let mut inst = crate::kit_tracks::KitMicInstrument::new(engine);
+        let _ = inst.prepare(self.inner.sample_rate as f64, PREPARE_BLOCK);
+        daw.insert_plugin_instance(fx_guid.clone(), Box::new(inst));
+
+        let track = InstrumentTrack {
+            track_guid,
+            fx_guid,
+            meter_index,
+            piece: Some(piece.to_string()),
+        };
+        tables.instruments.insert(id.to_string(), track.clone());
+        tables.order.push(id.to_string());
+        drop(tables);
+        let tables = self.inner.tracks.lock().expect("track table poisoned");
+        self.resize_meters(&tables);
+        Ok(track)
+    }
+
+    fn ensure_bus_track(&self, bus_id: &str) -> eyre::Result<String> {
+        let existing = self
+            .inner
+            .tracks
+            .lock()
+            .ok()
+            .and_then(|t| t.buses.get(bus_id).map(|b| b.track_guid.clone()));
+        match existing {
+            Some(g) => Ok(g),
+            None => Ok(self.add_bus_track(bus_id)?.track_guid),
+        }
+    }
+
+    /// Dispatch one MIDI event through the loaded kit's routing table
+    /// (direct engine calls — mic RR selection stays correlated).
+    pub fn kit_dispatch(&self, ev: &midicore::MidiEvent) {
+        if let Ok(kit) = self.inner.kit.lock() {
+            if let Some(kit) = kit.as_ref() {
+                kit.dispatch(ev);
+            }
+        }
+    }
+
+    /// Route one note through the loaded kit (UI pads / triggers).
+    pub fn kit_note(&self, note: u8, velocity: u8) {
+        if let Ok(kit) = self.inner.kit.lock() {
+            if let Some(kit) = kit.as_ref() {
+                kit.dispatch_note(note, velocity);
+            }
+        }
+    }
+
+    /// True when a per-track kit is loaded.
+    pub fn kit_active(&self) -> bool {
+        self.inner.kit.lock().map(|k| k.is_some()).unwrap_or(false)
+    }
+
+    /// Run `f` over the loaded kit state (strip guids, meter indices,
+    /// engines) — the backend's read/inspect seam.
+    pub fn with_kit<R>(&self, f: impl FnOnce(&crate::kit_tracks::KitState) -> R) -> Option<R> {
+        self.inner
+            .kit
+            .lock()
+            .ok()
+            .and_then(|k| k.as_ref().map(f))
+    }
+
+    /// The current per-track meter bank (cell indices = the meter indices in
+    /// the kit/instrument track tables).
+    pub fn meters_bank(&self) -> Arc<Meters> {
+        self.inner
+            .meters
+            .lock()
+            .map(|m| m.clone())
+            .unwrap_or_else(|_| Meters::new(0))
+    }
+
+    /// A kit piece's preload progress `(loaded, total)`, summed over its mic
+    /// engines.
+    pub fn kit_piece_progress(&self, piece: &str) -> (usize, usize) {
+        self.with_kit(|kit| {
+            let Some(p) = kit.piece(piece) else { return (0, 0) };
+            let mut loaded = 0;
+            let mut total = 0;
+            for mic in &p.mics {
+                if let Ok(e) = mic.engine.try_lock() {
+                    loaded += e.loaded_sample_count();
+                    total += e.total_sample_count();
+                }
+            }
+            (loaded, total)
+        })
+        .unwrap_or((0, 0))
+    }
+
+    /// Active voices across the loaded kit's mic engines.
+    pub fn kit_voices(&self) -> usize {
+        self.with_kit(|kit| {
+            kit.pieces
+                .iter()
+                .flat_map(|p| p.mics.iter())
+                .filter_map(|m| m.engine.try_lock().ok().map(|e| e.active_voices()))
+                .sum()
+        })
+        .unwrap_or(0)
+    }
+
+    /// Open a hardware MIDI input whose events are transformed then routed
+    /// through the loaded kit's dispatch table (per-track kit analog of
+    /// [`attach_midi_transformed`](Self::attach_midi_transformed)).
+    pub fn attach_midi_kit<F>(
+        &self,
+        selection: midicore::PortSelector,
+        transform: F,
+    ) -> eyre::Result<midicore::midir::MidiInput>
+    where
+        F: FnMut(midicore::MidiEvent) -> Vec<midicore::MidiEvent> + Send + 'static,
+    {
+        let rig = self.clone();
+        let sink = midicore::attach::tap_sink_transformed(
+            self.inner.midi_monitor.clone(),
+            transform,
+            move |ev| rig.kit_dispatch(&ev),
+        );
+        midicore::midir::MidiInput::open(selection, sink)
     }
 
     fn tracks_for(&self, id: &str) -> Vec<String> {

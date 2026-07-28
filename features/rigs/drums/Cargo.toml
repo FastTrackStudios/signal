@@ -13,6 +13,10 @@ pipewire = ["midicore/midir-pipewire"]
 [dependencies]
 # Drums are plain sample zones on the shared engine — no drum-specific DSP.
 signal-sampler.workspace = true
+# Cross-rig utilities: shared mixer math (dB→linear).
+signal-rig-host.workspace = true
+# daw services — every strip fader/mute/solo/send is a daw track/route op.
+daw.workspace = true
 # The wire contract this crate's headless backend implements (DrumRig service).
 signal-drums-proto.workspace = true
 # Layer/Services composition + dispatchers + PubSub for mounting the services.

@@ -94,7 +94,7 @@ impl PreloadProfile {
         paths
     }
 
-    fn engine_priority(self, engine_type: &str) -> u8 {
+    pub(crate) fn engine_priority(self, engine_type: &str) -> u8 {
         match self {
             Self::DrumKit => drum_priority(engine_type),
             Self::PianoCenterOut => {
@@ -119,7 +119,7 @@ struct PendingPreload {
     paths: Vec<PathBuf>,
 }
 
-fn resolve_relative(path_str: &str, base_dir: &Path) -> PathBuf {
+pub(crate) fn resolve_relative(path_str: &str, base_dir: &Path) -> PathBuf {
     let p = PathBuf::from(path_str);
     if p.is_absolute() { p } else { base_dir.join(p) }
 }
