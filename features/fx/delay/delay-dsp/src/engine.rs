@@ -221,6 +221,12 @@ pub struct DelayEngine {
     // ── Reverse-specific ───────────────────────────────────────────
     /// Crossfade overlap (0.0–0.5). Reverse only.
     pub reverse_crossfade: f64,
+    /// Smear: allpass diffusion on the reversed audio (0.0–1.0). Reverse only.
+    pub reverse_smear: f64,
+    /// Delay-line mod LFO rate in Hz. Reverse only.
+    pub reverse_mod_rate: f64,
+    /// Delay-line mod depth (0.0–1.0). Reverse only.
+    pub reverse_mod_depth: f64,
 
     // ── Pitch-specific (TimeLine MX "Ice") ─────────────────────────
     /// Playback speed ratio (used when `pitch_interval` is Free). Pitch only.
@@ -375,6 +381,9 @@ impl DelayEngine {
             shimmer_pitch: 2.0,
             shimmer_mix: 0.5,
             reverse_crossfade: 0.1,
+            reverse_smear: 0.0,
+            reverse_mod_rate: 0.8,
+            reverse_mod_depth: 0.0,
             pitch_speed: 1.0,
             pitch_interval: IceInterval::Free,
             pitch_slice: None,
@@ -588,6 +597,9 @@ impl DelayEngine {
                 d.feedback = self_feedback;
                 d.hicut_freq = self_hicut;
                 d.grain_crossfade = self.reverse_crossfade;
+                d.smear = self.reverse_smear;
+                d.mod_rate_hz = self.reverse_mod_rate;
+                d.mod_depth = self.reverse_mod_depth;
                 d.decay_tilt = self_tilt;
                 d.update(sample_rate);
             }
