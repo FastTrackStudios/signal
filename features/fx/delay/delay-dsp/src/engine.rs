@@ -5,7 +5,7 @@
 //! a concrete delay type, enabling runtime style switching.
 
 use crate::bbd_delay::BbdDelay;
-use crate::clean_delay::CleanDelay;
+use crate::clean_delay::{CleanDelay, DigitalVoice};
 use crate::drum_delay::{DrumDelay, DrumHead, DrumSpacing, HeadPlayback, GOLDEN_HEADS};
 use crate::filter_delay::{FilterDelay, FilterLfoShape, FilterLocation};
 use crate::lofi_delay::{LoFiDelay, LoFiFilterShape};
@@ -218,6 +218,15 @@ pub struct DelayEngine {
     /// Shimmer mix (0.0–1.0). Shimmer only.
     pub shimmer_mix: f64,
 
+    // ── Digital-specific ───────────────────────────────────────────
+    /// Classic voice's morphing FILTER position (0 full-bw → 1 tape).
+    /// Digital only.
+    pub digital_morph: f64,
+    /// Delay-line mod LFO rate in Hz. Digital only.
+    pub digital_mod_rate: f64,
+    /// Delay-line mod depth (0.0–1.0). Digital only.
+    pub digital_mod_depth: f64,
+
     // ── Reverse-specific ───────────────────────────────────────────
     /// Crossfade overlap (0.0–0.5). Reverse only.
     pub reverse_crossfade: f64,
@@ -380,6 +389,9 @@ impl DelayEngine {
             lofi_filter_shape: LoFiFilterShape::Off,
             shimmer_pitch: 2.0,
             shimmer_mix: 0.5,
+            digital_morph: 0.0,
+            digital_mod_rate: 0.6,
+            digital_mod_depth: 0.0,
             reverse_crossfade: 0.1,
             reverse_smear: 0.0,
             reverse_mod_rate: 0.8,
@@ -546,6 +558,10 @@ impl DelayEngine {
                 d.feedback = self_feedback;
                 d.hicut_freq = self_hicut;
                 d.locut_freq = self_locut;
+                d.voice = DigitalVoice::from_index(self.voice as usize);
+                d.filter_morph = self.digital_morph;
+                d.mod_rate_hz = self.digital_mod_rate;
+                d.mod_depth = self.digital_mod_depth;
                 d.decay_tilt = self_tilt;
                 d.update(sample_rate);
             }
