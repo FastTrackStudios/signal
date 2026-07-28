@@ -739,6 +739,12 @@ const REVERB_PARAMS: &[ParamSpec] = &[
     // 3 Overdrive) + Number of Springs (0 One / 1 Two / 2 Three).
     ParamSpec { id: 50, name: "spring_dwell", min: 0.0, max: 3.0, default: 0.0 },
     ParamSpec { id: 51, name: "spring_num", min: 0.0, max: 2.0, default: 1.0 },
+    // Common per-reverb params the MX menu carries on most engines:
+    // Diffusion (ER softening/density) and Low End (low-frequency
+    // content + decay profile; 0.5 = neutral, above = lows ring longer
+    // / "larger spaces", below = lows tamed).
+    ParamSpec { id: 52, name: "diffusion", min: 0.0, max: 1.0, default: 0.5 },
+    ParamSpec { id: 53, name: "low_end", min: 0.0, max: 1.0, default: 0.5 },
 ];
 
 /// Native Reverb block — wraps [`reverb::DualReverb`] (two full chains +
@@ -750,12 +756,15 @@ pub struct NativeReverb {
     prepared: bool,
     scratch_l: Vec<f64>,
     scratch_r: Vec<f64>,
-    /// Impulse re-prepare worker (native only): re-bakes the IR off the
-    /// audio thread when imp_* shaping params change and takes the
-    /// displaced buffers for off-thread deallocation. Without it the
-    /// Impulse live params would mark slots dirty and never re-prepare.
+    /// Impulse re-prepare workers (native only), one per chain: re-bake
+    /// the IR off the audio thread when imp_* shaping params change and
+    /// take the displaced buffers for off-thread deallocation. Without
+    /// them the Impulse live params would mark slots dirty and never
+    /// re-prepare.
     #[cfg(not(target_arch = "wasm32"))]
-    reshaper: Option<reverb::ir::ImpulseReshaper>,
+    reshaper_a: Option<reverb::ir::ImpulseReshaper>,
+    #[cfg(not(target_arch = "wasm32"))]
+    reshaper_b: Option<reverb::ir::ImpulseReshaper>,
 }
 
 impl NativeReverb {
@@ -776,7 +785,9 @@ impl NativeReverb {
             rev,
             prepared: false,
             #[cfg(not(target_arch = "wasm32"))]
-            reshaper: None,
+            reshaper_a: None,
+            #[cfg(not(target_arch = "wasm32"))]
+            reshaper_b: None,
             scratch_l: Vec::new(),
             scratch_r: Vec::new(),
         }
@@ -1011,6 +1022,21 @@ impl NativeReverb {
                 c.spring.springs = v.round().max(0.0) as u8 + 1;
                 c.update_params();
             }
+            52 => {
+                c.params.diffusion = v.clamp(0.0, 1.0);
+                c.update_params();
+            }
+            53 => {
+                // 0 -> lows tamed (0.5x), 0.5 -> neutral, 1 -> lows
+                // bloom (1.6x) — the "impression of larger spaces".
+                let v = v.clamp(0.0, 1.0);
+                c.params.low_decay_mult = if v < 0.5 {
+                    0.5 + v
+                } else {
+                    1.0 + (v - 0.5) * 1.2
+                };
+                c.update_params();
+            }
             _ => {}
         }
     }
@@ -1106,16 +1132,26 @@ impl PluginInstance for NativeReverb {
             max_buffer_size: block_size.max(1) as usize,
         });
         self.rev.reset();
-        // Impulse live-param pipeline (chain A, where the MX engine
-        // params are addressed): worker re-prepares shaped IRs and
-        // disposes swap garbage off the audio thread.
+        // Impulse live-param pipeline, one worker per chain (the r2_*
+        // mirror block can host a second Impulse engine): workers
+        // re-prepare shaped IRs and dispose swap garbage off the audio
+        // thread.
         #[cfg(not(target_arch = "wasm32"))]
-        if self.reshaper.is_none() {
-            let (reshaper, rx) = reverb::ir::ImpulseReshaper::new();
-            self.rev.a.set_prepared_ir_receiver(rx);
-            self.rev.a.set_reshape_sender(reshaper.sender());
-            self.rev.a.set_ir_trash_sender(reshaper.trash_sender());
-            self.reshaper = Some(reshaper);
+        {
+            if self.reshaper_a.is_none() {
+                let (reshaper, rx) = reverb::ir::ImpulseReshaper::new();
+                self.rev.a.set_prepared_ir_receiver(rx);
+                self.rev.a.set_reshape_sender(reshaper.sender());
+                self.rev.a.set_ir_trash_sender(reshaper.trash_sender());
+                self.reshaper_a = Some(reshaper);
+            }
+            if self.reshaper_b.is_none() {
+                let (reshaper, rx) = reverb::ir::ImpulseReshaper::new();
+                self.rev.b.set_prepared_ir_receiver(rx);
+                self.rev.b.set_reshape_sender(reshaper.sender());
+                self.rev.b.set_ir_trash_sender(reshaper.trash_sender());
+                self.reshaper_b = Some(reshaper);
+            }
         }
         self.scratch_l = vec![0.0; block_size.max(1) as usize];
         self.scratch_r = vec![0.0; block_size.max(1) as usize];
