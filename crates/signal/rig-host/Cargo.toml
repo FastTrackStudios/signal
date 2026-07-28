@@ -7,10 +7,9 @@ authors.workspace = true
 description = "Shared daw-backed host for signal live rigs — one project/track/engine bootstrap for every rig"
 
 [features]
-# Native PipeWire duplex engine (Linux) — the guitar/bass live path. Forwarded
-# by signal-sampler's `pipewire` feature so the cfg-selection here matches the
-# engine the rig links.
-pipewire = ["daw/pipewire", "daw-audio-io/pipewire"]
+# PipeWire is DEFAULT on Linux (target-gated in daw-audio-io); alias kept so
+# existing `signal-rig-host/pipewire` references parse.
+pipewire = []
 # Legacy JACK backend (pipewire-jack shim) — enables the PIPEWIRE_LATENCY
 # quantum request before the JACK client connects.
 jack = ["daw-audio-io/jack"]

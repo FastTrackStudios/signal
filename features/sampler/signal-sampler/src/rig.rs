@@ -1269,9 +1269,9 @@ impl GuitarRig {
     /// Live phones-bus levels (headphone volume + self-mix) — forwarded to
     /// the duplex engine's lock-free bus for routed interfaces.
     pub fn set_phones_levels(volume: f32, self_mix: f32) {
-        #[cfg(all(feature = "pipewire", target_os = "linux"))]
+        #[cfg(target_os = "linux")]
         daw::standalone::audio_engine::PhonesBus::shared().set(volume, self_mix);
-        #[cfg(not(all(feature = "pipewire", target_os = "linux")))]
+        #[cfg(not(target_os = "linux"))]
         let _ = (volume, self_mix); // cpal fallback: no routed phones bus yet
     }
 

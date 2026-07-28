@@ -9,7 +9,9 @@ authors.workspace = true
 # PipeWire mode: audio via cpal's pipewire host AND MIDI via the
 # pipewire-jack backend (so hardware MIDI stays a routable graph node
 # instead of an exclusive ALSA grab). midir's jack swap is whole-binary.
-pipewire = ["signal-sampler/pipewire", "midicore/midir-pipewire"]
+# PipeWire (audio + MIDI) is DEFAULT on Linux — audio is target-gated in
+# daw-audio-io, MIDI via the linux target table below. Alias only.
+pipewire = []
 
 [dependencies]
 signal-rigs-proto.workspace = true
@@ -44,3 +46,8 @@ eyre.workspace = true
 ratatui = "0.30"
 libc = "0.2"
 tracing-subscriber.workspace = true
+
+[target.'cfg(target_os = "linux")'.dependencies]
+# Hardware MIDI as a routable PipeWire graph node (midir on the
+# pipewire-jack backend) — the Linux default, matching the audio host.
+midicore = { workspace = true, features = ["vox", "midir", "midir-pipewire"] }

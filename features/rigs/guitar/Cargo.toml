@@ -10,7 +10,9 @@ authors.workspace = true
 # backend (routable graph node, not an exclusive ALSA grab). midir's jack
 # swap is compile-time and whole-binary. Audio pipewire is picked up via
 # signal-sampler when the app enables it.
-pipewire = ["midicore/midir-pipewire"]
+# PipeWire (audio + MIDI) is DEFAULT on Linux — audio is target-gated in
+# daw-audio-io, MIDI via the linux target table below. Alias only.
+pipewire = []
 
 [dependencies]
 signal-rigs-proto.workspace = true
@@ -47,3 +49,8 @@ tracing-subscriber.workspace = true
 architect = { workspace = true, features = ["vox", "local"] }
 vox.workspace = true
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "time"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+# Hardware MIDI as a routable PipeWire graph node (midir on the
+# pipewire-jack backend) — the Linux default, matching the audio host.
+midicore = { workspace = true, features = ["vox", "midir", "midir-pipewire"] }

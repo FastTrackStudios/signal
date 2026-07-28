@@ -36,7 +36,7 @@ use daw::service::handle::DawHandle as _;
 use daw::service::ProjectInfo;
 use daw::standalone::Standalone;
 use daw::standalone::audio_engine::AudioEngine;
-#[cfg(all(feature = "pipewire", target_os = "linux"))]
+#[cfg(target_os = "linux")]
 use daw::standalone::audio_engine::DuplexAudioEngine;
 use daw::standalone::metering::Meters;
 use daw::standalone::transport_engine::{PlayStateRepr, TransportShared};
@@ -84,7 +84,7 @@ impl HostedEngine for AudioEngine {
     }
 }
 
-#[cfg(all(feature = "pipewire", target_os = "linux"))]
+#[cfg(target_os = "linux")]
 impl HostedEngine for DuplexAudioEngine {
     fn open(
         daw: Standalone,
@@ -105,9 +105,9 @@ impl HostedEngine for DuplexAudioEngine {
 
 /// The duplex host's engine: the native PipeWire `pw_filter` engine where
 /// available, the cpal engine (with a live input stream) elsewhere.
-#[cfg(all(feature = "pipewire", target_os = "linux"))]
+#[cfg(target_os = "linux")]
 pub type DuplexEngine = DuplexAudioEngine;
-#[cfg(not(all(feature = "pipewire", target_os = "linux")))]
+#[cfg(not(target_os = "linux"))]
 pub type DuplexEngine = AudioEngine;
 
 /// A running duplex (live-input) rig host — `Send`-only under the native

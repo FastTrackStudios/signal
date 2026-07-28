@@ -8,7 +8,9 @@ authors.workspace = true
 [features]
 # PipeWire mode: audio + MIDI through the pipewire host, matching the keys rig.
 # Threads through to the shared KeysRig host + midicore's jack swap.
-pipewire = ["signal-keys/pipewire", "midicore/midir-pipewire"]
+# PipeWire (audio + MIDI) is DEFAULT on Linux — audio is target-gated in
+# daw-audio-io, MIDI via the linux target table below. Alias only.
+pipewire = []
 
 [dependencies]
 signal-rigs-proto.workspace = true
@@ -35,3 +37,8 @@ tracing.workspace = true
 # OB-8 PWM Big Strings soundsource is realized + audible.
 signal-plugin-host.workspace = true
 daw.workspace = true
+
+[target.'cfg(target_os = "linux")'.dependencies]
+# Hardware MIDI as a routable PipeWire graph node (midir on the
+# pipewire-jack backend) — the Linux default, matching the audio host.
+midicore = { workspace = true, features = ["vox", "midir", "midir-pipewire"] }
