@@ -599,6 +599,24 @@ impl ReverbChain {
         self.infinite_mode = s.infinite_mode;
     }
 
+    /// Input bandwidth including the Classic-voice vintage cap: the
+    /// early-'80s color is bandwidth + interpolation grain, not just
+    /// EQ (VintageVerb's lesson) — Classic on the retuned engines caps
+    /// the input at ~9 kHz before the user's own input LP.
+    fn effective_input_lp(&self) -> f64 {
+        let user = self.input_lp_freq.min(20000.0);
+        let vintage_capped = self.voice == ReverbVoice::Classic
+            && matches!(
+                self.algorithm_type,
+                AlgorithmType::Hall | AlgorithmType::Room | AlgorithmType::Shimmer
+            );
+        if vintage_capped {
+            user.min(9000.0)
+        } else {
+            user
+        }
+    }
+
     /// Magneto's knob remap: PRE-DELAY drives the engine's feedback.
     /// Compute the params to push, folding the remap in whenever the
     /// Magneto engine is active.
@@ -813,7 +831,7 @@ impl Processor for ReverbChain {
         );
         self.input_lp.set(
             FilterType::Lowpass,
-            self.input_lp_freq.min(20000.0),
+            self.effective_input_lp(),
             0.707,
             config.sample_rate,
         );
@@ -952,6 +970,16 @@ impl Processor for ReverbChain {
         } else {
             self.predelay_samples = (self.predelay_ms * 0.001 * self.sample_rate) as usize;
         }
+
+        // Re-apply the input LP here too: the Classic-voice vintage cap
+        // must engage when the voice changes via update_params, not
+        // only on the next full config update.
+        self.input_lp.set(
+            FilterType::Lowpass,
+            self.effective_input_lp(),
+            0.707,
+            self.sample_rate,
+        );
         let duck_thresh = self.duck_threshold.max(1.0e-6);
 
         // Hall Mid EQ + Swell engage flags (chain-level Hall params).

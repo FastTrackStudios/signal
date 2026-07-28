@@ -67,6 +67,17 @@ pub struct Fdn {
     loop_ap_len: Vec<usize>,
     loop_ap_coeff: f64,
 
+    // ── Per-line in-loop shelving EQ (opt-in, CloudSeed-style) ─────
+    // Cheap one-pole-based low + high shelf inside every feedback
+    // path: tonal color compounds per recirculation (the CloudSeed
+    // per-line EQ trick). Boosts are clamped small — a shelf gain in
+    // the loop multiplies the per-band loop gain.
+    loop_eq_active: bool,
+    eq_low_lp: Vec<Lp1>,
+    eq_high_lp: Vec<Lp1>,
+    eq_low_gain: f64,
+    eq_high_gain: f64,
+
     // ── Random-walk delay jitter (opt-in via `set_jitter`) ─────────
     // reverbsc-style per-line drift: random targets, linear glide,
     // fractional reads — huge-but-unchorused tail animation.
@@ -118,6 +129,11 @@ impl Fdn {
             loop_ap: Vec::new(),
             loop_ap_len: vec![0; n],
             loop_ap_coeff: 0.0,
+            loop_eq_active: false,
+            eq_low_lp: (0..n).map(|_| Lp1::new()).collect(),
+            eq_high_lp: (0..n).map(|_| Lp1::new()).collect(),
+            eq_low_gain: 1.0,
+            eq_high_gain: 1.0,
             jitter_depth: 0.0,
             jitter_cur: vec![0.0; n],
             jitter_step: vec![0.0; n],
@@ -225,6 +241,30 @@ impl Fdn {
                 self.loop_ap_len[i] = len;
                 self.loop_ap.push(DelayLine::new(len + 4));
             }
+        }
+    }
+
+    /// Per-line in-loop shelving EQ: `low/high_gain_db` applied below
+    /// `low_hz` / above `high_hz` INSIDE every feedback path, so the
+    /// color deepens with each pass. Boosts clamp to +2 dB (loop-gain
+    /// safety); cuts are free. Both gains 0 dB disables.
+    pub fn set_loop_shelves(
+        &mut self,
+        low_hz: f64,
+        low_gain_db: f64,
+        high_hz: f64,
+        high_gain_db: f64,
+        sample_rate: f64,
+    ) {
+        self.eq_low_gain = 10.0f64.powf(low_gain_db.min(2.0) / 20.0);
+        self.eq_high_gain = 10.0f64.powf(high_gain_db.min(2.0) / 20.0);
+        self.loop_eq_active =
+            (self.eq_low_gain - 1.0).abs() > 1e-3 || (self.eq_high_gain - 1.0).abs() > 1e-3;
+        for lp in &mut self.eq_low_lp {
+            lp.set_freq(low_hz.clamp(40.0, 2000.0), sample_rate);
+        }
+        for lp in &mut self.eq_high_lp {
+            lp.set_freq(high_hz.clamp(800.0, 12000.0), sample_rate);
         }
     }
 
@@ -337,6 +377,14 @@ impl Fdn {
                 sig = delayed + g * v;
             }
 
+            // Per-line loop shelving EQ (color compounds per pass).
+            if self.loop_eq_active {
+                let low = self.eq_low_lp[i].tick(sig);
+                sig += (self.eq_low_gain - 1.0) * low;
+                let lp2 = self.eq_high_lp[i].tick(sig);
+                sig += (self.eq_high_gain - 1.0) * (sig - lp2);
+            }
+
             // Block DC in the recirculating path — long tails otherwise
             // accumulate subsonic offset (worst with pitch-shifted or
             // saturated feedback around the FDN).
@@ -370,6 +418,12 @@ impl Fdn {
         }
         for ap in &mut self.loop_ap {
             ap.clear();
+        }
+        for lp in &mut self.eq_low_lp {
+            lp.reset();
+        }
+        for lp in &mut self.eq_high_lp {
+            lp.reset();
         }
         self.shelf_state.fill(0.0);
         self.tc_prev = 0.0;
