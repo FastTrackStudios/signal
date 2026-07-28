@@ -1058,7 +1058,7 @@ const DELAY_PARAMS: &[ParamSpec] = &[
     ParamSpec { id: 1, name: "time", min: 2.0, max: 2500.0, default: 400.0 },
     ParamSpec { id: 2, name: "feedback", min: 0.0, max: 0.95, default: 0.30 },
     // TimeLine MX parity params (style index: see delay::DelayStyle).
-    ParamSpec { id: 3, name: "style", min: 0.0, max: 12.0, default: 1.0 },
+    ParamSpec { id: 3, name: "style", min: 0.0, max: 13.0, default: 1.0 },
     ParamSpec { id: 4, name: "swell", min: 0.0, max: 4.0, default: 0.0 },
     ParamSpec { id: 5, name: "freeze", min: 0.0, max: 1.0, default: 0.0 },
     ParamSpec { id: 6, name: "tempo_bpm", min: 0.0, max: 300.0, default: 0.0 },
@@ -1080,7 +1080,7 @@ const DELAY_PARAMS: &[ParamSpec] = &[
     // 2 Series 2>1 / 3 Parallel / 4 Split / 5 Split Swap) + delay B.
     // Ids 0-16 keep addressing delay A.
     ParamSpec { id: 17, name: "routing", min: 0.0, max: 5.0, default: 0.0 },
-    ParamSpec { id: 18, name: "style_b", min: 0.0, max: 12.0, default: 1.0 },
+    ParamSpec { id: 18, name: "style_b", min: 0.0, max: 13.0, default: 1.0 },
     ParamSpec { id: 19, name: "time_b", min: 2.0, max: 2500.0, default: 300.0 },
     ParamSpec { id: 20, name: "feedback_b", min: 0.0, max: 0.95, default: 0.30 },
     ParamSpec { id: 21, name: "mix_b", min: 0.0, max: 1.0, default: 0.08 },

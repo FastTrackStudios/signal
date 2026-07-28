@@ -13,6 +13,7 @@ use crate::modulation::WobbleShape;
 use crate::multitap_delay::{FeedbackMode, MultiTapDelay, Tap, TapGrid, TapPreset, MAX_TAPS};
 use crate::oilcan_delay::{OilCanDelay, OilCanHeads};
 use crate::pitch_delay::{IceInterval, IceSlice, PitchDelay};
+use crate::reverb_delay::ReverbDelay;
 use crate::reverse_delay::ReverseDelay;
 use crate::rhythm_delay::RhythmDelay;
 use crate::shimmer_delay::ShimmerDelay;
@@ -26,7 +27,8 @@ use crate::tape_delay::{SaturationType, TapeDelay, TapeSpeed, TapeVoice};
 /// `Bbd`≈dBucket, `LoFi`≈Lo-Fi, `Reverse`≈Reverse, `Pitch`≈Ice,
 /// `Rhythm`≈TimeLine-v1 Pattern (fixed patterns), `Drum`≈Drum,
 /// `OilCan`≈Oil Can, `MultiTap`≈MultiTap (editable taps),
-/// `Spectral`≈Spectral, `Filter`≈Filter (+folded-in Trem).
+/// `Spectral`≈Spectral, `Filter`≈Filter (+folded-in Trem),
+/// `Reverb`≈Reverb (bonus machine: TIME = pre-delay, REPEATS = decay).
 /// `Shimmer` has no TimeLine counterpart.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DelayStyle {
@@ -43,10 +45,11 @@ pub enum DelayStyle {
     MultiTap,
     Spectral,
     Filter,
+    Reverb,
 }
 
 impl DelayStyle {
-    pub const COUNT: usize = 13;
+    pub const COUNT: usize = 14;
 
     pub fn from_index(i: usize) -> Self {
         match i {
@@ -63,6 +66,7 @@ impl DelayStyle {
             10 => Self::MultiTap,
             11 => Self::Spectral,
             12 => Self::Filter,
+            13 => Self::Reverb,
             _ => Self::Tape,
         }
     }
@@ -82,6 +86,7 @@ impl DelayStyle {
             Self::MultiTap => 10,
             Self::Spectral => 11,
             Self::Filter => 12,
+            Self::Reverb => 13,
         }
     }
 
@@ -100,6 +105,7 @@ impl DelayStyle {
             Self::MultiTap => "MultiTap",
             Self::Spectral => "Spectral",
             Self::Filter => "Filter",
+            Self::Reverb => "Reverb",
         }
     }
 
@@ -110,6 +116,8 @@ impl DelayStyle {
             Self::Drum => (200.0, 2000.0),
             Self::OilCan => (200.0, 800.0),
             Self::LoFi => (2.0, 2500.0),
+            // TIME = pre-delay on the Reverb machine.
+            Self::Reverb => (2.0, 2500.0),
             _ => (60.0, 2500.0),
         }
     }
@@ -129,6 +137,7 @@ enum EngineInner {
     MultiTap(MultiTapDelay),
     Spectral(SpectralDelay),
     Filter(FilterDelay),
+    Reverb(ReverbDelay),
 }
 
 /// Unified delay engine wrapping all delay styles.
@@ -327,6 +336,12 @@ pub struct DelayEngine {
     /// Grain playback direction. Spectral only.
     pub spectral_direction: GrainDirection,
 
+    // ── Reverb-machine-specific ────────────────────────────────────
+    /// Wet tremolo rate in Hz (Mod Speed on the Reverb machine).
+    pub reverb_trem_rate: f64,
+    /// Wet tremolo depth (Mod Depth on the Reverb machine), 0.0–1.0.
+    pub reverb_trem_depth: f64,
+
     // ── Filter-specific ────────────────────────────────────────────
     /// LFO waveform. Filter only.
     pub filter_lfo_shape: FilterLfoShape,
@@ -422,6 +437,8 @@ impl DelayEngine {
             oilcan_tone: 2500.0,
             oilcan_grit: 0.1,
             oilcan_mod_rate: 0.9,
+            reverb_trem_rate: 4.0,
+            reverb_trem_depth: 0.0,
             multitap_taps: crate::multitap_delay::TapPreset::Quarters.taps(),
             multitap_grid: TapGrid::default(),
             multitap_feedback_mode: FeedbackMode::Input,
@@ -509,6 +526,7 @@ impl DelayEngine {
             DelayStyle::MultiTap => EngineInner::MultiTap(MultiTapDelay::new()),
             DelayStyle::Spectral => EngineInner::Spectral(SpectralDelay::new()),
             DelayStyle::Filter => EngineInner::Filter(FilterDelay::new()),
+            DelayStyle::Reverb => EngineInner::Reverb(ReverbDelay::new()),
         };
     }
 
@@ -704,6 +722,16 @@ impl DelayEngine {
                 d.decay_tilt = self_tilt;
                 d.update(sample_rate);
             }
+            EngineInner::Reverb(d) => {
+                d.time_ms = self.time_ms;
+                d.feedback = feedback;
+                d.hicut_freq = self_hicut;
+                d.grit = if self.frozen { 0.0 } else { self.drive };
+                d.trem_rate_hz = self.reverb_trem_rate;
+                d.trem_depth = self.reverb_trem_depth;
+                d.decay_tilt = self_tilt;
+                d.update(sample_rate);
+            }
         }
     }
 
@@ -760,6 +788,10 @@ impl DelayEngine {
                 d.tick(input, ch)
             }
             EngineInner::Filter(d) => {
+                d.feedback = fb;
+                d.tick(input, ch)
+            }
+            EngineInner::Reverb(d) => {
                 d.feedback = fb;
                 d.tick(input, ch)
             }
@@ -839,6 +871,11 @@ impl DelayEngine {
                 d.feedback = fb;
                 d.tick(input, ch)
             }
+            EngineInner::Reverb(d) => {
+                d.time_ms = time_ms;
+                d.feedback = fb;
+                d.tick(input, ch)
+            }
         }
     }
 
@@ -896,6 +933,7 @@ impl DelayEngine {
             EngineInner::MultiTap(d) => d.last_feedback(),
             EngineInner::Spectral(d) => d.last_feedback(),
             EngineInner::Filter(d) => d.last_feedback(),
+            EngineInner::Reverb(d) => d.last_feedback(),
         }
     }
 
@@ -914,6 +952,7 @@ impl DelayEngine {
             EngineInner::MultiTap(d) => d.reset(),
             EngineInner::Spectral(d) => d.reset(),
             EngineInner::Filter(d) => d.reset(),
+            EngineInner::Reverb(d) => d.reset(),
         }
     }
 }

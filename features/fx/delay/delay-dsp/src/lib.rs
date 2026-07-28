@@ -20,6 +20,7 @@ pub mod modulation;
 pub mod multitap_delay;
 pub mod oilcan_delay;
 pub mod pitch_delay;
+pub mod reverb_delay;
 pub mod reverse_delay;
 pub mod rhythm_delay;
 pub mod shimmer_delay;
