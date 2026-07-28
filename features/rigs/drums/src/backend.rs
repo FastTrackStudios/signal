@@ -563,8 +563,7 @@ impl DrumRigBackend {
     /// alone would silence it).
     fn apply_kit_mixer(&self) {
         use daw::service::handle::DawHandle as _;
-        use daw::service::{RouteLocation, RouteRef, Routing, TrackRef};
-        use daw::standalone::Standalone;
+        use daw::service::{RouteLocation, RouteRef, RoutingDirectExt as _, TrackRef};
         let daw = {
             let rig = self.inner.rig.lock().unwrap();
             let Some(rig) = rig.as_ref() else { return };
@@ -589,8 +588,7 @@ impl DrumRigBackend {
             let _ = track.mute(piece.muted || snd.muted);
             let _ = track.solo(piece.soloed || snd.soloed);
             // The send level rides the route, not the track fader.
-            let _ = <Standalone as Routing>::set_volume(
-                &daw,
+            let _ = daw.routing_direct().set_volume(
                 project.context(),
                 RouteLocation::send(TrackRef::guid(&snd.track), RouteRef::Index(0)),
                 vol(snd.level_db),
