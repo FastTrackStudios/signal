@@ -233,27 +233,30 @@ fn chorale_voice_and_mod_change_the_output() {
         choir_level: Some(0.8),
         voice: ChoirVoice::Tenor,
         mod_amount: 0.0,
+        ..Default::default()
     });
-    let soprano = render(ChoraleParams {
+    let baritone = render(ChoraleParams {
         choir_level: Some(0.8),
-        voice: ChoirVoice::Soprano,
+        voice: ChoirVoice::Baritone,
         mod_amount: 0.0,
+        ..Default::default()
     });
     let modded = render(ChoraleParams {
         choir_level: Some(0.8),
         voice: ChoirVoice::Tenor,
         mod_amount: 1.0,
+        ..Default::default()
     });
 
-    for v in soprano.iter().chain(modded.iter()) {
+    for v in baritone.iter().chain(modded.iter()) {
         assert!(v.is_finite(), "chorale params produced non-finite output");
     }
 
     let diff = |a: &[f64], b: &[f64]| -> f64 {
         a.iter().zip(b.iter()).map(|(x, y)| (x - y).abs()).sum()
     };
-    let d_voice = diff(&tenor, &soprano);
+    let d_voice = diff(&tenor, &baritone);
     let d_mod = diff(&tenor, &modded);
-    assert!(d_voice > 1e-3, "Soprano must differ from Tenor: {d_voice}");
+    assert!(d_voice > 1e-3, "Baritone must differ from Tenor: {d_voice}");
     assert!(d_mod > 1e-3, "Mod randomization must be audible: {d_mod}");
 }

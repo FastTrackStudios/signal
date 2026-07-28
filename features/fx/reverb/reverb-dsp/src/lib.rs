@@ -31,7 +31,7 @@ pub mod primitives;
 
 pub use algorithm::{
     AlgorithmParams, AlgorithmType, BloomParams, ChamberColor, ChamberParams, ChoirVoice,
-    ChoraleParams, CloudParams,
+    ChoraleParams, ChoraleResonance, ChoraleVowel, CloudParams,
     ConvolutionModParams, HallParams, ImpulseDirection, ImpulseParams, ImpulseTail, IrSlot,
     MagnetoHeads, MagnetoParams, MagnetoSpacing, NlShape, NonLinearParams, ReverbAlgorithm,
     ReverbVoice,

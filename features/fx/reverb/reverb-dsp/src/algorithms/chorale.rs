@@ -4,7 +4,7 @@
 //! filtered through formant resonances to create vocal/choral textures.
 //! Combines shimmer architecture with a formant filter bank.
 
-use crate::algorithm::{AlgorithmParams, ChoirVoice, ChoraleParams, ReverbAlgorithm};
+use crate::algorithm::{ChoraleResonance, ChoraleVowel, AlgorithmParams, ChoirVoice, ChoraleParams, ReverbAlgorithm};
 use crate::primitives::allpass_diffuser::AllpassDiffuser;
 use crate::primitives::fdn::{Fdn, MixMatrix};
 use crate::primitives::one_pole::Lp1;
@@ -63,6 +63,10 @@ pub struct Chorale {
     rand_target_speed: [f64; 2],
     rand_target_formant: [f64; 2],
     ctrl_countdown: usize,
+    /// Vowel-program morph phase (combination programs sweep slowly
+    /// between their two vowels; Random walks the space).
+    vowel_phase: f64,
+    vowel_walk_target: f64,
     walk_countdown: usize,
     sample_rate: f64,
 }
@@ -101,6 +105,8 @@ impl Chorale {
             rand_target_speed: [0.0; 2],
             rand_target_formant: [0.0; 2],
             ctrl_countdown: 0,
+            vowel_phase: 0.0,
+            vowel_walk_target: 0.5,
             walk_countdown: 0,
             sample_rate,
         };
@@ -134,11 +140,12 @@ impl Chorale {
         let hi = (lo + 1).min(3);
         let frac = idx - lo as f64;
 
-        // Choir Voice range: Soprano shifts the formant centers up
-        // (higher vocal tract). Tenor = 1.0 keeps the legacy voicing.
+        // Choir Voice range: Baritone shifts the formant centers DOWN
+        // (larger vocal tract, low chorale range — the pedal's second
+        // range). Tenor = 1.0 keeps the legacy voicing.
         let voice_scale = match self.mx.voice {
             ChoirVoice::Tenor => 1.0,
-            ChoirVoice::Soprano => 1.4,
+            ChoirVoice::Baritone => 0.78,
         };
 
         #[allow(clippy::needless_range_loop)]
@@ -149,10 +156,10 @@ impl Chorale {
             let freq_r = base * voice_scale * (1.0 + self.rand_formant[1]);
             // +12 dB / Q 5 peaks inside the feedback loop pushed loop gain
             // near unity at the formant centers — a 33 dB isolated tail
-            // mode (metallic ringing). 8 dB / Q 3 keeps the vowel color
-            // with the mode down (IR-metric verified).
-            let gain_db = 8.0;
-            let q = 3.0;
+            // mode (metallic ringing). Mild (8 dB / Q 3) keeps the vowel
+            // color with the mode down (IR-metric verified); Medium/High
+            // raise intensity but stay under that ceiling.
+            let (q, gain_db) = self.mx.resonance.q_gain();
             self.formants_l[i].set(FilterType::Peak { gain_db }, freq_l, q, sample_rate);
             self.formants_r[i].set(FilterType::Peak { gain_db }, freq_r, q, sample_rate);
         }
@@ -163,6 +170,51 @@ impl Chorale {
     fn rand_bipolar(&mut self) -> f64 {
         self.rng = self.rng.wrapping_mul(1664525).wrapping_add(1013904223);
         (self.rng >> 8) as f64 / ((u32::MAX >> 8) as f64) * 2.0 - 1.0
+    }
+
+    /// Control-rate vowel-program update: static programs pin
+    /// `vowel_mix`; combination programs sweep slowly (~0.07 Hz)
+    /// between their two vowels; Random walks the whole space.
+    /// Formant-space positions: ah = 0.0, ee = 1/3, oh = 2/3, oo = 1.0.
+    fn update_vowel_program(&mut self) {
+        let Some(program) = self.mx.vowel else {
+            return; // legacy continuous morph via extra_b
+        };
+        let dt = CTRL_BLOCK as f64 / self.sample_rate;
+        let sweep = |phase: f64, a: f64, b: f64| -> f64 {
+            let x = 0.5 - 0.5 * (phase * std::f64::consts::TAU).cos();
+            a + (b - a) * x
+        };
+        let target = match program {
+            ChoraleVowel::Aahh => 0.0,
+            ChoraleVowel::Oh => 2.0 / 3.0,
+            ChoraleVowel::Ooo => 1.0,
+            ChoraleVowel::Aahhoo => {
+                self.vowel_phase = (self.vowel_phase + 0.07 * dt).fract();
+                sweep(self.vowel_phase, 0.0, 1.0)
+            }
+            ChoraleVowel::Aahhoh => {
+                self.vowel_phase = (self.vowel_phase + 0.07 * dt).fract();
+                sweep(self.vowel_phase, 0.0, 2.0 / 3.0)
+            }
+            ChoraleVowel::Ooohoh => {
+                self.vowel_phase = (self.vowel_phase + 0.07 * dt).fract();
+                sweep(self.vowel_phase, 1.0, 2.0 / 3.0)
+            }
+            ChoraleVowel::Random => {
+                // New random vowel target every ~1.2 s, glide toward it.
+                self.vowel_phase += dt;
+                if self.vowel_phase >= 1.2 {
+                    self.vowel_phase = 0.0;
+                    self.vowel_walk_target = (self.rand_bipolar() + 1.0) * 0.5;
+                }
+                self.vowel_mix + (self.vowel_walk_target - self.vowel_mix) * 0.06
+            }
+        };
+        if (target - self.vowel_mix).abs() > 1e-4 {
+            self.vowel_mix = target;
+            self.set_vowel(target, self.sample_rate);
+        }
     }
 
     /// Control-rate randomization update: smoothed random walks on the
@@ -290,14 +342,16 @@ impl ReverbAlgorithm for Chorale {
 
     #[inline]
     fn tick(&mut self, left: f64, right: f64) -> (f64, f64) {
-        // Control-rate per-voice randomization (Mod).
-        if self.mx.mod_amount > 1e-9 {
-            if self.ctrl_countdown == 0 {
+        // Control-rate updates: vowel program morph + per-voice
+        // randomization (Mod).
+        if self.ctrl_countdown == 0 {
+            self.update_vowel_program();
+            if self.mx.mod_amount > 1e-9 {
                 self.update_randomization();
-                self.ctrl_countdown = CTRL_BLOCK;
             }
-            self.ctrl_countdown -= 1;
+            self.ctrl_countdown = CTRL_BLOCK;
         }
+        self.ctrl_countdown -= 1;
 
         // Mix input with formant-filtered pitch-shifted feedback
         let in_l = left + self.fb_l * self.chorale_amount;

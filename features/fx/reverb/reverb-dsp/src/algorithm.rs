@@ -624,14 +624,77 @@ impl Default for BloomParams {
     }
 }
 
+/// BigSky MX Chorale vowel programs (manual menu order, CC 0–6).
+/// Combination entries morph slowly between their vowels; `Random`
+/// wanders the whole formant space.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ChoraleVowel {
+    Aahhoo,
+    Aahh,
+    Aahhoh,
+    Oh,
+    Ooohoh,
+    Ooo,
+    Random,
+}
+
+impl ChoraleVowel {
+    pub const COUNT: usize = 7;
+
+    pub fn from_index(i: usize) -> Self {
+        match i {
+            0 => Self::Aahhoo,
+            1 => Self::Aahh,
+            2 => Self::Aahhoh,
+            3 => Self::Oh,
+            4 => Self::Ooohoh,
+            5 => Self::Ooo,
+            _ => Self::Random,
+        }
+    }
+}
+
+/// BigSky MX Chorale "Resonance": intensity of the vowel via the
+/// vocal-filter Q.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ChoraleResonance {
+    /// Subtle vocal quality.
+    #[default]
+    Mild,
+    /// Increased intensity.
+    Medium,
+    /// Most resonant.
+    High,
+}
+
+impl ChoraleResonance {
+    pub fn from_index(i: usize) -> Self {
+        match i {
+            1 => Self::Medium,
+            2 => Self::High,
+            _ => Self::Mild,
+        }
+    }
+
+    /// (Q, peak dB) for the formant filters.
+    pub fn q_gain(self) -> (f64, f64) {
+        match self {
+            Self::Mild => (3.0, 8.0),
+            Self::Medium => (4.5, 10.0),
+            Self::High => (6.5, 12.0),
+        }
+    }
+}
+
 /// Chorale choir range (BigSky MX "Choir Voice").
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ChoirVoice {
-    /// Lower range — the legacy voicing.
+    /// Mid-to-high chorale range — the legacy voicing.
     #[default]
     Tenor,
-    /// Higher range: formant centers shifted up.
-    Soprano,
+    /// Low chorale range: formant centers shifted DOWN (the pedal's
+    /// second range is Baritone, not up).
+    Baritone,
 }
 
 /// BigSky MX Chorale engine params (beyond the shared set).
@@ -640,6 +703,11 @@ pub struct ChoraleParams {
     /// Choir voice level (0..1). `None` = legacy `extra_a` mapping.
     pub choir_level: Option<f64>,
     pub voice: ChoirVoice,
+    /// Vowel program (manual menu). `None` = legacy continuous
+    /// `extra_b` morph.
+    pub vowel: Option<ChoraleVowel>,
+    /// Formant-resonance intensity (vocal-filter Q).
+    pub resonance: ChoraleResonance,
     /// Per-voice pitch/timbre randomization (0..1): more mod = more
     /// distinct singers (decorrelated vibrato + formant drift).
     /// 0 = off (transparent).

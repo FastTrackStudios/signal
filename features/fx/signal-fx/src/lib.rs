@@ -692,7 +692,7 @@ const REVERB_PARAMS: &[ParamSpec] = &[
     // BigSky MX input-analysis generators: Cloud Ensemble (pitch-tracked
     // synthetic string layer), Bloom Harmonics (overtone generator on
     // the trail), Chorale Choir level / Voice (0 Tenor / 1 Soprano) /
-    // Mod (per-voice randomization).
+    // Mod (per-voice randomization). cho_voice: 0 Tenor / 1 Baritone.
     ParamSpec { id: 29, name: "cloud_ensemble", min: 0.0, max: 1.0, default: 0.0 },
     ParamSpec { id: 30, name: "bloom_harmonics", min: 0.0, max: 1.0, default: 0.0 },
     ParamSpec { id: 31, name: "cho_choir", min: 0.0, max: 1.0, default: 0.3 },
@@ -745,6 +745,11 @@ const REVERB_PARAMS: &[ParamSpec] = &[
     // / "larger spaces", below = lows tamed).
     ParamSpec { id: 52, name: "diffusion", min: 0.0, max: 1.0, default: 0.5 },
     ParamSpec { id: 53, name: "low_end", min: 0.0, max: 1.0, default: 0.5 },
+    // Chorale: vowel program (0 AAHHOO / 1 AAHH / 2 AAHHOH / 3 OH /
+    // 4 OOOHOH / 5 OOO / 6 Random) + Resonance (0 Mild / 1 Medium /
+    // 2 High).
+    ParamSpec { id: 54, name: "cho_vowel", min: 0.0, max: 6.0, default: 1.0 },
+    ParamSpec { id: 55, name: "cho_resonance", min: 0.0, max: 2.0, default: 0.0 },
 ];
 
 /// Native Reverb block — wraps [`reverb::DualReverb`] (two full chains +
@@ -932,7 +937,7 @@ impl NativeReverb {
             }
             32 => {
                 c.chorale.voice = if v >= 0.5 {
-                    reverb::ChoirVoice::Soprano
+                    reverb::ChoirVoice::Baritone
                 } else {
                     reverb::ChoirVoice::Tenor
                 };
@@ -1024,6 +1029,16 @@ impl NativeReverb {
             }
             52 => {
                 c.params.diffusion = v.clamp(0.0, 1.0);
+                c.update_params();
+            }
+            54 => {
+                c.chorale.vowel =
+                    Some(reverb::ChoraleVowel::from_index(v.round().max(0.0) as usize));
+                c.update_params();
+            }
+            55 => {
+                c.chorale.resonance =
+                    reverb::ChoraleResonance::from_index(v.round().max(0.0) as usize);
                 c.update_params();
             }
             53 => {
