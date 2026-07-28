@@ -78,6 +78,15 @@ pub struct Fdn {
     eq_low_gain: f64,
     eq_high_gain: f64,
 
+    // ── Vintage reads (opt-in via `set_vintage_reads`) ─────────────
+    // Early-'80s texture: a common-mode single-sine chorus on every
+    // line (audible pitch undulation — the Classic-voice signature)
+    // read with TRUNCATED (non-interpolated) positions, so the sweep
+    // grinds out the era's interpolation grain instead of gliding.
+    vintage: bool,
+    vintage_phase: f64,
+    vintage_inc: f64,
+
     // ── Random-walk delay jitter (opt-in via `set_jitter`) ─────────
     // reverbsc-style per-line drift: random targets, linear glide,
     // fractional reads — huge-but-unchorused tail animation.
@@ -134,6 +143,9 @@ impl Fdn {
             eq_high_lp: (0..n).map(|_| Lp1::new()).collect(),
             eq_low_gain: 1.0,
             eq_high_gain: 1.0,
+            vintage: false,
+            vintage_phase: 0.0,
+            vintage_inc: 0.9 / 48_000.0,
             jitter_depth: 0.0,
             jitter_cur: vec![0.0; n],
             jitter_step: vec![0.0; n],
@@ -268,6 +280,13 @@ impl Fdn {
         }
     }
 
+    /// Vintage (Classic-voice) read texture: common-mode ~0.9 Hz sine
+    /// chorus with truncated reads. Off = clean modern reads.
+    pub fn set_vintage_reads(&mut self, on: bool, sample_rate: f64) {
+        self.vintage = on;
+        self.vintage_inc = 0.9 / sample_rate.max(1.0);
+    }
+
     /// reverbsc-style random-walk delay jitter: each line drifts its
     /// read position by up to `±depth_ms`, gliding linearly to freshly
     /// randomized targets. Depth 0 disables (integer reads).
@@ -281,7 +300,20 @@ impl Fdn {
         let n = self.num_lines;
 
         // Read from all delay lines (fractional when jittered).
-        if self.jitter_depth > 1e-9 {
+        if self.vintage {
+            // Classic voice: one shared sine sweeps every line (common-
+            // mode = audible chorus), truncated reads grind the sweep.
+            self.vintage_phase += self.vintage_inc;
+            if self.vintage_phase >= 1.0 {
+                self.vintage_phase -= 1.0;
+            }
+            let sweep = (self.vintage_phase * core::f64::consts::TAU).sin() * 3.5;
+            for i in 0..n {
+                let pos = (self.delay_samples[i] as f64 + sweep)
+                    .clamp(1.0, (self.delays[i].len() - 2) as f64);
+                self.feedback[i] = self.delays[i].read(pos as usize);
+            }
+        } else if self.jitter_depth > 1e-9 {
             for i in 0..n {
                 if self.jitter_count[i] == 0 {
                     // New random drift target, glide over 300–1500 samples.

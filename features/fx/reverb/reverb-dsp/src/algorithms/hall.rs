@@ -235,6 +235,12 @@ impl ReverbAlgorithm for Hall {
         *self = Self::new(sample_rate);
     }
 
+    fn set_vintage(&mut self, on: bool) -> bool {
+        self.fdn_l.set_vintage_reads(on, self.sample_rate);
+        self.fdn_r.set_vintage_reads(on, self.sample_rate);
+        true
+    }
+
     fn set_params(&mut self, params: &AlgorithmParams) {
         // Size → scale all delay lengths
         let new_size = 0.3 + params.size * 2.0; // 0.3x to 2.3x

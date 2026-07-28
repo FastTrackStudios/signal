@@ -506,6 +506,13 @@ impl ReverbChain {
             self.algorithm.set_magneto_params(&self.effective_magneto());
         self.algorithm.set_chamber_params(&self.chamber);
         self.algorithm.set_spring_params(&self.spring);
+        self.algorithm.set_vintage(
+            self.voice == ReverbVoice::Classic
+                && matches!(
+                    self.algorithm_type,
+                    AlgorithmType::Hall | AlgorithmType::Room | AlgorithmType::Shimmer
+                ),
+        );
             self.algorithm.set_nonlinear_params(&self.effective_nonlinear());
         }
     }
@@ -775,6 +782,13 @@ impl ReverbChain {
         self.algorithm.set_magneto_params(&self.effective_magneto());
         self.algorithm.set_chamber_params(&self.chamber);
         self.algorithm.set_spring_params(&self.spring);
+        self.algorithm.set_vintage(
+            self.voice == ReverbVoice::Classic
+                && matches!(
+                    self.algorithm_type,
+                    AlgorithmType::Hall | AlgorithmType::Room | AlgorithmType::Shimmer
+                ),
+        );
         self.algorithm.set_nonlinear_params(&self.effective_nonlinear());
         self.algorithm.set_cloud_params(&self.cloud);
         self.algorithm.set_bloom_params(&self.bloom);
@@ -895,6 +909,13 @@ impl Processor for ReverbChain {
         self.algorithm.set_magneto_params(&self.effective_magneto());
         self.algorithm.set_chamber_params(&self.chamber);
         self.algorithm.set_spring_params(&self.spring);
+        self.algorithm.set_vintage(
+            self.voice == ReverbVoice::Classic
+                && matches!(
+                    self.algorithm_type,
+                    AlgorithmType::Hall | AlgorithmType::Room | AlgorithmType::Shimmer
+                ),
+        );
         self.algorithm.set_nonlinear_params(&self.effective_nonlinear());
         self.algorithm.set_cloud_params(&self.cloud);
         self.algorithm.set_bloom_params(&self.bloom);

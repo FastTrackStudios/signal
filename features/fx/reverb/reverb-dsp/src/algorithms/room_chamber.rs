@@ -317,6 +317,12 @@ impl ReverbAlgorithm for RoomChamber {
         true
     }
 
+    fn set_vintage(&mut self, on: bool) -> bool {
+        self.fdn_l.set_vintage_reads(on, self.sample_rate);
+        self.fdn_r.set_vintage_reads(on, self.sample_rate);
+        true
+    }
+
     fn set_params(&mut self, params: &AlgorithmParams) {
         // Size — chamber is small: closet to small room
         let new_size = 0.05 + params.size * 0.5; // 0.05x to 0.55x

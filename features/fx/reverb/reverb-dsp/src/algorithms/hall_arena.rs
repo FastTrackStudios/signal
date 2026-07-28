@@ -237,6 +237,12 @@ impl ReverbAlgorithm for HallArena {
         *self = Self::new(sample_rate);
     }
 
+    fn set_vintage(&mut self, on: bool) -> bool {
+        self.fdn_l.set_vintage_reads(on, self.sample_rate);
+        self.fdn_r.set_vintage_reads(on, self.sample_rate);
+        true
+    }
+
     fn set_params(&mut self, params: &AlgorithmParams) {
         // Size — arena ranges from large venue to stadium
         let new_size = 1.5 + params.size * 3.5; // 1.5x to 5.0x

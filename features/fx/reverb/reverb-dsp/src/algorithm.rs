@@ -849,6 +849,13 @@ pub trait ReverbAlgorithm: Send {
 
     /// Push Magneto engine params. No-op outside Magneto; returns
     /// `true` if accepted.
+    /// Engage the Classic-voice vintage texture (truncated common-mode
+    /// chorus reads, era voicings). Returns false when the algorithm
+    /// has no vintage path.
+    fn set_vintage(&mut self, _on: bool) -> bool {
+        false
+    }
+
     /// Push Spring params. No-op outside the Spring engines.
     fn set_spring_params(&mut self, _params: &SpringParams) -> bool {
         false

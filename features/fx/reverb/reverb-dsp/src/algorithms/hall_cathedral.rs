@@ -240,6 +240,12 @@ impl ReverbAlgorithm for HallCathedral {
         *self = Self::new(sample_rate);
     }
 
+    fn set_vintage(&mut self, on: bool) -> bool {
+        self.fdn_l.set_vintage_reads(on, self.sample_rate);
+        self.fdn_r.set_vintage_reads(on, self.sample_rate);
+        true
+    }
+
     fn set_params(&mut self, params: &AlgorithmParams) {
         // Size — cathedral ranges from large church to massive basilica
         let new_size = 1.0 + params.size * 2.5; // 1.0x to 3.5x
