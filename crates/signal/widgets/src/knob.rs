@@ -4,9 +4,9 @@
 //! (150 px per sweep, wheel steps). The nih-plug `ParamPtr` binding is
 //! replaced by plain value/on_change props writing over the vox link.
 
-use std::f64::consts::PI;
-
 use dioxus::prelude::*;
+
+use crate::arc::{SENSITIVITY, START_ANGLE, SWEEP, angle_for_value, arc_point, arc_path};
 
 /// Knob display size — audio-gui's diameters.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
@@ -54,32 +54,14 @@ impl KnobSize {
     }
 }
 
-// Arc geometry: 270° sweep from 135° (7 o'clock) to 405° (5 o'clock).
-const START_ANGLE: f64 = 135.0;
-const SWEEP: f64 = 270.0;
-/// Pixels of vertical drag per full 0→1 sweep.
-const SENSITIVITY: f64 = 150.0;
-
 // audio-gui dark theme values.
 const ACCENT: &str = "#8fa8c8";
 const KNOB_TRACK: &str = "#252528";
 const BODY_LIGHT: &str = "#333338";
 const BODY_DARK: &str = "#1c1c20";
 
-fn arc_point(cx: f64, cy: f64, r: f64, angle_deg: f64) -> (f64, f64) {
-    let rad = angle_deg * PI / 180.0;
-    (cx + r * rad.cos(), cy + r * rad.sin())
-}
-
 fn svg_arc(cx: f64, cy: f64, r: f64, start_deg: f64, end_deg: f64) -> String {
-    let (x1, y1) = arc_point(cx, cy, r, start_deg);
-    let (x2, y2) = arc_point(cx, cy, r, end_deg);
-    let large = if (end_deg - start_deg).abs() > 180.0 { 1 } else { 0 };
-    format!("M {x1:.1} {y1:.1} A {r:.1} {r:.1} 0 {large} 1 {x2:.1} {y2:.1}")
-}
-
-fn angle_for_value(v: f64) -> f64 {
-    START_ANGLE + v.clamp(0.0, 1.0) * SWEEP
+    arc_path(cx, cy, r, start_deg, end_deg)
 }
 
 /// A `fn(f32) -> String` formatter override, wrapped so props-diffing

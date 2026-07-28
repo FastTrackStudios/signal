@@ -23,6 +23,7 @@
 use std::path::PathBuf;
 
 use facet::Facet;
+use signal_rig_host::store::{StyxDir, signal_config_dir};
 
 use crate::profiles::{
     DrivePresetDef, KeyBindingDef, MidiMapDef, ProfileDef, SetlistDef, SongDef,
@@ -37,7 +38,12 @@ pub fn rig_dir() -> PathBuf {
             return PathBuf::from(p);
         }
     }
-    signal_sampler::rig_prefs::signal_config_dir().join("rig")
+    signal_config_dir().join("rig")
+}
+
+/// The styx store over [`rig_dir`].
+fn store() -> StyxDir {
+    StyxDir::new(rig_dir())
 }
 
 // Wrapper structs: styx serialises a struct per file.
@@ -173,149 +179,83 @@ fn seed_models() {
     }
 }
 
-/// Resolve a rig-dir-relative NAM path ("models/…") to absolute;
-/// absolute paths pass through.
-fn resolve_nam(path: &mut String) {
-    if !path.is_empty() && !std::path::Path::new(path.as_str()).is_absolute() {
-        *path = rig_dir().join(path.as_str()).to_string_lossy().into_owned();
-    }
-}
-
-/// Inverse of [`resolve_nam`] for saves: paths under the rig dir are
-/// stored relative, so the on-disk library stays portable — including
-/// when the rig dir is a symlink into the repo's default-config (live
-/// edits become committable working-tree diffs).
-fn relativize_nam(path: &mut String) {
-    if let Ok(rel) = std::path::Path::new(path.as_str()).strip_prefix(rig_dir()) {
-        *path = rel.to_string_lossy().into_owned();
-    }
-}
-
-fn read<T: for<'a> Facet<'a>>(file: &str) -> Option<T> {
-    let path = rig_dir().join(file);
-    let text = std::fs::read_to_string(&path).ok()?;
-    match facet_styx::from_str::<T>(&text) {
-        Ok(v) => Some(v),
-        Err(e) => {
-            tracing::warn!("rig library: {file} failed to parse ({e}) — using defaults");
-            None
-        }
-    }
-}
-
-fn write<T: for<'a> Facet<'a>>(file: &str, value: &T) {
-    let dir = rig_dir();
-    if let Err(e) = std::fs::create_dir_all(&dir) {
-        tracing::warn!("rig library: cannot create {}: {e}", dir.display());
-        return;
-    }
-    match facet_styx::to_string(value) {
-        Ok(text) => {
-            if let Err(e) = std::fs::write(dir.join(file), text) {
-                tracing::warn!("rig library: write {file} failed: {e}");
-            }
-        }
-        Err(e) => tracing::warn!("rig library: serialize {file} failed: {e}"),
-    }
-}
-
-/// Read `file`, seeding it from the embedded in-repo default text when
-/// missing (the text is written verbatim so the on-disk copy matches the
-/// repo snapshot). Falls back to the code-built default if the embedded
-/// text fails to parse.
-fn read_or_seed<T: for<'a> Facet<'a>>(file: &str, seed: &str, fallback: impl FnOnce() -> T) -> T {
-    if let Some(v) = read(file) {
-        return v;
-    }
-    let dir = rig_dir();
-    if let Err(e) = std::fs::create_dir_all(&dir) {
-        tracing::warn!("rig library: cannot create {}: {e}", dir.display());
-    } else if let Err(e) = std::fs::write(dir.join(file), seed) {
-        tracing::warn!("rig library: seed {file} failed: {e}");
-    } else {
-        tracing::info!("rig library: seeded {file} from the in-repo default");
-    }
-    match facet_styx::from_str::<T>(seed) {
-        Ok(v) => v,
-        Err(e) => {
-            tracing::warn!("rig library: embedded default {file} failed to parse ({e})");
-            let v = fallback();
-            write(file, &v);
-            v
-        }
-    }
-}
-
 impl RigLibrary {
     /// Load the library, bootstrapping any missing file (and the NAM
     /// models the defaults reference) from the embedded in-repo default
     /// config, so the directory is always complete.
     pub fn load_or_bootstrap() -> Self {
         seed_models();
-        let mut profile = read_or_seed::<ProfileDef>("profile.styx", DEFAULT_PROFILE, worship_def);
-        let mut drive_presets =
-            read_or_seed::<DrivePresetLib>("drive-presets.styx", DEFAULT_DRIVE_PRESETS, || {
+        let store = store();
+        let mut profile =
+            store.read_or_seed::<ProfileDef>("profile.styx", DEFAULT_PROFILE, worship_def);
+        let mut drive_presets = store
+            .read_or_seed::<DrivePresetLib>("drive-presets.styx", DEFAULT_DRIVE_PRESETS, || {
                 DrivePresetLib { presets: drive_presets() }
             })
             .presets;
-        let songs = read_or_seed::<SongLib>("songs.styx", DEFAULT_SONGS, || SongLib {
-            songs: song_library(),
-        })
-        .songs;
-        let setlists =
-            read_or_seed::<SetlistLib>("setlists.styx", DEFAULT_SETLISTS, || SetlistLib {
+        let songs = store
+            .read_or_seed::<SongLib>("songs.styx", DEFAULT_SONGS, || SongLib {
+                songs: song_library(),
+            })
+            .songs;
+        let setlists = store
+            .read_or_seed::<SetlistLib>("setlists.styx", DEFAULT_SETLISTS, || SetlistLib {
                 setlists: default_setlists(),
             })
             .setlists;
-        let midi_map = read_or_seed::<MidiMapDef>("midi.styx", DEFAULT_MIDI, default_midi_map);
-        let keymap = read_or_seed::<KeymapLib>("keymap.styx", DEFAULT_KEYMAP, || KeymapLib {
-            bindings: default_keymap(),
-        })
-        .bindings;
+        let midi_map =
+            store.read_or_seed::<MidiMapDef>("midi.styx", DEFAULT_MIDI, default_midi_map);
+        let keymap = store
+            .read_or_seed::<KeymapLib>("keymap.styx", DEFAULT_KEYMAP, || KeymapLib {
+                bindings: default_keymap(),
+            })
+            .bindings;
         for preset in &mut profile.presets {
-            resolve_nam(&mut preset.nam);
+            store.resolve(&mut preset.nam);
         }
         for dp in &mut drive_presets {
             for option in &mut dp.options {
-                resolve_nam(&mut option.nam);
+                store.resolve(&mut option.nam);
             }
         }
         Self { profile, drive_presets, songs, setlists, midi_map, keymap }
     }
 
     pub fn save_profile(profile: &ProfileDef) {
+        let store = store();
         let mut profile = profile.clone();
         for preset in &mut profile.presets {
-            relativize_nam(&mut preset.nam);
+            store.relativize(&mut preset.nam);
         }
-        write("profile.styx", &profile);
+        store.write("profile.styx", &profile);
     }
 
     pub fn save_drive_presets(presets: &[DrivePresetDef]) {
+        let store = store();
         let mut presets = presets.to_vec();
         for dp in &mut presets {
             for option in &mut dp.options {
-                relativize_nam(&mut option.nam);
+                store.relativize(&mut option.nam);
             }
         }
-        write("drive-presets.styx", &DrivePresetLib { presets });
+        store.write("drive-presets.styx", &DrivePresetLib { presets });
     }
 
     pub fn save_songs(songs: &[SongDef]) {
-        write("songs.styx", &SongLib { songs: songs.to_vec() });
+        store().write("songs.styx", &SongLib { songs: songs.to_vec() });
     }
 
     pub fn save_setlists(setlists: &[SetlistDef]) {
-        write("setlists.styx", &SetlistLib { setlists: setlists.to_vec() });
+        store().write("setlists.styx", &SetlistLib { setlists: setlists.to_vec() });
     }
 
     pub fn save_last_state(state: &LastState) {
-        write("last-state.styx", state);
+        store().write("last-state.styx", state);
     }
 
     /// `None` when the file is missing (fresh install) or unparsable.
     pub fn load_last_state() -> Option<LastState> {
-        read("last-state.styx")
+        store().read("last-state.styx")
     }
 }
 
@@ -324,14 +264,15 @@ mod tests {
     #[test]
     fn nam_paths_roundtrip_relative() {
         std::env::set_var("SIGNAL_RIG_DIR", "/tmp/fts-test-rig");
+        let store = super::store();
         let mut p = String::from("models/x.nam");
-        super::resolve_nam(&mut p);
+        store.resolve(&mut p);
         assert_eq!(p, "/tmp/fts-test-rig/models/x.nam");
-        super::relativize_nam(&mut p);
+        store.relativize(&mut p);
         assert_eq!(p, "models/x.nam");
         let mut abs = String::from("/elsewhere/y.nam");
-        super::resolve_nam(&mut abs);
-        super::relativize_nam(&mut abs);
+        store.resolve(&mut abs);
+        store.relativize(&mut abs);
         assert_eq!(abs, "/elsewhere/y.nam");
     }
 

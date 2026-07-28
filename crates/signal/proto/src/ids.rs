@@ -1,8 +1,8 @@
 //! ID infrastructure — branded newtype macros, seed helpers, and core ID types.
 //!
 //! This module provides:
-//! - [`typed_uuid_id!`] — macro for creating globally-unique UUID-backed IDs
-//! - [`typed_string_id!`] — macro for creating human-readable string IDs
+//! - `typed_uuid_id!` — macro for creating globally-unique UUID-backed IDs
+//! - `typed_string_id!` — macro for creating human-readable string IDs
 //! - [`IdFactory`] / [`RuntimeIdFactory`] — abstraction for UUID generation
 //! - [`seed_id`] — deterministic UUID generation for seed data and tests
 //! - Core ID types used by the preset/module model: [`PresetId`], [`SnapshotId`],

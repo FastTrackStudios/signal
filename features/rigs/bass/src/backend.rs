@@ -17,7 +17,7 @@
 //!   program change / footswitch CCs (`midi.styx`).
 
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
+use std::sync::{Arc, Mutex};
 
 use architect::dispatch::CurrentThreadDispatcher;
 use architect::rig::RigBackend;
@@ -35,17 +35,7 @@ use crate::library::{BassLastState, BassLibrary, BassMidiMapDef, BassPresetDef};
 /// `<config>/signal/rigs/bass-rig.styx` by `RigManager`).
 const AUDIO_RIG_NAME: &str = "Bass Rig";
 
-/// Poison-tolerant locking: a panic in one service call must never take the
-/// rest of the rig down with it (the guarded state is plain data).
-trait LockExt<T> {
-    fn lock_ok(&self) -> MutexGuard<'_, T>;
-}
-
-impl<T> LockExt<T> for Mutex<T> {
-    fn lock_ok(&self) -> MutexGuard<'_, T> {
-        self.lock().unwrap_or_else(PoisonError::into_inner)
-    }
-}
+use signal_rig_host::lock::LockExt;
 
 /// Meter-pump loop state, kept outside the tick so a caught panic in one
 /// iteration doesn't reset CC edge detection.
@@ -699,6 +689,37 @@ impl BassRigSvc for BassRigBackend {
         self.apply_master_trim();
         self.publish_all();
         tracing::info!("bass library reloaded");
+    }
+}
+
+// ── shared RigCore (mounted instance-scoped as "bass") ───────────────────────
+impl signal_rigs_proto::rig_core::RigCore for BassRigBackend {
+    fn start(&self) {
+        BassRigSvc::start(self);
+    }
+    fn stop(&self) {
+        BassRigSvc::stop(self);
+    }
+    fn running(&self) -> bool {
+        architect::rig::RigBackend::is_running(self)
+    }
+    fn presets(&self) -> Vec<signal_rigs_proto::RigPresetInfo> {
+        BassRigSvc::presets(self)
+            .into_iter()
+            .map(|p| signal_rigs_proto::RigPresetInfo { loaded: p.active, name: p.name })
+            .collect()
+    }
+    fn load_preset(&self, index: u32) {
+        BassRigSvc::select_preset(self, index);
+    }
+    fn midi_ports(&self) -> Vec<String> {
+        BassRigSvc::midi_ports(self)
+    }
+    fn set_midi_port(&self, name: String) {
+        BassRigSvc::set_midi_port(self, name);
+    }
+    fn midi_recent(&self) -> Vec<String> {
+        BassRigSvc::midi_recent(self).iter().map(|e| format!("{e:?}")).collect()
     }
 }
 

@@ -1,0 +1,16 @@
+[package]
+name = "signal-rigs-proto"
+version.workspace = true
+edition = "2021"          # kept on 2021 — pre-move signal workspace edition; migrate deliberately
+license.workspace = true
+authors.workspace = true
+description = "Shared live-rig wire contract — the RigCore service every rig mounts (instance-scoped)"
+
+[features]
+default = ["vox"]
+vox = ["dep:vox", "architect/vox"]
+
+[dependencies]
+architect = { workspace = true }
+vox = { workspace = true, optional = true }
+facet.workspace = true

@@ -43,21 +43,14 @@ use signal_proto::block::{BlockCategory, BlockType};
 
 use facet::Facet;
 
-use daw::service::{
-    FxChainContext, FxChains, FxParams, ProjectContext, ProjectInfo, RecordInput, TrackRef, Tracks,
-};
-// The rig's realtime engine. On Linux with the `pipewire` feature it's the
-// native duplex `pw_filter` engine (one callback, no ring, low latency); the
-// cpal `AudioEngine` is the fallback. Both share `with_project_prefs` +
-// `sample_rate`, so the open path below is engine-agnostic.
+use daw::service::{FxChainContext, FxChains, FxParams, ProjectContext, TrackRef, Tracks};
 use daw::standalone::Standalone;
-#[cfg(not(all(feature = "pipewire", target_os = "linux")))]
-use daw::standalone::audio_engine::AudioEngine as RigEngine;
-#[cfg(all(feature = "pipewire", target_os = "linux"))]
-use daw::standalone::audio_engine::DuplexAudioEngine as RigEngine;
 use daw::standalone::metering::{Meters, linear_to_db};
-use daw::standalone::transport_engine::{PlayStateRepr, TransportShared};
 use daw_audio_io::duplex::EngineStats;
+// The shared daw-backed host: project seeding, track/FX-slot reservation, the
+// realtime engine (native duplex `pw_filter` on Linux with the `pipewire`
+// feature, cpal fallback elsewhere), meters, transport.
+use signal_rig_host::{DuplexRigHost, RigProject};
 use signal_plugin_host::{
     PluginDescriptor, PluginError, PluginEvents, PluginFormat, PluginInstance, PluginParamInfo,
 };
@@ -82,14 +75,6 @@ const MAX_CHAIN_SLOTS: usize = 24;
 /// Identifies a chain resident control-side. Assigned on install; opaque
 /// elsewhere.
 pub type ModelId = u32;
-
-fn db_to_lin(db: f32) -> f32 {
-    if db == 0.0 {
-        1.0
-    } else {
-        10f32.powf(db / 20.0)
-    }
-}
 
 /// How a block's [`BlockType`] is **implemented** — the realization axis
 /// (orthogonal to the semantic `block_type`). Each block type can have several
@@ -1102,16 +1087,13 @@ struct SwapState {
 /// active patch, running on daw's realtime `AudioEngine`.
 pub struct GuitarRig {
     daw: Standalone,
-    // The realtime engine (duplex pw_filter or cpal); drop = stop audio.
-    _engine: RigEngine,
+    // The shared daw host (project + realtime engine + transport); drop =
+    // stop audio.
+    _host: DuplexRigHost,
     /// Live realtime metrics (render time / block size) from the duplex engine,
     /// driving the rig's DSP-load meter. `None` under the cpal fallback.
     engine_stats: Option<Arc<EngineStats>>,
-    #[allow(dead_code)]
-    shared: Arc<TransportShared>,
     meters: Arc<Meters>,
-    #[allow(dead_code)]
-    project_guid: String,
     track_guid: String,
     /// Fixed fx-guids for the chain slots (constant for the project's life).
     slot_guids: Vec<String>,
@@ -1165,87 +1147,29 @@ impl GuitarRig {
     /// `AudioEngine` with live input, reserves the track's FX slots, and
     /// begins transport so the renderer runs every block.
     pub fn open(prefs: &RigAudioPrefs) -> eyre::Result<Self> {
-        // Low latency under JACK/PipeWire: ask PipeWire for the quantum before
-        // the JACK client connects (the client can't set the buffer there).
-        #[cfg(feature = "jack")]
-        {
-            if let Some(buf) = prefs.buffer_size_opt() {
-                if std::env::var_os("PIPEWIRE_LATENCY").is_none() {
-                    let rate = prefs.sample_rate_opt().unwrap_or(48_000);
-                    unsafe { std::env::set_var("PIPEWIRE_LATENCY", format!("{buf}/{rate}")) };
-                    tracing::info!(quantum = %format!("{buf}/{rate}"), "rig: requesting PipeWire low-latency quantum");
-                }
-            }
-        }
+        // 1. Seed a one-track project (current, so the FX-chain service
+        //    targets it); arm the track to monitor the hardware input channel.
+        let project = RigProject::new(RIG_PROJECT_NAME);
+        let track_guid = project.add_track(RIG_TRACK_NAME)?;
+        project.arm_input(&track_guid, prefs.input_channel as u32)?;
 
-        let daw = Standalone::new();
-
-        // 1. Seed a one-track project; make it current so the FX-chain service
-        //    (which resolves the current project) targets it.
-        let project_guid = uuid::new_v4_string();
-        daw.seed_project(ProjectInfo {
-            guid: project_guid.clone(),
-            name: RIG_PROJECT_NAME.to_string(),
-            path: String::new(),
-        });
-        daw.set_current_project(&project_guid);
-
-        let track_guid =
-            <Standalone as Tracks>::add(&daw, ProjectContext::Current, RIG_TRACK_NAME, None)
-                .map_err(|e| eyre::eyre!("rig: add track failed: {e}"))?;
-
-        // 2. Arm the track to monitor the hardware input channel — this is what
-        //    makes daw's engine open a live input stream and feed the bus.
-        <Standalone as Tracks>::set_record_input(
-            &daw,
-            ProjectContext::Current,
-            TrackRef::guid(track_guid.as_str()),
-            RecordInput::Audio {
-                channel: prefs.input_channel as u32,
-            },
-        )
-        .map_err(|e| eyre::eyre!("rig: set record input failed: {e}"))?;
-
-        // 3. Reserve the fixed FX slots on the track (constant guids). Slot 0 is
-        //    the input probe; the rest start as identity pass-throughs.
-        let fx_ctx = FxChainContext::track(track_guid.clone());
+        // 2. Reserve the fixed FX slots on the track (constant guids). Slot 0
+        //    is the input probe; the rest start as identity pass-throughs.
         let mut slot_guids = Vec::with_capacity(MAX_CHAIN_SLOTS + 1);
         for i in 0..=MAX_CHAIN_SLOTS {
-            let idx = <Standalone as FxChains>::add(&daw, fx_ctx.clone(), &format!("rig-slot-{i}"))
-                .map_err(|e| eyre::eyre!("rig: reserve fx slot {i} failed: {e}"))?;
-            // The standalone FxChains service assigns the entry's guid; fetch it.
-            let guid = <Standalone as FxChains>::get(&daw, fx_ctx.clone(), idx)
-                .map(|fx| fx.guid)
-                .ok_or_else(|| eyre::eyre!("rig: fx slot {i} vanished after add"))?;
-            slot_guids.push(guid);
+            slot_guids.push(project.add_fx_slot(&track_guid, &format!("rig-slot-{i}"))?);
         }
 
-        // 4. Build the shared transport + realtime audio engine with live input.
-        //    `prefs.into()` forces `want_input` so the engine opens the input
-        //    stream even before a track is read as armed.
-        let req_rate = prefs.sample_rate_opt().unwrap_or(48_000);
-        let shared = Arc::new(TransportShared::new(req_rate, 120.0));
-        let engine = RigEngine::with_project_prefs(
-            daw.clone(),
-            project_guid.clone(),
-            shared.clone(),
-            &prefs.into(),
-        )
-        .map_err(|e| eyre::eyre!("rig: audio engine failed: {e}"))?;
-        let sample_rate = engine.sample_rate();
-        // Duplex engine surfaces live render-time metrics; cpal fallback doesn't.
-        #[cfg(all(feature = "pipewire", target_os = "linux"))]
-        let engine_stats = Some(engine.stats());
-        #[cfg(not(all(feature = "pipewire", target_os = "linux")))]
-        let engine_stats: Option<Arc<EngineStats>> = None;
+        // 3. Open the duplex realtime engine (`prefs.into()` carries the
+        //    device/routing config; the host forces `want_input` on) and the
+        //    per-track meter bank (one cell, post-fader output peak).
+        let host = project.start_duplex(&prefs.into())?;
+        let sample_rate = host.sample_rate();
+        let engine_stats = host.stats();
+        let meters = host.install_meters(1);
+        let daw = host.daw().clone();
 
-        // Per-track meter bank (one cell, post-fader output peak). Install AFTER
-        // the engine opens so it's sized for the device; the renderer reads
-        // `daw.meters()` fresh each block.
-        let meters = Meters::new(1);
-        daw.set_meters(meters.clone());
-
-        // 5. Populate the reserved slots: input probe at 0, identities elsewhere.
+        // 4. Populate the reserved slots: input probe at 0, identities elsewhere.
         let input_meter = Arc::new(InputMeterShared::default());
         {
             let mut probe = InputProbe::new(input_meter.clone());
@@ -1258,9 +1182,9 @@ impl GuitarRig {
             }
         }
 
-        // 6. Roll the transport so the renderer runs (and the live input flows
+        // 5. Roll the transport so the renderer runs (and the live input flows
         //    through the chain to master) every block.
-        shared.set_play_state(PlayStateRepr::Playing);
+        host.play();
 
         // Tracing only — never println/eprintln here: the live-rig TUI owns the
         // terminal, and a stray write to stdout/stderr corrupts the render. A
@@ -1268,7 +1192,7 @@ impl GuitarRig {
         tracing::info!(
             input_channel = prefs.input_channel,
             sample_rate,
-            project = %project_guid,
+            project = %host.project_guid(),
             "signal-sampler: guitar rig started on daw engine (in ch{} → FX chain → master @ {} Hz)",
             prefs.input_channel,
             sample_rate,
@@ -1291,11 +1215,9 @@ impl GuitarRig {
 
         Ok(Self {
             daw,
-            _engine: engine,
+            _host: host,
             engine_stats,
-            shared,
             meters,
-            project_guid,
             track_guid,
             slot_guids,
             input_meter,
@@ -1569,7 +1491,7 @@ impl GuitarRig {
     pub fn set_output_trim_db(&self, db: f32) {
         self.swap.lock().unwrap().output_trim_db = db;
         // Output trim → the track's post-fader gain (linear).
-        let out_lin = db_to_lin(db) as f64;
+        let out_lin = signal_rig_host::mixer::db_to_linear(db) as f64;
         let _ = <Standalone as Tracks>::set_volume(
             &self.daw,
             ProjectContext::Current,
@@ -1887,31 +1809,9 @@ fn base64_decode(s: &str) -> Result<Vec<u8>, String> {
         .map_err(|e| e.to_string())
 }
 
-/// Process-unique guid string — shared by [`GuitarRig`] and
-/// [`SamplerRig`](crate::sampler_rig::SamplerRig) for their project guids.
-pub fn uuid_string() -> String {
-    uuid::new_v4_string()
-}
-
-mod uuid {
-    //! Minimal UUIDv4-ish string generator — avoids pulling the `uuid` crate just
-    //! for the rig's project guid. Not cryptographically strong; only needs to
-    //! be unique within this process.
-    use std::sync::atomic::{AtomicU64, Ordering};
-    use std::time::{SystemTime, UNIX_EPOCH};
-
-    static COUNTER: AtomicU64 = AtomicU64::new(0);
-
-    pub fn new_v4_string() -> String {
-        let nanos = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map(|d| d.as_nanos() as u64)
-            .unwrap_or(0);
-        let c = COUNTER.fetch_add(1, Ordering::Relaxed);
-        let pid = std::process::id() as u64;
-        format!("signal-rig-{nanos:x}-{pid:x}-{c:x}")
-    }
-}
+/// Process-unique guid string — now provided by the shared rig host; kept
+/// re-exported here for the existing `signal_sampler::rig::uuid_string` path.
+pub use signal_rig_host::uuid_string;
 
 #[cfg(test)]
 mod tests {
@@ -2044,7 +1944,8 @@ mod tests {
 
     #[test]
     fn db_to_lin_is_unity_at_zero() {
-        assert_eq!(db_to_lin(0.0), 1.0);
-        assert!((db_to_lin(-6.0206) - 0.5).abs() < 1e-4);
+        use signal_rig_host::mixer::db_to_linear;
+        assert_eq!(db_to_linear(0.0), 1.0);
+        assert!((db_to_linear(-6.0206) - 0.5).abs() < 1e-4);
     }
 }

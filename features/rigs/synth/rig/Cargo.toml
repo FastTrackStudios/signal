@@ -11,6 +11,7 @@ authors.workspace = true
 pipewire = ["signal-keys/pipewire", "midicore/midir-pipewire"]
 
 [dependencies]
+signal-rigs-proto.workspace = true
 # The Omnisphere patch importer (`load_patch_file`, `SoundsourceIndex`) — the
 # rig's preset source.
 signal-synth.workspace = true

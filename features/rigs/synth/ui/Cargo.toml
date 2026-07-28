@@ -7,6 +7,8 @@ authors.workspace = true
 
 [dependencies]
 dioxus.workspace = true
+# Shared audio-gui widgets (arc geometry).
+signal-widgets.workspace = true
 fts-chrome.workspace = true
 signal-synth-proto.workspace = true
 # The wasm-clean tagging engine (StructuredTag / TagSet / TagCategory) — the

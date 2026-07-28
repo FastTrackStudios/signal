@@ -39,6 +39,12 @@ pub fn level_to_db(level: f32) -> f32 {
 /// Build a hostable processor for one MM2 FX slot, or `None` if it's bypassed
 /// or its type has no mapping yet.
 pub fn build_processor(slot: &FxSlot, sample_rate: f64) -> Option<HostedPlugin> {
+    build_instance(slot, sample_rate).map(HostedPlugin::from_instance)
+}
+
+/// As [`build_processor`], but returns the bare [`PluginInstance`] — what a
+/// daw track FX slot hosts directly (the per-track kit mixer).
+pub fn build_instance(slot: &FxSlot, sample_rate: f64) -> Option<Box<dyn PluginInstance>> {
     if slot.bypass {
         return None;
     }
@@ -52,7 +58,7 @@ pub fn build_processor(slot: &FxSlot, sample_rate: f64) -> Option<HostedPlugin> 
             return None;
         }
     };
-    Some(HostedPlugin::from_instance(inner))
+    Some(inner)
 }
 
 fn build_eq(slot: &FxSlot, sr: f64) -> NativeEq {

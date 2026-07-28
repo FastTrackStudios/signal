@@ -134,7 +134,7 @@ impl MidiActionBinding {
 /// A collection of MIDI → action bindings.
 ///
 /// Start with [`MidiActionMap::default()`] for the built-in bindings, then
-/// call [`set`] / [`remove`] to customise.
+/// call `set` / `remove` to customise.
 #[derive(Debug, Clone, Serialize, Deserialize, Facet)]
 pub struct MidiActionMap {
     bindings: Vec<MidiActionBinding>,

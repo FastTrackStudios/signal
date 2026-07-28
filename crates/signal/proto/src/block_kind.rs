@@ -1,4 +1,4 @@
-//! Block implementation discriminator (orthogonal to [`BlockType`]).
+//! Block implementation discriminator (orthogonal to `BlockType`).
 //!
 //! [`BlockType`](crate::block::BlockType) captures *what a block does
 //! semantically* — Amp, Drive, Reverb, EQ. [`BlockKind`] captures *how

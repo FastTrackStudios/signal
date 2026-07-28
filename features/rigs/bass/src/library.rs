@@ -20,6 +20,7 @@
 use std::path::PathBuf;
 
 use facet::Facet;
+use signal_rig_host::store::{StyxDir, signal_config_dir};
 
 /// The library directory (`SIGNAL_BASS_DIR` overrides).
 pub fn bass_dir() -> PathBuf {
@@ -28,7 +29,12 @@ pub fn bass_dir() -> PathBuf {
             return PathBuf::from(p);
         }
     }
-    signal_sampler::rig_prefs::signal_config_dir().join("bass")
+    signal_config_dir().join("bass")
+}
+
+/// The styx store over [`bass_dir`].
+fn store() -> StyxDir {
+    StyxDir::new(bass_dir())
 }
 
 /// One preset in the bass library — a complete tone the rig switches to.
@@ -157,95 +163,27 @@ fn default_presets() -> Vec<BassPresetDef> {
     ]
 }
 
-/// Resolve a bass-dir-relative asset path ("models/…", "irs/…") to
-/// absolute; absolute paths and empties pass through.
-fn resolve_asset(path: &mut String) {
-    if !path.is_empty() && !std::path::Path::new(path.as_str()).is_absolute() {
-        *path = bass_dir().join(path.as_str()).to_string_lossy().into_owned();
-    }
-}
-
-/// Inverse of [`resolve_asset`] for saves: paths under the bass dir are
-/// stored relative, so the on-disk library stays portable.
-fn relativize_asset(path: &mut String) {
-    if let Ok(rel) = std::path::Path::new(path.as_str()).strip_prefix(bass_dir()) {
-        *path = rel.to_string_lossy().into_owned();
-    }
-}
-
-fn resolve_preset(p: &mut BassPresetDef) {
-    resolve_asset(&mut p.drive_nam);
-    resolve_asset(&mut p.nam);
-    resolve_asset(&mut p.ir);
-    resolve_asset(&mut p.sample);
-}
-
-fn read<T: for<'a> Facet<'a>>(file: &str) -> Option<T> {
-    let path = bass_dir().join(file);
-    let text = std::fs::read_to_string(&path).ok()?;
-    match facet_styx::from_str::<T>(&text) {
-        Ok(v) => Some(v),
-        Err(e) => {
-            tracing::warn!("bass library: {file} failed to parse ({e}) — using defaults");
-            None
-        }
-    }
-}
-
-fn write<T: for<'a> Facet<'a>>(file: &str, value: &T) {
-    let dir = bass_dir();
-    if let Err(e) = std::fs::create_dir_all(&dir) {
-        tracing::warn!("bass library: cannot create {}: {e}", dir.display());
-        return;
-    }
-    match facet_styx::to_string(value) {
-        Ok(text) => {
-            if let Err(e) = std::fs::write(dir.join(file), text) {
-                tracing::warn!("bass library: write {file} failed: {e}");
-            }
-        }
-        Err(e) => tracing::warn!("bass library: serialize {file} failed: {e}"),
-    }
-}
-
-/// Read `file`, seeding it from the embedded in-repo default text when
-/// missing (written verbatim so the on-disk copy matches the repo
-/// snapshot). Falls back to the code-built default if the embedded text
-/// fails to parse.
-fn read_or_seed<T: for<'a> Facet<'a>>(file: &str, seed: &str, fallback: impl FnOnce() -> T) -> T {
-    if let Some(v) = read(file) {
-        return v;
-    }
-    let dir = bass_dir();
-    if let Err(e) = std::fs::create_dir_all(&dir) {
-        tracing::warn!("bass library: cannot create {}: {e}", dir.display());
-    } else if let Err(e) = std::fs::write(dir.join(file), seed) {
-        tracing::warn!("bass library: seed {file} failed: {e}");
-    } else {
-        tracing::info!("bass library: seeded {file} from the in-repo default");
-    }
-    match facet_styx::from_str::<T>(seed) {
-        Ok(v) => v,
-        Err(e) => {
-            tracing::warn!("bass library: embedded default {file} failed to parse ({e})");
-            let v = fallback();
-            write(file, &v);
-            v
-        }
-    }
+fn resolve_preset(store: &StyxDir, p: &mut BassPresetDef) {
+    store.resolve(&mut p.drive_nam);
+    store.resolve(&mut p.nam);
+    store.resolve(&mut p.ir);
+    store.resolve(&mut p.sample);
 }
 
 impl BassLibrary {
     /// Load the library, bootstrapping any missing file from the embedded
     /// in-repo default config, so the directory is always complete.
     pub fn load_or_bootstrap() -> Self {
-        let mut presets = read_or_seed::<BassLib>("presets.styx", DEFAULT_PRESETS, || BassLib {
-            presets: default_presets(),
-        })
-        .presets;
-        let midi_map = read_or_seed::<BassMidiMapDef>("midi.styx", DEFAULT_MIDI, default_midi_map);
+        let store = store();
+        let mut presets = store
+            .read_or_seed::<BassLib>("presets.styx", DEFAULT_PRESETS, || BassLib {
+                presets: default_presets(),
+            })
+            .presets;
+        let midi_map =
+            store.read_or_seed::<BassMidiMapDef>("midi.styx", DEFAULT_MIDI, default_midi_map);
         for p in &mut presets {
-            resolve_preset(p);
+            resolve_preset(&store, p);
         }
         Self { presets, midi_map }
     }
@@ -253,27 +191,28 @@ impl BassLibrary {
     /// Persist the preset pool (asset paths under the bass dir stored
     /// relative — the file stays portable).
     pub fn save_presets(presets: &[BassPresetDef]) {
+        let store = store();
         let mut presets = presets.to_vec();
         for p in &mut presets {
-            relativize_asset(&mut p.drive_nam);
-            relativize_asset(&mut p.nam);
-            relativize_asset(&mut p.ir);
-            relativize_asset(&mut p.sample);
+            store.relativize(&mut p.drive_nam);
+            store.relativize(&mut p.nam);
+            store.relativize(&mut p.ir);
+            store.relativize(&mut p.sample);
         }
-        write("presets.styx", &BassLib { presets });
+        store.write("presets.styx", &BassLib { presets });
     }
 
     pub fn save_midi_map(map: &BassMidiMapDef) {
-        write("midi.styx", map);
+        store().write("midi.styx", map);
     }
 
     pub fn save_last_state(state: &BassLastState) {
-        write("last-state.styx", state);
+        store().write("last-state.styx", state);
     }
 
     /// `None` when the file is missing (fresh install) or unparsable.
     pub fn load_last_state() -> Option<BassLastState> {
-        read("last-state.styx")
+        store().read("last-state.styx")
     }
 }
 
@@ -295,14 +234,15 @@ mod tests {
     #[test]
     fn asset_paths_roundtrip_relative() {
         std::env::set_var("SIGNAL_BASS_DIR", "/tmp/fts-test-bass");
+        let store = super::store();
         let mut p = String::from("models/x.nam");
-        super::resolve_asset(&mut p);
+        store.resolve(&mut p);
         assert_eq!(p, "/tmp/fts-test-bass/models/x.nam");
-        super::relativize_asset(&mut p);
+        store.relativize(&mut p);
         assert_eq!(p, "models/x.nam");
         let mut abs = String::from("/elsewhere/y.nam");
-        super::resolve_asset(&mut abs);
-        super::relativize_asset(&mut abs);
+        store.resolve(&mut abs);
+        store.relativize(&mut abs);
         assert_eq!(abs, "/elsewhere/y.nam");
     }
 
