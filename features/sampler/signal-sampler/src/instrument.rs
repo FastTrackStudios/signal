@@ -85,8 +85,13 @@ impl SamplerInstrument {
             MidiEvent::PolyAftertouch { key, pressure, .. } => {
                 self.engine.poly_aftertouch(key.get(), pressure.get());
             }
-            // ProgramChange / PitchBend / SysEx: not handled by the
-            // sampler — ignored.
+            // Pitch wheel: live playback-rate bend on every pitched voice
+            // (Omnisphere-style synth presets want this; percussion engines
+            // ignore it).
+            MidiEvent::PitchBend { bend, .. } => {
+                self.engine.pitch_bend(bend.get());
+            }
+            // ProgramChange / SysEx: not handled by the sampler — ignored.
             _ => {}
         }
     }

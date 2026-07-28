@@ -2302,6 +2302,56 @@ zones (
         std::env::var_os("SIGNAL_SAMPLER_RIG_AUDIO").is_some()
     }
 
+    /// The pitch wheel bends a SAMPLED voice live: playback rate shifts on
+    /// the held note, and returns on wheel-center — the path an Omnisphere
+    /// synth preset takes (percussion engines ignore it, tested in
+    /// engine::tests).
+    #[test]
+    fn pitch_bend_bends_a_sampled_voice() {
+        let dir = std::env::temp_dir().join(format!("signal-bend-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("mkdir");
+        // 3 s of 220 Hz sine, rooted at note 60.
+        let mut engine = minimal_engine_frames(&dir, 3 * 48_000);
+        let freq = |e: &mut SampleEngine, frames: usize| {
+            let mut buf = vec![0.0f32; frames * 2];
+            e.render(&mut buf);
+            let left: Vec<f32> = buf.chunks(2).map(|c| c[0]).collect();
+            let crossings = left
+                .windows(2)
+                .filter(|w| (w[0] <= 0.0) != (w[1] <= 0.0))
+                .count() as f32;
+            crossings / 2.0 / (frames as f32 / 48_000.0)
+        };
+        engine.note_on(60, 100);
+        let plain = freq(&mut engine, 14_400); // 300 ms
+        assert!((plain - 220.0).abs() < 4.0, "root note at 220 Hz, got {plain}");
+
+        engine.pitch_bend(16_383); // full up, default ±2 st
+        let bent = freq(&mut engine, 14_400);
+        let ratio = bent / plain;
+        assert!(
+            (ratio - 2f32.powf(2.0 / 12.0)).abs() < 0.02,
+            "full bend ≈ +2 st on the held sampled voice: ratio={ratio}"
+        );
+
+        engine.pitch_bend(8_192); // back to center
+        let back = freq(&mut engine, 14_400);
+        assert!((back - 220.0).abs() < 5.0, "wheel-center returns to pitch, got {back}");
+    }
+
+    fn minimal_engine_frames(dir: &std::path::Path, frames: usize) -> SampleEngine {
+        let wav = dir.join("note.wav");
+        write_sine_wav(&wav, frames);
+        let styx = "\
+name TestZoneLib\nzones (\n    { file note.wav, key_min 0, key_max 127, root_key 60, vel_min 0, vel_max 127 }\n)\n";
+        let spec_path = dir.join("lib.styx");
+        std::fs::write(&spec_path, styx).expect("write styx");
+        let patch = crate::PlayerPatch::load(&spec_path, dir).expect("load patch");
+        let mut engine = SampleEngine::new(patch, 48_000, "", "");
+        engine.preload_samples();
+        engine
+    }
+
     fn write_sine_wav(path: &std::path::Path, frames: usize) {
         let spec = hound::WavSpec {
             channels: 1,

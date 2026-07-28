@@ -423,6 +423,8 @@ pub struct SampleEngine {
     patch: PlayerPatch,
     cache: SampleCache,
     voices: VoicePool,
+    /// Pitch-bend range in semitones (full wheel throw).
+    bend_range_st: f32,
     /// Round-robin counters. Interior-mutable so voice resolution
     /// (`make_voice`) can run as `&self` — it only advances RR and records
     /// miss telemetry, letting note-on pass `&self.articulation`/`section`/`mic`
@@ -826,6 +828,7 @@ impl SampleEngine {
             patch,
             cache,
             voices: VoicePool::new(),
+            bend_range_st: 2.0,
             rr: RefCell::new(RrCounters::new()),
             sample_rate,
             section,
@@ -1092,6 +1095,23 @@ impl SampleEngine {
     /// Unison playback for zone triggers: `voices` copies per note, spread
     /// symmetrically across ±`detune_cents`/2 and panned by `width` (0..1),
     /// level-compensated 1/√n. `voices <= 1` disables.
+    /// Live pitch wheel (14-bit raw, 8192 = center): every sounding pitched
+    /// voice takes the new playback rate immediately, new voices spawn with
+    /// it. Percussion engines ignore bend (a drum plays at natural pitch).
+    pub fn pitch_bend(&mut self, raw: u16) {
+        if self.percussion {
+            return;
+        }
+        let norm = ((raw as f64 - 8192.0) / 8192.0).clamp(-1.0, 1.0);
+        let factor = 2f64.powf(norm * self.bend_range_st as f64 / 12.0);
+        self.voices.set_bend(factor);
+    }
+
+    /// Pitch-bend range in semitones (full wheel throw; default 2).
+    pub fn set_bend_range(&mut self, semitones: f32) {
+        self.bend_range_st = semitones.clamp(0.0, 24.0);
+    }
+
     pub fn set_unison(&mut self, voices: u8, detune_cents: f32, width: f32) {
         self.unison = (
             voices.clamp(1, 8),

@@ -122,6 +122,11 @@ pub struct Voice {
     /// Playback rate. 1.0 = original pitch, 2^(semitones/12) for transposition.
     rate: f64,
 
+    /// Live pitch-bend factor multiplied onto the playback rate each frame
+    /// (1.0 = no bend). Set by the pool on spawn and on wheel moves, so a
+    /// bend reaches held voices and new ones alike.
+    bend: f64,
+
     /// Output gain [0.0, 1.0].
     pub gain: f32,
     pan_l: f32,
@@ -412,6 +417,7 @@ impl Voice {
             stream_pin: None,
             loop_xfade: 0,
             rate,
+            bend: 1.0,
             gain,
             pan_l: 1.0,
             pan_r: 1.0,
@@ -478,6 +484,7 @@ impl Voice {
             stream_pin: None,
             loop_xfade: 0,
             rate,
+            bend: 1.0,
             gain,
             pan_l: 1.0,
             pan_r: 1.0,
@@ -1036,17 +1043,18 @@ impl Voice {
         // Advance position. During a portamento glide the read rate is nudged
         // by `glide_cents` (ramping to 0) so the pitch scoops into true tuning;
         // the tiny position drift over the ~60 ms glide is inaudible.
-        let step = if self.glide_frames > 0 {
-            let s = self.rate * 2f64.powf(self.glide_cents as f64 / 1200.0);
-            self.glide_cents += self.glide_step;
-            self.glide_frames -= 1;
-            if self.glide_frames == 0 {
-                self.glide_cents = self.glide_end;
-            }
-            s
-        } else {
-            self.rate
-        };
+        let step = self.bend
+            * if self.glide_frames > 0 {
+                let s = self.rate * 2f64.powf(self.glide_cents as f64 / 1200.0);
+                self.glide_cents += self.glide_step;
+                self.glide_frames -= 1;
+                if self.glide_frames == 0 {
+                    self.glide_cents = self.glide_end;
+                }
+                s
+            } else {
+                self.rate
+            };
         if self.reverse {
             self.position -= step;
         } else {
@@ -1203,6 +1211,9 @@ pub struct VoicePool {
     stolen: usize,
     max_voices: usize,
     steal_policy: VoiceStealPolicy,
+    /// Live pitch-bend factor — stamped onto every spawned voice and pushed
+    /// to the ones already sounding by [`set_bend`](Self::set_bend).
+    bend: f64,
     /// Solo filter: when `Some`, only voices whose `note` is in the set
     /// contribute to the output. Muted voices still render (into a discard
     /// buffer) so their lifecycle — and therefore every other note's legato
@@ -1224,6 +1235,7 @@ impl VoicePool {
             stolen: 0,
             max_voices: MAX_VOICES,
             steal_policy: VoiceStealPolicy::ReleaseFirstQuietest,
+            bend: 1.0,
             solo_notes: None,
             solo_scratch: Vec::new(),
         }
@@ -1236,6 +1248,7 @@ impl VoicePool {
             stolen: 0,
             max_voices: max_voices.max(1),
             steal_policy: VoiceStealPolicy::ReleaseFirstQuietest,
+            bend: 1.0,
             solo_notes: None,
             solo_scratch: Vec::new(),
         }
@@ -1259,7 +1272,19 @@ impl VoicePool {
     }
 
     /// Add a voice, stealing one or more voices if at capacity.
+    /// Set the live pitch-bend factor: held voices take it immediately,
+    /// and every voice spawned from here on is stamped with it.
+    pub fn set_bend(&mut self, factor: f64) {
+        self.bend = factor.clamp(0.25, 4.0);
+        for v in &mut self.voices {
+            v.bend = self.bend;
+        }
+    }
+
     pub fn spawn(&mut self, voice: Voice) {
+        let mut voice = voice;
+        // New voices sound at the current wheel position.
+        voice.bend = self.bend;
         // Remove done voices first
         self.voices.retain(|v| !v.is_done());
 

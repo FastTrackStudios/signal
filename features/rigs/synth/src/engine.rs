@@ -432,7 +432,7 @@ mod tests {
         let mut rn = RenderNode::compile(&tree, 48_000);
         rn.prepare(48_000.0, 512);
 
-        let mut run = |rn: &mut RenderNode, midi: &[PluginMidiEvent], frames: usize| {
+        let run = |rn: &mut RenderNode, midi: &[PluginMidiEvent], frames: usize| {
             let (mut l, mut r) = (vec![0.0f32; frames], vec![0.0f32; frames]);
             let ev = PluginEvents { params: &[], midi, note_expressions: &[] };
             rn.render(&mut l, &mut r, &ev);

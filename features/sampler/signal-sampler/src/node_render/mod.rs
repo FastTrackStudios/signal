@@ -1680,7 +1680,7 @@ zones (
         let mut rn = RenderNode::compile(&tree, 48_000);
         rn.prepare(48_000.0, 512);
 
-        let mut sustain = |rn: &mut RenderNode| {
+        let sustain = |rn: &mut RenderNode| {
             let (mut l, mut r) = (vec![0.0; 512], vec![0.0; 512]);
             let mut level = 0.0;
             for b in 0..24 {
