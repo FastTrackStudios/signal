@@ -40,8 +40,8 @@
 //!
 //! - **Close mic / direct-to-master** → a plain instrument track.
 //! - **Bus mic (overhead / room)** → the mic's instrument track gets a
-//!   [`Routing::add_send`] to a shared **bus track** with
-//!   [`SendMode::PostFx`], and its parent-send to master is disabled.
+//!   `Routing::add_send` to a shared **bus track** with
+//!   `SendMode::PostFx`, and its parent-send to master is disabled.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
