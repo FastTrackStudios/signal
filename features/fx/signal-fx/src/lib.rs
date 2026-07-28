@@ -761,21 +761,15 @@ impl NativeReverb {
     }
 
     fn set(&mut self, id: u32, v: f64) {
-        // Ids 0-2 address reverb A; 3+ are the dual-routing block.
+        // Ids < 100: chain A + the dual block. Ids 100+: the same
+        // chain-scoped param on chain B (`r2_*` names, id − 100).
         match id {
-            0 => self.rev.a.mix = v.clamp(0.0, 1.0),
-            1 => {
-                self.rev.a.params.decay = v;
-                self.rev.a.update_params();
-            }
-            2 => {
-                self.rev.a.params.size = v;
-                self.rev.a.update_params();
-            }
             3 => {
                 self.rev.routing =
                     reverb::DualRouting::from_index(v.round().max(0.0) as usize)
             }
+            // Legacy dual block (kept for preset compat; equivalent to
+            // r2_algorithm / r2_decay / r2_mix / r2_pan).
             4 => self
                 .rev
                 .b
@@ -787,174 +781,191 @@ impl NativeReverb {
                 self.rev.b.update_params();
             }
             6 => self.rev.b.mix = v.clamp(0.0, 1.0),
-            7 => self.rev.a.pan = v.clamp(-1.0, 1.0),
             8 => self.rev.b.pan = v.clamp(-1.0, 1.0),
-            9 => {
-                self.rev.a.trem_rate_hz = v;
-                self.rev.b.trem_rate_hz = v;
+            _ if id >= 100 => Self::set_chain(&mut self.rev.b, id - 100, v),
+            _ => Self::set_chain(&mut self.rev.a, id, v),
+        }
+    }
+
+    /// Apply a chain-scoped param (everything in `REVERB_PARAMS` except
+    /// the dual block) to one `ReverbChain`. Chain A hears these at
+    /// their base ids, chain B at id + 100 (`r2_*`).
+    fn set_chain(c: &mut reverb::ReverbChain, id: u32, v: f64) {
+        match id {
+            0 => c.mix = v.clamp(0.0, 1.0),
+            1 => {
+                c.params.decay = v;
+                c.update_params();
             }
-            10 => {
-                self.rev.a.trem_depth = v.clamp(0.0, 1.0);
-                self.rev.b.trem_depth = v.clamp(0.0, 1.0);
+            2 => {
+                c.params.size = v;
+                c.update_params();
             }
+            7 => c.pan = v.clamp(-1.0, 1.0),
+            9 => c.trem_rate_hz = v,
+            10 => c.trem_depth = v.clamp(0.0, 1.0),
             11 => {
-                self.rev.a.impulse.decay = v.clamp(0.01, 1.0);
-                self.rev.a.update_params();
+                c.impulse.decay = v.clamp(0.01, 1.0);
+                c.update_params();
             }
             12 => {
-                self.rev.a.impulse.tail = if v >= 0.5 {
+                c.impulse.tail = if v >= 0.5 {
                     reverb::ImpulseTail::Gate
                 } else {
                     reverb::ImpulseTail::Envelope
                 };
-                self.rev.a.update_params();
+                c.update_params();
             }
             13 => {
-                self.rev.a.impulse.attack = v.clamp(0.0, 1.0);
-                self.rev.a.update_params();
+                c.impulse.attack = v.clamp(0.0, 1.0);
+                c.update_params();
             }
             14 => {
-                self.rev.a.impulse.stretch = v.clamp(0.25, 4.0);
-                self.rev.a.update_params();
+                c.impulse.stretch = v.clamp(0.25, 4.0);
+                c.update_params();
             }
             15 => {
-                self.rev.a.impulse.direction = if v >= 0.5 {
+                c.impulse.direction = if v >= 0.5 {
                     reverb::ImpulseDirection::Reverse
                 } else {
                     reverb::ImpulseDirection::Forward
                 };
-                self.rev.a.update_params();
+                c.update_params();
             }
             16 => {
-                self.rev.a.impulse.feedback = v.clamp(0.0, 1.0);
-                self.rev.a.update_params();
+                c.impulse.feedback = v.clamp(0.0, 1.0);
+                c.update_params();
             }
             17 => {
-                self.rev.a.shimmer.shift1_semitones = Some(v.clamp(-12.0, 12.0));
-                self.rev.a.update_params();
+                c.shimmer.shift1_semitones = Some(v.clamp(-12.0, 12.0));
+                c.update_params();
             }
             18 => {
-                self.rev.a.shimmer.shift2_semitones = Some(v.clamp(-12.0, 12.0));
-                self.rev.a.update_params();
+                c.shimmer.shift2_semitones = Some(v.clamp(-12.0, 12.0));
+                c.update_params();
             }
             19 => {
-                self.rev.a.shimmer.voice2 = v >= 0.5;
-                self.rev.a.update_params();
+                c.shimmer.voice2 = v >= 0.5;
+                c.update_params();
             }
             20 => {
-                self.rev.a.shimmer.amount = Some(v.clamp(0.0, 1.0));
-                self.rev.a.update_params();
+                c.shimmer.amount = Some(v.clamp(0.0, 1.0));
+                c.update_params();
             }
             21 => {
-                self.rev.a.shimmer.feedback_mode =
+                c.shimmer.feedback_mode =
                     reverb::ShimmerFeedbackMode::from_index(v.round().max(0.0) as usize);
-                self.rev.a.update_params();
+                c.update_params();
             }
             22 => {
-                self.rev.a.magneto.ping_pong = v >= 0.5;
-                self.rev.a.update_params();
+                c.magneto.ping_pong = v >= 0.5;
+                c.update_params();
             }
             23 => {
-                self.rev.a.nonlinear.chop_rate_hz = v.clamp(0.1, 15.0);
-                self.rev.a.update_params();
+                c.nonlinear.chop_rate_hz = v.clamp(0.1, 15.0);
+                c.update_params();
             }
             24 => {
-                self.rev.a.nonlinear.chop_depth = v.clamp(0.0, 1.0);
-                self.rev.a.update_params();
+                c.nonlinear.chop_depth = v.clamp(0.0, 1.0);
+                c.update_params();
             }
             25 => {
-                self.rev.a.nonlinear.gate_speed = v.clamp(0.0, 1.0);
-                self.rev.a.update_params();
+                c.nonlinear.gate_speed = v.clamp(0.0, 1.0);
+                c.update_params();
             }
             26 => {
-                self.rev.a.nonlinear.late_speed = v.clamp(0.0, 1.0);
-                self.rev.a.update_params();
+                c.nonlinear.late_speed = v.clamp(0.0, 1.0);
+                c.update_params();
             }
             27 => {
-                self.rev.a.nonlinear.late_decay = v.clamp(0.0, 1.0);
-                self.rev.a.update_params();
+                c.nonlinear.late_decay = v.clamp(0.0, 1.0);
+                c.update_params();
             }
             28 => {
-                self.rev.a.nonlinear.late_level = v.clamp(0.0, 1.0);
-                self.rev.a.update_params();
+                c.nonlinear.late_level = v.clamp(0.0, 1.0);
+                c.update_params();
             }
             29 => {
-                self.rev.a.cloud.ensemble = v.clamp(0.0, 1.0);
-                self.rev.a.update_params();
+                c.cloud.ensemble = v.clamp(0.0, 1.0);
+                c.update_params();
             }
             30 => {
-                self.rev.a.bloom.harmonics = v.clamp(0.0, 1.0);
-                self.rev.a.update_params();
+                c.bloom.harmonics = v.clamp(0.0, 1.0);
+                c.update_params();
             }
             31 => {
-                self.rev.a.chorale.choir_level = Some(v.clamp(0.0, 1.0));
-                self.rev.a.update_params();
+                c.chorale.choir_level = Some(v.clamp(0.0, 1.0));
+                c.update_params();
             }
             32 => {
-                self.rev.a.chorale.voice = if v >= 0.5 {
+                c.chorale.voice = if v >= 0.5 {
                     reverb::ChoirVoice::Soprano
                 } else {
                     reverb::ChoirVoice::Tenor
                 };
-                self.rev.a.update_params();
+                c.update_params();
             }
             33 => {
-                self.rev.a.chorale.mod_amount = v.clamp(0.0, 1.0);
-                self.rev.a.update_params();
+                c.chorale.mod_amount = v.clamp(0.0, 1.0);
+                c.update_params();
             }
             34 => {
-                self.rev.a.voice = if v >= 0.5 {
+                c.voice = if v >= 0.5 {
                     reverb::ReverbVoice::Classic
                 } else {
                     reverb::ReverbVoice::Mx
                 };
-                self.rev.a.update_params();
+                c.update_params();
             }
             35 => {
-                self.rev.a.hall.mid_db = v.clamp(-6.0, 6.0);
-                self.rev.a.update_params();
+                c.hall.mid_db = v.clamp(-6.0, 6.0);
+                c.update_params();
             }
             36 => {
-                self.rev.a.hall.swell_rise = v.clamp(0.0, 1.0);
-                self.rev.a.update_params();
+                c.hall.swell_rise = v.clamp(0.0, 1.0);
+                c.update_params();
             }
             37 => {
-                self.rev.a.hall.swell_type = if v >= 0.5 {
+                c.hall.swell_type = if v >= 0.5 {
                     reverb::SwellType::WetPlusDry
                 } else {
                     reverb::SwellType::Wet
                 };
-                self.rev.a.update_params();
+                c.update_params();
             }
             38 => {
-                self.rev.a.set_size_index(v.round().max(0.0) as usize);
+                c.set_size_index(v.round().max(0.0) as usize);
             }
-            // Chain-A tone/space controls (39+ — see REVERB_PARAMS).
             39 => {
-                self.rev
-                    .a
-                    .set_algorithm(reverb::AlgorithmType::from_index(v.round().max(0.0) as usize));
-                self.rev.a.update_params();
+                c.set_algorithm(reverb::AlgorithmType::from_index(v.round().max(0.0) as usize));
+                c.update_params();
             }
             40 => {
-                self.rev.a.params.modulation = v;
-                self.rev.a.update_params();
+                c.params.modulation = v;
+                c.update_params();
             }
             41 => {
-                self.rev.a.params.damping = v;
-                self.rev.a.update_params();
+                c.params.damping = v;
+                c.update_params();
             }
             42 => {
-                self.rev.a.params.tone = v;
-                self.rev.a.update_params();
+                c.params.tone = v;
+                c.update_params();
             }
-            43 => self.rev.a.predelay_ms = v,
+            43 => c.predelay_ms = v,
             _ => {}
         }
     }
 
     /// Apply a build-time parameter by name (see `REVERB_PARAMS`).
+    /// `r2_<name>` addresses the same chain-scoped param on reverb 2.
     pub fn set_named(&mut self, name: &str, value: f64) {
+        if let Some(base) = name.strip_prefix("r2_") {
+            if let Some(id) = param_id(REVERB_PARAMS, base) {
+                self.set(id + 100, value);
+            }
+            return;
+        }
         if let Some(id) = param_id(REVERB_PARAMS, name) {
             self.set(id, value);
         }
@@ -1001,7 +1012,23 @@ impl PluginInstance for NativeReverb {
         descriptor("signal.fx.reverb", "Reverb")
     }
     fn params(&mut self) -> Vec<PluginParamInfo> {
-        param_infos(REVERB_PARAMS)
+        let mut infos = param_infos(REVERB_PARAMS);
+        // Mirror every chain-scoped param for reverb 2 at id + 100
+        // (`r2_*`), so a dual preset can run two full MX engines. The
+        // dual block (routing + the legacy b params) stays single.
+        infos.extend(
+            REVERB_PARAMS
+                .iter()
+                .filter(|s| !matches!(s.id, 3..=6 | 8))
+                .map(|s| PluginParamInfo {
+                    id: s.id + 100,
+                    name: format!("r2_{}", s.name),
+                    min: s.min,
+                    max: s.max,
+                    default: s.default,
+                }),
+        );
+        infos
     }
     fn param_value(&mut self, _id: u32) -> Option<f64> {
         None
@@ -2180,5 +2207,28 @@ mod param_table_tests {
                 "reverb param {name:?} missing from REVERB_PARAMS"
             );
         }
+    }
+
+    /// The `r2_*` mirror block must land chain-scoped params on chain B
+    /// and leave chain A untouched (and vice versa).
+    #[test]
+    fn reverb_r2_params_reach_chain_b() {
+        let mut r = NativeReverb::new(48000.0);
+        r.set_named("cloud_ensemble", 0.8);
+        r.set_named("r2_cloud_ensemble", 0.3);
+        assert!((r.rev.a.cloud.ensemble - 0.8).abs() < 1e-9);
+        assert!((r.rev.b.cloud.ensemble - 0.3).abs() < 1e-9);
+
+        r.set_named("r2_mix", 0.77);
+        assert!((r.rev.b.mix - 0.77).abs() < 1e-9);
+
+        r.set_named("r2_algorithm", 6.0); // Shimmer
+        assert_eq!(r.rev.b.algorithm_type(), reverb::AlgorithmType::Shimmer);
+        assert_ne!(r.rev.a.algorithm_type(), reverb::AlgorithmType::Shimmer);
+
+        // The advertised param list contains the mirrors exactly once.
+        let infos = r.params();
+        let r2: Vec<_> = infos.iter().filter(|i| i.name.starts_with("r2_")).collect();
+        assert_eq!(r2.len(), REVERB_PARAMS.len() - 5);
     }
 }
