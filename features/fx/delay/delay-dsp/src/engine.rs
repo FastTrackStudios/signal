@@ -295,6 +295,8 @@ pub struct DelayEngine {
     pub oilcan_tone: f64,
     /// Rotation-speed randomization (time-domain dirt, 0.0-1.0). OilCan only.
     pub oilcan_grit: f64,
+    /// Rotation LFO base rate in Hz (Mod Speed). OilCan only.
+    pub oilcan_mod_rate: f64,
 
     // ── MultiTap-specific ──────────────────────────────────────────
     /// User tap pattern. MultiTap only.
@@ -419,6 +421,7 @@ impl DelayEngine {
             oilcan_wobble: 0.6,
             oilcan_tone: 2500.0,
             oilcan_grit: 0.1,
+            oilcan_mod_rate: 0.9,
             multitap_taps: crate::multitap_delay::TapPreset::Quarters.taps(),
             multitap_grid: TapGrid::default(),
             multitap_feedback_mode: FeedbackMode::Input,
@@ -643,6 +646,8 @@ impl DelayEngine {
                 d.feedback = self_feedback;
                 d.heads = self.drum_heads;
                 d.lo_cut = if self.frozen { 0.0 } else { self.drum_lo_cut };
+                d.hicut_freq = self_hicut;
+                d.grit = if self.frozen { 0.0 } else { self.drive };
                 d.wobble = self.drum_wobble;
                 d.decay_tilt = self_tilt;
                 d.update(sample_rate);
@@ -652,6 +657,7 @@ impl DelayEngine {
                 d.feedback = self_feedback;
                 d.heads = self.oilcan_heads;
                 d.wobble = self.oilcan_wobble;
+                d.mod_rate = self.oilcan_mod_rate;
                 d.tone_hz = if self.frozen { 8000.0 } else { self.oilcan_tone };
                 d.grit = self.oilcan_grit;
                 d.decay_tilt = self_tilt;

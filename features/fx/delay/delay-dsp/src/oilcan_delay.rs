@@ -44,8 +44,17 @@ pub struct OilCanDelay {
     pub heads: OilCanHeads,
     /// Wobble depth (0.0–1.0). Oil cans wobble a lot; default is high.
     pub wobble: f64,
-    /// Loop darkness: lowpass cutoff in Hz (default 2500, the murk).
+    /// Loop darkness: filter voicing in Hz (default 2500). The range is
+    /// wider than the real unit at the open end (bonus bandwidth,
+    /// 300–12000); below ~1200 Hz the response morphs from a plain
+    /// lowpass into a resonant band-pass with the deep lows thinned —
+    /// the "extremely dark murky bandpass" at the FILTER knob's max.
     pub tone_hz: f64,
+    /// Rotation LFO base rate in Hz (TimeLine Mod Speed). The wobble is
+    /// spring-loaded: it crawls through the first half of each cycle
+    /// and accelerates through the second, like a disc fighting its
+    /// drive spring before letting go.
+    pub mod_rate: f64,
     /// Rotation-speed randomization (0.0–1.0): time-domain jitter on the
     /// read heads. This is TimeLine's Grit for Oil Can — dirt via speed
     /// uncertainty, not saturation.
@@ -55,6 +64,8 @@ pub struct OilCanDelay {
 
     delay: DelayLine,
     lp: Biquad,
+    murk_hp: Biquad,
+    murk_active: bool,
     decay_tilt_eq: DecayTilt,
     // Small fixed allpass for the regen "splatter".
     splatter: DelayLine,
@@ -93,10 +104,13 @@ impl OilCanDelay {
             heads: OilCanHeads::Long,
             wobble: 0.6,
             tone_hz: 2500.0,
+            mod_rate: 0.9,
             grit: 0.1,
             decay_tilt: 0.0,
             delay: DelayLine::new(48000 * 2),
             lp: Biquad::new(),
+            murk_hp: Biquad::new(),
+            murk_active: false,
             decay_tilt_eq: DecayTilt::new(),
             splatter: DelayLine::new(512),
             splatter_g: 0.45,
@@ -123,8 +137,24 @@ impl OilCanDelay {
             self.splatter = DelayLine::new(splat_len);
         }
 
-        self.lp
-            .set(FilterType::Lowpass, self.tone_hz.clamp(500.0, 8000.0), 0.707, sample_rate);
+        // Filter voicing: plain LP over most of the travel, morphing to
+        // a resonant, low-thinned bandpass below ~1200 Hz.
+        let tone = self.tone_hz.clamp(300.0, 12000.0);
+        if tone >= 1200.0 {
+            self.lp.set(FilterType::Lowpass, tone, 0.707, sample_rate);
+            self.murk_active = false;
+        } else {
+            let murk = ((1200.0 - tone) / 900.0).clamp(0.0, 1.0);
+            self.lp
+                .set(FilterType::Lowpass, tone, 0.707 + murk * 2.3, sample_rate);
+            self.murk_hp.set(
+                FilterType::Highpass,
+                120.0 + murk * 280.0,
+                0.9,
+                sample_rate,
+            );
+            self.murk_active = true;
+        }
 
         self.decay_tilt_eq.configure(self.decay_tilt, sample_rate);
 
@@ -146,13 +176,17 @@ impl OilCanDelay {
         self.smoother.set_target(target_delay);
         let smooth_delay = self.smoother.tick();
 
-        // Heavy dual-LFO wobble: slow wow (0.9 Hz, up to ±1.2%) plus
-        // faster flutter (6.3 Hz, up to ±0.25%).
-        self.wow_phase += 0.9 / self.sample_rate;
+        // Heavy dual-LFO wobble: slow wow (Mod Speed, up to ±1.2%) plus
+        // faster flutter (7× Mod Speed, up to ±0.25%). The wow phase is
+        // spring-loaded — it advances at half rate near the cycle start
+        // and ~1.5× near the end (average 1×), the fights-the-spring-
+        // then-accelerates character of real units.
+        let spring = 0.5 + self.wow_phase;
+        self.wow_phase += self.mod_rate * spring / self.sample_rate;
         if self.wow_phase >= 1.0 {
             self.wow_phase -= 1.0;
         }
-        self.flutter_phase += 6.3 / self.sample_rate;
+        self.flutter_phase += self.mod_rate * 7.0 / self.sample_rate;
         if self.flutter_phase >= 1.0 {
             self.flutter_phase -= 1.0;
         }
@@ -188,15 +222,22 @@ impl OilCanDelay {
         // period regardless of the Repeats setting.
         let ghost = self.delay.read_cubic(rotation_pos) * Self::CHARGE_RESIDUE;
 
-        // Loop: murk (LP) → light constant saturation → splatter allpass.
+        // Regen: light constant saturation → splatter allpass → tilt.
         let mut fb = output * self.feedback + ghost;
-        fb = self.lp.tick(fb, ch);
         fb = sin_clip(fb * 1.2) / 1.2;
         fb = self.splatter_tick(fb);
         fb = self.decay_tilt_eq.tick(fb, ch);
         fb = fb.clamp(-1.5, 1.5);
 
-        self.delay.write(input + fb);
+        // The disc medium itself is band-limited: the murk filter sits
+        // in the RECORD path, so the first echo is already dark and
+        // every rotation compounds it (matches FILTER acting at
+        // Repeats = 0 on the real unit).
+        let mut record = self.lp.tick(input + fb, ch);
+        if self.murk_active {
+            record = self.murk_hp.tick(record, ch);
+        }
+        self.delay.write(record);
         self.feedback_sample = fb;
 
         output
@@ -210,6 +251,7 @@ impl OilCanDelay {
         self.delay.clear();
         self.splatter.clear();
         self.lp.reset();
+        self.murk_hp.reset();
         self.decay_tilt_eq.reset();
         self.feedback_sample = 0.0;
         self.smoother.reset(0.0);
@@ -257,6 +299,7 @@ mod tests {
         d.feedback = 0.0;
         d.wobble = 0.0;
         d.heads = OilCanHeads::Both;
+        d.tone_hz = 12000.0; // open the murk so the tap timing is clean
         d.update(SR);
 
         let mut hits = Vec::new();
@@ -314,6 +357,7 @@ mod tests {
             d.wobble = 0.0;
             d.grit = 0.0;
             d.heads = heads;
+            d.tone_hz = 12000.0; // open the murk so peak timing is clean
             d.update(SR);
             let mut out = vec![0.0f64; 96000];
             for (i, o) in out.iter_mut().enumerate() {
@@ -356,5 +400,66 @@ mod tests {
             let out = d.tick(input, 0);
             assert!(out.is_finite(), "NaN at {i}");
         }
+    }
+
+    #[test]
+    fn murk_bandpass_thins_lows_at_dark_end() {
+        // 90 Hz sits below both cutoffs. A plain lowpass at 350 Hz would
+        // pass it at ~unity; the murk bandpass must attenuate it.
+        let low_energy = |tone: f64| -> f64 {
+            let mut d = OilCanDelay::new();
+            d.time_ms = 300.0;
+            d.feedback = 0.0;
+            d.wobble = 0.0;
+            d.grit = 0.0;
+            d.tone_hz = tone;
+            d.update(SR);
+            (0..96000)
+                .map(|i| {
+                    let input =
+                        (core::f64::consts::TAU * 90.0 * i as f64 / SR).sin() * 0.5;
+                    let out = d.tick(input, 0);
+                    out * out
+                })
+                .sum()
+        };
+        let open = low_energy(2500.0);
+        let murk = low_energy(350.0);
+        assert!(
+            murk < open * 0.4,
+            "dark-end filter should be a low-thinned bandpass, not a plain LP: {murk} vs {open}"
+        );
+    }
+
+    #[test]
+    fn mod_rate_controls_the_wobble() {
+        let run = |rate: f64| -> Vec<f64> {
+            let mut d = OilCanDelay::new();
+            d.time_ms = 300.0;
+            d.feedback = 0.0;
+            d.wobble = 1.0;
+            d.grit = 0.0;
+            d.mod_rate = rate;
+            d.update(SR);
+            (0..48000)
+                .map(|i| {
+                    let input =
+                        (core::f64::consts::TAU * 220.0 * i as f64 / SR).sin() * 0.5;
+                    d.tick(input, 0)
+                })
+                .collect()
+        };
+        let slow = run(0.3);
+        let fast = run(2.5);
+        let ref_energy: f64 = slow.iter().map(|x| x * x).sum();
+        let diff: f64 = slow
+            .iter()
+            .zip(&fast)
+            .map(|(a, b)| (a - b) * (a - b))
+            .sum();
+        assert!(
+            diff > ref_energy * 0.01,
+            "Mod Speed should change the wobble: {diff} vs {ref_energy}"
+        );
     }
 }
