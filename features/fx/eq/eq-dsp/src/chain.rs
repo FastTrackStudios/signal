@@ -76,10 +76,22 @@ impl EqChain {
     /// Process interleaved stereo buffers through all bands.
     ///
     /// Each sample passes through all bands in series (left then right).
+    /// True when at least one band would touch the signal.
+    pub fn has_active_bands(&self) -> bool {
+        self.bands.iter().any(|b| !b.is_idle())
+    }
+
     pub fn process(&mut self, left: &mut [f64], right: &mut [f64]) {
         use crate::band::Placement;
+        // Idle chain: zero per-sample work.
+        if !self.has_active_bands() {
+            return;
+        }
         for i in 0..left.len().min(right.len()) {
             for band in &mut self.bands {
+                if band.is_idle() {
+                    continue;
+                }
                 match band.placement {
                     Placement::Stereo => {
                         left[i] = band.tick(left[i], 0);

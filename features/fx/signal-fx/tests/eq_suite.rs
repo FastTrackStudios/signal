@@ -208,3 +208,32 @@ fn transient_mode_null_and_stream_routing() {
         "steady-stream band should boost the held tone: {tone_boost:.1} dB"
     );
 }
+
+#[test]
+fn idle_eq_is_a_bit_exact_copy() {
+    // Nothing enabled: the block must take the copy path — output is
+    // BIT-exact, proving no DSP ran.
+    let mut eq = NativeEq::new(SR);
+    let input = sine(997.0, 0.37, 24_000);
+    let out = run(&mut eq, &input);
+    assert_eq!(out, input, "idle EQ must be a bit-exact passthrough");
+
+    // Toggle a feature on, then fully off again: back on the copy path.
+    let mut eq2 = NativeEq::new(SR);
+    eq2.set_named("b1_used", 1.0);
+    eq2.set_named("b1_on", 1.0);
+    eq2.set_named("b1_gain", 6.0);
+    eq2.set_named("transient_mode", 1.0);
+    eq2.set_named("b1_spectral", 1.0);
+    eq2.set_named("b1_dyn_range", -12.0);
+    // ...and off.
+    eq2.set_named("b1_used", 0.0);
+    eq2.set_named("transient_mode", 0.0);
+    eq2.set_named("b1_spectral", 0.0);
+    eq2.set_named("b1_dyn_range", 0.0);
+    let out2 = run(&mut eq2, &input);
+    assert_eq!(
+        out2, input,
+        "after disabling every feature the EQ must return to the copy path"
+    );
+}

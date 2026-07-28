@@ -166,6 +166,10 @@ impl Band {
     /// channel 0 so stereo pairs stay matched).
     #[inline]
     pub fn tick(&mut self, sample: f64, ch: usize) -> f64 {
+        // Fully-settled bypass: zero work (no ramp math, no cascade).
+        if !self.enabled && self.bypass_ramp == 0.0 {
+            return sample;
+        }
         if ch == 0 {
             // 5 ms at 48 kHz ≈ coefficient 0.004; sample-rate scaling
             // here would need plumbing — the click protection is what
@@ -204,6 +208,13 @@ impl Band {
     /// Force the bypass ramp fully open/closed (preset loads — no fade).
     pub fn snap_bypass(&mut self) {
         self.bypass_ramp = if self.enabled { 1.0 } else { 0.0 };
+    }
+
+    /// True when the band contributes nothing to the signal (disabled
+    /// and the bypass ramp fully settled) — the chain skips it.
+    #[inline]
+    pub fn is_idle(&self) -> bool {
+        !self.enabled && self.bypass_ramp == 0.0
     }
 
     /// Reset all section state to zero (ramp too — matches a fresh band).

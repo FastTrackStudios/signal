@@ -287,6 +287,10 @@ pub struct NativeEq {
     prepared: bool,
     scratch_l: Vec<f64>,
     scratch_r: Vec<f64>,
+    /// Transient-mode stream buffers (steady L/R) — the main scratch
+    /// carries the transient stream in place.
+    scratch_sl: Vec<f64>,
+    scratch_sr: Vec<f64>,
 }
 
 impl NativeEq {
@@ -345,6 +349,8 @@ impl NativeEq {
             prepared: false,
             scratch_l: Vec::new(),
             scratch_r: Vec::new(),
+            scratch_sl: Vec::new(),
+            scratch_sr: Vec::new(),
         }
     }
 
@@ -639,6 +645,8 @@ impl PluginInstance for NativeEq {
         }
         self.scratch_l = vec![0.0; block_size.max(1) as usize];
         self.scratch_r = vec![0.0; block_size.max(1) as usize];
+        self.scratch_sl = vec![0.0; block_size.max(1) as usize];
+        self.scratch_sr = vec![0.0; block_size.max(1) as usize];
         self.prepared = true;
         Ok(())
     }
@@ -656,6 +664,20 @@ impl PluginInstance for NativeEq {
         for &(id, value) in events.params {
             self.set(id, value);
         }
+        // Fully-idle block (no active bands, no dynamics, no spectral,
+        // no transient split, unity output): straight copy, zero DSP.
+        let any_dyn = self.dyn_active.iter().any(|&a| a);
+        if !self.transient_mode
+            && !any_dyn
+            && !self.spectral.has_regions()
+            && !self.eq.has_active_bands()
+            && self.output_gain_db.abs() < 1.0e-9
+        {
+            let n = in_l.len().min(out_l.len());
+            out_l[..n].copy_from_slice(&in_l[..n]);
+            out_r[..n].copy_from_slice(&in_r[..n]);
+            return Ok(());
+        }
         let eq = &mut self.eq;
         let eq_b = &mut self.eq_b;
         let splitter = &mut self.splitter;
@@ -667,6 +689,8 @@ impl PluginInstance for NativeEq {
         let tg = audiocore_dsp::db::db_to_linear(self.transient_gain_db);
         let sg = audiocore_dsp::db::db_to_linear(self.steady_gain_db);
         let out_gain = audiocore_dsp::db::db_to_linear(self.output_gain_db);
+        let scratch_sl = &mut self.scratch_sl;
+        let scratch_sr = &mut self.scratch_sr;
         process_f64_inplace(
             &mut self.scratch_l,
             &mut self.scratch_r,
@@ -676,31 +700,31 @@ impl PluginInstance for NativeEq {
             out_r,
             |l, r| {
                 if transient_mode {
-                    // Split → per-stream chains → recombine. The
-                    // complementary split keeps flat settings a null.
-                    for i in 0..l.len() {
+                    // Split the whole block, run each stream's chain
+                    // block-wise (l/r become the transient stream, the
+                    // steady stream rides the dedicated scratch), then
+                    // recombine. Complementary split keeps flat
+                    // settings a null.
+                    let n = l.len();
+                    for i in 0..n {
                         let mask = splitter.tick_mask(0.5 * (l[i] + r[i]));
-                        let (mut tl, mut tr) = (l[i] * mask, r[i] * mask);
-                        let (mut sl, mut sr) = (l[i] - tl, r[i] - tr);
-                        {
-                            let (a, b) = (&mut tl, &mut tr);
-                            let mut la = [*a];
-                            let mut ra = [*b];
-                            eq.process(&mut la, &mut ra);
-                            *a = la[0];
-                            *b = ra[0];
-                        }
-                        {
-                            let mut la = [sl];
-                            let mut ra = [sr];
-                            eq_b.process(&mut la, &mut ra);
-                            sl = la[0];
-                            sr = ra[0];
-                        }
+                        let tl = l[i] * mask;
+                        let tr = r[i] * mask;
+                        scratch_sl[i] = l[i] - tl;
+                        scratch_sr[i] = r[i] - tr;
+                        l[i] = tl;
+                        r[i] = tr;
+                    }
+                    eq.process(l, r);
+                    eq_b.process(&mut scratch_sl[..n], &mut scratch_sr[..n]);
+                    for i in 0..n {
                         let (ol, or) = match split_solo {
-                            1 => (tl * tg, tr * tg),
-                            2 => (sl * sg, sr * sg),
-                            _ => (tl * tg + sl * sg, tr * tg + sr * sg),
+                            1 => (l[i] * tg, r[i] * tg),
+                            2 => (scratch_sl[i] * sg, scratch_sr[i] * sg),
+                            _ => (
+                                l[i] * tg + scratch_sl[i] * sg,
+                                r[i] * tg + scratch_sr[i] * sg,
+                            ),
                         };
                         l[i] = ol;
                         r[i] = or;
