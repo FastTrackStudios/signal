@@ -39,6 +39,9 @@ struct SpringUnit {
     delay_samples: usize,
     /// Lowpass in feedback path (frequency-dependent decay).
     damp: Lp1,
+    /// Chirp EQ: low-mid resonance (~183 Hz, BW ~146 Hz per the
+    /// DAFx-11 measured model) emphasizing the chirp body.
+    chirp_eq: audiocore_dsp::biquad::Biquad,
     /// DC blocker to prevent DC buildup in feedback loop.
     dc_blocker: DcBlocker,
     /// Feedback loop gain.
@@ -70,6 +73,13 @@ impl SpringUnit {
 
         let mut damp = Lp1::new();
         damp.set_freq(damp_freq, sample_rate);
+        let mut chirp_eq = audiocore_dsp::biquad::Biquad::new();
+        chirp_eq.set(
+            audiocore_dsp::biquad::FilterType::Peak { gain_db: 4.5 },
+            183.0,
+            183.0 / 146.0, // Q from the measured bandwidth
+            sample_rate,
+        );
 
         Self {
             dispersion: SpectralDelay::new(num_sections, stretch, ap_coeff),
@@ -78,6 +88,7 @@ impl SpringUnit {
             damp,
             dc_blocker: DcBlocker::with_cutoff(38.0, 48000.0), // matches the old 0.995 pole
             loop_gain: 0.8,
+            chirp_eq,
             mod_phase: 0.0,
             mod_rate: mod_rate / sample_rate,
             mod_depth,
@@ -86,6 +97,7 @@ impl SpringUnit {
     }
 
     fn reset(&mut self) {
+        self.chirp_eq.reset();
         self.dispersion.reset();
         self.delay.clear();
         self.damp.reset();
@@ -126,11 +138,15 @@ impl SpringUnit {
         // DC blocker prevents runaway DC in the loop
         let clean = self.dc_blocker.tick(damped);
 
-        // Store feedback for next sample
-        self.feedback = clean * self.loop_gain;
+        // Store feedback for next sample. NEGATIVE loop gain: measured
+        // spring models (Gamper/Parker/Välimäki DAFx-11, g_lf ≈ −0.8)
+        // fit alternating-polarity echoes — the flip each pass is part
+        // of the "drip" character.
+        self.feedback = clean * -self.loop_gain;
 
-        // Output is the dispersed signal
-        dispersed
+        // Output: dispersed signal through the chirp EQ (low-mid
+        // resonance emphasizing the chirp body).
+        self.chirp_eq.tick(dispersed, 0)
     }
 }
 
