@@ -7,6 +7,7 @@ description = "EQ filter design and biquad-cascade DSP for FTS-EQ"
 
 [dependencies]
 audiocore-dsp = { workspace = true }
+realfft = { workspace = true }
 
 [dev-dependencies]
 

@@ -15,6 +15,8 @@
 
 #![no_std]
 
+pub mod preamp;
+
 /// Saturation transfer-curve family.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum SaturationCurve {
@@ -140,7 +142,7 @@ fn clamp01(x: f32) -> f32 {
 /// tanh via the padé-ish rational approximation used across the fx DSP cores —
 /// keeps the crate `no_std` (no libm dependency) and branch-free.
 #[inline]
-fn tanh_approx(x: f32) -> f32 {
+pub(crate) fn tanh_approx(x: f32) -> f32 {
     let x = x.clamp(-3.0, 3.0);
     let x2 = x * x;
     x * (27.0 + x2) / (27.0 + 9.0 * x2)

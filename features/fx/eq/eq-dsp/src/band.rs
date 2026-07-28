@@ -15,6 +15,31 @@ pub const MAX_ORDER: usize = 16;
 const MAX_SECTIONS: usize = MAX_ORDER / 2 + 1; // +1 for odd-order 1st-order section
 
 /// A single EQ band with variable order, using the pro ZPK design pipeline.
+/// Which part of the stereo image a band processes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[repr(u8)]
+pub enum Placement {
+    /// Both channels (default).
+    #[default]
+    Stereo = 0,
+    Left = 1,
+    Right = 2,
+    Mid = 3,
+    Side = 4,
+}
+
+impl Placement {
+    pub fn from_index(idx: u32) -> Placement {
+        match idx {
+            1 => Placement::Left,
+            2 => Placement::Right,
+            3 => Placement::Mid,
+            4 => Placement::Side,
+            _ => Placement::Stereo,
+        }
+    }
+}
+
 pub struct Band {
     pub filter_type: FilterType,
     pub freq_hz: f64,
@@ -22,9 +47,14 @@ pub struct Band {
     pub q: f64,
     pub order: usize,
     pub enabled: bool,
+    /// Stereo placement: which part of the image this band filters.
+    pub placement: Placement,
     /// Gain-Q interaction amount (0.0 = off, 1.0 = full). Only affects Peak.
     /// From Pro-Q 4 binary: offset 0x8c in band parameter object.
     pub gain_q_interaction: f64,
+    /// Enable/bypass crossfade position (0 = dry, 1 = wet) — ~5 ms
+    /// ramp so toggling a band never clicks.
+    bypass_ramp: f64,
 
     sections: [Tdf2Section; MAX_SECTIONS],
     df1_sections: [Df1Section; MAX_SECTIONS],
@@ -44,6 +74,8 @@ impl Band {
             order: 2,
             enabled: true,
             gain_q_interaction: 0.0,
+            placement: Placement::default(),
+            bypass_ramp: 0.0,
             sections: std::array::from_fn(|_| Tdf2Section::new()),
             df1_sections: std::array::from_fn(|_| Df1Section::new()),
             use_df1: false,
@@ -129,12 +161,37 @@ impl Band {
     }
 
     /// Process a single sample through all cascaded sections.
+    ///
+    /// Enable/disable is crossfaded over ~5 ms (the ramp advances on
+    /// channel 0 so stereo pairs stay matched).
     #[inline]
     pub fn tick(&mut self, sample: f64, ch: usize) -> f64 {
-        if !self.enabled {
+        // Fully-settled bypass: zero work (no ramp math, no cascade).
+        if !self.enabled && self.bypass_ramp == 0.0 {
             return sample;
         }
+        if ch == 0 {
+            // 5 ms at 48 kHz ≈ coefficient 0.004; sample-rate scaling
+            // here would need plumbing — the click protection is what
+            // matters, not the exact ms.
+            const RAMP_COEFF: f64 = 0.004;
+            let target = if self.enabled { 1.0 } else { 0.0 };
+            self.bypass_ramp += (target - self.bypass_ramp) * RAMP_COEFF;
+            if !self.enabled && self.bypass_ramp < 1.0e-4 {
+                self.bypass_ramp = 0.0;
+            }
+        }
+        if self.bypass_ramp <= 0.0 {
+            return sample;
+        }
+        let dry = sample;
+        let wet = self.tick_inner(sample, ch);
+        dry + self.bypass_ramp * (wet - dry)
+    }
 
+    /// The raw cascade (no bypass crossfade).
+    #[inline]
+    fn tick_inner(&mut self, sample: f64, ch: usize) -> f64 {
         let mut out = sample;
         if self.use_df1 {
             for i in 0..self.num_sections {
@@ -148,7 +205,19 @@ impl Band {
         out * self.output_gain
     }
 
-    /// Reset all section state to zero.
+    /// Force the bypass ramp fully open/closed (preset loads — no fade).
+    pub fn snap_bypass(&mut self) {
+        self.bypass_ramp = if self.enabled { 1.0 } else { 0.0 };
+    }
+
+    /// True when the band contributes nothing to the signal (disabled
+    /// and the bypass ramp fully settled) — the chain skips it.
+    #[inline]
+    pub fn is_idle(&self) -> bool {
+        !self.enabled && self.bypass_ramp == 0.0
+    }
+
+    /// Reset all section state to zero (ramp too — matches a fresh band).
     pub fn reset(&mut self) {
         for s in &mut self.sections {
             s.reset();
@@ -156,6 +225,7 @@ impl Band {
         for s in &mut self.df1_sections {
             s.reset();
         }
+        self.bypass_ramp = 0.0;
     }
 }
 

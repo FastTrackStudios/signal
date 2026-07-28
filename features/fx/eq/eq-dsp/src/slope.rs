@@ -88,6 +88,63 @@ impl Slope {
         })
     }
 
+    /// CANONICAL slope param index (0..=10, Brickwall = 10) — the ONE
+    /// table every param surface uses (plugin, signal-fx, rig, tests).
+    pub fn param_index(self) -> usize {
+        match self {
+            Slope::Db0 => 0,
+            Slope::Db6 => 1,
+            Slope::Db12 => 2,
+            Slope::Db18 => 3,
+            Slope::Db24 => 4,
+            Slope::Db30 => 5,
+            Slope::Db36 => 6,
+            Slope::Db48 => 7,
+            Slope::Db72 => 8,
+            Slope::Db96 => 9,
+            Slope::Brickwall => 10,
+        }
+    }
+
+    /// Canonical inverse of [`Self::param_index`]. Out-of-range clamps
+    /// to Db12 (the historical default order).
+    pub fn from_param_index(idx: usize) -> Slope {
+        match idx {
+            0 => Slope::Db0,
+            1 => Slope::Db6,
+            2 => Slope::Db12,
+            3 => Slope::Db18,
+            4 => Slope::Db24,
+            5 => Slope::Db30,
+            6 => Slope::Db36,
+            7 => Slope::Db48,
+            8 => Slope::Db72,
+            9 => Slope::Db96,
+            10 => Slope::Brickwall,
+            _ => Slope::Db12,
+        }
+    }
+
+    /// CANONICAL filter order (pole count) for this slope — replaces
+    /// the three divergent tables that lived in the plugin shell and
+    /// the conformance tests. Brickwall currently maps to the maximum
+    /// IIR order (a dedicated brickwall path is tracked in issue #73).
+    pub fn order(self) -> usize {
+        match self {
+            Slope::Db0 => 0,
+            Slope::Db6 => 1,
+            Slope::Db12 => 2,
+            Slope::Db18 => 3,
+            Slope::Db24 => 4,
+            Slope::Db30 => 5,
+            Slope::Db36 => 6,
+            Slope::Db48 => 8,
+            Slope::Db72 => 12,
+            Slope::Db96 => 16,
+            Slope::Brickwall => 16,
+        }
+    }
+
     /// Number of biquad sections Pro-Q uses for this slope.
     /// Empirically captured via probe (see capture_grid.py + RE).
     pub fn section_count(self) -> usize {
@@ -104,21 +161,97 @@ impl Slope {
 }
 
 /// Pro-Q UI filter shape — mirrors the shape button options.
+///
+/// The variant ORDER here is the **canonical shape index** used by
+/// every param surface (signal-fx `b{i}_shape`, the rig patches, the
+/// web UI's `EqBandShape::all()`, and the plugin shell). It is
+/// APPEND-ONLY: never reorder, only add at the end. The last three
+/// variants expose the previously-unreachable DSP designs.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
 pub enum FilterShape {
-    Bell,
-    LowShelf,
-    LowCut,
-    HighShelf,
-    HighCut,
-    Notch,
-    BandPass,
-    TiltShelf,
-    FlatTilt,
-    AllPass,
+    Bell = 0,
+    LowShelf = 1,
+    HighShelf = 2,
+    LowCut = 3,
+    HighCut = 4,
+    Notch = 5,
+    BandPass = 6,
+    TiltShelf = 7,
+    FlatTilt = 8,
+    AllPass = 9,
+    /// Band shelf (Pro-Q type 10) — previously design-only.
+    BandShelf = 10,
+    /// Alternative shelf cascade (Pro-Q type 12) — previously design-only.
+    ShelfAlt = 11,
+    /// Bandpass variant (Pro-Q type 5) — previously design-only.
+    BandPassVariant = 12,
 }
 
 impl FilterShape {
+    /// Canonical shape index (the wire/param value).
+    pub fn canonical_index(self) -> u32 {
+        self as u32
+    }
+
+    /// Canonical inverse. Out-of-range falls back to Bell.
+    pub fn from_canonical_index(idx: u32) -> FilterShape {
+        match idx {
+            0 => FilterShape::Bell,
+            1 => FilterShape::LowShelf,
+            2 => FilterShape::HighShelf,
+            3 => FilterShape::LowCut,
+            4 => FilterShape::HighCut,
+            5 => FilterShape::Notch,
+            6 => FilterShape::BandPass,
+            7 => FilterShape::TiltShelf,
+            8 => FilterShape::FlatTilt,
+            9 => FilterShape::AllPass,
+            10 => FilterShape::BandShelf,
+            11 => FilterShape::ShelfAlt,
+            12 => FilterShape::BandPassVariant,
+            _ => FilterShape::Bell,
+        }
+    }
+
+    /// The DSP design entry point for this UI shape.
+    pub fn to_filter_type(self) -> crate::design::FilterType {
+        use crate::design::FilterType;
+        match self {
+            FilterShape::Bell => FilterType::Peak,
+            FilterShape::LowShelf => FilterType::LowShelf,
+            FilterShape::HighShelf => FilterType::HighShelf,
+            FilterShape::LowCut => FilterType::Highpass,
+            FilterShape::HighCut => FilterType::Lowpass,
+            FilterShape::Notch => FilterType::Notch,
+            FilterShape::BandPass => FilterType::Bandpass,
+            FilterShape::TiltShelf => FilterType::TiltShelf,
+            FilterShape::FlatTilt => FilterType::FlatTilt,
+            FilterShape::AllPass => FilterType::Allpass,
+            FilterShape::BandShelf => FilterType::BandShelf,
+            FilterShape::ShelfAlt => FilterType::ShelfAlt,
+            FilterShape::BandPassVariant => FilterType::BandPassVariant,
+        }
+    }
+
+    /// Effective filter order for a canonical slope param index,
+    /// clamped to this shape's minimum slope. The single entry point
+    /// for every param surface. Returns 0 for a 0 dB/oct cut — that
+    /// slope means BYPASS on Low/High Cut and Band Pass (Pro-Q
+    /// behavior); callers disable the band.
+    pub fn effective_order(self, slope_param_index: usize) -> usize {
+        let slope = Slope::from_param_index(slope_param_index);
+        let min = self.min_slope();
+        let slope = if slope.param_index() < min.param_index() {
+            min
+        } else if slope == Slope::Brickwall && !self.supports_brickwall() {
+            Slope::Db96
+        } else {
+            slope
+        };
+        slope.order()
+    }
+
     /// Minimum dB/oct slope this filter shape allows in Pro-Q UI.
     pub fn min_slope(self) -> Slope {
         match self {
@@ -128,7 +261,10 @@ impl FilterShape {
             | FilterShape::HighShelf
             | FilterShape::TiltShelf
             | FilterShape::FlatTilt
-            | FilterShape::AllPass => Slope::Db6,
+            | FilterShape::AllPass
+            | FilterShape::BandShelf
+            | FilterShape::ShelfAlt
+            | FilterShape::BandPassVariant => Slope::Db6,
         }
     }
 
@@ -146,6 +282,8 @@ impl FilterShape {
                 | FilterShape::HighShelf
                 | FilterShape::TiltShelf
                 | FilterShape::FlatTilt
+                | FilterShape::BandShelf
+                | FilterShape::ShelfAlt
         )
     }
 
@@ -162,6 +300,9 @@ impl FilterShape {
             FilterShape::TiltShelf => 7,
             FilterShape::FlatTilt => 8,
             FilterShape::AllPass => 11,
+            FilterShape::BandShelf => 10,
+            FilterShape::ShelfAlt => 12,
+            FilterShape::BandPassVariant => 5,
         }
     }
 }
@@ -183,6 +324,27 @@ mod tests {
         assert_eq!(FilterShape::LowCut.min_slope(), Slope::Db0);
         assert_eq!(FilterShape::Bell.min_slope(), Slope::Db12);
         assert_eq!(FilterShape::LowShelf.min_slope(), Slope::Db6);
+    }
+
+    #[test]
+    fn canonical_index_round_trips() {
+        for i in 0..13u32 {
+            let s = FilterShape::from_canonical_index(i);
+            assert_eq!(s.canonical_index(), i);
+        }
+    }
+
+    #[test]
+    fn effective_order_clamps_to_shape_minimum() {
+        // Bell at slope 0/1 clamps up to Db12 → order 2.
+        assert_eq!(FilterShape::Bell.effective_order(0), 2);
+        assert_eq!(FilterShape::Bell.effective_order(1), 2);
+        // Cuts honor low slopes; 0 dB/oct on a cut = bypass (order 0).
+        assert_eq!(FilterShape::LowCut.effective_order(0), 0);
+        assert_eq!(FilterShape::LowCut.effective_order(1), 1);
+        // Brickwall only for cuts; others cap at Db96.
+        assert_eq!(FilterShape::Bell.effective_order(10), 16);
+        assert_eq!(FilterShape::LowCut.effective_order(10), 16);
     }
 
     #[test]

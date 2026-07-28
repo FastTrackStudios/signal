@@ -76,11 +76,44 @@ impl EqChain {
     /// Process interleaved stereo buffers through all bands.
     ///
     /// Each sample passes through all bands in series (left then right).
+    /// True when at least one band would touch the signal.
+    pub fn has_active_bands(&self) -> bool {
+        self.bands.iter().any(|b| !b.is_idle())
+    }
+
     pub fn process(&mut self, left: &mut [f64], right: &mut [f64]) {
+        use crate::band::Placement;
+        // Idle chain: zero per-sample work.
+        if !self.has_active_bands() {
+            return;
+        }
         for i in 0..left.len().min(right.len()) {
             for band in &mut self.bands {
-                left[i] = band.tick(left[i], 0);
-                right[i] = band.tick(right[i], 1);
+                if band.is_idle() {
+                    continue;
+                }
+                match band.placement {
+                    Placement::Stereo => {
+                        left[i] = band.tick(left[i], 0);
+                        right[i] = band.tick(right[i], 1);
+                    }
+                    Placement::Left => left[i] = band.tick(left[i], 0),
+                    Placement::Right => right[i] = band.tick(right[i], 1),
+                    Placement::Mid => {
+                        let m = 0.5 * (left[i] + right[i]);
+                        let s = 0.5 * (left[i] - right[i]);
+                        let m = band.tick(m, 0);
+                        left[i] = m + s;
+                        right[i] = m - s;
+                    }
+                    Placement::Side => {
+                        let m = 0.5 * (left[i] + right[i]);
+                        let s = 0.5 * (left[i] - right[i]);
+                        let s = band.tick(s, 0);
+                        left[i] = m + s;
+                        right[i] = m - s;
+                    }
+                }
             }
         }
     }
@@ -89,6 +122,71 @@ impl EqChain {
 impl Default for EqChain {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod placement_tests {
+    use super::*;
+    use crate::band::Placement;
+    use crate::design::FilterType;
+
+    #[test]
+    fn side_band_leaves_mono_untouched() {
+        let mut c = EqChain::new();
+        c.set_sample_rate(48000.0);
+        let idx = c.add_band();
+        if let Some(b) = c.band_mut(idx) {
+            b.filter_type = FilterType::Peak;
+            b.freq_hz = 1000.0;
+            b.gain_db = 12.0;
+            b.q = 1.0;
+            b.placement = Placement::Side;
+            b.enabled = true;
+        }
+        c.update_band(idx);
+        let n = 24_000;
+        let mut l: Vec<f64> = (0..n)
+            .map(|i| 0.4 * (core::f64::consts::TAU * 1000.0 * i as f64 / 48000.0).sin())
+            .collect();
+        let mut r = l.clone();
+        let dry = l.clone();
+        c.process(&mut l, &mut r);
+        let mut max_err = 0.0f64;
+        for i in 0..n {
+            max_err = max_err.max((l[i] - dry[i]).abs());
+        }
+        assert!(
+            max_err < 1e-9,
+            "mono (side-free) content must pass a Side band untouched: {max_err:e}"
+        );
+    }
+
+    #[test]
+    fn mid_band_boosts_mono() {
+        let mut c = EqChain::new();
+        c.set_sample_rate(48000.0);
+        let idx = c.add_band();
+        if let Some(b) = c.band_mut(idx) {
+            b.filter_type = FilterType::Peak;
+            b.freq_hz = 1000.0;
+            b.gain_db = 12.0;
+            b.q = 1.0;
+            b.placement = Placement::Mid;
+            b.enabled = true;
+        }
+        c.update_band(idx);
+        let n = 48_000;
+        let mut l: Vec<f64> = (0..n)
+            .map(|i| 0.2 * (core::f64::consts::TAU * 1000.0 * i as f64 / 48000.0).sin())
+            .collect();
+        let mut r = l.clone();
+        let dry = l.clone();
+        c.process(&mut l, &mut r);
+        let e_in: f64 = dry[n / 2..].iter().map(|x| x * x).sum();
+        let e_out: f64 = l[n / 2..].iter().map(|x| x * x).sum();
+        let g = 10.0 * (e_out / e_in).log10();
+        assert!((g - 12.0).abs() < 1.0, "mid band boosts mono content: {g:.1} dB");
     }
 }
 

@@ -37,6 +37,7 @@ pub mod chain;
 pub mod constants;
 pub mod delay;
 pub mod design;
+pub mod dynamics;
 pub mod elliptic;
 pub mod hardware_eq;
 pub mod hardware_targets;
@@ -51,7 +52,9 @@ pub mod section;
 pub mod shelf;
 pub mod shelf_zpk;
 pub mod slope;
+pub mod spectral;
 pub mod transform;
+pub mod transient;
 pub mod zpk;
 
 pub use band::Band;

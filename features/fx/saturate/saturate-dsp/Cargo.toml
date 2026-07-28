@@ -6,6 +6,10 @@ authors.workspace = true
 license.workspace = true
 description = "saturate-dsp — saturation engine: tanh/tape/tube waveshapers with drive, tone tilt, and loudness-compensated makeup."
 
+[features]
+# Display/metering probes (transfer curve + harmonic spectrum) — std trig.
+analysis = []
+
 [dependencies]
 
 [dev-dependencies]

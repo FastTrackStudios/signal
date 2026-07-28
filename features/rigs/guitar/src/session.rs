@@ -1004,18 +1004,13 @@ fn param_specs(bt: BlockType) -> Vec<(String, f32, f32, f32)> {
         t.iter().map(|(n, a, b, c)| (n.to_string(), *a, *b, *c)).collect()
     }
     match bt {
-        // The full FTS-EQ band set — one source of truth with the DSP.
-        BlockType::Eq => (0..signal_fx::EQ_BANDS * signal_fx::EQ_FIELDS)
-            .map(|i| {
-                let (band, field) = (i / signal_fx::EQ_FIELDS, i % signal_fx::EQ_FIELDS);
-                let (min, max, default) = match field {
-                    0 | 1 => (0.0, 1.0, 0.0),
-                    2 => (10.0, 30000.0, 1000.0),
-                    3 => (-30.0, 30.0, 0.0),
-                    4 => (0.025, 40.0, 0.707),
-                    _ => (0.0, 9.0, 0.0),
-                };
-                (signal_fx::eq_param_name(band, field), min, max, default)
+        // The full FTS-EQ param surface — one source of truth with the
+        // DSP (bands + slope + dynamics + masters, from eq_param_range).
+        BlockType::Eq => (0..signal_fx::EQ_PARAM_COUNT)
+            .filter_map(|id| {
+                let name = signal_fx::eq_param_name_of(id)?;
+                let (min, max, default) = signal_fx::eq_param_range(id);
+                Some((name, min as f32, max as f32, default as f32))
             })
             .collect(),
         BlockType::Compressor => owned(&[

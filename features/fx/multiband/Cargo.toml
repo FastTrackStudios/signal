@@ -1,0 +1,9 @@
+[package]
+name = "multiband-dsp"
+version.workspace = true
+edition = "2021"          # kept on 2021 — matches the fx tree
+license.workspace = true
+authors.workspace = true
+description = "Reusable multiband splitter core — LR4 crossovers with phase-matched flat sum, for making any FTS effect multiband"
+
+[dependencies]
