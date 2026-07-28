@@ -187,6 +187,17 @@ fn render_source_config(source: &ModulationSource) -> Element {
                 span { "Depth: {(cfg.depth * 100.0) as i32}%" }
             }
         },
+        ModulationSource::Pattern(cfg) => rsx! {
+            div { class: "flex items-center gap-3 text-[10px] text-zinc-500",
+                span { "{cfg.points.len()} points" }
+                span { "Depth: {(cfg.depth * 100.0) as i32}%" }
+                if cfg.tempo_sync {
+                    span { class: "px-1 rounded bg-zinc-800 text-zinc-400",
+                        "Sync: {cfg.sync_division.map(|d| d.display_name()).unwrap_or(\"1/4\")}"
+                    }
+                }
+            }
+        },
     }
 }
 
@@ -200,6 +211,7 @@ fn source_icon(source: &ModulationSource) -> &'static str {
         ModulationSource::Macro { .. } => "\u{25C9}",  // ◉ macro knob
         ModulationSource::Follower(_) => "\u{2261}",   // ≡ audio level
         ModulationSource::Random(_) => "\u{2684}",     // ⚄ die
+        ModulationSource::Pattern(_) => "\u{223C}",    // ∼ drawn curve
     }
 }
 
@@ -213,5 +225,6 @@ fn source_color(source: &ModulationSource) -> &'static str {
         ModulationSource::Macro { .. } => "#EAB308",  // yellow
         ModulationSource::Follower(_) => "#EC4899",   // pink
         ModulationSource::Random(_) => "#14B8A6",     // teal
+        ModulationSource::Pattern(_) => "#7DD3FC",     // sky
     }
 }

@@ -36,6 +36,7 @@ pub use parameter::{BlockParameter, ParameterValue};
 pub use response::ResponseCurve;
 pub use routing::{ModulationRoute, ModulationRouteSet};
 pub use sources::{
+    PatternConfig, PatternPoint,
     EnvelopeConfig, EnvelopeMode, FollowerConfig, FollowerInput, LfoConfig, LfoWaveform,
     ModulationSource, RandomConfig, RetriggerMode, TempoDiv,
 };

@@ -1,0 +1,9 @@
+[package]
+name = "pattern-ui"
+version.workspace = true
+edition = "2021"          # kept on 2021 — matches the fx tree
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+fts-modulation = { workspace = true }
