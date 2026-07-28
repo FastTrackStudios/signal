@@ -15,6 +15,7 @@ use crate::algorithms;
 use crate::ir::engine::{ProcessedIr, ReshapeJob};
 use crate::ir::prepared::PreparedIrPair;
 use audiocore_dsp::envelope::EnvelopeFollower;
+use audiocore_dsp::mseg::MsegLane;
 use audiocore_dsp::smoothing::ParamSmoother;
 
 use crate::primitives::saturation::Saturator;
@@ -238,6 +239,15 @@ pub struct ReverbChain {
     /// algorithms). `None` = drop inline.
     ir_trash_tx: Option<Sender<crate::ir::IrTrash>>,
 
+    /// MSEG pattern lanes (gain-domain rhythmic modulation): `send`
+    /// gates the signal INTO the algorithm, `wet` gates the reverb
+    /// output. A pattern point flagged `clear_tails` hard-resets the
+    /// algorithm as it is crossed. Tempo for synced lanes comes from
+    /// `tempo_bpm`.
+    send_lane: Option<MsegLane>,
+    wet_lane: Option<MsegLane>,
+    pub tempo_bpm: Option<f64>,
+
     /// Voice value last applied to the variant pairing (Plate/Spring),
     /// so an explicit `set_variant` isn't clobbered on every
     /// `update_params`.
@@ -371,6 +381,9 @@ impl ReverbChain {
             prepared_ir_rx: None,
             reshape_tx: None,
             ir_trash_tx: None,
+            send_lane: None,
+            wet_lane: None,
+            tempo_bpm: None,
             applied_voice: ReverbVoice::default(),
             mid_eq: Biquad::new(),
             swell_env: {
@@ -397,6 +410,24 @@ impl ReverbChain {
     /// glitch-free runtime IR changes.
     pub fn set_prepared_ir_receiver(&mut self, rx: Receiver<PreparedIrPair>) {
         self.prepared_ir_rx = Some(rx);
+    }
+
+    /// Install (or clear) the send-pattern lane: rhythmically gates
+    /// the signal feeding the algorithm (pumping/gated-input reverb).
+    pub fn set_send_pattern(&mut self, lane: Option<MsegLane>) {
+        self.send_lane = lane;
+        if let Some(l) = &mut self.send_lane {
+            l.configure(self.sample_rate);
+        }
+    }
+
+    /// Install (or clear) the wet-pattern lane: rhythmically gates the
+    /// reverb output.
+    pub fn set_wet_pattern(&mut self, lane: Option<MsegLane>) {
+        self.wet_lane = lane;
+        if let Some(l) = &mut self.wet_lane {
+            l.configure(self.sample_rate);
+        }
     }
 
     /// Attach a disposal channel for buffers displaced by audio-thread
@@ -1080,7 +1111,7 @@ impl Processor for ReverbChain {
                 // Freeze: kill input to the algorithm but keep feedback
                 // running. Infinite keeps feeding input into the
                 // sustained wash instead.
-                let (alg_in_l, alg_in_r) = if self.freeze
+                let (mut alg_in_l, mut alg_in_r) = if self.freeze
                     && self.infinite_mode == InfiniteMode::Freeze
                 {
                     (0.0, 0.0)
@@ -1091,6 +1122,16 @@ impl Processor for ReverbChain {
                 } else {
                     (filt_l, filt_r)
                 };
+
+                // Send pattern: rhythmic gate on the algorithm input.
+                if let Some(lane) = &mut self.send_lane {
+                    let (g, clear) = lane.tick(self.sample_rate, self.tempo_bpm);
+                    alg_in_l *= g;
+                    alg_in_r *= g;
+                    if clear {
+                        self.algorithm.reset();
+                    }
+                }
 
                 // Algorithm
                 let (mut wet_l, mut wet_r) = self.algorithm.tick(alg_in_l, alg_in_r);
@@ -1136,6 +1177,16 @@ impl Processor for ReverbChain {
                     let (gl, gr) = audiocore_dsp::stereo::pan_equal_power(pan);
                     final_l *= gl;
                     final_r *= gr;
+                }
+
+                // Wet pattern: rhythmic gate on the reverb output.
+                if let Some(lane) = &mut self.wet_lane {
+                    let (g, clear) = lane.tick(self.sample_rate, self.tempo_bpm);
+                    final_l *= g;
+                    final_r *= g;
+                    if clear {
+                        self.algorithm.reset();
+                    }
                 }
 
                 // Wet tremolo (sine, wet path only). Phase advances only

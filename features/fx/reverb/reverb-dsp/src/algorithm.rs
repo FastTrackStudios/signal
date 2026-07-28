@@ -268,6 +268,11 @@ pub enum ImpulseDirection {
 /// (mix, which lives on the chain, is preserved).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ImpulseParams {
+    /// Decay EQ: low-band end gain in dB (−24..+12) at ~250 Hz —
+    /// negative shortens the low decay, positive stretches it.
+    pub decay_lo_db: f64,
+    /// Decay EQ: high-band end gain in dB (−24..+12) at ~4 kHz.
+    pub decay_hi_db: f64,
     /// Fraction of the IR that plays back (0.01..1.0).
     pub decay: f64,
     /// How `decay` < 1.0 shortens the tail.
@@ -287,6 +292,8 @@ pub struct ImpulseParams {
 impl Default for ImpulseParams {
     fn default() -> Self {
         Self {
+            decay_lo_db: 0.0,
+            decay_hi_db: 0.0,
             decay: 1.0,
             tail: ImpulseTail::Envelope,
             attack: 0.0,
@@ -300,13 +307,16 @@ impl Default for ImpulseParams {
 impl ImpulseParams {
     /// The shaping subset (everything except `feedback`) — equality on
     /// this tuple decides whether a re-preparation is needed.
-    pub fn shape_key(&self) -> (u64, ImpulseTail, u64, u64, ImpulseDirection) {
+    #[allow(clippy::type_complexity)]
+    pub fn shape_key(&self) -> (u64, ImpulseTail, u64, u64, ImpulseDirection, u64, u64) {
         (
             self.decay.clamp(0.01, 1.0).to_bits(),
             self.tail,
             self.attack.clamp(0.0, 1.0).to_bits(),
             self.stretch.clamp(0.25, 4.0).to_bits(),
             self.direction,
+            self.decay_lo_db.clamp(-24.0, 12.0).to_bits(),
+            self.decay_hi_db.clamp(-24.0, 12.0).to_bits(),
         )
     }
 
@@ -317,6 +327,8 @@ impl ImpulseParams {
             && self.attack <= 1e-9
             && (self.stretch - 1.0).abs() <= 1e-9
             && self.direction == ImpulseDirection::Forward
+            && self.decay_lo_db.abs() <= 0.05
+            && self.decay_hi_db.abs() <= 0.05
     }
 }
 

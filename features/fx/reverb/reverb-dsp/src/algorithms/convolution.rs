@@ -88,7 +88,21 @@ struct PartitionedConv {
 
     /// Frequency-domain partitions of the IR (one Vec<Complex> per partition).
     ir_partitions: Vec<Vec<Complex<f64>>>,
+    /// Outgoing IR during a hot-swap crossfade. Because the input
+    /// history is IR-independent, both partition sets convolve against
+    /// the SAME history — both tails are exact from the first fade
+    /// block, no warmup pass needed (unlike engines whose convolver
+    /// state couples to the IR).
+    old_partitions: Vec<Vec<Complex<f64>>>,
+    old_gain: f64,
+    /// Remaining / total crossfade blocks (equal-power in the
+    /// frequency domain — mixing spectra is linear, one IFFT).
+    xfade_pos: u32,
+    xfade_len: u32,
     /// Ring buffer of past input partitions in the frequency domain.
+    /// The ring modulus is the BUFFER length (not the partition
+    /// count), so partition sets of different lengths index it
+    /// consistently during crossfades.
     input_history: Vec<Vec<Complex<f64>>>,
     history_head: usize,
 
@@ -117,6 +131,10 @@ impl PartitionedConv {
             fft_fwd,
             fft_inv,
             ir_partitions: Vec::new(),
+            old_partitions: Vec::new(),
+            old_gain: 1.0,
+            xfade_pos: 0,
+            xfade_len: 0,
             input_history: Vec::new(),
             history_head: 0,
             input_block: [0.0; FFT_LEN],
@@ -151,23 +169,48 @@ impl PartitionedConv {
     /// indexes modulo the partition count, so surplus entries are
     /// simply never touched. Steady-state Impulse knob sweeps therefore
     /// allocate nothing once the largest stretch has been visited.
-    fn swap_prepared(&mut self, mut prepared: PreparedIr) -> PreparedIr {
-        core::mem::swap(&mut self.ir_partitions, &mut prepared.partitions);
-        self.gain = prepared.gain;
-        let n = self.ir_partitions.len();
-        if self.input_history.len() < n {
-            self.input_history.reserve(n - self.input_history.len());
-            while self.input_history.len() < n {
-                self.input_history
-                    .push(vec![Complex::new(0.0, 0.0); SPECTRUM_LEN]);
+    fn swap_prepared(&mut self, prepared: PreparedIr) -> PreparedIr {
+        self.swap_prepared_ext(prepared, false)
+    }
+
+    /// `crossfade` = knob-driven reshape sweeps (equal-power fade, both
+    /// tails exact against the shared history). Fresh IR LOADS pass
+    /// false: a new impulse is a musical event and replaces instantly.
+    fn swap_prepared_ext(&mut self, mut prepared: PreparedIr, crossfade: bool) -> PreparedIr {
+        let n = prepared.partitions.len();
+        if crossfade && n <= self.input_history.len() && !self.ir_partitions.is_empty() {
+            // Crossfade path: retire the current IR into old_partitions
+            // (whatever was there before goes back to the caller for
+            // disposal) and equal-power fade over ~80 ms. Both sets
+            // convolve the SAME input history, so the outgoing tail
+            // rings on and the incoming tail is exact immediately.
+            core::mem::swap(&mut self.old_partitions, &mut prepared.partitions);
+            core::mem::swap(&mut self.ir_partitions, &mut self.old_partitions);
+            self.old_gain = self.gain;
+            self.gain = prepared.gain;
+            self.xfade_len = ((0.08 * 48_000.0) / BLOCK as f64) as u32 + 1;
+            self.xfade_pos = self.xfade_len;
+        } else {
+            // Growth (or first load): the history ring must be resized,
+            // which invalidates ring continuity — instant swap.
+            core::mem::swap(&mut self.ir_partitions, &mut prepared.partitions);
+            self.gain = prepared.gain;
+            if self.input_history.len() < n {
+                self.input_history.reserve(n - self.input_history.len());
+                while self.input_history.len() < n {
+                    self.input_history
+                        .push(vec![Complex::new(0.0, 0.0); SPECTRUM_LEN]);
+                }
             }
+            // Zero so we don't multiply stale frequency-domain data
+            // against the new IR.
+            for h in &mut self.input_history {
+                h.fill(Complex::new(0.0, 0.0));
+            }
+            self.history_head = 0;
+            self.xfade_pos = 0;
+            self.old_partitions.clear();
         }
-        // Zero so we don't multiply stale frequency-domain data against
-        // the new IR.
-        for h in &mut self.input_history {
-            h.fill(Complex::new(0.0, 0.0));
-        }
-        self.history_head = 0;
         prepared
     }
 
@@ -193,6 +236,7 @@ impl PartitionedConv {
         self.history_head = 0;
         self.prev_input_tail.fill(0.0);
         self.output_block.fill(0.0);
+        self.xfade_pos = 0;
     }
 
     /// Process one block of size BLOCK in/out.
@@ -213,17 +257,42 @@ impl PartitionedConv {
             .process(&mut self.input_block.clone(), spec)
             .unwrap();
 
-        // Accumulate Σ_k IR[k] * Input[t - k].
+        // Accumulate Σ_k IR[k] * Input[t - k]. Ring modulus is the
+        // history length so differently-sized partition sets (during a
+        // crossfade) index consistently.
         for s in self.accumulator.iter_mut() {
             *s = Complex::new(0.0, 0.0);
         }
+        let hist_len = self.input_history.len();
         let n_parts = self.ir_partitions.len();
+        let (mut w_new, mut w_old) = (1.0f64, 0.0f64);
+        if self.xfade_pos > 0 {
+            // Equal-power fade, advanced per block.
+            let t = 1.0 - self.xfade_pos as f64 / self.xfade_len as f64;
+            let theta = t * core::f64::consts::FRAC_PI_2;
+            w_new = theta.sin();
+            w_old = theta.cos();
+            self.xfade_pos -= 1;
+        }
         for p in 0..n_parts {
-            let hist_idx = (self.history_head + n_parts - p) % n_parts;
+            let hist_idx = (self.history_head + hist_len - p) % hist_len;
             let ir_p = &self.ir_partitions[p];
             let in_p = &self.input_history[hist_idx];
+            let w = Complex::new(w_new * self.gain, 0.0);
             for k in 0..SPECTRUM_LEN {
-                self.accumulator[k] += ir_p[k] * in_p[k];
+                self.accumulator[k] += ir_p[k] * in_p[k] * w;
+            }
+        }
+        if w_old > 0.0 {
+            let n_old = self.old_partitions.len().min(hist_len);
+            let w = Complex::new(w_old * self.old_gain, 0.0);
+            for p in 0..n_old {
+                let hist_idx = (self.history_head + hist_len - p) % hist_len;
+                let ir_p = &self.old_partitions[p];
+                let in_p = &self.input_history[hist_idx];
+                for k in 0..SPECTRUM_LEN {
+                    self.accumulator[k] += ir_p[k] * in_p[k] * w;
+                }
             }
         }
 
@@ -234,13 +303,14 @@ impl PartitionedConv {
             .unwrap();
 
         // Take the second half — discard wrap-around (overlap-save).
-        let g = self.gain;
+        // Gains are already folded into the accumulation weights (the
+        // two IRs in a crossfade can carry different makeup gains).
         for i in 0..BLOCK {
-            self.output_block[i] = self.ifft_out[BLOCK + i] * g;
+            self.output_block[i] = self.ifft_out[BLOCK + i];
         }
 
-        // Advance ring buffer head.
-        self.history_head = (self.history_head + 1) % n_parts;
+        // Advance ring buffer head (modulo the history length).
+        self.history_head = (self.history_head + 1) % hist_len;
     }
 }
 
@@ -639,12 +709,12 @@ impl Convolution {
     fn swap_reshaped(&mut self, pair: PreparedIrPair, slot: IrSlot) {
         let (old_l, old_r) = match slot {
             IrSlot::A => (
-                self.conv_l.swap_prepared(pair.left),
-                self.conv_r.swap_prepared(pair.right),
+                self.conv_l.swap_prepared_ext(pair.left, true),
+                self.conv_r.swap_prepared_ext(pair.right, true),
             ),
             IrSlot::B => (
-                self.conv_l_b.swap_prepared(pair.left),
-                self.conv_r_b.swap_prepared(pair.right),
+                self.conv_l_b.swap_prepared_ext(pair.left, true),
+                self.conv_r_b.swap_prepared_ext(pair.right, true),
             ),
         };
         self.discard(IrTrash::Prepared(old_l));

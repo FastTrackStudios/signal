@@ -274,6 +274,7 @@ fn new_ir_load_resets_params() {
             stretch: 2.0,
             direction: ImpulseDirection::Reverse,
             feedback: 0.5,
+            ..Default::default()
         },
         true,
     );
@@ -335,4 +336,92 @@ fn chain_reshape_worker_applies() {
         }
     }
     assert!(applied, "reshaped IR never arrived / never truncated the tail");
+}
+
+#[test]
+fn reshape_swap_does_not_duck_the_tail() {
+    // Knob-driven reshapes hot-swap through an equal-power crossfade
+    // where BOTH partition sets convolve the shared input history — the
+    // ringing tail must survive the swap instead of collapsing to the
+    // zeroed-history restart of a fresh load.
+    let mut chain = ReverbChain::new();
+    chain.set_algorithm(AlgorithmType::Convolution);
+    chain.mix = 1.0;
+    chain.update(AudioConfig {
+        sample_rate: SR,
+        max_buffer_size: 512,
+    });
+    let ir = test_ir();
+    chain.load_convolution_ir(&ir, &ir);
+
+    let (reshaper, rx) = ImpulseReshaper::new();
+    chain.set_prepared_ir_receiver(rx);
+    chain.set_reshape_sender(reshaper.sender());
+
+    // Ring the tail with a burst, then go silent.
+    let mut l = vec![0.0f64; 4096];
+    let mut r = vec![0.0f64; 4096];
+    for i in 0..256 {
+        l[i] = (core::f64::consts::TAU * 500.0 * i as f64 / SR).sin() * 0.8;
+        r[i] = l[i];
+    }
+    chain.process(&mut l, &mut r);
+
+    // Trigger a mild reshape mid-tail and keep processing silence,
+    // tracking per-block energy through the swap window.
+    chain.impulse.stretch = 1.3;
+    chain.update_params();
+
+    let mut energies = Vec::new();
+    for _ in 0..40 {
+        std::thread::sleep(std::time::Duration::from_millis(10));
+        let mut l = vec![0.0f64; 512];
+        let mut r = vec![0.0f64; 512];
+        chain.process(&mut l, &mut r);
+        energies.push(energy(&l));
+    }
+
+    // The tail decays; assert no block collapses far below its
+    // predecessor (a zeroed-history swap drops several orders of
+    // magnitude within one block).
+    let mut worst_drop = 1.0f64;
+    for w in energies.windows(2) {
+        if w[0] > 1e-9 {
+            worst_drop = worst_drop.min(w[1] / w[0]);
+        }
+    }
+    assert!(
+        worst_drop > 0.05,
+        "tail should survive the reshape swap: worst block-to-block drop {worst_drop:e}"
+    );
+}
+
+#[test]
+fn decay_eq_shortens_band_decay() {
+    // decay_hi_db = −18: the high band must die off toward the tail
+    // while the head keeps its brightness (frequency-dependent decay,
+    // not a static EQ).
+    let flat = render(&ImpulseParams::default(), 0.6);
+    let dark = render(
+        &ImpulseParams {
+            decay_hi_db: -18.0,
+            ..Default::default()
+        },
+        0.6,
+    );
+    let hf = |x: &[f64], a: usize, b: usize| -> f64 {
+        x[a..b.min(x.len())]
+            .windows(2)
+            .map(|w| (w[1] - w[0]) * (w[1] - w[0]))
+            .sum()
+    };
+    let n = flat.len().min(dark.len());
+    let early_ratio = hf(&dark, 0, n / 6) / hf(&flat, 0, n / 6).max(1e-30);
+    let late_ratio =
+        hf(&dark, n * 2 / 3, n) / hf(&flat, n * 2 / 3, n).max(1e-30);
+    assert!(
+        late_ratio < early_ratio * 0.5,
+        "high band should decay faster, not just be quieter: \
+         early {early_ratio:.3} late {late_ratio:.3}"
+    );
 }

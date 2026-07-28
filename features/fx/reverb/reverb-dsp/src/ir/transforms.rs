@@ -46,6 +46,13 @@ pub struct IrTransforms {
     /// (0.01..1.0, 1.0 = whole file, no-op). Applied BEFORE `reverse`,
     /// so a reversed IR is the decay-shortened head played backwards.
     pub decay_frac: f64,
+    /// Frequency-dependent decay shaping ("Decay EQ"): per band
+    /// `(center_hz, end_gain_db)` — the band's gain ramps linearly in
+    /// dB from 0 at the IR head to `end_gain_db` at the tail, so
+    /// negative values shorten that band's decay and positive values
+    /// stretch it. Applied with time-varying low/high shelves
+    /// (band 0 = low shelf, band 1 = high shelf).
+    pub decay_eq: [(f64, f64); 2],
     /// How `decay_frac` < 1.0 shortens: `false` = decreasing ramp
     /// (Envelope), `true` = abrupt truncation (Gate).
     pub tail_gate: bool,
@@ -59,6 +66,7 @@ pub struct IrTransforms {
 impl Default for IrTransforms {
     fn default() -> Self {
         Self {
+            decay_eq: [(250.0, 0.0), (4000.0, 0.0)],
             trim_start_s: 0.0,
             trim_end_s: 0.0,
             reverse: false,
@@ -88,6 +96,7 @@ impl IrTransforms {
             attack_frac: p.attack.clamp(0.0, 1.0),
             stretch: p.stretch.clamp(0.25, 4.0),
             reverse: p.direction == crate::algorithm::ImpulseDirection::Reverse,
+            decay_eq: [(250.0, p.decay_lo_db), (4000.0, p.decay_hi_db)],
             ..Default::default()
         }
     }
@@ -112,6 +121,14 @@ impl IrTransforms {
         if df < 1.0 - 1e-9 {
             apply_decay_window(&mut l, df, self.tail_gate);
             apply_decay_window(&mut r, df, self.tail_gate);
+        }
+
+        // 1.7. Decay EQ: frequency-dependent decay via time-varying
+        // shelves — recomputed every ~10 ms chunk, dB ramping linearly
+        // to the band's end gain across the file.
+        if self.decay_eq.iter().any(|&(_, db)| db.abs() > 0.05) {
+            apply_decay_eq(&mut l, &self.decay_eq, sr);
+            apply_decay_eq(&mut r, &self.decay_eq, sr);
         }
 
         // 2. Reverse
@@ -255,6 +272,43 @@ fn prepend_zeros(buf: &[f64], n: usize) -> Vec<f64> {
     let mut out = vec![0.0; n];
     out.extend_from_slice(buf);
     out
+}
+
+
+/// Time-varying decay EQ: low shelf (band 0) + high shelf (band 1)
+/// whose gains ramp linearly in dB from 0 at the head to the band's
+/// `end_gain_db` at the tail. Coefficients refresh per ~10 ms chunk;
+/// one-pole shelf construction keeps it phase-benign for IR use.
+fn apply_decay_eq(x: &mut [f64], bands: &[(f64, f64); 2], sample_rate: f64) {
+    if x.is_empty() {
+        return;
+    }
+    let n = x.len();
+    let chunk = ((sample_rate * 0.01) as usize).max(64);
+    let (lo_f, lo_db) = bands[0];
+    let (hi_f, hi_db) = bands[1];
+    // One-pole crossover states.
+    let a_lo = (-core::f64::consts::TAU * lo_f.clamp(40.0, 2000.0) / sample_rate).exp();
+    let a_hi = (-core::f64::consts::TAU * hi_f.clamp(800.0, 12_000.0) / sample_rate).exp();
+    let mut lp_lo = 0.0;
+    let mut lp_hi = 0.0;
+    let mut i = 0;
+    while i < n {
+        let end = (i + chunk).min(n);
+        let t = i as f64 / n as f64;
+        let g_lo = 10.0f64.powf(lo_db * t / 20.0);
+        let g_hi = 10.0f64.powf(hi_db * t / 20.0);
+        for v in &mut x[i..end] {
+            let inp = *v;
+            lp_lo = (1.0 - a_lo) * inp + a_lo * lp_lo;
+            lp_hi = (1.0 - a_hi) * inp + a_hi * lp_hi;
+            let low = lp_lo;
+            let high = inp - lp_hi;
+            let mid = inp - low - high;
+            *v = low * g_lo + mid + high * g_hi;
+        }
+        i = end;
+    }
 }
 
 #[cfg(test)]

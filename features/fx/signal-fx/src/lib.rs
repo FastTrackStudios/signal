@@ -750,6 +750,12 @@ const REVERB_PARAMS: &[ParamSpec] = &[
     // 2 High).
     ParamSpec { id: 54, name: "cho_vowel", min: 0.0, max: 6.0, default: 1.0 },
     ParamSpec { id: 55, name: "cho_resonance", min: 0.0, max: 2.0, default: 0.0 },
+    // Impulse Decay EQ: frequency-dependent decay shaping (end-of-tail
+    // band gains in dB at ~250 Hz / ~4 kHz; negative shortens that
+    // band's decay, positive stretches it). FTS extra beyond the MX
+    // surface.
+    ParamSpec { id: 56, name: "imp_decay_lo", min: -24.0, max: 12.0, default: 0.0 },
+    ParamSpec { id: 57, name: "imp_decay_hi", min: -24.0, max: 12.0, default: 0.0 },
 ];
 
 /// Native Reverb block — wraps [`reverb::DualReverb`] (two full chains +
@@ -1039,6 +1045,14 @@ impl NativeReverb {
             55 => {
                 c.chorale.resonance =
                     reverb::ChoraleResonance::from_index(v.round().max(0.0) as usize);
+                c.update_params();
+            }
+            56 => {
+                c.impulse.decay_lo_db = v.clamp(-24.0, 12.0);
+                c.update_params();
+            }
+            57 => {
+                c.impulse.decay_hi_db = v.clamp(-24.0, 12.0);
                 c.update_params();
             }
             53 => {
