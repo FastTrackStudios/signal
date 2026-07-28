@@ -134,7 +134,7 @@ impl FtsTune {
     }
 
     /// Detect f0 over the current history and update the target shift.
-    fn update_shift(&mut self) {
+    fn update_shift(&mut self, block_len: usize) {
         let frame = self.detector.detect(&self.hist);
         let target_shift = match frame.f0_hz {
             Some(hz) => {
@@ -144,9 +144,13 @@ impl FtsTune {
             }
             None => 0.0, // unvoiced: relax toward no shift
         };
-        // One-pole slew toward the target (retune speed).
+        // One-pole slew toward the target (retune speed), settled by
+        // the block's REAL duration so the retune time is
+        // buffer-size-independent (the old per-sample coefficient
+        // applied once per block made retune ~8x faster at 64-sample
+        // buffers than at 512).
         let t = (self.params.retune_ms.value() as f64 / 1000.0).max(1e-4);
-        let coeff = (-1.0 / (t * self.sample_rate)).exp();
+        let coeff = (-(block_len as f64) / (t * self.sample_rate)).exp();
         self.shift_semitones = target_shift + coeff * (self.shift_semitones - target_shift);
     }
 }
@@ -240,7 +244,7 @@ impl Plugin for FtsTune {
         }
 
         // Detect + update the shift once per block, then drive the chain.
-        self.update_shift();
+        self.update_shift(frames);
         self.chain.semitones = self.shift_semitones;
         self.chain.mix = self.params.mix.value() as f64;
         context.set_latency_samples(self.chain.latency() as u32);

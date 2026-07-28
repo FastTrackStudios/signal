@@ -1613,10 +1613,11 @@ impl NativeTune {
         let detector = tune::detect::YinDetector::new(sr, tune::detect::YinConfig::default());
         let window = detector.window();
         let mut chain = pitch_dsp::chain::PitchChain::new();
-        // WSOLA: the only in-tree shifter that is cents-accurate at
-        // small ratios (PSOLA's epoch spacing is broken near 1.0 —
-        // measured 452 Hz -> 469 Hz at -0.47 st; see autotune-plan.md).
-        chain.algorithm = pitch_dsp::chain::Algorithm::Wsola;
+        // PSOLA (pitch-synchronous — the right engine for voice), now
+        // that its grain-boundary recentering is fixed: measured
+        // +0.1/+1.3/+2.2 cents at -0.47/-2/+2 st, equal or better than
+        // WSOLA (see autotune-plan.md status log).
+        chain.algorithm = pitch_dsp::chain::Algorithm::Psola;
         chain.semitones = 0.0;
         chain.mix = 1.0;
         Self {
