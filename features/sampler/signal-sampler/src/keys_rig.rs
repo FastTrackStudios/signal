@@ -562,6 +562,16 @@ impl KeysRig {
     pub fn cc(&self, controller: u8, value: u8) {
         self.dispatch(ev_cc(controller, value));
     }
+    /// Pitch wheel (14-bit raw, 8192 = center) — reaches every lane; synth
+    /// voices bend per their `bend_range`, sampled voices per the engine's,
+    /// percussion ignores it.
+    pub fn pitch_bend(&self, raw: u16) {
+        use midicore::{Channel, MidiEvent, PitchBend};
+        self.dispatch(MidiEvent::PitchBend {
+            channel: Channel::new(0),
+            bend: PitchBend::new(raw.min(16_383)),
+        });
+    }
     /// All Notes Off (CC 123).
     pub fn all_notes_off(&self) {
         self.dispatch(ev_cc(123, 0));

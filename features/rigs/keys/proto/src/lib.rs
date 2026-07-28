@@ -477,6 +477,11 @@ pub mod keys {
         fn capture_stack(&self, index: u32);
         /// Trigger a note from the UI (velocity 0 = note-off).
         fn trigger(&self, note: u32, velocity: u32);
+        /// Pitch wheel (14-bit raw, 8192 = center) — for remotes with an
+        /// on-screen wheel; hardware wheels ride the MIDI stream directly.
+        fn pitch_bend(&self, raw: u32);
+        /// Mod wheel (CC1, 0..127) — same remote surface.
+        fn mod_wheel(&self, value: u32);
         /// Enumerate hardware MIDI input ports.
         fn midi_ports(&self) -> Vec<String>;
         /// Attach a hardware MIDI input by name (empty = omni / all inputs).

@@ -1776,6 +1776,22 @@ impl KeysRigSvc for KeysRigBackend {
         }
     }
 
+    fn pitch_bend(&self, raw: u32) {
+        if let Ok(rig) = self.inner.rig.lock() {
+            if let Some(rig) = rig.as_ref() {
+                rig.pitch_bend(raw.min(16_383) as u16);
+            }
+        }
+    }
+
+    fn mod_wheel(&self, value: u32) {
+        if let Ok(rig) = self.inner.rig.lock() {
+            if let Some(rig) = rig.as_ref() {
+                rig.cc(1, value.min(127) as u8);
+            }
+        }
+    }
+
     fn midi_ports(&self) -> Vec<String> {
         KeysRig::midi_input_ports()
     }
