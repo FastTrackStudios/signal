@@ -106,8 +106,10 @@ pub const EQ_DYN_REL_BASE: u32 = 248;
 pub const EQ_DYN_AUTO_BASE: u32 = 272;
 /// `b{i}_dyn_relative` 0/1 (band-vs-program detection).
 pub const EQ_DYN_RELATIVE_BASE: u32 = 296;
+/// `b{i}_placement` — 0 Stereo, 1 Left, 2 Right, 3 Mid, 4 Side.
+pub const EQ_PLACEMENT_BASE: u32 = 320;
 /// One past the last EQ param id.
-pub const EQ_PARAM_COUNT: u32 = 320;
+pub const EQ_PARAM_COUNT: u32 = 344;
 
 /// Canonical shape conversion — [`eq::slope::FilterShape`] owns the
 /// one true ordering (append-only, documented there).
@@ -121,8 +123,9 @@ pub fn eq_param_name(band: usize, field: usize) -> String {
     format!("b{}_{}", band + 1, f)
 }
 
-const EQ_EXT_FIELDS: [(&str, u32); 7] = [
+const EQ_EXT_FIELDS: [(&str, u32); 8] = [
     ("slope", EQ_SLOPE_BASE),
+    ("placement", EQ_PLACEMENT_BASE),
     ("dyn_range", EQ_DYN_RANGE_BASE),
     ("dyn_thr", EQ_DYN_THR_BASE),
     ("dyn_atk", EQ_DYN_ATK_BASE),
@@ -176,6 +179,7 @@ pub fn eq_param_range(id: u32) -> (f64, f64, f64) {
         i if (EQ_DYN_REL_BASE..EQ_DYN_REL_BASE + 24).contains(&i) => (0.0, 100.0, 50.0),
         i if (EQ_DYN_AUTO_BASE..EQ_DYN_AUTO_BASE + 24).contains(&i) => (0.0, 1.0, 1.0),
         i if (EQ_DYN_RELATIVE_BASE..EQ_DYN_RELATIVE_BASE + 24).contains(&i) => (0.0, 1.0, 0.0),
+        i if (EQ_PLACEMENT_BASE..EQ_PLACEMENT_BASE + 24).contains(&i) => (0.0, 4.0, 0.0),
         _ => (0.0, 1.0, 0.0),
     }
 }
@@ -213,6 +217,7 @@ pub struct NativeEq {
     /// effective-order resolution).
     shapes: [u32; EQ_BANDS],
     slopes: [u32; EQ_BANDS],
+    placements: [u32; EQ_BANDS],
     /// Raw dynamic params per band: (range, thr, atk, rel, auto, relative).
     dyn_cfg: [(f64, f64, f64, f64, bool, bool); EQ_BANDS],
     /// Whether the band currently routes through the dynamic engine.
@@ -258,6 +263,7 @@ impl NativeEq {
             state: [(false, false); EQ_BANDS],
             shapes: [0; EQ_BANDS],
             slopes: [2; EQ_BANDS],
+            placements: [0; EQ_BANDS],
             dyn_cfg: [(0.0, -40.0, 50.0, 50.0, true, false); EQ_BANDS],
             dyn_active: [false; EQ_BANDS],
             values,
@@ -298,6 +304,7 @@ impl NativeEq {
             b.q = q;
             b.filter_type = eq_shape_to_filter(self.shapes[band]);
             b.order = shape.effective_order(self.slopes[band] as usize);
+            b.placement = eq::band::Placement::from_index(self.placements[band]);
         }
         self.eq.update_band(band);
 
@@ -362,11 +369,15 @@ impl NativeEq {
                 i if (EQ_DYN_RELATIVE_BASE..EQ_DYN_RELATIVE_BASE + 24).contains(&i) => {
                     (EQ_DYN_RELATIVE_BASE, 6)
                 }
+                i if (EQ_PLACEMENT_BASE..EQ_PLACEMENT_BASE + 24).contains(&i) => {
+                    (EQ_PLACEMENT_BASE, 7)
+                }
                 _ => return,
             };
             let band = (id - base) as usize;
             match field {
                 0 => self.slopes[band] = v as u32,
+                7 => self.placements[band] = v as u32,
                 1 => self.dyn_cfg[band].0 = v,
                 2 => self.dyn_cfg[band].1 = v,
                 3 => self.dyn_cfg[band].2 = v,
