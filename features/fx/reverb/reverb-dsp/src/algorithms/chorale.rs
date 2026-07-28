@@ -4,7 +4,7 @@
 //! filtered through formant resonances to create vocal/choral textures.
 //! Combines shimmer architecture with a formant filter bank.
 
-use crate::algorithm::{ChoraleResonance, ChoraleVowel, AlgorithmParams, ChoirVoice, ChoraleParams, ReverbAlgorithm};
+use crate::algorithm::{ChoraleVowel, AlgorithmParams, ChoirVoice, ChoraleParams, ReverbAlgorithm};
 use crate::primitives::allpass_diffuser::AllpassDiffuser;
 use crate::primitives::fdn::{Fdn, MixMatrix};
 use crate::primitives::one_pole::Lp1;

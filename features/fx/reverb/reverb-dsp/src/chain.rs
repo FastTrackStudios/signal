@@ -20,11 +20,7 @@ use audiocore_dsp::smoothing::ParamSmoother;
 use crate::primitives::saturation::Saturator;
 use crate::primitives::tilt_eq::TiltEq;
 
-/// Full reverb processing chain.
-///
-/// Signal flow:
-///   Input → Input HP/LP → Pre-Delay → Algorithm (with freeze override)
-//// BigSky MX INFINITE footswitch behavior (per-preset `Inf Mode`).
+/// BigSky MX INFINITE footswitch behavior (per-preset `Inf Mode`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum InfiniteMode {
     /// Capture and sustain the current reverb; new playing stays dry.
@@ -36,7 +32,51 @@ pub enum InfiniteMode {
     Off,
 }
 
-//        → Wet Saturation → Output Low/High-Cut → Tilt EQ
+/// The chain's copyable parameter surface — everything BigSky MX
+/// "copy settings" carries between dual slots (NOT the algorithm
+/// selection or internal state). One list, used by both
+/// [`ReverbChain::param_surface`] and [`ReverbChain::apply_surface`],
+/// so a new chain param only needs adding here to travel.
+#[derive(Debug, Clone, Copy)]
+pub struct ChainParamSurface {
+    pub params: AlgorithmParams,
+    pub conv_mod: ConvolutionModParams,
+    pub shimmer: ShimmerParams,
+    pub cloud: CloudParams,
+    pub bloom: BloomParams,
+    pub chorale: ChoraleParams,
+    pub chamber: ChamberParams,
+    pub spring: SpringParams,
+    pub voice: ReverbVoice,
+    pub hall: HallParams,
+    pub magneto: MagnetoParams,
+    pub nonlinear: NonLinearParams,
+    pub predelay_ms: f64,
+    pub mix: f64,
+    pub width: f64,
+    pub pan: f64,
+    pub trem_rate_hz: f64,
+    pub trem_depth: f64,
+    pub input_hp_freq: f64,
+    pub input_lp_freq: f64,
+    pub output_hp_freq: f64,
+    pub output_lp_freq: f64,
+    pub output_tilt_db: f64,
+    pub output_tilt_pivot: f64,
+    pub saturation: f64,
+    pub duck_amount: f64,
+    pub duck_threshold: f64,
+    pub duck_attack_ms: f64,
+    pub duck_release_ms: f64,
+    pub freeze: bool,
+    pub infinite_mode: InfiniteMode,
+}
+
+/// Full reverb processing chain.
+///
+/// Signal flow:
+///   Input → Input HP/LP → Pre-Delay → Algorithm (with freeze override)
+///        → Wet Saturation → Output Low/High-Cut → Tilt EQ
 ///        → Width → Ducker → Mix
 pub struct ReverbChain {
     // Algorithm
@@ -483,6 +523,80 @@ impl ReverbChain {
     /// Get the current variant index.
     pub fn variant(&self) -> usize {
         self.variant
+    }
+
+    /// Snapshot the copyable parameter surface (see
+    /// [`ChainParamSurface`]).
+    pub fn param_surface(&self) -> ChainParamSurface {
+        ChainParamSurface {
+            params: self.params,
+            conv_mod: self.conv_mod,
+            shimmer: self.shimmer,
+            cloud: self.cloud,
+            bloom: self.bloom,
+            chorale: self.chorale,
+            chamber: self.chamber,
+            spring: self.spring,
+            voice: self.voice,
+            hall: self.hall,
+            magneto: self.magneto,
+            nonlinear: self.nonlinear,
+            predelay_ms: self.predelay_ms,
+            mix: self.mix,
+            width: self.width,
+            pan: self.pan,
+            trem_rate_hz: self.trem_rate_hz,
+            trem_depth: self.trem_depth,
+            input_hp_freq: self.input_hp_freq,
+            input_lp_freq: self.input_lp_freq,
+            output_hp_freq: self.output_hp_freq,
+            output_lp_freq: self.output_lp_freq,
+            output_tilt_db: self.output_tilt_db,
+            output_tilt_pivot: self.output_tilt_pivot,
+            saturation: self.saturation,
+            duck_amount: self.duck_amount,
+            duck_threshold: self.duck_threshold,
+            duck_attack_ms: self.duck_attack_ms,
+            duck_release_ms: self.duck_release_ms,
+            freeze: self.freeze,
+            infinite_mode: self.infinite_mode,
+        }
+    }
+
+    /// Apply a copied parameter surface. Call `update_params()`
+    /// afterwards so filters and smoothers pick the values up.
+    pub fn apply_surface(&mut self, s: &ChainParamSurface) {
+        self.params = s.params;
+        self.conv_mod = s.conv_mod;
+        self.shimmer = s.shimmer;
+        self.cloud = s.cloud;
+        self.bloom = s.bloom;
+        self.chorale = s.chorale;
+        self.chamber = s.chamber;
+        self.spring = s.spring;
+        self.voice = s.voice;
+        self.hall = s.hall;
+        self.magneto = s.magneto;
+        self.nonlinear = s.nonlinear;
+        self.predelay_ms = s.predelay_ms;
+        self.mix = s.mix;
+        self.width = s.width;
+        self.pan = s.pan;
+        self.trem_rate_hz = s.trem_rate_hz;
+        self.trem_depth = s.trem_depth;
+        self.input_hp_freq = s.input_hp_freq;
+        self.input_lp_freq = s.input_lp_freq;
+        self.output_hp_freq = s.output_hp_freq;
+        self.output_lp_freq = s.output_lp_freq;
+        self.output_tilt_db = s.output_tilt_db;
+        self.output_tilt_pivot = s.output_tilt_pivot;
+        self.saturation = s.saturation;
+        self.duck_amount = s.duck_amount;
+        self.duck_threshold = s.duck_threshold;
+        self.duck_attack_ms = s.duck_attack_ms;
+        self.duck_release_ms = s.duck_release_ms;
+        self.freeze = s.freeze;
+        self.infinite_mode = s.infinite_mode;
     }
 
     /// Magneto's knob remap: PRE-DELAY drives the engine's feedback.
@@ -960,9 +1074,7 @@ impl Processor for ReverbChain {
 
                 // Width (mid-side)
                 let (mut final_l, mut final_r) = if (width - 1.0).abs() > 0.001 {
-                    let mid = (wet_l + wet_r) * 0.5;
-                    let side = (wet_l - wet_r) * 0.5;
-                    (mid + side * width, mid - side * width)
+                    audiocore_dsp::stereo::width(wet_l, wet_r, width)
                 } else {
                     (wet_l, wet_r)
                 };
@@ -972,9 +1084,9 @@ impl Processor for ReverbChain {
                 // leaving decay audible on the far side).
                 let pan = self.pan_smoother.tick();
                 if pan.abs() > 1e-6 {
-                    let theta = (pan.clamp(-1.0, 1.0) + 1.0) * std::f64::consts::FRAC_PI_4;
-                    final_l *= std::f64::consts::SQRT_2 * theta.cos();
-                    final_r *= std::f64::consts::SQRT_2 * theta.sin();
+                    let (gl, gr) = audiocore_dsp::stereo::pan_equal_power(pan);
+                    final_l *= gl;
+                    final_r *= gr;
                 }
 
                 // Wet tremolo (sine, wet path only). Phase advances only
