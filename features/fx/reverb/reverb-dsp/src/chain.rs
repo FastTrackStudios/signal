@@ -1473,27 +1473,49 @@ mod tests {
                 .collect()
         };
 
-        let mut l1 = sine(0);
+        // Pre-roll several blocks so the tail is fully developed before
+        // the reference slope is measured (the Hall T60 at default
+        // decay is now seconds long — measuring during buildup would
+        // understate the natural slope).
+        let mut off = 0;
+        for _ in 0..40 {
+            let mut lp = sine(off);
+            let mut rp = lp.clone();
+            c.process(&mut lp, &mut rp);
+            off += n;
+        }
+
+        let mut l1 = sine(off);
         let mut r1 = l1.clone();
         c.process(&mut l1, &mut r1);
+        off += n;
         // Natural signal slope, measured after the reverb has built up.
         let before = max_step(&l1[4800..]);
 
         mutate(&mut c);
         c.update_params();
 
-        let mut l2 = sine(n);
+        let mut l2 = sine(off);
         let mut r2 = l2.clone();
         c.process(&mut l2, &mut r2);
         // The 30 ms ramp lives inside the first ~1440 samples + margin.
         let after = max_step(&l2[..2400]);
+        // Post-ramp steady slope at the NEW setting — the level-shift-
+        // immune reference (a tilt swing legitimately scales the wet
+        // level, and with it the natural slope).
+        let settled = max_step(&l2[4800..]);
 
         for &v in l2.iter() {
             assert!(v.is_finite());
         }
+        // ×2.5: a saturation engage legitimately has a ramp window
+        // slightly steeper than its own compressed settled slope; a
+        // hard step still lands well above this.
+        let reference = before.max(settled);
         assert!(
-            after < before * 3.0 + 0.02,
-            "param step should be ramped, not stepped: before={before}, after={after}"
+            after < reference * 2.5 + 0.02,
+            "param step should be ramped, not stepped: \
+             before={before}, after={after}, settled={settled}"
         );
     }
 

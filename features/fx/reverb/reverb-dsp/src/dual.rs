@@ -243,7 +243,10 @@ mod tests {
         d.a.predelay_ms = 120.0;
         d.b.set_algorithm(AlgorithmType::Hall);
         d.b.mix = 1.0;
-        d.b.params.decay = 0.8;
+        // Moderate T60 (the Jot-shelf mapping reaches tens of seconds
+        // at high decay values — the series/parallel energy contrast
+        // needs the hall tail shorter than the render window).
+        d.b.params.decay = 0.45;
         d.update(config());
         d
     }
