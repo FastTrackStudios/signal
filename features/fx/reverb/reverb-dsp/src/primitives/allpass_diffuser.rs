@@ -127,6 +127,16 @@ impl AllpassDiffuser {
         }
     }
 
+    /// Distribute stage LFO phases in quadrature (0°/90°/180°/270°
+    /// cycling): the BigSky Cloud scheme — heavy diffusor modulation
+    /// without common-mode pitch pumping, because the four phases'
+    /// instantaneous delay changes cancel in aggregate.
+    pub fn set_quadrature_phases(&mut self) {
+        for (i, f) in self.filters.iter_mut().enumerate() {
+            f.set_phase(i as f64 * 0.25 + 0.31);
+        }
+    }
+
     pub fn set_modulation_enabled(&mut self, enabled: bool) {
         for f in &mut self.filters {
             f.modulation_enabled = enabled;

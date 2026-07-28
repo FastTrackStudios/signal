@@ -179,6 +179,9 @@ impl CloudChannel {
         let mut diffuser = AllpassDiffuser::new_default();
         diffuser.set_sample_rate(sample_rate);
         diffuser.set_interpolation_enabled(true);
+        // BigSky Cloud modulation scheme: quadrature stage LFOs — high
+        // depth on the input diffusors without common-mode pumping.
+        diffuser.set_quadrature_phases();
 
         let mut high_pass = Hp1::new();
         high_pass.set_freq(20.0, sample_rate);
@@ -753,19 +756,31 @@ impl ReverbAlgorithm for Cloud {
         self.set_raw_param(param::EARLY_DIFFUSE_DELAY, params.size);
         self.set_raw_param(param::LATE_DIFFUSE_DELAY, params.size);
 
-        // Diffusion → early/late diffuse counts and feedback
-        self.set_raw_param(param::EARLY_DIFFUSE_COUNT, params.diffusion);
-        self.set_raw_param(param::EARLY_DIFFUSE_FEEDBACK, params.diffusion * 0.8);
-        self.set_raw_param(param::LATE_DIFFUSE_COUNT, params.diffusion);
-        self.set_raw_param(param::LATE_DIFFUSE_FEEDBACK, params.diffusion * 0.8);
+        // Diffusion — the Cloud continuum (manual): at MIN the reverb is
+        // "grainier yet mesmerizing on transient attacks" — a skittery
+        // DISCRETE multitap early field with the diffusers out of the
+        // way; raising the knob multiplies taps into a dense cluster
+        // and brings the cascaded diffusers in until the attack is fog.
+        let d = params.diffusion;
+        self.set_raw_param(param::TAP_ENABLED, 1.0);
+        // ~21 discrete taps (grainy) → ~72 blended taps (dense).
+        self.set_raw_param(param::TAP_COUNT, 0.08 + d * 0.2);
+        self.set_raw_param(param::EARLY_DIFFUSE_COUNT, d);
+        self.set_raw_param(param::EARLY_DIFFUSE_FEEDBACK, d * 0.85);
+        self.set_raw_param(param::LATE_DIFFUSE_COUNT, d);
+        self.set_raw_param(param::LATE_DIFFUSE_FEEDBACK, d * 0.8);
         self.set_raw_param(
             param::EARLY_DIFFUSE_ENABLED,
-            if params.diffusion > 0.05 { 1.0 } else { 0.0 },
+            if d > 0.03 { 1.0 } else { 0.0 },
         );
         self.set_raw_param(
             param::LATE_DIFFUSE_ENABLED,
-            if params.diffusion > 0.15 { 1.0 } else { 0.0 },
+            if d > 0.12 { 1.0 } else { 0.0 },
         );
+        // Early/late balance rides the knob: grainy = the tap field
+        // stays prominent; foggy = the tank dominates.
+        self.set_raw_param(param::EARLY_OUT, 0.95 - d * 0.25);
+        self.set_raw_param(param::LATE_OUT, 0.85 + d * 0.15);
 
         // Damping → EQ lowpass cutoff
         let cutoff_raw = 1.0 - params.damping;
@@ -775,13 +790,35 @@ impl ReverbAlgorithm for Cloud {
         );
         self.set_raw_param(param::EQ_CUTOFF, cutoff_raw);
 
-        // Modulation → all mod amounts and rates
-        self.set_raw_param(param::EARLY_DIFFUSE_MOD_AMOUNT, params.modulation);
-        self.set_raw_param(param::EARLY_DIFFUSE_MOD_RATE, params.modulation);
-        self.set_raw_param(param::LATE_LINE_MOD_AMOUNT, params.modulation);
-        self.set_raw_param(param::LATE_LINE_MOD_RATE, params.modulation);
-        self.set_raw_param(param::LATE_DIFFUSE_MOD_AMOUNT, params.modulation * 0.8);
-        self.set_raw_param(param::LATE_DIFFUSE_MOD_RATE, params.modulation);
+        // Modulation — the manual's two-segment law: min → "2 o'clock"
+        // (~72% travel) raises the DEPTH of the quadrature oscillators
+        // on the INPUT DIFFUSOR sections; past 2 o'clock the oscillator
+        // FREQUENCY rises instead. The tank itself stays nearly still —
+        // that is the stated design for high modulation without
+        // muddying the sustaining tail.
+        let m = params.modulation.clamp(0.0, 1.0);
+        let depth = (m / 0.72).min(1.0);
+        let rate_seg = ((m - 0.72) / 0.28).max(0.0);
+        self.set_raw_param(param::EARLY_DIFFUSE_MOD_AMOUNT, depth);
+        self.set_raw_param(param::EARLY_DIFFUSE_MOD_RATE, 0.35 + rate_seg * 0.45);
+        self.set_raw_param(param::LATE_LINE_MOD_AMOUNT, depth * 0.25);
+        self.set_raw_param(param::LATE_LINE_MOD_RATE, 0.3);
+        self.set_raw_param(param::LATE_DIFFUSE_MOD_AMOUNT, depth * 0.35);
+        self.set_raw_param(param::LATE_DIFFUSE_MOD_RATE, 0.3 + rate_seg * 0.3);
+
+        // Low End (BigSky common param): per-line low shelf inside the
+        // CloudSeed loop EQ — above 1.0 the lows bloom per pass, below
+        // they thin. Bright tone settings override with their low cut.
+        let le = params.low_decay_mult;
+        let low_end_active = (le - 1.0).abs() > 0.02 && params.tone <= 0.0;
+        if low_end_active {
+            self.set_raw_param(param::EQ_LOW_SHELF_ENABLED, 1.0);
+            self.set_raw_param(param::EQ_LOW_FREQ, 0.35);
+            self.set_raw_param(
+                param::EQ_LOW_GAIN,
+                (0.5 + (le - 1.0) * 0.4).clamp(0.1, 0.75),
+            );
+        }
 
         // Tone → EQ shelf gains
         if params.tone < 0.0 {
@@ -789,7 +826,9 @@ impl ReverbAlgorithm for Cloud {
             self.set_raw_param(param::EQ_HIGH_SHELF_ENABLED, 1.0);
             self.set_raw_param(param::EQ_HIGH_GAIN, 0.5 + params.tone * 0.5);
             self.set_raw_param(param::EQ_HIGH_FREQ, 0.5);
-            self.set_raw_param(param::EQ_LOW_SHELF_ENABLED, 0.0);
+            if !low_end_active {
+                self.set_raw_param(param::EQ_LOW_SHELF_ENABLED, 0.0);
+            }
         } else if params.tone > 0.0 {
             // Bright: cut lows
             self.set_raw_param(param::EQ_LOW_SHELF_ENABLED, 1.0);
@@ -797,22 +836,21 @@ impl ReverbAlgorithm for Cloud {
             self.set_raw_param(param::EQ_LOW_FREQ, 0.3);
             self.set_raw_param(param::EQ_HIGH_SHELF_ENABLED, 0.0);
         } else {
-            self.set_raw_param(param::EQ_LOW_SHELF_ENABLED, 0.0);
+            if !low_end_active {
+                self.set_raw_param(param::EQ_LOW_SHELF_ENABLED, 0.0);
+            }
             self.set_raw_param(param::EQ_HIGH_SHELF_ENABLED, 0.0);
         }
 
-        // Extra A → pre-delay (0-500ms via resp1dec), tap count, line count
+        // Extra A → pre-delay (0-500ms via resp1dec) + line count
+        // (tap count is owned by the Diffusion continuum above).
         self.set_raw_param(param::TAP_PREDELAY, params.extra_a * 0.5);
-        self.set_raw_param(param::TAP_COUNT, params.extra_a * 0.3);
         self.set_raw_param(param::LATE_LINE_COUNT, 0.4 + params.extra_a * 0.5);
 
         // Extra B → cross-seed, seeds (character/stereo width)
         self.set_raw_param(param::EQ_CROSS_SEED, params.extra_b);
         self.set_raw_param(param::INPUT_MIX, params.extra_b * 0.8);
 
-        // Output levels (always set)
-        self.set_raw_param(param::EARLY_OUT, 0.8);
-        self.set_raw_param(param::LATE_OUT, 1.0);
     }
 
     fn set_cloud_params(&mut self, params: &CloudParams) -> bool {
