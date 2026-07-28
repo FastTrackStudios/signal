@@ -8,6 +8,7 @@
 //! - [`engine::DelayEngine`] — Unified wrapper over all delay styles
 //! - [`chain::DelayChain`] — Full stereo delay with ping-pong, swing, and mix
 
+pub mod bbd_core;
 pub mod bbd_delay;
 pub mod chain;
 pub mod clean_delay;
