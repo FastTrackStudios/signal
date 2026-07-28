@@ -99,6 +99,10 @@ pub struct PitchDelay {
     pub slice: Option<IceSlice>,
     /// Dry↔ice balance on the delay line, pre-feedback (1.0 = all ice).
     pub blend: f64,
+    /// Delay-line modulation LFO rate in Hz.
+    pub mod_rate_hz: f64,
+    /// Delay-line modulation depth (0.0–1.0; full scale ≈ ±3 ms).
+    pub mod_depth: f64,
     /// Crossfade grain size in milliseconds (when `slice` is `None`).
     pub grain_ms: f64,
     /// Decay EQ tilt (-1.0 = darken repeats, 0 = neutral, +1.0 = brighten).
@@ -113,6 +117,7 @@ pub struct PitchDelay {
     feedback_sample: f64,
     sample_rate: f64,
     smoother: ParamSmoother,
+    lfo_phase: f64,
 }
 
 impl PitchDelay {
@@ -129,6 +134,8 @@ impl PitchDelay {
             interval: IceInterval::Free,
             slice: None,
             blend: 1.0,
+            mod_rate_hz: 0.6,
+            mod_depth: 0.0,
             grain_ms: 30.0,
             decay_tilt: 0.0,
             decay_tilt_eq: DecayTilt::new(),
@@ -139,6 +146,7 @@ impl PitchDelay {
             feedback_sample: 0.0,
             sample_rate: 48000.0,
             smoother: ParamSmoother::new(0.0),
+            lfo_phase: 0.0,
         }
     }
 
@@ -185,7 +193,17 @@ impl PitchDelay {
         // Smooth delay time
         let target_delay = self.time_ms * 0.001 * self.sample_rate;
         self.smoother.set_target(target_delay);
-        let smooth_delay = self.smoother.tick();
+        let mut smooth_delay = self.smoother.tick();
+        if self.mod_depth > 0.0 {
+            self.lfo_phase += self.mod_rate_hz / self.sample_rate;
+            if self.lfo_phase >= 1.0 {
+                self.lfo_phase -= 1.0;
+            }
+            smooth_delay += (self.lfo_phase * core::f64::consts::TAU).sin()
+                * self.mod_depth
+                * 0.003
+                * self.sample_rate;
+        }
 
         let max_read = self.delay.len() as f64 - 4.0;
 
@@ -236,6 +254,7 @@ impl PitchDelay {
         self.dc_blocker.reset();
         self.feedback_sample = 0.0;
         self.smoother.reset(0.0);
+        self.lfo_phase = 0.0;
     }
 }
 

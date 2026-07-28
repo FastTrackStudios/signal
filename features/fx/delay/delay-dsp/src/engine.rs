@@ -220,6 +220,10 @@ pub struct DelayEngine {
     pub lofi_vinyl: f64,
     /// Output device voicing (telephone/victrola/...). LoFi only.
     pub lofi_filter_shape: LoFiFilterShape,
+    /// Delay-line mod LFO rate in Hz. LoFi only.
+    pub lofi_mod_rate: f64,
+    /// Delay-line mod depth (0.0–1.0). LoFi only.
+    pub lofi_mod_depth: f64,
 
     // ── Shimmer-specific ───────────────────────────────────────────
     /// Pitch ratio (0.5–4.0). Shimmer only.
@@ -255,6 +259,10 @@ pub struct DelayEngine {
     pub pitch_slice: Option<IceSlice>,
     /// Dry↔ice blend on the delay line, pre-feedback. Pitch only.
     pub pitch_blend: f64,
+    /// Delay-line mod LFO rate in Hz. Pitch only.
+    pub pitch_mod_rate: f64,
+    /// Delay-line mod depth (0.0–1.0). Pitch only.
+    pub pitch_mod_depth: f64,
 
     // ── Rhythm-specific ──────────────────────────────────────────
     /// Tap levels for rhythm mode (8 taps at 1x–8x base time).
@@ -404,6 +412,8 @@ impl DelayEngine {
             lofi_mix: 1.0,
             lofi_vinyl: 0.0,
             lofi_filter_shape: LoFiFilterShape::Off,
+            lofi_mod_rate: 0.6,
+            lofi_mod_depth: 0.0,
             shimmer_pitch: 2.0,
             shimmer_mix: 0.5,
             digital_morph: 0.0,
@@ -417,6 +427,8 @@ impl DelayEngine {
             pitch_interval: IceInterval::Free,
             pitch_slice: None,
             pitch_blend: 1.0,
+            pitch_mod_rate: 0.6,
+            pitch_mod_depth: 0.0,
             rhythm_taps: [1.0, 0.7, 0.5, 0.35, 0.25, 0.18, 0.12, 0.08],
             decay_tilt: 0.0,
             wow_shape: WobbleShape::Sine,
@@ -608,6 +620,8 @@ impl DelayEngine {
             EngineInner::LoFi(d) => {
                 d.time_ms = self.time_ms;
                 d.feedback = self_feedback;
+                d.mod_rate_hz = self.lofi_mod_rate;
+                d.mod_depth = self.lofi_mod_depth;
                 d.hicut_freq = self_hicut;
                 d.locut_freq = self_locut;
                 d.bit_depth = self.lofi_bit_depth;
@@ -643,6 +657,8 @@ impl DelayEngine {
             EngineInner::Pitch(d) => {
                 d.time_ms = self.time_ms;
                 d.feedback = self_feedback;
+                d.mod_rate_hz = self.pitch_mod_rate;
+                d.mod_depth = self.pitch_mod_depth;
                 d.speed = self.pitch_speed;
                 d.interval = self.pitch_interval;
                 d.slice = self.pitch_slice;

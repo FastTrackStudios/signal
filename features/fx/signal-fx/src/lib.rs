@@ -1110,6 +1110,41 @@ const DELAY_PARAMS: &[ParamSpec] = &[
     ParamSpec { id: 35, name: "tap_div_l", min: 0.0, max: 7.0, default: 7.0 },
     ParamSpec { id: 36, name: "tap_div_r", min: 0.0, max: 7.0, default: 7.0 },
     ParamSpec { id: 37, name: "pan", min: -1.0, max: 1.0, default: 0.0 },
+    // Common Mod Speed/Depth (TimeLine PARAM-menu mod): one knob pair
+    // drives whichever machine is active (each engine keeps per-machine
+    // fields; the Reverb machine routes these to its wet tremolo).
+    ParamSpec { id: 38, name: "mod_rate", min: 0.05, max: 8.0, default: 0.6 },
+    ParamSpec { id: 39, name: "mod_depth", min: 0.0, max: 1.0, default: 0.0 },
+    // Reverse machine: Smear (diffusion on the reversed audio).
+    ParamSpec { id: 40, name: "rev_smear", min: 0.0, max: 1.0, default: 0.0 },
+    // Digital Classic voice: morphing FILTER (0 full-bw -> 1 tape).
+    ParamSpec { id: 41, name: "dig_morph", min: 0.0, max: 1.0, default: 0.0 },
+    // Ducking (TimeLine Duck Sens 0-18, Duck Release 0.05-1.00 s).
+    ParamSpec { id: 42, name: "duck_sens", min: 0.0, max: 18.0, default: 0.0 },
+    ParamSpec { id: 43, name: "duck_release", min: 0.05, max: 1.0, default: 0.2 },
+    // Drum machine: head spacing (0 Even / 1 Triplet / 2 Golden /
+    // 3 Silver) + Lo Cut.
+    ParamSpec { id: 44, name: "drum_spacing", min: 0.0, max: 3.0, default: 2.0 },
+    ParamSpec { id: 45, name: "drum_locut", min: 0.0, max: 1.0, default: 0.2 },
+    // Oil Can: head mode (0 Long / 1 Short / 2 Both).
+    ParamSpec { id: 46, name: "oilcan_heads", min: 0.0, max: 2.0, default: 0.0 },
+    // Per-delay wet output level (TimeLine Output Level).
+    ParamSpec { id: 47, name: "output_level", min: 0.0, max: 1.0, default: 1.0 },
+    // Filter machine (swept filter + trem on repeats).
+    ParamSpec { id: 48, name: "flt_shape", min: 0.0, max: 9.0, default: 1.0 },
+    ParamSpec { id: 49, name: "flt_speed", min: 0.03125, max: 32.0, default: 1.0 },
+    ParamSpec { id: 50, name: "flt_depth", min: 0.0, max: 1.0, default: 0.5 },
+    ParamSpec { id: 51, name: "flt_center", min: 100.0, max: 8000.0, default: 1200.0 },
+    ParamSpec { id: 52, name: "flt_q", min: 0.5, max: 10.0, default: 2.0 },
+    ParamSpec { id: 53, name: "flt_location", min: 0.0, max: 1.0, default: 1.0 },
+    ParamSpec { id: 54, name: "flt_trem_depth", min: 0.0, max: 1.0, default: 0.0 },
+    ParamSpec { id: 55, name: "flt_trem_speed", min: 0.03125, max: 32.0, default: 1.0 },
+    // MultiTap: Classic pattern recall (0 = custom, 1-16 = Classic n),
+    // feedback topology (0 Input / 1 Parallel), step grid
+    // (0 16th / 1 Triplet / 2 Off-256).
+    ParamSpec { id: 56, name: "mtap_pattern", min: 0.0, max: 16.0, default: 0.0 },
+    ParamSpec { id: 57, name: "mtap_fb_mode", min: 0.0, max: 1.0, default: 0.0 },
+    ParamSpec { id: 58, name: "mtap_grid", min: 0.0, max: 2.0, default: 0.0 },
 ];
 
 /// Native Delay block — wraps [`delay::DualDelay`] (two full chains +
@@ -1309,6 +1344,130 @@ impl NativeDelay {
                 let shape = delay::LoFiFilterShape::from_index(v.round().max(0.0) as usize);
                 a.delay_l.lofi_filter_shape = shape;
                 a.delay_r.lofi_filter_shape = shape;
+            }
+            38 => {
+                for e in [&mut a.delay_l, &mut a.delay_r] {
+                    e.digital_mod_rate = v;
+                    e.reverse_mod_rate = v;
+                    e.lofi_mod_rate = v;
+                    e.pitch_mod_rate = v;
+                    e.bbd_mod_rate = v;
+                    e.oilcan_mod_rate = v;
+                    e.multitap_mod_rate_hz = v;
+                    e.reverb_trem_rate = v;
+                }
+            }
+            39 => {
+                let d = v.clamp(0.0, 1.0);
+                for e in [&mut a.delay_l, &mut a.delay_r] {
+                    e.digital_mod_depth = d;
+                    e.reverse_mod_depth = d;
+                    e.lofi_mod_depth = d;
+                    e.pitch_mod_depth = d;
+                    e.bbd_mod_depth = d;
+                    e.multitap_mod_depth = d;
+                    e.reverb_trem_depth = d;
+                }
+            }
+            40 => {
+                a.delay_l.reverse_smear = v;
+                a.delay_r.reverse_smear = v;
+            }
+            41 => {
+                a.delay_l.digital_morph = v;
+                a.delay_r.digital_morph = v;
+            }
+            42 => {
+                a.ducking_enabled = v > 0.05;
+                a.ducker.amount = (v / 18.0).clamp(0.0, 1.0);
+            }
+            43 => a.ducker.release_ms = v.clamp(0.05, 1.0) * 1000.0,
+            44 => {
+                let spacing = match v.round().max(0.0) as usize {
+                    0 => delay::DrumSpacing::Even,
+                    1 => delay::DrumSpacing::Triplet,
+                    3 => delay::DrumSpacing::Silver,
+                    _ => delay::DrumSpacing::Golden,
+                };
+                a.delay_l.set_drum_spacing(spacing);
+                a.delay_r.set_drum_spacing(spacing);
+            }
+            45 => {
+                a.delay_l.drum_lo_cut = v;
+                a.delay_r.drum_lo_cut = v;
+            }
+            46 => {
+                let heads = match v.round().max(0.0) as usize {
+                    1 => delay::OilCanHeads::Short,
+                    2 => delay::OilCanHeads::Both,
+                    _ => delay::OilCanHeads::Long,
+                };
+                a.delay_l.oilcan_heads = heads;
+                a.delay_r.oilcan_heads = heads;
+            }
+            47 => a.output_level = v.clamp(0.0, 1.0),
+            48 => {
+                let shape = delay::FilterLfoShape::from_index(v.round().max(0.0) as usize);
+                a.delay_l.filter_lfo_shape = shape;
+                a.delay_r.filter_lfo_shape = shape;
+            }
+            49 => {
+                a.delay_l.filter_lfo_speed = v;
+                a.delay_r.filter_lfo_speed = v;
+            }
+            50 => {
+                a.delay_l.filter_depth = v;
+                a.delay_r.filter_depth = v;
+            }
+            51 => {
+                a.delay_l.filter_center = v;
+                a.delay_r.filter_center = v;
+            }
+            52 => {
+                a.delay_l.filter_q = v;
+                a.delay_r.filter_q = v;
+            }
+            53 => {
+                let loc = if v > 0.5 {
+                    delay::FilterLocation::Post
+                } else {
+                    delay::FilterLocation::Pre
+                };
+                a.delay_l.filter_location = loc;
+                a.delay_r.filter_location = loc;
+            }
+            54 => {
+                a.delay_l.filter_trem_depth = v;
+                a.delay_r.filter_trem_depth = v;
+            }
+            55 => {
+                a.delay_l.filter_trem_speed = v;
+                a.delay_r.filter_trem_speed = v;
+            }
+            56 => {
+                let n = v.round().max(0.0) as u8;
+                if n >= 1 {
+                    a.delay_l.apply_multitap_classic(n);
+                    a.delay_r.apply_multitap_classic(n);
+                }
+            }
+            57 => {
+                let mode = if v > 0.5 {
+                    delay::FeedbackMode::Parallel
+                } else {
+                    delay::FeedbackMode::Input
+                };
+                a.delay_l.multitap_feedback_mode = mode;
+                a.delay_r.multitap_feedback_mode = mode;
+            }
+            58 => {
+                let grid = match v.round().max(0.0) as usize {
+                    1 => delay::TapGrid::Triplet,
+                    2 => delay::TapGrid::Off,
+                    _ => delay::TapGrid::Sixteenth,
+                };
+                a.delay_l.multitap_grid = grid;
+                a.delay_r.multitap_grid = grid;
             }
             _ => {}
         }
