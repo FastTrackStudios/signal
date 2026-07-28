@@ -736,3 +736,22 @@ heads/spacing exposure, NonLinear Gauss/Bounce shapes + full shape count, Choral
 Resonance, Spring Dwell / #Springs named params, Param 1/2 assignment layer, per-engine
 Low End as a first-class param, chain-B impulse reshaper (B slot currently shares no
 worker), and the per-engine A/B dial-in passes.
+
+## Status update — 2026-07-27 second pass
+
+- **Chamber**: Color bank implemented (5 fixed EQ profiles, `chamber_color` id 46).
+- **Magneto**: heads 1/2/3/4/6 + Even/Uneven spacing (Uneven = irregular grid AND
+  feedback from the last two heads); knob remap landed (DECAY = last-head time ≤ 1.5 s
+  in-engine, PRE-DELAY → engine feedback; chain pre-delay disengages while active).
+- **NonLinear**: 6-shape named menu incl. Gauss + Bounce (id 49); DECAY→window-time and
+  PRE-DELAY→generator-feedback remap (shares the Magneto plumbing).
+- **Chorale**: 7-entry Vowel program menu + Mild/Medium/High Resonance; second Choir
+  Voice corrected Soprano→Baritone (formants down 0.78×).
+- **Spring**: Dwell (Clean/Combo/Tube/Overdrive preamp stages) + Number of Springs 1–3
+  named on both voices; MX voice gained a real third SpringUnit.
+- **Common**: Diffusion (52) + first-class Low End (53) exposed; chain-B has its own
+  impulse reshaper; copy/paste now travels via `ChainParamSurface` (carries the new
+  chamber/spring/infinite-mode params).
+
+Remaining: Hall/Room/Shimmer Classic voices as real second implementations, and the
+per-engine hardware A/B dial-in passes.

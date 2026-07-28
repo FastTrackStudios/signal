@@ -635,3 +635,15 @@ Still open: #7 Param1/2 assignment decision, #11 Filter SVF types + attack-sync
 polarity, #12 Spectral FFT character + grains-per-beat density, #14 dual-B machine
 params (delay side), #15 LoFi absolute-Hz mapping, #17 Repeat-Dynamics scoping,
 #18 enum-order note, and the per-machine A/B dial-in passes (#19–23).
+
+## Status update — 2026-07-27 second pass
+
+- **Spectral**: synced Density is the 15-step 1/1→1/32 menu (off-grid ratios reachable;
+  intermediate ratios marked for hardware dial-in), free-mode spacing randomizes ±50%,
+  16 grain voices. FFT character remains a documented interpretation. (No Mod on this
+  machine — SPEED/DEPTH are Density/Stretch.)
+- **Filter machine**: −Square added (11 modes, CC order), ± shapes attack-sync their
+  polarity ('+' = highest frequency at the input onset), trem waveform exposed (id 59).
+- **Lo-Fi**: Sample Rate = 21-step absolute-Hz menu (id 31), host-rate correct.
+- **Decisions**: Repeat Dynamics stays a superset (all machines); Param 1/2 assignment
+  is declared equivalent to the FTS param surface (controller-mapping concern).
