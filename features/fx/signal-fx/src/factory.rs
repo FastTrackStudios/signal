@@ -12,7 +12,7 @@ use signal_plugin_host::{FxFactory, InstalledFx, PluginInstance};
 
 use crate::{
     NativeComp, NativeDelay, NativeEq, NativeGain, NativeGate, NativeLevel, NativeMod,
-    NativePreamp, NativeReverb, NativeTrem,
+    NativePreamp, NativeReverb, NativeSaturate, NativeTrem,
 };
 
 /// `(ident, display name, constructor)` — one row per built-in.
@@ -45,6 +45,9 @@ const CATALOG: &[(&str, &str, Ctor)] = &[
     ("signal.fx.gain", "Gain", |sr| Box::new(NativeGain::new(sr))),
     ("signal.fx.preamp", "Preamp", |sr| {
         Box::new(NativePreamp::new(sr))
+    }),
+    ("signal.fx.saturate", "Saturate", |sr| {
+        Box::new(NativeSaturate::new(sr))
     }),
 ];
 

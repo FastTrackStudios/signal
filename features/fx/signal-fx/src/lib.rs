@@ -1019,6 +1019,436 @@ impl PluginInstance for NativePreamp {
     }
 }
 
+
+// ── FTS-Saturate: the full distortion engine ──────────────────────────────
+
+const SATURATE_PARAMS: &[ParamSpec] = &[
+    ParamSpec { id: 0, name: "drive", min: 0.0, max: 36.0, default: 6.0 },
+    ParamSpec { id: 1, name: "q_point", min: -1.0, max: 1.0, default: 0.0 },
+    ParamSpec { id: 2, name: "pos_shaper", min: 0.0, max: 5.0, default: 3.0 },
+    ParamSpec { id: 3, name: "neg_shaper", min: 0.0, max: 5.0, default: 3.0 },
+    // Pre-emphasis tilt (dB at the top vs bottom of the spectrum),
+    // inverted exactly on the way out — tape/console style: drive the
+    // highs harder without changing the tone balance.
+    ParamSpec { id: 4, name: "emphasis", min: -12.0, max: 12.0, default: 0.0 },
+    // LF protection: highpass BEFORE the shaper (kills bass-driven
+    // intermodulation), re-summed after so the low end stays intact.
+    ParamSpec { id: 5, name: "lf_protect", min: 0.0, max: 500.0, default: 0.0 },
+    // 0 = 1x, 1 = 2x, 2 = 4x, 3 = 8x.
+    ParamSpec { id: 6, name: "oversample", min: 0.0, max: 3.0, default: 1.0 },
+    ParamSpec { id: 7, name: "auto_gain", min: 0.0, max: 1.0, default: 1.0 },
+    ParamSpec { id: 8, name: "mix", min: 0.0, max: 1.0, default: 1.0 },
+    ParamSpec { id: 9, name: "output", min: -24.0, max: 24.0, default: 0.0 },
+    // 0 off / 1 delta (hear only the added distortion).
+    ParamSpec { id: 10, name: "listen", min: 0.0, max: 1.0, default: 0.0 },
+];
+
+/// Harmonic readback ids `h1`..`h8` — same contract as the preamp.
+pub const SATURATE_HARMONIC_BASE: u32 = 100;
+/// Emphasis-EQ band params: `eq_b{i}_{used|on|freq|gain|q|shape}` at
+/// id 200 + (band*6+field) — a full FTS-EQ band surface whose curve
+/// shapes what the saturator drives; the SAME curve, gain-inverted,
+/// runs on the way out so the net tone stays balanced (drive the
+/// highs harder, keep the mix tonally identical).
+pub const SATURATE_EQ_BASE: u32 = 200;
+
+/// FTS-Saturate — the distortion engine: Class-A asymmetric core
+/// (Q point + per-side shapers) inside a mastering-grade chain:
+/// oversampled shaping (2x default, to 8x), pre/de-emphasis tilt,
+/// LF-protected drive, RMS-matched auto gain, delta listen, and the
+/// measured harmonic readback for the visualization.
+use audiocore_dsp::biquad::{Biquad as SatBiquad, FilterType as SatFilterType};
+
+pub struct NativeSaturate {
+    pre: [saturate_dsp::preamp::ClassAPreamp; 2],
+    os: audiocore_dsp::oversampling::Oversampler,
+    emph_lo: SatBiquad,
+    emph_hi: SatBiquad,
+    deemph_lo: SatBiquad,
+    deemph_hi: SatBiquad,
+    /// The emphasis EQ (full FTS-EQ band engine) + its inverse mirror.
+    emph_eq: eq::EqChain,
+    deemph_eq: eq::EqChain,
+    eq_state: [(bool, bool); EQ_BANDS],
+    lf_split: SatBiquad,
+    lf_low: SatBiquad,
+    emphasis_db: f64,
+    lf_hz: f64,
+    auto_gain: bool,
+    mix: f64,
+    output_gain: f64,
+    listen_delta: bool,
+    // RMS trackers for auto gain (in vs post-shaper).
+    in_ms: f64,
+    out_ms: f64,
+    agc_gain: f64,
+    harmonics: [f32; PREAMP_HARMONICS],
+    harmonics_dirty: bool,
+    sample_rate: f64,
+    prepared: bool,
+    scratch_l: Vec<f64>,
+    scratch_r: Vec<f64>,
+    dry_l: Vec<f64>,
+    dry_r: Vec<f64>,
+}
+
+impl NativeSaturate {
+    pub fn new(sample_rate: f64) -> Self {
+        use audiocore_dsp::oversampling::{OversampleQuality, OversampleRate};
+        let sr = sample_rate.max(1.0);
+        let mk = || saturate_dsp::preamp::ClassAPreamp::new(sr as f32);
+        let mut sat = Self {
+            pre: [mk(), mk()],
+            os: audiocore_dsp::oversampling::Oversampler::new(
+                OversampleRate::X2,
+                OversampleQuality::Medium,
+            ),
+            emph_lo: SatBiquad::new(),
+            emph_hi: SatBiquad::new(),
+            deemph_lo: SatBiquad::new(),
+            deemph_hi: SatBiquad::new(),
+            emph_eq: {
+                let mut c = eq::EqChain::new();
+                c.set_sample_rate(sr);
+                for _ in 0..EQ_BANDS {
+                    let i = c.add_band();
+                    if let Some(b) = c.band_mut(i) {
+                        b.enabled = false;
+                    }
+                    c.update_band(i);
+                }
+                c
+            },
+            deemph_eq: {
+                let mut c = eq::EqChain::new();
+                c.set_sample_rate(sr);
+                for _ in 0..EQ_BANDS {
+                    let i = c.add_band();
+                    if let Some(b) = c.band_mut(i) {
+                        b.enabled = false;
+                    }
+                    c.update_band(i);
+                }
+                c
+            },
+            eq_state: [(false, false); EQ_BANDS],
+            lf_split: SatBiquad::new(),
+            lf_low: SatBiquad::new(),
+            emphasis_db: 0.0,
+            lf_hz: 0.0,
+            auto_gain: true,
+            mix: 1.0,
+            output_gain: 1.0,
+            listen_delta: false,
+            in_ms: 0.0,
+            out_ms: 0.0,
+            agc_gain: 1.0,
+            harmonics: [0.0; PREAMP_HARMONICS],
+            harmonics_dirty: true,
+            sample_rate: sr,
+            prepared: false,
+            scratch_l: Vec::new(),
+            scratch_r: Vec::new(),
+            dry_l: Vec::new(),
+            dry_r: Vec::new(),
+        };
+        sat.os.update(sr);
+        for spec in SATURATE_PARAMS {
+            sat.set(spec.id, spec.default);
+        }
+        sat
+    }
+
+    fn update_filters(&mut self) {
+        let sr = self.sample_rate;
+        let e = self.emphasis_db;
+        // Tilt via complementary shelves at 700 Hz, mirrored on exit.
+        self.emph_lo.set(SatFilterType::LowShelf { gain_db: -e * 0.5 }, 700.0, 0.5, sr);
+        self.emph_hi.set(SatFilterType::HighShelf { gain_db: e * 0.5 }, 700.0, 0.5, sr);
+        self.deemph_lo.set(SatFilterType::LowShelf { gain_db: e * 0.5 }, 700.0, 0.5, sr);
+        self.deemph_hi.set(SatFilterType::HighShelf { gain_db: -e * 0.5 }, 700.0, 0.5, sr);
+        if self.lf_hz > 1.0 {
+            self.lf_split.set(SatFilterType::Highpass, self.lf_hz, 0.707, sr);
+            self.lf_low.set(SatFilterType::Lowpass, self.lf_hz, 0.707, sr);
+        }
+    }
+
+    fn set(&mut self, id: u32, v: f64) {
+        use audiocore_dsp::oversampling::OversampleRate;
+        match id {
+            0 => {
+                let g = 10.0f32.powf((v.clamp(0.0, 36.0) as f32) / 20.0);
+                for p in &mut self.pre {
+                    p.drive = g;
+                }
+            }
+            1 => {
+                for p in &mut self.pre {
+                    p.q_point = v.clamp(-1.0, 1.0) as f32;
+                }
+            }
+            2 => {
+                for p in &mut self.pre {
+                    p.positive = saturate_dsp::preamp::SideShaper::from_index(v as u32);
+                }
+            }
+            3 => {
+                for p in &mut self.pre {
+                    p.negative = saturate_dsp::preamp::SideShaper::from_index(v as u32);
+                }
+            }
+            4 => {
+                self.emphasis_db = v.clamp(-12.0, 12.0);
+                self.update_filters();
+            }
+            5 => {
+                self.lf_hz = v.clamp(0.0, 500.0);
+                self.update_filters();
+            }
+            6 => {
+                self.os.set_rate(match v as u32 {
+                    0 => OversampleRate::X1,
+                    2 => OversampleRate::X4,
+                    3 => OversampleRate::X8,
+                    _ => OversampleRate::X2,
+                });
+                self.os.update(self.sample_rate);
+                let os_sr = (self.sample_rate * self.os.rate().ratio() as f64) as f32;
+                for p in &mut self.pre {
+                    p.set_sample_rate(os_sr);
+                }
+            }
+            7 => self.auto_gain = v >= 0.5,
+            8 => self.mix = v.clamp(0.0, 1.0),
+            9 => self.output_gain = audiocore_dsp::db::db_to_linear(v.clamp(-24.0, 24.0)),
+            10 => self.listen_delta = v >= 0.5,
+            i if (SATURATE_EQ_BASE..SATURATE_EQ_BASE + (EQ_BANDS * EQ_FIELDS) as u32)
+                .contains(&i) =>
+            {
+                let rel = (i - SATURATE_EQ_BASE) as usize;
+                let (band, field) = (rel / EQ_FIELDS, rel % EQ_FIELDS);
+                match field {
+                    0 => self.eq_state[band].0 = v >= 0.5,
+                    1 => self.eq_state[band].1 = v >= 0.5,
+                    _ => {}
+                }
+                let (used, on) = self.eq_state[band];
+                // Same band in both chains; gain INVERTED in the mirror
+                // (gain-less shapes — cuts/notches — mirror as-is and
+                // are documented as uncompensated pre-filters).
+                for (chain, invert) in
+                    [(&mut self.emph_eq, false), (&mut self.deemph_eq, true)]
+                {
+                    if let Some(b) = chain.band_mut(band) {
+                        match field {
+                            0 | 1 => b.enabled = used && on,
+                            2 => b.freq_hz = v.clamp(10.0, 30000.0),
+                            3 => {
+                                let g = v.clamp(-30.0, 30.0);
+                                b.gain_db = if invert { -g } else { g };
+                            }
+                            4 => b.q = v.clamp(0.025, 40.0),
+                            _ => b.filter_type = eq_shape_to_filter(v as u32),
+                        }
+                    }
+                    chain.update_band(band);
+                }
+            }
+            _ => {}
+        }
+        if id <= 3 {
+            self.harmonics_dirty = true;
+        }
+    }
+
+    pub fn set_named(&mut self, name: &str, value: f64) {
+        if let Some(id) = param_id(SATURATE_PARAMS, name) {
+            self.set(id, value);
+            return;
+        }
+        if let Some(rest) = name.strip_prefix("eq_") {
+            if let Some(id) = eq_param_id_of(rest) {
+                if id < (EQ_BANDS * EQ_FIELDS) as u32 {
+                    self.set(SATURATE_EQ_BASE + id, value);
+                }
+            }
+        }
+    }
+
+    pub fn harmonics(&mut self) -> [f32; PREAMP_HARMONICS] {
+        if self.harmonics_dirty {
+            saturate_dsp::preamp::analysis::harmonic_spectrum(&self.pre[0], &mut self.harmonics);
+            self.harmonics_dirty = false;
+        }
+        self.harmonics
+    }
+}
+
+impl PluginInstance for NativeSaturate {
+    fn descriptor(&self) -> PluginDescriptor {
+        descriptor("signal.fx.saturate", "Saturate")
+    }
+    fn params(&mut self) -> Vec<PluginParamInfo> {
+        let mut out = param_infos(SATURATE_PARAMS);
+        for i in 0..EQ_BANDS * EQ_FIELDS {
+            let (band, field) = (i / EQ_FIELDS, i % EQ_FIELDS);
+            let (min, max, default) = eq_param_range(i as u32);
+            out.push(PluginParamInfo {
+                id: SATURATE_EQ_BASE + i as u32,
+                name: format!("eq_{}", eq_param_name(band, field)),
+                min,
+                max,
+                default,
+            });
+        }
+        out
+    }
+    fn param_value(&mut self, id: u32) -> Option<f64> {
+        if (SATURATE_HARMONIC_BASE..SATURATE_HARMONIC_BASE + PREAMP_HARMONICS as u32).contains(&id)
+        {
+            let h = self.harmonics();
+            return Some(f64::from(h[(id - SATURATE_HARMONIC_BASE) as usize]));
+        }
+        None
+    }
+    fn value_to_text(&mut self, id: u32, value: f64) -> Option<String> {
+        match id {
+            0 | 9 => Some(format!("{value:+.1} dB")),
+            6 => Some(format!("{}x", 1usize << (value as u32).min(3))),
+            _ => None,
+        }
+    }
+    fn text_to_value(&mut self, _id: u32, _text: &str) -> Option<f64> {
+        None
+    }
+    fn latency(&mut self) -> u32 {
+        self.os.latency() as u32
+    }
+    fn prepare(&mut self, sample_rate: f64, block_size: u32) -> Result<(), PluginError> {
+        self.sample_rate = sample_rate.max(1.0);
+        self.os.update(self.sample_rate);
+        let os_sr = (self.sample_rate * self.os.rate().ratio() as f64) as f32;
+        for p in &mut self.pre {
+            p.set_sample_rate(os_sr);
+            p.reset();
+        }
+        self.update_filters();
+        self.emph_eq.set_sample_rate(self.sample_rate);
+        self.emph_eq.reset();
+        self.deemph_eq.set_sample_rate(self.sample_rate);
+        self.deemph_eq.reset();
+        let n = block_size.max(1) as usize;
+        self.scratch_l = vec![0.0; n];
+        self.scratch_r = vec![0.0; n];
+        self.dry_l = vec![0.0; n];
+        self.dry_r = vec![0.0; n];
+        self.in_ms = 0.0;
+        self.out_ms = 0.0;
+        self.agc_gain = 1.0;
+        self.prepared = true;
+        Ok(())
+    }
+    fn is_prepared(&self) -> bool {
+        self.prepared
+    }
+    fn process_block(
+        &mut self,
+        in_l: &[f32],
+        in_r: &[f32],
+        out_l: &mut [f32],
+        out_r: &mut [f32],
+        events: &PluginEvents<'_>,
+    ) -> Result<(), PluginError> {
+        for &(id, value) in events.params {
+            self.set(id, value);
+        }
+        let n = in_l.len().min(out_l.len()).min(self.scratch_l.len());
+        for i in 0..n {
+            self.scratch_l[i] = f64::from(in_l[i]);
+            self.scratch_r[i] = f64::from(in_r[i]);
+            self.dry_l[i] = self.scratch_l[i];
+            self.dry_r[i] = self.scratch_r[i];
+        }
+        let (l, r) = (&mut self.scratch_l[..n], &mut self.scratch_r[..n]);
+        // Emphasis EQ: the drawn curve decides what gets driven.
+        if self.emph_eq.has_active_bands() {
+            let (a, b) = (&mut *l, &mut *r);
+            self.emph_eq.process(a, b);
+        }
+        let lf_on = self.lf_hz > 1.0;
+        // Pre-emphasis + LF split (protected lows bypass the shaper).
+        for i in 0..n {
+            let mut xl = self.emph_hi.tick(self.emph_lo.tick(l[i], 0), 0);
+            let mut xr = self.emph_hi.tick(self.emph_lo.tick(r[i], 1), 1);
+            if lf_on {
+                let low_l = self.lf_low.tick(xl, 0);
+                let low_r = self.lf_low.tick(xr, 1);
+                xl = self.lf_split.tick(xl, 0);
+                xr = self.lf_split.tick(xr, 1);
+                self.dry_l[i] = low_l; // stash protected lows
+                self.dry_r[i] = low_r;
+            }
+            l[i] = xl;
+            r[i] = xr;
+        }
+        // Track input loudness for AGC.
+        for i in 0..n {
+            let sq = 0.5 * (l[i] * l[i] + r[i] * r[i]);
+            self.in_ms += (sq - self.in_ms) * 0.0005;
+        }
+        // Oversampled asymmetric shaping.
+        let pre = &mut self.pre;
+        self.os.process_stereo(l, r, |ol, or| {
+            for i in 0..ol.len() {
+                ol[i] = f64::from(pre[0].process(0, ol[i] as f32));
+                or[i] = f64::from(pre[1].process(1, or[i] as f32));
+            }
+        });
+        for i in 0..n {
+            let sq = 0.5 * (l[i] * l[i] + r[i] * r[i]);
+            self.out_ms += (sq - self.out_ms) * 0.0005;
+        }
+        // RMS-matching auto gain (slewed).
+        if self.auto_gain {
+            let target = (self.in_ms.max(1.0e-12) / self.out_ms.max(1.0e-12)).sqrt().clamp(0.1, 10.0);
+            for i in 0..n {
+                self.agc_gain += (target - self.agc_gain) * 0.0005;
+                l[i] *= self.agc_gain;
+                r[i] *= self.agc_gain;
+            }
+        }
+        // Mirror EQ: the inverse curve restores the tonal balance.
+        if self.deemph_eq.has_active_bands() {
+            let (a, b) = (&mut *l, &mut *r);
+            self.deemph_eq.process(a, b);
+        }
+        // De-emphasis + reassemble.
+        for i in 0..n {
+            let mut yl = self.deemph_hi.tick(self.deemph_lo.tick(l[i], 0), 0);
+            let mut yr = self.deemph_hi.tick(self.deemph_lo.tick(r[i], 1), 1);
+            if lf_on {
+                yl += self.dry_l[i];
+                yr += self.dry_r[i];
+            }
+            let (dl, dr) = (f64::from(in_l[i]), f64::from(in_r[i]));
+            let (mut fl, mut fr) = (
+                dl + (yl - dl) * self.mix,
+                dr + (yr - dr) * self.mix,
+            );
+            if self.listen_delta {
+                fl -= dl;
+                fr -= dr;
+            }
+            out_l[i] = (fl * self.output_gain) as f32;
+            out_r[i] = (fr * self.output_gain) as f32;
+        }
+        Ok(())
+    }
+    fn deactivate(&mut self) {
+        self.prepared = false;
+    }
+}
+
 // ── Compressor ─────────────────────────────────────────────────────────────
 
 /// Live compressor telemetry — the rolling waveform + GR the FTS-Comp
