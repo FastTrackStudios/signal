@@ -69,59 +69,31 @@ impl Default for FtsEq {
 /// Map slope index (0–10) to filter order for eq-dsp.
 /// Pro-Q 4 slopes: 0,6,12,18,24,30,36,48,72,96 dB/oct + Brickwall.
 /// Each 6 dB/oct = 1 pole (order 1).
-fn slope_to_order(slope: i32) -> usize {
-    match slope {
-        0 => 2,   // 0 dB/oct (Pro-Q 4 treats same as 12 dB/oct for bell/shelf)
-        1 => 1,   // 6 dB/oct
-        2 => 2,   // 12 dB/oct
-        3 => 3,   // 18 dB/oct
-        4 => 4,   // 24 dB/oct
-        5 => 5,   // 30 dB/oct
-        6 => 6,   // 36 dB/oct
-        7 => 8,   // 48 dB/oct
-        8 => 12,  // 72 dB/oct
-        9 => 16,  // 96 dB/oct (clamped to MAX_ORDER in DSP)
-        10 => 16, // Brickwall (max we can do)
-        _ => 2,
-    }
-}
-
-/// LP/HP slope mapping for high_cut and low_cut filters.
+/// Plugin-persisted shape index → canonical [`eq_dsp::slope::FilterShape`].
 ///
-/// Differs from slope_to_order: slope 0 = bypass (order 0), and the
-/// higher slopes use even orders (48, 60, 72 dB/oct = 8, 10, 12 poles).
-fn lp_hp_slope_to_order(slope: i32) -> usize {
-    match slope {
-        0 => 0,   // bypass
-        1 => 1,   // 6 dB/oct
-        2 => 2,   // 12 dB/oct
-        3 => 3,   // 18 dB/oct
-        4 => 4,   // 24 dB/oct
-        5 => 5,   // 30 dB/oct
-        6 => 8,   // 48 dB/oct
-        7 => 10,  // 60 dB/oct
-        8 => 12,  // 72 dB/oct
-        9 => 16,  // 96 dB/oct
-        10 => 16, // Brickwall
-        _ => 2,
+/// NOTE the plugin's persisted order predates the canonical table and
+/// differs at 2/3 (LowCut/HighShelf swapped). It stays frozen so saved
+/// presets keep meaning; everything downstream goes through canonical.
+fn plugin_shape(shape: i32) -> eq_dsp::slope::FilterShape {
+    use eq_dsp::slope::FilterShape as F;
+    match shape {
+        0 => F::Bell,
+        1 => F::LowShelf,
+        2 => F::LowCut,
+        3 => F::HighShelf,
+        4 => F::HighCut,
+        5 => F::Notch,
+        6 => F::BandPass,
+        7 => F::TiltShelf,
+        8 => F::FlatTilt,
+        9 => F::AllPass,
+        _ => F::Bell,
     }
 }
 
-/// Map EqBandShape integer to eq-dsp-v2 FilterType.
+/// Map EqBandShape integer to eq-dsp-v2 FilterType (via canonical).
 fn shape_to_filter_type(shape: i32) -> FilterType {
-    match shape {
-        0 => FilterType::Peak,      // Bell
-        1 => FilterType::LowShelf,  // Low Shelf
-        2 => FilterType::Highpass,  // Low Cut (cuts lows = highpass)
-        3 => FilterType::HighShelf, // High Shelf
-        4 => FilterType::Lowpass,   // High Cut (cuts highs = lowpass)
-        5 => FilterType::Notch,     // Notch
-        6 => FilterType::Bandpass,  // Bandpass
-        7 => FilterType::TiltShelf, // Tilt Shelf
-        8 => FilterType::FlatTilt,  // Flat Tilt (type 6 in Pro-Q 4 binary)
-        9 => FilterType::Allpass,   // All Pass
-        _ => FilterType::Peak,
-    }
+    plugin_shape(shape).to_filter_type()
 }
 
 impl FtsEq {
@@ -147,17 +119,10 @@ impl FtsEq {
                 // Pro-Q 4 convention: display Q=1.0 = Butterworth (filter Q = 1/√2).
                 let q = bp.q.value() as f64 * std::f64::consts::FRAC_1_SQRT_2;
                 let slope_val = bp.slope.value();
-                let order = match ft {
-                    FilterType::Lowpass | FilterType::Highpass | FilterType::Bandpass => {
-                        lp_hp_slope_to_order(slope_val)
-                    }
-                    FilterType::LowShelf | FilterType::HighShelf | FilterType::TiltShelf
-                        if slope_val == 0 =>
-                    {
-                        1
-                    }
-                    _ => slope_to_order(slope_val),
-                };
+                // One canonical slope→order table (eq_dsp::Slope),
+                // clamped per shape.
+                let order = plugin_shape(bp.filter_type.value())
+                    .effective_order(slope_val.max(0) as usize);
 
                 if band.enabled != enabled
                     || band.filter_type != ft

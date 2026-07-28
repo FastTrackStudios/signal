@@ -86,22 +86,33 @@ pub const EQ_BANDS: usize = 24;
 /// Per-band fields, in wire order: used, on, freq, gain, q, shape.
 pub const EQ_FIELDS: usize = 6;
 
-/// Shape indices, matching eq-ui's `EqBandShape` ordering: 0 Bell,
-/// 1 LowShelf, 2 HighShelf, 3 LowCut, 4 HighCut, 5 Notch, 6 BandPass,
-/// 7 TiltShelf, 8 FlatTilt, 9 AllPass.
+// Appended param blocks (ids are APPEND-ONLY — the 0..143 layout is
+// frozen by saved rig patches):
+/// `b{i}_slope` — canonical slope index 0..10 (eq_dsp::Slope table).
+pub const EQ_SLOPE_BASE: u32 = 144;
+/// `output_gain` dB.
+pub const EQ_OUTPUT_GAIN_ID: u32 = 168;
+/// `gain_scale` — scales every band gain (ZL-style, 1.0 = neutral).
+pub const EQ_GAIN_SCALE_ID: u32 = 169;
+/// `b{i}_dyn_range` dB (0 = static band).
+pub const EQ_DYN_RANGE_BASE: u32 = 176;
+/// `b{i}_dyn_thr` dB (auto flag separate).
+pub const EQ_DYN_THR_BASE: u32 = 200;
+/// `b{i}_dyn_atk` percent (50 = auto).
+pub const EQ_DYN_ATK_BASE: u32 = 224;
+/// `b{i}_dyn_rel` percent (50 = auto).
+pub const EQ_DYN_REL_BASE: u32 = 248;
+/// `b{i}_dyn_auto` 0/1 (learned threshold).
+pub const EQ_DYN_AUTO_BASE: u32 = 272;
+/// `b{i}_dyn_relative` 0/1 (band-vs-program detection).
+pub const EQ_DYN_RELATIVE_BASE: u32 = 296;
+/// One past the last EQ param id.
+pub const EQ_PARAM_COUNT: u32 = 320;
+
+/// Canonical shape conversion — [`eq::slope::FilterShape`] owns the
+/// one true ordering (append-only, documented there).
 fn eq_shape_to_filter(shape: u32) -> eq::FilterType {
-    match shape {
-        1 => eq::FilterType::LowShelf,
-        2 => eq::FilterType::HighShelf,
-        3 => eq::FilterType::Highpass,
-        4 => eq::FilterType::Lowpass,
-        5 => eq::FilterType::Notch,
-        6 => eq::FilterType::Bandpass,
-        7 => eq::FilterType::TiltShelf,
-        8 => eq::FilterType::FlatTilt,
-        9 => eq::FilterType::Allpass,
-        _ => eq::FilterType::Peak,
-    }
+    eq::slope::FilterShape::from_canonical_index(shape).to_filter_type()
 }
 
 /// Param name for `(band, field)` — `b{band+1}_{used|on|freq|gain|q|shape}`.
@@ -110,26 +121,107 @@ pub fn eq_param_name(band: usize, field: usize) -> String {
     format!("b{}_{}", band + 1, f)
 }
 
+const EQ_EXT_FIELDS: [(&str, u32); 7] = [
+    ("slope", EQ_SLOPE_BASE),
+    ("dyn_range", EQ_DYN_RANGE_BASE),
+    ("dyn_thr", EQ_DYN_THR_BASE),
+    ("dyn_atk", EQ_DYN_ATK_BASE),
+    ("dyn_rel", EQ_DYN_REL_BASE),
+    ("dyn_auto", EQ_DYN_AUTO_BASE),
+    ("dyn_relative", EQ_DYN_RELATIVE_BASE),
+];
+
 fn eq_param_id_of(name: &str) -> Option<u32> {
+    match name {
+        "output_gain" => return Some(EQ_OUTPUT_GAIN_ID),
+        "gain_scale" => return Some(EQ_GAIN_SCALE_ID),
+        _ => {}
+    }
     let rest = name.strip_prefix('b')?;
     let (num, field) = rest.split_once('_')?;
     let band: usize = num.parse().ok()?;
     if band == 0 || band > EQ_BANDS {
         return None;
     }
-    let fidx = ["used", "on", "freq", "gain", "q", "shape"]
+    if let Some(fidx) = ["used", "on", "freq", "gain", "q", "shape"]
         .iter()
-        .position(|f| *f == field)?;
-    Some(((band - 1) * EQ_FIELDS + fidx) as u32)
+        .position(|f| *f == field)
+    {
+        return Some(((band - 1) * EQ_FIELDS + fidx) as u32);
+    }
+    EQ_EXT_FIELDS
+        .iter()
+        .find(|(f, _)| *f == field)
+        .map(|(_, base)| base + (band - 1) as u32)
+}
+
+/// Range/default metadata shared by `params()` and the rig tables.
+pub fn eq_param_range(id: u32) -> (f64, f64, f64) {
+    if id < (EQ_BANDS * EQ_FIELDS) as u32 {
+        return match id as usize % EQ_FIELDS {
+            0 | 1 => (0.0, 1.0, 0.0),
+            2 => (10.0, 30000.0, 1000.0),
+            3 => (-30.0, 30.0, 0.0),
+            4 => (0.025, 40.0, 0.707),
+            _ => (0.0, 12.0, 0.0),
+        };
+    }
+    match id {
+        EQ_OUTPUT_GAIN_ID => (-30.0, 30.0, 0.0),
+        EQ_GAIN_SCALE_ID => (-1.0, 2.0, 1.0),
+        i if (EQ_SLOPE_BASE..EQ_SLOPE_BASE + 24).contains(&i) => (0.0, 10.0, 2.0),
+        i if (EQ_DYN_RANGE_BASE..EQ_DYN_RANGE_BASE + 24).contains(&i) => (-30.0, 30.0, 0.0),
+        i if (EQ_DYN_THR_BASE..EQ_DYN_THR_BASE + 24).contains(&i) => (-80.0, 0.0, -40.0),
+        i if (EQ_DYN_ATK_BASE..EQ_DYN_ATK_BASE + 24).contains(&i) => (0.0, 100.0, 50.0),
+        i if (EQ_DYN_REL_BASE..EQ_DYN_REL_BASE + 24).contains(&i) => (0.0, 100.0, 50.0),
+        i if (EQ_DYN_AUTO_BASE..EQ_DYN_AUTO_BASE + 24).contains(&i) => (0.0, 1.0, 1.0),
+        i if (EQ_DYN_RELATIVE_BASE..EQ_DYN_RELATIVE_BASE + 24).contains(&i) => (0.0, 1.0, 0.0),
+        _ => (0.0, 1.0, 0.0),
+    }
+}
+
+pub fn eq_param_name_of(id: u32) -> Option<String> {
+    if id < (EQ_BANDS * EQ_FIELDS) as u32 {
+        let (band, field) = (id as usize / EQ_FIELDS, id as usize % EQ_FIELDS);
+        return Some(eq_param_name(band, field));
+    }
+    match id {
+        EQ_OUTPUT_GAIN_ID => return Some("output_gain".into()),
+        EQ_GAIN_SCALE_ID => return Some("gain_scale".into()),
+        _ => {}
+    }
+    for (f, base) in EQ_EXT_FIELDS {
+        if (base..base + 24).contains(&id) {
+            return Some(format!("b{}_{}", id - base + 1, f));
+        }
+    }
+    None
 }
 
 /// Native EQ block — the full FTS-EQ engine: 24 dynamic bands over
-/// [`eq::EqChain`]'s Pro-Q ZPK pipeline, each with used/on/freq/gain/Q/shape
-/// (all ten eq-ui shapes). Bands start unused → transparent passthrough.
+/// [`eq::EqChain`]'s Pro-Q ZPK pipeline, each with
+/// used/on/freq/gain/q/shape (all thirteen canonical shapes) + slope,
+/// plus per-band DYNAMIC EQ (Pro-Q-style range/threshold/auto) running
+/// on the SVF dynamics engine, and output gain / gain-scale masters.
+/// Bands start unused → transparent passthrough.
 pub struct NativeEq {
     eq: eq::EqChain,
+    dyn_bands: Vec<eq::dynamics::DynBand>,
     /// (used, on) per band — a band renders only when both are set.
     state: [(bool, bool); EQ_BANDS],
+    /// Canonical shape + slope index per band (needed for routing and
+    /// effective-order resolution).
+    shapes: [u32; EQ_BANDS],
+    slopes: [u32; EQ_BANDS],
+    /// Raw dynamic params per band: (range, thr, atk, rel, auto, relative).
+    dyn_cfg: [(f64, f64, f64, f64, bool, bool); EQ_BANDS],
+    /// Whether the band currently routes through the dynamic engine.
+    dyn_active: [bool; EQ_BANDS],
+    /// Every param value by id, for host readback.
+    values: Vec<f64>,
+    output_gain_db: f64,
+    gain_scale: f64,
+    sample_rate: f64,
     prepared: bool,
     scratch_l: Vec<f64>,
     scratch_r: Vec<f64>,
@@ -150,43 +242,154 @@ impl NativeEq {
             }
             chain.update_band(idx);
         }
+        let mut values = vec![0.0; EQ_PARAM_COUNT as usize];
+        for id in 0..EQ_PARAM_COUNT {
+            values[id as usize] = eq_param_range(id).2;
+        }
         Self {
             eq: chain,
+            dyn_bands: (0..EQ_BANDS)
+                .map(|_| {
+                    let mut d = eq::dynamics::DynBand::new(sample_rate);
+                    d.params.enabled = false;
+                    d
+                })
+                .collect(),
             state: [(false, false); EQ_BANDS],
+            shapes: [0; EQ_BANDS],
+            slopes: [2; EQ_BANDS],
+            dyn_cfg: [(0.0, -40.0, 50.0, 50.0, true, false); EQ_BANDS],
+            dyn_active: [false; EQ_BANDS],
+            values,
+            output_gain_db: 0.0,
+            gain_scale: 1.0,
+            sample_rate,
             prepared: false,
             scratch_l: Vec::new(),
             scratch_r: Vec::new(),
         }
     }
 
-    fn set(&mut self, id: u32, v: f64) {
-        let (band, field) = ((id as usize) / EQ_FIELDS, (id as usize) % EQ_FIELDS);
-        if band >= EQ_BANDS {
-            return;
-        }
-        match field {
-            0 => self.state[band].0 = v >= 0.5,
-            1 => self.state[band].1 = v >= 0.5,
-            _ => {}
-        }
+    /// Route + configure one band after any of its params changed.
+    fn sync_band(&mut self, band: usize) {
         let (used, on) = self.state[band];
+        let enabled = used && on;
+        let shape = eq::slope::FilterShape::from_canonical_index(self.shapes[band]);
+        let (range, thr, atk, rel, auto, relative) = self.dyn_cfg[band];
+        // A band goes dynamic when it has a range and a dynamics-capable
+        // shape (Bell/shelves — same rule as Pro-Q).
+        let dyn_shape = match shape {
+            eq::slope::FilterShape::Bell => Some(eq::dynamics::DynShape::Bell),
+            eq::slope::FilterShape::LowShelf => Some(eq::dynamics::DynShape::LowShelf),
+            eq::slope::FilterShape::HighShelf => Some(eq::dynamics::DynShape::HighShelf),
+            _ => None,
+        };
+        let go_dynamic = enabled && range.abs() > 1.0e-3 && dyn_shape.is_some();
+        self.dyn_active[band] = go_dynamic;
+
+        let freq = self.values[band * EQ_FIELDS + 2].clamp(10.0, 30000.0);
+        let gain = self.values[band * EQ_FIELDS + 3].clamp(-30.0, 30.0) * self.gain_scale;
+        let q = self.values[band * EQ_FIELDS + 4].clamp(0.025, 40.0);
+
         if let Some(b) = self.eq.band_mut(band) {
-            match field {
-                0 | 1 => b.enabled = used && on,
-                2 => b.freq_hz = v.clamp(10.0, 30000.0),
-                3 => b.gain_db = v.clamp(-30.0, 30.0),
-                4 => b.q = v.clamp(0.025, 40.0),
-                _ => b.filter_type = eq_shape_to_filter(v as u32),
-            }
+            b.enabled = enabled && !go_dynamic;
+            b.freq_hz = freq;
+            b.gain_db = gain;
+            b.q = q;
+            b.filter_type = eq_shape_to_filter(self.shapes[band]);
+            b.order = shape.effective_order(self.slopes[band] as usize);
         }
         self.eq.update_band(band);
+
+        let d = &mut self.dyn_bands[band];
+        d.params.enabled = go_dynamic;
+        if go_dynamic {
+            d.params.shape = dyn_shape.unwrap_or(eq::dynamics::DynShape::Bell);
+            d.params.freq_hz = freq;
+            d.params.q = q;
+            d.params.base_gain_db = gain;
+            d.params.range_db = range * self.gain_scale;
+            d.detector.params.threshold_db = if auto { 0.0 } else { thr };
+            d.detector.params.auto = auto;
+            d.detector.params.relative = relative;
+            // Percent knobs around frequency-dependent auto ballistics
+            // (lower bands ride slower — Pro-Q's published behavior).
+            let base_atk = (5000.0 / freq).clamp(2.0, 120.0);
+            let base_rel = base_atk * 5.0;
+            d.detector.params.attack_ms =
+                base_atk * 8.0f64.powf((atk.clamp(0.0, 100.0) - 50.0) / 50.0);
+            d.detector.params.release_ms =
+                base_rel * 8.0f64.powf((rel.clamp(0.0, 100.0) - 50.0) / 50.0);
+            d.update(self.sample_rate);
+        }
     }
 
-    /// Apply a parameter by name (`b{i}_{used|on|freq|gain|q|shape}`).
+    fn set(&mut self, id: u32, v: f64) {
+        if id >= EQ_PARAM_COUNT {
+            return;
+        }
+        self.values[id as usize] = v;
+        if id == EQ_OUTPUT_GAIN_ID {
+            self.output_gain_db = v.clamp(-30.0, 30.0);
+            return;
+        }
+        if id == EQ_GAIN_SCALE_ID {
+            self.gain_scale = v.clamp(-1.0, 2.0);
+            for b in 0..EQ_BANDS {
+                self.sync_band(b);
+            }
+            return;
+        }
+        let band = if id < (EQ_BANDS * EQ_FIELDS) as u32 {
+            let (band, field) = (id as usize / EQ_FIELDS, id as usize % EQ_FIELDS);
+            match field {
+                0 => self.state[band].0 = v >= 0.5,
+                1 => self.state[band].1 = v >= 0.5,
+                5 => self.shapes[band] = v as u32,
+                _ => {}
+            }
+            band
+        } else {
+            let (base, field): (u32, usize) = match id {
+                i if (EQ_SLOPE_BASE..EQ_SLOPE_BASE + 24).contains(&i) => (EQ_SLOPE_BASE, 0),
+                i if (EQ_DYN_RANGE_BASE..EQ_DYN_RANGE_BASE + 24).contains(&i) => {
+                    (EQ_DYN_RANGE_BASE, 1)
+                }
+                i if (EQ_DYN_THR_BASE..EQ_DYN_THR_BASE + 24).contains(&i) => (EQ_DYN_THR_BASE, 2),
+                i if (EQ_DYN_ATK_BASE..EQ_DYN_ATK_BASE + 24).contains(&i) => (EQ_DYN_ATK_BASE, 3),
+                i if (EQ_DYN_REL_BASE..EQ_DYN_REL_BASE + 24).contains(&i) => (EQ_DYN_REL_BASE, 4),
+                i if (EQ_DYN_AUTO_BASE..EQ_DYN_AUTO_BASE + 24).contains(&i) => (EQ_DYN_AUTO_BASE, 5),
+                i if (EQ_DYN_RELATIVE_BASE..EQ_DYN_RELATIVE_BASE + 24).contains(&i) => {
+                    (EQ_DYN_RELATIVE_BASE, 6)
+                }
+                _ => return,
+            };
+            let band = (id - base) as usize;
+            match field {
+                0 => self.slopes[band] = v as u32,
+                1 => self.dyn_cfg[band].0 = v,
+                2 => self.dyn_cfg[band].1 = v,
+                3 => self.dyn_cfg[band].2 = v,
+                4 => self.dyn_cfg[band].3 = v,
+                5 => self.dyn_cfg[band].4 = v >= 0.5,
+                _ => self.dyn_cfg[band].5 = v >= 0.5,
+            }
+            band
+        };
+        self.sync_band(band);
+    }
+
+    /// Apply a parameter by name (`b{i}_...`, `output_gain`, `gain_scale`).
     pub fn set_named(&mut self, name: &str, value: f64) {
         if let Some(id) = eq_param_id_of(name) {
             self.set(id, value);
         }
+    }
+
+    /// Live dynamic gain of a band in dB (the yellow bar).
+    pub fn live_dyn_gain_db(&self, band: usize) -> Option<f64> {
+        (band < EQ_BANDS && self.dyn_active[band])
+            .then(|| self.dyn_bands[band].live_gain_db())
     }
 }
 
@@ -195,31 +398,42 @@ impl PluginInstance for NativeEq {
         descriptor("signal.fx.eq", "EQ")
     }
     fn params(&mut self) -> Vec<PluginParamInfo> {
-        (0..EQ_BANDS * EQ_FIELDS)
-            .map(|i| {
-                let (band, field) = (i / EQ_FIELDS, i % EQ_FIELDS);
-                let (min, max, default) = match field {
-                    0 | 1 => (0.0, 1.0, 0.0),
-                    2 => (10.0, 30000.0, 1000.0),
-                    3 => (-30.0, 30.0, 0.0),
-                    4 => (0.025, 40.0, 0.707),
-                    _ => (0.0, 9.0, 0.0),
-                };
-                PluginParamInfo {
-                    id: i as u32,
-                    name: eq_param_name(band, field),
+        (0..EQ_PARAM_COUNT)
+            .filter_map(|id| {
+                let name = eq_param_name_of(id)?;
+                let (min, max, default) = eq_param_range(id);
+                Some(PluginParamInfo {
+                    id,
+                    name,
                     min,
                     max,
                     default,
-                }
+                })
             })
             .collect()
     }
-    fn param_value(&mut self, _id: u32) -> Option<f64> {
-        None
+    fn param_value(&mut self, id: u32) -> Option<f64> {
+        self.values.get(id as usize).copied()
     }
-    fn value_to_text(&mut self, _id: u32, _value: f64) -> Option<String> {
-        None
+    fn value_to_text(&mut self, id: u32, value: f64) -> Option<String> {
+        let name = eq_param_name_of(id)?;
+        if name.ends_with("_freq") {
+            Some(if value >= 1000.0 {
+                format!("{:.2} kHz", value / 1000.0)
+            } else {
+                format!("{value:.0} Hz")
+            })
+        } else if name.ends_with("_gain") || name.ends_with("dyn_range") || name == "output_gain" {
+            Some(format!("{value:+.1} dB"))
+        } else if name.ends_with("_slope") {
+            let s = eq::slope::Slope::from_param_index(value as usize);
+            Some(match s {
+                eq::slope::Slope::Brickwall => "Brickwall".into(),
+                s => format!("{:.0} dB/oct", s.db_per_octave()),
+            })
+        } else {
+            None
+        }
     }
     fn text_to_value(&mut self, _id: u32, _text: &str) -> Option<f64> {
         None
@@ -228,8 +442,13 @@ impl PluginInstance for NativeEq {
         0
     }
     fn prepare(&mut self, sample_rate: f64, block_size: u32) -> Result<(), PluginError> {
-        self.eq.set_sample_rate(sample_rate.max(1.0));
+        self.sample_rate = sample_rate.max(1.0);
+        self.eq.set_sample_rate(self.sample_rate);
         self.eq.reset();
+        for b in 0..EQ_BANDS {
+            self.dyn_bands[b].reset();
+            self.sync_band(b);
+        }
         self.scratch_l = vec![0.0; block_size.max(1) as usize];
         self.scratch_r = vec![0.0; block_size.max(1) as usize];
         self.prepared = true;
@@ -250,6 +469,9 @@ impl PluginInstance for NativeEq {
             self.set(id, value);
         }
         let eq = &mut self.eq;
+        let dyn_bands = &mut self.dyn_bands;
+        let dyn_active = &self.dyn_active;
+        let out_gain = audiocore_dsp::db::db_to_linear(self.output_gain_db);
         process_f64_inplace(
             &mut self.scratch_l,
             &mut self.scratch_r,
@@ -257,8 +479,352 @@ impl PluginInstance for NativeEq {
             in_r,
             out_l,
             out_r,
-            |l, r| eq.process(l, r),
+            |l, r| {
+                eq.process(l, r);
+                for (bi, d) in dyn_bands.iter_mut().enumerate() {
+                    if !dyn_active[bi] {
+                        continue;
+                    }
+                    for i in 0..l.len() {
+                        let side = 0.5 * (l[i] + r[i]);
+                        d.tick(&mut l[i], &mut r[i], side);
+                    }
+                }
+                if (out_gain - 1.0).abs() > 1.0e-9 {
+                    for i in 0..l.len() {
+                        l[i] *= out_gain;
+                        r[i] *= out_gain;
+                    }
+                }
+            },
         );
+        Ok(())
+    }
+    fn deactivate(&mut self) {
+        self.prepared = false;
+    }
+}
+
+
+// ── Spectral shaper (ANINA/soothe-class) ──────────────────────────────────
+
+const SPECTRAL_PARAMS: &[ParamSpec] = &[
+    ParamSpec { id: 0, name: "amount", min: 0.0, max: 1.0, default: 0.5 },
+    ParamSpec { id: 1, name: "density", min: 0.0, max: 1.0, default: 0.5 },
+    ParamSpec { id: 2, name: "tilt", min: 0.0, max: 1.0, default: 1.0 },
+    ParamSpec { id: 3, name: "attack", min: 0.1, max: 100.0, default: 3.0 },
+    ParamSpec { id: 4, name: "release", min: 5.0, max: 1000.0, default: 80.0 },
+    ParamSpec { id: 5, name: "lo_freq", min: 20.0, max: 20000.0, default: 80.0 },
+    ParamSpec { id: 6, name: "hi_freq", min: 20.0, max: 20000.0, default: 16000.0 },
+    ParamSpec { id: 7, name: "gate", min: -100.0, max: 0.0, default: -70.0 },
+    ParamSpec { id: 8, name: "relative", min: 0.0, max: 1.0, default: 1.0 },
+    ParamSpec { id: 9, name: "threshold", min: -12.0, max: 24.0, default: 4.0 },
+    ParamSpec { id: 10, name: "freeze", min: 0.0, max: 1.0, default: 0.0 },
+    ParamSpec { id: 11, name: "delta", min: 0.0, max: 1.0, default: 0.0 },
+];
+
+/// Native spectral shaper — per-bin resonance suppression over
+/// [`eq::spectral::SpectralEngine`] (see eq-suite-plan.md).
+pub struct NativeSpectral {
+    engine: eq::spectral::SpectralEngine,
+    sample_rate: f64,
+    prepared: bool,
+}
+
+impl NativeSpectral {
+    pub fn new(sample_rate: f64) -> Self {
+        Self {
+            engine: eq::spectral::SpectralEngine::new(sample_rate.max(1.0), 1024),
+            sample_rate: sample_rate.max(1.0),
+            prepared: false,
+        }
+    }
+
+    fn set(&mut self, id: u32, v: f64) {
+        let p = &mut self.engine.params;
+        match id {
+            0 => p.amount = v.clamp(0.0, 1.0),
+            1 => p.density = v.clamp(0.0, 1.0),
+            2 => p.tilt = v >= 0.5,
+            3 => p.attack_ms = v.clamp(0.1, 100.0),
+            4 => p.release_ms = v.clamp(5.0, 1000.0),
+            5 => p.lo_hz = v.clamp(20.0, 20000.0),
+            6 => p.hi_hz = v.clamp(20.0, 20000.0),
+            7 => p.gate_db = v.clamp(-100.0, 0.0),
+            8 => p.relative = v >= 0.5,
+            9 => p.threshold_db = v.clamp(-12.0, 24.0),
+            10 => p.freeze = v >= 0.5,
+            11 => p.delta = v.clamp(0.0, 1.0),
+            _ => {}
+        }
+        self.engine.update(self.sample_rate);
+    }
+
+    pub fn set_named(&mut self, name: &str, value: f64) {
+        if let Some(id) = param_id(SPECTRAL_PARAMS, name) {
+            self.set(id, value);
+        }
+    }
+}
+
+impl PluginInstance for NativeSpectral {
+    fn descriptor(&self) -> PluginDescriptor {
+        descriptor("signal.fx.spectral", "Spectral")
+    }
+    fn params(&mut self) -> Vec<PluginParamInfo> {
+        param_infos(SPECTRAL_PARAMS)
+    }
+    fn param_value(&mut self, _id: u32) -> Option<f64> {
+        None
+    }
+    fn value_to_text(&mut self, _id: u32, _value: f64) -> Option<String> {
+        None
+    }
+    fn text_to_value(&mut self, _id: u32, _text: &str) -> Option<f64> {
+        None
+    }
+    fn latency(&mut self) -> u32 {
+        self.engine.latency() as u32
+    }
+    fn prepare(&mut self, sample_rate: f64, _block_size: u32) -> Result<(), PluginError> {
+        self.sample_rate = sample_rate.max(1.0);
+        let params = self.engine.params;
+        self.engine = eq::spectral::SpectralEngine::new(self.sample_rate, 1024);
+        self.engine.params = params;
+        self.engine.update(self.sample_rate);
+        self.prepared = true;
+        Ok(())
+    }
+    fn is_prepared(&self) -> bool {
+        self.prepared
+    }
+    fn process_block(
+        &mut self,
+        in_l: &[f32],
+        in_r: &[f32],
+        out_l: &mut [f32],
+        out_r: &mut [f32],
+        events: &PluginEvents<'_>,
+    ) -> Result<(), PluginError> {
+        for &(id, value) in events.params {
+            self.set(id, value);
+        }
+        for i in 0..in_l.len().min(out_l.len()) {
+            let (l, r) = self.engine.tick(f64::from(in_l[i]), f64::from(in_r[i]));
+            out_l[i] = l as f32;
+            out_r[i] = r as f32;
+        }
+        Ok(())
+    }
+    fn deactivate(&mut self) {
+        self.prepared = false;
+    }
+}
+
+// ── Transient EQ (SplitEQ-class dual-stream) ──────────────────────────────
+
+/// Split/master params occupy ids 0..15; the two 24-band EQ surfaces
+/// live behind name prefixes `t_b{i}_*` (transient) and `s_b{i}_*`
+/// (steady) at id blocks 100.. and 500.. mirroring the NativeEq
+/// band-field layout (used/on/freq/gain/q/shape only — slope +
+/// dynamics on the streams come later).
+const TRANSIENT_EQ_PARAMS: &[ParamSpec] = &[
+    ParamSpec { id: 0, name: "balance", min: -50.0, max: 50.0, default: 0.0 },
+    ParamSpec { id: 1, name: "attack", min: 0.0, max: 100.0, default: 50.0 },
+    ParamSpec { id: 2, name: "hold", min: 0.0, max: 100.0, default: 50.0 },
+    ParamSpec { id: 3, name: "smooth", min: 0.0, max: 100.0, default: 50.0 },
+    ParamSpec { id: 4, name: "transient_gain", min: -30.0, max: 30.0, default: 0.0 },
+    ParamSpec { id: 5, name: "steady_gain", min: -30.0, max: 30.0, default: 0.0 },
+    ParamSpec { id: 6, name: "solo", min: 0.0, max: 2.0, default: 0.0 },
+];
+
+const TEQ_T_BASE: u32 = 100;
+const TEQ_S_BASE: u32 = 500;
+
+pub struct NativeTransientEq {
+    engine: eq::transient::TransientEq,
+    t_state: [(bool, bool); EQ_BANDS],
+    s_state: [(bool, bool); EQ_BANDS],
+    sample_rate: f64,
+    prepared: bool,
+}
+
+impl NativeTransientEq {
+    pub fn new(sample_rate: f64) -> Self {
+        let mut engine = eq::transient::TransientEq::new(sample_rate.max(1.0));
+        for chain in [&mut engine.transient_eq, &mut engine.steady_eq] {
+            chain.set_sample_rate(sample_rate.max(1.0));
+            for _ in 0..EQ_BANDS {
+                let idx = chain.add_band();
+                if let Some(b) = chain.band_mut(idx) {
+                    b.enabled = false;
+                    b.freq_hz = 1000.0;
+                    b.q = 0.707;
+                }
+                chain.update_band(idx);
+            }
+        }
+        Self {
+            engine,
+            t_state: [(false, false); EQ_BANDS],
+            s_state: [(false, false); EQ_BANDS],
+            sample_rate: sample_rate.max(1.0),
+            prepared: false,
+        }
+    }
+
+    fn set_band(&mut self, transient: bool, band: usize, field: usize, v: f64) {
+        if band >= EQ_BANDS {
+            return;
+        }
+        let (chain, state) = if transient {
+            (&mut self.engine.transient_eq, &mut self.t_state)
+        } else {
+            (&mut self.engine.steady_eq, &mut self.s_state)
+        };
+        match field {
+            0 => state[band].0 = v >= 0.5,
+            1 => state[band].1 = v >= 0.5,
+            _ => {}
+        }
+        let (used, on) = state[band];
+        if let Some(b) = chain.band_mut(band) {
+            match field {
+                0 | 1 => b.enabled = used && on,
+                2 => b.freq_hz = v.clamp(10.0, 30000.0),
+                3 => b.gain_db = v.clamp(-30.0, 30.0),
+                4 => b.q = v.clamp(0.025, 40.0),
+                _ => b.filter_type = eq_shape_to_filter(v as u32),
+            }
+        }
+        chain.update_band(band);
+    }
+
+    fn set(&mut self, id: u32, v: f64) {
+        match id {
+            0 => {
+                self.engine.splitter.params.balance = v.clamp(-50.0, 50.0);
+                self.engine.splitter.update(self.engine_rate());
+            }
+            1 => {
+                self.engine.splitter.params.attack = v.clamp(0.0, 100.0);
+                self.engine.splitter.update(self.engine_rate());
+            }
+            2 => {
+                self.engine.splitter.params.hold = v.clamp(0.0, 100.0);
+                self.engine.splitter.update(self.engine_rate());
+            }
+            3 => {
+                self.engine.splitter.params.smooth = v.clamp(0.0, 100.0);
+                self.engine.splitter.update(self.engine_rate());
+            }
+            4 => self.engine.transient_gain_db = v.clamp(-30.0, 30.0),
+            5 => self.engine.steady_gain_db = v.clamp(-30.0, 30.0),
+            6 => {
+                self.engine.solo = match v as u32 {
+                    1 => eq::transient::StreamSolo::Transient,
+                    2 => eq::transient::StreamSolo::Steady,
+                    _ => eq::transient::StreamSolo::None,
+                }
+            }
+            i if (TEQ_T_BASE..TEQ_T_BASE + (EQ_BANDS * EQ_FIELDS) as u32).contains(&i) => {
+                let rel = (i - TEQ_T_BASE) as usize;
+                self.set_band(true, rel / EQ_FIELDS, rel % EQ_FIELDS, v);
+            }
+            i if (TEQ_S_BASE..TEQ_S_BASE + (EQ_BANDS * EQ_FIELDS) as u32).contains(&i) => {
+                let rel = (i - TEQ_S_BASE) as usize;
+                self.set_band(false, rel / EQ_FIELDS, rel % EQ_FIELDS, v);
+            }
+            _ => {}
+        }
+    }
+
+    fn engine_rate(&self) -> f64 {
+        self.sample_rate
+    }
+
+    pub fn set_named(&mut self, name: &str, value: f64) {
+        if let Some(id) = param_id(TRANSIENT_EQ_PARAMS, name) {
+            self.set(id, value);
+            return;
+        }
+        let (base, rest) = if let Some(r) = name.strip_prefix("t_") {
+            (TEQ_T_BASE, r)
+        } else if let Some(r) = name.strip_prefix("s_") {
+            (TEQ_S_BASE, r)
+        } else {
+            return;
+        };
+        if let Some(id) = eq_param_id_of(rest) {
+            if id < (EQ_BANDS * EQ_FIELDS) as u32 {
+                self.set(base + id, value);
+            }
+        }
+    }
+}
+
+impl PluginInstance for NativeTransientEq {
+    fn descriptor(&self) -> PluginDescriptor {
+        descriptor("signal.fx.transient-eq", "Transient EQ")
+    }
+    fn params(&mut self) -> Vec<PluginParamInfo> {
+        let mut out = param_infos(TRANSIENT_EQ_PARAMS);
+        for (base, prefix) in [(TEQ_T_BASE, "t_"), (TEQ_S_BASE, "s_")] {
+            for i in 0..EQ_BANDS * EQ_FIELDS {
+                let (band, field) = (i / EQ_FIELDS, i % EQ_FIELDS);
+                let (min, max, default) = eq_param_range(i as u32);
+                out.push(PluginParamInfo {
+                    id: base + i as u32,
+                    name: format!("{prefix}{}", eq_param_name(band, field)),
+                    min,
+                    max,
+                    default,
+                });
+            }
+        }
+        out
+    }
+    fn param_value(&mut self, _id: u32) -> Option<f64> {
+        None
+    }
+    fn value_to_text(&mut self, _id: u32, _value: f64) -> Option<String> {
+        None
+    }
+    fn text_to_value(&mut self, _id: u32, _text: &str) -> Option<f64> {
+        None
+    }
+    fn latency(&mut self) -> u32 {
+        0
+    }
+    fn prepare(&mut self, sample_rate: f64, _block_size: u32) -> Result<(), PluginError> {
+        let sr = sample_rate.max(1.0);
+        self.sample_rate = sr;
+        self.engine.splitter.update(sr);
+        self.engine.transient_eq.set_sample_rate(sr);
+        self.engine.steady_eq.set_sample_rate(sr);
+        self.engine.reset();
+        self.prepared = true;
+        Ok(())
+    }
+    fn is_prepared(&self) -> bool {
+        self.prepared
+    }
+    fn process_block(
+        &mut self,
+        in_l: &[f32],
+        in_r: &[f32],
+        out_l: &mut [f32],
+        out_r: &mut [f32],
+        events: &PluginEvents<'_>,
+    ) -> Result<(), PluginError> {
+        for &(id, value) in events.params {
+            self.set(id, value);
+        }
+        for i in 0..in_l.len().min(out_l.len()) {
+            let (l, r) = self.engine.tick(f64::from(in_l[i]), f64::from(in_r[i]));
+            out_l[i] = l as f32;
+            out_r[i] = r as f32;
+        }
         Ok(())
     }
     fn deactivate(&mut self) {
