@@ -33,7 +33,7 @@ pub mod rig_core {
         fn running(&self) -> bool;
         /// The rig's selectable presets (kits / patches / programs).
         fn presets(&self) -> Vec<RigPresetInfo>;
-        /// Load presets()[index].
+        /// Load `presets()[index]`.
         fn load_preset(&self, index: u32);
         /// Hardware MIDI input ports.
         fn midi_ports(&self) -> Vec<String>;
