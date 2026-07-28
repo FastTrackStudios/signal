@@ -110,8 +110,11 @@ impl CalibrationParameters for HardwareEqCalibration {
                 self.api_high_presence_step,
             ),
             7 => CalibratedScalar::new(self.ssl_e_skirt_factor, 0.0, 0.18, self.ssl_e_skirt_step),
-            8 => CalibratedScalar::new(self.ssl_g_skirt_factor, 0.0, 0.14, self.ssl_g_skirt_step),
-            _ => panic!("unknown hardware EQ calibration scalar {index}"),
+            // Out-of-range indices clamp to the last scalar — a panic
+
+            // here would abort the audio host on a bad automation index.
+
+            _ => CalibratedScalar::new(self.ssl_g_skirt_factor, 0.0, 0.14, self.ssl_g_skirt_step),
         }
     }
 
@@ -126,7 +129,7 @@ impl CalibrationParameters for HardwareEqCalibration {
             6 => self.api_high_presence_factor = value,
             7 => self.ssl_e_skirt_factor = value,
             8 => self.ssl_g_skirt_factor = value,
-            _ => panic!("unknown hardware EQ calibration scalar {index}"),
+            _ => {} // ignore out-of-range calibration indices
         }
     }
 
@@ -141,7 +144,7 @@ impl CalibrationParameters for HardwareEqCalibration {
             6 => self.api_high_presence_step = step,
             7 => self.ssl_e_skirt_step = step,
             8 => self.ssl_g_skirt_step = step,
-            _ => panic!("unknown hardware EQ calibration scalar {index}"),
+            _ => {} // ignore out-of-range calibration indices
         }
     }
 }
