@@ -116,7 +116,8 @@ pub type DuplexEngine = AudioEngine;
 pub type DuplexRigHost = RigHost<DuplexEngine>;
 
 /// A seeded rig project **before** the engine opens: add tracks and reserve
-/// FX slots here, then [`start`](Self::start) the engine to get a [`RigHost`].
+/// FX slots here, then start the engine ([`start_output`](Self::start_output) /
+/// [`start_duplex`](Self::start_duplex)) to get a [`RigHost`].
 pub struct RigProject {
     daw: Standalone,
     project_guid: String,
