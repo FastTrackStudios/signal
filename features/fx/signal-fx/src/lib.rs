@@ -128,8 +128,13 @@ pub const EQ_STEADY_GAIN_ID: u32 = 369;
 /// Spectral): its freq/Q footprint + dyn range/threshold drive the
 /// shared spectral engine instead of the whole-band gain ride.
 pub const EQ_SPECTRAL_BASE: u32 = 376;
+/// `b{i}_listen` — 0 off, 1 solo the band's frequency region,
+/// 2 delta (hear only what this EQ changes). One band at a time (the
+/// most recent non-zero wins); composes with `split_solo` so you can
+/// hear e.g. just the transients of the soloed region.
+pub const EQ_LISTEN_BASE: u32 = 400;
 /// One past the last EQ param id.
-pub const EQ_PARAM_COUNT: u32 = 400;
+pub const EQ_PARAM_COUNT: u32 = 424;
 
 /// Canonical shape conversion — [`eq::slope::FilterShape`] owns the
 /// one true ordering (append-only, documented there).
@@ -143,7 +148,8 @@ pub fn eq_param_name(band: usize, field: usize) -> String {
     format!("b{}_{}", band + 1, f)
 }
 
-const EQ_EXT_FIELDS: [(&str, u32); 10] = [
+const EQ_EXT_FIELDS: [(&str, u32); 11] = [
+    ("listen", EQ_LISTEN_BASE),
     ("slope", EQ_SLOPE_BASE),
     ("placement", EQ_PLACEMENT_BASE),
     ("stream", EQ_STREAM_BASE),
@@ -217,6 +223,7 @@ pub fn eq_param_range(id: u32) -> (f64, f64, f64) {
         i if (EQ_PLACEMENT_BASE..EQ_PLACEMENT_BASE + 24).contains(&i) => (0.0, 4.0, 0.0),
         i if (EQ_STREAM_BASE..EQ_STREAM_BASE + 24).contains(&i) => (0.0, 2.0, 0.0),
         i if (EQ_SPECTRAL_BASE..EQ_SPECTRAL_BASE + 24).contains(&i) => (0.0, 1.0, 0.0),
+        i if (EQ_LISTEN_BASE..EQ_LISTEN_BASE + 24).contains(&i) => (0.0, 2.0, 0.0),
         _ => (0.0, 1.0, 0.0),
     }
 }
@@ -275,6 +282,13 @@ pub struct NativeEq {
     split_solo: u32,
     transient_gain_db: f64,
     steady_gain_db: f64,
+    /// Active listen: (band, mode 1 solo / 2 delta).
+    listen: Option<(usize, u32)>,
+    solo_filter: eq::dynamics::Svf,
+    /// Dry ring for delta listening, latency-aligned with the spectral
+    /// engine (max 2048 covers every supported block size).
+    dry_ring: [Vec<f64>; 2],
+    dry_pos: usize,
     /// Raw dynamic params per band: (range, thr, atk, rel, auto, relative).
     dyn_cfg: [(f64, f64, f64, f64, bool, bool); EQ_BANDS],
     /// Whether the band currently routes through the dynamic engine.
@@ -340,6 +354,10 @@ impl NativeEq {
             split_solo: 0,
             transient_gain_db: 0.0,
             steady_gain_db: 0.0,
+            listen: None,
+            solo_filter: eq::dynamics::Svf::new(sample_rate),
+            dry_ring: [vec![0.0; 2048], vec![0.0; 2048]],
+            dry_pos: 0,
             dyn_cfg: [(0.0, -40.0, 50.0, 50.0, true, false); EQ_BANDS],
             dyn_active: [false; EQ_BANDS],
             values,
@@ -389,12 +407,16 @@ impl NativeEq {
                 b.gain_db = gain;
                 b.q = q;
                 b.filter_type = eq_shape_to_filter(self.shapes[band]);
-                b.order = shape.effective_order(self.slopes[band] as usize);
+                // effective_order 0 = a 0 dB/oct cut = true bypass.
+                let order = shape.effective_order(self.slopes[band] as usize);
+                b.order = order.max(1);
+                b.enabled = b.enabled && order > 0;
                 b.placement = eq::band::Placement::from_index(self.placements[band]);
             }
             chain.update_band(band);
         }
         self.sync_spectral_regions();
+        self.sync_listen();
 
         let d = &mut self.dyn_bands[band];
         d.params.enabled = go_dynamic;
@@ -454,6 +476,29 @@ impl NativeEq {
     /// Whether the spectral engine is currently in the signal path.
     pub fn spectral_engaged(&self) -> bool {
         self.spectral.has_regions()
+    }
+
+    /// Configure the solo filter for the active listen band: the
+    /// region you hear follows the band's shape — bells/notches solo a
+    /// bandpass at freq/Q, shelves and cuts solo everything they reach.
+    fn sync_listen(&mut self) {
+        let Some((band, mode)) = self.listen else {
+            return;
+        };
+        if mode != 1 {
+            return;
+        }
+        let freq = self.values[band * EQ_FIELDS + 2].clamp(10.0, 30000.0);
+        let q = self.values[band * EQ_FIELDS + 4].clamp(0.025, 40.0);
+        use eq::dynamics::SvfShape;
+        use eq::slope::FilterShape as F;
+        let (shape, sf, sq) = match F::from_canonical_index(self.shapes[band]) {
+            F::LowShelf | F::LowCut => (SvfShape::Lowpass, freq, 0.707),
+            F::HighShelf | F::HighCut => (SvfShape::Highpass, freq, 0.707),
+            // Bells, notches, bandpasses, tilts: hear the band region.
+            _ => (SvfShape::Bandpass, freq, q.max(0.5)),
+        };
+        self.solo_filter.set(shape, sf, sq, 0.0);
     }
 
     fn set(&mut self, id: u32, v: f64) {
@@ -543,6 +588,7 @@ impl NativeEq {
                 i if (EQ_SPECTRAL_BASE..EQ_SPECTRAL_BASE + 24).contains(&i) => {
                     (EQ_SPECTRAL_BASE, 9)
                 }
+                i if (EQ_LISTEN_BASE..EQ_LISTEN_BASE + 24).contains(&i) => (EQ_LISTEN_BASE, 10),
                 _ => return,
             };
             let band = (id - base) as usize;
@@ -551,6 +597,17 @@ impl NativeEq {
                 7 => self.placements[band] = v as u32,
                 8 => self.streams[band] = v as u32,
                 9 => self.spectral_on[band] = v >= 0.5,
+                10 => {
+                    let mode = v as u32;
+                    if mode == 0 {
+                        if self.listen.is_some_and(|(b, _)| b == band) {
+                            self.listen = None;
+                        }
+                    } else {
+                        self.listen = Some((band, mode.min(2)));
+                        self.solo_filter.reset();
+                    }
+                }
                 1 => self.dyn_cfg[band].0 = v,
                 2 => self.dyn_cfg[band].1 = v,
                 3 => self.dyn_cfg[band].2 = v,
@@ -668,7 +725,8 @@ impl PluginInstance for NativeEq {
         // Fully-idle block (no active bands, no dynamics, no spectral,
         // no transient split, unity output): straight copy, zero DSP.
         let any_dyn = self.dyn_active.iter().any(|&a| a);
-        if !self.transient_mode
+        if self.listen.is_none()
+            && !self.transient_mode
             && !any_dyn
             && !self.spectral.has_regions()
             && !self.eq.has_active_bands()
@@ -692,6 +750,17 @@ impl PluginInstance for NativeEq {
         let out_gain = audiocore_dsp::db::db_to_linear(self.output_gain_db);
         let scratch_sl = &mut self.scratch_sl;
         let scratch_sr = &mut self.scratch_sr;
+        let listen = self.listen;
+        let solo_filter = &mut self.solo_filter;
+        let dry_ring = &mut self.dry_ring;
+        let dry_pos = &mut self.dry_pos;
+        // Delta listening compares against the dry signal delayed by
+        // the current path latency (spectral engaged → block-1).
+        let dry_delay = if spectral.has_regions() {
+            spectral.latency()
+        } else {
+            0
+        };
         process_f64_inplace(
             &mut self.scratch_l,
             &mut self.scratch_r,
@@ -700,6 +769,17 @@ impl PluginInstance for NativeEq {
             out_l,
             out_r,
             |l, r| {
+                // Record dry for delta listening (cheap ring write,
+                // only while a delta listen is active).
+                if matches!(listen, Some((_, 2))) {
+                    let ring = dry_ring[0].len();
+                    let mut p = *dry_pos;
+                    for i in 0..l.len() {
+                        dry_ring[0][p] = l[i];
+                        dry_ring[1][p] = r[i];
+                        p = (p + 1) % ring;
+                    }
+                }
                 if transient_mode {
                     // Split the whole block, run each stream's chain
                     // block-wise (l/r become the transient stream, the
@@ -755,6 +835,30 @@ impl PluginInstance for NativeEq {
                     for i in 0..l.len() {
                         l[i] *= out_gain;
                         r[i] *= out_gain;
+                    }
+                }
+                // ── Listen: solo the band's region, or hear only the
+                // delta this EQ creates. Composes with split_solo (the
+                // stream solo already happened upstream), so
+                // "transients of the soloed band" is stream solo +
+                // band solo together.
+                if let Some((_, mode)) = listen {
+                    match mode {
+                        1 => {
+                            for i in 0..l.len() {
+                                l[i] = solo_filter.tick(0, l[i]);
+                                r[i] = solo_filter.tick(1, r[i]);
+                            }
+                        }
+                        _ => {
+                            let ring = dry_ring[0].len();
+                            for i in 0..l.len() {
+                                let read = (*dry_pos + ring - dry_delay) % ring;
+                                l[i] -= dry_ring[0][read];
+                                r[i] -= dry_ring[1][read];
+                                *dry_pos = (*dry_pos + 1) % ring;
+                            }
+                        }
                     }
                 }
             },

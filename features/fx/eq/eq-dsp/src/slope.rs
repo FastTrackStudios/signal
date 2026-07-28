@@ -236,7 +236,9 @@ impl FilterShape {
 
     /// Effective filter order for a canonical slope param index,
     /// clamped to this shape's minimum slope. The single entry point
-    /// for every param surface.
+    /// for every param surface. Returns 0 for a 0 dB/oct cut — that
+    /// slope means BYPASS on Low/High Cut and Band Pass (Pro-Q
+    /// behavior); callers disable the band.
     pub fn effective_order(self, slope_param_index: usize) -> usize {
         let slope = Slope::from_param_index(slope_param_index);
         let min = self.min_slope();
@@ -247,7 +249,7 @@ impl FilterShape {
         } else {
             slope
         };
-        slope.order().max(1)
+        slope.order()
     }
 
     /// Minimum dB/oct slope this filter shape allows in Pro-Q UI.
@@ -337,7 +339,8 @@ mod tests {
         // Bell at slope 0/1 clamps up to Db12 → order 2.
         assert_eq!(FilterShape::Bell.effective_order(0), 2);
         assert_eq!(FilterShape::Bell.effective_order(1), 2);
-        // Cuts honor low slopes.
+        // Cuts honor low slopes; 0 dB/oct on a cut = bypass (order 0).
+        assert_eq!(FilterShape::LowCut.effective_order(0), 0);
         assert_eq!(FilterShape::LowCut.effective_order(1), 1);
         // Brickwall only for cuts; others cap at Db96.
         assert_eq!(FilterShape::Bell.effective_order(10), 16);

@@ -14,6 +14,7 @@ pub enum SvfShape {
     HighShelf,
     Lowpass,
     Highpass,
+    Bandpass,
 }
 
 /// Stereo (2-channel) Simper SVF.
@@ -103,7 +104,9 @@ impl Svf {
             SvfShape::Bell => (self.g_base, self.k_base / a),
             SvfShape::LowShelf => (self.g_base / a.sqrt(), self.k_base),
             SvfShape::HighShelf => (self.g_base * a.sqrt(), self.k_base),
-            SvfShape::Lowpass | SvfShape::Highpass => (self.g_base, self.k_base),
+            SvfShape::Lowpass | SvfShape::Highpass | SvfShape::Bandpass => {
+                (self.g_base, self.k_base)
+            }
         };
         self.a1 = 1.0 / (1.0 + g * (g + k));
         self.a2 = g * self.a1;
@@ -133,6 +136,12 @@ impl Svf {
                 self.m0 = 1.0;
                 self.m1 = -k;
                 self.m2 = -1.0;
+            }
+            SvfShape::Bandpass => {
+                // Unity peak gain at the center (k · BP).
+                self.m0 = 0.0;
+                self.m1 = k;
+                self.m2 = 0.0;
             }
         }
     }
