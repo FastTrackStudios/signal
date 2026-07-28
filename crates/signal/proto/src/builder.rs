@@ -114,7 +114,7 @@ pub struct BuiltBlockPreset {
 
 /// All entities produced by [`RigBuilder::build`].
 ///
-/// Call [`BuiltRig::entities`] to get all saveable domain objects.
+/// Call `BuiltRig::entities` to get all saveable domain objects.
 pub struct BuiltRig {
     pub block_presets: Vec<BuiltBlockPreset>,
     pub module_preset: ModulePreset,
