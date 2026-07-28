@@ -37,6 +37,12 @@ pub trait Soundsource: Send {
     /// Which generator this is (for the source picker / per-kind UI).
     fn kind(&self) -> SoundsourceKind;
 
+    /// Downcast hook for live control-thread edits (e.g. the sampler's
+    /// unison / amp envelope setters). Default: not downcastable.
+    fn as_any_mut(&mut self) -> Option<&mut dyn core::any::Any> {
+        None
+    }
+
     /// (Re)allocate for `sample_rate` / `block_size`.
     fn prepare(&mut self, sample_rate: f32, block_size: usize);
 

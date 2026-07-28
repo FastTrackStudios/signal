@@ -104,6 +104,14 @@ impl KeysInstrument {
     pub fn gain_cells(&self) -> GainCells {
         self.cells.clone()
     }
+
+    /// The compiled render tree — the live-edit surface
+    /// ([`RenderNode::set_leaf_param`] & friends). Control-thread only,
+    /// reached through the host's plugin-map lock
+    /// (see `KeysRig::edit_lane`).
+    pub fn render_mut(&mut self) -> &mut RenderNode {
+        &mut self.render
+    }
 }
 
 impl PluginInstance for KeysInstrument {
@@ -158,6 +166,10 @@ impl PluginInstance for KeysInstrument {
     }
     fn deactivate(&mut self) {
         self.prepared = false;
+    }
+
+    fn as_any_mut(&mut self) -> Option<&mut dyn std::any::Any> {
+        Some(self)
     }
 }
 
@@ -447,6 +459,33 @@ impl KeysRig {
     pub fn lane_cells(&self, layer: &str) -> Option<GainCells> {
         let Hosting::Lanes(l) = &self.hosting else { return None };
         l.layers.iter().find(|t| t.name == layer).map(|t| t.cells.clone())
+    }
+
+    /// Run `f` against the live [`KeysInstrument`] hosting `layer` — the
+    /// realtime parameter-edit seam (filter cutoff, envelope ADSR, unison…),
+    /// serialized against the renderer by the host's plugin-map lock. In
+    /// single-tree mode the one instrument hosts every layer, so the layer
+    /// name only picks the fx slot in lane mode.
+    pub fn edit_lane<R>(
+        &self,
+        layer: &str,
+        f: impl FnOnce(&mut KeysInstrument) -> R,
+    ) -> Option<R> {
+        let fx = match &self.hosting {
+            Hosting::Single { fx_guid, .. } => fx_guid.clone(),
+            Hosting::Lanes(l) => l
+                .layers
+                .iter()
+                .find(|t| t.name == layer)
+                .map(|t| t.fx.clone())?,
+        };
+        self.daw
+            .with_plugin_instance(&fx, |inst| {
+                inst.as_any_mut()
+                    .and_then(|any| any.downcast_mut::<KeysInstrument>())
+                    .map(f)
+            })
+            .flatten()
     }
 
     /// The live fader cells for the loaded program's engines + layers

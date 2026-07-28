@@ -190,6 +190,12 @@ pub enum MidiMod {
 /// block. Implement this to add a new source kind (a sequencer, a follower,
 /// a macro…) — the ModMatrix engine only sees the trait.
 pub trait ControlSource: Send {
+    /// Live-update an envelope source's ADSR. `false` for non-envelope
+    /// sources (the caller treats it as "not an env").
+    fn set_env_params(&mut self, _sample_rate: f32, _params: crate::native::AdsrParams) -> bool {
+        false
+    }
+
     /// Rate change (voices/coefficients survive).
     fn set_sample_rate(&mut self, _sample_rate: f32) {}
     /// Advance through one block; returns the source's current value.
@@ -219,6 +225,11 @@ impl ControlSource for ControlLfo {
 }
 
 impl ControlSource for ControlEnv {
+    fn set_env_params(&mut self, sample_rate: f32, params: crate::native::AdsrParams) -> bool {
+        self.env.set_params(sample_rate, params);
+        true
+    }
+
     fn set_sample_rate(&mut self, sample_rate: f32) {
         self.env.set_sample_rate(sample_rate);
     }
@@ -321,6 +332,11 @@ impl ControlSource for MidiSource {
 pub struct ModSource(Box<dyn ControlSource>);
 
 impl ModSource {
+    /// Live-update this source's ADSR when it is an envelope.
+    pub fn set_env_params(&mut self, sample_rate: f32, params: crate::native::AdsrParams) -> bool {
+        self.0.set_env_params(sample_rate, params)
+    }
+
     pub fn lfo(mut lfo: ControlLfo, sample_rate: f32) -> Self {
         lfo.sample_rate = sample_rate;
         Self(Box::new(lfo))

@@ -777,6 +777,107 @@ impl KeysRigBackend {
             || id == "source.detune"
     }
 
+    /// One module's DSP values, read from live state (own macros, else the
+    /// macro defaults) — everything [`push_module_dsp`](Self::push_module_dsp)
+    /// writes into the running engine.
+    fn module_dsp_values(&self, layer: &str, module: usize) -> Option<[f32; 13]> {
+        let s = self.inner.state.lock().ok()?;
+        let lane = s.lanes.get(layer)?;
+        if lane.modules.get(module).is_none() {
+            return None;
+        }
+        let v = |id: &str| Self::module_value(lane, module, id);
+        Some([
+            v("filter.cutoff"),
+            v("filter.reso"),
+            v("filter.env_amt"),
+            v("env1.attack"),
+            v("env1.decay"),
+            v("env1.sustain"),
+            v("env1.release"),
+            v("env2.attack"),
+            v("env2.decay"),
+            v("env2.sustain"),
+            v("env2.release"),
+            v("source.unison"),
+            v("source.detune"),
+        ])
+    }
+
+    /// Push one module's DSP macros — filter cutoff/resonance, the Amp and
+    /// Filter envelope ADSRs, the filter-env amount, unison — into the
+    /// RUNNING engine, live. This replaced the rebuild for these edits: the
+    /// filter and env-amount land in the render tree's parameter overlay,
+    /// the envelopes mutate their control sources in place, and the sampler
+    /// source takes its own unison / attack / release setters. Returns
+    /// `false` when nothing could be applied (engine stopped, lane not
+    /// hosted) — the caller falls back to the rebuild path.
+    fn push_module_dsp(&self, layer: &str, module_idx: usize) -> bool {
+        use signal_sampler::native::AdsrParams;
+        let Some(vals) = self.module_dsp_values(layer, module_idx) else { return false };
+        let [cutoff_hz, reso, env_amt, a1, d1, s1, r1, a2, d2, s2, r2, unison, detune] = vals;
+        let module = format!("{layer} {}", signal_synth::engine::module_slot(module_idx));
+        let Ok(rig) = self.inner.rig.lock() else { return false };
+        let Some(rig) = rig.as_ref() else { return false };
+        let sample_rate = rig.sample_rate().max(1);
+        rig.edit_lane(layer, |inst| {
+            let render = inst.render_mut();
+            // Filter block params (normalized on the block's own scale).
+            let cutoff_norm =
+                signal_sampler::native::NativeFilter::norm_from_cutoff(cutoff_hz) as f64;
+            let mut applied =
+                render.set_leaf_param(&module, "Filter 1", "cutoff", cutoff_norm);
+            applied |= render.set_leaf_param(
+                &module,
+                "Filter 1",
+                "resonance",
+                reso.clamp(0.0, 1.0) as f64,
+            );
+            // Envelope sources + the env→cutoff amount (synth modules; a
+            // sampler module has no env sources — its voices carry their
+            // own envelope, updated below).
+            let adsr = |a: f32, d: f32, sus: f32, r: f32| AdsrParams {
+                attack_s: (a / 1000.0).max(0.0),
+                decay_s: (d / 1000.0).max(0.0),
+                sustain: sus.clamp(0.0, 1.0),
+                release_s: (r / 1000.0).max(0.0),
+            };
+            applied |= render.set_env(&module, "Amp Env", adsr(a1, d1, s1, r1));
+            applied |= render.set_env(&module, "Filter Env", adsr(a2, d2, s2, r2));
+            applied |= render.set_route_depth(
+                &module,
+                "Filter Env",
+                "Filter 1",
+                "cutoff",
+                env_amt.clamp(-1.0, 1.0),
+            );
+            // Sampler source: per-voice amp attack/release + unison.
+            applied |= render.with_sampler_source(&module, "Soundsource", |sampler| {
+                let engine = sampler.engine_mut();
+                engine.set_attack_frames(
+                    ((a1.max(0.0) / 1000.0) * sample_rate as f32) as usize,
+                );
+                engine.set_release_frames(
+                    ((r1.max(0.0) / 1000.0) * sample_rate as f32) as usize,
+                );
+                engine.set_unison(
+                    (unison.max(1.0).round() as u8).min(8),
+                    detune.clamp(0.0, 2.0) * 100.0,
+                    0.7,
+                );
+            });
+            applied
+        })
+        .unwrap_or(false)
+    }
+
+    /// Live-push every `(layer, module)` target; `true` only if every one
+    /// applied (any miss → the caller rebuilds, which covers them all).
+    fn push_targets_dsp(&self, targets: &[(String, usize)]) -> bool {
+        !targets.is_empty()
+            && targets.iter().all(|(layer, i)| self.push_module_dsp(layer, *i))
+    }
+
     /// Rebuild the program shortly, once the knob stops moving.
     ///
     /// Filter and envelope values are block params, so hearing them means
@@ -799,8 +900,11 @@ impl KeysRigBackend {
             });
     }
 
-    fn after_global(&self, rebuild: bool) {
-        if rebuild {
+    fn after_global(&self, rebuild: bool, targets: &[(String, usize)]) {
+        // DSP parameters go LIVE into the running engine now (parameter
+        // overlay + in-place envelope sources); the rebuild only remains as
+        // the fallback when nothing is hosted yet.
+        if rebuild && !self.push_targets_dsp(targets) {
             // Coalesced: a global sweep moves every lane's parameter at drag
             // rate, and each one is a program rebuild.
             self.rebuild_soon();
@@ -1876,6 +1980,7 @@ impl KeysRigSvc for KeysRigBackend {
     fn set_layer_global(&self, layer: String, id: String, value: f32) {
         let Some(def) = global_def(&id) else { return };
         let rebuild;
+        let dsp_targets;
         {
             let Ok(mut s) = self.inner.state.lock() else { return };
             let Some(lane) = s.lanes.get_mut(&layer) else { return };
@@ -1898,10 +2003,10 @@ impl KeysRigSvc for KeysRigBackend {
             // The engine's knob for the same parameter now describes a patch
             // that moved under it.
             Self::rebase_others(&mut s, std::slice::from_ref(&engine), std::slice::from_ref(&layer), target, &id);
-            // Unison changes the program's voice count — that needs a build.
             rebuild = Self::macro_is_dsp(target);
+            dsp_targets = targets;
         }
-        self.after_global(rebuild);
+        self.after_global(rebuild, &dsp_targets);
     }
 
     fn engine_detail(&self, engine: String) -> KeysEngineDetail {
@@ -1930,6 +2035,7 @@ impl KeysRigSvc for KeysRigBackend {
     fn set_engine_global(&self, engine: String, id: String, value: f32) {
         let Some(def) = global_def(&id) else { return };
         let rebuild;
+        let dsp_targets;
         {
             let Ok(mut s) = self.inner.state.lock() else { return };
             if !s.engines.contains_key(&engine) {
@@ -1956,8 +2062,9 @@ impl KeysRigSvc for KeysRigBackend {
             // Every lane knob for this parameter has been moved from under it.
             Self::rebase_others(&mut s, std::slice::from_ref(&engine), &lanes, target, &id);
             rebuild = Self::macro_is_dsp(target);
+            dsp_targets = targets;
         }
-        self.after_global(rebuild);
+        self.after_global(rebuild, &dsp_targets);
     }
 
     fn rig_macros(&self) -> Vec<KeysMacro> {
@@ -1970,6 +2077,7 @@ impl KeysRigSvc for KeysRigBackend {
     fn set_rig_global(&self, id: String, value: f32) {
         let Some(def) = global_def(&id) else { return };
         let rebuild;
+        let dsp_targets;
         {
             let Ok(mut s) = self.inner.state.lock() else { return };
             let Some(target) = def.target else {
@@ -1991,8 +2099,9 @@ impl KeysRigSvc for KeysRigBackend {
             // from under it.
             Self::rebase_others(&mut s, &engines, &lanes, target, &id);
             rebuild = Self::macro_is_dsp(target);
+            dsp_targets = targets;
         }
-        self.after_global(rebuild);
+        self.after_global(rebuild, &dsp_targets);
     }
 
     fn set_layer_macro(&self, layer: String, module: u32, id: String, value: f32) {
@@ -2014,7 +2123,9 @@ impl KeysRigSvc for KeysRigBackend {
         if def.id == "source.level" {
             self.apply_mixer();
         }
-        if Self::macro_is_dsp(def.id) {
+        // DSP macros go live into the running engine (filter / envelopes /
+        // unison); the rebuild only remains as the not-yet-hosted fallback.
+        if Self::macro_is_dsp(def.id) && !self.push_module_dsp(&layer, module as usize) {
             self.rebuild_soon();
         }
         self.publish_mixer();
@@ -2567,7 +2678,16 @@ mod tests {
     /// module at the given cutoff.
     fn keys_state(lanes: &[(&str, f32)]) -> State {
         let mut s = State::default();
-        s.adopt_profile(worship_profile());
+        let mut profile = worship_profile();
+        // These tests exercise the knob mechanics over the named lanes;
+        // the worship profile's authored exclusions (Keys A, the piano) are
+        // covered by their own test below.
+        for (lane, _) in lanes {
+            if let Some(l) = profile.layer_mut(lane) {
+                l.exclude_global = false;
+            }
+        }
+        s.adopt_profile(profile);
         for (lane, cutoff) in lanes {
             let l = s.lanes.get_mut(*lane).expect("lane in the worship profile");
             let mut macros = default_macros();
@@ -2575,6 +2695,25 @@ mod tests {
             l.modules = vec![ModuleState { patch: "test".into(), macros, ..ModuleState::default() }];
         }
         s
+    }
+
+    /// The worship profile keeps the piano (Keys A) OUT of the global scope
+    /// — the exclusion that regressed the knob tests when it was authored.
+    #[test]
+    fn excluded_lanes_stay_out_of_global_scope() {
+        let mut s = State::default();
+        s.adopt_profile(worship_profile());
+        for lane in ["Keys A", "Keys B"] {
+            let l = s.lanes.get_mut(lane).expect("lane");
+            l.modules =
+                vec![ModuleState { patch: "test".into(), macros: default_macros(), ..ModuleState::default() }];
+        }
+        let targets = keys_targets(&s);
+        assert!(
+            !targets.iter().any(|(lane, _)| lane == "Keys A"),
+            "the piano is excluded from the engine's global scope"
+        );
+        assert!(targets.iter().any(|(lane, _)| lane == "Keys B"));
     }
 
     fn cutoff(s: &State, lane: &str) -> f32 {

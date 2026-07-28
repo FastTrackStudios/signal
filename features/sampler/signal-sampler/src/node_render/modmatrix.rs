@@ -34,19 +34,31 @@ pub(super) fn build_arp(container: &Container) -> Option<crate::native::ArpEngin
 
 /// One resolved ModMatrix row.
 pub(super) struct CompiledRoute {
-    source: usize,
-    leaf: usize,
-    param: u32,
+    pub(super) source: usize,
+    pub(super) leaf: usize,
+    pub(super) param: u32,
     /// Base (unmodulated) normalized value the depth adds onto.
-    base: f64,
-    depth: f32,
+    pub(super) base: f64,
+    pub(super) depth: f32,
 }
 
 /// The compiled control-rate modulation engine + send-bus state for one tree.
 #[derive(Default)]
 pub struct ModEngine {
     pub(super) sources: Vec<ModSource>,
+    /// Per-source `(container path, name)` — lower-cased, for live
+    /// addressing ("which module's Amp Env").
+    pub(super) source_paths: Vec<(Vec<String>, String)>,
     pub(super) routes: Vec<CompiledRoute>,
+    /// Per-leaf lower-cased `(container path, display name, params)` — the
+    /// live-edit address book (leaf ids index all three).
+    pub(super) leaf_paths: Vec<Vec<String>>,
+    pub(super) leaf_names: Vec<String>,
+    pub(super) leaf_params: Vec<Vec<signal_plugin_host::PluginParamInfo>>,
+    /// Persistent live parameter overlay per leaf (`(param id, normalized)`)
+    /// — control-thread edits land here and both seed the per-block writes
+    /// and re-base any routes onto the same parameter.
+    pub(super) overlay: Vec<Vec<(u32, f64)>>,
     /// Per-leaf pending parameter writes, rebuilt each block.
     pub(super) writes: Vec<Vec<(u32, f64)>>,
     /// Send buses (indexed by compile-time bus id), zeroed each block.
@@ -67,6 +79,9 @@ impl ModEngine {
             s.set_sample_rate(sample_rate as f32);
         }
         self.writes = vec![Vec::new(); leaf_count];
+        if self.overlay.len() != leaf_count {
+            self.overlay = vec![Vec::new(); leaf_count];
+        }
     }
 
     /// Tick all sources through one block and rebuild the per-leaf writes.
@@ -78,11 +93,91 @@ impl ModEngine {
             .iter_mut()
             .map(|s| s.tick_at(events, frames, tempo))
             .collect();
-        accumulate_writes(&self.routes, &values, &mut self.writes);
+        accumulate_writes(&self.routes, &values, &self.overlay, &mut self.writes);
     }
 
     pub fn route_count(&self) -> usize {
         self.routes.len()
+    }
+
+    // ── Live editing (control thread, under the host's plugin-map lock) ──
+
+    /// Leaf id whose path contains the `module` segment and whose display
+    /// name is `leaf` (both matched lower-cased).
+    pub(super) fn find_leaf(&self, module: &str, leaf: &str) -> Option<usize> {
+        let module = module.to_lowercase();
+        let leaf = leaf.to_lowercase();
+        (0..self.leaf_names.len()).find(|&i| {
+            self.leaf_names[i] == leaf && self.leaf_paths[i].iter().any(|seg| *seg == module)
+        })
+    }
+
+    /// Set a leaf parameter live (normalized 0..1). The value persists in
+    /// the overlay: it seeds the leaf's writes every block and becomes the
+    /// base any modulation routes on that parameter add onto.
+    pub fn set_leaf_param(&mut self, module: &str, leaf: &str, param: &str, value: f64) -> bool {
+        let Some(idx) = self.find_leaf(module, leaf) else { return false };
+        let pkey = param.to_lowercase();
+        let Some(p) = self.leaf_params[idx].iter().find(|p| p.name.to_lowercase() == pkey)
+        else {
+            return false;
+        };
+        let value = value.clamp(0.0, 1.0);
+        if self.overlay.len() <= idx {
+            self.overlay.resize(self.leaf_names.len(), Vec::new());
+        }
+        match self.overlay[idx].iter_mut().find(|(id, _)| *id == p.id) {
+            Some(entry) => entry.1 = value,
+            None => self.overlay[idx].push((p.id, value)),
+        }
+        true
+    }
+
+    /// Live-update a modulator envelope's ADSR, addressed by module + name
+    /// ("amp env" / "filter env").
+    pub fn set_env(&mut self, module: &str, name: &str, params: crate::native::AdsrParams) -> bool {
+        let module = module.to_lowercase();
+        let name = name.to_lowercase();
+        let sr = self.sample_rate;
+        for (i, (path, source_name)) in self.source_paths.iter().enumerate() {
+            if *source_name == name && path.iter().any(|seg| *seg == module) {
+                return self.sources[i].set_env_params(sr, params);
+            }
+        }
+        false
+    }
+
+    /// Live-update a route's depth (e.g. the Filter Env → cutoff amount),
+    /// addressed by module + source name + target leaf/param.
+    pub fn set_route_depth(
+        &mut self,
+        module: &str,
+        source: &str,
+        leaf: &str,
+        param: &str,
+        depth: f32,
+    ) -> bool {
+        let Some(leaf_idx) = self.find_leaf(module, leaf) else { return false };
+        let pkey = param.to_lowercase();
+        let Some(p) = self.leaf_params[leaf_idx]
+            .iter()
+            .find(|p| p.name.to_lowercase() == pkey)
+        else {
+            return false;
+        };
+        let source = source.to_lowercase();
+        let module = module.to_lowercase();
+        let mut hit = false;
+        for r in &mut self.routes {
+            if r.leaf == leaf_idx && r.param == p.id {
+                let (path, name) = &self.source_paths[r.source];
+                if *name == source && path.iter().any(|seg| *seg == module) {
+                    r.depth = depth;
+                    hit = true;
+                }
+            }
+        }
+        hit
     }
 }
 
@@ -94,9 +189,22 @@ impl ModEngine {
 /// (spec `signal.parameter.modulatable` / `signal.modulator.route`: a
 /// parameter's value is `base + Σ(route offsets)`). Before this, the last route
 /// to a target won and the others were silently dropped.
-fn accumulate_writes(routes: &[CompiledRoute], values: &[f32], writes: &mut [Vec<(u32, f64)>]) {
+fn accumulate_writes(
+    routes: &[CompiledRoute],
+    values: &[f32],
+    overlay: &[Vec<(u32, f64)>],
+    writes: &mut [Vec<(u32, f64)>],
+) {
     for w in writes.iter_mut() {
         w.clear();
+    }
+    // Seed every live-overlay entry first: an overlaid parameter reaches its
+    // leaf even with no routes, and a route onto it adds its offset ON TOP
+    // of the live value (the overlay IS the new base).
+    for (leaf, entries) in overlay.iter().enumerate() {
+        if let Some(w) = writes.get_mut(leaf) {
+            w.extend_from_slice(entries);
+        }
     }
     for r in routes {
         let Some(&source) = values.get(r.source) else {
@@ -125,6 +233,8 @@ fn accumulate_writes(routes: &[CompiledRoute], values: &[f32], writes: &mut [Vec
 /// + send-bus registry.
 pub(super) struct ModCompiler {
     pub(super) sources: Vec<ModSource>,
+    /// Per-source `(container path, name)` — mirrors `sources`.
+    pub(super) source_paths: Vec<(Vec<String>, String)>,
     /// (lower-cased modulator name, source index) — scoped stack.
     pub(super) scope: Vec<(String, usize)>,
     /// Dedup for MIDI sources.
@@ -132,6 +242,10 @@ pub(super) struct ModCompiler {
     pub(super) routes: Vec<CompiledRoute>,
     /// Per-leaf (lower-cased display name, params) for target resolution.
     pub(super) leaves: Vec<(String, Vec<signal_plugin_host::PluginParamInfo>)>,
+    /// Per-leaf lower-cased container path — mirrors `leaves`.
+    pub(super) leaf_paths: Vec<Vec<String>>,
+    /// Container-name stack during compile (lower-cased), for path capture.
+    pub(super) path: Vec<String>,
     /// Send-bus names (lower-cased), collected in a pre-pass; index = bus id.
     pub(super) buses: Vec<String>,
     sample_rate: u32,
@@ -141,10 +255,13 @@ impl ModCompiler {
     pub(super) fn new(sample_rate: u32) -> Self {
         Self {
             sources: Vec::new(),
+            source_paths: Vec::new(),
             scope: Vec::new(),
             midi: Vec::new(),
             routes: Vec::new(),
             leaves: Vec::new(),
+            leaf_paths: Vec::new(),
+            path: Vec::new(),
             buses: Vec::new(),
             sample_rate,
         }
@@ -213,6 +330,8 @@ impl ModCompiler {
             _ => return None,
         };
         self.sources.push(src);
+        self.source_paths
+            .push((self.path.clone(), block.display_name().to_lowercase()));
         Some(self.sources.len() - 1)
     }
 
@@ -228,6 +347,7 @@ impl ModCompiler {
             return Some(*idx);
         }
         self.sources.push(ModSource::midi(m));
+        self.source_paths.push((Vec::new(), name.to_lowercase()));
         let idx = self.sources.len() - 1;
         self.midi.push((m, idx));
         Some(idx)
@@ -291,7 +411,8 @@ mod tests {
         ];
         let values = [1.0f32, 1.0];
         let mut writes = vec![Vec::new()];
-        accumulate_writes(&routes, &values, &mut writes);
+        let overlay: Vec<Vec<(u32, f64)>> = vec![Vec::new(); writes.len()];
+        accumulate_writes(&routes, &values, &overlay, &mut writes);
         assert_eq!(writes[0].len(), 1, "one accumulated write per param");
         let (param, v) = writes[0][0];
         assert_eq!(param, 7);
@@ -306,7 +427,8 @@ mod tests {
         ];
         let values = [1.0f32];
         let mut writes = vec![Vec::new()];
-        accumulate_writes(&routes, &values, &mut writes);
+        let overlay: Vec<Vec<(u32, f64)>> = vec![Vec::new(); writes.len()];
+        accumulate_writes(&routes, &values, &overlay, &mut writes);
         assert_eq!(writes[0][0].1, 1.0);
     }
 
@@ -315,7 +437,8 @@ mod tests {
         let routes = vec![route(0, 0, 3, 0.5, -0.5)];
         let values = [1.0f32];
         let mut writes = vec![Vec::new()];
-        accumulate_writes(&routes, &values, &mut writes);
+        let overlay: Vec<Vec<(u32, f64)>> = vec![Vec::new(); writes.len()];
+        accumulate_writes(&routes, &values, &overlay, &mut writes);
         assert!((writes[0][0].1 - 0.0).abs() < 1e-9);
     }
 
@@ -327,7 +450,8 @@ mod tests {
         ];
         let values = [1.0f32];
         let mut writes = vec![Vec::new()];
-        accumulate_writes(&routes, &values, &mut writes);
+        let overlay: Vec<Vec<(u32, f64)>> = vec![Vec::new(); writes.len()];
+        accumulate_writes(&routes, &values, &overlay, &mut writes);
         assert_eq!(writes[0].len(), 2);
     }
 }

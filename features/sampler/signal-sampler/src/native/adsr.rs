@@ -66,6 +66,14 @@ impl Adsr {
         env
     }
 
+    /// Replace the ADSR parameters live — coefficients recompute, the
+    /// current stage and level survive (a held note keeps sounding and
+    /// takes the new times from here on).
+    pub fn set_params(&mut self, sample_rate: f32, params: AdsrParams) {
+        self.params = params;
+        self.set_sample_rate(sample_rate);
+    }
+
     /// Recompute per-sample coefficients for a new rate (voices survive).
     pub fn set_sample_rate(&mut self, sample_rate: f32) {
         let sr = sample_rate.max(1.0);

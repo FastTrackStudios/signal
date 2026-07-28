@@ -98,6 +98,10 @@ impl Soundsource for SamplerInstrument {
         SoundsourceKind::Sample
     }
 
+    fn as_any_mut(&mut self) -> Option<&mut dyn core::any::Any> {
+        Some(self)
+    }
+
     fn descriptor(&self) -> PluginDescriptor {
         PluginDescriptor {
             id: "signal.sampler.instrument".into(),

@@ -304,23 +304,28 @@ impl RenderNode {
         container: &Container,
         sample_rate: u32,
     ) -> RenderNode {
-        if mc.routes.is_empty() && mc.buses.is_empty() && build_arp(container).is_none() {
-            root
-        } else {
-            let bus_count = mc.buses.len();
-            RenderNode::Modulated {
-                engine: Box::new(ModEngine {
-                    sources: mc.sources,
-                    routes: mc.routes,
-                    writes: Vec::new(),
-                    bus_l: vec![Vec::new(); bus_count],
-                    bus_r: vec![Vec::new(); bus_count],
-                    tempo_bpm: 120.0,
-                    sample_rate: sample_rate as f32,
-                    arp: build_arp(container),
-                }),
-                inner: Box::new(root),
-            }
+        // Always wrap: the ModEngine is also the tree's live-edit address
+        // book (leaf/source registries + parameter overlay), so even a
+        // route-less tree keeps it — an empty tick is a few clears.
+        let bus_count = mc.buses.len();
+        let (leaf_names, leaf_params): (Vec<_>, Vec<_>) = mc.leaves.into_iter().unzip();
+        RenderNode::Modulated {
+            engine: Box::new(ModEngine {
+                sources: mc.sources,
+                source_paths: mc.source_paths,
+                routes: mc.routes,
+                leaf_paths: mc.leaf_paths,
+                leaf_names,
+                leaf_params,
+                overlay: Vec::new(),
+                writes: Vec::new(),
+                bus_l: vec![Vec::new(); bus_count],
+                bus_r: vec![Vec::new(); bus_count],
+                tempo_bpm: 120.0,
+                sample_rate: sample_rate as f32,
+                arp: build_arp(container),
+            }),
+            inner: Box::new(root),
         }
     }
 
@@ -336,7 +341,9 @@ impl RenderNode {
         if container.bypassed {
             return RenderNode::Serial(Vec::new());
         }
-        // Bring this container's modulators into scope.
+        // Bring this container's modulators into scope (its name is on the
+        // path first, so their live address includes this container).
+        mc.path.push(container.name.to_lowercase());
         let scope_mark = mc.scope.len();
         for m in &container.modulators {
             if let Some(idx) = mc.instantiate(m) {
@@ -356,6 +363,7 @@ impl RenderNode {
         mc.resolve_routes(&container.mod_routes, &subtree);
 
         mc.scope.truncate(scope_mark);
+        mc.path.pop();
 
         let base = match container.combine {
             Combine::Serial => RenderNode::Serial(kids),
@@ -438,6 +446,7 @@ impl RenderNode {
                     .unwrap_or_default();
                 let id = mc.leaves.len();
                 mc.leaves.push((b.display_name().to_lowercase(), params));
+                mc.leaf_paths.push(mc.path.clone());
                 let leaf = RenderNode::Leaf { id, inst };
                 // A block can also be a send target (e.g. the global Rotary).
                 match mc.bus_id(&b.display_name()) {
@@ -451,6 +460,97 @@ impl RenderNode {
             RigNode::Container { container: c } => {
                 Self::compile_container_cells(c, sample_rate, mc, cells)
             }
+        }
+    }
+
+    // ── Live editing (control thread, under the host's plugin-map lock) ──
+    //
+    // The compiled tree keeps its address book (leaf/source registries) in
+    // the root [`ModEngine`]; these methods resolve `(module, target)` there
+    // and either write the parameter overlay / envelope sources, or reach a
+    // sampler source instance for its own setters. All are cheap and safe
+    // against the renderer: the host serializes access through the same
+    // plugin-map lock that guards `process_block`.
+
+    fn root_engine(&mut self) -> Option<&mut ModEngine> {
+        match self {
+            RenderNode::Modulated { engine, .. } => Some(engine),
+            _ => None,
+        }
+    }
+
+    /// Set a leaf block parameter live (normalized 0..1), addressed by the
+    /// owning `module` container + the block's display name. Persists until
+    /// the next set; modulation routes on the same parameter ride on top.
+    pub fn set_leaf_param(&mut self, module: &str, leaf: &str, param: &str, value: f64) -> bool {
+        self.root_engine()
+            .map(|e| e.set_leaf_param(module, leaf, param, value))
+            .unwrap_or(false)
+    }
+
+    /// Live-update a modulator envelope's ADSR ("amp env" / "filter env"),
+    /// addressed by its owning `module` container.
+    pub fn set_env(&mut self, module: &str, name: &str, params: crate::native::AdsrParams) -> bool {
+        self.root_engine()
+            .map(|e| e.set_env(module, name, params))
+            .unwrap_or(false)
+    }
+
+    /// Live-update a modulation route's depth (e.g. Filter Env → cutoff
+    /// amount), addressed by module + source + target.
+    pub fn set_route_depth(
+        &mut self,
+        module: &str,
+        source: &str,
+        leaf: &str,
+        param: &str,
+        depth: f32,
+    ) -> bool {
+        self.root_engine()
+            .map(|e| e.set_route_depth(module, source, leaf, param, depth))
+            .unwrap_or(false)
+    }
+
+    /// Run `f` against the sampler source instance of `module`'s leaf named
+    /// `leaf` (its unison / amp-envelope setters). `false` when the leaf
+    /// isn't a sampler source.
+    pub fn with_sampler_source(
+        &mut self,
+        module: &str,
+        leaf: &str,
+        f: impl FnOnce(&mut crate::SamplerInstrument),
+    ) -> bool {
+        let Some(id) = self
+            .root_engine()
+            .and_then(|e| e.find_leaf(module, leaf))
+        else {
+            return false;
+        };
+        let Some(LeafBackend::Source(source)) = self.leaf_backend_mut(id) else {
+            return false;
+        };
+        match source.as_any_mut().and_then(|a| a.downcast_mut::<crate::SamplerInstrument>()) {
+            Some(sampler) => {
+                f(sampler);
+                true
+            }
+            None => false,
+        }
+    }
+
+    /// The leaf backend behind leaf `id`, if present in this subtree.
+    fn leaf_backend_mut(&mut self, id: usize) -> Option<&mut LeafBackend> {
+        match self {
+            RenderNode::Leaf { id: lid, inst } if *lid == id => inst.as_mut(),
+            RenderNode::Leaf { .. } => None,
+            RenderNode::Serial(v) | RenderNode::Parallel(v) => {
+                v.iter_mut().find_map(|n| n.leaf_backend_mut(id))
+            }
+            RenderNode::Zoned { inner, .. }
+            | RenderNode::Gain { inner, .. }
+            | RenderNode::Modulated { inner, .. }
+            | RenderNode::BusInject { inner, .. }
+            | RenderNode::SendTap { inner, .. } => inner.leaf_backend_mut(id),
         }
     }
 
@@ -1329,9 +1429,11 @@ zones (
                 tree = tree.route("Filter Env", "Filter.cutoff", -0.95);
             }
             let mut rn = RenderNode::compile(&tree, 48_000);
+            // The engine (live-edit address book) is always present now;
+            // only the ROUTE count depends on the tree.
             assert_eq!(
                 rn.mod_engine().map(|e| e.route_count()),
-                with_route.then_some(1),
+                Some(if with_route { 1 } else { 0 }),
                 "route resolution matches"
             );
             rn.prepare(48_000.0, 512);
@@ -1551,6 +1653,84 @@ zones (
 
     /// Routes on placeholder blocks resolve to nothing (warn, not panic),
     /// and the tree still renders.
+    /// The realtime edit surface: a running tree's filter cutoff closes via
+    /// the parameter overlay (no rebuild), the env→cutoff amount and the
+    /// envelope's own ADSR mutate in place, and addressing is module-scoped
+    /// (a sibling module's identically-named blocks are not touched).
+    #[test]
+    fn live_edits_reach_the_running_tree() {
+        let module = |name: &str| {
+            Container::module(name)
+                .block(BlockType::Oscillator, "Osc")
+                .add(
+                    crate::rig::RigBlock::of_type(BlockType::Filter)
+                        .named("Filter 1")
+                        .with_param("cutoff", "1.0"),
+                )
+                .modulator(BlockType::Envelope, "Filter Env")
+                .route("Filter Env", "Filter 1.cutoff", 0.0)
+        };
+        // Modules SUM (parallel), exactly as the engine builds a layer — in
+        // series, module B's source would replace A's output.
+        let tree = Container::layer("L").add(
+            Container::parallel("L Modules")
+                .add(module("L A"))
+                .add(module("L B")),
+        );
+        let mut rn = RenderNode::compile(&tree, 48_000);
+        rn.prepare(48_000.0, 512);
+
+        let mut sustain = |rn: &mut RenderNode| {
+            let (mut l, mut r) = (vec![0.0; 512], vec![0.0; 512]);
+            let mut level = 0.0;
+            for b in 0..24 {
+                let midi = [note_on(60, 100)];
+                let ev = PluginEvents {
+                    params: &[],
+                    midi: if b == 0 { &midi } else { &[] },
+                    note_expressions: &[],
+                };
+                rn.render(&mut l, &mut r, &ev);
+                level = rms(&l);
+            }
+            level
+        };
+
+        let open = sustain(&mut rn);
+        assert!(open > 1e-3, "open tree sounds, rms={open}");
+
+        // Close ONE module's filter live — module-scoped addressing.
+        assert!(rn.set_leaf_param("L A", "Filter 1", "cutoff", 0.0));
+        assert!(!rn.set_leaf_param("L C", "Filter 1", "cutoff", 0.0), "unknown module");
+        assert!(!rn.set_leaf_param("L A", "Filter 9", "cutoff", 0.0), "unknown leaf");
+        let one_closed = sustain(&mut rn);
+        assert!(
+            one_closed < open * 0.75 && one_closed > open * 0.25,
+            "one of two parallel modules darkened: open={open} one_closed={one_closed}"
+        );
+
+        // Close the sibling too — near-silent highs now.
+        assert!(rn.set_leaf_param("L B", "Filter 1", "cutoff", 0.0));
+        let both_closed = sustain(&mut rn);
+        assert!(
+            both_closed < open * 0.35,
+            "both filters closed: open={open} both={both_closed}"
+        );
+
+        // Envelope + route-depth edits resolve (module-scoped).
+        assert!(rn.set_env(
+            "L A",
+            "Filter Env",
+            crate::native::AdsrParams { attack_s: 0.5, decay_s: 0.1, sustain: 1.0, release_s: 0.1 },
+        ));
+        assert!(!rn.set_env("L C", "Filter Env", crate::native::AdsrParams::default()));
+        assert!(rn.set_route_depth("L B", "Filter Env", "Filter 1", "cutoff", 0.9));
+        assert!(!rn.set_route_depth("L B", "Amp Env", "Filter 1", "cutoff", 0.9));
+
+        // No sampler source in this tree.
+        assert!(!rn.with_sampler_source("L A", "Soundsource", |_| {}));
+    }
+
     #[test]
     fn unresolved_routes_are_harmless() {
         let tree = Container::layer("L")
@@ -1559,7 +1739,9 @@ zones (
             .route("Wheel", "Rotary.speed", 1.0)
             .route("Nonexistent Env", "Osc.pitch", 1.0);
         let mut rn = RenderNode::compile(&tree, 48_000);
-        assert!(rn.mod_engine().is_none(), "no routes resolved");
+        // The engine is always present (live-edit address book); the broken
+        // routes just resolve to nothing.
+        assert_eq!(rn.mod_engine().map(|e| e.route_count()), Some(0), "no routes resolved");
         rn.prepare(48_000.0, 256);
         assert!(render_note(&mut rn, 60, 100) > 1e-3, "still renders");
     }
