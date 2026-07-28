@@ -104,8 +104,15 @@ impl IrTransforms {
     /// Apply the full pipeline to an [`IrAsset`] and produce a stereo
     /// pair at the asset's sample rate.
     pub fn apply(&self, ir: &IrAsset) -> (Vec<f64>, Vec<f64>) {
-        let sr = ir.sample_rate;
-        let (mut l, mut r) = extract_stereo(ir, self.layout);
+        let (l, r) = extract_stereo(ir, self.layout);
+        self.apply_pair(l, r, ir.sample_rate)
+    }
+
+    /// Apply the pipeline to an already-extracted channel pair — used
+    /// for the cross (LR/RL) channels of a true-stereo IR so all four
+    /// legs get identical shaping.
+    pub fn apply_pair(&self, l: Vec<f64>, r: Vec<f64>, sr: f64) -> (Vec<f64>, Vec<f64>) {
+        let (mut l, mut r) = (l, r);
 
         // 1. Trim
         let start = ((self.trim_start_s.max(0.0)) * sr) as usize;

@@ -15,7 +15,7 @@ use crate::algorithms;
 use crate::ir::engine::{ProcessedIr, ReshapeJob};
 use crate::ir::prepared::PreparedIrPair;
 use audiocore_dsp::envelope::EnvelopeFollower;
-use fts_modulation::{Modulator, TransportInfo};
+use fts_modulation::{EnvFollower, Modulator, TransportInfo};
 use audiocore_dsp::smoothing::ParamSmoother;
 
 use crate::primitives::saturation::Saturator;
@@ -53,6 +53,9 @@ pub struct ChainParamSurface {
     pub magneto: MagnetoParams,
     pub nonlinear: NonLinearParams,
     pub predelay_ms: f64,
+    /// Tempo-synced pre-delay: when set (in beats) and `tempo_bpm` is
+    /// known, overrides `predelay_ms` (e.g. 0.25 = a 16th note).
+    pub predelay_sync_beats: Option<f64>,
     pub mix: f64,
     pub width: f64,
     pub pan: f64,
@@ -177,6 +180,9 @@ pub struct ReverbChain {
     // Global controls
     /// Pre-delay in milliseconds (0-500).
     pub predelay_ms: f64,
+    /// Tempo-synced pre-delay: when set (in beats) and `tempo_bpm` is
+    /// known, overrides `predelay_ms` (e.g. 0.25 = a 16th note).
+    pub predelay_sync_beats: Option<f64>,
     /// Dry/wet mix (0.0 = fully dry, 1.0 = fully wet).
     pub mix: f64,
     /// Stereo width (0.0 = mono, 1.0 = normal, 2.0 = extra wide).
@@ -248,6 +254,9 @@ pub struct ReverbChain {
     /// chain advances its own transport position.
     send_mod: Option<Box<Modulator>>,
     wet_mod: Option<Box<Modulator>>,
+    /// Envelope-follower lane on the wet output: rides (or, inverted,
+    /// ducks) the reverb with the dry input's envelope.
+    wet_follower: Option<Box<EnvFollower>>,
     send_prev_phase: f64,
     wet_prev_phase: f64,
     transport_qn: f64,
@@ -364,6 +373,7 @@ impl ReverbChain {
             voice: ReverbVoice::default(),
             hall: HallParams::default(),
             predelay_ms: 0.0,
+            predelay_sync_beats: None,
             mix: 0.5,
             width: 1.0,
             pan: 0.0,
@@ -388,6 +398,7 @@ impl ReverbChain {
             ir_trash_tx: None,
             send_mod: None,
             wet_mod: None,
+            wet_follower: None,
             send_prev_phase: 0.0,
             wet_prev_phase: 0.0,
             transport_qn: 0.0,
@@ -439,6 +450,15 @@ impl ReverbChain {
         }
     }
 
+    /// Install (or clear) the wet envelope follower: the dry input's
+    /// envelope rides the reverb output (invert = ducking reverb).
+    pub fn set_wet_follower(&mut self, f: Option<Box<EnvFollower>>) {
+        self.wet_follower = f;
+        if let Some(f) = &mut self.wet_follower {
+            f.update(self.sample_rate);
+        }
+    }
+
     /// MIDI trigger both lanes (Midi trigger mode restarts the cycle).
     pub fn midi_trigger_patterns(&mut self) {
         if let Some(m) = &mut self.send_mod {
@@ -479,6 +499,10 @@ impl ReverbChain {
                     right,
                     transforms: crate::ir::IrTransforms::from_impulse(&self.impulse),
                     sample_rate: self.sample_rate,
+                    cross: match slot {
+                        IrSlot::A => self.algorithm.impulse_reshape_cross_source(),
+                        IrSlot::B => None,
+                    },
                 };
                 if tx.send(job).is_err() {
                     self.reshape_tx = None;
@@ -599,6 +623,7 @@ impl ReverbChain {
             magneto: self.magneto,
             nonlinear: self.nonlinear,
             predelay_ms: self.predelay_ms,
+            predelay_sync_beats: self.predelay_sync_beats,
             mix: self.mix,
             width: self.width,
             pan: self.pan,
@@ -636,6 +661,7 @@ impl ReverbChain {
         self.magneto = s.magneto;
         self.nonlinear = s.nonlinear;
         self.predelay_ms = s.predelay_ms;
+        self.predelay_sync_beats = s.predelay_sync_beats;
         self.mix = s.mix;
         self.width = s.width;
         self.pan = s.pan;
@@ -1022,7 +1048,14 @@ impl Processor for ReverbChain {
             }
             let mut loaded = false;
             for ir in [latest_a, latest_b].into_iter().flatten() {
-                loaded |= self.algorithm.try_load_ir_slot(&ir.left, &ir.right, ir.slot);
+                loaded |= match (&ir.cross, ir.slot) {
+                    // True-stereo loads (slot A only) carry LR/RL legs.
+                    (Some((lr, rl)), IrSlot::A) => self
+                        .algorithm
+                        .try_load_ir_true_stereo(&ir.left, lr, rl, &ir.right)
+                        || self.algorithm.try_load_ir_slot(&ir.left, &ir.right, ir.slot),
+                    _ => self.algorithm.try_load_ir_slot(&ir.left, &ir.right, ir.slot),
+                };
             }
             if loaded {
                 self.reset_impulse_after_load();
@@ -1039,7 +1072,14 @@ impl Processor for ReverbChain {
         ) {
             self.predelay_samples = 0;
         } else {
-            self.predelay_samples = (self.predelay_ms * 0.001 * self.sample_rate) as usize;
+            // Tempo sync wins over the ms knob when both are set.
+            let ms = match (self.predelay_sync_beats, self.tempo_bpm) {
+                (Some(beats), Some(bpm)) if beats > 0.0 && bpm > 0.0 => {
+                    (beats * 60_000.0 / bpm).min(490.0)
+                }
+                _ => self.predelay_ms,
+            };
+            self.predelay_samples = (ms * 0.001 * self.sample_rate) as usize;
         }
 
         // Re-apply the input LP here too: the Classic-voice vintage cap
@@ -1220,6 +1260,13 @@ impl Processor for ReverbChain {
                         self.algorithm.reset();
                     }
                     self.wet_prev_phase = phase;
+                    final_l *= g;
+                    final_r *= g;
+                }
+
+                // Follower lane: dry envelope rides/ducks the wet.
+                if let Some(f) = &mut self.wet_follower {
+                    let g = f.tick((dry_l + dry_r) * 0.5);
                     final_l *= g;
                     final_r *= g;
                 }
@@ -1517,6 +1564,7 @@ mod tests {
             source_frames: 1000,
             source_channels: 2,
             slot: IrSlot::A,
+            cross: None,
         })
         .unwrap();
 

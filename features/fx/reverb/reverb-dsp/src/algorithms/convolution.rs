@@ -434,6 +434,14 @@ pub struct Convolution {
     // IR slot B — pre-allocated, gated off until the morph engages.
     conv_l_b: PartitionedConv,
     conv_r_b: PartitionedConv,
+    // True-stereo cross legs (input L → out R, input R → out L),
+    // engaged only while a 4-leg IR occupies slot A.
+    conv_lr: PartitionedConv,
+    conv_rl: PartitionedConv,
+    true_stereo: bool,
+    /// Un-shaped cross originals (LR, RL) for Impulse re-shaping.
+    #[allow(clippy::type_complexity)]
+    cross_originals: Option<(Arc<Vec<f64>>, Arc<Vec<f64>>)>,
     sample_rate: f64,
     ir_seconds: f64,
     /// True once a user-supplied IR has been loaded — disables the
@@ -507,6 +515,8 @@ impl Convolution {
         let mut conv_r = PartitionedConv::new(&mut planner);
         let mut conv_l_b = PartitionedConv::new(&mut planner);
         let mut conv_r_b = PartitionedConv::new(&mut planner);
+        let conv_lr = PartitionedConv::new(&mut planner);
+        let conv_rl = PartitionedConv::new(&mut planner);
 
         let ir_l = synthesize_ir(sample_rate, 1.5, 0xC0FFEE);
         let ir_r = synthesize_ir(sample_rate, 1.5, 0xBADBEEF);
@@ -543,6 +553,10 @@ impl Convolution {
             conv_r,
             conv_l_b,
             conv_r_b,
+            conv_lr,
+            conv_rl,
+            true_stereo: false,
+            cross_originals: None,
             sample_rate,
             ir_seconds: 1.5,
             user_ir_loaded: false,
@@ -613,6 +627,7 @@ impl Convolution {
                 self.conv_l.load_ir(cap_l);
                 self.conv_r.load_ir(cap_r);
                 self.user_ir_loaded = true;
+                self.disengage_true_stereo();
             }
             IrSlot::B => {
                 self.conv_l_b.load_ir(cap_l);
@@ -623,6 +638,55 @@ impl Convolution {
         self.originals[slot_idx(slot)] =
             Some((Arc::new(cap_l.to_vec()), Arc::new(cap_r.to_vec())));
         self.on_new_r_loaded(slot);
+    }
+
+    /// True-stereo (4-leg) synchronous load into slot A: LL/RR feed
+    /// the direct convolvers, LR/RL the cross pair. Runs FFTs —
+    /// background/setup use only.
+    pub fn load_ir_true_stereo(
+        &mut self,
+        ll: &[f64],
+        lr: &[f64],
+        rl: &[f64],
+        rr: &[f64],
+    ) -> bool {
+        let max = (self.sample_rate * MAX_IR_SECONDS) as usize;
+        let cap = |x: &[f64]| x[..x.len().min(max)].to_vec();
+        let (ll, lr, rl, rr) = (cap(ll), cap(lr), cap(rl), cap(rr));
+        self.conv_l.load_ir(&ll);
+        self.conv_r.load_ir(&rr);
+        self.conv_lr.load_ir(&lr);
+        self.conv_rl.load_ir(&rl);
+        self.user_ir_loaded = true;
+        self.true_stereo = true;
+        self.originals[0] = Some((Arc::new(ll), Arc::new(rr)));
+        self.cross_originals = Some((Arc::new(lr), Arc::new(rl)));
+        self.on_new_r_loaded(IrSlot::A);
+        true
+    }
+
+    /// Cross reshape originals for the chain's reshape pump.
+    #[allow(clippy::type_complexity)]
+    pub fn cross_reshape_source(
+        &self,
+    ) -> Option<(Arc<Vec<f64>>, Arc<Vec<f64>>)> {
+        if self.true_stereo {
+            self.cross_originals.clone()
+        } else {
+            None
+        }
+    }
+
+    /// Drop back to plain stereo: flag off, cross originals discarded
+    /// off-thread. Cross partitions stay allocated (silent — never
+    /// processed while disengaged) so re-engaging costs no allocation
+    /// churn beyond the loads themselves.
+    fn disengage_true_stereo(&mut self) {
+        self.true_stereo = false;
+        if let Some((lr, rl)) = self.cross_originals.take() {
+            self.discard(IrTrash::Raw(lr));
+            self.discard(IrTrash::Raw(rl));
+        }
     }
 
     /// New-IR bookkeeping: shaping params reset to defaults (manual
@@ -640,6 +704,7 @@ impl Convolution {
     pub fn clear_user_ir(&mut self) {
         self.user_ir_loaded = false;
         self.user_ir_loaded_b = false;
+        self.disengage_true_stereo();
         self.rebuild_synth_ir(self.ir_seconds);
     }
 
@@ -666,6 +731,26 @@ impl Convolution {
                 let l = self.conv_l.swap_prepared(pair.left);
                 let r = self.conv_r.swap_prepared(pair.right);
                 self.user_ir_loaded = true;
+                // True-stereo pairs install the cross legs; plain
+                // stereo pairs disengage them.
+                if let Some(cross) = pair.cross {
+                    let (plr, prl) = *cross;
+                    let old_lr = self.conv_lr.swap_prepared(plr);
+                    let old_rl = self.conv_rl.swap_prepared(prl);
+                    self.discard(IrTrash::Prepared(old_lr));
+                    self.discard(IrTrash::Prepared(old_rl));
+                    self.true_stereo = true;
+                    let prev = match pair.cross_raw {
+                        Some(cr) => self.cross_originals.replace(cr),
+                        None => self.cross_originals.take(),
+                    };
+                    if let Some((plr, prl)) = prev {
+                        self.discard(IrTrash::Raw(plr));
+                        self.discard(IrTrash::Raw(prl));
+                    }
+                } else {
+                    self.disengage_true_stereo();
+                }
                 (l, r)
             }
             IrSlot::B => {
@@ -707,6 +792,15 @@ impl Convolution {
     /// Return leg of the re-preparation pipeline: swap partitions only,
     /// leaving impulse params and user-IR flags untouched.
     fn swap_reshaped(&mut self, pair: PreparedIrPair, slot: IrSlot) {
+        if slot == IrSlot::A && self.true_stereo {
+            if let Some(cross) = pair.cross {
+                let (plr, prl) = *cross;
+                let old_lr = self.conv_lr.swap_prepared_ext(plr, true);
+                let old_rl = self.conv_rl.swap_prepared_ext(prl, true);
+                self.discard(IrTrash::Prepared(old_lr));
+                self.discard(IrTrash::Prepared(old_rl));
+            }
+        }
         let (old_l, old_r) = match slot {
             IrSlot::A => (
                 self.conv_l.swap_prepared_ext(pair.left, true),
@@ -761,6 +855,17 @@ impl Convolution {
                 IrSlot::A => {
                     self.conv_l.load_ir(&sl);
                     self.conv_r.load_ir(&sr);
+                    if self.true_stereo {
+                        if let Some((lr, rl)) = self.cross_originals.clone() {
+                            let (slr, srl) = t.apply_pair(
+                                (*lr).clone(),
+                                (*rl).clone(),
+                                self.sample_rate,
+                            );
+                            self.conv_lr.load_ir(&slr);
+                            self.conv_rl.load_ir(&srl);
+                        }
+                    }
                 }
                 IrSlot::B => {
                     self.conv_l_b.load_ir(&sl);
@@ -893,6 +998,8 @@ impl ReverbAlgorithm for Convolution {
         self.conv_r.reset();
         self.conv_l_b.reset();
         self.conv_r_b.reset();
+        self.conv_lr.reset();
+        self.conv_rl.reset();
         self.predelay_l.reset();
         self.predelay_r.reset();
         for ap in &mut self.motion {
@@ -916,6 +1023,12 @@ impl ReverbAlgorithm for Convolution {
         self.conv_r = PartitionedConv::new(&mut planner);
         self.conv_l_b = PartitionedConv::new(&mut planner);
         self.conv_r_b = PartitionedConv::new(&mut planner);
+        self.conv_lr = PartitionedConv::new(&mut planner);
+        self.conv_rl = PartitionedConv::new(&mut planner);
+        // Cross originals were sampled at the old rate; the host (or
+        // loader) re-submits the IR on rate changes, which re-engages.
+        self.true_stereo = false;
+        self.cross_originals = None;
         self.planner = planner;
         self.rebuild_synth_ir(self.ir_seconds);
 
@@ -973,6 +1086,22 @@ impl ReverbAlgorithm for Convolution {
     fn try_load_ir_slot(&mut self, left: &[f64], right: &[f64], slot: IrSlot) -> bool {
         self.load_ir_stereo_slot(left, right, slot);
         true
+    }
+
+    fn try_load_ir_true_stereo(
+        &mut self,
+        ll: &[f64],
+        lr: &[f64],
+        rl: &[f64],
+        rr: &[f64],
+    ) -> bool {
+        self.load_ir_true_stereo(ll, lr, rl, rr)
+    }
+
+    fn impulse_reshape_cross_source(
+        &self,
+    ) -> Option<(Arc<Vec<f64>>, Arc<Vec<f64>>)> {
+        self.cross_reshape_source()
     }
 
     fn try_load_prepared_ir_slot(&mut self, pair: PreparedIrPair, slot: IrSlot) -> bool {
@@ -1106,6 +1235,27 @@ impl ReverbAlgorithm for Convolution {
         } else {
             0.0
         };
+        // True-stereo cross legs: input L convolved toward R and vice
+        // versa. Zero cost while disengaged (blocks never processed).
+        let (out_cross_r, out_cross_l) = if self.true_stereo {
+            let cr = if self.conv_lr.output_block_read < BLOCK {
+                let v = self.conv_lr.output_block[self.conv_lr.output_block_read];
+                self.conv_lr.output_block_read += 1;
+                v
+            } else {
+                0.0
+            };
+            let cl = if self.conv_rl.output_block_read < BLOCK {
+                let v = self.conv_rl.output_block[self.conv_rl.output_block_read];
+                self.conv_rl.output_block_read += 1;
+                v
+            } else {
+                0.0
+            };
+            (cr, cl)
+        } else {
+            (0.0, 0.0)
+        };
 
         // Push input sample. When block is full, run FFT and reset read
         // ptr. Slot B stages in lockstep (cheap) but only pays for
@@ -1116,6 +1266,10 @@ impl ReverbAlgorithm for Convolution {
         self.conv_r.input_block[fill] = in_r;
         self.conv_l_b.input_block[fill] = in_l;
         self.conv_r_b.input_block[fill] = in_r;
+        if self.true_stereo {
+            self.conv_lr.input_block[fill] = in_l;
+            self.conv_rl.input_block[fill] = in_r;
+        }
         let new_fill = fill + 1;
 
         if new_fill >= BLOCK {
@@ -1129,6 +1283,14 @@ impl ReverbAlgorithm for Convolution {
             self.conv_r_b.input_block_fill = 0;
             self.conv_l.process_block(&block_l);
             self.conv_r.process_block(&block_r);
+            if self.true_stereo {
+                self.conv_lr.input_block_fill = 0;
+                self.conv_lr.process_block(&block_l);
+                self.conv_rl.input_block_fill = 0;
+                self.conv_rl.process_block(&block_r);
+                self.conv_lr.output_block_read = 0;
+                self.conv_rl.output_block_read = 0;
+            }
             if self.b_engaged {
                 let mut block_l_b = [0.0; BLOCK];
                 let mut block_r_b = [0.0; BLOCK];
@@ -1149,9 +1311,15 @@ impl ReverbAlgorithm for Convolution {
             self.conv_r.input_block_fill = new_fill;
             self.conv_l_b.input_block_fill = new_fill;
             self.conv_r_b.input_block_fill = new_fill;
+            if self.true_stereo {
+                self.conv_lr.input_block_fill = new_fill;
+                self.conv_rl.input_block_fill = new_fill;
+            }
         }
 
         // ── Option 3: equal-power A/B morph ───────────────────────────
+        let out_l = out_l + out_cross_l;
+        let out_r = out_r + out_cross_r;
         let (mut wet_l, mut wet_r) = if self.b_engaged {
             let pos = (self.sm.morph.value() + self.sm.morph_lfo.value() * lfo)
                 .clamp(0.0, 1.0);

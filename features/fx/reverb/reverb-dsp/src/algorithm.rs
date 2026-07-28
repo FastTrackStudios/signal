@@ -812,6 +812,29 @@ pub trait ReverbAlgorithm: Send {
         false
     }
 
+    /// True-stereo (4-leg) IR load: LL/RR drive the direct convolvers,
+    /// LR/RL the cross-feed pair. Slot A only. No-op outside
+    /// Convolution.
+    fn try_load_ir_true_stereo(
+        &mut self,
+        ll: &[f64],
+        lr: &[f64],
+        rl: &[f64],
+        rr: &[f64],
+    ) -> bool {
+        let _ = (ll, lr, rl, rr);
+        false
+    }
+
+    /// Cross-leg reshape originals (LR, RL) for a true-stereo slot A
+    /// impulse, if loaded.
+    #[allow(clippy::type_complexity)]
+    fn impulse_reshape_cross_source(
+        &self,
+    ) -> Option<(std::sync::Arc<Vec<f64>>, std::sync::Arc<Vec<f64>>)> {
+        None
+    }
+
     /// Slot-addressed IR load for dual-IR algorithms. Default: slot A
     /// falls through to [`Self::try_load_ir`], slot B is rejected.
     fn try_load_ir_slot(&mut self, left: &[f64], right: &[f64], slot: IrSlot) -> bool {

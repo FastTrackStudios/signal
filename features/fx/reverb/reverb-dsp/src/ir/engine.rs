@@ -55,6 +55,9 @@ pub struct ProcessedIr {
     pub source_channels: usize,
     /// Destination IR slot, carried through from [`IrJob::slot`].
     pub slot: IrSlot,
+    /// True-stereo cross legs (L→R, R→L) when the source was a
+    /// 4-channel file or an auto-paired `_L`/`_R` stereo file set.
+    pub cross: Option<(Vec<f64>, Vec<f64>)>,
 }
 
 pub struct IrEngine {
@@ -181,6 +184,15 @@ impl IrEngine {
                 let mut planner = RealFftPlanner::<f64>::new();
                 while let Ok(result) = src.recv() {
                     let Ok(ir) = result.outcome else { continue };
+                    let cross = ir.cross.as_ref().map(|(lr, rl)| {
+                        Box::new((
+                            PreparedIr::build_with_planner(lr, &mut planner),
+                            PreparedIr::build_with_planner(rl, &mut planner),
+                        ))
+                    });
+                    let cross_raw = ir
+                        .cross
+                        .map(|(lr, rl)| (Arc::new(lr), Arc::new(rl)));
                     let pair = PreparedIrPair {
                         left: PreparedIr::build_with_planner(&ir.left, &mut planner),
                         right: PreparedIr::build_with_planner(&ir.right, &mut planner),
@@ -190,6 +202,8 @@ impl IrEngine {
                         // Impulse engine can re-shape without a disk
                         // round-trip.
                         raw: Some((Arc::new(ir.left), Arc::new(ir.right))),
+                        cross,
+                        cross_raw,
                     };
                     if tx.send(pair).is_err() {
                         break;
@@ -231,6 +245,9 @@ pub struct ReshapeJob {
     /// decay_frac / tail_gate / attack_frac / stretch / reverse).
     pub transforms: IrTransforms,
     pub sample_rate: f64,
+    /// True-stereo cross originals (LR, RL) to shape alongside.
+    #[allow(clippy::type_complexity)]
+    pub cross: Option<(Arc<Vec<f64>>, Arc<Vec<f64>>)>,
 }
 
 /// Background worker that re-shapes an Impulse engine's IR when its
@@ -296,12 +313,25 @@ impl ImpulseReshaper {
                             job.sample_rate,
                         );
                         let (l, r) = job.transforms.apply(&asset);
+                        let cross = job.cross.as_ref().map(|(lr, rl)| {
+                            let (slr, srl) = job.transforms.apply_pair(
+                                (**lr).clone(),
+                                (**rl).clone(),
+                                job.sample_rate,
+                            );
+                            Box::new((
+                                PreparedIr::build_with_planner(&slr, &mut planner),
+                                PreparedIr::build_with_planner(&srl, &mut planner),
+                            ))
+                        });
                         let pair = PreparedIrPair {
                             left: PreparedIr::build_with_planner(&l, &mut planner),
                             right: PreparedIr::build_with_planner(&r, &mut planner),
                             slot: job.slot,
                             reshape: true,
                             raw: None,
+                            cross,
+                            cross_raw: None,
                         };
                         if tx_out.send(pair).is_err() {
                             return;
@@ -356,6 +386,56 @@ fn process_job(job: &IrJob) -> Result<ProcessedIr, IrLoadError> {
     let asset = IrAsset::load(&job.path, job.target_sample_rate)?;
     let source_frames = asset.frames();
     let source_channels = asset.num_channels();
+
+    // True-stereo detection: a 4-channel file is [LL, LR, RL, RR]; a
+    // stereo file named `*_L` with a `*_R` sibling (or vice versa) is
+    // the two-file convention (L file = source-L → LL/LR).
+    let quad: Option<[Vec<f64>; 4]> = if asset.num_channels() >= 4 {
+        Some([
+            asset.channels[0].clone(),
+            asset.channels[1].clone(),
+            asset.channels[2].clone(),
+            asset.channels[3].clone(),
+        ])
+    } else if asset.num_channels() == 2 {
+        true_stereo_sibling(&job.path).and_then(|(l_path, r_path)| {
+            let l = if l_path == job.path {
+                asset.clone()
+            } else {
+                IrAsset::load(&l_path, job.target_sample_rate).ok()?
+            };
+            let r = if r_path == job.path {
+                asset.clone()
+            } else {
+                IrAsset::load(&r_path, job.target_sample_rate).ok()?
+            };
+            (l.num_channels() >= 2 && r.num_channels() >= 2).then(|| {
+                [
+                    l.channels[0].clone(),
+                    l.channels[1].clone(),
+                    r.channels[0].clone(),
+                    r.channels[1].clone(),
+                ]
+            })
+        })
+    } else {
+        None
+    };
+
+    if let Some([ll, lr, rl, rr]) = quad {
+        let (left, right) = job.transforms.apply_pair(ll, rr, job.target_sample_rate);
+        let cross = job.transforms.apply_pair(lr, rl, job.target_sample_rate);
+        return Ok(ProcessedIr {
+            left,
+            right,
+            sample_rate: job.target_sample_rate,
+            source_frames,
+            source_channels: 4,
+            slot: job.slot,
+            cross: Some(cross),
+        });
+    }
+
     let (left, right) = job.transforms.apply(&asset);
     Ok(ProcessedIr {
         left,
@@ -364,5 +444,32 @@ fn process_job(job: &IrJob) -> Result<ProcessedIr, IrLoadError> {
         source_frames,
         source_channels,
         slot: job.slot,
+        cross: None,
     })
+}
+
+/// Map a path with an `_L`/`-L`/` L` (or `R`) stem suffix to its
+/// true-stereo (L-file, R-file) pair, if the sibling exists on disk.
+fn true_stereo_sibling(path: &Path) -> Option<(PathBuf, PathBuf)> {
+    let stem = path.file_stem()?.to_str()?;
+    let ext = path.extension()?.to_str()?;
+    for (suffix_l, suffix_r) in [("_L", "_R"), ("-L", "-R"), (" L", " R")] {
+        let (this, other, this_is_l) = if stem.ends_with(suffix_l) {
+            (suffix_l, suffix_r, true)
+        } else if stem.ends_with(suffix_r) {
+            (suffix_r, suffix_l, false)
+        } else {
+            continue;
+        };
+        let base = &stem[..stem.len() - this.len()];
+        let sibling = path.with_file_name(format!("{base}{other}.{ext}"));
+        if sibling.is_file() {
+            return Some(if this_is_l {
+                (path.to_path_buf(), sibling)
+            } else {
+                (sibling, path.to_path_buf())
+            });
+        }
+    }
+    None
 }

@@ -109,6 +109,12 @@ pub struct PreparedIrPair {
     /// `Arc` so audio-thread clones are allocation-free.
     #[allow(clippy::type_complexity)]
     pub raw: Option<(std::sync::Arc<Vec<f64>>, std::sync::Arc<Vec<f64>>)>,
+    /// True-stereo cross legs (L→R, R→L), prepared. `None` = plain
+    /// stereo. Boxed so the common case stays small.
+    pub cross: Option<Box<(PreparedIr, PreparedIr)>>,
+    /// Un-shaped cross originals, mirroring `raw`.
+    #[allow(clippy::type_complexity)]
+    pub cross_raw: Option<(std::sync::Arc<Vec<f64>>, std::sync::Arc<Vec<f64>>)>,
 }
 
 impl PreparedIrPair {
@@ -119,6 +125,8 @@ impl PreparedIrPair {
             slot: crate::algorithm::IrSlot::A,
             reshape: false,
             raw: None,
+            cross: None,
+            cross_raw: None,
         }
     }
 
@@ -133,6 +141,8 @@ impl PreparedIrPair {
             slot: crate::algorithm::IrSlot::A,
             reshape: false,
             raw: None,
+            cross: None,
+            cross_raw: None,
         }
     }
 }
