@@ -52,6 +52,7 @@ pub mod section;
 pub mod shelf;
 pub mod shelf_zpk;
 pub mod slope;
+pub mod spectral;
 pub mod transform;
 pub mod zpk;
 
