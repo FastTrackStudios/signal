@@ -75,8 +75,24 @@ impl Default for SpectralParams {
 /// relative reference — roughly a third-octave view of "expected" level.
 const SMOOTH_OCTAVES: f64 = 0.33;
 
+/// One band-shaped spectral region (Pro-Q "Spectral" band): per-bin
+/// dynamics restricted to a frequency range with its own depth and
+/// threshold.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct SpectralRegion {
+    pub lo_hz: f64,
+    pub hi_hz: f64,
+    /// Reduction depth 0..1 (from the band's dynamic range).
+    pub amount: f64,
+    /// dB over the smoothed reference (relative mode).
+    pub threshold_db: f64,
+}
+
 pub struct SpectralEngine {
     pub params: SpectralParams,
+    /// When non-empty, band regions REPLACE the global lo/hi/amount/
+    /// threshold: a bin is processed by the strongest matching region.
+    regions: Vec<SpectralRegion>,
     fft: Arc<dyn RealToComplex<f64>>,
     ifft: Arc<dyn ComplexToReal<f64>>,
     block: usize,
@@ -118,6 +134,7 @@ impl SpectralEngine {
         let bins = block / 2 + 1;
         let mut e = Self {
             params: SpectralParams::default(),
+            regions: Vec::with_capacity(24),
             fft,
             ifft,
             block,
@@ -150,6 +167,19 @@ impl SpectralEngine {
     /// t + block − 1).
     pub fn latency(&self) -> usize {
         self.block - 1
+    }
+
+    /// Replace the band-region set (preallocated capacity 24 — no
+    /// audio-thread allocation up to 24 regions).
+    pub fn set_regions(&mut self, regions: &[SpectralRegion]) {
+        self.regions.clear();
+        for r in regions.iter().take(self.regions.capacity()) {
+            self.regions.push(*r);
+        }
+    }
+
+    pub fn has_regions(&self) -> bool {
+        !self.regions.is_empty()
     }
 
     pub fn update(&mut self, sample_rate: f64) {
@@ -238,16 +268,37 @@ impl SpectralEngine {
             let sharp = 1.0 + self.params.density.clamp(0.0, 1.0) * 3.0;
             for i in 0..bins {
                 let f = i as f64 * bin_hz;
-                let in_range = f >= self.params.lo_hz && f <= self.params.hi_hz;
+                // Region mode: the strongest matching band region sets
+                // depth + threshold; global mode uses the engine params.
+                let (in_range, amount, thr) = if self.regions.is_empty() {
+                    (
+                        f >= self.params.lo_hz && f <= self.params.hi_hz,
+                        self.params.amount,
+                        self.params.threshold_db,
+                    )
+                } else {
+                    let mut best: Option<&SpectralRegion> = None;
+                    for r in &self.regions {
+                        if f >= r.lo_hz && f <= r.hi_hz
+                            && best.is_none_or(|b| r.amount > b.amount)
+                        {
+                            best = Some(r);
+                        }
+                    }
+                    match best {
+                        Some(r) => (true, r.amount, r.threshold_db),
+                        None => (false, 0.0, 0.0),
+                    }
+                };
                 let gated = self.mag_db[i] < self.params.gate_db;
                 let over = if self.params.relative {
-                    self.mag_db[i] - self.ref_db[i] - self.params.threshold_db
+                    self.mag_db[i] - self.ref_db[i] - thr
                 } else {
-                    self.mag_db[i] - self.params.threshold_db
+                    self.mag_db[i] - thr
                 };
                 let target = if in_range && !gated && over > 0.0 {
                     // Density sharpens: prominence^sharp scaling, capped.
-                    (over * sharp * self.params.amount.clamp(0.0, 1.0)).min(24.0)
+                    (over * sharp * amount.clamp(0.0, 1.0)).min(24.0)
                 } else {
                     0.0
                 };
