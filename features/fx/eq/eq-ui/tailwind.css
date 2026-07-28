@@ -1,5 +1,5 @@
 @import "tailwindcss";
-@import "../../../../libs/fts-ui/showcase/assets/fts-theme.css";
+@import "../../../../libs/fts-ui/fts-ui/assets/fts-theme.css";
 
 /* eq-ui's OWN Tailwind build — the plugin editor embeds the compiled
  * output (assets/tailwind.css) via include_str! in control_view.rs.

@@ -77,8 +77,16 @@
         pname = "task-webapp";
         appDir = "apps/task/web";
         dxName = "task-app-web";
+        # assets/tailwind.css is generated, not committed. dx detects the
+        # `tailwind.css` at the crate root and builds it, but it reads
+        # assets/ before cargo runs, so build it up front to avoid the
+        # race — from the ONE shared input at apps/task/tailwind.css.
+        #
+        # cwd is irrelevant to the result: the input sets `source(none)`
+        # and names every source explicitly, so the sheet is identical
+        # from anywhere. Run from apps/task/ purely for the short path.
         preBuild = ''
-          tailwindcss -i apps/task/web/tailwind.css -o apps/task/web/assets/tailwind.css
+          (cd apps/task && tailwindcss -i tailwind.css -o web/assets/tailwind.css)
         '';
       };
 

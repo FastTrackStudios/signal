@@ -148,6 +148,14 @@ jobs:
       - name: Manifests + lockfile
         if: needs.plan.outputs.workspace == 'true' || needs.plan.outputs.patchbay == 'true'
         run: ${NIX_DEV} cargo metadata --locked --format-version 1 > /dev/null
+      # The Task apps' assets/tailwind.css is generated, not committed,
+      # and `asset!()` resolves it at compile time — so it has to exist
+      # before cargo runs. `dx` builds it during a normal `dx serve` /
+      # `dx build`, but CI drives plain cargo, so generate it here.
+      # tailwindcss comes from the .#ci shell.
+      - name: Generate Task tailwind sheets
+        if: needs.plan.outputs.workspace == 'true'
+        run: ${NIX_DEV} just --justfile apps/task/Justfile --working-directory apps/task css
       - name: cargo check --workspace
         if: needs.plan.outputs.workspace == 'true'
         run: ${NIX_DEV} cargo check --workspace --exclude vox-discover

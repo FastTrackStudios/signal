@@ -1,5 +1,5 @@
 @import "tailwindcss";
-@import "../../../../fts-ui/crates/showcase/assets/fts-theme.css";
+@import "../../../../../libs/fts-ui/fts-ui/assets/fts-theme.css";
 
 /* Scan paths are relative to THIS file (the source).
  * apps/eq-standalone/ → ../../crates is FTS-EQ/crates;

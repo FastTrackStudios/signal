@@ -72,7 +72,10 @@ jobs:
           # script uses `${DX_FEATURES-<default>}`, not `:-`).
           DX_FEATURES: ""
           DX_BUNDLE_ID: app.fasttrackstudio.task
-          DX_TAILWIND: tailwind.css
+          # Relative to DX_APP_DIR. The three Task apps share ONE tailwind
+          # input at apps/task/tailwind.css (each app's assets/tailwind.css
+          # is generated, gitignored output).
+          DX_TAILWIND: ../tailwind.css
           ICONS_DIR: ${{ github.workspace }}/apps/task/mobile/ios/Assets.xcassets
           # ── Embedded watchOS companion (apps/task/watchos/project.yml) ──
           WATCH_APP: apps/task/watchos
