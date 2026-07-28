@@ -9,7 +9,6 @@
 use crate::tilt::DecayTilt;
 use audiocore_dsp::biquad::{Biquad, FilterType};
 use audiocore_dsp::dc_blocker::DcBlocker;
-use audiocore_dsp::delay_line::DelayLine;
 use audiocore_dsp::one_pole::OnePoleHp;
 use audiocore_dsp::prng::XorShift32;
 use audiocore_dsp::smoothing::ParamSmoother;
@@ -180,7 +179,29 @@ pub struct TapeDelay {
 
     // Internal state
     decay_tilt_eq: DecayTilt,
-    delay: DelayLine,
+    // ── Speed-type tape transport (Zavalishin–Parker DAFx-18) ──────
+    // The buffer is uniform in TAPE DISTANCE (cells), not host time:
+    // the write head lays the signal down at `speed` cells per host
+    // sample and each playback head sits a FIXED number of cells
+    // behind it, so delay = cells / speed. Changing the TIME knob
+    // changes the motor speed — stored audio replays at the ratio of
+    // current to written speed, i.e. it REPITCHES like tape instead of
+    // sliding like a chorus. Slow tape (long delays) packs fewer cells
+    // per host sample → genuinely duller repeats via the record-head
+    // AA filter.
+
+    tape: Box<[f64]>,
+    write_phase: f64,
+    prev_write_in: f64,
+    /// Motor speed smoother (~120 ms inertia — the repitch glide).
+    speed_smoother: ParamSmoother,
+    /// Record-head bandwidth limit while the tape runs slower than the
+    /// host rate (cutoff tracks 0.45 · speed · sr).
+    record_aa: audiocore_dsp::one_pole::OnePoleLp,
+    /// Previous wobble offset — its per-sample derivative modulates the
+    /// SPEED (position-offset wobble on a uniform tape wouldn't touch
+    /// the write side; speed wobble is what real transports do).
+    prev_mod_offset: f64,
     wow: Wow,
     flutter: Flutter,
     hicut: Biquad,
@@ -206,7 +227,6 @@ pub struct TapeDelay {
     flutter_key_env: f64,
     feedback_sample: f64,
     sample_rate: f64,
-    smoother: ParamSmoother,
     fb_smoother: ParamSmoother,
     drive_smoother: ParamSmoother,
     hicut_smoother: ParamSmoother,
@@ -223,8 +243,6 @@ impl Default for TapeDelay {
 }
 
 impl TapeDelay {
-    /// Maximum delay time in seconds (must accommodate Head 3 at 2.85× base).
-    const MAX_DELAY_S: f64 = 5.0;
 
     pub fn new() -> Self {
         Self {
@@ -255,7 +273,12 @@ impl TapeDelay {
             tape_speed: TapeSpeed::Normal,
             low_contour: 0.0,
             decay_tilt_eq: DecayTilt::new(),
-            delay: DelayLine::new(48000 * 5 + 1024),
+            tape: vec![0.0; Self::tape_capacity(48000.0)].into_boxed_slice(),
+            write_phase: 0.0,
+            prev_write_in: 0.0,
+            speed_smoother: ParamSmoother::new(0.0),
+            record_aa: audiocore_dsp::one_pole::OnePoleLp::new(20000.0, 48000.0),
+            prev_mod_offset: 0.0,
             wow: Wow::new(),
             flutter: Flutter::new(),
             hicut: Biquad::new(),
@@ -273,7 +296,6 @@ impl TapeDelay {
             flutter_key_env: 0.0,
             feedback_sample: 0.0,
             sample_rate: 48000.0,
-            smoother: ParamSmoother::new(0.0),
             fb_smoother: ParamSmoother::new(0.4),
             drive_smoother: ParamSmoother::new(0.0),
             hicut_smoother: ParamSmoother::new(8000.0),
@@ -283,11 +305,46 @@ impl TapeDelay {
     }
 
     // r[impl delay.tape.update]
+    /// Tape cells for the head-1 distance: one second of tape at unity
+    /// speed; the Fast transport doubles the cell density (same knob
+    /// delay ⇒ double speed ⇒ double bandwidth at long delays).
+    fn head_cells(&self) -> f64 {
+        match self.tape_speed {
+            TapeSpeed::Fast => self.sample_rate * 2.0,
+            TapeSpeed::Normal => self.sample_rate,
+        }
+    }
+
+    /// Buffer capacity: farthest head (2.85×) at Fast density + margin.
+    fn tape_capacity(sample_rate: f64) -> usize {
+        (HEAD3_RATIO * sample_rate * 2.0) as usize + 4096
+    }
+
+    /// Cubic read at `lag_cells` behind the (fractional) write head.
+    #[inline]
+    fn read_tape(&self, lag_cells: f64) -> f64 {
+        let cap = self.tape.len() as f64;
+        let pos = (self.write_phase - lag_cells).rem_euclid(cap);
+        let i0 = pos.floor();
+        let frac = pos - i0;
+        let idx = i0 as usize;
+        let cap_u = self.tape.len();
+        let ym1 = self.tape[(idx + cap_u - 1) % cap_u];
+        let y0 = self.tape[idx];
+        let y1 = self.tape[(idx + 1) % cap_u];
+        let y2 = self.tape[(idx + 2) % cap_u];
+        // Catmull-Rom
+        let a0 = -0.5 * ym1 + 1.5 * y0 - 1.5 * y1 + 0.5 * y2;
+        let a1 = ym1 - 2.5 * y0 + 2.0 * y1 - 0.5 * y2;
+        let a2 = -0.5 * ym1 + 0.5 * y1;
+        ((a0 * frac + a1) * frac + a2) * frac + y0
+    }
+
     pub fn update(&mut self, sample_rate: f64) {
         self.sample_rate = sample_rate;
-        let max_len = (sample_rate * Self::MAX_DELAY_S) as usize + 1024;
-        if self.delay.len() < max_len {
-            self.delay = DelayLine::new(max_len);
+        let cap = Self::tape_capacity(sample_rate);
+        if self.tape.len() < cap {
+            self.tape = vec![0.0; cap].into_boxed_slice();
         }
 
         self.wow.set_sample_rate(sample_rate);
@@ -332,9 +389,12 @@ impl TapeDelay {
             self.contour_hp.set_cutoff(hp, sample_rate);
         }
 
-        // Smooth delay time changes (~150ms time constant, from qdelay)
-        self.smoother
-            .set_time_seeded(0.15, sample_rate, self.time_ms * 0.001 * sample_rate);
+        // Motor inertia: the speed target glides over ~120 ms, and the
+        // stored audio repitches through the glide (the tape feel).
+        let delay_samples = (self.time_ms * 0.001 * sample_rate).max(64.0);
+        self.speed_smoother
+            .set_time_seeded(0.12, sample_rate, self.head_cells() / delay_samples);
+        self.speed_smoother.set_epsilon(1e-5);
 
         // Gain-ish params get a short 5ms smoothing to kill zipper noise
         // on automation; cutoffs get 20ms with periodic coeff refresh.
@@ -385,10 +445,11 @@ impl TapeDelay {
         self.flutter.depth = self.flutter_depth * speed_scale;
         self.flutter.rate = self.flutter_rate;
 
-        // Smooth delay time (base time for all heads)
-        let target_delay = self.time_ms * 0.001 * self.sample_rate;
-        self.smoother.set_target(target_delay);
-        let smooth_delay = self.smoother.tick();
+        // Motor speed from the TIME knob: v = head_cells / delay.
+        let delay_samples = (self.time_ms * 0.001 * self.sample_rate).max(64.0);
+        self.speed_smoother
+            .set_target(self.head_cells() / delay_samples);
+        let v_base = self.speed_smoother.tick();
 
         // Smooth gain-ish params per sample
         self.fb_smoother.set_target(self.feedback);
@@ -460,26 +521,27 @@ impl TapeDelay {
         let wow_offset = self.wow.tick();
         let flutter_offset = self.flutter.tick() * key;
         let mod_offset = wow_offset + flutter_offset + self.crinkle_warp;
-        let max_read = self.delay.len() as f64 - 4.0;
 
+        // Wobble drives the transport SPEED: the per-sample derivative
+        // of the legacy position-offset waveform is exactly the speed
+        // factor that produces the same pitch deviation — but routed
+        // through the motor, so the write side wobbles too and every
+        // head repitches coherently.
+        let d_offset = (mod_offset - self.prev_mod_offset).clamp(-0.5, 0.5);
+        self.prev_mod_offset = mod_offset;
+        let v = (v_base * (1.0 + d_offset)).clamp(0.05, 40.0);
+
+        // Playback heads at FIXED tape distances (RE-201 layout).
+        let cells = self.head_cells();
         let mut output = 0.0;
-
-        // Read Head 1 (at base time)
         if self.head1_enabled {
-            let head1_delay = (smooth_delay + mod_offset).clamp(1.0, max_read);
-            output += self.delay.read_cubic(head1_delay) * self.head1_level;
+            output += self.read_tape(cells) * self.head1_level;
         }
-
-        // Read Head 2 (at HEAD2_RATIO × base time)
         if self.head2_enabled {
-            let head2_delay = (smooth_delay * HEAD2_RATIO + mod_offset).clamp(1.0, max_read);
-            output += self.delay.read_cubic(head2_delay) * self.head2_level;
+            output += self.read_tape(cells * HEAD2_RATIO) * self.head2_level;
         }
-
-        // Read Head 3 (at HEAD3_RATIO × base time)
         if self.head3_enabled {
-            let head3_delay = (smooth_delay * HEAD3_RATIO + mod_offset).clamp(1.0, max_read);
-            output += self.delay.read_cubic(head3_delay) * self.head3_level;
+            output += self.read_tape(cells * HEAD3_RATIO) * self.head3_level;
         }
 
         // Playback-path degradation: crinkle level dip + tape-age HF loss.
@@ -575,8 +637,32 @@ impl TapeDelay {
         // asymmetric saturation (Dirt/Pump) injects into the loop.
         fb = self.dc_blocker.tick(fb.clamp(-1.5, 1.5));
 
-        // Write input + feedback to delay line
-        self.delay.write(input + fb);
+        // Record head: band-limit to the tape's own bandwidth while it
+        // runs slower than the host rate (slow tape = dull tape), then
+        // lay the signal down at every cell boundary the head crosses
+        // this sample (linear interpolation between ticks; v > 1 writes
+        // several cells, v < 1 leaves cells holding across samples).
+        let aa_cutoff = if v < 0.95 {
+            (0.45 * v * self.sample_rate).max(500.0)
+        } else {
+            20_000.0f64.min(self.sample_rate * 0.45)
+        };
+        self.record_aa.set_cutoff(aa_cutoff, self.sample_rate);
+        let write_in = self.record_aa.tick(input + fb);
+
+        let cap = self.tape.len() as f64;
+        let old_pos = self.write_phase;
+        let new_pos = old_pos + v;
+        let mut boundary = old_pos.floor() + 1.0;
+        while boundary <= new_pos {
+            let t = (boundary - old_pos) / v;
+            let sample = self.prev_write_in + t * (write_in - self.prev_write_in);
+            let idx = (boundary.rem_euclid(cap)) as usize % self.tape.len();
+            self.tape[idx] = sample;
+            boundary += 1.0;
+        }
+        self.write_phase = new_pos.rem_euclid(cap);
+        self.prev_write_in = write_in;
         self.feedback_sample = fb;
 
         output
@@ -587,7 +673,11 @@ impl TapeDelay {
     }
 
     pub fn reset(&mut self) {
-        self.delay.clear();
+        self.tape.fill(0.0);
+        self.write_phase = 0.0;
+        self.prev_write_in = 0.0;
+        self.prev_mod_offset = 0.0;
+        self.record_aa.reset();
         self.wow.reset();
         self.flutter.reset();
         self.flutter_key_env = 0.0;
@@ -604,7 +694,7 @@ impl TapeDelay {
         self.crinkle_dip = 1.0;
         self.crinkle_warp = 0.0;
         self.feedback_sample = 0.0;
-        self.smoother.reset(0.0);
+        self.speed_smoother.reset(0.0);
         self.fb_smoother.reset(self.feedback);
         self.drive_smoother.reset(self.drive);
         self.hicut_smoother.reset(self.hicut_freq);
@@ -1169,6 +1259,59 @@ mod dtape_parity_tests {
         assert!(
             peak < 4.0,
             "10 s at unity feedback must stay bounded: peak={peak:.2}"
+        );
+    }
+
+    #[test]
+    fn time_change_repitches_stored_audio_by_the_speed_ratio() {
+        // The speed-type transport's defining behavior (Zavalishin &
+        // Parker): audio recorded at motor speed v1 and read back after
+        // the TIME knob moves to v2 replays at pitch ratio v2/v1 —
+        // 300 ms -> 1500 ms is a 5x slowdown, so a 440 Hz tone comes
+        // back near 88 Hz. A fractional-read delay would keep it at
+        // 440 Hz (chorus-style slide).
+        const SR_T: f64 = 48000.0;
+        let mut d = TapeDelay::new();
+        d.time_ms = 300.0;
+        d.feedback = 0.0;
+        d.drive = 0.0;
+        d.wow_depth = 0.0;
+        d.flutter_depth = 0.0;
+        d.crinkle = 0.0;
+        d.update(SR_T);
+
+        // 1 s of 440 Hz at the fast motor speed.
+        for i in 0..(SR_T as usize) {
+            let x = (core::f64::consts::TAU * 440.0 * i as f64 / SR_T).sin() * 0.5;
+            d.tick(x, 0);
+        }
+        // Slam the TIME knob to 1500 ms; silence in.
+        d.time_ms = 1500.0;
+        d.update(SR_T);
+
+        // Let the motor glide settle (~0.75 s), then count zero
+        // crossings over 0.25 s — the head reaches the post-change
+        // (silent) tape at ~1.05 s, so the window must end before that.
+        for _ in 0..((0.75 * SR_T) as usize) {
+            d.tick(0.0, 0);
+        }
+        let n = (0.25 * SR_T) as usize;
+        let mut prev = 0.0f64;
+        let mut crossings = 0u32;
+        let mut energy = 0.0;
+        for _ in 0..n {
+            let out = d.tick(0.0, 0);
+            energy += out * out;
+            if (prev < 0.0 && out >= 0.0) || (prev > 0.0 && out <= 0.0) {
+                crossings += 1;
+            }
+            prev = out;
+        }
+        assert!(energy > 1e-3, "should still be reading the stored tone: {energy}");
+        let freq = crossings as f64 / 2.0 / 0.25;
+        assert!(
+            (60.0..130.0).contains(&freq),
+            "stored tone should replay near 88 Hz (5x slowdown), got {freq} Hz"
         );
     }
 }
