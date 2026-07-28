@@ -6,11 +6,11 @@
 
 use crate::bbd_delay::BbdDelay;
 use crate::clean_delay::CleanDelay;
-use crate::drum_delay::{DrumDelay, DrumHead, HeadPlayback, GOLDEN_HEADS};
+use crate::drum_delay::{DrumDelay, DrumHead, DrumSpacing, HeadPlayback, GOLDEN_HEADS};
 use crate::filter_delay::{FilterDelay, FilterLfoShape, FilterLocation};
 use crate::lofi_delay::{LoFiDelay, LoFiFilterShape};
 use crate::modulation::WobbleShape;
-use crate::multitap_delay::{FeedbackMode, MultiTapDelay, Tap, MAX_TAPS};
+use crate::multitap_delay::{FeedbackMode, MultiTapDelay, Tap, TapGrid, TapPreset, MAX_TAPS};
 use crate::oilcan_delay::{OilCanDelay, OilCanHeads};
 use crate::pitch_delay::{IceInterval, IceSlice, PitchDelay};
 use crate::reverse_delay::ReverseDelay;
@@ -284,6 +284,9 @@ pub struct DelayEngine {
     // ── MultiTap-specific ──────────────────────────────────────────
     /// User tap pattern. MultiTap only.
     pub multitap_taps: [Tap; MAX_TAPS],
+    /// Step grid (16th / triplet / free-256) used when editing taps by
+    /// step and recalled with Classic patterns. MultiTap only.
+    pub multitap_grid: TapGrid,
     /// Feedback topology (Input = shared line, Parallel = 8 independent
     /// lines). MultiTap only.
     pub multitap_feedback_mode: FeedbackMode,
@@ -396,6 +399,7 @@ impl DelayEngine {
             oilcan_tone: 2500.0,
             oilcan_grit: 0.1,
             multitap_taps: crate::multitap_delay::TapPreset::Quarters.taps(),
+            multitap_grid: TapGrid::default(),
             multitap_feedback_mode: FeedbackMode::Input,
             multitap_mod_rate_hz: 0.5,
             multitap_mod_depth: 0.0,
@@ -438,6 +442,27 @@ impl DelayEngine {
         } else {
             self.feedback * self.feedback_trim
         }
+    }
+
+    /// Apply a Drum head-spacing preset: rewrites the four heads'
+    /// positions in place, keeping each head's playback/feedback/pan.
+    /// Engine-side so it survives `update()`'s head sync (setting
+    /// spacing on the inner `DrumDelay` directly would be clobbered).
+    pub fn set_drum_spacing(&mut self, spacing: DrumSpacing) {
+        for (head, pos) in self.drum_heads.iter_mut().zip(spacing.positions()) {
+            head.position = pos;
+        }
+    }
+
+    /// Recall a MultiTap Classic pattern (1–16): rewrites the engine's
+    /// tap pattern and auto-sets the 16th grid + `Input` feedback like
+    /// the MX does on recall. Engine-side so it survives `update()`'s
+    /// tap sync (the inner `MultiTapDelay::apply_classic` would be
+    /// clobbered by the next param push).
+    pub fn apply_multitap_classic(&mut self, n: u8) {
+        self.multitap_taps = TapPreset::classic(n);
+        self.multitap_grid = TapGrid::Sixteenth;
+        self.multitap_feedback_mode = FeedbackMode::Input;
     }
 
     /// Switch to a new delay style. Resets internal state.
@@ -610,6 +635,7 @@ impl DelayEngine {
                 d.hicut_freq = self_hicut;
                 d.locut_freq = self_locut;
                 d.taps = self.multitap_taps;
+                d.grid = self.multitap_grid;
                 d.feedback_mode = self.multitap_feedback_mode;
                 d.mod_rate_hz = self.multitap_mod_rate_hz;
                 d.mod_depth = self.multitap_mod_depth;
@@ -936,6 +962,48 @@ mod tests {
         for i in 0..DelayStyle::COUNT {
             let style = DelayStyle::from_index(i);
             assert_eq!(style.to_index(), i);
+        }
+    }
+
+    #[test]
+    fn drum_spacing_survives_update() {
+        let mut e = DelayEngine::new();
+        e.set_style(DelayStyle::Drum);
+        e.set_drum_spacing(DrumSpacing::Even);
+        e.update(SR);
+        e.update(SR); // a second sync must not clobber the spacing
+
+        let expected = DrumSpacing::Even.positions();
+        match &e.inner {
+            EngineInner::Drum(d) => {
+                for (head, want) in d.heads.iter().zip(expected) {
+                    assert_eq!(head.position, want);
+                }
+            }
+            _ => panic!("expected drum engine"),
+        }
+    }
+
+    #[test]
+    fn multitap_classic_reaches_inner_engine() {
+        let mut e = DelayEngine::new();
+        e.set_style(DelayStyle::MultiTap);
+        // Start from a non-default grid/feedback so the recall is visible.
+        e.multitap_grid = TapGrid::Off;
+        e.multitap_feedback_mode = FeedbackMode::Parallel;
+        e.apply_multitap_classic(1);
+        e.update(SR);
+        e.update(SR);
+
+        match &e.inner {
+            EngineInner::MultiTap(d) => {
+                assert_eq!(d.grid, TapGrid::Sixteenth);
+                assert_eq!(d.feedback_mode, FeedbackMode::Input);
+                let want = TapPreset::classic(1);
+                assert_eq!(d.taps[0].position, want[0].position);
+                assert_eq!(d.taps[1].pan, want[1].pan);
+            }
+            _ => panic!("expected multitap engine"),
         }
     }
 }
