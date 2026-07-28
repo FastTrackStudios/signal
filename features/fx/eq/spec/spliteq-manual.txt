@@ -1,0 +1,674 @@
+User Guide
+
+Copyright 2022, Eventide Inc.
+P/N: 141362, Rev 2
+Eventide is a registered trademark of Eventide Inc.
+The SplitEQ product utilizes Eventide’s Structural Split technology which is covered by United States
+Patent No. US 10,430,154 B2.
+AAX and Pro Tools are trademarks of Avid Technology. Names and logos are used with permission.
+Audio Units and macOS are trademarks of Apple, Inc.
+VST is a trademark of Steinberg Media Technologies GmbH.
+All other trademarks contained herein are the property of their respective owners.
+Eventide Inc.
+One Alsan Way
+Little Ferry, NJ 07643
+201-641-1200
+www.eventide.com
+
+Contents
+1 Welcome
+1.1 About This Product . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+1
+1
+
+2 SplitEQ
+2.1 Introduction . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+2.2 The EQ Plot . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+2.3 Band Editors . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+Controls . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+EQ . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+Pan . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+2.4 Split . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+Tuning the Split . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+A Note About Latency . . . . . . . . . . . . . . . . . . . . . . . . . .
+2.5 Master . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+Controls . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+Spectrum Analyzer . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+2.6 Preset Bar . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+Controls (from left to right) . . . . . . . . . . . . . . . . . . . . . . . . .
+
+2
+2
+4
+5
+5
+6
+7
+8
+10
+11
+12
+12
+13
+15
+15
+
+3 Conclusion
+
+17
+
+I
+
+part 1
+
+Welcome
+
+1.1 About This Product
+SplitEQ is a mixing/mastering EQ that enables you to surgically address common equalization problems, even in a complex mix. Eventide’s patented Structural Split™ technology splits the incoming audio into Transient and Tonal signals: the rapidly changing
+parts of the input signal are identified as Transient, while the remaining, sustaining elements are considered Tonal.
+Once the signals are split, you can apply equalization and panning separately to each.
+This is useful because many tough EQ problems can be formulated as “I want to do X
+but without doing Y.” For example: “I want to increase the low thud of the kick drum,
+but a low-shelf boost will also make the sound muddy.” In SplitEQ, this problem is easy
+to solve: simply apply a low-shelf boost to only the Transient signal.
+We think that as you learn to use SplitEQ, you will be delighted to discover how many
+common EQ problems it can solve, as well as new creative possibilities.
+
+1
+
+part 2
+
+SplitEQ
+
+2.1 Introduction
+The plugin window for SplitEQ is divided up into five major sections:
+
+Preset Bar
+
+Plot
+
+Master
+Controls
+
+Band
+Editors
+Structural Split Controls
+Preset Bar
+
+Presets, Undo/Redo, A/B Comparison, Info, and Zoom.
+
+Plot
+
+Graphical EQ curve editor.
+
+Band Editors
+
+Adjust EQ and Pan controls.
+
+Structural Split
+Controls
+
+Fine-tune SplitEQ’s Transient and Tonal detection algorithm.
+
+Master Controls
+
+Metering, Spectrum Analyzer, and Master Controls.
+
+2
+
+Control Scheme
+Under the hood, SplitEQ operates two EQs in parallel, one for the Transient signal, and
+one for the Tonal signal. This allows you to adjust Transient or Tonal signals independently or together. Because there are twice as many EQs, there are also twice as many
+controls and curves on the plot. Consequently, SplitEQ provides linked controls for adjusting Transient and Tonal values together and uses color-coding to show which signal
+a control affects.
+
+• Green controls apply only to the Transient signal.
+• Blue controls apply only to the Tonal signal.
+• White or Gray controls apply to both signals.
+Similarly, green curves on the plot indicate the Transient EQ curve, while blue curves
+indicate the Tonal EQ curve. White indicates portions of the EQ curves where Transient
+and Tonal are the same. The color-coding scheme also applies to the metering and the
+spectrum analyzer.
+
+3
+
+2.2 The EQ Plot
+You can adjust the gain, frequency, and Q for each band directly on the EQ Plot by
+clicking and dragging on the band’s handle(s) or on or near the band’s highlighted
+area.
+When Tonal and Transient gains are the same, a white (Both) handle is shown with
+colored pull tabs for the Transient and Tonal handles. When the handle is white the
+band is behaving just like a normal parametric EQ band; dragging on the handle or
+band will adjust Transient and Tonal settings together.
+Dragging on one of the pull tabs splits the handle, so that you are now affecting only
+the Transient or Tonal portion. Separate handles are shown for Transient and Tonal,
+and the Both handle disappears.
+The blue handle represents the Tonal settings, and the green handle represents the
+Transient settings. Dragging anywhere other than the Transient or Tonal handle will
+move both handles in parallel, maintaining their initial offset. To bring the handles back
+together, double-click on the Transient or Tonal handle, and the other handle will snap
+to it.
+The following table shows the mouse interaction modes for SplitEQ’s plot:
+Action
+
+Mac
+
+Windows
+
+Join handles
+
+double-click
+
+double-click
+
+Reset handle
+
+-click
+
+Alt -click
+
+Adjust Q
+
+drag
+
+drag
+
+Precision Drag
+
+drag
+
+Ctrl drag
+
+Momentary Solo
+
++
+
+drag
+
+Ctrl + Alt drag
+
+For an illustrated overview of how the band handles work, follow the
+tutorial when you first launch the plugin. This tutorial is also accessible
+under the “i” (Info) menu in the menubar.
+
+4
+
+2.3 Band Editors
+
+The Band Editors section is located underneath the plot. It contains two panels, EQ and
+Pan, which can be accessed through the EQ and Pan buttons in the lower left corner.
+Similar to the plot, the controls in the Band Editors also support linked edits.
+The following table shows the mouse interaction modes for SplitEQ’s linked text sliders:
+Action
+
+Mac
+
+Windows
+
+Type In a Value
+
+double-click
+
+double-click
+
+Reset Value
+
+-click
+
+Alt -click
+
+Repel Mode (link arrows only)
+
+drag
+
+drag
+
+Precision Drag
+
+drag
+
+Ctrl drag
+
+Controls
+Reset All
+
+Resets all bands to their default state.
+
+Collapse / Expand
+
+To reduce the size of the band editors, click on the collapse
+icon. When the band editors are collapsed, clicking the expand
+button will restore them to their original size.
+
+/
+
+EQ / Pan
+
+Switches view from EQ values to panning values, and vice versa.
+
+(Mono/Stereo and
+Stereo instances only)
+
+5
+
+EQ
+Each EQ band’s parameters are displayed on this panel.
+The first band and last band are dedicated highpass and lowpass filters with independent Transient and Tonal cutoff frequencies.
+The numbered bands (1-6) can be assigned to different filter types. These bands each
+use a single frequency for the Transient and Tonal filters.
+
+Band Controls
+Active
+
+Enables/disables processing for the band. Disabled bands will
+not be shown on the plot unless they are soloed.
+
+Type
+
+Selects the type of filter for bands 1-6.
+
+(bands 1-6 only)
+
+The available types are:
+• Low Shelf
+• Peak
+• Notch
+• High Shelf
+• Tilt Shelf
+• Bandpass
+
+Slope
+
+Selects the slope of the filter in dB/oct.
+
+Solo
+
+Solos the band. When you mouse over the headphone icon a
+popup appears which allows you to select the source for the
+solo: Transient, Both, or Tonal.
+
+Frequency
+
+Sets the frequency for the band. The Highpass and Lowpass
+bands have separate Transient and Tonal frequencies. The
+numbered bands (1-6) use a single frequency value which applies to Transient and Tonal.
+
+Gain
+
+For peaking and shelving filters, this sets the individual
+Transient and Tonal Gains of the band. These values can be
+moved together or separately. Linked adjustments preserve
+any offset between Transient and Tonal Gain.
+6
+
+Split Source
+(Notch filter only)
+
+Q
+
+Selects which signal the notch applies to: Transient, Both, or
+Tonal. This appears in place of gain controls for the Notch filter
+type.
+This sets the Transient and/or Tonal Q factor of the band.
+These values can be moved together or separately. Linked adjustments preserve the ratio between Transient and Tonal Q.
+
+Pan
+(Available in Mono/Stereo and Stereo instances only.)
+
+Each band’s stereo positioning details are displayed on this tab. This panel is not available for mono output instances of SplitEQ.
+
+Controls
+Pan Mode
+
+Switches between Left/Right and Mid/Side panning modes.
+
+Pan
+
+This pans the effect of the the band’s EQ for both the Transient
+and Tonal signals. These values can be moved together or
+separately. Linked adjustments preserve any offset between
+Transient and Tonal Pan.
+
+Mid/Side
+
+This adjusts the stereo width of the band’s Transient and Tonal
+signals. These values can be moved together or separately.
+Linked adjustments preserve any offset between Transient and
+Tonal Mid/Side.
+
+The Pan Mode and Mid/Side controls are only available in stereo instances of the plugin because Mid/Side processing requires a stereo
+input source.
+
+7
+
+2.4 Split
+
+The Structural Split™ divides the incoming audio signal into Transient and Tonal signals. It does this by looking for regions of relative stability in terms of time and frequency
+and considers those to be Tonal. Subtracting those regions from the input, what remains is Transient. The advantage of this approach is that, unlike compressors or other
+dynamics-based tools, it is not level-dependent. After all, in the real world transients
+can be loud or soft.
+The Transient and Tonal signals are complementary: if you sum them back together,
+they perfectly reconstruct the incoming signal. Put another way, any part of the sound
+that is not considered Tonal is Transient, and vice versa. The word “considered” here is
+important: the controls in the Split section simply affect which areas of the sound across
+time and frequency are considered Transient or Tonal, and do not alter the sound on
+their own.
+SplitEQ provides four controls for shaping the operation of the Structural Split: the
+Source and Transient Separation controls determine how the Split identifies regions,
+and the Transient Decay and Smooth controls allow you to shape the transitions between Transient and Tonal regions.
+Additionally there is a master solo button on the right end of the Split controls which is
+provided to facilitate tuning, since it is often helpful to listen to the Transient and Tonal
+signals in isolation to hear the effects of these controls.
+
+Controls
+Source
+
+This menu box includes “coarse” algorithmic tunings for different audio sources as suggestions for the separation engine. In
+general, you will see the best results by matching the Source to
+the input audio.
+These coarse Source Type tunings essentially scale the internal
+algorithm parameters used by the Transient Separation control
+to split the input audio. Tunings for higher polyphony or complexity (full drums, electronic beat, piano, guitar, vocal) tend to
+split best on source material that has higher polyphony or complexity. That said, you may find interesting results with tunings
+which do not match the source.
+8
+
+Source Lock
+
+Locks the Source control as you change presets.
+
+Transient
+Separation
+
+Affects the isolation level for transients across the spectrum.
+This control sets the main transition region or decision point
+where audio splits (in time and frequency) into the separate
+Transient and Tonal streams. At higher values, Transient regions will be smaller and have sharper boundaries in terms of
+time and frequency.
+
+0-100%
+
+This is the main control you will use to fine tune the Split. If
+you solo the Transient signal and increase Transient Separation, less of the sound will be classified as Transient.
+Transient Decay
+0-100%
+
+Increases the release time of Transient regions, resulting in
+longer Transient areas and slower Tonal swells.
+This control limits how quickly a region is allowed to transition (in time and frequency) from Transient to Tonal, thus increasing the decay on the Transient regions. Larger values of
+Transient Decay will limit the transition rate substantially. This
+control could equally be named “Tonal Swell”, as larger values
+will also increase the auto-swell period in the Tonal Channel.
+
+Smoothing
+0-50 ms
+
+This control essentially controls the speed of the decisionmaking process, preventing it from making too fast a decision
+either way. This is useful for trimming out unwanted transient
+chirps or smoothing rough transitions. It can also be musically
+useful for slowing the attack of Transient regions.
+In general, turning this control up will reduce the differences
+between the EQ curves.
+
+9
+
+Tuning the Split
+You can certainly get good results out of SplitEQ without ever changing any of the
+Split section controls, but learning how to use them will allow you to more precisely
+target particular aspects of a sound. The following steps may be helpful in tuning the
+Split.
+1. Choose an appropriate source in the Source popup for your program material.
+2. Use the solo button to audition the Transient or Tonal signals in isolation. It is
+significantly easier to hear what the controls are doing with the solo engaged.
+The following settings can be useful for observing how the Split is working.
+• Transient Solo Active
+• EQ Bypass Active
+• Analyzer - Source: All, Routing: Pre + Post, Decay: Very Fast
+With these settings, the green curve represents the transient portion. The visible
+portion of the gray curve above the green portion effectively represents the portion of the signal which is tonal.
+3. If necessary, adjust Transient Separation, Transient Decay, and Smoothing until
+you reach your desired results. The streams do not necessarily have to be completely distinct from each other.
+After making some adjustments to the EQ curves in the plugin, you may find small adjustments in the Split settings useful for making global adjustments to the application
+of your EQ curves.
+The Transient and Tonal audio streams automatically mix back
+together at SplitEQ’s output to perfectly reconstruct the input signal.
+You will not hear any change in audio as you adjust the controls in the
+Split section unless the Transient and Tonal EQ curves are different or
+you are soloing Transient or Tonal.
+
+10
+
+A Note About Latency
+In order to effectively separate the incoming audio signal into Transient and Tonal audio streams, the Structural Split™ keeps a small running history of the audio signal.
+This introduces a significant bit of latency, which is expected.
+Most modern DAWs will compensate for such latency, so SplitEQ will not audibly delay
+the audio signal in your sessions. However, due to this inherent latency, SplitEQ is not
+fit for real-time use.
+Sample Rate (Hz)
+
+Latency (Samples)
+
+44,100
+
+3,592
+
+48,000
+
+3,592
+
+88,200
+
+7,176
+
+96,000
+
+7,176
+
+176,400
+
+14,344
+
+192,000
+
+14,344
+
+11
+
+2.5 Master
+The Master section contains controls and metering for the post-EQ Transient and Tonal
+signals as well as the spectrum analyzer.
+The bar meters display the peak and RMS amplitude for the Transient and Tonal signals, with the lighter-colored bar representing the RMS, and the darker-colored bar representing the peak. Infinite-hold clip indicators appear above the meters. Click on the
+clip indicators to clear them.
+
+Controls
+Solo
+
+Solos the Transient or Tonal audio stream (post-EQ).
+
+Output Gain
+
+Amount of gain in dB (-30 to +30) to apply to the audio postEQ. These values can be moved together or separately. Linked
+adjustments preserve any offset between Transient and Tonal
+Gain.
+
+Phase Invert
+
+Inverts the phase of the plugin’s output.
+
+Pan
+
+Adjusts the L/R balance of the entire Transient or Tonal audio stream. These values can be moved together or separately.
+Linked adjustments preserve any offset between Transient and
+Tonal Pan.
+
+(Mono/Stereo or
+Stereo only)
+
+M/S (Mid/Side)
+(Stereo only)
+
+Adjusts the stereo width of the entire Transient or Tonal audio stream. These values can be moved together or separately.
+Linked adjustments preserve any offset between Transient and
+Tonal Pan. To switch from Pan to M/S mode, click the Pan label
+and select “M/S”.
+
+Scale
+
+Scales the overall EQ curve for the Transient or Tonal audio
+stream. These values can be moved together or separately.
+Linked adjustments preserve any offset between Transient and
+Tonal Scale.
+
+Global Bypass
+
+Bypasses the plugin completely.
+
+EQ Bypass
+
+Bypasses the EQ section, but includes any alterations made in
+the Master section.
+12
+
+Spectrum Analyzer
+
+The Spectrum Analyzer displays the spectrum of one or more signals on the plot. SplitEQ’s
+analyzer is especially useful because it can display the spectrum of the Transient and
+Tonal signals as well as the plugin’s input and output.
+The controls for the Spectrum Analyzer are located in the bottom right corner of the
+plugin. The first button turns the analyzer on and off. The second button pops up a
+panel with additional settings for the analyzer. Finally, the Pre and Post buttons adjust
+the routing of the analyzer.
+
+Analyzer Settings
+Source
+
+The spectrum analyzer has four source options:
+• All – the summed Transient and Tonal signals.
+• Split – separate views of Transient and Tonal signals.
+(pre or post)
+• Transient – only the Transient signal.
+• Tonal – only the Tonal signal.
+
+Routing
+
+Selects pre and/or post-EQ routing for the spectrum analyzer.
+When Source is set to Split, the analyzer can be either pre or
+post, but not both.
+
+Resolution
+
+Adjusts the resolution of the analysis.
+“Best for Frequency” and “Better for Frequency” will capture
+more detail about the frequency, but with less frequent updates.
+“Better for Time” and “Best for Time” will show less frequency
+detail but update more often.
+
+Decay
+
+Sets the decay rate for the peaks of the analyzer.
+
+13
+
+Freeze
+
+Enables infinite peak hold on the plot. When active, existing
+peaks will not decay, and new peak values will be held, allowing
+you to see the peak amplitude at any given frequency.
+
+On Windows, the Spectrum Analyzer will be disabled if OpenGL is unavailable. This could occur if the Use OpenGL plug-in setting is turned
+off in the Info drop-down menu, or if the computer hardware lacks sufficient OpenGL support.
+
+14
+
+2.6 Preset Bar
+
+Located at the top of the SplitEQ plug-in, the Preset Bar lets you load and save presets,
+along with several other features.
+When SplitEQ is installed, a library of settings is placed into the <user>/Music/Eventide/SplitEQ/Presets folder (Mac) or the <user>/Documents/Eventide/SplitEQ/Presets
+folder (Windows). These presets have a .tidex extension and can be saved or loaded
+from the SplitEQ preset bar in any supported DAW.
+In many DAWs there is an additional generic preset bar that saves DAW-specific presets
+to a separate location. We recommend saving your presets using the Eventide preset
+bar to ensure that your presets will be accessible from any DAW. You can also create
+sub-folders inside the preset folders, if you wish.
+
+Controls (from left to right)
+Undo
+
+The Undo button undoes the last change, and restores the plugin to the previous state. Pressing this button multiple times will
+move you backwards in the plugin’s state history.
+
+Redo
+
+The Redo button reverses the last undo command, if any. Pressing this button multiple times will move you forwards in the plugin’s state history.
+
+Previous Preset
+
+Loads the preset before the current preset in the preset menu.
+
+Next Preset
+
+Loads the preset after the current preset in the preset menu.
+
+Preset Chooser
+
+Choose a preset from the Factory or User preset collections.
+• Save as... Save the preset with a new name or location.
+• Load... Open a preset from a location on disk.
+• Import... Copy a preset from a location on disk into the
+User preset collection.
+
+Save
+
+Saves the preset to disk.
+
+15
+
+AIB
+
+Switches between two temporary plugin states, A and B. This is
+useful for making A/B comparisons.
+• Click A or B to switch states.
+• Click I to copy state A into B.
+• Click J to copy state B into A.
+The A and B states are not saved in your DAW session. When
+you load a session, the current settings for the plugin will be
+loaded into A and B.
+
+Info (i)
+
+Opens a drop-down menu with various help topics and settings.
+• User Guide – Open this document.
+• Tutorial – Open the tutorial which was displayed the first
+time the plugin was loaded.
+• Webpage – Launches the SplitEQ webpage.
+• Theme – Select a color theme for the whole UI.
+• Use OpenGL – Enable or disable OpenGL for the analyzer.
+After changing this value, you must close and re-open
+the plugin window for the change to take effect.
+(N.B. OpenGL is unavailable on certain systems lacking sufficient support. If this is the case, this setting will be
+hidden.)
+• Tooltips – Enable or disable tooltips.
+• Invert Handle Tabs – Invert the direction of the Transient
+and Tonal band handle tabs.
+
+Zoom
+
+Clicking the magnifying glass button will automatically zoom
+the plot to fit its contents. Click the drop-down menu to the
+right of the button to choose a zoom setting from a list.
+
+16
+
+part 3
+
+Conclusion
+
+We hope you enjoy the SplitEQ plug-in and put it to good use in all of your mixes.
+Please be sure to check out Eventide’s other native plug-in offerings for more unique
+and interesting effects.
+
+17
+
+
