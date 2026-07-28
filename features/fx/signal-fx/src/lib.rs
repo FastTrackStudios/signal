@@ -730,6 +730,15 @@ const REVERB_PARAMS: &[ParamSpec] = &[
     // time; the chain handles that from the existing decay/predelay ids.
     ParamSpec { id: 47, name: "mag_heads", min: 0.0, max: 4.0, default: 3.0 },
     ParamSpec { id: 48, name: "mag_spacing", min: 0.0, max: 1.0, default: 0.0 },
+    // NonLinear Shape (manual order: 0 Swoosh / 1 Reverse / 2 Ramp /
+    // 3 Gate / 4 Gauss / 5 Bounce). With NonLinear active the pedal
+    // remaps decay -> nonlinear-window time and predelay -> generator
+    // feedback; the chain handles both from the existing ids.
+    ParamSpec { id: 49, name: "nl_shape", min: 0.0, max: 5.0, default: 0.0 },
+    // Spring: Dwell drive stage (0 Clean / 1 Combo / 2 Tube /
+    // 3 Overdrive) + Number of Springs (0 One / 1 Two / 2 Three).
+    ParamSpec { id: 50, name: "spring_dwell", min: 0.0, max: 3.0, default: 0.0 },
+    ParamSpec { id: 51, name: "spring_num", min: 0.0, max: 2.0, default: 1.0 },
 ];
 
 /// Native Reverb block — wraps [`reverb::DualReverb`] (two full chains +
@@ -988,6 +997,18 @@ impl NativeReverb {
                 } else {
                     reverb::MagnetoSpacing::Even
                 };
+                c.update_params();
+            }
+            49 => {
+                c.nonlinear.shape = Some(reverb::NlShape::from_index(v.round().max(0.0) as usize));
+                c.update_params();
+            }
+            50 => {
+                c.spring.dwell = reverb::SpringDwell::from_index(v.round().max(0.0) as usize);
+                c.update_params();
+            }
+            51 => {
+                c.spring.springs = v.round().max(0.0) as u8 + 1;
                 c.update_params();
             }
             _ => {}

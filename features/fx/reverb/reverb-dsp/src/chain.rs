@@ -6,7 +6,7 @@ use audiocore_dsp::delay_line::DelayLine;
 use audiocore_dsp::{AudioConfig, Processor};
 use crossbeam_channel::{Receiver, Sender, TryRecvError};
 
-use crate::algorithm::{ChamberParams, 
+use crate::algorithm::{ChamberParams, SpringParams, 
     AlgorithmParams, AlgorithmType, BloomParams, ChoraleParams, CloudParams,
     ConvolutionModParams, HallParams, ImpulseParams, IrSlot, MagnetoParams, NonLinearParams,
     ReverbAlgorithm, ReverbVoice, ShimmerParams, SwellType,
@@ -111,6 +111,8 @@ pub struct ReverbChain {
     pub magneto: MagnetoParams,
     /// Chamber Color (applies to the Chamber engine).
     pub chamber: ChamberParams,
+    /// Spring Dwell + Number of Springs (applies to the Spring engines).
+    pub spring: SpringParams,
     /// BigSky MX NonLinear params (chop / gate speed / late stage).
     /// Only consumed by NonLinear; defaults are transparent.
     pub nonlinear: NonLinearParams,
@@ -299,6 +301,7 @@ impl ReverbChain {
             shimmer: ShimmerParams::default(),
             magneto: MagnetoParams::default(),
             chamber: ChamberParams::default(),
+            spring: SpringParams::default(),
             nonlinear: NonLinearParams::default(),
             cloud: CloudParams::default(),
             bloom: BloomParams::default(),
@@ -462,7 +465,8 @@ impl ReverbChain {
             self.algorithm.set_shimmer_params(&self.shimmer);
             self.algorithm.set_magneto_params(&self.effective_magneto());
         self.algorithm.set_chamber_params(&self.chamber);
-            self.algorithm.set_nonlinear_params(&self.nonlinear);
+        self.algorithm.set_spring_params(&self.spring);
+            self.algorithm.set_nonlinear_params(&self.effective_nonlinear());
         }
     }
 
@@ -490,6 +494,15 @@ impl ReverbChain {
             m.feedback = (self.predelay_ms / 200.0).clamp(0.0, 1.0);
         }
         m
+    }
+
+    /// NonLinear shares the PRE-DELAY→feedback knob remap.
+    fn effective_nonlinear(&self) -> NonLinearParams {
+        let mut n = self.nonlinear;
+        if self.algorithm_type == AlgorithmType::NonLinear {
+            n.feedback = (self.predelay_ms / 200.0).clamp(0.0, 1.0);
+        }
+        n
     }
 
     /// True while the INFINITE footswitch state should sustain the tail
@@ -629,7 +642,8 @@ impl ReverbChain {
         self.algorithm.set_shimmer_params(&self.shimmer);
         self.algorithm.set_magneto_params(&self.effective_magneto());
         self.algorithm.set_chamber_params(&self.chamber);
-        self.algorithm.set_nonlinear_params(&self.nonlinear);
+        self.algorithm.set_spring_params(&self.spring);
+        self.algorithm.set_nonlinear_params(&self.effective_nonlinear());
         self.algorithm.set_cloud_params(&self.cloud);
         self.algorithm.set_bloom_params(&self.bloom);
         self.algorithm.set_chorale_params(&self.chorale);
@@ -668,7 +682,10 @@ impl Processor for ReverbChain {
 
         let max_predelay = (config.sample_rate * 0.5) as usize;
         self.predelay = DelayLine::new(max_predelay + 1);
-        self.predelay_samples = if self.algorithm_type == AlgorithmType::Magneto {
+        self.predelay_samples = if matches!(
+            self.algorithm_type,
+            AlgorithmType::Magneto | AlgorithmType::NonLinear
+        ) {
             0
         } else {
             (self.predelay_ms * 0.001 * config.sample_rate) as usize
@@ -745,7 +762,8 @@ impl Processor for ReverbChain {
         self.algorithm.set_shimmer_params(&self.shimmer);
         self.algorithm.set_magneto_params(&self.effective_magneto());
         self.algorithm.set_chamber_params(&self.chamber);
-        self.algorithm.set_nonlinear_params(&self.nonlinear);
+        self.algorithm.set_spring_params(&self.spring);
+        self.algorithm.set_nonlinear_params(&self.effective_nonlinear());
         self.algorithm.set_cloud_params(&self.cloud);
         self.algorithm.set_bloom_params(&self.bloom);
         self.algorithm.set_chorale_params(&self.chorale);
@@ -812,7 +830,10 @@ impl Processor for ReverbChain {
         // feedback (see `effective_magneto`) and the chain's own
         // pre-delay line disengages (DECAY -> last-head time happens
         // inside the engine).
-        if self.algorithm_type == AlgorithmType::Magneto {
+        if matches!(
+            self.algorithm_type,
+            AlgorithmType::Magneto | AlgorithmType::NonLinear
+        ) {
             self.predelay_samples = 0;
         } else {
             self.predelay_samples = (self.predelay_ms * 0.001 * self.sample_rate) as usize;

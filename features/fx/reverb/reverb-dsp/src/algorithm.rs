@@ -425,6 +425,92 @@ pub enum MagnetoSpacing {
     Uneven,
 }
 
+/// BigSky MX Spring "Dwell": drive stages of the spring-tank preamp.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum SpringDwell {
+    /// The cleanest spring tones.
+    #[default]
+    Clean,
+    /// More gain, typical of combo amps with onboard spring.
+    Combo,
+    /// Increased gain AND harmonic content entering the tank.
+    Tube,
+    /// Expanded preamp gain for maximum trashiness.
+    Overdrive,
+}
+
+impl SpringDwell {
+    pub const COUNT: usize = 4;
+
+    pub fn from_index(i: usize) -> Self {
+        match i {
+            1 => Self::Combo,
+            2 => Self::Tube,
+            3 => Self::Overdrive,
+            _ => Self::Clean,
+        }
+    }
+
+    /// Preamp drive into the tank (1.0 = unity/clean).
+    pub fn drive(self) -> f64 {
+        match self {
+            Self::Clean => 1.0,
+            Self::Combo => 1.7,
+            Self::Tube => 2.6,
+            Self::Overdrive => 4.5,
+        }
+    }
+}
+
+/// BigSky MX Spring engine params.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SpringParams {
+    pub dwell: SpringDwell,
+    /// Springs in the tank (1–3).
+    pub springs: u8,
+}
+
+impl Default for SpringParams {
+    fn default() -> Self {
+        Self {
+            dwell: SpringDwell::Clean,
+            springs: 2,
+        }
+    }
+}
+
+/// BigSky MX NonLinear envelope shapes (manual menu order, CC 0–5).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NlShape {
+    /// Exponential backward swell.
+    Swoosh,
+    /// Linear backward ramp-up then cut.
+    Reverse,
+    /// Triangle: up then down.
+    Ramp,
+    /// Even amplitude with abrupt cut-off.
+    Gate,
+    /// Bell-curve profile.
+    Gauss,
+    /// Inverted bell.
+    Bounce,
+}
+
+impl NlShape {
+    pub const COUNT: usize = 6;
+
+    pub fn from_index(i: usize) -> Self {
+        match i {
+            0 => Self::Swoosh,
+            1 => Self::Reverse,
+            2 => Self::Ramp,
+            3 => Self::Gate,
+            4 => Self::Gauss,
+            _ => Self::Bounce,
+        }
+    }
+}
+
 /// BigSky MX Chamber "Color": five fixed post-tonality profiles
 /// capturing "the speakers and mics used in the chamber recording
 /// process". Not a continuous control.
@@ -469,6 +555,13 @@ pub struct ChamberParams {
 /// legacy 90% hold point).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct NonLinearParams {
+    /// Envelope shape (manual menu order). `None` = legacy `extra_a`
+    /// threshold mapping.
+    pub shape: Option<NlShape>,
+    /// Feedback from the nonlinear generator back to the input, before
+    /// the late stage (0..1). This is the engine's PRE-DELAY knob
+    /// remap — the chain routes `predelay_ms` here for NonLinear.
+    pub feedback: f64,
     /// Chop LFO rate in Hz (0.1..15).
     pub chop_rate_hz: f64,
     /// Chop depth (0..1). 0 = off (transparent).
@@ -489,6 +582,8 @@ pub struct NonLinearParams {
 impl Default for NonLinearParams {
     fn default() -> Self {
         Self {
+            shape: None,
+            feedback: 0.0,
             chop_rate_hz: 4.0,
             chop_depth: 0.0,
             gate_speed: 1.0,
@@ -686,6 +781,11 @@ pub trait ReverbAlgorithm: Send {
 
     /// Push Magneto engine params. No-op outside Magneto; returns
     /// `true` if accepted.
+    /// Push Spring params. No-op outside the Spring engines.
+    fn set_spring_params(&mut self, _params: &SpringParams) -> bool {
+        false
+    }
+
     /// Push Chamber params. No-op outside the Chamber engine.
     fn set_chamber_params(&mut self, _params: &ChamberParams) -> bool {
         false

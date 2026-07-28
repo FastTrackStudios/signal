@@ -13,7 +13,7 @@
 //! The 3 springs create a complex interference pattern that's denser
 //! and warmer than the 2-spring Classic tank.
 
-use crate::algorithm::{AlgorithmParams, ReverbAlgorithm};
+use crate::algorithm::{SpringDwell, SpringParams, AlgorithmParams, ReverbAlgorithm};
 use crate::primitives::one_pole::Lp1;
 use crate::primitives::spectral_delay::SpectralDelay;
 use audiocore_dsp::dc_blocker::DcBlocker;
@@ -141,6 +141,11 @@ pub struct SpringVintage {
     output_lp: Lp1,
     /// Number of active springs (1–3).
     num_active: usize,
+    /// Named Number-of-Springs override (set_spring_params wins over
+    /// the legacy extra_b mapping).
+    named_springs: Option<usize>,
+    /// Preamp drive stage (manual "Dwell").
+    dwell: SpringDwell,
     sample_rate: f64,
 }
 
@@ -210,6 +215,8 @@ impl SpringVintage {
             input_hp,
             output_lp,
             num_active: 3,
+            named_springs: None,
+            dwell: SpringDwell::Clean,
             sample_rate,
         }
     }
@@ -285,19 +292,38 @@ impl ReverbAlgorithm for SpringVintage {
         self.spring_b.drive = drive;
         self.spring_c.drive = drive;
 
-        // Extra B → number of active springs
-        self.num_active = if params.extra_b < 0.33 {
+        // Extra B → number of active springs (named param wins).
+        self.num_active = self.named_springs.unwrap_or(if params.extra_b < 0.33 {
             1
         } else if params.extra_b < 0.66 {
             2
         } else {
             3
-        };
+        });
+    }
+
+    fn set_spring_params(&mut self, params: &SpringParams) -> bool {
+        self.dwell = params.dwell;
+        self.named_springs = Some((params.springs as usize).clamp(1, 3));
+        self.num_active = self.named_springs.unwrap_or(self.num_active);
+        true
     }
 
     #[inline]
     fn tick(&mut self, left: f64, right: f64) -> (f64, f64) {
-        let mono = (left + right) * 0.5;
+        let mut mono = (left + right) * 0.5;
+        // Dwell: preamp drive into the tank (Tube+ adds asymmetric
+        // harmonic content).
+        let drive = self.dwell.drive();
+        if drive > 1.001 {
+            let x = mono * drive;
+            let asym = if matches!(self.dwell, SpringDwell::Tube | SpringDwell::Overdrive) {
+                x + 0.12 * x * x.abs()
+            } else {
+                x
+            };
+            mono = asym.tanh() / drive.tanh();
+        }
 
         // Vintage band-limited input
         let lp = self.input_lp.tick(mono);

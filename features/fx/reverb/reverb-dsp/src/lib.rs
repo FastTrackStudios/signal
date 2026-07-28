@@ -33,9 +33,10 @@ pub use algorithm::{
     AlgorithmParams, AlgorithmType, BloomParams, ChamberColor, ChamberParams, ChoirVoice,
     ChoraleParams, CloudParams,
     ConvolutionModParams, HallParams, ImpulseDirection, ImpulseParams, ImpulseTail, IrSlot,
-    MagnetoHeads, MagnetoParams, MagnetoSpacing, NonLinearParams, ReverbAlgorithm, ReverbVoice,
+    MagnetoHeads, MagnetoParams, MagnetoSpacing, NlShape, NonLinearParams, ReverbAlgorithm,
+    ReverbVoice,
     ShimmerFeedbackMode,
-    ShimmerParams, SwellType,
+    ShimmerParams, SpringDwell, SpringParams, SwellType,
 };
 pub use chain::{InfiniteMode, ReverbChain};
 pub use dual::{DualReverb, DualRouting};
