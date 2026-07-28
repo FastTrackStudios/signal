@@ -29,7 +29,10 @@ use audiocore_dsp::delay_line::DelayLine;
 use audiocore_dsp::prng::XorShift32;
 use audiocore_dsp::smoothing::ParamSmoother;
 
-const NUM_GRAINS: usize = 8;
+// 16 voices: 1/32-of-repeat density with 2x-overlap windows plus
+// stretch needs more simultaneous grains than the old cap of 8 —
+// exhausted voices skip spawns and the cloud thins audibly.
+const NUM_GRAINS: usize = 16;
 
 /// Grain envelope shape (TimeLine MX Spectral "Shape").
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -357,12 +360,19 @@ impl SpectralDelay {
         let smooth_delay = self.smoother.tick();
         let max_read = self.delay.len() as f64 - 4.0;
 
-        // Spawn scheduler.
+        // Spawn scheduler. Synced density is metronomic; free density
+        // randomizes each gap ±50% ("Off: grain fragments repeat
+        // randomly" — the manual's sync distinction).
         let interval = self.spawn_interval_samples(smooth_delay);
         self.spawn_countdown -= 1.0;
         if self.spawn_countdown <= 0.0 {
             self.spawn_grain(smooth_delay, interval);
-            self.spawn_countdown = interval;
+            self.spawn_countdown = match self.density {
+                DensityMode::Synced(_) => interval,
+                DensityMode::FreeHz(_) => {
+                    interval * (1.0 + self.rng.next_bipolar() * 0.5)
+                }
+            };
         }
 
         // Sum grain voices with the selected shape window.

@@ -1144,11 +1144,13 @@ const DELAY_PARAMS: &[ParamSpec] = &[
     ParamSpec { id: 20, name: "feedback_b", min: 0.0, max: 0.95, default: 0.30 },
     ParamSpec { id: 21, name: "mix_b", min: 0.0, max: 1.0, default: 0.08 },
     // Spectral machine (grain_shape: 0 Soft/1 Swell/2 SoftPluck/
-    // 3 Pluck/4 Bounce; direction: 0 Fwd/1 Rev/2 Both; density = n in
-    // Synced(1/n); density_ms >= 6 switches to free 6-250 ms).
+    // 3 Pluck/4 Bounce; direction: 0 Fwd/1 Rev/2 Both; density = the
+    // MX 15-step synced menu index (CC 0-14, 1/1 .. 1/32 of the repeat
+    // incl. off-grid ratios); density_ms >= 6 switches to free
+    // 6-250 ms).
     ParamSpec { id: 22, name: "grain_shape", min: 0.0, max: 4.0, default: 0.0 },
     ParamSpec { id: 23, name: "direction", min: 0.0, max: 2.0, default: 0.0 },
-    ParamSpec { id: 24, name: "density", min: 1.0, max: 32.0, default: 8.0 },
+    ParamSpec { id: 24, name: "density", min: 0.0, max: 14.0, default: 9.0 },
     ParamSpec { id: 25, name: "density_ms", min: 0.0, max: 250.0, default: 0.0 },
     ParamSpec { id: 26, name: "spread", min: 0.0, max: 1.0, default: 0.0 },
     ParamSpec { id: 27, name: "stretch", min: 0.0, max: 1.0, default: 0.0 },
@@ -1190,7 +1192,7 @@ const DELAY_PARAMS: &[ParamSpec] = &[
     // Per-delay wet output level (TimeLine Output Level).
     ParamSpec { id: 47, name: "output_level", min: 0.0, max: 1.0, default: 1.0 },
     // Filter machine (swept filter + trem on repeats).
-    ParamSpec { id: 48, name: "flt_shape", min: 0.0, max: 9.0, default: 1.0 },
+    ParamSpec { id: 48, name: "flt_shape", min: 0.0, max: 10.0, default: 0.0 },
     ParamSpec { id: 49, name: "flt_speed", min: 0.03125, max: 32.0, default: 1.0 },
     ParamSpec { id: 50, name: "flt_depth", min: 0.0, max: 1.0, default: 0.5 },
     ParamSpec { id: 51, name: "flt_center", min: 100.0, max: 8000.0, default: 1200.0 },
@@ -1204,6 +1206,9 @@ const DELAY_PARAMS: &[ParamSpec] = &[
     ParamSpec { id: 56, name: "mtap_pattern", min: 0.0, max: 16.0, default: 0.0 },
     ParamSpec { id: 57, name: "mtap_fb_mode", min: 0.0, max: 1.0, default: 0.0 },
     ParamSpec { id: 58, name: "mtap_grid", min: 0.0, max: 2.0, default: 0.0 },
+    // Filter-machine tremolo waveform (manual list: 0 Triangle /
+    // 1 Square / 2 Sine / 3 Ramp / 4 Saw).
+    ParamSpec { id: 59, name: "flt_trem_shape", min: 0.0, max: 4.0, default: 2.0 },
 ];
 
 /// Native Delay block — wraps [`delay::DualDelay`] (two full chains +
@@ -1353,8 +1358,31 @@ impl NativeDelay {
                 a.delay_r.spectral_direction = dir;
             }
             24 => {
-                let n = v.clamp(1.0, 32.0);
-                let d = delay::DensityMode::Synced(1.0 / n);
+                // MX synced-density menu: 15 steps from 1/1 down to
+                // 1/32 of the repeat time, including the off-grid
+                // ratios the walkthrough demos (2/3, 3/8, ...).
+                // // interpretation: the manual gives only the
+                // endpoints + step count; intermediate ratios are a
+                // musical fill to be dialed in against hardware.
+                const SYNCED_STEPS: [f64; 15] = [
+                    1.0,
+                    3.0 / 4.0,
+                    2.0 / 3.0,
+                    1.0 / 2.0,
+                    3.0 / 8.0,
+                    1.0 / 3.0,
+                    1.0 / 4.0,
+                    3.0 / 16.0,
+                    1.0 / 6.0,
+                    1.0 / 8.0,
+                    1.0 / 12.0,
+                    1.0 / 16.0,
+                    1.0 / 20.0,
+                    1.0 / 24.0,
+                    1.0 / 32.0,
+                ];
+                let i = (v.round().max(0.0) as usize).min(SYNCED_STEPS.len() - 1);
+                let d = delay::DensityMode::Synced(SYNCED_STEPS[i]);
                 a.delay_l.spectral_density = d;
                 a.delay_r.spectral_density = d;
             }
@@ -1527,6 +1555,17 @@ impl NativeDelay {
                 };
                 a.delay_l.multitap_grid = grid;
                 a.delay_r.multitap_grid = grid;
+            }
+            59 => {
+                let shape = match v.round().max(0.0) as usize {
+                    0 => delay::FilterLfoShape::TrianglePos,
+                    1 => delay::FilterLfoShape::SquarePos,
+                    3 => delay::FilterLfoShape::Ramp,
+                    4 => delay::FilterLfoShape::Saw,
+                    _ => delay::FilterLfoShape::SinePos,
+                };
+                a.delay_l.filter_trem_shape = shape;
+                a.delay_r.filter_trem_shape = shape;
             }
             _ => {}
         }

@@ -19,38 +19,56 @@ use audiocore_dsp::smoothing::ParamSmoother;
 /// down (or up) over one LFO period, then holds — not cyclical.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FilterLfoShape {
-    SinePos,
-    SineNeg,
     TrianglePos,
     TriangleNeg,
     SquarePos,
-    Saw,
+    SquareNeg,
+    SinePos,
+    SineNeg,
     Ramp,
+    Saw,
     Random,
     Down,
     Up,
 }
 
 impl FilterLfoShape {
-    pub const COUNT: usize = 10;
+    pub const COUNT: usize = 11;
 
+    /// TimeLine MX CC order: +Tri, −Tri, +Sq, −Sq, +Sine, −Sine, Ramp,
+    /// Saw, Random, Down, Up (CC 0–10).
     pub fn from_index(i: usize) -> Self {
         match i {
-            0 => Self::SinePos,
-            1 => Self::SineNeg,
-            2 => Self::TrianglePos,
-            3 => Self::TriangleNeg,
-            4 => Self::SquarePos,
-            5 => Self::Saw,
+            0 => Self::TrianglePos,
+            1 => Self::TriangleNeg,
+            2 => Self::SquarePos,
+            3 => Self::SquareNeg,
+            4 => Self::SinePos,
+            5 => Self::SineNeg,
             6 => Self::Ramp,
-            7 => Self::Random,
-            8 => Self::Down,
+            7 => Self::Saw,
+            8 => Self::Random,
+            9 => Self::Down,
             _ => Self::Up,
         }
     }
 
     pub fn is_one_shot(self) -> bool {
         matches!(self, Self::Down | Self::Up)
+    }
+
+    /// ± shapes re-sync their cycle to input attacks: '+' lands at the
+    /// highest frequency on the attack, '−' at the lowest. Returns the
+    /// phase that puts the waveform at that extreme.
+    fn attack_sync_phase(self) -> Option<f64> {
+        match self {
+            // Triangles peak mid-cycle; the others at phase 0.
+            Self::TrianglePos | Self::TriangleNeg => Some(0.5),
+            Self::SquarePos | Self::SquareNeg | Self::SinePos | Self::SineNeg => {
+                Some(0.0)
+            }
+            _ => None,
+        }
     }
 
     /// Cyclic waveform value in [-1, 1] at `phase` (0..1). `sh` is the
@@ -71,6 +89,13 @@ impl FilterLfoShape {
                     1.0
                 } else {
                     -1.0
+                }
+            }
+            FilterLfoShape::SquareNeg => {
+                if phase < 0.5 {
+                    -1.0
+                } else {
+                    1.0
                 }
             }
             FilterLfoShape::Saw => 1.0 - 2.0 * phase,
@@ -263,13 +288,18 @@ impl FilterDelay {
             self.sh_value = self.rng.next_bipolar();
         }
 
-        // One-shot Down/Up: detect input attacks and restart the sweep.
-        if self.lfo_shape.is_one_shot() {
+        // Attack detection drives both the one-shot Down/Up sweeps and
+        // the ± shapes' polarity sync (the cycle restarts at its
+        // highest/lowest-frequency point on each new attack).
+        if self.lfo_shape.is_one_shot() || self.lfo_shape.attack_sync_phase().is_some() {
             let env = self.attack_env.tick(input.abs());
             if env > 0.02 {
                 if !self.attack_gate {
                     self.attack_gate = true;
                     self.one_shot_phase = 0.0;
+                    if let Some(p) = self.lfo_shape.attack_sync_phase() {
+                        self.lfo_phase = p;
+                    }
                 }
             } else if env < 0.01 {
                 self.attack_gate = false;
@@ -524,6 +554,67 @@ mod tests {
                 let out = d.tick(input, 0);
                 assert!(out.is_finite(), "shape {i} NaN at {s}");
             }
+        }
+    }
+
+    #[test]
+    fn plus_shapes_resync_to_attacks() {
+        // Two identical bursts separated by a gap that is NOT a
+        // multiple of the LFO period must produce near-identical
+        // post-attack sweeps when the shape is polarity-synced.
+        let sr = 48000.0;
+        let mut d = FilterDelay::new();
+        d.time_ms = 200.0;
+        d.feedback = 0.0;
+        d.lfo_shape = FilterLfoShape::SinePos;
+        d.lfo_speed = 2.0;
+        d.depth = 1.0;
+        d.center_hz = 1200.0;
+        d.q = 4.0;
+        d.location = FilterLocation::Pre;
+        d.update(sr);
+
+        let burst = |d: &mut FilterDelay, n: usize| -> Vec<f64> {
+            (0..n)
+                .map(|i| {
+                    let x = if i < 4800 {
+                        (core::f64::consts::TAU * 440.0 * i as f64 / sr).sin() * 0.6
+                    } else {
+                        0.0
+                    };
+                    d.tick(x, 0)
+                })
+                .collect()
+        };
+        let a = burst(&mut d, 14400);
+        // Silence gap misaligned with the LFO period (delay 200 ms,
+        // speed 2 → period 100 ms = 4800 samples; gap = 8.12 periods),
+        // long enough for the 150 ms attack-envelope release to re-arm.
+        for _ in 0..38977 {
+            d.tick(0.0, 0);
+        }
+        let b = burst(&mut d, 14400);
+
+        // The wet burst emerges one delay time (9600 samples) later.
+        let ref_e: f64 = a[9600..14400].iter().map(|x| x * x).sum();
+        let diff: f64 = a[9600..14400]
+            .iter()
+            .zip(&b[9600..14400])
+            .map(|(x, y)| (x - y) * (x - y))
+            .sum();
+        assert!(ref_e > 1e-6, "no wet output to compare");
+        assert!(
+            diff < ref_e * 0.05,
+            "synced '+' shape should sweep identically per attack: diff {diff} ref {ref_e}"
+        );
+    }
+
+    #[test]
+    fn square_neg_is_inverted_square() {
+        for phase in [0.1, 0.4, 0.6, 0.9] {
+            let p = FilterLfoShape::SquarePos.cyclic_value(phase, 0.0);
+            let n = FilterLfoShape::SquareNeg.cyclic_value(phase, 0.0);
+            assert_eq!(p, -n);
         }
     }
 }
