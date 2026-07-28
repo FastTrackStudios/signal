@@ -37,6 +37,7 @@ pub mod chain;
 pub mod constants;
 pub mod delay;
 pub mod design;
+pub mod dynamics;
 pub mod elliptic;
 pub mod hardware_eq;
 pub mod hardware_targets;
