@@ -12,6 +12,7 @@
 //! using the original ScaleParam() response curves.
 
 use crate::algorithm::{AlgorithmParams, CloudParams, ReverbAlgorithm};
+use audiocore_dsp::biquad::{Biquad, FilterType};
 use crate::primitives::allpass_diffuser::AllpassDiffuser;
 use crate::primitives::lcg_random::random_buffer_cross_seed;
 use crate::primitives::modulated_delay::ModulatedDelay;
@@ -531,101 +532,120 @@ impl CloudChannel {
     }
 }
 
-/// Pitch-tracked synthetic string/pad layer (BigSky MX Cloud
-/// "Ensemble", from Cloudburst).
+/// Vocoder-driven additive ensemble (BigSky MX Cloud "Ensemble",
+/// from Cloudburst).
 ///
-/// // interpretation: the hardware analyzes the input and synthesizes
-/// // a string-ensemble layer that feeds the reverb. We track pitch
-/// // with a PLL, run a small bank of detuned sawtooths at the tracked
-/// // frequency (unison ×3 + octave ×2), shape them with a slow-attack
-/// // envelope follower, and low-pass the sum into a pad.
+/// Strymon describes Cloudburst's ensemble as continuously analyzing
+/// dozens of frequency bands and generating upper harmonic partials of
+/// whatever it finds — "more akin to polyphonic additive synthesis".
+/// That is a channel vocoder driving oscillators, NOT a pitch tracker:
+/// per-band bandpass → slow envelope follower → sine partials at 2×
+/// and 3× the band center, amplitude riding the band envelope with an
+/// HF rolloff. Inherently polyphonic, no tracking to glitch.
 struct Ensemble {
-    pll: pitch_dsp::pll::PllTracker,
-    /// Saw phases: 3 unison-detuned + 2 octave-up voices.
-    phases: [f64; 5],
-    /// Slow detune LFO phases (one per voice).
-    lfo_phases: [f64; 5],
-    /// Slow attack/release level (one-pole).
-    level: f64,
-    /// Pad low-pass.
+    bands: [Biquad; ENSEMBLE_BANDS],
+    envs: [f64; ENSEMBLE_BANDS],
+    centers: [f64; ENSEMBLE_BANDS],
+    phase2: [f64; ENSEMBLE_BANDS],
+    phase3: [f64; ENSEMBLE_BANDS],
+    lfo: [f64; ENSEMBLE_BANDS],
+    attack: f64,
+    release: f64,
     lp: crate::primitives::one_pole::Lp1,
     sample_rate: f64,
 }
 
-/// (freq ratio, detune cents amplitude, voice gain) per ensemble voice.
-const ENSEMBLE_VOICES: [(f64, f64, f64); 5] = [
-    (1.0, 6.0, 1.0),
-    (1.0, -8.0, 0.85),
-    (1.0, 11.0, 0.85),
-    (2.0, -5.0, 0.45),
-    (2.0, 9.0, 0.4),
-];
+/// Analysis bands: ~third-octave log spacing, 80 Hz – 6 kHz.
+const ENSEMBLE_BANDS: usize = 24;
 
 impl Ensemble {
     fn new(sample_rate: f64) -> Self {
-        let mut pll = pitch_dsp::pll::PllTracker::new();
-        pll.update(sample_rate);
         let mut lp = crate::primitives::one_pole::Lp1::new();
-        lp.set_freq(2500.0, sample_rate);
-        Self {
-            pll,
-            phases: [0.0, 0.21, 0.47, 0.68, 0.91],
-            lfo_phases: [0.0, 0.2, 0.4, 0.6, 0.8],
-            level: 0.0,
+        lp.set_freq(3200.0, sample_rate);
+        let mut e = Self {
+            bands: core::array::from_fn(|_| Biquad::new()),
+            envs: [0.0; ENSEMBLE_BANDS],
+            centers: [0.0; ENSEMBLE_BANDS],
+            phase2: core::array::from_fn(|i| i as f64 * 0.041),
+            phase3: core::array::from_fn(|i| i as f64 * 0.067),
+            lfo: core::array::from_fn(|i| i as f64 / ENSEMBLE_BANDS as f64),
+            attack: 0.001,
+            release: 0.0005,
             lp,
             sample_rate,
+        };
+        e.configure(sample_rate);
+        e
+    }
+
+    fn configure(&mut self, sample_rate: f64) {
+        self.sample_rate = sample_rate;
+        let ratio = (6000.0f64 / 80.0).powf(1.0 / (ENSEMBLE_BANDS as f64 - 1.0));
+        let mut f = 80.0;
+        for i in 0..ENSEMBLE_BANDS {
+            self.centers[i] = f;
+            self.bands[i].set(FilterType::Bandpass, f, 5.3, sample_rate);
+            f *= ratio;
         }
+        // Slow swell per band: ~180 ms attack, ~450 ms release — the
+        // layer blooms behind the note instead of doubling its attack.
+        self.attack = 1.0 - (-1.0 / (0.18 * sample_rate)).exp();
+        self.release = 1.0 - (-1.0 / (0.45 * sample_rate)).exp();
+        self.lp.set_freq(3200.0, sample_rate);
     }
 
     fn reset(&mut self) {
-        self.pll.reset();
-        self.level = 0.0;
+        self.envs = [0.0; ENSEMBLE_BANDS];
+        for b in &mut self.bands {
+            b.reset();
+        }
         self.lp.reset();
     }
 
     fn set_sample_rate(&mut self, sample_rate: f64) {
-        *self = Self::new(sample_rate);
+        self.configure(sample_rate);
+        self.reset();
     }
 
-    /// Track `input` (mono) and return the ensemble layer sample.
+    /// Analyze `input` (mono) and return the ensemble layer sample.
     #[inline]
     fn tick(&mut self, input: f64) -> f64 {
-        // Track pitch (the PLL's own audio output is unused).
-        let _ = self.pll.tick(input);
-        let freq = self.pll.frequency();
-        let env = self.pll.envelope_value().min(1.0);
-
-        // Slow swell: ~200 ms attack, ~400 ms release — the layer fades
-        // in behind the note instead of doubling its attack.
-        let coeff = if env > self.level {
-            1.0 - (-1.0 / (0.2 * self.sample_rate)).exp()
-        } else {
-            1.0 - (-1.0 / (0.4 * self.sample_rate)).exp()
-        };
-        self.level += (env - self.level) * coeff;
-        if self.level < 1e-6 {
-            return 0.0;
-        }
-
         let mut sum = 0.0;
-        for (i, (ratio, cents, gain)) in ENSEMBLE_VOICES.iter().enumerate() {
-            // Slow per-voice detune wobble (0.15..0.45 Hz).
-            let lfo_rate = 0.15 + i as f64 * 0.07;
-            self.lfo_phases[i] += lfo_rate / self.sample_rate;
-            if self.lfo_phases[i] >= 1.0 {
-                self.lfo_phases[i] -= 1.0;
+        for i in 0..ENSEMBLE_BANDS {
+            let band = self.bands[i].tick(input, 0);
+            let level = band.abs();
+            let coeff = if level > self.envs[i] {
+                self.attack
+            } else {
+                self.release
+            };
+            self.envs[i] += (level - self.envs[i]) * coeff;
+            let env = self.envs[i];
+            if env < 1.0e-5 {
+                continue; // silent band: skip the oscillators entirely
             }
-            let wobble = (self.lfo_phases[i] * std::f64::consts::TAU).sin();
-            let detune = 2f64.powf((cents + wobble * 4.0) / 1200.0);
-            let f = (freq * ratio * detune).min(self.sample_rate * 0.45);
 
-            self.phases[i] += f / self.sample_rate;
-            self.phases[i] -= self.phases[i].floor();
-            // Sawtooth — filtered below into a string-ish pad.
-            sum += (2.0 * self.phases[i] - 1.0) * gain;
+            // Slow per-band detune wobble (string-machine shimmer).
+            let lfo_rate = 0.12 + (i % 5) as f64 * 0.06;
+            self.lfo[i] += lfo_rate / self.sample_rate;
+            if self.lfo[i] >= 1.0 {
+                self.lfo[i] -= 1.0;
+            }
+            let wobble = (self.lfo[i] * std::f64::consts::TAU).sin();
+            let detune = 2f64.powf(wobble * 5.0 / 1200.0);
+
+            // Upper partials at 2× and 3× the band center; HF rolloff
+            // keeps the top registers airy instead of piercing.
+            let roll = (self.centers[0] / self.centers[i]).sqrt();
+            let f2 = (2.0 * self.centers[i] * detune).min(self.sample_rate * 0.45);
+            let f3 = (3.0 * self.centers[i] * detune).min(self.sample_rate * 0.45);
+            self.phase2[i] = (self.phase2[i] + f2 / self.sample_rate).fract();
+            self.phase3[i] = (self.phase3[i] + f3 / self.sample_rate).fract();
+            sum += (self.phase2[i] * std::f64::consts::TAU).sin() * env * roll;
+            sum += (self.phase3[i] * std::f64::consts::TAU).sin() * env * roll * 0.5;
         }
 
-        self.lp.tick(sum * 0.45 * self.level)
+        self.lp.tick(sum * 0.7)
     }
 }
 
