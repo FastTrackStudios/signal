@@ -64,10 +64,16 @@ pub struct Flutter {
     pub rate: f64,
     pub depth: f64,
     phase: f64,
+    /// Pinch-wheel component: quasi-periodic at an INCOMMENSURATE
+    /// multiple of the capstan rate (the Echoplex flutter measurements
+    /// decompose into capstan + pinch-wheel + drift; two rationally
+    /// unrelated rates never repeat, which reads as "mechanical").
+    pinch_phase: f64,
     sample_rate: f64,
     amp1: f64,
     amp2: f64,
     amp3: f64,
+    amp_pinch: f64,
 }
 
 impl Default for Flutter {
@@ -82,10 +88,12 @@ impl Flutter {
             rate: 0.3,
             depth: 0.0,
             phase: 0.0,
+            pinch_phase: 0.0,
             sample_rate: 48000.0,
             amp1: 0.0,
             amp2: 0.0,
             amp3: 0.0,
+            amp_pinch: 0.0,
         }
     }
 
@@ -99,6 +107,7 @@ impl Flutter {
         self.amp1 = -230.0 * 1000.0 / self.sample_rate;
         self.amp2 = -80.0 * 1000.0 / self.sample_rate;
         self.amp3 = -99.0 * 1000.0 / self.sample_rate;
+        self.amp_pinch = -60.0 * 1000.0 / self.sample_rate;
     }
 
     /// Returns modulation offset in samples.
@@ -110,16 +119,25 @@ impl Flutter {
             self.phase -= 2.0 * PI;
         }
 
+        // Pinch wheel: 2.39486× the capstan rate (irrational-ish ratio
+        // — the combined pattern never repeats).
+        self.pinch_phase += phase_inc * 2.39486;
+        if self.pinch_phase > 2.0 * PI {
+            self.pinch_phase -= 2.0 * PI;
+        }
+
         let p = self.phase;
         let lfo = self.amp1 * (p).cos()
             + self.amp2 * (2.0 * p + 13.0 * PI / 4.0).cos()
-            + self.amp3 * (3.0 * p - PI / 10.0).cos();
+            + self.amp3 * (3.0 * p - PI / 10.0).cos()
+            + self.amp_pinch * (self.pinch_phase + PI / 3.0).cos();
 
         lfo * d2
     }
 
     pub fn reset(&mut self) {
         self.phase = 0.0;
+        self.pinch_phase = 0.0;
     }
 }
 
@@ -630,5 +648,71 @@ mod tests {
             nonzero_count > 100,
             "Diffuser should spread impulse over many samples: got {nonzero_count}"
         );
+    }
+}
+
+/// NE570/571-style 2:1 compander half (one-pole full-wave-rectifier
+/// averager, τ ≈ 5 ms). The 12-bit era stored COMPRESSED audio; the
+/// expander at playback modulates the quantization-noise floor with
+/// the signal envelope — that breathing is the sound, more than the
+/// bit depth itself.
+pub struct CompanderEnv {
+    env: f64,
+    attack: f64,
+    release: f64,
+}
+
+impl CompanderEnv {
+    /// Unity-gain reference level for the 2:1 curve.
+    const G0: f64 = 0.3;
+    /// Rectifier averager: fast charge (≈1 ms) so musical transients
+    /// aren't crushed, ≈5 ms discharge (the NE570 RC ballpark).
+    const ATTACK_S: f64 = 0.001;
+    const RELEASE_S: f64 = 0.005;
+
+    pub fn new() -> Self {
+        let mut c = Self {
+            env: Self::G0,
+            attack: 0.02,
+            release: 0.004,
+        };
+        c.configure(48000.0);
+        c
+    }
+
+    pub fn configure(&mut self, sample_rate: f64) {
+        self.attack = 1.0 - (-1.0 / (Self::ATTACK_S * sample_rate)).exp();
+        self.release = 1.0 - (-1.0 / (Self::RELEASE_S * sample_rate)).exp();
+    }
+
+    #[inline]
+    fn track(&mut self, level: f64) {
+        let coeff = if level > self.env {
+            self.attack
+        } else {
+            self.release
+        };
+        self.env += (level - self.env) * coeff;
+    }
+
+    /// Feedback compressor (measures its own output): y = x / g.
+    #[inline]
+    pub fn compress(&mut self, x: f64) -> f64 {
+        let g = (self.env / Self::G0).max(1e-3);
+        let y = x / g;
+        self.track(y.abs());
+        y
+    }
+
+    /// Feedforward expander (measures its input): y = x · g.
+    #[inline]
+    pub fn expand(&mut self, x: f64) -> f64 {
+        let g = (self.env / Self::G0).max(1e-3);
+        self.track(x.abs());
+        x * g
+    }
+
+    pub fn reset(&mut self) {
+        self.env = Self::G0;
     }
 }

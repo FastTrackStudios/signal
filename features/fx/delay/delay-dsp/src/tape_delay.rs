@@ -199,6 +199,11 @@ pub struct TapeDelay {
     crinkle_warp_target: f64,
     crinkle_dip: f64,
     crinkle_warp: f64,
+    /// Amplitude-keyed flutter envelope (~20 ms one-pole on |input|):
+    /// tape flutter audibly rides the program level (the transport
+    /// loads under signal) — keying depth to the envelope turns the
+    /// metronomic LFO into the irregular "wavery" real-machine motion.
+    flutter_key_env: f64,
     feedback_sample: f64,
     sample_rate: f64,
     smoother: ParamSmoother,
@@ -265,6 +270,7 @@ impl TapeDelay {
             crinkle_warp_target: 0.0,
             crinkle_dip: 1.0,
             crinkle_warp: 0.0,
+            flutter_key_env: 0.0,
             feedback_sample: 0.0,
             sample_rate: 48000.0,
             smoother: ParamSmoother::new(0.0),
@@ -445,9 +451,14 @@ impl TapeDelay {
         self.crinkle_dip += crinkle_a * (self.crinkle_dip_target - self.crinkle_dip);
         self.crinkle_warp += crinkle_a * (self.crinkle_warp_target - self.crinkle_warp);
 
-        // Wow/flutter offset — shared across all heads (same tape transport)
+        // Wow/flutter offset — shared across all heads (same tape transport).
+        // Flutter is amplitude-keyed: a ~20 ms envelope of the input
+        // scales its depth between 35% (quiet) and 100% (loud).
+        let key_coeff = 1.0 - (-1.0 / (0.02 * self.sample_rate)).exp();
+        self.flutter_key_env += (input.abs() - self.flutter_key_env) * key_coeff;
+        let key = 0.35 + 0.65 * (self.flutter_key_env * 3.0).min(1.0);
         let wow_offset = self.wow.tick();
-        let flutter_offset = self.flutter.tick();
+        let flutter_offset = self.flutter.tick() * key;
         let mod_offset = wow_offset + flutter_offset + self.crinkle_warp;
         let max_read = self.delay.len() as f64 - 4.0;
 
@@ -579,6 +590,7 @@ impl TapeDelay {
         self.delay.clear();
         self.wow.reset();
         self.flutter.reset();
+        self.flutter_key_env = 0.0;
         self.hicut.reset();
         self.locut.reset();
         self.decay_tilt_eq.reset();

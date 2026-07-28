@@ -16,6 +16,7 @@
 //! clock IS low (e.g. 4096 stages / 800 ms ≈ 5.1 kHz), and the write path
 //! is deliberately not oversampled.
 
+use crate::modulation::CompanderEnv;
 use crate::tilt::DecayTilt;
 use audiocore_dsp::biquad::{Biquad, FilterType};
 use audiocore_dsp::denormal::flush;
@@ -96,6 +97,18 @@ pub struct BbdDelay {
     rng: XorShift32,
     /// Smoothed jitter so clock noise wobbles instead of stepping.
     jitter_state: f64,
+    /// NE570-style 2:1 compander (Raffel–Smith DAFx-10): compress into
+    /// the buckets, expand at the reconstruction output. The averagers'
+    /// mismatch against the DELAYED envelope is the authentic
+    /// bucket-loss "breathing" on repeats, compounding per pass.
+    comp_env: CompanderEnv,
+    exp_env: CompanderEnv,
+    /// Level-independent cubic THD constants (paper fit: a=1/8, b=1/18
+    /// for 4096 stages; scaled by the voice's stage count).
+    thd_a: f64,
+    thd_b: f64,
+    /// DC blocker after the x² term of the THD polynomial.
+    thd_dc: audiocore_dsp::dc_blocker::DcBlocker,
 }
 
 impl Default for BbdDelay {
@@ -131,10 +144,23 @@ impl BbdDelay {
             lfo_phase: 0.0,
             rng: XorShift32::new(0xDEAD_BEEF),
             jitter_state: 0.0,
+            comp_env: CompanderEnv::new(),
+            exp_env: CompanderEnv::new(),
+            thd_a: 0.125,
+            thd_b: 1.0 / 18.0,
+            thd_dc: audiocore_dsp::dc_blocker::DcBlocker::new(),
         }
     }
 
     pub fn update(&mut self, sample_rate: f64) {
+        self.comp_env.configure(sample_rate);
+        self.exp_env.configure(sample_rate);
+        // THD scales with stage count (~1% per 1024 stages,
+        // level-independent — the giveaway BBD flavor; NOT clipping).
+        let stage_scale = self.voice.stages() / 4096.0;
+        self.thd_a = 0.125 * stage_scale;
+        self.thd_b = (1.0 / 18.0) * stage_scale;
+        self.thd_dc.set_cutoff(10.0, sample_rate);
         self.sample_rate = sample_rate;
 
         // Voice bandwidth: Mx (Brig) is cleaner up top than Classic.
@@ -227,8 +253,8 @@ impl BbdDelay {
         let out_pos = self.write_phase - n_stages;
         let raw_output = self.read_stages(out_pos);
 
-        // Reconstruction filter
-        let output = self.recon_filter.tick(raw_output, ch);
+        // Reconstruction filter, then the compander's expand half.
+        let output = self.exp_env.expand(self.recon_filter.tick(raw_output, ch));
 
         // Feedback path: tone filter (analog-voiced) → tilt → limit
         let mut fb = output * self.feedback;
@@ -241,7 +267,15 @@ impl BbdDelay {
         // (input + feedback) signal at each crossing. ratio > 1 writes
         // multiple stages per sample; ratio < 1 leaves stages holding
         // charge across samples (the authentic aliasing source).
-        let write_in = filtered_input + fb;
+        // Compander front half + the BBD's level-independent cubic
+        // THD (f(x) = x − a·x² − b·x³, DC-blocked) + charge noise
+        // (~−60 dB, injected INSIDE the loop so feedback > 1 rides up
+        // into authentic self-oscillation instead of digital silence).
+        let compressed = self.comp_env.compress(filtered_input + fb);
+        let x = compressed.clamp(-1.5, 1.5);
+        let shaped = x - self.thd_a * x * x - self.thd_b * x * x * x;
+        let write_in =
+            self.thd_dc.tick(shaped) + self.rng.next_bipolar() * 1.0e-3;
         let old_phase = self.write_phase;
         let new_phase = old_phase + ratio;
         let mut boundary = old_phase.floor() + 1.0;
@@ -270,6 +304,9 @@ impl BbdDelay {
         self.prev_write_in = 0.0;
         self.loss_lp = 0.0;
         self.jitter_state = 0.0;
+        self.comp_env.reset();
+        self.exp_env.reset();
+        self.thd_dc.reset();
         self.aa_filter.reset();
         self.recon_filter.reset();
         self.tone_filter.reset();
@@ -298,31 +335,45 @@ mod tests {
 
     #[test]
     fn silence_in_silence_out() {
-        let mut d = make(100.0);
+        // The loop carries an analog noise floor (~−60 dB inside,
+        // expander-gated at the output) — silence in means a residual
+        // hiss floor out, far below audibility but not digital zero.
+        let mut d = make(200.0);
+        let mut peak = 0.0f64;
         for _ in 0..48000 {
-            let out = d.tick(0.0, 0);
-            assert!(out.abs() < 1e-6, "Expected silence: {out}");
+            peak = peak.max(d.tick(0.0, 0).abs());
         }
+        assert!(peak < 1.0e-3, "noise floor too hot: {peak}");
     }
 
     #[test]
     fn impulse_delayed() {
-        let mut d = make(100.0);
-        let mut peak_pos = 0;
-        let mut peak_val = 0.0f64;
-        for i in 0..10000 {
-            let input = if i == 0 { 1.0 } else { 0.0 };
-            let out = d.tick(input, 0);
-            if out.abs() > peak_val {
-                peak_val = out.abs();
-                peak_pos = i;
+        // A short burst (physical transient — the compander's 1 ms
+        // attack needs real signal duration; a 1-sample impulse is
+        // legitimately crushed by an expander) must come back at the
+        // delay time at significant level.
+        let mut d = make(150.0);
+        let burst = (0.003 * SR) as usize;
+        let expected = (150.0 * SR / 1000.0) as i64;
+        let mut peak = 0.0f64;
+        let mut peak_idx = 0i64;
+        for i in 0..24000 {
+            let input = if i < burst {
+                (core::f64::consts::TAU * 1000.0 * i as f64 / SR).sin() * 0.8
+            } else {
+                0.0
+            };
+            let out = d.tick(input, 0).abs();
+            if i as i64 > burst as i64 + 100 && out > peak {
+                peak = out;
+                peak_idx = i as i64;
             }
         }
         assert!(
-            peak_pos > 4700 && peak_pos < 5100,
-            "Peak at {peak_pos}, expected near 4800"
+            (peak_idx - expected).unsigned_abs() < 500,
+            "peak at {peak_idx}, expected near {expected}"
         );
-        assert!(peak_val > 0.1, "Peak should be significant: {peak_val}");
+        assert!(peak > 0.2, "Peak should be significant: {peak}");
     }
 
     #[test]
@@ -590,5 +641,27 @@ mod tests {
             diff(&mod_a, &mod_b) > 0.1,
             "modulation + phase offset should decorrelate the channels"
         );
+    }
+
+    #[test]
+    fn overdriven_feedback_self_oscillates_from_the_noise_floor() {
+        // With loop gain > 1 a real BBD sings: the in-loop charge noise
+        // seeds runaway regeneration (bounded by the loop clamp). A
+        // noiseless digital loop would stay at exact zero forever.
+        let mut d = make(120.0);
+        d.feedback = 1.1;
+        d.update(SR);
+        let mut late = 0.0f64;
+        for i in 0..(6 * 48000) {
+            let out = d.tick(0.0, 0);
+            if i > 5 * 48000 {
+                late += out * out;
+            }
+        }
+        assert!(
+            late > 1e-4,
+            "feedback > 1 should self-oscillate from the noise floor: {late}"
+        );
+        assert!(late.is_finite());
     }
 }

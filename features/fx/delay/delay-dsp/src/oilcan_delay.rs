@@ -94,8 +94,12 @@ impl OilCanDelay {
     /// Disc-rotation period relative to the (long-head) first echo.
     /// > 1.0: the ghost recurs later than the first echo (off-kilter).
     const ROTATION_RATIO: f64 = 1.45;
-    /// Residual charge surviving one rotation (no-erase decay constant).
-    const CHARGE_RESIDUE: f64 = 0.4;
+    /// Write-head charge-transfer efficiency: the write only PARTIALLY
+    /// re-charges the disc each revolution (`disc[w] = α·in + (1−α)·disc[w]`,
+    /// Tel-Ray no-erase physics), so 1−α of last revolution's charge
+    /// survives every lap — the ghost-echo recurrence falls out of the
+    /// write equation instead of being a bolted-on tap.
+    const WRITE_ALPHA: f64 = 0.6;
 
     pub fn new() -> Self {
         Self {
@@ -210,34 +214,42 @@ impl OilCanDelay {
         let rotation_pos =
             (smooth_delay * Self::ROTATION_RATIO * factor).clamp(1.0, max_read);
 
+        // Pickup makeup: writes are α-scaled by the partial re-charge,
+        // the playback amp brings the first echo back to unity.
+        let makeup = 1.0 / Self::WRITE_ALPHA;
         let output = match self.heads {
-            OilCanHeads::Long => self.delay.read_cubic(long_pos),
-            OilCanHeads::Short => self.delay.read_cubic(short_pos),
+            OilCanHeads::Long => self.delay.read_cubic(long_pos) * makeup,
+            OilCanHeads::Short => self.delay.read_cubic(short_pos) * makeup,
             OilCanHeads::Both => {
-                (self.delay.read_cubic(long_pos) + self.delay.read_cubic(short_pos) * 0.8) / 1.4
+                (self.delay.read_cubic(long_pos) + self.delay.read_cubic(short_pos) * 0.8)
+                    * makeup
+                    / 1.4
             }
         };
 
-        // No-erase ghost: residual charge recirculates at the rotation
-        // period regardless of the Repeats setting.
-        let ghost = self.delay.read_cubic(rotation_pos) * Self::CHARGE_RESIDUE;
-
         // Regen: light constant saturation → splatter allpass → tilt.
-        let mut fb = output * self.feedback + ghost;
+        let mut fb = output * self.feedback;
         fb = sin_clip(fb * 1.2) / 1.2;
         fb = self.splatter_tick(fb);
         fb = self.decay_tilt_eq.tick(fb, ch);
         fb = fb.clamp(-1.5, 1.5);
 
+        // No-erase write: the head only partially re-charges the disc,
+        // so (1−α) of the charge deposited exactly one revolution ago
+        // survives underneath — the ghost that recurs at the rotation
+        // period (with repeats at 0) IS this residue re-passing the
+        // pickup, and it interacts with feedback self-consistently.
         // The disc medium itself is band-limited: the murk filter sits
         // in the RECORD path, so the first echo is already dark and
         // every rotation compounds it (matches FILTER acting at
         // Repeats = 0 on the real unit).
+        let residue = self.delay.read_cubic(rotation_pos);
         let mut record = self.lp.tick(input + fb, ch);
         if self.murk_active {
             record = self.murk_hp.tick(record, ch);
         }
-        self.delay.write(record);
+        self.delay
+            .write(Self::WRITE_ALPHA * record + (1.0 - Self::WRITE_ALPHA) * residue);
         self.feedback_sample = fb;
 
         output
@@ -461,5 +473,42 @@ mod tests {
             diff > ref_energy * 0.01,
             "Mod Speed should change the wobble: {diff} vs {ref_energy}"
         );
+    }
+
+    #[test]
+    fn ghost_train_decays_per_revolution() {
+        // Each revolution the write head re-covers the residue with
+        // fresh (silent) charge, so successive ghost passes decay
+        // geometrically — a TRAIN of ghosts, not a single echo.
+        let mut d = OilCanDelay::new();
+        d.time_ms = 400.0;
+        d.feedback = 0.0;
+        d.wobble = 0.0;
+        d.grit = 0.0;
+        d.tone_hz = 12000.0;
+        d.update(SR);
+
+        let mut out = vec![0.0f64; (3.0 * SR) as usize];
+        for (i, o) in out.iter_mut().enumerate() {
+            let input = if i == 0 { 1.0 } else { 0.0 };
+            *o = d.tick(input, 0);
+        }
+        let energy_at = |ms: f64| -> f64 {
+            let c = (ms * SR / 1000.0) as usize;
+            out[c.saturating_sub(1200)..(c + 1200).min(out.len())]
+                .iter()
+                .map(|x| x * x)
+                .sum()
+        };
+        // Ghost passes at 400 + n*580 ms.
+        let g1 = energy_at(980.0);
+        let g2 = energy_at(1560.0);
+        let g3 = energy_at(2140.0);
+        assert!(g1 > 1e-8, "first ghost missing: {g1}");
+        assert!(
+            g2 < g1 * 0.8 && g3 < g2 * 0.8,
+            "ghost train should decay per revolution: {g1} {g2} {g3}"
+        );
+        assert!(g3 > g1 * 0.005, "train should not vanish instantly: {g3} vs {g1}");
     }
 }

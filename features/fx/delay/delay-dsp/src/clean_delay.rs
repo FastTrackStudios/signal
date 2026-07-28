@@ -5,17 +5,20 @@
 //! re-encodes (the hardware puts the converter inside the loop):
 //!
 //! - **24/96** — pristine, no coloration.
-//! - **ADM** — early-'80s 1-bit adaptive delta modulation, modelled as a
-//!   real slope-tracking codec run at 8× per host sample: step size
-//!   adapts Jayant-style, fast transients slope-overload then snap —
-//!   the signature snappy, percussive repeat attack.
-//! - **12-Bit** — µ-law companding quantized to 12 bits plus a gentle
-//!   in-loop lowpass: slightly darker, warmer mid-'80s repeats.
+//! - **ADM** — early-'80s 1-bit adaptive delta modulation, modelled as
+//!   a CVSD codec (run-of-4 coincidence rule, 5 ms syllabic filter,
+//!   leaky integrator) at 8× per host sample: fast transients
+//!   slope-overload then snap — the signature percussive repeat attack.
+//! - **12-Bit** — NE570-style 2:1 compander around a linear 12-bit
+//!   quantizer + noise floor (compress at the write head, expand at the
+//!   read head — the expander's envelope-tracking noise breathing is
+//!   the era sound) plus a gentle in-loop lowpass.
 //! - **Classic** — the original TimeLine digital voice: rounder/fatter
 //!   (soft one-pole rolloff + mild saturation), with the voice's
 //!   morphing FILTER response (full bandwidth → analog → tape) driven
 //!   by [`CleanDelay::filter_morph`].
 
+use crate::modulation::CompanderEnv;
 use crate::tilt::DecayTilt;
 use audiocore_dsp::biquad::{Biquad, FilterType};
 use audiocore_dsp::delay_line::DelayLine;
@@ -66,44 +69,74 @@ impl DigitalVoice {
     }
 }
 
-/// Adaptive delta modulator: 1-bit encode/decode at `OVERSAMPLE`
-/// iterations per host sample. The reconstruction level chases the
-/// input with an adaptive step (grow on consecutive equal bits, shrink
-/// on alternation), so slew is program-dependent: fast attacks overload
-/// then snap — the ADM "percussive" signature.
+/// Adaptive delta modulator — CVSD-calibrated (the early-'80s 1-bit
+/// codec: MC3417/HC-55516 family). 1-bit encode/decode at `OVERSAMPLE`
+/// iterations per host sample:
+///
+/// - **run-of-N coincidence rule**: the step only grows while the last
+///   `HISTORY_BITS` output bits are all equal (slope overload);
+///   otherwise the **syllabic filter** decays it toward the minimum
+///   (τ ≈ 5 ms, the mil/Bluetooth spec value).
+/// - **leaky ("principal") integrator**, τ ≈ 1 ms, reconstructs the
+///   level.
+///
+/// Slew is program-dependent: fast attacks overload then snap — the
+/// ADM "percussive" signature; quiet sustain rides the granular
+/// min-step floor.
 struct AdmCodec {
     level: f64,
     step: f64,
-    last_bit: bool,
+    history: u32,
+    /// Per-clock-tick syllabic decay toward MIN_STEP / charge toward
+    /// MAX_STEP (exp(-1/(τ_syllabic · f_clock))).
+    syllabic: f64,
+    /// Per-clock-tick principal-integrator leak.
+    leak: f64,
 }
 
 impl AdmCodec {
     const OVERSAMPLE: usize = 8;
+    const HISTORY_BITS: u32 = 4;
     const MIN_STEP: f64 = 2.0e-4;
     const MAX_STEP: f64 = 0.12;
-    const GROW: f64 = 1.35;
-    const SHRINK: f64 = 0.78;
+    /// Syllabic time constant (spec: 5 ms ± 1) and principal
+    /// integrator time constant (~1 ms).
+    const SYLLABIC_S: f64 = 0.005;
+    const PRINCIPAL_S: f64 = 0.001;
 
     fn new() -> Self {
-        Self {
+        let mut c = Self {
             level: 0.0,
             step: Self::MIN_STEP,
-            last_bit: false,
-        }
+            history: 0,
+            syllabic: 0.999,
+            leak: 0.997,
+        };
+        c.configure(48000.0);
+        c
+    }
+
+    fn configure(&mut self, sample_rate: f64) {
+        let clock = sample_rate * Self::OVERSAMPLE as f64;
+        self.syllabic = (-1.0 / (Self::SYLLABIC_S * clock)).exp();
+        self.leak = (-1.0 / (Self::PRINCIPAL_S * clock)).exp();
     }
 
     #[inline]
     fn process(&mut self, x: f64) -> f64 {
+        let mask = (1u32 << Self::HISTORY_BITS) - 1;
         for _ in 0..Self::OVERSAMPLE {
             let bit = x > self.level;
-            let factor = if bit == self.last_bit {
-                Self::GROW
+            self.history = ((self.history << 1) | bit as u32) & mask;
+            let run = self.history == 0 || self.history == mask;
+            self.step = if run {
+                // Charge toward MAX at the syllabic rate.
+                Self::MAX_STEP + (self.step - Self::MAX_STEP) * self.syllabic
             } else {
-                Self::SHRINK
+                // Decay toward MIN at the syllabic rate.
+                Self::MIN_STEP + (self.step - Self::MIN_STEP) * self.syllabic
             };
-            self.step = (self.step * factor).clamp(Self::MIN_STEP, Self::MAX_STEP);
-            self.level += if bit { self.step } else { -self.step };
-            self.last_bit = bit;
+            self.level = self.level * self.leak + if bit { self.step } else { -self.step };
         }
         self.level
     }
@@ -111,20 +144,15 @@ impl AdmCodec {
     fn reset(&mut self) {
         self.level = 0.0;
         self.step = Self::MIN_STEP;
-        self.last_bit = false;
+        self.history = 0;
     }
 }
 
-/// µ-law companded 12-bit quantizer (µ = 255): compress, quantize to
-/// 2048 positive steps, expand. Small signals keep resolution; the
-/// misses land as the era-correct grainy noise floor.
+/// Linear 12-bit quantizer (the era's DAC was linear — the dynamics
+/// came from the external NE570 compander around it).
 #[inline]
-fn compand_12bit(x: f64) -> f64 {
-    const MU: f64 = 255.0;
-    let clamped = x.clamp(-1.0, 1.0);
-    let compressed = clamped.signum() * (1.0 + MU * clamped.abs()).ln() / (1.0 + MU).ln();
-    let quantized = (compressed * 2048.0).round() / 2048.0;
-    quantized.signum() * ((1.0 + MU).powf(quantized.abs()) - 1.0) / MU
+fn quantize_12bit(x: f64) -> f64 {
+    (x.clamp(-1.0, 1.0) * 2048.0).round() / 2048.0
 }
 
 /// Clean digital delay — the Digital machine's four voices.
@@ -162,6 +190,11 @@ pub struct CleanDelay {
     morph_hp: Biquad,
     /// 12-Bit voice's in-loop darkening.
     twelve_lp: Biquad,
+    /// 12-Bit voice: NE570-style 2:1 compander (compress at the write
+    /// head, expand at the read head — envelope-modulated noise floor).
+    comp_env: CompanderEnv,
+    exp_env: CompanderEnv,
+    noise: audiocore_dsp::prng::XorShift32,
     adm: AdmCodec,
     feedback_sample: f64,
     sample_rate: f64,
@@ -199,6 +232,9 @@ impl CleanDelay {
             morph_lp: Biquad::new(),
             morph_hp: Biquad::new(),
             twelve_lp: Biquad::new(),
+            comp_env: CompanderEnv::new(),
+            exp_env: CompanderEnv::new(),
+            noise: audiocore_dsp::prng::XorShift32::new(0x0D16_17A1),
             adm: AdmCodec::new(),
             feedback_sample: 0.0,
             sample_rate: 48000.0,
@@ -244,6 +280,9 @@ impl CleanDelay {
 
         self.twelve_lp
             .set(FilterType::Lowpass, 9500.0, 0.707, sample_rate);
+        self.adm.configure(sample_rate);
+        self.comp_env.configure(sample_rate);
+        self.exp_env.configure(sample_rate);
 
         self.decay_tilt_eq.configure(self.decay_tilt, sample_rate);
 
@@ -259,7 +298,16 @@ impl CleanDelay {
         match self.voice {
             DigitalVoice::TwentyFour96 => x,
             DigitalVoice::Adm => self.adm.process(x),
-            DigitalVoice::TwelveBit => self.twelve_lp.tick(compand_12bit(x), ch),
+            DigitalVoice::TwelveBit => {
+                // Compress (feedback 2:1) → 12-bit linear quantize with
+                // a ~1.5-LSB noise floor → store. The expander at the
+                // read head turns that fixed floor into the era's
+                // signal-tracking breathing.
+                let compressed = self.comp_env.compress(x);
+                let noisy =
+                    compressed + self.noise.next_bipolar() * (1.5 / 2048.0);
+                self.twelve_lp.tick(quantize_12bit(noisy), ch)
+            }
             DigitalVoice::Classic => {
                 // Rounder/fatter: gentle saturation + the morph filter.
                 let softened = (x * 1.1).tanh() / 1.1f64.tanh();
@@ -271,6 +319,16 @@ impl CleanDelay {
                     lp
                 }
             }
+        }
+    }
+
+    /// Read-head decode: the 12-Bit voice expands (2:1) what the write
+    /// head compressed; other voices pass through.
+    #[inline]
+    fn decode(&mut self, x: f64) -> f64 {
+        match self.voice {
+            DigitalVoice::TwelveBit => self.exp_env.expand(x),
+            _ => x,
         }
     }
 
@@ -295,7 +353,7 @@ impl CleanDelay {
 
         let max_read = self.delay.len() as f64 - 4.0;
         let read_pos = (smooth_delay + mod_off).clamp(1.0, max_read);
-        let output = self.delay.read_cubic(read_pos);
+        let output = self.decode(self.delay.read_cubic(read_pos));
 
         // Feedback path: output → filter → limit
         let mut fb = output * self.feedback;
@@ -329,6 +387,8 @@ impl CleanDelay {
         self.morph_lp.reset();
         self.morph_hp.reset();
         self.twelve_lp.reset();
+        self.comp_env.reset();
+        self.exp_env.reset();
         self.adm.reset();
         self.decay_tilt_eq.reset();
         self.feedback_sample = 0.0;
