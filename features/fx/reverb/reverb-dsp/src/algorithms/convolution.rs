@@ -46,7 +46,7 @@ use audiocore_dsp::smoothing::ParamSmoother;
 use crate::algorithm::{
     AlgorithmParams, ConvolutionModParams, ImpulseParams, IrSlot, ReverbAlgorithm,
 };
-use crate::ir::prepared::{PreparedIr, PreparedIrPair, BLOCK, FFT_LEN, SPECTRUM_LEN};
+use crate::ir::prepared::{IrTrash, PreparedIr, PreparedIrPair, BLOCK, FFT_LEN, SPECTRUM_LEN};
 use crate::ir::transforms::IrTransforms;
 use crate::ir::IrAsset;
 use crate::primitives::modulated_allpass::ModulatedAllpass;
@@ -137,23 +137,38 @@ impl PartitionedConv {
     fn load_ir(&mut self, ir: &[f64]) {
         let mut planner = RealFftPlanner::<f64>::new();
         let prepared = PreparedIr::build_with_planner(ir, &mut planner);
-        self.swap_prepared(prepared);
+        // Control path — dropping the displaced buffers inline is fine.
+        let _old = self.swap_prepared(prepared);
     }
 
-    /// Audio-thread-safe IR replacement. No FFT work, just buffer moves
-    /// and one resize. The partition count may change so we also resize
-    /// the input-history ring and zero it (so the tail of the OLD IR
-    /// doesn't bleed into the new convolution).
-    fn swap_prepared(&mut self, prepared: PreparedIr) {
-        let n = prepared.partitions.len();
-        self.ir_partitions = prepared.partitions;
+    /// Audio-thread-safe IR replacement: buffer swaps only. Returns the
+    /// DISPLACED partitions (inside the passed-in `PreparedIr`) so the
+    /// caller can route them off-thread for deallocation — dropping the
+    /// old `Vec<Vec<Complex>>` here would free on the audio thread.
+    ///
+    /// The input-history ring only ever GROWS (to the high-water
+    /// partition count) and is zeroed on swap; the accumulate loop
+    /// indexes modulo the partition count, so surplus entries are
+    /// simply never touched. Steady-state Impulse knob sweeps therefore
+    /// allocate nothing once the largest stretch has been visited.
+    fn swap_prepared(&mut self, mut prepared: PreparedIr) -> PreparedIr {
+        core::mem::swap(&mut self.ir_partitions, &mut prepared.partitions);
         self.gain = prepared.gain;
-        // Resize history to match new partition count. Zero-fill so we
-        // don't multiply stale frequency-domain data against the new IR.
-        self.input_history.clear();
-        self.input_history
-            .resize(n, vec![Complex::new(0.0, 0.0); SPECTRUM_LEN]);
+        let n = self.ir_partitions.len();
+        if self.input_history.len() < n {
+            self.input_history.reserve(n - self.input_history.len());
+            while self.input_history.len() < n {
+                self.input_history
+                    .push(vec![Complex::new(0.0, 0.0); SPECTRUM_LEN]);
+            }
+        }
+        // Zero so we don't multiply stale frequency-domain data against
+        // the new IR.
+        for h in &mut self.input_history {
+            h.fill(Complex::new(0.0, 0.0));
+        }
         self.history_head = 0;
+        prepared
     }
 
     fn reset(&mut self) {
@@ -355,6 +370,9 @@ pub struct Convolution {
     /// synthetic-IR rebuild on `set_params` so user choices stick.
     user_ir_loaded: bool,
     user_ir_loaded_b: bool,
+    /// Disposal channel for buffers displaced by audio-thread swaps.
+    /// `None` (tests / offline) drops inline.
+    trash_tx: Option<crossbeam_channel::Sender<IrTrash>>,
 
     // ── Modulation options ────────────────────────────────────────────
     mod_params: ConvolutionModParams,
@@ -459,6 +477,7 @@ impl Convolution {
             ir_seconds: 1.5,
             user_ir_loaded: false,
             user_ir_loaded_b: false,
+            trash_tx: None,
             mod_params,
             sm: ModSmoothers::new(sample_rate),
             lfo_phase: 0.0,
@@ -572,41 +591,64 @@ impl Convolution {
             return;
         }
         let raw = pair.raw.clone();
-        match slot {
+        let (old_l, old_r) = match slot {
             IrSlot::A => {
-                self.conv_l.swap_prepared(pair.left);
-                self.conv_r.swap_prepared(pair.right);
+                let l = self.conv_l.swap_prepared(pair.left);
+                let r = self.conv_r.swap_prepared(pair.right);
                 self.user_ir_loaded = true;
+                (l, r)
             }
             IrSlot::B => {
-                self.conv_l_b.swap_prepared(pair.left);
-                self.conv_r_b.swap_prepared(pair.right);
+                let l = self.conv_l_b.swap_prepared(pair.left);
+                let r = self.conv_r_b.swap_prepared(pair.right);
                 self.user_ir_loaded_b = true;
+                (l, r)
             }
-        }
-        if let Some(raw) = raw {
-            self.originals[slot_idx(slot)] = Some(raw);
-        } else {
+        };
+        self.discard(IrTrash::Prepared(old_l));
+        self.discard(IrTrash::Prepared(old_r));
+        // Retain (or clear) the un-shaped original; the previous Arc's
+        // refcount decrement also goes through the trash chute — it may
+        // be the last reference.
+        let prev = match raw {
+            Some(raw) => self.originals[slot_idx(slot)].replace(raw),
             // No raw retained (direct PreparedIrPair::build) — shaping
             // can't re-derive from this load.
-            self.originals[slot_idx(slot)] = None;
+            None => self.originals[slot_idx(slot)].take(),
+        };
+        if let Some((prev_l, prev_r)) = prev {
+            self.discard(IrTrash::Raw(prev_l));
+            self.discard(IrTrash::Raw(prev_r));
         }
         self.on_new_r_loaded(slot);
+    }
+
+    /// Route displaced buffers to the disposal worker; drop inline when
+    /// no worker is attached (offline / tests).
+    #[inline]
+    fn discard(&self, trash: IrTrash) {
+        if let Some(tx) = &self.trash_tx {
+            if tx.send(trash).is_ok() {
+                return;
+            }
+        }
     }
 
     /// Return leg of the re-preparation pipeline: swap partitions only,
     /// leaving impulse params and user-IR flags untouched.
     fn swap_reshaped(&mut self, pair: PreparedIrPair, slot: IrSlot) {
-        match slot {
-            IrSlot::A => {
-                self.conv_l.swap_prepared(pair.left);
-                self.conv_r.swap_prepared(pair.right);
-            }
-            IrSlot::B => {
-                self.conv_l_b.swap_prepared(pair.left);
-                self.conv_r_b.swap_prepared(pair.right);
-            }
-        }
+        let (old_l, old_r) = match slot {
+            IrSlot::A => (
+                self.conv_l.swap_prepared(pair.left),
+                self.conv_r.swap_prepared(pair.right),
+            ),
+            IrSlot::B => (
+                self.conv_l_b.swap_prepared(pair.left),
+                self.conv_r_b.swap_prepared(pair.right),
+            ),
+        };
+        self.discard(IrTrash::Prepared(old_l));
+        self.discard(IrTrash::Prepared(old_r));
     }
 
     /// Impulse shaping params currently targeted (not necessarily baked
@@ -865,6 +907,14 @@ impl ReverbAlgorithm for Convolution {
 
     fn try_load_prepared_ir_slot(&mut self, pair: PreparedIrPair, slot: IrSlot) -> bool {
         self.swap_prepared_pair_slot(pair, slot);
+        true
+    }
+
+    fn set_ir_trash_sender(
+        &mut self,
+        tx: crossbeam_channel::Sender<IrTrash>,
+    ) -> bool {
+        self.trash_tx = Some(tx);
         true
     }
 

@@ -1,8 +1,8 @@
 //! Service trait definitions — async interfaces for the signal domain.
 //!
 //! Each trait defines the operations available for a specific domain entity.
-//! Implementations live in [`signal_live`] (runtime) and are wrapped by
-//! [`signal_controller`] for the user-facing API.
+//! Implementations live in `signal_live` (runtime) and are wrapped by
+//! `signal_controller` for the user-facing API.
 //!
 //! All methods return `Result<T, SignalServiceError>` using typed error variants
 //! for structured diagnostics.

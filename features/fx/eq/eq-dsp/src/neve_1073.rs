@@ -242,13 +242,16 @@ impl CalibrationParameters for Neve1073Calibration {
                 0.35,
                 self.mid_upper_gain_step,
             ),
-            13 => CalibratedScalar::new(
+            // Out-of-range indices clamp to the last scalar — a panic
+
+            // here would abort the audio host on a bad automation index.
+
+            _ => CalibratedScalar::new(
                 self.high_presence_gain_factor,
                 -0.5,
                 0.5,
                 self.high_presence_gain_step,
             ),
-            _ => panic!("unknown Neve1073 calibration scalar {index}"),
         }
     }
 
@@ -268,7 +271,7 @@ impl CalibrationParameters for Neve1073Calibration {
             11 => self.mid_upper_ratio = value,
             12 => self.mid_upper_gain_factor = value,
             13 => self.high_presence_gain_factor = value,
-            _ => panic!("unknown Neve1073 calibration scalar {index}"),
+            _ => {} // ignore out-of-range calibration indices
         }
     }
 
@@ -288,7 +291,7 @@ impl CalibrationParameters for Neve1073Calibration {
             11 => self.mid_upper_ratio_step = step,
             12 => self.mid_upper_gain_step = step,
             13 => self.high_presence_gain_step = step,
-            _ => panic!("unknown Neve1073 calibration scalar {index}"),
+            _ => {} // ignore out-of-range calibration indices
         }
     }
 }

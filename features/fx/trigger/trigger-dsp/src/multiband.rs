@@ -154,12 +154,14 @@ impl MultibandDetector {
         }
     }
 
-    /// Feed one mono sample. Returns up to NUM_BANDS trigger events.
+    /// Feed one mono sample. Returns per-band trigger slots (`None` =
+    /// no trigger this sample) — a fixed array, so the audio thread
+    /// never allocates.
     ///
     /// Each enabled band runs its own onset detector. A trigger fires
     /// when the band's ODF exceeds its adaptive threshold.
-    pub fn tick(&mut self, sample: f64) -> Vec<BandTrigger> {
-        let mut triggers = Vec::new();
+    pub fn tick(&mut self, sample: f64) -> [Option<BandTrigger>; NUM_BANDS] {
+        let mut triggers = [None; NUM_BANDS];
 
         // Split into bands using crossover filters
         // Band 0: LPF(crossover[0])
@@ -186,7 +188,7 @@ impl MultibandDetector {
 
             if let Some(odf) = self.detectors[b].tick(sig) {
                 if self.detectors[b].is_peak(odf, self.thresholds[b]) {
-                    triggers.push(BandTrigger { band: b, odf });
+                    triggers[b] = Some(BandTrigger { band: b, odf });
                 }
             }
         }
@@ -230,7 +232,10 @@ mod tests {
         let mut mb = MultibandDetector::new(SR);
         for _ in 0..48000 {
             let triggers = mb.tick(0.0);
-            assert!(triggers.is_empty(), "Silence should produce no triggers");
+            assert!(
+                triggers.iter().all(Option::is_none),
+                "Silence should produce no triggers"
+            );
         }
     }
 
@@ -252,8 +257,8 @@ mod tests {
             let t = i as f64 / SR;
             let sample = (80.0 * std::f64::consts::TAU * t).sin() * 0.8;
             let triggers = mb.tick(sample);
-            if !triggers.is_empty() {
-                assert_eq!(triggers[0].band, 0, "80Hz should trigger sub band");
+            if let Some(t) = triggers.iter().flatten().next() {
+                assert_eq!(t.band, 0, "80Hz should trigger sub band");
                 got_trigger = true;
             }
         }
@@ -278,8 +283,8 @@ mod tests {
             let t = i as f64 / SR;
             let sample = (8000.0 * std::f64::consts::TAU * t).sin() * 0.8;
             let triggers = mb.tick(sample);
-            if !triggers.is_empty() {
-                assert_eq!(triggers[0].band, 3, "8kHz should trigger high band");
+            if let Some(t) = triggers.iter().flatten().next() {
+                assert_eq!(t.band, 3, "8kHz should trigger high band");
                 got_trigger = true;
             }
         }

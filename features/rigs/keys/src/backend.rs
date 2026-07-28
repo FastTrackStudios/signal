@@ -23,6 +23,7 @@ use signal_keys_proto::{
 };
 
 use crate::profile::{KeysProfile, worship_profile};
+use signal_rig_host::mixer::{self as rig_mixer, db_to_linear};
 use signal_sampler::rig_node::{RigNode, Role};
 use signal_sampler::{Container, MidiInputHandle};
 
@@ -67,6 +68,10 @@ struct State {
     /// Grid mode: 0 Preset, 1 Profile (stacks), 2 Setlist.
     perform_mode: u32,
 }
+
+/// What the program builders read: the live profile, the patch-name →
+/// spec-path index, and the lane snapshot.
+type ProfileInputs = (KeysProfile, BTreeMap<String, PathBuf>, BTreeMap<String, LaneState>);
 
 /// Live per-layer mixer state (the profile holds the authored defaults).
 #[derive(Clone, Debug)]
@@ -450,25 +455,21 @@ impl State {
     fn lane_gain(&self, name: &str) -> f32 {
         let Some(lane) = self.lanes.get(name) else { return 0.0 };
         let engine_muted = self.engines.get(&lane.engine).is_some_and(|e| e.muted);
-        let solo_excluded = self.any_solo() && !lane.soloed;
-        if lane.muted || engine_muted || solo_excluded || !lane.any_live() {
-            0.0
-        } else {
-            db_to_linear(lane.gain_db)
-        }
+        let mix = rig_mixer::LaneMix {
+            gain_db: lane.gain_db,
+            muted: lane.muted,
+            soloed: lane.soloed,
+            live: lane.any_live(),
+        };
+        rig_mixer::lane_gain(&mix, engine_muted, self.any_solo())
     }
 
     fn engine_gain(&self, name: &str) -> f32 {
         match self.engines.get(name) {
-            Some(e) if !e.muted => db_to_linear(e.gain_db),
-            Some(_) => 0.0,
+            Some(e) => rig_mixer::group_gain(e.gain_db, e.muted),
             None => 1.0,
         }
     }
-}
-
-fn db_to_linear(db: f32) -> f32 {
-    10f32.powf(db / 20.0)
 }
 
 struct Inner {
@@ -906,19 +907,19 @@ impl KeysRigBackend {
         Some(keys_program(&name, spec))
     }
 
-    /// Build the profile's full program: every engine, every layer, each
-    /// lane's patch resolved to its pack/library spec.
-    fn profile_program(&self) -> Option<Container> {
+    /// The live profile + patch-spec index + lane snapshot behind both
+    /// program builders (single tree and lane program).
+    fn profile_inputs(&self) -> Option<ProfileInputs> {
         let s = self.inner.state.lock().ok()?;
         if s.profile.engines.is_empty() {
             return None;
         }
         // Patch name → spec path, via the scanned library.
-        let index: BTreeMap<&str, &PathBuf> = s
+        let index: BTreeMap<String, PathBuf> = s
             .presets
             .iter()
             .zip(s.specs.iter())
-            .map(|(p, spec)| (p.name.as_str(), spec))
+            .map(|(p, spec)| (p.name.clone(), spec.clone()))
             .collect();
         // Lanes carry the LIVE patch assignment (a stack recall or a browser
         // pick), which is what should be rendering — not the authored default.
@@ -931,87 +932,151 @@ impl KeysRigBackend {
                 layer.extra_modules = patches.into_iter().skip(1).collect();
             }
         }
-        // Each module's macros ride into the tree: the Filter block gets its
-        // cutoff and resonance, the Amp Env and Filter Env their times. This
-        // is what makes those blocks sound rather than sit there.
-        let lanes = s.lanes.clone();
+        Some((profile, index, s.lanes.clone()))
+    }
+
+    /// Each module's macros ride into the tree: the Filter block gets its
+    /// cutoff and resonance, the Amp Env and Filter Env their times. This
+    /// is what makes those blocks sound rather than sit there.
+    fn module_settings_for(
+        lanes: &BTreeMap<String, LaneState>,
+        layer: &str,
+        module: usize,
+    ) -> signal_synth::engine::ModuleSettings {
+        let mut set = signal_synth::engine::ModuleSettings::default();
+        let Some(lane) = lanes.get(layer) else { return set };
+        let v = |id: &str| {
+            lane.modules
+                .get(module)
+                .and_then(|m| m.macros.get(id).copied())
+                .or_else(|| macro_def(id).map(|d| d.default))
+                .unwrap_or(0.0)
+        };
+        set.cutoff_hz = v("filter.cutoff");
+        set.resonance = v("filter.reso");
+        set.filter_env_depth = v("filter.env_amt");
+        set.amp_env = (
+            v("env1.attack"),
+            v("env1.decay"),
+            v("env1.sustain"),
+            v("env1.release"),
+        );
+        set.filter_env = (
+            v("env2.attack"),
+            v("env2.decay"),
+            v("env2.sustain"),
+            v("env2.release"),
+        );
+        set.unison = v("source.unison").max(1.0) as u32;
+        set.detune = v("source.detune");
+        set
+    }
+
+    /// Build the profile's full program: every engine, every layer, each
+    /// lane's patch resolved to its pack/library spec.
+    fn profile_program(&self) -> Option<Container> {
+        let (profile, index, lanes) = self.profile_inputs()?;
         Some(profile.build_tree_with(
             |patch| index.get(patch).map(|p| p.to_string_lossy().into_owned()),
-            |layer, module| {
-                let mut set = signal_synth::engine::ModuleSettings::default();
-                let Some(lane) = lanes.get(layer) else { return set };
-                let v = |id: &str| {
-                    lane.modules
-                        .get(module)
-                        .and_then(|m| m.macros.get(id).copied())
-                        .or_else(|| macro_def(id).map(|d| d.default))
-                        .unwrap_or(0.0)
-                };
-                set.cutoff_hz = v("filter.cutoff");
-                set.resonance = v("filter.reso");
-                set.filter_env_depth = v("filter.env_amt");
-                set.amp_env = (
-                    v("env1.attack"),
-                    v("env1.decay"),
-                    v("env1.sustain"),
-                    v("env1.release"),
-                );
-                set.filter_env = (
-                    v("env2.attack"),
-                    v("env2.decay"),
-                    v("env2.sustain"),
-                    v("env2.release"),
-                );
-                set.unison = v("source.unison").max(1.0) as u32;
-                set.detune = v("source.detune");
-                set
-            },
+            |layer, module| Self::module_settings_for(&lanes, layer, module),
         ))
     }
 
-    /// Push every live fader / mute / solo into the running program's cells.
-    /// Pure atomics — no rebuild, so this is safe at UI drag rate.
+    /// Build the profile as a per-lane daw-track program — the fully
+    /// daw-based mixer (each layer/engine a real track).
+    fn profile_lane_program(&self) -> Option<signal_sampler::keys_rig::LaneProgram> {
+        let (profile, index, lanes) = self.profile_inputs()?;
+        Some(profile.build_lane_program(
+            |patch| index.get(patch).map(|p| p.to_string_lossy().into_owned()),
+            |layer, module| Self::module_settings_for(&lanes, layer, module),
+        ))
+    }
+
+    /// Push every live fader / mute / solo into the running program.
+    ///
+    /// Lane mode: faders/mutes/solos are daw track ops (the renderer folds
+    /// solo-exclusion and folder mutes natively); only module trims stay
+    /// in-tree cells. Single mode: everything is cells, with the mute/solo
+    /// fold computed here. Both are safe at UI drag rate.
     fn apply_mixer(&self) {
         let Ok(rig) = self.inner.rig.lock() else { return };
         let Some(rig) = rig.as_ref() else { return };
-        let cells = rig.gain_cells();
         let Ok(s) = self.inner.state.lock() else { return };
-        // Address by (role, name), never name alone: a one-lane engine is
-        // named after its lane ("Pad" holding "Pad"), and a flat name map gave
-        // both the same cell — the engine's trim, written second, put the
-        // lane's mute and solo straight back.
-        for (name, lane) in s.lanes.iter() {
-            cells.set(Role::Layer, name, s.lane_gain(name));
-            // Modules are named "<layer> <slot>" in the tree.
-            for i in 0..lane.modules.len() {
-                let module_name =
-                    format!("{name} {}", signal_synth::engine::module_slot(i));
-                cells.set(Role::Module, &module_name, lane.module_gain(i));
+        if rig.is_lanes() {
+            for (name, lane) in s.lanes.iter() {
+                rig.set_lane_volume(Role::Layer, name, db_to_linear(lane.gain_db));
+                rig.set_lane_mute(Role::Layer, name, lane.muted);
+                rig.set_lane_solo(Role::Layer, name, lane.soloed);
+                if let Some(cells) = rig.lane_cells(name) {
+                    // Modules are named "<layer> <slot>" in the lane's tree.
+                    for i in 0..lane.modules.len() {
+                        let module_name =
+                            format!("{name} {}", signal_synth::engine::module_slot(i));
+                        cells.set(Role::Module, &module_name, lane.module_gain(i));
+                    }
+                }
             }
-        }
-        for name in s.engines.keys() {
-            cells.set(Role::Engine, name, s.engine_gain(name));
+            for (name, e) in s.engines.iter() {
+                rig.set_lane_volume(Role::Engine, name, db_to_linear(e.gain_db));
+                rig.set_lane_mute(Role::Engine, name, e.muted);
+            }
+        } else {
+            let cells = rig.gain_cells();
+            // Address by (role, name), never name alone: a one-lane engine is
+            // named after its lane ("Pad" holding "Pad"), and a flat name map
+            // gave both the same cell — the engine's trim, written second,
+            // put the lane's mute and solo straight back.
+            for (name, lane) in s.lanes.iter() {
+                cells.set(Role::Layer, name, s.lane_gain(name));
+                // Modules are named "<layer> <slot>" in the tree.
+                for i in 0..lane.modules.len() {
+                    let module_name =
+                        format!("{name} {}", signal_synth::engine::module_slot(i));
+                    cells.set(Role::Module, &module_name, lane.module_gain(i));
+                }
+            }
+            for name in s.engines.keys() {
+                cells.set(Role::Engine, name, s.engine_gain(name));
+            }
         }
         rig.set_output_gain(db_to_linear(s.master_db));
     }
 
     /// Rebuild the playable program from the profile (patch assignment
-    /// changed), then re-apply the mixer to the fresh cells.
+    /// changed), then re-apply the mixer to the fresh program.
     fn rebuild_program(&self) {
         // Breadcrumbs: a rebuild touches the state lock, the rig lock and the
         // audio device in that order, so a stall is only diagnosable if the
         // log says which step it reached.
         tracing::debug!("keys rig: rebuild — building program");
+        // The single tree is always built: it is the control-view structure
+        // (`s.tree`) even when the audio is hosted per lane.
         let Some(tree) = self.profile_program() else { return };
         tracing::debug!("keys rig: rebuild — ensuring audio");
         if !self.ensure_open() {
             self.publish_all();
             return;
         }
-        tracing::debug!("keys rig: rebuild — loading preset");
+        tracing::debug!("keys rig: rebuild — loading program");
+        let lane_program = self
+            .inner
+            .rig
+            .lock()
+            .ok()
+            .and_then(|r| r.as_ref().map(|r| r.is_lanes()))
+            .unwrap_or(false)
+            .then(|| self.profile_lane_program())
+            .flatten();
         if let Ok(mut rig) = self.inner.rig.lock() {
             if let Some(rig) = rig.as_mut() {
-                rig.load_preset(&tree);
+                match lane_program {
+                    Some(prog) => {
+                        if let Err(e) = rig.load_lanes(&prog) {
+                            tracing::error!("keys rig: lane reload failed: {e}");
+                        }
+                    }
+                    None => rig.load_preset(&tree),
+                }
             }
         }
         tracing::debug!("keys rig: rebuild — publishing");
@@ -1236,16 +1301,20 @@ impl KeysRigBackend {
                 return true;
             }
         }
-        // The profile IS the program — engines, layers, every lane's patch.
-        // (A profile-less build falls back to the single-patch program, which
-        // is what the mobile shell's one-pack case wants.)
+        // The profile IS the program — engines, layers, every lane's patch —
+        // hosted as per-lane daw tracks (the fully daw-based mixer). A
+        // profile-less build falls back to the single-patch, single-track
+        // program, which is what the mobile shell's one-pack case wants.
         let idx = self.inner.state.lock().ok().and_then(|s| s.loaded).unwrap_or(0);
-        let Some(tree) = self.profile_program().or_else(|| self.program_for(idx)) else {
+        let lane_program = self.profile_lane_program();
+        // The single tree doubles as the control-view structure either way.
+        let tree = self.profile_program().or_else(|| self.program_for(idx));
+        if lane_program.is_none() && tree.is_none() {
             if let Ok(mut s) = self.inner.state.lock() {
                 s.last_error = Some("no patches downloaded yet".into());
             }
             return false;
-        };
+        }
         let prefs = AudioIoPrefs {
             output_device: String::new(),
             sample_rate: 0,
@@ -1264,7 +1333,11 @@ impl KeysRigBackend {
         }
         self.inner.events.publish(KeysEvent::Status(KeysRigSvc::status(self)));
         let opened = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            KeysRig::open(&prefs, &tree)
+            match (&lane_program, &tree) {
+                (Some(prog), _) => KeysRig::open_lanes(&prefs, prog),
+                (None, Some(tree)) => KeysRig::open(&prefs, tree),
+                (None, None) => unreachable!("guarded above"),
+            }
         }))
         .unwrap_or_else(|p| {
             let msg = p
@@ -1287,7 +1360,7 @@ impl KeysRigBackend {
                     for (i, p) in s.presets.iter_mut().enumerate() {
                         p.loaded = i == idx;
                     }
-                    s.tree = Some(tree);
+                    s.tree = tree;
                     s.last_error = None;
                 }
                 true
@@ -1318,7 +1391,26 @@ impl KeysRigBackend {
         }
         if let Ok(mut rig) = self.inner.rig.lock() {
             if let Some(rig) = rig.as_mut() {
-                rig.load_preset(&tree);
+                if rig.is_lanes() {
+                    // Whole-rig preset audition while hosted per lane: one
+                    // engine, one lane, the preset's tree.
+                    let prog = signal_sampler::keys_rig::LaneProgram {
+                        name: tree.name.clone(),
+                        engines: vec![signal_sampler::keys_rig::LaneEngine {
+                            name: tree.name.clone(),
+                            layers: vec![signal_sampler::keys_rig::LaneLayer {
+                                name: tree.name.clone(),
+                                tree: tree.clone(),
+                            }],
+                        }],
+                        tail: None,
+                    };
+                    if let Err(e) = rig.load_lanes(&prog) {
+                        tracing::error!("keys rig: preset audition reload failed: {e}");
+                    }
+                } else {
+                    rig.load_preset(&tree);
+                }
             }
         }
         if let Ok(mut s) = self.inner.state.lock() {
@@ -2096,6 +2188,37 @@ impl KeysRigSvc for KeysRigBackend {
                 .collect();
         }
         self.publish_perform();
+    }
+}
+
+// ── shared RigCore (mounted instance-scoped as "keys") ───────────────────────
+impl signal_rigs_proto::rig_core::RigCore for KeysRigBackend {
+    fn start(&self) {
+        KeysRigSvc::start(self);
+    }
+    fn stop(&self) {
+        KeysRigSvc::stop(self);
+    }
+    fn running(&self) -> bool {
+        architect::rig::RigBackend::is_running(self)
+    }
+    fn presets(&self) -> Vec<signal_rigs_proto::RigPresetInfo> {
+        KeysRigSvc::presets(self)
+            .into_iter()
+            .map(|p| signal_rigs_proto::RigPresetInfo { name: p.name, loaded: p.loaded })
+            .collect()
+    }
+    fn load_preset(&self, index: u32) {
+        KeysRigSvc::load_preset(self, index);
+    }
+    fn midi_ports(&self) -> Vec<String> {
+        KeysRigSvc::midi_ports(self)
+    }
+    fn set_midi_port(&self, name: String) {
+        KeysRigSvc::set_midi_port(self, name);
+    }
+    fn midi_recent(&self) -> Vec<String> {
+        KeysRigSvc::midi_recent(self).iter().map(|e| format!("{e:?}")).collect()
     }
 }
 

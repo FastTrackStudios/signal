@@ -13,6 +13,8 @@ authors.workspace = true
 
 [dependencies]
 dioxus.workspace = true
+# Shared audio-gui widgets (knob + arc geometry) — one copy for every rig UI.
+signal-widgets.workspace = true
 lumen-blocks.workspace = true
 signal-guitar-proto.workspace = true
 # Uses `session_ui::PerformanceLayout` (a Dioxus component), so session-ui's

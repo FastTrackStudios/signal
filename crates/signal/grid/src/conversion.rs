@@ -431,9 +431,9 @@ fn find_free_module_row(
 /// each block as a dashed placeholder awaiting a plugin/preset assignment.
 ///
 /// Layout mirrors the resolved converters: modules flow left→right, wrap at
-/// [`SOFT_MAX_COLS`], and `Split` nodes fan their wet lanes into parallel rows.
+/// `SOFT_MAX_COLS`, and `Split` nodes fan their wet lanes into parallel rows.
 /// Empty lanes (dry pass-through) are skipped, exactly as in
-/// [`flatten_chain_nodes`].
+/// `flatten_chain_nodes`.
 pub fn template_to_grid_slots(rig: &RigTemplate) -> Vec<GridSlot> {
     let mut slots = Vec::new();
     let mut engine_base_row: usize = 0;

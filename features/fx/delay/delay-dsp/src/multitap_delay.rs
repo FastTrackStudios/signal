@@ -21,6 +21,7 @@
 //!   skipped. Per-tap filters run inside each line's own loop, so
 //!   filtered repeats self-darken authentically in both modes.
 
+use crate::tilt::DecayTilt;
 use audiocore_dsp::biquad::{Biquad, FilterType};
 use audiocore_dsp::delay_line::DelayLine;
 use audiocore_dsp::smoothing::ParamSmoother;
@@ -372,7 +373,7 @@ pub struct MultiTapDelay {
     tap_filters: [Biquad; MAX_TAPS],
     hicut: Biquad,
     locut: Biquad,
-    decay_eq: Biquad,
+    decay_tilt_eq: DecayTilt,
     feedback_sample: f64,
     sample_rate: f64,
     smoother: ParamSmoother,
@@ -407,7 +408,7 @@ impl MultiTapDelay {
             tap_filters: std::array::from_fn(|_| Biquad::new()),
             hicut: Biquad::new(),
             locut: Biquad::new(),
-            decay_eq: Biquad::new(),
+            decay_tilt_eq: DecayTilt::new(),
             feedback_sample: 0.0,
             sample_rate: 48000.0,
             smoother: ParamSmoother::new(0.0),
@@ -461,23 +462,9 @@ impl MultiTapDelay {
             self.locut
                 .set(FilterType::Highpass, self.locut_freq, 0.707, sample_rate);
         }
-        if self.decay_tilt.abs() > 0.01 {
-            if self.decay_tilt < 0.0 {
-                let freq = 20000.0 * (1.0 + self.decay_tilt).max(0.05);
-                self.decay_eq
-                    .set(FilterType::Lowpass, freq, 0.707, sample_rate);
-            } else {
-                let freq = 20.0 + self.decay_tilt * 2000.0;
-                self.decay_eq
-                    .set(FilterType::Highpass, freq, 0.707, sample_rate);
-            }
-        }
+        self.decay_tilt_eq.configure(self.decay_tilt, sample_rate);
 
-        self.smoother.set_time(0.15, sample_rate);
-        let target = self.time_ms * 0.001 * sample_rate;
-        if self.smoother.value() == 0.0 {
-            self.smoother.set_immediate(target);
-        }
+        self.smoother.set_time_seeded(0.15, sample_rate, self.time_ms * 0.001 * sample_rate);
     }
 
     /// Advance the time smoother + shared mod LFO phase; returns the
@@ -568,9 +555,7 @@ impl MultiTapDelay {
         if self.locut_freq > 0.0 {
             fb = self.locut.tick(fb, ch);
         }
-        if self.decay_tilt.abs() > 0.01 {
-            fb = self.decay_eq.tick(fb, ch);
-        }
+        fb = self.decay_tilt_eq.tick(fb, ch);
         fb = fb.clamp(-1.5, 1.5);
 
         self.delay.write(input + fb);
@@ -640,7 +625,7 @@ impl MultiTapDelay {
         }
         self.hicut.reset();
         self.locut.reset();
-        self.decay_eq.reset();
+        self.decay_tilt_eq.reset();
         self.feedback_sample = 0.0;
         self.smoother.reset(0.0);
         self.mod_phase = 0.0;

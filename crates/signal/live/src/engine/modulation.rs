@@ -97,7 +97,7 @@ impl ModulationRuntime {
     /// Advance modulation by `dt` seconds at the given BPM.
     ///
     /// Returns only the parameter writes that actually changed since the last tick
-    /// (deduplication within [`DEDUP_EPSILON`]).
+    /// (deduplication within `DEDUP_EPSILON`).
     pub fn tick(&mut self, dt: f64, bpm: f64) -> Vec<ParamWrite> {
         let ctx = TickContext { dt, bpm };
         let outputs = self.processor.tick(ctx);

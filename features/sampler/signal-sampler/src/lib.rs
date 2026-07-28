@@ -83,6 +83,8 @@ pub mod document_rt;
 pub mod engine;
 pub mod engine_spec;
 pub mod instrument;
+pub mod keys_rig;
+pub mod kit_tracks;
 pub mod loudness;
 pub mod midi;
 pub mod mixer;
@@ -126,6 +128,7 @@ pub use engine::trace::{RenderTrace, TraceEvent, TraceKind, VoiceSpawn};
 pub use engine::{ArticClass, EmittedMarker, LegatoFireEvent, LineId, PlayMode, SampleEngine};
 pub use engine_spec::{BlockRef, EngineLayerSpec, EngineSpec, FxChainSlot, PortSpec, VoiceConfig};
 pub use instrument::SamplerInstrument;
+pub use keys_rig::{KeysInstrument, KeysRig};
 pub use mixer::{
     Bus, BusStrip, ChannelStrip, DirectChannel, DrumMixer, EngineStrip, FxBackend, FxSlotStrip,
     FxTarget, MixerLayout, MixerMeters, Send as MixerSend, SendStrip,
@@ -247,6 +250,10 @@ pub enum SamplerError {
 ///   [`resolve_zone`](Self::resolve_zone). Used by Spectrasonics-style
 ///   libraries (Omnisphere, Trilian) where the keymap is metadata, not
 ///   filenames.
+///
+/// Cloning is cheap-ish (spec + path lists; the pack's audio bytes are
+/// shared) — per-mic kit engines clone one loaded patch per mic.
+#[derive(Clone)]
 pub struct PlayerPatch {
     pub spec: LibrarySpec,
     pub map: SampleMap,

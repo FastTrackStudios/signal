@@ -13,9 +13,12 @@ authors.workspace = true
 pipewire = ["midicore/midir-pipewire"]
 
 [dependencies]
+signal-rigs-proto.workspace = true
 # The shared sampler core — GuitarRig / ProfileRig / RigProfile / RigBlock /
 # RigAudioPrefs. The guitar feature is a thin live-handle layer on top.
 signal-sampler.workspace = true
+# Cross-rig utilities: poison-tolerant locking, panic payload text.
+signal-rig-host.workspace = true
 
 # The wire contract this crate's headless backend implements (Rig +
 # AudioSettings services); front-ends consume the same crate's clients.

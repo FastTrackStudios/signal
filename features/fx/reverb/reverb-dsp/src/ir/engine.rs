@@ -243,6 +243,7 @@ pub struct ReshapeJob {
 /// only the newest job per slot before doing any work.
 pub struct ImpulseReshaper {
     tx_jobs: Sender<ReshapeJob>,
+    tx_trash: Sender<crate::ir::IrTrash>,
     stop: Arc<AtomicBool>,
     worker: Option<JoinHandle<()>>,
 }
@@ -254,6 +255,7 @@ impl ImpulseReshaper {
     pub fn new() -> (Self, Receiver<PreparedIrPair>) {
         let (tx_jobs, rx_jobs) = unbounded::<ReshapeJob>();
         let (tx_out, rx_out) = unbounded::<PreparedIrPair>();
+        let (tx_trash, rx_trash) = unbounded::<crate::ir::IrTrash>();
         let stop = Arc::new(AtomicBool::new(false));
         let stop_w = stop.clone();
 
@@ -262,6 +264,10 @@ impl ImpulseReshaper {
             .spawn(move || {
                 let mut planner = RealFftPlanner::<f64>::new();
                 while !stop_w.load(Ordering::Relaxed) {
+                    // Dispose buffers the audio thread displaced during
+                    // IR swaps — dropping here keeps frees off the RT
+                    // thread. Runs every wake, including timeouts.
+                    while rx_trash.try_recv().is_ok() {}
                     // recv with a timeout so a stop request still wakes
                     // us when a cloned sender (handed to the audio
                     // thread via `sender()`) keeps the channel alive.
@@ -308,6 +314,7 @@ impl ImpulseReshaper {
         (
             Self {
                 tx_jobs,
+                tx_trash,
                 stop,
                 worker: Some(worker),
             },
@@ -324,6 +331,13 @@ impl ImpulseReshaper {
     /// A cloneable submission handle for the audio-thread side.
     pub fn sender(&self) -> Sender<ReshapeJob> {
         self.tx_jobs.clone()
+    }
+
+    /// Disposal handle for buffers displaced by audio-thread IR swaps —
+    /// feed into [`crate::chain::ReverbChain::set_ir_trash_sender`].
+    /// The worker drops whatever arrives.
+    pub fn trash_sender(&self) -> Sender<crate::ir::IrTrash> {
+        self.tx_trash.clone()
     }
 }
 

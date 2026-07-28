@@ -1,0 +1,24 @@
+[package]
+name = "signal-rig-host"
+version.workspace = true
+edition = "2021"          # kept on 2021 — pre-move signal workspace edition; migrate deliberately
+license.workspace = true
+authors.workspace = true
+description = "Shared daw-backed host for signal live rigs — one project/track/engine bootstrap for every rig"
+
+[features]
+# Native PipeWire duplex engine (Linux) — the guitar/bass live path. Forwarded
+# by signal-sampler's `pipewire` feature so the cfg-selection here matches the
+# engine the rig links.
+pipewire = ["daw/pipewire", "daw-audio-io/pipewire"]
+# Legacy JACK backend (pipewire-jack shim) — enables the PIPEWIRE_LATENCY
+# quantum request before the JACK client connects.
+jack = ["daw-audio-io/jack"]
+
+[dependencies]
+daw = { workspace = true, features = ["standalone-audio"] }
+daw-audio-io.workspace = true
+eyre.workspace = true
+tracing.workspace = true
+facet.workspace = true
+facet-styx.workspace = true

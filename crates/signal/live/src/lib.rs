@@ -35,7 +35,7 @@
 //! # Key types
 //!
 //! - [`SignalLive`] -- the generic live service implementing all `signal-proto` service traits
-//! - [`ServiceCache`] -- in-memory read cache for list queries
+//! - `ServiceCache` -- in-memory read cache for list queries
 //! - DAW integration: `DawPatchApplier`, `RigSceneApplier`, `MorphEngine`
 //! - Macro system: [`MacroRecorder`], `MacroSetup`, `MacroRegistry`
 //!

@@ -4,6 +4,7 @@
 //! per-tap level control and a decay tilt EQ in the feedback path for tonal
 //! shaping of repeats.
 
+use crate::tilt::DecayTilt;
 use audiocore_dsp::biquad::{Biquad, FilterType};
 use audiocore_dsp::delay_line::DelayLine;
 use audiocore_dsp::smoothing::ParamSmoother;
@@ -28,7 +29,7 @@ pub struct RhythmDelay {
     delay: DelayLine,
     hicut: Biquad,
     locut: Biquad,
-    decay_eq: Biquad,
+    decay_tilt_eq: DecayTilt,
     feedback_sample: f64,
     sample_rate: f64,
     smoother: ParamSmoother,
@@ -56,7 +57,7 @@ impl RhythmDelay {
             delay: DelayLine::new(48000 * 40 + 1024),
             hicut: Biquad::new(),
             locut: Biquad::new(),
-            decay_eq: Biquad::new(),
+            decay_tilt_eq: DecayTilt::new(),
             feedback_sample: 0.0,
             sample_rate: 48000.0,
             smoother: ParamSmoother::new(0.0),
@@ -87,24 +88,9 @@ impl RhythmDelay {
             );
         }
 
-        // Decay tilt EQ
-        if self.decay_tilt < 0.0 {
-            // Negative = lowpass (darkening). Freq sweeps from 1000 Hz down to ~1000 Hz min.
-            let freq = 20000.0 * (1.0 + self.decay_tilt).max(0.05);
-            self.decay_eq
-                .set(FilterType::Lowpass, freq, 0.707, sample_rate);
-        } else if self.decay_tilt > 0.0 {
-            // Positive = highpass (brightening).
-            let freq = 20.0 + self.decay_tilt * 2000.0;
-            self.decay_eq
-                .set(FilterType::Highpass, freq, 0.707, sample_rate);
-        }
+        self.decay_tilt_eq.configure(self.decay_tilt, sample_rate);
 
-        self.smoother.set_time(0.15, sample_rate);
-        let target = self.time_ms * 0.001 * sample_rate;
-        if self.smoother.value() == 0.0 {
-            self.smoother.set_immediate(target);
-        }
+        self.smoother.set_time_seeded(0.15, sample_rate, self.time_ms * 0.001 * sample_rate);
     }
 
     pub fn tick(&mut self, input: f64, ch: usize) -> f64 {
@@ -136,9 +122,7 @@ impl RhythmDelay {
         if self.locut_freq > 0.0 {
             fb = self.locut.tick(fb, ch);
         }
-        if self.decay_tilt != 0.0 {
-            fb = self.decay_eq.tick(fb, ch);
-        }
+        fb = self.decay_tilt_eq.tick(fb, ch);
 
         fb = fb.clamp(-1.5, 1.5);
 
@@ -156,7 +140,7 @@ impl RhythmDelay {
         self.delay.clear();
         self.hicut.reset();
         self.locut.reset();
-        self.decay_eq.reset();
+        self.decay_tilt_eq.reset();
         self.feedback_sample = 0.0;
         self.smoother.reset(0.0);
     }

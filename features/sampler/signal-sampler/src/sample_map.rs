@@ -68,6 +68,7 @@ pub struct SampleQuery<'a> {
 // ── Sample map ────────────────────────────────────────────────────────────────
 
 /// In-memory index: `SampleKey → absolute sample path`.
+#[derive(Clone)]
 pub struct SampleMap {
     /// Primary index.
     map: HashMap<SampleKey, PathBuf>,

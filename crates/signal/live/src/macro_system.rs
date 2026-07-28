@@ -57,7 +57,7 @@
 //!
 //! # Example Usage
 //!
-//! ```ignore
+//! ```text
 //! // 1. Load a block with a MacroBank onto a track
 //! let result = setup_macros_for_block(&track, &fx, &block).await?;
 //!

@@ -117,7 +117,7 @@ pub struct RackTemplate {
     pub fx_send_groups: Vec<FxSendGroupTemplate>,
 }
 
-/// Named group of send destinations (e.g. [AUX], [TIME]).
+/// Named group of send destinations (e.g. `[AUX]`, `[TIME]`).
 #[derive(Debug, Clone)]
 pub struct FxSendGroupTemplate {
     pub name: String,

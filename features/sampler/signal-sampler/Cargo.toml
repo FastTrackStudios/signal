@@ -12,12 +12,16 @@ description = "Sample library playback engine for Signal — loads and plays orc
 # by name and daw targets that device, so PipeWire maps its capture channels to
 # the rig in order and the chosen channel lands on the tapped input. Requires
 # libpipewire at build/link time (provided by the flake dev shell).
-pipewire = ["cpal/pipewire", "daw-audio-io/pipewire", "daw/pipewire"]
+pipewire = ["cpal/pipewire", "daw-audio-io/pipewire", "daw/pipewire", "signal-rig-host/pipewire"]
 # Legacy JACK backend (pipewire-jack shim). Kept as a fallback for systems
 # without the native PipeWire host; run under `pw-jack`. Requires libjack.
-jack = ["cpal/jack", "daw-audio-io/jack"]
+jack = ["cpal/jack", "daw-audio-io/jack", "signal-rig-host/jack"]
 
 [dependencies]
+# Shared daw-backed rig host — the one project/track/engine bootstrap every
+# live rig (GuitarRig / SamplerRig / KeysRig) runs on.
+signal-rig-host.workspace = true
+
 # Spec loading
 facet       = { workspace = true }
 facet-styx  = { workspace = true }

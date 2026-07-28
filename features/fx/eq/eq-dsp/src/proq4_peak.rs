@@ -150,7 +150,7 @@ pub fn solve_pole_frequencies(poly: &MagSqPoly) -> PoleFreqs {
     if r2 > 0.0 {
         freqs.push(r2.sqrt());
     }
-    freqs.sort_by(|a, b| a.partial_cmp(b).unwrap());
+    freqs.sort_by(|a, b| a.partial_cmp(b).unwrap_or(core::cmp::Ordering::Equal));
 
     match freqs.len() {
         0 => PoleFreqs {

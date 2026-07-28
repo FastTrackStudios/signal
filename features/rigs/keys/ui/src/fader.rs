@@ -12,7 +12,7 @@ use dioxus::prelude::*;
 pub const MIN_DB: f32 = -60.0;
 pub const MAX_DB: f32 = 6.0;
 /// Pixels of drag for the full sweep.
-const SENSITIVITY: f64 = 150.0;
+use signal_widgets::arc::SENSITIVITY;
 
 /// dB → 0..1 fader position, with the taper opened up near unity.
 pub fn db_to_pos(db: f32) -> f32 {

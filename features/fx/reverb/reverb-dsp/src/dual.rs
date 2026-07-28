@@ -115,64 +115,8 @@ impl DualReverb {
         } else {
             (&self.b, &mut self.a)
         };
-        // Read everything first (src is an immutable borrow).
-        let params = src.params;
-        let conv_mod = src.conv_mod;
-        let shimmer = src.shimmer;
-        let cloud = src.cloud;
-        let bloom = src.bloom;
-        let chorale = src.chorale;
-        let voice = src.voice;
-        let hall = src.hall;
-        let magneto = src.magneto;
-        let nonlinear = src.nonlinear;
-        let predelay_ms = src.predelay_ms;
-        let mix = src.mix;
-        let width = src.width;
-        let pan = src.pan;
-        let trem_rate_hz = src.trem_rate_hz;
-        let trem_depth = src.trem_depth;
-        let input_hp_freq = src.input_hp_freq;
-        let input_lp_freq = src.input_lp_freq;
-        let output_hp_freq = src.output_hp_freq;
-        let output_lp_freq = src.output_lp_freq;
-        let output_tilt_db = src.output_tilt_db;
-        let output_tilt_pivot = src.output_tilt_pivot;
-        let saturation = src.saturation;
-        let duck_amount = src.duck_amount;
-        let duck_threshold = src.duck_threshold;
-        let duck_attack_ms = src.duck_attack_ms;
-        let duck_release_ms = src.duck_release_ms;
-        let freeze = src.freeze;
-
-        dst.params = params;
-        dst.conv_mod = conv_mod;
-        dst.shimmer = shimmer;
-        dst.cloud = cloud;
-        dst.bloom = bloom;
-        dst.chorale = chorale;
-        dst.voice = voice;
-        dst.hall = hall;
-        dst.magneto = magneto;
-        dst.nonlinear = nonlinear;
-        dst.predelay_ms = predelay_ms;
-        dst.mix = mix;
-        dst.width = width;
-        dst.pan = pan;
-        dst.trem_rate_hz = trem_rate_hz;
-        dst.trem_depth = trem_depth;
-        dst.input_hp_freq = input_hp_freq;
-        dst.input_lp_freq = input_lp_freq;
-        dst.output_hp_freq = output_hp_freq;
-        dst.output_lp_freq = output_lp_freq;
-        dst.output_tilt_db = output_tilt_db;
-        dst.output_tilt_pivot = output_tilt_pivot;
-        dst.saturation = saturation;
-        dst.duck_amount = duck_amount;
-        dst.duck_threshold = duck_threshold;
-        dst.duck_attack_ms = duck_attack_ms;
-        dst.duck_release_ms = duck_release_ms;
-        dst.freeze = freeze;
+        let surface = src.param_surface();
+        dst.apply_surface(&surface);
     }
 
     /// Max samples per inner chunk (scratch capacity).
@@ -293,6 +237,10 @@ mod tests {
         d.routing = routing;
         d.a.set_algorithm(AlgorithmType::Magneto);
         d.a.mix = 1.0;
+        // Magneto knob remap: PRE-DELAY drives the engine's feedback —
+        // give the taps some recirculation so the series/parallel
+        // energy contrast is audible.
+        d.a.predelay_ms = 120.0;
         d.b.set_algorithm(AlgorithmType::Hall);
         d.b.mix = 1.0;
         d.b.params.decay = 0.8;

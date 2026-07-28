@@ -6,7 +6,7 @@
 //! follows the same pattern as the rest of `signal-proto`.
 //!
 //! Runtime DSP lives in a separate crate (`signal-synth-blocks`, TODO).
-//! Each block here exposes a [`SynthBlockParams::DEFAULT`] reference value
+//! Each block here exposes a `SynthBlockParams::DEFAULT` reference value
 //! mined from the empirical corpus analysis (see
 //! `docs/content/spectrasonics-corpus-params.md`) so the import pipeline
 //! has somewhere to land Spectrasonics XML attributes.
@@ -179,7 +179,7 @@ pub fn process_sampler(_params: &SamplerParams, _out: &mut [f32]) {
 
 // ─── Wavetable ─────────────────────────────────────────────────────
 
-/// Wavetable oscillator. Consumes [`crate::WavetableSpec`]-described banks.
+/// Wavetable oscillator. Consumes `WavetableSpec`-described banks.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Facet)]
 pub struct WavetableParams {
     /// Reference to a wavetable resource (`.stmwf` / Serum-style WAV).

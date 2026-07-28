@@ -2,8 +2,6 @@
 //! [`RigManager`](crate::rig_manager::RigManager). Persistence lives on the
 //! manager; this is just the device / channel / rate config.
 
-use std::path::PathBuf;
-
 use facet::Facet;
 
 /// Audio I/O preferences for [`GuitarRig`](crate::rig::GuitarRig).
@@ -117,12 +115,6 @@ impl From<&RigAudioPrefs> for daw_audio_io::AudioIoPrefs {
     }
 }
 
-/// Signal's user config directory: `$XDG_CONFIG_HOME/signal`, falling back to
-/// `$HOME/.config/signal`, then `./signal`.
-pub fn signal_config_dir() -> PathBuf {
-    let base = std::env::var_os("XDG_CONFIG_HOME")
-        .map(PathBuf::from)
-        .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".config")))
-        .unwrap_or_else(|| PathBuf::from("."));
-    base.join("signal")
-}
+/// Signal's user config directory — now provided by the shared rig host;
+/// kept re-exported here for the existing `rig_prefs::signal_config_dir` path.
+pub use signal_rig_host::store::signal_config_dir;

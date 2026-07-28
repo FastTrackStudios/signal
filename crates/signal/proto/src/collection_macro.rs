@@ -2,10 +2,10 @@
 //!
 //! Most domain types follow a common pattern: a **collection** struct holds a
 //! `Vec` of **variant** structs plus a default-variant ID field. Both carry a
-//! `metadata` field.  The [`impl_collection!`] macro generates the
+//! `metadata` field.  The `impl_collection!` macro generates the
 //! [`typed_uuid_id!`](crate::typed_uuid_id!) calls for both ID types **and**
-//! the four trait implementations ([`Variant`], [`DefaultVariant`],
-//! [`Collection`], [`HasMetadata`] x 2) in a single invocation.
+//! the four trait implementations (`Variant`, `DefaultVariant`,
+//! `Collection`, `HasMetadata` x 2) in a single invocation.
 //!
 //! # Usage
 //!

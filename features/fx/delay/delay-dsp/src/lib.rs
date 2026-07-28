@@ -8,6 +8,7 @@
 //! - [`engine::DelayEngine`] — Unified wrapper over all delay styles
 //! - [`chain::DelayChain`] — Full stereo delay with ping-pong, swing, and mix
 
+pub mod bbd_core;
 pub mod bbd_delay;
 pub mod chain;
 pub mod clean_delay;
@@ -20,11 +21,13 @@ pub mod modulation;
 pub mod multitap_delay;
 pub mod oilcan_delay;
 pub mod pitch_delay;
+pub mod reverb_delay;
 pub mod reverse_delay;
 pub mod rhythm_delay;
 pub mod shimmer_delay;
 pub mod spectral_delay;
 pub mod tape_delay;
+pub mod tilt;
 
 pub use chain::{DelayChain, HeadMode, TapDivision};
 pub use dual::{DualDelay, DualRouting};
@@ -40,16 +43,9 @@ pub use bbd_delay::BbdVoice;
 pub use pitch_delay::{IceInterval, IceSlice};
 pub use tape_delay::{SaturationType, TapeSpeed, TapeVoice};
 
-/// Equal-power pan gains, normalized so a centered source contributes
-/// unity to BOTH sides — this keeps the head/tap engines' default
-/// (pan = 0) output bit-identical to the old dual-mono routing.
-/// Hard pans put the full-power (+3 dB) signal on one side, standard
-/// for constant-power laws with a 0 dB center.
+/// Equal-power pan gains — see [`audiocore_dsp::stereo::pan_equal_power`]
+/// (centered = unity both sides; hard pans full-power one side).
 #[inline]
 pub(crate) fn pan_gains(pan: f64) -> (f64, f64) {
-    let theta = (pan.clamp(-1.0, 1.0) + 1.0) * std::f64::consts::FRAC_PI_4;
-    (
-        std::f64::consts::SQRT_2 * theta.cos(),
-        std::f64::consts::SQRT_2 * theta.sin(),
-    )
+    audiocore_dsp::stereo::pan_equal_power(pan)
 }

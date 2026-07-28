@@ -180,15 +180,16 @@ fn magneto_ping_pong_alternates_heads() {
         // Sharp taps: no diffusion smear, no extra modulation.
         c.params.diffusion = 0.0;
         c.params.modulation = 0.0;
-        c.params.size = 0.5; // head spacing base = 0.25 s
-        c.params.decay = 0.0;
+        // Knob remap: DECAY = last-head time (0.1 + decay*1.4 s).
+        // decay 0.5 -> last head at 0.8 s, 4 even heads -> 0.2 s apart.
+        // Feedback rides PRE-DELAY (0 here -> taps only).
+        c.params.decay = 0.5;
         c.magneto.ping_pong = pp;
         c.update_params();
         c
     };
 
-    // Head period: base = (0.05 + size*0.35) * SR.
-    let head = ((0.05 + 0.5 * 0.35) * SR) as usize;
+    let head = ((0.1 + 0.5 * 1.4) / 4.0 * SR) as usize;
     let n = head * 5;
 
     let (l, r) = render_impulse(&mut make(true), n);

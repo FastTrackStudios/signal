@@ -571,14 +571,10 @@ struct Drag {
 }
 
 fn arc_pt(cx: f64, cy: f64, r: f64, deg: f64) -> (f64, f64) {
-    let rad = deg * std::f64::consts::PI / 180.0;
-    (cx + r * rad.cos(), cy + r * rad.sin())
+    signal_widgets::arc::arc_point(cx, cy, r, deg)
 }
 fn knob_arc(cx: f64, cy: f64, r: f64, a0: f64, a1: f64) -> String {
-    let (x1, y1) = arc_pt(cx, cy, r, a0);
-    let (x2, y2) = arc_pt(cx, cy, r, a1);
-    let large = if (a1 - a0).abs() > 180.0 { 1 } else { 0 };
-    format!("M {x1:.1} {y1:.1} A {r:.1} {r:.1} 0 {large} 1 {x2:.1} {y2:.1}")
+    signal_widgets::arc::arc_path(cx, cy, r, a0, a1)
 }
 
 /// Small inline-styled SVG arc knob (Blitz-safe, no Tailwind, no external deps).

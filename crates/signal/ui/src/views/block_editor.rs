@@ -4,7 +4,6 @@
 //! parameter sliders with color-coded block cards. Composes
 //! `components::block_color()` for styling.
 
-use std::f64::consts::PI;
 
 use dioxus::prelude::dioxus_elements::geometry::WheelDelta;
 use dioxus::prelude::*;
@@ -108,27 +107,10 @@ mod cg_cursor {
 
 // region: --- Arc geometry helpers
 
-const START_ANGLE: f64 = 135.0;
-const SWEEP: f64 = 270.0;
-
-fn angle_for_value(v: f64) -> f64 {
-    START_ANGLE + v.clamp(0.0, 1.0) * SWEEP
-}
-
-fn arc_point(cx: f64, cy: f64, r: f64, angle_deg: f64) -> (f64, f64) {
-    let rad = angle_deg * PI / 180.0;
-    (cx + r * rad.cos(), cy + r * rad.sin())
-}
+use signal_widgets::arc::{angle_for_value, arc_point};
 
 fn svg_arc(cx: f64, cy: f64, r: f64, start_deg: f64, end_deg: f64) -> String {
-    let (x1, y1) = arc_point(cx, cy, r, start_deg);
-    let (x2, y2) = arc_point(cx, cy, r, end_deg);
-    let large = if (end_deg - start_deg).abs() > 180.0 {
-        1
-    } else {
-        0
-    };
-    format!("M {x1:.1} {y1:.1} A {r:.1} {r:.1} 0 {large} 1 {x2:.1} {y2:.1}")
+    signal_widgets::arc::arc_path(cx, cy, r, start_deg, end_deg)
 }
 
 // endregion: --- Arc geometry helpers

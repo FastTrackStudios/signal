@@ -22,7 +22,7 @@
 //! Each trip around the feedback loop applies dispersion again, making
 //! successive echoes progressively more "chirpy" and diffuse.
 
-use crate::algorithm::{AlgorithmParams, ReverbAlgorithm};
+use crate::algorithm::{SpringDwell, SpringParams, AlgorithmParams, ReverbAlgorithm};
 use crate::primitives::one_pole::Lp1;
 use crate::primitives::spectral_delay::SpectralDelay;
 use audiocore_dsp::dc_blocker::DcBlocker;
@@ -138,6 +138,12 @@ impl SpringUnit {
 pub struct Spring {
     spring_a: SpringUnit,
     spring_b: SpringUnit,
+    /// Third spring (mid length/character) for the 3-spring tank.
+    spring_c: SpringUnit,
+    /// Active springs 1–3 (manual "Number of Springs").
+    num_springs: usize,
+    /// Preamp drive stage (manual "Dwell").
+    dwell: SpringDwell,
     /// Input lowpass (band-limiting before springs).
     input_lp: Lp1,
     /// Output tone control.
@@ -180,6 +186,20 @@ impl Spring {
             3.5,    // slightly more mod
         );
 
+        // Spring C: mid length, its own detune — engages with the
+        // 3-spring tank for denser interference.
+        let spring_c = SpringUnit::new(
+            sample_rate,
+            36.0, // between A and B
+            max_delay_ms,
+            90,     // sections
+            4,      // stretch factor
+            0.565,  // coefficient between A and B
+            4500.0, // damping between A and B
+            0.6,    // mod rate
+            3.2,    // mod depth
+        );
+
         let mut input_lp = Lp1::new();
         input_lp.set_freq(8000.0, sample_rate);
         let mut tone_lp = Lp1::new();
@@ -188,6 +208,9 @@ impl Spring {
         Self {
             spring_a,
             spring_b,
+            spring_c,
+            num_springs: 2,
+            dwell: SpringDwell::Clean,
             input_lp,
             tone_lp,
             sample_rate,
@@ -197,6 +220,7 @@ impl Spring {
 
 impl ReverbAlgorithm for Spring {
     fn reset(&mut self) {
+        self.spring_c.reset();
         self.spring_a.reset();
         self.spring_b.reset();
         self.input_lp.reset();
@@ -259,18 +283,53 @@ impl ReverbAlgorithm for Spring {
         self.spring_b.mod_rate = mod_rate_b / self.sample_rate;
     }
 
+    fn set_spring_params(&mut self, params: &SpringParams) -> bool {
+        self.dwell = params.dwell;
+        self.num_springs = (params.springs as usize).clamp(1, 3);
+        true
+    }
+
     #[inline]
     fn tick(&mut self, left: f64, right: f64) -> (f64, f64) {
         let mono = (left + right) * 0.5;
-        let input = self.input_lp.tick(mono);
 
-        // Process both springs
+        // Dwell: preamp drive INTO the tank. Tube and up add harmonic
+        // content (soft asymmetry) before the springs, like cranking an
+        // outboard unit's Dwell.
+        let drive = self.dwell.drive();
+        let driven = if drive > 1.001 {
+            let x = mono * drive;
+            let asym = if self.dwell == SpringDwell::Clean || self.dwell == SpringDwell::Combo {
+                x
+            } else {
+                x + 0.12 * x * x.abs()
+            };
+            asym.tanh() / drive.tanh()
+        } else {
+            mono
+        };
+        let input = self.input_lp.tick(driven);
+
+        // Active springs: 1 = A centered, 2 = A/B panned, 3 = +C center.
         let a_out = self.spring_a.tick(input);
-        let b_out = self.spring_b.tick(input);
-
-        // Pan springs for stereo: A mostly left, B mostly right
-        let out_l = a_out * 0.65 + b_out * 0.35;
-        let out_r = a_out * 0.35 + b_out * 0.65;
+        let (out_l, out_r);
+        match self.num_springs {
+            1 => {
+                out_l = a_out * 0.5;
+                out_r = a_out * 0.5;
+            }
+            3 => {
+                let b_out = self.spring_b.tick(input);
+                let c_out = self.spring_c.tick(input);
+                out_l = a_out * 0.55 + b_out * 0.25 + c_out * 0.33;
+                out_r = a_out * 0.25 + b_out * 0.55 + c_out * 0.33;
+            }
+            _ => {
+                let b_out = self.spring_b.tick(input);
+                out_l = a_out * 0.65 + b_out * 0.35;
+                out_r = a_out * 0.35 + b_out * 0.65;
+            }
+        }
 
         // Output tone filtering
         let final_l = self.tone_lp.tick(out_l);

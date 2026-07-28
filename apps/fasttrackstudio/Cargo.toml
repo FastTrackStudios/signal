@@ -198,6 +198,7 @@ name = "keys_probe"
 required-features = ["signal"]
 
 [dependencies]
+signal-rigs-proto.workspace = true
 tracing.workspace = true
 
 # Signal domain (the rig)
