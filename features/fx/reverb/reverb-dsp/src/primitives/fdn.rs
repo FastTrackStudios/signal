@@ -209,7 +209,7 @@ impl Fdn {
     /// Switch to exact Jot per-line T60 decay: `t60_dc` / `t60_nyq`
     /// seconds at DC and Nyquist. Replaces `set_decay` + `set_damping`
     /// + `set_band_decay` (those become inert while active); pass a
-    /// huge T60 for infinite hold. Disable with `clear_t60`.
+    ///   huge T60 for infinite hold. Disable with `clear_t60`.
     pub fn set_t60(&mut self, t60_dc: f64, t60_nyq: f64, sample_rate: f64) {
         let t_dc = t60_dc.max(0.01);
         let t_ny = t60_nyq.max(0.01);

@@ -354,6 +354,7 @@ impl ImpulseReshaper {
 
     /// Submit a re-shape. RT-safe: the job is `Arc` clones + a `Copy`
     /// transform set; the channel is lock-free.
+    #[allow(clippy::result_large_err)]
     pub fn submit(&self, job: ReshapeJob) -> Result<(), crossbeam_channel::SendError<ReshapeJob>> {
         self.tx_jobs.send(job)
     }

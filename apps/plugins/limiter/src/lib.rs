@@ -40,6 +40,11 @@ pub struct LimiterParams {
     /// ratio), 1 = full ClipSoftly sine shaping (rounder, adds harmonics).
     #[id = "character"]
     pub character: FloatParam,
+    /// True-peak mode: the gain computer detects INTER-SAMPLE peaks
+    /// (4x oversampled estimate), so the ceiling holds in dBTP terms —
+    /// what streaming loudness normalization actually measures.
+    #[id = "true_peak"]
+    pub true_peak: BoolParam,
 }
 
 impl Default for LimiterParams {
@@ -73,7 +78,43 @@ impl Default for LimiterParams {
             )
             .with_value_to_string(formatters::v2s_f32_percentage(0))
             .with_unit("%"),
+            true_peak: BoolParam::new("True Peak", true),
         }
+    }
+}
+
+/// 4-point Catmull-Rom inter-sample peak estimate over the last four
+/// input samples — a cheap, allocation-free stand-in for full 4x
+/// polyphase upsampling that catches the overwhelming majority of ISPs
+/// (the same estimator family meter-dsp's TruePeakDetector uses).
+#[derive(Default)]
+struct IspEstimator {
+    h: [f64; 4],
+}
+
+impl IspEstimator {
+    #[inline]
+    fn push(&mut self, x: f64) -> f64 {
+        self.h.rotate_left(1);
+        self.h[3] = x;
+        let [a, b, c, d] = self.h;
+        // Peak of |interpolated curve| between b and c at t = ¼, ½, ¾.
+        let mut peak = b.abs().max(c.abs());
+        for &t in &[0.25f64, 0.5, 0.75] {
+            let t2 = t * t;
+            let t3 = t2 * t;
+            let v = 0.5
+                * ((2.0 * b)
+                    + (-a + c) * t
+                    + (2.0 * a - 5.0 * b + 4.0 * c - d) * t2
+                    + (-a + 3.0 * b - 3.0 * c + d) * t3);
+            peak = peak.max(v.abs());
+        }
+        peak
+    }
+
+    fn reset(&mut self) {
+        self.h = [0.0; 4];
     }
 }
 
@@ -85,24 +126,43 @@ struct Channel {
     envelope: f64,
     /// Golden-ratio interpolated hard clip (per-channel instance, lane 0).
     clip: GoldenClip,
+    /// Inter-sample peak estimator (true-peak mode).
+    isp: IspEstimator,
 }
 
 impl Channel {
     fn new() -> Self {
-        Self { envelope: 1.0, clip: GoldenClip::new() }
+        Self {
+            envelope: 1.0,
+            clip: GoldenClip::new(),
+            isp: IspEstimator::default(),
+        }
     }
 
     fn reset(&mut self) {
         self.envelope = 1.0;
         self.clip.reset();
+        self.isp.reset();
     }
 
     /// Process one sample already normalized to the ceiling domain
     /// (|1.0| == ceiling). Returns a value guaranteed within ±1.0.
     #[inline]
-    fn tick(&mut self, normalized: f64, release_coeff: f64, character: f64) -> f64 {
+    fn tick(
+        &mut self,
+        normalized: f64,
+        release_coeff: f64,
+        character: f64,
+        true_peak: bool,
+    ) -> f64 {
         // Brickwall gain computer: instant attack, smoothed release.
-        let level = normalized.abs();
+        // True-peak mode drives it with the inter-sample peak estimate
+        // so the ceiling holds between samples too.
+        let level = if true_peak {
+            self.isp.push(normalized)
+        } else {
+            normalized.abs()
+        };
         let target = if level > 1.0 { 1.0 / level } else { 1.0 };
         if target < self.envelope {
             self.envelope = target;
@@ -195,6 +255,7 @@ impl Plugin for FtsLimiter {
         let ceiling = util::db_to_gain(self.params.ceiling.value()) as f64;
         let character = self.params.character.value() as f64;
         let release_s = (self.params.release_ms.value() as f64 / 1_000.0).max(1e-4);
+        let true_peak = self.params.true_peak.value();
         // One-pole release: per-sample coefficient toward full recovery.
         let release_coeff = (-1.0 / (self.sample_rate * release_s)).exp();
         let inv_ceiling = 1.0 / ceiling.max(1e-6);
@@ -203,7 +264,9 @@ impl Plugin for FtsLimiter {
             for (c, sample) in frame.iter_mut().enumerate() {
                 if let Some(ch) = self.channels.get_mut(c) {
                     let normalized = *sample as f64 * in_gain * inv_ceiling;
-                    *sample = (ch.tick(normalized, release_coeff, character) * ceiling) as f32;
+                    *sample =
+                        (ch.tick(normalized, release_coeff, character, true_peak) * ceiling)
+                            as f32;
                 }
             }
         }

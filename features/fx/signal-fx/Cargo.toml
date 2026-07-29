@@ -9,6 +9,9 @@ description = "Built-in FX for signal — PluginInstance wrappers over the vendo
 hound = "3.5"
 signal-plugin-host = { workspace = true }
 saturate-dsp = { workspace = true, features = ["analysis"] }
+tune = { workspace = true }
+daw-proto = { workspace = true }
+pitch-dsp = { workspace = true }
 audiocore-dsp = { workspace = true }
 # FX facades (never the -dsp crates directly).
 eq = { workspace = true }
@@ -19,5 +22,6 @@ level-dsp = { workspace = true }
 modulation = { workspace = true }
 
 [dev-dependencies]
+midicore-proto = { workspace = true }
 # Integration test: built-in FX through the standalone daw's Effects::add.
 daw = { workspace = true, features = ["standalone"] }

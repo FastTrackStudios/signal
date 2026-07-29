@@ -4,6 +4,7 @@
 //! directly (mirrors the level/comp facade pattern).
 
 pub use saturate_dsp::{SaturationCurve, Saturator};
+pub use saturate_dsp::preamp;
 
 /// Stereo (or N-channel) saturator: one memoryless [`Saturator`] per channel
 /// sharing one settings set.

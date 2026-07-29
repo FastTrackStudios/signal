@@ -236,7 +236,7 @@ tailwind-trigger:
 plugins-bundle:
     #!/usr/bin/env bash
     set -euo pipefail
-    for p in eq comp reverb delay tune modulation nam level saturate signal guide gate limiter trigger; do
+    for p in eq comp reverb delay tune modulation nam level saturate signal guide gate limiter trigger meter pitch unison; do
         cargo run -q -p fts-plugin-xtask -- bundle -p "$p-plugin" --release
     done
     ls target/bundled/

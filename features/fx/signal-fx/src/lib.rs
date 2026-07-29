@@ -1540,6 +1540,363 @@ impl PluginInstance for NativeSaturate {
     }
 }
 
+
+// ── Tune (autotune / pitch correction) ────────────────────────────────────
+
+const TUNE_PARAMS: &[ParamSpec] = &[
+    // Key root pitch class (0 = C .. 11 = B).
+    ParamSpec { id: 0, name: "key", min: 0.0, max: 11.0, default: 0.0 },
+    // 0 Chromatic, 1 Major, 2 Minor.
+    ParamSpec { id: 1, name: "scale", min: 0.0, max: 2.0, default: 0.0 },
+    // 0 = hard-tune jump; buffer-size-INDEPENDENT slew.
+    ParamSpec { id: 2, name: "retune_ms", min: 0.0, max: 400.0, default: 40.0 },
+    ParamSpec { id: 3, name: "strength", min: 0.0, max: 1.0, default: 1.0 },
+    // Flex-tune: only correct within this many cents of a target
+    // (0 = always correct).
+    ParamSpec { id: 4, name: "flex_cents", min: 0.0, max: 200.0, default: 0.0 },
+    ParamSpec { id: 5, name: "a4_hz", min: 415.0, max: 466.0, default: 440.0 },
+    ParamSpec { id: 6, name: "mix", min: 0.0, max: 1.0, default: 1.0 },
+    // 0 Scale, 1 MIDI latch (last note persists), 2 MIDI gate
+    // (correct only while a note is held).
+    ParamSpec { id: 7, name: "midi_mode", min: 0.0, max: 2.0, default: 0.0 },
+    // Note-boundary hysteresis (stops target chatter).
+    ParamSpec { id: 8, name: "hysteresis_cents", min: 0.0, max: 60.0, default: 15.0 },
+];
+
+/// Per-pitch-class bypass toggles (`pc_bypass_0`..`pc_bypass_11`, C..B):
+/// classes left UNCORRECTED (blue notes).
+pub const TUNE_PC_BYPASS_BASE: u32 = 40;
+/// Readback: detected pitch in MIDI (float) and cents offset from the
+/// nearest target — drives the tuner UI needle.
+pub const TUNE_DETECTED_MIDI_ID: u32 = 100;
+pub const TUNE_CENTS_OFF_ID: u32 = 101;
+
+/// Native autotune block — YIN detection → keyflow-compatible scale
+/// snapping (hysteresis, per-PC bypass, flex-tune, A4 reference) →
+/// buffer-size-independent retune slew → PSOLA shifting. MIDI target
+/// modes take notes straight from `PluginEvents.midi`.
+pub struct NativeTune {
+    detector: tune::detect::YinDetector,
+    chain: pitch_dsp::chain::PitchChain,
+    scale: tune::correct::Scale,
+    key: u8,
+    scale_kind: u32,
+    retune_ms: f64,
+    strength: f64,
+    flex_cents: f64,
+    a4_hz: f64,
+    midi_mode: u32,
+    hysteresis_cents: f64,
+    bypass_mask: u16,
+    /// Mono detection history (window-sized ring).
+    history: Vec<f64>,
+    hist_fill: usize,
+    /// Current smoothed shift in semitones.
+    shift_state: f64,
+    /// Previous snapped target (hysteresis anchor).
+    prev_target: Option<f64>,
+    /// Held MIDI notes (stack; last = newest).
+    held: Vec<u8>,
+    /// Latched target from MIDI (mode 1).
+    latched: Option<u8>,
+    detected_midi: f64,
+    cents_off: f64,
+    sample_rate: f64,
+    prepared: bool,
+    scratch_l: Vec<f64>,
+    scratch_r: Vec<f64>,
+}
+
+impl NativeTune {
+    pub fn new(sample_rate: f64) -> Self {
+        let sr = sample_rate.max(1.0);
+        let detector = tune::detect::YinDetector::new(sr, tune::detect::YinConfig::default());
+        let window = detector.window();
+        let mut chain = pitch_dsp::chain::PitchChain::new();
+        // PSOLA (pitch-synchronous — the right engine for voice), now
+        // that its grain-boundary recentering is fixed: measured
+        // +0.1/+1.3/+2.2 cents at -0.47/-2/+2 st, equal or better than
+        // WSOLA (see autotune-plan.md status log).
+        chain.algorithm = pitch_dsp::chain::Algorithm::Psola;
+        chain.semitones = 0.0;
+        chain.mix = 1.0;
+        Self {
+            detector,
+            chain,
+            scale: tune::correct::Scale::CHROMATIC,
+            key: 0,
+            scale_kind: 0,
+            retune_ms: 40.0,
+            strength: 1.0,
+            flex_cents: 0.0,
+            a4_hz: 440.0,
+            midi_mode: 0,
+            hysteresis_cents: 15.0,
+            bypass_mask: 0,
+            history: vec![0.0; window],
+            hist_fill: 0,
+            shift_state: 0.0,
+            prev_target: None,
+            held: Vec::with_capacity(16),
+            latched: None,
+            detected_midi: 0.0,
+            cents_off: 0.0,
+            sample_rate: sr,
+            prepared: false,
+            scratch_l: Vec::new(),
+            scratch_r: Vec::new(),
+        }
+    }
+
+    fn rebuild_scale(&mut self) {
+        self.scale = match self.scale_kind {
+            1 => tune::correct::Scale::major(self.key),
+            2 => tune::correct::Scale::minor(self.key),
+            _ => tune::correct::Scale {
+                root_pc: self.key,
+                ..tune::correct::Scale::CHROMATIC
+            },
+        };
+    }
+
+    fn set(&mut self, id: u32, v: f64) {
+        match id {
+            0 => {
+                self.key = (v as u32 % 12) as u8;
+                self.rebuild_scale();
+            }
+            1 => {
+                self.scale_kind = v as u32;
+                self.rebuild_scale();
+            }
+            2 => self.retune_ms = v.clamp(0.0, 400.0),
+            3 => self.strength = v.clamp(0.0, 1.0),
+            4 => self.flex_cents = v.clamp(0.0, 200.0),
+            5 => self.a4_hz = v.clamp(415.0, 466.0),
+            6 => self.chain.mix = v.clamp(0.0, 1.0),
+            7 => self.midi_mode = v as u32,
+            8 => self.hysteresis_cents = v.clamp(0.0, 60.0),
+            i if (TUNE_PC_BYPASS_BASE..TUNE_PC_BYPASS_BASE + 12).contains(&i) => {
+                let bit = 1u16 << (i - TUNE_PC_BYPASS_BASE);
+                if v >= 0.5 {
+                    self.bypass_mask |= bit;
+                } else {
+                    self.bypass_mask &= !bit;
+                }
+            }
+            _ => {}
+        }
+    }
+
+    pub fn set_named(&mut self, name: &str, value: f64) {
+        if let Some(id) = param_id(TUNE_PARAMS, name) {
+            self.set(id, value);
+            return;
+        }
+        if let Some(pc) = name.strip_prefix("pc_bypass_").and_then(|s| s.parse::<u32>().ok()) {
+            if pc < 12 {
+                self.set(TUNE_PC_BYPASS_BASE + pc, value);
+            }
+        }
+    }
+
+    /// hz → MIDI honoring the A4 reference.
+    fn to_midi(&self, hz: f64) -> f64 {
+        69.0 + 12.0 * (hz / self.a4_hz).log2()
+    }
+
+    /// Choose the correction target for the detected pitch.
+    fn target_for(&mut self, midi: f64) -> Option<f64> {
+        match self.midi_mode {
+            1 => self.latched.map(f64::from),
+            2 => self.held.last().copied().map(f64::from),
+            _ => self.scale.snap_hysteresis(
+                midi,
+                self.prev_target,
+                self.hysteresis_cents,
+                self.bypass_mask,
+            ),
+        }
+    }
+}
+
+impl PluginInstance for NativeTune {
+    fn descriptor(&self) -> PluginDescriptor {
+        descriptor("signal.fx.tune", "Tune")
+    }
+    fn params(&mut self) -> Vec<PluginParamInfo> {
+        let mut out = param_infos(TUNE_PARAMS);
+        for pc in 0..12u32 {
+            out.push(PluginParamInfo {
+                id: TUNE_PC_BYPASS_BASE + pc,
+                name: format!("pc_bypass_{pc}"),
+                min: 0.0,
+                max: 1.0,
+                default: 0.0,
+            });
+        }
+        out
+    }
+    fn param_value(&mut self, id: u32) -> Option<f64> {
+        match id {
+            TUNE_DETECTED_MIDI_ID => Some(self.detected_midi),
+            TUNE_CENTS_OFF_ID => Some(self.cents_off),
+            _ => None,
+        }
+    }
+    fn value_to_text(&mut self, id: u32, value: f64) -> Option<String> {
+        const NAMES: [&str; 12] = [
+            "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B",
+        ];
+        match id {
+            0 => Some(NAMES[(value as usize) % 12].into()),
+            1 => Some(
+                match value as u32 {
+                    1 => "Major",
+                    2 => "Minor",
+                    _ => "Chromatic",
+                }
+                .into(),
+            ),
+            2 => Some(if value < 0.5 {
+                "Hard".into()
+            } else {
+                format!("{value:.0} ms")
+            }),
+            _ => None,
+        }
+    }
+    fn text_to_value(&mut self, _id: u32, _text: &str) -> Option<f64> {
+        None
+    }
+    fn latency(&mut self) -> u32 {
+        self.chain.latency() as u32
+    }
+    fn prepare(&mut self, sample_rate: f64, block_size: u32) -> Result<(), PluginError> {
+        self.sample_rate = sample_rate.max(1.0);
+        self.detector =
+            tune::detect::YinDetector::new(self.sample_rate, tune::detect::YinConfig::default());
+        self.history = vec![0.0; self.detector.window()];
+        self.hist_fill = 0;
+        use audiocore_dsp::Processor;
+        self.chain.update(audiocore_dsp::AudioConfig {
+            sample_rate: self.sample_rate,
+            max_buffer_size: block_size.max(1) as usize,
+        });
+        self.chain.reset();
+        self.shift_state = 0.0;
+        self.prev_target = None;
+        let n = block_size.max(1) as usize;
+        self.scratch_l = vec![0.0; n];
+        self.scratch_r = vec![0.0; n];
+        self.prepared = true;
+        Ok(())
+    }
+    fn is_prepared(&self) -> bool {
+        self.prepared
+    }
+    fn process_block(
+        &mut self,
+        in_l: &[f32],
+        in_r: &[f32],
+        out_l: &mut [f32],
+        out_r: &mut [f32],
+        events: &PluginEvents<'_>,
+    ) -> Result<(), PluginError> {
+        for &(id, value) in events.params {
+            self.set(id, value);
+        }
+        // MIDI target-note bookkeeping.
+        for ev in events.midi {
+            match &ev.message {
+                daw_proto::MidiEvent::NoteOn { key, velocity, .. } => {
+                    if velocity.get() > 0 {
+                        let k = key.get();
+                        self.held.retain(|&h| h != k);
+                        if self.held.len() < 16 {
+                            self.held.push(k);
+                        }
+                        self.latched = Some(k);
+                    } else {
+                        let k = key.get();
+                        self.held.retain(|&h| h != k);
+                    }
+                }
+                daw_proto::MidiEvent::NoteOff { key, .. } => {
+                    let k = key.get();
+                    self.held.retain(|&h| h != k);
+                }
+                _ => {}
+            }
+        }
+
+        let n = in_l.len().min(out_l.len());
+        // Slide the mono detection history.
+        let window = self.history.len();
+        for i in 0..n {
+            let mono = 0.5 * (f64::from(in_l[i]) + f64::from(in_r[i]));
+            if self.hist_fill < window {
+                self.history[self.hist_fill] = mono;
+                self.hist_fill += 1;
+            } else {
+                self.history.copy_within(1.., 0);
+                self.history[window - 1] = mono;
+            }
+        }
+
+        // Detect + retarget once per block.
+        let mut target_shift = 0.0;
+        if self.hist_fill >= window {
+            let frame = self.detector.detect(&self.history);
+            if let Some(hz) = frame.f0_hz {
+                let midi = self.to_midi(hz);
+                self.detected_midi = midi;
+                if let Some(target) = self.target_for(midi) {
+                    self.prev_target = Some(target);
+                    self.cents_off = (midi - target) * 100.0;
+                    let flex_ok = self.flex_cents <= 0.0
+                        || self.cents_off.abs() <= self.flex_cents;
+                    // MIDI gate with no note held → no correction.
+                    let gated = self.midi_mode == 2 && self.held.is_empty();
+                    if flex_ok && !gated {
+                        target_shift = (target - midi) * self.strength;
+                    }
+                }
+            } else {
+                self.prev_target = None;
+                self.cents_off = 0.0;
+            }
+        }
+
+        // Buffer-size-INDEPENDENT retune slew: settle by the block's
+        // real duration (retune_ms = time constant), snap when hard.
+        if self.retune_ms < 0.5 {
+            self.shift_state = target_shift;
+        } else {
+            let a = (-(n as f64) / (self.retune_ms * 0.001 * self.sample_rate)).exp();
+            self.shift_state = target_shift + (self.shift_state - target_shift) * a;
+        }
+        self.chain.semitones = self.shift_state.clamp(-24.0, 24.0);
+
+        // Shift.
+        for i in 0..n {
+            self.scratch_l[i] = f64::from(in_l[i]);
+            self.scratch_r[i] = f64::from(in_r[i]);
+        }
+        use audiocore_dsp::Processor;
+        self.chain
+            .process(&mut self.scratch_l[..n], &mut self.scratch_r[..n]);
+        for i in 0..n {
+            out_l[i] = self.scratch_l[i] as f32;
+            out_r[i] = self.scratch_r[i] as f32;
+        }
+        Ok(())
+    }
+    fn deactivate(&mut self) {
+        self.prepared = false;
+    }
+}
+
 // ── Compressor ─────────────────────────────────────────────────────────────
 
 /// Live compressor telemetry — the rolling waveform + GR the FTS-Comp
