@@ -43,3 +43,9 @@ name = "FTS Limiter"
 
 [trigger-plugin]
 name = "FTS Trigger"
+
+[meter-plugin]
+name = "FTS Meter"
+
+[pitch-plugin]
+name = "FTS Pitch"
