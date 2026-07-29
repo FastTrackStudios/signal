@@ -147,9 +147,11 @@ mod tests {
 
     #[test]
     fn tempo_sync_rate() {
-        let mut cfg = PatternConfig::default();
-        cfg.tempo_sync = true;
-        cfg.sync_division = Some(TempoDiv::Quarter);
+        let cfg = PatternConfig {
+            tempo_sync: true,
+            sync_division: Some(TempoDiv::Quarter),
+            ..Default::default()
+        };
         assert!((cfg.effective_rate_hz(120.0) - 2.0).abs() < 1e-6);
     }
 }

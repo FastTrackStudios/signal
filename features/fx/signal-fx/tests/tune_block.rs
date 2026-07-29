@@ -6,10 +6,6 @@ use signal_plugin_host::{PluginEvents, PluginInstance, PluginMidiEvent};
 const SR: f64 = 48000.0;
 const N: usize = 144_000;
 
-fn no_events() -> PluginEvents<'static> {
-    PluginEvents { params: &[], midi: &[], note_expressions: &[] }
-}
-
 fn sine(freq: f64, amp: f64, n: usize) -> Vec<f32> {
     (0..n).map(|i| (amp * (core::f64::consts::TAU * freq * i as f64 / SR).sin()) as f32).collect()
 }
@@ -41,8 +37,6 @@ fn run(t: &mut NativeTune, input: &[f32], block: usize, midi_at: Option<(usize, 
             }],
             _ => vec![],
         };
-        let events = PluginEvents { params: &[], midi: &midi_events, note_expressions: &[] };
-        let _ = events;
         t.process_block(
             chunk,
             chunk,

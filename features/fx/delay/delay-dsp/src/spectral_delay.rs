@@ -126,6 +126,7 @@ impl CloudsDiffuser {
 
     fn resize(&mut self, base_32k: &[f64; 4], sample_rate: f64) {
         let scale = sample_rate / 32_000.0;
+        #[allow(clippy::needless_range_loop)] // i spans parallel tables
         for i in 0..4 {
             self.delays[i] = base_32k[i] * scale;
             let needed = self.delays[i] as usize + 8;
@@ -138,6 +139,7 @@ impl CloudsDiffuser {
     #[inline]
     fn tick(&mut self, input: f64) -> f64 {
         let mut x = input;
+        #[allow(clippy::needless_range_loop)] // i spans parallel tables
         for i in 0..4 {
             let delayed = self.lines[i].read_linear(self.delays[i]);
             let v = x - DIFFUSER_K * delayed;

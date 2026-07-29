@@ -32,14 +32,8 @@ pub struct MeterShared {
     pub spectrum: Arc<SpectrumState>,
 }
 
-#[derive(Params)]
+#[derive(Params, Default)]
 pub struct MeterParams {}
-
-impl Default for MeterParams {
-    fn default() -> Self {
-        Self {}
-    }
-}
 
 pub struct FtsMeter {
     params: Arc<MeterParams>,

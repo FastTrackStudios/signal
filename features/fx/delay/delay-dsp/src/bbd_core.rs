@@ -226,11 +226,13 @@ impl BbdCore {
         self.h0 = 0.0;
         let mut hin0 = C::ZERO;
         let mut hout0 = C::ZERO;
+        #[allow(clippy::needless_range_loop)] // i spans arrays + self state
         for i in 0..N_FILT {
             hin0 = hin0.add(IN_ROOTS[i].div(IN_POLES[i]).scale(-1.0));
             hout0 = hout0.add(OUT_ROOTS[i].div(OUT_POLES[i]).scale(-1.0));
         }
         self.makeup = 1.0 / (hin0.re * hout0.re).abs().max(1e-6);
+        #[allow(clippy::needless_range_loop)] // i spans arrays + self state
         for i in 0..N_FILT {
             // Input side: scale poles AND roots by k (the C++ reference
             // scales both, keeping the response shape).
@@ -259,6 +261,7 @@ impl BbdCore {
         let delay = delay_samples.max(16.0);
         self.ts_bbd = delay / (2.0 * self.stages as f64);
         let dt = 2.0 * self.ts_bbd;
+        #[allow(clippy::needless_range_loop)] // i spans arrays + self state
         for i in 0..N_FILT {
             self.in_aplus[i] = self.in_phat[i].scale(dt).exp();
             self.out_aplus[i] = self.out_phat[i].scale(-dt).exp();
@@ -284,6 +287,8 @@ impl BbdCore {
                 // Input tick: evaluate the AA filter bank at this exact
                 // clock instant and charge the bucket.
                 let mut v = 0.0;
+                #[allow(clippy::needless_range_loop)] // i spans two arrays + self state
+                #[allow(clippy::needless_range_loop)] // i spans arrays + self state
                 for i in 0..N_FILT {
                     self.in_arec[i] = self.in_arec[i].mul(self.in_aplus[i]);
                     let g = self.in_g0[i].mul(self.in_arec[i]);
@@ -299,6 +304,7 @@ impl BbdCore {
                 let y = self.buffer[self.ptr];
                 let delta = y - self.y_bbd_old;
                 self.y_bbd_old = y;
+                #[allow(clippy::needless_range_loop)] // i spans arrays + self state
                 for i in 0..N_FILT {
                     self.out_arec[i] = self.out_arec[i].mul(self.out_aplus[i]);
                     out_accum[i] = out_accum[i]
@@ -313,6 +319,7 @@ impl BbdCore {
         // Per-sample: rewind the running exponentials by one sample and
         // advance the section states at audio rate.
         let mut out = self.h0 * self.y_bbd_old;
+        #[allow(clippy::needless_range_loop)] // i spans arrays + self state
         for i in 0..N_FILT {
             self.in_arec[i] = self.in_arec[i].mul(self.in_pbar_inv[i]);
             self.out_arec[i] = self.out_arec[i].mul(self.out_pbar[i]);
@@ -326,6 +333,7 @@ impl BbdCore {
         self.renorm += 1;
         if self.renorm >= 256 {
             self.renorm = 0;
+            #[allow(clippy::needless_range_loop)] // i spans arrays + self state
             for i in 0..N_FILT {
                 self.in_arec[i] = self.in_phat[i].scale(self.tn).exp();
                 self.out_arec[i] = self.out_phat[i].scale(-self.tn).exp();
@@ -344,6 +352,8 @@ impl BbdCore {
         self.renorm = 0;
         self.in_x = [C::ZERO; N_FILT];
         self.out_x = [C::ZERO; N_FILT];
+        #[allow(clippy::needless_range_loop)] // i spans two arrays + self state
+        #[allow(clippy::needless_range_loop)] // i spans arrays + self state
         for i in 0..N_FILT {
             self.in_arec[i] = C { re: 1.0, im: 0.0 };
             self.out_arec[i] = C { re: 1.0, im: 0.0 };

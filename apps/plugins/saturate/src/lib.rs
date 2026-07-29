@@ -175,7 +175,7 @@ impl Plugin for FtsSaturate {
         _context: &mut impl InitContext<Self>,
     ) -> bool {
         for p in &mut self.pre {
-            p.set_sample_rate(buffer_config.sample_rate as f32);
+            p.set_sample_rate(buffer_config.sample_rate);
             p.reset();
         }
         true

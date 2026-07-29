@@ -123,6 +123,7 @@ impl DelayStyle {
     }
 }
 
+#[allow(clippy::large_enum_variant)] // one live engine at a time; boxing would ripple through the hot path
 enum EngineInner {
     Tape(TapeDelay),
     Clean(CleanDelay),
