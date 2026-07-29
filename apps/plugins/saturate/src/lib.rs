@@ -1,53 +1,74 @@
 //! FTS Saturate — CLAP/VST3 saturation plugin.
 //!
-//! A thin nice-plug shell over the [`saturate`] facade's [`StereoSaturator`]:
-//! drive → curve (tanh/tape/tube/hard) → mix → output trim. The stage is
-//! memoryless, so one shared instance serves every channel.
+//! Runs the Class-A preamp engine (`saturate_dsp::preamp`) — the same
+//! core behind `signal.fx.saturate`/`signal.fx.preamp`: model voicing
+//! (Preamp/Tube/Tape/Transformer/Console/Fuzz per-side shaper pairs),
+//! Q-point bias (raise it and even-order harmonics spring up), bias
+//! sag (tube bloom — program-dependent asymmetry), and a 1073-style
+//! output DC blocker. The legacy 4-curve Custom mode maps onto the
+//! same per-side shapers, so old presets keep their sound.
 //!
-//! GUI is deliberately absent for now (headless, host-generic params),
-//! matching level-plugin; the nice-plug-dioxus editor is a follow-up.
+//! GUI is deliberately absent for now (headless, host-generic params);
+//! the big-sine + harmonic-bars editor is a follow-up (the analysis
+//! probes in saturate-dsp are ready for it).
 
 use nice_plug::prelude::*;
 use std::sync::Arc;
 
-use saturate::{SaturationCurve, StereoSaturator};
+use saturate::preamp::{ClassAPreamp, SideShaper};
 
 const PLUGIN_NAME: &str = "FTS Saturate";
 
 // ── Parameters ────────────────────────────────────────────────────────────
 
-/// The transfer-curve selector, mirrored onto [`SaturationCurve`].
+/// Saturation model — voices the per-side shapers, Q point, and sag
+/// (mirrors NativeSaturate's model table).
 #[derive(Enum, Debug, Clone, Copy, PartialEq, Eq)]
-pub enum CurveParam {
-    #[name = "Tanh"]
-    Tanh,
-    #[name = "Tape"]
-    Tape,
+pub enum ModelParam {
+    #[name = "Preamp"]
+    Preamp,
     #[name = "Tube"]
     Tube,
-    #[name = "Hard"]
-    Hard,
+    #[name = "Tape"]
+    Tape,
+    #[name = "Transformer"]
+    Transformer,
+    #[name = "Console"]
+    Console,
+    #[name = "Fuzz"]
+    Fuzz,
 }
 
-impl From<CurveParam> for SaturationCurve {
-    fn from(value: CurveParam) -> Self {
-        match value {
-            CurveParam::Tanh => SaturationCurve::Tanh,
-            CurveParam::Tape => SaturationCurve::Tape,
-            CurveParam::Tube => SaturationCurve::Tube,
-            CurveParam::Hard => SaturationCurve::Hard,
+impl ModelParam {
+    /// (positive shaper, negative shaper, q_point, sag).
+    fn voicing(self) -> (SideShaper, SideShaper, f32, f32) {
+        match self {
+            ModelParam::Preamp => (SideShaper::Transformer, SideShaper::Transformer, 0.25, 0.1),
+            ModelParam::Tube => (SideShaper::Tube, SideShaper::Tube, 0.15, 0.6),
+            ModelParam::Tape => (SideShaper::Transformer, SideShaper::Transformer, 0.0, 0.2),
+            ModelParam::Transformer => {
+                (SideShaper::Transformer, SideShaper::Transformer, 0.0, 0.0)
+            }
+            ModelParam::Console => (SideShaper::OpAmp, SideShaper::OpAmp, 0.0, 0.0),
+            ModelParam::Fuzz => (SideShaper::Hard, SideShaper::Diode, 0.4, 0.3),
         }
     }
 }
 
 #[derive(Params)]
 pub struct SaturateParams {
-    /// Drive amount (0 = clean, 1 = heavy; 1x–8x internal pre-gain).
+    /// Drive into the stage in dB.
     #[id = "drive"]
     pub drive: FloatParam,
-    /// Transfer curve family.
+    /// Saturation model (voices shapers + Q + sag).
     #[id = "curve"]
-    pub curve: EnumParam<CurveParam>,
+    pub model: EnumParam<ModelParam>,
+    /// Q-point trim around the model's voicing (−1..1).
+    #[id = "q_point"]
+    pub q_point: FloatParam,
+    /// Bias sag trim (0..1) — program-dependent bloom.
+    #[id = "sag"]
+    pub sag: FloatParam,
     /// Dry/wet mix.
     #[id = "mix"]
     pub mix: FloatParam,
@@ -59,10 +80,23 @@ pub struct SaturateParams {
 impl Default for SaturateParams {
     fn default() -> Self {
         Self {
-            drive: FloatParam::new("Drive", 0.3, FloatRange::Linear { min: 0.0, max: 1.0 })
+            drive: FloatParam::new(
+                "Drive",
+                6.0,
+                FloatRange::Linear { min: 0.0, max: 36.0 },
+            )
+            .with_unit(" dB")
+            .with_value_to_string(formatters::v2s_f32_rounded(1)),
+            model: EnumParam::new("Model", ModelParam::Preamp),
+            q_point: FloatParam::new(
+                "Q Point",
+                0.0,
+                FloatRange::Linear { min: -1.0, max: 1.0 },
+            )
+            .with_value_to_string(formatters::v2s_f32_rounded(2)),
+            sag: FloatParam::new("Sag", 0.0, FloatRange::Linear { min: 0.0, max: 1.0 })
                 .with_value_to_string(formatters::v2s_f32_percentage(0))
                 .with_unit("%"),
-            curve: EnumParam::new("Curve", CurveParam::Tanh),
             mix: FloatParam::new("Mix", 1.0, FloatRange::Linear { min: 0.0, max: 1.0 })
                 .with_value_to_string(formatters::v2s_f32_percentage(0))
                 .with_unit("%"),
@@ -81,24 +115,35 @@ impl Default for SaturateParams {
 
 pub struct FtsSaturate {
     params: Arc<SaturateParams>,
-    saturator: StereoSaturator,
+    pre: [ClassAPreamp; 2],
 }
 
 impl Default for FtsSaturate {
     fn default() -> Self {
         Self {
             params: Arc::new(SaturateParams::default()),
-            saturator: StereoSaturator::new(),
+            pre: [ClassAPreamp::new(48_000.0), ClassAPreamp::new(48_000.0)],
         }
     }
 }
 
 impl FtsSaturate {
     fn sync_params(&mut self) {
-        self.saturator.set_drive(self.params.drive.value());
-        self.saturator.set_curve(self.params.curve.value().into());
-        self.saturator.set_mix(self.params.mix.value());
-        self.saturator.set_output_db(self.params.output_db.value());
+        let (pos, neg, q_base, sag_base) = self.params.model.value().voicing();
+        let drive = 10.0f32.powf(self.params.drive.value() / 20.0);
+        let q = (q_base + self.params.q_point.value()).clamp(-1.0, 1.0);
+        let sag = (sag_base + self.params.sag.value()).clamp(0.0, 1.0);
+        let mix = self.params.mix.value();
+        let out = 10.0f32.powf(self.params.output_db.value() / 20.0);
+        for p in &mut self.pre {
+            p.positive = pos;
+            p.negative = neg;
+            p.drive = drive;
+            p.q_point = q;
+            p.sag = sag;
+            p.mix = mix;
+            p.output_gain = out;
+        }
     }
 }
 
@@ -123,8 +168,23 @@ impl Plugin for FtsSaturate {
         self.params.clone()
     }
 
+    fn initialize(
+        &mut self,
+        _audio_io_layout: &AudioIOLayout,
+        buffer_config: &BufferConfig,
+        _context: &mut impl InitContext<Self>,
+    ) -> bool {
+        for p in &mut self.pre {
+            p.set_sample_rate(buffer_config.sample_rate as f32);
+            p.reset();
+        }
+        true
+    }
+
     fn reset(&mut self) {
-        self.saturator.reset();
+        for p in &mut self.pre {
+            p.reset();
+        }
     }
 
     fn process(
@@ -136,8 +196,9 @@ impl Plugin for FtsSaturate {
         self.sync_params();
 
         for mut frame in buffer.iter_samples() {
-            for sample in frame.iter_mut() {
-                *sample = self.saturator.process_sample(*sample);
+            for (c, sample) in frame.iter_mut().enumerate() {
+                let pre = &mut self.pre[c.min(1)];
+                *sample = pre.process(c.min(1), *sample);
             }
         }
         ProcessStatus::Normal

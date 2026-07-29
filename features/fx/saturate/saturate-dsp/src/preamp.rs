@@ -138,8 +138,11 @@ impl ClassAPreamp {
     pub fn set_sample_rate(&mut self, sample_rate: f32) {
         self.sample_rate = sample_rate.max(1.0);
         self.dc_r = 1.0 - core::f32::consts::TAU * DC_BLOCK_HZ / self.sample_rate;
-        // ~30 ms sag ballistics.
-        self.sag_coeff = 1.0 - (-1.0 / (0.030 * self.sample_rate)).exp();
+        // ~30 ms sag ballistics. Padé form of 1 − e^(−x) for tiny x —
+        // keeps the crate honestly no_std (f32::exp only resolves here
+        // when a feature happens to link std).
+        let x = 1.0 / (0.030 * self.sample_rate);
+        self.sag_coeff = x / (1.0 + x);
     }
 
     /// The static (stateless) transfer: bias, side-split shaping. The
