@@ -77,7 +77,7 @@ pub fn build(
                 .to_string_lossy()
                 .into_owned();
             let n = done.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
-            if n % 500 == 0 {
+            if n.is_multiple_of(500) {
                 progress(n, total);
             }
             if let (Some((prev, prev_feats)), Some(&pi)) =
