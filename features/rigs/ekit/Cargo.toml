@@ -1,0 +1,30 @@
+[package]
+name = "signal-ekit"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Electronic Kit rig — a pad grid over the sample space, with kit generation and similarity morphing (#77)"
+
+[lints]
+workspace = true
+
+[features]
+# PipeWire (audio + MIDI) is the Linux default via target-gated deps.
+pipewire = []
+
+[dependencies]
+signal-ekit-proto = { workspace = true }
+signal-rigs-proto = { workspace = true }
+signal-sampler = { workspace = true }
+signal-space = { workspace = true }
+midicore = { workspace = true, features = ["vox", "midir"] }
+architect = { workspace = true, features = ["vox", "rig"] }
+daw = { workspace = true }
+tracing = { workspace = true }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+midicore = { workspace = true, features = ["vox", "midir", "midir-pipewire"] }
+
+[dev-dependencies]
+tracing-subscriber = { workspace = true }

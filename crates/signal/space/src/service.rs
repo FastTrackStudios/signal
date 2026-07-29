@@ -14,9 +14,8 @@ use signal_space_proto::{MapItem, SimilarHit, SpaceEvent, SpaceFilter, SpaceInfo
 
 use crate::{Space, build, knn};
 
-/// Colon-separated roots scanned (depth-bounded) for `Space/*.space` dirs.
-pub const ROOTS_ENV: &str = "SIGNAL_SPACE_ROOTS";
-const DEFAULT_ROOTS: &str = "/run/media/AudioHaven/Sampled:/run/media/AudioHaven/Signal/Libraries";
+/// Re-exported for consumers that read the same roots (the ekit rig).
+pub use crate::ROOTS_ENV;
 
 struct Loaded {
     dir: PathBuf,
@@ -31,7 +30,6 @@ pub struct SpaceBackend {
 }
 
 struct Inner {
-    roots: Vec<PathBuf>,
     /// name → loaded space (lazy).
     cache: Mutex<HashMap<String, Arc<Loaded>>>,
     events: PubSub<SpaceEvent>,
@@ -47,17 +45,9 @@ impl Default for SpaceBackend {
 
 impl SpaceBackend {
     pub fn new() -> Self {
-        let roots = std::env::var(ROOTS_ENV)
-            .unwrap_or_else(|_| DEFAULT_ROOTS.into())
-            .split(':')
-            .filter(|s| !s.is_empty())
-            .map(PathBuf::from)
-            .filter(|p| p.is_dir())
-            .collect::<Vec<_>>();
-        tracing::info!(?roots, "sample space: roots");
+        tracing::info!(roots = ?crate::space_roots(), "sample space: roots");
         Self {
             inner: Arc::new(Inner {
-                roots,
                 cache: Mutex::new(HashMap::new()),
                 events: architect::rig::events_hub(),
                 audition: Mutex::new(None),
@@ -69,26 +59,9 @@ impl SpaceBackend {
         self.clone().into_router()
     }
 
-    /// All `.space` dirs under the roots (`<lib>/Space/<name>.space`).
+    /// All `.space` dirs under the roots.
     fn discover(&self) -> Vec<PathBuf> {
-        let mut out = Vec::new();
-        for root in &self.inner.roots {
-            for entry in walkdir::WalkDir::new(root)
-                .max_depth(4)
-                .follow_links(false)
-                .into_iter()
-                .filter_map(|e| e.ok())
-            {
-                if entry.file_type().is_dir()
-                    && entry.path().extension().and_then(|e| e.to_str()) == Some("space")
-                {
-                    out.push(entry.into_path());
-                }
-            }
-        }
-        out.sort();
-        out.dedup();
-        out
+        crate::discover_spaces()
     }
 
     fn load(&self, name: &str) -> Option<Arc<Loaded>> {

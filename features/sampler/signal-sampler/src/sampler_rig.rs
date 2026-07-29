@@ -979,6 +979,27 @@ impl SamplerRig {
         self.dispatch(ev_note_on(0, note, velocity));
     }
 
+    /// Note-on addressed at ONE instrument by id, bypassing channel routing.
+    ///
+    /// [`note_on`](Self::note_on) ignores its `id` and dispatches on channel
+    /// 0, and `midi_channels` maps a channel to exactly one instrument — so
+    /// neither can drive a bank of many instruments that must each answer
+    /// independently (a pad grid, where every pad is its own instrument).
+    pub fn note_on_instrument(&self, id: &str, note: u8, velocity: u8) {
+        match self.bank().lock() {
+            Ok(mut bank) => bank.note_on(id, note, velocity),
+            Err(_) => tracing::warn!("signal-sampler: bank lock poisoned; note_on skipped"),
+        }
+    }
+
+    /// The [`note_on_instrument`](Self::note_on_instrument) counterpart.
+    pub fn note_off_instrument(&self, id: &str, note: u8, velocity: u8) {
+        match self.bank().lock() {
+            Ok(mut bank) => bank.note_off_with_velocity(id, note, velocity),
+            Err(_) => tracing::warn!("signal-sampler: bank lock poisoned; note_off skipped"),
+        }
+    }
+
     pub fn note_off(&self, _id: &str, note: u8) {
         self.dispatch(ev_note_off(0, note, 0));
     }

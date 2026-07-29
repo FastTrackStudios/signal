@@ -114,6 +114,69 @@ impl Space {
     }
 }
 
+/// Default library roots scanned for built spaces.
+pub const ROOTS_ENV: &str = "SIGNAL_SPACE_ROOTS";
+const DEFAULT_ROOTS: &str =
+    "/run/media/AudioHaven/Sampled:/run/media/AudioHaven/Signal/Libraries";
+
+/// The configured library roots.
+pub fn space_roots() -> Vec<PathBuf> {
+    std::env::var(ROOTS_ENV)
+        .unwrap_or_else(|_| DEFAULT_ROOTS.to_string())
+        .split(':')
+        .filter(|s| !s.is_empty())
+        .map(PathBuf::from)
+        .filter(|p| p.is_dir())
+        .collect()
+}
+
+/// Every `<root>/**/Space/<name>.space` under the configured roots.
+///
+/// Spaces live in a `Space/` dir beside the library they describe, so this
+/// walks DIRECTORIES ONLY and never descends past [`MAX_SPACE_DEPTH`] —
+/// sample trees hold millions of files, and a walker that reads even one
+/// level too deep stalls for minutes (learned the hard way).
+pub fn discover_spaces() -> Vec<PathBuf> {
+    let mut out = Vec::new();
+    for root in space_roots() {
+        collect_spaces(&root, 0, &mut out);
+    }
+    out.sort();
+    out.dedup();
+    out
+}
+
+/// `<root>/Space/x.space` is depth 2; allow a couple of library-nesting
+/// levels above that.
+pub const MAX_SPACE_DEPTH: usize = 4;
+
+fn collect_spaces(dir: &Path, depth: usize, out: &mut Vec<PathBuf>) {
+    if depth > MAX_SPACE_DEPTH {
+        return;
+    }
+    let Ok(entries) = std::fs::read_dir(dir) else { return };
+    for e in entries.flatten() {
+        let Ok(ft) = e.file_type() else { continue };
+        if !ft.is_dir() {
+            continue;
+        }
+        let p = e.path();
+        if p.extension().and_then(|x| x.to_str()) == Some("space") {
+            out.push(p);
+            continue; // never descend into a space's own contents
+        }
+        collect_spaces(&p, depth + 1, out);
+    }
+}
+
+/// Locate a built space by name and load it.
+pub fn find_space(name: &str) -> Option<(PathBuf, Space, Vec<f32>)> {
+    discover_spaces()
+        .into_iter()
+        .find(|d| d.file_stem().and_then(|s| s.to_str()) == Some(name))
+        .and_then(|dir| Space::load(&dir).ok().map(|(s, f)| (dir, s, f)))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
