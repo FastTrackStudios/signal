@@ -204,6 +204,11 @@ async fn async_main() {
     let space = signal_space::service::SpaceBackend::new();
     let router = router.merge_router(space.router());
 
+    // ── Electronic Kit (pad grid over the sample space, #77) ─────────────
+    let ekit = signal_ekit::EkitBackend::new();
+    let router = router.merge_router(ekit.router());
+    let router = mount_core!(router, "ekit", ekit.clone());
+
     // ── Session (the setlist player) ─────────────────────────────────────
     // Mount SetlistService (+ its `#[subscribe]` stream sibling) from the
     // in-process session engine bootstrapped in `run()`, so browser/desktop

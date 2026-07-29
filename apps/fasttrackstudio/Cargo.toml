@@ -120,6 +120,8 @@ signal = [
     "dep:signal-pack-library",
     "dep:signal-space",
     "dep:signal-space-proto",
+    "dep:signal-ekit",
+    "dep:signal-ekit-proto",
     "dep:axum",
     "dep:tower-http",
 ]
@@ -200,6 +202,11 @@ name = "keys_probe"
 required-features = ["signal"]
 
 [dependencies]
+# Sample-space + Electronic Kit WIRE CONTRACTS (#77). Wasm-clean — the
+# browser remote renders the map and the pad grid from these; their
+# backends (signal-space / signal-ekit) stay native-only below.
+signal-space-proto = { workspace = true, optional = true }
+signal-ekit-proto = { workspace = true, optional = true }
 signal-rigs-proto.workspace = true
 tracing.workspace = true
 
@@ -307,7 +314,7 @@ signal-synth-rig = { workspace = true, optional = true }
 signal-sampler = { workspace = true, optional = true }
 signal-pack-library = { workspace = true, optional = true }
 signal-space = { workspace = true, optional = true }
-signal-space-proto = { workspace = true, optional = true }
+signal-ekit = { workspace = true, optional = true }
 axum = { workspace = true, optional = true }
 tower-http = { workspace = true, optional = true }
 # Watch bridge (engine_watch.rs): facet-json for the WatchState wire form,
