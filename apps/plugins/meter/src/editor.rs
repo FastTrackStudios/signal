@@ -23,6 +23,7 @@ const GONIO: (f64, f64, f64, f64) = (PAD, 330.0, 300.0, 186.0);
 const PHASE: (f64, f64, f64, f64) = (330.0, 330.0, 322.0, 40.0);
 const LUFS: (f64, f64, f64, f64) = (668.0, PAD, 240.0, 504.0);
 
+#[allow(non_snake_case)]
 pub fn App() -> Element {
     let shared = use_context::<SharedState>();
     let state: Arc<MeterShared> = shared

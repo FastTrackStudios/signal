@@ -49,3 +49,6 @@ name = "FTS Meter"
 
 [pitch-plugin]
 name = "FTS Pitch"
+
+[unison-plugin]
+name = "FTS Unison"
