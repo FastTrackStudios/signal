@@ -200,6 +200,10 @@ async fn async_main() {
     let packs = signal_pack_library::PackLibraryBackend::new();
     let router = router.merge_router(packs.router());
 
+    // ── Sample space (similarity maps over the sample libraries, #77) ────
+    let space = signal_space::service::SpaceBackend::new();
+    let router = router.merge_router(space.router());
+
     // ── Session (the setlist player) ─────────────────────────────────────
     // Mount SetlistService (+ its `#[subscribe]` stream sibling) from the
     // in-process session engine bootstrapped in `run()`, so browser/desktop

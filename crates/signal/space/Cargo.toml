@@ -19,3 +19,5 @@ tracing = { workspace = true }
 walkdir = { workspace = true }
 # Barnes-Hut t-SNE (pure Rust) for the 2D projection.
 bhtsne = "0.5"
+architect = { workspace = true, features = ["vox", "rig"] }
+signal-space-proto = { workspace = true }

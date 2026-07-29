@@ -14,6 +14,7 @@ pub mod build;
 pub mod classify;
 pub mod knn;
 pub mod project;
+pub mod service;
 
 use std::path::{Path, PathBuf};
 

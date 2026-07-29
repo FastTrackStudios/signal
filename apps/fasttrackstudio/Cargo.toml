@@ -118,6 +118,8 @@ signal = [
     # Pack distribution: the engine serves its .signalpack library
     # (native-only dep — no-op on the web build, same trick as above).
     "dep:signal-pack-library",
+    "dep:signal-space",
+    "dep:signal-space-proto",
     "dep:axum",
     "dep:tower-http",
 ]
@@ -304,6 +306,8 @@ signal-keys = { workspace = true, optional = true }
 signal-synth-rig = { workspace = true, optional = true }
 signal-sampler = { workspace = true, optional = true }
 signal-pack-library = { workspace = true, optional = true }
+signal-space = { workspace = true, optional = true }
+signal-space-proto = { workspace = true, optional = true }
 axum = { workspace = true, optional = true }
 tower-http = { workspace = true, optional = true }
 # Watch bridge (engine_watch.rs): facet-json for the WatchState wire form,
