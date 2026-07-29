@@ -1,7 +1,7 @@
 //! Space CLI — build/audit/similar until `fts signal space` absorbs it.
 //!
 //! ```bash
-//! cargo run --release -p signal-space --example space_cli -- build <root> [name]
+//! cargo run --release -p signal-space --example space_cli -- build <root> [name] [--pieces]
 //! cargo run --release -p signal-space --example space_cli -- audit <root>/Space/<name>.space
 //! cargo run --release -p signal-space --example space_cli -- similar <space-dir> <substr> [k]
 //! ```
@@ -18,15 +18,22 @@ fn main() {
             let root = PathBuf::from(args.get(1).expect("usage: build <root> [name]"));
             let name = args
                 .get(2)
+                .filter(|a| !a.starts_with("--"))
                 .cloned()
                 .or_else(|| root.file_name().map(|s| s.to_string_lossy().into_owned()))
                 .unwrap_or_else(|| "space".into());
             let dir = Space::space_dir(&root, &name);
             let previous = Space::load(&dir).ok();
             let t0 = std::time::Instant::now();
+            let granularity = if args.iter().any(|a| a == "--pieces") {
+                build::Granularity::Piece
+            } else {
+                build::Granularity::Sample
+            };
             let report = build::build(
                 &name,
                 &root,
+                granularity,
                 previous.as_ref().map(|(s, f)| (s, f.as_slice())),
                 &|n, total| eprintln!("  analyzed {n}/{total}"),
             );

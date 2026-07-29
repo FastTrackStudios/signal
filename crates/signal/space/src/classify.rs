@@ -34,6 +34,7 @@ pub fn classify(a: &Analysis, name: &str) -> &'static str {
         ("crash", "cymbal"),
         ("cym", "cymbal"),
         ("china", "cymbal"),
+        ("stack", "cymbal"),
         ("splash", "cymbal"),
         ("tom", "tom"),
         ("perc", "perc"),
@@ -59,8 +60,12 @@ pub fn classify(a: &Analysis, name: &str) -> &'static str {
         hint = None;
     }
 
-    // Non-percussive / long content → not a drum one-shot.
+    // Non-percussive / long content → not a drum one-shot. Cymbals are the
+    // exception: they legitimately ring for many seconds.
     if a.duration_s > 4.0 || a.percussiveness < 0.25 {
+        if hint == Some("cymbal") || (a.centroid_hz > 2000.0 && a.band_energy[2] > 0.4) {
+            return "cymbal";
+        }
         return hint.filter(|h| *h == "fx").unwrap_or("other");
     }
     if let Some(h) = hint {
