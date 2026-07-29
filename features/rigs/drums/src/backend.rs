@@ -877,6 +877,39 @@ impl DrumRig for DrumRigBackend {
             .spawn(move || b.do_swap_piece(slot_id, engine_path));
     }
 
+    fn similar_pieces(&self, slot_id: String) -> Vec<signal_drums_proto::LibraryPiece> {
+        let current = {
+            let s = self.inner.state.lock().unwrap();
+            s.engines.iter().find(|(id, _)| *id == slot_id).map(|(_, p)| p.clone())
+        };
+        let Some(current) = current else { return Vec::new() };
+        match crate::piece_space::similar_to(&self.inner.library_dir, &current, 12) {
+            Ok(hits) => hits
+                .into_iter()
+                .filter_map(|(path, _)| {
+                    self.inner.library.iter().find(|p| p.path == path).cloned()
+                })
+                .collect(),
+            Err(e) => {
+                tracing::debug!("similar_pieces: {e}");
+                Vec::new()
+            }
+        }
+    }
+
+    fn build_piece_space(&self) {
+        let b = self.clone();
+        let _ = std::thread::Builder::new().name("drum-piece-space".into()).spawn(move || {
+            match crate::piece_space::build(&b.inner.library_dir) {
+                Ok((dir, n, skipped)) => {
+                    tracing::info!(dir = %dir.display(), analyzed = n, skipped, "piece space built");
+                }
+                Err(e) => tracing::error!("piece space build failed: {e}"),
+            }
+            b.publish_all();
+        });
+    }
+
     fn mm2_mixes(&self) -> Vec<String> {
         self.inner.mixes.iter().map(|(n, _)| n.clone()).collect()
     }

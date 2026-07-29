@@ -15,6 +15,7 @@ use signal_sampler::{InstrumentId, PreloadProfile, PresetSpec, SamplerRig};
 mod backend;
 pub mod cradle;
 pub mod library;
+pub mod piece_space;
 mod lightguide;
 pub mod mm2fx;
 pub use backend::DrumRigBackend;

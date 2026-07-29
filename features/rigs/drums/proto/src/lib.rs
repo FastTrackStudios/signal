@@ -225,6 +225,12 @@ pub mod drum {
         /// The kit's piece slots + the instrument currently in each (the kit
         /// designer's rows).
         fn kit_slots(&self) -> Vec<KitSlot>;
+        /// Library pieces most similar to the one in `slot_id`, best-first
+        /// (same kind only). Empty until the piece space is built (#77 M4).
+        fn similar_pieces(&self, slot_id: String) -> Vec<LibraryPiece>;
+        /// (Re)build the piece similarity space over the library. Runs
+        /// off-thread; publishes `Library` when done.
+        fn build_piece_space(&self);
         /// Every swappable instrument in the sample library, grouped by `kind`
         /// on the client. Static for a session (the library scan).
         fn library(&self) -> Vec<LibraryPiece>;
