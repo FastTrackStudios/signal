@@ -57,12 +57,14 @@ enum RigKind {
     Drums,
     Keys,
     Synth,
+    /// Not a rig — the sample-space map browser (#77).
+    Space,
 }
 
 impl RigKind {
     /// Every rig, in picker order.
     const ALL: &'static [RigKind] =
-        &[RigKind::Guitar, RigKind::Bass, RigKind::Drums, RigKind::Keys, RigKind::Synth];
+        &[RigKind::Guitar, RigKind::Bass, RigKind::Drums, RigKind::Keys, RigKind::Synth, RigKind::Space];
 
     /// Stable slug used in prefs + the web URL hash.
     fn slug(self) -> &'static str {
@@ -72,6 +74,7 @@ impl RigKind {
             RigKind::Drums => "drums",
             RigKind::Keys => "keys",
             RigKind::Synth => "synth",
+            RigKind::Space => "space",
         }
     }
 
@@ -83,6 +86,7 @@ impl RigKind {
             RigKind::Drums => "Drums",
             RigKind::Keys => "Keys",
             RigKind::Synth => "Synth",
+            RigKind::Space => "Samples",
         }
     }
 
@@ -95,6 +99,7 @@ impl RigKind {
             RigKind::Drums => Icon::Drums,
             RigKind::Keys => Icon::Keys,
             RigKind::Synth => Icon::Synth,
+            RigKind::Space => Icon::Browser,
         }
     }
 
@@ -106,6 +111,7 @@ impl RigKind {
             RigKind::Drums => "sampled kit, mixer, MM2 mixes",
             RigKind::Keys => "Keyscape pianos — Nord-style engine/layer routing",
             RigKind::Synth => "Omnisphere patches — imported into the native engine",
+            RigKind::Space => "similarity maps over the sample libraries",
         }
     }
 
@@ -195,6 +201,7 @@ pub fn SignalWorkspace() -> Element {
                 RigKind::Guitar => rsx! { GuitarRigView {} },
                 RigKind::Bass => rsx! { BassRigView {} },
                 RigKind::Drums => rsx! { DrumRigView {} },
+                RigKind::Space => rsx! { crate::space_view::SpaceView {} },
                 RigKind::Keys => rsx! { KeysRigView {} },
                 RigKind::Synth => rsx! { SynthRigView {} },
             }

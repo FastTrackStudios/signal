@@ -118,6 +118,8 @@ signal = [
     # Pack distribution: the engine serves its .signalpack library
     # (native-only dep — no-op on the web build, same trick as above).
     "dep:signal-pack-library",
+    "dep:signal-space",
+    "dep:signal-space-proto",
     "dep:axum",
     "dep:tower-http",
 ]
@@ -304,6 +306,8 @@ signal-keys = { workspace = true, optional = true }
 signal-synth-rig = { workspace = true, optional = true }
 signal-sampler = { workspace = true, optional = true }
 signal-pack-library = { workspace = true, optional = true }
+signal-space = { workspace = true, optional = true }
+signal-space-proto = { workspace = true, optional = true }
 axum = { workspace = true, optional = true }
 tower-http = { workspace = true, optional = true }
 # Watch bridge (engine_watch.rs): facet-json for the WatchState wire form,
@@ -334,18 +338,8 @@ dioxus = { workspace = true, default-features = true, features = ["mobile", "lau
 # AVAudioSession bootstrap (ios_audio.rs) — four dynamic objc calls.
 objc2 = "0.5"
 
-[target.'cfg(target_os = "linux")'.dependencies]
-signal-sampler = { workspace = true, features = ["pipewire"], optional = true }
-# MIDI over PipeWire too: the guitar rig's pipewire feature flips midir onto
-# the pipewire-jack backend. Compile-time, whole-binary swap (unifies midir
-# for midicore as well), so hardware MIDI becomes a routable PipeWire
-# graph node instead of an exclusive ALSA-seq grab. Needs pipewire-jack's
-# libjack at run time — the same host cpal's audio already relies on.
-signal-guitar = { workspace = true, features = ["pipewire"], optional = true }
-signal-bass = { workspace = true, features = ["pipewire"], optional = true }
-signal-drums = { workspace = true, features = ["pipewire"], optional = true }
-signal-keys = { workspace = true, features = ["pipewire"], optional = true }
-signal-synth-rig = { workspace = true, features = ["pipewire"], optional = true }
+# PipeWire (audio + MIDI) is the Linux DEFAULT via target-gated deps inside
+# daw-audio-io and the rig crates themselves — no per-app feature plumbing.
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 dioxus = { workspace = true, default-features = true, features = ["web", "launch"] }

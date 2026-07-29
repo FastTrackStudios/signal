@@ -53,6 +53,7 @@ mod remote;
 mod pack_client;
 #[cfg(feature = "signal")]
 mod rig_view;
+mod space_view;
 // The in-process session player (daw-standalone + audio + guide) is
 // native-only; the wasm build is a remote of the network engine instead.
 #[cfg(all(feature = "session", not(target_arch = "wasm32")))]

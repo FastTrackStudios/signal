@@ -3971,6 +3971,229 @@ impl PluginInstance for NativeGate {
     }
 }
 
+// ── Transient ───────────────────────────────────────────────────────────────
+
+const TRANSIENT_PARAMS: &[ParamSpec] = &[
+    // Bipolar, normalized: +1 = full attack boost, -1 = full attack cut.
+    ParamSpec { id: 0, name: "attack", min: -1.0, max: 1.0, default: 0.0 },
+    ParamSpec { id: 1, name: "sustain", min: -1.0, max: 1.0, default: 0.0 },
+    ParamSpec { id: 2, name: "mix", min: 0.0, max: 1.0, default: 1.0 },
+    ParamSpec { id: 3, name: "output", min: -24.0, max: 24.0, default: 0.0 },
+];
+
+/// Attack gain span at |attack| = 1 (dB). SPL-style designers ride ±15 dB.
+const TRANSIENT_ATTACK_DB: f64 = 15.0;
+/// Sustain gain span at |sustain| = 1 (dB).
+const TRANSIENT_SUSTAIN_DB: f64 = 24.0;
+
+/// Native transient designer — level-independent dual-envelope differential
+/// (the SPL Transient Designer topology). The attack section compares a fast
+/// follower against a slowed copy: their difference in dB *is* the transient,
+/// scaled by the bipolar `attack` amount. The sustain section compares a fast
+/// release against a long release: the long tail hanging above the fast one
+/// *is* the sustain, scaled by `sustain`. Detection is stereo-linked.
+pub struct NativeTransient {
+    attack: f64,
+    sustain: f64,
+    mix: f64,
+    output_gain: f64,
+    // Attack pair: same release, different attack times.
+    env_fast: f64,
+    env_slow: f64,
+    // Sustain pair: same (instant) attack, different release times.
+    env_short: f64,
+    env_long: f64,
+    a_fast: f64,
+    a_slow: f64,
+    a_rel: f64,
+    r_short: f64,
+    r_long: f64,
+    sample_rate: f64,
+    prepared: bool,
+}
+
+impl NativeTransient {
+    pub fn new(sample_rate: f64) -> Self {
+        let mut t = Self {
+            attack: 0.0,
+            sustain: 0.0,
+            mix: 1.0,
+            output_gain: 1.0,
+            env_fast: 0.0,
+            env_slow: 0.0,
+            env_short: 0.0,
+            env_long: 0.0,
+            a_fast: 0.0,
+            a_slow: 0.0,
+            a_rel: 0.0,
+            r_short: 0.0,
+            r_long: 0.0,
+            sample_rate: sample_rate.max(1.0),
+            prepared: false,
+        };
+        t.update_coeffs();
+        t
+    }
+
+    fn update_coeffs(&mut self) {
+        let coeff = |ms: f64| (-1.0 / (ms / 1000.0 * self.sample_rate)).exp();
+        self.a_fast = coeff(0.1); // near-instant rise
+        self.a_slow = coeff(20.0); // the "no transient" reference rise
+        self.a_rel = coeff(60.0); // shared fall for the attack pair
+        self.r_short = coeff(40.0); // fast fall — hugs the hit
+        self.r_long = coeff(600.0); // long fall — carries the sustain/ring
+    }
+
+    fn set(&mut self, id: u32, v: f64) {
+        match id {
+            0 => self.attack = v.clamp(-1.0, 1.0),
+            1 => self.sustain = v.clamp(-1.0, 1.0),
+            2 => self.mix = v.clamp(0.0, 1.0),
+            3 => self.output_gain = 10f64.powf(v.clamp(-24.0, 24.0) / 20.0),
+            _ => {}
+        }
+    }
+
+    pub fn set_named(&mut self, name: &str, value: f64) {
+        if let Some(id) = param_id(TRANSIENT_PARAMS, name) {
+            self.set(id, value);
+        }
+    }
+}
+
+impl PluginInstance for NativeTransient {
+    fn descriptor(&self) -> PluginDescriptor {
+        descriptor("signal.fx.transient", "Transient")
+    }
+    fn params(&mut self) -> Vec<PluginParamInfo> {
+        param_infos(TRANSIENT_PARAMS)
+    }
+    fn param_value(&mut self, _id: u32) -> Option<f64> {
+        None
+    }
+    fn value_to_text(&mut self, _id: u32, _value: f64) -> Option<String> {
+        None
+    }
+    fn text_to_value(&mut self, _id: u32, _text: &str) -> Option<f64> {
+        None
+    }
+    fn latency(&mut self) -> u32 {
+        0
+    }
+    fn prepare(&mut self, sample_rate: f64, _block_size: u32) -> Result<(), PluginError> {
+        self.sample_rate = sample_rate.max(1.0);
+        self.update_coeffs();
+        self.env_fast = 0.0;
+        self.env_slow = 0.0;
+        self.env_short = 0.0;
+        self.env_long = 0.0;
+        self.prepared = true;
+        Ok(())
+    }
+    fn is_prepared(&self) -> bool {
+        self.prepared
+    }
+    fn process_block(
+        &mut self,
+        in_l: &[f32],
+        in_r: &[f32],
+        out_l: &mut [f32],
+        out_r: &mut [f32],
+        events: &PluginEvents<'_>,
+    ) -> Result<(), PluginError> {
+        for &(id, value) in events.params {
+            self.set(id, value);
+        }
+        let atk_db = self.attack * TRANSIENT_ATTACK_DB;
+        let sus_db = self.sustain * TRANSIENT_SUSTAIN_DB;
+        for i in 0..out_l.len() {
+            let l = in_l.get(i).copied().unwrap_or(0.0);
+            let r = in_r.get(i).copied().unwrap_or(0.0);
+            let peak = (l.abs().max(r.abs()) as f64).max(1e-8);
+            // Attack pair — different rise, shared fall.
+            let up = |env: f64, a: f64| peak + (env - peak) * a;
+            self.env_fast =
+                if peak > self.env_fast { up(self.env_fast, self.a_fast) } else { peak + (self.env_fast - peak) * self.a_rel };
+            self.env_slow =
+                if peak > self.env_slow { up(self.env_slow, self.a_slow) } else { peak + (self.env_slow - peak) * self.a_rel };
+            // Sustain pair — instant rise, different fall.
+            self.env_short = if peak > self.env_short { peak } else { peak + (self.env_short - peak) * self.r_short };
+            self.env_long = if peak > self.env_long { peak } else { peak + (self.env_long - peak) * self.r_long };
+            // Ratios in dB (level-independent): >0 only during the hit /
+            // the tail respectively; clamp keeps pathological ratios sane.
+            let attack_amt = (self.env_fast / self.env_slow.max(1e-8)).ln() * (20.0 / core::f64::consts::LN_10);
+            let sustain_amt = (self.env_long / self.env_short.max(1e-8)).ln() * (20.0 / core::f64::consts::LN_10);
+            let gain_db = atk_db * (attack_amt.clamp(0.0, 12.0) / 12.0) + sus_db * (sustain_amt.clamp(0.0, 24.0) / 24.0);
+            let wet = 10f64.powf(gain_db / 20.0) * self.output_gain;
+            let g = (1.0 - self.mix) + self.mix * wet;
+            out_l[i] = l * g as f32;
+            out_r[i] = r * g as f32;
+        }
+        Ok(())
+    }
+    fn deactivate(&mut self) {
+        self.prepared = false;
+    }
+}
+
+#[cfg(test)]
+mod transient_tests {
+    use super::*;
+
+    /// A percussive burst: 5 ms of full-scale noise-ish signal, then a quiet
+    /// 300 ms tail. Returns (peak of first 10 ms, rms of 100–300 ms).
+    fn drum_hit(t: &mut NativeTransient) -> (f32, f64) {
+        let sr = 48_000usize;
+        let n = sr * 3 / 10;
+        let input: Vec<f32> = (0..n)
+            .map(|i| {
+                let x = (i as f32 * 0.7).sin();
+                if i < sr * 5 / 1000 { x } else { x * 0.15 }
+            })
+            .collect();
+        let mut out_l = vec![0.0f32; n];
+        let mut out_r = vec![0.0f32; n];
+        let events = PluginEvents::default();
+        for (block_in, (bl, br)) in input
+            .chunks(256)
+            .zip(out_l.chunks_mut(256).zip(out_r.chunks_mut(256)))
+        {
+            t.process_block(block_in, block_in, bl, br, &events).unwrap();
+        }
+        let head = out_l[..sr / 100].iter().fold(0.0f32, |a, &s| a.max(s.abs()));
+        let tail = &out_l[sr / 10..];
+        let rms = (tail.iter().map(|&s| (s as f64) * (s as f64)).sum::<f64>()
+            / tail.len() as f64)
+            .sqrt();
+        (head, rms)
+    }
+
+    #[test]
+    fn attack_and_sustain_move_the_right_parts() {
+        let mk = |atk: f64, sus: f64| {
+            let mut t = NativeTransient::new(48_000.0);
+            t.prepare(48_000.0, 256).unwrap();
+            t.set_named("attack", atk);
+            t.set_named("sustain", sus);
+            t
+        };
+        let (head0, tail0) = drum_hit(&mut mk(0.0, 0.0));
+        let (head_up, _) = drum_hit(&mut mk(1.0, 0.0));
+        let (head_dn, _) = drum_hit(&mut mk(-1.0, 0.0));
+        let (_, tail_up) = drum_hit(&mut mk(0.0, 1.0));
+        let (_, tail_dn) = drum_hit(&mut mk(0.0, -1.0));
+        // Neutral is a passthrough (unity ±0.1 dB on the head).
+        assert!((head0 - 1.0).abs() < 0.02, "neutral head {head0}");
+        assert!(head_up > head0 * 1.25, "attack boost: {head_up} vs {head0}");
+        assert!(head_dn < head0 * 0.8, "attack cut: {head_dn} vs {head0}");
+        assert!(tail_up > tail0 * 1.25, "sustain boost: {tail_up} vs {tail0}");
+        assert!(tail_dn < tail0 * 0.8, "sustain cut: {tail_dn} vs {tail0}");
+        for v in [head0, head_up, head_dn] {
+            assert!(v.is_finite());
+        }
+    }
+}
+
 #[cfg(test)]
 mod param_table_tests {
     use super::*;
@@ -3988,6 +4211,7 @@ mod param_table_tests {
             ("TREM_PARAMS", TREM_PARAMS),
             ("GAIN_PARAMS", GAIN_PARAMS),
             ("GATE_PARAMS", GATE_PARAMS),
+            ("TRANSIENT_PARAMS", TRANSIENT_PARAMS),
         ] {
             let mut ids: Vec<u32> = table.iter().map(|p| p.id).collect();
             ids.sort_unstable();

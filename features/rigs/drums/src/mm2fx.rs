@@ -4,10 +4,10 @@
 //! own drum samples.
 //!
 //! Coverage: EQ (parametric bands), Modern/Vintage Compressor, Limiter (→ comp
-//! with a brick-wall ratio), Reverb. Transient + Drive have no direct DSP yet,
-//! so they are skipped (logged) until those processors land.
+//! with a brick-wall ratio), Reverb, Transient (NativeTransient dual-envelope
+//! designer), Drive (→ NativeSaturate voiced by MM2's Soft/Tape/Hard mode).
 
-use signal_fx::{NativeComp, NativeEq, NativeReverb};
+use signal_fx::{NativeComp, NativeEq, NativeReverb, NativeSaturate, NativeTransient};
 use signal_plugin_host::{HostedPlugin, PluginInstance};
 
 use crate::cradle::{FxSlot, Mixer, Strip};
@@ -53,6 +53,8 @@ pub fn build_instance(slot: &FxSlot, sample_rate: f64) -> Option<Box<dyn PluginI
         "Modern Compressor" | "Vintage Compressor" => Box::new(build_comp(slot, sample_rate)),
         "Limiter" => Box::new(build_limiter(slot, sample_rate)),
         "Reverb" => Box::new(build_reverb(slot, sample_rate)),
+        "Transient" => Box::new(build_transient(slot, sample_rate)),
+        "Drive" => Box::new(build_drive(slot, sample_rate)),
         other => {
             tracing::debug!(fx = other, "mm2 import: no DSP mapping yet — skipped");
             return None;
@@ -105,6 +107,43 @@ fn build_reverb(slot: &FxSlot, sr: f64) -> NativeReverb {
     r.set_named("decay", slot.num("decay").unwrap_or(0.45).clamp(0.0, 1.0));
     r.set_named("size", size_from_mode(slot.text("mode")));
     r
+}
+
+fn build_transient(slot: &FxSlot, sr: f64) -> NativeTransient {
+    let mut t = NativeTransient::new(sr);
+    // MM2 stores attack/sustain already normalized bipolar — same contract
+    // as NativeTransient's params.
+    t.set_named("attack", slot.num("attack").unwrap_or(0.0).clamp(-1.0, 1.0));
+    t.set_named("sustain", slot.num("sustain").unwrap_or(0.0).clamp(-1.0, 1.0));
+    t.set_named("mix", slot.num("mix").unwrap_or(1.0).clamp(0.0, 1.0));
+    if let Some(out) = slot.num("output") {
+        t.set_named("output", out.clamp(-24.0, 24.0));
+    }
+    t
+}
+
+fn build_drive(slot: &FxSlot, sr: f64) -> NativeSaturate {
+    let mut s = NativeSaturate::new(sr);
+    // Voicing first (model configures shapers/bias), then the amount —
+    // MM2 modes: Soft (tube-ish), Tape, Hard (clipper).
+    s.set_named(
+        "model",
+        match slot.text("mode") {
+            Some("Tape") => 3.0,
+            Some("Hard") => 6.0, // Fuzz: hard/diode shaper pair
+            _ => 2.0,            // Soft → Tube
+        },
+    );
+    // MM2 drive is 0..1; NativeSaturate drive is dB into the shaper.
+    s.set_named("drive", slot.num("drive").unwrap_or(0.0).clamp(0.0, 1.0) * 24.0);
+    s.set_named("mix", slot.num("mix").unwrap_or(1.0).clamp(0.0, 1.0));
+    if let Some(out) = slot.num("output") {
+        s.set_named("output", out.clamp(-24.0, 24.0));
+    }
+    if let Some(os) = slot.num("numOversamplingStages") {
+        s.set_named("oversample", os.clamp(0.0, 3.0));
+    }
+    s
 }
 
 // ── param conversions ───────────────────────────────────────────────────────
