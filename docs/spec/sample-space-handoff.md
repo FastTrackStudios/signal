@@ -11,9 +11,9 @@ loss.
 | M1 | `signal-space` core (analyze/classify/project/knn/store/CLI) | **DONE** `ba1b45827` |
 | — | Piece granularity (a multisampled piece = ONE node) | **DONE** `f743b5914` |
 | M2 | `signal-space-proto` + `SpaceBackend` + app "Samples" view | **DONE** `aeb3ca50a` |
-| M3 | Electronic Kit rig (`features/rigs/ekit`) | **core DONE** `5782d0847` (branch `worktree/sample-space-m3`) — engine mount + UI pending |
-| M4 | Acoustic piece subspaces in the drums swap UI | todo |
-| M5 | NAM space (prober + archetypes + guitar UI) | todo |
+| M3 | Electronic Kit rig (`features/rigs/ekit`) | **DONE** — backend `5782d0847`, engine mount + pad grid `012a2a73b` |
+| M4 | Acoustic piece subspaces (`signal_drums::piece_space`) | **DONE** `27b59d25a` — RPCs shipped, drums UI list still to render |
+| M5 | NAM space (`signal_nam::space`) | **DONE** `b8c1e63d4` / `ae1a7d8ba` — prober + similar/partner; guitar UI still to render |
 
 ## Hard-won facts (do not re-derive)
 
@@ -41,15 +41,32 @@ moved ahead, so rebasing/merging would have clobbered them. Merge the branch
 into main once the engraver work settles (`git merge worktree/sample-space-m3`
 from a clean tree). M1/M2 are already on main.
 
-## Remaining M3 work
+## What is left (all UI / polish — every engine path works)
 
-1. Mount in `engine_main.rs`: `let ekit = signal_ekit::EkitBackend::new();`
-   → `.merge_router(ekit.router())` + `mount_core!(router, "ekit", …)`.
-2. `RigKind::Ekit` ("E-Kit") variant + a pad-grid view (mirror
-   `space_view.rs` for the client/establish pattern; pads are buttons in a
-   4×4 CSS grid, class color per category, hit flash from `EkitEvent::Hit`,
-   toolbar = space picker + New Kit + Morph ±).
-3. Kit persistence (`.signalpreset` export) — deliberately deferred.
+1. **Drums UI**: render `similar_pieces(slot_id)` in the swap panel, and a
+   "build piece space" action calling `build_piece_space()`.
+2. **Guitar UI**: render `signal_nam::space::{similar_to, partner_for}` in
+   the drive-block palette; archetype grouping headers.
+3. **NAM archetype labels** need a second pass — neighbours are right but
+   the label is driven by a knee metric that reads input-stage headroom
+   (a boosted 5150 lands in "clean-warm"). Don't front a UI with the
+   labels until fixed; the similarity lists are solid.
+4. Ekit kit persistence (`.signalpreset` export) — deliberately deferred.
+5. Auditioning in `SpaceBackend` still shells out to `pw-play`; wants a
+   real engine preview lane.
+
+## Validation on file (reproduce with these)
+
+- `signal-space/examples/space_cli build <root> [--pieces]` — Luke Holland
+  16 075 wavs → 26 piece nodes in 0.3 s.
+- `signal-ekit/examples/pad_probe <space>` — 11/16 pads fill, 11/11
+  audible, morph steps 9.
+- `signal-drums/examples/piece_space_probe` — MM2: 48 engines in 14 s; a
+  10" tom's neighbours are the 12"/13" toms.
+- `signal-nam/examples/nam_space_probe <root>` + `nam_query <root> <substr>`
+  — 259 community models in 66 s; TwinVerb Norm → TwinVerb Vibrato 0.988,
+  5150 Boosted → 6505+ 0.862 (successor circuit). Library cloned at
+  `/run/media/AudioHaven/Signal/NAM_models` (pelennor2170/NAM_models).
 
 ## Traps already paid for (encoded as comments in the code)
 
