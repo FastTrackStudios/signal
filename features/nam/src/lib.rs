@@ -42,6 +42,7 @@ pub mod nam_file;
 pub mod pack;
 pub mod resolve;
 pub mod scanner;
+pub mod space;
 pub mod vst_chunk;
 
 // Re-export primary types at crate root for convenience.
