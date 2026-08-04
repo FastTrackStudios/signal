@@ -1,5 +1,0 @@
-[application]
-name = "web"
-
-[web.app]
-title = "web"

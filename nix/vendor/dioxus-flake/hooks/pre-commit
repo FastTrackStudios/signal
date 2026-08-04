@@ -1,4 +1,0 @@
-#!/usr/bin/env bash
-set -euo pipefail
-CAPN_BIN="${CAPN_BIN:-/home/cody/Development/capn/target/debug/capn}"
-exec "$CAPN_BIN" fmt
