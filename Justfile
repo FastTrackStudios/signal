@@ -233,11 +233,19 @@ tailwind-trigger:
 # Bundle every FTS plugin as .clap + .vst3 (target/bundled/, names from
 # bundler.toml). Debug of a single plugin: cargo run -p fts-plugin-xtask
 # -- bundle -p eq-plugin
+#
+# On macOS this uses nice-plug-xtask's `bundle-universal` instead of
+# `bundle`: it builds both aarch64-apple-darwin and x86_64-apple-darwin and
+# lipo's them into one universal .clap/.vst3 per plugin — no custom lipo
+# scripting needed. Requires the x86_64-apple-darwin rustc target (added to
+# fts.rustToolchain for darwin — nix/modules/toolchain.nix).
 plugins-bundle:
     #!/usr/bin/env bash
     set -euo pipefail
+    cmd=bundle
+    [ "$(uname)" = "Darwin" ] && cmd=bundle-universal
     for p in eq comp reverb delay tune modulation nam level saturate signal guide gate limiter trigger meter pitch unison; do
-        cargo run -q -p fts-plugin-xtask -- bundle -p "$p-plugin" --release
+        cargo run -q -p fts-plugin-xtask -- "$cmd" -p "$p-plugin" --release
     done
     ls target/bundled/
 

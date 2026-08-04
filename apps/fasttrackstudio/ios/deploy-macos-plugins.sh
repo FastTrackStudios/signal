@@ -1,7 +1,13 @@
 #!/usr/bin/env bash
 # Build, Developer-ID-sign, and notarize the FTS plugin bundle (CLAP + VST3,
 # no AU yet) for macOS — the fts-installer-downloadable
-# fts-plugins-v<version>-aarch64-macos.zip release asset.
+# fts-plugins-v<version>-macos.zip release asset.
+#
+# `just plugins-bundle` uses nice-plug-xtask's `bundle-universal` on
+# Darwin, which builds both aarch64-apple-darwin and x86_64-apple-darwin
+# and lipo's them together — one release covers both Mac architectures,
+# unlike the app .dmg (see deploy-macos.sh's TARGET var), which ships as
+# two separate arch-specific downloads.
 #
 # Distinct from deploy-macos.sh: plugins aren't an .app/.pkg/.dmg, so they
 # can't be STAPLED (Apple's stapler only supports those three container
@@ -54,8 +60,8 @@ SIGN_ID="$(security find-identity -v -p codesigning "$KEYCHAIN" \
 [ -n "$SIGN_ID" ] || { echo "ERROR: no Developer ID Application identity." >&2; exit 1; }
 echo "=== signing identity: $SIGN_ID ==="
 
-# ── Build every plugin bundle (native macOS target, same recipe as Linux) ───
-echo "=== building plugin bundles ==="
+# ── Build every plugin bundle (universal: both Mac arches, lipo'd) ──────────
+echo "=== building universal plugin bundles (aarch64 + x86_64) ==="
 rm -rf target/bundled
 "$NIX" develop "$ROOT" --accept-flake-config -c just plugins-bundle
 [ -d target/bundled ] && [ -n "$(ls -A target/bundled 2>/dev/null)" ] || { echo "ERROR: no bundles produced"; exit 1; }
@@ -79,8 +85,7 @@ done
 
 # ── Package + notarize (zip only — stapling needs .app/.pkg/.dmg) ───────────
 echo "=== packaging zip ==="
-PLAT="aarch64-macos"
-ZIP="$ROOT/target/fts-plugins-v${VERSION}-${PLAT}.zip"
+ZIP="$ROOT/target/fts-plugins-v${VERSION}-macos.zip"
 rm -f "$ZIP"
 ditto -c -k --keepParent target/bundled "$ZIP"
 echo "zip: $ZIP"

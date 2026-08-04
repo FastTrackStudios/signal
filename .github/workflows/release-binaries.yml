@@ -7,8 +7,9 @@
 #   linux-desktop  .AppImage           self-hosted nix-host (THEBATTLESHIP)
 #   linux-plugins  fts-plugins-*.tar.gz self-hosted nix-host (THEBATTLESHIP)
 #   patchbay-linux .deb                self-hosted nix-host (THEBATTLESHIP)
-#   macos-desktop  notarized .dmg      self-hosted airlock          (TODO)
-#   macos-plugins  notarized (unstapled) fts-plugins-*.zip  self-hosted airlock
+#   macos-desktop        notarized .dmg (arm64)   self-hosted airlock (TODO)
+#   macos-desktop-x86_64 notarized .dmg (Intel, cross-compiled)  self-hosted airlock
+#   macos-plugins        notarized (unstapled), universal fts-plugins-*.zip  self-hosted airlock
 #   docker         self-host image     self-hosted nix-host         (TODO)
 #
 # workflow_dispatch takes a tag so a release can be (re)built by hand.
@@ -190,7 +191,9 @@ jobs:
     # Self-hosted Mac (airlock) — the only machine that can Developer-ID-sign
     # and notarize. Its build keychain + ASC key + Developer ID cert are
     # provisioned locally; see deploy-macos.sh. airlock reaches GitHub, so a
-    # plain checkout works (no local mirror like the nix-host).
+    # plain checkout works (no local mirror like the nix-host). Native build
+    # (airlock's own arch, Apple Silicon) — see macos-desktop-x86_64 for the
+    # cross-compiled Intel build.
     runs-on: [self-hosted, macos, airlock]
     steps:
       - uses: actions/checkout@v4
@@ -213,7 +216,44 @@ jobs:
           tag="${{ github.event.release.tag_name || inputs.tag }}"
           export MARKETING_VER="${tag#v}"
           bash apps/fasttrackstudio/ios/deploy-macos.sh
-          echo "artifact=$(ls -t target/FastTrackStudio-*-macos.dmg | head -1)" >> "$GITHUB_ENV"
+          echo "artifact=$(ls -t target/FastTrackStudio-*-aarch64-macos.dmg | head -1)" >> "$GITHUB_ENV"
+      - name: Upload to the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          tag="${{ github.event.release.tag_name || inputs.tag }}"
+          nix run nixpkgs#gh -- release upload "$tag" "$artifact" --clobber
+          echo "uploaded $artifact to $tag"
+
+  macos-desktop-x86_64:
+    # Same airlock Mac, cross-compiled for Intel (TARGET=x86_64-apple-darwin
+    # — airlock is Apple Silicon and has no real Intel hardware; the
+    # x86_64-apple-darwin rustc target + Apple's SDK/linker support this
+    # without one, see nix/modules/toolchain.nix). Ships as a SEPARATE dmg,
+    # not a universal binary — fts-installer picks the matching one via
+    # platform_suffix() at install time.
+    runs-on: [self-hosted, macos, airlock]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name || inputs.tag }}
+          clean: false
+      - name: Build, sign, notarize, staple .dmg (x86_64)
+        env:
+          KEYCHAIN: fts-build.keychain
+          KEYCHAIN_PW: fts-build
+          ACTOOL_DEVELOPER_DIR: /Applications/Xcode-beta.app/Contents/Developer
+          EMBED_WEB: "1"
+          TARGET: x86_64-apple-darwin
+        run: |
+          set -euo pipefail
+          export PATH="/nix/var/nix/profiles/default/bin:$PATH"
+          export NIX=/nix/var/nix/profiles/default/bin/nix
+          tag="${{ github.event.release.tag_name || inputs.tag }}"
+          export MARKETING_VER="${tag#v}"
+          bash apps/fasttrackstudio/ios/deploy-macos.sh
+          echo "artifact=$(ls -t target/FastTrackStudio-*-x86_64-macos.dmg | head -1)" >> "$GITHUB_ENV"
       - name: Upload to the release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -224,9 +264,11 @@ jobs:
           echo "uploaded $artifact to $tag"
 
   macos-plugins:
-    # Same airlock Mac as macos-desktop, same Developer-ID cert — but the
-    # FTS plugin bundle (CLAP+VST3, no AU yet) isn't an .app/.pkg/.dmg, so
-    # it's signed + notarized but NOT stapled (deploy-macos-plugins.sh).
+    # Same airlock Mac as macos-desktop, same Developer-ID cert. Unlike the
+    # app, this is ONE universal (lipo'd, both arches) build — nice-plug-
+    # xtask's bundle-universal — not two separate jobs. The FTS plugin
+    # bundle (CLAP+VST3, no AU yet) isn't an .app/.pkg/.dmg, so it's signed
+    # + notarized but NOT stapled (deploy-macos-plugins.sh).
     runs-on: [self-hosted, macos, airlock]
     steps:
       - uses: actions/checkout@v4
@@ -242,7 +284,7 @@ jobs:
           export PATH="/nix/var/nix/profiles/default/bin:$PATH"
           export NIX=/nix/var/nix/profiles/default/bin/nix
           bash apps/fasttrackstudio/ios/deploy-macos-plugins.sh
-          echo "artifact=$(ls -t target/fts-plugins-*-aarch64-macos.zip | head -1)" >> "$GITHUB_ENV"
+          echo "artifact=$(ls -t target/fts-plugins-*-macos.zip | head -1)" >> "$GITHUB_ENV"
       - name: Upload to the release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

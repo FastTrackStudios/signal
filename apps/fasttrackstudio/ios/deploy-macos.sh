@@ -25,6 +25,24 @@ DX_APP_DIR="${DX_APP_DIR:-apps/fasttrackstudio}"
 # before the build so the embedded sheet isn't a stale stub (Task desktop).
 DX_TAILWIND="${DX_TAILWIND:-}"
 
+# Cross-arch: unset TARGET builds natively for airlock's own arch (Apple
+# Silicon). Set TARGET=x86_64-apple-darwin to cross-compile the Intel
+# build instead — needs the x86_64-apple-darwin rustc target (nix/modules/
+# toolchain.nix). Unlike the plugin bundle (nice-plug-xtask's
+# bundle-universal, one lipo'd release for both arches), the app ships as
+# two separate arch-specific .dmg downloads — no universal-binary
+# machinery for a full dx app bundle exists yet.
+TARGET="${TARGET:-}"
+case "${TARGET:-$(uname -m)}" in
+    aarch64-apple-darwin | arm64) ARCH_TOKEN=aarch64 ;;
+    x86_64-apple-darwin | x86_64) ARCH_TOKEN=x86_64 ;;
+    *)
+        echo "ERROR: unsupported TARGET/arch: ${TARGET:-$(uname -m)}" >&2
+        exit 1
+        ;;
+esac
+TARGET_ARG="${TARGET:+--target=$TARGET}"
+
 # shellcheck disable=SC1090
 source "$HOME/.appstoreconnect/config.env"
 
@@ -61,17 +79,22 @@ SIGN_ID="$(security find-identity -v -p codesigning "$KEYCHAIN" \
 echo "=== signing identity: $SIGN_ID ==="
 
 # ── Build (embed the web view so the app serves it on the LAN) ───────────────
-APP_GLOB="$ROOT/target/dx/$DX_PACKAGE/release/macos/"*.app
-# shellcheck disable=SC2086
-if [ "${SKIP_BUILD:-}" = "1" ] && [ -d $APP_GLOB ]; then
+# dx's bundle staging dir under a cross --target isn't something we can
+# assume ahead of time, so instead of a fixed glob we look for the most
+# recently modified *.app anywhere under target/dx/$DX_PACKAGE and check
+# it's actually newer than a marker touched right before the build —
+# avoids silently reusing a stale bundle from a previous (different-arch)
+# run sharing the same target/ dir.
+find_app() {
+    find "$ROOT/target/dx/$DX_PACKAGE" -type d -iname '*.app' -exec stat -f '%m %N' {} \; 2>/dev/null \
+        | sort -rn | head -1 | cut -d' ' -f2-
+}
+
+if [ "${SKIP_BUILD:-}" = "1" ] && [ -n "$(find_app)" ]; then
     echo "SKIP_BUILD=1 — reusing existing app"
 else
-    echo "=== building macOS app ==="
-    # Remove any prior .app so a failed build can't be silently mistaken for a
-    # fresh one (dx exits non-zero even on success, so we gate on the .app, not
-    # the exit code — but only if it's THIS build's output).
-    # shellcheck disable=SC2086
-    rm -rf $APP_GLOB
+    echo "=== building macOS app ($ARCH_TOKEN) ==="
+    MARKER="$(mktemp)"
     # EMBED_WEB=1 (default) bakes the browser remote into the binary so the app
     # serves it on the LAN. That needs the wasm web build (`just web-stage`),
     # which currently can't run on macOS (a clang-18/clang-21 dylib mismatch in
@@ -94,13 +117,20 @@ else
         # at the working directory, so the wrong cwd silently drops rules.
         # Matches apps/task/tailwind_build.rs.
         ${DX_TAILWIND:+(cd \"\$(dirname '$DX_TAILWIND')\" && tailwindcss -i \"\$(basename '$DX_TAILWIND')\" -o '$ROOT/$DX_APP_DIR/assets/tailwind.css')}
-        dx build --platform macos --release $FEATURES
+        dx build --platform macos --release $FEATURES $TARGET_ARG
     " > /tmp/fts-macos-build.log 2>&1 || true
     tail -3 /tmp/fts-macos-build.log
+    APP_MTIME="$(find_app | xargs -I{} stat -f '%m' {} 2>/dev/null || echo 0)"
+    MARKER_MTIME="$(stat -f '%m' "$MARKER")"
+    rm -f "$MARKER"
+    if [ -z "$APP_MTIME" ] || [ "$APP_MTIME" -lt "$MARKER_MTIME" ]; then
+        echo "ERROR: build produced no new app (found nothing newer than the pre-build marker)"
+        tail -30 /tmp/fts-macos-build.log
+        exit 1
+    fi
 fi
-# shellcheck disable=SC2086
-APP="$(ls -d $APP_GLOB 2>/dev/null | head -1)"
-[ -n "$APP" ] && [ -d "$APP" ] || { echo "ERROR: build produced no app"; tail -30 /tmp/fts-macos-build.log; exit 1; }
+APP="$(find_app)"
+[ -n "$APP" ] && [ -d "$APP" ] || { echo "ERROR: no app bundle found under target/dx/$DX_PACKAGE"; exit 1; }
 echo "=== app bundle: $APP ==="
 
 # ── Home-screen icon (beta actool — 26.6's is broken on macOS 27) ────────────
@@ -145,7 +175,7 @@ codesign --verify --deep --strict --verbose=2 "$APP"
 echo "=== packaging .dmg ==="
 BUILD_NO="${BUILD_NO:-$(date +%s)}"
 PRODUCT_NAME="${PRODUCT_NAME:-FastTrackStudio}"
-DMG="$ROOT/target/${PRODUCT_NAME}-${MARKETING_VER:-0.0.1}-${BUILD_NO}-macos.dmg"
+DMG="$ROOT/target/${PRODUCT_NAME}-${MARKETING_VER:-0.0.1}-${BUILD_NO}-${ARCH_TOKEN}-macos.dmg"
 STAGE="$(mktemp -d)"
 cp -R "$APP" "$STAGE/"
 ln -s /Applications "$STAGE/Applications"

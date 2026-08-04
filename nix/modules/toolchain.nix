@@ -35,11 +35,15 @@
       fts.rustToolchain = pkgs.rust-bin.stable."1.94.0".default.override {
         extensions = [ "rust-src" "rust-analyzer" "clippy" "rustfmt" ];
         # wasm for the web remotes; on darwin also the iOS targets for the
-        # iPhone app (device + simulator).
+        # iPhone app (device + simulator), and x86_64-apple-darwin so
+        # airlock (Apple Silicon) can cross-compile the Intel desktop/
+        # plugin builds without needing real Intel hardware (deploy-macos.sh
+        # TARGET=x86_64-apple-darwin, nice-plug-xtask's bundle-universal).
         targets = [ "wasm32-unknown-unknown" ]
           ++ lib.optionals pkgs.stdenv.isDarwin [
             "aarch64-apple-ios"
             "aarch64-apple-ios-sim"
+            "x86_64-apple-darwin"
           ];
       };
 
