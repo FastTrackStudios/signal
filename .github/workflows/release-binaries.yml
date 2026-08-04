@@ -5,8 +5,10 @@
 # NOT here — those push to TestFlight/App Store via ios.yml, not GitHub assets.
 #
 #   linux-desktop  .AppImage           self-hosted nix-host (THEBATTLESHIP)
+#   linux-plugins  fts-plugins-*.tar.gz self-hosted nix-host (THEBATTLESHIP)
 #   patchbay-linux .deb                self-hosted nix-host (THEBATTLESHIP)
 #   macos-desktop  notarized .dmg      self-hosted airlock          (TODO)
+#   macos-plugins  notarized (unstapled) fts-plugins-*.zip  self-hosted airlock
 #   docker         self-host image     self-hosted nix-host         (TODO)
 #
 # workflow_dispatch takes a tag so a release can be (re)built by hand.
@@ -212,6 +214,35 @@ jobs:
           export MARKETING_VER="${tag#v}"
           bash apps/fasttrackstudio/ios/deploy-macos.sh
           echo "artifact=$(ls -t target/FastTrackStudio-*-macos.dmg | head -1)" >> "$GITHUB_ENV"
+      - name: Upload to the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          tag="${{ github.event.release.tag_name || inputs.tag }}"
+          nix run nixpkgs#gh -- release upload "$tag" "$artifact" --clobber
+          echo "uploaded $artifact to $tag"
+
+  macos-plugins:
+    # Same airlock Mac as macos-desktop, same Developer-ID cert — but the
+    # FTS plugin bundle (CLAP+VST3, no AU yet) isn't an .app/.pkg/.dmg, so
+    # it's signed + notarized but NOT stapled (deploy-macos-plugins.sh).
+    runs-on: [self-hosted, macos, airlock]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name || inputs.tag }}
+          clean: false
+      - name: Build, sign, notarize plugin bundle
+        env:
+          KEYCHAIN: fts-build.keychain
+          KEYCHAIN_PW: fts-build
+        run: |
+          set -euo pipefail
+          export PATH="/nix/var/nix/profiles/default/bin:$PATH"
+          export NIX=/nix/var/nix/profiles/default/bin/nix
+          bash apps/fasttrackstudio/ios/deploy-macos-plugins.sh
+          echo "artifact=$(ls -t target/fts-plugins-*-aarch64-macos.zip | head -1)" >> "$GITHUB_ENV"
       - name: Upload to the release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
