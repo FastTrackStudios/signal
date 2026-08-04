@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+set -eux
+CAPN_BIN=/home/cody/.local/bin/capn
+test -x "$CAPN_BIN"
+"$CAPN_BIN" pre-push

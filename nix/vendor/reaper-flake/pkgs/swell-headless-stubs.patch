@@ -1,0 +1,12 @@
+diff --git a/WDL/swell/swell-generic-headless.cpp b/WDL/swell/swell-generic-headless.cpp
+index abcdef1..1234567 100644
+--- a/WDL/swell/swell-generic-headless.cpp
++++ b/WDL/swell/swell-generic-headless.cpp
+@@ -146,6 +146,7 @@ void swell_oswindow_begin_resize(SWELL_OSWINDOW wnd) { }
+ void swell_oswindow_resize(SWELL_OSWINDOW wnd, int reposflag, RECT f) { }
+ void swell_oswindow_postresize(HWND hwnd, RECT f) { }
+ void swell_oswindow_invalidate(HWND hwnd, const RECT *r) { }
++void swell_oswindow_maximize(HWND hwnd, bool wantmax) { }
+
+ void UpdateWindow(HWND hwnd) { }
+
