@@ -70,21 +70,21 @@ echo "=== signing identity: $SIGN_ID ==="
 
 # ── Build both arches (embed the web view so the app serves it on the LAN) ──
 # dx's bundle staging dir under a cross --target isn't something we can
-# assume ahead of time, so instead of a fixed glob we look for the most
-# recently modified *.app anywhere under target/dx/$DX_PACKAGE and check
-# it's actually newer than a marker touched right before the build —
-# avoids silently reusing a stale bundle from a previous run sharing the
-# same target/ dir.
+# assume ahead of time, so instead of a fixed glob we look for *.app
+# anywhere under target/dx/$DX_PACKAGE. Freshness is enforced by DELETING
+# any existing one before each build (not by mtime — an .app bundle's own
+# directory entry only updates when files are added/removed DIRECTLY
+# inside it, not when nested Contents/Resources/... files change, so a
+# real dx build can finish successfully while leaving the top-level .app
+# dir's mtime looking stale).
 find_app() {
-    find "$ROOT/target/dx/$DX_PACKAGE" -type d -iname '*.app' -exec stat -f '%m %N' {} \; 2>/dev/null \
-        | sort -rn | head -1 | cut -d' ' -f2-
+    find "$ROOT/target/dx/$DX_PACKAGE" -type d -iname '*.app' 2>/dev/null | head -1
 }
 
 build_one_arch() {
     local target="$1"
     echo "=== building macOS app ($target) ==="
-    local marker
-    marker="$(mktemp)"
+    find "$ROOT/target/dx/$DX_PACKAGE" -type d -iname '*.app' -exec rm -rf {} + 2>/dev/null || true
     # EMBED_WEB=1 (default) bakes the browser remote into the binary so the app
     # serves it on the LAN. That needs the wasm web build (`just web-stage`),
     # which currently can't run on macOS (a clang-18/clang-21 dylib mismatch in
@@ -111,12 +111,8 @@ build_one_arch() {
         dx build --platform macos --release $features --target=$target
     " > "/tmp/fts-macos-build-$target.log" 2>&1 || true
     tail -3 "/tmp/fts-macos-build-$target.log"
-    local app_mtime marker_mtime
-    app_mtime="$(find_app | xargs -I{} stat -f '%m' {} 2>/dev/null || true)"
-    marker_mtime="$(stat -f '%m' "$marker")"
-    rm -f "$marker"
-    if [ -z "$app_mtime" ] || [ "$app_mtime" -lt "$marker_mtime" ]; then
-        echo "ERROR: build produced no new app for $target (found nothing newer than the pre-build marker)"
+    if [ -z "$(find_app)" ]; then
+        echo "ERROR: build produced no app for $target"
         tail -30 "/tmp/fts-macos-build-$target.log"
         exit 1
     fi

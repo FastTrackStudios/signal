@@ -71,7 +71,12 @@ app)
 
     MOUNT="$(mktemp -d)"
     hdiutil attach -nobrowse -quiet -mountpoint "$MOUNT" "$ARTIFACT"
-    trap 'hdiutil detach -quiet "$MOUNT" >/dev/null 2>&1 || true' EXIT
+    # The exec smoke test below runs the binary straight out of the mounted
+    # volume; a killed process doesn't always release its mapped executable
+    # instantly, so a plain detach can race and fail with "Resource busy" —
+    # give it a moment, then fall back to a forced detach rather than
+    # silently leaving the dmg mounted (which then breaks the NEXT run).
+    trap 'sleep 1; hdiutil detach -quiet "$MOUNT" >/dev/null 2>&1 || hdiutil detach -force -quiet "$MOUNT" >/dev/null 2>&1 || true' EXIT
     APP="$(find "$MOUNT" -maxdepth 1 -iname '*.app' | head -1)"
     [ -n "$APP" ] || { fail "no .app inside the dmg"; exit 1; }
     echo "  app: $(basename "$APP")"
