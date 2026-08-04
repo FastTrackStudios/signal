@@ -218,6 +218,8 @@ jobs:
           export MARKETING_VER="${tag#v}"
           bash apps/fasttrackstudio/ios/deploy-macos.sh
           echo "artifact=$(ls -t target/FastTrackStudio-*-macos.dmg | head -1)" >> "$GITHUB_ENV"
+      - name: Verify it's a genuine universal build
+        run: bash apps/fasttrackstudio/ios/verify-macos-universal.sh app "$artifact"
       - name: Upload to the release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -249,6 +251,8 @@ jobs:
           export NIX=/nix/var/nix/profiles/default/bin/nix
           bash apps/fasttrackstudio/ios/deploy-macos-plugins.sh
           echo "artifact=$(ls -t target/fts-plugins-*-macos.zip | head -1)" >> "$GITHUB_ENV"
+      - name: Verify it's a genuine universal build
+        run: bash apps/fasttrackstudio/ios/verify-macos-universal.sh plugins "$artifact"
       - name: Upload to the release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
