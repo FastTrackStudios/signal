@@ -25,23 +25,13 @@ DX_APP_DIR="${DX_APP_DIR:-apps/fasttrackstudio}"
 # before the build so the embedded sheet isn't a stale stub (Task desktop).
 DX_TAILWIND="${DX_TAILWIND:-}"
 
-# Cross-arch: unset TARGET builds natively for airlock's own arch (Apple
-# Silicon). Set TARGET=x86_64-apple-darwin to cross-compile the Intel
-# build instead — needs the x86_64-apple-darwin rustc target (nix/modules/
-# toolchain.nix). Unlike the plugin bundle (nice-plug-xtask's
-# bundle-universal, one lipo'd release for both arches), the app ships as
-# two separate arch-specific .dmg downloads — no universal-binary
-# machinery for a full dx app bundle exists yet.
-TARGET="${TARGET:-}"
-case "${TARGET:-$(uname -m)}" in
-    aarch64-apple-darwin | arm64) ARCH_TOKEN=aarch64 ;;
-    x86_64-apple-darwin | x86_64) ARCH_TOKEN=x86_64 ;;
-    *)
-        echo "ERROR: unsupported TARGET/arch: ${TARGET:-$(uname -m)}" >&2
-        exit 1
-        ;;
-esac
-TARGET_ARG="${TARGET:+--target=$TARGET}"
+# Universal binary: build both Mac architectures and `lipo` them together,
+# same idea as nice-plug-xtask's `bundle-universal` for the plugins and
+# REAPER's own official "_universal.dmg" — one download, both arches.
+# airlock is Apple Silicon with no real Intel hardware; x86_64-apple-darwin
+# is a cross-compile (needs that rustc target — nix/modules/toolchain.nix
+# — and Apple's SDK linker, which supports it natively on Apple Silicon).
+UNIVERSAL_TARGETS=(aarch64-apple-darwin x86_64-apple-darwin)
 
 # shellcheck disable=SC1090
 source "$HOME/.appstoreconnect/config.env"
@@ -78,60 +68,122 @@ SIGN_ID="$(security find-identity -v -p codesigning "$KEYCHAIN" \
 [ -n "$SIGN_ID" ] || { echo "ERROR: no Developer ID Application identity." >&2; exit 1; }
 echo "=== signing identity: $SIGN_ID ==="
 
-# ── Build (embed the web view so the app serves it on the LAN) ───────────────
+# ── Build both arches (embed the web view so the app serves it on the LAN) ──
 # dx's bundle staging dir under a cross --target isn't something we can
 # assume ahead of time, so instead of a fixed glob we look for the most
 # recently modified *.app anywhere under target/dx/$DX_PACKAGE and check
 # it's actually newer than a marker touched right before the build —
-# avoids silently reusing a stale bundle from a previous (different-arch)
-# run sharing the same target/ dir.
+# avoids silently reusing a stale bundle from a previous run sharing the
+# same target/ dir.
 find_app() {
     find "$ROOT/target/dx/$DX_PACKAGE" -type d -iname '*.app' -exec stat -f '%m %N' {} \; 2>/dev/null \
         | sort -rn | head -1 | cut -d' ' -f2-
 }
 
-if [ "${SKIP_BUILD:-}" = "1" ] && [ -n "$(find_app)" ]; then
-    echo "SKIP_BUILD=1 — reusing existing app"
-else
-    echo "=== building macOS app ($ARCH_TOKEN) ==="
-    MARKER="$(mktemp)"
+build_one_arch() {
+    local target="$1"
+    echo "=== building macOS app ($target) ==="
+    local marker
+    marker="$(mktemp)"
     # EMBED_WEB=1 (default) bakes the browser remote into the binary so the app
     # serves it on the LAN. That needs the wasm web build (`just web-stage`),
     # which currently can't run on macOS (a clang-18/clang-21 dylib mismatch in
     # ring's wasm C build). Stage web-dist on Linux and copy it over, OR set
     # EMBED_WEB=0 to ship the native app without the embedded remote.
+    local features stage_web
     if [ "${EMBED_WEB:-1}" = "1" ]; then
-        FEATURES="--features embed-web"
-        STAGE_WEB='just web-stage'
+        features="--features embed-web"
+        stage_web='just web-stage'
     else
-        FEATURES=""
-        STAGE_WEB='echo "EMBED_WEB=0 — skipping web bundle"'
+        features=""
+        stage_web='echo "EMBED_WEB=0 — skipping web bundle"'
     fi
     "$NIX" develop "$ROOT" --accept-flake-config -c bash -c "
         set -euo pipefail
         cd $ROOT
-        $STAGE_WEB
+        $stage_web
         cd '$ROOT/$DX_APP_DIR'
         # DX_TAILWIND is relative to DX_APP_DIR. Build it from the input's
         # own directory: Tailwind v4's automatic content detection is rooted
         # at the working directory, so the wrong cwd silently drops rules.
         # Matches apps/task/tailwind_build.rs.
         ${DX_TAILWIND:+(cd \"\$(dirname '$DX_TAILWIND')\" && tailwindcss -i \"\$(basename '$DX_TAILWIND')\" -o '$ROOT/$DX_APP_DIR/assets/tailwind.css')}
-        dx build --platform macos --release $FEATURES $TARGET_ARG
-    " > /tmp/fts-macos-build.log 2>&1 || true
-    tail -3 /tmp/fts-macos-build.log
-    APP_MTIME="$(find_app | xargs -I{} stat -f '%m' {} 2>/dev/null || echo 0)"
-    MARKER_MTIME="$(stat -f '%m' "$MARKER")"
-    rm -f "$MARKER"
-    if [ -z "$APP_MTIME" ] || [ "$APP_MTIME" -lt "$MARKER_MTIME" ]; then
-        echo "ERROR: build produced no new app (found nothing newer than the pre-build marker)"
-        tail -30 /tmp/fts-macos-build.log
+        dx build --platform macos --release $features --target=$target
+    " > "/tmp/fts-macos-build-$target.log" 2>&1 || true
+    tail -3 "/tmp/fts-macos-build-$target.log"
+    local app_mtime marker_mtime
+    app_mtime="$(find_app | xargs -I{} stat -f '%m' {} 2>/dev/null || true)"
+    marker_mtime="$(stat -f '%m' "$marker")"
+    rm -f "$marker"
+    if [ -z "$app_mtime" ] || [ "$app_mtime" -lt "$marker_mtime" ]; then
+        echo "ERROR: build produced no new app for $target (found nothing newer than the pre-build marker)"
+        tail -30 "/tmp/fts-macos-build-$target.log"
         exit 1
     fi
+}
+
+if [ "${SKIP_BUILD:-}" = "1" ] && [ -d "$ROOT/target/fts-universal-staging/${UNIVERSAL_TARGETS[0]}" ]; then
+    echo "SKIP_BUILD=1 — reusing existing per-arch staged apps"
+else
+    STAGING="$ROOT/target/fts-universal-staging"
+    rm -rf "$STAGING"
+    for target in "${UNIVERSAL_TARGETS[@]}"; do
+        build_one_arch "$target"
+        app="$(find_app)"
+        [ -n "$app" ] && [ -d "$app" ] || { echo "ERROR: no app bundle found for $target"; exit 1; }
+        mkdir -p "$STAGING/$target"
+        cp -R "$app" "$STAGING/$target/"
+    done
 fi
-APP="$(find_app)"
-[ -n "$APP" ] && [ -d "$APP" ] || { echo "ERROR: no app bundle found under target/dx/$DX_PACKAGE"; exit 1; }
-echo "=== app bundle: $APP ==="
+
+# ── Lipo every Mach-O in the app into one universal bundle ──────────────────
+# Base = the first target's staged .app (arbitrary — both should be
+# structurally identical, same dx bundling run just a different target).
+STAGING="$ROOT/target/fts-universal-staging"
+BASE_TARGET="${UNIVERSAL_TARGETS[0]}"
+OTHER_TARGET="${UNIVERSAL_TARGETS[1]}"
+BASE_APP="$(find "$STAGING/$BASE_TARGET" -maxdepth 1 -iname '*.app' | head -1)"
+OTHER_APP="$(find "$STAGING/$OTHER_TARGET" -maxdepth 1 -iname '*.app' | head -1)"
+[ -n "$BASE_APP" ] && [ -n "$OTHER_APP" ] || { echo "ERROR: missing staged .app for one or both targets"; exit 1; }
+
+UNIVERSAL_APP="$ROOT/target/$(basename "$BASE_APP")"
+rm -rf "$UNIVERSAL_APP"
+cp -R "$BASE_APP" "$UNIVERSAL_APP"
+
+echo "=== lipo: merging $BASE_TARGET + $OTHER_TARGET into a universal app ==="
+LIPO_WARNINGS=0
+while IFS= read -r -d '' f; do
+    rel="${f#"$UNIVERSAL_APP"/}"
+    other_f="$OTHER_APP/$rel"
+    # Not every regular file is Mach-O (resources, plists, etc.) — `lipo
+    # -archs` fails cleanly on those, so use it as the Mach-O test too.
+    lipo -archs "$f" >/dev/null 2>&1 || continue
+    if [ ! -f "$other_f" ]; then
+        echo "  WARNING: no $OTHER_TARGET counterpart for $rel — shipping $BASE_TARGET slice only"
+        LIPO_WARNINGS=$((LIPO_WARNINGS + 1))
+        continue
+    fi
+    lipo -archs "$other_f" >/dev/null 2>&1 || {
+        echo "  WARNING: $OTHER_TARGET counterpart for $rel isn't Mach-O — leaving $BASE_TARGET slice as-is"
+        LIPO_WARNINGS=$((LIPO_WARNINGS + 1))
+        continue
+    }
+    tmp="$(mktemp)"
+    if lipo -create "$f" "$other_f" -output "$tmp" 2>/tmp/fts-lipo-err.log; then
+        mv "$tmp" "$f"
+        chmod +x "$f" 2>/dev/null || true
+    else
+        rm -f "$tmp"
+        echo "  WARNING: lipo failed for $rel (likely identical/incompatible slices — see /tmp/fts-lipo-err.log): leaving $BASE_TARGET slice as-is"
+        LIPO_WARNINGS=$((LIPO_WARNINGS + 1))
+    fi
+done < <(find "$UNIVERSAL_APP" -type f -print0)
+[ "$LIPO_WARNINGS" -eq 0 ] || echo "=== lipo done with $LIPO_WARNINGS warning(s) — not every binary in the bundle is universal, see above ==="
+
+APP="$UNIVERSAL_APP"
+echo "=== universal app bundle: $APP ==="
+MAIN_EXE="$(find "$APP/Contents/MacOS" -maxdepth 1 -type f | head -1)"
+[ -n "$MAIN_EXE" ] && echo "  main executable archs: $(lipo -archs "$MAIN_EXE" 2>/dev/null || echo unknown)"
 
 # ── Home-screen icon (beta actool — 26.6's is broken on macOS 27) ────────────
 ICONS_DIR="${ICONS_DIR:-$ROOT/apps/fasttrackstudio/ios/Assets.xcassets}"
@@ -175,7 +227,7 @@ codesign --verify --deep --strict --verbose=2 "$APP"
 echo "=== packaging .dmg ==="
 BUILD_NO="${BUILD_NO:-$(date +%s)}"
 PRODUCT_NAME="${PRODUCT_NAME:-FastTrackStudio}"
-DMG="$ROOT/target/${PRODUCT_NAME}-${MARKETING_VER:-0.0.1}-${BUILD_NO}-${ARCH_TOKEN}-macos.dmg"
+DMG="$ROOT/target/${PRODUCT_NAME}-${MARKETING_VER:-0.0.1}-${BUILD_NO}-macos.dmg"
 STAGE="$(mktemp -d)"
 cp -R "$APP" "$STAGE/"
 ln -s /Applications "$STAGE/Applications"
