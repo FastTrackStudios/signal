@@ -148,9 +148,12 @@ plugins)
     STAGE="$(mktemp -d)"
     trap 'rm -rf "$STAGE"' EXIT
     ditto -x -k "$ARTIFACT" "$STAGE"
-    shopt -s nullglob
-    BUNDLES=("$STAGE"/*.clap "$STAGE"/*.vst3)
-    shopt -u nullglob
+    # Search recursively, not just the zip root — deploy-macos-plugins.sh
+    # zips with `ditto -c -k --keepParent target/bundled ...`, so the
+    # bundles land under a bundled/ subdirectory, not the zip root.
+    BUNDLES=()
+    while IFS= read -r -d '' b; do BUNDLES+=("$b"); done \
+        < <(find "$STAGE" \( -iname '*.clap' -o -iname '*.vst3' \) -print0)
     [ "${#BUNDLES[@]}" -gt 0 ] || { fail "no .clap/.vst3 bundles found in the zip"; exit 1; }
     echo "  ${#BUNDLES[@]} bundles"
 
