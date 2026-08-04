@@ -28,6 +28,13 @@ concurrency:
   group: release-binaries-${{ github.event.release.tag_name || inputs.tag }}
   cancel-in-progress: false
 
+# Without this, GITHUB_TOKEN gets whatever the repo's default workflow
+# permissions are (read-only here) and every `gh release upload` 403s with
+# "Resource not accessible by integration" — this workflow's entire job is
+# uploading release assets, so it needs contents: write explicitly.
+permissions:
+  contents: write
+
 env:
   # Local mirror on THEBATTLESHIP (same as deploy.yml) — github egress here is
   # unreliable, so clone local-first and fall back to the forge.
