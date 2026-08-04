@@ -84,7 +84,7 @@ jobs:
         run: |
           set -euo pipefail
           tag="${{ github.event.release.tag_name || inputs.tag }}"
-          nix run nixpkgs#gh -- release upload "$tag" "$artifact" --clobber
+          nix run nixpkgs#gh -- release upload "$tag" "$artifact" --repo "$GITHUB_REPOSITORY" --clobber
           echo "uploaded $artifact to $tag"
 
   linux-plugins:
@@ -128,7 +128,7 @@ jobs:
         run: |
           set -euo pipefail
           tag="${{ github.event.release.tag_name || inputs.tag }}"
-          nix run nixpkgs#gh -- release upload "$tag" "$artifact" --clobber
+          nix run nixpkgs#gh -- release upload "$tag" "$artifact" --repo "$GITHUB_REPOSITORY" --clobber
           echo "uploaded $artifact to $tag"
 
   patchbay-linux:
@@ -183,7 +183,7 @@ jobs:
         run: |
           set -euo pipefail
           tag="${{ github.event.release.tag_name || inputs.tag }}"
-          nix run nixpkgs#gh -- release upload "$tag" "$artifact" --clobber
+          nix run nixpkgs#gh -- release upload "$tag" "$artifact" --repo "$GITHUB_REPOSITORY" --clobber
           echo "uploaded $artifact to $tag"
 
   macos-desktop:
@@ -226,7 +226,7 @@ jobs:
         run: |
           set -euo pipefail
           tag="${{ github.event.release.tag_name || inputs.tag }}"
-          nix run nixpkgs#gh -- release upload "$tag" "$artifact" --clobber
+          nix run nixpkgs#gh -- release upload "$tag" "$artifact" --repo "$GITHUB_REPOSITORY" --clobber
           echo "uploaded $artifact to $tag"
 
   macos-plugins:
@@ -259,5 +259,5 @@ jobs:
         run: |
           set -euo pipefail
           tag="${{ github.event.release.tag_name || inputs.tag }}"
-          nix run nixpkgs#gh -- release upload "$tag" "$artifact" --clobber
+          nix run nixpkgs#gh -- release upload "$tag" "$artifact" --repo "$GITHUB_REPOSITORY" --clobber
           echo "uploaded $artifact to $tag"
