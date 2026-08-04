@@ -124,8 +124,8 @@ fn clear_tails_point_kills_the_wash() {
     // clear point crosses at 24000 samples into the cycle.
     let n = 96_000;
     let mut l = vec![0.0f64; n];
-    for i in 0..4000 {
-        l[i] = (core::f64::consts::TAU * 350.0 * i as f64 / SR).sin() * 0.7;
+    for (i, s) in l.iter_mut().enumerate().take(4000) {
+        *s = (core::f64::consts::TAU * 350.0 * i as f64 / SR).sin() * 0.7;
     }
     let mut r = l.clone();
     c.process(&mut l, &mut r);

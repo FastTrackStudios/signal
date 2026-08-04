@@ -484,6 +484,74 @@ impl Diffuser {
     }
 }
 
+
+/// NE570/571-style 2:1 compander half (one-pole full-wave-rectifier
+/// averager, τ ≈ 5 ms). The 12-bit era stored COMPRESSED audio; the
+/// expander at playback modulates the quantization-noise floor with
+/// the signal envelope — that breathing is the sound, more than the
+/// bit depth itself.
+pub struct CompanderEnv {
+    env: f64,
+    attack: f64,
+    release: f64,
+}
+
+impl CompanderEnv {
+    /// Unity-gain reference level for the 2:1 curve.
+    const G0: f64 = 0.3;
+    /// Rectifier averager: fast charge (≈1 ms) so musical transients
+    /// aren't crushed, ≈5 ms discharge (the NE570 RC ballpark).
+    const ATTACK_S: f64 = 0.001;
+    const RELEASE_S: f64 = 0.005;
+
+    #[allow(clippy::new_without_default)]
+    pub fn new() -> Self {
+        let mut c = Self {
+            env: Self::G0,
+            attack: 0.02,
+            release: 0.004,
+        };
+        c.configure(48000.0);
+        c
+    }
+
+    pub fn configure(&mut self, sample_rate: f64) {
+        self.attack = 1.0 - (-1.0 / (Self::ATTACK_S * sample_rate)).exp();
+        self.release = 1.0 - (-1.0 / (Self::RELEASE_S * sample_rate)).exp();
+    }
+
+    #[inline]
+    fn track(&mut self, level: f64) {
+        let coeff = if level > self.env {
+            self.attack
+        } else {
+            self.release
+        };
+        self.env += (level - self.env) * coeff;
+    }
+
+    /// Feedback compressor (measures its own output): y = x / g.
+    #[inline]
+    pub fn compress(&mut self, x: f64) -> f64 {
+        let g = (self.env / Self::G0).max(1e-3);
+        let y = x / g;
+        self.track(y.abs());
+        y
+    }
+
+    /// Feedforward expander (measures its input): y = x · g.
+    #[inline]
+    pub fn expand(&mut self, x: f64) -> f64 {
+        let g = (self.env / Self::G0).max(1e-3);
+        self.track(x.abs());
+        x * g
+    }
+
+    pub fn reset(&mut self) {
+        self.env = Self::G0;
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -648,71 +716,5 @@ mod tests {
             nonzero_count > 100,
             "Diffuser should spread impulse over many samples: got {nonzero_count}"
         );
-    }
-}
-
-/// NE570/571-style 2:1 compander half (one-pole full-wave-rectifier
-/// averager, τ ≈ 5 ms). The 12-bit era stored COMPRESSED audio; the
-/// expander at playback modulates the quantization-noise floor with
-/// the signal envelope — that breathing is the sound, more than the
-/// bit depth itself.
-pub struct CompanderEnv {
-    env: f64,
-    attack: f64,
-    release: f64,
-}
-
-impl CompanderEnv {
-    /// Unity-gain reference level for the 2:1 curve.
-    const G0: f64 = 0.3;
-    /// Rectifier averager: fast charge (≈1 ms) so musical transients
-    /// aren't crushed, ≈5 ms discharge (the NE570 RC ballpark).
-    const ATTACK_S: f64 = 0.001;
-    const RELEASE_S: f64 = 0.005;
-
-    pub fn new() -> Self {
-        let mut c = Self {
-            env: Self::G0,
-            attack: 0.02,
-            release: 0.004,
-        };
-        c.configure(48000.0);
-        c
-    }
-
-    pub fn configure(&mut self, sample_rate: f64) {
-        self.attack = 1.0 - (-1.0 / (Self::ATTACK_S * sample_rate)).exp();
-        self.release = 1.0 - (-1.0 / (Self::RELEASE_S * sample_rate)).exp();
-    }
-
-    #[inline]
-    fn track(&mut self, level: f64) {
-        let coeff = if level > self.env {
-            self.attack
-        } else {
-            self.release
-        };
-        self.env += (level - self.env) * coeff;
-    }
-
-    /// Feedback compressor (measures its own output): y = x / g.
-    #[inline]
-    pub fn compress(&mut self, x: f64) -> f64 {
-        let g = (self.env / Self::G0).max(1e-3);
-        let y = x / g;
-        self.track(y.abs());
-        y
-    }
-
-    /// Feedforward expander (measures its input): y = x · g.
-    #[inline]
-    pub fn expand(&mut self, x: f64) -> f64 {
-        let g = (self.env / Self::G0).max(1e-3);
-        self.track(x.abs());
-        x * g
-    }
-
-    pub fn reset(&mut self) {
-        self.env = Self::G0;
     }
 }

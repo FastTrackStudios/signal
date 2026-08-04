@@ -1,0 +1,15 @@
+[package]
+name = "unison-plugin"
+version.workspace = true
+edition = "2021"          # matches the nice-plug plugin stack
+authors.workspace = true
+license.workspace = true
+description = "FTS Unison — audio-domain unison / double-tracking engine (the same voices signal's synths use)"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+
+[dependencies]
+nice-plug.workspace = true
+pitch-dsp = { workspace = true }
+audiocore-dsp = { workspace = true }

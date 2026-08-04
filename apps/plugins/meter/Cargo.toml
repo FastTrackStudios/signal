@@ -1,0 +1,18 @@
+[package]
+name = "meter-plugin"
+version.workspace = true
+edition = "2021"          # matches the nice-plug plugin stack
+authors.workspace = true
+license.workspace = true
+description = "FTS Meter — LUFS / true-peak / correlation / goniometer / spectrum metering plugin"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+
+[dependencies]
+nice-plug.workspace = true
+nice-plug-dioxus.workspace = true
+dioxus = { workspace = true }
+meter-dsp = { workspace = true }
+meter-ui = { workspace = true }
+parking_lot = { workspace = true }

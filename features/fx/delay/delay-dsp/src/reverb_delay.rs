@@ -152,6 +152,7 @@ impl ReverbDelay {
         for (i, ap) in self.diffusers.iter_mut().enumerate() {
             ap.resize(ms(DIFF_MS[i]));
         }
+        #[allow(clippy::needless_range_loop)] // i spans parallel arrays + self
         for i in 0..4 {
             self.line_len[i] = ms(LINE_MS[i]);
             let needed = self.line_len[i] as usize + 64;
@@ -221,6 +222,7 @@ impl ReverbDelay {
 
         // FDN read (lines 0 and 2 gently modulated).
         let mut outs = [0.0f64; 4];
+        #[allow(clippy::needless_range_loop)] // i spans parallel arrays + self
         for i in 0..4 {
             let mut len = self.line_len[i];
             if i == 0 || i == 2 {
@@ -241,7 +243,8 @@ impl ReverbDelay {
         // Damping inside the loop (bypassed while infinite).
         let mut damped = outs;
         if !self.damp_open {
-            for i in 0..4 {
+            #[allow(clippy::needless_range_loop)] // i spans parallel arrays + self
+        for i in 0..4 {
                 damped[i] = self.damp[i].tick(damped[i]);
             }
         }
@@ -249,6 +252,7 @@ impl ReverbDelay {
         // Householder feedback: y_i = x_i − (2/4)·Σx.
         let sum: f64 = damped.iter().sum();
         let inject = [1.0, -1.0, 1.0, -1.0];
+        #[allow(clippy::needless_range_loop)] // i spans parallel arrays + self
         for i in 0..4 {
             let mixed = damped[i] - 0.5 * sum;
             self.lines[i].write(x * inject[i] * 0.5 + mixed * self.line_g);

@@ -783,9 +783,8 @@ impl Convolution {
     #[inline]
     fn discard(&self, trash: IrTrash) {
         if let Some(tx) = &self.trash_tx {
-            if tx.send(trash).is_ok() {
-                return;
-            }
+            // Send failure falls through to dropping inline.
+            let _ = tx.send(trash);
         }
     }
 

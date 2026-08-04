@@ -12,7 +12,7 @@ use signal_plugin_host::{FxFactory, InstalledFx, PluginInstance};
 
 use crate::{
     NativeComp, NativeDelay, NativeEq, NativeGain, NativeGate, NativeLevel, NativeMod,
-    NativePreamp, NativeReverb, NativeSaturate, NativeTransient, NativeTrem,
+    NativePreamp, NativeReverb, NativeSaturate, NativeTransient, NativeTrem, NativeTune,
 };
 
 /// `(ident, display name, constructor)` — one row per built-in.
@@ -52,6 +52,7 @@ const CATALOG: &[(&str, &str, Ctor)] = &[
     ("signal.fx.saturate", "Saturate", |sr| {
         Box::new(NativeSaturate::new(sr))
     }),
+    ("signal.fx.tune", "Tune", |sr| Box::new(NativeTune::new(sr))),
 ];
 
 /// The stock built-in FX factory. Stateless; construct freely.

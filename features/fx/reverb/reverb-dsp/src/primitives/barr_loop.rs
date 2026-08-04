@@ -138,6 +138,9 @@ impl BarrLoop {
         let mut sig = self.ring + x;
         let mut out_l = 0.0;
         let mut out_r = 0.0;
+        // Index-based: `i` walks sections, tap gains, and the modulated
+        // AP selector together (enumerate can't span the self borrows).
+        #[allow(clippy::needless_range_loop)]
         for i in 0..4 {
             let len = self.sections[i].len;
             self.sections[i].delay.write(sig);
