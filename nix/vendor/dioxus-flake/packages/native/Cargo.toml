@@ -1,0 +1,8 @@
+[package]
+name = "native"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+dioxus-native = { git = "https://github.com/DioxusLabs/blitz", features = ["prelude"] }
+ui = { workspace = true }

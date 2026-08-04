@@ -1,0 +1,10 @@
+@schema {id crate:capn-config@1, cli capn}
+
+// Capn configuration
+// Most options default to true. Set to false to disable.
+
+pre-commit {
+}
+
+pre-push {
+}
