@@ -30,11 +30,25 @@ pub const EDITOR_H: u32 = 560;
 pub const MIN_EDITOR_W: f32 = 560.0;
 pub const MIN_EDITOR_H: f32 = 460.0;
 
+/// Largest size the editor accepts.
+///
+/// Not cosmetic: with no maximum, `ResizeHint::adjust_size` rubber-stamps
+/// whatever a host proposes, and hosts do propose absurd sizes — REAPER opened
+/// this editor at 3371x1017 (full screen width) because it asked "is this size
+/// OK?" and an unbounded hint said yes. Anything past roughly twice the design
+/// size is stretched chrome around a fixed control surface, so the cap is
+/// generous but real.
+pub const MAX_EDITOR_W: f32 = 1600.0;
+pub const MAX_EDITOR_H: f32 = 1200.0;
+
 /// How the host may resize this editor: freely on both axes above the minimum.
 /// The trace is the part that benefits from extra width — a longer time window
 /// makes the limiter's release behaviour much easier to read.
 pub fn resize_hint() -> ResizeHint {
-    ResizeHint::RESIZABLE.with_min_logical_size(LogicalSize::new(MIN_EDITOR_W, MIN_EDITOR_H))
+    ResizeHint::RESIZABLE.with_min_max_logical_size(
+        Some(LogicalSize::new(MIN_EDITOR_W, MIN_EDITOR_H)),
+        Some(LogicalSize::new(MAX_EDITOR_W, MAX_EDITOR_H)),
+    )
 }
 
 /// The limiter's identity colour.

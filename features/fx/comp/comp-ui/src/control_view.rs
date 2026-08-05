@@ -57,13 +57,27 @@ pub const EDITOR_H: u32 = 660;
 pub const MIN_EDITOR_W: f32 = 720.0;
 pub const MIN_EDITOR_H: f32 = 560.0;
 
+/// Largest size the editor accepts.
+///
+/// Not cosmetic: with no maximum, `ResizeHint::adjust_size` rubber-stamps
+/// whatever a host proposes, and hosts do propose absurd sizes — REAPER opened
+/// this editor at 3371x1017 (full screen width) because it asked "is this size
+/// OK?" and an unbounded hint said yes. Anything past roughly twice the design
+/// size is stretched chrome around a fixed control surface, so the cap is
+/// generous but real.
+pub const MAX_EDITOR_W: f32 = 1960.0;
+pub const MAX_EDITOR_H: f32 = 1320.0;
+
 /// How the host may resize this editor.
 ///
 /// Freely resizable on both axes above [`MIN_EDITOR_W`] x [`MIN_EDITOR_H`],
 /// with no aspect-ratio lock — the layout is a graph over a row of sections and
 /// both are happy to grow in either direction.
 pub fn resize_hint() -> ResizeHint {
-    ResizeHint::RESIZABLE.with_min_logical_size(LogicalSize::new(MIN_EDITOR_W, MIN_EDITOR_H))
+    ResizeHint::RESIZABLE.with_min_max_logical_size(
+        Some(LogicalSize::new(MIN_EDITOR_W, MIN_EDITOR_H)),
+        Some(LogicalSize::new(MAX_EDITOR_W, MAX_EDITOR_H)),
+    )
 }
 
 /// Root editor component.

@@ -39,11 +39,25 @@ pub const EDITOR_H: u32 = 600;
 pub const MIN_EDITOR_W: f32 = 760.0;
 pub const MIN_EDITOR_H: f32 = 520.0;
 
+/// Largest size the editor accepts.
+///
+/// Not cosmetic: with no maximum, `ResizeHint::adjust_size` rubber-stamps
+/// whatever a host proposes, and hosts do propose absurd sizes — REAPER opened
+/// this editor at 3371x1017 (full screen width) because it asked "is this size
+/// OK?" and an unbounded hint said yes. Anything past roughly twice the design
+/// size is stretched chrome around a fixed control surface, so the cap is
+/// generous but real.
+pub const MAX_EDITOR_W: f32 = 2400.0;
+pub const MAX_EDITOR_H: f32 = 1400.0;
+
 /// How the host may resize this editor: freely on both axes above the
 /// minimum, no aspect-ratio lock. The EQ curve benefits from every extra
 /// pixel of width, so this is the plugin that most wants to be dragged wide.
 pub fn resize_hint() -> ResizeHint {
-    ResizeHint::RESIZABLE.with_min_logical_size(LogicalSize::new(MIN_EDITOR_W, MIN_EDITOR_H))
+    ResizeHint::RESIZABLE.with_min_max_logical_size(
+        Some(LogicalSize::new(MIN_EDITOR_W, MIN_EDITOR_H)),
+        Some(LogicalSize::new(MAX_EDITOR_W, MAX_EDITOR_H)),
+    )
 }
 use crate::param_adapter::param_handle;
 use crate::params::{EqUiState, NUM_BANDS, SPECTRUM_BINS};
