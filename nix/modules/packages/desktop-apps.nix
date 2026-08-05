@@ -29,13 +29,6 @@
         nativeBuildInputs = config.fts.nativeBuildInputs ++ [ pkgs.python3 ];
       };
 
-      # KNOWN GAP (Linux only): fails to build in this sandbox — cpal's
-      # pipewire backend (transitively required) hits the same
-      # bindgen/libspa SPA_ID_INVALID issue documented in reaper.nix's
-      # fts-plugins (signal-plugin skip). Builds and runs fine on Darwin
-      # (no pipewire feature compiled there at all). Root cause not yet
-      # found after extensive isolation testing — revisit in a future
-      # session rather than block this package definition on it.
       fasttrackstudio = config.fts.craneLib.buildPackage (config.fts.commonArgs // guiArgs // {
         pname = "fasttrackstudio";
         version = "0.0.2-alpha";

@@ -43,6 +43,48 @@
       # vendored into libs/vendor/baseview as a path dep 2026-07-16.)
       cargoVendorDir = craneLib.vendorCargoDeps {
         src = ftsSrc;
+
+        # libspa-sys needs bindgen's `clang_macro_fallback()` to evaluate
+        # cast-expression C macros its normal cexpr parser can't fold —
+        # notably SPA_ID_INVALID (`((uint32_t)0xffffffff)`). That fallback
+        # writes a scratch `.macro_eval.c` + `*-precompile.h.pch` into
+        # `clang_macro_fallback_build_dir`, which DEFAULTS TO THE PROCESS
+        # CWD — and cargo runs a build script with CWD set to the crate's
+        # own source dir. Under nix that dir is the vendored copy in the
+        # read-only store (dr-xr-xr-x), so the write fails; bindgen then
+        # swallows it (`tu.save(&pch).ok()?` in ir/context.rs) and
+        # SILENTLY disables macro fallback, emitting bindings with
+        # SPA_ID_INVALID simply absent. The failure only surfaces much
+        # later, as `libspa` failing to compile with a baffling
+        # "cannot find value SPA_ID_INVALID in crate spa_sys".
+        #
+        # Ordinary `cargo build` never hits this: ~/.cargo/registry/src
+        # is user-writable, so the scratch files land next to the crate
+        # and everything works — which is why this reproduced ONLY inside
+        # nix and looked, misleadingly, like a feature-unification bug.
+        #
+        # Point the fallback at OUT_DIR (where scratch build artifacts
+        # belong) instead. Upstream should arguably do this itself.
+        #
+        # Both pipewire-rs `-sys` crates have it (libspa-sys drops
+        # SPA_ID_INVALID, pipewire-sys drops PW_ID_ANY). The injected
+        # expression is deliberately self-contained rather than reusing
+        # each crate's `out_path` local: in pipewire-sys the
+        # `.clang_macro_fallback()` call site comes *before* `out_path`
+        # is even declared, so referencing it wouldn't compile.
+        overrideVendorCargoPackage = p: drv:
+          if p.name == "libspa-sys" || p.name == "pipewire-sys" then
+            drv.overrideAttrs (old: {
+              postInstall = (old.postInstall or "") + ''
+                substituteInPlace $out/build.rs \
+                  --replace-fail \
+                    '.clang_macro_fallback()' \
+                    '.clang_macro_fallback().clang_macro_fallback_build_dir(::std::path::PathBuf::from(::std::env::var("OUT_DIR").unwrap()))'
+              '';
+            })
+          else
+            drv;
+
         overrideVendorGitCheckout = ps: drv:
           if lib.any (p: p.name == "reaper-low") ps then
             drv.overrideAttrs (old: {
