@@ -259,6 +259,8 @@ impl Plugin for FtsSignalController {
         ..AudioIOLayout::const_default()
     }];
     const MIDI_INPUT: MidiConfig = MidiConfig::Basic;
+    // No editor — this shell is a headless REAPER controller.
+    type Editor = ();
     type SysExMessage = ();
     type BackgroundTask = ();
 
@@ -266,11 +268,11 @@ impl Plugin for FtsSignalController {
         self.params.clone()
     }
 
-    fn initialize(
+    fn activate(
         &mut self,
         _audio_io_layout: &AudioIOLayout,
         _buffer_config: &BufferConfig,
-        context: &mut impl InitContext<Self>,
+        context: &mut impl ActivateContext<Self>,
     ) -> bool {
         // Set up file-based logging
         let log_path = "/tmp/signal-reaper-controller.log";

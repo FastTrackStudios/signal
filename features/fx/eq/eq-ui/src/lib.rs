@@ -8,6 +8,8 @@
 //!
 //! - [`control_view`]: Pro-Q style spectrum analyzer with draggable band nodes
 //! - [`eq_graph`] / [`eq_graph_painter`]: vello-rendered frequency-response graph
+//! - [`faces`]: one front panel per hardware model — Pultec, SSL, API, 1073 —
+//!   drawn from the shared kit in [`fts_ui_audio::hardware`]
 //! - [`profile_view`]: profile-driven layouts (Pultec knob layout, etc.)
 //! - [`params`]: nice_plug parameter tree + shared UI state
 //! - [`param_adapter`]: nice_plug `ParamPtr` → [`fts_ui_audio::ParamHandle`]
@@ -24,6 +26,8 @@ pub mod eq_graph_svg;
 pub mod control_view;
 #[cfg(feature = "native")]
 pub mod eq_graph;
+#[cfg(feature = "native")]
+pub mod faces;
 #[cfg(feature = "native")]
 pub mod eq_graph_painter;
 #[cfg(feature = "native")]

@@ -19,13 +19,13 @@
 //!
 //! # Coordinate mapping
 //!
-//! The SVG uses a fixed `0 0 360 300` viewBox with
-//! `preserveAspectRatio: none`. The host container
-//! ([`crate::control_view`]) pins the graph height to exactly
-//! [`GRAPH_H`] CSS px, so element-relative pointer y IS viewBox y — no
+//! The SVG's viewBox is `0 0 360 {height}` with `preserveAspectRatio: none`,
+//! and the host container ([`crate::faces::control`]) pins the graph to
+//! exactly that many CSS px, so element-relative pointer y IS viewBox y — no
 //! async rect measurement (which is unreliable under Blitz, see eq-ui's
-//! notes) and no scale drift. The width stretches freely; no interaction
-//! depends on x.
+//! notes) and no scale drift. That is why the height is a prop rather than a
+//! constant: it grows with the editor ([`graph_height`]) and the two uses have
+//! to move together. The width stretches freely; no interaction depends on x.
 
 use std::sync::atomic::Ordering;
 
@@ -37,11 +37,43 @@ use crate::comp_graph_svg::{
 };
 use crate::params::CompUiState;
 
-/// viewBox width. Stretched to the container width (visual only).
+/// Design viewBox width, and the fallback when no window size is in context.
 pub const GRAPH_VB_W: f64 = 360.0;
-/// viewBox height AND the required CSS pixel height of the container —
-/// keeping them equal makes pointer y map 1:1 onto graph dB space.
+/// Design height of the graph: the viewBox height AND the CSS pixel height of
+/// the container at the editor's design size. Keeping the two equal is what
+/// makes pointer y map 1:1 onto graph dB space — see [`graph_height`], which
+/// preserves that property as the editor grows.
 pub const GRAPH_H: f64 = 300.0;
+/// The graph's size for the current editor window: the surface the shell rail
+/// leaves, in CSS px.
+///
+/// Both numbers go into the viewBox as well as the container, because blitz
+/// does not honour `preserveAspectRatio: none` — it scales the viewBox
+/// uniformly and centres it, so a viewBox whose aspect does not match its box
+/// gets letterboxed. Feeding it the real pixel size makes the scale exactly 1,
+/// which both fills the surface and keeps pointer coordinates equal to viewBox
+/// coordinates.
+pub fn graph_size() -> (f64, f64) {
+    match crate::hardware::panel::window_logical_size() {
+        Some((win_w, win_h)) => (
+            (win_w - crate::control_view::RAIL_W).round().max(1.0),
+            win_h.round().max(1.0),
+        ),
+        None => (GRAPH_VB_W, GRAPH_H),
+    }
+}
+
+/// The graph height for the current editor window.
+///
+/// The graph is no longer pinned to [`GRAPH_H`], and no longer a band under a
+/// header: it *is* the control surface, so it takes the window's full height,
+/// with the knobs and meters floating over it. The same number is used for the
+/// container height and for the viewBox, so element-relative pointer y is
+/// still viewBox y at any size. Falls back to the design height when no host
+/// window size is in context (headless tests, non-plugin mounts).
+pub fn graph_height() -> f64 {
+    graph_size().1
+}
 /// Grab distance (px) around the threshold line.
 const THRESHOLD_GRAB_PX: f64 = 16.0;
 /// Vertical drag distance (px) that doubles/halves the ratio.
@@ -57,10 +89,16 @@ enum CompDrag {
 }
 
 /// The compressor graph. Consumes `SharedState` (for [`CompUiState`]) and
-/// the editor's `ParamContext` from context, like the rest of the editor —
-/// no props, so it renders identically standalone and embedded.
+/// the editor's `ParamContext` from context, like the rest of the editor.
+///
+/// `width` and `height` are both the container's CSS size and the viewBox — the
+/// caller owns them (it sizes the container) and passes them in so the two
+/// cannot drift apart and break the 1:1 pointer mapping. See [`graph_size`].
 #[component]
-pub fn CompGraph() -> Element {
+pub fn CompGraph(
+    #[props(default = GRAPH_VB_W)] width: f64,
+    #[props(default = GRAPH_H)] height: f64,
+) -> Element {
     let shared = use_context::<SharedState>();
     let ui = shared.get::<CompUiState>().expect("CompUiState missing");
     let ctx = use_param_context();
@@ -93,17 +131,17 @@ pub fn CompGraph() -> Element {
     // ── Paths (portable math) ────────────────────────────────────────────
     let in_scaled = scale_input_wave(&ui.input_wave.snapshot());
     let gr_scaled = scale_gr_wave(&ui.gr_wave.snapshot());
-    let in_fill = smooth_path(&in_scaled, GRAPH_VB_W, GRAPH_H, true, true);
-    let in_edge = smooth_path(&in_scaled, GRAPH_VB_W, GRAPH_H, true, false);
+    let in_fill = smooth_path(&in_scaled, width, height, true, true);
+    let in_edge = smooth_path(&in_scaled, width, height, true, false);
     let gr_active = gr_scaled.iter().any(|&g| g > 0.002);
-    let gr_fill = smooth_path(&gr_scaled, GRAPH_VB_W, GRAPH_H, false, true);
-    let gr_edge = smooth_path(&gr_scaled, GRAPH_VB_W, GRAPH_H, false, false);
+    let gr_fill = smooth_path(&gr_scaled, width, height, false, true);
+    let gr_edge = smooth_path(&gr_scaled, width, height, false, false);
 
-    let tc = transfer_curve_path(threshold, ratio, knee, GRAPH_VB_W, GRAPH_H);
-    let ball = transfer_ball(in_db, threshold, ratio, knee, GRAPH_VB_W, GRAPH_H);
-    let thresh_y = db_to_y(threshold as f64, GRAPH_H);
-    let knee_lo_y = db_to_y((threshold - knee * 0.5) as f64, GRAPH_H);
-    let knee_hi_y = db_to_y((threshold + knee * 0.5) as f64, GRAPH_H);
+    let tc = transfer_curve_path(threshold, ratio, knee, width, height);
+    let ball = transfer_ball(in_db, threshold, ratio, knee, width, height);
+    let thresh_y = db_to_y(threshold as f64, height);
+    let knee_lo_y = db_to_y((threshold - knee * 0.5) as f64, height);
+    let knee_hi_y = db_to_y((threshold + knee * 0.5) as f64, height);
 
     rsx! {
         div {
@@ -117,7 +155,7 @@ pub fn CompGraph() -> Element {
                 let ctx = ctx.clone();
                 move |evt: MouseEvent| {
                     let y = evt.element_coordinates().y;
-                    let ty = db_to_y(params.threshold_db.value() as f64, GRAPH_H);
+                    let ty = db_to_y(params.threshold_db.value() as f64, height);
                     if (y - ty).abs() < THRESHOLD_GRAB_PX {
                         ctx.begin_set_raw(params.threshold_db.as_ptr());
                         dragging.set(Some(CompDrag::Threshold));
@@ -152,7 +190,7 @@ pub fn CompGraph() -> Element {
                     let y = evt.element_coordinates().y;
                     match mode {
                         CompDrag::Threshold => {
-                            let db = y_to_db(y, GRAPH_H).clamp(-(RANGE_DB as f64), 0.0) as f32;
+                            let db = y_to_db(y, height).clamp(-(RANGE_DB as f64), 0.0) as f32;
                             ctx.set_normalized_raw(
                                 params.threshold_db.as_ptr(),
                                 params.threshold_db.preview_normalized(db),
@@ -207,7 +245,7 @@ pub fn CompGraph() -> Element {
             svg {
                 style: "position:absolute; top:0; left:0; right:0; bottom:0; \
                         width:100%; height:100%; display:block; pointer-events:none;",
-                view_box: "0 0 360 300",
+                view_box: "0 0 {width} {height}",
                 preserve_aspect_ratio: "none",
 
                 defs {
@@ -243,19 +281,19 @@ pub fn CompGraph() -> Element {
 
                 // Knee markers — the soft-knee window around the threshold.
                 if knee > 0.05 {
-                    line { x1: "0", y1: "{knee_hi_y:.1}", x2: "360", y2: "{knee_hi_y:.1}",
+                    line { x1: "0", y1: "{knee_hi_y:.1}", x2: "{width:.1}", y2: "{knee_hi_y:.1}",
                         stroke: "rgba(255,180,120,0.18)", stroke_width: "1", stroke_dasharray: "2,4" }
-                    line { x1: "0", y1: "{knee_lo_y:.1}", x2: "360", y2: "{knee_lo_y:.1}",
+                    line { x1: "0", y1: "{knee_lo_y:.1}", x2: "{width:.1}", y2: "{knee_lo_y:.1}",
                         stroke: "rgba(255,180,120,0.18)", stroke_width: "1", stroke_dasharray: "2,4" }
                 }
 
                 // Threshold line — the grabbable control.
-                line { x1: "0", y1: "{thresh_y:.1}", x2: "360", y2: "{thresh_y:.1}",
+                line { x1: "0", y1: "{thresh_y:.1}", x2: "{width:.1}", y2: "{thresh_y:.1}",
                     stroke: "rgba(255,120,120,0.55)", stroke_width: "2", stroke_dasharray: "6,4" }
                 // Grab handle chip at the right end.
-                rect { x: "328", y: "{thresh_y - 7.0:.1}", width: "30", height: "14", rx: "3",
+                rect { x: "6", y: "{thresh_y - 7.0:.1}", width: "30", height: "14", rx: "3",
                     fill: "rgba(255,120,120,0.15)", stroke: "rgba(255,120,120,0.5)", stroke_width: "1" }
-                text { x: "343", y: "{thresh_y + 3.5:.1}", fill: "#ff9c9c", font_size: "9",
+                text { x: "21", y: "{thresh_y + 3.5:.1}", fill: "#ff9c9c", font_size: "9",
                     text_anchor: "middle", pointer_events: "none", "{threshold:.0}" }
 
                 // Transfer curve + live input ball.
@@ -264,9 +302,11 @@ pub fn CompGraph() -> Element {
                 circle { cx: "{ball.0:.1}", cy: "{ball.1:.1}", r: "3", fill: "rgba(255,255,255,0.78)" }
             }
 
-            // GR readout, top right (real detector value).
+            // Readouts sit top-left, and so does the threshold line's grab
+            // chip: the floating meter and control panels own the right-hand
+            // and bottom edges of the surface.
             div {
-                style: "position:absolute; top:6px; right:8px; display:flex; \
+                style: "position:absolute; top:8px; left:10px; display:flex; \
                         align-items:baseline; gap:4px; pointer-events:none;",
                 span {
                     style: "font-size:9px; font-weight:600; text-transform:uppercase; color:#8a8a92;",
@@ -278,9 +318,8 @@ pub fn CompGraph() -> Element {
                 }
             }
 
-            // Threshold · ratio readout, bottom left.
             div {
-                style: "position:absolute; bottom:4px; left:8px; display:flex; \
+                style: "position:absolute; top:26px; left:10px; display:flex; \
                         flex-direction:column; pointer-events:none;",
                 span {
                     style: "font-size:8px; color:#8a8a92; text-transform:uppercase;",

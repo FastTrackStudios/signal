@@ -54,6 +54,12 @@ futures-timer = { version = "3", optional = true }
 name = "gui_editor"
 required-features = ["native"]
 
+# The screenshot harness paints the real editor to PNGs (tests/screenshots.rs)
+# — a look-at-it aid, not an assertion suite. Same feature gate.
+[[test]]
+name = "screenshots"
+required-features = ["native"]
+
 [dev-dependencies]
 # Headless GUI tests:
 # - tests/gui_smoke.rs — SSR structure tests (plain VirtualDom + dioxus-ssr).

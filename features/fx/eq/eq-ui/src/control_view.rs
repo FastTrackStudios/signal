@@ -8,6 +8,11 @@
 use std::sync::atomic::Ordering;
 
 use audiocore_core::prelude::*;
+// The concrete `GuiContext` is not in nice-plug's prelude (which carries the
+// `GuiContextInner` trait); upstream's own backends import it directly too.
+use nice_plug::context::gui::GuiContext;
+use nice_plug::editor::dpi::LogicalSize;
+use nice_plug::editor::ResizeHint;
 use fts_ui::prelude::{
     Button, ButtonSize, ButtonVariant, Card, CardContent, CardHeader, CardTitle, SegmentedControl,
     SegmentedControlSize, Select, SelectContent, SelectItem, Switch, TabContent, TabList,
@@ -16,6 +21,44 @@ use fts_ui::prelude::{
 use fts_ui_audio::prelude::*;
 
 use crate::eq_graph::{EqBand, EqBandShape, EqGraph, OverlayChoice};
+
+/// Editor size the plugin shell requests from the host on open.
+///
+/// The starting size, not a ceiling — the editor opts into host resizing
+/// through [`resize_hint`].
+pub const EDITOR_W: u32 = 1000;
+pub const EDITOR_H: u32 = 600;
+
+/// Smallest size the surface still works at.
+///
+/// Enforced by `DioxusEditorHandle::set_size` rather than advisory: blitz
+/// collapses a container that does not fit to 0x0 instead of clipping it, so
+/// too small a minimum yields unreachable controls rather than a cramped
+/// editor. The EQ needs more width than most — the curve, the band row and the
+/// analyzer panel share one row.
+pub const MIN_EDITOR_W: f32 = 760.0;
+pub const MIN_EDITOR_H: f32 = 520.0;
+
+/// Largest size the editor accepts.
+///
+/// Not cosmetic: with no maximum, `ResizeHint::adjust_size` rubber-stamps
+/// whatever a host proposes, and hosts do propose absurd sizes — REAPER opened
+/// this editor at 3371x1017 (full screen width) because it asked "is this size
+/// OK?" and an unbounded hint said yes. Anything past roughly twice the design
+/// size is stretched chrome around a fixed control surface, so the cap is
+/// generous but real.
+pub const MAX_EDITOR_W: f32 = 2400.0;
+pub const MAX_EDITOR_H: f32 = 1400.0;
+
+/// How the host may resize this editor: freely on both axes above the
+/// minimum, no aspect-ratio lock. The EQ curve benefits from every extra
+/// pixel of width, so this is the plugin that most wants to be dragged wide.
+pub fn resize_hint() -> ResizeHint {
+    ResizeHint::RESIZABLE.with_min_max_logical_size(
+        Some(LogicalSize::new(MIN_EDITOR_W, MIN_EDITOR_H)),
+        Some(LogicalSize::new(MAX_EDITOR_W, MAX_EDITOR_H)),
+    )
+}
 use crate::param_adapter::param_handle;
 use crate::params::{EqUiState, NUM_BANDS, SPECTRUM_BINS};
 use crate::profile_view::{
@@ -31,7 +74,7 @@ use spectrum_analyzer::ui::AnalyzerSettingsPanel;
 /// track, so the standalone injects a `StaticTrackProvider` instead and this is
 /// never reached.
 struct GuiContextTrackProvider {
-    gui: std::sync::Arc<dyn GuiContext>,
+    gui: GuiContext,
 }
 
 impl crate::cheatsheet::TrackInfoProvider for GuiContextTrackProvider {
@@ -185,7 +228,10 @@ fn AppShell() -> Element {
     let analyzer_snapshot = ui.analyzer.snapshot();
     let mut analyzer_settings: Signal<AnalyzerSettings> = use_signal(|| ui.analyzer.settings());
     let analyzer_for_settings = ui.clone();
-    let current_model = params.model.value();
+    // The *resolved* model: the persisted id when the session has one, the
+    // index otherwise. See `FtsEqParams::model_id`.
+    let current_model = crate::faces::resolved_model(&params);
+    let current_form = crate::faces::resolved_form(&params);
     let hardware_mode_active = current_model != 0;
     let model_response: Option<Vec<f32>> = hardware_mode_active.then(|| {
         (0..SPECTRUM_BINS)
@@ -293,6 +339,75 @@ fn AppShell() -> Element {
         div {
             style: format!("{root_style} overflow:hidden;"),
             "data-frame": "{frame_counter}",
+
+            PluginShell {
+                title: "FTS EQ".to_string(),
+                subtitle: "Equalizer".to_string(),
+                brand: "EQ".to_string(),
+                items: crate::faces::rail_items(current_model),
+                selected: crate::faces::category_of(current_model).map(|(c, _)| c).unwrap_or(0),
+                accent: "#8aa4ff".to_string(),
+                rail_footer: rsx! {
+                    // Size presets, cycled from the foot cluster — chrome
+                    // about the editor rather than about the sound.
+                    RailButton {
+                        testid: "form-cycle".to_string(),
+                        label: current_form.badge().to_string(),
+                        title: format!("Editor size — {} (click to cycle)", current_form.label()),
+                        active: current_form != fts_ui_audio::EditorForm::default(),
+                        accent: "#8aa4ff".to_string(),
+                        on_click: {
+                            let params = params.clone();
+                            move |_| {
+                                let forms = fts_ui_audio::EDITOR_FORMS;
+                                let index =
+                                    forms.iter().position(|f| *f == current_form).unwrap_or(0);
+                                crate::faces::store_form(&params, forms[(index + 1) % forms.len()]);
+                            }
+                        },
+                    }
+                },
+                on_select: {
+                    let ctx = ctx.clone();
+                    let model_ptr = params.model.as_ptr();
+                    let params_for_id = params.clone();
+                    move |category: usize| {
+                        // Clicking the active family cycles the models inside
+                        // it — SSL E to SSL G — and any other family lands on
+                        // its first model.
+                        let next = crate::faces::rail_click_target(current_model, category);
+                        ctx.begin_set_raw(model_ptr);
+                        ctx.set_normalized_raw(model_ptr, next as f32 / 5.0);
+                        ctx.end_set_raw(model_ptr);
+                        // What the session restores from.
+                        crate::faces::store_model_id(&params_for_id, next);
+                    }
+                },
+
+            if let Some(design) = crate::faces::design_for_model(current_model) {
+                // A hardware model swaps the whole surface for that unit's
+                // front panel.
+                crate::faces::rack::EqRackFace {
+                    key: "{current_model}",
+                    design: *design,
+                    model: current_model,
+                    frame: frame_counter,
+                    form: current_form,
+                }
+            }
+
+            // The Main face — hidden rather than unmounted while a hardware
+            // panel is up. The EQ curve is a blitz *custom widget* node, and
+            // tearing that subtree down mid-session panics blitz's mutator on
+            // a stale template path (`node_at_path`); hiding it also keeps the
+            // analyzer and its canvas alive across a model switch instead of
+            // rebuilding them on every click.
+            div {
+                style: if hardware_mode_active {
+                    "display:none;"
+                } else {
+                    "flex:1; min-height:0; display:flex; flex-direction:column;"
+                },
 
             // ── Header ───────────────────────────────────────────
             //
@@ -980,6 +1095,8 @@ fn AppShell() -> Element {
                 }
             }
             }
+            } // end of the Main face
+            }  // PluginShell
             ResizeHandle {
                 min_width: 600,
                 min_height: 400,

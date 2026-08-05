@@ -13,75 +13,19 @@
 //! onto that chain (Input → drive, Ceiling → output ceiling, Release →
 //! BlockParty release, Character → clip-stage morph).
 //!
-//! GUI is deliberately absent for now (headless, host-generic params),
-//! matching `signal-sampler-clap`; the nice-plug-dioxus editor is a follow-up.
+//! Params + shared UI state live in [`limiter_ui::params`] (like `comp-ui`),
+//! so the Dioxus editor ([`limiter_ui::control_view::App`]) renders against
+//! them without a circular dep.
 
 use nice_plug::prelude::*;
+use nice_plug_dioxus::{create_dioxus_editor_with_state, DioxusState};
 use std::sync::Arc;
+use std::sync::atomic::Ordering;
 
 use comp::limiter::{sin_clip, GoldenClip};
+use limiter_ui::params::{LimiterParams, LimiterUiState};
 
 const PLUGIN_NAME: &str = "FTS Limiter";
-
-// ── Parameters ────────────────────────────────────────────────────────────
-
-#[derive(Params)]
-pub struct LimiterParams {
-    /// Gain into the limiter — drives the signal against the ceiling.
-    #[id = "in_gain"]
-    pub input_gain: FloatParam,
-    /// Output ceiling; no sample exceeds this level.
-    #[id = "ceiling"]
-    pub ceiling: FloatParam,
-    /// Gain-reduction recovery time (attack is instantaneous / brickwall).
-    #[id = "release"]
-    pub release_ms: FloatParam,
-    /// Ceiling-stage morph: 0 = transparent hard clip (ADClip-style golden
-    /// ratio), 1 = full ClipSoftly sine shaping (rounder, adds harmonics).
-    #[id = "character"]
-    pub character: FloatParam,
-    /// True-peak mode: the gain computer detects INTER-SAMPLE peaks
-    /// (4x oversampled estimate), so the ceiling holds in dBTP terms —
-    /// what streaming loudness normalization actually measures.
-    #[id = "true_peak"]
-    pub true_peak: BoolParam,
-}
-
-impl Default for LimiterParams {
-    fn default() -> Self {
-        Self {
-            input_gain: FloatParam::new(
-                "Input",
-                0.0,
-                FloatRange::Linear { min: -12.0, max: 24.0 },
-            )
-            .with_unit(" dB")
-            .with_value_to_string(formatters::v2s_f32_rounded(1)),
-            ceiling: FloatParam::new(
-                "Ceiling",
-                -0.3,
-                FloatRange::Linear { min: -20.0, max: 0.0 },
-            )
-            .with_unit(" dB")
-            .with_value_to_string(formatters::v2s_f32_rounded(1)),
-            release_ms: FloatParam::new(
-                "Release",
-                100.0,
-                FloatRange::Skewed { min: 5.0, max: 500.0, factor: 0.5 },
-            )
-            .with_unit(" ms")
-            .with_value_to_string(formatters::v2s_f32_rounded(0)),
-            character: FloatParam::new(
-                "Character",
-                0.5,
-                FloatRange::Linear { min: 0.0, max: 1.0 },
-            )
-            .with_value_to_string(formatters::v2s_f32_percentage(0))
-            .with_unit("%"),
-            true_peak: BoolParam::new("True Peak", true),
-        }
-    }
-}
 
 /// 4-point Catmull-Rom inter-sample peak estimate over the last four
 /// input samples — a cheap, allocation-free stand-in for full 4x
@@ -183,14 +127,26 @@ impl Channel {
 pub struct FtsLimiter {
     params: Arc<LimiterParams>,
     /// One lane per channel (linked-free, mono detection each).
+    ui_state: Arc<LimiterUiState>,
+    editor_state: Arc<DioxusState>,
     channels: Vec<Channel>,
     sample_rate: f64,
 }
 
 impl Default for FtsLimiter {
     fn default() -> Self {
+        let params = Arc::new(LimiterParams::default());
+        let ui_state = Arc::new(LimiterUiState::new(params.clone()));
         Self {
-            params: Arc::new(LimiterParams::default()),
+            params,
+            ui_state,
+            editor_state: DioxusState::new(|| {
+                (
+                    limiter_ui::control_view::EDITOR_W,
+                    limiter_ui::control_view::EDITOR_H,
+                )
+            })
+            .with_resize_hint(limiter_ui::control_view::resize_hint()),
             channels: Vec::new(),
             sample_rate: 48_000.0,
         }
@@ -211,6 +167,7 @@ impl Plugin for FtsLimiter {
         ..AudioIOLayout::const_default()
     }];
 
+    type Editor = nice_plug_dioxus::editor::DioxusEditor;
     type SysExMessage = ();
     type BackgroundTask = ();
 
@@ -218,11 +175,19 @@ impl Plugin for FtsLimiter {
         self.params.clone()
     }
 
-    fn initialize(
+    fn editor(&mut self, _async_executor: AsyncExecutor<Self>) -> Option<Self::Editor> {
+        create_dioxus_editor_with_state(
+            self.editor_state.clone(),
+            self.ui_state.clone(),
+            limiter_ui::control_view::App,
+        )
+    }
+
+    fn activate(
         &mut self,
         audio_io_layout: &AudioIOLayout,
         buffer_config: &BufferConfig,
-        _context: &mut impl InitContext<Self>,
+        _context: &mut impl ActivateContext<Self>,
     ) -> bool {
         self.sample_rate = buffer_config.sample_rate as f64;
         let ch = audio_io_layout
@@ -231,6 +196,9 @@ impl Plugin for FtsLimiter {
             .unwrap_or(2)
             .max(1);
         self.channels = (0..ch).map(|_| Channel::new()).collect();
+        self.ui_state
+            .sample_rate
+            .store(buffer_config.sample_rate as u32, Ordering::Relaxed);
         true
     }
 
@@ -260,16 +228,42 @@ impl Plugin for FtsLimiter {
         let release_coeff = (-1.0 / (self.sample_rate * release_s)).exp();
         let inv_ceiling = 1.0 / ceiling.max(1e-6);
 
+        let mut input_peak: f32 = 0.0;
+        let mut output_peak: f32 = 0.0;
+        // Deepest reduction in the block: the envelope is a gain multiplier
+        // (1.0 = untouched), so the *smallest* envelope is the most reduction.
+        let mut min_envelope: f64 = 1.0;
+
         for mut frame in buffer.iter_samples() {
             for (c, sample) in frame.iter_mut().enumerate() {
                 if let Some(ch) = self.channels.get_mut(c) {
+                    input_peak = input_peak.max(sample.abs());
                     let normalized = *sample as f64 * in_gain * inv_ceiling;
                     *sample =
                         (ch.tick(normalized, release_coeff, character, true_peak) * ceiling)
                             as f32;
+                    output_peak = output_peak.max(sample.abs());
+                    min_envelope = min_envelope.min(ch.envelope);
                 }
             }
         }
+
+        // ── UI feeds (lock-free atomics; no allocation) ──────────────────
+        // GR is reported positive-going, like every other dynamics meter in
+        // the suite: 0 dB = not limiting.
+        let gr_db = if min_envelope > 0.0 {
+            (-20.0 * min_envelope.log10()) as f32
+        } else {
+            0.0
+        };
+        self.ui_state
+            .gain_reduction_db
+            .store(gr_db, Ordering::Relaxed);
+        self.ui_state.gr_wave.push(gr_db);
+        self.ui_state.output_wave.push(output_peak);
+        self.ui_state.input.push_peak(input_peak);
+        self.ui_state.output.push_peak(output_peak);
+
         ProcessStatus::Normal
     }
 }

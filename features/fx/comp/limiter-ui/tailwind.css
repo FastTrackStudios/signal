@@ -1,0 +1,23 @@
+@import "tailwindcss";
+@import "../../../../libs/fts-ui/fts-ui/assets/fts-theme.css";
+
+/* limiter-ui's OWN Tailwind build — the plugin editor embeds the compiled
+ * output (assets/tailwind.css) via include_str! in control_view.rs.
+ * nice-plug-dioxus's TAILWIND_CSS only covers the framework's widgets;
+ * per the signal GUI rules every UI crate ships the utilities its own
+ * rsx uses. Rebuild with `just tailwind-comp` after class changes.
+ * Scan paths are relative to THIS file. */
+@source "./src/**/*.rs";
+@source "../../../../libs/fts-ui/fts-ui/src/**/*.rs";
+@source "../../../../libs/fts-ui/fts-ui-audio/src/**/*.rs";
+@source "../../../../libs/fts-ui/fts-plug-ui/src/**/*.rs";
+
+@layer base {
+    html {
+        color-scheme: dark;
+    }
+    body {
+        background: var(--background);
+        color: var(--foreground);
+    }
+}

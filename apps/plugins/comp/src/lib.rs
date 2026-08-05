@@ -43,8 +43,16 @@ impl Default for FtsComp {
         Self {
             params,
             ui_state,
-            // Tall enough for the 300 px graph + knob rows + meters.
-            editor_state: DioxusState::new(|| (800, 640)),
+            // Sized by the editor surface itself — see comp_ui::control_view::
+            // EDITOR_W/EDITOR_H for why it is a hard constraint rather than a
+            // preference.
+            editor_state: DioxusState::new(|| {
+                (
+                    comp_ui::control_view::EDITOR_W,
+                    comp_ui::control_view::EDITOR_H,
+                )
+            })
+            .with_resize_hint(comp_ui::control_view::resize_hint()),
             chain: CompChain::new(),
             sample_rate: 48_000.0,
         }
@@ -58,16 +66,48 @@ impl FtsComp {
     /// hermite smoother when a value actually changed, so this is safe to
     /// call once per block.
     fn sync_params(&mut self) {
+        let p = &*self.params;
         let c = &mut self.chain.comp;
-        c.set_threshold(self.params.threshold_db.value() as f64);
-        c.set_ratio(self.params.ratio.value() as f64);
-        c.set_attack_ms(self.params.attack_ms.value() as f64);
-        c.set_release_ms(self.params.release_ms.value() as f64);
-        c.set_knee(self.params.knee_db.value() as f64);
-        c.set_fold(self.params.mix.value() as f64);
-        c.output_gain_db = self.params.makeup_db.value() as f64;
-        c.channel_link = self.params.stereo_link.value() as f64;
+        c.set_threshold(p.threshold_db.value() as f64);
+        c.set_ratio(p.ratio.value() as f64);
+        c.set_attack_ms(p.attack_ms.value() as f64);
+        c.set_release_ms(p.release_ms.value() as f64);
+        c.set_knee(p.knee_db.value() as f64);
+        c.set_fold(p.mix.value() as f64);
+        c.output_gain_db = p.makeup_db.value() as f64;
+        c.channel_link = p.stereo_link.value() as f64;
+
+        // ── Extended surface ────────────────────────────────────────────
+        // set_style / set_range_db mirror into the gain curve, so they have to
+        // go through the setters; the rest are plain fields the core smooths
+        // itself. Both setters no-op when the value is unchanged.
+        c.set_style(p.style.value());
+        c.set_range_db(p.range_db.value() as f64);
+        c.character_mode = p.character_mode.value();
+        c.drive = p.drive.value() as f64;
+        c.input_gain_db = p.input_gain_db.value() as f64;
+        c.auto_makeup = p.auto_makeup.value();
+        c.detector_rms_mix = p.detector_rms_mix.value() as f64;
+        c.feedback = p.feedback.value() as f64;
+        c.hold_ms = p.hold_ms.value() as f64;
+        c.inertia = p.inertia.value() as f64;
+        c.inertia_decay = p.inertia_decay.value() as f64;
+        c.expander_threshold_db = p.expander_threshold_db.value() as f64;
+        c.expander_ratio = p.expander_ratio.value() as f64;
+        c.upward_threshold_db = p.upward_threshold_db.value() as f64;
+        c.upward_ratio = p.upward_ratio.value() as f64;
+        c.ceiling = p.ceiling.value() as f64;
         c.update(self.sample_rate);
+
+        // Chain-level params. The sidechain setters early-out on an unchanged
+        // frequency and `set_lookahead` only reallocates when the sample count
+        // moves, so the filter rebuild / buffer alloc happens on an actual
+        // edit rather than every block.
+        self.chain
+            .set_sidechain_freq(p.sidechain_freq.value() as f64);
+        self.chain
+            .set_sidechain_lowpass_freq(p.sidechain_lowpass_freq.value() as f64);
+        self.chain.set_lookahead(p.lookahead_ms.value() as f64);
     }
 }
 
@@ -85,6 +125,9 @@ impl Plugin for FtsComp {
         ..AudioIOLayout::const_default()
     }];
 
+    // `Plugin::Editor` is an associated type as of the baseview 0.3 rework,
+    // so the editor is named here rather than returned as a trait object.
+    type Editor = audiocore_core::nice_plug_dioxus::editor::DioxusEditor;
     type SysExMessage = ();
     type BackgroundTask = ();
 
@@ -92,7 +135,7 @@ impl Plugin for FtsComp {
         self.params.clone()
     }
 
-    fn editor(&mut self, _async_executor: AsyncExecutor<Self>) -> Option<Box<dyn Editor>> {
+    fn editor(&mut self, _async_executor: AsyncExecutor<Self>) -> Option<Self::Editor> {
         create_dioxus_editor_with_state(
             self.editor_state.clone(),
             self.ui_state.clone(),
@@ -100,11 +143,11 @@ impl Plugin for FtsComp {
         )
     }
 
-    fn initialize(
+    fn activate(
         &mut self,
         _audio_io_layout: &AudioIOLayout,
         buffer_config: &BufferConfig,
-        _context: &mut impl InitContext<Self>,
+        _context: &mut impl ActivateContext<Self>,
     ) -> bool {
         self.sample_rate = buffer_config.sample_rate as f64;
         self.ui_state

@@ -1,0 +1,22 @@
+[package]
+name = "limiter-ui"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+edition = "2021"
+description = "FTS Limiter GUI — params, shared UI state, and the Dioxus control view"
+
+[dependencies]
+atomic_float = { workspace = true }
+audiocore-core = { workspace = true }
+dioxus = { workspace = true }
+fts-plug-ui = { workspace = true }
+nice-plug = { workspace = true }
+nice-plug-dioxus = { workspace = true }
+
+[dev-dependencies]
+dioxus-test = { workspace = true }
+tokio = { workspace = true, features = ["macros", "rt"] }
+
+[lints]
+workspace = true

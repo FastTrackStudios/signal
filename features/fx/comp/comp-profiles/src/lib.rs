@@ -7,27 +7,142 @@
 //!
 //! Profiles are pure data + mapping functions. No GUI, no framework deps.
 
+pub mod cl1b;
 pub mod control;
 pub mod core;
+pub mod dbx160;
+pub mod distressor;
+pub mod fairchild;
 pub mod la2a;
+pub mod manley;
 pub mod presets;
 pub mod ssl_bus;
 pub mod urei_1176;
 
 pub use self::core::{Constraint, ParamMapping, Profile, ProfileControl};
+pub use cl1b::Cl1bProfile;
 pub use control::ControlProfile;
+pub use dbx160::Dbx160Profile;
+pub use distressor::DistressorProfile;
+pub use fairchild::Fairchild670Profile;
 pub use la2a::La2aProfile;
+pub use manley::ManleyVariMuProfile;
 pub use presets::{all_factory_presets, FactoryPreset, PresetParam, FACTORY_PRESETS};
 pub use ssl_bus::SslBusProfile;
 pub use urei_1176::Urei1176Profile;
 
 pub static CONTROL: ControlProfile = ControlProfile;
 pub static LA2A: La2aProfile = La2aProfile;
+pub static CL1B: Cl1bProfile = Cl1bProfile;
+pub static FAIRCHILD_670: Fairchild670Profile = Fairchild670Profile;
+pub static MANLEY_VARI_MU: ManleyVariMuProfile = ManleyVariMuProfile;
 pub static SSL_BUS: SslBusProfile = SslBusProfile;
+pub static DBX_160: Dbx160Profile = Dbx160Profile;
+pub static DISTRESSOR: DistressorProfile = DistressorProfile;
 pub static UREI_1176: Urei1176Profile = Urei1176Profile;
 
-pub fn all_profiles() -> [&'static dyn Profile; 4] {
-    [&CONTROL, &LA2A, &SSL_BUS, &UREI_1176]
+/// Every profile, in the order the UI lists them: the FTS surface first, then
+/// each compressor family, and within a family the units in the order the
+/// category cycles through them.
+///
+/// This order IS the `profile` parameter's value order, so **append only** —
+/// hosts persist the parameter, and reordering silently repoints a saved
+/// session at a different unit.
+pub fn all_profiles() -> [&'static (dyn Profile + Sync); 9] {
+    [
+        &CONTROL,
+        &UREI_1176,
+        &LA2A,
+        &CL1B,
+        &FAIRCHILD_670,
+        &MANLEY_VARI_MU,
+        &SSL_BUS,
+        &DBX_160,
+        &DISTRESSOR,
+        // NOTE: keep in sync with `CATEGORIES` below — the test
+        // `every_profile_belongs_to_exactly_one_category` is the guard.
+    ]
+}
+
+/// A compressor family — how the units are grouped in the UI, and the shape of
+/// the rail: one button per family, clicking it again cycles the units inside.
+///
+/// The grouping is by *topology*, because that is what actually predicts how a
+/// unit behaves: a FET is fast and gritty, an opto is slow and self-correcting,
+/// a variable-mu glues, a VCA punches. Which specific unit you want inside the
+/// family is a finer decision than which family you want, so it is the second
+/// click rather than the first.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Category {
+    /// Stable id, used for test ids and rail keys.
+    pub id: &'static str,
+    /// "Opto".
+    pub label: &'static str,
+    /// Rail badge when no unit in the family is active.
+    pub badge: &'static str,
+    /// Profile ids, in cycling order.
+    pub profiles: &'static [&'static str],
+}
+
+pub static CATEGORIES: &[Category] = &[
+    Category {
+        id: "main",
+        label: "Main",
+        badge: "MAIN",
+        profiles: &["control"],
+    },
+    Category {
+        id: "fet",
+        label: "FET",
+        badge: "FET",
+        profiles: &["urei_1176"],
+    },
+    Category {
+        id: "opto",
+        label: "Opto",
+        badge: "OPT",
+        profiles: &["la2a", "cl1b"],
+    },
+    Category {
+        id: "vari_mu",
+        label: "Vari-Mu",
+        badge: "MU",
+        profiles: &["fairchild670", "manley_vari_mu"],
+    },
+    Category {
+        id: "vca",
+        label: "VCA",
+        badge: "VCA",
+        profiles: &["ssl_bus", "dbx160"],
+    },
+    Category {
+        id: "hybrid",
+        label: "Hybrid",
+        badge: "HYB",
+        profiles: &["distressor"],
+    },
+];
+
+/// The profile with this id, if there is one.
+pub fn profile_by_id(id: &str) -> Option<&'static (dyn Profile + Sync)> {
+    all_profiles().into_iter().find(|p| p.id() == id)
+}
+
+/// Index of a profile id in [`all_profiles`] — the value the `profile`
+/// parameter holds.
+pub fn profile_index(id: &str) -> Option<usize> {
+    all_profiles().iter().position(|p| p.id() == id)
+}
+
+/// The category a profile belongs to, and its position within it.
+pub fn category_of(profile_id: &str) -> Option<(usize, usize)> {
+    CATEGORIES.iter().enumerate().find_map(|(ci, category)| {
+        category
+            .profiles
+            .iter()
+            .position(|id| *id == profile_id)
+            .map(|vi| (ci, vi))
+    })
 }
 
 pub fn map_control_value(
@@ -248,6 +363,53 @@ mod tests {
             saw_parallel,
             "preset pack should include parallel compression"
         );
+    }
+
+    #[test]
+    fn every_profile_belongs_to_exactly_one_category() {
+        for profile in all_profiles() {
+            let hits = CATEGORIES
+                .iter()
+                .filter(|c| c.profiles.contains(&profile.id()))
+                .count();
+            assert_eq!(
+                hits, 1,
+                "{} appears in {hits} categories, expected exactly 1",
+                profile.id()
+            );
+        }
+    }
+
+    #[test]
+    fn every_category_entry_names_a_real_profile() {
+        for category in CATEGORIES {
+            assert!(!category.profiles.is_empty(), "{} is empty", category.id);
+            for id in category.profiles {
+                assert!(
+                    profile_by_id(id).is_some(),
+                    "{} lists unknown profile {id}",
+                    category.id
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn a_profile_resolves_back_to_its_category_and_position() {
+        assert_eq!(category_of("control").map(|(c, _)| CATEGORIES[c].id), Some("main"));
+        assert_eq!(category_of("la2a"), Some((2, 0)));
+        assert_eq!(category_of("cl1b"), Some((2, 1)));
+        assert_eq!(category_of("dbx160").map(|(_, v)| v), Some(1));
+        assert_eq!(category_of("nope"), None);
+    }
+
+    #[test]
+    fn profile_indices_are_stable_and_start_with_the_fts_surface() {
+        // The parameter's value order. Appending is fine; reordering silently
+        // repoints saved sessions at a different unit.
+        assert_eq!(profile_index("control"), Some(0));
+        assert_eq!(profile_index("urei_1176"), Some(1));
+        assert_eq!(profile_index("la2a"), Some(2));
     }
 
     fn assert_known_param(profile_id: &str, control_id: &str, param: &str) {

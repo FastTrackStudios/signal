@@ -26,7 +26,7 @@ use dioxus_native::launch_cfg;
 use dioxus_native::prelude::{document, rsx};
 use eq_ui::params::{EqUiState, FtsEqParams, NUM_BANDS, SPECTRUM_BINS};
 use audiocore_core::prelude::Param;
-use nice_plug::context::gui::GuiContext;
+use nice_plug::context::gui::{GuiContext, GuiContextInner};
 use nice_plug::prelude::*;
 use nice_plug_dioxus::{ParamContext, SharedState};
 
@@ -78,7 +78,7 @@ fn main() {
 
     let shared = SharedState::new(ui_state);
 
-    let gui_context: Arc<dyn GuiContext> = Arc::new(StandaloneGuiContext);
+    let gui_context = GuiContext::new(Arc::new(StandaloneGuiContext));
     let needs_redraw = Arc::new(std::sync::atomic::AtomicBool::new(true));
     let param_ctx = ParamContext::new(gui_context, needs_redraw);
 
@@ -109,12 +109,9 @@ fn standalone_shell() -> dioxus_core::Element {
 /// private `StandaloneGuiContext` so knob drags pipe straight to `ParamPtr`.
 struct StandaloneGuiContext;
 
-impl GuiContext for StandaloneGuiContext {
+impl GuiContextInner for StandaloneGuiContext {
     fn plugin_api(&self) -> PluginApi {
         PluginApi::Clap
-    }
-    fn request_resize(&self) -> bool {
-        true
     }
     unsafe fn raw_begin_set_parameter(&self, _param: ParamPtr) {}
     unsafe fn raw_set_parameter_normalized(&self, param: ParamPtr, normalized: f32) {

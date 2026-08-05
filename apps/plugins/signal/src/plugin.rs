@@ -165,6 +165,8 @@ impl Plugin for FtsSignal {
     /// MidiCCs: rigs use CC dynamics/expression, not just notes.
     const MIDI_INPUT: MidiConfig = MidiConfig::MidiCCs;
 
+    // No editor yet — the host shows its generic parameter UI.
+    type Editor = ();
     type SysExMessage = ();
     type BackgroundTask = ();
 
@@ -172,11 +174,11 @@ impl Plugin for FtsSignal {
         self.params.clone()
     }
 
-    fn initialize(
+    fn activate(
         &mut self,
         _audio_io_layout: &AudioIOLayout,
         buffer_config: &BufferConfig,
-        _context: &mut impl InitContext<Self>,
+        _context: &mut impl ActivateContext<Self>,
     ) -> bool {
         init_logging();
         let sr = buffer_config.sample_rate.round() as u32;

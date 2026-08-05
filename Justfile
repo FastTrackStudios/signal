@@ -225,10 +225,26 @@ tailwind-eq:
 tailwind-comp:
     tailwindcss -i features/fx/comp/comp-ui/tailwind.css -o features/fx/comp/comp-ui/assets/tailwind.css --minify
 
+tailwind-limiter:
+    tailwindcss -i features/fx/comp/limiter-ui/tailwind.css -o features/fx/comp/limiter-ui/assets/tailwind.css --minify
+
 # Rebuild trigger-ui's embedded Tailwind (features/fx/trigger/trigger-ui/
 # assets/tailwind.css) after class changes in trigger-ui / fts-ui.
 tailwind-trigger:
     tailwindcss -i features/fx/trigger/trigger-ui/tailwind.css -o features/fx/trigger/trigger-ui/assets/tailwind.css --minify
+
+# Rasterize the comp editor to PNGs — every profile face, plus the Advanced
+# page and a resized panel — so a GUI change can be looked at without opening
+# a DAW. Same headless mount the behavioural tests drive, painted through
+# blitz + vello_cpu. Shots land in target/gui-shots/comp/ (FTS_SHOTS_DIR
+# overrides).
+comp-shots:
+    cargo test -p comp-ui --features native --test screenshots -- --nocapture
+
+# Same for the EQ: every hardware model's faceplate, painted headless.
+# Shots land in target/gui-shots/eq/.
+eq-shots:
+    cargo test -p eq-ui --features native --test screenshots -- --nocapture
 
 # Bundle every FTS plugin as .clap + .vst3 (target/bundled/, names from
 # bundler.toml). Debug of a single plugin: cargo run -p fts-plugin-xtask
