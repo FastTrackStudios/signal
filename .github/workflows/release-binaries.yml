@@ -9,6 +9,9 @@
 #   patchbay-linux .deb                self-hosted nix-host (THEBATTLESHIP)
 #   macos-desktop  notarized universal .dmg (both arches, lipo'd)  self-hosted airlock (TODO)
 #   macos-plugins  notarized (unstapled), universal fts-plugins-*.zip  self-hosted airlock
+#   macos-installer THE macOS download: themed, notarized .pkg — app +
+#                  per-plugin-toggleable suite, + its silent-install choices
+#                  template                                    self-hosted airlock
 #   docker         self-host image     self-hosted nix-host         (TODO)
 #
 # workflow_dispatch takes a tag so a release can be (re)built by hand.
@@ -268,3 +271,58 @@ jobs:
           tag="${{ github.event.release.tag_name || inputs.tag }}"
           nix run nixpkgs#gh -- release upload "$tag" "$artifact" --repo "$GITHUB_REPOSITORY" --clobber
           echo "uploaded $artifact to $tag"
+
+  macos-installer:
+    # THE macOS download: a themed, notarized .pkg that installs the desktop
+    # app plus the whole plugin suite, with per-component checkboxes (the
+    # "FTS Plugins" group toggles all 17 at once; each is individually
+    # selectable) and clean upgrade-in-place on re-run.
+    #
+    # Runs after macos-desktop/macos-plugins rather than beside them: it
+    # rebuilds the same universal payloads via BUILD_ONLY=1 and would other-
+    # wise race them over target/ on the same self-hosted Mac.
+    #
+    # Uploads the .pkg AND its choices template — the latter is what admins
+    # edit for scripted/MDM installs:
+    #   sudo installer -applyChoiceChangesXML <choices>.xml -pkg <pkg> -target /
+    needs: [macos-desktop, macos-plugins]
+    runs-on: [self-hosted, macos, airlock]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name || inputs.tag }}
+          clean: false
+      - name: Build, sign, notarize the .pkg installer
+        env:
+          KEYCHAIN: fts-build.keychain
+          KEYCHAIN_PW: fts-build
+          ACTOOL_DEVELOPER_DIR: /Applications/Xcode-beta.app/Contents/Developer
+          EMBED_WEB: "1"
+        run: |
+          set -euo pipefail
+          export PATH="/nix/var/nix/profiles/default/bin:$PATH"
+          export NIX=/nix/var/nix/profiles/default/bin/nix
+          tag="${{ github.event.release.tag_name || inputs.tag }}"
+          export MARKETING_VER="${tag#v}"
+          bash apps/fasttrackstudio/ios/deploy-macos-pkg.sh
+          echo "pkg=$(ls -t target/FastTrackStudio-*-macos.pkg | head -1)" >> "$GITHUB_ENV"
+          echo "choices=$(ls -t target/FastTrackStudio-*-macos-choices.xml | head -1)" >> "$GITHUB_ENV"
+      - name: Verify the installer is signed, notarized and universal
+        run: |
+          set -euo pipefail
+          # Gatekeeper accepts it (install policy, not the execute policy an
+          # .app is judged by) and the notarization ticket is stapled, so it
+          # opens with no warning offline.
+          spctl --assess --type install -vv "$pkg"
+          xcrun stapler validate "$pkg"
+          # The payloads are what actually has to be universal.
+          bash apps/fasttrackstudio/ios/verify-macos-universal.sh plugins \
+            "$(ls -t target/fts-plugins-*-macos.zip | head -1)"
+      - name: Upload to the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          tag="${{ github.event.release.tag_name || inputs.tag }}"
+          nix run nixpkgs#gh -- release upload "$tag" "$pkg" "$choices" --repo "$GITHUB_REPOSITORY" --clobber
+          echo "uploaded $pkg + $choices to $tag"
