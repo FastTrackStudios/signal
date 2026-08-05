@@ -24,7 +24,7 @@ use audiocore_core::prelude::*;
 
 use crate::faces::use_face_context;
 use crate::hardware::knob::HardwareKnob;
-use fts_ui_audio::hardware::button::LedMeter;
+use fts_ui_audio::hardware::button::{LedBar, LedMeter, LedSelect, PanelButton};
 use fts_ui_audio::prelude::GrMeter;
 use crate::hardware::rack::{RackDesign, RackItem};
 use crate::hardware::panel::{panel_scale, Panel, PanelSlot, Silkscreen};
@@ -84,8 +84,20 @@ pub fn RackFace(
             background: design.paint.to_string(),
             chrome: design.chrome.to_string(),
 
-            for item in design.items.iter().copied() {
-                {
+            for (index , item) in design.items.iter().copied().enumerate() {
+                div {
+                    // Keyed and uniform: the arms below produce different
+                    // shapes (a slot, a pair, a bare div), and a list whose
+                    // entries change shape between two designs is what walks
+                    // blitz's mutator off the end of a template path. The
+                    // wrapper is inert — the items inside are absolutely
+                    // positioned on the panel, as before.
+                    key: "{design.id}-{index}",
+                    // Not `display:contents` — that leaves blitz a node with
+                    // no children, which is the very panic this is fixing. A
+                    // plain static div is zero-height (everything inside is
+                    // absolutely positioned against the panel) and gives the
+                    // diff a stable node to land on.
                     match item {
                         RackItem::Vu { x, y, w, mode, legend } => rsx! {
                             PanelSlot { scale, x, y, w: w + 14.0, h: w * 0.72,
@@ -106,6 +118,13 @@ pub fn RackFace(
                             // The knob's box is wider than the knob: the
                             // printed ring lives outside it.
                             let box_w = d * 2.0;
+                            let (ring_r, label_r, ticks) = ring.geometry();
+                            // A pointer knob's nose reaches past its body, so
+                            // its panel scale is printed further out.
+                            let (ring_r, label_r) = (
+                                ring_r + design.knob.ring_offset(),
+                                label_r + design.knob.ring_offset(),
+                            );
                             rsx! {
                                 PanelSlot { scale, x, y, w: box_w, h: box_w,
                                     HardwareKnob {
@@ -117,6 +136,9 @@ pub fn RackFace(
                                         ink: design.ink.to_string(),
                                         marks: ring.marks(),
                                         tint: tint.map(str::to_string),
+                                        ring_r,
+                                        label_r,
+                                        ticks,
                                     }
                                 }
                                 Silkscreen {
@@ -169,10 +191,67 @@ pub fn RackFace(
                                 }
                             }
                         },
+                        RackItem::LedBar { x, y, steps, pitch } => rsx! {
+                            PanelSlot { scale, x, y, w: steps.len() as f64 * pitch + 8.0, h: 34.0,
+                                LedBar {
+                                    scale,
+                                    value_db: gr_db,
+                                    steps: steps.to_vec(),
+                                    pitch,
+                                    ink: design.ink.to_string(),
+                                }
+                            }
+                        },
+                        RackItem::LedSelect { id, x, y, labels, pitch } => rsx! {
+                            PanelSlot { scale, x, y, w: labels.len() as f64 * pitch + 8.0, h: 34.0,
+                                LedSelect {
+                                    handle: face.handle(id),
+                                    testid: id.replace('_', "-"),
+                                    scale,
+                                    labels: labels.iter().map(|s| s.to_string()).collect(),
+                                    pitch,
+                                    ink: design.ink.to_string(),
+                                }
+                            }
+                        },
+                        RackItem::Button { id, label, x, y, color, ink, led } => rsx! {
+                            PanelSlot { scale, x, y, w: 62.0, h: 62.0,
+                                PanelButton {
+                                    handle: (!id.is_empty()).then(|| face.handle(id)),
+                                    testid: if id.is_empty() {
+                                        label.to_lowercase().replace([' ', '/'], "-")
+                                    } else {
+                                        id.replace('_', "-")
+                                    },
+                                    scale,
+                                    label: label.to_string(),
+                                    color: color.to_string(),
+                                    ink: ink.to_string(),
+                                    led: led.to_string(),
+                                    w: 40.0,
+                                    h: 22.0,
+                                }
+                            }
+                        },
+                        RackItem::Frame { x, y, w, h } => rsx! {
+                            div {
+                                style: format!(
+                                    "position:absolute; left:{:.1}px; top:{:.1}px; \
+                                     width:{:.1}px; height:{:.1}px; border-radius:{:.1}px; \
+                                     border:{:.1}px solid rgba(255,255,255,0.16); \
+                                     pointer-events:none;",
+                                    (x - w / 2.0) * scale,
+                                    (y - h / 2.0) * scale,
+                                    w * scale,
+                                    h * scale,
+                                    8.0 * scale,
+                                    (1.0 * scale).max(1.0),
+                                ),
+                            }
+                        },
                         RackItem::Lever { .. }
                         | RackItem::Readout { .. }
                         | RackItem::Lamp { .. }
-                        | RackItem::Button { .. }
                         | RackItem::Divider { .. } => rsx! {},
                         RackItem::Text { x, y, text, size, strong } => rsx! {
                             Silkscreen {
@@ -231,8 +310,20 @@ fn CompactRack(design: RackDesign, profile_id: String, avail_h: f64) -> Element 
 
             GrMeter { gain_reduction_db: gr_db, height: meter_h as f32 }
 
-            for item in design.items.iter().copied() {
-                {
+            for (index , item) in design.items.iter().copied().enumerate() {
+                div {
+                    // Keyed and uniform: the arms below produce different
+                    // shapes (a slot, a pair, a bare div), and a list whose
+                    // entries change shape between two designs is what walks
+                    // blitz's mutator off the end of a template path. The
+                    // wrapper is inert — the items inside are absolutely
+                    // positioned on the panel, as before.
+                    key: "{design.id}-{index}",
+                    // Not `display:contents` — that leaves blitz a node with
+                    // no children, which is the very panic this is fixing. A
+                    // plain static div is zero-height (everything inside is
+                    // absolutely positioned against the panel) and gives the
+                    // diff a stable node to land on.
                     match item {
                         RackItem::Knob { id, legend, ring, .. } => rsx! {
                             div {

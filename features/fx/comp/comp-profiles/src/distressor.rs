@@ -76,6 +76,15 @@ static CONTROLS: &[ProfileControl] = &[
             labels: &["Clean", "Dist 2", "Dist 3"],
         },
     },
+    // The unit's wet/dry blend — parallel compression without a bus.
+    ProfileControl {
+        id: "mix",
+        label: "Mix",
+        mapping: ParamMapping::Direct {
+            param: "fold",
+            range: 0.0..=1.0,
+        },
+    },
     // The detector high-pass ("British mode" territory).
     ProfileControl {
         id: "detector",

@@ -165,11 +165,15 @@ pub fn Face(
 ) -> Element {
     let _ = frame;
     match units::design_for(profile_id_for_index(profile_index)) {
-        // `key` is what makes a face swap actually swap: without it Dioxus
-        // diffs the new design into the old panel's nodes, and knobs keep the
-        // previous unit's handles.
+        // Rendered as a keyed list of one, which is the shape Dioxus honours
+        // keys in. It has to *remount* rather than diff: the panels do not
+        // share an item list, and diffing one design's items into another's
+        // walks blitz's mutator off the end of a template path — the same
+        // failure the EQ hit tearing down its graph.
         Some(design) => rsx! {
-            rack::RackFace { key: "{profile_index}", design: *design, frame, form }
+            for id in [design.id] {
+                rack::RackFace { key: "{id}", design: *design, frame, form }
+            }
         },
         None => rsx! { control::ControlFace { advanced, frame } },
     }
@@ -189,7 +193,15 @@ impl FaceContext {
     /// Panics if the control is not on the profile or writes nothing this
     /// plugin exposes — both are authoring mistakes in a face, not runtime
     /// conditions, and a silently missing knob is worse than a loud one.
+    ///
+    /// The exception is an empty id, which means a control the panel has and
+    /// the DSP does not yet: it draws and does not move. Which controls those
+    /// are is pinned by `the_unwired_controls_are_the_ones_we_know_about`, so
+    /// a typo still lands in the panic above rather than here.
     pub fn handle(&self, control_id: &str) -> ParamHandle {
+        if control_id.is_empty() {
+            return ParamHandle::inert("Not wired", 0.5);
+        }
         handle_for(
             self.profile,
             control_id,

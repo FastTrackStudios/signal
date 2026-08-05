@@ -112,6 +112,12 @@ pub fn EqRackFace(
                         RackItem::Knob { id, legend, x, y, d, ring, tint } => {
                             let box_w = d * 2.0;
                             let (ring_r, label_r, ticks) = ring.geometry();
+                            // A pointer knob's nose reaches past its body, so
+                            // its panel scale is printed further out.
+                            let (ring_r, label_r) = (
+                                ring_r + design.knob.ring_offset(),
+                                label_r + design.knob.ring_offset(),
+                            );
                             rsx! {
                                 PanelSlot { scale, x, y, w: box_w, h: box_w,
                                     HardwareKnob {
@@ -273,8 +279,12 @@ pub fn EqRackFace(
                             }
                         },
                         // EQ panels carry no meter movement — the console's
-                        // metering is an LED ladder, above.
-                        RackItem::Vu { .. } => rsx! {},
+                        // metering is an LED ladder, above — and no LED rows
+                        // or section frames, which are the hybrid's idiom.
+                        RackItem::Vu { .. }
+                        | RackItem::LedBar { .. }
+                        | RackItem::LedSelect { .. }
+                        | RackItem::Frame { .. } => rsx! {},
                     }
                 }
             }

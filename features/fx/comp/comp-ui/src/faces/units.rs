@@ -128,74 +128,100 @@ pub static UREI_1176: RackDesign = RackDesign {
 // Opto — LA-2A, CL 1B
 // ─────────────────────────────────────────────────────────────────────────
 
-/// Cream leveling amplifier: two knobs and a switch, both knobs printed 0–10
-/// because the operator's reference is the panel, not the engine's dB.
+/// The LA-2A, laid out from the unit.
+///
+/// The panel is **grey**, not cream — the cream is the meter card behind its
+/// bezel, and mistaking one for the other is how every LA-2A pastiche gives
+/// itself away. Red Teletronix script at the left, the movement centred in a
+/// heavy bezel, and the two big pointer knobs either side of it with their
+/// scales printed **0–100** on the panel.
+///
+/// The knobs are plain black with a moulded nose: you read the nose against
+/// the panel, which is why there is no skirt and nothing printed on the knob.
+///
+/// **Not yet wired**: the meter-mode selector (gain reduction / +10 / +4) and
+/// POWER. They draw and do nothing.
 pub static LA2A: RackDesign = RackDesign {
     id: "la2a",
-    w: W,
-    h: H,
-    paint: "linear-gradient(178deg, #efe6cf 0%, #e4d8bb 46%, #d6c9a9 100%)",
-    ink: "#3a3228",
-    dim_ink: "#6b6053",
-    chrome: "#c9c2b0",
+    w: 940.0,
+    h: 254.0,
+    // Brushed grey panel, lit from above.
+    paint: "linear-gradient(178deg, #cfd0cd 0%, #bcbdba 46%, #a7a8a5 100%)",
+    ink: "#2e2f2d",
+    dim_ink: "#6a6b68",
+    chrome: "#b9bab6",
     vu: VuFace::Amber,
-    // Big black phenolic pointer knobs, of a piece with the era's other
-    // American outboard. Inferred from the unit rather than documented.
-    knob: KnobStyle::Daka,
+    knob: KnobStyle::Pointer,
     items: &[
-        RackItem::Vu {
-            x: 218.0,
-            y: 140.0,
-            w: 240.0,
-            mode: VuMode::GainReduction,
-            legend: "Gain Reduction",
+        // ── Identity ─────────────────────────────────────────────────────
+        RackItem::Text { x: 168.0, y: 62.0, text: "Teletronix", size: 17.0, strong: true },
+        RackItem::Text { x: 168.0, y: 84.0, text: "Engineering Co.", size: 7.5, strong: false },
+        RackItem::Text { x: 296.0, y: 64.0, text: "Leveling Amplifier", size: 8.5, strong: false },
+        RackItem::Text { x: 296.0, y: 82.0, text: "Model LA-2A", size: 8.5, strong: false },
+
+        // ── Mode, far left, as the unit has it ───────────────────────────
+        RackItem::Switch {
+            id: "mode",
+            legend: "",
+            x: 104.0,
+            y: 150.0,
+            labels: ["Limit", "Compress"],
         },
+
+        // ── Gain ─────────────────────────────────────────────────────────
         RackItem::Knob {
             id: "gain",
             legend: "Gain",
-            x: 470.0,
-            y: ROW,
-            d: 66.0,
-            ring: Ring::Linear {
-                from: 0.0,
-                to: 10.0,
-                majors: 6,
-            },
+            x: 286.0,
+            y: 150.0,
+            d: 68.0,
+            ring: Ring::Numerals(&[
+                "0", "10", "20", "30", "40", "50", "60", "70", "80", "90", "100",
+            ]),
             tint: None,
         },
+
+        // ── The movement ─────────────────────────────────────────────────
+        RackItem::Vu {
+            x: 478.0,
+            y: 122.0,
+            w: 198.0,
+            mode: VuMode::GainReduction,
+            legend: "VU Level Indicator",
+        },
+
+        // ── Peak reduction ───────────────────────────────────────────────
         RackItem::Knob {
             id: "peak_reduction",
             legend: "Peak Reduction",
-            x: 650.0,
-            y: ROW,
-            d: 66.0,
-            ring: Ring::Linear {
-                from: 0.0,
-                to: 10.0,
-                majors: 6,
-            },
+            x: 660.0,
+            y: 150.0,
+            d: 68.0,
+            ring: Ring::Numerals(&[
+                "0", "10", "20", "30", "40", "50", "60", "70", "80", "90", "100",
+            ]),
+            tint: None,
+        },
+
+        // ── Meter mode + power, top right ────────────────────────────────
+        RackItem::Text { x: 830.0, y: 44.0, text: "Gain Reduction", size: 7.5, strong: false },
+        RackItem::Text { x: 776.0, y: 62.0, text: "Output +10", size: 7.0, strong: false },
+        RackItem::Text { x: 884.0, y: 62.0, text: "Output +4", size: 7.0, strong: false },
+        RackItem::Knob {
+            id: "",
+            legend: "",
+            x: 830.0,
+            y: 106.0,
+            d: 42.0,
+            ring: Ring::None,
             tint: None,
         },
         RackItem::Switch {
-            id: "mode",
-            legend: "Mode",
-            x: 800.0,
-            y: ROW,
-            labels: ["Comp", "Limit"],
-        },
-        RackItem::Text {
-            x: 640.0,
-            y: 62.0,
-            text: "Leveling Amplifier",
-            size: 15.0,
-            strong: true,
-        },
-        RackItem::Text {
-            x: 640.0,
-            y: 88.0,
-            text: "FTS Comp · Optical",
-            size: 9.0,
-            strong: false,
+            id: "",
+            legend: "",
+            x: 830.0,
+            y: 190.0,
+            labels: ["On", "Power"],
         },
     ],
 };
@@ -693,104 +719,150 @@ pub static DBX_160: RackDesign = RackDesign {
 // Hybrid — Distressor
 // ─────────────────────────────────────────────────────────────────────────
 
-/// Digitally-controlled analogue: the ratio switch is a mode selector as much
-/// as a number (NUKE is not "32:1", it is the sound), with the audio and
-/// detector modes beside it.
+/// The Distressor, laid out from the unit.
+///
+/// Two bordered sections, as the panel has: everything that *reports* up top —
+/// the gain-reduction ladder, the ratio row, the mode buttons — and the four
+/// big dials plus MIX below, with their legends printed above them rather than
+/// underneath.
+///
+/// The knobs are the point. A Distressor's numerals are printed on a wide
+/// brushed skirt that *turns*, read against a fixed index on the panel; that
+/// is why the panel around each knob is bare where every other unit here
+/// prints a scale. And it does not have a meter movement at all: gain
+/// reduction is an LED ladder reading right to left, 1 dB at the right.
+///
+/// **Not yet wired**: BYPASS, POWER, the detector Link, and the HR trim. They
+/// draw and do nothing — see the note on the SSL face.
 pub static DISTRESSOR: RackDesign = RackDesign {
     id: "distressor",
-    w: W,
-    h: H,
-    paint: "linear-gradient(178deg, #1e2a35 0%, #16202a 52%, #0e161d 100%)",
-    ink: "#dfe7ee",
-    dim_ink: "#8fa1b1",
-    chrome: "#7d8b98",
+    w: 940.0,
+    h: 340.0,
+    paint: "linear-gradient(178deg, #26282b 0%, #191b1d 48%, #0f1113 100%)",
+    ink: "#e8eaec",
+    dim_ink: "#9aa1a8",
+    chrome: "#8b9096",
     vu: VuFace::Ivory,
-    knob: KnobStyle::Skirted,
+    knob: KnobStyle::Dial,
     items: &[
-        // No movement: the unit meters gain reduction on an LED ladder, with
-        // a second for output.
-        RackItem::LedMeter { x: 132.0, y: 140.0, h: 150.0, right: true },
-        RackItem::LedMeter { x: 162.0, y: 140.0, h: 150.0, right: false },
-        RackItem::Text { x: 148.0, y: 232.0, text: "GR · Out", size: 8.0, strong: false },
-        RackItem::Buttons {
-            id: "ratio",
-            legend: "Ratio",
-            x: 306.0,
-            y: 146.0,
-            labels: &["1", "2", "3", "4", "6", "10", "20", "Nuke"],
+        // ── Upper section: what the unit reports ─────────────────────────
+        RackItem::Frame { x: 470.0, y: 96.0, w: 856.0, h: 150.0 },
+        RackItem::Text { x: 168.0, y: 96.0, text: "Distressor", size: 20.0, strong: true },
+        RackItem::Text { x: 168.0, y: 116.0, text: "FTS Comp · Hybrid", size: 8.0, strong: false },
+
+        // Gain reduction: 1 dB at the right, deepest at the left.
+        RackItem::LedBar {
+            x: 508.0,
+            y: 48.0,
+            steps: &[26.0, 23.0, 20.0, 17.0, 14.0, 12.0, 10.0, 9.0, 8.0, 7.0, 6.0, 5.0, 4.0, 3.0, 2.0, 1.0],
+            pitch: 27.0,
         },
+        RackItem::Text { x: 508.0, y: 86.0, text: "Gain Reduction", size: 8.5, strong: false },
+
+        // Ratio, as the row of lamps it is on the unit — the button beside it
+        // steps through them, and so does clicking a lamp.
+        RackItem::LedSelect {
+            id: "ratio",
+            x: 476.0,
+            y: 120.0,
+            labels: &["1:1", "2:1", "3:1", "4:1", "6:1", "10:1", "20:1", "Nuke"],
+            pitch: 54.0,
+        },
+        RackItem::Text { x: 476.0, y: 156.0, text: "Ratio", size: 8.5, strong: false },
+        RackItem::Button {
+            id: "",
+            label: "BY PASS",
+            x: 232.0,
+            y: 128.0,
+            color: "#8d9298",
+            ink: "#15171a",
+            led: "#e0483a",
+        },
+        RackItem::Button {
+            id: "ratio",
+            label: "RATIO",
+            x: 734.0,
+            y: 128.0,
+            color: "#8d9298",
+            ink: "#15171a",
+            led: "",
+        },
+        RackItem::Button {
+            id: "detector",
+            label: "DET",
+            x: 800.0,
+            y: 128.0,
+            color: "#8d9298",
+            ink: "#15171a",
+            led: "",
+        },
+        RackItem::Button {
+            id: "audio_mode",
+            label: "AUDIO",
+            x: 866.0,
+            y: 128.0,
+            color: "#8d9298",
+            ink: "#15171a",
+            led: "",
+        },
+        RackItem::Text { x: 800.0, y: 156.0, text: "Detector", size: 8.0, strong: false },
+        RackItem::Text { x: 866.0, y: 156.0, text: "Audio", size: 8.0, strong: false },
+
+        // ── Lower section: the dials ─────────────────────────────────────
+        RackItem::Frame { x: 470.0, y: 250.0, w: 856.0, h: 150.0 },
+        RackItem::Text { x: 152.0, y: 180.0, text: "Input", size: 9.5, strong: true },
         RackItem::Knob {
             id: "input",
-            legend: "Input",
-            x: 420.0,
-            y: ROW,
-            d: 52.0,
-            ring: Ring::Plain { majors: 6 },
+            legend: "",
+            x: 152.0,
+            y: 254.0,
+            d: 92.0,
+            ring: Ring::Numerals(&["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]),
             tint: None,
         },
+        RackItem::Text { x: 320.0, y: 180.0, text: "Attack", size: 9.5, strong: true },
         RackItem::Knob {
             id: "attack",
-            legend: "Attack",
-            x: 524.0,
-            y: ROW,
-            d: 52.0,
-            ring: Ring::Plain { majors: 6 },
+            legend: "",
+            x: 320.0,
+            y: 254.0,
+            d: 92.0,
+            ring: Ring::Numerals(&["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]),
             tint: None,
         },
+        RackItem::Text { x: 488.0, y: 180.0, text: "Release", size: 9.5, strong: true },
         RackItem::Knob {
             id: "release",
-            legend: "Release",
-            x: 628.0,
-            y: ROW,
-            d: 52.0,
-            ring: Ring::Plain { majors: 6 },
+            legend: "",
+            x: 488.0,
+            y: 254.0,
+            d: 92.0,
+            ring: Ring::Numerals(&["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]),
             tint: None,
         },
+        RackItem::Text { x: 656.0, y: 180.0, text: "Output", size: 9.5, strong: true },
         RackItem::Knob {
             id: "output",
-            legend: "Output",
-            x: 732.0,
-            y: ROW,
-            d: 52.0,
-            ring: Ring::Linear {
-                from: -12.0,
-                to: 24.0,
-                majors: 5,
-            },
+            legend: "",
+            x: 656.0,
+            y: 254.0,
+            d: 92.0,
+            ring: Ring::Numerals(&["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]),
             tint: None,
         },
+        RackItem::Text { x: 800.0, y: 186.0, text: "Mix", size: 9.5, strong: true },
         RackItem::Knob {
-            id: "audio_mode",
-            legend: "Audio",
-            x: 828.0,
-            y: 112.0,
-            d: 40.0,
-            ring: Ring::Detents(&["Cln", "D2", "D3"]),
-            tint: None,
+            id: "mix",
+            legend: "",
+            x: 800.0,
+            y: 250.0,
+            d: 44.0,
+            ring: Ring::None,
+            tint: Some("#26282b"),
         },
-        RackItem::Knob {
-            id: "detector",
-            legend: "Detector",
-            x: 828.0,
-            y: 214.0,
-            d: 40.0,
-            ring: Ring::Detents(&["Off", "HP", "HP+"]),
-            tint: None,
-        },
-        RackItem::Text {
-            x: 560.0,
-            y: 54.0,
-            text: "Distressor",
-            size: 14.0,
-            strong: true,
-        },
-        RackItem::Text {
-            x: 560.0,
-            y: 78.0,
-            text: "FTS Comp · Hybrid",
-            size: 9.0,
-            strong: false,
-        },
+        RackItem::Text { x: 772.0, y: 292.0, text: "Dry", size: 7.5, strong: false },
+        RackItem::Text { x: 832.0, y: 292.0, text: "Comp", size: 7.5, strong: false },
+        RackItem::Text { x: 878.0, y: 254.0, text: "EL8", size: 9.0, strong: false },
     ],
 };
 
@@ -814,6 +886,64 @@ mod tests {
     use super::*;
     use comp_profiles::{all_profiles, Profile};
 
+    /// Every control id a panel places, excluding the deliberately unwired.
+    fn wired_ids(design: &RackDesign) -> Vec<&'static str> {
+        design
+            .items
+            .iter()
+            .filter_map(|item| match item {
+                RackItem::Knob { id, .. }
+                | RackItem::Buttons { id, .. }
+                | RackItem::Switch { id, .. }
+                | RackItem::Button { id, .. }
+                | RackItem::LedSelect { id, .. } => Some(*id),
+                _ => None,
+            })
+            .filter(|id| !id.is_empty())
+            .collect()
+    }
+
+    /// Controls a panel draws with nothing behind them.
+    fn unwired_count(design: &RackDesign) -> usize {
+        design
+            .items
+            .iter()
+            .filter(|item| {
+                matches!(
+                    item,
+                    RackItem::Knob { id, .. }
+                        | RackItem::Button { id, .. }
+                        | RackItem::Switch { id, .. }
+                    if id.is_empty()
+                )
+            })
+            .count()
+    }
+
+    /// The unwired controls are a known, counted debt — a panel may draw what
+    /// the DSP does not have yet, but not by accident. See the EQ's twin.
+    #[test]
+    fn the_unwired_controls_are_the_ones_we_know_about() {
+        for profile in all_profiles() {
+            let Some(design) = design_for(profile.id()) else {
+                continue;
+            };
+            let expected = match profile.id() {
+                // The LA-2A's meter-mode selector and POWER; the Distressor's
+                // BYPASS. Everything else is wired.
+                "la2a" => 2,
+                "distressor" => 1,
+                _ => 0,
+            };
+            assert_eq!(
+                unwired_count(design),
+                expected,
+                "{} grew an unwired control",
+                profile.id(),
+            );
+        }
+    }
+
     /// Every control a panel places has to exist on that unit's profile —
     /// otherwise the knob mounts and does nothing, which is the one failure a
     /// screenshot will not show you.
@@ -823,13 +953,7 @@ mod tests {
             let Some(design) = design_for(profile.id()) else {
                 continue;
             };
-            for item in design.items {
-                let id = match item {
-                    RackItem::Knob { id, .. }
-                    | RackItem::Buttons { id, .. }
-                    | RackItem::Switch { id, .. } => *id,
-                    _ => continue,
-                };
+            for id in wired_ids(design) {
                 assert!(
                     profile.controls().iter().any(|c| c.id == id),
                     "{} places a control {id} its profile does not have",
@@ -849,15 +973,7 @@ mod tests {
                 continue;
             };
             for control in profile.controls() {
-                let placed = design.items.iter().any(|item| {
-                    matches!(
-                        item,
-                        RackItem::Knob { id, .. }
-                            | RackItem::Buttons { id, .. }
-                            | RackItem::Switch { id, .. }
-                        if *id == control.id
-                    )
-                });
+                let placed = wired_ids(design).contains(&control.id);
                 assert!(
                     placed,
                     "{}'s {} control is not on its panel",
@@ -907,7 +1023,10 @@ mod tests {
                     | RackItem::Lamp { .. }
                     | RackItem::Button { .. }
                     | RackItem::LedMeter { .. }
-                    | RackItem::Divider { .. } => continue,
+                    | RackItem::Divider { .. }
+                    | RackItem::Frame { .. }
+                    | RackItem::LedBar { .. }
+                    | RackItem::LedSelect { .. } => continue,
                 };
                 assert!(
                     x - half >= EAR && x + half <= design.w - EAR,
