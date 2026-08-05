@@ -5,7 +5,9 @@
 //! [`fts_ui_audio`] widgets. General-purpose widgets (knobs, meters, drag
 //! provider) come from [`fts_ui_audio`]; layout primitives from [`fts_ui`].
 //!
-//! - [`control_view`]: the plugin editor — classic comp knob row + GR meter
+//! - [`control_view`]: the plugin editor — profile-skinned, sectioned control
+//!   surface (Basic/Advanced) over the graph + GR meter
+//! - [`sections`]: the labelled-section / knob / selector layout primitives
 //! - [`profile_view`]: hardware-profile data model (1176, LA-2A, SSL bus)
 //! - [`params`]: nice_plug parameter tree + shared UI state
 //! - [`param_adapter`]: nice_plug `ParamPtr` → [`fts_ui_audio::ParamHandle`]
@@ -28,3 +30,5 @@ pub mod control_view;
 pub mod param_adapter;
 #[cfg(feature = "native")]
 pub mod params;
+#[cfg(feature = "native")]
+pub mod sections;

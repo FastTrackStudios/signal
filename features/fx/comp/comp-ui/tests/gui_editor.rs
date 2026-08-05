@@ -137,6 +137,12 @@ mod support {
     ///   `use_param_context()` / all `ctx.begin_set_raw(..)` call sites hit),
     /// - `SharedState` wrapping `Arc<CompUiState>` (params + meters).
     pub fn mount() -> Fixture {
+        mount_sized(1200, 700)
+    }
+
+    /// Mount at an explicit window size — used to check the surface against the
+    /// editor size the plugin shell actually asks the host for.
+    pub fn mount_sized(width: u32, height: u32) -> Fixture {
         let params = Arc::new(CompParams::default());
         let ui_state = Arc::new(CompUiState::new(params.clone()));
         let log = Arc::new(Mutex::new(Vec::new()));
@@ -145,7 +151,7 @@ mod support {
         let param_ctx = ParamContext::new(gui, Arc::new(AtomicBool::new(true)));
 
         let tester = render(Harness)
-            .with_window_size(1200, 700)
+            .with_window_size(width, height)
             .with_root_context(param_ctx)
             .with_root_context(SharedState::new(ui_state))
             .build();
@@ -164,6 +170,28 @@ mod support {
             let (ox, oy) = el.document_origin();
             let (w, h) = el.size();
             (ox + w as f64 / 2.0, oy + h as f64 / 2.0)
+        }
+
+        /// Let the editor re-render *and* re-lay-out after a change.
+        ///
+        /// Two separate things need coaxing here:
+        ///
+        /// - `AppShell` reads plugin params directly rather than through
+        ///   signals, so a widget that only writes a param (the Segmented
+        ///   selectors — unlike knobs, which also drive the shared
+        ///   `DragProvider` signal) re-renders itself immediately but does not
+        ///   re-render the shell. In the plugin the ~30 Hz tick thread picks
+        ///   the change up within ~33 ms; here we have to wait for one.
+        /// - `pump()` only drives the VirtualDom. It does **not** recompute
+        ///   layout, so nodes created by the re-render keep a 0×0 box and every
+        ///   size / hit-test assertion against them fails. `advance_time()` is
+        ///   the call that resolves the document, so it has to follow.
+        pub async fn settle(&mut self) {
+            for _ in 0..10 {
+                tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+                let _ = self.tester.pump().await;
+            }
+            self.tester.advance_time(std::time::Duration::from_millis(16)).await;
         }
 
         /// Document-space origin of the compressor-graph interaction surface.
@@ -199,7 +227,7 @@ mod support {
     }
 }
 
-use support::{mount, ptr_key, Gesture};
+use support::{mount, mount_sized, ptr_key, Gesture};
 
 // ─────────────────────────────────────────────────────────────────────────
 // Tests
@@ -486,5 +514,222 @@ async fn dragging_above_knee_on_graph_raises_ratio() -> dioxus_test::Result<()> 
         !log.iter().any(|g| matches!(g, Gesture::Set(k, _) if *k == thr_key)),
         "ratio drag leaked threshold sets: {log:?}"
     );
+    Ok(())
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Sectioned surface / Basic-Advanced disclosure
+// ─────────────────────────────────────────────────────────────────────────
+
+/// Every classic knob lives in a labelled section, and Basic mode hides the
+/// extended stages — the advanced-only sections must not be in the DOM until
+/// the disclosure is opened.
+#[tokio::test]
+async fn basic_mode_shows_core_sections_only() -> dioxus_test::Result<()> {
+    let fx = mount();
+
+    for id in ["section-dynamics", "section-detector", "section-character", "section-output"] {
+        let el = fx.tester.query(by_testid(id)).immediately()?;
+        let (w, h) = el.size();
+        assert!(w > 40.0 && h > 30.0, "section {id} collapsed to {w}x{h}px");
+    }
+
+    for id in ["section-sidechain", "section-expander", "section-upward"] {
+        assert!(
+            fx.tester.query(by_testid(id)).immediately().is_err(),
+            "advanced section {id} rendered while in Basic mode"
+        );
+    }
+
+    // Style + profile selectors are always available.
+    for id in ["select-style", "select-profile"] {
+        fx.tester.query(by_testid(id)).immediately()?;
+    }
+    Ok(())
+}
+
+/// Clicking the disclosure reveals the extended stages with real layout, and
+/// does so without recording any host automation — the Basic/Advanced split is
+/// local UI state, not a parameter.
+#[tokio::test]
+async fn advanced_toggle_reveals_extended_sections() -> dioxus_test::Result<()> {
+    let mut fx = mount();
+
+    let el = fx.tester.query(by_testid("advanced-toggle")).immediately()?;
+    let (ox, oy) = el.document_origin();
+    let (w, h) = el.size();
+    fx.tester.pointer_down(ox + w as f64 / 2.0, oy + h as f64 / 2.0);
+    let _ = fx.tester.pump().await;
+    fx.tester.pointer_up(ox + w as f64 / 2.0, oy + h as f64 / 2.0);
+    fx.settle().await;
+
+    for id in ["section-sidechain", "section-expander", "section-upward"] {
+        let el = fx
+            .tester
+            .query(by_testid(id))
+            .immediately()
+            .unwrap_or_else(|e| panic!("advanced section {id} still missing: {e:?}"));
+        let (w, h) = el.size();
+        assert!(w > 40.0 && h > 30.0, "advanced section {id} collapsed to {w}x{h}px");
+    }
+
+    // The advanced-only knobs of every stage are now hit-testable.
+    for id in [
+        "knob-schp", "knob-sclp", "knob-expthresh", "knob-expratio", "knob-upthresh",
+        "knob-upratio", "knob-ingain", "knob-ceiling", "knob-rmsmix", "knob-feedback",
+        "knob-lookahead", "knob-inertia", "knob-inertiadecay", "knob-hold", "knob-range",
+    ] {
+        let el = fx
+            .tester
+            .query(by_testid(id))
+            .immediately()
+            .unwrap_or_else(|e| panic!("advanced knob {id} missing: {e:?}"));
+        let (w, h) = el.size();
+        assert!(w > 20.0 && h > 20.0, "advanced knob {id} collapsed to {w}x{h}px");
+    }
+
+    // Advanced *replaces* the page — the Basic-only sections are gone, which
+    // is what keeps every view inside the editor's fixed height.
+    for id in ["section-dynamics", "section-output"] {
+        assert!(
+            fx.tester.query(by_testid(id)).immediately().is_err(),
+            "Basic section {id} still rendered on the Advanced page"
+        );
+    }
+
+    assert!(
+        fx.log.lock().unwrap().is_empty(),
+        "toggling Basic/Advanced recorded host automation — it must stay local UI state"
+    );
+    Ok(())
+}
+
+/// An advanced knob drives its parameter through real host gestures, proving
+/// the extended surface is wired end to end and not just decorative.
+#[tokio::test]
+async fn dragging_an_advanced_knob_drives_its_param() -> dioxus_test::Result<()> {
+    let mut fx = mount();
+
+    let el = fx.tester.query(by_testid("advanced-toggle")).immediately()?;
+    let (ox, oy) = el.document_origin();
+    let (w, h) = el.size();
+    fx.tester.pointer_down(ox + w as f64 / 2.0, oy + h as f64 / 2.0);
+    let _ = fx.tester.pump().await;
+    fx.tester.pointer_up(ox + w as f64 / 2.0, oy + h as f64 / 2.0);
+    fx.settle().await;
+
+    let dp = &fx.params.ceiling;
+    let key = ptr_key(dp.as_ptr());
+    let before = dp.value();
+    assert!(before.abs() < 1e-6, "ceiling should default to 0: {before}");
+
+    let (sx, sy) = fx.knob_center("knob-ceiling");
+    fx.tester.pointer_down(sx, sy);
+    let _ = fx.tester.pump().await;
+    for step in 1..=3 {
+        fx.tester.pointer_move(sx, sy - 10.0 * step as f64, true);
+        let _ = fx.tester.pump().await;
+    }
+    fx.tester.pointer_up(sx, sy - 30.0);
+    let _ = fx.tester.pump().await;
+
+    // 30 px at 150 px per full sweep over the linear 0..1 range = +0.2.
+    let after = dp.value();
+    assert!(
+        (after - 0.2).abs() < 0.02,
+        "ceiling landed at {after}, expected ~0.2"
+    );
+
+    let log = fx.log.lock().unwrap();
+    assert!(
+        log.iter().any(|g| matches!(g, Gesture::Begin(k) if *k == key)),
+        "no begin gesture for ceiling: {log:?}"
+    );
+    assert!(
+        log.iter().any(|g| matches!(g, Gesture::End(k) if *k == key)),
+        "no end gesture for ceiling: {log:?}"
+    );
+    Ok(())
+}
+
+/// Selecting a hardware profile re-tints the surface: the section chrome picks
+/// up that profile's accent from `profile_skin`, so the same DOM reads as
+/// LA-2A rather than the default Control skin.
+#[tokio::test]
+async fn choosing_a_profile_reskins_the_surface() -> dioxus_test::Result<()> {
+    let mut fx = mount();
+
+    let control_accent = comp_ui::control_view::skin_for_profile_index(0).accent;
+    let la2a_accent = comp_ui::control_view::skin_for_profile_index(1).accent;
+    assert_ne!(control_accent, la2a_accent, "skins must be distinguishable");
+
+    let before = fx.tester.query(by_testid("section-dynamics")).immediately()?.inner_html();
+    assert!(
+        before.contains(control_accent),
+        "default surface not wearing the Control accent {control_accent}"
+    );
+
+    // Click the "LA-2A" segment of the profile selector — segment 1 of 4.
+    let sel = fx.tester.query(by_testid("select-profile")).immediately()?;
+    let (ox, oy) = sel.document_origin();
+    let (w, h) = sel.size();
+    let seg_w = w as f64 / 4.0;
+    let (x, y) = (ox + seg_w * 1.5, oy + h as f64 * 0.75);
+    fx.tester.pointer_down(x, y);
+    let _ = fx.tester.pump().await;
+    fx.tester.pointer_up(x, y);
+    fx.settle().await;
+
+    assert_eq!(fx.params.profile.value(), 1, "profile param did not move to LA-2A");
+
+    let after = fx.tester.query(by_testid("section-dynamics")).immediately()?.inner_html();
+    assert!(
+        after.contains(la2a_accent),
+        "surface did not re-tint to the LA-2A accent {la2a_accent}"
+    );
+    Ok(())
+}
+
+
+/// The Advanced page must fit the editor size the plugin shell requests from
+/// the host (`DioxusState::new(|| (EDITOR_W, EDITOR_H))` in `comp-plugin`).
+/// Blitz will not overflow-scroll a height-constrained container, so anything
+/// that does not fit is not merely clipped — it collapses to 0×0 and becomes
+/// unreachable. This is the regression guard for that.
+#[tokio::test]
+async fn advanced_page_fits_the_plugin_editor_size() -> dioxus_test::Result<()> {
+    let mut fx = mount_sized(comp_ui::control_view::EDITOR_W, comp_ui::control_view::EDITOR_H);
+
+    let el = fx.tester.query(by_testid("advanced-toggle")).immediately()?;
+    let (ox, oy) = el.document_origin();
+    let (w, h) = el.size();
+    fx.tester.pointer_down(ox + w as f64 / 2.0, oy + h as f64 / 2.0);
+    let _ = fx.tester.pump().await;
+    fx.tester.pointer_up(ox + w as f64 / 2.0, oy + h as f64 / 2.0);
+    fx.settle().await;
+
+    for id in [
+        "section-detector", "section-sidechain", "section-expander", "section-upward",
+        "section-character",
+    ] {
+        let el = fx
+            .tester
+            .query(by_testid(id))
+            .immediately()
+            .unwrap_or_else(|e| panic!("{id} missing at editor size: {e:?}"));
+        let (w, h) = el.size();
+        assert!(
+            w > 40.0 && h > 30.0,
+            "{id} collapsed to {w}x{h}px at the plugin's {}x{} editor size",
+            comp_ui::control_view::EDITOR_W,
+            comp_ui::control_view::EDITOR_H,
+        );
+    }
+
+    // Every advanced knob stays hit-testable at that size.
+    for id in ["knob-schp", "knob-expratio", "knob-upratio", "knob-ceiling", "knob-inertia"] {
+        let (w, h) = fx.tester.query(by_testid(id)).immediately()?.size();
+        assert!(w > 20.0 && h > 20.0, "{id} collapsed to {w}x{h}px at editor size");
+    }
     Ok(())
 }

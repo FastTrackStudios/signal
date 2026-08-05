@@ -84,10 +84,29 @@ impl CompUiState {
     }
 }
 
-/// The classic parameter set only — threshold / ratio / attack / release /
-/// knee / makeup / mix, plus the chain's stereo-link amount. The engine's
-/// extended surface (styles, character/drive, expander, upward comp,
-/// sidechain EQ, lookahead, multiband) is deliberately not exposed here.
+/// Compression style — the detector/ballistics model. Mirrors
+/// [`comp_dsp::CompressionStyle`] ids 0..=3 (`Reserved` is not exposed).
+pub const STYLE_LABELS: &[&str] = &["Clean", "FET", "VCA", "Opto"];
+
+/// Character (drive) waveshaper, mirroring `ProC3Compressor::drive_transfer`'s
+/// `character_mode` dispatch: 0 tanh, 1 atan, 2 x/(1+|x|), 3 HF-only,
+/// 4 cubic, 5 hard clip, 6 asymmetric tanh.
+pub const CHARACTER_LABELS: &[&str] = &[
+    "Tape", "Tube", "Trans", "Bright", "Cubic", "Clip", "Asym",
+];
+
+/// Hardware profile skins from [`comp_profiles`], in `all_profiles()` order.
+pub const PROFILE_LABELS: &[&str] = &["Control", "LA-2A", "SSL Bus", "1176"];
+
+/// Full parameter tree.
+///
+/// The first eight ids (`threshold`…`link`) are the original classic set and
+/// **must keep their order and ids** — hosts persist VST3 state by index.
+/// Everything after them is the engine's extended surface, appended: style /
+/// character + drive, input gain + auto makeup, detector shaping (RMS blend,
+/// feedback, hold, lookahead, inertia), sidechain EQ, range, the expander and
+/// upward-compression stages, and the soft ceiling. The multiband stage is
+/// still not exposed (it wants its own crossover UI).
 #[derive(Params)]
 pub struct CompParams {
     /// Level above which compression starts.
@@ -114,6 +133,70 @@ pub struct CompParams {
     /// Stereo detector link (1 = fully linked max of both channels).
     #[id = "link"]
     pub stereo_link: FloatParam,
+
+    // ── Extended surface (appended — never reorder the eight above) ──────
+
+    /// Detector/ballistics model — see [`STYLE_LABELS`].
+    #[id = "style"]
+    pub style: IntParam,
+    /// Waveshaper used by the drive stage — see [`CHARACTER_LABELS`].
+    #[id = "charmode"]
+    pub character_mode: IntParam,
+    /// Saturation amount feeding the character waveshaper (0 = bypassed).
+    #[id = "drive"]
+    pub drive: FloatParam,
+    /// Trim applied before detection and compression.
+    #[id = "ingain"]
+    pub input_gain_db: FloatParam,
+    /// Compensate the makeup gain automatically from threshold + ratio.
+    #[id = "automake"]
+    pub auto_makeup: BoolParam,
+    /// Detector blend: 0 = pure peak, 1 = pure RMS.
+    #[id = "rmsmix"]
+    pub detector_rms_mix: FloatParam,
+    /// Feedback detection blend (0 = feedforward, 1 = feedback/vintage).
+    #[id = "feedback"]
+    pub feedback: FloatParam,
+    /// Freeze release for this long after gain reduction deepens.
+    #[id = "hold"]
+    pub hold_ms: FloatParam,
+    /// Lookahead delay — buys the detector time at the cost of latency.
+    #[id = "lookahead"]
+    pub lookahead_ms: FloatParam,
+    /// Program-dependent ballistics amount (0 = manual attack/release only).
+    #[id = "inertia"]
+    pub inertia: FloatParam,
+    /// How slowly the inertia estimator decays back toward the manual times.
+    #[id = "inertiadecay"]
+    pub inertia_decay: FloatParam,
+    /// Sidechain high-pass; at or below 20 Hz the filter is bypassed.
+    #[id = "schp"]
+    pub sidechain_freq: FloatParam,
+    /// Sidechain low-pass; at or below 20 Hz the filter is bypassed.
+    #[id = "sclp"]
+    pub sidechain_lowpass_freq: FloatParam,
+    /// Maximum gain reduction the curve may apply.
+    #[id = "range"]
+    pub range_db: FloatParam,
+    /// Downward expander threshold (below this, the expander opens up).
+    #[id = "expthresh"]
+    pub expander_threshold_db: FloatParam,
+    /// Downward expander ratio (1 = off).
+    #[id = "expratio"]
+    pub expander_ratio: FloatParam,
+    /// Upward compression threshold (below this, quiet material is lifted).
+    #[id = "upthresh"]
+    pub upward_threshold_db: FloatParam,
+    /// Upward compression ratio (1 = off).
+    #[id = "upratio"]
+    pub upward_ratio: FloatParam,
+    /// Soft output ceiling (tanh saturation); 0 = off.
+    #[id = "ceiling"]
+    pub ceiling: FloatParam,
+    /// Hardware profile skin selection — see [`PROFILE_LABELS`]. Purely a UI
+    /// concern (which control strip is drawn); the DSP reads the params above.
+    #[id = "profile"]
+    pub profile: IntParam,
 }
 
 impl Default for CompParams {
@@ -183,6 +266,155 @@ impl Default for CompParams {
             )
             .with_unit("%")
             .with_value_to_string(formatters::v2s_f32_percentage(0)),
+
+            // ── Extended surface ────────────────────────────────────────
+            style: IntParam::new("Style", 0, IntRange::Linear { min: 0, max: 3 })
+                .with_value_to_string(label_formatter(STYLE_LABELS)),
+            character_mode: IntParam::new("Character", 0, IntRange::Linear { min: 0, max: 6 })
+                .with_value_to_string(label_formatter(CHARACTER_LABELS)),
+            drive: FloatParam::new("Drive", 0.0, FloatRange::Linear { min: 0.0, max: 1.0 })
+                .with_unit("%")
+                .with_value_to_string(formatters::v2s_f32_percentage(0)),
+            input_gain_db: FloatParam::new(
+                "Input",
+                0.0,
+                FloatRange::Linear { min: -24.0, max: 24.0 },
+            )
+            .with_unit(" dB")
+            .with_value_to_string(formatters::v2s_f32_rounded(1)),
+            auto_makeup: BoolParam::new("Auto Makeup", false),
+            detector_rms_mix: FloatParam::new(
+                "Peak / RMS",
+                0.0,
+                FloatRange::Linear { min: 0.0, max: 1.0 },
+            )
+            .with_unit("%")
+            .with_value_to_string(formatters::v2s_f32_percentage(0)),
+            feedback: FloatParam::new(
+                "Feedback",
+                0.0,
+                FloatRange::Linear { min: 0.0, max: 1.0 },
+            )
+            .with_unit("%")
+            .with_value_to_string(formatters::v2s_f32_percentage(0)),
+            hold_ms: FloatParam::new(
+                "Hold",
+                0.0,
+                FloatRange::Skewed {
+                    min: 0.0,
+                    max: 500.0,
+                    factor: FloatRange::skew_factor(-2.0),
+                },
+            )
+            .with_unit(" ms")
+            .with_value_to_string(formatters::v2s_f32_rounded(1)),
+            lookahead_ms: FloatParam::new(
+                "Lookahead",
+                0.0,
+                FloatRange::Skewed {
+                    min: 0.0,
+                    max: 20.0,
+                    factor: FloatRange::skew_factor(-1.5),
+                },
+            )
+            .with_unit(" ms")
+            .with_value_to_string(formatters::v2s_f32_rounded(2)),
+            inertia: FloatParam::new("Inertia", 0.0, FloatRange::Linear { min: 0.0, max: 1.0 })
+                .with_unit("%")
+                .with_value_to_string(formatters::v2s_f32_percentage(0)),
+            inertia_decay: FloatParam::new(
+                "Inertia Decay",
+                0.0,
+                FloatRange::Linear { min: 0.0, max: 0.999 },
+            )
+            .with_unit("%")
+            .with_value_to_string(formatters::v2s_f32_percentage(0)),
+            // 20 Hz is the engine's bypass floor for both sidechain filters,
+            // so the defaults sit exactly on "off".
+            sidechain_freq: FloatParam::new(
+                "SC High-Pass",
+                20.0,
+                FloatRange::Skewed {
+                    min: 20.0,
+                    max: 2000.0,
+                    factor: FloatRange::skew_factor(-2.0),
+                },
+            )
+            .with_unit(" Hz")
+            .with_value_to_string(formatters::v2s_f32_rounded(0)),
+            sidechain_lowpass_freq: FloatParam::new(
+                "SC Low-Pass",
+                20.0,
+                FloatRange::Skewed {
+                    min: 20.0,
+                    max: 20_000.0,
+                    factor: FloatRange::skew_factor(-2.0),
+                },
+            )
+            .with_unit(" Hz")
+            .with_value_to_string(formatters::v2s_f32_rounded(0)),
+            range_db: FloatParam::new("Range", 60.0, FloatRange::Linear { min: 0.0, max: 60.0 })
+                .with_unit(" dB")
+                .with_value_to_string(formatters::v2s_f32_rounded(1)),
+            expander_threshold_db: FloatParam::new(
+                "Exp Threshold",
+                -80.0,
+                FloatRange::Linear { min: -80.0, max: 0.0 },
+            )
+            .with_unit(" dB")
+            .with_value_to_string(formatters::v2s_f32_rounded(1)),
+            expander_ratio: FloatParam::new(
+                "Exp Ratio",
+                1.0,
+                FloatRange::Skewed {
+                    min: 1.0,
+                    max: 8.0,
+                    factor: FloatRange::skew_factor(-1.5),
+                },
+            )
+            .with_unit(":1")
+            .with_value_to_string(formatters::v2s_f32_rounded(1)),
+            upward_threshold_db: FloatParam::new(
+                "Up Threshold",
+                -60.0,
+                FloatRange::Linear { min: -60.0, max: 0.0 },
+            )
+            .with_unit(" dB")
+            .with_value_to_string(formatters::v2s_f32_rounded(1)),
+            upward_ratio: FloatParam::new(
+                "Up Ratio",
+                1.0,
+                FloatRange::Skewed {
+                    min: 1.0,
+                    max: 4.0,
+                    factor: FloatRange::skew_factor(-1.5),
+                },
+            )
+            .with_unit(":1")
+            .with_value_to_string(formatters::v2s_f32_rounded(2)),
+            ceiling: FloatParam::new("Ceiling", 0.0, FloatRange::Linear { min: 0.0, max: 1.0 })
+                .with_unit("%")
+                .with_value_to_string(formatters::v2s_f32_percentage(0)),
+            profile: IntParam::new(
+                "Profile",
+                0,
+                IntRange::Linear {
+                    min: 0,
+                    max: PROFILE_LABELS.len() as i32 - 1,
+                },
+            )
+            .with_value_to_string(label_formatter(PROFILE_LABELS)),
         }
     }
+}
+
+/// `with_value_to_string` helper for the discrete params: render the label at
+/// the parameter's integer value instead of the bare number.
+fn label_formatter(labels: &'static [&'static str]) -> Arc<dyn Fn(i32) -> String + Send + Sync> {
+    Arc::new(move |v| {
+        labels
+            .get(v.max(0) as usize)
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| v.to_string())
+    })
 }
