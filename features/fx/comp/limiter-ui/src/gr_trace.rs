@@ -16,8 +16,17 @@ use crate::params::LimiterUiState;
 
 pub use crate::gr_trace_svg::TRACE_H as GRAPH_H;
 
+/// `frame` is not read — it exists to defeat memoization.
+///
+/// Dioxus skips re-rendering a component whose props compare equal, and this
+/// component's only real prop (`skin`) never changes. Its data comes from the
+/// audio thread through atomics, which Dioxus cannot see, so without a prop
+/// that moves every tick the trace renders once and then sits frozen no matter
+/// what the limiter is doing. Feeding the redraw counter in makes the props
+/// differ each tick, which is what actually drives the animation.
 #[component]
-pub fn GrTrace(skin: Skin) -> Element {
+pub fn GrTrace(skin: Skin, frame: u64) -> Element {
+    let _ = frame;
     let shared = use_context::<SharedState>();
     let ui = shared
         .get::<LimiterUiState>()

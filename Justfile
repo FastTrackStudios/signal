@@ -225,6 +225,9 @@ tailwind-eq:
 tailwind-comp:
     tailwindcss -i features/fx/comp/comp-ui/tailwind.css -o features/fx/comp/comp-ui/assets/tailwind.css --minify
 
+tailwind-limiter:
+    tailwindcss -i features/fx/comp/limiter-ui/tailwind.css -o features/fx/comp/limiter-ui/assets/tailwind.css --minify
+
 # Rebuild trigger-ui's embedded Tailwind (features/fx/trigger/trigger-ui/
 # assets/tailwind.css) after class changes in trigger-ui / fts-ui.
 tailwind-trigger:

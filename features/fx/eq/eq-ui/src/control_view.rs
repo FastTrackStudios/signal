@@ -11,6 +11,8 @@ use audiocore_core::prelude::*;
 // The concrete `GuiContext` is not in nice-plug's prelude (which carries the
 // `GuiContextInner` trait); upstream's own backends import it directly too.
 use nice_plug::context::gui::GuiContext;
+use nice_plug::editor::dpi::LogicalSize;
+use nice_plug::editor::ResizeHint;
 use fts_ui::prelude::{
     Button, ButtonSize, ButtonVariant, Card, CardContent, CardHeader, CardTitle, SegmentedControl,
     SegmentedControlSize, Select, SelectContent, SelectItem, Switch, TabContent, TabList,
@@ -19,6 +21,30 @@ use fts_ui::prelude::{
 use fts_ui_audio::prelude::*;
 
 use crate::eq_graph::{EqBand, EqBandShape, EqGraph, OverlayChoice};
+
+/// Editor size the plugin shell requests from the host on open.
+///
+/// The starting size, not a ceiling — the editor opts into host resizing
+/// through [`resize_hint`].
+pub const EDITOR_W: u32 = 1000;
+pub const EDITOR_H: u32 = 600;
+
+/// Smallest size the surface still works at.
+///
+/// Enforced by `DioxusEditorHandle::set_size` rather than advisory: blitz
+/// collapses a container that does not fit to 0x0 instead of clipping it, so
+/// too small a minimum yields unreachable controls rather than a cramped
+/// editor. The EQ needs more width than most — the curve, the band row and the
+/// analyzer panel share one row.
+pub const MIN_EDITOR_W: f32 = 760.0;
+pub const MIN_EDITOR_H: f32 = 520.0;
+
+/// How the host may resize this editor: freely on both axes above the
+/// minimum, no aspect-ratio lock. The EQ curve benefits from every extra
+/// pixel of width, so this is the plugin that most wants to be dragged wide.
+pub fn resize_hint() -> ResizeHint {
+    ResizeHint::RESIZABLE.with_min_logical_size(LogicalSize::new(MIN_EDITOR_W, MIN_EDITOR_H))
+}
 use crate::param_adapter::param_handle;
 use crate::params::{EqUiState, NUM_BANDS, SPECTRUM_BINS};
 use crate::profile_view::{

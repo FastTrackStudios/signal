@@ -49,7 +49,10 @@ impl Default for FtsEq {
         Self {
             params,
             ui_state,
-            editor_state: DioxusState::new(|| (1000, 600)),
+            editor_state: DioxusState::new(|| {
+                (eq_ui::control_view::EDITOR_W, eq_ui::control_view::EDITOR_H)
+            })
+            .with_resize_hint(eq_ui::control_view::resize_hint()),
             chain,
             neve_1073: Neve1073Model::new(48000.0, Neve1073Settings::default()),
             hardware_eq: HardwareEqModel::new(

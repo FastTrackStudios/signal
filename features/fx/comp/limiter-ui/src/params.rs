@@ -24,6 +24,10 @@ pub struct LimiterUiState {
 }
 
 impl LimiterUiState {
+    /// How many pushes fill a history ring — handy for tests that want to
+    /// flush the whole window to a known value.
+    pub const WAVE_LEN_HINT: usize = fts_plug_ui::feed::WAVE_HISTORY_LEN;
+
     pub fn new(params: Arc<LimiterParams>) -> Self {
         Self {
             params,

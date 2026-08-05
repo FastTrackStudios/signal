@@ -15,6 +15,14 @@ crate-type = ["cdylib", "lib"]
 # `nice_export_clap!`/`nice_export_vst3!` expand to absolute `::nice_plug::…`
 # paths, so the crate has to be nameable here. `vst3` is on by default.
 nice-plug.workspace = true
+# The Dioxus GUI backend — `DioxusState` + `create_dioxus_editor_with_state`,
+# and the concrete `DioxusEditor` this shell names as its `Plugin::Editor`.
+nice-plug-dioxus.workspace = true
+
+# Params, shared UI state and the editor's Dioxus components. The param tree
+# lives there (not here) so the control view can render against it without a
+# circular dep — same split as comp-plugin / comp-ui.
+limiter-ui.workspace = true
 
 # The DSP facade (`comp::limiter` — the limiter engine surface). Never depend
 # on limiter-dsp / comp-dsp directly.

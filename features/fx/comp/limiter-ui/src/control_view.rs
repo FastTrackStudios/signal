@@ -6,20 +6,36 @@
 
 use audiocore_core::prelude::*;
 use fts_plug_ui::prelude::*;
+use nice_plug::editor::dpi::LogicalSize;
+use nice_plug::editor::ResizeHint;
 use nice_plug_dioxus::SharedState;
 use std::sync::atomic::Ordering;
 
 use crate::gr_trace::{GRAPH_H, GrTrace};
 use crate::params::LimiterUiState;
 
-/// Editor size requested from the host.
+/// Editor size requested from the host on open.
 ///
-/// Blitz does not overflow-scroll a height-constrained container — a section
-/// that does not fit collapses to 0×0 and becomes unhittable rather than being
-/// clipped — so this is a constraint of the surface, not a preference.
-/// `advanced_page_fits_the_plugin_editor_size`-style tests guard it.
+/// The starting size, not a ceiling — the editor opts into host resizing
+/// through [`resize_hint`].
 pub const EDITOR_W: u32 = 720;
 pub const EDITOR_H: u32 = 560;
+
+/// Smallest size the surface still works at.
+///
+/// Enforced by `DioxusEditorHandle::set_size` rather than advisory: blitz
+/// collapses a container that does not fit to 0×0 instead of clipping it, so
+/// too small a minimum yields unreachable controls rather than a cramped
+/// editor. `surface_survives_the_declared_minimum_size` keeps it honest.
+pub const MIN_EDITOR_W: f32 = 560.0;
+pub const MIN_EDITOR_H: f32 = 460.0;
+
+/// How the host may resize this editor: freely on both axes above the minimum.
+/// The trace is the part that benefits from extra width — a longer time window
+/// makes the limiter's release behaviour much easier to read.
+pub fn resize_hint() -> ResizeHint {
+    ResizeHint::RESIZABLE.with_min_logical_size(LogicalSize::new(MIN_EDITOR_W, MIN_EDITOR_H))
+}
 
 /// The limiter's identity colour.
 pub fn skin() -> Skin {
@@ -46,6 +62,11 @@ fn AppShell() -> Element {
     let params = &ui.params;
     let skin = skin();
 
+    // Owned here, not by the chrome: this is the scope that loads the meter
+    // atomics below, and `schedule_update` only dirties the scope it is called
+    // in. See `fts_plug_ui::chrome::use_redraw_tick`.
+    let frame = use_redraw_tick();
+
     let gr_db = ui.gain_reduction_db.load(Ordering::Relaxed);
     let input_db = ui.input.db();
     let output_db = ui.output.db();
@@ -55,13 +76,14 @@ fn AppShell() -> Element {
             title: "FTS Limiter".to_string(),
             subtitle: "Brickwall Limiter".to_string(),
             skin,
+            frame,
 
             // Height pinned to exactly GRAPH_H CSS px so the trace's fixed
             // viewBox maps 1:1 onto the element.
             div {
                 "data-testid": "limiter-trace",
                 style: "height:{GRAPH_H}px; flex:none; position:relative; overflow:hidden;",
-                GrTrace { skin }
+                GrTrace { skin, frame }
             }
 
             ControlSurface {
