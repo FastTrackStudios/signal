@@ -33,8 +33,16 @@ DX_TAILWIND="${DX_TAILWIND:-}"
 # — and Apple's SDK linker, which supports it natively on Apple Silicon).
 UNIVERSAL_TARGETS=(aarch64-apple-darwin x86_64-apple-darwin)
 
-# shellcheck disable=SC1090
-source "$HOME/.appstoreconnect/config.env"
+# ADHOC_SIGN=1: local test build — sign ad-hoc (`-`) instead of Developer ID
+# and skip notarization entirely. Apple caps Developer ID certs per account,
+# so a throwaway test machine must NOT mint one (it would burn a slot and
+# collide with airlock's). Ad-hoc is enough for a binary to RUN locally on
+# Apple Silicon, which is all a runnability test needs; it is NOT
+# distributable.
+if [ "${ADHOC_SIGN:-}" != "1" ]; then
+    # shellcheck disable=SC1090
+    source "$HOME/.appstoreconnect/config.env"
+fi
 
 NIX="${NIX:-}"
 if [ -z "$NIX" ]; then
@@ -45,6 +53,15 @@ fi
 
 KEYCHAIN="${KEYCHAIN:-login.keychain-db}"
 KEYCHAIN_PW="${KEYCHAIN_PW:-}"
+if [ "${ADHOC_SIGN:-}" = "1" ]; then
+    SIGN_ID="-"
+    # Ad-hoc + hardened runtime fights the JIT entitlements (phon-jit copies
+    # stencils into executable memory), so local test builds skip the
+    # hardened runtime — it only matters for notarized distribution anyway.
+    RUNTIME_OPTS=()
+    echo "=== ADHOC_SIGN=1 — ad-hoc signing, no Developer ID, no notarization ==="
+else
+RUNTIME_OPTS=(--options runtime --timestamp)
 [ -n "$KEYCHAIN_PW" ] && security unlock-keychain -p "$KEYCHAIN_PW" "$KEYCHAIN"
 
 # ── Developer ID Application identity ────────────────────────────────────────
@@ -67,6 +84,7 @@ SIGN_ID="$(security find-identity -v -p codesigning "$KEYCHAIN" \
     | awk -F'"' '/Developer ID Application/{print $2; exit}')"
 [ -n "$SIGN_ID" ] || { echo "ERROR: no Developer ID Application identity." >&2; exit 1; }
 echo "=== signing identity: $SIGN_ID ==="
+fi
 
 # ── Build both arches (embed the web view so the app serves it on the LAN) ──
 # dx's bundle staging dir under a cross --target isn't something we can
@@ -211,11 +229,15 @@ PLIST
 
 # ── Sign (inside-out): nested code first, then the bundle ────────────────────
 echo "=== signing (Developer ID + hardened runtime) ==="
+# --keychain is meaningless for an ad-hoc identity, so only pass it when
+# signing for real.
+KC_OPTS=()
+[ "${ADHOC_SIGN:-}" = "1" ] || KC_OPTS=(--keychain "$KEYCHAIN")
 find "$APP" \( -name "*.dylib" -o -name "*.so" -o -name "*.framework" \) -print0 \
     | while IFS= read -r -d '' f; do
-        codesign --force --keychain "$KEYCHAIN" --options runtime --timestamp --sign "$SIGN_ID" "$f"
+        codesign --force "${KC_OPTS[@]}" "${RUNTIME_OPTS[@]}" --sign "$SIGN_ID" "$f"
       done
-codesign --force --keychain "$KEYCHAIN" --options runtime --timestamp \
+codesign --force "${KC_OPTS[@]}" "${RUNTIME_OPTS[@]}" \
     --entitlements "$ENT" --sign "$SIGN_ID" "$APP"
 codesign --verify --deep --strict --verbose=2 "$APP"
 

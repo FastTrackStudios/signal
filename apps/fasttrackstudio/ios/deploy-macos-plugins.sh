@@ -26,8 +26,13 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 cd "$ROOT"
 
-# shellcheck disable=SC1090
-source "$HOME/.appstoreconnect/config.env"
+# ADHOC_SIGN=1: local test build — ad-hoc signature, no Developer ID, no
+# notarization. See deploy-macos.sh for why a test machine must not mint a
+# Developer ID cert.
+if [ "${ADHOC_SIGN:-}" != "1" ]; then
+    # shellcheck disable=SC1090
+    source "$HOME/.appstoreconnect/config.env"
+fi
 
 NIX="${NIX:-}"
 if [ -z "$NIX" ]; then
@@ -38,6 +43,14 @@ fi
 
 KEYCHAIN="${KEYCHAIN:-login.keychain-db}"
 KEYCHAIN_PW="${KEYCHAIN_PW:-}"
+if [ "${ADHOC_SIGN:-}" = "1" ]; then
+    SIGN_ID="-"
+    RUNTIME_OPTS=()
+    KC_OPTS=()
+    echo "=== ADHOC_SIGN=1 — ad-hoc signing, no Developer ID, no notarization ==="
+else
+RUNTIME_OPTS=(--options runtime --timestamp)
+KC_OPTS=(--keychain "$KEYCHAIN")
 [ -n "$KEYCHAIN_PW" ] && security unlock-keychain -p "$KEYCHAIN_PW" "$KEYCHAIN"
 
 # ── Developer ID Application identity (same cert deploy-macos.sh uses/mints) ─
@@ -59,6 +72,7 @@ SIGN_ID="$(security find-identity -v -p codesigning "$KEYCHAIN" \
     | awk -F'"' '/Developer ID Application/{print $2; exit}')"
 [ -n "$SIGN_ID" ] || { echo "ERROR: no Developer ID Application identity." >&2; exit 1; }
 echo "=== signing identity: $SIGN_ID ==="
+fi
 
 # ── Build every plugin bundle (universal: both Mac arches, lipo'd) ──────────
 echo "=== building universal plugin bundles (aarch64 + x86_64) ==="
@@ -80,10 +94,10 @@ for bundle in target/bundled/*; do
     if [ -d "$bundle" ]; then
         find "$bundle" \( -name "*.dylib" -o -name "*.so" -o -name "*.framework" \) -print0 \
             | while IFS= read -r -d '' f; do
-                codesign --force --keychain "$KEYCHAIN" --options runtime --timestamp --sign "$SIGN_ID" "$f"
+                codesign --force "${KC_OPTS[@]}" "${RUNTIME_OPTS[@]}" --sign "$SIGN_ID" "$f"
               done
     fi
-    codesign --force --keychain "$KEYCHAIN" --options runtime --timestamp --sign "$SIGN_ID" "$bundle"
+    codesign --force "${KC_OPTS[@]}" "${RUNTIME_OPTS[@]}" --sign "$SIGN_ID" "$bundle"
     codesign --verify --deep --strict --verbose=2 "$bundle"
 done
 

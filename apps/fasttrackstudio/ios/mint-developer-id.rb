@@ -4,16 +4,16 @@
 # macOS software OUTSIDE the App Store, distinct from the "Apple Distribution"
 # cert used for TestFlight.
 #
-# Two flavours, selected by $DEVID_CERT_TYPE:
+# Only DEVELOPER_ID_APPLICATION (the default) can be minted here — it signs
+# .app bundles and plugin bundles.
+#   -> ~/.appstoreconnect/devid.key + devid.cer
 #
-#   DEVELOPER_ID_APPLICATION  (default)  signs .app bundles / plugin bundles
-#     -> ~/.appstoreconnect/devid.key + devid.cer
-#   DEVELOPER_ID_INSTALLER               signs .pkg installers
-#     -> ~/.appstoreconnect/devid-installer.key + devid-installer.cer
-#
-# They are NOT interchangeable: `productbuild --sign` rejects an Application
-# cert, and `codesign` rejects an Installer cert. deploy-macos-pkg.sh needs
-# both (Application for the payloads, Installer for the .pkg wrapper).
+# The OTHER cert a full release needs, "Developer ID Installer" (for signing
+# the .pkg), is deliberately NOT mintable: the App Store Connect API has no
+# such certificateType (verified against the live API — see the abort below).
+# It must be created once by hand in the developer portal. The two are not
+# interchangeable: `productbuild --sign` rejects an Application cert and
+# `codesign` rejects an Installer cert.
 #
 # The caller bundles the pair into a .p12 and imports it into the keychain.
 #
@@ -36,8 +36,31 @@ ISSUER_ID = ENV.fetch("ASC_ISSUER_ID")
 KEY_PATH = ENV.fetch("ASC_KEY_PATH")
 DIR = File.expand_path("~/.appstoreconnect")
 CERT_TYPE = ENV.fetch("DEVID_CERT_TYPE", "DEVELOPER_ID_APPLICATION")
-unless %w[DEVELOPER_ID_APPLICATION DEVELOPER_ID_INSTALLER].include?(CERT_TYPE)
-  abort("DEVID_CERT_TYPE must be DEVELOPER_ID_APPLICATION or DEVELOPER_ID_INSTALLER (got #{CERT_TYPE})")
+if CERT_TYPE == "DEVELOPER_ID_INSTALLER"
+  # Confirmed against the live API: the certificateType enum accepts
+  # DEVELOPER_ID_APPLICATION{,_G2} and DEVELOPER_ID_KEXT{,_G2}, but there is
+  # NO Developer ID *Installer* member. (MAC_INSTALLER_DISTRIBUTION exists but
+  # is the Mac App Store installer cert — Gatekeeper rejects a .pkg signed
+  # with it for direct distribution, so it is not a substitute.) Apple only
+  # issues Developer ID Installer certs through the developer portal / Xcode.
+  abort(<<~MSG)
+    DEVELOPER_ID_INSTALLER cannot be created through the App Store Connect API.
+
+    Create it once by hand, then this script is not needed for it:
+      1. https://developer.apple.com/account/resources/certificates/add
+         -> "Developer ID Installer"  (needs Account Holder access)
+      2. Upload a CSR (Keychain Access > Certificate Assistant > Request a
+         Certificate From a Certificate Authority), download the .cer
+      3. Import it plus its private key into the build keychain:
+           security import <file>.cer -k "$KEYCHAIN"
+         and confirm with:
+           security find-identity -v "$KEYCHAIN" | grep "Developer ID Installer"
+
+    To build an unsigned .pkg for local testing instead, set PKG_UNSIGNED=1.
+  MSG
+end
+unless CERT_TYPE == "DEVELOPER_ID_APPLICATION"
+  abort("DEVID_CERT_TYPE must be DEVELOPER_ID_APPLICATION (got #{CERT_TYPE})")
 end
 # Distinct filenames per type so both can coexist in ~/.appstoreconnect.
 SLUG = CERT_TYPE == "DEVELOPER_ID_INSTALLER" ? "devid-installer" : "devid"
