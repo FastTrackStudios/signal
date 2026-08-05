@@ -159,6 +159,9 @@ if [ -z "$APP" ]; then
     APP="${_apps[0]:-}"
 fi
 [ -n "$APP" ] && [ -d "$APP" ] || { echo "ERROR: no .app found (run without SKIP_BUILD=1, or set APP_PATH)"; exit 1; }
+# Never package a hollow bundle — see deploy-macos.sh's app_has_executable.
+[ -n "$(find "$APP/Contents/MacOS" -maxdepth 1 -type f 2>/dev/null | head -1)" ] \
+    || { echo "ERROR: $APP has no executable in Contents/MacOS — refusing to package a broken app"; exit 1; }
 echo "app:     $APP"
 
 BUNDLED="$ROOT/target/bundled"

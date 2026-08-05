@@ -99,6 +99,17 @@ find_app() {
     find "$ROOT/target/dx/$DX_PACKAGE" -type d -iname '*.app' 2>/dev/null | head -1
 }
 
+# A .app DIRECTORY existing is not proof the build worked: dx creates the
+# bundle shell before cargo finishes, so a failed compile leaves a hollow
+# .app behind and every "did it build?" check that only looks for the
+# directory passes — silently packaging an installer with no executable in
+# it. Require an actual binary in Contents/MacOS.
+app_has_executable() {
+    local app="$1"
+    [ -n "$app" ] && [ -d "$app" ] || return 1
+    [ -n "$(find "$app/Contents/MacOS" -maxdepth 1 -type f 2>/dev/null | head -1)" ]
+}
+
 build_one_arch() {
     local target="$1"
     echo "=== building macOS app ($target) ==="
@@ -129,8 +140,8 @@ build_one_arch() {
         dx build --platform macos --release $features --target=$target
     " > "/tmp/fts-macos-build-$target.log" 2>&1 || true
     tail -3 "/tmp/fts-macos-build-$target.log"
-    if [ -z "$(find_app)" ]; then
-        echo "ERROR: build produced no app for $target"
+    if ! app_has_executable "$(find_app)"; then
+        echo "ERROR: build produced no usable app for $target (no executable in Contents/MacOS)"
         tail -30 "/tmp/fts-macos-build-$target.log"
         exit 1
     fi
@@ -144,7 +155,7 @@ else
     for target in "${UNIVERSAL_TARGETS[@]}"; do
         build_one_arch "$target"
         app="$(find_app)"
-        [ -n "$app" ] && [ -d "$app" ] || { echo "ERROR: no app bundle found for $target"; exit 1; }
+        app_has_executable "$app" || { echo "ERROR: no usable app bundle for $target"; exit 1; }
         mkdir -p "$STAGING/$target"
         cp -R "$app" "$STAGING/$target/"
     done
@@ -207,6 +218,36 @@ if [ -d "$ICONS_DIR" ] && [ -x "$ICON_DEV/usr/bin/actool" ]; then
         --platform macosx --minimum-deployment-target 12.0 --app-icon AppIcon \
         --output-partial-info-plist /tmp/fts-macicon.plist >/tmp/fts-macactool.log 2>&1 || true
     /usr/libexec/PlistBuddy -c "Merge /tmp/fts-macicon.plist" "$APP/Contents/Info.plist" 2>/dev/null || true
+fi
+
+# ── Bundle icon (.icns) ──────────────────────────────────────────────────────
+# actool alone is NOT enough here: the shared Assets.xcassets is an iOS icon
+# set (a single 1024 image tagged "platform": "ios"), so compiling it with
+# --platform macosx emits no Assets.car and no icon at all — which is exactly
+# why the app shipped with a blank Finder/Dock icon. dx meanwhile writes
+# CFBundleIconFile=icon.icns into Info.plist but never produces the file.
+# Build a real multi-resolution .icns from the 1024 master to satisfy it.
+ICON_PNG="$(find "$ICONS_DIR" -name 'icon-1024.png' 2>/dev/null | head -1)"
+if [ -n "$ICON_PNG" ] && command -v iconutil >/dev/null 2>&1; then
+    echo "=== building icon.icns from $(basename "$ICON_PNG") ==="
+    ICONSET="$(mktemp -d)/AppIcon.iconset"
+    mkdir -p "$ICONSET"
+    for sz in 16 32 128 256 512; do
+        sips -z "$sz" "$sz" "$ICON_PNG" --out "$ICONSET/icon_${sz}x${sz}.png" >/dev/null 2>&1
+        sips -z "$((sz * 2))" "$((sz * 2))" "$ICON_PNG" --out "$ICONSET/icon_${sz}x${sz}@2x.png" >/dev/null 2>&1
+    done
+    if iconutil -c icns "$ICONSET" -o "$APP/Contents/Resources/icon.icns"; then
+        # Make sure Info.plist actually points at it (dx usually sets this, but
+        # don't depend on it — a missing key means a blank icon again).
+        /usr/libexec/PlistBuddy -c "Set :CFBundleIconFile icon.icns" "$APP/Contents/Info.plist" 2>/dev/null \
+            || /usr/libexec/PlistBuddy -c "Add :CFBundleIconFile string icon.icns" "$APP/Contents/Info.plist" 2>/dev/null || true
+        echo "  icon.icns installed ($(du -h "$APP/Contents/Resources/icon.icns" | cut -f1))"
+    else
+        echo "  WARNING: iconutil failed — app will have a blank icon"
+    fi
+    rm -rf "$(dirname "$ICONSET")"
+else
+    echo "  WARNING: no icon-1024.png under $ICONS_DIR — app will have a blank icon"
 fi
 
 # ── Hardened runtime entitlements ────────────────────────────────────────────
