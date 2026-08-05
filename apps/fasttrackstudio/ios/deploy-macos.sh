@@ -206,6 +206,29 @@ done < <(find "$UNIVERSAL_APP" -type f -print0)
 [ "$LIPO_WARNINGS" -eq 0 ] || echo "=== lipo done with $LIPO_WARNINGS warning(s) — not every binary in the bundle is universal, see above ==="
 
 APP="$UNIVERSAL_APP"
+
+# dx names the bundle by title-casing the crate name (fasttrackstudio ->
+# "Fasttrackstudio", task-app-desktop -> "TaskAppDesktop"), which is not the
+# product name a user should see in /Applications. Rename before signing —
+# CFBundleName is covered by the signature, so doing it afterwards would
+# invalidate it.
+if [ -n "${APP_BUNDLE_NAME:-}" ] && [ "$(basename "$APP")" != "$APP_BUNDLE_NAME.app" ]; then
+    RENAMED="$ROOT/target/$APP_BUNDLE_NAME.app"
+    # macOS filesystems are case-INSENSITIVE: when the old and new names
+    # differ only in case (Fasttrackstudio -> FastTrackStudio) they are the
+    # same path, so `rm -rf "$RENAMED"` would delete the bundle we are about
+    # to move. Go via a temp name.
+    TMP_APP="$ROOT/target/.rename-$$.app"
+    rm -rf "$TMP_APP"
+    mv "$APP" "$TMP_APP"
+    rm -rf "$RENAMED"
+    mv "$TMP_APP" "$RENAMED"
+    APP="$RENAMED"
+    /usr/libexec/PlistBuddy -c "Set :CFBundleName $APP_BUNDLE_NAME" "$APP/Contents/Info.plist" 2>/dev/null \
+        || /usr/libexec/PlistBuddy -c "Add :CFBundleName string $APP_BUNDLE_NAME" "$APP/Contents/Info.plist" 2>/dev/null || true
+    echo "=== renamed bundle -> $APP_BUNDLE_NAME.app ==="
+fi
+
 echo "=== universal app bundle: $APP ==="
 MAIN_EXE="$(find "$APP/Contents/MacOS" -maxdepth 1 -type f | head -1)"
 [ -n "$MAIN_EXE" ] && echo "  main executable archs: $(lipo -archs "$MAIN_EXE" 2>/dev/null || echo unknown)"

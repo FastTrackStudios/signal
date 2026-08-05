@@ -130,6 +130,8 @@ APP="${APP_PATH:-}"
 if [ "${SKIP_BUILD:-}" = "1" ]; then
     echo "=== SKIP_BUILD=1 — reusing existing build output ==="
 else
+    # Ship the bundle under the product name, not dx's title-cased crate name.
+    export APP_BUNDLE_NAME="${APP_BUNDLE_NAME:-$PRODUCT_NAME}"
     echo "=== building the $PRODUCT_NAME desktop app (universal, signed) ==="
     # Take the app path from deploy-macos.sh's own BUILD_ONLY output rather
     # than globbing target/*.app: with both products built in one tree the
