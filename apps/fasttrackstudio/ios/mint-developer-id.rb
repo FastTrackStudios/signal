@@ -1,12 +1,21 @@
 #!/usr/bin/env ruby
-# Ensure a "Developer ID Application" signing certificate + its private key
-# exist locally (App Store Connect API — no Xcode UI). This is the cert for
-# distributing a macOS app OUTSIDE the App Store (a notarized .dmg), distinct
-# from the "Apple Distribution" cert used for TestFlight. Writes:
-#   ~/.appstoreconnect/devid.key  (PEM private key)
-#   ~/.appstoreconnect/devid.cer  (DER certificate)
-# The caller (deploy-macos.sh) bundles these into a .p12 and imports them so
-# codesign can Developer-ID-sign the app.
+# Ensure a Developer ID signing certificate + its private key exist locally
+# (App Store Connect API — no Xcode UI). These are the certs for distributing
+# macOS software OUTSIDE the App Store, distinct from the "Apple Distribution"
+# cert used for TestFlight.
+#
+# Two flavours, selected by $DEVID_CERT_TYPE:
+#
+#   DEVELOPER_ID_APPLICATION  (default)  signs .app bundles / plugin bundles
+#     -> ~/.appstoreconnect/devid.key + devid.cer
+#   DEVELOPER_ID_INSTALLER               signs .pkg installers
+#     -> ~/.appstoreconnect/devid-installer.key + devid-installer.cer
+#
+# They are NOT interchangeable: `productbuild --sign` rejects an Application
+# cert, and `codesign` rejects an Installer cert. deploy-macos-pkg.sh needs
+# both (Application for the payloads, Installer for the .pkg wrapper).
+#
+# The caller bundles the pair into a .p12 and imports it into the keychain.
 #
 # Idempotent: reuses a local key+cert if a matching live cert still exists.
 # Reads ASC_* from the environment.
@@ -26,9 +35,14 @@ KEY_ID = ENV.fetch("ASC_KEY_ID")
 ISSUER_ID = ENV.fetch("ASC_ISSUER_ID")
 KEY_PATH = ENV.fetch("ASC_KEY_PATH")
 DIR = File.expand_path("~/.appstoreconnect")
-DEVID_KEY = File.join(DIR, "devid.key")
-DEVID_CER = File.join(DIR, "devid.cer")
-CERT_TYPE = "DEVELOPER_ID_APPLICATION"
+CERT_TYPE = ENV.fetch("DEVID_CERT_TYPE", "DEVELOPER_ID_APPLICATION")
+unless %w[DEVELOPER_ID_APPLICATION DEVELOPER_ID_INSTALLER].include?(CERT_TYPE)
+  abort("DEVID_CERT_TYPE must be DEVELOPER_ID_APPLICATION or DEVELOPER_ID_INSTALLER (got #{CERT_TYPE})")
+end
+# Distinct filenames per type so both can coexist in ~/.appstoreconnect.
+SLUG = CERT_TYPE == "DEVELOPER_ID_INSTALLER" ? "devid-installer" : "devid"
+DEVID_KEY = File.join(DIR, "#{SLUG}.key")
+DEVID_CER = File.join(DIR, "#{SLUG}.cer")
 
 def jwt
   header = { alg: "ES256", kid: KEY_ID, typ: "JWT" }
@@ -85,6 +99,6 @@ resp = api(:post, "/v1/certificates", {
   } }
 })
 File.binwrite(DEVID_CER, Base64.decode64(resp["data"]["attributes"]["certificateContent"]))
-puts "created Developer ID Application certificate"
+puts "created #{CERT_TYPE} certificate"
 puts "DEVID_KEY=#{DEVID_KEY}"
 puts "DEVID_CER=#{DEVID_CER}"

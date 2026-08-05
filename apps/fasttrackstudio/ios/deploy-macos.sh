@@ -219,6 +219,16 @@ codesign --force --keychain "$KEYCHAIN" --options runtime --timestamp \
     --entitlements "$ENT" --sign "$SIGN_ID" "$APP"
 codesign --verify --deep --strict --verbose=2 "$APP"
 
+# BUILD_ONLY: stop with a universal, Developer-ID-signed, hardened .app and
+# skip the .dmg + notarization. deploy-macos-pkg.sh uses this to get the app
+# payload for the .pkg installer (which is notarized once, as a whole, at the
+# end — notarizing an intermediate .dmg here would just waste a round trip).
+if [ "${BUILD_ONLY:-}" = "1" ]; then
+    echo "=== BUILD_ONLY=1 — signed universal app ready, skipping dmg/notarize ==="
+    echo "app: $APP"
+    exit 0
+fi
+
 # ── Package .dmg ─────────────────────────────────────────────────────────────
 echo "=== packaging .dmg ==="
 BUILD_NO="${BUILD_NO:-$(date +%s)}"

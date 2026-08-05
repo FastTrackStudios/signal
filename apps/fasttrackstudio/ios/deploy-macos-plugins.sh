@@ -87,6 +87,15 @@ for bundle in target/bundled/*; do
     codesign --verify --deep --strict --verbose=2 "$bundle"
 done
 
+# BUILD_ONLY: stop with universal, Developer-ID-signed bundles in
+# target/bundled and skip the zip + notarization — deploy-macos-pkg.sh takes
+# them as the .pkg's plugin payloads and notarizes the installer as a whole.
+if [ "${BUILD_ONLY:-}" = "1" ]; then
+    echo "=== BUILD_ONLY=1 — signed universal bundles ready, skipping zip/notarize ==="
+    echo "bundles: $ROOT/target/bundled"
+    exit 0
+fi
+
 # ── Package + notarize (zip only — stapling needs .app/.pkg/.dmg) ───────────
 echo "=== packaging zip ==="
 ZIP="$ROOT/target/fts-plugins-v${VERSION}-macos.zip"
