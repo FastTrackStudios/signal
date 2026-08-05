@@ -11,6 +11,7 @@
 
 use audiocore_core::prelude::*;
 use fts_ui_audio::hardware::knob::HardwareKnob;
+use fts_ui_audio::hardware::lever::LeverSwitch;
 use fts_ui_audio::hardware::panel::{panel_scale, Panel, PanelSlot, Silkscreen};
 use fts_ui_audio::hardware::rack::{RackDesign, RackItem};
 use fts_ui_audio::hardware::switches::{RatioButtons, ToggleSwitch};
@@ -22,10 +23,27 @@ use crate::param_adapter::param_handle;
 use crate::params::EqUiState;
 
 /// Where a knob's legend sits below its centre, in design px.
-const LEGEND_DROP: f64 = 58.0;
+///
+/// Proportional to the knob, because the numerals it has to clear are printed
+/// at a radius proportional to the knob: a fixed drop puts "BOOST" through the
+/// "0" and "10" of a 96 px Pultec knob.
+fn legend_drop(d: f64, label_r: f64) -> f64 {
+    // Where the printed numerals actually reach: `label_r` is in the knob's
+    // 110-unit viewBox, the box is 110/60 of the knob's diameter, and the
+    // lowest numerals sit at cos(30°) of that radius. Then clear their text
+    // and the legend's own half-height.
+    //
+    // It has to be computed rather than picked, because the two ring styles
+    // print at different radii — a fixed drop that clears a Pultec's tight
+    // numerals strikes the SSL's wider ones.
+    let numerals = d * (label_r / 60.0) * 0.866;
+    let text = d * (7.0 / 110.0) * 0.5 + 5.5;
+    (numerals + text + 4.0).max(30.0)
+}
 /// Legend box width — narrow enough that neighbours on a seven-control row do
-/// not run into each other.
-const LEGEND_W: f64 = 118.0;
+/// not run into each other, and that a knob's legend clears the printed arc of
+/// a lever standing between it and the next knob.
+const LEGEND_W: f64 = 88.0;
 
 /// Draw an EQ model's front panel.
 #[component]
@@ -68,6 +86,7 @@ pub fn EqRackFace(
                     match item {
                         RackItem::Knob { id, legend, x, y, d, ring } => {
                             let box_w = d * 2.0;
+                            let (ring_r, label_r, ticks) = ring.geometry();
                             rsx! {
                                 PanelSlot { scale, x, y, w: box_w, h: box_w,
                                     HardwareKnob {
@@ -78,11 +97,16 @@ pub fn EqRackFace(
                                         style: design.knob,
                                         ink: design.ink.to_string(),
                                         marks: ring.marks(),
+                                        ring_r,
+                                        label_r,
+                                        ticks,
                                     }
                                 }
-                                Silkscreen {
-                                    scale, x, y: y + LEGEND_DROP, width: LEGEND_W,
-                                    text: legend.to_string(), color: design.ink.to_string(),
+                                if !legend.is_empty() {
+                                    Silkscreen {
+                                        scale, x, y: y + legend_drop(d, label_r), width: LEGEND_W,
+                                        text: legend.to_string(), color: design.ink.to_string(),
+                                    }
                                 }
                             }
                         }
@@ -97,7 +121,7 @@ pub fn EqRackFace(
                                 }
                             }
                             Silkscreen {
-                                scale, x, y: y + LEGEND_DROP + 12.0, width: LEGEND_W,
+                                scale, x, y: y + 70.0, width: LEGEND_W,
                                 text: legend.to_string(), color: design.ink.to_string(),
                             }
                         },
@@ -112,7 +136,7 @@ pub fn EqRackFace(
                                 }
                             }
                             Silkscreen {
-                                scale, x, y: y + LEGEND_DROP, width: LEGEND_W,
+                                scale, x, y: y + 58.0, width: LEGEND_W,
                                 text: legend.to_string(), color: design.ink.to_string(),
                             }
                         },
@@ -129,6 +153,56 @@ pub fn EqRackFace(
                                 } else {
                                     design.dim_ink.to_string()
                                 },
+                            }
+                        },
+                        RackItem::Lever { id, legend, unit, x, y, labels } => rsx! {
+                            PanelSlot { scale, x, y, w: 132.0, h: 132.0,
+                                LeverSwitch {
+                                    length: 41.0,
+                                    handle: handle(id),
+                                    testid: id.replace('_', "-"),
+                                    scale,
+                                    labels: labels.iter().map(|s| s.to_string()).collect(),
+                                    unit: unit.to_string(),
+                                    ink: design.ink.to_string(),
+                                }
+                            }
+                            Silkscreen {
+                                scale, x, y: y + 62.0, width: 170.0,
+                                text: legend.to_string(), color: design.ink.to_string(),
+                            }
+                        },
+                        RackItem::Readout { id, x, y } => {
+                            // The panel's own 0–10 scale, which is what the
+                            // numerals around the knob mean too — not the
+                            // engine's dB.
+                            let value = handle(id).normalized() * 10.0;
+                            rsx! {
+                                Silkscreen {
+                                    scale, x, y, width: 90.0, size: 10.0,
+                                    tracking: 0.02, weight: 600,
+                                    text: format!("{value:.1}"),
+                                    color: design.ink.to_string(),
+                                }
+                            }
+                        }
+                        RackItem::Lamp { x, y, color } => rsx! {
+                            PanelSlot { scale, x, y, w: 30.0, h: 30.0,
+                                div {
+                                    style: format!(
+                                        "width:{:.1}px; height:{:.1}px; border-radius:50%; \
+                                         background:radial-gradient(circle at 40% 34%, {color}, \
+                                         rgba(0,0,0,0.75)); \
+                                         box-shadow:0 0 {:.1}px {color}, \
+                                         inset 0 0 {:.1}px rgba(0,0,0,0.5); \
+                                         border:{:.1}px solid rgba(0,0,0,0.55);",
+                                        17.0 * scale,
+                                        17.0 * scale,
+                                        7.0 * scale,
+                                        4.0 * scale,
+                                        (1.5 * scale).max(1.0),
+                                    ),
+                                }
                             }
                         },
                         // EQ panels carry no meter movement — see the module

@@ -130,6 +130,11 @@ pub fn RackFace(
                                 text: legend.to_string(), color: design.ink.to_string(),
                             }
                         },
+                        // Levers, readouts and lamps are the EQ panels' idiom;
+                        // no compressor face places one.
+                        RackItem::Lever { .. }
+                        | RackItem::Readout { .. }
+                        | RackItem::Lamp { .. } => rsx! {},
                         RackItem::Text { x, y, text, size, strong } => rsx! {
                             Silkscreen {
                                 scale, x, y,

@@ -854,7 +854,10 @@ mod tests {
                     RackItem::Vu { x, w, .. } => (*x, (w + 14.0) / 2.0),
                     RackItem::Buttons { x, .. } => (*x, 45.0),
                     RackItem::Switch { x, .. } => (*x, 60.0),
-                    RackItem::Text { .. } => continue,
+                    RackItem::Text { .. }
+                    | RackItem::Lever { .. }
+                    | RackItem::Readout { .. }
+                    | RackItem::Lamp { .. } => continue,
                 };
                 assert!(
                     x - half >= EAR && x + half <= design.w - EAR,

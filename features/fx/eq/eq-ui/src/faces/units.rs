@@ -22,9 +22,10 @@ use fts_ui_audio::hardware::rack::{RackDesign, RackItem, Ring};
 use fts_ui_audio::hardware::vu::VuFace;
 
 /// Panel drawing size shared by the EQ faces. Taller than the compressor's
-/// because these units are 2–3U and carry two rows of controls.
+/// because these units are 2–3U and carry two rows of controls; the ratio is
+/// the Pultec's own 2.72:1.
 pub const W: f64 = 900.0;
-pub const H: f64 = 360.0;
+pub const H: f64 = 331.0;
 
 /// The two control rows.
 const ROW_A: f64 = 132.0;
@@ -34,141 +35,157 @@ const ROW_B: f64 = 268.0;
 // Pultec EQP-1A
 // ─────────────────────────────────────────────────────────────────────────
 
-/// Blue-grey passive program equalizer. Low boost and low atten are separate
-/// controls on the same band — that is the unit, not an oversight.
+/// The EQP-1A, laid out from the unit's own panel rather than from a grid.
+///
+/// Coordinates are the photograph's, scaled to this design space (the panel is
+/// 2.72:1, and everything below sits where it sits on the real thing): the two
+/// low-band knobs and the two high-band knobs across the top with their values
+/// printed above them, the two frequency *levers* below, BANDWIDTH between
+/// them, and ATTEN SEL / OUTPUT stacked at the right edge.
+///
+/// The details that are the unit rather than decoration:
+///
+/// - BOOST and ATTEN are separate controls on the *same* band, which is the
+///   only reason the "Pultec trick" exists.
+/// - The frequency selectors are levers, not knobs — four positions and seven,
+///   read at a glance.
+/// - The knobs are printed 0–10 and nothing else. The number above each is the
+///   position on that scale, which is how the unit is actually documented and
+///   recalled.
 pub static PULTEC: RackDesign = RackDesign {
     id: "eq_pultec_eqp1a",
     w: W,
     h: H,
-    paint: "linear-gradient(178deg, #5d7f96 0%, #48697e 50%, #375464 100%)",
-    ink: "#eef4f8",
-    dim_ink: "#b3c8d4",
-    chrome: "#a8bcc8",
+    // Dusty blue-grey, lit from above.
+    paint: "linear-gradient(176deg, #5b7e94 0%, #4e7188 46%, #3f5f74 100%)",
+    ink: "#e8eef2",
+    dim_ink: "#a9bfcc",
+    chrome: "#b9c6cf",
     vu: VuFace::Blue,
-    knob: KnobStyle::Bakelite,
+    knob: KnobStyle::Skirted,
     items: &[
-        RackItem::Text {
-            x: 450.0,
-            y: 44.0,
-            text: "Program Equalizer",
-            size: 15.0,
-            strong: true,
-        },
-        RackItem::Text {
-            x: 450.0,
-            y: 68.0,
-            text: "FTS EQ · Passive Tube",
-            size: 9.0,
-            strong: false,
-        },
-        // ── Low band: one frequency, boost and atten independently ──
-        RackItem::Knob {
-            id: "low_freq",
-            legend: "Low CPS",
-            x: 132.0,
-            y: ROW_A,
-            d: 52.0,
-            ring: Ring::Detents(&["20", "30", "60", "100"]),
-        },
+        // ── Top row: the two bands' boost and atten ──────────────────────
+        RackItem::Readout { id: "low_boost", x: 214.0, y: 22.0 },
         RackItem::Knob {
             id: "low_boost",
-            legend: "Low Boost",
-            x: 268.0,
-            y: ROW_A,
-            d: 52.0,
-            ring: Ring::Linear {
-                from: 0.0,
-                to: 10.0,
-                majors: 6,
-            },
+            legend: "Boost",
+            x: 214.0,
+            y: 98.0,
+            d: 96.0,
+            ring: Ring::Numerals(&["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]),
         },
+        RackItem::Readout { id: "low_atten", x: 349.0, y: 22.0 },
         RackItem::Knob {
             id: "low_atten",
-            legend: "Low Atten",
-            x: 404.0,
-            y: ROW_A,
-            d: 52.0,
-            ring: Ring::Linear {
-                from: 0.0,
-                to: 10.0,
-                majors: 6,
-            },
+            legend: "Atten",
+            x: 349.0,
+            y: 98.0,
+            d: 96.0,
+            ring: Ring::Numerals(&["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]),
         },
-        RackItem::Knob {
-            id: "bandwidth",
-            legend: "Bandwidth",
-            x: 540.0,
-            y: ROW_A,
-            d: 52.0,
-            ring: Ring::Plain { majors: 6 },
-        },
-        RackItem::Knob {
-            id: "drive",
-            legend: "Drive",
-            x: 676.0,
-            y: ROW_A,
-            d: 46.0,
-            ring: Ring::Plain { majors: 5 },
-        },
-        RackItem::Switch {
-            id: "eq_in",
-            legend: "EQ",
-            x: 806.0,
-            y: ROW_A,
-            labels: ["Out", "In"],
-        },
-        // ── High band: boost with its own frequency, atten with another ──
-        RackItem::Knob {
-            id: "high_boost_freq",
-            legend: "Boost KCS",
-            x: 132.0,
-            y: ROW_B,
-            d: 52.0,
-            ring: Ring::Detents(&["3", "4", "5", "8", "10", "12", "16"]),
-        },
+        RackItem::Readout { id: "high_boost", x: 553.0, y: 22.0 },
         RackItem::Knob {
             id: "high_boost",
-            legend: "High Boost",
-            x: 268.0,
-            y: ROW_B,
-            d: 52.0,
-            ring: Ring::Linear {
-                from: 0.0,
-                to: 10.0,
-                majors: 6,
-            },
+            legend: "Boost",
+            x: 553.0,
+            y: 98.0,
+            d: 96.0,
+            ring: Ring::Numerals(&["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]),
         },
+        RackItem::Readout { id: "high_atten", x: 688.0, y: 22.0 },
+        RackItem::Knob {
+            id: "high_atten",
+            legend: "Atten",
+            x: 688.0,
+            y: 98.0,
+            d: 96.0,
+            ring: Ring::Numerals(&["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]),
+        },
+        // The high-attenuation frequency: a small knob at the top right.
         RackItem::Knob {
             id: "high_atten_freq",
             legend: "Atten Sel",
-            x: 404.0,
-            y: ROW_B,
-            d: 52.0,
-            ring: Ring::Detents(&["5", "10", "20"]),
+            x: 810.0,
+            y: 94.0,
+            d: 42.0,
+            ring: Ring::Numerals(&["5", "10", "20"]),
+        },
+        // ── Bottom row: the levers, bandwidth, bypass and output ─────────
+        RackItem::Lever {
+            id: "low_freq",
+            legend: "Low Frequency",
+            unit: "CPS",
+            x: 289.0,
+            y: 222.0,
+            labels: &["20", "30", "60", "100"],
+        },
+        RackItem::Readout { id: "bandwidth", x: 447.0, y: 176.0 },
+        RackItem::Knob {
+            id: "bandwidth",
+            legend: "Bandwidth",
+            x: 447.0,
+            y: 240.0,
+            d: 88.0,
+            ring: Ring::Numerals(&["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]),
+        },
+        RackItem::Lever {
+            id: "high_boost_freq",
+            legend: "High Frequency",
+            unit: "KCS",
+            x: 609.0,
+            y: 222.0,
+            labels: &["3", "4", "5", "8", "10", "12", "16"],
+        },
+        RackItem::Lamp {
+            x: 746.0,
+            y: 168.0,
+            color: "#ff4a32",
+        },
+        RackItem::Text {
+            x: 690.0,
+            y: 196.0,
+            text: "Off",
+            size: 9.0,
+            strong: true,
+        },
+        RackItem::Text {
+            x: 744.0,
+            y: 214.0,
+            text: "On",
+            size: 9.0,
+            strong: true,
         },
         RackItem::Knob {
-            id: "high_atten",
-            legend: "High Atten",
-            x: 540.0,
-            y: ROW_B,
-            d: 52.0,
-            ring: Ring::Linear {
-                from: 0.0,
-                to: 10.0,
-                majors: 6,
-            },
+            id: "eq_in",
+            legend: "",
+            x: 709.0,
+            y: 236.0,
+            d: 44.0,
+            ring: Ring::None,
         },
+        RackItem::Readout { id: "trim", x: 810.0, y: 196.0 },
         RackItem::Knob {
             id: "trim",
-            legend: "Trim",
-            x: 676.0,
-            y: ROW_B,
+            legend: "Output",
+            x: 810.0,
+            y: 240.0,
             d: 46.0,
-            ring: Ring::Linear {
-                from: -24.0,
-                to: 24.0,
-                majors: 5,
-            },
+            ring: Ring::Numerals(&["0", "2", "4", "6", "8", "10"]),
+        },
+        // ── Panel marks ──────────────────────────────────────────────────
+        RackItem::Text {
+            x: 108.0,
+            y: 302.0,
+            text: "EQP-1A",
+            size: 13.0,
+            strong: true,
+        },
+        RackItem::Text {
+            x: 700.0,
+            y: 306.0,
+            text: "Vintage Program Equalizer",
+            size: 10.0,
+            strong: false,
         },
     ],
 };
