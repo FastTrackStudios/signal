@@ -43,9 +43,9 @@ Three pieces, using `track_manager_actions.rs` as the reference:
    — this is the macro surface, nothing else:
 
    ```rust
-   #[architect::actions(namespace = "TRACK_MANAGER", category = "Session")]
+   #[architect::actions(namespace = "TRACK_MANAGER")]
    pub trait TrackManagerActions {
-       #[action(description = "Add the next dynamic-template channel to the selected track scope")]
+       #[action(undo, description = "Add the next dynamic-template channel to the selected track scope")]
        fn add_channel(&self) -> DawResult<()>;
        // ...
    }
@@ -65,6 +65,12 @@ Three pieces, using `track_manager_actions.rs` as the reference:
      Manager"`) unless a method overrides it. Don't repeat
      `group = "..."` on every `#[action(...)]` — that's exactly the
      duplication the trait-name default exists to avoid.
+   - **`undo`** (bare flag) marks a *mutating* action. The backend then
+     brackets the handler in a host undo block labelled from the same
+     metadata that names it in the action list — never hand-roll
+     `begin_undo_block`/`end_undo_block` in an action body. Read-only
+     actions leave it off so they don't litter the undo history with
+     empty points.
    - **Method signature constraint (hard, macro-enforced):** `fn(&self)`
      — no other parameters — returning either nothing or
      `Result<(), E: std::fmt::Display>` (`DawResult<()>` qualifies,
@@ -73,7 +79,7 @@ Three pieces, using `track_manager_actions.rs` as the reference:
      style choice — REAPER named commands take no arguments. If your
      logic needs parameters, give it a private helper method with
      parameters and have the `#[action]` method call it with fixed
-     arguments (e.g. `add_layer` calling `add_named_scope("DBL", true)`).
+     arguments (e.g. `add_layer` calling `add_named_scope("DBL")`).
 
 2. **One concrete struct implementing it**, generic over the DAW backend:
 
@@ -107,40 +113,36 @@ Three pieces, using `track_manager_actions.rs` as the reference:
      resolves to itself), and only reaches through `Deref` to `D` for
      names `TrackManager` doesn't define. One caveat: UFCS-style
      disambiguated calls (`Tracks::get(self, ...)`) do *not* go through
-     `Deref` — use `Tracks::get(&self.daw, ...)` for those (see
-     `prepare_append` in `track_manager_actions.rs` for the one place
-     this comes up, working around the `Tracks::get`/`Projects::get`
-     name collision below).
+     `Deref` — use `Tracks::get(&self.daw, ...)` for those (needed
+     around the `Tracks::get`/`Projects::get` name collision below).
    - One implementor of the trait, but the *type* is generic — the same
      `TrackManagerActions for TrackManager<D>` impl runs against
      `daw::reaper::Reaper` in production and
      `daw_standalone::sync::Standalone` in tests. Don't write two
      versions.
 
-3. **A `register_actions(&backend, daw)` function** that composes the
-   namespace nesting and constructs the wrapper:
+3. **No registration wrapper — call the macro-generated function.** The
+   macro emits `register_<trait_snake_sans_Actions_suffix>_actions`
+   (`TrackManagerActions` → `register_track_manager_actions`). Don't
+   write a per-module `register_actions` shim around it; register at the
+   entry point (`apps/extensions/reaper-fts-extensions/src/lib.rs`),
+   composing the scope nesting there:
 
    ```rust
-   pub fn register_actions<B, D>(backend: &B, daw: D)
-   where
-       B: architect::action::ActionBackend + Clone,
-       D: Tracks + Items + Projects + Send + Sync + 'static,
-   {
-       let session = architect::action::ScopedActionBackend::new(backend.clone(), "SESSION", "Session");
-       register_track_manager_actions_actions(&session, std::sync::Arc::new(TrackManager::new(daw)));
-   }
+   session::track_manager_actions::register_track_manager_actions(
+       &architect::action::ScopedActionBackend::new(daw_reaper::Reaper, "SESSION", "Session"),
+       std::sync::Arc::new(session::track_manager_actions::TrackManager::new(daw_reaper::Reaper)),
+   );
    ```
 
-   `register_<snake_trait_name>_actions` is macro-generated (from the
-   trait name — mind the doubled `_actions` when the trait itself ends in
-   `Actions`: `TrackManagerActions` → `register_track_manager_actions_actions`).
    `ScopedActionBackend::new(inner, scope_id, scope_category)` prepends
    `scope_id` to every action's `id` and overrides `category` to
    `scope_category` — this is how "Track Manager" (the trait's own
    identity) ends up nested under "Session" without the trait ever
-   saying so. Stack another `ScopedActionBackend` wrap for a further
-   level (e.g. an eventual "FTS" outer scope) without touching the leaf
-   trait at all.
+   saying so, and it belongs at the registration site because *who a
+   module lives under* is a fact about the registrar, not the module.
+   Stack another wrap for a further level (an eventual "FTS" outer
+   scope) without touching the leaf trait at all.
 
 ## Error handling — don't hand-roll it
 
@@ -157,37 +159,30 @@ propagate; don't swallow errors into `tracing::error!` the way the old
 `dispatch()` pattern did (that's silent-to-the-user and is what this
 whole system replaces).
 
-## Undo blocks — call the primitive directly, don't build a service
+## Undo blocks — `#[action(undo)]`, never by hand
 
-`Projects::begin_undo_block`/`end_undo_block` are already on `D` (in
-scope via `Deref`). Bracket a mutating action's body directly — no shared
-"run with undo" wrapper method, no `ActionHistoryService`:
+Tag the action, write only the logic:
 
 ```rust
-fn add_channel(&self) -> DawResult<()> {
-    let project = ProjectContext::Current;
-    let label = "Session Track Manager - Add Channel";
-    self.begin_undo_block(project.clone(), label);
-    let result = (|| -> DawResult<()> {
-        // ... real logic, `?` freely ...
-    })();
-    self.end_undo_block(project, label, None);
-    result
-}
+#[action(undo, description = "...")]
+fn add_channel(&self) -> DawResult<()>;
 ```
 
-The inner `(|| -> DawResult<()> { ... })()` is a local IIFE, not a
-generic abstraction — it exists purely so `?`/early-`return` inside the
-body can't skip `end_undo_block`. Every mutating action repeats this
-~4-line shape; that's fine, it's cheaper to read inline than to chase
-through a wrapper. Non-mutating actions (pure queries, or ones that log
-and return) don't need it at all.
+The backend brackets the handler in a host undo block labelled
+`"{category} {group} - {display_name}"` (e.g. `"Session Track Manager -
+Add Channel"`), so the whole action is one atomic undo point and `?` can
+propagate freely without skipping an end-block. Never call
+`begin_undo_block`/`end_undo_block` inside an action body, and don't
+build a "run with undo" wrapper method or an `ActionHistoryService` —
+that plumbing lives once, in `impl ActionBackend for Reaper`
+(`features/reaper/daw-reaper/src/action_registry.rs`).
 
-Selection save/restore is a separate concern from undo blocks and is
-**not** a responsibility this pattern gives you for free — if a specific
-action needs to preserve selection across a mutation, do it explicitly
-with `TracksExt::select`/`add_to_selection` at that call site, don't
-build a shared "preserve selection" wrapper on spec.
+Leave `undo` off read-only actions so they don't add empty undo points.
+
+Selection save/restore is a separate concern and is **not** provided —
+if an action needs to preserve selection across a mutation, do it
+explicitly with `TracksExt::select`/`add_to_selection` at that call
+site, don't build a shared wrapper on spec.
 
 ## `daw::service::TracksExt` — where generic plumbing goes
 
@@ -197,34 +192,67 @@ any one feature's business logic belong in
 blanket-impl'd for any `D: Tracks + Items + Projects`), not reimplemented
 per action module:
 
+**Snapshot + navigate** (prefer this for anything touching more than one
+track — the per-call helpers each re-fetch the whole track list, so
+walking a tree with them is quadratic and, over RPC, a round-trip per
+node):
+
+- `track_tree()` → `TrackTree`, one fetch of the whole list. Then
+  `.get(guid)`, `.at_index(i)`, `.children_of(guid)`, `.parent_of(t)`,
+  `.subtree_end_index(guid)`, `.shape_of_children(guid)` all run in
+  memory. It's a *snapshot* — re-take it after mutating rather than
+  reusing a stale one to compute indices.
+
+**Selection:**
+
 - `selected_scope()` — the one selected track, or a "no track is
   selected" error.
 - `select(guid)` / `add_to_selection(guid)` — `select` clears and
   selects exactly one; `add_to_selection` extends whatever's already
   selected. There's no `select_only` — "select" already means exclusive
   selection.
-- `insert_track(name)` — add a plain top-level track. (Not
-  `add_top_level` — a track is just a track; "top level" is what
-  happens when you don't give it a parent/index.)
-- `find_track(name)` — errors on zero or multiple matches, doesn't
-  silently pick one.
-- `get_track(guid)` — one track by guid via `TrackRef::Guid`, or an
-  "invalid object" error if it no longer exists. Prefer this over
-  `self.all(...).iter().find(...)` when you only need one track.
-- `children_of(guid)` — direct children of a track, in mixer order.
-  Prefer this over fetching `all()` and filtering by `parent_guid`
-  yourself.
-- `subtree_end_index(guid)` — the insertion index just past a track's
-  subtree, for "append as last child" operations.
+
+**Lookup:**
+
+- `get_track(guid)` / `track_at_index(i)` / `find_track(name)` —
+  `find_track` errors on zero *or* multiple matches rather than
+  silently picking one.
+- `children_of(guid)`, `subtree_end_index(guid)` — single-shot
+  convenience wrappers over `track_tree()`.
+
+**Mutation** (all implicitly on `ProjectContext::Current`, so no
+`project.clone()` threading):
+
+- `insert_track(name)` / `insert_track_at(name, index)` — (not
+  `add_top_level`: a track is just a track; "top level" is what happens
+  when you don't give it a parent/index).
+- `set_depth(guid, depth)` — folder-depth change (`1` opens, `0` plain,
+  negative closes that many levels).
+- `append_child(parent_guid, name)` / `append_shape(parent_guid, shape)`
+  — create a track, or a whole nested `TrackShape` subtree, as the last
+  children of a folder. These handle the fiddly part: `prepare_append`
+  computes the insertion index from a pre-mutation snapshot and fixes up
+  whichever track currently terminates the parent's subtree so the
+  newcomer takes over closing the folder.
+- `insert_shape_at(shape, index)` — escape hatch for when you already
+  know the position and the tree is mid-restructure (not well-formed
+  enough for a subtree-end walk).
 - `move_items(from_guid, to_guid)`.
 
+**`TrackShape`** is the nested "subtree to create" type
+(`TrackShape::leaf(name)` / `with_children(name, kids)`), the
+counterpart to the DAW's flat depth-change encoding.
+`TrackTree::shape_of_children(guid)` reads an existing subtree back out
+as one, so "give the new channel the same mics the old one has" is a
+read-then-append rather than hand-rolled recursion.
+
 The dividing line: if the logic only needs `Tracks`/`Items`/`Projects`
-primitives and isn't specific to what your feature is building (channel
-trees, arrangement variants, whatever), it belongs on `TracksExt`, where
-every other feature gets it for free too. If it's specific business
-logic (like `TrackManager::append_child`'s folder-depth bookkeeping, or
-`child_shapes`' dynamic-template-aware recursion), it stays as an
-inherent method on your wrapper struct.
+primitives and isn't specific to what your feature is building, it
+belongs on `TracksExt`/`TrackTree`, where every other feature gets it
+for free. Only what's genuinely domain-specific stays on your wrapper —
+in `TrackManager`'s case that's "which dynamic-template dimension does
+this track name read as" and "what shape does each action build", and
+nothing else.
 
 ## `TrackRef` vs `Track` — don't collapse them
 
@@ -281,21 +309,27 @@ reshape).
 
 When moving an existing `*_actions.rs` onto this pattern:
 
-1. Delete the action-id enum, `action_for_id`, and `dispatch()`.
+1. Delete the action-id enum, `action_for_id`, `dispatch()`, any
+   `*ActionsImpl` bridge struct, the per-module `register_actions`
+   wrapper, and any no-op `init(ctx)` (drop its call in
+   `daw_module.rs`'s `init` too).
 2. Turn the forwarding `#[architect::actions]` trait's one-line methods
-   into the real logic (or keep them thin and call a private helper on
-   the wrapper struct for anything needing non-`&self` parameters).
+   into declarations, and put the real logic in the wrapper's `impl` of
+   that trait — one method per action, no shadow "logic" method behind
+   it. Tag mutating ones `#[action(undo, ...)]`.
 3. Introduce (or reuse) a concrete wrapper struct + `Deref` if the
    module doesn't have one yet.
-4. Move any selection/lookup/undo plumbing that's genuinely generic onto
-   `TracksExt`; leave feature-specific logic on the wrapper.
-5. Update the `register_actions` callsite in
-   `apps/extensions/reaper-fts-extensions/src/lib.rs` to the two-arg
-   `register_actions(&daw_reaper::Reaper, daw_reaper::Reaper)` form and
-   wire the `ScopedActionBackend` nesting.
-6. Remove the module's `TRACK_MANAGER_*`-style entries from
-   `session_actions`'s `define_actions!` block in `lib.rs` if they exist
-   — that's the legacy path this replaces; leaving both registers the
-   same command twice under two different ids.
-7. Add a headless test against `Standalone` before considering the
-   refactor done.
+4. Move any generic selection/lookup/tree-building plumbing onto
+   `TracksExt`/`TrackTree`; leave only domain logic on the wrapper.
+5. Update the callsite in
+   `apps/extensions/reaper-fts-extensions/src/lib.rs` to call the
+   macro-generated `register_<name>_actions` directly, wrapping the
+   backend in `ScopedActionBackend` for the nesting.
+6. Remove the module's `define_actions!` entries from
+   `session_actions` in `lib.rs` and its arm from `daw_module.rs`'s
+   dispatch chain if they exist — that's the legacy path this replaces;
+   leaving both registers the same command twice under two different ids.
+7. Add headless tests against `Standalone` before considering the
+   refactor done — cover *every* branch, not just the happy path. The
+   two branches that had no test in `track_manager_actions` both turned
+   out to be broken; the tests found it.
