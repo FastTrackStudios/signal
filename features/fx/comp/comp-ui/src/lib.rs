@@ -5,8 +5,14 @@
 //! [`fts_ui_audio`] widgets. General-purpose widgets (knobs, meters, drag
 //! provider) come from [`fts_ui_audio`]; layout primitives from [`fts_ui`].
 //!
-//! - [`control_view`]: the plugin editor — profile-skinned, sectioned control
-//!   surface (Basic/Advanced) over the graph + GR meter
+//! - [`control_view`]: the plugin editor shell — header, profile picker, and
+//!   the face the selected profile swaps in
+//! - [`faces`]: one front panel per profile — the FTS control surface, and the
+//!   LA-2A / 1176 / SSL bus faceplates
+//! - [`hardware`]: the parts a faceplate is made of (VU movement, pointer
+//!   knobs, panel switches, chrome) plus their portable geometry
+//! - [`profile_handle`]: a profile control → [`fts_ui_audio::ParamHandle`],
+//!   including the macro fanout that lets one knob write several engine params
 //! - [`sections`]: the labelled-section / knob / selector layout primitives
 //! - [`profile_view`]: hardware-profile data model (1176, LA-2A, SSL bus)
 //! - [`params`]: nice_plug parameter tree + shared UI state
@@ -28,8 +34,14 @@ pub mod comp_graph;
 #[cfg(feature = "native")]
 pub mod control_view;
 #[cfg(feature = "native")]
+pub mod faces;
+#[cfg(feature = "native")]
 pub mod param_adapter;
 #[cfg(feature = "native")]
+pub mod param_map;
+#[cfg(feature = "native")]
 pub mod params;
+#[cfg(feature = "native")]
+pub mod profile_handle;
 #[cfg(feature = "native")]
 pub mod sections;

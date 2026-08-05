@@ -197,6 +197,38 @@ pub struct CompParams {
     /// concern (which control strip is drawn); the DSP reads the params above.
     #[id = "profile"]
     pub profile: IntParam,
+
+    /// Position of the active profile's first compound ("macro") control.
+    ///
+    /// A hardware macro — LA-2A PEAK REDUCTION, 1176 INPUT — writes several
+    /// engine params at once through `ParamMapping::Compound`, so its own
+    /// position cannot be recovered from any single one of them. It is stored
+    /// here instead, which also makes the knob the user actually turns the
+    /// thing the host automates and the session reloads.
+    ///
+    /// Slots are assigned by the order compound controls appear in the active
+    /// profile, so the same slot means PEAK REDUCTION under LA-2A and INPUT
+    /// under the 1176 — the faces are mutually exclusive, and switching profile
+    /// is already a change of instrument.
+    #[id = "macro1"]
+    pub macro1: FloatParam,
+    /// Second macro slot — see [`CompParams::macro1`]. Unused by the current
+    /// four profiles (each has exactly one compound control); present so a
+    /// profile can add one without a state-breaking param insert.
+    #[id = "macro2"]
+    pub macro2: FloatParam,
+}
+
+/// The macro slots, in assignment order — index N backs the Nth compound
+/// control of the active profile.
+impl CompParams {
+    pub fn macro_slot(&self, index: usize) -> Option<&FloatParam> {
+        match index {
+            0 => Some(&self.macro1),
+            1 => Some(&self.macro2),
+            _ => None,
+        }
+    }
 }
 
 impl Default for CompParams {
@@ -404,8 +436,19 @@ impl Default for CompParams {
                 },
             )
             .with_value_to_string(label_formatter(PROFILE_LABELS)),
+            macro1: macro_slot_param("Macro 1"),
+            macro2: macro_slot_param("Macro 2"),
         }
     }
+}
+
+/// A macro slot: a plain 0..1 position with a percentage readout. The meaning
+/// of the number is the active profile's business — see
+/// [`CompParams::macro1`].
+fn macro_slot_param(name: &str) -> FloatParam {
+    FloatParam::new(name, 0.5, FloatRange::Linear { min: 0.0, max: 1.0 })
+        .with_unit("%")
+        .with_value_to_string(formatters::v2s_f32_percentage(0))
 }
 
 /// `with_value_to_string` helper for the discrete params: render the label at

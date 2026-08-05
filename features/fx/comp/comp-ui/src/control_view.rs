@@ -1,25 +1,23 @@
 //! Comp editor — Dioxus GUI root component.
 //!
-//! Layout, top to bottom:
+//! The editor is a header over a *face*. The header is the only part every
+//! profile shares: plugin identity, the hardware-profile picker, and the
+//! Basic/Advanced toggle (which belongs to the FTS surface and is hidden on
+//! the hardware faces, where there is no such thing as an advanced page).
 //!
-//! 1. **Header** — plugin identity, the hardware-profile picker (Control /
-//!    LA-2A / SSL Bus / 1176, which re-tints the whole surface through
-//!    [`crate::profile_view::profile_skin`]), and the Basic/Advanced toggle.
-//! 2. **Graph** — [`crate::comp_graph::CompGraph`]: transfer curve with
-//!    threshold/knee drag plus the rolling waveform + GR traces.
-//! 3. **Control surface** — the engine grouped into labelled sections
-//!    (Detector / Dynamics / Character / Output, then Sidechain / Expander /
-//!    Upward when Advanced is on) beside the GR and I/O meters.
+//! Everything below the header comes from [`crate::faces`]:
 //!
-//! Basic shows the classic eight params; Advanced adds the rest of
-//! `ProC3Compressor`'s surface. The split is a UI concern only — every param
-//! stays automatable from the host in both modes.
+//! - **Control** — the FTS surface: the compressor graph over a row of
+//!   labelled sections, plus the GR and I/O meters.
+//! - **LA-2A / 1176 / SSL Bus** — the unit's own front panel, drawn from
+//!   [`crate::hardware`] and driven through [`crate::profile_handle`].
+//!
+//! Selecting a profile therefore swaps the whole UI rather than recolouring
+//! it. The `profile` param persists, so the face survives a session reload.
 //!
 //! Reusable widgets (knobs, meters, drag provider) come from [`fts_ui_audio`];
 //! theme + layout primitives from [`fts_ui`]; the section wrappers from
 //! [`crate::sections`].
-
-use std::sync::atomic::Ordering;
 
 use audiocore_core::prelude::*;
 use nice_plug::editor::dpi::LogicalSize;
@@ -27,14 +25,18 @@ use nice_plug::editor::ResizeHint;
 use fts_ui::prelude::{ThemeMode, ThemeProvider, ThemeState, default_theme_preset};
 use fts_ui_audio::prelude::*;
 
+use crate::faces::{Face, PROFILE_IDS};
 use crate::param_adapter::param_handle;
-use crate::params::{CHARACTER_LABELS, CompUiState, PROFILE_LABELS, STYLE_LABELS};
+use crate::params::{CompUiState, PROFILE_LABELS};
 use crate::profile_view::{ProfileSkin, profile_skin};
-use crate::sections::{ParamKnob, ParamSelector, Section};
+use crate::sections::ParamSelector;
 
-/// Profile ids in [`PROFILE_LABELS`] order — the index the `profile` param
-/// holds maps onto `comp_profiles::all_profiles()` through this table.
-const PROFILE_IDS: &[&str] = &["control", "la2a", "ssl_bus", "urei_1176"];
+/// Height of the header strip, in CSS px.
+///
+/// Hardware faces need it as a number, not as layout: a faceplate is fitted to
+/// the space *below* the header, so the fit has to know how much of the window
+/// the header already took.
+pub const HEADER_H: f64 = 52.0;
 
 /// Editor size the plugin shell requests from the host on open.
 ///
@@ -138,13 +140,11 @@ fn AppShell() -> Element {
     // the host's project state.
     let mut advanced = use_signal(|| false);
 
-    // The profile param picks the skin; every section below tints from it.
+    // The profile param picks the face; the header tints from its skin.
     let profile_idx = params.profile.value().max(0) as usize;
-    let skin = profile_skin(PROFILE_IDS.get(profile_idx).copied().unwrap_or("control"));
-
-    let gr_db = ui.gain_reduction_db.load(Ordering::Relaxed);
-    let input_db = ui.input_peak_db.load(Ordering::Relaxed);
-    let output_db = ui.output_peak_db.load(Ordering::Relaxed);
+    let profile_id = PROFILE_IDS.get(profile_idx).copied().unwrap_or("control");
+    let skin = profile_skin(profile_id);
+    let is_control_face = profile_id == "control";
 
     let base_css = "*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; } \
          html, body { width: 100%; height: 100%; overflow: hidden; \
@@ -171,7 +171,10 @@ fn AppShell() -> Element {
 
                 // ── Header ───────────────────────────────────────────
                 div {
-                    class: "flex justify-between items-center px-4 py-3 border-b border-border bg-card/50",
+                    class: "flex justify-between items-center px-4 border-b border-border bg-card/50",
+                    // Pinned rather than padded: the hardware faces fit
+                    // themselves into what is left, and they need that number.
+                    style: "height:{HEADER_H}px; flex:none;",
                     div { class: "flex items-baseline gap-3 shrink-0",
                         div {
                             class: "text-base font-bold tracking-wide text-foreground",
@@ -186,7 +189,7 @@ fn AppShell() -> Element {
                     div {
                         style: "display:flex; align-items:center; gap:14px;",
 
-                        // Hardware profile picker.
+                        // Hardware profile picker — this is the face switch.
                         ParamSelector {
                             handle: param_handle(params.profile.as_ptr(), ctx.clone()),
                             testid: "profile".to_string(),
@@ -195,237 +198,28 @@ fn AppShell() -> Element {
                             skin,
                         }
 
-                        // Basic/Advanced disclosure.
-                        div {
-                            "data-testid": "advanced-toggle",
-                            style: format!(
-                                "cursor:pointer; padding:5px 12px; border-radius:6px; \
-                                 font-size:11px; font-weight:600; letter-spacing:0.06em; \
-                                 text-transform:uppercase; border:1px solid {}; color:{}; background:{};",
-                                skin.border,
-                                if is_advanced { "#fff" } else { skin.text },
-                                if is_advanced { skin.accent } else { "transparent" },
-                            ),
-                            onclick: move |_| advanced.toggle(),
-                            if is_advanced { "Advanced" } else { "Basic" }
-                        }
-                    }
-                }
-
-                // ── Compressor graph ────────────────────────────────
-                // Height pinned to exactly GRAPH_H CSS px so pointer y maps
-                // 1:1 onto the graph's fixed viewBox (see comp_graph.rs) —
-                // the control surface below takes the remaining space.
-                div {
-                    "data-testid": "comp-graph",
-                    style: format!(
-                        "height:{}px; flex:none; position:relative; overflow:hidden;",
-                        crate::comp_graph::GRAPH_H
-                    ),
-                    crate::comp_graph::CompGraph {}
-                }
-
-                // ── Control surface ─────────────────────────────────
-                // One row of sections, always. Advanced *swaps the page*
-                // rather than appending to it: blitz will not overflow-scroll
-                // a height-constrained grid — a second row of sections is
-                // simply allocated 0 px and collapses — and the editor is a
-                // fixed 800×640 in most hosts, so there is no second row to be
-                // had. Each page is sized to fit what remains under the graph.
-                div {
-                    class: "flex-1 min-h-0 flex items-stretch gap-6 px-5 py-4",
-
-                    div {
-                        style: "flex:1; min-width:0; display:flex; align-items:stretch; gap:10px;",
-
-                        if is_advanced {
-                            // Detector internals: everything shaping *when*
-                            // and *how fast* the compressor reacts.
-                            Section { label: "Detector".to_string(), skin,
-                                ParamKnob {
-                                    handle: param_handle(params.detector_rms_mix.as_ptr(), ctx.clone()),
-                                    testid: "rmsmix".to_string(),
-                                    size: KnobSize::Small,
-                                }
-                                ParamKnob {
-                                    handle: param_handle(params.feedback.as_ptr(), ctx.clone()),
-                                    testid: "feedback".to_string(),
-                                    size: KnobSize::Small,
-                                }
-                                ParamKnob {
-                                    handle: param_handle(params.hold_ms.as_ptr(), ctx.clone()),
-                                    testid: "hold".to_string(),
-                                    size: KnobSize::Small,
-                                }
-                                ParamKnob {
-                                    handle: param_handle(params.lookahead_ms.as_ptr(), ctx.clone()),
-                                    testid: "lookahead".to_string(),
-                                    size: KnobSize::Small,
-                                }
-                                ParamKnob {
-                                    handle: param_handle(params.inertia.as_ptr(), ctx.clone()),
-                                    testid: "inertia".to_string(),
-                                    size: KnobSize::Small,
-                                }
-                                ParamKnob {
-                                    handle: param_handle(params.inertia_decay.as_ptr(), ctx.clone()),
-                                    testid: "inertiadecay".to_string(),
-                                    size: KnobSize::Small,
-                                }
-                            }
-
-                            // Detector-path EQ. Both filters bypass at their
-                            // 20 Hz floor, so parking a knob at minimum is the
-                            // same as switching the filter out.
-                            Section { label: "Sidechain".to_string(), skin,
-                                ParamKnob {
-                                    handle: param_handle(params.sidechain_freq.as_ptr(), ctx.clone()),
-                                    testid: "schp".to_string(),
-                                    size: KnobSize::Small,
-                                }
-                                ParamKnob {
-                                    handle: param_handle(params.sidechain_lowpass_freq.as_ptr(), ctx.clone()),
-                                    testid: "sclp".to_string(),
-                                    size: KnobSize::Small,
-                                }
-                                ParamKnob {
-                                    handle: param_handle(params.range_db.as_ptr(), ctx.clone()),
-                                    testid: "range".to_string(),
-                                    size: KnobSize::Small,
-                                }
-                            }
-
-                            // Both extra dynamics stages are inert at ratio
-                            // 1:1, which is where they default.
-                            Section { label: "Expander".to_string(), skin,
-                                ParamKnob {
-                                    handle: param_handle(params.expander_threshold_db.as_ptr(), ctx.clone()),
-                                    testid: "expthresh".to_string(),
-                                    size: KnobSize::Small,
-                                }
-                                ParamKnob {
-                                    handle: param_handle(params.expander_ratio.as_ptr(), ctx.clone()),
-                                    testid: "expratio".to_string(),
-                                    size: KnobSize::Small,
-                                }
-                            }
-
-                            Section { label: "Upward".to_string(), skin,
-                                ParamKnob {
-                                    handle: param_handle(params.upward_threshold_db.as_ptr(), ctx.clone()),
-                                    testid: "upthresh".to_string(),
-                                    size: KnobSize::Small,
-                                }
-                                ParamKnob {
-                                    handle: param_handle(params.upward_ratio.as_ptr(), ctx.clone()),
-                                    testid: "upratio".to_string(),
-                                    size: KnobSize::Small,
-                                }
-                            }
-
-                            // Saturation shape + the soft output ceiling, plus
-                            // the input trim and auto-makeup that belong with
-                            // the extended gain staging.
-                            Section { label: "Character".to_string(), skin,
-                                ParamSelector {
-                                    handle: param_handle(params.character_mode.as_ptr(), ctx.clone()),
-                                    testid: "charmode".to_string(),
-                                    label: "Shape".to_string(),
-                                    options: CHARACTER_LABELS.iter().map(|s| s.to_string()).collect(),
-                                    skin,
-                                }
-                                ParamKnob {
-                                    handle: param_handle(params.ceiling.as_ptr(), ctx.clone()),
-                                    testid: "ceiling".to_string(),
-                                    size: KnobSize::Small,
-                                }
-                                ParamKnob {
-                                    handle: param_handle(params.input_gain_db.as_ptr(), ctx.clone()),
-                                    testid: "ingain".to_string(),
-                                    size: KnobSize::Small,
-                                }
-                                div {
-                                    "data-testid": "toggle-automake",
-                                    style: "align-self:center;",
-                                    Toggle {
-                                        handle: param_handle(params.auto_makeup.as_ptr(), ctx.clone()),
-                                        color: skin.accent.to_string(),
-                                    }
-                                }
-                            }
-                        } else {
-                            // ── Dynamics — the curve itself ─────────────
-                            Section { label: "Dynamics".to_string(), skin,
-                                ParamKnob {
-                                    handle: param_handle(params.threshold_db.as_ptr(), ctx.clone()),
-                                    testid: "threshold".to_string(),
-                                }
-                                ParamKnob {
-                                    handle: param_handle(params.ratio.as_ptr(), ctx.clone()),
-                                    testid: "ratio".to_string(),
-                                }
-                                ParamKnob {
-                                    handle: param_handle(params.attack_ms.as_ptr(), ctx.clone()),
-                                    testid: "attack".to_string(),
-                                }
-                                ParamKnob {
-                                    handle: param_handle(params.release_ms.as_ptr(), ctx.clone()),
-                                    testid: "release".to_string(),
-                                }
-                                ParamKnob {
-                                    handle: param_handle(params.knee_db.as_ptr(), ctx.clone()),
-                                    testid: "knee".to_string(),
-                                }
-                            }
-
-                            // ── Detector — how the level is measured ────
-                            Section { label: "Detector".to_string(), skin,
-                                ParamSelector {
-                                    handle: param_handle(params.style.as_ptr(), ctx.clone()),
-                                    testid: "style".to_string(),
-                                    label: "Style".to_string(),
-                                    options: STYLE_LABELS.iter().map(|s| s.to_string()).collect(),
-                                    skin,
-                                }
-                                ParamKnob {
-                                    handle: param_handle(params.stereo_link.as_ptr(), ctx.clone()),
-                                    testid: "link".to_string(),
-                                    size: KnobSize::Small,
-                                }
-                            }
-
-                            // ── Character — the saturation stage ────────
-                            Section { label: "Character".to_string(), skin,
-                                ParamKnob {
-                                    handle: param_handle(params.drive.as_ptr(), ctx.clone()),
-                                    testid: "drive".to_string(),
-                                }
-                            }
-
-                            // ── Output — gain staging + parallel blend ──
-                            Section { label: "Output".to_string(), skin,
-                                ParamKnob {
-                                    handle: param_handle(params.makeup_db.as_ptr(), ctx.clone()),
-                                    testid: "makeup".to_string(),
-                                }
-                                ParamKnob {
-                                    handle: param_handle(params.mix.as_ptr(), ctx.clone()),
-                                    testid: "mix".to_string(),
-                                }
+                        // Basic/Advanced disclosure. Only the FTS surface has
+                        // pages; a faceplate has the controls the unit has.
+                        if is_control_face {
+                            div {
+                                "data-testid": "advanced-toggle",
+                                style: format!(
+                                    "cursor:pointer; padding:5px 12px; border-radius:6px; \
+                                     font-size:11px; font-weight:600; letter-spacing:0.06em; \
+                                     text-transform:uppercase; border:1px solid {}; color:{}; background:{};",
+                                    skin.border,
+                                    if is_advanced { "#fff" } else { skin.text },
+                                    if is_advanced { skin.accent } else { "transparent" },
+                                ),
+                                onclick: move |_| advanced.toggle(),
+                                if is_advanced { "Advanced" } else { "Basic" }
                             }
                         }
                     }
-
-                    // Metering — GR (fed by the audio thread through
-                    // CompUiState) flanked by I/O peak meters.
-                    div {
-                        class: "flex items-end gap-3 shrink-0",
-                        "data-testid": "meters",
-                        LevelMeterDb { level_db: input_db, label: "IN".to_string(), height: 160.0 }
-                        GrMeter { gain_reduction_db: gr_db, height: 160.0 }
-                        LevelMeterDb { level_db: output_db, label: "OUT".to_string(), height: 160.0 }
-                    }
                 }
+
+                // ── The face ─────────────────────────────────────────
+                Face { profile_index: profile_idx, advanced: is_advanced, frame: frame_counter }
             }
         }
     }

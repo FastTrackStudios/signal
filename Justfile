@@ -233,6 +233,14 @@ tailwind-limiter:
 tailwind-trigger:
     tailwindcss -i features/fx/trigger/trigger-ui/tailwind.css -o features/fx/trigger/trigger-ui/assets/tailwind.css --minify
 
+# Rasterize the comp editor to PNGs — every profile face, plus the Advanced
+# page and a resized panel — so a GUI change can be looked at without opening
+# a DAW. Same headless mount the behavioural tests drive, painted through
+# blitz + vello_cpu. Shots land in target/gui-shots/comp/ (FTS_SHOTS_DIR
+# overrides).
+comp-shots:
+    cargo test -p comp-ui --features native --test screenshots -- --nocapture
+
 # Bundle every FTS plugin as .clap + .vst3 (target/bundled/, names from
 # bundler.toml). Debug of a single plugin: cargo run -p fts-plugin-xtask
 # -- bundle -p eq-plugin

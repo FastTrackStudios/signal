@@ -19,13 +19,13 @@
 //!
 //! # Coordinate mapping
 //!
-//! The SVG uses a fixed `0 0 360 300` viewBox with
-//! `preserveAspectRatio: none`. The host container
-//! ([`crate::control_view`]) pins the graph height to exactly
-//! [`GRAPH_H`] CSS px, so element-relative pointer y IS viewBox y — no
+//! The SVG's viewBox is `0 0 360 {height}` with `preserveAspectRatio: none`,
+//! and the host container ([`crate::faces::control`]) pins the graph to
+//! exactly that many CSS px, so element-relative pointer y IS viewBox y — no
 //! async rect measurement (which is unreliable under Blitz, see eq-ui's
-//! notes) and no scale drift. The width stretches freely; no interaction
-//! depends on x.
+//! notes) and no scale drift. That is why the height is a prop rather than a
+//! constant: it grows with the editor ([`graph_height`]) and the two uses have
+//! to move together. The width stretches freely; no interaction depends on x.
 
 use std::sync::atomic::Ordering;
 
@@ -39,9 +39,33 @@ use crate::params::CompUiState;
 
 /// viewBox width. Stretched to the container width (visual only).
 pub const GRAPH_VB_W: f64 = 360.0;
-/// viewBox height AND the required CSS pixel height of the container —
-/// keeping them equal makes pointer y map 1:1 onto graph dB space.
+/// Design height of the graph: the viewBox height AND the CSS pixel height of
+/// the container at the editor's design size. Keeping the two equal is what
+/// makes pointer y map 1:1 onto graph dB space — see [`graph_height`], which
+/// preserves that property as the editor grows.
 pub const GRAPH_H: f64 = 300.0;
+/// Editor height [`GRAPH_H`] was drawn for.
+const DESIGN_EDITOR_H: f64 = 660.0;
+/// Bounds on the grown graph. Below the minimum the transfer curve stops being
+/// readable; above the maximum the graph starts eating the control surface.
+const MIN_GRAPH_H: f64 = 220.0;
+const MAX_GRAPH_H: f64 = 460.0;
+
+/// The graph height for the current editor window.
+///
+/// The graph is no longer pinned to [`GRAPH_H`]: it keeps its share of a
+/// resized editor, and the *same* number is used for the container height and
+/// for the viewBox, so element-relative pointer y is still viewBox y at any
+/// size. Falls back to the design height when no host window size is in
+/// context (headless tests, non-plugin mounts).
+pub fn graph_height() -> f64 {
+    match crate::hardware::panel::window_logical_size() {
+        Some((_, win_h)) => (GRAPH_H * win_h / DESIGN_EDITOR_H)
+            .clamp(MIN_GRAPH_H, MAX_GRAPH_H)
+            .round(),
+        None => GRAPH_H,
+    }
+}
 /// Grab distance (px) around the threshold line.
 const THRESHOLD_GRAB_PX: f64 = 16.0;
 /// Vertical drag distance (px) that doubles/halves the ratio.
@@ -57,10 +81,13 @@ enum CompDrag {
 }
 
 /// The compressor graph. Consumes `SharedState` (for [`CompUiState`]) and
-/// the editor's `ParamContext` from context, like the rest of the editor —
-/// no props, so it renders identically standalone and embedded.
+/// the editor's `ParamContext` from context, like the rest of the editor.
+///
+/// `height` is both the container's CSS height and the viewBox height — the
+/// caller owns it (it sizes the container) and passes it in so the two cannot
+/// drift apart and break the 1:1 pointer mapping.
 #[component]
-pub fn CompGraph() -> Element {
+pub fn CompGraph(#[props(default = GRAPH_H)] height: f64) -> Element {
     let shared = use_context::<SharedState>();
     let ui = shared.get::<CompUiState>().expect("CompUiState missing");
     let ctx = use_param_context();
@@ -93,17 +120,17 @@ pub fn CompGraph() -> Element {
     // ── Paths (portable math) ────────────────────────────────────────────
     let in_scaled = scale_input_wave(&ui.input_wave.snapshot());
     let gr_scaled = scale_gr_wave(&ui.gr_wave.snapshot());
-    let in_fill = smooth_path(&in_scaled, GRAPH_VB_W, GRAPH_H, true, true);
-    let in_edge = smooth_path(&in_scaled, GRAPH_VB_W, GRAPH_H, true, false);
+    let in_fill = smooth_path(&in_scaled, GRAPH_VB_W, height, true, true);
+    let in_edge = smooth_path(&in_scaled, GRAPH_VB_W, height, true, false);
     let gr_active = gr_scaled.iter().any(|&g| g > 0.002);
-    let gr_fill = smooth_path(&gr_scaled, GRAPH_VB_W, GRAPH_H, false, true);
-    let gr_edge = smooth_path(&gr_scaled, GRAPH_VB_W, GRAPH_H, false, false);
+    let gr_fill = smooth_path(&gr_scaled, GRAPH_VB_W, height, false, true);
+    let gr_edge = smooth_path(&gr_scaled, GRAPH_VB_W, height, false, false);
 
-    let tc = transfer_curve_path(threshold, ratio, knee, GRAPH_VB_W, GRAPH_H);
-    let ball = transfer_ball(in_db, threshold, ratio, knee, GRAPH_VB_W, GRAPH_H);
-    let thresh_y = db_to_y(threshold as f64, GRAPH_H);
-    let knee_lo_y = db_to_y((threshold - knee * 0.5) as f64, GRAPH_H);
-    let knee_hi_y = db_to_y((threshold + knee * 0.5) as f64, GRAPH_H);
+    let tc = transfer_curve_path(threshold, ratio, knee, GRAPH_VB_W, height);
+    let ball = transfer_ball(in_db, threshold, ratio, knee, GRAPH_VB_W, height);
+    let thresh_y = db_to_y(threshold as f64, height);
+    let knee_lo_y = db_to_y((threshold - knee * 0.5) as f64, height);
+    let knee_hi_y = db_to_y((threshold + knee * 0.5) as f64, height);
 
     rsx! {
         div {
@@ -117,7 +144,7 @@ pub fn CompGraph() -> Element {
                 let ctx = ctx.clone();
                 move |evt: MouseEvent| {
                     let y = evt.element_coordinates().y;
-                    let ty = db_to_y(params.threshold_db.value() as f64, GRAPH_H);
+                    let ty = db_to_y(params.threshold_db.value() as f64, height);
                     if (y - ty).abs() < THRESHOLD_GRAB_PX {
                         ctx.begin_set_raw(params.threshold_db.as_ptr());
                         dragging.set(Some(CompDrag::Threshold));
@@ -152,7 +179,7 @@ pub fn CompGraph() -> Element {
                     let y = evt.element_coordinates().y;
                     match mode {
                         CompDrag::Threshold => {
-                            let db = y_to_db(y, GRAPH_H).clamp(-(RANGE_DB as f64), 0.0) as f32;
+                            let db = y_to_db(y, height).clamp(-(RANGE_DB as f64), 0.0) as f32;
                             ctx.set_normalized_raw(
                                 params.threshold_db.as_ptr(),
                                 params.threshold_db.preview_normalized(db),
@@ -207,7 +234,7 @@ pub fn CompGraph() -> Element {
             svg {
                 style: "position:absolute; top:0; left:0; right:0; bottom:0; \
                         width:100%; height:100%; display:block; pointer-events:none;",
-                view_box: "0 0 360 300",
+                view_box: "0 0 360 {height}",
                 preserve_aspect_ratio: "none",
 
                 defs {

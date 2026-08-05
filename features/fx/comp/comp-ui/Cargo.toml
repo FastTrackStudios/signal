@@ -37,6 +37,12 @@ comp-profiles = { path = "../comp-profiles" }
 name = "gui_editor"
 required-features = ["native"]
 
+# The screenshot harness paints the same mount to PNGs (see tests/screenshots.rs)
+# — a look-at-it aid, not an assertion suite. Same feature gate.
+[[test]]
+name = "screenshots"
+required-features = ["native"]
+
 [dev-dependencies]
 # Headless GUI tests: REAL event dispatch on a headless Blitz DOM via the
 # vendored dioxus-test (libs/vendor/dioxus-test) — same harness as eq-ui.
