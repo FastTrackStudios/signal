@@ -18,7 +18,7 @@ use daw::service::ProjectInfo;
 use daw_standalone::bootstrap::build_in_process_daw;
 use daw_standalone::sync::Standalone;
 use eyre::Result;
-use session::setlist_service::demo::stamp_demo_setlist_with;
+use session::setlist::service::demo::stamp_demo_setlist_with;
 use session::{
     SetlistServiceClient, SetlistServiceImpl, serve_setlist_service,
     setlist_service_service_descriptor,
