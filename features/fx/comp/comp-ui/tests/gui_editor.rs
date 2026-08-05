@@ -43,18 +43,34 @@ mod support;
 
 use support::{mount, mount_sized, ptr_key, Fixture, Gesture};
 
-/// Click profile `index` in the shell rail — the face switch.
-async fn select_profile(fx: &mut Fixture, index: usize) -> dioxus_test::Result<()> {
-    let id = comp_ui::faces::PROFILE_IDS[index];
-    let item = fx.tester.query(by_testid(&format!("rail-item-{id}"))).immediately()?;
-    let (ox, oy) = item.document_origin();
-    let (w, h) = item.size();
-    let (x, y) = (ox + w as f64 / 2.0, oy + h as f64 / 2.0);
-    fx.tester.pointer_down(x, y);
-    let _ = fx.tester.pump().await;
-    fx.tester.pointer_up(x, y);
-    fx.settle().await;
-    Ok(())
+/// Select a profile by id through the shell rail.
+///
+/// The rail is one button per compressor family, and clicking the active
+/// family cycles the units inside it — so reaching "cl1b" means clicking Opto
+/// twice. This clicks until the parameter lands on the unit asked for.
+async fn select_profile(fx: &mut Fixture, profile_id: &str) -> dioxus_test::Result<()> {
+    let (category, _) = comp_profiles::category_of(profile_id)
+        .unwrap_or_else(|| panic!("{profile_id} is in no category"));
+    let target = comp_profiles::profile_index(profile_id).unwrap() as i32;
+    let rail_id = comp_profiles::CATEGORIES[category].id;
+
+    for _ in 0..8 {
+        if fx.params.profile.value() == target {
+            return Ok(());
+        }
+        let item = fx.tester.query(by_testid(&format!("rail-item-{rail_id}"))).immediately()?;
+        let (ox, oy) = item.document_origin();
+        let (w, h) = item.size();
+        let (x, y) = (ox + w as f64 / 2.0, oy + h as f64 / 2.0);
+        fx.tester.pointer_down(x, y);
+        let _ = fx.tester.pump().await;
+        fx.tester.pointer_up(x, y);
+        fx.settle().await;
+    }
+    panic!(
+        "rail never reached {profile_id}: stuck at {}",
+        fx.params.profile.value()
+    );
 }
 
 /// Rendered size of the faceplate itself (the drawing, not the space around
@@ -392,8 +408,10 @@ async fn basic_mode_shows_core_sections_only() -> dioxus_test::Result<()> {
 
     // The style selector and the rail's profile list are always available.
     fx.tester.query(by_testid("select-style")).immediately()?;
-    for id in comp_ui::faces::PROFILE_IDS {
-        fx.tester.query(by_testid(&format!("rail-item-{id}"))).immediately()?;
+    for category in comp_profiles::CATEGORIES {
+        fx.tester
+            .query(by_testid(&format!("rail-item-{}", category.id)))
+            .immediately()?;
     }
     Ok(())
 }
@@ -513,8 +531,12 @@ async fn choosing_a_profile_swaps_in_its_faceplate() -> dioxus_test::Result<()> 
     fx.tester.query(by_testid("section-dynamics")).immediately()?;
     fx.tester.query(by_testid("comp-graph")).immediately()?;
 
-    select_profile(&mut fx, 1).await?;
-    assert_eq!(fx.params.profile.value(), 1, "profile param did not move to LA-2A");
+    select_profile(&mut fx, "la2a").await?;
+    assert_eq!(
+        fx.params.profile.value(),
+        comp_profiles::profile_index("la2a").unwrap() as i32,
+        "profile param did not move to LA-2A"
+    );
 
     // The FTS surface is gone — this is a face swap, not a re-tint.
     for id in ["section-dynamics", "section-output", "comp-graph", "meters"] {
@@ -556,22 +578,27 @@ async fn choosing_a_profile_swaps_in_its_faceplate() -> dioxus_test::Result<()> 
 async fn every_profile_renders_its_own_face() -> dioxus_test::Result<()> {
     let mut fx = mount();
 
-    // (profile index, a control only that face has)
-    for (index, marker) in [
-        (1usize, "hw-knob-peak-reduction"),
-        (2, "hw-knob-makeup"),
-        (3, "hw-buttons-ratio"),
+    // (profile id, a control only that face has) — including both units of a
+    // two-unit family, which is what the rail's cycling is for.
+    for (id, marker) in [
+        ("urei_1176", "hw-buttons-ratio"),
+        ("la2a", "hw-knob-peak-reduction"),
+        ("cl1b", "hw-knob-ratio"),
+        ("fairchild670", "hw-knob-time-constant"),
+        ("manley_vari_mu", "hw-knob-recovery"),
+        ("ssl_bus", "hw-knob-makeup"),
+        ("dbx160", "hw-knob-compression"),
+        ("distressor", "hw-knob-audio-mode"),
     ] {
-        select_profile(&mut fx, index).await?;
-        assert_eq!(fx.params.profile.value(), index as i32);
+        select_profile(&mut fx, id).await?;
         fx.tester
             .query(by_testid(marker))
             .immediately()
-            .unwrap_or_else(|e| panic!("profile {index} face missing {marker}: {e:?}"));
+            .unwrap_or_else(|e| panic!("{id} face missing {marker}: {e:?}"));
     }
 
     // …and back to the FTS surface.
-    select_profile(&mut fx, 0).await?;
+    select_profile(&mut fx, "control").await?;
     fx.tester.query(by_testid("section-dynamics")).immediately()?;
     assert!(
         fx.tester.query(by_testid("hardware-panel")).immediately().is_err(),
@@ -588,7 +615,7 @@ async fn every_profile_renders_its_own_face() -> dioxus_test::Result<()> {
 #[tokio::test]
 async fn dragging_peak_reduction_drives_every_param_behind_it() -> dioxus_test::Result<()> {
     let mut fx = mount();
-    select_profile(&mut fx, 1).await?;
+    select_profile(&mut fx, "la2a").await?;
 
     // Park the knob first. Until the macro has been turned once, the engine
     // still holds the plugin's own defaults, which are not what any macro
@@ -668,7 +695,7 @@ async fn dragging_peak_reduction_drives_every_param_behind_it() -> dioxus_test::
 #[tokio::test]
 async fn pressing_a_ratio_button_sets_that_ratio() -> dioxus_test::Result<()> {
     let mut fx = mount();
-    select_profile(&mut fx, 3).await?;
+    select_profile(&mut fx, "urei_1176").await?;
 
     // Button 3 of 4:8:12:20:All.
     let el = fx.tester.query(by_testid("hw-button-ratio-3")).immediately()?;
@@ -700,11 +727,11 @@ async fn pressing_a_ratio_button_sets_that_ratio() -> dioxus_test::Result<()> {
 #[tokio::test]
 async fn the_faceplate_scales_with_the_editor() -> dioxus_test::Result<()> {
     let mut small = mount_sized(comp_ui::control_view::EDITOR_W, comp_ui::control_view::EDITOR_H);
-    select_profile(&mut small, 1).await?;
+    select_profile(&mut small, "la2a").await?;
     let (sw, sh) = panel_size(&small);
 
     let mut large = mount_sized(1600, 1000);
-    select_profile(&mut large, 1).await?;
+    select_profile(&mut large, "la2a").await?;
     let (lw, lh) = panel_size(&large);
 
     assert!(lw > sw && lh > sh, "panel did not grow: {sw}x{sh} → {lw}x{lh}");

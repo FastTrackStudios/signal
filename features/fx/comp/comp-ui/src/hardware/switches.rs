@@ -8,6 +8,9 @@
 use audiocore_core::prelude::*;
 use fts_ui_audio::prelude::*;
 
+/// How many buttons a bank stacks before it starts a second column.
+const MAX_BUTTON_ROWS: usize = 5;
+
 /// Normalized position of detent `index` out of `count`.
 fn detent(index: usize, count: usize) -> f32 {
     if count < 2 {
@@ -104,11 +107,15 @@ pub fn ToggleSwitch(
     }
 }
 
-/// The 1176's vertical ratio buttons.
+/// A bank of radio-like panel buttons — the 1176's ratios, the Distressor's.
 ///
-/// Radio-like: exactly one is in at a time, and the one that is in stays in.
-/// (The real unit lets you push several at once — "all buttons" — which the
-/// profile models as one more detent rather than as real multi-select.)
+/// Exactly one is in at a time, and the one that is in stays in. (The real
+/// 1176 lets you push several at once — "all buttons" — which the profile
+/// models as one more detent rather than as real multi-select.)
+///
+/// Banks longer than [`MAX_BUTTON_ROWS`] run into a second column rather than
+/// off the bottom of the panel: the Distressor has eight ratios and a rack
+/// unit is only 300 px tall.
 #[component]
 pub fn RatioButtons(
     handle: ParamHandle,
@@ -122,12 +129,18 @@ pub fn RatioButtons(
 
     let bw = 34.0 * scale;
     let bh = 22.0 * scale;
+    let rows = count.div_ceil((count + MAX_BUTTON_ROWS - 1) / MAX_BUTTON_ROWS);
 
     rsx! {
         div {
             "data-testid": "hw-buttons-{testid}",
             "data-index": "{selected}",
-            style: format!("display:flex; flex-direction:column; gap:{:.1}px;", 4.0 * scale),
+            style: format!(
+                "display:flex; flex-direction:column; flex-wrap:wrap; \
+                 align-content:center; gap:{:.1}px; max-height:{:.1}px;",
+                4.0 * scale,
+                rows as f64 * (bh + 4.0 * scale) + 1.0,
+            ),
 
             for (i , label) in labels.iter().enumerate() {
                 div {
@@ -195,6 +208,39 @@ mod tests {
             for i in 0..count {
                 assert_eq!(detent_index(detent(i, count), count), i);
             }
+        }
+    }
+}
+
+#[cfg(test)]
+mod layout_tests {
+    use super::MAX_BUTTON_ROWS;
+
+    /// The row count the component computes: banks split into as few columns
+    /// as fit, balanced rather than one long column plus a stub.
+    fn rows(count: usize) -> usize {
+        count.div_ceil((count + MAX_BUTTON_ROWS - 1) / MAX_BUTTON_ROWS)
+    }
+
+    #[test]
+    fn short_banks_stay_in_one_column() {
+        for count in 1..=MAX_BUTTON_ROWS {
+            assert_eq!(rows(count), count, "{count} buttons should stack");
+        }
+    }
+
+    #[test]
+    fn long_banks_split_into_balanced_columns() {
+        // The Distressor's eight ratios: two columns of four, not 5 + 3.
+        assert_eq!(rows(8), 4);
+        assert_eq!(rows(6), 3);
+        assert_eq!(rows(10), 5);
+    }
+
+    #[test]
+    fn no_bank_is_taller_than_the_limit() {
+        for count in 1..=12 {
+            assert!(rows(count) <= MAX_BUTTON_ROWS, "{count} → {}", rows(count));
         }
     }
 }

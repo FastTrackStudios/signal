@@ -60,28 +60,28 @@ fn mount_design() -> Fixture {
 /// Mount, switch to a profile, and size the window the way the host would:
 /// switching profile asks for that face's size, so a shot taken at the FTS
 /// surface's size is not what anyone sees.
-async fn mount_face(profile_index: usize) -> Fixture {
-    let (w, h) = comp_ui::faces::preferred_editor_size(profile_index);
+async fn mount_face(profile_id: &str) -> Fixture {
+    let index = comp_profiles::profile_index(profile_id).unwrap();
+    let (w, h) = comp_ui::faces::preferred_editor_size(index);
     let mut fx = mount_sized(w, h);
-    select_profile(&mut fx, profile_index).await;
+    select_profile(&mut fx, profile_id).await;
     fx
 }
 
-/// Click profile `index` in the shell rail — the face switch.
-async fn select_profile(fx: &mut Fixture, index: usize) {
-    let id = comp_ui::faces::PROFILE_IDS[index];
-    let item = fx
-        .tester
-        .query(by_testid(&format!("rail-item-{id}")))
-        .immediately()
-        .unwrap_or_else(|e| panic!("rail item {id} missing: {e:?}"));
-    let (ox, oy) = item.document_origin();
-    let (w, h) = item.size();
-    let (x, y) = (ox + w as f64 / 2.0, oy + h as f64 / 2.0);
-    fx.tester.pointer_down(x, y);
-    let _ = fx.tester.pump().await;
-    fx.tester.pointer_up(x, y);
-    fx.settle().await;
+/// Select a profile by id through the shell rail, cycling the family button
+/// as many times as it takes.
+async fn select_profile(fx: &mut Fixture, profile_id: &str) {
+    let (category, _) = comp_profiles::category_of(profile_id)
+        .unwrap_or_else(|| panic!("{profile_id} is in no category"));
+    let target = comp_profiles::profile_index(profile_id).unwrap() as i32;
+    let rail_id = comp_profiles::CATEGORIES[category].id;
+    for _ in 0..8 {
+        if fx.params.profile.value() == target {
+            return;
+        }
+        click_testid(fx, &format!("rail-item-{rail_id}")).await;
+    }
+    panic!("rail never reached {profile_id}");
 }
 
 /// Click the centre of whatever carries `testid`.
@@ -137,7 +137,7 @@ async fn shot_character_dropdown() {
 
 #[tokio::test]
 async fn shot_la2a_face() {
-    let mut fx = mount_face(1).await;
+    let mut fx = mount_face("la2a").await;
     // Some peak reduction on the meter, and gain brought back up.
     fx.ui.gain_reduction_db
         .store(7.5, std::sync::atomic::Ordering::Relaxed);
@@ -148,7 +148,7 @@ async fn shot_la2a_face() {
 
 #[tokio::test]
 async fn shot_ssl_bus_face() {
-    let mut fx = mount_face(2).await;
+    let mut fx = mount_face("ssl_bus").await;
     fx.ui.gain_reduction_db
         .store(4.0, std::sync::atomic::Ordering::Relaxed);
     turn(&mut fx, "hw-knob-threshold", -30.0).await;
@@ -157,7 +157,7 @@ async fn shot_ssl_bus_face() {
 
 #[tokio::test]
 async fn shot_1176_face() {
-    let mut fx = mount_face(3).await;
+    let mut fx = mount_face("urei_1176").await;
     fx.ui.gain_reduction_db
         .store(11.0, std::sync::atomic::Ordering::Relaxed);
     turn(&mut fx, "hw-knob-input", -30.0).await;
@@ -165,12 +165,27 @@ async fn shot_1176_face() {
     shot(&fx, "urei-1176");
 }
 
+/// Every remaining unit, one shot each — this is the sheet to look at after
+/// touching the panel kit.
+#[tokio::test]
+async fn shot_every_other_unit() {
+    for id in ["cl1b", "fairchild670", "manley_vari_mu", "dbx160", "distressor"] {
+        let mut fx = mount_face(id).await;
+        fx.ui.gain_reduction_db
+            .store(6.0, std::sync::atomic::Ordering::Relaxed);
+        fx.ui.output_peak_db
+            .store(-14.0, std::sync::atomic::Ordering::Relaxed);
+        fx.settle().await;
+        shot(&fx, &id.replace('_', "-"));
+    }
+}
+
 /// The same face in a window the user dragged wider — this is what host
 /// resizing does to a faceplate (scale it, not reflow it).
 #[tokio::test]
 async fn shot_la2a_face_large() {
     let mut fx = mount_sized(1500, 520);
-    select_profile(&mut fx, 1).await;
+    select_profile(&mut fx, "la2a").await;
     fx.ui.gain_reduction_db
         .store(5.0, std::sync::atomic::Ordering::Relaxed);
     shot(&fx, "la2a-large");

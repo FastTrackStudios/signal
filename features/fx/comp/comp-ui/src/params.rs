@@ -95,8 +95,19 @@ pub const CHARACTER_LABELS: &[&str] = &[
     "Tape", "Tube", "Trans", "Bright", "Cubic", "Clip", "Asym",
 ];
 
-/// Hardware profile skins from [`comp_profiles`], in `all_profiles()` order.
-pub const PROFILE_LABELS: &[&str] = &["Control", "LA-2A", "SSL Bus", "1176"];
+/// Profile names in `comp_profiles::all_profiles()` order — the order the
+/// `profile` parameter's values are in, so **append only**.
+pub const PROFILE_LABELS: &[&str] = &[
+    "Control",
+    "1176",
+    "LA-2A",
+    "CL 1B",
+    "Fairchild 670",
+    "Manley Vari-Mu",
+    "SSL Bus",
+    "dbx 160",
+    "Distressor",
+];
 
 /// Full parameter tree.
 ///

@@ -29,7 +29,7 @@ use nice_plug::editor::ResizeHint;
 use fts_ui::prelude::{ThemeMode, ThemeProvider, ThemeState, default_theme_preset};
 use fts_ui_audio::prelude::*;
 
-use crate::faces::{Face, PROFILE_IDS};
+use crate::faces::{profile_id_for_index, Face};
 use crate::param_adapter::param_handle;
 use crate::params::{CompUiState, PROFILE_LABELS};
 use crate::profile_view::{ProfileSkin, profile_skin};
@@ -156,7 +156,7 @@ fn AppShell() -> Element {
 
     // The profile param picks the face; the rail tints from its skin.
     let profile_idx = params.profile.value().max(0) as usize;
-    let profile_id = PROFILE_IDS.get(profile_idx).copied().unwrap_or("control");
+    let profile_id = profile_id_for_index(profile_idx);
     let skin = profile_skin(profile_id);
     let is_control_face = profile_id == "control";
 
@@ -192,14 +192,11 @@ fn AppShell() -> Element {
     // everything else.
     let profile_handle = param_handle(params.profile.as_ptr(), ctx.clone());
     let profile_count = PROFILE_LABELS.len();
-    // Badges are how the units are named on their own front panels; the full
-    // name is the tooltip.
-    let items = ShellItem::list([
-        ("control", "Control", "CTL"),
-        ("la2a", "LA-2A", "2A"),
-        ("ssl_bus", "SSL Bus", "SSL"),
-        ("urei_1176", "1176", "76"),
-    ]);
+    // One rail entry per compressor family, badged with the active unit.
+    let items = crate::faces::rail_items(profile_idx);
+    let active_category = comp_profiles::category_of(profile_id)
+        .map(|(c, _)| c)
+        .unwrap_or(0);
 
     rsx! {
         document::Style { {base_css} }
@@ -214,9 +211,12 @@ fn AppShell() -> Element {
                     subtitle: "Stereo Compressor".to_string(),
                     brand: "CMP".to_string(),
                     items,
-                    selected: profile_idx,
+                    selected: active_category,
                     accent: skin.accent.to_string(),
-                    on_select: move |index: usize| {
+                    on_select: move |category: usize| {
+                        // Clicking the active family cycles the units inside
+                        // it; clicking another lands on its first unit.
+                        let index = crate::faces::rail_click_target(profile_idx, category);
                         let normalized = if profile_count > 1 {
                             index as f32 / (profile_count - 1) as f32
                         } else {
@@ -256,5 +256,5 @@ fn AppShell() -> Element {
 /// Re-exported so callers (and tests) can resolve a profile index to its skin
 /// the same way [`AppShell`] does.
 pub fn skin_for_profile_index(index: usize) -> ProfileSkin {
-    profile_skin(PROFILE_IDS.get(index).copied().unwrap_or("control"))
+    profile_skin(profile_id_for_index(index))
 }

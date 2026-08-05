@@ -11,33 +11,111 @@
 //! it.
 
 pub mod control;
-pub mod la2a;
-pub mod ssl_bus;
-pub mod urei_1176;
+pub mod rack;
+pub mod units;
 
 use std::sync::Arc;
 
 use audiocore_core::prelude::*;
 use comp_profiles::Profile;
+use fts_ui_audio::shell::ShellItem;
 use fts_ui_audio::ParamHandle;
 use nice_plug_dioxus::prelude::ParamContext;
 
 use crate::params::CompUiState;
 use crate::profile_handle::handle_for;
 
-/// Profile ids in [`crate::params::PROFILE_LABELS`] order — the index the
-/// `profile` param holds maps onto `comp_profiles::all_profiles()` through
-/// this table.
-pub const PROFILE_IDS: &[&str] = &["control", "la2a", "ssl_bus", "urei_1176"];
+/// Profile ids in `comp_profiles::all_profiles()` order — which is the order
+/// the `profile` parameter's values are in.
+pub fn profile_ids() -> Vec<&'static str> {
+    comp_profiles::all_profiles()
+        .iter()
+        .map(|p| p.id())
+        .collect()
+}
+
+/// The profile id a `profile` param index selects.
+pub fn profile_id_for_index(index: usize) -> &'static str {
+    comp_profiles::all_profiles()
+        .get(index)
+        .map(|p| p.id())
+        .unwrap_or("control")
+}
 
 /// The profile a `profile` param index selects.
 pub fn profile_for_index(index: usize) -> &'static (dyn Profile + Sync) {
-    match PROFILE_IDS.get(index).copied() {
-        Some("la2a") => &comp_profiles::LA2A,
-        Some("ssl_bus") => &comp_profiles::SSL_BUS,
-        Some("urei_1176") => &comp_profiles::UREI_1176,
-        _ => &comp_profiles::CONTROL,
+    comp_profiles::all_profiles()
+        .get(index)
+        .copied()
+        .unwrap_or(&comp_profiles::CONTROL)
+}
+
+/// The rail badge for a profile — how the unit is named on its own panel.
+pub fn profile_badge(profile_id: &str) -> &'static str {
+    match profile_id {
+        "control" => "MAIN",
+        "urei_1176" => "76",
+        "la2a" => "2A",
+        "cl1b" => "CL",
+        "fairchild670" => "670",
+        "manley_vari_mu" => "MAN",
+        "ssl_bus" => "SSL",
+        "dbx160" => "160",
+        "distressor" => "DIS",
+        _ => "?",
     }
+}
+
+/// The rail, as the shell wants it: one entry per compressor family, badged
+/// with the *active* unit when that family is the one you are on.
+///
+/// A family with more than one unit says so in its tooltip, because a button
+/// that changes on a second click is not discoverable otherwise.
+pub fn rail_items(profile_index: usize) -> Vec<ShellItem> {
+    let active_id = profile_id_for_index(profile_index);
+    let active = comp_profiles::category_of(active_id).map(|(c, _)| c);
+
+    comp_profiles::CATEGORIES
+        .iter()
+        .enumerate()
+        .map(|(index, category)| {
+            let is_active = active == Some(index);
+            let badge = if is_active {
+                profile_badge(active_id)
+            } else {
+                category.badge
+            };
+            let names: Vec<&str> = category
+                .profiles
+                .iter()
+                .filter_map(|id| comp_profiles::profile_by_id(id).map(|p| p.name()))
+                .collect();
+            let label = if names.len() > 1 {
+                format!("{} — {} (click again to cycle)", category.label, names.join(" · "))
+            } else {
+                format!("{} — {}", category.label, names.join(""))
+            };
+            ShellItem::new(category.id, label).with_badge(badge)
+        })
+        .collect()
+}
+
+/// The `profile` parameter index a rail click selects.
+///
+/// Clicking the family you are already on advances to the next unit inside it
+/// and wraps; clicking any other family lands on its first unit.
+pub fn rail_click_target(profile_index: usize, clicked_category: usize) -> usize {
+    let active_id = profile_id_for_index(profile_index);
+    let Some(category) = comp_profiles::CATEGORIES.get(clicked_category) else {
+        return profile_index;
+    };
+    let next_id = match comp_profiles::category_of(active_id) {
+        Some((current, variant)) if current == clicked_category => {
+            category.profiles[(variant + 1) % category.profiles.len()]
+        }
+        _ => category.profiles[0],
+    };
+    comp_profiles::profile_index(next_id).unwrap_or(profile_index)
 }
 
 /// The editor size a face wants, in logical px — including the shell rail.
@@ -48,14 +126,12 @@ pub fn profile_for_index(index: usize) -> &'static (dyn Profile + Sync) {
 /// draws black above and below itself. So switching profile asks the host to
 /// resize, the same way the plugin asks on open.
 pub fn preferred_editor_size(profile_index: usize) -> (u32, u32) {
-    match PROFILE_IDS.get(profile_index).copied() {
+    if units::design_for(profile_id_for_index(profile_index)).is_some() {
         // Rack units: the panel's 900x300 drawing plus the rail, with a little
         // air around it.
-        Some("la2a") | Some("ssl_bus") | Some("urei_1176") => (1000, 348),
-        _ => (
-            crate::control_view::EDITOR_W,
-            crate::control_view::EDITOR_H,
-        ),
+        (1000, 348)
+    } else {
+        (crate::control_view::EDITOR_W, crate::control_view::EDITOR_H)
     }
 }
 
@@ -71,11 +147,15 @@ pub fn preferred_editor_size(profile_index: usize) -> (u32, u32) {
 /// once and then sit there with a frozen VU and stale knob positions.
 #[component]
 pub fn Face(profile_index: usize, advanced: bool, frame: u64) -> Element {
-    match PROFILE_IDS.get(profile_index).copied() {
-        Some("la2a") => rsx! { la2a::La2aFace { frame } },
-        Some("ssl_bus") => rsx! { ssl_bus::SslBusFace { frame } },
-        Some("urei_1176") => rsx! { urei_1176::Urei1176Face { frame } },
-        _ => rsx! { control::ControlFace { advanced, frame } },
+    let _ = frame;
+    match units::design_for(profile_id_for_index(profile_index)) {
+        // `key` is what makes a face swap actually swap: without it Dioxus
+        // diffs the new design into the old panel's nodes, and knobs keep the
+        // previous unit's handles.
+        Some(design) => rsx! {
+            rack::RackFace { key: "{profile_index}", design: *design, frame }
+        },
+        None => rsx! { control::ControlFace { advanced, frame } },
     }
 }
 
@@ -131,12 +211,12 @@ mod tests {
     fn the_rack_faces_ask_for_a_shorter_window_than_the_fts_surface() {
         let (_, control_h) = preferred_editor_size(0);
         assert_eq!((preferred_editor_size(0)), (EDITOR_W, EDITOR_H));
-        for index in 1..PROFILE_IDS.len() {
+        for index in 1..profile_ids().len() {
             let (_, face_h) = preferred_editor_size(index);
             assert!(
                 face_h < control_h,
                 "{} asks for {face_h}px, no shorter than the FTS surface's {control_h}px",
-                PROFILE_IDS[index],
+                profile_id_for_index(index),
             );
         }
     }
@@ -146,7 +226,7 @@ mod tests {
         // A preferred size outside the declared resize bounds is a request the
         // host will clamp or refuse — the face would open at the wrong size
         // with nothing in the log to say why.
-        for index in 0..PROFILE_IDS.len() {
+        for index in 0..profile_ids().len() {
             let (w, h) = preferred_editor_size(index);
             let (w, h) = (w as f32, h as f32);
             assert!(
@@ -154,7 +234,7 @@ mod tests {
                     && (MIN_EDITOR_H..=MAX_EDITOR_H).contains(&h),
                 "{} wants {w}x{h}, outside the editor's {MIN_EDITOR_W}x{MIN_EDITOR_H}..\
                  {MAX_EDITOR_W}x{MAX_EDITOR_H} bounds",
-                PROFILE_IDS[index],
+                profile_id_for_index(index),
             );
         }
     }
