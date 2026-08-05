@@ -1,0 +1,98 @@
+# FTS-Reaper: `nix run .#fts-reaper` — REAPER + SWS + ReaPack + every FTS
+# plugin (CLAP+VST3), pre-wired into a config dir. No manual setup, no
+# separate `fts-installer reaper` step.
+#
+# Built from the vendored reaper-flake recipes (nix/vendor/reaper-flake,
+# subtree-imported — see wrapper/reaper/pkgs/{reaper,sws,reapack}.nix) plus a
+# new `fts-plugins` crane package (this repo's own 17-plugin suite,
+# apps/plugins/*, bundled the same way `just plugins-bundle` does).
+#
+# Plugin injection follows the exact idiom reaper-flake already used for
+# SWS/ReaPack (idempotent launch-time symlinks into $REAPER_CONFIG/
+# UserPlugins — see wrapper/reaper/pkgs/dmg.nix's fts-reaper-launcher),
+# extended with a third category (VST3/CLAP) that didn't exist before.
+{ ... }:
+{
+  perSystem = { pkgs, lib, config, ... }:
+    let
+      vendor = ../../vendor/reaper-flake;
+
+      reaper = pkgs.callPackage (vendor + "/wrapper/reaper/pkgs/reaper.nix") {
+        jackLibrary = pkgs.pipewire.jack;
+        libxml2 = pkgs.libxml2_13; # .so.2 — matches nixpkgs' libSwell build
+      };
+      sws = pkgs.callPackage (vendor + "/wrapper/reaper/pkgs/sws.nix") { };
+      reapack = pkgs.callPackage (vendor + "/wrapper/reaper/pkgs/reapack.nix") { };
+
+      # The FTS plugin suite (bundler.toml's 17 CLAP+VST3 plugins),
+      # bundled via fts-plugin-xtask — same recipe `just plugins-bundle`
+      # runs, just inside the crane sandbox (offline: cargoVendorDir
+      # already carries every crate). Single-arch only for now (whatever
+      # `system` this perSystem is evaluating) — no lipo/universal step,
+      # unlike the macOS release artifact.
+      fts-plugins = config.fts.craneLib.buildPackage (config.fts.commonArgs // config.fts.shellEnv // {
+        pname = "fts-plugins";
+        version = "0.1.0";
+        cargoArtifacts = null;
+        cargoExtraArgs = "--package fts-plugin-xtask";
+        buildInputs = config.fts.buildInputs;
+        # python3 explicitly: stylo's build.rs (nice-plug-dioxus/Blitz) shells
+        # out to `python3` and needs it on PATH, not just linkable.
+        nativeBuildInputs = config.fts.nativeBuildInputs ++ [ pkgs.python3 ];
+        doNotPostBuildInstallCargoBinaries = true;
+        doCheck = false;
+        buildPhaseCargoCommand = ''
+          # signal-plugin (daw-bridge -> cpal's pipewire feature -> the
+          # pipewire-sys/libspa bindgen) fails against this nixpkgs
+          # pipewire's headers (SPA_ID_INVALID missing — a header/ABI
+          # version mismatch, same class of issue as the Inferno x
+          # PipeWire 1.6.3 incompat elsewhere in this tree, not something
+          # introduced by this packaging). Skip it rather than fail the
+          # whole bundle; the other 16 plugins are unaffected.
+          for p in eq comp reverb delay tune modulation nam level saturate \
+                   signal guide gate limiter trigger meter pitch unison; do
+            cargo run -q -p fts-plugin-xtask -- bundle -p "$p-plugin" --release --offline \
+              || echo "WARNING: $p-plugin failed to bundle — skipping (see comment above)"
+          done
+        '';
+        installPhaseCommand = ''
+          mkdir -p $out
+          cp -r target/bundled/. $out/
+        '';
+      });
+
+      reaperConfig = "\${FTS_REAPER_CONFIG:-$HOME/fasttrackstudio}";
+
+      # FTS default reaper.ini — general prefs only (audio driver mode,
+      # undo memory, the reaper_fts_extensions dock layout, SWS loudness
+      # targets, toolbar geometry). No machine-specific window positions
+      # or audio/MIDI device selection — those stay on REAPER's own
+      # auto-detect. Sourced from the actual production rig's config
+      # (~/fasttrackstudio/reaper.ini), hardware-specific bits stripped.
+      reaperIniTemplate = vendor + "/assets/reaper.ini.template";
+
+      fts-reaper = pkgs.writeShellApplication {
+        name = "fts-reaper";
+        text = ''
+          CONFIG_DIR="${reaperConfig}"
+          mkdir -p "$CONFIG_DIR/UserPlugins" "$CONFIG_DIR/Scripts"
+
+          # Never clobber a configured rig — only seed the FTS defaults
+          # the first time this config dir is used.
+          # install -m: the nix store source is read-only; REAPER needs to
+          # write this file back on exit.
+          [ -f "$CONFIG_DIR/reaper.ini" ] || install -m 644 "${reaperIniTemplate}" "$CONFIG_DIR/reaper.ini"
+
+          ln -sf "${sws}"/UserPlugins/* "$CONFIG_DIR/UserPlugins/" 2>/dev/null || true
+          ln -sf "${reapack}"/UserPlugins/* "$CONFIG_DIR/UserPlugins/" 2>/dev/null || true
+          find "${fts-plugins}" \( -iname '*.vst3' -o -iname '*.clap' \) -maxdepth 3 -print0 \
+            | xargs -0 -I{} ln -sf {} "$CONFIG_DIR/UserPlugins/"
+
+          exec "${reaper}/bin/reaper" -cfgfile "$CONFIG_DIR/reaper.ini" -newinst "$@"
+        '';
+      };
+    in
+    {
+      packages = { inherit reaper sws reapack fts-plugins fts-reaper; };
+    };
+}

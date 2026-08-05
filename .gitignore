@@ -12,3 +12,7 @@ apps/patchbay/web-dist/
 # graphify knowledge graph — regenerable via `just graph`, machine-local.
 # Un-ignore graph.json/GRAPH_REPORT.md if you want to share a prebuilt graph.
 graphify-out/
+
+# nix build result symlinks (result, result-1, result-2, ...)
+result
+result-*

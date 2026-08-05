@@ -1,0 +1,86 @@
+; FTS default REAPER preferences — installed by `nix run .#fts-reaper` (and
+; `fts-installer reaper`) only when a rig's reaper.ini doesn't exist yet;
+; never overwrites a configured rig. Machine-specific bits (window geometry,
+; monitor positions, audio/MIDI device selection — see
+; reaper-midihw-{linux,alsa}.ini) are deliberately NOT here; REAPER picks
+; sane defaults for those on first run / first device scan.
+
+[reaper]
+; Low-latency PipeWire/ALSA defaults — no device selection (that's
+; per-machine, left on auto-detect).
+linux_audio_mode=2
+linux_audio_bits=32
+linux_audio_bsize=512
+linux_audio_bufs=3
+linux_audio_srate=44100
+linux_audio_nch_in=2
+linux_audio_nch_out=2
+linux_auto_pasuspend=1
+; Unlimited undo memory — a live rig should never hit an undo ceiling
+; mid-set (also set via launch.json's ini_overrides for the fts-installer
+; path; kept here too so a bare `nix run .#fts-reaper` gets the same).
+undomaxmem=0
+renderclosewhendone=4
+
+[REAPERdockpref]
+; reaper_fts_extensions panel layout (dock fractions) — FTS_INPUT_ACTIONS /
+; FTS_INPUT_KEYBOARD / FTS_LAUNCHER / FTS_UI_DESKTOP / FTS_UI_NATIVE.
+FTS_INPUT_ACTIONS=0.64110780 3
+FTS_INPUT_KEYBOARD=0.38631266 -1
+FTS_LAUNCHER=0.01847867 -1
+FTS_UI_DESKTOP=0.39710078 -1
+FTS_UI_NATIVE=0.47025254 -1
+
+[SWS]
+; EBU R128 loudness targets.
+BR - LoudnessPref=-23.000000 0 -41.000000 -14.000000
+DragZoomScale=0.10
+ZoomPrefs=0
+
+[toolbar:1]
+dock=1
+wnd_height=66
+wnd_left=0
+wnd_top=0
+wnd_vis=1
+wnd_width=431
+
+[toolbar:2]
+dock=1
+wnd_height=66
+wnd_left=0
+wnd_top=0
+wnd_vis=1
+wnd_width=431
+
+[toolbar:3]
+dock=1
+wnd_height=66
+wnd_left=0
+wnd_top=0
+wnd_vis=1
+wnd_width=431
+
+[toolbar:4]
+dock=1
+wnd_height=66
+wnd_left=0
+wnd_top=0
+wnd_vis=1
+wnd_width=431
+
+[toolbar:9]
+dock=1
+wnd_height=66
+wnd_left=0
+wnd_top=0
+wnd_vis=1
+wnd_width=431
+
+[toolbar:10]
+dock=1
+wnd_height=66
+wnd_left=0
+wnd_top=0
+wnd_vis=1
+wnd_width=431
