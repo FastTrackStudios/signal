@@ -81,6 +81,7 @@ pub static PULTEC: RackDesign = RackDesign {
             d: 96.0,
             ring: Ring::Numerals(&["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]),
             tint: None,
+            style: None,
         },
         RackItem::Readout { id: "low_atten", x: 349.0, y: 22.0 },
         RackItem::Knob {
@@ -91,6 +92,7 @@ pub static PULTEC: RackDesign = RackDesign {
             d: 96.0,
             ring: Ring::Numerals(&["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]),
             tint: None,
+            style: None,
         },
         RackItem::Readout { id: "high_boost", x: 553.0, y: 22.0 },
         RackItem::Knob {
@@ -101,6 +103,7 @@ pub static PULTEC: RackDesign = RackDesign {
             d: 96.0,
             ring: Ring::Numerals(&["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]),
             tint: None,
+            style: None,
         },
         RackItem::Readout { id: "high_atten", x: 688.0, y: 22.0 },
         RackItem::Knob {
@@ -111,6 +114,7 @@ pub static PULTEC: RackDesign = RackDesign {
             d: 96.0,
             ring: Ring::Numerals(&["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]),
             tint: None,
+            style: None,
         },
         // The high-attenuation frequency: a small knob at the top right.
         RackItem::Knob {
@@ -121,6 +125,7 @@ pub static PULTEC: RackDesign = RackDesign {
             d: 42.0,
             ring: Ring::Numerals(&["5", "10", "20"]),
             tint: None,
+            style: Some(KnobStyle::Pointer),
         },
         // ── Bottom row: the levers, bandwidth, bypass and output ─────────
         RackItem::Lever {
@@ -140,6 +145,7 @@ pub static PULTEC: RackDesign = RackDesign {
             d: 88.0,
             ring: Ring::Numerals(&["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]),
             tint: None,
+            style: None,
         },
         RackItem::Lever {
             id: "high_boost_freq",
@@ -176,6 +182,7 @@ pub static PULTEC: RackDesign = RackDesign {
             d: 44.0,
             ring: Ring::None,
             tint: None,
+            style: Some(KnobStyle::Pointer),
         },
         RackItem::Readout { id: "trim", x: 810.0, y: 196.0 },
         RackItem::Knob {
@@ -186,6 +193,7 @@ pub static PULTEC: RackDesign = RackDesign {
             d: 46.0,
             ring: Ring::Numerals(&["0", "2", "4", "6", "8", "10"]),
             tint: None,
+            style: Some(KnobStyle::Pointer),
         },
         // ── Panel marks ──────────────────────────────────────────────────
         RackItem::Text {
@@ -271,6 +279,7 @@ pub static SSL: RackDesign = RackDesign {
             d: 42.0,
             ring: Ring::Dots(&["16", "20", "70", "120", "200", "300", "350"]),
             tint: Some("#d8d4c6"),
+            style: None,
         },
         RackItem::Knob {
             id: "lpf",
@@ -280,6 +289,7 @@ pub static SSL: RackDesign = RackDesign {
             d: 42.0,
             ring: Ring::Dots(&["3", "5", "8", "12", "16", "20", "22"]),
             tint: Some("#d8d4c6"),
+            style: None,
         },
         RackItem::Divider { x: 218.0, y: 140.0, h: 236.0 },
 
@@ -293,6 +303,7 @@ pub static SSL: RackDesign = RackDesign {
             d: 44.0,
             ring: Ring::Dots(&["-", "", "", "", "", "0", "", "", "", "", "+"]),
             tint: Some("#2b2d31"),
+            style: None,
         },
         RackItem::Knob {
             id: "lf_freq",
@@ -302,6 +313,7 @@ pub static SSL: RackDesign = RackDesign {
             d: 42.0,
             ring: Ring::Dots(&["30", "50", "100", "200", "300", "450"]),
             tint: Some("#2b2d31"),
+            style: None,
         },
         RackItem::Divider { x: 340.0, y: 140.0, h: 236.0 },
 
@@ -315,6 +327,7 @@ pub static SSL: RackDesign = RackDesign {
             d: 44.0,
             ring: Ring::Dots(&["-", "", "", "", "", "0", "", "", "", "", "+"]),
             tint: Some("#2b7fc0"),
+            style: None,
         },
         RackItem::Button {
             id: "",
@@ -333,6 +346,7 @@ pub static SSL: RackDesign = RackDesign {
             d: 40.0,
             ring: Ring::Dots(&["3", "2", "1.5", "1", ".5"]),
             tint: Some("#2b7fc0"),
+            style: None,
         },
         RackItem::Knob {
             id: "lmf_freq",
@@ -342,6 +356,7 @@ pub static SSL: RackDesign = RackDesign {
             d: 40.0,
             ring: Ring::Dots(&[".2", ".3", ".8", "1", "1.5", "2", "2.5"]),
             tint: Some("#2b7fc0"),
+            style: None,
         },
         RackItem::Divider { x: 516.0, y: 140.0, h: 236.0 },
 
@@ -364,6 +379,7 @@ pub static SSL: RackDesign = RackDesign {
             d: 44.0,
             ring: Ring::Dots(&["-", "", "", "", "", "0", "", "", "", "", "+"]),
             tint: Some("#2c8f5a"),
+            style: None,
         },
         RackItem::Knob {
             id: "",
@@ -373,6 +389,7 @@ pub static SSL: RackDesign = RackDesign {
             d: 40.0,
             ring: Ring::Dots(&["3", "2", "1.5", "1", ".5"]),
             tint: Some("#2c8f5a"),
+            style: None,
         },
         RackItem::Knob {
             id: "hmf_freq",
@@ -382,6 +399,7 @@ pub static SSL: RackDesign = RackDesign {
             d: 40.0,
             ring: Ring::Dots(&[".6", ".8", "1.5", "3", "4.5", "6", "7"]),
             tint: Some("#2c8f5a"),
+            style: None,
         },
         RackItem::Divider { x: 702.0, y: 140.0, h: 236.0 },
 
@@ -395,6 +413,7 @@ pub static SSL: RackDesign = RackDesign {
             d: 44.0,
             ring: Ring::Dots(&["-", "", "", "", "", "0", "", "", "", "", "+"]),
             tint: Some("#a8438f"),
+            style: None,
         },
         RackItem::Knob {
             id: "hf_freq",
@@ -404,6 +423,7 @@ pub static SSL: RackDesign = RackDesign {
             d: 42.0,
             ring: Ring::Dots(&["1.5", "2", "5", "8", "10", "14", "16"]),
             tint: Some("#a8438f"),
+            style: None,
         },
         RackItem::Divider { x: 800.0, y: 140.0, h: 236.0 },
 
@@ -434,6 +454,7 @@ pub static SSL: RackDesign = RackDesign {
             d: 42.0,
             ring: Ring::Dots(&["-24", "", "", "0", "", "", "+12"]),
             tint: Some("#d8d4c6"),
+            style: None,
         },
         RackItem::Knob {
             id: "drive",
@@ -443,6 +464,7 @@ pub static SSL: RackDesign = RackDesign {
             d: 34.0,
             ring: Ring::Dots(&["", "", "", "", ""]),
             tint: Some("#d8d4c6"),
+            style: None,
         },
         RackItem::Text { x: 978.0, y: 48.0, text: "0", size: 7.0, strong: false },
         RackItem::Text { x: 978.0, y: 84.0, text: "-10", size: 7.0, strong: false },
@@ -495,6 +517,7 @@ pub static API_550A: RackDesign = RackDesign {
             d: 52.0,
             ring: Ring::Detents(&["50", "100", "200", "400"]),
             tint: None,
+            style: None,
         },
         RackItem::Knob {
             id: "mid_freq",
@@ -504,6 +527,7 @@ pub static API_550A: RackDesign = RackDesign {
             d: 52.0,
             ring: Ring::Detents(&["400", "800", "1.5k", "3k", "5k"]),
             tint: None,
+            style: None,
         },
         RackItem::Knob {
             id: "high_freq",
@@ -513,6 +537,7 @@ pub static API_550A: RackDesign = RackDesign {
             d: 52.0,
             ring: Ring::Detents(&["5k", "7k", "10k", "12.5k", "15k"]),
             tint: None,
+            style: None,
         },
         RackItem::Switch {
             id: "eq_in",
@@ -533,6 +558,7 @@ pub static API_550A: RackDesign = RackDesign {
                 majors: 7,
             },
             tint: None,
+            style: None,
         },
         RackItem::Knob {
             id: "mid_gain",
@@ -546,6 +572,7 @@ pub static API_550A: RackDesign = RackDesign {
                 majors: 7,
             },
             tint: None,
+            style: None,
         },
         RackItem::Knob {
             id: "high_gain",
@@ -559,6 +586,7 @@ pub static API_550A: RackDesign = RackDesign {
                 majors: 7,
             },
             tint: None,
+            style: None,
         },
         RackItem::Knob {
             id: "drive",
@@ -568,6 +596,7 @@ pub static API_550A: RackDesign = RackDesign {
             d: 42.0,
             ring: Ring::Plain { majors: 5 },
             tint: None,
+            style: None,
         },
         RackItem::Knob {
             id: "trim",
@@ -581,6 +610,7 @@ pub static API_550A: RackDesign = RackDesign {
                 majors: 5,
             },
             tint: None,
+            style: None,
         },
     ],
 };
@@ -630,6 +660,7 @@ pub static NEVE_1073: RackDesign = RackDesign {
                 majors: 5,
             },
             tint: Some("#8d9196"),
+            style: None,
         },
         RackItem::Knob {
             id: "mid_freq",
@@ -639,6 +670,7 @@ pub static NEVE_1073: RackDesign = RackDesign {
             d: 52.0,
             ring: Ring::Detents(&["Off", "360", "700", "1.6k", "3.2k", "4.8k", "7.2k"]),
             tint: Some("#8e2f38"),
+            style: None,
         },
         RackItem::Knob {
             id: "mid_gain",
@@ -652,6 +684,7 @@ pub static NEVE_1073: RackDesign = RackDesign {
                 majors: 5,
             },
             tint: Some("#8e2f38"),
+            style: None,
         },
         RackItem::Knob {
             id: "drive",
@@ -661,6 +694,7 @@ pub static NEVE_1073: RackDesign = RackDesign {
             d: 46.0,
             ring: Ring::Plain { majors: 5 },
             tint: Some("#8e2f38"),
+            style: None,
         },
         RackItem::Switch {
             id: "eq_in",
@@ -677,6 +711,7 @@ pub static NEVE_1073: RackDesign = RackDesign {
             d: 52.0,
             ring: Ring::Detents(&["Off", "35", "60", "110", "220"]),
             tint: Some("#28527f"),
+            style: None,
         },
         RackItem::Knob {
             id: "low_gain",
@@ -690,6 +725,7 @@ pub static NEVE_1073: RackDesign = RackDesign {
                 majors: 5,
             },
             tint: Some("#28527f"),
+            style: None,
         },
         RackItem::Knob {
             id: "hpf",
@@ -699,6 +735,7 @@ pub static NEVE_1073: RackDesign = RackDesign {
             d: 52.0,
             ring: Ring::Detents(&["Off", "50", "80", "160", "300"]),
             tint: Some("#28527f"),
+            style: None,
         },
         RackItem::Knob {
             id: "trim",
@@ -708,6 +745,7 @@ pub static NEVE_1073: RackDesign = RackDesign {
             d: 46.0,
             ring: Ring::Plain { majors: 5 },
             tint: Some("#8e2f38"),
+            style: None,
         },
         RackItem::Switch {
             id: "phase",

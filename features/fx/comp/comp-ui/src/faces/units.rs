@@ -67,6 +67,7 @@ pub static UREI_1176: RackDesign = RackDesign {
                 majors: 5,
             },
             tint: None,
+            style: None,
         },
         RackItem::Knob {
             id: "output",
@@ -80,6 +81,7 @@ pub static UREI_1176: RackDesign = RackDesign {
                 majors: 5,
             },
             tint: None,
+            style: None,
         },
         RackItem::Knob {
             id: "attack",
@@ -93,6 +95,7 @@ pub static UREI_1176: RackDesign = RackDesign {
                 majors: 7,
             },
             tint: None,
+            style: None,
         },
         RackItem::Knob {
             id: "release",
@@ -106,6 +109,7 @@ pub static UREI_1176: RackDesign = RackDesign {
                 majors: 7,
             },
             tint: None,
+            style: None,
         },
         RackItem::Text {
             x: 600.0,
@@ -179,6 +183,7 @@ pub static LA2A: RackDesign = RackDesign {
                 "0", "10", "20", "30", "40", "50", "60", "70", "80", "90", "100",
             ]),
             tint: None,
+            style: None,
         },
 
         // ── The movement ─────────────────────────────────────────────────
@@ -201,6 +206,7 @@ pub static LA2A: RackDesign = RackDesign {
                 "0", "10", "20", "30", "40", "50", "60", "70", "80", "90", "100",
             ]),
             tint: None,
+            style: None,
         },
 
         // ── Meter mode + power, top right ────────────────────────────────
@@ -215,6 +221,7 @@ pub static LA2A: RackDesign = RackDesign {
             d: 42.0,
             ring: Ring::None,
             tint: None,
+            style: None,
         },
         RackItem::Switch {
             id: "",
@@ -260,6 +267,7 @@ pub static CL1B: RackDesign = RackDesign {
                 majors: 5,
             },
             tint: None,
+            style: None,
         },
         RackItem::Knob {
             id: "ratio",
@@ -273,6 +281,7 @@ pub static CL1B: RackDesign = RackDesign {
                 majors: 5,
             },
             tint: None,
+            style: None,
         },
         RackItem::Knob {
             id: "attack",
@@ -282,6 +291,7 @@ pub static CL1B: RackDesign = RackDesign {
             d: 54.0,
             ring: Ring::Plain { majors: 6 },
             tint: None,
+            style: None,
         },
         RackItem::Knob {
             id: "release",
@@ -291,6 +301,7 @@ pub static CL1B: RackDesign = RackDesign {
             d: 54.0,
             ring: Ring::Plain { majors: 6 },
             tint: None,
+            style: None,
         },
         RackItem::Knob {
             id: "gain",
@@ -304,6 +315,7 @@ pub static CL1B: RackDesign = RackDesign {
                 majors: 5,
             },
             tint: None,
+            style: None,
         },
         RackItem::Text {
             x: 560.0,
@@ -367,6 +379,7 @@ pub static FAIRCHILD_670: RackDesign = RackDesign {
                 majors: 5,
             },
             tint: None,
+            style: None,
         },
         RackItem::Knob {
             id: "threshold",
@@ -380,6 +393,7 @@ pub static FAIRCHILD_670: RackDesign = RackDesign {
                 majors: 5,
             },
             tint: None,
+            style: None,
         },
         RackItem::Knob {
             id: "time_constant",
@@ -389,6 +403,7 @@ pub static FAIRCHILD_670: RackDesign = RackDesign {
             d: 52.0,
             ring: Ring::Detents(&["1", "2", "3", "4", "5", "6"]),
             tint: None,
+            style: None,
         },
         RackItem::Knob {
             id: "output",
@@ -402,6 +417,7 @@ pub static FAIRCHILD_670: RackDesign = RackDesign {
                 majors: 5,
             },
             tint: None,
+            style: None,
         },
         RackItem::Text {
             x: 660.0,
@@ -454,6 +470,7 @@ pub static MANLEY_VARI_MU: RackDesign = RackDesign {
                 majors: 5,
             },
             tint: None,
+            style: None,
         },
         RackItem::Knob {
             id: "threshold",
@@ -467,6 +484,7 @@ pub static MANLEY_VARI_MU: RackDesign = RackDesign {
                 majors: 5,
             },
             tint: None,
+            style: None,
         },
         RackItem::Knob {
             id: "attack",
@@ -476,6 +494,7 @@ pub static MANLEY_VARI_MU: RackDesign = RackDesign {
             d: 50.0,
             ring: Ring::Plain { majors: 6 },
             tint: None,
+            style: None,
         },
         RackItem::Knob {
             id: "recovery",
@@ -485,6 +504,7 @@ pub static MANLEY_VARI_MU: RackDesign = RackDesign {
             d: 50.0,
             ring: Ring::Detents(&["1", "2", "3", "4", "5"]),
             tint: None,
+            style: None,
         },
         RackItem::Knob {
             id: "output",
@@ -498,6 +518,7 @@ pub static MANLEY_VARI_MU: RackDesign = RackDesign {
                 majors: 5,
             },
             tint: None,
+            style: None,
         },
         RackItem::Switch {
             id: "mode",
@@ -516,6 +537,7 @@ pub static MANLEY_VARI_MU: RackDesign = RackDesign {
             d: 34.0,
             ring: Ring::Detents(&["Out", "100"]),
             tint: None,
+            style: None,
         },
         RackItem::Text {
             x: 560.0,
@@ -573,6 +595,7 @@ pub static SSL_BUS: RackDesign = RackDesign {
                 majors: 7,
             },
             tint: None,
+            style: None,
         },
         RackItem::Knob {
             id: "ratio",
@@ -582,6 +605,7 @@ pub static SSL_BUS: RackDesign = RackDesign {
             d: 54.0,
             ring: Ring::Detents(&["2", "4", "10"]),
             tint: None,
+            style: None,
         },
         RackItem::Knob {
             id: "attack",
@@ -591,6 +615,7 @@ pub static SSL_BUS: RackDesign = RackDesign {
             d: 54.0,
             ring: Ring::Detents(&["0.1", "0.3", "1", "3", "10", "30"]),
             tint: None,
+            style: None,
         },
         RackItem::Knob {
             id: "release",
@@ -600,6 +625,7 @@ pub static SSL_BUS: RackDesign = RackDesign {
             d: 54.0,
             ring: Ring::Detents(&["0.1", "0.3", "0.6", "1.2", "A"]),
             tint: None,
+            style: None,
         },
         RackItem::Knob {
             id: "makeup",
@@ -613,6 +639,7 @@ pub static SSL_BUS: RackDesign = RackDesign {
                 majors: 7,
             },
             tint: None,
+            style: None,
         },
         RackItem::Knob {
             id: "mix",
@@ -622,6 +649,7 @@ pub static SSL_BUS: RackDesign = RackDesign {
             d: 34.0,
             ring: Ring::None,
             tint: None,
+            style: None,
         },
         RackItem::Text {
             x: 560.0,
@@ -671,6 +699,7 @@ pub static DBX_160: RackDesign = RackDesign {
                 majors: 5,
             },
             tint: None,
+            style: None,
         },
         RackItem::Knob {
             id: "compression",
@@ -684,6 +713,7 @@ pub static DBX_160: RackDesign = RackDesign {
                 majors: 5,
             },
             tint: None,
+            style: None,
         },
         RackItem::Knob {
             id: "output",
@@ -697,6 +727,7 @@ pub static DBX_160: RackDesign = RackDesign {
                 majors: 5,
             },
             tint: None,
+            style: None,
         },
         RackItem::Text {
             x: 640.0,
@@ -819,6 +850,7 @@ pub static DISTRESSOR: RackDesign = RackDesign {
             d: 92.0,
             ring: Ring::Numerals(&["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]),
             tint: None,
+            style: None,
         },
         RackItem::Text { x: 320.0, y: 180.0, text: "Attack", size: 9.5, strong: true },
         RackItem::Knob {
@@ -829,6 +861,7 @@ pub static DISTRESSOR: RackDesign = RackDesign {
             d: 92.0,
             ring: Ring::Numerals(&["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]),
             tint: None,
+            style: None,
         },
         RackItem::Text { x: 488.0, y: 180.0, text: "Release", size: 9.5, strong: true },
         RackItem::Knob {
@@ -839,6 +872,7 @@ pub static DISTRESSOR: RackDesign = RackDesign {
             d: 92.0,
             ring: Ring::Numerals(&["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]),
             tint: None,
+            style: None,
         },
         RackItem::Text { x: 656.0, y: 180.0, text: "Output", size: 9.5, strong: true },
         RackItem::Knob {
@@ -849,6 +883,7 @@ pub static DISTRESSOR: RackDesign = RackDesign {
             d: 92.0,
             ring: Ring::Numerals(&["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]),
             tint: None,
+            style: None,
         },
         RackItem::Text { x: 800.0, y: 186.0, text: "Mix", size: 9.5, strong: true },
         RackItem::Knob {
@@ -859,6 +894,7 @@ pub static DISTRESSOR: RackDesign = RackDesign {
             d: 44.0,
             ring: Ring::None,
             tint: Some("#26282b"),
+            style: None,
         },
         RackItem::Text { x: 772.0, y: 292.0, text: "Dry", size: 7.5, strong: false },
         RackItem::Text { x: 832.0, y: 292.0, text: "Comp", size: 7.5, strong: false },

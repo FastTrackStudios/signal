@@ -114,16 +114,17 @@ pub fn RackFace(
                                 }
                             }
                         },
-                        RackItem::Knob { id, legend, x, y, d, ring, tint } => {
+                        RackItem::Knob { id, legend, x, y, d, ring, tint, style } => {
                             // The knob's box is wider than the knob: the
                             // printed ring lives outside it.
                             let box_w = d * 2.0;
+                            let knob_style = style.unwrap_or(design.knob);
                             let (ring_r, label_r, ticks) = ring.geometry();
                             // A pointer knob's nose reaches past its body, so
                             // its panel scale is printed further out.
                             let (ring_r, label_r) = (
-                                ring_r + design.knob.ring_offset(),
-                                label_r + design.knob.ring_offset(),
+                                ring_r + knob_style.ring_offset(),
+                                label_r + knob_style.ring_offset(),
                             );
                             rsx! {
                                 PanelSlot { scale, x, y, w: box_w, h: box_w,
@@ -132,7 +133,7 @@ pub fn RackFace(
                                         testid: id.replace('_', "-"),
                                         scale,
                                         diameter: d,
-                                        style: design.knob,
+                                        style: knob_style,
                                         ink: design.ink.to_string(),
                                         marks: ring.marks(),
                                         tint: tint.map(str::to_string),
@@ -325,7 +326,7 @@ fn CompactRack(design: RackDesign, profile_id: String, avail_h: f64) -> Element 
                     // absolutely positioned against the panel) and gives the
                     // diff a stable node to land on.
                     match item {
-                        RackItem::Knob { id, legend, ring, .. } => rsx! {
+                        RackItem::Knob { id, legend, ring, style, .. } => rsx! {
                             div {
                                 style: "display:flex; flex-direction:column; align-items:center; gap:3px;",
                                 HardwareKnob {
@@ -333,7 +334,7 @@ fn CompactRack(design: RackDesign, profile_id: String, avail_h: f64) -> Element 
                                     testid: id.replace('_', "-"),
                                     scale: 1.0,
                                     diameter: knob_d,
-                                    style: design.knob,
+                                    style: style.unwrap_or(design.knob),
                                     ink: design.ink.to_string(),
                                     marks: ring.marks(),
                                 }
