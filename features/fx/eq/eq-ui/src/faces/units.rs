@@ -67,7 +67,9 @@ pub static PULTEC: RackDesign = RackDesign {
     dim_ink: "#a9bfcc",
     chrome: "#b9c6cf",
     vu: VuFace::Blue,
-    knob: KnobStyle::Skirted,
+    // Daka-Ware phenolic, as the unit wears: a ridged 1⅛" body on a 1½" skirt,
+    // with the index engraved into the body and filled white.
+    knob: KnobStyle::Daka,
     items: &[
         // ── Top row: the two bands' boost and atten ──────────────────────
         RackItem::Readout { id: "low_boost", x: 214.0, y: 22.0 },
@@ -235,7 +237,9 @@ pub static SSL: RackDesign = RackDesign {
     dim_ink: "#9aa0a6",
     chrome: "#8f9398",
     vu: VuFace::Blue,
-    knob: KnobStyle::Skirted,
+    // Collet caps: flat top, fluted rim, one white bar. The panel prints the
+    // travel as dots around them rather than the knob carrying a skirt.
+    knob: KnobStyle::Collet,
     items: &[
         // ── Filters ──────────────────────────────────────────────────────
         RackItem::Text { x: 66.0, y: 22.0, text: "Analog", size: 9.0, strong: false },
@@ -597,7 +601,8 @@ pub static NEVE_1073: RackDesign = RackDesign {
     dim_ink: "#9d9a94",
     chrome: "#9fa3a8",
     vu: VuFace::Amber,
-    knob: KnobStyle::Bakelite,
+    // Marconi wing knobs, and Neve's colour coding rides on them.
+    knob: KnobStyle::Marconi,
     items: &[
         RackItem::Text {
             x: 450.0,
@@ -624,7 +629,7 @@ pub static NEVE_1073: RackDesign = RackDesign {
                 to: 16.0,
                 majors: 5,
             },
-            tint: None,
+            tint: Some("#8d9196"),
         },
         RackItem::Knob {
             id: "mid_freq",
@@ -633,7 +638,7 @@ pub static NEVE_1073: RackDesign = RackDesign {
             y: ROW_A,
             d: 52.0,
             ring: Ring::Detents(&["Off", "360", "700", "1.6k", "3.2k", "4.8k", "7.2k"]),
-            tint: None,
+            tint: Some("#8e2f38"),
         },
         RackItem::Knob {
             id: "mid_gain",
@@ -646,7 +651,7 @@ pub static NEVE_1073: RackDesign = RackDesign {
                 to: 16.0,
                 majors: 5,
             },
-            tint: None,
+            tint: Some("#8e2f38"),
         },
         RackItem::Knob {
             id: "drive",
@@ -655,7 +660,7 @@ pub static NEVE_1073: RackDesign = RackDesign {
             y: ROW_A,
             d: 46.0,
             ring: Ring::Plain { majors: 5 },
-            tint: None,
+            tint: Some("#8e2f38"),
         },
         RackItem::Switch {
             id: "eq_in",
@@ -671,7 +676,7 @@ pub static NEVE_1073: RackDesign = RackDesign {
             y: ROW_B,
             d: 52.0,
             ring: Ring::Detents(&["Off", "35", "60", "110", "220"]),
-            tint: None,
+            tint: Some("#28527f"),
         },
         RackItem::Knob {
             id: "low_gain",
@@ -684,7 +689,7 @@ pub static NEVE_1073: RackDesign = RackDesign {
                 to: 16.0,
                 majors: 5,
             },
-            tint: None,
+            tint: Some("#28527f"),
         },
         RackItem::Knob {
             id: "hpf",
@@ -693,7 +698,7 @@ pub static NEVE_1073: RackDesign = RackDesign {
             y: ROW_B,
             d: 52.0,
             ring: Ring::Detents(&["Off", "50", "80", "160", "300"]),
-            tint: None,
+            tint: Some("#28527f"),
         },
         RackItem::Knob {
             id: "trim",
@@ -702,7 +707,7 @@ pub static NEVE_1073: RackDesign = RackDesign {
             y: ROW_B,
             d: 46.0,
             ring: Ring::Plain { majors: 5 },
-            tint: None,
+            tint: Some("#8e2f38"),
         },
         RackItem::Switch {
             id: "phase",
