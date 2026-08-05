@@ -8,6 +8,9 @@
 use std::sync::atomic::Ordering;
 
 use audiocore_core::prelude::*;
+// The concrete `GuiContext` is not in nice-plug's prelude (which carries the
+// `GuiContextInner` trait); upstream's own backends import it directly too.
+use nice_plug::context::gui::GuiContext;
 use fts_ui::prelude::{
     Button, ButtonSize, ButtonVariant, Card, CardContent, CardHeader, CardTitle, SegmentedControl,
     SegmentedControlSize, Select, SelectContent, SelectItem, Switch, TabContent, TabList,
@@ -31,7 +34,7 @@ use spectrum_analyzer::ui::AnalyzerSettingsPanel;
 /// track, so the standalone injects a `StaticTrackProvider` instead and this is
 /// never reached.
 struct GuiContextTrackProvider {
-    gui: std::sync::Arc<dyn GuiContext>,
+    gui: GuiContext,
 }
 
 impl crate::cheatsheet::TrackInfoProvider for GuiContextTrackProvider {

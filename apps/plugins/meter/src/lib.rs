@@ -85,6 +85,9 @@ impl Plugin for FtsMeter {
         ..AudioIOLayout::const_default()
     }];
 
+    // `Plugin::Editor` is an associated type as of the baseview 0.3 rework,
+    // so the editor is named here rather than returned as a trait object.
+    type Editor = nice_plug_dioxus::editor::DioxusEditor;
     type SysExMessage = ();
     type BackgroundTask = ();
 
@@ -92,7 +95,7 @@ impl Plugin for FtsMeter {
         self.params.clone()
     }
 
-    fn editor(&mut self, _async_executor: AsyncExecutor<Self>) -> Option<Box<dyn Editor>> {
+    fn editor(&mut self, _async_executor: AsyncExecutor<Self>) -> Option<Self::Editor> {
         create_dioxus_editor_with_state(
             self.editor_state.clone(),
             self.shared.clone(),
@@ -100,11 +103,11 @@ impl Plugin for FtsMeter {
         )
     }
 
-    fn initialize(
+    fn activate(
         &mut self,
         _audio_io_layout: &AudioIOLayout,
         buffer_config: &BufferConfig,
-        _context: &mut impl InitContext<Self>,
+        _context: &mut impl ActivateContext<Self>,
     ) -> bool {
         let sr = buffer_config.sample_rate;
         // Rebuild the meters at the real rate, re-share their states.

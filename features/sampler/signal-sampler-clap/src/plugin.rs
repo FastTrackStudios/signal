@@ -237,6 +237,8 @@ impl Plugin for SignalSamplerClap {
     }];
     /// MidiCCs: the live path needs CC1/CC2 dynamics + CC58 keyswitches.
     const MIDI_INPUT: MidiConfig = MidiConfig::MidiCCs;
+    // Headless sampler shell — the host shows its generic parameter UI.
+    type Editor = ();
     type SysExMessage = ();
     type BackgroundTask = ();
 
@@ -244,11 +246,11 @@ impl Plugin for SignalSamplerClap {
         self.params.clone()
     }
 
-    fn initialize(
+    fn activate(
         &mut self,
         _audio_io_layout: &AudioIOLayout,
         buffer_config: &BufferConfig,
-        _context: &mut impl InitContext<Self>,
+        _context: &mut impl ActivateContext<Self>,
     ) -> bool {
         init_logging();
         let sr = buffer_config.sample_rate.round() as u32;

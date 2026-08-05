@@ -168,6 +168,8 @@ impl Plugin for FtsTune {
         ..AudioIOLayout::const_default()
     }];
 
+    // No editor yet — the host shows its generic parameter UI.
+    type Editor = ();
     type SysExMessage = ();
     type BackgroundTask = ();
 
@@ -175,11 +177,11 @@ impl Plugin for FtsTune {
         self.params.clone()
     }
 
-    fn initialize(
+    fn activate(
         &mut self,
         _audio_io_layout: &AudioIOLayout,
         buffer_config: &BufferConfig,
-        _context: &mut impl InitContext<Self>,
+        _context: &mut impl ActivateContext<Self>,
     ) -> bool {
         self.sample_rate = buffer_config.sample_rate as f64;
         self.detector = YinDetector::new(self.sample_rate, YinConfig::default());

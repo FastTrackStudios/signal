@@ -223,6 +223,9 @@ impl Plugin for FtsTrigger {
     /// The whole point: a note-event output port.
     const MIDI_OUTPUT: MidiConfig = MidiConfig::Basic;
 
+    // `Plugin::Editor` is an associated type as of the baseview 0.3 rework,
+    // so the editor is named here rather than returned as a trait object.
+    type Editor = nice_plug_dioxus::editor::DioxusEditor;
     type SysExMessage = ();
     type BackgroundTask = ();
 
@@ -230,7 +233,7 @@ impl Plugin for FtsTrigger {
         self.params.clone()
     }
 
-    fn editor(&mut self, _async_executor: AsyncExecutor<Self>) -> Option<Box<dyn Editor>> {
+    fn editor(&mut self, _async_executor: AsyncExecutor<Self>) -> Option<Self::Editor> {
         create_dioxus_editor_with_state(
             self.editor_state.clone(),
             self.ui_state.clone(),
@@ -238,11 +241,11 @@ impl Plugin for FtsTrigger {
         )
     }
 
-    fn initialize(
+    fn activate(
         &mut self,
         _audio_io_layout: &AudioIOLayout,
         buffer_config: &BufferConfig,
-        _context: &mut impl InitContext<Self>,
+        _context: &mut impl ActivateContext<Self>,
     ) -> bool {
         self.sample_rate = buffer_config.sample_rate;
         self.ui_state

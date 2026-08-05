@@ -126,6 +126,8 @@ impl Plugin for FtsUnison {
         ..AudioIOLayout::const_default()
     }];
 
+    // No editor yet — the host shows its generic parameter UI.
+    type Editor = ();
     type SysExMessage = ();
     type BackgroundTask = ();
 
@@ -133,11 +135,11 @@ impl Plugin for FtsUnison {
         self.params.clone()
     }
 
-    fn initialize(
+    fn activate(
         &mut self,
         _audio_io_layout: &AudioIOLayout,
         buffer_config: &BufferConfig,
-        _context: &mut impl InitContext<Self>,
+        _context: &mut impl ActivateContext<Self>,
     ) -> bool {
         self.engine.prepare(
             buffer_config.sample_rate as f64,

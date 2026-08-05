@@ -51,7 +51,7 @@ use nice_plug_dioxus::{ParamContext, SharedState};
 mod support {
     use super::*;
     use dioxus::prelude::*;
-    use nice_plug::context::gui::GuiContext;
+    use nice_plug::context::gui::{GuiContext, GuiContextInner};
     use nice_plug::prelude::*;
     use std::collections::BTreeMap;
 
@@ -82,12 +82,9 @@ mod support {
         pub log: Arc<Mutex<Vec<Gesture>>>,
     }
 
-    impl GuiContext for RecordingGuiContext {
+    impl GuiContextInner for RecordingGuiContext {
         fn plugin_api(&self) -> PluginApi {
             PluginApi::Clap
-        }
-        fn request_resize(&self) -> bool {
-            true
         }
         unsafe fn raw_begin_set_parameter(&self, param: ParamPtr) {
             self.log.lock().unwrap().push(Gesture::Begin(ptr_key(param)));
@@ -149,7 +146,7 @@ mod support {
         let ui_state = Arc::new(EqUiState::new(params.clone()));
         let log = Arc::new(Mutex::new(Vec::new()));
 
-        let gui: Arc<dyn GuiContext> = Arc::new(RecordingGuiContext { log: log.clone() });
+        let gui = GuiContext::new(Arc::new(RecordingGuiContext { log: log.clone() }));
         let param_ctx = ParamContext::new(gui, Arc::new(AtomicBool::new(true)));
         let track: Arc<dyn eq_ui::cheatsheet::TrackInfoProvider> =
             Arc::new(eq_ui::cheatsheet::StaticTrackProvider::none());

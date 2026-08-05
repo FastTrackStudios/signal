@@ -164,6 +164,8 @@ impl Plugin for FtsReverb {
         ..AudioIOLayout::const_default()
     }];
 
+    // No editor yet — the host shows its generic parameter UI.
+    type Editor = ();
     type SysExMessage = ();
     type BackgroundTask = ();
 
@@ -171,11 +173,11 @@ impl Plugin for FtsReverb {
         self.params.clone()
     }
 
-    fn initialize(
+    fn activate(
         &mut self,
         _audio_io_layout: &AudioIOLayout,
         buffer_config: &BufferConfig,
-        _context: &mut impl InitContext<Self>,
+        _context: &mut impl ActivateContext<Self>,
     ) -> bool {
         self.sample_rate = buffer_config.sample_rate as f64;
         let max = (buffer_config.max_buffer_size as usize).max(1);
