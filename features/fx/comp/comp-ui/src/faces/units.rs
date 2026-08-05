@@ -341,28 +341,24 @@ pub static CL1B: RackDesign = RackDesign {
 // Variable-Mu — Fairchild 670, Manley
 // ─────────────────────────────────────────────────────────────────────────
 
-/// The valve limiter, laid out from the unit.
+/// The valve limiter, laid out from the unit — one channel of it.
 ///
-/// Black panel with white silkscreen and the channel labels picked out in
-/// red — the 670 is a two-channel unit and the colour is how you keep track
-/// of which half you are touching. Both movements are mounted through the
-/// panel in bezels, stacked at the left, amber-lit.
+/// Black panel, white silkscreen, the channel label picked out in red. The
+/// movement is mounted *through* the panel in a bezel with a vent below the
+/// glass, and its card is lamp-lit amber.
 ///
-/// **One channel is drawn, not two.** The unit has a full set of controls per
-/// channel; this plugin has one set. Drawing a second row that moved the same
-/// parameters would look right and lie, so the panel carries Channel A and
-/// says so.
+/// The real unit is two channels: two meters, two of every control, and the
+/// switch that links them. This plugin is one channel, so the panel is one
+/// channel — a second row moving the same parameters would look right and
+/// lie, and the linking switch would have nothing to link.
 ///
 /// The TIME CONSTANT switch is the unit's personality: six positions pairing
 /// an attack with a release, the last two program-dependent — which is where
 /// the glue comes from, and why it drives inertia rather than just release.
-///
-/// **Not yet wired**: the meter selector (bypass / VU / GR / balance) and the
-/// M-S link. They draw and do nothing.
 pub static FAIRCHILD_670: RackDesign = RackDesign {
     id: "fairchild670",
-    w: 960.0,
-    h: 330.0,
+    w: 940.0,
+    h: 290.0,
     paint: "linear-gradient(178deg, #232426 0%, #191a1c 48%, #0f1012 100%)",
     ink: "#eceef0",
     dim_ink: "#9aa0a6",
@@ -371,95 +367,65 @@ pub static FAIRCHILD_670: RackDesign = RackDesign {
     vu_bezel: true,
     knob: KnobStyle::Pointer,
     items: &[
-        // ── Power, far left ──────────────────────────────────────────────
-        RackItem::Text { x: 92.0, y: 40.0, text: "On", size: 8.0, strong: false },
-        RackItem::Switch { id: "", legend: "", x: 92.0, y: 84.0, labels: ["On", "Off"] },
-        RackItem::Lamp { x: 92.0, y: 176.0, color: "#e0483a" },
-
-        // ── The two movements ────────────────────────────────────────────
+        // ── The movement ─────────────────────────────────────────────────
         RackItem::Vu {
-            x: 236.0,
-            y: 96.0,
-            w: 150.0,
+            x: 176.0,
+            y: 136.0,
+            w: 168.0,
             mode: VuMode::GainReduction,
             legend: "Gain Reduction",
         },
-        RackItem::Vu {
-            x: 236.0,
-            y: 236.0,
-            w: 150.0,
-            mode: VuMode::Level,
-            legend: "Output",
-        },
+        RackItem::Lamp { x: 74.0, y: 136.0, color: "#e0483a" },
 
-        // ── Channel A ────────────────────────────────────────────────────
-        RackItem::Text { x: 388.0, y: 34.0, text: "Channel A", size: 8.5, strong: true },
-        RackItem::TintedText { x: 470.0, y: 34.0, text: "Left / M", size: 8.0, color: "#d8483a" },
-
-        RackItem::Text { x: 358.0, y: 56.0, text: "Meter", size: 7.5, strong: false },
-        RackItem::Knob {
-            id: "",
-            legend: "",
-            x: 358.0,
-            y: 124.0,
-            d: 46.0,
-            ring: Ring::Numerals(&["Byp", "VU", "GR", "Bal"]),
-            tint: None,
-            style: None,
-        },
-        RackItem::Text { x: 500.0, y: 56.0, text: "Input Gain", size: 7.5, strong: false },
+        // ── One row of controls ──────────────────────────────────────────
+        RackItem::Text { x: 402.0, y: 82.0, text: "Input Gain", size: 7.5, strong: false },
         RackItem::Knob {
             id: "input_gain",
             legend: "",
-            x: 500.0,
-            y: 124.0,
-            d: 60.0,
+            x: 402.0,
+            y: 156.0,
+            d: 62.0,
             ring: Ring::Numerals(&["0", "4", "8", "12", "16", "20"]),
             tint: None,
             style: None,
         },
-        RackItem::Text { x: 646.0, y: 56.0, text: "Threshold", size: 7.5, strong: false },
+        RackItem::Text { x: 548.0, y: 82.0, text: "Threshold", size: 7.5, strong: false },
         RackItem::Knob {
             id: "threshold",
             legend: "",
-            x: 646.0,
-            y: 124.0,
-            d: 60.0,
+            x: 548.0,
+            y: 156.0,
+            d: 62.0,
             ring: Ring::Numerals(&["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]),
             tint: None,
             style: None,
         },
-        RackItem::Text { x: 800.0, y: 56.0, text: "Time Constant", size: 7.5, strong: false },
+        RackItem::Text { x: 694.0, y: 82.0, text: "Time Constant", size: 7.5, strong: false },
         RackItem::Knob {
             id: "time_constant",
             legend: "",
-            x: 800.0,
-            y: 124.0,
-            d: 52.0,
+            x: 694.0,
+            y: 156.0,
+            d: 62.0,
             ring: Ring::Numerals(&["1", "2", "3", "4", "5", "6"]),
             tint: None,
             style: None,
         },
-        RackItem::Text { x: 898.0, y: 106.0, text: "Var", size: 7.0, strong: false },
-
-        // ── Output, and the link the unit switches its channels with ─────
-        RackItem::Text { x: 500.0, y: 216.0, text: "Output", size: 7.5, strong: false },
+        RackItem::Text { x: 840.0, y: 82.0, text: "Output", size: 7.5, strong: false },
         RackItem::Knob {
             id: "output",
             legend: "",
-            x: 500.0,
-            y: 268.0,
-            d: 54.0,
+            x: 840.0,
+            y: 156.0,
+            d: 62.0,
             ring: Ring::Numerals(&["0", "4", "8", "12", "16", "20"]),
             tint: None,
             style: None,
         },
-        RackItem::Text { x: 660.0, y: 216.0, text: "M-S · Link · Ind", size: 7.5, strong: false },
-        RackItem::Switch { id: "", legend: "", x: 660.0, y: 268.0, labels: ["M-S", "Link"] },
 
         // ── Panel marks ──────────────────────────────────────────────────
-        RackItem::Text { x: 800.0, y: 250.0, text: "Tube Limiter", size: 12.0, strong: true },
-        RackItem::Text { x: 800.0, y: 274.0, text: "FTS Comp · Variable-Mu", size: 8.0, strong: false },
+        RackItem::Text { x: 620.0, y: 238.0, text: "Tube Limiter", size: 12.0, strong: true },
+        RackItem::Text { x: 620.0, y: 260.0, text: "FTS Comp · Variable-Mu", size: 8.0, strong: false },
     ],
 };
 
@@ -996,11 +962,9 @@ mod tests {
                 continue;
             };
             let expected = match profile.id() {
-                // The LA-2A's meter-mode selector and POWER; the Fairchild's
-                // power, meter selector and M-S link; the Distressor's BYPASS.
-                // Everything else is wired.
+                // The LA-2A's meter-mode selector and POWER; the Distressor's
+                // BYPASS. Everything else is wired.
                 "la2a" => 2,
-                "fairchild670" => 3,
                 "distressor" => 1,
                 _ => 0,
             };

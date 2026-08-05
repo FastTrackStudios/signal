@@ -24,7 +24,7 @@ use audiocore_core::prelude::*;
 
 use crate::faces::use_face_context;
 use crate::hardware::knob::HardwareKnob;
-use fts_ui_audio::hardware::button::{LedBar, LedMeter, LedSelect, PanelButton};
+use fts_ui_audio::hardware::button::{Lamp, LedBar, LedMeter, LedSelect, PanelButton};
 use fts_ui_audio::prelude::GrMeter;
 use crate::hardware::rack::{RackDesign, RackItem};
 use crate::hardware::panel::{panel_scale, Panel, PanelSlot, Silkscreen};
@@ -251,9 +251,13 @@ pub fn RackFace(
                                 ),
                             }
                         },
+                        RackItem::Lamp { x, y, color } => rsx! {
+                            PanelSlot { scale, x, y, w: 26.0, h: 26.0,
+                                Lamp { scale, color: color.to_string(), d: 13.0 }
+                            }
+                        },
                         RackItem::Lever { .. }
                         | RackItem::Readout { .. }
-                        | RackItem::Lamp { .. }
                         | RackItem::Divider { .. } => rsx! {},
                         RackItem::TintedText { x, y, text, size, color } => rsx! {
                             Silkscreen {
