@@ -154,10 +154,10 @@ pub static LA2A: RackDesign = RackDesign {
     knob: KnobStyle::Pointer,
     items: &[
         // ── Identity ─────────────────────────────────────────────────────
-        RackItem::Text { x: 168.0, y: 62.0, text: "Teletronix", size: 17.0, strong: true },
-        RackItem::Text { x: 168.0, y: 84.0, text: "Engineering Co.", size: 7.5, strong: false },
+        RackItem::Text { x: 168.0, y: 62.0, text: "FTS", size: 17.0, strong: true },
+        RackItem::Text { x: 168.0, y: 84.0, text: "Audio", size: 7.5, strong: false },
         RackItem::Text { x: 296.0, y: 64.0, text: "Leveling Amplifier", size: 8.5, strong: false },
-        RackItem::Text { x: 296.0, y: 82.0, text: "Model LA-2A", size: 8.5, strong: false },
+        RackItem::Text { x: 296.0, y: 82.0, text: "Optical · Tube", size: 8.5, strong: false },
 
         // ── Mode, far left, as the unit has it ───────────────────────────
         RackItem::Switch {
@@ -747,7 +747,7 @@ pub static DISTRESSOR: RackDesign = RackDesign {
     items: &[
         // ── Upper section: what the unit reports ─────────────────────────
         RackItem::Frame { x: 470.0, y: 96.0, w: 856.0, h: 150.0 },
-        RackItem::Text { x: 168.0, y: 96.0, text: "Distressor", size: 20.0, strong: true },
+        RackItem::Text { x: 168.0, y: 96.0, text: "FTS", size: 20.0, strong: true },
         RackItem::Text { x: 168.0, y: 116.0, text: "FTS Comp · Hybrid", size: 8.0, strong: false },
 
         // Gain reduction: 1 dB at the right, deepest at the left.
@@ -862,7 +862,7 @@ pub static DISTRESSOR: RackDesign = RackDesign {
         },
         RackItem::Text { x: 772.0, y: 292.0, text: "Dry", size: 7.5, strong: false },
         RackItem::Text { x: 832.0, y: 292.0, text: "Comp", size: 7.5, strong: false },
-        RackItem::Text { x: 878.0, y: 254.0, text: "EL8", size: 9.0, strong: false },
+        RackItem::Text { x: 878.0, y: 254.0, text: "", size: 9.0, strong: false },
     ],
 };
 

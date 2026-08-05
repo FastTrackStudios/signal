@@ -191,7 +191,7 @@ pub static PULTEC: RackDesign = RackDesign {
         RackItem::Text {
             x: 108.0,
             y: 302.0,
-            text: "EQP-1A",
+            text: "FTS EQ",
             size: 13.0,
             strong: true,
         },
