@@ -14,6 +14,7 @@
 
 // ── Portable core (no plugin framework; compiles for wasm) ──
 pub mod comp_graph_svg;
+pub mod hardware;
 pub mod profile_view;
 
 pub use profile_view::{
