@@ -12,23 +12,32 @@
 //! synthesized defaults (`SampleBank::synthesize_defaults`) — audible with
 //! zero assets on disk.
 //!
-//! ## v0 scope — click only
+//! ## Two ways to drive it
 //!
-//! Count-in voices and spoken/TTS section cues are NOT wired here. Both are
-//! driven by the engine's [`session_guide::CueSchedule`], which is built from
-//! song *sections* with absolute song times ([`session_guide::GuideSection`] +
-//! [`session_guide::GuideSongTiming`], via `GuideEngine::set_sections`) — the
-//! host transport alone carries no section information, so there is nothing
-//! to schedule against. The engine sides are `config.enable_count` /
-//! `config.enable_guide` (held `false` here). Follow-ups:
+//! The **Source** parameter picks one, and they are mutually exclusive on
+//! purpose — running both double-triggers every beat, because a stamped
+//! guide track carries the same clicks and cues the internal grid would
+//! generate.
 //!
-//! - **Section source**: load song sections from a setlist/song file (styx
-//!   library or a `session_proto::Song` export) via a file-path param or a
-//!   nice-plug-dioxus editor, then call `engine.set_sections(...)` — count-in
-//!   and section-cue chimes light up with no further engine work.
-//! - **TTS cues**: pre-rendered wavs from `session_guide::CueBank` (TTS is
-//!   not realtime-safe; cues are cached by text hash at setlist-build time)
-//!   loaded into the bank with `insert_guide`.
+//! - **Host Transport** — the engine derives the click grid from the
+//!   host's tempo and time signature. Self-contained, nothing to route.
+//!   Count-in and section cues stay off in this mode: they need a
+//!   `CueSchedule` built from song *sections*, and the transport alone
+//!   carries no section information.
+//! - **MIDI** — the plugin plays incoming notes and nothing else. This is
+//!   what `session::guide`'s generate-guide-tracks action produces: the
+//!   click grid, count-in and section announcements as notes on the
+//!   Click / Count / Guide tracks. One table maps notes to sounds in both
+//!   directions (`session_guide::midi`), so a track FTS stamps is a track
+//!   this plugin reads back. Count and section cues work here, because
+//!   the notes *are* the schedule — editable and movable in the piano
+//!   roll.
+//!
+//! Section-cue audio still has to be in the bank to be heard: the
+//! synthesized defaults cover clicks and count ticks, but guide
+//! announcements come from real recorded samples (`load_guide_dir`) or
+//! pre-rendered TTS (`session_guide::CueBank`). A Guide note with no
+//! sample behind it is silently skipped. Loading those is a follow-up.
 //!
 //! GUI is deliberately absent (headless, host-generic params), matching the
 //! other apps/plugins shells; the nice-plug-dioxus editor is a follow-up.
@@ -36,7 +45,8 @@
 use nice_plug::prelude::*;
 use std::sync::Arc;
 
-use session_guide::{BlockClock, GuideConfig, GuideEngine};
+use session_guide::midi::trigger_for_midi_note;
+use session_guide::{BlockClock, GuideConfig, GuideEngine, TriggerSource};
 
 const PLUGIN_NAME: &str = "FTS Guide";
 
@@ -47,8 +57,40 @@ fn db_to_gain(db: f32) -> f32 {
 
 // ── Parameters ────────────────────────────────────────────────────────────
 
+/// What drives the engine. Mirrors [`TriggerSource`] as a host-visible
+/// enum param.
+#[derive(Enum, Debug, PartialEq, Eq, Clone, Copy)]
+pub enum Source {
+    /// Follow the host's tempo and time signature. Click only.
+    #[id = "transport"]
+    #[name = "Host Transport"]
+    HostTransport,
+    /// Play incoming MIDI notes — click, count and section cues.
+    #[id = "midi"]
+    #[name = "MIDI"]
+    Midi,
+}
+
+impl From<Source> for TriggerSource {
+    fn from(source: Source) -> Self {
+        match source {
+            Source::HostTransport => TriggerSource::HostTransport,
+            Source::Midi => TriggerSource::Midi,
+        }
+    }
+}
+
 #[derive(Params)]
 pub struct GuideParams {
+    /// Where triggers come from.
+    #[id = "source"]
+    pub source: EnumParam<Source>,
+    /// Count-voice volume. Only audible in MIDI mode.
+    #[id = "count_vol"]
+    pub count_db: FloatParam,
+    /// Section-announcement volume. Only audible in MIDI mode.
+    #[id = "guide_vol"]
+    pub guide_db: FloatParam,
     /// Click (quarter-note tick) volume.
     #[id = "click_vol"]
     pub click_db: FloatParam,
@@ -60,6 +102,21 @@ pub struct GuideParams {
 impl Default for GuideParams {
     fn default() -> Self {
         Self {
+            source: EnumParam::new("Source", Source::HostTransport),
+            count_db: FloatParam::new(
+                "Count",
+                0.0,
+                FloatRange::Linear { min: -60.0, max: 6.0 },
+            )
+            .with_unit(" dB")
+            .with_value_to_string(formatters::v2s_f32_rounded(1)),
+            guide_db: FloatParam::new(
+                "Guide",
+                0.0,
+                FloatRange::Linear { min: -60.0, max: 6.0 },
+            )
+            .with_unit(" dB")
+            .with_value_to_string(formatters::v2s_f32_rounded(1)),
             click_db: FloatParam::new(
                 "Click",
                 0.0,
@@ -125,6 +182,13 @@ impl Default for FtsGuide {
 impl FtsGuide {
     /// Apply the current volume params by rescaling the bank PCM in place.
     fn sync_params(&mut self) {
+        // Count and guide have real gain knobs on the engine, so they just
+        // get set. Click doesn't: the engine has ONE `click_gain` covering
+        // both the beat tick and the measure accent, which is why those two
+        // are applied by rescaling the bank PCM below.
+        self.engine.config.count_gain = db_to_gain(self.params.count_db.value());
+        self.engine.config.guide_gain = db_to_gain(self.params.guide_db.value());
+
         let click_db = self.params.click_db.value();
         let accent_db = self.params.accent_db.value();
         if click_db == self.applied_click_db && accent_db == self.applied_accent_db {
@@ -160,12 +224,17 @@ impl Plugin for FtsGuide {
     const EMAIL: &'static str = "";
     const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
-    /// Generator: no input, stereo click bus out.
+    /// Generator: no audio input, stereo click bus out.
     const AUDIO_IO_LAYOUTS: &'static [AudioIOLayout] = &[AudioIOLayout {
         main_input_channels: None,
         main_output_channels: NonZeroU32::new(2),
         ..AudioIOLayout::const_default()
     }];
+
+    /// Note events in — this is how a stamped guide track drives the
+    /// plugin. Basic is enough: only note-ons matter, and only their
+    /// pitch and timing.
+    const MIDI_INPUT: MidiConfig = MidiConfig::Basic;
 
     // No editor yet — the host shows its generic parameter UI.
     type Editor = ();
@@ -222,6 +291,27 @@ impl Plugin for FtsGuide {
         let output = buffer.as_slice();
         for ch in output.iter_mut() {
             ch.fill(0.0);
+        }
+
+        let source = self.params.source.value();
+        self.engine.config.source = source.into();
+        // Count-in and section cues only have a schedule to fire from in
+        // MIDI mode; under the host transport there are no sections, so
+        // leaving them on would just be dead config.
+        let midi = source == Source::Midi;
+        self.engine.config.enable_count = midi;
+        self.engine.config.enable_guide = midi;
+
+        // Drain this block's notes. `timing` is the event's offset within
+        // the block, which is passed straight through so a cue lands where
+        // it was played instead of at the block boundary — quantising to
+        // the block audibly flams against a click.
+        while let Some(event) = context.next_event() {
+            if let NoteEvent::NoteOn { timing, note, .. } = event {
+                if let Some(trigger) = trigger_for_midi_note(note) {
+                    self.engine.trigger(timing as usize, trigger);
+                }
+            }
         }
 
         let t = context.transport();

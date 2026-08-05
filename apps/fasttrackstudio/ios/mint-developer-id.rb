@@ -1,12 +1,21 @@
 #!/usr/bin/env ruby
-# Ensure a "Developer ID Application" signing certificate + its private key
-# exist locally (App Store Connect API — no Xcode UI). This is the cert for
-# distributing a macOS app OUTSIDE the App Store (a notarized .dmg), distinct
-# from the "Apple Distribution" cert used for TestFlight. Writes:
-#   ~/.appstoreconnect/devid.key  (PEM private key)
-#   ~/.appstoreconnect/devid.cer  (DER certificate)
-# The caller (deploy-macos.sh) bundles these into a .p12 and imports them so
-# codesign can Developer-ID-sign the app.
+# Ensure a Developer ID signing certificate + its private key exist locally
+# (App Store Connect API — no Xcode UI). These are the certs for distributing
+# macOS software OUTSIDE the App Store, distinct from the "Apple Distribution"
+# cert used for TestFlight.
+#
+# Only DEVELOPER_ID_APPLICATION (the default) can be minted here — it signs
+# .app bundles and plugin bundles.
+#   -> ~/.appstoreconnect/devid.key + devid.cer
+#
+# The OTHER cert a full release needs, "Developer ID Installer" (for signing
+# the .pkg), is deliberately NOT mintable: the App Store Connect API has no
+# such certificateType (verified against the live API — see the abort below).
+# It must be created once by hand in the developer portal. The two are not
+# interchangeable: `productbuild --sign` rejects an Application cert and
+# `codesign` rejects an Installer cert.
+#
+# The caller bundles the pair into a .p12 and imports it into the keychain.
 #
 # Idempotent: reuses a local key+cert if a matching live cert still exists.
 # Reads ASC_* from the environment.
@@ -26,9 +35,37 @@ KEY_ID = ENV.fetch("ASC_KEY_ID")
 ISSUER_ID = ENV.fetch("ASC_ISSUER_ID")
 KEY_PATH = ENV.fetch("ASC_KEY_PATH")
 DIR = File.expand_path("~/.appstoreconnect")
-DEVID_KEY = File.join(DIR, "devid.key")
-DEVID_CER = File.join(DIR, "devid.cer")
-CERT_TYPE = "DEVELOPER_ID_APPLICATION"
+CERT_TYPE = ENV.fetch("DEVID_CERT_TYPE", "DEVELOPER_ID_APPLICATION")
+if CERT_TYPE == "DEVELOPER_ID_INSTALLER"
+  # Confirmed against the live API: the certificateType enum accepts
+  # DEVELOPER_ID_APPLICATION{,_G2} and DEVELOPER_ID_KEXT{,_G2}, but there is
+  # NO Developer ID *Installer* member. (MAC_INSTALLER_DISTRIBUTION exists but
+  # is the Mac App Store installer cert — Gatekeeper rejects a .pkg signed
+  # with it for direct distribution, so it is not a substitute.) Apple only
+  # issues Developer ID Installer certs through the developer portal / Xcode.
+  abort(<<~MSG)
+    DEVELOPER_ID_INSTALLER cannot be created through the App Store Connect API.
+
+    Create it once by hand, then this script is not needed for it:
+      1. https://developer.apple.com/account/resources/certificates/add
+         -> "Developer ID Installer"  (needs Account Holder access)
+      2. Upload a CSR (Keychain Access > Certificate Assistant > Request a
+         Certificate From a Certificate Authority), download the .cer
+      3. Import it plus its private key into the build keychain:
+           security import <file>.cer -k "$KEYCHAIN"
+         and confirm with:
+           security find-identity -v "$KEYCHAIN" | grep "Developer ID Installer"
+
+    To build an unsigned .pkg for local testing instead, set PKG_UNSIGNED=1.
+  MSG
+end
+unless CERT_TYPE == "DEVELOPER_ID_APPLICATION"
+  abort("DEVID_CERT_TYPE must be DEVELOPER_ID_APPLICATION (got #{CERT_TYPE})")
+end
+# Distinct filenames per type so both can coexist in ~/.appstoreconnect.
+SLUG = CERT_TYPE == "DEVELOPER_ID_INSTALLER" ? "devid-installer" : "devid"
+DEVID_KEY = File.join(DIR, "#{SLUG}.key")
+DEVID_CER = File.join(DIR, "#{SLUG}.cer")
 
 def jwt
   header = { alg: "ES256", kid: KEY_ID, typ: "JWT" }
@@ -85,6 +122,6 @@ resp = api(:post, "/v1/certificates", {
   } }
 })
 File.binwrite(DEVID_CER, Base64.decode64(resp["data"]["attributes"]["certificateContent"]))
-puts "created Developer ID Application certificate"
+puts "created #{CERT_TYPE} certificate"
 puts "DEVID_KEY=#{DEVID_KEY}"
 puts "DEVID_CER=#{DEVID_CER}"

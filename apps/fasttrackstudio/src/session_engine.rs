@@ -37,7 +37,7 @@ use session::services::setlist_service::{
     SetlistServiceStreamClient, setlist_service_stream_service_descriptor,
     stream_serve as setlist_service_stream_serve,
 };
-use session::setlist_service::demo::{demo_songs_base, stamp_song_with_default_tempo_native};
+use session::setlist::service::demo::{demo_songs_base, stamp_song_with_default_tempo_native};
 use session::{
     SetlistServiceClient, SetlistServiceImpl, serve_setlist_service,
     setlist_service_service_descriptor,
@@ -417,13 +417,13 @@ async fn bootstrap(engine_rt: tokio::runtime::Handle) -> eyre::Result<SessionEng
         // Attach the bundled keyflow chart to the project (ext-state
         // `FTS/chart_text`) so setlist hydration serves it to remotes —
         // the browser chart pane renders from exactly this text.
-        if let Some(chart) = session::setlist_service::demo::demo_chart_for(song.name) {
+        if let Some(chart) = session::setlist::service::demo::demo_chart_for(song.name) {
             use daw::service::ExtState as _;
             standalone
                 .set_project(
                     daw::service::ProjectContext::Project(guid.clone()),
-                    session::setlist_service::CHART_EXT_STATE_SECTION,
-                    session::setlist_service::CHART_EXT_STATE_KEY,
+                    session::setlist::service::CHART_EXT_STATE_SECTION,
+                    session::setlist::service::CHART_EXT_STATE_KEY,
                     chart,
                 )
                 .map_err(|e| eyre::eyre!("stamp chart for {}: {e:?}", song.name))?;

@@ -33,8 +33,16 @@ DX_TAILWIND="${DX_TAILWIND:-}"
 # — and Apple's SDK linker, which supports it natively on Apple Silicon).
 UNIVERSAL_TARGETS=(aarch64-apple-darwin x86_64-apple-darwin)
 
-# shellcheck disable=SC1090
-source "$HOME/.appstoreconnect/config.env"
+# ADHOC_SIGN=1: local test build — sign ad-hoc (`-`) instead of Developer ID
+# and skip notarization entirely. Apple caps Developer ID certs per account,
+# so a throwaway test machine must NOT mint one (it would burn a slot and
+# collide with airlock's). Ad-hoc is enough for a binary to RUN locally on
+# Apple Silicon, which is all a runnability test needs; it is NOT
+# distributable.
+if [ "${ADHOC_SIGN:-}" != "1" ]; then
+    # shellcheck disable=SC1090
+    source "$HOME/.appstoreconnect/config.env"
+fi
 
 NIX="${NIX:-}"
 if [ -z "$NIX" ]; then
@@ -45,6 +53,15 @@ fi
 
 KEYCHAIN="${KEYCHAIN:-login.keychain-db}"
 KEYCHAIN_PW="${KEYCHAIN_PW:-}"
+if [ "${ADHOC_SIGN:-}" = "1" ]; then
+    SIGN_ID="-"
+    # Ad-hoc + hardened runtime fights the JIT entitlements (phon-jit copies
+    # stencils into executable memory), so local test builds skip the
+    # hardened runtime — it only matters for notarized distribution anyway.
+    RUNTIME_OPTS=()
+    echo "=== ADHOC_SIGN=1 — ad-hoc signing, no Developer ID, no notarization ==="
+else
+RUNTIME_OPTS=(--options runtime --timestamp)
 [ -n "$KEYCHAIN_PW" ] && security unlock-keychain -p "$KEYCHAIN_PW" "$KEYCHAIN"
 
 # ── Developer ID Application identity ────────────────────────────────────────
@@ -67,6 +84,7 @@ SIGN_ID="$(security find-identity -v -p codesigning "$KEYCHAIN" \
     | awk -F'"' '/Developer ID Application/{print $2; exit}')"
 [ -n "$SIGN_ID" ] || { echo "ERROR: no Developer ID Application identity." >&2; exit 1; }
 echo "=== signing identity: $SIGN_ID ==="
+fi
 
 # ── Build both arches (embed the web view so the app serves it on the LAN) ──
 # dx's bundle staging dir under a cross --target isn't something we can
@@ -79,6 +97,17 @@ echo "=== signing identity: $SIGN_ID ==="
 # dir's mtime looking stale).
 find_app() {
     find "$ROOT/target/dx/$DX_PACKAGE" -type d -iname '*.app' 2>/dev/null | head -1
+}
+
+# A .app DIRECTORY existing is not proof the build worked: dx creates the
+# bundle shell before cargo finishes, so a failed compile leaves a hollow
+# .app behind and every "did it build?" check that only looks for the
+# directory passes — silently packaging an installer with no executable in
+# it. Require an actual binary in Contents/MacOS.
+app_has_executable() {
+    local app="$1"
+    [ -n "$app" ] && [ -d "$app" ] || return 1
+    [ -n "$(find "$app/Contents/MacOS" -maxdepth 1 -type f 2>/dev/null | head -1)" ]
 }
 
 build_one_arch() {
@@ -111,8 +140,8 @@ build_one_arch() {
         dx build --platform macos --release $features --target=$target
     " > "/tmp/fts-macos-build-$target.log" 2>&1 || true
     tail -3 "/tmp/fts-macos-build-$target.log"
-    if [ -z "$(find_app)" ]; then
-        echo "ERROR: build produced no app for $target"
+    if ! app_has_executable "$(find_app)"; then
+        echo "ERROR: build produced no usable app for $target (no executable in Contents/MacOS)"
         tail -30 "/tmp/fts-macos-build-$target.log"
         exit 1
     fi
@@ -126,7 +155,7 @@ else
     for target in "${UNIVERSAL_TARGETS[@]}"; do
         build_one_arch "$target"
         app="$(find_app)"
-        [ -n "$app" ] && [ -d "$app" ] || { echo "ERROR: no app bundle found for $target"; exit 1; }
+        app_has_executable "$app" || { echo "ERROR: no usable app bundle for $target"; exit 1; }
         mkdir -p "$STAGING/$target"
         cp -R "$app" "$STAGING/$target/"
     done
@@ -177,6 +206,29 @@ done < <(find "$UNIVERSAL_APP" -type f -print0)
 [ "$LIPO_WARNINGS" -eq 0 ] || echo "=== lipo done with $LIPO_WARNINGS warning(s) — not every binary in the bundle is universal, see above ==="
 
 APP="$UNIVERSAL_APP"
+
+# dx names the bundle by title-casing the crate name (fasttrackstudio ->
+# "Fasttrackstudio", task-app-desktop -> "TaskAppDesktop"), which is not the
+# product name a user should see in /Applications. Rename before signing —
+# CFBundleName is covered by the signature, so doing it afterwards would
+# invalidate it.
+if [ -n "${APP_BUNDLE_NAME:-}" ] && [ "$(basename "$APP")" != "$APP_BUNDLE_NAME.app" ]; then
+    RENAMED="$ROOT/target/$APP_BUNDLE_NAME.app"
+    # macOS filesystems are case-INSENSITIVE: when the old and new names
+    # differ only in case (Fasttrackstudio -> FastTrackStudio) they are the
+    # same path, so `rm -rf "$RENAMED"` would delete the bundle we are about
+    # to move. Go via a temp name.
+    TMP_APP="$ROOT/target/.rename-$$.app"
+    rm -rf "$TMP_APP"
+    mv "$APP" "$TMP_APP"
+    rm -rf "$RENAMED"
+    mv "$TMP_APP" "$RENAMED"
+    APP="$RENAMED"
+    /usr/libexec/PlistBuddy -c "Set :CFBundleName $APP_BUNDLE_NAME" "$APP/Contents/Info.plist" 2>/dev/null \
+        || /usr/libexec/PlistBuddy -c "Add :CFBundleName string $APP_BUNDLE_NAME" "$APP/Contents/Info.plist" 2>/dev/null || true
+    echo "=== renamed bundle -> $APP_BUNDLE_NAME.app ==="
+fi
+
 echo "=== universal app bundle: $APP ==="
 MAIN_EXE="$(find "$APP/Contents/MacOS" -maxdepth 1 -type f | head -1)"
 [ -n "$MAIN_EXE" ] && echo "  main executable archs: $(lipo -archs "$MAIN_EXE" 2>/dev/null || echo unknown)"
@@ -189,6 +241,36 @@ if [ -d "$ICONS_DIR" ] && [ -x "$ICON_DEV/usr/bin/actool" ]; then
         --platform macosx --minimum-deployment-target 12.0 --app-icon AppIcon \
         --output-partial-info-plist /tmp/fts-macicon.plist >/tmp/fts-macactool.log 2>&1 || true
     /usr/libexec/PlistBuddy -c "Merge /tmp/fts-macicon.plist" "$APP/Contents/Info.plist" 2>/dev/null || true
+fi
+
+# ── Bundle icon (.icns) ──────────────────────────────────────────────────────
+# actool alone is NOT enough here: the shared Assets.xcassets is an iOS icon
+# set (a single 1024 image tagged "platform": "ios"), so compiling it with
+# --platform macosx emits no Assets.car and no icon at all — which is exactly
+# why the app shipped with a blank Finder/Dock icon. dx meanwhile writes
+# CFBundleIconFile=icon.icns into Info.plist but never produces the file.
+# Build a real multi-resolution .icns from the 1024 master to satisfy it.
+ICON_PNG="$(find "$ICONS_DIR" -name 'icon-1024.png' 2>/dev/null | head -1)"
+if [ -n "$ICON_PNG" ] && command -v iconutil >/dev/null 2>&1; then
+    echo "=== building icon.icns from $(basename "$ICON_PNG") ==="
+    ICONSET="$(mktemp -d)/AppIcon.iconset"
+    mkdir -p "$ICONSET"
+    for sz in 16 32 128 256 512; do
+        sips -z "$sz" "$sz" "$ICON_PNG" --out "$ICONSET/icon_${sz}x${sz}.png" >/dev/null 2>&1
+        sips -z "$((sz * 2))" "$((sz * 2))" "$ICON_PNG" --out "$ICONSET/icon_${sz}x${sz}@2x.png" >/dev/null 2>&1
+    done
+    if iconutil -c icns "$ICONSET" -o "$APP/Contents/Resources/icon.icns"; then
+        # Make sure Info.plist actually points at it (dx usually sets this, but
+        # don't depend on it — a missing key means a blank icon again).
+        /usr/libexec/PlistBuddy -c "Set :CFBundleIconFile icon.icns" "$APP/Contents/Info.plist" 2>/dev/null \
+            || /usr/libexec/PlistBuddy -c "Add :CFBundleIconFile string icon.icns" "$APP/Contents/Info.plist" 2>/dev/null || true
+        echo "  icon.icns installed ($(du -h "$APP/Contents/Resources/icon.icns" | cut -f1))"
+    else
+        echo "  WARNING: iconutil failed — app will have a blank icon"
+    fi
+    rm -rf "$(dirname "$ICONSET")"
+else
+    echo "  WARNING: no icon-1024.png under $ICONS_DIR — app will have a blank icon"
 fi
 
 # ── Hardened runtime entitlements ────────────────────────────────────────────
@@ -211,13 +293,27 @@ PLIST
 
 # ── Sign (inside-out): nested code first, then the bundle ────────────────────
 echo "=== signing (Developer ID + hardened runtime) ==="
+# --keychain is meaningless for an ad-hoc identity, so only pass it when
+# signing for real.
+KC_OPTS=()
+[ "${ADHOC_SIGN:-}" = "1" ] || KC_OPTS=(--keychain "$KEYCHAIN")
 find "$APP" \( -name "*.dylib" -o -name "*.so" -o -name "*.framework" \) -print0 \
     | while IFS= read -r -d '' f; do
-        codesign --force --keychain "$KEYCHAIN" --options runtime --timestamp --sign "$SIGN_ID" "$f"
+        codesign --force "${KC_OPTS[@]}" "${RUNTIME_OPTS[@]}" --sign "$SIGN_ID" "$f"
       done
-codesign --force --keychain "$KEYCHAIN" --options runtime --timestamp \
+codesign --force "${KC_OPTS[@]}" "${RUNTIME_OPTS[@]}" \
     --entitlements "$ENT" --sign "$SIGN_ID" "$APP"
 codesign --verify --deep --strict --verbose=2 "$APP"
+
+# BUILD_ONLY: stop with a universal, Developer-ID-signed, hardened .app and
+# skip the .dmg + notarization. deploy-macos-pkg.sh uses this to get the app
+# payload for the .pkg installer (which is notarized once, as a whole, at the
+# end — notarizing an intermediate .dmg here would just waste a round trip).
+if [ "${BUILD_ONLY:-}" = "1" ]; then
+    echo "=== BUILD_ONLY=1 — signed universal app ready, skipping dmg/notarize ==="
+    echo "app: $APP"
+    exit 0
+fi
 
 # ── Package .dmg ─────────────────────────────────────────────────────────────
 echo "=== packaging .dmg ==="
