@@ -10,6 +10,7 @@
 //! the Main face.
 
 use audiocore_core::prelude::*;
+use fts_ui_audio::hardware::button::{LedMeter, PanelButton};
 use fts_ui_audio::hardware::knob::HardwareKnob;
 use fts_ui_audio::hardware::lever::LeverSwitch;
 use fts_ui_audio::hardware::panel::{panel_scale, Panel, PanelSlot, Silkscreen};
@@ -68,11 +69,22 @@ pub fn EqRackFace(
     let ctx = use_param_context();
     let params = ui.params.clone();
     let scale = panel_scale(design.w, design.h, RAIL_W);
+    // The console's LED ladders read the plugin's own metering.
+    let in_db = ui.input_peak_db.load(std::sync::atomic::Ordering::Relaxed);
+    let out_db = ui.output_peak_db.load(std::sync::atomic::Ordering::Relaxed);
 
     // Panics rather than skipping: a control on a panel that resolves to no
     // parameter is a knob that does nothing, and `every_placed_control_resolves`
     // is the test that keeps it from shipping.
     let handle = move |id: &str| -> ParamHandle {
+        // An empty id is a control the panel has and the DSP does not yet: it
+        // draws and does not move. Anything else must resolve — a knob bound
+        // to nothing by accident is the one failure a screenshot will not
+        // show you, and `every_placed_control_resolves_to_a_parameter` is what
+        // keeps that from shipping.
+        if id.is_empty() {
+            return ParamHandle::inert("Not wired", 0.5);
+        }
         let ptr = control_ptr(&params, model, id)
             .unwrap_or_else(|| panic!("model {model} has no parameter for control {id}"));
         param_handle(ptr, ctx.clone())
@@ -97,7 +109,7 @@ pub fn EqRackFace(
             for item in design.items.iter().copied() {
                 {
                     match item {
-                        RackItem::Knob { id, legend, x, y, d, ring } => {
+                        RackItem::Knob { id, legend, x, y, d, ring, tint } => {
                             let box_w = d * 2.0;
                             let (ring_r, label_r, ticks) = ring.geometry();
                             rsx! {
@@ -110,6 +122,7 @@ pub fn EqRackFace(
                                         style: design.knob,
                                         ink: design.ink.to_string(),
                                         marks: ring.marks(),
+                                        tint: tint.map(str::to_string),
                                         ring_r,
                                         label_r,
                                         ticks,
@@ -218,8 +231,49 @@ pub fn EqRackFace(
                                 }
                             }
                         },
-                        // EQ panels carry no meter movement — see the module
-                        // docs.
+                        RackItem::Button { id, label, x, y, color, ink, led } => rsx! {
+                            PanelSlot { scale, x, y, w: 64.0, h: 86.0,
+                                PanelButton {
+                                    // An empty id is a control the panel has
+                                    // and the DSP does not yet: it draws, it
+                                    // does not move. See the kit's docs.
+                                    handle: (!id.is_empty()).then(|| handle(id)),
+                                    testid: if id.is_empty() {
+                                        label.to_lowercase().replace([' ', '/'], "-")
+                                    } else {
+                                        id.replace('_', "-")
+                                    },
+                                    scale,
+                                    label: label.to_string(),
+                                    color: color.to_string(),
+                                    ink: ink.to_string(),
+                                    led: led.to_string(),
+                                }
+                            }
+                        },
+                        RackItem::LedMeter { x, y, h, right } => {
+                            let level = if right { out_db } else { in_db };
+                            rsx! {
+                                PanelSlot { scale, x, y, w: 22.0, h: h + 6.0,
+                                    LedMeter { scale, level_db: level, h }
+                                }
+                            }
+                        }
+                        RackItem::Divider { x, y, h } => rsx! {
+                            div {
+                                style: format!(
+                                    "position:absolute; left:{:.1}px; top:{:.1}px; \
+                                     width:{:.1}px; height:{:.1}px; \
+                                     background:rgba(255,255,255,0.10);",
+                                    x * scale,
+                                    (y - h / 2.0) * scale,
+                                    (1.0 * scale).max(1.0),
+                                    h * scale,
+                                ),
+                            }
+                        },
+                        // EQ panels carry no meter movement — the console's
+                        // metering is an LED ladder, above.
                         RackItem::Vu { .. } => rsx! {},
                     }
                 }
@@ -242,6 +296,14 @@ fn CompactEqRack(design: RackDesign, model: i32, avail_h: f64) -> Element {
     let params = ui.params.clone();
 
     let handle = move |id: &str| -> ParamHandle {
+        // An empty id is a control the panel has and the DSP does not yet: it
+        // draws and does not move. Anything else must resolve — a knob bound
+        // to nothing by accident is the one failure a screenshot will not
+        // show you, and `every_placed_control_resolves_to_a_parameter` is what
+        // keeps that from shipping.
+        if id.is_empty() {
+            return ParamHandle::inert("Not wired", 0.5);
+        }
         let ptr = control_ptr(&params, model, id)
             .unwrap_or_else(|| panic!("model {model} has no parameter for control {id}"));
         param_handle(ptr, ctx.clone())
@@ -284,7 +346,7 @@ fn CompactEqRack(design: RackDesign, model: i32, avail_h: f64) -> Element {
                         }
                     };
                     match item {
-                        RackItem::Knob { id, legend, ring, .. } => cell(id, legend, rsx! {
+                        RackItem::Knob { id, legend, ring, tint, .. } => cell(id, legend, rsx! {
                             HardwareKnob {
                                 handle: handle(id),
                                 testid: id.replace('_', "-"),
@@ -293,6 +355,7 @@ fn CompactEqRack(design: RackDesign, model: i32, avail_h: f64) -> Element {
                                 style: design.knob,
                                 ink: design.ink.to_string(),
                                 marks: ring.marks(),
+                                tint: tint.map(str::to_string),
                             }
                         }),
                         // A lever needs an arc of panel to print its legends

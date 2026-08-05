@@ -101,7 +101,7 @@ pub fn RackFace(
                                 }
                             }
                         },
-                        RackItem::Knob { id, legend, x, y, d, ring } => {
+                        RackItem::Knob { id, legend, x, y, d, ring, tint } => {
                             // The knob's box is wider than the knob: the
                             // printed ring lives outside it.
                             let box_w = d * 2.0;
@@ -115,6 +115,7 @@ pub fn RackFace(
                                         style: design.knob,
                                         ink: design.ink.to_string(),
                                         marks: ring.marks(),
+                                        tint: tint.map(str::to_string),
                                     }
                                 }
                                 Silkscreen {
@@ -157,7 +158,10 @@ pub fn RackFace(
                         // no compressor face places one.
                         RackItem::Lever { .. }
                         | RackItem::Readout { .. }
-                        | RackItem::Lamp { .. } => rsx! {},
+                        | RackItem::Lamp { .. }
+                        | RackItem::Button { .. }
+                        | RackItem::LedMeter { .. }
+                        | RackItem::Divider { .. } => rsx! {},
                         RackItem::Text { x, y, text, size, strong } => rsx! {
                             Silkscreen {
                                 scale, x, y,

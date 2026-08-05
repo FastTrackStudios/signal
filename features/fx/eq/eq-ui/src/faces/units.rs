@@ -27,6 +27,11 @@ use fts_ui_audio::hardware::vu::VuFace;
 pub const W: f64 = 900.0;
 pub const H: f64 = 331.0;
 
+/// The SSL is a channel strip: wider and shorter than the outboard faces, and
+/// the ratio is the unit's own.
+const SSL_W: f64 = 1060.0;
+const SSL_H: f64 = 296.0;
+
 /// The two control rows.
 const ROW_A: f64 = 132.0;
 const ROW_B: f64 = 268.0;
@@ -73,6 +78,7 @@ pub static PULTEC: RackDesign = RackDesign {
             y: 98.0,
             d: 96.0,
             ring: Ring::Numerals(&["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]),
+            tint: None,
         },
         RackItem::Readout { id: "low_atten", x: 349.0, y: 22.0 },
         RackItem::Knob {
@@ -82,6 +88,7 @@ pub static PULTEC: RackDesign = RackDesign {
             y: 98.0,
             d: 96.0,
             ring: Ring::Numerals(&["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]),
+            tint: None,
         },
         RackItem::Readout { id: "high_boost", x: 553.0, y: 22.0 },
         RackItem::Knob {
@@ -91,6 +98,7 @@ pub static PULTEC: RackDesign = RackDesign {
             y: 98.0,
             d: 96.0,
             ring: Ring::Numerals(&["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]),
+            tint: None,
         },
         RackItem::Readout { id: "high_atten", x: 688.0, y: 22.0 },
         RackItem::Knob {
@@ -100,6 +108,7 @@ pub static PULTEC: RackDesign = RackDesign {
             y: 98.0,
             d: 96.0,
             ring: Ring::Numerals(&["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]),
+            tint: None,
         },
         // The high-attenuation frequency: a small knob at the top right.
         RackItem::Knob {
@@ -109,6 +118,7 @@ pub static PULTEC: RackDesign = RackDesign {
             y: 94.0,
             d: 42.0,
             ring: Ring::Numerals(&["5", "10", "20"]),
+            tint: None,
         },
         // ── Bottom row: the levers, bandwidth, bypass and output ─────────
         RackItem::Lever {
@@ -127,6 +137,7 @@ pub static PULTEC: RackDesign = RackDesign {
             y: 240.0,
             d: 88.0,
             ring: Ring::Numerals(&["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]),
+            tint: None,
         },
         RackItem::Lever {
             id: "high_boost_freq",
@@ -162,6 +173,7 @@ pub static PULTEC: RackDesign = RackDesign {
             y: 236.0,
             d: 44.0,
             ring: Ring::None,
+            tint: None,
         },
         RackItem::Readout { id: "trim", x: 810.0, y: 196.0 },
         RackItem::Knob {
@@ -171,6 +183,7 @@ pub static PULTEC: RackDesign = RackDesign {
             y: 240.0,
             d: 46.0,
             ring: Ring::Numerals(&["0", "2", "4", "6", "8", "10"]),
+            tint: None,
         },
         // ── Panel marks ──────────────────────────────────────────────────
         RackItem::Text {
@@ -194,159 +207,248 @@ pub static PULTEC: RackDesign = RackDesign {
 // SSL channel EQ (E and G)
 // ─────────────────────────────────────────────────────────────────────────
 
-/// Four bands with swept frequencies and the console's filters. E and G share
-/// this panel and these parameters — the difference between them is the curves
-/// the DSP runs, which is exactly what the model value selects.
+/// The console channel EQ, laid out from the unit's own panel.
+///
+/// Sections left to right — filters, LF, LMF, HMF, HF, then the switching and
+/// the output metering — divided by hairlines, exactly as the strip is. Two
+/// rows: gains and switching up top, frequencies and Qs beneath, so a band
+/// reads as a column.
+///
+/// The band colours are not decoration. A console is operated by reaching for
+/// "the blue one" without reading anything, and the E and G both colour-code
+/// LMF blue, HMF green and HF magenta.
+///
+/// **Not yet wired.** The panel carries controls this plugin has no parameter
+/// for — the LMF and HMF Q knobs, the ÷3 and ×3 range switches, FLTR IN, the
+/// phase invert, ANALOG. They draw and do nothing, on purpose: the panel is
+/// the specification for what the DSP still owes, and hiding them would hide
+/// the debt. Everything with an id behind it works.
+///
+/// E and G share this panel and these parameters; the model value picks the
+/// curves, which is the whole difference between them.
 pub static SSL: RackDesign = RackDesign {
     id: "eq_ssl_e",
-    w: W,
-    h: H,
-    paint: "linear-gradient(178deg, #43464b 0%, #303337 50%, #232528 100%)",
-    ink: "#e9ebee",
-    dim_ink: "#9ba1a8",
-    chrome: "#a5a9ae",
+    w: SSL_W,
+    h: SSL_H,
+    paint: "linear-gradient(178deg, #34373b 0%, #26282c 46%, #1b1d20 100%)",
+    ink: "#eceef0",
+    dim_ink: "#9aa0a6",
+    chrome: "#8f9398",
     vu: VuFace::Blue,
-    knob: KnobStyle::Metal,
+    knob: KnobStyle::Skirted,
     items: &[
-        RackItem::Text {
-            x: 450.0,
-            y: 44.0,
-            text: "Channel Equalizer",
-            size: 15.0,
-            strong: true,
+        // ── Filters ──────────────────────────────────────────────────────
+        RackItem::Text { x: 66.0, y: 22.0, text: "Analog", size: 9.0, strong: false },
+        RackItem::Text { x: 46.0, y: 118.0, text: "Off", size: 8.0, strong: false },
+        RackItem::Button {
+            id: "",
+            label: "ON",
+            x: 46.0,
+            y: 62.0,
+            color: "#1c1e21",
+            ink: "#e8eaec",
+            led: "#43d17a",
         },
-        RackItem::Text {
-            x: 450.0,
-            y: 68.0,
-            text: "FTS EQ · Console",
-            size: 9.0,
-            strong: false,
+        RackItem::Text { x: 128.0, y: 24.0, text: "HP", size: 11.0, strong: true },
+        RackItem::Button {
+            id: "",
+            label: "FLTR IN",
+            x: 152.0,
+            y: 62.0,
+            color: "#e6e2d4",
+            ink: "#23252a",
+            led: "#43d17a",
         },
-        // Frequencies on the top row, gains beneath them: the console layout,
-        // and the one that lets you read a band as a column.
         RackItem::Knob {
             id: "hpf",
-            legend: "HPF",
-            x: 112.0,
-            y: ROW_A,
-            d: 46.0,
-            ring: Ring::Plain { majors: 5 },
-        },
-        RackItem::Knob {
-            id: "lf_freq",
-            legend: "LF Freq",
-            x: 230.0,
-            y: ROW_A,
-            d: 46.0,
-            ring: Ring::Plain { majors: 5 },
-        },
-        RackItem::Knob {
-            id: "lmf_freq",
-            legend: "LMF Freq",
-            x: 348.0,
-            y: ROW_A,
-            d: 46.0,
-            ring: Ring::Plain { majors: 5 },
-        },
-        RackItem::Knob {
-            id: "hmf_freq",
-            legend: "HMF Freq",
-            x: 466.0,
-            y: ROW_A,
-            d: 46.0,
-            ring: Ring::Plain { majors: 5 },
-        },
-        RackItem::Knob {
-            id: "hf_freq",
-            legend: "HF Freq",
-            x: 584.0,
-            y: ROW_A,
-            d: 46.0,
-            ring: Ring::Plain { majors: 5 },
+            legend: "Hz",
+            x: 86.0,
+            y: 182.0,
+            d: 42.0,
+            ring: Ring::Dots(&["16", "20", "70", "120", "200", "300", "350"]),
+            tint: Some("#d8d4c6"),
         },
         RackItem::Knob {
             id: "lpf",
-            legend: "LPF",
-            x: 702.0,
-            y: ROW_A,
-            d: 46.0,
-            ring: Ring::Plain { majors: 5 },
+            legend: "kHz",
+            x: 172.0,
+            y: 182.0,
+            d: 42.0,
+            ring: Ring::Dots(&["3", "5", "8", "12", "16", "20", "22"]),
+            tint: Some("#d8d4c6"),
         },
-        RackItem::Switch {
-            id: "eq_in",
-            legend: "EQ",
-            x: 818.0,
-            y: ROW_A,
-            labels: ["Out", "In"],
-        },
+        RackItem::Divider { x: 218.0, y: 140.0, h: 236.0 },
+
+        // ── LF ───────────────────────────────────────────────────────────
+        RackItem::Text { x: 268.0, y: 24.0, text: "LF", size: 11.0, strong: true },
         RackItem::Knob {
             id: "lf_gain",
-            legend: "LF",
-            x: 230.0,
-            y: ROW_B,
-            d: 46.0,
-            ring: Ring::Linear {
-                from: -18.0,
-                to: 18.0,
-                majors: 5,
-            },
+            legend: "",
+            x: 288.0,
+            y: 74.0,
+            d: 44.0,
+            ring: Ring::Dots(&["-", "", "", "", "", "0", "", "", "", "", "+"]),
+            tint: Some("#2b2d31"),
         },
         RackItem::Knob {
+            id: "lf_freq",
+            legend: "Hz",
+            x: 288.0,
+            y: 182.0,
+            d: 42.0,
+            ring: Ring::Dots(&["30", "50", "100", "200", "300", "450"]),
+            tint: Some("#2b2d31"),
+        },
+        RackItem::Divider { x: 340.0, y: 140.0, h: 236.0 },
+
+        // ── LMF ──────────────────────────────────────────────────────────
+        RackItem::Text { x: 392.0, y: 24.0, text: "LMF", size: 11.0, strong: true },
+        RackItem::Knob {
             id: "lmf_gain",
-            legend: "LMF",
-            x: 348.0,
-            y: ROW_B,
-            d: 46.0,
-            ring: Ring::Linear {
-                from: -18.0,
-                to: 18.0,
-                majors: 5,
-            },
+            legend: "",
+            x: 396.0,
+            y: 74.0,
+            d: 44.0,
+            ring: Ring::Dots(&["-", "", "", "", "", "0", "", "", "", "", "+"]),
+            tint: Some("#2b7fc0"),
+        },
+        RackItem::Button {
+            id: "",
+            label: "/3",
+            x: 462.0,
+            y: 68.0,
+            color: "#e6e2d4",
+            ink: "#1f5f96",
+            led: "#43d17a",
+        },
+        RackItem::Knob {
+            id: "",
+            legend: "",
+            x: 380.0,
+            y: 186.0,
+            d: 40.0,
+            ring: Ring::Dots(&["3", "2", "1.5", "1", ".5"]),
+            tint: Some("#2b7fc0"),
+        },
+        RackItem::Knob {
+            id: "lmf_freq",
+            legend: "kHz",
+            x: 470.0,
+            y: 186.0,
+            d: 40.0,
+            ring: Ring::Dots(&[".2", ".3", ".8", "1", "1.5", "2", "2.5"]),
+            tint: Some("#2b7fc0"),
+        },
+        RackItem::Divider { x: 516.0, y: 140.0, h: 236.0 },
+
+        // ── HMF ──────────────────────────────────────────────────────────
+        RackItem::Text { x: 578.0, y: 24.0, text: "HMF", size: 11.0, strong: true },
+        RackItem::Button {
+            id: "",
+            label: "×3",
+            x: 552.0,
+            y: 68.0,
+            color: "#e6e2d4",
+            ink: "#1d6b46",
+            led: "#43d17a",
         },
         RackItem::Knob {
             id: "hmf_gain",
-            legend: "HMF",
-            x: 466.0,
-            y: ROW_B,
-            d: 46.0,
-            ring: Ring::Linear {
-                from: -18.0,
-                to: 18.0,
-                majors: 5,
-            },
+            legend: "",
+            x: 622.0,
+            y: 74.0,
+            d: 44.0,
+            ring: Ring::Dots(&["-", "", "", "", "", "0", "", "", "", "", "+"]),
+            tint: Some("#2c8f5a"),
         },
         RackItem::Knob {
+            id: "",
+            legend: "",
+            x: 566.0,
+            y: 186.0,
+            d: 40.0,
+            ring: Ring::Dots(&["3", "2", "1.5", "1", ".5"]),
+            tint: Some("#2c8f5a"),
+        },
+        RackItem::Knob {
+            id: "hmf_freq",
+            legend: "kHz",
+            x: 656.0,
+            y: 186.0,
+            d: 40.0,
+            ring: Ring::Dots(&[".6", ".8", "1.5", "3", "4.5", "6", "7"]),
+            tint: Some("#2c8f5a"),
+        },
+        RackItem::Divider { x: 702.0, y: 140.0, h: 236.0 },
+
+        // ── HF ───────────────────────────────────────────────────────────
+        RackItem::Text { x: 742.0, y: 24.0, text: "HF", size: 11.0, strong: true },
+        RackItem::Knob {
             id: "hf_gain",
-            legend: "HF",
-            x: 584.0,
-            y: ROW_B,
-            d: 46.0,
-            ring: Ring::Linear {
-                from: -18.0,
-                to: 18.0,
-                majors: 5,
-            },
+            legend: "",
+            x: 752.0,
+            y: 74.0,
+            d: 44.0,
+            ring: Ring::Dots(&["-", "", "", "", "", "0", "", "", "", "", "+"]),
+            tint: Some("#a8438f"),
+        },
+        RackItem::Knob {
+            id: "hf_freq",
+            legend: "kHz",
+            x: 752.0,
+            y: 186.0,
+            d: 42.0,
+            ring: Ring::Dots(&["1.5", "2", "5", "8", "10", "14", "16"]),
+            tint: Some("#a8438f"),
+        },
+        RackItem::Divider { x: 800.0, y: 140.0, h: 236.0 },
+
+        // ── Switching + output ───────────────────────────────────────────
+        RackItem::Button {
+            id: "eq_in",
+            label: "EQ IN",
+            x: 838.0,
+            y: 68.0,
+            color: "#e6e2d4",
+            ink: "#23252a",
+            led: "#43d17a",
+        },
+        RackItem::Button {
+            id: "",
+            label: "Ø",
+            x: 906.0,
+            y: 68.0,
+            color: "#c2382c",
+            ink: "#f4e9e7",
+            led: "#e0483a",
+        },
+        RackItem::Knob {
+            id: "trim",
+            legend: "Output",
+            x: 872.0,
+            y: 186.0,
+            d: 42.0,
+            ring: Ring::Dots(&["-24", "", "", "0", "", "", "+12"]),
+            tint: Some("#d8d4c6"),
         },
         RackItem::Knob {
             id: "drive",
             legend: "Drive",
-            x: 702.0,
-            y: ROW_B,
-            d: 40.0,
-            ring: Ring::Plain { majors: 5 },
+            x: 946.0,
+            y: 186.0,
+            d: 34.0,
+            ring: Ring::Dots(&["", "", "", "", ""]),
+            tint: Some("#d8d4c6"),
         },
-        RackItem::Knob {
-            id: "trim",
-            legend: "Trim",
-            x: 112.0,
-            y: ROW_B,
-            d: 40.0,
-            ring: Ring::Linear {
-                from: -24.0,
-                to: 24.0,
-                majors: 5,
-            },
-        },
+        RackItem::Text { x: 978.0, y: 48.0, text: "0", size: 7.0, strong: false },
+        RackItem::Text { x: 978.0, y: 84.0, text: "-10", size: 7.0, strong: false },
+        RackItem::Text { x: 978.0, y: 132.0, text: "-20", size: 7.0, strong: false },
+        RackItem::Text { x: 978.0, y: 186.0, text: "-30", size: 7.0, strong: false },
+        RackItem::Text { x: 978.0, y: 222.0, text: "-40", size: 7.0, strong: false },
+        RackItem::LedMeter { x: 1006.0, y: 132.0, h: 190.0, right: false },
+        RackItem::LedMeter { x: 1032.0, y: 132.0, h: 190.0, right: true },
+
+        RackItem::Text { x: 520.0, y: 268.0, text: "FTS EQ · Console", size: 9.0, strong: false },
     ],
 };
 
@@ -388,6 +490,7 @@ pub static API_550A: RackDesign = RackDesign {
             y: ROW_A,
             d: 52.0,
             ring: Ring::Detents(&["50", "100", "200", "400"]),
+            tint: None,
         },
         RackItem::Knob {
             id: "mid_freq",
@@ -396,6 +499,7 @@ pub static API_550A: RackDesign = RackDesign {
             y: ROW_A,
             d: 52.0,
             ring: Ring::Detents(&["400", "800", "1.5k", "3k", "5k"]),
+            tint: None,
         },
         RackItem::Knob {
             id: "high_freq",
@@ -404,6 +508,7 @@ pub static API_550A: RackDesign = RackDesign {
             y: ROW_A,
             d: 52.0,
             ring: Ring::Detents(&["5k", "7k", "10k", "12.5k", "15k"]),
+            tint: None,
         },
         RackItem::Switch {
             id: "eq_in",
@@ -423,6 +528,7 @@ pub static API_550A: RackDesign = RackDesign {
                 to: 12.0,
                 majors: 7,
             },
+            tint: None,
         },
         RackItem::Knob {
             id: "mid_gain",
@@ -435,6 +541,7 @@ pub static API_550A: RackDesign = RackDesign {
                 to: 12.0,
                 majors: 7,
             },
+            tint: None,
         },
         RackItem::Knob {
             id: "high_gain",
@@ -447,6 +554,7 @@ pub static API_550A: RackDesign = RackDesign {
                 to: 12.0,
                 majors: 7,
             },
+            tint: None,
         },
         RackItem::Knob {
             id: "drive",
@@ -455,6 +563,7 @@ pub static API_550A: RackDesign = RackDesign {
             y: ROW_B,
             d: 42.0,
             ring: Ring::Plain { majors: 5 },
+            tint: None,
         },
         RackItem::Knob {
             id: "trim",
@@ -467,6 +576,7 @@ pub static API_550A: RackDesign = RackDesign {
                 to: 24.0,
                 majors: 5,
             },
+            tint: None,
         },
     ],
 };
@@ -514,6 +624,7 @@ pub static NEVE_1073: RackDesign = RackDesign {
                 to: 16.0,
                 majors: 5,
             },
+            tint: None,
         },
         RackItem::Knob {
             id: "mid_freq",
@@ -522,6 +633,7 @@ pub static NEVE_1073: RackDesign = RackDesign {
             y: ROW_A,
             d: 52.0,
             ring: Ring::Detents(&["Off", "360", "700", "1.6k", "3.2k", "4.8k", "7.2k"]),
+            tint: None,
         },
         RackItem::Knob {
             id: "mid_gain",
@@ -534,6 +646,7 @@ pub static NEVE_1073: RackDesign = RackDesign {
                 to: 16.0,
                 majors: 5,
             },
+            tint: None,
         },
         RackItem::Knob {
             id: "drive",
@@ -542,6 +655,7 @@ pub static NEVE_1073: RackDesign = RackDesign {
             y: ROW_A,
             d: 46.0,
             ring: Ring::Plain { majors: 5 },
+            tint: None,
         },
         RackItem::Switch {
             id: "eq_in",
@@ -557,6 +671,7 @@ pub static NEVE_1073: RackDesign = RackDesign {
             y: ROW_B,
             d: 52.0,
             ring: Ring::Detents(&["Off", "35", "60", "110", "220"]),
+            tint: None,
         },
         RackItem::Knob {
             id: "low_gain",
@@ -569,6 +684,7 @@ pub static NEVE_1073: RackDesign = RackDesign {
                 to: 16.0,
                 majors: 5,
             },
+            tint: None,
         },
         RackItem::Knob {
             id: "hpf",
@@ -577,6 +693,7 @@ pub static NEVE_1073: RackDesign = RackDesign {
             y: ROW_B,
             d: 52.0,
             ring: Ring::Detents(&["Off", "50", "80", "160", "300"]),
+            tint: None,
         },
         RackItem::Knob {
             id: "trim",
@@ -585,6 +702,7 @@ pub static NEVE_1073: RackDesign = RackDesign {
             y: ROW_B,
             d: 46.0,
             ring: Ring::Plain { majors: 5 },
+            tint: None,
         },
         RackItem::Switch {
             id: "phase",
@@ -613,6 +731,37 @@ mod tests {
     use crate::faces::params_map::control_ptr;
     use crate::params::FtsEqParams;
 
+    /// Ids placed on a panel, excluding the deliberately unwired ones.
+    fn wired_ids(design: &RackDesign) -> Vec<&'static str> {
+        design
+            .items
+            .iter()
+            .filter_map(|item| match item {
+                RackItem::Knob { id, .. }
+                | RackItem::Buttons { id, .. }
+                | RackItem::Switch { id, .. }
+                | RackItem::Lever { id, .. }
+                | RackItem::Button { id, .. } => Some(*id),
+                _ => None,
+            })
+            .filter(|id| !id.is_empty())
+            .collect()
+    }
+
+    /// How many controls a panel draws with nothing behind them.
+    fn unwired_count(design: &RackDesign) -> usize {
+        design
+            .items
+            .iter()
+            .filter(|item| {
+                matches!(
+                    item,
+                    RackItem::Knob { id, .. } | RackItem::Button { id, .. } if id.is_empty()
+                )
+            })
+            .count()
+    }
+
     /// Every control a panel places has to resolve to a parameter for that
     /// model — otherwise the knob mounts and does nothing, which is the one
     /// failure a screenshot will not show you. (`EqRackFace` panics on a miss;
@@ -625,18 +774,34 @@ mod tests {
             let Some(design) = design_for(model) else {
                 continue;
             };
-            for item in design.items {
-                let id = match item {
-                    RackItem::Knob { id, .. }
-                    | RackItem::Buttons { id, .. }
-                    | RackItem::Switch { id, .. } => *id,
-                    _ => continue,
-                };
+            for id in wired_ids(design) {
                 assert!(
                     control_ptr(&params, model, id).is_some(),
                     "model {model} places {id}, which resolves to no parameter",
                 );
             }
+        }
+    }
+
+    /// The unwired controls are a known, counted debt.
+    ///
+    /// A panel may draw a control the DSP does not have yet — that is how the
+    /// panel states what it still owes — but it may not do so by accident. A
+    /// mistyped id would otherwise land here silently and read as "not wired
+    /// yet" forever, so the number is pinned and moving it is a deliberate
+    /// edit.
+    #[test]
+    fn the_unwired_controls_are_the_ones_we_know_about() {
+        // SSL: ANALOG, FLTR IN, ÷3, ×3, phase, and the two mid-band Q knobs.
+        assert_eq!(unwired_count(design_for(4).unwrap()), 7);
+        assert_eq!(unwired_count(design_for(5).unwrap()), 7, "E and G share a panel");
+        // Every other model is fully wired.
+        for model in [1, 2, 3] {
+            assert_eq!(
+                unwired_count(design_for(model).unwrap()),
+                0,
+                "model {model} grew an unwired control",
+            );
         }
     }
 
