@@ -231,6 +231,7 @@ fn AppShell() -> Element {
     // The *resolved* model: the persisted id when the session has one, the
     // index otherwise. See `FtsEqParams::model_id`.
     let current_model = crate::faces::resolved_model(&params);
+    let current_form = crate::faces::resolved_form(&params);
     let hardware_mode_active = current_model != 0;
     let model_response: Option<Vec<f32>> = hardware_mode_active.then(|| {
         (0..SPECTRUM_BINS)
@@ -346,6 +347,26 @@ fn AppShell() -> Element {
                 items: crate::faces::rail_items(current_model),
                 selected: crate::faces::category_of(current_model).map(|(c, _)| c).unwrap_or(0),
                 accent: "#8aa4ff".to_string(),
+                rail_footer: rsx! {
+                    // Size presets, cycled from the foot cluster — chrome
+                    // about the editor rather than about the sound.
+                    RailButton {
+                        testid: "form-cycle".to_string(),
+                        label: current_form.badge().to_string(),
+                        title: format!("Editor size — {} (click to cycle)", current_form.label()),
+                        active: current_form != fts_ui_audio::EditorForm::default(),
+                        accent: "#8aa4ff".to_string(),
+                        on_click: {
+                            let params = params.clone();
+                            move |_| {
+                                let forms = fts_ui_audio::EDITOR_FORMS;
+                                let index =
+                                    forms.iter().position(|f| *f == current_form).unwrap_or(0);
+                                crate::faces::store_form(&params, forms[(index + 1) % forms.len()]);
+                            }
+                        },
+                    }
+                },
                 on_select: {
                     let ctx = ctx.clone();
                     let model_ptr = params.model.as_ptr();
@@ -371,6 +392,7 @@ fn AppShell() -> Element {
                     design: *design,
                     model: current_model,
                     frame: frame_counter,
+                    form: current_form,
                 }
             }
 

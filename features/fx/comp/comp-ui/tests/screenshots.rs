@@ -180,6 +180,23 @@ async fn shot_every_other_unit() {
     }
 }
 
+/// Every size preset, on a face that has a panel — this is the sheet that
+/// says whether a form is usable, which is not something a size in a table can
+/// tell you.
+#[tokio::test]
+async fn shot_every_editor_form() {
+    for form in fts_ui_audio::EDITOR_FORMS {
+        let index = comp_profiles::profile_index("la2a").unwrap();
+        let (w, h) = comp_ui::faces::editor_size_for(index, *form);
+        let params = std::sync::Arc::new(comp_ui::params::CompParams::default());
+        params.store_profile_id(index);
+        params.store_editor_form(*form);
+        let mut fx = support::mount_with(params, w, h);
+        fx.settle().await;
+        shot(&fx, &format!("form-{}", form.id().replace('_', "-")));
+    }
+}
+
 /// The same face in a window the user dragged wider — this is what host
 /// resizing does to a faceplate (scale it, not reflow it).
 #[tokio::test]

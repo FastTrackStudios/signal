@@ -227,6 +227,11 @@ pub struct CompParams {
     #[persist = "profile_id"]
     pub profile_id: parking_lot::RwLock<String>,
 
+    /// The editor's form factor — Responsive, a rack size, a 500-series
+    /// module. Persisted by id for the same reason the profile is.
+    #[persist = "editor_form"]
+    pub editor_form: parking_lot::RwLock<String>,
+
     /// Position of the active profile's first compound ("macro") control.
     ///
     /// A hardware macro — LA-2A PEAK REDUCTION, 1176 INPUT — writes several
@@ -258,6 +263,16 @@ impl CompParams {
     pub fn resolved_profile_index(&self) -> usize {
         let id = self.profile_id.read();
         comp_profiles::profile_index(&id).unwrap_or_else(|| self.profile.value().max(0) as usize)
+    }
+
+    /// The editor form a loaded session should open at. An unknown or missing
+    /// id means Responsive, which is the size the face asks for anyway.
+    pub fn resolved_editor_form(&self) -> fts_ui_audio::EditorForm {
+        fts_ui_audio::EditorForm::from_id(&self.editor_form.read()).unwrap_or_default()
+    }
+
+    pub fn store_editor_form(&self, form: fts_ui_audio::EditorForm) {
+        *self.editor_form.write() = form.id().to_string();
     }
 
     /// Record the id for `index` — call this wherever the profile changes, so
@@ -489,6 +504,7 @@ impl Default for CompParams {
             )
             .with_value_to_string(label_formatter(PROFILE_LABELS)),
             profile_id: parking_lot::RwLock::new(String::new()),
+            editor_form: parking_lot::RwLock::new(String::new()),
             macro1: macro_slot_param("Macro 1"),
             macro2: macro_slot_param("Macro 2"),
         }

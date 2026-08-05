@@ -56,6 +56,11 @@ pub fn EqRackFace(
     /// panel re-renders against fresh parameter values rather than being
     /// memoized away.
     frame: u64,
+    /// The editor's form. A panel is a fixed drawing, so when the window is a
+    /// shape it was never for — a portrait 500-series module, a 1U sliver —
+    /// the face flows its controls instead of shrinking the panel past
+    /// legibility.
+    form: fts_ui_audio::EditorForm,
 ) -> Element {
     let _ = frame;
     let shared = use_context::<SharedState>();
@@ -72,6 +77,14 @@ pub fn EqRackFace(
             .unwrap_or_else(|| panic!("model {model} has no parameter for control {id}"));
         param_handle(ptr, ctx.clone())
     };
+
+    let (win_w, win_h) = fts_ui_audio::hardware::panel::window_logical_size()
+        .unwrap_or((design.w + RAIL_W, design.h));
+    if !form.wants_panel(design.w, design.h, win_w - RAIL_W, win_h) {
+        return rsx! {
+            CompactEqRack { design, model, avail_h: win_h }
+        };
+    }
 
     rsx! {
         Panel {
@@ -208,6 +221,115 @@ pub fn EqRackFace(
                         // EQ panels carry no meter movement — see the module
                         // docs.
                         RackItem::Vu { .. } => rsx! {},
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// The same model, flowed into a window its panel does not fit.
+///
+/// The *same* [`RackDesign`] items as the panel, drawn as a wrapping row of
+/// cells — so a 500-series or 1U view exists for every model without a second
+/// layout table per unit. Levers become their underlying stepped control,
+/// because a paddle needs the arc of panel a small window does not have.
+#[component]
+fn CompactEqRack(design: RackDesign, model: i32, avail_h: f64) -> Element {
+    let shared = use_context::<SharedState>();
+    let ui = shared.get::<EqUiState>().expect("EqUiState missing");
+    let ctx = use_param_context();
+    let params = ui.params.clone();
+
+    let handle = move |id: &str| -> ParamHandle {
+        let ptr = control_ptr(&params, model, id)
+            .unwrap_or_else(|| panic!("model {model} has no parameter for control {id}"));
+        param_handle(ptr, ctx.clone())
+    };
+
+    let rows = if avail_h > 260.0 { 3.0 } else { 1.0 };
+    let cell_h = (avail_h - 20.0) / rows;
+    let knob_d = (cell_h * 0.58).clamp(26.0, 46.0);
+    let show_legends = cell_h > 62.0;
+
+    rsx! {
+        div {
+            "data-testid": "compact-rack",
+            style: format!(
+                "flex:1; min-height:0; display:flex; flex-wrap:wrap; \
+                 align-content:center; justify-content:center; gap:10px 14px; \
+                 padding:10px; overflow:hidden; background:{};",
+                design.paint,
+            ),
+
+            for item in design.items.iter().copied() {
+                {
+                    let cell = |id: &'static str, legend: &'static str, inner: Element| {
+                        let _ = id;
+                        rsx! {
+                            div {
+                                style: "display:flex; flex-direction:column; align-items:center; gap:3px;",
+                                {inner}
+                                if show_legends && !legend.is_empty() {
+                                    div {
+                                        style: format!(
+                                            "font-size:9px; font-weight:700; letter-spacing:0.06em; \
+                                             text-transform:uppercase; color:{};",
+                                            design.ink,
+                                        ),
+                                        "{legend}"
+                                    }
+                                }
+                            }
+                        }
+                    };
+                    match item {
+                        RackItem::Knob { id, legend, ring, .. } => cell(id, legend, rsx! {
+                            HardwareKnob {
+                                handle: handle(id),
+                                testid: id.replace('_', "-"),
+                                scale: 1.0,
+                                diameter: knob_d,
+                                style: design.knob,
+                                ink: design.ink.to_string(),
+                                marks: ring.marks(),
+                            }
+                        }),
+                        // A lever needs an arc of panel to print its legends
+                        // in; at this size the same stepped parameter reads
+                        // better as a knob.
+                        RackItem::Lever { id, legend, labels, .. } => cell(id, legend, rsx! {
+                            HardwareKnob {
+                                handle: handle(id),
+                                testid: id.replace('_', "-"),
+                                scale: 1.0,
+                                diameter: knob_d,
+                                style: design.knob,
+                                ink: design.ink.to_string(),
+                                marks: fts_ui_audio::hardware::rack::Ring::Detents(labels).marks(),
+                            }
+                        }),
+                        RackItem::Switch { id, legend, labels, .. } => cell(id, legend, rsx! {
+                            ToggleSwitch {
+                                handle: handle(id),
+                                testid: id.replace('_', "-"),
+                                scale: 0.8,
+                                labels: [labels[0].to_string(), labels[1].to_string()],
+                                ink: design.ink.to_string(),
+                            }
+                        }),
+                        RackItem::Buttons { id, legend, labels, .. } => cell(id, legend, rsx! {
+                            RatioButtons {
+                                handle: handle(id),
+                                testid: id.replace('_', "-"),
+                                scale: 0.8,
+                                labels: labels.iter().map(|s| s.to_string()).collect(),
+                                ink: design.ink.to_string(),
+                            }
+                        }),
+                        // Panel text, readouts, lamps and meters are the
+                        // panel's, not the controls'.
+                        _ => rsx! {},
                     }
                 }
             }

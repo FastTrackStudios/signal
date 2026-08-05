@@ -256,6 +256,11 @@ pub struct FtsEqParams {
     #[persist = "model_id"]
     pub model_id: parking_lot::RwLock<String>,
 
+    /// The editor's form factor — Responsive, a rack size, a 500-series
+    /// module. Persisted by id for the same reason the model is.
+    #[persist = "editor_form"]
+    pub editor_form: parking_lot::RwLock<String>,
+
     #[id = "output_gain"]
     pub output_gain_db: FloatParam,
 
@@ -378,6 +383,7 @@ impl Default for FtsEqParams {
     fn default() -> Self {
         Self {
             model_id: parking_lot::RwLock::new(String::new()),
+            editor_form: parking_lot::RwLock::new(String::new()),
 
             model: IntParam::new("Model", 0, IntRange::Linear { min: 0, max: 5 })
                 .with_value_to_string(Arc::new(|v| match v {

@@ -135,6 +135,15 @@ pub fn preferred_editor_size(profile_index: usize) -> (u32, u32) {
     }
 }
 
+/// The editor size for a profile *and* a chosen form: the form decides, except
+/// for Responsive, which defers to the face.
+pub fn editor_size_for(profile_index: usize, form: fts_ui_audio::EditorForm) -> (u32, u32) {
+    form.editor_size(
+        crate::control_view::RAIL_W,
+        preferred_editor_size(profile_index),
+    )
+}
+
 /// The editor body for a profile index.
 ///
 /// `advanced` is the FTS surface's page selection; the hardware faces ignore
@@ -146,14 +155,21 @@ pub fn preferred_editor_size(profile_index: usize) -> (u32, u32) {
 /// changed — so without a prop that changes every tick, a face would render
 /// once and then sit there with a frozen VU and stale knob positions.
 #[component]
-pub fn Face(profile_index: usize, advanced: bool, frame: u64) -> Element {
+pub fn Face(
+    profile_index: usize,
+    advanced: bool,
+    frame: u64,
+    /// The editor's form factor — a face draws its panel or flows its controls
+    /// depending on whether the panel fits the shape.
+    form: fts_ui_audio::EditorForm,
+) -> Element {
     let _ = frame;
     match units::design_for(profile_id_for_index(profile_index)) {
         // `key` is what makes a face swap actually swap: without it Dioxus
         // diffs the new design into the old panel's nodes, and knobs keep the
         // previous unit's handles.
         Some(design) => rsx! {
-            rack::RackFace { key: "{profile_index}", design: *design, frame }
+            rack::RackFace { key: "{profile_index}", design: *design, frame, form }
         },
         None => rsx! { control::ControlFace { advanced, frame } },
     }

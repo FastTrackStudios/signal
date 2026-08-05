@@ -99,6 +99,22 @@ pub fn resolved_model(params: &crate::params::FtsEqParams) -> i32 {
     model_for_id(&id).unwrap_or_else(|| params.model.value())
 }
 
+/// The editor form a loaded session should open at. An unknown or missing id
+/// means Responsive, which is the size the face asks for anyway.
+pub fn resolved_form(params: &crate::params::FtsEqParams) -> fts_ui_audio::EditorForm {
+    fts_ui_audio::EditorForm::from_id(&params.editor_form.read()).unwrap_or_default()
+}
+
+pub fn store_form(params: &crate::params::FtsEqParams, form: fts_ui_audio::EditorForm) {
+    *params.editor_form.write() = form.id().to_string();
+}
+
+/// The editor size for a model *and* a chosen form: the form decides, except
+/// for Responsive, which defers to the face.
+pub fn editor_size_for(model: i32, form: fts_ui_audio::EditorForm) -> (u32, u32) {
+    form.editor_size(fts_ui_audio::shell::RAIL_W, preferred_editor_size(model))
+}
+
 /// Record the id for `model` — call this wherever the model changes.
 pub fn store_model_id(params: &crate::params::FtsEqParams, model: i32) {
     *params.model_id.write() = model_id(model).to_string();

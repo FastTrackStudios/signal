@@ -187,6 +187,22 @@ async fn switching_models_by_rail_click_does_not_panic() {
     }
 }
 
+/// Every size preset on the Pultec — whether a form is usable is not something
+/// a size in a table can tell you.
+#[tokio::test]
+async fn shot_every_editor_form() {
+    for form in fts_ui_audio::EDITOR_FORMS {
+        let (w, h) = eq_ui::faces::editor_size_for(1, *form);
+        let params = Arc::new(FtsEqParams::default());
+        unsafe { params.model.as_ptr()._internal_set_normalized_value(1.0 / 5.0) };
+        eq_ui::faces::store_model_id(&params, 1);
+        eq_ui::faces::store_form(&params, *form);
+        let mut fx = mount_with(params, w, h);
+        fx.settle().await;
+        shot(&fx, &format!("form-{}", form.id().replace('_', "-")));
+    }
+}
+
 #[tokio::test]
 async fn shot_every_hardware_model() {
     for (model, name) in [

@@ -115,7 +115,13 @@ pub fn mount() -> Fixture {
 /// Mount at an explicit window size — used to check the surface against the
 /// editor size the plugin shell actually asks the host for.
 pub fn mount_sized(width: u32, height: u32) -> Fixture {
-    let params = Arc::new(CompParams::default());
+    mount_with(Arc::new(CompParams::default()), width, height)
+}
+
+/// Mount against a params tree the caller has already set up — a persisted
+/// profile id, a chosen editor form — so a test can open the editor the way a
+/// host restoring a session would.
+pub fn mount_with(params: Arc<CompParams>, width: u32, height: u32) -> Fixture {
     let ui_state = Arc::new(CompUiState::new(params.clone()));
     let log = Arc::new(Mutex::new(Vec::new()));
 

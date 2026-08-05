@@ -146,12 +146,18 @@ fn AppShell() -> Element {
 
     let mut advanced = use_signal(|| false);
 
+    // The editor's form factor: Responsive, a rack size, a 500-series module.
+    // Persisted by id like the profile, and the reason the size reconciliation
+    // below has two inputs rather than one.
+    let form = params.resolved_editor_form();
+
     // Profile → editor size. Faces are different shapes, so a face swap is a
     // resize request to the host (see `faces::preferred_editor_size`). Tracked
     // through a plain Cell rather than an effect because the profile lives in
     // a plugin param, not a signal: this shell re-renders on the redraw tick
     // anyway, so comparing here also catches the host automating the param.
-    let last_profile: std::rc::Rc<std::cell::Cell<Option<usize>>> =
+    #[allow(clippy::type_complexity)]
+    let last_profile: std::rc::Rc<std::cell::Cell<Option<(usize, fts_ui_audio::EditorForm)>>> =
         use_hook(|| std::rc::Rc::new(std::cell::Cell::new(None)));
 
     // The face comes from the *resolved* profile: the persisted id when the
@@ -161,8 +167,8 @@ fn AppShell() -> Element {
     let skin = profile_skin(profile_id);
     let is_control_face = profile_id == "control";
 
-    if last_profile.get() != Some(profile_idx) {
-        last_profile.set(Some(profile_idx));
+    if last_profile.get() != Some((profile_idx, form)) {
+        last_profile.set(Some((profile_idx, form)));
         // A session restored from its id can land with the index parameter
         // still on whatever number that id used to be; put it back in line so
         // the host reads the same face the editor shows.
@@ -181,7 +187,7 @@ fn AppShell() -> Element {
         // Absent when the editor is embedded without a nice-plug window
         // (headless tests): nothing to resize, so nothing to do.
         if let Some(state) = try_consume_context::<std::sync::Arc<nice_plug_dioxus::DioxusState>>() {
-            let (w, h) = crate::faces::preferred_editor_size(profile_idx);
+            let (w, h) = crate::faces::editor_size_for(profile_idx, form);
             if state.size() != (w, h) {
                 state.request_resize(w, h);
             }
@@ -208,6 +214,7 @@ fn AppShell() -> Element {
     // everything else.
     let profile_handle = param_handle(params.profile.as_ptr(), ctx.clone());
     let params_for_id = ui.params.clone();
+    let params_for_form = ui.params.clone();
     let profile_count = PROFILE_LABELS.len();
     // One rail entry per compressor family, badged with the active unit.
     let items = crate::faces::rail_items(profile_idx);
@@ -249,6 +256,22 @@ fn AppShell() -> Element {
                         // Basic/Advanced disclosure. Local UI state — never a
                         // plugin param, so switching pages does not show up as
                         // an automatable change or dirty the host's project.
+                        // Size presets. One button that cycles the forms, in
+                        // the foot cluster because it is chrome about the
+                        // editor rather than about the sound.
+                        RailButton {
+                            testid: "form-cycle".to_string(),
+                            label: form.badge().to_string(),
+                            title: format!("Editor size — {} (click to cycle)", form.label()),
+                            active: form != fts_ui_audio::EditorForm::default(),
+                            accent: skin.accent.to_string(),
+                            on_click: move |_| {
+                                let forms = fts_ui_audio::EDITOR_FORMS;
+                                let index = forms.iter().position(|f| *f == form).unwrap_or(0);
+                                params_for_form.store_editor_form(forms[(index + 1) % forms.len()]);
+                            },
+                        }
+
                         if is_control_face {
                             RailButton {
                                 testid: "advanced-toggle".to_string(),
@@ -265,7 +288,12 @@ fn AppShell() -> Element {
                         }
                     },
 
-                    Face { profile_index: profile_idx, advanced: is_advanced, frame: frame_counter }
+                    Face {
+                        profile_index: profile_idx,
+                        advanced: is_advanced,
+                        frame: frame_counter,
+                        form,
+                    }
                 }
             }
         }
