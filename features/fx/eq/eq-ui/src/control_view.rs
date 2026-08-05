@@ -337,6 +337,51 @@ fn AppShell() -> Element {
             style: format!("{root_style} overflow:hidden;"),
             "data-frame": "{frame_counter}",
 
+            PluginShell {
+                title: "FTS EQ".to_string(),
+                subtitle: "Equalizer".to_string(),
+                brand: "EQ".to_string(),
+                items: crate::faces::rail_items(current_model),
+                selected: crate::faces::category_of(current_model).map(|(c, _)| c).unwrap_or(0),
+                accent: "#8aa4ff".to_string(),
+                on_select: {
+                    let ctx = ctx.clone();
+                    let model_ptr = params.model.as_ptr();
+                    move |category: usize| {
+                        // Clicking the active family cycles the models inside
+                        // it — SSL E to SSL G — and any other family lands on
+                        // its first model.
+                        let next = crate::faces::rail_click_target(current_model, category);
+                        ctx.begin_set_raw(model_ptr);
+                        ctx.set_normalized_raw(model_ptr, next as f32 / 5.0);
+                        ctx.end_set_raw(model_ptr);
+                    }
+                },
+
+            if let Some(design) = crate::faces::design_for_model(current_model) {
+                // A hardware model swaps the whole surface for that unit's
+                // front panel.
+                crate::faces::rack::EqRackFace {
+                    key: "{current_model}",
+                    design: *design,
+                    model: current_model,
+                    frame: frame_counter,
+                }
+            }
+
+            // The Main face — hidden rather than unmounted while a hardware
+            // panel is up. The EQ curve is a blitz *custom widget* node, and
+            // tearing that subtree down mid-session panics blitz's mutator on
+            // a stale template path (`node_at_path`); hiding it also keeps the
+            // analyzer and its canvas alive across a model switch instead of
+            // rebuilding them on every click.
+            div {
+                style: if hardware_mode_active {
+                    "display:none;"
+                } else {
+                    "flex:1; min-height:0; display:flex; flex-direction:column;"
+                },
+
             // ── Header ───────────────────────────────────────────
             //
             // Theme-driven: background `--card`, border `--border`, text
@@ -1023,6 +1068,8 @@ fn AppShell() -> Element {
                 }
             }
             }
+            } // end of the Main face
+            }  // PluginShell
             ResizeHandle {
                 min_width: 600,
                 min_height: 400,

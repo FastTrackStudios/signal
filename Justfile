@@ -241,6 +241,11 @@ tailwind-trigger:
 comp-shots:
     cargo test -p comp-ui --features native --test screenshots -- --nocapture
 
+# Same for the EQ: every hardware model's faceplate, painted headless.
+# Shots land in target/gui-shots/eq/.
+eq-shots:
+    cargo test -p eq-ui --features native --test screenshots -- --nocapture
+
 # Bundle every FTS plugin as .clap + .vst3 (target/bundled/, names from
 # bundler.toml). Debug of a single plugin: cargo run -p fts-plugin-xtask
 # -- bundle -p eq-plugin
