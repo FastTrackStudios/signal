@@ -30,7 +30,7 @@
       # already carries every crate). Single-arch only for now (whatever
       # `system` this perSystem is evaluating) — no lipo/universal step,
       # unlike the macOS release artifact.
-      fts-plugins = config.fts.craneLib.buildPackage (config.fts.commonArgs // config.fts.shellEnv // {
+      fts-plugins = config.fts.craneLib.buildPackage (config.fts.commonArgs // {
         pname = "fts-plugins";
         version = "0.1.0";
         cargoArtifacts = null;
@@ -43,12 +43,18 @@
         doCheck = false;
         buildPhaseCargoCommand = ''
           # signal-plugin (daw-bridge -> cpal's pipewire feature -> the
-          # pipewire-sys/libspa bindgen) fails against this nixpkgs
-          # pipewire's headers (SPA_ID_INVALID missing — a header/ABI
-          # version mismatch, same class of issue as the Inferno x
-          # PipeWire 1.6.3 incompat elsewhere in this tree, not something
-          # introduced by this packaging). Skip it rather than fail the
-          # whole bundle; the other 16 plugins are unaffected.
+          # pipewire-sys/libspa bindgen) fails to build in this sandbox:
+          # bindgen silently drops SPA_ID_INVALID (a cast-expression C
+          # macro) from its generated bindings, even with a clean
+          # experimental+runtime-only feature set (verified directly
+          # inside a --keep-failed sandbox, both parallel and -j1, fresh
+          # target/ — this is NOT the bindgen/rusty_link feature-
+          # unification issue libs/vendor/rusty_link fixes; root cause
+          # still unknown after extensive isolation testing). Only
+          # affects Linux (cpal's pipewire backend isn't compiled on
+          # Darwin at all — signal-plugin builds there with all others).
+          # Skip it rather than fail the whole 17-plugin bundle; revisit
+          # in a future session.
           for p in eq comp reverb delay tune modulation nam level saturate \
                    signal guide gate limiter trigger meter pitch unison; do
             cargo run -q -p fts-plugin-xtask -- bundle -p "$p-plugin" --release --offline \

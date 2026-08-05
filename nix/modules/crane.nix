@@ -20,10 +20,43 @@
 
       craneLib = (inputs.crane.mkLib pkgs).overrideToolchain config.fts.rustToolchain;
 
+      # reaper-low (git dep on codeberg.org/FastTrackStudios/reaper-rs)
+      # mounts justinfrankel/WDL as a git submodule at main/low/lib/WDL.
+      # crane's git-dep vendoring lists files via `cargo package -l`,
+      # which walks git-TRACKED files from the superproject's index —
+      # a submodule's content isn't in that index (only its gitlink is),
+      # so the vendored reaper-low ends up with an empty/partial lib/WDL
+      # and its build.rs's own live `git submodule update` then fails
+      # silently in the network-off nix sandbox ("no such file or
+      # directory: lib/WDL/WDL/projectcontext.cpp"). Fetch the exact
+      # submodule commit (pinned via reaper-rs's .gitmodules) and inject
+      # it post-vendor instead.
+      wdlSrc = pkgs.fetchFromGitHub {
+        owner = "justinfrankel";
+        repo = "WDL";
+        rev = "40df69c0b9124ac433347f31c3f467054a8bfde8";
+        hash = "sha256-sOVDXTNydgpetvC1D+DBF1XmR6k6KZbQ9mXKPOBPuTg=";
+      };
+
       # Vendor against the root Cargo.lock. (The old baseview fetch
       # override is gone: the dead Codys-Wright/baseview.git dep was
       # vendored into libs/vendor/baseview as a path dep 2026-07-16.)
-      cargoVendorDir = craneLib.vendorCargoDeps { src = ftsSrc; };
+      cargoVendorDir = craneLib.vendorCargoDeps {
+        src = ftsSrc;
+        overrideVendorGitCheckout = ps: drv:
+          if lib.any (p: p.name == "reaper-low") ps then
+            drv.overrideAttrs (old: {
+              postInstall = (old.postInstall or "") + ''
+                for d in $out/reaper-low-*; do
+                  rm -rf "$d/lib/WDL"
+                  cp -r ${wdlSrc} "$d/lib/WDL"
+                  chmod -R u+w "$d/lib/WDL"
+                done
+              '';
+            })
+          else
+            drv;
+      };
     in
     {
       fts.craneLib = craneLib;
