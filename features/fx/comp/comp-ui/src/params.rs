@@ -204,10 +204,28 @@ pub struct CompParams {
     /// Soft output ceiling (tanh saturation); 0 = off.
     #[id = "ceiling"]
     pub ceiling: FloatParam,
-    /// Hardware profile skin selection — see [`PROFILE_LABELS`]. Purely a UI
-    /// concern (which control strip is drawn); the DSP reads the params above.
+    /// Hardware profile selection — see [`PROFILE_LABELS`]. Purely a UI
+    /// concern (which face is drawn); the DSP reads the params above.
+    ///
+    /// This is an *index*, because a host parameter has to be a number, and it
+    /// is the automatable face switch. What it is **not** is how the choice is
+    /// persisted — see [`CompParams::profile_id`].
     #[id = "profile"]
     pub profile: IntParam,
+
+    /// The selected profile's id, persisted alongside the index.
+    ///
+    /// A parameter's stored value is normalized, so an index-valued parameter
+    /// is only stable while the list length is: add a tenth profile and a
+    /// session that saved the ninth reloads pointing at something else — the
+    /// normalized value round-trips through a different denominator. Names do
+    /// not have that problem, so the id is what a session actually restores
+    /// from, and the index is reconciled to it on load ([`profile_index_for`]).
+    ///
+    /// Empty means "written before ids existed"; then the index stands, which
+    /// is the best that can be done for those sessions.
+    #[persist = "profile_id"]
+    pub profile_id: parking_lot::RwLock<String>,
 
     /// Position of the active profile's first compound ("macro") control.
     ///
@@ -228,6 +246,29 @@ pub struct CompParams {
     /// profile can add one without a state-breaking param insert.
     #[id = "macro2"]
     pub macro2: FloatParam,
+}
+
+impl CompParams {
+    /// The profile index a loaded session should be showing.
+    ///
+    /// The persisted id wins when it names a profile we still have: it survives
+    /// the list growing, being reordered, or a profile being removed. Falls
+    /// back to the index for sessions saved before ids, and for an id this
+    /// build does not know (a project from a newer version).
+    pub fn resolved_profile_index(&self) -> usize {
+        let id = self.profile_id.read();
+        comp_profiles::profile_index(&id).unwrap_or_else(|| self.profile.value().max(0) as usize)
+    }
+
+    /// Record the id for `index` — call this wherever the profile changes, so
+    /// what gets saved is the name and not just the number.
+    pub fn store_profile_id(&self, index: usize) {
+        let id = comp_profiles::all_profiles()
+            .get(index)
+            .map(|p| p.id())
+            .unwrap_or("control");
+        *self.profile_id.write() = id.to_string();
+    }
 }
 
 /// The macro slots, in assignment order — index N backs the Nth compound
@@ -447,6 +488,7 @@ impl Default for CompParams {
                 },
             )
             .with_value_to_string(label_formatter(PROFILE_LABELS)),
+            profile_id: parking_lot::RwLock::new(String::new()),
             macro1: macro_slot_param("Macro 1"),
             macro2: macro_slot_param("Macro 2"),
         }
@@ -471,4 +513,58 @@ fn label_formatter(labels: &'static [&'static str]) -> Arc<dyn Fn(i32) -> String
             .map(|s| s.to_string())
             .unwrap_or_else(|| v.to_string())
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_session_restores_from_the_profile_id_not_the_index() {
+        let params = CompParams::default();
+        params.store_profile_id(comp_profiles::profile_index("dbx160").unwrap());
+        // Whatever the index parameter happens to hold — a stale number from a
+        // shorter list, a value the host round-tripped through a different
+        // denominator — the id decides.
+        assert_eq!(
+            params.resolved_profile_index(),
+            comp_profiles::profile_index("dbx160").unwrap()
+        );
+    }
+
+    #[test]
+    fn an_unknown_id_falls_back_to_the_index_rather_than_guessing() {
+        let params = CompParams::default();
+        // A project saved by a newer build naming a profile we do not have.
+        *params.profile_id.write() = "some_future_comp".to_string();
+        assert_eq!(params.resolved_profile_index(), 0);
+    }
+
+    #[test]
+    fn a_session_saved_before_ids_still_resolves() {
+        let params = CompParams::default();
+        assert!(params.profile_id.read().is_empty());
+        assert_eq!(params.resolved_profile_index(), 0);
+    }
+
+    /// The bug this whole mechanism exists for: an index-valued parameter is
+    /// stored normalized, so growing the list moves what a saved value means.
+    #[test]
+    fn an_index_parameter_alone_would_not_have_survived_a_longer_list() {
+        let count_then = 8usize;
+        let count_now = PROFILE_LABELS.len();
+        assert!(count_now > count_then, "this test assumes the list grew");
+        let mut drifted = Vec::new();
+        for saved in 0..count_then {
+            let normalized = saved as f32 / (count_then - 1) as f32;
+            let reloaded = (normalized * (count_now - 1) as f32).round() as usize;
+            if reloaded != saved {
+                drifted.push((saved, reloaded));
+            }
+        }
+        assert!(
+            !drifted.is_empty(),
+            "expected some indices to move; the id is what makes that harmless"
+        );
+    }
 }

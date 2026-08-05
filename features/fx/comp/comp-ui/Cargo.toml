@@ -18,6 +18,7 @@ native = [
     "dep:audiocore-core",
     "dep:fts-ui",
     "dep:atomic_float",
+    "dep:parking_lot",
 ]
 
 [dependencies]
@@ -27,6 +28,9 @@ fts-ui-audio = { workspace = true }
 nice-plug = { workspace = true, optional = true }
 nice-plug-dioxus = { workspace = true, optional = true }
 atomic_float = { workspace = true, optional = true }
+# The persisted profile id (see params::CompParams::profile_id) — nice-plug's
+# `#[persist]` wants a field with interior mutability.
+parking_lot = { workspace = true, optional = true }
 comp-profiles = { path = "../comp-profiles" }
 
 # The real-editor behavioral tests (tests/gui_editor.rs) mount

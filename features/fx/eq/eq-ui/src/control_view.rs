@@ -228,7 +228,9 @@ fn AppShell() -> Element {
     let analyzer_snapshot = ui.analyzer.snapshot();
     let mut analyzer_settings: Signal<AnalyzerSettings> = use_signal(|| ui.analyzer.settings());
     let analyzer_for_settings = ui.clone();
-    let current_model = params.model.value();
+    // The *resolved* model: the persisted id when the session has one, the
+    // index otherwise. See `FtsEqParams::model_id`.
+    let current_model = crate::faces::resolved_model(&params);
     let hardware_mode_active = current_model != 0;
     let model_response: Option<Vec<f32>> = hardware_mode_active.then(|| {
         (0..SPECTRUM_BINS)
@@ -347,6 +349,7 @@ fn AppShell() -> Element {
                 on_select: {
                     let ctx = ctx.clone();
                     let model_ptr = params.model.as_ptr();
+                    let params_for_id = params.clone();
                     move |category: usize| {
                         // Clicking the active family cycles the models inside
                         // it — SSL E to SSL G — and any other family lands on
@@ -355,6 +358,8 @@ fn AppShell() -> Element {
                         ctx.begin_set_raw(model_ptr);
                         ctx.set_normalized_raw(model_ptr, next as f32 / 5.0);
                         ctx.end_set_raw(model_ptr);
+                        // What the session restores from.
+                        crate::faces::store_model_id(&params_for_id, next);
                     }
                 },
 

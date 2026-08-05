@@ -238,8 +238,23 @@ impl BandParams {
 pub struct FtsEqParams {
     /// Processing model:
     /// 0=Default parametric, 1=Pultec, 2=Neve 1073, 3=API, 4=SSL E, 5=SSL G.
+    ///
+    /// An *index*, because a host parameter has to be a number, and the
+    /// automatable model switch. Not how the choice is persisted — see
+    /// [`FtsEqParams::model_id`].
     #[id = "model"]
     pub model: IntParam,
+
+    /// The selected model's id, persisted alongside the index.
+    ///
+    /// A parameter's stored value is normalized, so an index-valued parameter
+    /// is only stable while the list length is: add a seventh model and a
+    /// session that saved the sixth reloads pointing at something else. Names
+    /// do not have that problem, so the id is what a session restores from and
+    /// the index is reconciled to it on load. Empty means "saved before ids
+    /// existed", and then the index stands.
+    #[persist = "model_id"]
+    pub model_id: parking_lot::RwLock<String>,
 
     #[id = "output_gain"]
     pub output_gain_db: FloatParam,
@@ -362,6 +377,8 @@ pub struct FtsEqParams {
 impl Default for FtsEqParams {
     fn default() -> Self {
         Self {
+            model_id: parking_lot::RwLock::new(String::new()),
+
             model: IntParam::new("Model", 0, IntRange::Linear { min: 0, max: 5 })
                 .with_value_to_string(Arc::new(|v| match v {
                     1 => "Pultec EQP-1A".to_string(),

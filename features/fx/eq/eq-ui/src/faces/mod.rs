@@ -73,6 +73,37 @@ pub static CATEGORIES: &[EqCategory] = &[
 /// does not have to know that designs live in [`units`].
 pub use units::design_for as design_for_model;
 
+/// The stable id for a `model` value — what a session persists instead of the
+/// number. See `FtsEqParams::model_id`.
+pub fn model_id(model: i32) -> &'static str {
+    match model {
+        1 => "pultec",
+        2 => "neve_1073",
+        3 => "api_550a",
+        4 => "ssl_e",
+        5 => "ssl_g",
+        _ => "parametric",
+    }
+}
+
+/// The `model` value an id names, if this build knows it.
+pub fn model_for_id(id: &str) -> Option<i32> {
+    (0..=5).find(|m| model_id(*m) == id)
+}
+
+/// The model a loaded session should be showing: the persisted id when it
+/// names a model we still have, the index otherwise (sessions saved before
+/// ids, or a project from a newer build).
+pub fn resolved_model(params: &crate::params::FtsEqParams) -> i32 {
+    let id = params.model_id.read();
+    model_for_id(&id).unwrap_or_else(|| params.model.value())
+}
+
+/// Record the id for `model` — call this wherever the model changes.
+pub fn store_model_id(params: &crate::params::FtsEqParams, model: i32) {
+    *params.model_id.write() = model_id(model).to_string();
+}
+
 /// The category a `model` value belongs to, and its position within it.
 pub fn category_of(model: i32) -> Option<(usize, usize)> {
     CATEGORIES.iter().enumerate().find_map(|(ci, category)| {
@@ -169,6 +200,22 @@ mod tests {
         assert_eq!(rail_items(5)[ssl].badge, "G");
         // Inactive families wear the family badge.
         assert_eq!(rail_items(0)[ssl].badge, "SSL");
+    }
+
+    #[test]
+    fn every_model_has_a_stable_id_and_round_trips_through_it() {
+        // Ids are what a session restores from, so each must be distinct and
+        // resolve back to the same model.
+        let mut seen = Vec::new();
+        for model in 0..=5 {
+            let id = model_id(model);
+            assert!(!seen.contains(&id), "duplicate model id {id}");
+            seen.push(id);
+            assert_eq!(model_for_id(id), Some(model));
+        }
+        // An id from a newer build resolves to nothing rather than to the
+        // wrong model.
+        assert_eq!(model_for_id("some_future_eq"), None);
     }
 
     #[test]

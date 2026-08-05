@@ -154,14 +154,30 @@ fn AppShell() -> Element {
     let last_profile: std::rc::Rc<std::cell::Cell<Option<usize>>> =
         use_hook(|| std::rc::Rc::new(std::cell::Cell::new(None)));
 
-    // The profile param picks the face; the rail tints from its skin.
-    let profile_idx = params.profile.value().max(0) as usize;
+    // The face comes from the *resolved* profile: the persisted id when the
+    // session has one, the index otherwise. See `CompParams::profile_id`.
+    let profile_idx = params.resolved_profile_index();
     let profile_id = profile_id_for_index(profile_idx);
     let skin = profile_skin(profile_id);
     let is_control_face = profile_id == "control";
 
     if last_profile.get() != Some(profile_idx) {
         last_profile.set(Some(profile_idx));
+        // A session restored from its id can land with the index parameter
+        // still on whatever number that id used to be; put it back in line so
+        // the host reads the same face the editor shows.
+        if params.profile.value().max(0) as usize != profile_idx {
+            let ptr = params.profile.as_ptr();
+            let count = PROFILE_LABELS.len();
+            let normalized = if count > 1 {
+                profile_idx as f32 / (count - 1) as f32
+            } else {
+                0.0
+            };
+            ctx.begin_set_raw(ptr);
+            ctx.set_normalized_raw(ptr, normalized);
+            ctx.end_set_raw(ptr);
+        }
         // Absent when the editor is embedded without a nice-plug window
         // (headless tests): nothing to resize, so nothing to do.
         if let Some(state) = try_consume_context::<std::sync::Arc<nice_plug_dioxus::DioxusState>>() {
@@ -191,6 +207,7 @@ fn AppShell() -> Element {
     // any other control, so switching faces is automatable and undoable like
     // everything else.
     let profile_handle = param_handle(params.profile.as_ptr(), ctx.clone());
+    let params_for_id = ui.params.clone();
     let profile_count = PROFILE_LABELS.len();
     // One rail entry per compressor family, badged with the active unit.
     let items = crate::faces::rail_items(profile_idx);
@@ -225,6 +242,8 @@ fn AppShell() -> Element {
                         profile_handle.begin_edit();
                         profile_handle.set_normalized(normalized);
                         profile_handle.end_edit();
+                        // What the session restores from.
+                        params_for_id.store_profile_id(index);
                     },
                     rail_footer: rsx! {
                         // Basic/Advanced disclosure. Local UI state — never a
