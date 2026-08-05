@@ -730,3 +730,53 @@ async fn advanced_page_fits_the_plugin_editor_size() -> dioxus_test::Result<()> 
     }
     Ok(())
 }
+
+/// The editor declares itself resizable down to
+/// `MIN_EDITOR_W` x `MIN_EDITOR_H`, and `DioxusEditorHandle::set_size` enforces
+/// that floor. This checks the floor is honest: the Advanced page — the densest
+/// one — must still lay out at exactly the declared minimum.
+///
+/// It matters more than a normal layout test because Blitz does not clip what
+/// does not fit, it collapses it to 0x0. A minimum that is a little too small
+/// does not produce a cramped editor, it produces unreachable controls.
+#[tokio::test]
+async fn advanced_page_survives_the_declared_minimum_size() -> dioxus_test::Result<()> {
+    let mut fx = mount_sized(
+        comp_ui::control_view::MIN_EDITOR_W as u32,
+        comp_ui::control_view::MIN_EDITOR_H as u32,
+    );
+
+    let el = fx.tester.query(by_testid("advanced-toggle")).immediately()?;
+    let (ox, oy) = el.document_origin();
+    let (w, h) = el.size();
+    fx.tester.pointer_down(ox + w as f64 / 2.0, oy + h as f64 / 2.0);
+    let _ = fx.tester.pump().await;
+    fx.tester.pointer_up(ox + w as f64 / 2.0, oy + h as f64 / 2.0);
+    fx.settle().await;
+
+    for id in [
+        "section-detector", "section-sidechain", "section-expander", "section-upward",
+        "section-character",
+    ] {
+        let el = fx
+            .tester
+            .query(by_testid(id))
+            .immediately()
+            .unwrap_or_else(|e| panic!("{id} missing at the declared minimum size: {e:?}"));
+        let (w, h) = el.size();
+        assert!(
+            w > 40.0 && h > 30.0,
+            "{id} collapsed to {w}x{h}px at the declared minimum {}x{} — \
+             the minimum in control_view::resize_hint() is too small",
+            comp_ui::control_view::MIN_EDITOR_W,
+            comp_ui::control_view::MIN_EDITOR_H,
+        );
+    }
+
+    // And the knobs inside them stay hit-testable.
+    for id in ["knob-schp", "knob-expratio", "knob-upratio", "knob-ceiling"] {
+        let (w, h) = fx.tester.query(by_testid(id)).immediately()?.size();
+        assert!(w > 20.0 && h > 20.0, "{id} collapsed to {w}x{h}px at the minimum size");
+    }
+    Ok(())
+}

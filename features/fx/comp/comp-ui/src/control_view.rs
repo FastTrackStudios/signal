@@ -22,6 +22,8 @@
 use std::sync::atomic::Ordering;
 
 use audiocore_core::prelude::*;
+use nice_plug::editor::dpi::LogicalSize;
+use nice_plug::editor::ResizeHint;
 use fts_ui::prelude::{ThemeMode, ThemeProvider, ThemeState, default_theme_preset};
 use fts_ui_audio::prelude::*;
 
@@ -34,15 +36,35 @@ use crate::sections::{ParamKnob, ParamSelector, Section};
 /// holds maps onto `comp_profiles::all_profiles()` through this table.
 const PROFILE_IDS: &[&str] = &["control", "la2a", "ssl_bus", "urei_1176"];
 
-/// Editor size the plugin shell requests from the host.
+/// Editor size the plugin shell requests from the host on open.
 ///
-/// Lives here rather than in `comp-plugin` because the surface is what
-/// constrains it: blitz does not overflow-scroll a height-constrained
-/// container, so a section that does not fit collapses to 0×0 and becomes
-/// unreachable rather than being clipped. Widening the Advanced page means
-/// growing these — `advanced_page_fits_the_plugin_editor_size` is the guard.
+/// This is the *starting* size, not a ceiling — the editor opts into host
+/// resizing through [`resize_hint`]. It lives here rather than in
+/// `comp-plugin` because the surface is what constrains it: blitz does not
+/// overflow-scroll a height-constrained container, so a section that does not
+/// fit collapses to 0×0 and becomes unreachable rather than being clipped.
+/// `advanced_page_fits_the_plugin_editor_size` guards the default.
 pub const EDITOR_W: u32 = 980;
 pub const EDITOR_H: u32 = 660;
+
+/// Smallest size the surface still works at.
+///
+/// Below this the graph and the section row stop fitting, and — per the note on
+/// [`EDITOR_W`] — not fitting means collapsing, not clipping. So this floor is
+/// what keeps a host-driven resize from making controls unreachable, and it is
+/// enforced rather than advisory: `DioxusEditorHandle::set_size` refuses
+/// anything smaller.
+pub const MIN_EDITOR_W: f32 = 720.0;
+pub const MIN_EDITOR_H: f32 = 560.0;
+
+/// How the host may resize this editor.
+///
+/// Freely resizable on both axes above [`MIN_EDITOR_W`] x [`MIN_EDITOR_H`],
+/// with no aspect-ratio lock — the layout is a graph over a row of sections and
+/// both are happy to grow in either direction.
+pub fn resize_hint() -> ResizeHint {
+    ResizeHint::RESIZABLE.with_min_logical_size(LogicalSize::new(MIN_EDITOR_W, MIN_EDITOR_H))
+}
 
 /// Root editor component.
 ///

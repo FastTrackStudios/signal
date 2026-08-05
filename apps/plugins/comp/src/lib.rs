@@ -51,7 +51,8 @@ impl Default for FtsComp {
                     comp_ui::control_view::EDITOR_W,
                     comp_ui::control_view::EDITOR_H,
                 )
-            }),
+            })
+            .with_resize_hint(comp_ui::control_view::resize_hint()),
             chain: CompChain::new(),
             sample_rate: 48_000.0,
         }
