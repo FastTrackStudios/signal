@@ -24,6 +24,7 @@ use audiocore_core::prelude::*;
 
 use crate::faces::use_face_context;
 use crate::hardware::knob::HardwareKnob;
+use fts_ui_audio::hardware::button::LedMeter;
 use fts_ui_audio::prelude::GrMeter;
 use crate::hardware::rack::{RackDesign, RackItem};
 use crate::hardware::panel::{panel_scale, Panel, PanelSlot, Silkscreen};
@@ -156,11 +157,22 @@ pub fn RackFace(
                         },
                         // Levers, readouts and lamps are the EQ panels' idiom;
                         // no compressor face places one.
+                        // A hybrid meters with LEDs rather than a movement.
+                        RackItem::LedMeter { x, y, h, right } => rsx! {
+                            PanelSlot { scale, x, y, w: 22.0, h: h + 6.0,
+                                LedMeter {
+                                    scale,
+                                    // Gain reduction reads downward, so the
+                                    // ladder fills as the compressor works.
+                                    level_db: if right { -gr_db } else { out_db },
+                                    h,
+                                }
+                            }
+                        },
                         RackItem::Lever { .. }
                         | RackItem::Readout { .. }
                         | RackItem::Lamp { .. }
                         | RackItem::Button { .. }
-                        | RackItem::LedMeter { .. }
                         | RackItem::Divider { .. } => rsx! {},
                         RackItem::Text { x, y, text, size, strong } => rsx! {
                             Silkscreen {

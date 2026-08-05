@@ -35,8 +35,11 @@ pub static UREI_1176: RackDesign = RackDesign {
     ink: "#ded7c9",
     dim_ink: "#9a9384",
     chrome: "#8d8a84",
-    vu: VuFace::Blue,
-    knob: KnobStyle::Bakelite,
+    vu: VuFace::Ivory,
+    // Documented: black plastic bodies with brushed silver tops and
+    // clear plastic collars — the large pair for INPUT and OUTPUT, the
+    // smaller for ATTACK and RELEASE.
+    knob: KnobStyle::SilverTop,
     items: &[
         RackItem::Vu {
             x: 186.0,
@@ -136,7 +139,9 @@ pub static LA2A: RackDesign = RackDesign {
     dim_ink: "#6b6053",
     chrome: "#c9c2b0",
     vu: VuFace::Amber,
-    knob: KnobStyle::Bakelite,
+    // Big black phenolic pointer knobs, of a piece with the era's other
+    // American outboard. Inferred from the unit rather than documented.
+    knob: KnobStyle::Daka,
     items: &[
         RackItem::Vu {
             x: 218.0,
@@ -205,8 +210,10 @@ pub static CL1B: RackDesign = RackDesign {
     ink: "#eef4fa",
     dim_ink: "#a9c3d8",
     chrome: "#9fb4c6",
-    vu: VuFace::Amber,
-    knob: KnobStyle::Bakelite,
+    vu: VuFace::Ivory,
+    // Five large plain black knobs on the blue face — no skirt, no
+    // flutes, which is what makes the CL 1B look modern beside an LA-2A.
+    knob: KnobStyle::Skirted,
     items: &[
         RackItem::Vu {
             x: 168.0,
@@ -305,7 +312,8 @@ pub static FAIRCHILD_670: RackDesign = RackDesign {
     dim_ink: "#5d564b",
     chrome: "#8f887a",
     vu: VuFace::Amber,
-    knob: KnobStyle::Bakelite,
+    // Period phenolic, as the LA-2A.
+    knob: KnobStyle::Daka,
     items: &[
         RackItem::Vu {
             x: 148.0,
@@ -398,6 +406,7 @@ pub static MANLEY_VARI_MU: RackDesign = RackDesign {
     dim_ink: "#9c968a",
     chrome: "#b8b2a6",
     vu: VuFace::Amber,
+    // Brushed metal, the modern boutique idiom.
     knob: KnobStyle::Metal,
     items: &[
         RackItem::Vu {
@@ -514,8 +523,10 @@ pub static SSL_BUS: RackDesign = RackDesign {
     ink: "#e6e8ea",
     dim_ink: "#9aa0a6",
     chrome: "#a9adb2",
-    vu: VuFace::Blue,
-    knob: KnobStyle::Metal,
+    vu: VuFace::Ivory,
+    // The console's collet caps: the bus compressor is a centre-section
+    // module, so it wears the same knob as the channel strip.
+    knob: KnobStyle::Collet,
     items: &[
         RackItem::Vu {
             x: 180.0,
@@ -612,8 +623,8 @@ pub static DBX_160: RackDesign = RackDesign {
     ink: "#25272a",
     dim_ink: "#5a5e63",
     chrome: "#8b8f94",
-    vu: VuFace::Amber,
-    knob: KnobStyle::Bakelite,
+    vu: VuFace::Ivory,
+    knob: KnobStyle::Skirted,
     items: &[
         RackItem::Vu {
             x: 210.0,
@@ -693,16 +704,14 @@ pub static DISTRESSOR: RackDesign = RackDesign {
     ink: "#dfe7ee",
     dim_ink: "#8fa1b1",
     chrome: "#7d8b98",
-    vu: VuFace::Blue,
-    knob: KnobStyle::Bakelite,
+    vu: VuFace::Ivory,
+    knob: KnobStyle::Skirted,
     items: &[
-        RackItem::Vu {
-            x: 150.0,
-            y: 136.0,
-            w: 180.0,
-            mode: VuMode::GainReduction,
-            legend: "Gain Reduction",
-        },
+        // No movement: the unit meters gain reduction on an LED ladder, with
+        // a second for output.
+        RackItem::LedMeter { x: 132.0, y: 140.0, h: 150.0, right: true },
+        RackItem::LedMeter { x: 162.0, y: 140.0, h: 150.0, right: false },
+        RackItem::Text { x: 148.0, y: 232.0, text: "GR · Out", size: 8.0, strong: false },
         RackItem::Buttons {
             id: "ratio",
             legend: "Ratio",
