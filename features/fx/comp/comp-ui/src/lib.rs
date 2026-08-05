@@ -20,8 +20,12 @@
 
 // ── Portable core (no plugin framework; compiles for wasm) ──
 pub mod comp_graph_svg;
-pub mod hardware;
 pub mod profile_view;
+
+/// The hardware-faceplate kit — VU movements, pointer knobs, panel switches,
+/// panel chrome — lives in `fts-ui-audio` now that the EQ wears faceplates
+/// too. Re-exported so `crate::hardware::…` still names it here.
+pub use fts_ui_audio::hardware;
 
 pub use profile_view::{
     profile_skin, ProfileControlGroup, ProfileControlKind, ProfileControlView, ProfileParamWrite,

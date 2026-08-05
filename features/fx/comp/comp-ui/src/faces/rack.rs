@@ -11,140 +11,23 @@
 //! numbers printed around each knob, and where things sit. What is shared is
 //! everything that should be identical across nine panels anyway.
 //!
-//! Every control is looked up on the unit's `comp-profiles` profile by id and
-//! driven through [`crate::profile_handle`], so a design cannot silently
+//! The tables themselves are [`RackDesign`]s from the shared hardware kit (see
+//! [`fts_ui_audio::hardware::rack`]); this is the compressor's *drawing* of
+//! one. Every control is looked up on the unit's `comp-profiles` profile by id
+//! and driven through [`crate::profile_handle`], so a design cannot silently
 //! reference a control the profile does not have — it panics at mount, in a
 //! test, rather than rendering a knob that does nothing.
 
 use std::sync::atomic::Ordering;
 
 use audiocore_core::prelude::*;
-use comp_profiles::Profile;
 
 use crate::faces::use_face_context;
-use crate::hardware::knob::{HardwareKnob, KnobStyle};
-use crate::hardware::knob_svg::{detent_ring, linear_scale_label, scale_ring, ScaleMark};
+use crate::hardware::knob::HardwareKnob;
+use crate::hardware::rack::{RackDesign, RackItem};
 use crate::hardware::panel::{panel_scale, Panel, PanelSlot, Silkscreen};
 use crate::hardware::switches::{RatioButtons, ToggleSwitch};
-use crate::hardware::vu::{VuFace, VuMeter, VuMode};
-
-/// What a knob's printed scale ring says.
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub enum Ring {
-    /// Numbers running `from`..`to` across the sweep, with `majors` of them.
-    Linear {
-        from: f64,
-        to: f64,
-        majors: usize,
-    },
-    /// One numbered mark per detent — for rotary switches.
-    Detents(&'static [&'static str]),
-    /// Tick marks with no numbers.
-    Plain { majors: usize },
-    /// No printed ring at all.
-    None,
-}
-
-impl Ring {
-    fn marks(self) -> Vec<ScaleMark> {
-        match self {
-            Ring::Linear { from, to, majors } => {
-                scale_ring(majors, 1, linear_scale_label(from, to))
-            }
-            Ring::Detents(labels) => detent_ring(labels),
-            Ring::Plain { majors } => scale_ring(majors, 1, |_| None),
-            Ring::None => Vec::new(),
-        }
-    }
-}
-
-/// One thing placed on a panel, in design-space coordinates.
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub enum RackItem {
-    /// The meter movement.
-    Vu {
-        x: f64,
-        y: f64,
-        w: f64,
-        mode: VuMode,
-        legend: &'static str,
-    },
-    /// A knob, with its legend silkscreened underneath.
-    Knob {
-        /// Control id on the unit's profile.
-        id: &'static str,
-        legend: &'static str,
-        x: f64,
-        y: f64,
-        d: f64,
-        ring: Ring,
-    },
-    /// A vertical bank of radio-like buttons (the 1176's ratios).
-    Buttons {
-        id: &'static str,
-        legend: &'static str,
-        x: f64,
-        y: f64,
-        labels: &'static [&'static str],
-    },
-    /// A two-position bat switch.
-    Switch {
-        id: &'static str,
-        legend: &'static str,
-        x: f64,
-        y: f64,
-        labels: [&'static str; 2],
-    },
-    /// Silkscreened panel text.
-    Text {
-        x: f64,
-        y: f64,
-        text: &'static str,
-        size: f64,
-        /// `true` for the model line, `false` for the smaller subtitle.
-        strong: bool,
-    },
-}
-
-/// A unit's front panel.
-///
-/// Props are compared for memoization, and a `&dyn Profile` has neither
-/// equality nor `Debug` — but a design is a static table, so both are its
-/// profile's id.
-#[derive(Clone, Copy)]
-pub struct RackDesign {
-    /// Which profile drives it — the controls named by the items must exist
-    /// on this profile.
-    pub profile: &'static (dyn Profile + Sync),
-    /// Drawing size in design-space px.
-    pub w: f64,
-    pub h: f64,
-    /// The paint, as a CSS background.
-    pub paint: &'static str,
-    /// Silkscreen colour.
-    pub ink: &'static str,
-    /// Secondary silkscreen colour (subtitles).
-    pub dim_ink: &'static str,
-    /// Rack ears and screws.
-    pub chrome: &'static str,
-    pub vu: VuFace,
-    pub knob: KnobStyle,
-    pub items: &'static [RackItem],
-}
-
-impl std::fmt::Debug for RackDesign {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("RackDesign")
-            .field("profile", &self.profile.id())
-            .finish()
-    }
-}
-
-impl PartialEq for RackDesign {
-    fn eq(&self, other: &Self) -> bool {
-        self.profile.id() == other.profile.id()
-    }
-}
+use crate::hardware::vu::{VuMeter, VuMode};
 
 /// Where a knob's legend sits below its centre, in design px.
 const LEGEND_DROP: f64 = 60.0;
@@ -162,7 +45,9 @@ pub fn RackFace(
     frame: u64,
 ) -> Element {
     let _ = frame;
-    let face = use_face_context(design.profile);
+    let profile = comp_profiles::profile_by_id(design.id)
+        .unwrap_or_else(|| panic!("rack design names unknown profile {}", design.id));
+    let face = use_face_context(profile);
     let gr_db = face.ui.gain_reduction_db.load(Ordering::Relaxed);
     let out_db = face.ui.output_peak_db.load(Ordering::Relaxed);
     let scale = panel_scale(design.w, design.h, crate::control_view::RAIL_W);

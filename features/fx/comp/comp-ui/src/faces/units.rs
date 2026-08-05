@@ -10,8 +10,8 @@
 //! Panels are 4:1 rack-unit drawings, so faces ask the host for a short
 //! editor — see `crate::faces::preferred_editor_size`.
 
-use crate::faces::rack::{RackDesign, RackItem, Ring};
 use crate::hardware::knob::KnobStyle;
+use crate::hardware::rack::{RackDesign, RackItem, Ring};
 use crate::hardware::vu::{VuFace, VuMode};
 
 /// Panel drawing size shared by every rack face.
@@ -28,7 +28,7 @@ const ROW: f64 = 152.0;
 /// knob), the ratio is four buttons, and ATTACK/RELEASE run backwards —
 /// fastest fully clockwise.
 pub static UREI_1176: RackDesign = RackDesign {
-    profile: &comp_profiles::UREI_1176,
+    id: "urei_1176",
     w: W,
     h: H,
     paint: "linear-gradient(178deg, #2b2b2f 0%, #1a1a1e 52%, #101013 100%)",
@@ -124,7 +124,7 @@ pub static UREI_1176: RackDesign = RackDesign {
 /// Cream leveling amplifier: two knobs and a switch, both knobs printed 0–10
 /// because the operator's reference is the panel, not the engine's dB.
 pub static LA2A: RackDesign = RackDesign {
-    profile: &comp_profiles::LA2A,
+    id: "la2a",
     w: W,
     h: H,
     paint: "linear-gradient(178deg, #efe6cf 0%, #e4d8bb 46%, #d6c9a9 100%)",
@@ -192,7 +192,7 @@ pub static LA2A: RackDesign = RackDesign {
 /// The other optical tube unit: same physics, every control unlocked. Blue
 /// panel, five large black knobs, VU on the left.
 pub static CL1B: RackDesign = RackDesign {
-    profile: &comp_profiles::CL1B,
+    id: "cl1b",
     w: W,
     h: H,
     paint: "linear-gradient(178deg, #2e5f86 0%, #1f4665 52%, #16334a 100%)",
@@ -286,7 +286,7 @@ pub static CL1B: RackDesign = RackDesign {
 /// CONSTANT switch that is the whole personality of the unit — positions 5 and
 /// 6 are program-dependent, which is where the "glue" comes from.
 pub static FAIRCHILD_670: RackDesign = RackDesign {
-    profile: &comp_profiles::FAIRCHILD_670,
+    id: "fairchild670",
     w: W,
     h: H,
     paint: "linear-gradient(178deg, #cfcabc 0%, #b9b3a4 50%, #a19a8b 100%)",
@@ -375,7 +375,7 @@ pub static FAIRCHILD_670: RackDesign = RackDesign {
 /// attack, stepped recovery, COMP/LIMIT, and the 100 Hz sidechain filter that
 /// stops the kick from working the whole mix.
 pub static MANLEY_VARI_MU: RackDesign = RackDesign {
-    profile: &comp_profiles::MANLEY_VARI_MU,
+    id: "manley_vari_mu",
     w: W,
     h: H,
     paint: "linear-gradient(178deg, #26262a 0%, #191a1d 52%, #101114 100%)",
@@ -486,7 +486,7 @@ pub static MANLEY_VARI_MU: RackDesign = RackDesign {
 /// *switches*, so their rings print detent legends — including AUTO at the
 /// release stop.
 pub static SSL_BUS: RackDesign = RackDesign {
-    profile: &comp_profiles::SSL_BUS,
+    id: "ssl_bus",
     w: W,
     h: H,
     paint: "linear-gradient(178deg, #4a4d52 0%, #34373b 50%, #26282c 100%)",
@@ -578,7 +578,7 @@ pub static SSL_BUS: RackDesign = RackDesign {
 
 /// Three knobs and a VU, and that really is the whole front panel.
 pub static DBX_160: RackDesign = RackDesign {
-    profile: &comp_profiles::DBX_160,
+    id: "dbx160",
     w: W,
     h: H,
     paint: "linear-gradient(178deg, #d3d5d8 0%, #b6b9bd 50%, #9ca0a5 100%)",
@@ -656,7 +656,7 @@ pub static DBX_160: RackDesign = RackDesign {
 /// as a number (NUKE is not "32:1", it is the sound), with the audio and
 /// detector modes beside it.
 pub static DISTRESSOR: RackDesign = RackDesign {
-    profile: &comp_profiles::DISTRESSOR,
+    id: "distressor",
     w: W,
     h: H,
     paint: "linear-gradient(178deg, #1e2a35 0%, #16202a 52%, #0e161d 100%)",
