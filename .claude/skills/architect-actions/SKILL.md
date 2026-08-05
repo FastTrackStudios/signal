@@ -6,12 +6,14 @@ description: "Use when adding a new REAPER-facing action module, or refactoring 
 # architect + daw action modules
 
 How to build (or refactor) a REAPER action module the way
-`crates/session/session/src/track_manager_actions.rs` does. That file is
-the canonical example — read it alongside this skill, not instead of it.
+`crates/session/session/src/track_manager.rs` does — paired with its
+contract in `crates/session/proto/src/track_manager.rs`. Those files are
+the canonical example — read them alongside this skill, not instead of
+them.
 
 ## The old pattern (what you're refactoring away from)
 
-Most `*_actions.rs` files in `crates/session/session/src/` still look like
+The action modules under `crates/session/session/src/` used to look like
 this — a hand-written id enum, a `action_for_id(&str) -> Option<Enum>`
 string-matcher, a `dispatch(action)` free function, **and** a separate
 `#[architect::actions]` trait whose methods are one-line forwards to
@@ -35,12 +37,25 @@ impl FooActions for FooActionsImpl {
 Don't add to this pattern. New modules — and modules you're touching for
 other reasons — should move to the shape below instead.
 
+Deleting the legacy path also means deleting the module's entries in the
+`actions_proto::define_actions!` block (`session/src/lib.rs`) and its arm
+in `daw_module.rs`'s dispatch chain. The `#[architect::actions]` macro
+emits the *same* `FTS_*` command ids, so leaving both in place registers
+every command twice. Pin the generated ids with a test in the proto
+module (`<Trait>Actions::all()`) so the exact REAPER command-name strings
+keybindings and toolbars depend on can't drift.
+
 ## The target shape
 
-Three pieces, using `track_manager_actions.rs` as the reference:
+Three pieces, using `track_manager` as the reference:
 
 1. **A plain declaration-only trait**, annotated with `#[architect::actions]`
-   — this is the macro surface, nothing else:
+   — this is the macro surface, nothing else. It lives in the domain's
+   `-proto` crate (`crates/session/proto/src/`), never beside the impl:
+   traits are protocol, and the macro emits the `ActionMeta` consts +
+   `register_<name>_actions` beside the trait, where any host — the
+   REAPER extension, a CLI, a remote client — can see them without
+   pulling in the implementation.
 
    ```rust
    #[architect::actions(namespace = "TRACK_MANAGER")]
@@ -129,9 +144,9 @@ Three pieces, using `track_manager_actions.rs` as the reference:
    composing the scope nesting there:
 
    ```rust
-   session::track_manager_actions::register_track_manager_actions(
+   session_proto::track_manager::register_track_manager_actions(
        &architect::action::ScopedActionBackend::new(daw_reaper::Reaper, "SESSION", "Session"),
-       std::sync::Arc::new(session::track_manager_actions::TrackManager::new(daw_reaper::Reaper)),
+       std::sync::Arc::new(session::track_manager::TrackManager::new(daw_reaper::Reaper)),
    );
    ```
 
@@ -331,5 +346,5 @@ When moving an existing `*_actions.rs` onto this pattern:
    leaving both registers the same command twice under two different ids.
 7. Add headless tests against `Standalone` before considering the
    refactor done — cover *every* branch, not just the happy path. The
-   two branches that had no test in `track_manager_actions` both turned
+   two branches that had no test in `track_manager` both turned
    out to be broken; the tests found it.
