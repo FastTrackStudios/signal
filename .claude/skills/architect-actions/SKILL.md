@@ -192,7 +192,7 @@ Three pieces, using `track_manager` as the reference:
        playback::register_actions(backend, daw.clone());
        modes::register_actions(backend);
        session_proto::track_manager::register_track_manager_actions(
-           &ScopedActionBackend::new(backend.clone(), "SESSION", "Session"),
+           &ScopedActionBackend::new(backend.clone(), "FTS_SESSION", "Session"),
            Arc::new(track_manager::TrackManager::new(daw)),
        );
    }
