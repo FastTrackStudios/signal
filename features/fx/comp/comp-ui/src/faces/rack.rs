@@ -100,7 +100,7 @@ pub fn RackFace(
                     // diff a stable node to land on.
                     match item {
                         RackItem::Vu { x, y, w, mode, legend } => rsx! {
-                            PanelSlot { scale, x, y, w: w + 14.0, h: w * 0.72,
+                            PanelSlot { scale, x, y, w: w + 30.0, h: w * 0.72 + if design.vu_bezel { 34.0 } else { 0.0 },
                                 VuMeter {
                                     scale,
                                     width: w,
@@ -111,6 +111,7 @@ pub fn RackFace(
                                         VuMode::Level => out_db,
                                     },
                                     legend: legend.to_string(),
+                                    bezel: design.vu_bezel,
                                 }
                             }
                         },
@@ -254,6 +255,17 @@ pub fn RackFace(
                         | RackItem::Readout { .. }
                         | RackItem::Lamp { .. }
                         | RackItem::Divider { .. } => rsx! {},
+                        RackItem::TintedText { x, y, text, size, color } => rsx! {
+                            Silkscreen {
+                                scale, x, y,
+                                text: text.to_string(),
+                                width: 220.0,
+                                size,
+                                weight: 700,
+                                tracking: 0.12,
+                                color: color.to_string(),
+                            }
+                        },
                         RackItem::Text { x, y, text, size, strong } => rsx! {
                             Silkscreen {
                                 scale, x, y,

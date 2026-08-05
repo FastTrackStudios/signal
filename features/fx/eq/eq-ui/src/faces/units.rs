@@ -67,6 +67,7 @@ pub static PULTEC: RackDesign = RackDesign {
     dim_ink: "#a9bfcc",
     chrome: "#b9c6cf",
     vu: VuFace::Blue,
+    vu_bezel: false,
     // Daka-Ware phenolic, as the unit wears: a ridged 1⅛" body on a 1½" skirt,
     // with the index engraved into the body and filled white.
     knob: KnobStyle::Daka,
@@ -245,6 +246,7 @@ pub static SSL: RackDesign = RackDesign {
     dim_ink: "#9aa0a6",
     chrome: "#8f9398",
     vu: VuFace::Blue,
+    vu_bezel: false,
     // Collet caps: flat top, fluted rim, one white bar. The panel prints the
     // travel as dots around them rather than the knob carrying a skirt.
     knob: KnobStyle::Collet,
@@ -493,6 +495,7 @@ pub static API_550A: RackDesign = RackDesign {
     dim_ink: "#565b61",
     chrome: "#7e8288",
     vu: VuFace::Amber,
+    vu_bezel: false,
     knob: KnobStyle::Bakelite,
     items: &[
         RackItem::Text {
@@ -631,6 +634,7 @@ pub static NEVE_1073: RackDesign = RackDesign {
     dim_ink: "#9d9a94",
     chrome: "#9fa3a8",
     vu: VuFace::Amber,
+    vu_bezel: false,
     // Marconi wing knobs, and Neve's colour coding rides on them.
     knob: KnobStyle::Marconi,
     items: &[

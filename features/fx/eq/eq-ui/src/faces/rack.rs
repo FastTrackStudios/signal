@@ -173,6 +173,17 @@ pub fn EqRackFace(
                                 text: legend.to_string(), color: design.ink.to_string(),
                             }
                         },
+                        RackItem::TintedText { x, y, text, size, color } => rsx! {
+                            Silkscreen {
+                                scale, x, y,
+                                text: text.to_string(),
+                                width: 220.0,
+                                size,
+                                weight: 700,
+                                tracking: 0.12,
+                                color: color.to_string(),
+                            }
+                        },
                         RackItem::Text { x, y, text, size, strong } => rsx! {
                             Silkscreen {
                                 scale, x, y,
