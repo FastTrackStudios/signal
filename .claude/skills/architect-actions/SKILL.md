@@ -41,9 +41,25 @@ Deleting the legacy path also means deleting the module's entries in the
 `actions_proto::define_actions!` block (`session/src/lib.rs`) and its arm
 in `daw_module.rs`'s dispatch chain. The `#[architect::actions]` macro
 emits the *same* `FTS_*` command ids, so leaving both in place registers
-every command twice. Pin the generated ids with a test in the proto
-module (`<Trait>Actions::all()`) so the exact REAPER command-name strings
-keybindings and toolbars depend on can't drift.
+every command twice.
+
+Two things guard this, and you want both:
+
+- **Per-module**: a test in the proto module asserting `<Trait>Actions::all()`
+  produces the exact command-id strings, so the names keybindings and
+  toolbars depend on can't drift.
+- **Tree-wide**: `apps/extensions/reaper-fts-extensions/tests/action_ids.rs`
+  runs the real `register_all_architect_actions` against a collecting
+  `ActionBackend` and asserts (a) no two traits emit the same id and
+  (b) the legacy `session_actions` block declares nothing the traits
+  already emit. A per-module test cannot see either failure. This one
+  found 39 duplicate registrations the first time it ran.
+
+Watch for the subtler variant: the same *operation* registered under two
+*different* ids. That doesn't collide, so REAPER happily lists both, and a
+keybinding on the losing name silently does nothing. An alias table
+mapping old ids onto new ones (as `dynamic_template`'s
+`dispatch_session_command` does) is the usual source.
 
 ## The target shape
 
@@ -136,28 +152,64 @@ Three pieces, using `track_manager` as the reference:
      `daw_standalone::sync::Standalone` in tests. Don't write two
      versions.
 
-3. **No registration wrapper — call the macro-generated function.** The
-   macro emits `register_<trait_snake_sans_Actions_suffix>_actions`
-   (`TrackManagerActions` → `register_track_manager_actions`). Don't
-   write a per-module `register_actions` shim around it; register at the
-   entry point (`apps/extensions/reaper-fts-extensions/src/lib.rs`),
-   composing the scope nesting there:
+3. **A thin `register_actions` shim per module, and one
+   `register_all_actions` per crate.** The macro emits
+   `register_<trait_snake_sans_Actions_suffix>_actions`
+   (`TrackManagerActions` → `register_track_manager_actions`), which
+   takes the backend and an `Arc<impl Trait>`. For a module generic over
+   a DAW backend that means every call site would have to build the impl
+   struct itself:
 
    ```rust
-   session_proto::track_manager::register_track_manager_actions(
-       &architect::action::ScopedActionBackend::new(daw_reaper::Reaper, "SESSION", "Session"),
-       std::sync::Arc::new(session::track_manager::TrackManager::new(daw_reaper::Reaper)),
-   );
+   // Don't make callers write this:
+   register_playback_actions(backend, Arc::new(PlaybackActionsImpl { daw }));
    ```
+
+   So each module wraps it once, and that shim's *only* job is binding
+   the implementor:
+
+   ```rust
+   pub fn register_actions<D, B>(backend: &B, daw: D)
+   where
+       D: TransportService + Send + Sync + 'static,
+       B: ActionBackend + ?Sized,
+   {
+       register_playback_actions(backend, Arc::new(PlaybackActionsImpl { daw }));
+   }
+   ```
+
+   **A shim must never do its own scoping.** Scope nesting is a fact
+   about the registrar, not the module — a leaf trait names only its own
+   identity, and whoever registers it decides what it lives under by
+   wrapping the backend.
+
+   Then each crate exposes exactly one `register_all_actions` that calls
+   every module's shim and applies whatever nesting that crate owns:
+
+   ```rust
+   // crates/session/session/src/lib.rs
+   pub fn register_all_actions<D, B>(backend: &B, daw: D) { /* … */
+       playback::register_actions(backend, daw.clone());
+       modes::register_actions(backend);
+       session_proto::track_manager::register_track_manager_actions(
+           &ScopedActionBackend::new(backend.clone(), "SESSION", "Session"),
+           Arc::new(track_manager::TrackManager::new(daw)),
+       );
+   }
+   ```
+
+   This is the part that matters: a host calls one function per crate, so
+   adding a module reaches every host automatically. Hand-listing every
+   module at every call site is how `FTS_SESSION_TOGGLE_PLAYBACK` ended
+   up declared, bound, and wired to nothing — the registration line was
+   simply never added, and nothing could tell.
 
    `ScopedActionBackend::new(inner, scope_id, scope_category)` prepends
    `scope_id` to every action's `id` and overrides `category` to
    `scope_category` — this is how "Track Manager" (the trait's own
    identity) ends up nested under "Session" without the trait ever
-   saying so, and it belongs at the registration site because *who a
-   module lives under* is a fact about the registrar, not the module.
-   Stack another wrap for a further level (an eventual "FTS" outer
-   scope) without touching the leaf trait at all.
+   saying so. Stack another wrap for a further level (an eventual "FTS"
+   outer scope) without touching the leaf trait at all.
 
 ## Error handling — don't hand-roll it
 
