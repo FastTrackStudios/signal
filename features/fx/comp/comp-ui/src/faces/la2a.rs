@@ -41,7 +41,7 @@ pub fn La2aFace(
     let _ = frame;
     let face = use_face_context(&comp_profiles::LA2A);
     let gr_db = face.ui.gain_reduction_db.load(Ordering::Relaxed);
-    let scale = panel_scale(W, H, crate::control_view::HEADER_H);
+    let scale = panel_scale(W, H, crate::control_view::RAIL_W);
 
     let peak_reduction = face.handle("peak_reduction");
     let gain = face.handle("gain");

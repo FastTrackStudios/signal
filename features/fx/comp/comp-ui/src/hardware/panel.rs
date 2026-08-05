@@ -35,15 +35,15 @@ pub fn window_logical_size() -> Option<(f64, f64)> {
 }
 
 /// The scale a `design_w` x `design_h` panel is drawn at in the current editor
-/// window, with `reserve_h` px of window height already spent above it (the
-/// header) — without that the panel is sized for space it does not have.
+/// window, with `reserve_w` px of window width already spent beside it (the
+/// shell rail) — without that the panel is sized for space it does not have.
 ///
 /// Faces call this themselves rather than letting [`Panel`] do it privately:
 /// every control on the panel needs the same factor, and children are built
 /// before the parent renders them.
-pub fn panel_scale(design_w: f64, design_h: f64, reserve_h: f64) -> f64 {
-    let (win_w, win_h) = window_logical_size().unwrap_or((design_w, design_h + reserve_h));
-    fit_scale(win_w, (win_h - reserve_h).max(1.0), design_w, design_h)
+pub fn panel_scale(design_w: f64, design_h: f64, reserve_w: f64) -> f64 {
+    let (win_w, win_h) = window_logical_size().unwrap_or((design_w + reserve_w, design_h));
+    fit_scale((win_w - reserve_w).max(1.0), win_h, design_w, design_h)
 }
 
 /// A hardware faceplate.

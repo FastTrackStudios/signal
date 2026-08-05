@@ -40,6 +40,25 @@ pub fn profile_for_index(index: usize) -> &'static (dyn Profile + Sync) {
     }
 }
 
+/// The editor size a face wants, in logical px — including the shell rail.
+///
+/// A face is not a page in a fixed window; it is a different instrument, and
+/// the instruments are different shapes. The FTS surface is a graph and wants
+/// height. A rack unit is 4:1 and wants none — given a tall window it just
+/// draws black above and below itself. So switching profile asks the host to
+/// resize, the same way the plugin asks on open.
+pub fn preferred_editor_size(profile_index: usize) -> (u32, u32) {
+    match PROFILE_IDS.get(profile_index).copied() {
+        // Rack units: the panel's 900x300 drawing plus the rail, with a little
+        // air around it.
+        Some("la2a") | Some("ssl_bus") | Some("urei_1176") => (1000, 348),
+        _ => (
+            crate::control_view::EDITOR_W,
+            crate::control_view::EDITOR_H,
+        ),
+    }
+}
+
 /// The editor body for a profile index.
 ///
 /// `advanced` is the FTS surface's page selection; the hardware faces ignore
@@ -98,5 +117,45 @@ pub fn use_face_context(profile: &'static (dyn Profile + Sync)) -> FaceContext {
         ui,
         ctx: use_param_context(),
         profile,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::control_view::{
+        EDITOR_H, EDITOR_W, MAX_EDITOR_H, MAX_EDITOR_W, MIN_EDITOR_H, MIN_EDITOR_W,
+    };
+
+    #[test]
+    fn the_rack_faces_ask_for_a_shorter_window_than_the_fts_surface() {
+        let (_, control_h) = preferred_editor_size(0);
+        assert_eq!((preferred_editor_size(0)), (EDITOR_W, EDITOR_H));
+        for index in 1..PROFILE_IDS.len() {
+            let (_, face_h) = preferred_editor_size(index);
+            assert!(
+                face_h < control_h,
+                "{} asks for {face_h}px, no shorter than the FTS surface's {control_h}px",
+                PROFILE_IDS[index],
+            );
+        }
+    }
+
+    #[test]
+    fn every_face_asks_for_a_size_the_host_is_allowed_to_give_it() {
+        // A preferred size outside the declared resize bounds is a request the
+        // host will clamp or refuse — the face would open at the wrong size
+        // with nothing in the log to say why.
+        for index in 0..PROFILE_IDS.len() {
+            let (w, h) = preferred_editor_size(index);
+            let (w, h) = (w as f32, h as f32);
+            assert!(
+                (MIN_EDITOR_W..=MAX_EDITOR_W).contains(&w)
+                    && (MIN_EDITOR_H..=MAX_EDITOR_H).contains(&h),
+                "{} wants {w}x{h}, outside the editor's {MIN_EDITOR_W}x{MIN_EDITOR_H}..\
+                 {MAX_EDITOR_W}x{MAX_EDITOR_H} bounds",
+                PROFILE_IDS[index],
+            );
+        }
     }
 }

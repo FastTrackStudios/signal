@@ -43,13 +43,13 @@ mod support;
 
 use support::{mount, mount_sized, ptr_key, Fixture, Gesture};
 
-/// Click segment `index` of the header's profile selector — the face switch.
+/// Click profile `index` in the shell rail — the face switch.
 async fn select_profile(fx: &mut Fixture, index: usize) -> dioxus_test::Result<()> {
-    let sel = fx.tester.query(by_testid("select-profile")).immediately()?;
-    let (ox, oy) = sel.document_origin();
-    let (w, h) = sel.size();
-    let seg_w = w as f64 / comp_ui::params::PROFILE_LABELS.len() as f64;
-    let (x, y) = (ox + seg_w * (index as f64 + 0.5), oy + h as f64 * 0.75);
+    let id = comp_ui::faces::PROFILE_IDS[index];
+    let item = fx.tester.query(by_testid(&format!("rail-item-{id}"))).immediately()?;
+    let (ox, oy) = item.document_origin();
+    let (w, h) = item.size();
+    let (x, y) = (ox + w as f64 / 2.0, oy + h as f64 / 2.0);
     fx.tester.pointer_down(x, y);
     let _ = fx.tester.pump().await;
     fx.tester.pointer_up(x, y);
@@ -71,14 +71,14 @@ fn panel_size(fx: &Fixture) -> (f32, f32) {
 // Tests
 // ─────────────────────────────────────────────────────────────────────────
 
-/// The editor mounts headless: the header, all eight classic-comp knobs, and
-/// the GR meter render with real (non-collapsed) layout.
+/// The editor mounts headless: the rail, all eight classic-comp knobs, and
+/// the graph's own readouts render with real (non-collapsed) layout.
 #[tokio::test]
-async fn editor_mounts_headless_with_knobs_and_meters() -> dioxus_test::Result<()> {
+async fn editor_mounts_headless_with_knobs_and_readouts() -> dioxus_test::Result<()> {
     let fx = mount();
 
     let html = fx.tester.query(":root").immediately()?.inner_html();
-    assert!(html.contains("FTS Comp"), "header title missing");
+    assert!(html.contains("FTS Comp"), "plugin identity missing from the rail");
     for name in [
         "Threshold",
         "Ratio",
@@ -91,10 +91,13 @@ async fn editor_mounts_headless_with_knobs_and_meters() -> dioxus_test::Result<(
     ] {
         assert!(html.contains(name), "knob label {name:?} missing from DOM");
     }
-    // GR meter (labelled "GR") + I/O peak meters.
-    for label in ["GR", "IN", "OUT"] {
-        assert!(html.contains(label), "meter label {label:?} missing from DOM");
-    }
+    // Metering lives in the graph, not in a meter strip: the GR readout and
+    // the threshold/ratio/knee line are what a glance reads.
+    assert!(html.contains("GR"), "GR readout missing from the graph");
+    assert!(
+        html.contains("Thr · Ratio · Knee"),
+        "param readout missing from the graph"
+    );
 
     // Every knob got a real (non-collapsed) layout box.
     for id in [
@@ -216,9 +219,14 @@ async fn graph_renders_transfer_curve() -> dioxus_test::Result<()> {
     let (w, h) = el.size();
     assert!(w > 300.0, "graph too narrow: {w}px");
     assert!(h as f64 >= 220.0, "graph collapsed to {h}px");
+    // The viewBox has to be the container's pixel size on both axes: blitz
+    // scales a viewBox uniformly (it ignores preserveAspectRatio), so any
+    // other aspect letterboxes the graph and breaks pointer ↔ viewBox.
     assert!(
-        el.inner_html().contains(&format!("viewBox=\"0 0 360 {}\"", h.round())),
-        "graph viewBox does not match its {h}px container — pointer↔viewBox mapping broken"
+        el.inner_html()
+            .contains(&format!("viewBox=\"0 0 {} {}\"", w.round(), h.round())),
+        "graph viewBox does not match its {w}x{h}px container — \
+         pointer↔viewBox mapping broken"
     );
 
     let d = fx.transfer_curve_d();
@@ -382,9 +390,10 @@ async fn basic_mode_shows_core_sections_only() -> dioxus_test::Result<()> {
         );
     }
 
-    // Style + profile selectors are always available.
-    for id in ["select-style", "select-profile"] {
-        fx.tester.query(by_testid(id)).immediately()?;
+    // The style selector and the rail's profile list are always available.
+    fx.tester.query(by_testid("select-style")).immediately()?;
+    for id in comp_ui::faces::PROFILE_IDS {
+        fx.tester.query(by_testid(&format!("rail-item-{id}"))).immediately()?;
     }
     Ok(())
 }

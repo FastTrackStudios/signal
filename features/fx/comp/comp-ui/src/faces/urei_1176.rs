@@ -38,7 +38,7 @@ pub fn Urei1176Face(
     let _ = frame;
     let face = use_face_context(&comp_profiles::UREI_1176);
     let gr_db = face.ui.gain_reduction_db.load(Ordering::Relaxed);
-    let scale = panel_scale(W, H, crate::control_view::HEADER_H);
+    let scale = panel_scale(W, H, crate::control_view::RAIL_W);
 
     let input = face.handle("input");
     let output = face.handle("output");

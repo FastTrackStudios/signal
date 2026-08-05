@@ -1,11 +1,15 @@
 //! Comp editor — Dioxus GUI root component.
 //!
-//! The editor is a header over a *face*. The header is the only part every
-//! profile shares: plugin identity, the hardware-profile picker, and the
-//! Basic/Advanced toggle (which belongs to the FTS surface and is hidden on
-//! the hardware faces, where there is no such thing as an advanced page).
+//! The editor is the shared [`PluginShell`]: a left rail carrying the plugin
+//! identity and the profile list, and one surface that gets everything else.
+//! Every FTS plugin wears the same shell, so the profile switch is in the same
+//! place in all of them — and the surface keeps the full window height, which
+//! is the dimension a graph or a faceplate actually wants.
 //!
-//! Everything below the header comes from [`crate::faces`]:
+//! The rail's footer holds the Basic/Advanced toggle, which belongs to the FTS
+//! surface only — a hardware unit has the controls it has.
+//!
+//! The surface itself comes from [`crate::faces`]:
 //!
 //! - **Control** — the FTS surface: the compressor graph over a row of
 //!   labelled sections, plus the GR and I/O meters.
@@ -29,14 +33,14 @@ use crate::faces::{Face, PROFILE_IDS};
 use crate::param_adapter::param_handle;
 use crate::params::{CompUiState, PROFILE_LABELS};
 use crate::profile_view::{ProfileSkin, profile_skin};
-use crate::sections::ParamSelector;
 
-/// Height of the header strip, in CSS px.
+/// Width the shell rail takes out of the window, in CSS px.
 ///
 /// Hardware faces need it as a number, not as layout: a faceplate is fitted to
-/// the space *below* the header, so the fit has to know how much of the window
-/// the header already took.
-pub const HEADER_H: f64 = 52.0;
+/// the space *beside* the rail, so the fit has to know how much of the window
+/// the rail already took. There is no header any more, so the faces get the
+/// window's full height.
+pub const RAIL_W: f64 = fts_ui_audio::shell::RAIL_W;
 
 /// Editor size the plugin shell requests from the host on open.
 ///
@@ -57,7 +61,12 @@ pub const EDITOR_H: u32 = 660;
 /// enforced rather than advisory: `DioxusEditorHandle::set_size` refuses
 /// anything smaller.
 pub const MIN_EDITOR_W: f32 = 720.0;
-pub const MIN_EDITOR_H: f32 = 560.0;
+/// Low enough for the rack faces, which are 4:1 drawings and ask the host for
+/// roughly a third of the FTS surface's height (see
+/// [`crate::faces::preferred_editor_size`]). The FTS surface survives it
+/// because its controls float over the graph rather than sitting under it —
+/// they overlap it when the window is squeezed, but nothing collapses.
+pub const MIN_EDITOR_H: f32 = 300.0;
 
 /// Largest size the editor accepts.
 ///
@@ -135,16 +144,33 @@ fn AppShell() -> Element {
     // and the meters freeze.
     let frame_counter = *app_tick.read();
 
-    // Advanced disclosure. Local UI state — deliberately not a plugin param,
-    // so switching views never shows up as an automatable change or dirties
-    // the host's project state.
     let mut advanced = use_signal(|| false);
 
-    // The profile param picks the face; the header tints from its skin.
+    // Profile → editor size. Faces are different shapes, so a face swap is a
+    // resize request to the host (see `faces::preferred_editor_size`). Tracked
+    // through a plain Cell rather than an effect because the profile lives in
+    // a plugin param, not a signal: this shell re-renders on the redraw tick
+    // anyway, so comparing here also catches the host automating the param.
+    let last_profile: std::rc::Rc<std::cell::Cell<Option<usize>>> =
+        use_hook(|| std::rc::Rc::new(std::cell::Cell::new(None)));
+
+    // The profile param picks the face; the rail tints from its skin.
     let profile_idx = params.profile.value().max(0) as usize;
     let profile_id = PROFILE_IDS.get(profile_idx).copied().unwrap_or("control");
     let skin = profile_skin(profile_id);
     let is_control_face = profile_id == "control";
+
+    if last_profile.get() != Some(profile_idx) {
+        last_profile.set(Some(profile_idx));
+        // Absent when the editor is embedded without a nice-plug window
+        // (headless tests): nothing to resize, so nothing to do.
+        if let Some(state) = try_consume_context::<std::sync::Arc<nice_plug_dioxus::DioxusState>>() {
+            let (w, h) = crate::faces::preferred_editor_size(profile_idx);
+            if state.size() != (w, h) {
+                state.request_resize(w, h);
+            }
+        }
+    }
 
     let base_css = "*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; } \
          html, body { width: 100%; height: 100%; overflow: hidden; \
@@ -161,6 +187,20 @@ fn AppShell() -> Element {
 
     let is_advanced = *advanced.read();
 
+    // The rail writes the profile param through the same host-gesture path as
+    // any other control, so switching faces is automatable and undoable like
+    // everything else.
+    let profile_handle = param_handle(params.profile.as_ptr(), ctx.clone());
+    let profile_count = PROFILE_LABELS.len();
+    // Badges are how the units are named on their own front panels; the full
+    // name is the tooltip.
+    let items = ShellItem::list([
+        ("control", "Control", "CTL"),
+        ("la2a", "LA-2A", "2A"),
+        ("ssl_bus", "SSL Bus", "SSL"),
+        ("urei_1176", "1176", "76"),
+    ]);
+
     rsx! {
         document::Style { {base_css} }
 
@@ -169,57 +209,45 @@ fn AppShell() -> Element {
                 style: format!("{root_style} overflow:hidden;"),
                 "data-frame": "{frame_counter}",
 
-                // ── Header ───────────────────────────────────────────
-                div {
-                    class: "flex justify-between items-center px-4 border-b border-border bg-card/50",
-                    // Pinned rather than padded: the hardware faces fit
-                    // themselves into what is left, and they need that number.
-                    style: "height:{HEADER_H}px; flex:none;",
-                    div { class: "flex items-baseline gap-3 shrink-0",
-                        div {
-                            class: "text-base font-bold tracking-wide text-foreground",
-                            "FTS Comp"
-                        }
-                        div {
-                            class: "text-xs text-muted-foreground uppercase tracking-wider",
-                            "Stereo Compressor"
-                        }
-                    }
-
-                    div {
-                        style: "display:flex; align-items:center; gap:14px;",
-
-                        // Hardware profile picker — this is the face switch.
-                        ParamSelector {
-                            handle: param_handle(params.profile.as_ptr(), ctx.clone()),
-                            testid: "profile".to_string(),
-                            label: "Profile".to_string(),
-                            options: PROFILE_LABELS.iter().map(|s| s.to_string()).collect(),
-                            skin,
-                        }
-
-                        // Basic/Advanced disclosure. Only the FTS surface has
-                        // pages; a faceplate has the controls the unit has.
+                PluginShell {
+                    title: "FTS Comp".to_string(),
+                    subtitle: "Stereo Compressor".to_string(),
+                    brand: "CMP".to_string(),
+                    items,
+                    selected: profile_idx,
+                    accent: skin.accent.to_string(),
+                    on_select: move |index: usize| {
+                        let normalized = if profile_count > 1 {
+                            index as f32 / (profile_count - 1) as f32
+                        } else {
+                            0.0
+                        };
+                        profile_handle.begin_edit();
+                        profile_handle.set_normalized(normalized);
+                        profile_handle.end_edit();
+                    },
+                    rail_footer: rsx! {
+                        // Basic/Advanced disclosure. Local UI state — never a
+                        // plugin param, so switching pages does not show up as
+                        // an automatable change or dirty the host's project.
                         if is_control_face {
-                            div {
-                                "data-testid": "advanced-toggle",
-                                style: format!(
-                                    "cursor:pointer; padding:5px 12px; border-radius:6px; \
-                                     font-size:11px; font-weight:600; letter-spacing:0.06em; \
-                                     text-transform:uppercase; border:1px solid {}; color:{}; background:{};",
-                                    skin.border,
-                                    if is_advanced { "#fff" } else { skin.text },
-                                    if is_advanced { skin.accent } else { "transparent" },
-                                ),
-                                onclick: move |_| advanced.toggle(),
-                                if is_advanced { "Advanced" } else { "Basic" }
+                            RailButton {
+                                testid: "advanced-toggle".to_string(),
+                                label: "ADV".to_string(),
+                                title: if is_advanced {
+                                    "Advanced controls (on)".to_string()
+                                } else {
+                                    "Advanced controls".to_string()
+                                },
+                                active: is_advanced,
+                                accent: skin.accent.to_string(),
+                                on_click: move |_| advanced.toggle(),
                             }
                         }
-                    }
-                }
+                    },
 
-                // ── The face ─────────────────────────────────────────
-                Face { profile_index: profile_idx, advanced: is_advanced, frame: frame_counter }
+                    Face { profile_index: profile_idx, advanced: is_advanced, frame: frame_counter }
+                }
             }
         }
     }

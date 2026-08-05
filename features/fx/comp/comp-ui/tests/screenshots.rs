@@ -57,17 +57,43 @@ fn mount_design() -> Fixture {
     )
 }
 
-/// Click segment `index` of the header's profile selector — the face switch.
+/// Mount, switch to a profile, and size the window the way the host would:
+/// switching profile asks for that face's size, so a shot taken at the FTS
+/// surface's size is not what anyone sees.
+async fn mount_face(profile_index: usize) -> Fixture {
+    let (w, h) = comp_ui::faces::preferred_editor_size(profile_index);
+    let mut fx = mount_sized(w, h);
+    select_profile(&mut fx, profile_index).await;
+    fx
+}
+
+/// Click profile `index` in the shell rail — the face switch.
 async fn select_profile(fx: &mut Fixture, index: usize) {
-    let sel = fx
+    let id = comp_ui::faces::PROFILE_IDS[index];
+    let item = fx
         .tester
-        .query(by_testid("select-profile"))
+        .query(by_testid(&format!("rail-item-{id}")))
         .immediately()
-        .expect("profile selector missing");
-    let (ox, oy) = sel.document_origin();
-    let (w, h) = sel.size();
-    let seg_w = w as f64 / comp_ui::params::PROFILE_LABELS.len() as f64;
-    let (x, y) = (ox + seg_w * (index as f64 + 0.5), oy + h as f64 * 0.75);
+        .unwrap_or_else(|e| panic!("rail item {id} missing: {e:?}"));
+    let (ox, oy) = item.document_origin();
+    let (w, h) = item.size();
+    let (x, y) = (ox + w as f64 / 2.0, oy + h as f64 / 2.0);
+    fx.tester.pointer_down(x, y);
+    let _ = fx.tester.pump().await;
+    fx.tester.pointer_up(x, y);
+    fx.settle().await;
+}
+
+/// Click the centre of whatever carries `testid`.
+async fn click_testid(fx: &mut Fixture, testid: &str) {
+    let el = fx
+        .tester
+        .query(by_testid(testid))
+        .immediately()
+        .unwrap_or_else(|e| panic!("{testid} missing: {e:?}"));
+    let (ox, oy) = el.document_origin();
+    let (w, h) = el.size();
+    let (x, y) = (ox + w as f64 / 2.0, oy + h as f64 / 2.0);
     fx.tester.pointer_down(x, y);
     let _ = fx.tester.pump().await;
     fx.tester.pointer_up(x, y);
@@ -95,25 +121,23 @@ async fn shot_control_face() {
 #[tokio::test]
 async fn shot_control_face_advanced() {
     let mut fx = mount_design();
-    let el = fx
-        .tester
-        .query(by_testid("advanced-toggle"))
-        .immediately()
-        .expect("advanced toggle missing");
-    let (ox, oy) = el.document_origin();
-    let (w, h) = el.size();
-    let (x, y) = (ox + w as f64 / 2.0, oy + h as f64 / 2.0);
-    fx.tester.pointer_down(x, y);
-    let _ = fx.tester.pump().await;
-    fx.tester.pointer_up(x, y);
-    fx.settle().await;
+    click_testid(&mut fx, "advanced-toggle").await;
     shot(&fx, "control-advanced");
+}
+
+/// The character dropdown open — seven waveshapes that used to be seven
+/// segments across the bar.
+#[tokio::test]
+async fn shot_character_dropdown() {
+    let mut fx = mount_design();
+    click_testid(&mut fx, "advanced-toggle").await;
+    click_testid(&mut fx, "select-charmode-trigger").await;
+    shot(&fx, "control-advanced-dropdown");
 }
 
 #[tokio::test]
 async fn shot_la2a_face() {
-    let mut fx = mount_design();
-    select_profile(&mut fx, 1).await;
+    let mut fx = mount_face(1).await;
     // Some peak reduction on the meter, and gain brought back up.
     fx.ui.gain_reduction_db
         .store(7.5, std::sync::atomic::Ordering::Relaxed);
@@ -124,8 +148,7 @@ async fn shot_la2a_face() {
 
 #[tokio::test]
 async fn shot_ssl_bus_face() {
-    let mut fx = mount_design();
-    select_profile(&mut fx, 2).await;
+    let mut fx = mount_face(2).await;
     fx.ui.gain_reduction_db
         .store(4.0, std::sync::atomic::Ordering::Relaxed);
     turn(&mut fx, "hw-knob-threshold", -30.0).await;
@@ -134,8 +157,7 @@ async fn shot_ssl_bus_face() {
 
 #[tokio::test]
 async fn shot_1176_face() {
-    let mut fx = mount_design();
-    select_profile(&mut fx, 3).await;
+    let mut fx = mount_face(3).await;
     fx.ui.gain_reduction_db
         .store(11.0, std::sync::atomic::Ordering::Relaxed);
     turn(&mut fx, "hw-knob-input", -30.0).await;
@@ -143,11 +165,11 @@ async fn shot_1176_face() {
     shot(&fx, "urei-1176");
 }
 
-/// The same face at a bigger editor size — this is what host resizing does to
-/// a faceplate (scale it, not reflow it).
+/// The same face in a window the user dragged wider — this is what host
+/// resizing does to a faceplate (scale it, not reflow it).
 #[tokio::test]
 async fn shot_la2a_face_large() {
-    let mut fx = mount_sized(1600, 1000);
+    let mut fx = mount_sized(1500, 520);
     select_profile(&mut fx, 1).await;
     fx.ui.gain_reduction_db
         .store(5.0, std::sync::atomic::Ordering::Relaxed);
