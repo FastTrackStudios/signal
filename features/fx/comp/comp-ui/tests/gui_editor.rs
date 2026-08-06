@@ -769,10 +769,18 @@ async fn the_size_button_cycles_the_forms_and_each_asks_for_its_own_box() -> dio
     let mut boxes: Vec<_> = seen.iter().map(|(_, size)| *size).collect();
     boxes.sort();
     boxes.dedup();
+    // One duplicate is expected and meant: the faces are drawn as 2U units,
+    // so Responsive and Rack2U are the same box. Any other pair sharing one
+    // is a button that does nothing.
     assert_eq!(
         boxes.len(),
-        seen.len(),
-        "two forms resolve to the same window, so one of them is a button that does nothing"
+        seen.len() - 1,
+        "more than one pair of forms resolves to the same window"
+    );
+    assert_eq!(
+        comp_ui::faces::editor_size_for(0, fts_ui_audio::EditorForm::Rack2U),
+        comp_ui::faces::editor_size_for(0, fts_ui_audio::EditorForm::Responsive),
+        "a face's own size is its 2U size",
     );
     Ok(())
 }

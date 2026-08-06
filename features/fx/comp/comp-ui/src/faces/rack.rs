@@ -25,7 +25,6 @@ use audiocore_core::prelude::*;
 use crate::faces::use_face_context;
 use crate::hardware::knob::HardwareKnob;
 use fts_ui_audio::hardware::button::{Lamp, LedBar, LedMeter, LedSelect, PanelButton};
-use fts_ui_audio::prelude::GrMeter;
 use crate::hardware::rack::{RackDesign, RackItem};
 use crate::hardware::panel::{panel_scale, Panel, PanelSlot, Silkscreen};
 use crate::hardware::switches::{RatioButtons, ToggleSwitch};
@@ -80,6 +79,7 @@ pub fn RackFace(
             CompactRack {
                 design,
                 profile_id: design.id.to_string(),
+                avail_w: win_w - crate::control_view::RAIL_W,
                 avail_h: win_h,
             }
         };
@@ -285,7 +285,6 @@ pub fn RackFace(
                             }
                         },
                         RackItem::Lever { .. }
-                        | RackItem::Glyph { .. }
                         | RackItem::Readout { .. }
                         | RackItem::Divider { .. } => rsx! {},
                         RackItem::TintedText { x, y, text, size, color } => rsx! {
@@ -321,6 +320,156 @@ pub fn RackFace(
     }
 }
 
+/// How a compact view flows its cells.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum CompactFlow {
+    /// One row, no wrapping — a 1U sliver. A wrapped row in a window that
+    /// short is a row cut in half.
+    Row,
+    /// One column — a 500-series slot, which is what the hardware is.
+    Column,
+    /// Wrapped rows, for boxes that are neither.
+    Grid,
+}
+
+/// The largest control size that actually fits, and how to flow them.
+///
+/// Solved rather than assumed. The knob size decides how many cells fit per
+/// row, the row count decides how much height each cell gets, and that decides
+/// the knob size — so guessing one and hoping produced a Mini view with three
+/// rows of controls in a two-row box, clipped, because blitz does not shrink
+/// what does not fit, it cuts it.
+///
+/// So: try every size from generous down to tiny and take the first that fits
+/// both axes. It is a dozen iterations of arithmetic, once per render, and it
+/// cannot be wrong about whether the result fits.
+fn fit_cells(cells: usize, avail_w: f64, avail_h: f64) -> CompactFit {
+    /// A knob's box is nearly twice its diameter — `HardwareKnob` sizes its
+    /// viewBox for the printed ring outside the body.
+    const KNOB_BOX_RATIO: f64 = 110.0 / 60.0;
+    const LEGEND_H: f64 = 13.0;
+    const GAP: f64 = 12.0;
+    const PAD: f64 = 16.0;
+
+    let (inner_w, inner_h) = ((avail_w - PAD * 2.0).max(1.0), (avail_h - PAD).max(1.0));
+    let flow = if avail_h < 200.0 {
+        CompactFlow::Row
+    } else if avail_w < avail_h {
+        CompactFlow::Column
+    } else {
+        CompactFlow::Grid
+    };
+
+    let mut best = CompactFit { knob_d: 16.0, show_legends: false, flow };
+    for step in 0..=30 {
+        let knob_d = 46.0 - step as f64;
+        let box_px = knob_d * KNOB_BOX_RATIO;
+        for show_legends in [true, false] {
+            let cell_w = box_px + GAP;
+            let cell_h = box_px + if show_legends { LEGEND_H } else { 0.0 } + GAP;
+            let cols = match flow {
+                CompactFlow::Row => cells,
+                CompactFlow::Column => 1,
+                CompactFlow::Grid => ((inner_w / cell_w).floor() as usize).max(1),
+            };
+            let rows = cells.div_ceil(cols);
+            if cell_w * cols as f64 <= inner_w && cell_h * rows as f64 <= inner_h {
+                return CompactFit { knob_d, show_legends, flow };
+            }
+            best = CompactFit { knob_d, show_legends, flow };
+        }
+    }
+    best
+}
+
+struct CompactFit {
+    knob_d: f64,
+    show_legends: bool,
+    flow: CompactFlow,
+}
+
+/// How many of a design's items are controls a compact view will draw.
+///
+/// Silkscreen, regions and lamps are panel *drawing*: they have no cell in a
+/// flowed layout, so counting them would divide the height into rows that
+/// nothing occupies.
+fn design_control_count(design: &RackDesign) -> usize {
+    design
+        .items
+        .iter()
+        .filter(|item| {
+            matches!(
+                item,
+                RackItem::Knob { .. } | RackItem::Buttons { .. } | RackItem::Switch { .. }
+            )
+        })
+        .count()
+}
+
+/// Gain reduction, in the panel's own ink.
+///
+/// The shared [`GrMeter`](fts_ui_audio::prelude::GrMeter) is a dark-theme
+/// widget — surface, border and text all come from the app palette — and on a
+/// grey leveling-amplifier plate it reads as a black sticker someone left on
+/// the panel. This one is drawn from the design: the plate's ink for the fill,
+/// its dim ink for the well, and a needle-sized reading beside it.
+#[component]
+fn CompactGrMeter(
+    gain_reduction_db: f32,
+    ink: String,
+    dim_ink: String,
+    /// Short windows lay the meter along the row rather than across it.
+    horizontal: bool,
+    /// Length of the meter's travel, in px.
+    extent: f64,
+) -> Element {
+    const MAX_GR_DB: f32 = 24.0;
+    let filled = (gain_reduction_db.clamp(0.0, MAX_GR_DB) / MAX_GR_DB) * 100.0;
+    let thickness = 9.0;
+    let (well, fill) = if horizontal {
+        (
+            format!("width:{extent:.0}px; height:{thickness:.0}px;"),
+            format!("top:0; bottom:0; right:0; width:{filled:.1}%;"),
+        )
+    } else {
+        (
+            format!("width:{thickness:.0}px; height:{extent:.0}px;"),
+            format!("left:0; right:0; top:0; height:{filled:.1}%;"),
+        )
+    };
+
+    rsx! {
+        div {
+            "data-testid": "compact-gr",
+            style: format!(
+                "display:flex; {}; align-items:center; gap:5px;",
+                if horizontal { "flex-direction:column" } else { "flex-direction:column" },
+            ),
+            div {
+                style: format!(
+                    "font-size:8px; font-weight:700; letter-spacing:0.10em; \
+                     text-transform:uppercase; color:{dim_ink};"
+                ),
+                "GR"
+            }
+            div {
+                style: format!(
+                    "{well} position:relative; border-radius:2px; \
+                     background:rgba(0,0,0,0.30); \
+                     box-shadow:inset 0 1px 2px rgba(0,0,0,0.45); overflow:hidden;"
+                ),
+                div {
+                    style: format!("position:absolute; {fill} background:{ink}; opacity:0.85;"),
+                }
+            }
+            div {
+                style: format!("font-size:8px; font-family:monospace; color:{dim_ink};"),
+                "{-gain_reduction_db:.1}"
+            }
+        }
+    }
+}
+
 /// The same unit, flowed into a window its panel does not fit.
 ///
 /// Not a second layout table: the *same* [`RackDesign`] items, drawn as a
@@ -329,32 +478,49 @@ pub fn RackFace(
 /// be drawn for twice. Silkscreen, rack ears and placement are what a small
 /// window has no room for anyway; the controls are what it is for.
 #[component]
-fn CompactRack(design: RackDesign, profile_id: String, avail_h: f64) -> Element {
+fn CompactRack(design: RackDesign, profile_id: String, avail_w: f64, avail_h: f64) -> Element {
     let profile = comp_profiles::profile_by_id(&profile_id)
         .unwrap_or_else(|| panic!("rack design names unknown profile {profile_id}"));
     let face = use_face_context(profile);
     let gr_db = face.ui.gain_reduction_db.load(Ordering::Relaxed);
 
-    // A 1U window is 89 px tall, a module is 984: the same cell cannot serve
-    // both. Size the controls from the height, and drop the legends when there
-    // is not room for a knob *and* a word under it.
-    let rows = if avail_h > 260.0 { 3.0 } else { 1.0 };
-    let cell_h = (avail_h - 20.0) / rows;
-    let knob_d = (cell_h * 0.62).clamp(26.0, 46.0);
-    let show_legends = cell_h > 62.0;
-    let meter_h = (avail_h - 28.0).clamp(40.0, 120.0);
+    // A 1U window is 89px tall, a module is 984, and Mini is 260x200: no
+    // fixed cell size or row count serves all three. So the layout is solved
+    // rather than guessed — see [`fit_cells`].
+    let cells = design_control_count(&design) + 1; // +1 for the meter
+    let fit = fit_cells(cells, avail_w, avail_h);
+    let (knob_d, show_legends) = (fit.knob_d, fit.show_legends);
+    // Numerals are legible down to about here; below it they are grey noise
+    // around a knob, and the knob is the useful part.
+    let marks_fit = knob_d >= 30.0;
 
     rsx! {
         div {
             "data-testid": "compact-rack",
             style: format!(
-                "flex:1; min-height:0; display:flex; flex-wrap:wrap; \
-                 align-content:center; justify-content:center; gap:10px 14px; \
-                 padding:10px; overflow:hidden; background:{};",
+                "flex:1; min-height:0; display:flex; {} \
+                 align-items:center; align-content:center; justify-content:{}; \
+                 gap:{}; padding:8px 12px; overflow:hidden; background:{};",
+                match fit.flow {
+                    CompactFlow::Row => "flex-wrap:nowrap;",
+                    CompactFlow::Column => "flex-direction:column; flex-wrap:nowrap;",
+                    CompactFlow::Grid => "flex-wrap:wrap;",
+                },
+                if fit.flow == CompactFlow::Column { "space-evenly" } else { "center" },
+                if fit.flow == CompactFlow::Row { "0 10px" } else { "12px 16px" },
                 design.paint,
             ),
 
-            GrMeter { gain_reduction_db: gr_db, height: meter_h as f32 }
+            CompactGrMeter {
+                gain_reduction_db: gr_db,
+                ink: design.ink.to_string(),
+                dim_ink: design.dim_ink.to_string(),
+                horizontal: fit.flow == CompactFlow::Row,
+                extent: match fit.flow {
+                    CompactFlow::Row => 96.0,
+                    _ => (avail_h * 0.18).clamp(48.0, 140.0),
+                },
+            }
 
             for (index , item) in design.items.iter().copied().enumerate() {
                 div {
@@ -381,7 +547,7 @@ fn CompactRack(design: RackDesign, profile_id: String, avail_h: f64) -> Element 
                                     diameter: knob_d,
                                     style: style.unwrap_or(design.knob),
                                     ink: design.ink.to_string(),
-                                    marks: ring.marks(),
+                                    marks: if marks_fit { ring.marks() } else { Vec::new() },
                                 }
                                 if show_legends {
                                     div {
