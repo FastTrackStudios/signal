@@ -588,7 +588,7 @@ async fn every_profile_renders_its_own_face() -> dioxus_test::Result<()> {
         ("manley_vari_mu", "hw-knob-recovery"),
         ("ssl_bus", "hw-knob-makeup"),
         ("dbx160", "hw-knob-compression"),
-        ("distressor", "hw-knob-audio-mode"),
+        ("distressor", "hw-led-select-ratio"),
     ] {
         select_profile(&mut fx, id).await?;
         fx.tester
