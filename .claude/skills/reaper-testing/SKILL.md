@@ -126,17 +126,44 @@ headless** when missing.
 
 ## Running visibly, with screenshots
 
-Use `scripts/reaper-test-visual.sh` in
-`apps/extensions/reaper-fts-extensions`:
-
 ```sh
-nix shell nixpkgs#openbox nixpkgs#bc -c \
-  ./scripts/reaper-test-visual.sh [name-filter]
+nix develop .#reaper-test
+cargo run -p fts-extensions-xtask -- --virtual [name-filter]
 ```
 
-It brings up a private Xvfb, runs **openbox** on it, drives the suite
-with `--gui`, captures the root window on an interval, and drops blank
-frames. Output lands in `target/reaper-shots/`.
+`--virtual` builds a [`daw::test::VirtualDisplay`]: a private Xvfb, a
+window manager on it, a screenshot loop into `target/reaper-shots/`, and
+xdotool input. All Rust, all from the nix shell — the shell needs
+`Xvfb`, `openbox`, `imagemagick`, `xwininfo` and `xdotool`, which
+`.#reaper-test` provides.
+
+Use it directly for finer control:
+
+```rust
+let vd = VirtualDisplay::start_default()?;
+let rec = vd.record("target/shots", Duration::from_millis(500));
+// … drive the test …
+vd.close_stray_dialogs();
+vd.click_in_window_sized(1180, 640, 40, 20, 1);
+vd.key("Escape");
+vd.screenshot_window_sized(1180, 640, "panel.png")?;
+let kept = rec.finish("target/shots");
+```
+
+### REAPER needs the FHS wrapper for GUI libs
+
+A display alone is not enough. Without `reaper-env` (the FHS wrapper),
+REAPER's SWELL cannot load its GUI dependencies:
+
+```
+swell: dlopen() failed: libxml2.so.2: cannot open shared object file
+gdk_cursor_new_from_pixbuf: assertion 'GDK_IS_DISPLAY (display)' failed
+```
+
+The runner warns `reaper-env not found; plugin GUIs may fail without FHS
+env`. **Believe that warning** — GDK will fail even with `DISPLAY` set
+correctly, and it looks exactly like a missing display. Check the
+warning before assuming the display setup is wrong.
 
 **Run a window manager.** This is the part that is easy to skip and
 shouldn't be. A bare Xvfb has no WM, so windows are unmanaged: nothing

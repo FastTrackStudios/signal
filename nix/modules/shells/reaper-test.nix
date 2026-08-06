@@ -14,6 +14,18 @@
         # Xvfb + xvfb-run — the REAPER harness needs a display.
         pkgs.xorg.xorgserver
         pkgs.xvfb-run
+        # A window manager. Not optional for GUI tests: a bare Xvfb
+        # leaves windows unmanaged — nothing positions or stacks them,
+        # and REAPER's restored dialogs cover whatever is under test, so
+        # a screenshot shows nothing useful.
+        pkgs.openbox
+        # Screenshots (`import`, `identify`) and window lookup for
+        # `daw::test::VirtualDisplay`.
+        pkgs.imagemagick
+        pkgs.xwininfo
+        # Sending clicks and keys — closing REAPER's restored dialogs
+        # and driving a panel.
+        pkgs.xdotool
       ]
       ++ config.fts.buildInputs
       ++ [ pkgs.pkg-config pkgs.rustPlatform.bindgenHook ];
