@@ -33,7 +33,7 @@ pub use super::eq_graph_response::{calculate_band_response, calculate_combined_r
 use spectrum_analyzer::dsp::AnalyzerSnapshot;
 
 /// Get current timestamp in milliseconds.
-fn now_ms() -> f64 {
+pub(crate) fn now_ms() -> f64 {
     use std::time::{SystemTime, UNIX_EPOCH};
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -219,6 +219,15 @@ pub fn EqGraph(
     // Track when mouse left the focused band area (for fade timeout)
     // Stores (timestamp_ms, band_idx) when mouse leaves focus area
     let mut focus_leave_time: Signal<Option<(f64, usize)>> = use_signal(|| None);
+    // Timestamp of the last pointer event the band popup handled itself. The
+    // popup stops those events from bubbling (they carry popup-relative
+    // coordinates, which would read as "nowhere near the band"), so this is the
+    // only signal the graph gets that the pointer is on the panel. It is a
+    // timestamp rather than a bool so it can never latch on and pin focus
+    // forever if a leave event is missed.
+    let popup_activity: Signal<f64> = use_signal(|| 0.0);
+    // How long after the last popup contact focus is still held open.
+    let popup_grace_ms = 600.0;
     // Popup fade timeout in milliseconds
     let popup_fade_timeout_ms = 300.0;
     // Double-click threshold in milliseconds
@@ -583,23 +592,53 @@ pub fn EqGraph(
                 let cur_focus = { *focused_band.read() };
                 let leave_time = { *focus_leave_time.read() };
                 let now = now_ms();
-                match (cur_focus, new_focus) {
-                    (Some(old), Some(new)) if old != new => { set_focused(Some(new)); focus_leave_time.set(None); }
-                    (Some(_), Some(_)) => { focus_leave_time.set(None); }
-                    (None, Some(new)) => { set_focused(Some(new)); focus_leave_time.set(None); }
-                    (Some(old), None) => {
-                        match leave_time {
-                            None => { focus_leave_time.set(Some((now, old))); }
-                            Some((ts, idx)) if idx == old => {
-                                if now - ts > popup_fade_timeout_ms {
-                                    set_focused(None);
-                                    focus_leave_time.set(None);
+
+                // The detail panel is a real, clickable surface — the pointer
+                // has to be able to travel from the band node onto it and
+                // operate its controls. Three things keep focus alive for that:
+                //
+                //   1. the panel just handled a pointer event itself (it stops
+                //      them bubbling, so this is the only trace we get),
+                //   2. the pointer is inside the union of the panel's box and
+                //      the band node — i.e. crossing the gap between them,
+                //   3. the band is explicitly selected, in which case the panel
+                //      is sticky until the selection is cleared.
+                let panel_fresh = now - *popup_activity.read() < popup_grace_ms;
+                let in_panel_region = cur_focus
+                    .and_then(|old| bands.read().get(old).cloned())
+                    .is_some_and(|b| {
+                        crate::eq_graph_popup::point_in_popup_region(
+                            x, y,
+                            mapper.freq_to_x(b.frequency as f64),
+                            mapper.db_to_y(b.gain as f64),
+                            graph_width, graph_height,
+                            false,
+                        )
+                    });
+                let is_selected = cur_focus
+                    .is_some_and(|old| selected_bands.read().contains(&old));
+
+                if cur_focus.is_some() && (panel_fresh || in_panel_region || is_selected) {
+                    focus_leave_time.set(None);
+                } else {
+                    match (cur_focus, new_focus) {
+                        (Some(old), Some(new)) if old != new => { set_focused(Some(new)); focus_leave_time.set(None); }
+                        (Some(_), Some(_)) => { focus_leave_time.set(None); }
+                        (None, Some(new)) => { set_focused(Some(new)); focus_leave_time.set(None); }
+                        (Some(old), None) => {
+                            match leave_time {
+                                None => { focus_leave_time.set(Some((now, old))); }
+                                Some((ts, idx)) if idx == old => {
+                                    if now - ts > popup_fade_timeout_ms {
+                                        set_focused(None);
+                                        focus_leave_time.set(None);
+                                    }
                                 }
+                                _ => { focus_leave_time.set(Some((now, old))); }
                             }
-                            _ => { focus_leave_time.set(Some((now, old))); }
                         }
+                        (None, None) => { focus_leave_time.set(None); }
                     }
-                    (None, None) => { focus_leave_time.set(None); }
                 }
             },
 
@@ -765,7 +804,14 @@ pub fn EqGraph(
                     evt.prevent_default();
                 } else {
                     last_click.set(Some((now, x, y)));
-                    if !evt.modifiers().shift() { selected_bands.set(Vec::new()); }
+                    if !evt.modifiers().shift() {
+                        selected_bands.set(Vec::new());
+                        // A selected band's panel is sticky (see the focus
+                        // logic in onmousemove); clicking empty graph is how the
+                        // user dismisses it.
+                        set_focused(None);
+                        focus_leave_time.set(None);
+                    }
                     selection_rect.set(Some((x, y, x, y)));
                     drag_start.set(Some((x, y)));
                 }
@@ -967,6 +1013,7 @@ pub fn EqGraph(
                     if w > 5.0 || h > 5.0 {
                         rsx! {
                             div {
+                                "data-testid": "eq-selection-rect",
                                 style: format!("position:absolute; left:{mnx}px; top:{mny}px;                                     width:{w}px; height:{h}px;                                     border:1px dashed rgba(100,150,255,0.6);                                     background:rgba(100,150,255,0.15);                                     pointer-events:none; box-sizing:border-box;"),
                             }
                         }
@@ -995,6 +1042,7 @@ pub fn EqGraph(
                                 graph_h: graph_height,
                                 is_dragging: dragging.is_some(),
                                 bands,
+                                popup_activity,
                                 on_band_change: on_band_change,
                                 on_band_remove: on_band_remove,
                                 on_dismiss: move |_| { set_focused(None); },

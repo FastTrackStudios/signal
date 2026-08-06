@@ -55,6 +55,9 @@ mod support {
     use nice_plug::prelude::*;
     use std::collections::BTreeMap;
 
+    /// `data-testid` on the EQ graph's band detail panel.
+    pub const PANEL_TESTID: &str = "eq-band-popup";
+
     /// One recorded host automation call.
     #[derive(Clone, Copy, Debug, PartialEq)]
     pub enum Gesture {
@@ -193,6 +196,86 @@ mod support {
                 oy + mapper.db_to_y(bp.gain_db.value() as f64),
             )
         }
+
+        /// Run pending event handlers, then lay the document out again.
+        ///
+        /// `pump()` alone applies DOM mutations but leaves layout stale, so a
+        /// panel that a pointer event just opened would have no box and would
+        /// not be hit-testable. Anything that measures or clicks event-created
+        /// UI must settle instead of bare-pumping.
+        pub async fn settle(&self) {
+            let _ = self.tester.pump().await;
+            self.tester.relayout();
+        }
+
+        /// The band detail panel, if it is currently mounted.
+        pub fn panel(&self) -> Option<dioxus_test::ResolvedElement> {
+            self.tester
+                .query(dioxus_test::by_testid(PANEL_TESTID))
+                .immediately()
+                .ok()
+        }
+
+        /// Document-space center of the band detail panel.
+        ///
+        /// Panics if the panel is not showing — every caller has just done
+        /// something that must have opened it.
+        pub fn panel_center(&self) -> (f64, f64) {
+            let panel = self.panel().expect("band detail panel is not mounted");
+            let (x, y) = panel.document_origin();
+            let (w, h) = panel.size();
+            (x + w as f64 / 2.0, y + h as f64 / 2.0)
+        }
+
+        /// A control inside the detail panel, found by its exact label.
+        ///
+        /// `fts_ui`'s `Button` has no attribute passthrough, so the panel's
+        /// controls are addressed the way a user sees them — by their caption.
+        pub fn panel_control(&self, label: &str) -> dioxus_test::ResolvedElement {
+            let sel = format!("[data-testid='{PANEL_TESTID}'] button");
+            let found = self
+                .tester
+                .query_all(sel.as_str())
+                .immediately()
+                .into_iter()
+                .find(|e| e.inner_html().trim() == label);
+            match found {
+                Some(e) => e,
+                None => {
+                    let labels: Vec<String> = self
+                        .tester
+                        .query_all(sel.as_str())
+                        .immediately()
+                        .into_iter()
+                        .map(|e| e.inner_html().trim().to_string())
+                        .collect();
+                    panic!("no {label:?} control in the band panel; found {labels:?}");
+                }
+            }
+        }
+
+        /// Walks the pointer from `from` to `to` in `steps` hit-tested moves,
+        /// the way a hand actually crosses the gap between the band node and
+        /// its detail panel. `held` reports the primary button state.
+        pub async fn glide(&self, from: (f64, f64), to: (f64, f64), steps: usize, held: bool) {
+            for step in 1..=steps {
+                let t = step as f64 / steps as f64;
+                self.tester.pointer_move(
+                    from.0 + (to.0 - from.0) * t,
+                    from.1 + (to.1 - from.1) * t,
+                    held,
+                );
+                self.settle().await;
+            }
+        }
+
+        /// A hit-tested press-and-release at a document point.
+        pub async fn tap(&self, x: f64, y: f64) {
+            self.tester.pointer_down(x, y);
+            self.settle().await;
+            self.tester.pointer_up(x, y);
+            self.settle().await;
+        }
     }
 }
 
@@ -244,9 +327,9 @@ async fn clicking_a_band_node_focuses_it_and_shows_its_popup() -> dioxus_test::R
     let (x, y) = fx.band_point(1);
 
     fx.tester.pointer_down(x, y);
-    let _ = fx.tester.pump().await;
+    fx.settle().await;
     fx.tester.pointer_up(x, y);
-    let _ = fx.tester.pump().await;
+    fx.settle().await;
 
     fx.tester
         .query(":root")
@@ -281,14 +364,14 @@ async fn dragging_a_band_node_changes_frequency_and_gain() -> dioxus_test::Resul
     let (dx, dy) = (40.0, -30.0);
 
     fx.tester.pointer_down(sx, sy);
-    let _ = fx.tester.pump().await;
+    fx.settle().await;
     for step in 1..=4 {
         let t = step as f64 / 4.0;
         fx.tester.pointer_move(sx + dx * t, sy + dy * t, true);
-        let _ = fx.tester.pump().await;
+        fx.settle().await;
     }
     fx.tester.pointer_up(sx + dx, sy + dy);
-    let _ = fx.tester.pump().await;
+    fx.settle().await;
 
     // Where the mapper says the final pointer position lands. `band_point`
     // used the graph origin, so subtract it back out for element coords.
@@ -347,3 +430,263 @@ async fn dragging_a_band_node_changes_frequency_and_gain() -> dioxus_test::Resul
 
     Ok(())
 }
+
+// ─────────────────────────────────────────────────────────────────────────
+// Band detail panel
+//
+// The panel that floats above a hovered/selected band is a real, clickable
+// surface, and these tests hold it to that. Every one of them drives
+// hit-tested pointer events at coordinates resolved from the live layout —
+// none of them poke a handler directly — so a panel that is unreachable in
+// the plugin window is unreachable here too.
+//
+// The bug they lock down: pointer events landing on the panel bubbled to the
+// graph carrying panel-relative coordinates, which the graph's hit-test read
+// as "nowhere near the band". Focus then faded on a 300 ms timer and the
+// panel vanished out from under the cursor before anything in it could be
+// clicked.
+// ─────────────────────────────────────────────────────────────────────────
+
+/// Hovering a band node opens its detail panel, and the panel is laid out
+/// with a real box — not collapsed to nothing.
+#[tokio::test]
+async fn hovering_a_band_opens_a_panel_with_real_layout() -> dioxus_test::Result<()> {
+    let fx = mount();
+    let (x, y) = fx.band_point(1);
+
+    assert!(fx.panel().is_none(), "panel showing before any pointer input");
+
+    fx.tester.pointer_move(x, y, false);
+    fx.settle().await;
+
+    let panel = fx.panel().expect("hovering a band node did not open its panel");
+    let (w, h) = panel.size();
+    assert!(w > 100.0 && h > 20.0, "panel collapsed to {w}x{h}");
+    Ok(())
+}
+
+/// THE regression: the pointer must be able to travel from the band node onto
+/// the panel without the panel disappearing. Every intermediate step is
+/// checked, so a fade anywhere along the path fails here.
+#[tokio::test]
+async fn panel_survives_the_pointer_trip_from_node_to_panel() -> dioxus_test::Result<()> {
+    let fx = mount();
+    let node = fx.band_point(1);
+
+    fx.tester.pointer_move(node.0, node.1, false);
+    fx.settle().await;
+    let target = fx.panel_center();
+
+    for step in 1..=10 {
+        let t = step as f64 / 10.0;
+        let px = node.0 + (target.0 - node.0) * t;
+        let py = node.1 + (target.1 - node.1) * t;
+        fx.tester.pointer_move(px, py, false);
+        fx.settle().await;
+        assert!(
+            fx.panel().is_some(),
+            "panel disappeared {}% of the way from the band node to the panel",
+            (t * 100.0) as i32,
+        );
+    }
+
+    // And it stays up while the pointer moves around inside it.
+    let (cx, cy) = fx.panel_center();
+    for (dx, dy) in [(-40.0, -8.0), (40.0, -8.0), (40.0, 8.0), (-40.0, 8.0)] {
+        fx.tester.pointer_move(cx + dx, cy + dy, false);
+        fx.settle().await;
+        assert!(fx.panel().is_some(), "panel closed while the pointer moved inside it");
+    }
+    Ok(())
+}
+
+/// Pointer events on the panel must not reach the graph's band hit-test. If
+/// they do, their panel-relative coordinates get read as a drag and the band
+/// jumps across the graph.
+#[tokio::test]
+async fn interacting_with_the_panel_does_not_move_the_band() -> dioxus_test::Result<()> {
+    let fx = mount();
+    let bp = &fx.params.bands[1];
+    let node = fx.band_point(1);
+
+    fx.tester.pointer_move(node.0, node.1, false);
+    fx.settle().await;
+
+    let freq_before = bp.freq_hz.value();
+    let gain_before = bp.gain_db.value();
+
+    let (cx, cy) = fx.panel_center();
+    fx.glide(node, (cx, cy), 6, false).await;
+    // Press, drag a little, release — all inside the panel.
+    fx.tester.pointer_down(cx, cy);
+    fx.settle().await;
+    fx.glide((cx, cy), (cx + 30.0, cy + 10.0), 3, true).await;
+
+    // Checked while the button is still down: the graph clears its selection
+    // rectangle on release, so after the release there would be nothing to
+    // see even if the press had leaked through.
+    assert!(
+        fx.tester
+            .query(dioxus_test::by_testid("eq-selection-rect"))
+            .immediately()
+            .is_err(),
+        "dragging inside the panel started a selection rectangle on the graph",
+    );
+
+    fx.tester.pointer_up(cx + 30.0, cy + 10.0);
+    fx.settle().await;
+
+    assert!(
+        (bp.freq_hz.value() - freq_before).abs() < 1e-3,
+        "panel interaction moved the band's frequency: {freq_before} → {}",
+        bp.freq_hz.value(),
+    );
+    assert!(
+        (bp.gain_db.value() - gain_before).abs() < 1e-3,
+        "panel interaction moved the band's gain: {gain_before} → {}",
+        bp.gain_db.value(),
+    );
+    Ok(())
+}
+
+/// The panel's solo control is reachable by a hit-tested click and actually
+/// drives the parameter through a host automation gesture.
+#[tokio::test]
+async fn panel_solo_control_is_clickable() -> dioxus_test::Result<()> {
+    let fx = mount();
+    let bp = &fx.params.bands[1];
+    let solo_key = ptr_key(bp.solo.as_ptr());
+    let node = fx.band_point(1);
+
+    fx.tester.pointer_move(node.0, node.1, false);
+    fx.settle().await;
+    assert!(bp.solo.value() < 0.5, "band 2 starts soloed");
+
+    let target = fx.panel_center();
+    fx.glide(node, target, 6, false).await;
+
+    let solo = fx.panel_control("S");
+    let (bx, by) = solo.document_origin();
+    let (bw, bh) = solo.size();
+    assert!(bw > 0.0 && bh > 0.0, "solo control has no layout box");
+    fx.tap(bx + bw as f64 / 2.0, by + bh as f64 / 2.0).await;
+
+    assert!(
+        bp.solo.value() > 0.5,
+        "clicking the panel's solo control did not solo the band",
+    );
+    let log = fx.log.lock().unwrap();
+    assert!(
+        log.iter().any(|g| matches!(g, Gesture::Set(k, v) if *k == solo_key && *v > 0.5)),
+        "no host automation gesture for solo: {log:?}",
+    );
+    Ok(())
+}
+
+/// Same for the bypass control at the other end of the panel's control row —
+/// proving the whole row is reachable, not just the middle of the panel.
+#[tokio::test]
+async fn panel_bypass_control_is_clickable() -> dioxus_test::Result<()> {
+    let fx = mount();
+    let bp = &fx.params.bands[1];
+    let node = fx.band_point(1);
+
+    fx.tester.pointer_move(node.0, node.1, false);
+    fx.settle().await;
+    assert!(bp.enabled.value() > 0.5, "band 2 starts bypassed");
+
+    let target = fx.panel_center();
+    fx.glide(node, target, 6, false).await;
+
+    let bypass = fx.panel_control("On");
+    let (bx, by) = bypass.document_origin();
+    let (bw, bh) = bypass.size();
+    fx.tap(bx + bw as f64 / 2.0, by + bh as f64 / 2.0).await;
+
+    assert!(
+        bp.enabled.value() < 0.5,
+        "clicking the panel's bypass control did not bypass the band",
+    );
+    Ok(())
+}
+
+/// A band the user has *selected* (clicked) keeps its panel up even when the
+/// pointer wanders off, so the panel can be aimed at deliberately.
+#[tokio::test]
+async fn selected_band_keeps_its_panel_when_the_pointer_leaves() -> dioxus_test::Result<()> {
+    let fx = mount();
+    let node = fx.band_point(1);
+    let (ox, oy) = fx.graph_origin();
+
+    fx.tap(node.0, node.1).await;
+    assert!(fx.panel().is_some(), "clicking a band did not open its panel");
+
+    // Far corner of the graph, well outside any band's focus radius, with
+    // enough wall-clock time for the fade timer to have fired several times.
+    let far = (ox + 760.0, oy + 330.0);
+    for _ in 0..3 {
+        fx.glide(node, far, 4, false).await;
+        std::thread::sleep(std::time::Duration::from_millis(200));
+        fx.tester.pointer_move(far.0, far.1, false);
+        fx.settle().await;
+    }
+
+    assert!(
+        fx.panel().is_some(),
+        "the selected band's panel faded while the pointer was elsewhere",
+    );
+    Ok(())
+}
+
+/// …and clicking empty graph is how that sticky panel is dismissed.
+#[tokio::test]
+async fn clicking_empty_graph_dismisses_the_selected_panel() -> dioxus_test::Result<()> {
+    let fx = mount();
+    let node = fx.band_point(1);
+    let (ox, oy) = fx.graph_origin();
+
+    fx.tap(node.0, node.1).await;
+    assert!(fx.panel().is_some(), "clicking a band did not open its panel");
+
+    fx.tap(ox + 760.0, oy + 330.0).await;
+    // The fade path still needs a move event to run.
+    fx.tester.pointer_move(ox + 755.0, oy + 325.0, false);
+    fx.settle().await;
+
+    assert!(
+        fx.panel().is_none(),
+        "clicking empty graph left the panel up",
+    );
+    Ok(())
+}
+
+/// The stickiness above must not become permanence: a merely *hovered* band
+/// (never clicked, never selected) still closes its panel once the pointer
+/// leaves and the fade timer expires.
+#[tokio::test]
+async fn hovered_only_panel_still_fades_after_the_pointer_leaves() -> dioxus_test::Result<()> {
+    let fx = mount();
+    let node = fx.band_point(1);
+    let (ox, oy) = fx.graph_origin();
+
+    fx.tester.pointer_move(node.0, node.1, false);
+    fx.settle().await;
+    assert!(fx.panel().is_some(), "hover did not open the panel");
+
+    // Leave, wait past both the fade timeout and the panel-contact grace
+    // period (real wall clock — the graph timestamps with SystemTime), then
+    // move again so the timer actually runs.
+    let far = (ox + 760.0, oy + 330.0);
+    fx.tester.pointer_move(far.0, far.1, false);
+    fx.settle().await;
+    std::thread::sleep(std::time::Duration::from_millis(700));
+    fx.tester.pointer_move(far.0 - 5.0, far.1 - 5.0, false);
+    fx.settle().await;
+
+    assert!(
+        fx.panel().is_none(),
+        "a hover-only panel never closed after the pointer left",
+    );
+    Ok(())
+}
+
