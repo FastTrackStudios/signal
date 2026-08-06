@@ -129,7 +129,9 @@ static ITEMS_1176: &[RackItem] = &[
             x: 710.0,
             y: 150.0,
             w: 208.0,
-            h: 268.0,
+            // Full panel height: the stripe is a painted band across the
+            // whole plate, edge to edge, not an inset block.
+            h: 300.0,
             color: "#1b5f79",
         },
         // The jewel above the frame, on the blue.
@@ -164,9 +166,10 @@ static ITEMS_1176: &[RackItem] = &[
 
 /// One finish of the FET limiter.
 ///
-/// The three the unit came in differ in paint and nothing else, so they share
-/// [`ITEMS_1176`] and the same profile mappings. The blue meter section is
-/// common to all three.
+/// The three the unit came in differ in colour and nothing else, so they share
+/// [`ITEMS_1176`] and the same profile mappings. All three are anodised
+/// aluminium — black, natural and plum — so all three are brushed; the blue
+/// meter section is common to them too.
 const fn fet_limiter(
     id: &'static str,
     paint: &'static str,
@@ -200,7 +203,8 @@ pub static UREI_1176: RackDesign = fet_limiter(
     "#ded7c9",
     "#9a9384",
     "#8d8a84",
-    PanelTexture::Painted,
+    // Black anodising: the same grain, a third as visible on it.
+    PanelTexture::Brushed { strength: 30 },
 );
 
 /// Brushed aluminium.
@@ -210,8 +214,7 @@ pub static UREI_1176_SILVER: RackDesign = fet_limiter(
     "#1e1f21",
     "#55575a",
     "#b6b7b5",
-    // The one that is actually a metal plate.
-    PanelTexture::Brushed,
+    PanelTexture::Brushed { strength: 100 },
 );
 
 /// The LN's plum panel.
@@ -221,7 +224,8 @@ pub static UREI_1176_LN: RackDesign = fet_limiter(
     "#ece2ec",
     "#a094a2",
     "#9b8c9d",
-    PanelTexture::Painted,
+    // Plum is mid-toned: between the natural and the black plate.
+    PanelTexture::Brushed { strength: 65 },
 );
 
 // ─────────────────────────────────────────────────────────────────────────
