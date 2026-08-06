@@ -12,13 +12,44 @@ default:
 # whenever UI-crate class usage changes. input.css @source globs scan the
 # signal/session UI crates + libs/fts-ui + libs/dock.
 
+# Point apps/fasttrackstudio/.lumen-blocks at the lumen-blocks checkout
+# cargo actually resolved.
+#
+# input.css used to reach into $CARGO_HOME with a hardcoded /home/cody path
+# and a `lumen-blocks-*/*/` wildcard. That wildcard matched EVERY checkout
+# in the cache, not the pinned one — four of them here — so the compiled
+# sheet depended on which revisions happened to be lying around, and
+# changed on its own as the cache moved. That's what kept this file
+# permanently dirty. `cargo metadata` knows the real answer; ask it.
+_lumen-link:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    dir=$(cargo metadata --format-version 1 2>/dev/null \
+        | python3 -c 'import json,sys,os; print(next(os.path.dirname(p["manifest_path"]) for p in json.load(sys.stdin)["packages"] if p["name"]=="lumen-blocks"))')
+    ln -sfn "$dir" apps/fasttrackstudio/.lumen-blocks
+
 # Build Tailwind CSS (v4)
-tailwind:
+tailwind: _lumen-link
     cd apps/fasttrackstudio && tailwindcss -i ./input.css -o ./assets/tailwind-signal.css --minify
 
 # Watch Tailwind CSS for changes
-tailwind-watch:
+tailwind-watch: _lumen-link
     cd apps/fasttrackstudio && tailwindcss -i ./input.css -o ./assets/tailwind-signal.css --watch --minify
+
+# Fail if the committed sheet isn't what the sources produce.
+#
+# tailwind-signal.css is `include_str!`d by rig_view.rs and main.rs, so it
+# has to be committed — which means it can go stale silently when someone
+# adds a class and doesn't rebuild. It was stale by ~50 classes when this
+# check was written.
+tailwind-check: tailwind
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if ! git diff --quiet -- apps/fasttrackstudio/assets/tailwind-signal.css; then
+        echo "tailwind-signal.css is out of date — run 'just tailwind' and commit the result" >&2
+        exit 1
+    fi
+    echo "tailwind-signal.css is up to date"
 
 # ── Live Rigs (carried from the dissolved signal workspace) ──────────────
 # Open a live instrument rig: live input → FX chain (NAM amp / cab / plugins)
