@@ -105,6 +105,7 @@ pub fn EqRackFace(
             scale,
             background: design.paint.to_string(),
             chrome: design.chrome.to_string(),
+            ends: design.ends,
 
             for item in design.items.iter().copied() {
                 {

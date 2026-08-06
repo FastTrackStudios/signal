@@ -83,6 +83,7 @@ pub fn RackFace(
             scale,
             background: design.paint.to_string(),
             chrome: design.chrome.to_string(),
+            ends: design.ends,
 
             for (index , item) in design.items.iter().copied().enumerate() {
                 div {
@@ -112,6 +113,7 @@ pub fn RackFace(
                                     },
                                     legend: legend.to_string(),
                                     bezel: design.vu_bezel,
+                                    card: design.vu_card,
                                 }
                             }
                         },
