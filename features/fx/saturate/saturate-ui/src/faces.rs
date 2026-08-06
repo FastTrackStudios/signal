@@ -238,7 +238,11 @@ pub fn SatFace(
     let design = design_for(&profile_id);
     let profile =
         saturate_profiles::profile_by_id(&profile_id).unwrap_or(&saturate_profiles::PROFILES[0]);
-    let scale = fts_ui_audio::hardware::panel::panel_scale(W, H, crate::control_view::RAIL_W);
+    // The rail's own width, from fts-ui-audio rather than from
+    // `control_view` — the panels are drawn without the `native` feature too,
+    // and reaching into a module that is not compiled there broke the crate
+    // for anything but the plugin build.
+    let scale = fts_ui_audio::hardware::panel::panel_scale(W, H, fts_ui_audio::shell::RAIL_W);
 
     let value = |name: &str, fallback: f32| {
         handles

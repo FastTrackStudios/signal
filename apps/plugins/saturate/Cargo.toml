@@ -4,7 +4,7 @@ version.workspace = true
 edition = "2021"          # matches the nice-plug plugin stack (level-plugin, tune-plugin)
 authors.workspace = true
 license.workspace = true
-description = "FTS Saturate — CLAP/VST3 saturation plugin (tanh/tape/tube/hard curves) over the saturate engine"
+description = "FTS Saturate — CLAP/VST3 saturation plugin: five circuits over the Class-A preamp engine"
 
 [lib]
 # cdylib → the loadable CLAP/VST3 binary; lib → tests + a future standalone host.
@@ -14,6 +14,15 @@ crate-type = ["cdylib", "lib"]
 # Plugin framework. Must be a direct dep — the export macros expand to
 # absolute `::nice_plug::…` paths.
 nice-plug.workspace = true
+audiocore-core = { workspace = true }
 
 # The DSP facade (re-exports saturate-dsp). Never depend on saturate-dsp directly.
 saturate.workspace = true
+# What each circuit IS, and the only place that knows how a knob reaches the
+# DSP — the shell deliberately carries no voicing table of its own.
+saturate-profiles.workspace = true
+# The Blitz/nice-plug editor: the five circuits and their panels. `native`
+# pulls nice-plug-dioxus.
+saturate-ui = { workspace = true, features = ["native"] }
+# The meters the editor reads.
+atomic_float = { workspace = true }
