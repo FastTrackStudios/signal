@@ -26,37 +26,27 @@ const ROW: f64 = 152.0;
 // FET — UREI 1176
 // ─────────────────────────────────────────────────────────────────────────
 
-/// The FET limiter, laid out from the unit.
+/// The FET limiter's panel, laid out from the unit — measured off the
+/// photograph rather than spaced by eye.
 ///
-/// Left to right as the panel runs: INPUT, OUTPUT, ATTACK, RELEASE, the ratio
-/// buttons, then the meter in its own painted section with the meter-source
-/// buttons beside it. Earlier versions of this face had the meter on the left,
-/// which is the panel mirrored.
+/// Reading it as fractions of panel width: INPUT sits at 0.13 and OUTPUT at
+/// 0.32, both on the vertical centre; the ATTACK/RELEASE pair stacks at 0.50
+/// at half the diameter, its own centre on the same line; the ratio bank at
+/// 0.59; the meter's painted section centred at 0.74; the meter-source bank at
+/// 0.88. Those ratios are what this table is.
 ///
 /// INPUT drives *into* compression — there is no threshold control, which is
 /// the unit's whole character — and ATTACK and RELEASE run backwards, fastest
 /// fully clockwise. The printed scales are the unit's: attenuation in dB from
-/// ∞ down to 0, marked with dots.
-pub static UREI_1176: RackDesign = RackDesign {
-    id: "urei_1176",
-    w: 960.0,
-    h: 300.0,
-    paint: "linear-gradient(178deg, #2b2b2f 0%, #1a1a1e 52%, #101013 100%)",
-    ink: "#ded7c9",
-    dim_ink: "#9a9384",
-    chrome: "#8d8a84",
-    vu: VuFace::Ivory,
-    vu_bezel: false,
-    vu_card: VuScale::Vu,
-    ends: PanelEnds::RackEars,
-    knob: KnobStyle::SilverTop,
-    items: &[
-        // ── The four controls ────────────────────────────────────────────
+/// ∞ down to 0, marked with dots. The ratio buttons are push-in selectors:
+/// the engaged one is the one sitting lower.
+static ITEMS_1176: &[RackItem] = &[
+        // ── The two big knobs, on the centre line ────────────────────────
         RackItem::Knob {
             id: "input",
             legend: "Input",
-            x: 132.0,
-            y: 136.0,
+            x: 126.0,
+            y: 150.0,
             d: 84.0,
             ring: Ring::Dots(&["∞", "48", "36", "30", "24", "18", "12", "6", "0"]),
             tint: None,
@@ -65,36 +55,64 @@ pub static UREI_1176: RackDesign = RackDesign {
         RackItem::Knob {
             id: "output",
             legend: "Output",
-            x: 306.0,
-            y: 136.0,
+            x: 308.0,
+            y: 150.0,
             d: 84.0,
             ring: Ring::Dots(&["∞", "48", "36", "30", "24", "18", "12", "6", "0"]),
             tint: None,
             style: None,
         },
+
+        // ── The trims that live between them ─────────────────────────────
+        RackItem::Text { x: 217.0, y: 74.0, text: "HR", size: 7.0, strong: false },
+        RackItem::Knob {
+            id: "",
+            legend: "",
+            x: 217.0,
+            y: 104.0,
+            d: 20.0,
+            ring: Ring::None,
+            tint: None,
+            style: Some(KnobStyle::MetalFluted),
+        },
+        RackItem::Text { x: 217.0, y: 168.0, text: "Mix", size: 7.0, strong: false },
+        RackItem::Knob {
+            id: "",
+            legend: "",
+            x: 217.0,
+            y: 198.0,
+            d: 20.0,
+            ring: Ring::None,
+            tint: None,
+            style: Some(KnobStyle::MetalFluted),
+        },
+
+        // ── Attack over release, half the size, same centre line ─────────
+        RackItem::Text { x: 480.0, y: 56.0, text: "Attack", size: 8.0, strong: false },
         RackItem::Knob {
             id: "attack",
-            legend: "Attack",
-            x: 452.0,
-            y: 108.0,
-            d: 54.0,
+            legend: "",
+            x: 480.0,
+            y: 100.0,
+            d: 42.0,
             ring: Ring::Dots(&["1", "2", "3", "4", "5", "6", "7"]),
             tint: None,
             style: None,
         },
+        RackItem::Text { x: 480.0, y: 160.0, text: "Release", size: 8.0, strong: false },
         RackItem::Knob {
             id: "release",
-            legend: "Release",
-            x: 452.0,
-            y: 226.0,
-            d: 54.0,
+            legend: "",
+            x: 480.0,
+            y: 204.0,
+            d: 42.0,
             ring: Ring::Dots(&["1", "2", "3", "4", "5", "6", "7"]),
             tint: None,
             style: None,
         },
 
-        // ── Ratio ────────────────────────────────────────────────────────
-        RackItem::Text { x: 566.0, y: 40.0, text: "Ratio", size: 8.0, strong: false },
+        // ── Ratio: push-in selectors ─────────────────────────────────────
+        RackItem::Text { x: 566.0, y: 44.0, text: "Ratio", size: 8.0, strong: false },
         RackItem::Buttons {
             id: "ratio",
             legend: "",
@@ -105,33 +123,94 @@ pub static UREI_1176: RackDesign = RackDesign {
 
         // ── The meter, in its own paint ──────────────────────────────────
         RackItem::Region {
-            x: 750.0,
+            x: 710.0,
             y: 150.0,
-            w: 228.0,
+            w: 208.0,
             h: 268.0,
             color: "#1b5f79",
         },
         RackItem::Vu {
-            x: 750.0,
+            x: 710.0,
             y: 118.0,
-            w: 196.0,
+            w: 182.0,
             mode: VuMode::GainReduction,
             legend: "Gain Reduction",
         },
-        RackItem::Text { x: 750.0, y: 236.0, text: "FTS Comp", size: 13.0, strong: true },
-        RackItem::Text { x: 750.0, y: 258.0, text: "Limiting Amplifier", size: 8.0, strong: false },
+        RackItem::TintedText { x: 710.0, y: 232.0, text: "FTS Comp", size: 12.0, color: "#f0f5f8" },
+        RackItem::TintedText {
+            x: 710.0,
+            y: 254.0,
+            text: "Limiting Amplifier",
+            size: 8.0,
+            color: "#bcd8e4",
+        },
 
         // ── Meter source ─────────────────────────────────────────────────
-        RackItem::Text { x: 884.0, y: 40.0, text: "Meter", size: 8.0, strong: false },
+        RackItem::Text { x: 848.0, y: 44.0, text: "Meter", size: 8.0, strong: false },
         RackItem::Buttons {
             id: "",
             legend: "",
-            x: 884.0,
+            x: 848.0,
             y: 150.0,
             labels: &["GR", "+8", "+4", "Off"],
         },
-    ],
-};
+];
+
+/// One finish of the FET limiter.
+///
+/// The three the unit came in differ in paint and nothing else, so they share
+/// [`ITEMS_1176`] and the same profile mappings. The blue meter section is
+/// common to all three.
+const fn fet_limiter(
+    id: &'static str,
+    paint: &'static str,
+    ink: &'static str,
+    dim_ink: &'static str,
+    chrome: &'static str,
+) -> RackDesign {
+    RackDesign {
+        id,
+        w: 960.0,
+        h: 300.0,
+        paint,
+        ink,
+        dim_ink,
+        chrome,
+        vu: VuFace::Ivory,
+        vu_bezel: false,
+        vu_card: VuScale::Vu,
+        ends: PanelEnds::RackEars,
+        knob: KnobStyle::SilverTop,
+        items: ITEMS_1176,
+    }
+}
+
+/// Blackface.
+pub static UREI_1176: RackDesign = fet_limiter(
+    "urei_1176",
+    "linear-gradient(178deg, #2b2b2f 0%, #1a1a1e 52%, #101013 100%)",
+    "#ded7c9",
+    "#9a9384",
+    "#8d8a84",
+);
+
+/// Brushed aluminium.
+pub static UREI_1176_SILVER: RackDesign = fet_limiter(
+    "urei_1176_silver",
+    "linear-gradient(178deg, #d6d7d5 0%, #c0c1bf 44%, #a5a6a4 100%)",
+    "#1e1f21",
+    "#55575a",
+    "#b6b7b5",
+);
+
+/// The LN's plum panel.
+pub static UREI_1176_LN: RackDesign = fet_limiter(
+    "urei_1176_ln",
+    "linear-gradient(178deg, #3b2c3d 0%, #2b202d 50%, #1c141e 100%)",
+    "#ece2ec",
+    "#a094a2",
+    "#9b8c9d",
+);
 
 // ─────────────────────────────────────────────────────────────────────────
 // Opto — LA-2A, CL 1B
@@ -963,6 +1042,8 @@ pub static DISTRESSOR: RackDesign = RackDesign {
 pub fn design_for(profile_id: &str) -> Option<&'static RackDesign> {
     Some(match profile_id {
         "urei_1176" => &UREI_1176,
+        "urei_1176_silver" => &UREI_1176_SILVER,
+        "urei_1176_ln" => &UREI_1176_LN,
         "la2a" => &LA2A,
         "cl1b" => &CL1B,
         "fairchild670" => &FAIRCHILD_670,
@@ -1029,8 +1110,9 @@ mod tests {
                 "la2a" => 2,
                 // The dbx's power and its three meter-source buttons.
                 "dbx160" => 4,
-                // The 1176's meter-source bank.
-                "urei_1176" => 1,
+                // The FET limiter's meter-source bank and its two trims — the
+                // same panel in three finishes.
+                "urei_1176" | "urei_1176_silver" | "urei_1176_ln" => 3,
                 "distressor" => 1,
                 _ => 0,
             };

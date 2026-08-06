@@ -8,7 +8,13 @@
 
 use crate::{Constraint, ParamMapping, Profile, ProfileControl};
 
-pub struct Urei1176Profile;
+/// The FET limiter. One circuit, three finishes — the panel colour is paint,
+/// not behaviour, so they share every control and constraint below and differ
+/// only in `id` and `name`.
+pub struct Urei1176Profile {
+    pub id: &'static str,
+    pub name: &'static str,
+}
 
 static CONTROLS: &[ProfileControl] = &[
     ProfileControl {
@@ -103,11 +109,11 @@ fn input_drive(x: f64) -> f64 {
 
 impl Profile for Urei1176Profile {
     fn id(&self) -> &'static str {
-        "urei_1176"
+        self.id
     }
 
     fn name(&self) -> &'static str {
-        "UREI 1176"
+        self.name
     }
 
     fn controls(&self) -> &[ProfileControl] {

@@ -107,6 +107,8 @@ pub const PROFILE_LABELS: &[&str] = &[
     "SSL Bus",
     "dbx 160",
     "Distressor",
+    "1176 Silver",
+    "1176 LN",
 ];
 
 /// Full parameter tree.

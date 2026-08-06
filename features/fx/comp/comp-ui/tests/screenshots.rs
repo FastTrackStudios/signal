@@ -169,7 +169,15 @@ async fn shot_1176_face() {
 /// touching the panel kit.
 #[tokio::test]
 async fn shot_every_other_unit() {
-    for id in ["cl1b", "fairchild670", "manley_vari_mu", "dbx160", "distressor"] {
+    for id in [
+        "cl1b",
+        "fairchild670",
+        "manley_vari_mu",
+        "dbx160",
+        "distressor",
+        "urei_1176_silver",
+        "urei_1176_ln",
+    ] {
         let mut fx = mount_face(id).await;
         fx.ui.gain_reduction_db
             .store(6.0, std::sync::atomic::Ordering::Relaxed);

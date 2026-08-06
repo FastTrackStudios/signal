@@ -55,6 +55,8 @@ pub fn profile_badge(profile_id: &str) -> &'static str {
     match profile_id {
         "control" => "MAIN",
         "urei_1176" => "76",
+        "urei_1176_silver" => "76s",
+        "urei_1176_ln" => "LN",
         "la2a" => "2A",
         "cl1b" => "CL",
         "fairchild670" => "670",

@@ -135,6 +135,16 @@ pub struct ProfileParamWrite {
 }
 
 pub fn profile_skin(profile_id: &str) -> ProfileSkin {
+    // The FET limiter's three finishes are one unit as far as the rail is
+    // concerned, so they wear one skin — reported under the id asked for.
+    if let "urei_1176_silver" | "urei_1176_ln" = profile_id {
+        let mut skin = profile_skin("urei_1176");
+        skin.profile_id = match profile_id {
+            "urei_1176_silver" => "urei_1176_silver",
+            _ => "urei_1176_ln",
+        };
+        return skin;
+    }
     match profile_id {
         "la2a" => ProfileSkin {
             profile_id: "la2a",
@@ -213,6 +223,8 @@ pub fn profile_skin(profile_id: &str) -> ProfileSkin {
             strip_bg: "linear-gradient(180deg, rgba(22,44,56,0.98), rgba(13,26,34,0.98))",
             overlay_gradient: "linear-gradient(to top, rgba(18,40,52,0.74) 0%, rgba(18,40,52,0.26) 55%, transparent 100%)",
         },
+        // The three FET finishes share a skin — the rail tints from the
+        // unit, and they are one unit.
         "urei_1176" => ProfileSkin {
             profile_id: "urei_1176",
             macro_group_label: "FET",
