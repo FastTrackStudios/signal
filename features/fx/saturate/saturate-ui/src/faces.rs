@@ -110,11 +110,14 @@ const SS_KNOBS: &[KnobSpec] = &[
     knob("output", "Output", 866.0, 54.0, KnobStyle::SilverTop),
 ];
 
+// The two circuit knobs carry this family's real pair — Ceiling/Knee on the
+// clipper, Bits/Rate on the crusher — so the shared legends here must not
+// claim either of those names, or Bitcrush shows "Rate" twice.
 const DIGITAL_KNOBS: &[KnobSpec] = &[
     knob("drive", "Drive", 130.0, 58.0, KnobStyle::Collet),
     knob("character_a", "Ceiling", 262.0, 58.0, KnobStyle::Collet),
     knob("character_b", "Bits", 390.0, 46.0, KnobStyle::Collet),
-    knob("tilt", "Rate", 510.0, 46.0, KnobStyle::Collet),
+    knob("tilt", "Tone", 510.0, 46.0, KnobStyle::Collet),
     knob("sag", "Dither", 630.0, 46.0, KnobStyle::Collet),
     knob("mix", "Mix", 750.0, 46.0, KnobStyle::Collet),
     knob("output", "Output", 866.0, 54.0, KnobStyle::Collet),
@@ -237,14 +240,24 @@ pub fn SatFace(
         saturate_profiles::profile_by_id(&profile_id).unwrap_or(&saturate_profiles::PROFILES[0]);
     let scale = fts_ui_audio::hardware::panel::panel_scale(W, H, crate::control_view::RAIL_W);
 
-    let value = |name: &str| {
+    let value = |name: &str, fallback: f32| {
         handles
             .get(name)
-            .map(|h| h.normalized() as f64)
-            .unwrap_or(0.5)
+            .map(|h| h.normalized())
+            .unwrap_or(fallback)
     };
-    // The curve is drawn from what actually shapes it.
-    let (drive, bias, mix) = (value("drive"), value("bias"), value("mix"));
+    // The curve is drawn from what actually shapes it — the same struct the
+    // plugin hands to `saturate_profiles::apply` on the audio thread.
+    let defaults = saturate_profiles::Controls::default();
+    let controls = saturate_profiles::Controls {
+        drive: value("drive", defaults.drive),
+        bias: value("bias", defaults.bias),
+        sag: value("sag", defaults.sag),
+        tilt: value("tilt", defaults.tilt),
+        character_a: value("character_a", defaults.character_a),
+        character_b: value("character_b", defaults.character_b),
+        mix: value("mix", defaults.mix),
+    };
 
     rsx! {
         Panel {
@@ -261,9 +274,8 @@ pub fn SatFace(
                     circuit: design.circuit,
                     accent: design.accent.to_string(),
                     ink: design.dim_ink.to_string(),
-                    drive,
-                    bias,
-                    mix,
+                    profile_id: profile_id.clone(),
+                    controls,
                     lift: variant_lift(&profile_id),
                 }
             }
@@ -318,65 +330,65 @@ pub fn SatFace(
 
 /// The transfer curve, live, with the circuit drawn around it.
 ///
-/// This is the honest picture of a saturator. The curve's *shape* is the
-/// sound, and its **asymmetry** is where even harmonics come from — so a tube
-/// panel shows its curve leaning as you move the bias, which is a thing no
-/// number on a panel has ever conveyed. A symmetric circuit's curve stays
-/// symmetric no matter what you do to it, and that is worth seeing too.
+/// This is the honest picture of a saturator, and it is honest because it is
+/// **the engine's own curve** — [`saturate_profiles::apply`] voices a stage
+/// exactly as the audio thread does, and this samples
+/// [`ClassAPreamp::transfer`] through it. A panel that drew a stylised
+/// impression of what a tube does would be a nicer drawing and a worse
+/// instrument: the whole reason to put a curve on a saturator is that its
+/// shape is the sound and its **asymmetry** is where even harmonics come
+/// from. Move a tube's Bias and watch the curve lean; move a transistor's and
+/// watch nothing happen, which is also true and also worth seeing.
+///
+/// Tilt is the one control that cannot appear here — it is a filter pair, so
+/// it has no single transfer curve — and rate reduction cannot either, since
+/// a held sample is a fact about time rather than about level. The step
+/// graphic beside the curve is what says so.
 #[component]
 fn CurveView(
     circuit: Circuit,
     accent: String,
     ink: String,
-    drive: f64,
-    bias: f64,
-    mix: f64,
+    profile_id: String,
+    controls: saturate_profiles::Controls,
     lift: f64,
 ) -> Element {
     let (w, h) = (620.0, 150.0);
     let (cx, cy) = (w / 2.0, h / 2.0);
     let half = 62.0;
+    let drive = controls.drive as f64;
+    let mix = controls.mix as f64;
     let glow = (0.35 + drive * 0.5).min(0.95) * lift.min(1.5);
     let body = accent.clone();
 
-    // The transfer function, sampled. Gain rises with drive; the asymmetry
-    // term is what a bias control actually does, and only the circuits that
-    // have one pass a bias that moves.
-    let gain = 1.0 + drive * 7.0;
-    let asym = match circuit {
-        Circuit::Valve => (bias - 0.5) * 1.4,
-        Circuit::Tape => (bias - 0.5) * 0.3,
-        _ => 0.0,
-    };
-    let shape = |x: f64| -> f64 {
-        let v = x * gain + asym;
-        match circuit {
-            // Soft, asymmetric — the bias offset is removed after shaping,
-            // exactly as the DSP's Tube curve does it.
-            Circuit::Valve => v.tanh() - asym.tanh(),
-            // A soft knee that becomes compression rather than clipping.
-            Circuit::Tape => (v - v.powi(3) / 3.0).clamp(-1.0, 1.0) * 0.85 + v.tanh() * 0.15,
-            // Saturates on rate of change more than level: the curve stays
-            // steep in the middle and folds at the extremes.
-            Circuit::Core => v.tanh() * 0.8 + (v * 0.5).tanh() * 0.2,
-            // A hard corner, drawn as hard as it sounds.
-            Circuit::Solid => v.clamp(-1.0, 1.0) * 0.92 + v.tanh() * 0.08,
-            // Not a curve at all: quantisation steps.
-            Circuit::Steps => {
-                let steps = (3.0 + (1.0 - drive) * 12.0).round();
-                (v.clamp(-1.0, 1.0) * steps).round() / steps
-            }
-        }
-    };
+    let profile = saturate_profiles::profile_by_id(&profile_id)
+        .unwrap_or(&saturate_profiles::PROFILES[0]);
+    let mut pre = saturate_dsp::preamp::ClassAPreamp::new(48_000.0);
+    let mut quantiser = saturate_dsp::digital::DigitalStage::new();
+    saturate_profiles::apply(profile, &controls, &mut pre, &mut quantiser);
+    // Rate reduction is time-domain and dither is noise; neither belongs in a
+    // static curve. Word length does — a crushed signal really is a staircase.
+    quantiser.rate = 1.0;
+    quantiser.dither = 0.0;
+
+    // The stage compensates its own drive (`process` divides the shaped
+    // signal by it), so the drawing has to as well — otherwise turning drive
+    // up would draw a steeper line rather than a flatter one, which is the
+    // opposite of what you hear.
+    let compensate = pre.drive.max(1.0e-3);
 
     let mut path = String::new();
-    let samples = 120;
+    let samples = 200;
     for i in 0..=samples {
         let x = -1.0 + 2.0 * i as f64 / samples as f64;
-        let y = shape(x).clamp(-1.0, 1.0);
+        let shaped = pre.transfer(x as f32) / compensate;
+        let y = (quantiser.process(0, shaped) as f64).clamp(-1.0, 1.0);
         let (px, py) = (cx + x * half * 2.0, cy - y * half);
         path.push_str(&format!("{}{:.1} {:.1}", if i == 0 { "M " } else { " L " }, px, py));
     }
+    // The corner markers on the solid-state panel sit where the curve gives
+    // up, which is the drive it takes to reach the rail.
+    let gain = compensate as f64;
 
     rsx! {
         svg {
@@ -545,6 +557,77 @@ mod tests {
                 "{} offers Bias on a symmetric curve",
                 design.family,
             );
+        }
+    }
+
+    /// …and now that a profile names its own shapers, "asymmetric" is a fact
+    /// about the engine rather than about which panel it draws. A family that
+    /// offers Bias must be built on a stage where moving the operating point
+    /// actually changes the harmonics.
+    #[test]
+    fn a_panel_that_offers_bias_is_built_on_an_asymmetric_stage() {
+        for category in saturate_profiles::CATEGORIES {
+            let design = design_for(category.profiles[0]);
+            if !design.knobs.iter().any(|k| k.param == "bias") {
+                continue;
+            }
+            for id in category.profiles {
+                let v = saturate_profiles::profile_by_id(id).unwrap().voicing;
+                assert!(
+                    v.positive != v.negative || v.skew != 0.0,
+                    "{id} offers Bias but its two halves are the same circuit",
+                );
+            }
+        }
+    }
+
+    /// Two knobs with the same word under them is a panel you cannot read.
+    /// The circuit knobs are renamed per profile, so the clash only appears
+    /// on one of the nine — which is exactly the kind of thing a static
+    /// legend table hides.
+    #[test]
+    fn no_profile_shows_the_same_legend_twice() {
+        for profile in saturate_profiles::PROFILES {
+            let design = design_for(profile.id);
+            let (a, b) = character_legends(profile.id);
+            let mut seen: Vec<&str> = Vec::new();
+            for spec in design.knobs {
+                let legend = match spec.param {
+                    "character_a" => a,
+                    "character_b" => b,
+                    _ => spec.legend,
+                };
+                assert!(
+                    !seen.contains(&legend),
+                    "{} shows {legend:?} twice",
+                    profile.id,
+                );
+                seen.push(legend);
+            }
+        }
+    }
+
+    /// The panel draws the engine, so a control the panel places must be one
+    /// the profile has actually wired to something. A knob drawn on a circuit
+    /// that ignores it is the drift the voicing table exists to prevent.
+    #[test]
+    fn every_circuit_knob_a_panel_places_is_wired_by_its_profile() {
+        use saturate_profiles::Character;
+        for profile in saturate_profiles::PROFILES {
+            let design = design_for(profile.id);
+            for (param, role) in [
+                ("character_a", profile.voicing.character_a),
+                ("character_b", profile.voicing.character_b),
+            ] {
+                if design.knobs.iter().any(|k| k.param == param) {
+                    assert_ne!(
+                        role,
+                        Character::None,
+                        "{} draws {param} and wires it to nothing",
+                        profile.id,
+                    );
+                }
+            }
         }
     }
 
