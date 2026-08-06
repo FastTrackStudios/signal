@@ -26,13 +26,21 @@ const ROW: f64 = 152.0;
 // FET — UREI 1176
 // ─────────────────────────────────────────────────────────────────────────
 
-/// Black FET panel: INPUT drives *into* compression (there is no threshold
-/// knob), the ratio is four buttons, and ATTACK/RELEASE run backwards —
-/// fastest fully clockwise.
+/// The FET limiter, laid out from the unit.
+///
+/// Left to right as the panel runs: INPUT, OUTPUT, ATTACK, RELEASE, the ratio
+/// buttons, then the meter in its own painted section with the meter-source
+/// buttons beside it. Earlier versions of this face had the meter on the left,
+/// which is the panel mirrored.
+///
+/// INPUT drives *into* compression — there is no threshold control, which is
+/// the unit's whole character — and ATTACK and RELEASE run backwards, fastest
+/// fully clockwise. The printed scales are the unit's: attenuation in dB from
+/// ∞ down to 0, marked with dots.
 pub static UREI_1176: RackDesign = RackDesign {
     id: "urei_1176",
-    w: W,
-    h: H,
+    w: 960.0,
+    h: 300.0,
     paint: "linear-gradient(178deg, #2b2b2f 0%, #1a1a1e 52%, #101013 100%)",
     ink: "#ded7c9",
     dim_ink: "#9a9384",
@@ -41,94 +49,86 @@ pub static UREI_1176: RackDesign = RackDesign {
     vu_bezel: false,
     vu_card: VuScale::Vu,
     ends: PanelEnds::RackEars,
-    // Documented: black plastic bodies with brushed silver tops and
-    // clear plastic collars — the large pair for INPUT and OUTPUT, the
-    // smaller for ATTACK and RELEASE.
     knob: KnobStyle::SilverTop,
     items: &[
-        RackItem::Vu {
-            x: 186.0,
-            y: 140.0,
-            w: 228.0,
-            mode: VuMode::GainReduction,
-            legend: "Gain Reduction",
-        },
-        RackItem::Buttons {
-            id: "ratio",
-            legend: "Ratio",
-            x: 352.0,
-            y: ROW,
-            labels: &["4", "8", "12", "20", "All"],
-        },
+        // ── The four controls ────────────────────────────────────────────
         RackItem::Knob {
             id: "input",
             legend: "Input",
-            x: 470.0,
-            y: ROW,
-            d: 58.0,
-            ring: Ring::Linear {
-                from: -48.0,
-                to: 12.0,
-                majors: 5,
-            },
+            x: 132.0,
+            y: 136.0,
+            d: 84.0,
+            ring: Ring::Dots(&["∞", "48", "36", "30", "24", "18", "12", "6", "0"]),
             tint: None,
             style: None,
         },
         RackItem::Knob {
             id: "output",
             legend: "Output",
-            x: 583.0,
-            y: ROW,
-            d: 58.0,
-            ring: Ring::Linear {
-                from: -12.0,
-                to: 24.0,
-                majors: 5,
-            },
+            x: 306.0,
+            y: 136.0,
+            d: 84.0,
+            ring: Ring::Dots(&["∞", "48", "36", "30", "24", "18", "12", "6", "0"]),
             tint: None,
             style: None,
         },
         RackItem::Knob {
             id: "attack",
             legend: "Attack",
-            x: 696.0,
-            y: ROW,
-            d: 58.0,
-            ring: Ring::Linear {
-                from: 1.0,
-                to: 7.0,
-                majors: 7,
-            },
+            x: 452.0,
+            y: 108.0,
+            d: 54.0,
+            ring: Ring::Dots(&["1", "2", "3", "4", "5", "6", "7"]),
             tint: None,
             style: None,
         },
         RackItem::Knob {
             id: "release",
             legend: "Release",
-            x: 809.0,
-            y: ROW,
-            d: 58.0,
-            ring: Ring::Linear {
-                from: 1.0,
-                to: 7.0,
-                majors: 7,
-            },
+            x: 452.0,
+            y: 226.0,
+            d: 54.0,
+            ring: Ring::Dots(&["1", "2", "3", "4", "5", "6", "7"]),
             tint: None,
             style: None,
         },
-        RackItem::Text {
-            x: 600.0,
-            y: 60.0,
-            text: "Peak Limiter",
-            size: 14.0,
-            strong: true,
+
+        // ── Ratio ────────────────────────────────────────────────────────
+        RackItem::Text { x: 566.0, y: 40.0, text: "Ratio", size: 8.0, strong: false },
+        RackItem::Buttons {
+            id: "ratio",
+            legend: "",
+            x: 566.0,
+            y: 150.0,
+            labels: &["4", "8", "12", "20", "All"],
         },
-        RackItem::Text {
-            x: 600.0,
-            y: 84.0,
-            text: "FTS Comp · FET",
-            size: 9.0,
-            strong: false,
+
+        // ── The meter, in its own paint ──────────────────────────────────
+        RackItem::Region {
+            x: 750.0,
+            y: 150.0,
+            w: 228.0,
+            h: 268.0,
+            color: "#1b5f79",
+        },
+        RackItem::Vu {
+            x: 750.0,
+            y: 118.0,
+            w: 196.0,
+            mode: VuMode::GainReduction,
+            legend: "Gain Reduction",
+        },
+        RackItem::Text { x: 750.0, y: 236.0, text: "FTS Comp", size: 13.0, strong: true },
+        RackItem::Text { x: 750.0, y: 258.0, text: "Limiting Amplifier", size: 8.0, strong: false },
+
+        // ── Meter source ─────────────────────────────────────────────────
+        RackItem::Text { x: 884.0, y: 40.0, text: "Meter", size: 8.0, strong: false },
+        RackItem::Buttons {
+            id: "",
+            legend: "",
+            x: 884.0,
+            y: 150.0,
+            labels: &["GR", "+8", "+4", "Off"],
         },
     ],
 };
@@ -1007,6 +1007,8 @@ mod tests {
                     RackItem::Knob { id, .. }
                         | RackItem::Button { id, .. }
                         | RackItem::Switch { id, .. }
+                        | RackItem::Buttons { id, .. }
+                        | RackItem::LedSelect { id, .. }
                     if id.is_empty()
                 )
             })
@@ -1027,6 +1029,8 @@ mod tests {
                 "la2a" => 2,
                 // The dbx's power and its three meter-source buttons.
                 "dbx160" => 4,
+                // The 1176's meter-source bank.
+                "urei_1176" => 1,
                 "distressor" => 1,
                 _ => 0,
             };
@@ -1121,6 +1125,7 @@ mod tests {
                     | RackItem::LedMeter { .. }
                     | RackItem::Divider { .. }
                     | RackItem::Frame { .. }
+                    | RackItem::Region { .. }
                     | RackItem::LedBar { .. }
                     | RackItem::LedSelect { .. } => continue,
                 };

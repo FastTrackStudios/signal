@@ -32,7 +32,16 @@ use crate::hardware::switches::{RatioButtons, ToggleSwitch};
 use crate::hardware::vu::{VuMeter, VuMode};
 
 /// Where a knob's legend sits below its centre, in design px.
-const LEGEND_DROP: f64 = 60.0;
+///
+/// Computed from where the printed numerals actually reach, not picked: the
+/// ring styles print at different radii, so a fixed drop that clears one
+/// strikes another. (The 1176's dotted scale put "∞" and "0" straight through
+/// the word INPUT.) Same function the EQ's faces use.
+fn legend_drop(d: f64, label_r: f64) -> f64 {
+    let numerals = d * (label_r / 60.0) * 0.866;
+    let text = d * (7.0 / 110.0) * 0.5 + 5.5;
+    (numerals + text + 4.0).max(30.0)
+}
 /// Legend text box width. Narrow enough that neighbouring legends on a
 /// six-control row do not run into each other, which the panels are spaced for.
 const LEGEND_W: f64 = 124.0;
@@ -146,7 +155,7 @@ pub fn RackFace(
                                     }
                                 }
                                 Silkscreen {
-                                    scale, x, y: y + LEGEND_DROP, width: LEGEND_W,
+                                    scale, x, y: y + legend_drop(d, label_r), width: LEGEND_W,
                                     text: legend.to_string(), color: design.ink.to_string(),
                                 }
                             }
@@ -162,7 +171,7 @@ pub fn RackFace(
                                 }
                             }
                             Silkscreen {
-                                scale, x, y: y + LEGEND_DROP + 12.0, width: LEGEND_W,
+                                scale, x, y: y + 72.0, width: LEGEND_W,
                                 text: legend.to_string(), color: design.ink.to_string(),
                             }
                         },
@@ -177,7 +186,7 @@ pub fn RackFace(
                                 }
                             }
                             Silkscreen {
-                                scale, x, y: y + LEGEND_DROP, width: LEGEND_W,
+                                scale, x, y: y + 60.0, width: LEGEND_W,
                                 text: legend.to_string(), color: design.ink.to_string(),
                             }
                         },
@@ -235,6 +244,19 @@ pub fn RackFace(
                                     w: 40.0,
                                     h: 22.0,
                                 }
+                            }
+                        },
+                        RackItem::Region { x, y, w, h, color } => rsx! {
+                            div {
+                                style: format!(
+                                    "position:absolute; left:{:.1}px; top:{:.1}px; \
+                                     width:{:.1}px; height:{:.1}px; background:{color}; \
+                                     pointer-events:none;",
+                                    (x - w / 2.0) * scale,
+                                    (y - h / 2.0) * scale,
+                                    w * scale,
+                                    h * scale,
+                                ),
                             }
                         },
                         RackItem::Frame { x, y, w, h } => rsx! {

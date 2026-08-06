@@ -297,7 +297,8 @@ pub fn EqRackFace(
                         RackItem::Vu { .. }
                         | RackItem::LedBar { .. }
                         | RackItem::LedSelect { .. }
-                        | RackItem::Frame { .. } => rsx! {},
+                        | RackItem::Frame { .. }
+                        | RackItem::Region { .. } => rsx! {},
                     }
                 }
             }
