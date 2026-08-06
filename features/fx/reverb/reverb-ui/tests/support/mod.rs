@@ -138,10 +138,10 @@ pub fn mount_with(params: Arc<ReverbParams>, width: u32, height: u32) -> Fixture
             height as f64,
         ))
         .with_root_context(param_ctx)
-        .with_root_context(ReverbUi {
+        .with_root_context(Arc::new(ReverbUi {
             params: params.clone(),
             state: ui_state.clone(),
-        })
+        }))
         .build();
 
     Fixture {

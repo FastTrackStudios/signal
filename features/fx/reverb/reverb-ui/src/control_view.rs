@@ -71,7 +71,9 @@ pub fn editor_size_for(_profile_index: usize, form: fts_ui_audio::EditorForm) ->
 /// mount.
 #[component]
 pub fn App() -> Element {
-    let ui = use_context::<ReverbUi>();
+    // `Arc`, because that is what `create_dioxus_editor_with_state` puts in
+    // context — the plugin owns it and the editor borrows it.
+    let ui = use_context::<Arc<ReverbUi>>();
     let params = ui.params.clone();
     let ctx = use_param_context();
     let theme = use_signal(|| ThemeState::new(default_theme_preset(), ThemeMode::Dark));

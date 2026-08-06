@@ -1233,7 +1233,8 @@ mod tests {
                     | RackItem::Region { .. }
                     | RackItem::LedBar { .. }
                     | RackItem::LedSelect { .. }
-                    | RackItem::Glyph { .. } => continue,
+                    | RackItem::Glyph { .. }
+                    | RackItem::Concentric { .. } => continue,
                 };
                 assert!(
                     x - half >= EAR && x + half <= design.w - EAR,

@@ -73,7 +73,10 @@ pub struct SpaceDesign {
 /// in which two they make big — a hall is chosen by decay and size, a plate by
 /// tone, a spring by how hard you hit it.
 const fn knob(param: &'static str, legend: &'static str, x: f64, d: f64, style: KnobStyle) -> KnobSpec {
-    KnobSpec { param, legend, x, y: 232.0, d, style }
+    // The row sits high enough that the biggest knob's box *and* its legend
+    // clear the bottom edge: a knob's box is ~1.8x its diameter, so a 66px
+    // knob reaches 60px below this line and its legend another 20 after that.
+    KnobSpec { param, legend, x, y: 206.0, d, style }
 }
 
 const HALL_KNOBS: &[KnobSpec] = &[
@@ -351,7 +354,7 @@ pub fn SpaceFace(
                         }
                     }
                     Silkscreen {
-                        scale, x: spec.x, y: spec.y + spec.d * 0.95 + 12.0, width: 130.0,
+                        scale, x: spec.x, y: spec.y + spec.d * 0.92 + 10.0, width: 130.0,
                         text: spec.legend.to_string(), size: 9.0,
                         color: design.ink.to_string(),
                     }
