@@ -13,6 +13,7 @@
 //!
 //! ```sh
 //! fts-clap-host "FTS EQ"                    # resolves ~/.clap/FTS EQ.clap
+//! fts-clap-host "FTS Guide" --note-names    # print piano-roll key labels, no GUI
 //! fts-clap-host ~/.clap/"FTS EQ.clap"       # explicit bundle path
 //! fts-clap-host target/bundled/"FTS EQ.clap" --index 0
 //! ```
@@ -120,16 +121,23 @@ impl WindowHandler for HostHandler {
 fn main() -> eyre::Result<()> {
     let mut args = std::env::args().skip(1);
     let Some(bundle_arg) = args.next() else {
-        eprintln!("usage: fts-clap-host <bundle.clap | plugin name> [--index N]");
+        eprintln!(
+            "usage: fts-clap-host <bundle.clap | plugin name> [--index N] [--note-names]"
+        );
         std::process::exit(2);
     };
     let mut plugin_index = 0usize;
+    let mut note_names = false;
     while let Some(flag) = args.next() {
-        if flag == "--index" {
-            plugin_index = args
-                .next()
-                .and_then(|v| v.parse().ok())
-                .unwrap_or_default();
+        match flag.as_str() {
+            "--index" => {
+                plugin_index = args
+                    .next()
+                    .and_then(|v| v.parse().ok())
+                    .unwrap_or_default();
+            }
+            "--note-names" => note_names = true,
+            _ => {}
         }
     }
 
@@ -139,6 +147,36 @@ fn main() -> eyre::Result<()> {
         "fts-clap-host — {}",
         bundle.file_stem().unwrap_or_default().to_string_lossy()
     );
+
+    // Inspection mode: instantiate, dump the `note-name` extension, exit.
+    // No window, so this answers "does the plugin actually serve its key
+    // labels" without a DAW — the question you otherwise can't separate
+    // from "is the host configured to show them".
+    if note_names {
+        let mut plugin = ClapHost::default().load(&bundle, plugin_index)?;
+        let names = plugin.note_names();
+        println!(
+            "{} ({})",
+            plugin.descriptor().name,
+            plugin.descriptor().id
+        );
+        if names.is_empty() {
+            println!("  no note names (plugin does not implement clap.note-name)");
+            return Ok(());
+        }
+        println!("  {} note names:", names.len());
+        for n in names {
+            let wildcard = |v: i32| if v < 0 { "*".to_string() } else { v.to_string() };
+            println!(
+                "    key {:>3}  ch {:>3}  port {:>3}   {}",
+                wildcard(n.key),
+                wildcard(n.channel),
+                wildcard(n.port),
+                n.name
+            );
+        }
+        return Ok(());
+    }
 
     // open_blocking runs the build closure and the event loop on THIS
     // (main) thread — where CLAP requires all main-thread calls to happen.

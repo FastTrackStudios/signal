@@ -12,6 +12,8 @@
 #   macos-installer THE macOS download: themed, notarized .pkg — app +
 #                  per-plugin-toggleable suite, + its silent-install choices
 #                  template                                    self-hosted airlock
+#   macos-installer-task  the Task desktop app's own notarized .pkg (no
+#                  plugins, separate component ids)             self-hosted airlock
 #   docker         self-host image     self-hosted nix-host         (TODO)
 #
 # workflow_dispatch takes a tag so a release can be (re)built by hand.
@@ -318,6 +320,50 @@ jobs:
           # The payloads are what actually has to be universal.
           bash apps/fasttrackstudio/ios/verify-macos-universal.sh plugins \
             "$(ls -t target/fts-plugins-*-macos.zip | head -1)"
+      - name: Upload to the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          tag="${{ github.event.release.tag_name || inputs.tag }}"
+          nix run nixpkgs#gh -- release upload "$tag" "$pkg" "$choices" --repo "$GITHUB_REPOSITORY" --clobber
+          echo "uploaded $pkg + $choices to $tag"
+
+  macos-installer-task:
+    # The Task desktop app's OWN installer — a separate download with its own
+    # component identifiers (app.fasttrackstudio.task.*), so installing or
+    # updating it never touches a FastTrackStudio install. No plugins, so it
+    # is much smaller/faster than macos-installer.
+    #
+    # Chained after macos-installer for the same reason that one is chained:
+    # both drive target/ on the single self-hosted Mac.
+    needs: [macos-installer]
+    runs-on: [self-hosted, macos, airlock]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name || inputs.tag }}
+          clean: false
+      - name: Build, sign, notarize the Task .pkg installer
+        env:
+          KEYCHAIN: fts-build.keychain
+          KEYCHAIN_PW: fts-build
+          ACTOOL_DEVELOPER_DIR: /Applications/Xcode-beta.app/Contents/Developer
+          PKG_PRODUCT: task
+        run: |
+          set -euo pipefail
+          export PATH="/nix/var/nix/profiles/default/bin:$PATH"
+          export NIX=/nix/var/nix/profiles/default/bin/nix
+          tag="${{ github.event.release.tag_name || inputs.tag }}"
+          export MARKETING_VER="${tag#v}"
+          bash apps/fasttrackstudio/ios/deploy-macos-pkg.sh
+          echo "pkg=$(ls -t target/Task-*-macos.pkg | head -1)" >> "$GITHUB_ENV"
+          echo "choices=$(ls -t target/Task-*-macos-choices.xml | head -1)" >> "$GITHUB_ENV"
+      - name: Verify signed + notarized
+        run: |
+          set -euo pipefail
+          spctl --assess --type install -vv "$pkg"
+          xcrun stapler validate "$pkg"
       - name: Upload to the release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

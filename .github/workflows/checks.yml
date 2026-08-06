@@ -156,6 +156,21 @@ jobs:
       - name: Generate Task tailwind sheets
         if: needs.plan.outputs.workspace == 'true'
         run: ${NIX_DEV} just --justfile apps/task/Justfile --working-directory apps/task css
+      # The opposite case to Task's sheets: apps/fasttrackstudio's
+      # tailwind-signal.css IS committed, because main.rs / rig_view.rs /
+      # mobile_view.rs `include_str!` it. That means it can rot silently
+      # when someone adds a class and doesn't rebuild — it was stale by
+      # ~50 classes (966 selectors against the sources' 1015) before this
+      # check existed, so the signal UI was rendering some elements
+      # unstyled.
+      #
+      # This can only run here because `just tailwind` now resolves the
+      # lumen-blocks checkout through `cargo metadata` (the step above
+      # already populated it). It used to scan a hardcoded
+      # /home/cody/.cargo path, which no runner has.
+      - name: Tailwind sheet is current (fasttrackstudio)
+        if: needs.plan.outputs.workspace == 'true'
+        run: ${NIX_DEV} just tailwind-check
       - name: cargo check --workspace
         if: needs.plan.outputs.workspace == 'true'
         run: ${NIX_DEV} cargo check --workspace --exclude vox-discover

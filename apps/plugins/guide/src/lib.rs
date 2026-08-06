@@ -45,7 +45,7 @@
 use nice_plug::prelude::*;
 use std::sync::Arc;
 
-use session_guide::midi::trigger_for_midi_note;
+use session_guide::midi::{note_names, trigger_for_midi_note};
 use session_guide::{BlockClock, GuideConfig, GuideEngine, TriggerSource};
 
 const PLUGIN_NAME: &str = "FTS Guide";
@@ -243,6 +243,19 @@ impl Plugin for FtsGuide {
 
     fn params(&self) -> Arc<dyn Params> {
         self.params.clone()
+    }
+
+    /// Label the guide layout in the host's piano roll: "Chorus" rather
+    /// than "C6", "Count 1" rather than "C5", "Click: Accent" rather than
+    /// "C4".
+    ///
+    /// Same table the stamper and the MIDI input use, so what REAPER
+    /// shows on a note is exactly what this plugin will play for it.
+    fn note_names(&self) -> Vec<NoteName> {
+        note_names()
+            .into_iter()
+            .map(|(note, name)| NoteName::new(note, name))
+            .collect()
     }
 
     fn activate(

@@ -12,10 +12,15 @@
 @source "../../features/rigs/guitar/ui/src/**/*.rs";
 @source "../../crates/session/ui/src/**/*.rs";
 @source "../../features/daw-ui/daw-ui/src/**/*.rs";
+@source "../../features/chord-tool/*/src/**/*.rs";
 @source "../../libs/fts-ui/*/src/**/*.rs";
 @source "../../libs/dock/*/src/**/*.rs";
-/* lumen-blocks is still a git dep -- scan its cargo checkout ($CARGO_HOME). */
-@source "/home/cody/.cargo/git/checkouts/lumen-blocks-*/*/blocks/src/**/*.rs";
+/* lumen-blocks is still a git dep. `.lumen-blocks` is a symlink to the
+ * checkout cargo resolved, refreshed by `just tailwind` (recipe
+ * `_lumen-link`) and gitignored. Do NOT put a $CARGO_HOME glob here: it
+ * matches every cached revision, not the pinned one, so the compiled
+ * sheet drifts as the cache changes. */
+@source "./.lumen-blocks/src/**/*.rs";
 
 @layer base {
   body {
