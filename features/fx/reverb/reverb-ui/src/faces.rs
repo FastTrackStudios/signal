@@ -80,65 +80,95 @@ const fn knob(param: &'static str, legend: &'static str, x: f64, d: f64, style: 
 }
 
 const HALL_KNOBS: &[KnobSpec] = &[
-    knob("decay", "Decay", 150.0, 62.0, KnobStyle::Skirted),
-    knob("size", "Size", 300.0, 62.0, KnobStyle::Skirted),
-    knob("predelay", "Pre-Delay", 450.0, 44.0, KnobStyle::Metal),
-    knob("damping", "Damping", 590.0, 44.0, KnobStyle::Metal),
-    knob("tone", "Tone", 720.0, 44.0, KnobStyle::Metal),
-    knob("mix", "Mix", 850.0, 52.0, KnobStyle::Skirted),
+    knob("decay", "Decay", 118.0, 62.0, KnobStyle::Skirted),
+    knob("size", "Size", 230.0, 62.0, KnobStyle::Skirted),
+    knob("predelay", "Pre-Delay", 340.0, 44.0, KnobStyle::Metal),
+    knob("damping", "Damping", 450.0, 44.0, KnobStyle::Metal),
+    knob("tone", "Tone", 560.0, 44.0, KnobStyle::Metal),
+    // A hall's warmth is the low band outlasting the top, and its size is
+    // only convincing once the reflections are dense.
+    knob("bass", "Bass", 670.0, 44.0, KnobStyle::Metal),
+    knob("diffusion", "Diffusion", 780.0, 44.0, KnobStyle::Metal),
+    knob("mix", "Mix", 872.0, 52.0, KnobStyle::Skirted),
 ];
 
 const PLATE_KNOBS: &[KnobSpec] = &[
-    knob("decay", "Decay", 150.0, 58.0, KnobStyle::Collet),
-    knob("tone", "Tone", 300.0, 58.0, KnobStyle::Collet),
-    knob("damping", "Damping", 450.0, 44.0, KnobStyle::Collet),
-    knob("predelay", "Pre-Delay", 590.0, 44.0, KnobStyle::Collet),
-    knob("width", "Width", 720.0, 44.0, KnobStyle::Collet),
-    knob("mix", "Mix", 850.0, 52.0, KnobStyle::Collet),
+    knob("decay", "Decay", 118.0, 58.0, KnobStyle::Collet),
+    knob("tone", "Tone", 230.0, 58.0, KnobStyle::Collet),
+    knob("damping", "Damping", 340.0, 44.0, KnobStyle::Collet),
+    knob("predelay", "Pre-Delay", 450.0, 44.0, KnobStyle::Collet),
+    // A plate is a sheet under tension with a damper pressed against it,
+    // and the modulation is what stops it ringing on one note.
+    knob("modulation", "Motion", 560.0, 44.0, KnobStyle::Collet),
+    knob("diffusion", "Density", 670.0, 44.0, KnobStyle::Collet),
+    knob("width", "Width", 780.0, 44.0, KnobStyle::Collet),
+    knob("mix", "Mix", 872.0, 52.0, KnobStyle::Collet),
 ];
 
 const ROOM_KNOBS: &[KnobSpec] = &[
-    knob("size", "Size", 150.0, 58.0, KnobStyle::Metal),
-    knob("decay", "Decay", 300.0, 58.0, KnobStyle::Metal),
-    knob("damping", "Damping", 450.0, 44.0, KnobStyle::Metal),
-    knob("tone", "Tone", 590.0, 44.0, KnobStyle::Metal),
-    knob("width", "Width", 720.0, 44.0, KnobStyle::Metal),
-    knob("mix", "Mix", 850.0, 52.0, KnobStyle::Metal),
+    knob("size", "Size", 118.0, 58.0, KnobStyle::Metal),
+    knob("decay", "Decay", 230.0, 58.0, KnobStyle::Metal),
+    knob("damping", "Damping", 340.0, 44.0, KnobStyle::Metal),
+    knob("tone", "Tone", 450.0, 44.0, KnobStyle::Metal),
+    // A small room's character is its early reflections: how many, and
+    // how hard the walls are.
+    knob("diffusion", "Diffusion", 560.0, 44.0, KnobStyle::Metal),
+    knob("character_a", "Walls", 670.0, 44.0, KnobStyle::Metal),
+    knob("width", "Width", 780.0, 44.0, KnobStyle::Metal),
+    knob("mix", "Mix", 872.0, 52.0, KnobStyle::Metal),
 ];
 
 const SPRING_KNOBS: &[KnobSpec] = &[
-    knob("decay", "Dwell", 170.0, 66.0, KnobStyle::Bakelite),
-    knob("tone", "Tone", 330.0, 66.0, KnobStyle::Bakelite),
-    knob("damping", "Damp", 480.0, 46.0, KnobStyle::Bakelite),
-    knob("size", "Tension", 620.0, 46.0, KnobStyle::Bakelite),
-    knob("mix", "Blend", 790.0, 66.0, KnobStyle::Bakelite),
+    knob("decay", "Dwell", 118.0, 62.0, KnobStyle::Bakelite),
+    knob("tone", "Tone", 230.0, 62.0, KnobStyle::Bakelite),
+    knob("damping", "Damp", 340.0, 44.0, KnobStyle::Bakelite),
+    knob("size", "Tension", 450.0, 44.0, KnobStyle::Bakelite),
+    // `extra_a` is the spring's modulation rate — the drip. This is the
+    // control that makes it sound like a tank being kicked.
+    knob("character_a", "Drip", 560.0, 44.0, KnobStyle::Bakelite),
+    knob("modulation", "Warble", 670.0, 44.0, KnobStyle::Bakelite),
+    knob("diffusion", "Boing", 780.0, 44.0, KnobStyle::Bakelite),
+    knob("mix", "Blend", 872.0, 62.0, KnobStyle::Bakelite),
 ];
 
 const AMBIENT_KNOBS: &[KnobSpec] = &[
-    knob("decay", "Decay", 150.0, 62.0, KnobStyle::Marconi),
-    knob("size", "Spread", 300.0, 62.0, KnobStyle::Marconi),
-    knob("predelay", "Onset", 450.0, 44.0, KnobStyle::Marconi),
-    knob("damping", "Air", 590.0, 44.0, KnobStyle::Marconi),
-    knob("width", "Width", 720.0, 44.0, KnobStyle::Marconi),
-    knob("mix", "Mix", 850.0, 52.0, KnobStyle::Marconi),
+    knob("decay", "Decay", 118.0, 62.0, KnobStyle::Marconi),
+    knob("size", "Spread", 230.0, 62.0, KnobStyle::Marconi),
+    knob("predelay", "Onset", 340.0, 44.0, KnobStyle::Marconi),
+    knob("damping", "Air", 450.0, 44.0, KnobStyle::Marconi),
+    // Cloud and bloom read `extra_a`/`extra_b` as how the wash is built —
+    // tap spread and how much of the input it keeps.
+    knob("character_a", "Shape", 560.0, 44.0, KnobStyle::Marconi),
+    knob("character_b", "Grain", 670.0, 44.0, KnobStyle::Marconi),
+    knob("width", "Width", 780.0, 44.0, KnobStyle::Marconi),
+    knob("mix", "Mix", 872.0, 52.0, KnobStyle::Marconi),
 ];
 
 const SPECIAL_KNOBS: &[KnobSpec] = &[
-    knob("decay", "Decay", 150.0, 58.0, KnobStyle::SilverTop),
-    knob("size", "Size", 300.0, 58.0, KnobStyle::SilverTop),
-    knob("damping", "Damping", 450.0, 44.0, KnobStyle::SilverTop),
-    knob("tone", "Tone", 590.0, 44.0, KnobStyle::SilverTop),
-    knob("predelay", "Pre-Delay", 720.0, 44.0, KnobStyle::SilverTop),
-    knob("mix", "Mix", 850.0, 52.0, KnobStyle::SilverTop),
+    knob("decay", "Decay", 118.0, 58.0, KnobStyle::SilverTop),
+    knob("size", "Size", 230.0, 58.0, KnobStyle::SilverTop),
+    knob("damping", "Damping", 340.0, 44.0, KnobStyle::SilverTop),
+    knob("tone", "Tone", 450.0, 44.0, KnobStyle::SilverTop),
+    // The two that make these what they are: shimmer's amount and pitch,
+    // magneto's saturation, non-linear's gate shape. The legend changes
+    // with the profile — see `legend_for`.
+    knob("character_a", "Amount", 560.0, 48.0, KnobStyle::SilverTop),
+    knob("character_b", "Pitch", 670.0, 48.0, KnobStyle::SilverTop),
+    knob("modulation", "Motion", 780.0, 44.0, KnobStyle::SilverTop),
+    knob("mix", "Mix", 872.0, 52.0, KnobStyle::SilverTop),
 ];
 
 const IR_KNOBS: &[KnobSpec] = &[
-    knob("predelay", "Pre-Delay", 150.0, 58.0, KnobStyle::MetalFluted),
-    knob("decay", "Length", 300.0, 58.0, KnobStyle::MetalFluted),
-    knob("tone", "Tone", 450.0, 44.0, KnobStyle::MetalFluted),
-    knob("damping", "Damping", 590.0, 44.0, KnobStyle::MetalFluted),
-    knob("width", "Width", 720.0, 44.0, KnobStyle::MetalFluted),
-    knob("mix", "Mix", 850.0, 52.0, KnobStyle::MetalFluted),
+    knob("predelay", "Pre-Delay", 118.0, 58.0, KnobStyle::MetalFluted),
+    knob("decay", "Length", 230.0, 58.0, KnobStyle::MetalFluted),
+    knob("tone", "Tone", 340.0, 44.0, KnobStyle::MetalFluted),
+    knob("damping", "Damping", 450.0, 44.0, KnobStyle::MetalFluted),
+    // A convolution has no reflections to diffuse, but it does have
+    // motion and a tilt you can put on the recorded tail.
+    knob("modulation", "Motion", 560.0, 44.0, KnobStyle::MetalFluted),
+    knob("bass", "Bass", 670.0, 44.0, KnobStyle::MetalFluted),
+    knob("width", "Width", 780.0, 44.0, KnobStyle::MetalFluted),
+    knob("mix", "Mix", 872.0, 52.0, KnobStyle::MetalFluted),
 ];
 
 /// Impulse response: a machine, not a room. Dark, instrument-like, with the
@@ -239,6 +269,35 @@ pub static SPECIAL: SpaceDesign = SpaceDesign {
     centre: Centrepiece::Ladder,
     knobs: SPECIAL_KNOBS,
 };
+
+/// What this profile's engine does with `character_a` / `character_b`.
+///
+/// `extra_a` and `extra_b` reach every algorithm, and each one reads them as
+/// something else — shimmer's amount and pitch, magneto's saturation and wow,
+/// non-linear's gate shape. A knob called "Character A" tells you nothing, so
+/// the panel prints what it actually does here.
+pub fn character_legends(profile_id: &str) -> (&'static str, &'static str) {
+    match profile_id {
+        "shimmer" => ("Amount", "Pitch"),
+        "chorale" => ("Voices", "Detune"),
+        "magneto" => ("Saturation", "Wow"),
+        "nonlinear" => ("Shape", "Gate"),
+        "reflections" => ("Pattern", "Spread"),
+        "freeverb" => ("Room", "Damp"),
+        "cloud" => ("Taps", "Blend"),
+        "bloom" => ("Stages", "Harmonics"),
+        "swell" => ("Rise", "Hold"),
+        "velvet" => ("Density", "Softness"),
+        "spring_classic" | "spring_vintage" => ("Drip", "Tank"),
+        // Halls and plates take the pair as reflection shaping; the IR takes
+        // it as how the recorded tail is re-shaped on the way out.
+        "ir" => ("Stretch", "Tilt"),
+        "hall_concert" | "hall_cathedral" | "hall_arena" => ("Reflections", "Balcony"),
+        "plate_classic" | "plate_224" | "plate_progenitor" => ("Tension", "Damper"),
+        "room_medium" | "room_chamber" | "room_studio" => ("Walls", "Furniture"),
+        _ => ("Character", "Colour"),
+    }
+}
 
 /// The panel a profile is drawn on.
 ///
@@ -355,7 +414,12 @@ pub fn SpaceFace(
                     }
                     Silkscreen {
                         scale, x: spec.x, y: spec.y + spec.d * 0.92 + 10.0, width: 130.0,
-                        text: spec.legend.to_string(), size: 9.0,
+                        text: match spec.param {
+                            "character_a" => character_legends(&profile_id).0.to_string(),
+                            "character_b" => character_legends(&profile_id).1.to_string(),
+                            _ => spec.legend.to_string(),
+                        },
+                        size: 9.0,
                         color: design.ink.to_string(),
                     }
                 }
@@ -609,6 +673,83 @@ fn CentreView(
             view_box: "0 0 {w} {h}",
             style: "width:100%; height:100%; display:block;",
             {inner}
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A knob under a rack ear is a knob you cannot turn — the ear is drawn
+    /// over it. The panels are 960 wide with 26px ears, and a knob's box is
+    /// nearly twice its diameter.
+    #[test]
+    fn nothing_is_placed_under_a_rack_ear() {
+        const EAR: f64 = 26.0;
+        for design in [&IR, &HALL, &PLATE, &ROOM, &SPRING, &AMBIENT, &SPECIAL] {
+            for spec in design.knobs {
+                let half = spec.d * (110.0 / 60.0) / 2.0;
+                assert!(
+                    spec.x - half >= EAR && spec.x + half <= W - EAR,
+                    "{}'s {} at x={} (half-box {half:.1}) runs under an ear",
+                    design.family,
+                    spec.param,
+                    spec.x,
+                );
+            }
+        }
+    }
+
+    /// …and a knob whose legend falls off the bottom is a knob you cannot
+    /// name. Blitz clips rather than shrinking, so this is not cosmetic.
+    #[test]
+    fn every_legend_fits_on_the_panel() {
+        for design in [&IR, &HALL, &PLATE, &ROOM, &SPRING, &AMBIENT, &SPECIAL] {
+            for spec in design.knobs {
+                let legend_y = spec.y + spec.d * 0.92 + 10.0;
+                assert!(
+                    legend_y + 6.0 <= H,
+                    "{}'s {} legend sits at y={legend_y:.0} on a {H}px panel",
+                    design.family,
+                    spec.param,
+                );
+            }
+        }
+    }
+
+    /// Every control a panel places has to be one the editor actually binds.
+    /// A typo here is a knob that silently never appears.
+    #[test]
+    fn every_placed_control_is_one_the_editor_binds() {
+        const BOUND: &[&str] = &[
+            "decay", "size", "predelay", "damping", "tone", "width", "mix",
+            "diffusion", "modulation", "bass", "character_a", "character_b",
+        ];
+        for design in [&IR, &HALL, &PLATE, &ROOM, &SPRING, &AMBIENT, &SPECIAL] {
+            for spec in design.knobs {
+                assert!(
+                    BOUND.contains(&spec.param),
+                    "{} places {:?}, which the editor does not bind",
+                    design.family,
+                    spec.param,
+                );
+            }
+        }
+    }
+
+    /// The two engine controls are named per profile, and the fallback is a
+    /// sign nobody decided what they do on that machine.
+    #[test]
+    fn every_profile_names_its_engine_controls() {
+        for profile in reverb_profiles::PROFILES {
+            let (a, b) = character_legends(profile.id);
+            assert_ne!(
+                (a, b),
+                ("Character", "Colour"),
+                "{} still has the placeholder legends",
+                profile.id,
+            );
         }
     }
 }

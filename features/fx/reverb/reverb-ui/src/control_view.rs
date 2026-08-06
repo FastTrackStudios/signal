@@ -132,6 +132,11 @@ pub fn App() -> Element {
         ("tone", params.tone.as_ptr()),
         ("width", params.width.as_ptr()),
         ("mix", params.mix.as_ptr()),
+        ("diffusion", params.diffusion.as_ptr()),
+        ("modulation", params.modulation.as_ptr()),
+        ("bass", params.bass.as_ptr()),
+        ("character_a", params.character_a.as_ptr()),
+        ("character_b", params.character_b.as_ptr()),
     ]
     .into_iter()
     .map(|(name, ptr)| (name.to_string(), param_handle(ptr, ctx.clone())))

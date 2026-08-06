@@ -53,6 +53,35 @@ pub struct ReverbParams {
     #[id = "mix"]
     pub mix: FloatParam,
 
+    /// How dense the reflections are — sparse and grainy through to a
+    /// smear with no individual echoes left in it.
+    #[id = "diffusion"]
+    pub diffusion: FloatParam,
+
+    /// Movement inside the tail. A hall wants a little to stop it ringing
+    /// metallically; a chorale wants a lot.
+    #[id = "modulation"]
+    pub modulation: FloatParam,
+
+    /// How long the low band rings relative to the rest. Above 1 the lows
+    /// outlast the top, which is what a warm hall does and a plate does not.
+    #[id = "bass"]
+    pub bass: FloatParam,
+
+    /// The first of the engine's two algorithm-specific controls.
+    ///
+    /// Every algorithm in `reverb-dsp` takes an `extra_a` / `extra_b` pair and
+    /// means something different by them: shimmer amount and pitch, magneto's
+    /// saturation, bloom's feedback stages, non-linear's gate shape, spring's
+    /// modulation rate. That is not a shortcoming to paper over — it is the
+    /// per-family personality, and the panel is what names it. Each face
+    /// legends these two with what they do on *that* machine.
+    #[id = "chara"]
+    pub character_a: FloatParam,
+
+    #[id = "charb"]
+    pub character_b: FloatParam,
+
     /// What a session restores from.
     ///
     /// The index is not stable: adding a family, or another plate, renumbers
@@ -113,6 +142,21 @@ impl Default for ReverbParams {
                 .with_value_to_string(formatters::v2s_f32_percentage(0)),
 
             mix: FloatParam::new("Mix", 0.5, FloatRange::Linear { min: 0.0, max: 1.0 })
+                .with_value_to_string(formatters::v2s_f32_percentage(0)),
+
+            diffusion: FloatParam::new("Diffusion", 0.7, FloatRange::Linear { min: 0.0, max: 1.0 })
+                .with_value_to_string(formatters::v2s_f32_percentage(0)),
+
+            modulation: FloatParam::new("Modulation", 0.2, FloatRange::Linear { min: 0.0, max: 1.0 })
+                .with_value_to_string(formatters::v2s_f32_percentage(0)),
+
+            bass: FloatParam::new("Bass", 1.0, FloatRange::Linear { min: 0.0, max: 2.0 })
+                .with_value_to_string(formatters::v2s_f32_rounded(2)),
+
+            character_a: FloatParam::new("Character A", 0.5, FloatRange::Linear { min: 0.0, max: 1.0 })
+                .with_value_to_string(formatters::v2s_f32_percentage(0)),
+
+            character_b: FloatParam::new("Character B", 0.5, FloatRange::Linear { min: 0.0, max: 1.0 })
                 .with_value_to_string(formatters::v2s_f32_percentage(0)),
 
             profile_id: parking_lot::RwLock::new(String::new()),
