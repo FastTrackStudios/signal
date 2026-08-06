@@ -144,14 +144,15 @@ pub fn EqRackFace(
                                 }
                             }
                         }
-                        RackItem::Buttons { id, legend, x, y, labels } => rsx! {
-                            PanelSlot { scale, x, y, w: 90.0, h: 180.0,
+                        RackItem::Buttons { id, legend, x, y, labels, reverse } => rsx! {
+                            PanelSlot { scale, x, y, w: 96.0, h: 210.0,
                                 RatioButtons {
                                     handle: handle(id),
                                     testid: id.replace('_', "-"),
                                     scale,
                                     labels: labels.iter().map(|s| s.to_string()).collect(),
                                     ink: design.ink.to_string(),
+                                    reverse,
                                 }
                             }
                             Silkscreen {

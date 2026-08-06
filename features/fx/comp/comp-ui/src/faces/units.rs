@@ -119,6 +119,9 @@ static ITEMS_1176: &[RackItem] = &[
             x: 566.0,
             y: 150.0,
             labels: &["4", "8", "12", "20", "All"],
+            // The unit prints 20 at the top and 4 at the bottom; "all
+            // buttons" sits above them as the extreme of the same axis.
+            reverse: true,
         },
 
         // ── The meter, in its own paint ──────────────────────────────────
@@ -153,6 +156,7 @@ static ITEMS_1176: &[RackItem] = &[
             x: 848.0,
             y: 150.0,
             labels: &["GR", "+8", "+4", "Off"],
+            reverse: false,
         },
 ];
 
