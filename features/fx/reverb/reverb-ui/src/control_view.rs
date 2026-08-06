@@ -137,6 +137,12 @@ pub fn App() -> Element {
         ("bass", params.bass.as_ptr()),
         ("character_a", params.character_a.as_ptr()),
         ("character_b", params.character_b.as_ptr()),
+        ("shimmer_interval", params.shimmer_interval.as_ptr()),
+        ("springs", params.springs.as_ptr()),
+        ("harmonics", params.harmonics.as_ptr()),
+        ("singers", params.singers.as_ptr()),
+        ("regen", params.regen.as_ptr()),
+        ("chop", params.chop.as_ptr()),
     ]
     .into_iter()
     .map(|(name, ptr)| (name.to_string(), param_handle(ptr, ctx.clone())))

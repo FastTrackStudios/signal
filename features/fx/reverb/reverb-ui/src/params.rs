@@ -82,6 +82,41 @@ pub struct ReverbParams {
     #[id = "charb"]
     pub character_b: FloatParam,
 
+    // ── Engine controls that `extra_a` / `extra_b` cannot reach ──────────
+    //
+    // The chain carries a struct per algorithm with the settings that are
+    // genuinely that engine's own — a shimmer's interval in semitones, how
+    // many springs are in the tank. The coarse pair gets you an amount; these
+    // get you the thing itself.
+
+    /// Shimmer's first voice, in semitones. The engine's own control: the
+    /// coarse `extra_b` mapping only offers octave-up, fifth and octave-down.
+    #[id = "shimint"]
+    pub shimmer_interval: FloatParam,
+
+    /// Springs in the tank (1–3). Two is the usual guitar amp; one is
+    /// thinner and drips harder; three is the big outboard tank.
+    #[id = "springs"]
+    pub springs: IntParam,
+
+    /// Bloom's overtone generator — octave-up partials fed into the trail.
+    /// Zero is off and costs nothing.
+    #[id = "harmonics"]
+    pub harmonics: FloatParam,
+
+    /// Chorale's per-voice randomisation: how much the singers drift apart
+    /// from each other. Zero is one voice in unison with itself.
+    #[id = "singers"]
+    pub singers: FloatParam,
+
+    /// Magneto's feedback into the tape input — the repeats piling up.
+    #[id = "regen"]
+    pub regen: FloatParam,
+
+    /// Non-linear's chop depth: the LFO that cuts the tail into slices.
+    #[id = "chop"]
+    pub chop: FloatParam,
+
     /// What a session restores from.
     ///
     /// The index is not stable: adding a family, or another plate, renumbers
@@ -157,6 +192,28 @@ impl Default for ReverbParams {
                 .with_value_to_string(formatters::v2s_f32_percentage(0)),
 
             character_b: FloatParam::new("Character B", 0.5, FloatRange::Linear { min: 0.0, max: 1.0 })
+                .with_value_to_string(formatters::v2s_f32_percentage(0)),
+
+            shimmer_interval: FloatParam::new(
+                "Interval",
+                12.0,
+                FloatRange::Linear { min: -12.0, max: 12.0 },
+            )
+            .with_unit(" st")
+            .with_value_to_string(formatters::v2s_f32_rounded(0)),
+
+            springs: IntParam::new("Springs", 2, IntRange::Linear { min: 1, max: 3 }),
+
+            harmonics: FloatParam::new("Harmonics", 0.0, FloatRange::Linear { min: 0.0, max: 1.0 })
+                .with_value_to_string(formatters::v2s_f32_percentage(0)),
+
+            singers: FloatParam::new("Singers", 0.3, FloatRange::Linear { min: 0.0, max: 1.0 })
+                .with_value_to_string(formatters::v2s_f32_percentage(0)),
+
+            regen: FloatParam::new("Regen", 0.35, FloatRange::Linear { min: 0.0, max: 1.0 })
+                .with_value_to_string(formatters::v2s_f32_percentage(0)),
+
+            chop: FloatParam::new("Chop", 0.0, FloatRange::Linear { min: 0.0, max: 1.0 })
                 .with_value_to_string(formatters::v2s_f32_percentage(0)),
 
             profile_id: parking_lot::RwLock::new(String::new()),

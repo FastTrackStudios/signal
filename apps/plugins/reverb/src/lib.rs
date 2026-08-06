@@ -95,6 +95,17 @@ impl FtsReverb {
         self.chain.params.extra_a = self.params.character_a.value() as f64;
         self.chain.params.extra_b = self.params.character_b.value() as f64;
 
+        // …and the per-engine settings the shared pair cannot express. Each
+        // struct is only read by its own algorithm, so setting them all every
+        // block costs nothing and means switching profiles never lands on a
+        // stale value from the last one.
+        self.chain.shimmer.shift1_semitones = Some(self.params.shimmer_interval.value() as f64);
+        self.chain.spring.springs = self.params.springs.value().clamp(1, 3) as u8;
+        self.chain.bloom.harmonics = self.params.harmonics.value() as f64;
+        self.chain.chorale.mod_amount = self.params.singers.value() as f64;
+        self.chain.magneto.feedback = self.params.regen.value() as f64;
+        self.chain.nonlinear.chop_depth = self.params.chop.value() as f64;
+
         self.chain.predelay_ms = self.params.predelay.value() as f64;
         self.chain.width = self.params.width.value() as f64;
         self.chain.mix = self.params.mix.value() as f64;

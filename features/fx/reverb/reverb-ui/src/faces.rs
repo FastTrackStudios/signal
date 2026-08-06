@@ -270,6 +270,42 @@ pub static SPECIAL: SpaceDesign = SpaceDesign {
     knobs: SPECIAL_KNOBS,
 };
 
+/// Controls that belong to one engine and nothing else.
+///
+/// The family panel is shared — Shimmer, Magneto and Non-Linear are all
+/// "Special" — but they are not the same machine, and this is where they stop
+/// looking like each other. Each is placed in the panel's top right, beside
+/// the centrepiece, because it is the control you reach for *after* you have
+/// chosen the space.
+///
+/// Empty for the engines whose personality the shared controls already cover.
+pub fn extras_for(profile_id: &str) -> &'static [KnobSpec] {
+    // Statics rather than a match arm building them: a `&[..]` literal inside
+    // the arm is a temporary, and this has to outlive the call.
+    const fn extra(param: &'static str, legend: &'static str) -> KnobSpec {
+        // Top right, beside the centrepiece — the control you reach for after
+        // choosing the space, not while choosing it.
+        KnobSpec { param, legend, x: 800.0, y: 74.0, d: 38.0, style: KnobStyle::Metal }
+    }
+    static SHIMMER: &[KnobSpec] = &[extra("shimmer_interval", "Interval")];
+    static SPRINGS: &[KnobSpec] = &[extra("springs", "Springs")];
+    static BLOOM: &[KnobSpec] = &[extra("harmonics", "Harmonics")];
+    static CHORALE: &[KnobSpec] = &[extra("singers", "Singers")];
+    static MAGNETO: &[KnobSpec] = &[extra("regen", "Regen")];
+    static NONLINEAR: &[KnobSpec] = &[extra("chop", "Chop")];
+    match profile_id {
+        // The interval is the whole effect. A shimmer at +12 is a different
+        // instrument from one at +7, and the coarse mapping cannot say so.
+        "shimmer" => SHIMMER,
+        "spring_classic" | "spring_vintage" => SPRINGS,
+        "bloom" => BLOOM,
+        "chorale" => CHORALE,
+        "magneto" => MAGNETO,
+        "nonlinear" => NONLINEAR,
+        _ => &[],
+    }
+}
+
 /// What this profile's engine does with `character_a` / `character_b`.
 ///
 /// `extra_a` and `extra_b` reach every algorithm, and each one reads them as
@@ -394,7 +430,13 @@ pub fn SpaceFace(
                 size: 8.0, color: design.dim_ink.to_string(),
             }
 
-            for (index , spec) in design.knobs.iter().copied().enumerate() {
+            for (index , spec) in design
+                .knobs
+                .iter()
+                .chain(extras_for(&profile_id).iter())
+                .copied()
+                .enumerate()
+            {
                 div {
                     // Keyed and uniform — a list whose entries change shape
                     // between two designs is what walks blitz's mutator off
@@ -688,7 +730,12 @@ mod tests {
     fn nothing_is_placed_under_a_rack_ear() {
         const EAR: f64 = 26.0;
         for design in [&IR, &HALL, &PLATE, &ROOM, &SPRING, &AMBIENT, &SPECIAL] {
-            for spec in design.knobs {
+            for spec in design.knobs.iter().chain(
+                reverb_profiles::PROFILES
+                    .iter()
+                    .filter(|p| design_for(p.id).family == design.family)
+                    .flat_map(|p| extras_for(p.id)),
+            ) {
                 let half = spec.d * (110.0 / 60.0) / 2.0;
                 assert!(
                     spec.x - half >= EAR && spec.x + half <= W - EAR,
@@ -725,7 +772,18 @@ mod tests {
         const BOUND: &[&str] = &[
             "decay", "size", "predelay", "damping", "tone", "width", "mix",
             "diffusion", "modulation", "bass", "character_a", "character_b",
+            "shimmer_interval", "springs", "harmonics", "singers", "regen", "chop",
         ];
+        for profile in reverb_profiles::PROFILES {
+            for spec in extras_for(profile.id) {
+                assert!(
+                    BOUND.contains(&spec.param),
+                    "{}'s extra {:?} is not a control the editor binds",
+                    profile.id,
+                    spec.param,
+                );
+            }
+        }
         for design in [&IR, &HALL, &PLATE, &ROOM, &SPRING, &AMBIENT, &SPECIAL] {
             for spec in design.knobs {
                 assert!(
