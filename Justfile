@@ -256,6 +256,11 @@ reverb-shots:
 delay-shots:
     cargo test -p delay-ui --features native --test screenshots -- --nocapture
 
+# Every saturation circuit's panel, painted headless. Shots land in
+# target/gui-shots/saturate/.
+saturate-shots:
+    cargo test -p saturate-ui --features native --test screenshots -- --nocapture
+
 # Bundle every FTS plugin as .clap + .vst3 (target/bundled/, names from
 # bundler.toml). Debug of a single plugin: cargo run -p fts-plugin-xtask
 # -- bundle -p eq-plugin

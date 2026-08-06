@@ -1,0 +1,10 @@
+[package]
+name = "saturate-profiles"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+edition = "2021"
+description = "Saturation profiles — the five circuits, and the curve each one clips with"
+
+[dependencies]
+saturate-dsp = { path = "../saturate-dsp" }
