@@ -27,6 +27,14 @@ pub struct SatUiState {
 
 
 
+/// **Noon is the circuit as designed.**
+///
+/// Every control here except `drive`, `mix` and `output` is a *trim* around
+/// the active profile's voicing rather than an absolute value: 0.5 means "a
+/// Triode, as a Triode is", and turning a knob is always a statement about
+/// this circuit. That is what lets one set of nine parameters serve nine
+/// machines without a knob meaning something different on each — see
+/// [`saturate_profiles::Controls`], which is where they land.
 #[derive(Params)]
 pub struct SatParams {
     /// Which of the seven families' profiles is active, as an index into
@@ -107,7 +115,8 @@ impl Default for SatParams {
             bias: FloatParam::new("Bias", 0.5, FloatRange::Linear { min: 0.0, max: 1.0 })
                 .with_value_to_string(formatters::v2s_f32_percentage(0)),
 
-            sag: FloatParam::new("Sag", 0.0, FloatRange::Linear { min: 0.0, max: 1.0 })
+            // Noon, like every other trim on the panel — see the type's note.
+            sag: FloatParam::new("Sag", 0.5, FloatRange::Linear { min: 0.0, max: 1.0 })
                 .with_value_to_string(formatters::v2s_f32_percentage(0)),
 
             tilt: FloatParam::new("Tilt", 0.5, FloatRange::Linear { min: 0.0, max: 1.0 })

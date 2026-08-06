@@ -371,24 +371,25 @@ fn CurveView(
     quantiser.rate = 1.0;
     quantiser.dither = 0.0;
 
-    // The stage compensates its own drive (`process` divides the shaped
-    // signal by it), so the drawing has to as well — otherwise turning drive
-    // up would draw a steeper line rather than a flatter one, which is the
-    // opposite of what you hear.
-    let compensate = pre.drive.max(1.0e-3);
+    // The stage's own makeup, so the drawing is the level the listener gets.
+    // Without it, turning drive up would draw a steeper line rather than a
+    // flatter one, which is the opposite of what you hear — and the clipper,
+    // which has no makeup, would look like every other circuit instead of
+    // showing its ceiling coming down to meet the signal.
+    let makeup = pre.makeup_gain();
 
     let mut path = String::new();
     let samples = 200;
     for i in 0..=samples {
         let x = -1.0 + 2.0 * i as f64 / samples as f64;
-        let shaped = pre.transfer(x as f32) / compensate;
+        let shaped = pre.transfer(x as f32) * makeup;
         let y = (quantiser.process(0, shaped) as f64).clamp(-1.0, 1.0);
         let (px, py) = (cx + x * half * 2.0, cy - y * half);
         path.push_str(&format!("{}{:.1} {:.1}", if i == 0 { "M " } else { " L " }, px, py));
     }
     // The corner markers on the solid-state panel sit where the curve gives
     // up, which is the drive it takes to reach the rail.
-    let gain = compensate as f64;
+    let gain = pre.drive.max(1.0) as f64;
 
     rsx! {
         svg {

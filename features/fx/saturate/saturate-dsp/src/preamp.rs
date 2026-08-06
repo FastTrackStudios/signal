@@ -91,7 +91,33 @@ const TILT_HZ: f32 = 700.0;
 pub const TILT_MAX_DB: f32 = 12.0;
 /// Widest crossover deadband, in shaper units.
 const CROSSOVER_MAX: f32 = 0.15;
+/// The input level [`Makeup::Matched`] matches at: −6 dBFS, which is where
+/// most program actually sits.
+const MAKEUP_REF: f32 = 0.5;
 pub const MAX_CHANNELS: usize = 2;
+
+/// How a driven stage gives the gain back.
+///
+/// This is not a detail. A saturator whose loudness moves with its drive
+/// cannot be auditioned — every comparison becomes "which is louder", which
+/// is a question the ear always answers the same way.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Makeup {
+    /// Divide by the drive. Exactly unity for small signals, because every
+    /// curve here is unity-slope at the origin — but only for small signals:
+    /// once the stage is saturating, its output is bounded by the headroom
+    /// and dividing by a large drive buries it. Fine up to a few times over,
+    /// wrong for anything that squares up.
+    InverseDrive,
+    /// Level-matched at [`MAKEUP_REF`] — the stage's own gain at a realistic
+    /// input level, inverted. Correct whether the stage is barely working or
+    /// fully squared off, which is why it is what the profiles use.
+    /// [`ClassAPreamp::refresh_makeup`] computes it.
+    Matched(f32),
+    /// None at all. A clipper's ceiling is fixed and its drive is genuinely
+    /// level, so there is nothing to give back.
+    None,
+}
 
 #[derive(Debug, Clone)]
 pub struct ClassAPreamp {
@@ -129,6 +155,8 @@ pub struct ClassAPreamp {
     /// underbiased transistor stage buzz on quiet passages, and the
     /// same mechanism that gates a starved fuzz.
     pub crossover: f32,
+    /// How the stage gives back the gain it took.
+    pub makeup: Makeup,
     /// Dry/wet (1 = fully processed).
     pub mix: f32,
     /// Output trim (linear).
@@ -174,6 +202,9 @@ impl ClassAPreamp {
             headroom: 1.0,
             knee: 0.0,
             crossover: 0.0,
+            // The default keeps the long-standing behaviour for callers that
+            // set fields directly and never ask for a refresh.
+            makeup: Makeup::InverseDrive,
             mix: 1.0,
             output_gain: 1.0,
             dc_x1: [0.0; MAX_CHANNELS],
@@ -262,16 +293,25 @@ impl ClassAPreamp {
     #[inline]
     fn shape_side(&self, v: f32) -> f32 {
         let h = self.headroom.clamp(0.05, 16.0);
-        // Skew as a gain in and back out: the knee moves, the slope at
-        // the origin does not, so the two halves still meet smoothly.
-        let g = if v >= 0.0 {
-            1.0 + self.skew
+        // Skew is headroom asymmetry: the skewed half runs out of room
+        // sooner, the other half keeps what the stage has. Note that it
+        // only ever takes room AWAY — the alternative, scaling one side
+        // up, would let a strongly skewed stage stop limiting on that
+        // half altogether and hand back whatever was fed to it.
+        //
+        // `shape(v / scale) * scale` is unity-slope at the origin for
+        // any scale, so the two halves still meet smoothly however far
+        // apart their knees are. That is the whole trick: the ONSET is
+        // asymmetric and the small-signal gain is not, which is what
+        // makes even harmonics instead of a kink at the zero crossing.
+        let s = self.skew.clamp(-0.95, 0.95);
+        let scale = if (v >= 0.0) == (s >= 0.0) {
+            h * (1.0 - s.abs())
         } else {
-            1.0 - self.skew
+            h
         }
-        .clamp(0.05, 4.0);
+        .max(1.0e-3);
         let side = if v >= 0.0 { self.positive } else { self.negative };
-        let scale = h / g;
         let soft = side.shape(v / scale) * scale;
         if self.knee > 0.0 {
             let hard = (v / h).clamp(-1.0, 1.0) * h;
@@ -292,6 +332,36 @@ impl ClassAPreamp {
     pub fn transfer(&self, x: f32) -> f32 {
         let v = self.deadband(x * self.drive) + self.q_point;
         self.shape_side(v) - self.shape_side(self.q_point)
+    }
+
+    /// Measure the stage's own gain at [`MAKEUP_REF`] and set
+    /// [`Makeup::Matched`] to its inverse.
+    ///
+    /// Call after changing anything that shapes: drive, headroom, the
+    /// shapers, skew, knee, crossover, bias. It samples the static transfer,
+    /// so it is a handful of arithmetic and belongs on the setter path, never
+    /// in `process`.
+    pub fn refresh_makeup(&mut self) {
+        // Both halves, averaged. A one-sided measurement is wrong exactly
+        // where this stage is most interesting: on a strongly skewed
+        // transfer one half is crushed to nothing while the other still
+        // has all its room, and matching against the crushed half alone
+        // sets a makeup that the other half then shouts through.
+        let up = self.transfer(MAKEUP_REF).abs();
+        let down = self.transfer(-MAKEUP_REF).abs();
+        let gain = (up + down) / (2.0 * MAKEUP_REF);
+        self.makeup = Makeup::Matched((1.0 / gain.max(1.0e-3)).clamp(0.02, 8.0));
+    }
+
+    /// The makeup as a plain multiplier — what the display has to divide by
+    /// to draw the curve the listener will actually hear.
+    #[inline]
+    pub fn makeup_gain(&self) -> f32 {
+        match self.makeup {
+            Makeup::InverseDrive => 1.0 / self.drive.max(1.0e-3),
+            Makeup::Matched(gain) => gain,
+            Makeup::None => 1.0,
+        }
     }
 
     /// Process one sample on channel `ch`, dry/wet mixed and trimmed.
@@ -322,9 +392,11 @@ impl ClassAPreamp {
         let y = shaped - self.dc_x1[ch] + self.dc_r * self.dc_y1[ch];
         self.dc_x1[ch] = shaped;
         self.dc_y1[ch] = y;
-        // Small-signal gain compensation (drive is unity-slope at the
-        // origin for every curve, so 1/drive re-centers loudness).
-        let wet = y / self.drive.max(1.0e-3);
+        let wet = match self.makeup {
+            Makeup::InverseDrive => y / self.drive.max(1.0e-3),
+            Makeup::Matched(gain) => y * gain,
+            Makeup::None => y,
+        };
         self.tilt_out(ch, wet)
     }
 

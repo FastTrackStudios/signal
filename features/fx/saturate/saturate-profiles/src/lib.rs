@@ -23,7 +23,13 @@
 //! Drive is deliberately not a family. It is the control every one of these
 //! has, the way feedback is on every delay.
 //!
-//! Pure data — no GUI, no framework deps.
+//! Each profile carries the [`Voicing`] it *is* — the per-side shaper pair,
+//! the operating point, the sag and its ballistics — and [`apply`] is the one
+//! place that knows how a knob reaches the DSP. The plugin shell and the
+//! editor both go through it, which is why the curve drawn on a panel is the
+//! transfer function the audio thread applies rather than a drawing of one.
+//!
+//! Pure data and arithmetic — no GUI, no framework deps.
 
 pub use saturate_dsp::preamp::SideShaper;
 pub use saturate_dsp::SaturationCurve;
@@ -87,14 +93,19 @@ pub struct Voicing {
     pub knee: f32,
     /// Resting crossover deadband, 0..1.
     pub crossover: f32,
-    /// How hard this circuit wants to be pushed for the same drive setting.
-    /// A fuzz is not a tape machine with the knob turned up.
+    /// How far the Drive knob travels on this circuit. A fuzz is not a tape
+    /// machine with the knob turned up — it reaches gains a tape machine
+    /// never sees, and a clipper barely moves by comparison.
     pub drive_scale: f32,
     /// Which band meets the knee first, in dB. Negative drives the lows into
     /// the stage harder — the transformer's bloom; positive drives the top,
     /// which is how tape has always been flattered.
     pub tilt_db: f32,
-    /// Whether the quantiser runs after the preamp.
+    /// Whether the quantiser runs after the preamp — and, with it, whether
+    /// drive is a tone control or a level one. See
+    /// [`saturate_dsp::preamp::Makeup`]: a clipper's ceiling has to be
+    /// reachable, so it gets no makeup at all, while an analogue stage's
+    /// loudness must not move when you audition a drive setting.
     pub digital: bool,
     /// What the panel's first circuit knob is wired to…
     pub character_a: Character,
@@ -278,7 +289,7 @@ pub static PROFILES: &[Profile] = &[
             sag_ms: 140.0,
             skew: 0.12,
             headroom: 1.15,
-            tilt_db: -6.0,
+            tilt_db: -4.5,
             character_a: Character::Headroom, // "Core"
             character_b: Character::SagTime,  // "Hysteresis"
             ..Voicing::base()
@@ -344,6 +355,10 @@ pub static PROFILES: &[Profile] = &[
             positive: SideShaper::Hard,
             negative: SideShaper::Hard,
             knee: 1.0,
+            // Drive is level here rather than tone, so the knob has a much
+            // shorter throw: 0 is unity and fully up is about 12 dB over the
+            // ceiling, which is already further than anyone means to go.
+            drive_scale: 0.25,
             digital: true,
             character_a: Character::Headroom, // "Ceiling"
             character_b: Character::Knee,     // "Knee"
@@ -362,6 +377,7 @@ pub static PROFILES: &[Profile] = &[
             positive: SideShaper::Hard,
             negative: SideShaper::Hard,
             knee: 1.0,
+            drive_scale: 0.25,
             digital: true,
             character_a: Character::Bits,
             character_b: Character::Rate,
@@ -464,7 +480,10 @@ pub fn apply(
 
     pre.positive = v.positive;
     pre.negative = v.negative;
-    pre.drive = (1.0 + controls.drive.clamp(0.0, 1.0) * 15.0) * v.drive_scale;
+    // The scale multiplies how far the knob *travels*, not the gain itself,
+    // so a closed Drive is unity on all nine — no profile is being driven
+    // when the control says it is not.
+    pre.drive = 1.0 + controls.drive.clamp(0.0, 1.0) * 15.0 * v.drive_scale;
     pre.q_point = (v.q_point + (controls.bias.clamp(0.0, 1.0) - 0.5) * 1.2).clamp(-1.0, 1.0);
     pre.skew = v.skew;
     pre.headroom = v.headroom;
@@ -488,13 +507,29 @@ pub fn apply(
         pre.sag = trim(controls.sag, v.sag, 0.0, 1.0);
     }
     pre.set_sag_ms(v.sag_ms);
+    // The knob trims by half the engine's range, not all of it. The makeup
+    // below is measured on the static transfer, which cannot see a filter —
+    // so a tilt wide enough to keep the stage linear in one band while
+    // saturating it in another is a tilt the level match gets wrong. Half the
+    // range is plenty of character and stays inside what the match can track.
     pre.set_tilt_db(
-        (v.tilt_db + (controls.tilt.clamp(0.0, 1.0) - 0.5) * 2.0 * TILT_MAX_DB)
+        (v.tilt_db + (controls.tilt.clamp(0.0, 1.0) - 0.5) * TILT_MAX_DB)
             .clamp(-TILT_MAX_DB, TILT_MAX_DB),
     );
 
     apply_character(v.character_a, controls.character_a, &v, pre, digital);
     apply_character(v.character_b, controls.character_b, &v, pre, digital);
+
+    // Last, because it measures everything above. A clipper gets none: its
+    // ceiling is fixed and its drive is genuinely level, so there is nothing
+    // to give back. Everything else is level-matched, which is what lets you
+    // audition a Fuzz against a Triode and hear the circuit rather than the
+    // 25 dB between them.
+    if v.digital {
+        pre.makeup = saturate_dsp::preamp::Makeup::None;
+    } else {
+        pre.refresh_makeup();
+    }
 }
 
 fn apply_character(
@@ -508,13 +543,23 @@ fn apply_character(
     match role {
         Character::None => {}
         Character::Skew => pre.skew = trim(knob, v.skew, 0.0, 0.9),
-        Character::Headroom => pre.headroom = trim_ratio(knob, v.headroom, 1.5),
+        Character::Headroom => {
+            let room = trim_ratio(knob, v.headroom, 1.5);
+            // On a clipper the same field is the Ceiling, and a ceiling only
+            // comes down. Raising it above full scale would be a control that
+            // makes the plugin louder than its input while claiming to be
+            // limiting it — and with no makeup to take that back.
+            pre.headroom = if v.digital { room.min(v.headroom) } else { room };
+        }
         Character::SagTime => pre.set_sag_ms(trim_ratio(knob, v.sag_ms, 2.0)),
         Character::Knee => pre.knee = trim(knob, v.knee, 0.0, 1.0),
         Character::Crossover => pre.crossover = trim(knob, v.crossover, 0.0, 1.0),
-        // Word length: squared so the useful, audibly-crushed half of the
-        // knob is most of its travel, and fully up is genuinely off.
-        Character::Bits => digital.bits = 2.0 + knob * knob * 22.0,
+        // Word length, cubed. Bits are logarithmic in what they cost you and
+        // linear in the number, so a linear knob spends most of its travel in
+        // the region where nothing is audible. Cubed, noon lands near five
+        // bits — a profile called Bitcrush should arrive crushed — and fully
+        // up is genuinely off rather than merely quiet.
+        Character::Bits => digital.bits = 2.0 + knob * knob * knob * 22.0,
         // …and rate the other way round, so both digital knobs read
         // "clockwise is cleaner" like every other control on the panel.
         Character::Rate => {
@@ -728,14 +773,14 @@ mod tests {
         }
     }
 
-    /// Every curve the DSP implements is reachable from some profile.
+    /// Every curve the simple [`saturate_dsp::Saturator`] path implements is
+    /// reachable from some profile.
     ///
-    /// The reverse does **not** hold here, and that is worth being explicit
-    /// about: `saturate-dsp` has four curves and this rail offers nine
-    /// profiles, so several share one. A Triode and a Pentode are the same
-    /// `Tube` transfer today and differ only in the bias and drive the panel
-    /// sets — the distinction is real, the implementation has not caught up
-    /// yet, and the profiles are where it will land when it does.
+    /// The reverse does **not** hold: that path has four curves and this rail
+    /// offers nine profiles, so several share one. Nothing is lost by it any
+    /// more — `curve` is the coarse answer for callers that want a saturator
+    /// rather than a preamp, and [`Profile::voicing`] is where a Triode and a
+    /// Pentode actually stop being the same thing.
     #[test]
     fn every_curve_the_dsp_has_is_reachable() {
         for curve in [
@@ -892,6 +937,38 @@ mod tests {
             "Heat must move H2: {} → {} dB",
             h2(0.0),
             h2(1.0),
+        );
+    }
+
+    /// Switching circuits must be a change of character, not of volume.
+    ///
+    /// This is the one that caught the real bug: dividing by the drive is
+    /// only unity for small signals, so a Fuzz at twelve times drive — where
+    /// the output is bounded by the headroom, not by the slope — came out
+    /// 25 dB below everything else. Nobody would have called that a DSP
+    /// error; they would have called the Fuzz useless.
+    #[test]
+    fn no_profile_is_a_volume_change_when_you_switch_to_it() {
+        let mut levels = Vec::new();
+        for profile in PROFILES.iter().filter(|p| !p.voicing.digital) {
+            let (mut pre, _) = engine(profile.id, Controls::default());
+            let mut peak = 0.0f32;
+            for i in 0..9_600 {
+                // −6 dBFS, the level the makeup is matched at.
+                let x = (std::f32::consts::TAU * 220.0 * i as f32 / 48_000.0).sin() * 0.5;
+                let y = pre.process(0, x);
+                if i > 4_800 {
+                    peak = peak.max(y.abs());
+                }
+            }
+            levels.push((profile.id, db(peak)));
+        }
+        let loudest = levels.iter().map(|(_, l)| *l).fold(f32::MIN, f32::max);
+        let quietest = levels.iter().map(|(_, l)| *l).fold(f32::MAX, f32::min);
+        assert!(
+            loudest - quietest < 9.0,
+            "the rail spans {:.1} dB: {levels:?}",
+            loudest - quietest,
         );
     }
 

@@ -123,6 +123,7 @@ pub fn RackFace(
                                     },
                                     legend: legend.to_string(),
                                     bezel: design.vu_bezel,
+                                    bezel_style: design.vu_frame,
                                     card: design.vu_card,
                                 }
                             }
