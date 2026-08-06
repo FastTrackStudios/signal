@@ -24,7 +24,7 @@ default:
 _lumen-link:
     #!/usr/bin/env bash
     set -euo pipefail
-    dir=$(cargo metadata --format-version 1 2>/dev/null \
+    dir=$(cargo metadata --locked --format-version 1 2>/dev/null \
         | python3 -c 'import json,sys,os; print(next(os.path.dirname(p["manifest_path"]) for p in json.load(sys.stdin)["packages"] if p["name"]=="lumen-blocks"))')
     ln -sfn "$dir" apps/fasttrackstudio/.lumen-blocks
 
