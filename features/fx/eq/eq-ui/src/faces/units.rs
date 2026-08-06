@@ -272,6 +272,7 @@ pub static SSL: RackDesign = RackDesign {
             color: "#1c1e21",
             ink: "#e8eaec",
             led: "#43d17a",
+            style: None,
         },
         RackItem::Text { x: 128.0, y: 24.0, text: "HP", size: 11.0, strong: true },
         RackItem::Button {
@@ -282,6 +283,7 @@ pub static SSL: RackDesign = RackDesign {
             color: "#e6e2d4",
             ink: "#23252a",
             led: "#43d17a",
+            style: None,
         },
         RackItem::Knob {
             id: "hpf",
@@ -349,6 +351,7 @@ pub static SSL: RackDesign = RackDesign {
             color: "#e6e2d4",
             ink: "#1f5f96",
             led: "#43d17a",
+            style: None,
         },
         RackItem::Knob {
             id: "",
@@ -382,6 +385,7 @@ pub static SSL: RackDesign = RackDesign {
             color: "#e6e2d4",
             ink: "#1d6b46",
             led: "#43d17a",
+            style: None,
         },
         RackItem::Knob {
             id: "hmf_gain",
@@ -448,6 +452,7 @@ pub static SSL: RackDesign = RackDesign {
             color: "#e6e2d4",
             ink: "#23252a",
             led: "#43d17a",
+            style: None,
         },
         RackItem::Button {
             id: "",
@@ -457,6 +462,7 @@ pub static SSL: RackDesign = RackDesign {
             color: "#c2382c",
             ink: "#f4e9e7",
             led: "#e0483a",
+            style: None,
         },
         RackItem::Knob {
             id: "trim",
@@ -792,6 +798,7 @@ pub static NEVE_1073: RackDesign = RackDesign {
             color: "#e6e4dc",
             ink: "#20242b",
             led: "#d24a3a",
+            style: None,
         },
         RackItem::Button {
             id: "eq_in",
@@ -801,6 +808,7 @@ pub static NEVE_1073: RackDesign = RackDesign {
             color: "#e6e4dc",
             ink: "#20242b",
             led: "#d24a3a",
+            style: None,
         },
         RackItem::Text {
             x: 1160.0,

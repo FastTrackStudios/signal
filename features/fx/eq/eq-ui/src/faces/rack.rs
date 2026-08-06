@@ -301,7 +301,7 @@ pub fn EqRackFace(
                                 }
                             }
                         },
-                        RackItem::Button { id, label, x, y, color, ink, led } => rsx! {
+                        RackItem::Button { id, label, x, y, color, ink, led, style } => rsx! {
                             PanelSlot { scale, x, y, w: 64.0, h: 86.0,
                                 PanelButton {
                                     // An empty id is a control the panel has
@@ -318,6 +318,7 @@ pub fn EqRackFace(
                                     color: color.to_string(),
                                     ink: ink.to_string(),
                                     led: led.to_string(),
+                                    style: style.unwrap_or_default(),
                                 }
                             }
                         },
