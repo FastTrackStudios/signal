@@ -1,0 +1,10 @@
+[package]
+name = "reverb-profiles"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+edition = "2021"
+description = "Reverb profiles — the seven families a reverb actually comes in, and which engine each one is"
+
+[dependencies]
+reverb-dsp = { path = "../reverb-dsp" }
