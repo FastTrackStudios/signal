@@ -11,7 +11,7 @@
 //! editor — see `crate::faces::preferred_editor_size`.
 
 use crate::hardware::knob::KnobStyle;
-use crate::hardware::panel::PanelEnds;
+use crate::hardware::panel::{PanelEnds, PanelTexture};
 use crate::hardware::vu_svg::VuScale;
 use crate::hardware::rack::{RackDesign, RackItem, Ring};
 use crate::hardware::vu::{VuFace, VuMode};
@@ -173,6 +173,7 @@ const fn fet_limiter(
     ink: &'static str,
     dim_ink: &'static str,
     chrome: &'static str,
+    texture: PanelTexture,
 ) -> RackDesign {
     RackDesign {
         id,
@@ -186,6 +187,7 @@ const fn fet_limiter(
         vu_bezel: true,
         vu_card: VuScale::Vu,
         ends: PanelEnds::RackEars,
+        texture,
         knob: KnobStyle::SilverTop,
         items: ITEMS_1176,
     }
@@ -198,15 +200,18 @@ pub static UREI_1176: RackDesign = fet_limiter(
     "#ded7c9",
     "#9a9384",
     "#8d8a84",
+    PanelTexture::Painted,
 );
 
 /// Brushed aluminium.
 pub static UREI_1176_SILVER: RackDesign = fet_limiter(
     "urei_1176_silver",
-    "linear-gradient(178deg, #d6d7d5 0%, #c0c1bf 44%, #a5a6a4 100%)",
+    "linear-gradient(178deg, #c9cac8 0%, #b6b7b5 46%, #9d9e9c 100%)",
     "#1e1f21",
     "#55575a",
     "#b6b7b5",
+    // The one that is actually a metal plate.
+    PanelTexture::Brushed,
 );
 
 /// The LN's plum panel.
@@ -216,6 +221,7 @@ pub static UREI_1176_LN: RackDesign = fet_limiter(
     "#ece2ec",
     "#a094a2",
     "#9b8c9d",
+    PanelTexture::Painted,
 );
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -248,6 +254,7 @@ pub static LA2A: RackDesign = RackDesign {
     vu_bezel: true,
     vu_card: VuScale::Vu,
     ends: PanelEnds::RackEars,
+    texture: PanelTexture::Painted,
     knob: KnobStyle::Pointer,
     items: &[
         // ── Identity ─────────────────────────────────────────────────────
@@ -340,6 +347,7 @@ pub static CL1B: RackDesign = RackDesign {
     vu_bezel: false,
     vu_card: VuScale::Vu,
     ends: PanelEnds::RackEars,
+    texture: PanelTexture::Painted,
     // Five large plain black knobs on the blue face — no skirt, no
     // flutes, which is what makes the CL 1B look modern beside an LA-2A.
     knob: KnobStyle::Skirted,
@@ -460,6 +468,7 @@ pub static FAIRCHILD_670: RackDesign = RackDesign {
     vu_bezel: true,
     vu_card: VuScale::Vu,
     ends: PanelEnds::RackEars,
+    texture: PanelTexture::Painted,
     knob: KnobStyle::Pointer,
     items: &[
         // ── The movement ─────────────────────────────────────────────────
@@ -539,6 +548,7 @@ pub static MANLEY_VARI_MU: RackDesign = RackDesign {
     vu_bezel: false,
     vu_card: VuScale::Vu,
     ends: PanelEnds::RackEars,
+    texture: PanelTexture::Painted,
     // Brushed metal, the modern boutique idiom.
     knob: KnobStyle::Metal,
     items: &[
@@ -666,6 +676,7 @@ pub static SSL_BUS: RackDesign = RackDesign {
     vu_bezel: false,
     vu_card: VuScale::Vu,
     ends: PanelEnds::RackEars,
+    texture: PanelTexture::Painted,
     // The console's collet caps: the bus compressor is a centre-section
     // module, so it wears the same knob as the channel strip.
     knob: KnobStyle::Collet,
@@ -787,6 +798,7 @@ pub static DBX_160: RackDesign = RackDesign {
     vu_bezel: true,
     vu_card: VuScale::Decibels,
     ends: PanelEnds::Wood,
+    texture: PanelTexture::Painted,
     knob: KnobStyle::MetalFluted,
     items: &[
         // ── Threshold, with its over/under lamps ─────────────────────────
@@ -916,6 +928,7 @@ pub static DISTRESSOR: RackDesign = RackDesign {
     vu_bezel: false,
     vu_card: VuScale::Vu,
     ends: PanelEnds::RackEars,
+    texture: PanelTexture::Painted,
     knob: KnobStyle::Dial,
     items: &[
         // ── Upper section: what the unit reports ─────────────────────────

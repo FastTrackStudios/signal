@@ -17,7 +17,7 @@
 //! Panel drawings are wide and short, so a face asks the host for a shorter
 //! editor — see [`crate::faces::preferred_editor_size`].
 
-use fts_ui_audio::hardware::panel::PanelEnds;
+use fts_ui_audio::hardware::panel::{PanelEnds, PanelTexture};
 use fts_ui_audio::hardware::vu_svg::VuScale;
 use fts_ui_audio::hardware::knob::KnobStyle;
 use fts_ui_audio::hardware::rack::{RackDesign, RackItem, Ring};
@@ -72,6 +72,7 @@ pub static PULTEC: RackDesign = RackDesign {
     vu_bezel: false,
     vu_card: VuScale::Vu,
     ends: PanelEnds::RackEars,
+    texture: PanelTexture::Painted,
     // Daka-Ware phenolic, as the unit wears: a ridged 1⅛" body on a 1½" skirt,
     // with the index engraved into the body and filled white.
     knob: KnobStyle::Daka,
@@ -253,6 +254,7 @@ pub static SSL: RackDesign = RackDesign {
     vu_bezel: false,
     vu_card: VuScale::Vu,
     ends: PanelEnds::RackEars,
+    texture: PanelTexture::Painted,
     // Collet caps: flat top, fluted rim, one white bar. The panel prints the
     // travel as dots around them rather than the knob carrying a skirt.
     knob: KnobStyle::Collet,
@@ -504,6 +506,7 @@ pub static API_550A: RackDesign = RackDesign {
     vu_bezel: false,
     vu_card: VuScale::Vu,
     ends: PanelEnds::RackEars,
+    texture: PanelTexture::Painted,
     knob: KnobStyle::Bakelite,
     items: &[
         RackItem::Text {
@@ -645,6 +648,7 @@ pub static NEVE_1073: RackDesign = RackDesign {
     vu_bezel: false,
     vu_card: VuScale::Vu,
     ends: PanelEnds::RackEars,
+    texture: PanelTexture::Painted,
     // Marconi wing knobs, and Neve's colour coding rides on them.
     knob: KnobStyle::Marconi,
     items: &[
