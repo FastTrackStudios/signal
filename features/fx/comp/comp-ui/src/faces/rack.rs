@@ -232,7 +232,7 @@ pub fn RackFace(
                                 }
                             }
                         },
-                        RackItem::Button { id, label, x, y, color, ink, led } => rsx! {
+                        RackItem::Button { id, label, x, y, color, ink, led, style } => rsx! {
                             PanelSlot { scale, x, y, w: 62.0, h: 62.0,
                                 PanelButton {
                                     handle: (!id.is_empty()).then(|| face.handle(id)),
@@ -246,6 +246,7 @@ pub fn RackFace(
                                     color: color.to_string(),
                                     ink: ink.to_string(),
                                     led: led.to_string(),
+                                    style: style.unwrap_or_default(),
                                     w: 40.0,
                                     h: 22.0,
                                 }

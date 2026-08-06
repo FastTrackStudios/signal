@@ -865,6 +865,7 @@ pub static DBX_160: RackDesign = RackDesign {
             color: "#c9ccd0",
             ink: "#1a1c1f",
             led: "",
+            style: None,
         },
         RackItem::Button {
             id: "",
@@ -874,6 +875,7 @@ pub static DBX_160: RackDesign = RackDesign {
             color: "#c9ccd0",
             ink: "#1a1c1f",
             led: "",
+            style: None,
         },
         RackItem::Button {
             id: "",
@@ -883,6 +885,7 @@ pub static DBX_160: RackDesign = RackDesign {
             color: "#c9ccd0",
             ink: "#1a1c1f",
             led: "",
+            style: None,
         },
         RackItem::Button {
             id: "",
@@ -892,6 +895,7 @@ pub static DBX_160: RackDesign = RackDesign {
             color: "#c9ccd0",
             ink: "#1a1c1f",
             led: "",
+            style: None,
         },
         RackItem::Text { x: 496.0, y: 272.0, text: "Meter", size: 8.0, strong: false },
 
@@ -975,6 +979,7 @@ pub static DISTRESSOR: RackDesign = RackDesign {
             color: "#8d9298",
             ink: "#15171a",
             led: "#e0483a",
+            style: None,
         },
         RackItem::Button {
             id: "ratio",
@@ -984,6 +989,7 @@ pub static DISTRESSOR: RackDesign = RackDesign {
             color: "#8d9298",
             ink: "#15171a",
             led: "",
+            style: None,
         },
         RackItem::Button {
             id: "detector",
@@ -993,6 +999,7 @@ pub static DISTRESSOR: RackDesign = RackDesign {
             color: "#8d9298",
             ink: "#15171a",
             led: "",
+            style: None,
         },
         RackItem::Button {
             id: "audio_mode",
@@ -1002,6 +1009,7 @@ pub static DISTRESSOR: RackDesign = RackDesign {
             color: "#8d9298",
             ink: "#15171a",
             led: "",
+            style: None,
         },
         RackItem::Text { x: 800.0, y: 156.0, text: "Detector", size: 8.0, strong: false },
         RackItem::Text { x: 866.0, y: 156.0, text: "Audio", size: 8.0, strong: false },

@@ -1,0 +1,12 @@
+[package]
+name = "modulation-profiles"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+edition = "2021"
+description = "Modulation profiles — the five circuits, and what each one modulates"
+
+[dependencies]
+# The facade, not the three DSP cores: this crate names engines and voices
+# them, and the facade is what says which engines exist.
+modulation = { workspace = true }
