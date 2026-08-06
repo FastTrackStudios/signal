@@ -251,6 +251,11 @@ eq-shots:
 reverb-shots:
     cargo test -p reverb-ui --features native --test screenshots -- --nocapture
 
+# Every delay family's panel, painted headless. Shots land in
+# target/gui-shots/delay/.
+delay-shots:
+    cargo test -p delay-ui --features native --test screenshots -- --nocapture
+
 # Bundle every FTS plugin as .clap + .vst3 (target/bundled/, names from
 # bundler.toml). Debug of a single plugin: cargo run -p fts-plugin-xtask
 # -- bundle -p eq-plugin

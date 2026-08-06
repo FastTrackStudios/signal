@@ -11,8 +11,11 @@
 //! GUI is deliberately absent for now (headless, host-generic params),
 //! matching level-plugin; the nice-plug-dioxus editor is a follow-up.
 
+use audiocore_core::prelude::*;
 use nice_plug::prelude::*;
 use std::sync::Arc;
+
+use delay_ui::params::{DelayParams, DelayUiState};
 
 use audiocore_dsp::{AudioConfig, Processor};
 use delay::{DelayChain, DelayStyle};
@@ -25,167 +28,11 @@ const PLUGIN_NAME: &str = "FTS Delay";
 const TIME_MIN_MS: f32 = 20.0;
 const TIME_MAX_MS: f32 = 2500.0;
 
-// ── Parameters ────────────────────────────────────────────────────────────
-
-/// The delay-style selector, mirrored onto [`DelayStyle`].
-#[derive(Enum, Debug, Clone, Copy, PartialEq, Eq)]
-pub enum StyleParam {
-    #[name = "Tape"]
-    Tape,
-    #[name = "Digital"]
-    Clean,
-    #[name = "BBD"]
-    Bbd,
-    #[name = "Lo-Fi"]
-    LoFi,
-    #[name = "Shimmer"]
-    Shimmer,
-    #[name = "Reverse"]
-    Reverse,
-    #[name = "Pitch"]
-    Pitch,
-    #[name = "Rhythm"]
-    Rhythm,
-    #[name = "Drum"]
-    Drum,
-    #[name = "Oil Can"]
-    OilCan,
-    #[name = "MultiTap"]
-    MultiTap,
-    #[name = "Spectral"]
-    Spectral,
-    #[name = "Filter"]
-    Filter,
-}
-
-impl From<StyleParam> for DelayStyle {
-    fn from(value: StyleParam) -> Self {
-        match value {
-            StyleParam::Tape => DelayStyle::Tape,
-            StyleParam::Clean => DelayStyle::Clean,
-            StyleParam::Bbd => DelayStyle::Bbd,
-            StyleParam::LoFi => DelayStyle::LoFi,
-            StyleParam::Shimmer => DelayStyle::Shimmer,
-            StyleParam::Reverse => DelayStyle::Reverse,
-            StyleParam::Pitch => DelayStyle::Pitch,
-            StyleParam::Rhythm => DelayStyle::Rhythm,
-            StyleParam::Drum => DelayStyle::Drum,
-            StyleParam::OilCan => DelayStyle::OilCan,
-            StyleParam::MultiTap => DelayStyle::MultiTap,
-            StyleParam::Spectral => DelayStyle::Spectral,
-            StyleParam::Filter => DelayStyle::Filter,
-        }
-    }
-}
-
-#[derive(Params)]
-pub struct DelayParams {
-    /// Delay character (tape / digital / BBD / …).
-    #[id = "style"]
-    pub style: EnumParam<StyleParam>,
-    /// Left delay time in ms (free-running; styles clamp to their range).
-    #[id = "time_l"]
-    pub time_l: FloatParam,
-    /// Right delay time in ms (ignored while Link is on).
-    #[id = "time_r"]
-    pub time_r: FloatParam,
-    /// Link R to L (single-knob operation).
-    #[id = "link"]
-    pub link: BoolParam,
-    /// Regeneration amount (0 = single repeat, 1 = self-oscillation edge).
-    #[id = "feedback"]
-    pub feedback: FloatParam,
-    /// Feedback-loop hi-cut in Hz — repeats darken as it comes down.
-    #[id = "tone"]
-    pub tone: FloatParam,
-    /// Saturation drive in the loop (0 = clean).
-    #[id = "drive"]
-    pub drive: FloatParam,
-    /// Wow depth — slow tape-speed wobble (0 = off).
-    #[id = "wow"]
-    pub wow: FloatParam,
-    /// Flutter depth — fast tape-speed wobble (0 = off).
-    #[id = "flutter"]
-    pub flutter: FloatParam,
-    /// Duck amount: wet pulls down while the dry input is playing (0 = off).
-    #[id = "duck"]
-    pub duck: FloatParam,
-    /// Dry/wet mix.
-    #[id = "mix"]
-    pub mix: FloatParam,
-}
-
-impl Default for DelayParams {
-    fn default() -> Self {
-        Self {
-            style: EnumParam::new("Style", StyleParam::Tape),
-            time_l: FloatParam::new(
-                "Time L",
-                250.0,
-                FloatRange::Skewed {
-                    min: TIME_MIN_MS,
-                    max: TIME_MAX_MS,
-                    factor: FloatRange::skew_factor(-2.0),
-                },
-            )
-            .with_unit(" ms")
-            .with_value_to_string(formatters::v2s_f32_rounded(1)),
-            time_r: FloatParam::new(
-                "Time R",
-                250.0,
-                FloatRange::Skewed {
-                    min: TIME_MIN_MS,
-                    max: TIME_MAX_MS,
-                    factor: FloatRange::skew_factor(-2.0),
-                },
-            )
-            .with_unit(" ms")
-            .with_value_to_string(formatters::v2s_f32_rounded(1)),
-            link: BoolParam::new("Link L/R", true),
-            feedback: FloatParam::new(
-                "Feedback",
-                0.4,
-                FloatRange::Linear { min: 0.0, max: 1.0 },
-            )
-            .with_unit("%")
-            .with_value_to_string(formatters::v2s_f32_percentage(0)),
-            tone: FloatParam::new(
-                "Tone",
-                8000.0,
-                FloatRange::Skewed {
-                    min: 500.0,
-                    max: 20000.0,
-                    factor: FloatRange::skew_factor(-2.0),
-                },
-            )
-            .with_unit(" Hz")
-            .with_value_to_string(formatters::v2s_f32_rounded(0)),
-            drive: FloatParam::new("Drive", 0.0, FloatRange::Linear { min: 0.0, max: 1.0 })
-                .with_unit("%")
-                .with_value_to_string(formatters::v2s_f32_percentage(0)),
-            wow: FloatParam::new("Wow", 0.0, FloatRange::Linear { min: 0.0, max: 1.0 })
-                .with_unit("%")
-                .with_value_to_string(formatters::v2s_f32_percentage(0)),
-            flutter: FloatParam::new(
-                "Flutter",
-                0.0,
-                FloatRange::Linear { min: 0.0, max: 1.0 },
-            )
-            .with_unit("%")
-            .with_value_to_string(formatters::v2s_f32_percentage(0)),
-            duck: FloatParam::new("Duck", 0.0, FloatRange::Linear { min: 0.0, max: 1.0 })
-                .with_unit("%")
-                .with_value_to_string(formatters::v2s_f32_percentage(0)),
-            mix: FloatParam::new("Mix", 0.5, FloatRange::Linear { min: 0.0, max: 1.0 })
-                .with_unit("%")
-                .with_value_to_string(formatters::v2s_f32_percentage(0)),
-        }
-    }
-}
-
 // ── Plugin ────────────────────────────────────────────────────────────────
 
 pub struct FtsDelay {
+    ui_state: Arc<DelayUiState>,
+    editor_state: Arc<DioxusState>,
     params: Arc<DelayParams>,
     /// The full stereo chain (inherently stereo — one instance).
     chain: DelayChain,
@@ -197,6 +44,15 @@ impl Default for FtsDelay {
     fn default() -> Self {
         Self {
             params: Arc::new(DelayParams::default()),
+            ui_state: Arc::new(DelayUiState::default()),
+            // The editor sizes itself — see delay_ui::control_view.
+            editor_state: DioxusState::new(|| {
+                (
+                    delay_ui::control_view::EDITOR_W,
+                    delay_ui::control_view::EDITOR_H,
+                )
+            })
+            .with_resize_hint(delay_ui::control_view::resize_hint()),
             chain: DelayChain::new(),
             sample_rate: 48_000.0,
             max_buffer_size: 512,
@@ -214,7 +70,10 @@ impl FtsDelay {
         let p = &self.params;
         let c = &mut self.chain;
 
-        c.set_style(DelayStyle::from(p.style.value()));
+        // The engine comes from the profile, not from a raw style index: the
+        // rail's six families are the vocabulary, and the persisted id is
+        // what a session reopens with.
+        c.set_style(p.resolved_profile().style);
 
         // Time — free-running ms; Link mirrors L onto R.
         let time_l = p.time_l.value() as f64;
@@ -276,9 +135,20 @@ impl Plugin for FtsDelay {
     }];
 
     // No editor yet — the host shows its generic parameter UI.
-    type Editor = ();
+    type Editor = audiocore_core::nice_plug_dioxus::editor::DioxusEditor;
     type SysExMessage = ();
     type BackgroundTask = ();
+
+    fn editor(&mut self, _async_executor: AsyncExecutor<Self>) -> Option<Self::Editor> {
+        create_dioxus_editor_with_state(
+            self.editor_state.clone(),
+            Arc::new(delay_ui::control_view::DelayUi {
+                params: self.params.clone(),
+                state: self.ui_state.clone(),
+            }),
+            delay_ui::control_view::App,
+        )
+    }
 
     fn params(&self) -> Arc<dyn Params> {
         self.params.clone()

@@ -15,6 +15,11 @@ crate-type = ["cdylib", "lib"]
 # absolute `::nice_plug::…` paths.
 nice-plug.workspace = true
 
+# The Blitz/nice-plug editor: the six families and their panels.
+delay-ui = { workspace = true, features = ["native"] }
+delay-profiles.workspace = true
+audiocore-core = { workspace = true }
+
 # The DSP facade (re-exports delay-dsp). Never depend on delay-dsp directly.
 delay.workspace = true
 
