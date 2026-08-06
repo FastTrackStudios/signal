@@ -777,7 +777,7 @@ pub fn apply(
             trem.set_mode(mode);
             trem.set_depth(depth);
             trem.mix = mix;
-            trem.modulator.trigger.rate_hz = rate;
+            free_running(&mut trem.modulator.trigger, rate);
             // Stereo voicing is a 90° offset; the chain only reads its stereo
             // path when `stereo_phase` is nonzero.
             let (phase, offset) = if mode == TremMode::Stereo {
@@ -797,7 +797,7 @@ pub fn apply(
             wah.source = source;
             wah.env_amount = depth;
             wah.mix = mix;
-            wah.modulator.trigger.rate_hz = rate;
+            free_running(&mut wah.modulator.trigger, rate);
             wah.filter_l.mode = filter;
             wah.filter_r.mode = filter;
             wah.base_position = 0.3;
@@ -813,6 +813,20 @@ pub fn apply(
     for (knob, value) in v.knobs.iter().zip(controls.knobs.iter()) {
         apply_knob(*knob, *value, chorus, trem, wah);
     }
+}
+
+/// Put a modulator on its own clock at `rate`.
+///
+/// Belongs here rather than in the plugin's constructor: a chain that has a
+/// rate but is still waiting for a transport does not move at all, and the
+/// editor builds its own chains to draw from. Setting it in one place and not
+/// the other is how the panel ended up drawing a flat line for a tremolo.
+///
+/// Tempo sync is a follow-up — the host transport is not plumbed through yet.
+fn free_running(trigger: &mut modulation::trem::fts_modulation::TriggerEngine, rate: f64) {
+    trigger.mode = modulation::trem::fts_modulation::TriggerMode::Free;
+    trigger.sync_index = 0;
+    trigger.rate_hz = rate;
 }
 
 fn apply_knob(
@@ -864,6 +878,125 @@ fn apply_knob(
         }
     }
 }
+
+// ── The shape ────────────────────────────────────────────────────────────
+
+/// Sample one cycle of what a profile *moves*, normalised to 0..1.
+///
+/// This is the modulator's equivalent of the saturator's transfer curve, and
+/// it is taken from the engines for the same reason: a drawn sine is a
+/// picture of a chorus rather than of this one. The tape engine wanders on
+/// wow and flutter that are not locked to the rate; the orbit engine's line
+/// depends on a second slow rotation; a tremolo with groove on it is not
+/// symmetrical any more. All of that is in here because all of it is audible.
+///
+/// What is being plotted differs by circuit, and honestly so:
+///
+/// - **Delay circuits** plot *delay time*, which is what the LFO actually
+///   moves. The pitch wobble and the comb are both downstream of this line.
+/// - **Tremolo** plots the gain the amplitude modulator applies — the shape
+///   the level literally follows.
+/// - **Wah** plots the modulator driving the cutoff. On an envelope-driven
+///   profile there is nothing periodic to draw, and the line is flat at the
+///   pedal position: correct, and worth seeing, because that circuit responds
+///   to playing rather than to time.
+///
+/// Normalisation is per-circuit against its own range, so the drawing fills
+/// the box whatever the units are. `out` may be any length ≥ 2.
+pub fn shape(profile: &Profile, controls: &Controls, out: &mut [f64]) {
+    if out.is_empty() {
+        return;
+    }
+    let mut chorus = ChorusChain::new();
+    let mut trem = TremChain::new();
+    let mut wah = WahChain::new();
+    apply(profile, controls, &mut chorus, &mut trem, &mut wah);
+
+    match profile.voicing.circuit {
+        Circuit::Delay { engine, effect } => {
+            modulation::chorus::analysis::delay_cycle(
+                engine,
+                effect,
+                chorus.rate_hz,
+                chorus.depth,
+                chorus.color,
+                chorus.feedback,
+                0.0,
+                out,
+            );
+        }
+        Circuit::Tremolo { .. } => {
+            let n = out.len().max(2);
+            // The same pretend-sample-rate trick the chorus analysis uses:
+            // one cycle in `n` ticks whatever the real rate is.
+            let rate = trem.modulator.trigger.rate_hz.max(1.0e-6);
+            trem.modulator.update(n as f64 * rate.max(1.0));
+            trem.modulator.reset();
+            let transport = TransportInfo::default();
+            for slot in out.iter_mut() {
+                trem.modulator.tick(&transport, 0.0);
+                *slot = trem.modulator.output();
+            }
+        }
+        Circuit::Wah { source, .. } => {
+            let n = out.len().max(2);
+            if source == WahSource::Envelope {
+                // Nothing periodic drives this one — the line is where the
+                // pedal is sitting, and it does not move until you play.
+                out.fill(wah.base_position);
+                // Already in 0..1, and a flat line has no range to normalise
+                // against: drawn where the pedal actually is.
+                return;
+            } else {
+                let rate = wah.modulator.trigger.rate_hz.max(1.0e-6);
+                wah.modulator.update(n as f64 * rate.max(1.0));
+                wah.modulator.reset();
+                let transport = TransportInfo::default();
+                for slot in out.iter_mut() {
+                    wah.modulator.tick(&transport, 0.0);
+                    *slot = wah.base_position + wah.modulator.output() * wah.pattern_amount;
+                }
+            }
+        }
+    }
+    // A circuit that is not moving has no range to scale against, so the
+    // caller says where to draw the line instead. Mid-height for anything
+    // measured in its own units (a delay in ms means nothing as a height);
+    // the wah's own position when it is a position.
+    normalise(out, 0.5);
+}
+
+/// Scale a sampled cycle into 0..1 against its own range.
+///
+/// A nearly-flat line stays flat rather than being stretched into a wobble it
+/// does not have: a vibrato at 2% depth and one at 100% should not draw the
+/// same picture, and neither should a wah that is not moving.
+fn normalise(out: &mut [f64], flat_at: f64) {
+    let (mut lo, mut hi) = (f64::MAX, f64::MIN);
+    for v in out.iter() {
+        if v.is_finite() {
+            lo = lo.min(*v);
+            hi = hi.max(*v);
+        }
+    }
+    if !lo.is_finite() || !hi.is_finite() {
+        out.fill(flat_at);
+        return;
+    }
+    // Below this the movement is not worth drawing as movement. The span is
+    // in the circuit's own units, so the floor is relative to the level.
+    let span = hi - lo;
+    let reference = hi.abs().max(1.0e-6);
+    if span <= reference * 0.005 {
+        out.fill(flat_at.clamp(0.0, 1.0));
+        return;
+    }
+    for v in out.iter_mut() {
+        *v = ((*v - lo) / span).clamp(0.0, 1.0);
+    }
+}
+
+use modulation::trem::fts_modulation::TransportInfo;
 
 #[cfg(test)]
 mod tests {
@@ -1046,6 +1179,116 @@ mod tests {
                 );
                 seen.push(knob.role);
             }
+        }
+    }
+
+    /// Every profile draws something, and nothing draws a NaN.
+    #[test]
+    fn every_profile_has_a_shape() {
+        for profile in PROFILES {
+            let mut buf = [0.0f64; 96];
+            shape(profile, &Controls::default(), &mut buf);
+            for v in buf {
+                assert!(
+                    v.is_finite() && (0.0..=1.0).contains(&v),
+                    "{} drew {v}",
+                    profile.id,
+                );
+            }
+        }
+    }
+
+    /// The shape is the engine's, so a control that changes the movement has
+    /// to change the drawing. Depth is the plainest case: a deeper chorus
+    /// sweeps further, and if the picture does not move with it the panel is
+    /// drawing a sine and calling it a chorus.
+    #[test]
+    fn depth_changes_what_a_chorus_draws() {
+        let span = |depth: f32| {
+            let mut buf = [0.0f64; 128];
+            let mut raw = [0.0f64; 128];
+            let profile = profile_by_id("cubic").unwrap();
+            let controls = Controls { depth, ..Default::default() };
+            shape(profile, &controls, &mut buf);
+            // Normalised output always fills the box, so measure the RAW
+            // excursion the engine chose rather than the drawing.
+            let (mut c, mut t, mut w) = engines();
+            apply(profile, &controls, &mut c, &mut t, &mut w);
+            modulation::chorus::analysis::delay_cycle(
+                EngineType::Cubic,
+                EffectType::Chorus,
+                c.rate_hz,
+                c.depth,
+                c.color,
+                c.feedback,
+                0.0,
+                &mut raw,
+            );
+            raw.iter().cloned().fold(f64::MIN, f64::max)
+                - raw.iter().cloned().fold(f64::MAX, f64::min)
+        };
+        assert!(
+            span(0.9) > span(0.2) * 2.0,
+            "deeper must sweep further: {} vs {}",
+            span(0.2),
+            span(0.9),
+        );
+    }
+
+    /// Every periodic circuit must actually draw movement.
+    ///
+    /// The one that caught the real bug: a fresh chain's modulator is waiting
+    /// for a transport, not free-running, so setting only its rate left the
+    /// tremolo perfectly still — and the panel drew a flat line for an effect
+    /// whose entire job is to move.
+    #[test]
+    fn every_periodic_circuit_draws_movement() {
+        for profile in PROFILES {
+            // The envelope wah is the one honest exception; it has its own test.
+            if matches!(
+                profile.voicing.circuit,
+                Circuit::Wah { source: WahSource::Envelope, .. }
+            ) {
+                continue;
+            }
+            let mut buf = [0.0f64; 128];
+            shape(profile, &Controls::default(), &mut buf);
+            let lo = buf.iter().cloned().fold(f64::MAX, f64::min);
+            let hi = buf.iter().cloned().fold(f64::MIN, f64::max);
+            assert!(
+                hi - lo > 0.25,
+                "{} drew a still line ({lo:.3}..{hi:.3}) — is its modulator running?",
+                profile.id,
+            );
+        }
+    }
+
+    /// An envelope-driven wah has nothing periodic to draw, and drawing a
+    /// wobble there would be inventing movement the circuit does not have.
+    /// The flat line sits where the pedal actually is — pinning it to the top
+    /// of the box would be just as wrong as drawing a wobble.
+    #[test]
+    fn an_envelope_wah_draws_a_flat_line_at_its_pedal_position() {
+        for position in [0.2f32, 0.5, 0.8] {
+            let mut buf = [0.0f64; 64];
+            let controls = Controls {
+                knobs: [position, 0.5, 0.5, 0.5],
+                ..Default::default()
+            };
+            let profile = profile_by_id("wah_auto").unwrap();
+            shape(profile, &controls, &mut buf);
+            let lo = buf.iter().cloned().fold(f64::MAX, f64::min);
+            let hi = buf.iter().cloned().fold(f64::MIN, f64::max);
+            assert!((hi - lo) < 1.0e-6, "auto-wah drew movement: {lo}..{hi}");
+
+            // …and at the height the pedal is set to.
+            let (mut c, mut t, mut w) = engines();
+            apply(profile, &controls, &mut c, &mut t, &mut w);
+            assert!(
+                (lo - w.base_position).abs() < 1.0e-6,
+                "drew at {lo}, pedal is at {}",
+                w.base_position,
+            );
         }
     }
 

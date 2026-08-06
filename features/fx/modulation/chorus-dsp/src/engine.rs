@@ -59,6 +59,14 @@ pub trait ChorusEngine: Send {
         effect_type: EffectType,
     ) -> f64;
     fn reset(&mut self);
+
+    /// The delay this voice is currently reading at, in ms.
+    ///
+    /// Recorded by `tick`, not recomputed — an editor that drew a *second*
+    /// implementation of the LFO would be drawing a picture of the engine
+    /// rather than the engine, and the two would drift. See
+    /// [`crate::analysis`], which is the only caller.
+    fn delay_ms(&self) -> f64;
 }
 
 // ─── Cubic Engine ───────────────────────────────────────────────────
@@ -68,12 +76,15 @@ pub struct CubicVoice {
     lfo_phase: f64,
     phase_offset: f64,
     sample_rate: f64,
+    /// Last delay `tick` read at, in ms — display only.
+    last_delay_ms: f64,
 }
 
 impl CubicVoice {
     const MAX_DELAY: usize = 192000 / 20 + 64;
     pub fn new(phase_offset: f64) -> Self {
         Self {
+            last_delay_ms: 0.0,
             delay: DelayLine::new(Self::MAX_DELAY),
             lfo_phase: 0.0,
             phase_offset,
@@ -106,10 +117,15 @@ impl ChorusEngine for CubicVoice {
         let depth_ms = effect_type.max_depth_ms() * depth;
         let delay_samples = ((base_ms + depth_ms * lfo) * 0.001 * self.sample_rate)
             .clamp(1.0, self.delay.len() as f64 - 4.0);
+        self.last_delay_ms = delay_samples * 1000.0 / self.sample_rate;
         let delayed = self.delay.read_cubic(delay_samples);
         self.delay
             .write(input + (delayed * feedback).clamp(-1.5, 1.5));
         delayed
+    }
+
+    fn delay_ms(&self) -> f64 {
+        self.last_delay_ms
     }
 
     fn reset(&mut self) {
@@ -130,12 +146,15 @@ pub struct BbdVoice {
     output_lp: f64,
     num_stages: usize,
     sample_rate: f64,
+    /// Last delay `tick` read at, in ms — display only.
+    last_delay_ms: f64,
 }
 
 impl BbdVoice {
     const DEFAULT_STAGES: usize = 512;
     pub fn new(phase_offset: f64) -> Self {
         Self {
+            last_delay_ms: 0.0,
             lfo_phase: 0.0,
             phase_offset,
             buckets: vec![0.0; Self::DEFAULT_STAGES],
@@ -168,6 +187,7 @@ impl ChorusEngine for BbdVoice {
         let base_ms = effect_type.base_delay_ms();
         let depth_ms = effect_type.max_depth_ms() * depth;
         let target_delay_ms = base_ms + depth_ms * lfo;
+        self.last_delay_ms = target_delay_ms;
         let target_delay_s = (target_delay_ms * 0.001).max(0.0005);
         let clock_freq = self.num_stages as f64 / (2.0 * target_delay_s);
         // Deliberately NOT audiocore's OnePoleLp: the cutoff tracks the BBD
@@ -201,6 +221,10 @@ impl ChorusEngine for BbdVoice {
         self.output_lp
     }
 
+    fn delay_ms(&self) -> f64 {
+        self.last_delay_ms
+    }
+
     fn reset(&mut self) {
         self.buckets.fill(0.0);
         self.clock_phase = 0.0;
@@ -221,12 +245,15 @@ pub struct TapeVoice {
     flutter_phase: f64,
     tone_lp: f64,
     sample_rate: f64,
+    /// Last delay `tick` read at, in ms — display only.
+    last_delay_ms: f64,
 }
 
 impl TapeVoice {
     const MAX_DELAY: usize = 192000 / 20 + 64;
     pub fn new(phase_offset: f64) -> Self {
         Self {
+            last_delay_ms: 0.0,
             delay: DelayLine::new(Self::MAX_DELAY),
             lfo_phase: 0.0,
             phase_offset,
@@ -269,6 +296,7 @@ impl ChorusEngine for TapeVoice {
         let base_ms = effect_type.base_delay_ms();
         let depth_ms = effect_type.max_depth_ms() * depth;
         let delay_ms = base_ms + depth_ms * lfo + wow + flutter;
+        self.last_delay_ms = delay_ms;
         let delay_samples =
             (delay_ms * 0.001 * self.sample_rate).clamp(1.0, self.delay.len() as f64 - 4.0);
         let delayed = self.delay.read_cubic(delay_samples);
@@ -282,6 +310,10 @@ impl ChorusEngine for TapeVoice {
             .clamp(0.0, 0.99);
         self.tone_lp = flush(self.tone_lp + (delayed - self.tone_lp) * lp_coeff);
         self.tone_lp
+    }
+
+    fn delay_ms(&self) -> f64 {
+        self.last_delay_ms
     }
 
     fn reset(&mut self) {
@@ -301,12 +333,15 @@ pub struct OrbitVoice {
     theta: f64,
     phase_offset: f64,
     sample_rate: f64,
+    /// Last delay `tick` read at, in ms — display only.
+    last_delay_ms: f64,
 }
 
 impl OrbitVoice {
     const MAX_DELAY: usize = 192000 / 20 + 64;
     pub fn new(phase_offset: f64) -> Self {
         Self {
+            last_delay_ms: 0.0,
             delay: DelayLine::new(Self::MAX_DELAY),
             orbit_phase: 0.0,
             theta: 0.0,
@@ -350,6 +385,7 @@ impl ChorusEngine for OrbitVoice {
         let base_ms = effect_type.base_delay_ms();
         let depth_ms = effect_type.max_depth_ms() * depth;
         let delay1_ms = base_ms + depth_ms * proj * 0.7;
+        self.last_delay_ms = delay1_ms;
         let delay2_ms = base_ms + depth_ms * proj2 * 0.5;
         let max_delay = self.delay.len() as f64 - 4.0;
         let d1 = (delay1_ms * 0.001 * self.sample_rate).clamp(1.0, max_delay);
@@ -360,6 +396,10 @@ impl ChorusEngine for OrbitVoice {
         let fb = (blended * feedback).clamp(-1.5, 1.5);
         self.delay.write(input + fb);
         blended
+    }
+
+    fn delay_ms(&self) -> f64 {
+        self.last_delay_ms
     }
 
     fn reset(&mut self) {
@@ -387,6 +427,8 @@ pub struct JunoVoice {
     lp_state: f64,
     dc: DcBlocker,
     sample_rate: f64,
+    /// Last delay `tick` read at, in ms — display only.
+    last_delay_ms: f64,
 }
 
 impl JunoVoice {
@@ -398,6 +440,7 @@ impl JunoVoice {
     pub fn new(phase_offset: f64) -> Self {
         let lfo_phase = phase_offset * 2.0 - 1.0;
         let mut voice = Self {
+            last_delay_ms: 0.0,
             delay: DelayLine::new(2048),
             buf_len: 1024,
             lfo_phase,
@@ -467,6 +510,7 @@ impl ChorusEngine for JunoVoice {
 
         let offset = (lfo * 0.3 * depth + 0.4) * base_delay;
         let offset = offset.clamp(1.0, (self.buf_len.saturating_sub(2)) as f64);
+        self.last_delay_ms = offset * 1000.0 / self.sample_rate;
         let int_offset = offset.floor() as usize;
         let frac = offset - offset.floor();
 
@@ -486,6 +530,10 @@ impl ChorusEngine for JunoVoice {
         self.lp_state = flush((1.0 - p) * delayed + p * self.lp_state);
 
         self.dc.tick(self.lp_state)
+    }
+
+    fn delay_ms(&self) -> f64 {
+        self.last_delay_ms
     }
 
     fn reset(&mut self) {
