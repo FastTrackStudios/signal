@@ -71,9 +71,13 @@ pub fn editor_size_for(_profile_index: usize, form: fts_ui_audio::EditorForm) ->
 /// mount.
 #[component]
 pub fn App() -> Element {
-    // `Arc`, because that is what `create_dioxus_editor_with_state` puts in
-    // context — the plugin owns it and the editor borrows it.
-    let ui = use_context::<Arc<ReverbUi>>();
+    // `create_dioxus_editor_with_state` hands its argument over as a
+    // type-erased `SharedState`, so this is where it comes back out. The
+    // headless harness provides the same thing, so one mount serves both.
+    let shared = use_context::<nice_plug_dioxus::SharedState>();
+    let ui = shared
+        .get::<ReverbUi>()
+        .expect("the editor was mounted without its ReverbUi");
     let params = ui.params.clone();
     let ctx = use_param_context();
     let theme = use_signal(|| ThemeState::new(default_theme_preset(), ThemeMode::Dark));

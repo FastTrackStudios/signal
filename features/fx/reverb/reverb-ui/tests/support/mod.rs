@@ -18,7 +18,7 @@ use dioxus_test::{by_testid, render, DocumentTester};
 use reverb_ui::control_view::{App, ReverbUi};
 use reverb_ui::params::{ReverbParams, ReverbUiState};
 
-use nice_plug_dioxus::ParamContext;
+use nice_plug_dioxus::{ParamContext, SharedState};
 
 use dioxus::prelude::*;
 use nice_plug::context::gui::{GuiContext, GuiContextInner};
@@ -138,10 +138,10 @@ pub fn mount_with(params: Arc<ReverbParams>, width: u32, height: u32) -> Fixture
             height as f64,
         ))
         .with_root_context(param_ctx)
-        .with_root_context(Arc::new(ReverbUi {
+        .with_root_context(SharedState::new(Arc::new(ReverbUi {
             params: params.clone(),
             state: ui_state.clone(),
-        }))
+        })))
         .build();
 
     Fixture {

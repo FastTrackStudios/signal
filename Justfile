@@ -246,6 +246,11 @@ comp-shots:
 eq-shots:
     cargo test -p eq-ui --features native --test screenshots -- --nocapture
 
+# Every reverb family's panel, painted headless. Shots land in
+# target/gui-shots/reverb/.
+reverb-shots:
+    cargo test -p reverb-ui --features native --test screenshots -- --nocapture
+
 # Bundle every FTS plugin as .clap + .vst3 (target/bundled/, names from
 # bundler.toml). Debug of a single plugin: cargo run -p fts-plugin-xtask
 # -- bundle -p eq-plugin

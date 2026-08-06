@@ -15,97 +15,22 @@
 //! GUI is deliberately absent for now (headless, host-generic params), matching
 //! `signal-sampler-clap`; the nice-plug-dioxus editor is a follow-up.
 
+use audiocore_core::prelude::*;
 use nice_plug::prelude::*;
+use reverb_ui::params::{ReverbParams, ReverbUiState};
 use std::sync::Arc;
 
 use audiocore_dsp::{AudioConfig, Processor};
-use reverb::{AlgorithmType, ReverbChain};
+use reverb::{ReverbChain};
 
 const PLUGIN_NAME: &str = "FTS Reverb";
-
-// ── Parameters ────────────────────────────────────────────────────────────
-
-#[derive(Params)]
-pub struct ReverbParams {
-    /// Algorithm select (Room, Hall, Plate, Spring, … Convolution).
-    #[id = "algorithm"]
-    pub algorithm: IntParam,
-    /// Decay / RT60 control (0 = short, 1 = infinite).
-    #[id = "decay"]
-    pub decay: FloatParam,
-    /// Room / space size (0 = small, 1 = massive).
-    #[id = "size"]
-    pub size: FloatParam,
-    /// Pre-delay before the reverb onset.
-    #[id = "predelay"]
-    pub predelay: FloatParam,
-    /// High-frequency damping (0 = bright, 1 = dark).
-    #[id = "damping"]
-    pub damping: FloatParam,
-    /// Tone control (-1 = dark, 0 = neutral, +1 = bright).
-    #[id = "tone"]
-    pub tone: FloatParam,
-    /// Stereo width of the wet signal (0 = mono, 1 = normal, 2 = extra wide).
-    #[id = "width"]
-    pub width: FloatParam,
-    /// Dry/wet mix (0 = fully dry, 1 = fully wet).
-    #[id = "mix"]
-    pub mix: FloatParam,
-}
-
-impl Default for ReverbParams {
-    fn default() -> Self {
-        Self {
-            algorithm: IntParam::new(
-                "Algorithm",
-                0,
-                IntRange::Linear {
-                    min: 0,
-                    max: (AlgorithmType::ALL.len() - 1) as i32,
-                },
-            )
-            .with_value_to_string(Arc::new(|v| {
-                AlgorithmType::from_index(v as usize).name().to_string()
-            })),
-            decay: FloatParam::new("Decay", 0.5, FloatRange::Linear { min: 0.0, max: 1.0 })
-                .with_unit("%")
-                .with_value_to_string(formatters::v2s_f32_percentage(0)),
-            size: FloatParam::new("Size", 0.5, FloatRange::Linear { min: 0.0, max: 1.0 })
-                .with_unit("%")
-                .with_value_to_string(formatters::v2s_f32_percentage(0)),
-            predelay: FloatParam::new(
-                "Pre-Delay",
-                0.0,
-                FloatRange::Skewed {
-                    min: 0.0,
-                    max: 500.0,
-                    factor: FloatRange::skew_factor(-2.0),
-                },
-            )
-            .with_unit(" ms")
-            .with_value_to_string(formatters::v2s_f32_rounded(1)),
-            damping: FloatParam::new("Damping", 0.3, FloatRange::Linear { min: 0.0, max: 1.0 })
-                .with_unit("%")
-                .with_value_to_string(formatters::v2s_f32_percentage(0)),
-            tone: FloatParam::new(
-                "Tone",
-                0.0,
-                FloatRange::Linear { min: -1.0, max: 1.0 },
-            )
-            .with_value_to_string(formatters::v2s_f32_rounded(2)),
-            width: FloatParam::new("Width", 1.0, FloatRange::Linear { min: 0.0, max: 2.0 })
-                .with_value_to_string(formatters::v2s_f32_rounded(2)),
-            mix: FloatParam::new("Mix", 0.5, FloatRange::Linear { min: 0.0, max: 1.0 })
-                .with_unit("%")
-                .with_value_to_string(formatters::v2s_f32_percentage(0)),
-        }
-    }
-}
 
 // ── Plugin ────────────────────────────────────────────────────────────────
 
 pub struct FtsReverb {
     params: Arc<ReverbParams>,
+    ui_state: Arc<ReverbUiState>,
+    editor_state: Arc<DioxusState>,
     /// ONE stereo-coupled engine for the whole plugin (never per channel:
     /// the chain's width/mix/algorithm state spans both channels).
     chain: ReverbChain,
@@ -119,8 +44,18 @@ pub struct FtsReverb {
 
 impl Default for FtsReverb {
     fn default() -> Self {
+        let params = Arc::new(ReverbParams::default());
         Self {
-            params: Arc::new(ReverbParams::default()),
+            params,
+            ui_state: Arc::new(ReverbUiState::default()),
+            // The editor sizes itself — see reverb_ui::control_view.
+            editor_state: DioxusState::new(|| {
+                (
+                    reverb_ui::control_view::EDITOR_W,
+                    reverb_ui::control_view::EDITOR_H,
+                )
+            })
+            .with_resize_hint(reverb_ui::control_view::resize_hint()),
             chain: ReverbChain::new(),
             scratch_l: Vec::new(),
             scratch_r: Vec::new(),
@@ -134,8 +69,13 @@ impl FtsReverb {
     /// path; `set_algorithm` rebuilds engine state only when the selector
     /// actually changes). Decay/damping ramp inside the chain's smoothers.
     fn sync_params(&mut self) {
-        let algo = AlgorithmType::from_index(self.params.algorithm.value() as usize);
-        self.chain.set_algorithm(algo);
+        // The engine comes from the profile, not from a raw algorithm index:
+        // a profile names both the algorithm and which variant of it, and the
+        // variant is half of what makes a Cathedral not an Arena. Resolved
+        // through the persisted id so a session opens on the space it saved.
+        let profile = self.params.resolved_profile();
+        self.chain
+            .set_algorithm_variant(profile.algorithm, profile.variant);
 
         self.chain.params.decay = self.params.decay.value() as f64;
         self.chain.params.size = self.params.size.value() as f64;
@@ -164,13 +104,23 @@ impl Plugin for FtsReverb {
         ..AudioIOLayout::const_default()
     }];
 
-    // No editor yet — the host shows its generic parameter UI.
-    type Editor = ();
+    type Editor = audiocore_core::nice_plug_dioxus::editor::DioxusEditor;
     type SysExMessage = ();
     type BackgroundTask = ();
 
     fn params(&self) -> Arc<dyn Params> {
         self.params.clone()
+    }
+
+    fn editor(&mut self, _async_executor: AsyncExecutor<Self>) -> Option<Self::Editor> {
+        create_dioxus_editor_with_state(
+            self.editor_state.clone(),
+            Arc::new(reverb_ui::control_view::ReverbUi {
+                params: self.params.clone(),
+                state: self.ui_state.clone(),
+            }),
+            reverb_ui::control_view::App,
+        )
     }
 
     fn activate(
