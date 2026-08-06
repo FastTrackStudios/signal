@@ -124,8 +124,14 @@ jobs:
           # the gate and prod lags (this is what stranded the dioxus-icons
           # task-web build fix). Member-crate manifests are already covered
           # by the path prefixes above.
-          task_paths='^apps/task/|^crates/task/|^features/task/|^libs/architect/|^libs/editor/|^Cargo\.(toml|lock)$|^flake\.(nix|lock)$|^\.forgejo/workflows/deploy\.yml$'
-          site_paths='^apps/site/|^libs/editor/|^libs/fts-ui/|^crates/keyflow/|^features/engraver/|^crates/input/input-config-proto/|^features/reaper/reaper-input/config/|^Cargo\.(toml|lock)$|^flake\.(nix|lock)$|^\.forgejo/workflows/deploy\.yml$'
+          # `crates/session/` and `libs/fts-ui/` are REAL task deps, not
+          # incidental: task-player-ui depends on session + session-ui +
+          # session-proto, and both task UI crates depend on fts-ui. Their
+          # absence here is the same failure the note above describes — a
+          # session-only commit that FIXED the task-web wasm build did not
+          # redeploy task, so the fix sat on main while prod stayed broken.
+          task_paths='^apps/task/|^crates/task/|^features/task/|^crates/session/|^libs/architect/|^libs/editor/|^libs/fts-ui/|^Cargo\.(toml|lock)$|^flake\.(nix|lock)$|^\.github/workflows/deploy\.yml$'
+          site_paths='^apps/site/|^libs/editor/|^libs/fts-ui/|^crates/keyflow/|^features/engraver/|^crates/input/input-config-proto/|^features/reaper/reaper-input/config/|^Cargo\.(toml|lock)$|^flake\.(nix|lock)$|^\.github/workflows/deploy\.yml$'
 
           task=false; site=false
           grep -qE "$task_paths" /tmp/changed && task=true
