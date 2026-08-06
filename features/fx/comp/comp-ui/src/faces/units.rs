@@ -141,7 +141,7 @@ static ITEMS_1176: &[RackItem] = &[
             y: 136.0,
             w: 182.0,
             mode: VuMode::GainReduction,
-            legend: "Gain Reduction",
+            legend: "VU",
         },
         RackItem::TintedText { x: 710.0, y: 232.0, text: "Limiting Amplifier", size: 12.0, color: "#f0f5f8" },
         RackItem::TintedText {
@@ -296,7 +296,7 @@ pub static LA2A: RackDesign = RackDesign {
             y: 122.0,
             w: 198.0,
             mode: VuMode::GainReduction,
-            legend: "VU Level Indicator",
+            legend: "VU",
         },
 
         // ── Peak reduction ───────────────────────────────────────────────
@@ -361,7 +361,7 @@ pub static CL1B: RackDesign = RackDesign {
             y: 140.0,
             w: 212.0,
             mode: VuMode::GainReduction,
-            legend: "Gain Reduction",
+            legend: "VU",
         },
         RackItem::Knob {
             id: "threshold",
@@ -481,7 +481,7 @@ pub static FAIRCHILD_670: RackDesign = RackDesign {
             y: 136.0,
             w: 168.0,
             mode: VuMode::GainReduction,
-            legend: "Gain Reduction",
+            legend: "VU",
         },
         RackItem::Lamp { x: 74.0, y: 136.0, color: "#e0483a" },
 
@@ -561,7 +561,7 @@ pub static MANLEY_VARI_MU: RackDesign = RackDesign {
             y: 138.0,
             w: 180.0,
             mode: VuMode::GainReduction,
-            legend: "Gain Reduction",
+            legend: "VU",
         },
         RackItem::Knob {
             id: "input",

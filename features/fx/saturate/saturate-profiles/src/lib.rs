@@ -25,16 +25,120 @@
 //!
 //! Pure data — no GUI, no framework deps.
 
-use saturate_dsp::SaturationCurve;
+pub use saturate_dsp::preamp::SideShaper;
+pub use saturate_dsp::SaturationCurve;
+
+/// What a circuit's own two knobs are wired to.
+///
+/// The panels name these per profile — a tube's is "Heat", a fuzz's is
+/// "Starve" — but a name is not a mapping, and two vocabularies for the same
+/// choice is how the plugin ended up with a `ModelParam` table that had
+/// drifted away from the rail. This is the single vocabulary: the panel
+/// decides what to *call* a knob, this decides what it *does*.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Character {
+    /// Not offered on this circuit.
+    None,
+    /// Per-side onset asymmetry — one half of the wave reaches its knee
+    /// before the other. This is the even-harmonic control, and it is what a
+    /// "Heat" or a "Print" knob is really riding.
+    Skew,
+    /// Where the knee sits without touching the small-signal gain: a bigger
+    /// core, a higher rail, a tape biased hotter, a clipper's ceiling.
+    Headroom,
+    /// How long the stage stays bent after a transient — a valve's cathode
+    /// recovers faster than a tape machine's, and hysteresis slower still.
+    SagTime,
+    /// Blend toward a hard rail. The corner solid state has and valves do not.
+    Knee,
+    /// Class-B crossover deadband: neither half conducting near zero. The
+    /// buzz of an underbiased transistor stage, and the gate of a starved fuzz.
+    Crossover,
+    /// Word length, in bits.
+    Bits,
+    /// Sample-rate divisor.
+    Rate,
+}
+
+/// The engine settings a profile *is*.
+///
+/// `saturate-dsp` exposes two stages — the class-A preamp and, for the digital
+/// family, a quantiser. A profile is a point in that space, and this is the
+/// whole of it: nothing about a circuit lives in the plugin shell any more.
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub struct Voicing {
+    /// Transfer on the positive half of the wave…
+    pub positive: SideShaper,
+    /// …and on the negative half. **Which curve sits on which half is the
+    /// difference between even and odd harmonics** — a single-ended stage is
+    /// asymmetric because its two halves are not the same circuit.
+    pub negative: SideShaper,
+    /// Resting operating point, −1..1.
+    pub q_point: f32,
+    /// How far the operating point droops under program, 0..1.
+    pub sag: f32,
+    /// How long that droop takes to recover, in ms.
+    pub sag_ms: f32,
+    /// Resting per-side onset asymmetry, −1..1.
+    pub skew: f32,
+    /// Resting headroom multiplier.
+    pub headroom: f32,
+    /// Resting blend toward a hard rail, 0..1.
+    pub knee: f32,
+    /// Resting crossover deadband, 0..1.
+    pub crossover: f32,
+    /// How hard this circuit wants to be pushed for the same drive setting.
+    /// A fuzz is not a tape machine with the knob turned up.
+    pub drive_scale: f32,
+    /// Which band meets the knee first, in dB. Negative drives the lows into
+    /// the stage harder — the transformer's bloom; positive drives the top,
+    /// which is how tape has always been flattered.
+    pub tilt_db: f32,
+    /// Whether the quantiser runs after the preamp.
+    pub digital: bool,
+    /// What the panel's first circuit knob is wired to…
+    pub character_a: Character,
+    /// …and its second.
+    pub character_b: Character,
+}
+
+impl Voicing {
+    /// A neutral stage: a wire with a knee on it. Every profile below states
+    /// only what makes it itself.
+    const fn base() -> Self {
+        Self {
+            positive: SideShaper::Clean,
+            negative: SideShaper::Clean,
+            q_point: 0.0,
+            sag: 0.0,
+            sag_ms: 30.0,
+            skew: 0.0,
+            headroom: 1.0,
+            knee: 0.0,
+            crossover: 0.0,
+            drive_scale: 1.0,
+            tilt_db: 0.0,
+            digital: false,
+            character_a: Character::None,
+            character_b: Character::None,
+        }
+    }
+}
 
 /// One selectable saturator.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Debug)]
 pub struct Profile {
     /// Stable id. **Persisted** — a session records this, never an index.
     pub id: &'static str,
     pub name: &'static str,
     /// The transfer curve it clips with.
+    ///
+    /// This is the simple [`saturate_dsp::Saturator`] path — one curve, no
+    /// sides — and it is still the right answer for callers that want a
+    /// saturator rather than a preamp. The plugin runs [`Self::voicing`].
     pub curve: SaturationCurve,
+    /// The class-A stage this profile actually is.
+    pub voicing: Voicing,
     /// One line on what it is for.
     pub voice: &'static str,
 }

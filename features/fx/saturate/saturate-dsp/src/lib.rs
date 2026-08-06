@@ -15,6 +15,7 @@
 
 #![no_std]
 
+pub mod digital;
 pub mod preamp;
 
 /// Saturation transfer-curve family.
@@ -167,14 +168,14 @@ fn sqrt_approx(x: f32) -> f32 {
 
 /// dB → linear gain without `std`: 10^(db/20) = 2^(db * log2(10)/20).
 #[inline]
-fn db_to_gain(db: f32) -> f32 {
+pub(crate) fn db_to_gain(db: f32) -> f32 {
     exp2_approx(db * 0.166_096_4)
 }
 
 /// 2^x for the modest ranges gain trims use (|x| <= ~6), split into integer
 /// and fractional parts with a cubic fit on the fraction.
 #[inline]
-fn exp2_approx(x: f32) -> f32 {
+pub(crate) fn exp2_approx(x: f32) -> f32 {
     // Manual floor: `f32::floor` is std/libm-only and this crate is no_std.
     let mut xi = x as i32;
     if (xi as f32) > x {
