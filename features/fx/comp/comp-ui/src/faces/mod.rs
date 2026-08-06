@@ -55,6 +55,8 @@ pub fn profile_badge(profile_id: &str) -> &'static str {
     match profile_id {
         "control" => "MAIN",
         "urei_1176" => "76",
+        "urei_1176_silver" => "76s",
+        "urei_1176_ln" => "LN",
         "la2a" => "2A",
         "cl1b" => "CL",
         "fairchild670" => "670",
@@ -95,7 +97,17 @@ pub fn rail_items(profile_index: usize) -> Vec<ShellItem> {
             } else {
                 format!("{} — {}", category.label, names.join(""))
             };
-            ShellItem::new(category.id, label).with_badge(badge)
+            // The dots say how many units are stacked behind this family and
+            // which one is showing. Clicking cycles them, and until now
+            // nothing on the rail admitted that a family of three existed.
+            let at = if is_active {
+                comp_profiles::category_of(active_id).map(|(_, v)| v).unwrap_or(0)
+            } else {
+                0
+            };
+            ShellItem::new(category.id, label)
+                .with_badge(badge)
+                .with_cycle(category.profiles.len(), at)
         })
         .collect()
 }
@@ -125,14 +137,16 @@ pub fn rail_click_target(profile_index: usize, clicked_category: usize) -> usize
 /// height. A rack unit is 4:1 and wants none — given a tall window it just
 /// draws black above and below itself. So switching profile asks the host to
 /// resize, the same way the plugin asks on open.
-pub fn preferred_editor_size(profile_index: usize) -> (u32, u32) {
-    if units::design_for(profile_id_for_index(profile_index)).is_some() {
-        // Rack units: the panel's 900x300 drawing plus the rail, with a little
-        // air around it.
-        (1000, 348)
-    } else {
-        (crate::control_view::EDITOR_W, crate::control_view::EDITOR_H)
-    }
+pub fn preferred_editor_size(_profile_index: usize) -> (u32, u32) {
+    // Every face asks for the same box: the panel's 900x300 drawing plus the
+    // rail, with a little air around it.
+    //
+    // The FTS surface used to ask for a tall window of its own, which meant
+    // the editor jumped size every time you passed through Main on the way to
+    // a unit. A window that changes shape under you while you are browsing is
+    // worse than a graph with less height, so Main wears the rack's size too
+    // and the window only moves when you ask it to with a size preset.
+    (crate::control_view::EDITOR_W, crate::control_view::EDITOR_H)
 }
 
 /// The editor size for a profile *and* a chosen form: the form decides, except
@@ -232,25 +246,50 @@ pub fn use_face_context(profile: &'static (dyn Profile + Sync)) -> FaceContext {
 mod tests {
     use super::*;
     use crate::control_view::{
-        EDITOR_H, EDITOR_W, MAX_EDITOR_H, MAX_EDITOR_W, MIN_EDITOR_H, MIN_EDITOR_W,
+        EDITOR_H, EDITOR_W,
     };
 
     #[test]
-    fn the_rack_faces_ask_for_a_shorter_window_than_the_fts_surface() {
-        let (_, control_h) = preferred_editor_size(0);
-        assert_eq!((preferred_editor_size(0)), (EDITOR_W, EDITOR_H));
+    fn every_face_asks_for_the_same_window() {
+        // Browsing units should not move the window. Faces differ in what they
+        // draw, not in the box they draw it in, and the size only changes when
+        // you pick a size preset.
+        let first = preferred_editor_size(0);
+        assert_eq!(first, (EDITOR_W, EDITOR_H));
         for index in 1..profile_ids().len() {
-            let (_, face_h) = preferred_editor_size(index);
-            assert!(
-                face_h < control_h,
-                "{} asks for {face_h}px, no shorter than the FTS surface's {control_h}px",
+            assert_eq!(
+                preferred_editor_size(index),
+                first,
+                "{} asks for a different window",
                 profile_id_for_index(index),
             );
         }
     }
 
     #[test]
+    fn every_size_preset_is_reachable_on_every_face() {
+        // A preset outside the declared bounds is clamped by the host, and two
+        // presets clamped to the same box is a size button that does nothing.
+        let (min_w, min_h) = crate::control_view::min_editor_size();
+        let (max_w, max_h) = crate::control_view::max_editor_size();
+        for index in 0..profile_ids().len() {
+            for form in fts_ui_audio::EDITOR_FORMS {
+                let (w, h) = editor_size_for(index, *form);
+                let (w, h) = (w as f32, h as f32);
+                assert!(
+                    (min_w..=max_w).contains(&w) && (min_h..=max_h).contains(&h),
+                    "{} at {} wants {w}x{h}, outside {min_w}x{min_h}..{max_w}x{max_h}",
+                    profile_id_for_index(index),
+                    form.id(),
+                );
+            }
+        }
+    }
+
+    #[test]
     fn every_face_asks_for_a_size_the_host_is_allowed_to_give_it() {
+        let (min_w, min_h) = crate::control_view::min_editor_size();
+        let (max_w, max_h) = crate::control_view::max_editor_size();
         // A preferred size outside the declared resize bounds is a request the
         // host will clamp or refuse — the face would open at the wrong size
         // with nothing in the log to say why.
@@ -258,10 +297,9 @@ mod tests {
             let (w, h) = preferred_editor_size(index);
             let (w, h) = (w as f32, h as f32);
             assert!(
-                (MIN_EDITOR_W..=MAX_EDITOR_W).contains(&w)
-                    && (MIN_EDITOR_H..=MAX_EDITOR_H).contains(&h),
-                "{} wants {w}x{h}, outside the editor's {MIN_EDITOR_W}x{MIN_EDITOR_H}..\
-                 {MAX_EDITOR_W}x{MAX_EDITOR_H} bounds",
+                (min_w..=max_w).contains(&w) && (min_h..=max_h).contains(&h),
+                "{} wants {w}x{h}, outside the editor's {min_w}x{min_h}..\
+                 {max_w}x{max_h} bounds",
                 profile_id_for_index(index),
             );
         }

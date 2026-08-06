@@ -11,6 +11,8 @@
 //! editor — see `crate::faces::preferred_editor_size`.
 
 use crate::hardware::knob::KnobStyle;
+use crate::hardware::panel::{PanelEnds, PanelTexture};
+use crate::hardware::vu_svg::VuScale;
 use crate::hardware::rack::{RackDesign, RackItem, Ring};
 use crate::hardware::vu::{VuFace, VuMode};
 
@@ -24,110 +26,208 @@ const ROW: f64 = 152.0;
 // FET — UREI 1176
 // ─────────────────────────────────────────────────────────────────────────
 
-/// Black FET panel: INPUT drives *into* compression (there is no threshold
-/// knob), the ratio is four buttons, and ATTACK/RELEASE run backwards —
-/// fastest fully clockwise.
-pub static UREI_1176: RackDesign = RackDesign {
-    id: "urei_1176",
-    w: W,
-    h: H,
-    paint: "linear-gradient(178deg, #2b2b2f 0%, #1a1a1e 52%, #101013 100%)",
-    ink: "#ded7c9",
-    dim_ink: "#9a9384",
-    chrome: "#8d8a84",
-    vu: VuFace::Ivory,
-    vu_bezel: false,
-    // Documented: black plastic bodies with brushed silver tops and
-    // clear plastic collars — the large pair for INPUT and OUTPUT, the
-    // smaller for ATTACK and RELEASE.
-    knob: KnobStyle::SilverTop,
-    items: &[
-        RackItem::Vu {
-            x: 186.0,
-            y: 140.0,
-            w: 228.0,
-            mode: VuMode::GainReduction,
-            legend: "Gain Reduction",
-        },
-        RackItem::Buttons {
-            id: "ratio",
-            legend: "Ratio",
-            x: 352.0,
-            y: ROW,
-            labels: &["4", "8", "12", "20", "All"],
-        },
+/// The FET limiter's panel, laid out from the unit — measured off the
+/// photograph rather than spaced by eye.
+///
+/// Reading it as fractions of panel width: INPUT sits at 0.13 and OUTPUT at
+/// 0.32, both on the vertical centre; the ATTACK/RELEASE pair stacks at 0.50
+/// at half the diameter, its own centre on the same line; the ratio bank at
+/// 0.59; the meter's painted section centred at 0.74; the meter-source bank at
+/// 0.88. Those ratios are what this table is.
+///
+/// INPUT drives *into* compression — there is no threshold control, which is
+/// the unit's whole character — and ATTACK and RELEASE run backwards, fastest
+/// fully clockwise. The printed scales are the unit's: attenuation in dB from
+/// ∞ down to 0, marked with dots. The ratio buttons are push-in selectors:
+/// the engaged one is the one sitting lower.
+static ITEMS_1176: &[RackItem] = &[
+        // ── The two big knobs, on the centre line ────────────────────────
         RackItem::Knob {
             id: "input",
             legend: "Input",
-            x: 470.0,
-            y: ROW,
-            d: 58.0,
-            ring: Ring::Linear {
-                from: -48.0,
-                to: 12.0,
-                majors: 5,
-            },
+            x: 126.0,
+            y: 150.0,
+            d: 84.0,
+            ring: Ring::Dots(&["∞", "48", "36", "30", "24", "18", "12", "6", "0"]),
             tint: None,
             style: None,
         },
         RackItem::Knob {
             id: "output",
             legend: "Output",
-            x: 583.0,
-            y: ROW,
-            d: 58.0,
-            ring: Ring::Linear {
-                from: -12.0,
-                to: 24.0,
-                majors: 5,
-            },
+            x: 308.0,
+            y: 150.0,
+            d: 84.0,
+            ring: Ring::Dots(&["∞", "48", "36", "30", "24", "18", "12", "6", "0"]),
             tint: None,
             style: None,
         },
+
+        // ── The trims that live between them ─────────────────────────────
+        RackItem::Text { x: 217.0, y: 74.0, text: "HR", size: 7.0, strong: false },
+        RackItem::Knob {
+            id: "",
+            legend: "",
+            x: 217.0,
+            y: 104.0,
+            d: 20.0,
+            ring: Ring::None,
+            tint: None,
+            style: Some(KnobStyle::MetalFluted),
+        },
+        RackItem::Text { x: 217.0, y: 168.0, text: "Mix", size: 7.0, strong: false },
+        RackItem::Knob {
+            id: "",
+            legend: "",
+            x: 217.0,
+            y: 198.0,
+            d: 20.0,
+            ring: Ring::None,
+            tint: None,
+            style: Some(KnobStyle::MetalFluted),
+        },
+
+        // ── Attack over release, half the size, same centre line ─────────
+        RackItem::Text { x: 480.0, y: 56.0, text: "Attack", size: 8.0, strong: false },
         RackItem::Knob {
             id: "attack",
-            legend: "Attack",
-            x: 696.0,
-            y: ROW,
-            d: 58.0,
-            ring: Ring::Linear {
-                from: 1.0,
-                to: 7.0,
-                majors: 7,
-            },
+            legend: "",
+            x: 480.0,
+            y: 100.0,
+            d: 42.0,
+            ring: Ring::Dots(&["1", "2", "3", "4", "5", "6", "7"]),
             tint: None,
             style: None,
         },
+        RackItem::Text { x: 480.0, y: 160.0, text: "Release", size: 8.0, strong: false },
         RackItem::Knob {
             id: "release",
-            legend: "Release",
-            x: 809.0,
-            y: ROW,
-            d: 58.0,
-            ring: Ring::Linear {
-                from: 1.0,
-                to: 7.0,
-                majors: 7,
-            },
+            legend: "",
+            x: 480.0,
+            y: 204.0,
+            d: 42.0,
+            ring: Ring::Dots(&["1", "2", "3", "4", "5", "6", "7"]),
             tint: None,
             style: None,
         },
-        RackItem::Text {
-            x: 600.0,
-            y: 60.0,
+
+        // ── Ratio: push-in selectors ─────────────────────────────────────
+        RackItem::Text { x: 566.0, y: 44.0, text: "Ratio", size: 8.0, strong: false },
+        RackItem::Buttons {
+            id: "ratio",
+            legend: "",
+            x: 566.0,
+            y: 150.0,
+            labels: &["4", "8", "12", "20", "All"],
+            // The unit prints 20 at the top and 4 at the bottom; "all
+            // buttons" sits above them as the extreme of the same axis.
+            reverse: true,
+        },
+
+        // ── The meter, in its own paint ──────────────────────────────────
+        RackItem::Region {
+            x: 710.0,
+            y: 150.0,
+            w: 208.0,
+            // Full panel height: the stripe is a painted band across the
+            // whole plate, edge to edge, not an inset block.
+            h: 300.0,
+            color: "#1b5f79",
+        },
+        // The jewel above the frame, on the blue.
+        RackItem::Lamp { x: 710.0, y: 38.0, color: "#e33a2a" },
+        RackItem::Vu {
+            x: 710.0,
+            y: 136.0,
+            w: 182.0,
+            mode: VuMode::GainReduction,
+            legend: "VU",
+        },
+        RackItem::TintedText { x: 710.0, y: 232.0, text: "Limiting Amplifier", size: 12.0, color: "#f0f5f8" },
+        RackItem::TintedText {
+            x: 710.0,
+            y: 254.0,
             text: "Peak Limiter",
-            size: 14.0,
-            strong: true,
+            size: 8.0,
+            color: "#bcd8e4",
         },
-        RackItem::Text {
-            x: 600.0,
-            y: 84.0,
-            text: "FTS Comp · FET",
-            size: 9.0,
-            strong: false,
+
+        // ── Meter source ─────────────────────────────────────────────────
+        RackItem::Text { x: 848.0, y: 44.0, text: "Meter", size: 8.0, strong: false },
+        RackItem::Buttons {
+            id: "",
+            legend: "",
+            x: 848.0,
+            y: 150.0,
+            labels: &["GR", "+8", "+4", "Off"],
+            reverse: false,
         },
-    ],
-};
+];
+
+/// One finish of the FET limiter.
+///
+/// The three the unit came in differ in colour and nothing else, so they share
+/// [`ITEMS_1176`] and the same profile mappings. All three are anodised
+/// aluminium — black, natural and plum — so all three are brushed; the blue
+/// meter section is common to them too.
+const fn fet_limiter(
+    id: &'static str,
+    paint: &'static str,
+    ink: &'static str,
+    dim_ink: &'static str,
+    chrome: &'static str,
+    texture: PanelTexture,
+) -> RackDesign {
+    RackDesign {
+        id,
+        w: 960.0,
+        h: 300.0,
+        paint,
+        ink,
+        dim_ink,
+        chrome,
+        vu: VuFace::Ivory,
+        vu_bezel: true,
+        vu_frame: None,
+        vu_card: VuScale::Vu,
+        ends: PanelEnds::RackEars,
+        texture,
+        knob: KnobStyle::SilverTop,
+        items: ITEMS_1176,
+    }
+}
+
+/// Blackface.
+pub static UREI_1176: RackDesign = fet_limiter(
+    "urei_1176",
+    "linear-gradient(178deg, #2b2b2f 0%, #1a1a1e 52%, #101013 100%)",
+    "#ded7c9",
+    "#9a9384",
+    "#8d8a84",
+    // Black anodising: the same grain, a third as visible on it.
+    PanelTexture::Brushed { strength: 30 },
+);
+
+/// Brushed aluminium.
+pub static UREI_1176_SILVER: RackDesign = fet_limiter(
+    "urei_1176_silver",
+    "linear-gradient(178deg, #c9cac8 0%, #b6b7b5 46%, #9d9e9c 100%)",
+    "#1e1f21",
+    "#55575a",
+    "#b6b7b5",
+    PanelTexture::Brushed { strength: 100 },
+);
+
+/// The LN's plum panel.
+pub static UREI_1176_LN: RackDesign = fet_limiter(
+    "urei_1176_ln",
+    "linear-gradient(178deg, #3b2c3d 0%, #2b202d 50%, #1c141e 100%)",
+    "#ece2ec",
+    "#a094a2",
+    "#9b8c9d",
+    // Plum is mid-toned: between the natural and the black plate.
+    PanelTexture::Brushed { strength: 65 },
+);
 
 // ─────────────────────────────────────────────────────────────────────────
 // Opto — LA-2A, CL 1B
@@ -156,11 +256,15 @@ pub static LA2A: RackDesign = RackDesign {
     dim_ink: "#6a6b68",
     chrome: "#b9bab6",
     vu: VuFace::Amber,
-    vu_bezel: false,
+    vu_bezel: true,
+    vu_frame: None,
+    vu_card: VuScale::Vu,
+    ends: PanelEnds::RackEars,
+    texture: PanelTexture::Painted,
     knob: KnobStyle::Pointer,
     items: &[
         // ── Identity ─────────────────────────────────────────────────────
-        RackItem::Text { x: 168.0, y: 62.0, text: "FTS", size: 17.0, strong: true },
+        RackItem::Text { x: 168.0, y: 62.0, text: "Model 2A", size: 15.0, strong: true },
         RackItem::Text { x: 168.0, y: 84.0, text: "Audio", size: 7.5, strong: false },
         RackItem::Text { x: 296.0, y: 64.0, text: "Leveling Amplifier", size: 8.5, strong: false },
         RackItem::Text { x: 296.0, y: 82.0, text: "Optical · Tube", size: 8.5, strong: false },
@@ -194,7 +298,7 @@ pub static LA2A: RackDesign = RackDesign {
             y: 122.0,
             w: 198.0,
             mode: VuMode::GainReduction,
-            legend: "VU Level Indicator",
+            legend: "VU",
         },
 
         // ── Peak reduction ───────────────────────────────────────────────
@@ -247,6 +351,10 @@ pub static CL1B: RackDesign = RackDesign {
     chrome: "#9fb4c6",
     vu: VuFace::Ivory,
     vu_bezel: false,
+    vu_frame: None,
+    vu_card: VuScale::Vu,
+    ends: PanelEnds::RackEars,
+    texture: PanelTexture::Painted,
     // Five large plain black knobs on the blue face — no skirt, no
     // flutes, which is what makes the CL 1B look modern beside an LA-2A.
     knob: KnobStyle::Skirted,
@@ -256,7 +364,7 @@ pub static CL1B: RackDesign = RackDesign {
             y: 140.0,
             w: 212.0,
             mode: VuMode::GainReduction,
-            legend: "Gain Reduction",
+            legend: "VU",
         },
         RackItem::Knob {
             id: "threshold",
@@ -330,7 +438,7 @@ pub static CL1B: RackDesign = RackDesign {
         RackItem::Text {
             x: 560.0,
             y: 82.0,
-            text: "FTS Comp · Optical Tube",
+            text: "Optical Tube",
             size: 9.0,
             strong: false,
         },
@@ -365,6 +473,10 @@ pub static FAIRCHILD_670: RackDesign = RackDesign {
     chrome: "#a9adb2",
     vu: VuFace::Amber,
     vu_bezel: true,
+    vu_frame: None,
+    vu_card: VuScale::Vu,
+    ends: PanelEnds::RackEars,
+    texture: PanelTexture::Painted,
     knob: KnobStyle::Pointer,
     items: &[
         // ── The movement ─────────────────────────────────────────────────
@@ -373,7 +485,7 @@ pub static FAIRCHILD_670: RackDesign = RackDesign {
             y: 136.0,
             w: 168.0,
             mode: VuMode::GainReduction,
-            legend: "Gain Reduction",
+            legend: "VU",
         },
         RackItem::Lamp { x: 74.0, y: 136.0, color: "#e0483a" },
 
@@ -425,7 +537,7 @@ pub static FAIRCHILD_670: RackDesign = RackDesign {
 
         // ── Panel marks ──────────────────────────────────────────────────
         RackItem::Text { x: 620.0, y: 238.0, text: "Tube Limiter", size: 12.0, strong: true },
-        RackItem::Text { x: 620.0, y: 260.0, text: "FTS Comp · Variable-Mu", size: 8.0, strong: false },
+        RackItem::Text { x: 620.0, y: 260.0, text: "Variable-Mu", size: 8.0, strong: false },
     ],
 };
 
@@ -442,6 +554,10 @@ pub static MANLEY_VARI_MU: RackDesign = RackDesign {
     chrome: "#b8b2a6",
     vu: VuFace::Amber,
     vu_bezel: false,
+    vu_frame: None,
+    vu_card: VuScale::Vu,
+    ends: PanelEnds::RackEars,
+    texture: PanelTexture::Painted,
     // Brushed metal, the modern boutique idiom.
     knob: KnobStyle::Metal,
     items: &[
@@ -450,7 +566,7 @@ pub static MANLEY_VARI_MU: RackDesign = RackDesign {
             y: 138.0,
             w: 180.0,
             mode: VuMode::GainReduction,
-            legend: "Gain Reduction",
+            legend: "VU",
         },
         RackItem::Knob {
             id: "input",
@@ -543,7 +659,7 @@ pub static MANLEY_VARI_MU: RackDesign = RackDesign {
         RackItem::Text {
             x: 560.0,
             y: 80.0,
-            text: "FTS Comp · Variable-Mu",
+            text: "Variable-Mu",
             size: 9.0,
             strong: false,
         },
@@ -567,6 +683,10 @@ pub static SSL_BUS: RackDesign = RackDesign {
     chrome: "#a9adb2",
     vu: VuFace::Ivory,
     vu_bezel: false,
+    vu_frame: None,
+    vu_card: VuScale::Vu,
+    ends: PanelEnds::RackEars,
+    texture: PanelTexture::Painted,
     // The console's collet caps: the bus compressor is a centre-section
     // module, so it wears the same knob as the channel strip.
     knob: KnobStyle::Collet,
@@ -656,89 +776,135 @@ pub static SSL_BUS: RackDesign = RackDesign {
         RackItem::Text {
             x: 560.0,
             y: 80.0,
-            text: "FTS Comp · VCA",
+            text: "VCA",
             size: 9.0,
             strong: false,
         },
     ],
 };
 
-/// Three knobs and a VU, and that really is the whole front panel.
+/// Three knobs and a meter, laid out from the unit — and almost none of it is
+/// what the other faces here are.
+///
+/// It is not a rack unit: it sits on a desk in **walnut cheeks** between two
+/// brushed rails. Its knobs are fluted aluminium with a dark centre cap. And
+/// its movement is not a VU at all — an amber card printed in **blue** with a
+/// plain decibel scale from -40 to +20, no red stretch, because it is a
+/// readout rather than a reference level you are meant to stay under.
+///
+/// The three controls are the whole front panel, which is the unit's argument:
+/// threshold, how hard, how loud back.
+///
+/// **Not yet wired**: power and the three meter-source buttons.
 pub static DBX_160: RackDesign = RackDesign {
     id: "dbx160",
-    w: W,
-    h: H,
-    paint: "linear-gradient(178deg, #d3d5d8 0%, #b6b9bd 50%, #9ca0a5 100%)",
-    ink: "#25272a",
-    dim_ink: "#5a5e63",
-    chrome: "#8b8f94",
-    vu: VuFace::Ivory,
-    vu_bezel: false,
-    knob: KnobStyle::Skirted,
+    w: 940.0,
+    h: 300.0,
+    paint: "linear-gradient(178deg, #2a2b2d 0%, #1d1e20 46%, #141517 100%)",
+    ink: "#eceef0",
+    dim_ink: "#9aa0a6",
+    chrome: "#c8ccd0",
+    vu: VuFace::AmberBlue,
+    vu_bezel: true,
+    vu_frame: None,
+    vu_card: VuScale::Decibels,
+    ends: PanelEnds::Wood,
+    texture: PanelTexture::Painted,
+    knob: KnobStyle::MetalFluted,
     items: &[
-        RackItem::Vu {
-            x: 210.0,
-            y: 140.0,
-            w: 236.0,
-            mode: VuMode::GainReduction,
-            legend: "Gain Reduction",
-        },
+        // ── Threshold, with its over/under lamps ─────────────────────────
+        RackItem::Text { x: 214.0, y: 46.0, text: "Threshold", size: 9.5, strong: true },
+        RackItem::Lamp { x: 168.0, y: 72.0, color: "#e6c235" },
+        RackItem::Text { x: 130.0, y: 72.0, text: "Below", size: 7.0, strong: false },
+        RackItem::Lamp { x: 250.0, y: 72.0, color: "#d8483a" },
+        RackItem::Text { x: 292.0, y: 72.0, text: "Above", size: 7.0, strong: false },
         RackItem::Knob {
             id: "threshold",
-            legend: "Threshold",
-            x: 470.0,
-            y: ROW,
-            d: 60.0,
-            ring: Ring::Linear {
-                from: -40.0,
-                to: 0.0,
-                majors: 5,
-            },
+            legend: "Pull / SC",
+            x: 214.0,
+            y: 152.0,
+            d: 54.0,
+            ring: Ring::Numerals(&["10mv", "30mv", "100mv", "300mv", "1v", "3v"]),
             tint: None,
             style: None,
         },
+
+        // ── Compression ──────────────────────────────────────────────────
+        RackItem::Text { x: 428.0, y: 46.0, text: "Compression", size: 9.5, strong: true },
         RackItem::Knob {
             id: "compression",
-            legend: "Compression",
-            x: 640.0,
-            y: ROW,
-            d: 60.0,
-            ring: Ring::Linear {
-                from: 1.0,
-                to: 20.0,
-                majors: 5,
-            },
+            legend: "",
+            x: 428.0,
+            y: 152.0,
+            d: 62.0,
+            ring: Ring::Numerals(&["1", "1.5", "2", "3", "4", "6", "10", "20", "∞"]),
             tint: None,
             style: None,
         },
+
+        // ── Output gain ──────────────────────────────────────────────────
+        RackItem::Text { x: 604.0, y: 40.0, text: "Output", size: 9.5, strong: true },
+        RackItem::Text { x: 604.0, y: 62.0, text: "Gain", size: 9.5, strong: true },
         RackItem::Knob {
             id: "output",
-            legend: "Output Gain",
-            x: 810.0,
-            y: ROW,
-            d: 60.0,
-            ring: Ring::Linear {
-                from: -20.0,
-                to: 20.0,
-                majors: 5,
-            },
+            legend: "",
+            x: 604.0,
+            y: 152.0,
+            d: 54.0,
+            ring: Ring::Numerals(&["-20", "-10", "0", "+10", "+20"]),
             tint: None,
             style: None,
         },
-        RackItem::Text {
-            x: 640.0,
-            y: 58.0,
-            text: "Compressor / Limiter",
-            size: 14.0,
-            strong: true,
+
+        // ── The switching row ────────────────────────────────────────────
+        RackItem::Button {
+            id: "",
+            label: "POWER",
+            x: 214.0,
+            y: 236.0,
+            color: "#c9ccd0",
+            ink: "#1a1c1f",
+            led: "",
         },
-        RackItem::Text {
-            x: 640.0,
-            y: 82.0,
-            text: "FTS Comp · VCA",
-            size: 9.0,
-            strong: false,
+        RackItem::Button {
+            id: "",
+            label: "IN",
+            x: 424.0,
+            y: 236.0,
+            color: "#c9ccd0",
+            ink: "#1a1c1f",
+            led: "",
         },
+        RackItem::Button {
+            id: "",
+            label: "OUT",
+            x: 496.0,
+            y: 236.0,
+            color: "#c9ccd0",
+            ink: "#1a1c1f",
+            led: "",
+        },
+        RackItem::Button {
+            id: "",
+            label: "GAIN",
+            x: 568.0,
+            y: 236.0,
+            color: "#c9ccd0",
+            ink: "#1a1c1f",
+            led: "",
+        },
+        RackItem::Text { x: 496.0, y: 272.0, text: "Meter", size: 8.0, strong: false },
+
+        // ── The movement, and the panel's mark ───────────────────────────
+        RackItem::Vu {
+            x: 790.0,
+            y: 116.0,
+            w: 210.0,
+            mode: VuMode::GainReduction,
+            legend: "Decibels",
+        },
+        RackItem::Text { x: 790.0, y: 236.0, text: "Compressor", size: 15.0, strong: true },
+        RackItem::Text { x: 790.0, y: 262.0, text: "Compressor / Limiter", size: 8.0, strong: false },
     ],
 };
 
@@ -771,12 +937,16 @@ pub static DISTRESSOR: RackDesign = RackDesign {
     chrome: "#8b9096",
     vu: VuFace::Ivory,
     vu_bezel: false,
+    vu_frame: None,
+    vu_card: VuScale::Vu,
+    ends: PanelEnds::RackEars,
+    texture: PanelTexture::Painted,
     knob: KnobStyle::Dial,
     items: &[
         // ── Upper section: what the unit reports ─────────────────────────
         RackItem::Frame { x: 470.0, y: 96.0, w: 856.0, h: 150.0 },
-        RackItem::Text { x: 168.0, y: 96.0, text: "FTS", size: 20.0, strong: true },
-        RackItem::Text { x: 168.0, y: 116.0, text: "FTS Comp · Hybrid", size: 8.0, strong: false },
+        RackItem::Text { x: 168.0, y: 96.0, text: "Hybrid", size: 16.0, strong: true },
+        RackItem::Text { x: 168.0, y: 116.0, text: "Compressor", size: 8.0, strong: false },
 
         // Gain reduction: 1 dB at the right, deepest at the left.
         RackItem::LedBar {
@@ -903,6 +1073,8 @@ pub static DISTRESSOR: RackDesign = RackDesign {
 pub fn design_for(profile_id: &str) -> Option<&'static RackDesign> {
     Some(match profile_id {
         "urei_1176" => &UREI_1176,
+        "urei_1176_silver" => &UREI_1176_SILVER,
+        "urei_1176_ln" => &UREI_1176_LN,
         "la2a" => &LA2A,
         "cl1b" => &CL1B,
         "fairchild670" => &FAIRCHILD_670,
@@ -947,6 +1119,8 @@ mod tests {
                     RackItem::Knob { id, .. }
                         | RackItem::Button { id, .. }
                         | RackItem::Switch { id, .. }
+                        | RackItem::Buttons { id, .. }
+                        | RackItem::LedSelect { id, .. }
                     if id.is_empty()
                 )
             })
@@ -965,6 +1139,11 @@ mod tests {
                 // The LA-2A's meter-mode selector and POWER; the Distressor's
                 // BYPASS. Everything else is wired.
                 "la2a" => 2,
+                // The dbx's power and its three meter-source buttons.
+                "dbx160" => 4,
+                // The FET limiter's meter-source bank and its two trims — the
+                // same panel in three finishes.
+                "urei_1176" | "urei_1176_silver" | "urei_1176_ln" => 3,
                 "distressor" => 1,
                 _ => 0,
             };
@@ -1059,8 +1238,11 @@ mod tests {
                     | RackItem::LedMeter { .. }
                     | RackItem::Divider { .. }
                     | RackItem::Frame { .. }
+                    | RackItem::Region { .. }
                     | RackItem::LedBar { .. }
-                    | RackItem::LedSelect { .. } => continue,
+                    | RackItem::LedSelect { .. }
+                    | RackItem::Glyph { .. }
+                    | RackItem::Concentric { .. } => continue,
                 };
                 assert!(
                     x - half >= EAR && x + half <= design.w - EAR,

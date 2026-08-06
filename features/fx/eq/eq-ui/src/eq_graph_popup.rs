@@ -144,6 +144,58 @@ fn shape_icon(s: EqBandShape) -> &'static str {
     }
 }
 
+/// Vertical gap between the band node and the detail panel, in graph pixels.
+pub const POPUP_GAP: f64 = 18.0;
+
+/// Slack around the popup/node region that still counts as "on the band".
+const POPUP_REGION_PAD: f64 = 10.0;
+
+/// Geometry of the band detail panel in graph-element pixels: `(x, y, w, h)`.
+///
+/// Shared with `EqGraph`'s focus logic — the graph needs the same rect to know
+/// that a pointer heading for the panel has not left the band.
+pub fn band_popup_rect(
+    bx: f64,
+    by: f64,
+    graph_w: f64,
+    graph_h: f64,
+    is_dragging: bool,
+) -> (f64, f64, f64, f64) {
+    let w = if is_dragging { 178.0 } else { 196.0 };
+    let h = if is_dragging { 34.0 } else { 72.0 };
+    let x = (bx - w / 2.0).clamp(0.0, (graph_w - w).max(0.0));
+    let y = if by - h - POPUP_GAP >= 0.0 {
+        by - h - POPUP_GAP
+    } else {
+        by + POPUP_GAP
+    }
+    .clamp(0.0, (graph_h - h).max(0.0));
+    (x, y, w, h)
+}
+
+/// Is `(px, py)` inside the band's "keep the panel up" region?
+///
+/// That region is the union of the panel's box and the band node itself, so
+/// the empty [`POPUP_GAP`] the pointer must cross to reach the panel is part
+/// of it. Without this the panel fades out from under the cursor on the way
+/// there and its controls can never be clicked.
+pub fn point_in_popup_region(
+    px: f64,
+    py: f64,
+    bx: f64,
+    by: f64,
+    graph_w: f64,
+    graph_h: f64,
+    is_dragging: bool,
+) -> bool {
+    let (x, y, w, h) = band_popup_rect(bx, by, graph_w, graph_h, is_dragging);
+    let x0 = x.min(bx) - POPUP_REGION_PAD;
+    let x1 = (x + w).max(bx) + POPUP_REGION_PAD;
+    let y0 = y.min(by) - POPUP_REGION_PAD;
+    let y1 = (y + h).max(by) + POPUP_REGION_PAD;
+    px >= x0 && px <= x1 && py >= y0 && py <= y1
+}
+
 fn next_stereo_mode(mode: StereoMode) -> StereoMode {
     match mode {
         StereoMode::Stereo => StereoMode::Left,
@@ -163,6 +215,12 @@ pub fn BandPopup(
     graph_h: f64,
     is_dragging: bool,
     bands: Signal<Vec<EqBand>>,
+    /// Timestamp (ms) of the last pointer event the panel handled itself.
+    /// `EqGraph` reads this to suppress its fade timer while the user is
+    /// actually on the panel — the panel stops those events from bubbling, so
+    /// the graph would otherwise see no activity at all (or worse, coordinates
+    /// relative to the panel rather than the graph).
+    mut popup_activity: Signal<f64>,
     on_band_change: Option<EventHandler<(usize, EqBand)>>,
     on_band_remove: Option<EventHandler<usize>>,
     on_dismiss: EventHandler<()>,
@@ -189,15 +247,8 @@ pub fn BandPopup(
 
     let stereo_mode = band.stereo_mode;
 
-    let popup_w: f64 = if is_dragging { 178.0 } else { 196.0 };
-    let popup_h: f64 = if is_dragging { 34.0 } else { 72.0 };
-    let popup_x = (bx - popup_w / 2.0).clamp(0.0, (graph_w - popup_w).max(0.0));
-    let popup_y = if by - popup_h - 18.0 >= 0.0 {
-        by - popup_h - 18.0
-    } else {
-        by + 18.0
-    }
-    .clamp(0.0, (graph_h - popup_h).max(0.0));
+    let (popup_x, popup_y, popup_w, popup_h) =
+        band_popup_rect(bx, by, graph_w, graph_h, is_dragging);
 
     let current_shape_value = shape_to_int(band_shape).to_string();
     let mut shape_value_sig = use_signal(|| current_shape_value.clone());
@@ -224,10 +275,42 @@ pub fn BandPopup(
             // for a frame → the band snaps to the graph's top-left and back. So
             // make the popup click-through while dragging.
             style: format!(
-                "position:absolute; left:{popup_x}px; top:{popup_y}px; width:{popup_w}px; \
+                // Height is pinned to what `band_popup_rect` reports rather
+                // than left to the content, so the region the graph treats as
+                // "still on the band" and the box the pointer actually hits are
+                // the same rectangle.
+                "position:absolute; left:{popup_x}px; top:{popup_y}px; \
+                 width:{popup_w}px; height:{popup_h}px; \
                  z-index:10; pointer-events:{pe};",
                 pe = if is_dragging { "none" } else { "auto" },
             ),
+            "data-testid": "eq-band-popup",
+            "data-band": "{band_idx}",
+
+            // Pointer events that land on the panel must NOT bubble to the
+            // graph surface: `element_coordinates()` is relative to the event
+            // *target*, so a move over the panel reaches the graph's handler as
+            // a point near the panel's own origin — far from the band — and the
+            // graph fades the panel out from under the cursor before anything
+            // in it can be clicked. Stopping them here also records the moment
+            // of contact, which `EqGraph` uses to hold focus open.
+            onmousemove: move |evt: MouseEvent| {
+                evt.stop_propagation();
+                popup_activity.set(crate::eq_graph::now_ms());
+            },
+            onmouseup: move |evt: MouseEvent| {
+                evt.stop_propagation();
+                popup_activity.set(crate::eq_graph::now_ms());
+            },
+            onmousedown: move |evt: MouseEvent| {
+                evt.stop_propagation();
+                popup_activity.set(crate::eq_graph::now_ms());
+            },
+            onwheel: move |evt: WheelEvent| {
+                evt.stop_propagation();
+                popup_activity.set(crate::eq_graph::now_ms());
+            },
+
             div {
                 class: "rounded-md border bg-card text-foreground shadow-md p-1.5 flex flex-col gap-1.5",
                 style: format!("border-top: 2px solid {band_color};"),

@@ -17,8 +17,10 @@
 //! Panel drawings are wide and short, so a face asks the host for a shorter
 //! editor — see [`crate::faces::preferred_editor_size`].
 
+use fts_ui_audio::hardware::panel::{PanelEnds, PanelTexture};
+use fts_ui_audio::hardware::vu_svg::VuScale;
 use fts_ui_audio::hardware::knob::KnobStyle;
-use fts_ui_audio::hardware::rack::{RackDesign, RackItem, Ring};
+use fts_ui_audio::hardware::rack::{FilterGlyph, RackDesign, RackItem, Ring};
 use fts_ui_audio::hardware::vu::VuFace;
 
 /// Panel drawing size shared by the EQ faces. Taller than the compressor's
@@ -68,6 +70,10 @@ pub static PULTEC: RackDesign = RackDesign {
     chrome: "#b9c6cf",
     vu: VuFace::Blue,
     vu_bezel: false,
+    vu_frame: None,
+    vu_card: VuScale::Vu,
+    ends: PanelEnds::RackEars,
+    texture: PanelTexture::Painted,
     // Daka-Ware phenolic, as the unit wears: a ridged 1⅛" body on a 1½" skirt,
     // with the index engraved into the body and filled white.
     knob: KnobStyle::Daka,
@@ -200,7 +206,7 @@ pub static PULTEC: RackDesign = RackDesign {
         RackItem::Text {
             x: 108.0,
             y: 302.0,
-            text: "FTS EQ",
+            text: "Program Equalizer",
             size: 13.0,
             strong: true,
         },
@@ -247,6 +253,10 @@ pub static SSL: RackDesign = RackDesign {
     chrome: "#8f9398",
     vu: VuFace::Blue,
     vu_bezel: false,
+    vu_frame: None,
+    vu_card: VuScale::Vu,
+    ends: PanelEnds::RackEars,
+    texture: PanelTexture::Painted,
     // Collet caps: flat top, fluted rim, one white bar. The panel prints the
     // travel as dots around them rather than the knob carrying a skirt.
     knob: KnobStyle::Collet,
@@ -476,7 +486,7 @@ pub static SSL: RackDesign = RackDesign {
         RackItem::LedMeter { x: 1006.0, y: 132.0, h: 190.0, right: false },
         RackItem::LedMeter { x: 1032.0, y: 132.0, h: 190.0, right: true },
 
-        RackItem::Text { x: 520.0, y: 268.0, text: "FTS EQ · Console", size: 9.0, strong: false },
+        RackItem::Text { x: 520.0, y: 268.0, text: "Console", size: 9.0, strong: false },
     ],
 };
 
@@ -496,6 +506,10 @@ pub static API_550A: RackDesign = RackDesign {
     chrome: "#7e8288",
     vu: VuFace::Amber,
     vu_bezel: false,
+    vu_frame: None,
+    vu_card: VuScale::Vu,
+    ends: PanelEnds::RackEars,
+    texture: PanelTexture::Painted,
     knob: KnobStyle::Bakelite,
     items: &[
         RackItem::Text {
@@ -508,7 +522,7 @@ pub static API_550A: RackDesign = RackDesign {
         RackItem::Text {
             x: 450.0,
             y: 68.0,
-            text: "FTS EQ · Proportional Q",
+            text: "Proportional Q",
             size: 9.0,
             strong: false,
         },
@@ -625,138 +639,175 @@ pub static API_550A: RackDesign = RackDesign {
 /// The console channel: a fixed 12 kHz top, a stepped mid, a stepped low
 /// shelf, a stepped high-pass. Four decisions and no continuous frequency
 /// anywhere, which is why it is fast to use and hard to make sound bad.
+/// The 1073's own panel proportion. The module is a tall channel strip, but
+/// its controls are one row along its length — laid out here the way the unit
+/// is photographed and the way it reads on a desk: wide, short, one row.
+const NEVE_W: f64 = 1240.0;
+const NEVE_H: f64 = 300.0;
+
+/// Where the 1073's single row of controls sits, and the arc of its glyphs.
+const NEVE_ROW: f64 = 170.0;
+const NEVE_GLYPH_Y: f64 = 74.0;
+
+/// The 1073, laid out from the module's own front: one row, a red gain switch
+/// at the left, the bands' knobs each inside a printed ring of dots with the
+/// filter's *shape* drawn above it, and the latching buttons stacked on a pale
+/// strip at the right.
+///
+/// The details that are the unit rather than decoration:
+///
+/// - The rings are **dots**, not ticks. It is the first thing you see of a
+///   1073 from across a room and the reason its knobs read as haloed.
+/// - Neve prints the band's **shape** over the control instead of naming it,
+///   which is why the module is readable with no English on it at all.
+/// - The gain switch is red, the high-pass blue, the bands grey. The colour
+///   is the index — you find the control you want before reading anything.
+/// - The frequencies are the module's own stepped values (0·36–7·2 kHz mid,
+///   35–220 Hz low, 50–300 Hz high-pass), because a 1073 does not sweep.
 pub static NEVE_1073: RackDesign = RackDesign {
     id: "eq_neve_1073",
-    w: W,
-    h: H,
-    paint: "linear-gradient(178deg, #3a3c40 0%, #2a2c30 50%, #1e2023 100%)",
-    ink: "#ece8e0",
-    dim_ink: "#9d9a94",
-    chrome: "#9fa3a8",
+    w: NEVE_W,
+    h: NEVE_H,
+    // Near-black with the blue in it that the unit's paint has under light.
+    paint: "linear-gradient(178deg, #2c3139 0%, #232830 54%, #191d24 100%)",
+    ink: "#eef1f4",
+    dim_ink: "#9aa1aa",
+    chrome: "#aeb4ba",
     vu: VuFace::Amber,
     vu_bezel: false,
-    // Marconi wing knobs, and Neve's colour coding rides on them.
-    knob: KnobStyle::Marconi,
+    vu_frame: None,
+    vu_card: VuScale::Vu,
+    ends: PanelEnds::RackEars,
+    texture: PanelTexture::Painted,
+    // Moulded caps with a dark index, read against the printed dots.
+    knob: KnobStyle::Neve,
     items: &[
-        RackItem::Text {
-            x: 450.0,
-            y: 44.0,
-            text: "Channel Amplifier",
-            size: 15.0,
-            strong: true,
+        // ── The gain switch: red, and the biggest thing on the panel ──────
+        RackItem::Knob {
+            id: "drive",
+            legend: "dB",
+            x: 140.0,
+            y: NEVE_ROW,
+            d: 84.0,
+            ring: Ring::Dots(&["0", "2", "4", "6", "8", "10"]),
+            // Neve red, and a wing rather than a cap: the gain switch is the
+            // one control on the module you find without looking.
+            tint: Some("#9c1f27"),
+            style: Some(KnobStyle::Marconi),
         },
-        RackItem::Text {
-            x: 450.0,
-            y: 68.0,
-            text: "FTS EQ · Class A",
-            size: 9.0,
-            strong: false,
+        // ── High shelf: fixed at 12 kHz, so gain alone ───────────────────
+        RackItem::Glyph {
+            x: 322.0,
+            y: NEVE_GLYPH_Y,
+            shape: FilterGlyph::HighShelf,
+            w: 30.0,
         },
         RackItem::Knob {
             id: "high_gain",
-            legend: "High 12k",
-            x: 150.0,
-            y: ROW_A,
-            d: 52.0,
-            ring: Ring::Linear {
-                from: -16.0,
-                to: 16.0,
-                majors: 5,
-            },
-            tint: Some("#8d9196"),
+            legend: "12 kHz",
+            x: 322.0,
+            y: NEVE_ROW,
+            d: 84.0,
+            ring: Ring::Dots(&["-16", "-8", "0", "+8", "+16"]),
+            tint: Some("#7f858c"),
             style: None,
         },
-        RackItem::Knob {
-            id: "mid_freq",
-            legend: "Mid Freq",
-            x: 330.0,
-            y: ROW_A,
-            d: 52.0,
-            ring: Ring::Detents(&["Off", "360", "700", "1.6k", "3.2k", "4.8k", "7.2k"]),
-            tint: Some("#8e2f38"),
-            style: None,
+        // ── Mid: one control. Collar picks the frequency, cap sets the
+        //    gain — which is how the module is built and why its panel has
+        //    room for a whole EQ in one row.
+        RackItem::Glyph {
+            x: 504.0,
+            y: NEVE_GLYPH_Y,
+            shape: FilterGlyph::Bell,
+            w: 30.0,
         },
-        RackItem::Knob {
-            id: "mid_gain",
-            legend: "Mid",
-            x: 510.0,
-            y: ROW_A,
-            d: 52.0,
-            ring: Ring::Linear {
-                from: -16.0,
-                to: 16.0,
-                majors: 5,
-            },
-            tint: Some("#8e2f38"),
-            style: None,
+        RackItem::Concentric {
+            outer_id: "mid_freq",
+            inner_id: "mid_gain",
+            legend: "KHz",
+            x: 504.0,
+            y: NEVE_ROW,
+            d: 84.0,
+            ring: Ring::Dots(&["Off", "0·36", "0·7", "1·6", "3·2", "4·8", "7·2"]),
+            tint: Some("#7f858c"),
         },
-        RackItem::Knob {
-            id: "drive",
-            legend: "Drive",
-            x: 676.0,
-            y: ROW_A,
-            d: 46.0,
-            ring: Ring::Plain { majors: 5 },
-            tint: Some("#8e2f38"),
-            style: None,
+        // The cap's direction, printed where the module prints it: the inner
+        // knob boosts one way and cuts the other.
+        RackItem::Text { x: 452.0, y: 104.0, text: "+", size: 11.0, strong: true },
+        RackItem::Text { x: 556.0, y: 104.0, text: "−", size: 11.0, strong: true },
+        // ── Low shelf: the same pair ─────────────────────────────────────
+        RackItem::Glyph {
+            x: 686.0,
+            y: NEVE_GLYPH_Y,
+            shape: FilterGlyph::LowShelf,
+            w: 30.0,
         },
-        RackItem::Switch {
-            id: "eq_in",
-            legend: "EQ",
-            x: 800.0,
-            y: ROW_A,
-            labels: ["Out", "In"],
+        RackItem::Concentric {
+            outer_id: "low_freq",
+            inner_id: "low_gain",
+            legend: "Hz",
+            x: 686.0,
+            y: NEVE_ROW,
+            d: 84.0,
+            ring: Ring::Dots(&["Off", "35", "60", "110", "220"]),
+            tint: Some("#7f858c"),
         },
-        RackItem::Knob {
-            id: "low_freq",
-            legend: "Low Freq",
-            x: 150.0,
-            y: ROW_B,
-            d: 52.0,
-            ring: Ring::Detents(&["Off", "35", "60", "110", "220"]),
-            tint: Some("#28527f"),
-            style: None,
-        },
-        RackItem::Knob {
-            id: "low_gain",
-            legend: "Low",
-            x: 330.0,
-            y: ROW_B,
-            d: 52.0,
-            ring: Ring::Linear {
-                from: -16.0,
-                to: 16.0,
-                majors: 5,
-            },
-            tint: Some("#28527f"),
-            style: None,
+        RackItem::Text { x: 634.0, y: 104.0, text: "+", size: 11.0, strong: true },
+        RackItem::Text { x: 738.0, y: 104.0, text: "−", size: 11.0, strong: true },
+        // ── High pass: the blue one ──────────────────────────────────────
+        RackItem::Glyph {
+            x: 868.0,
+            y: NEVE_GLYPH_Y,
+            shape: FilterGlyph::HighPass,
+            w: 30.0,
         },
         RackItem::Knob {
             id: "hpf",
-            legend: "High Pass",
-            x: 510.0,
-            y: ROW_B,
-            d: 52.0,
-            ring: Ring::Detents(&["Off", "50", "80", "160", "300"]),
-            tint: Some("#28527f"),
-            style: None,
+            legend: "Hz",
+            x: 868.0,
+            y: NEVE_ROW,
+            d: 84.0,
+            ring: Ring::Dots(&["Off", "50", "80", "160", "300"]),
+            // Neve blue, and the same wing as the gain switch — the two
+            // coloured controls on the module are the two shaped ones.
+            tint: Some("#2b4a6d"),
+            style: Some(KnobStyle::Marconi),
         },
         RackItem::Knob {
             id: "trim",
             legend: "Trim",
-            x: 676.0,
-            y: ROW_B,
-            d: 46.0,
-            ring: Ring::Plain { majors: 5 },
-            tint: Some("#8e2f38"),
+            x: 1022.0,
+            y: NEVE_ROW,
+            d: 58.0,
+            ring: Ring::Dots(&["-10", "0", "+10"]),
+            tint: Some("#7f858c"),
             style: None,
         },
-        RackItem::Switch {
+        // ── The pale strip at the right, and what is printed on it ───────
+        RackItem::Button {
             id: "phase",
-            legend: "Phase",
-            x: 800.0,
-            y: ROW_B,
-            labels: ["Norm", "Ø"],
+            label: "Phase",
+            x: 1160.0,
+            y: 104.0,
+            color: "#e6e4dc",
+            ink: "#20242b",
+            led: "#d24a3a",
+        },
+        RackItem::Button {
+            id: "eq_in",
+            label: "EQL",
+            x: 1160.0,
+            y: 204.0,
+            color: "#e6e4dc",
+            ink: "#20242b",
+            led: "#d24a3a",
+        },
+        RackItem::Text {
+            x: 1160.0,
+            y: 268.0,
+            text: "1073",
+            size: 10.0,
+            strong: true,
         },
     ],
 };
@@ -783,13 +834,15 @@ mod tests {
         design
             .items
             .iter()
-            .filter_map(|item| match item {
+            .flat_map(|item| match item {
                 RackItem::Knob { id, .. }
                 | RackItem::Buttons { id, .. }
                 | RackItem::Switch { id, .. }
                 | RackItem::Lever { id, .. }
-                | RackItem::Button { id, .. } => Some(*id),
-                _ => None,
+                | RackItem::Button { id, .. } => vec![*id],
+                // One placement, two controls.
+                RackItem::Concentric { outer_id, inner_id, .. } => vec![*outer_id, *inner_id],
+                _ => Vec::new(),
             })
             .filter(|id| !id.is_empty())
             .collect()
@@ -871,7 +924,8 @@ mod tests {
             };
             for item in design.items {
                 let (x, half) = match item {
-                    RackItem::Knob { x, d, .. } => (*x, *d),
+                    RackItem::Knob { x, d, .. }
+                    | RackItem::Concentric { x, d, .. } => (*x, *d),
                     RackItem::Buttons { x, .. } => (*x, 45.0),
                     RackItem::Switch { x, .. } => (*x, 55.0),
                     _ => continue,
@@ -882,6 +936,57 @@ mod tests {
                 );
             }
         }
+    }
+
+    /// The 1073's kit and its wiring, which together are the module:
+    ///
+    /// - the two *coloured* controls are wing knobs, and a wing knob has to
+    ///   carry a colour, because on this panel the wing IS the colour;
+    /// - the swept bands are **concentric** — one placement carrying the
+    ///   band's frequency on the collar and its gain on the cap, which is
+    ///   what lets a whole EQ sit in one row;
+    /// - everything else is a collar knob, and nothing wears a part from
+    ///   another console.
+    #[test]
+    fn the_1073_wears_wings_on_its_coloured_controls_and_pairs_its_swept_bands() {
+        let mut wings = Vec::new();
+        let mut collars = Vec::new();
+        let mut pairs = Vec::new();
+        for item in NEVE_1073.items {
+            match item {
+                RackItem::Knob { id, style, tint, .. } => {
+                    match style.unwrap_or(NEVE_1073.knob) {
+                        KnobStyle::Marconi => {
+                            assert!(
+                                tint.is_some(),
+                                "{id} is a wing knob with no colour — the wing IS the colour",
+                            );
+                            wings.push(*id);
+                        }
+                        KnobStyle::Neve => collars.push(*id),
+                        other => panic!("{id} wears {other:?}, which is not 1073 kit"),
+                    }
+                }
+                RackItem::Concentric { outer_id, inner_id, .. } => {
+                    pairs.push((*outer_id, *inner_id));
+                }
+                _ => {}
+            }
+        }
+        assert_eq!(wings, vec!["drive", "hpf"], "wrong controls wear wings");
+        assert_eq!(
+            collars,
+            vec!["high_gain", "trim"],
+            "wrong controls wear collars",
+        );
+        // Frequency on the collar, gain on the cap — never the other way
+        // round: the collar is the one with detents, and the printed ring is
+        // its scale.
+        assert_eq!(
+            pairs,
+            vec![("mid_freq", "mid_gain"), ("low_freq", "low_gain")],
+            "the swept bands are not paired the way the module pairs them",
+        );
     }
 
     /// SSL E and G are one panel driven by two model values, so both must
