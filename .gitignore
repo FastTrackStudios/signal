@@ -20,3 +20,6 @@ result-*
 # Symlink to the resolved lumen-blocks checkout, created by `just tailwind`
 # so Tailwind scans the pinned revision instead of every cached one.
 apps/fasttrackstudio/.lumen-blocks
+
+# local reference checkouts (upstream scripts we port from)
+.reference/
