@@ -97,7 +97,17 @@ pub fn rail_items(profile_index: usize) -> Vec<ShellItem> {
             } else {
                 format!("{} — {}", category.label, names.join(""))
             };
-            ShellItem::new(category.id, label).with_badge(badge)
+            // The dots say how many units are stacked behind this family and
+            // which one is showing. Clicking cycles them, and until now
+            // nothing on the rail admitted that a family of three existed.
+            let at = if is_active {
+                comp_profiles::category_of(active_id).map(|(_, v)| v).unwrap_or(0)
+            } else {
+                0
+            };
+            ShellItem::new(category.id, label)
+                .with_badge(badge)
+                .with_cycle(category.profiles.len(), at)
         })
         .collect()
 }

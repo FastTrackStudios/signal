@@ -154,7 +154,17 @@ pub fn App() -> Element {
             } else {
                 category.badge.to_string()
             };
-            ShellItem::new(category.id, category.label).with_badge(badge)
+            // The dots say how many units are stacked behind this family and
+            // which one is showing — clicking cycles them, and nothing else
+            // on the rail admits that.
+            let at = if index == active_category {
+                delay_profiles::category_of(profile.id).map(|(_, v)| v).unwrap_or(0)
+            } else {
+                0
+            };
+            ShellItem::new(category.id, category.label)
+                .with_badge(badge)
+                .with_cycle(category.profiles.len(), at)
         })
         .collect();
 
