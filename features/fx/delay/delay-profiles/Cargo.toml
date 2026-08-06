@@ -1,0 +1,10 @@
+[package]
+name = "delay-profiles"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+edition = "2021"
+description = "Delay profiles — the six families a delay comes in, and which engine each one is"
+
+[dependencies]
+delay-dsp = { path = "../delay-dsp" }

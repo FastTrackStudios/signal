@@ -39,7 +39,7 @@ async fn ir_editor() -> Fixture {
 /// property of the panel rather than something to go clicking for.
 #[tokio::test]
 async fn the_browser_lists_the_library() -> dioxus_test::Result<()> {
-    let mut fx = ir_editor().await;
+    let fx = ir_editor().await;
     let entries: Vec<_> = fx
         .tester
         .query_all(by_testid("ir-entry"))
