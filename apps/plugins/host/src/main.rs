@@ -50,6 +50,10 @@ struct HostHandler {
     /// `WindowHandler` methods take `&self` in baseview 0.2 — the plugin
     /// lives behind a RefCell. Everything runs on the one GUI thread.
     plugin: RefCell<Option<LoadedClapPlugin>>,
+    /// This host's own window, so a resize the plugin asks for can be applied
+    /// to the frame around it. `WindowContext` is cheap to clone and is the
+    /// only handle a `WindowHandler` gets to the window in baseview 0.2.
+    window: baseview::WindowContext,
 }
 
 impl WindowHandler for HostHandler {
@@ -62,6 +66,23 @@ impl WindowHandler for HostHandler {
             // the process() loop that normally applies them doesn't exist
             // here, and without this the editor's edits never take effect.
             plugin.flush_params();
+
+            // …and drain resizes the plugin asked for. FTS Comp changes its
+            // own editor size when you switch profiles — a 4:1 rack face and
+            // a tall control surface are different shapes — and a host that
+            // does not do this leaves the new face rendering inside the old
+            // frame, which is exactly what it looked like.
+            //
+            // Both halves are needed: resize the frame, then tell the plugin
+            // the size it now has.
+            if let Some((w, h)) = plugin.take_requested_resize() {
+                if std::env::var_os("FTS_HOST_TRACE").is_some() {
+                    eprintln!("[host] plugin requested resize: {w}x{h}");
+                }
+                self.window
+                    .resize(baseview::dpi::PhysicalSize::new(w as f64, h as f64));
+                plugin.gui_set_size(w, h);
+            }
         }
     }
 
@@ -153,6 +174,7 @@ fn main() -> eyre::Result<()> {
 
             HostHandler {
                 plugin: RefCell::new(Some(plugin)),
+                window: ctx.clone(),
             }
         },
     );

@@ -205,7 +205,7 @@ pub static PULTEC: RackDesign = RackDesign {
         RackItem::Text {
             x: 108.0,
             y: 302.0,
-            text: "FTS EQ",
+            text: "Program Equalizer",
             size: 13.0,
             strong: true,
         },
@@ -484,7 +484,7 @@ pub static SSL: RackDesign = RackDesign {
         RackItem::LedMeter { x: 1006.0, y: 132.0, h: 190.0, right: false },
         RackItem::LedMeter { x: 1032.0, y: 132.0, h: 190.0, right: true },
 
-        RackItem::Text { x: 520.0, y: 268.0, text: "FTS EQ · Console", size: 9.0, strong: false },
+        RackItem::Text { x: 520.0, y: 268.0, text: "Console", size: 9.0, strong: false },
     ],
 };
 
@@ -519,7 +519,7 @@ pub static API_550A: RackDesign = RackDesign {
         RackItem::Text {
             x: 450.0,
             y: 68.0,
-            text: "FTS EQ · Proportional Q",
+            text: "Proportional Q",
             size: 9.0,
             strong: false,
         },
@@ -662,7 +662,7 @@ pub static NEVE_1073: RackDesign = RackDesign {
         RackItem::Text {
             x: 450.0,
             y: 68.0,
-            text: "FTS EQ · Class A",
+            text: "Class A",
             size: 9.0,
             strong: false,
         },

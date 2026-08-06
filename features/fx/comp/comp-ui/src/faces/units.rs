@@ -143,7 +143,7 @@ static ITEMS_1176: &[RackItem] = &[
             mode: VuMode::GainReduction,
             legend: "Gain Reduction",
         },
-        RackItem::TintedText { x: 710.0, y: 232.0, text: "FTS Comp", size: 12.0, color: "#f0f5f8" },
+        RackItem::TintedText { x: 710.0, y: 232.0, text: "Limiting Amplifier", size: 12.0, color: "#f0f5f8" },
         RackItem::TintedText {
             x: 710.0,
             y: 254.0,
@@ -262,7 +262,7 @@ pub static LA2A: RackDesign = RackDesign {
     knob: KnobStyle::Pointer,
     items: &[
         // ── Identity ─────────────────────────────────────────────────────
-        RackItem::Text { x: 168.0, y: 62.0, text: "FTS", size: 17.0, strong: true },
+        RackItem::Text { x: 168.0, y: 62.0, text: "Model 2A", size: 15.0, strong: true },
         RackItem::Text { x: 168.0, y: 84.0, text: "Audio", size: 7.5, strong: false },
         RackItem::Text { x: 296.0, y: 64.0, text: "Leveling Amplifier", size: 8.5, strong: false },
         RackItem::Text { x: 296.0, y: 82.0, text: "Optical · Tube", size: 8.5, strong: false },
@@ -435,7 +435,7 @@ pub static CL1B: RackDesign = RackDesign {
         RackItem::Text {
             x: 560.0,
             y: 82.0,
-            text: "FTS Comp · Optical Tube",
+            text: "Optical Tube",
             size: 9.0,
             strong: false,
         },
@@ -533,7 +533,7 @@ pub static FAIRCHILD_670: RackDesign = RackDesign {
 
         // ── Panel marks ──────────────────────────────────────────────────
         RackItem::Text { x: 620.0, y: 238.0, text: "Tube Limiter", size: 12.0, strong: true },
-        RackItem::Text { x: 620.0, y: 260.0, text: "FTS Comp · Variable-Mu", size: 8.0, strong: false },
+        RackItem::Text { x: 620.0, y: 260.0, text: "Variable-Mu", size: 8.0, strong: false },
     ],
 };
 
@@ -654,7 +654,7 @@ pub static MANLEY_VARI_MU: RackDesign = RackDesign {
         RackItem::Text {
             x: 560.0,
             y: 80.0,
-            text: "FTS Comp · Variable-Mu",
+            text: "Variable-Mu",
             size: 9.0,
             strong: false,
         },
@@ -770,7 +770,7 @@ pub static SSL_BUS: RackDesign = RackDesign {
         RackItem::Text {
             x: 560.0,
             y: 80.0,
-            text: "FTS Comp · VCA",
+            text: "VCA",
             size: 9.0,
             strong: false,
         },
@@ -896,7 +896,7 @@ pub static DBX_160: RackDesign = RackDesign {
             mode: VuMode::GainReduction,
             legend: "Decibels",
         },
-        RackItem::Text { x: 790.0, y: 236.0, text: "FTS Comp", size: 15.0, strong: true },
+        RackItem::Text { x: 790.0, y: 236.0, text: "Compressor", size: 15.0, strong: true },
         RackItem::Text { x: 790.0, y: 262.0, text: "Compressor / Limiter", size: 8.0, strong: false },
     ],
 };
@@ -937,8 +937,8 @@ pub static DISTRESSOR: RackDesign = RackDesign {
     items: &[
         // ── Upper section: what the unit reports ─────────────────────────
         RackItem::Frame { x: 470.0, y: 96.0, w: 856.0, h: 150.0 },
-        RackItem::Text { x: 168.0, y: 96.0, text: "FTS", size: 20.0, strong: true },
-        RackItem::Text { x: 168.0, y: 116.0, text: "FTS Comp · Hybrid", size: 8.0, strong: false },
+        RackItem::Text { x: 168.0, y: 96.0, text: "Hybrid", size: 16.0, strong: true },
+        RackItem::Text { x: 168.0, y: 116.0, text: "Compressor", size: 8.0, strong: false },
 
         // Gain reduction: 1 dB at the right, deepest at the left.
         RackItem::LedBar {
