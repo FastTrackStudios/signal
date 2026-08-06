@@ -286,6 +286,7 @@ pub fn RackFace(
                         },
                         RackItem::Lever { .. }
                         | RackItem::Glyph { .. }
+                        | RackItem::Concentric { .. }
                         | RackItem::Readout { .. }
                         | RackItem::Divider { .. } => rsx! {},
                         RackItem::TintedText { x, y, text, size, color } => rsx! {

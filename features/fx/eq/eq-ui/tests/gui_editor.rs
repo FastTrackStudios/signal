@@ -820,15 +820,16 @@ async fn clicking_a_pultec_lever_still_advances_one_position()
 async fn the_1073_prints_dot_rings_and_filter_glyphs() -> dioxus_test::Result<()> {
     let fx = mount_model(2).await;
 
-    // Every band knob is on the panel.
+    // Every control is on the panel. The swept bands are concentric, so the
+    // pair is addressed by its collar's id plus an `-inner` cap.
     for id in [
+        "hw-knob-drive",
         "hw-knob-high-gain",
         "hw-knob-mid-freq",
-        "hw-knob-mid-gain",
+        "hw-knob-mid-freq-inner",
         "hw-knob-low-freq",
-        "hw-knob-low-gain",
+        "hw-knob-low-freq-inner",
         "hw-knob-hpf",
-        "hw-knob-drive",
         "hw-knob-trim",
     ] {
         fx.tester
@@ -837,8 +838,7 @@ async fn the_1073_prints_dot_rings_and_filter_glyphs() -> dioxus_test::Result<()
             .unwrap_or_else(|e| panic!("1073 is missing {id}: {e:?}"));
     }
 
-    // The printed ring is dots, not tick lines: circles inside the knob's
-    // panel layer, and no <line> ticks at all.
+    // The printed ring is dots, not tick lines.
     let dots = fx
         .tester
         .query_all("[data-testid='hw-knob-hpf'] circle")
@@ -846,8 +846,7 @@ async fn the_1073_prints_dot_rings_and_filter_glyphs() -> dioxus_test::Result<()
         .len();
     assert!(dots >= 21, "1073 knob prints only {dots} ring dots");
 
-    // And the band's shape is drawn above it. Four glyph paths, one per
-    // filter symbol the panel carries plus the repeats for gain and freq.
+    // And the band's shape is drawn above it.
     let html = fx.tester.query(":root").immediately()?.inner_html();
     for glyph in [
         FilterGlyph::HighShelf,
@@ -860,5 +859,81 @@ async fn the_1073_prints_dot_rings_and_filter_glyphs() -> dioxus_test::Result<()
             "the 1073 panel does not draw the {glyph:?} symbol",
         );
     }
+    Ok(())
+}
+
+/// A 1073 band is two controls in one place, and which one you get is decided
+/// by *where* you press: the grey cap is the band's gain, the bright collar
+/// around it is the band's frequency. Dragging one must leave the other alone
+/// — a concentric knob that moves both is worse than two separate knobs.
+#[tokio::test]
+async fn the_1073s_collar_and_cap_are_separate_controls() -> dioxus_test::Result<()> {
+    let fx = mount_model(2).await;
+    let freq = &fx.params.neve_mid_freq;
+    let gain = &fx.params.neve_mid_gain_db;
+
+    // Drag the cap: the gain moves, the frequency does not.
+    let (freq_before, gain_before) = (freq.value(), gain.value());
+    let cap = fx
+        .tester
+        .query(dioxus_test::by_testid("hw-knob-mid-freq-inner"))
+        .immediately()?;
+    let (cx, cy) = cap.document_origin();
+    let (cw, ch) = cap.size();
+    assert!(cw > 0.0 && ch > 0.0, "the cap has no drag region");
+    let (cx, cy) = (cx + cw as f64 / 2.0, cy + ch as f64 / 2.0);
+
+    fx.tester.pointer_down(cx, cy);
+    fx.settle().await;
+    for step in 1..=5 {
+        fx.tester.pointer_move(cx, cy - step as f64 * 10.0, true);
+        fx.settle().await;
+    }
+    fx.tester.pointer_up(cx, cy - 50.0);
+    fx.settle().await;
+
+    assert!(
+        gain.value() > gain_before,
+        "dragging the cap up did not raise the band's gain: {gain_before} → {}",
+        gain.value(),
+    );
+    // The frequency is a stepped selector, so "unchanged" is exact.
+    assert_eq!(
+        freq.value(),
+        freq_before,
+        "dragging the cap moved the band's frequency too",
+    );
+
+    // Now the collar. Press outside the cap but inside the knob — the ring
+    // between them — and the frequency moves instead.
+    let (freq_before, gain_before) = (freq.value(), gain.value());
+    let knob = fx
+        .tester
+        .query(dioxus_test::by_testid("hw-knob-mid-freq"))
+        .immediately()?;
+    let (kx, ky) = knob.document_origin();
+    let (kw, kh) = knob.size();
+    // Just inside the knob's left edge, level with its centre: collar, not cap.
+    let (px, py) = (kx + kw as f64 * 0.30, ky + kh as f64 / 2.0);
+
+    fx.tester.pointer_down(px, py);
+    fx.settle().await;
+    for step in 1..=5 {
+        fx.tester.pointer_move(px, py - step as f64 * 10.0, true);
+        fx.settle().await;
+    }
+    fx.tester.pointer_up(px, py - 50.0);
+    fx.settle().await;
+
+    assert!(
+        freq.value() > freq_before,
+        "dragging the collar up did not raise the band's frequency: {freq_before} → {}",
+        freq.value(),
+    );
+    assert!(
+        (gain.value() - gain_before).abs() < 1e-3,
+        "dragging the collar moved the band's gain too: {gain_before} → {}",
+        gain.value(),
+    );
     Ok(())
 }
