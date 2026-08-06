@@ -20,3 +20,13 @@ graphify-out/
 # nix build result symlinks (result, result-1, result-2, ...)
 result
 result-*
+
+# Stray cargo target directories.
+#
+# `/target` covers the workspace's own, but a `cargo` run with CARGO_TARGET_DIR
+# set inside a crate leaves one wherever it was pointed — and 7.6 GB of .rlib
+# files once made it into a commit, which GitHub then refused to accept (its
+# limit is 100 MB per file). Anything named like a target directory is build
+# output no matter where it turns up.
+target-*/
+**/target/
