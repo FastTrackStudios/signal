@@ -1,228 +1,112 @@
 //! FTS Modulation — CLAP/VST3 multi-mode modulation plugin.
 //!
-//! A thin nice-plug shell over the [`modulation`] facade: one plugin, five
-//! modes. Chorus / Flanger / Vibrato share a [`modulation::chorus`]
-//! `ChorusChain` (Cubic engine, 1–4 voices); Tremolo runs a
-//! [`modulation::trem`] `TremChain` (free-running sine LFO); Wah runs a
-//! [`modulation::wah`] `WahChain` as an envelope-follower auto-wah.
+//! Five circuits on a rail — Chorus, Flanger, Vibrato, Tremolo, Wah — and
+//! fifteen profiles inside them. What each one *is* lives in
+//! [`modulation_profiles`]: which of the three chains it runs, which engine,
+//! and where its own controls rest. Nothing about a circuit lives in this
+//! file.
 //!
-//! All three chains are pre-allocated up front and updated in `initialize()`;
-//! `process()` only dispatches on the current mode and pushes plain field
-//! values — no allocation on the audio thread (the chorus engine is never
-//! switched, so `set_engine`'s reallocation path is never taken).
+//! That is the point of the crate split, and it is worth saying what it
+//! fixed. This shell used to carry a five-value `Mode` enum, hardcode
+//! `EngineType::Cubic`, and never call `set_engine` — its own doc note said
+//! so. Four of the five chorus engines (BBD, Tape, Orbit, Juno) had no way to
+//! be heard at all; the tremolo's groove, feel, accent and saturation and the
+//! wah's resonance, stages and sensitivity were fields nothing wrote. Seven
+//! parameters over about twenty-five real controls.
 //!
-//! GUI is deliberately absent for now (headless, host-generic params),
-//! matching level-plugin; the nice-plug-dioxus editor is a follow-up.
+//! [`modulation_profiles::apply`] is the only thing that knows how a knob
+//! reaches the DSP — which is also why the editor's shape is the engine's own
+//! movement rather than a drawing of one.
 
-use nice_plug::prelude::*;
+use audiocore_core::prelude::*;
+use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
 use audiocore_dsp::{AudioConfig, Processor};
 use modulation::chorus::chain::ChorusChain;
-use modulation::chorus::engine::EffectType;
 use modulation::trem::chain::TremChain;
-use modulation::trem::fts_modulation::trigger::TriggerMode;
-use modulation::trem::tremolo::TremMode;
-use modulation::wah::chain::{WahChain, WahSource};
+use modulation::wah::chain::WahChain;
+use modulation_profiles::Chain;
+use modulation_ui::params::{ModParams, ModUiState};
 
 const PLUGIN_NAME: &str = "FTS Modulation";
-
-// ── Parameters ────────────────────────────────────────────────────────────
-
-/// Which modulation engine processes the audio.
-#[derive(Enum, Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Mode {
-    #[name = "Chorus"]
-    Chorus,
-    #[name = "Flanger"]
-    Flanger,
-    #[name = "Vibrato"]
-    Vibrato,
-    #[name = "Tremolo"]
-    Tremolo,
-    #[name = "Wah"]
-    Wah,
-}
-
-/// Tremolo voicing, mirrored onto [`TremMode`].
-#[derive(Enum, Debug, Clone, Copy, PartialEq, Eq)]
-pub enum TremVoicing {
-    #[name = "Mono"]
-    Mono,
-    #[name = "Stereo"]
-    Stereo,
-    #[name = "Harmonic"]
-    Harmonic,
-}
-
-impl From<TremVoicing> for TremMode {
-    fn from(value: TremVoicing) -> Self {
-        match value {
-            TremVoicing::Mono => TremMode::Mono,
-            TremVoicing::Stereo => TremMode::Stereo,
-            TremVoicing::Harmonic => TremMode::Harmonic,
-        }
-    }
-}
-
-#[derive(Params)]
-pub struct ModulationParams {
-    /// Active engine.
-    #[id = "mode"]
-    pub mode: EnumParam<Mode>,
-    /// LFO rate (chorus/flanger/vibrato delay LFO, tremolo amplitude LFO).
-    /// The wah is envelope-driven, so rate has no effect there.
-    #[id = "rate"]
-    pub rate: FloatParam,
-    /// Modulation depth (chorus family depth, tremolo depth, wah envelope amount).
-    #[id = "depth"]
-    pub depth: FloatParam,
-    /// Dry/wet mix. Vibrato is inherently wet-only and ignores this.
-    #[id = "mix"]
-    pub mix: FloatParam,
-    /// Chorus family only: voices per channel.
-    #[id = "voices"]
-    pub voices: IntParam,
-    /// Tremolo only: mono / stereo (90° offset) / harmonic voicing.
-    #[id = "trem_mode"]
-    pub trem_mode: EnumParam<TremVoicing>,
-    /// Wah only: base pedal position the envelope sweeps from.
-    #[id = "wah_pos"]
-    pub wah_position: FloatParam,
-}
-
-impl Default for ModulationParams {
-    fn default() -> Self {
-        Self {
-            mode: EnumParam::new("Mode", Mode::Chorus),
-            rate: FloatParam::new(
-                "Rate",
-                1.0,
-                FloatRange::Skewed {
-                    min: 0.01,
-                    max: 20.0,
-                    factor: FloatRange::skew_factor(-2.0),
-                },
-            )
-            .with_unit(" Hz")
-            .with_value_to_string(formatters::v2s_f32_rounded(2)),
-            depth: FloatParam::new("Depth", 0.5, FloatRange::Linear { min: 0.0, max: 1.0 })
-                .with_value_to_string(formatters::v2s_f32_percentage(0))
-                .with_unit("%"),
-            mix: FloatParam::new("Mix", 0.5, FloatRange::Linear { min: 0.0, max: 1.0 })
-                .with_value_to_string(formatters::v2s_f32_percentage(0))
-                .with_unit("%"),
-            voices: IntParam::new("Voices", 2, IntRange::Linear { min: 1, max: 4 }),
-            trem_mode: EnumParam::new("Trem Mode", TremVoicing::Mono),
-            wah_position: FloatParam::new(
-                "Wah Position",
-                0.3,
-                FloatRange::Linear { min: 0.0, max: 1.0 },
-            )
-            .with_value_to_string(formatters::v2s_f32_percentage(0))
-            .with_unit("%"),
-        }
-    }
-}
 
 // ── Plugin ────────────────────────────────────────────────────────────────
 
 pub struct FtsModulation {
-    params: Arc<ModulationParams>,
-    /// Chorus / flanger / vibrato (Cubic engine — never switched, no realloc).
+    params: Arc<ModParams>,
+    ui_state: Arc<ModUiState>,
+    editor_state: Arc<DioxusState>,
+    /// All three chains live for the life of the plugin: switching families
+    /// is a dispatch, not a rebuild, and coming back to one finds it as you
+    /// left it.
     chorus: ChorusChain,
-    /// Tremolo (free-running LFO).
     trem: TremChain,
-    /// Envelope-follower auto-wah.
     wah: WahChain,
-    /// Last mode seen by `sync_params`, so a mode switch resets the incoming
-    /// chain instead of resuming from stale state.
-    current_mode: Mode,
+    /// Which chain the last block ran, so a family switch resets the incoming
+    /// one instead of resuming from stale state.
+    current: Chain,
     sample_rate: f64,
+    max_buffer_size: usize,
 }
 
 impl Default for FtsModulation {
     fn default() -> Self {
-        let mut trem = TremChain::new();
-        // Free-running LFO driven by the Rate param (sync_index 0 = free Hz).
-        trem.modulator.trigger.mode = TriggerMode::Free;
-        trem.modulator.trigger.sync_index = 0;
-
-        let mut wah = WahChain::new();
-        wah.source = WahSource::Envelope;
-
+        // The modulators' clocks are set by `modulation_profiles::apply`, not
+        // here — a chain configured in two places is how the editor ended up
+        // drawing a still line for the tremolo while the plugin ran fine.
         Self {
-            params: Arc::new(ModulationParams::default()),
+            params: Arc::new(ModParams::default()),
+            ui_state: Arc::new(ModUiState::default()),
+            // The editor sizes itself — see modulation_ui::control_view.
+            editor_state: DioxusState::new(|| {
+                (
+                    modulation_ui::control_view::EDITOR_W,
+                    modulation_ui::control_view::EDITOR_H,
+                )
+            })
+            .with_resize_hint(modulation_ui::control_view::resize_hint()),
             chorus: ChorusChain::new(),
-            trem,
-            wah,
-            current_mode: Mode::Chorus,
+            trem: TremChain::new(),
+            wah: WahChain::new(),
+            current: Chain::Delay,
             sample_rate: 48_000.0,
+            max_buffer_size: 512,
         }
     }
 }
 
 impl FtsModulation {
-    /// Push the current params into the active chain (plain field writes and
-    /// `reset()` only — no allocation).
-    fn sync_params(&mut self) {
-        let p = &self.params;
-        let mode = p.mode.value();
+    /// Point the engines at the resolved profile.
+    ///
+    /// Resolved through the *persisted id* rather than the automatable index,
+    /// so growing the rail never repoints an old session at a different
+    /// circuit — same contract the reverb and the saturator keep.
+    ///
+    /// Returns the chain to run this block.
+    fn sync_params(&mut self) -> Chain {
+        let profile = self.params.resolved_profile();
+        let chain = profile.voicing.circuit.chain();
 
-        // Reset the incoming chain on a mode switch so it starts clean.
-        if mode != self.current_mode {
-            self.current_mode = mode;
-            match mode {
-                Mode::Chorus | Mode::Flanger | Mode::Vibrato => self.chorus.reset(),
-                Mode::Tremolo => self.trem.reset(),
-                Mode::Wah => self.wah.reset(),
+        // Reset the incoming chain on a family switch so it starts clean
+        // rather than resuming a half-finished sweep.
+        if chain != self.current {
+            self.current = chain;
+            match chain {
+                Chain::Delay => self.chorus.reset(),
+                Chain::Tremolo => self.trem.reset(),
+                Chain::Wah => self.wah.reset(),
             }
         }
 
-        let rate = p.rate.value() as f64;
-        let depth = p.depth.value() as f64;
-        let mix = p.mix.value() as f64;
-
-        match mode {
-            Mode::Chorus | Mode::Flanger | Mode::Vibrato => {
-                let c = &mut self.chorus;
-                c.effect_type = match mode {
-                    Mode::Flanger => EffectType::Flanger,
-                    Mode::Vibrato => EffectType::Vibrato,
-                    _ => EffectType::Chorus,
-                };
-                c.rate_hz = rate;
-                c.depth = depth;
-                c.num_voices = p.voices.value() as usize;
-                // Vibrato is wet-only; the chain enforces it, keep mix coherent.
-                c.mix = if c.effect_type == EffectType::Vibrato { 1.0 } else { mix };
-            }
-            Mode::Tremolo => {
-                let t = &mut self.trem;
-                t.set_mode(p.trem_mode.value().into());
-                t.set_depth(depth);
-                t.mix = mix;
-                t.modulator.trigger.mode = TriggerMode::Free;
-                t.modulator.trigger.sync_index = 0;
-                t.modulator.trigger.rate_hz = rate;
-                // Stereo voicing = 90° L/R phase offset; the chain only reads
-                // its stereo path when stereo_phase is nonzero.
-                let (phase_deg, offset) = if p.trem_mode.value() == TremVoicing::Stereo {
-                    (90.0, 0.25)
-                } else {
-                    (0.0, 0.0)
-                };
-                t.stereo_phase = phase_deg;
-                t.modulator.stereo_offset = offset;
-            }
-            Mode::Wah => {
-                let w = &mut self.wah;
-                w.source = WahSource::Envelope;
-                w.env_amount = depth;
-                w.base_position = p.wah_position.value() as f64;
-                w.mix = mix;
-            }
-        }
+        modulation_profiles::apply(
+            profile,
+            &self.params.controls(),
+            &mut self.chorus,
+            &mut self.trem,
+            &mut self.wah,
+        );
+        chain
     }
 }
 
@@ -240,13 +124,23 @@ impl Plugin for FtsModulation {
         ..AudioIOLayout::const_default()
     }];
 
-    // No editor yet — the host shows its generic parameter UI.
-    type Editor = ();
+    type Editor = audiocore_core::nice_plug_dioxus::editor::DioxusEditor;
     type SysExMessage = ();
     type BackgroundTask = ();
 
     fn params(&self) -> Arc<dyn Params> {
         self.params.clone()
+    }
+
+    fn editor(&mut self, _async_executor: AsyncExecutor<Self>) -> Option<Self::Editor> {
+        create_dioxus_editor_with_state(
+            self.editor_state.clone(),
+            Arc::new(modulation_ui::control_view::ModUi {
+                params: self.params.clone(),
+                state: self.ui_state.clone(),
+            }),
+            modulation_ui::control_view::App,
+        )
     }
 
     fn activate(
@@ -256,12 +150,14 @@ impl Plugin for FtsModulation {
         _context: &mut impl ActivateContext<Self>,
     ) -> bool {
         self.sample_rate = buffer_config.sample_rate as f64;
+        self.max_buffer_size = buffer_config.max_buffer_size as usize;
         let config = AudioConfig {
             sample_rate: self.sample_rate,
-            max_buffer_size: buffer_config.max_buffer_size as usize,
+            max_buffer_size: self.max_buffer_size,
         };
-        // Pre-allocate / retune all three engines up front so process() only
-        // ever dispatches.
+        // Land the profile before the reconfigure, so each chain retunes onto
+        // the real settings rather than ramping out of a default nobody chose.
+        self.sync_params();
         self.chorus.update(config);
         self.trem.update(config);
         self.wah.update(config);
@@ -280,55 +176,89 @@ impl Plugin for FtsModulation {
         _aux: &mut AuxiliaryBuffers,
         _context: &mut impl ProcessContext<Self>,
     ) -> ProcessStatus {
-        self.sync_params();
-        let mode = self.current_mode;
+        if buffer.channels() < 2 {
+            return ProcessStatus::Normal;
+        }
+        let chain = self.sync_params();
+        let output = 10.0f32.powf(self.params.output.value() / 20.0);
 
-        // Process in fixed stack chunks, converting f32 <-> f64.
+        let mut input_peak = 0.0f32;
+        let mut output_peak = 0.0f32;
+
+        // Fixed stack chunks, f32 ↔ f64. No allocation on the audio thread.
         const CHUNK: usize = 128;
-        let num_samples = buffer.samples();
+        let total = buffer.samples();
         let mut offset = 0;
 
-        while offset < num_samples {
-            let end = (offset + CHUNK).min(num_samples);
-            let len = end - offset;
-
+        while offset < total {
+            let len = (offset + CHUNK).min(total) - offset;
             let mut left = [0.0f64; CHUNK];
             let mut right = [0.0f64; CHUNK];
 
-            let channels = buffer.as_slice();
-            for i in 0..len {
-                left[i] = channels[0][offset + i] as f64;
-                right[i] = channels[1][offset + i] as f64;
-            }
-
-            match mode {
-                Mode::Chorus | Mode::Flanger | Mode::Vibrato => {
-                    self.chorus.process(&mut left[..len], &mut right[..len]);
-                }
-                Mode::Tremolo => {
-                    self.trem.process(&mut left[..len], &mut right[..len]);
-                }
-                Mode::Wah => {
-                    self.wah.process(&mut left[..len], &mut right[..len]);
+            {
+                let channels = buffer.as_slice();
+                for i in 0..len {
+                    let (l, r) = (channels[0][offset + i], channels[1][offset + i]);
+                    input_peak = input_peak.max(l.abs().max(r.abs()));
+                    left[i] = l as f64;
+                    right[i] = r as f64;
                 }
             }
 
-            let channels = buffer.as_slice();
-            for i in 0..len {
-                channels[0][offset + i] = left[i] as f32;
-                channels[1][offset + i] = right[i] as f32;
+            match chain {
+                Chain::Delay => self.chorus.process(&mut left[..len], &mut right[..len]),
+                Chain::Tremolo => self.trem.process(&mut left[..len], &mut right[..len]),
+                Chain::Wah => self.wah.process(&mut left[..len], &mut right[..len]),
             }
 
-            offset = end;
+            {
+                let channels = buffer.as_slice();
+                for i in 0..len {
+                    let (l, r) = (left[i] as f32 * output, right[i] as f32 * output);
+                    output_peak = output_peak.max(l.abs().max(r.abs()));
+                    channels[0][offset + i] = l;
+                    channels[1][offset + i] = r;
+                }
+            }
+
+            offset += len;
         }
+
+        store_peak(&self.ui_state.input_db, input_peak);
+        store_peak(&self.ui_state.out_db, output_peak);
+        // Where the modulator is sitting, for the panel's playhead.
+        let modulated = match chain {
+            Chain::Tremolo => self.trem.modulator.output(),
+            Chain::Wah => self.wah.modulator.output(),
+            Chain::Delay => 0.0,
+        };
+        self.ui_state
+            .mod_value
+            .store(modulated as f32, Ordering::Relaxed);
+
         ProcessStatus::Normal
     }
+}
+
+/// Peak-hold in dB, falling 0.3 dB a block. The editor samples this when it
+/// draws; a frame that misses an update simply draws the next one.
+fn store_peak(slot: &atomic_float::AtomicF32, peak: f32) {
+    let db = if peak > 0.0 {
+        20.0 * peak.log10()
+    } else {
+        -100.0
+    };
+    let previous = slot.load(Ordering::Relaxed);
+    slot.store(
+        if db > previous { db } else { previous - 0.3 },
+        Ordering::Relaxed,
+    );
 }
 
 impl ClapPlugin for FtsModulation {
     const CLAP_ID: &'static str = "com.fasttrackstudio.modulation";
     const CLAP_DESCRIPTION: Option<&'static str> =
-        Some("Multi-mode modulation: chorus, flanger, vibrato, tremolo, and auto-wah");
+        Some("Five circuits: chorus, flanger, vibrato, tremolo, and wah");
     const CLAP_MANUAL_URL: Option<&'static str> = None;
     const CLAP_SUPPORT_URL: Option<&'static str> = None;
     const CLAP_FEATURES: &'static [ClapFeature] = &[
@@ -346,3 +276,160 @@ impl Vst3Plugin for FtsModulation {
 
 nice_export_clap!(FtsModulation);
 nice_export_vst3!(FtsModulation);
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use audiocore_core::nice_plug::params::InternalParamMut;
+    use modulation_profiles::{Circuit, EngineType};
+
+    /// The plugin runs whatever the rail says, with no table of its own.
+    ///
+    /// This is the regression guard for the bug the split fixed: the shell
+    /// pinned `EngineType::Cubic` and never switched, so four engines were
+    /// dead code. If a profile ever stops reaching its engine again, this is
+    /// what notices.
+    #[test]
+    fn every_profile_on_the_rail_reaches_the_engine_it_names() {
+        for (index, profile) in modulation_profiles::PROFILES.iter().enumerate() {
+            let mut plugin = FtsModulation::default();
+            plugin.params.store_profile_id(index);
+            let chain = plugin.sync_params();
+            assert_eq!(chain, profile.voicing.circuit.chain(), "{}", profile.id);
+            if let Circuit::Delay { engine, effect } = profile.voicing.circuit {
+                assert_eq!(plugin.chorus.engine, engine, "{}", profile.id);
+                assert_eq!(plugin.chorus.effect_type, effect, "{}", profile.id);
+            }
+        }
+    }
+
+    /// …and specifically that all five chorus engines are selected by
+    /// something, in the shell rather than only in the table.
+    #[test]
+    fn the_shell_can_select_every_chorus_engine() {
+        let mut reached = Vec::new();
+        for (index, _) in modulation_profiles::PROFILES.iter().enumerate() {
+            let mut plugin = FtsModulation::default();
+            plugin.params.store_profile_id(index);
+            plugin.sync_params();
+            if !reached.contains(&plugin.chorus.engine) {
+                reached.push(plugin.chorus.engine);
+            }
+        }
+        for engine in [
+            EngineType::Cubic,
+            EngineType::Bbd,
+            EngineType::Tape,
+            EngineType::Orbit,
+            EngineType::Juno,
+        ] {
+            assert!(reached.contains(&engine), "{engine:?} unreachable from the shell");
+        }
+    }
+
+    /// Silence in, silence out, on all fifteen. A modulator that idles into
+    /// something is unusable however good it sounds when played.
+    #[test]
+    fn no_profile_makes_a_sound_out_of_nothing() {
+        for index in 0..modulation_profiles::PROFILES.len() {
+            let mut plugin = FtsModulation::default();
+            plugin.params.store_profile_id(index);
+            let chain = plugin.sync_params();
+            let config = AudioConfig {
+                sample_rate: 48_000.0,
+                max_buffer_size: 128,
+            };
+            plugin.chorus.update(config);
+            plugin.trem.update(config);
+            plugin.wah.update(config);
+
+            let mut worst = 0.0f64;
+            for block in 0..40 {
+                let mut l = [0.0f64; 128];
+                let mut r = [0.0f64; 128];
+                match chain {
+                    Chain::Delay => plugin.chorus.process(&mut l, &mut r),
+                    Chain::Tremolo => plugin.trem.process(&mut l, &mut r),
+                    Chain::Wah => plugin.wah.process(&mut l, &mut r),
+                }
+                if block > 20 {
+                    for v in l.iter().chain(r.iter()) {
+                        assert!(v.is_finite(), "non-finite output");
+                        worst = worst.max(v.abs());
+                    }
+                }
+            }
+            let id = modulation_profiles::PROFILES[index].id;
+            assert!(worst < 1.0e-6, "{id} idles at {worst}");
+        }
+    }
+
+    /// Every profile passes audio without running away, at every extreme of
+    /// its controls.
+    #[test]
+    fn nothing_explodes_at_any_setting() {
+        for index in 0..modulation_profiles::PROFILES.len() {
+            for end in [0.0f32, 1.0] {
+                let mut plugin = FtsModulation::default();
+                plugin.params.store_profile_id(index);
+                for p in [
+                    &plugin.params.rate,
+                    &plugin.params.depth,
+                    &plugin.params.mix,
+                    &plugin.params.knob_a,
+                    &plugin.params.knob_b,
+                    &plugin.params.knob_c,
+                    &plugin.params.knob_d,
+                ] {
+                    // The host-facing setter; a test is standing in for the
+                    // host here, which is exactly what it is for. Unsafe
+                    // because nice-plug expects only the host to call it —
+                    // there is no aliasing hazard with a params tree this
+                    // test owns outright.
+                    unsafe { p._internal_set_plain_value(end) };
+                }
+                let chain = plugin.sync_params();
+                let config = AudioConfig {
+                    sample_rate: 48_000.0,
+                    max_buffer_size: 128,
+                };
+                plugin.chorus.update(config);
+                plugin.trem.update(config);
+                plugin.wah.update(config);
+
+                let mut worst = 0.0f64;
+                let mut phase = 0.0f64;
+                for block in 0..60 {
+                    let mut l = [0.0f64; 128];
+                    let mut r = [0.0f64; 128];
+                    for i in 0..128 {
+                        phase += 220.0 / 48_000.0;
+                        let s = (phase * std::f64::consts::TAU).sin() * 0.5;
+                        l[i] = s;
+                        r[i] = s;
+                    }
+                    match chain {
+                        Chain::Delay => plugin.chorus.process(&mut l, &mut r),
+                        Chain::Tremolo => plugin.trem.process(&mut l, &mut r),
+                        Chain::Wah => plugin.wah.process(&mut l, &mut r),
+                    }
+                    if block > 20 {
+                        for v in l.iter().chain(r.iter()) {
+                            assert!(
+                                v.is_finite(),
+                                "{} went non-finite at {end}",
+                                modulation_profiles::PROFILES[index].id,
+                            );
+                            worst = worst.max(v.abs());
+                        }
+                    }
+                }
+                assert!(
+                    worst < 4.0,
+                    "{} reached {worst} at {end}",
+                    modulation_profiles::PROFILES[index].id,
+                );
+            }
+        }
+    }
+}
