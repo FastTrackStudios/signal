@@ -722,6 +722,61 @@ async fn pressing_a_ratio_button_sets_that_ratio() -> dioxus_test::Result<()> {
     Ok(())
 }
 
+/// The size button cycles the forms, and each one asks for its own box.
+///
+/// Two things get checked together because either alone passes while the
+/// feature is broken: the button has to advance the persisted form, *and* the
+/// sizes those forms resolve to have to be distinct and inside the editor's
+/// declared bounds. They were not — a 300px height floor clamped 1U and 2U
+/// onto the same window, so the button "worked" and nothing moved.
+#[tokio::test]
+async fn the_size_button_cycles_the_forms_and_each_asks_for_its_own_box() -> dioxus_test::Result<()>
+{
+    let mut fx = mount();
+    let (min_w, min_h) = comp_ui::control_view::min_editor_size();
+    let (max_w, max_h) = comp_ui::control_view::max_editor_size();
+
+    let mut seen = Vec::new();
+    for _ in 0..fts_ui_audio::EDITOR_FORMS.len() {
+        let form = fx.params.resolved_editor_form();
+        let size = comp_ui::faces::editor_size_for(0, form);
+        assert!(
+            !seen.contains(&(form, size)),
+            "the size button came back to {} without visiting every form",
+            form.id(),
+        );
+        let (w, h) = (size.0 as f32, size.1 as f32);
+        assert!(
+            (min_w..=max_w).contains(&w) && (min_h..=max_h).contains(&h),
+            "{} asks for {w}x{h}, outside {min_w}x{min_h}..{max_w}x{max_h} — \
+             the host clamps this and the button appears to do nothing",
+            form.id(),
+        );
+        seen.push((form, size));
+
+        let el = fx.tester.query(by_testid("form-cycle")).immediately()?;
+        let (ox, oy) = el.document_origin();
+        let (w, h) = el.size();
+        fx.tester.pointer_down(ox + w as f64 / 2.0, oy + h as f64 / 2.0);
+        let _ = fx.tester.pump().await;
+        fx.tester.pointer_up(ox + w as f64 / 2.0, oy + h as f64 / 2.0);
+        fx.settle().await;
+    }
+
+    // A full cycle comes back to where it started.
+    assert_eq!(fx.params.resolved_editor_form(), seen[0].0);
+    // …and the boxes really are different from one another.
+    let mut boxes: Vec<_> = seen.iter().map(|(_, size)| *size).collect();
+    boxes.sort();
+    boxes.dedup();
+    assert_eq!(
+        boxes.len(),
+        seen.len(),
+        "two forms resolve to the same window, so one of them is a button that does nothing"
+    );
+    Ok(())
+}
+
 /// A faceplate is a fixed drawing: a bigger editor draws the same panel
 /// larger rather than reflowing it, and a smaller one draws it smaller.
 #[tokio::test]
@@ -806,19 +861,22 @@ async fn advanced_page_fits_the_plugin_editor_size() -> dioxus_test::Result<()> 
     Ok(())
 }
 
-/// The editor declares itself resizable down to
-/// `MIN_EDITOR_W` x `MIN_EDITOR_H`, and `DioxusEditorHandle::set_size` enforces
-/// that floor. This checks the floor is honest: the Advanced page — the densest
-/// one — must still lay out at exactly the declared minimum.
+/// The Advanced page — the densest one — must lay out at the size the editor
+/// actually opens at (`EDITOR_W` x `EDITOR_H`, which every face now asks for).
+///
+/// Not at the declared *minimum*: that is now the smallest size preset, a 1U
+/// sliver, where the face deliberately stops drawing its panel and flows its
+/// controls instead. The size that has to hold the full page is the one you
+/// get without asking for anything.
 ///
 /// It matters more than a normal layout test because Blitz does not clip what
 /// does not fit, it collapses it to 0x0. A minimum that is a little too small
 /// does not produce a cramped editor, it produces unreachable controls.
 #[tokio::test]
-async fn advanced_page_survives_the_declared_minimum_size() -> dioxus_test::Result<()> {
+async fn advanced_page_survives_the_size_the_editor_opens_at() -> dioxus_test::Result<()> {
     let mut fx = mount_sized(
-        comp_ui::control_view::MIN_EDITOR_W as u32,
-        comp_ui::control_view::MIN_EDITOR_H as u32,
+        comp_ui::control_view::EDITOR_W,
+        comp_ui::control_view::EDITOR_H,
     );
 
     let el = fx.tester.query(by_testid("advanced-toggle")).immediately()?;
@@ -841,10 +899,10 @@ async fn advanced_page_survives_the_declared_minimum_size() -> dioxus_test::Resu
         let (w, h) = el.size();
         assert!(
             w > 40.0 && h > 30.0,
-            "{id} collapsed to {w}x{h}px at the declared minimum {}x{} — \
-             the minimum in control_view::resize_hint() is too small",
-            comp_ui::control_view::MIN_EDITOR_W,
-            comp_ui::control_view::MIN_EDITOR_H,
+            "{id} collapsed to {w}x{h}px at the editor's own {}x{} — \
+             the default size in control_view is too small for this page",
+            comp_ui::control_view::EDITOR_W,
+            comp_ui::control_view::EDITOR_H,
         );
     }
 

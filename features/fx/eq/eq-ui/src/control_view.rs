@@ -26,37 +26,43 @@ use crate::eq_graph::{EqBand, EqBandShape, EqGraph, OverlayChoice};
 ///
 /// The starting size, not a ceiling — the editor opts into host resizing
 /// through [`resize_hint`].
-pub const EDITOR_W: u32 = 1000;
-pub const EDITOR_H: u32 = 600;
+pub const EDITOR_W: u32 = 1240;
+pub const EDITOR_H: u32 = 720;
 
-/// Smallest size the surface still works at.
+/// The editor's resize bounds — the extremes of the size presets.
 ///
-/// Enforced by `DioxusEditorHandle::set_size` rather than advisory: blitz
-/// collapses a container that does not fit to 0x0 instead of clipping it, so
-/// too small a minimum yields unreachable controls rather than a cramped
-/// editor. The EQ needs more width than most — the curve, the band row and the
-/// analyzer panel share one row.
-pub const MIN_EDITOR_W: f32 = 760.0;
-pub const MIN_EDITOR_H: f32 = 520.0;
+/// Derived from [`EDITOR_FORMS`](fts_ui_audio::EDITOR_FORMS) rather than
+/// chosen, because a host clamps a resize request to the bounds the plugin
+/// declared: any bound tighter than a preset the rail offers turns that
+/// preset into a window that never arrives. A 520px height floor collapsed
+/// 1U and 2U onto the same box.
+fn bounds() -> ((u32, u32), (u32, u32)) {
+    fts_ui_audio::EditorForm::size_bounds(
+        fts_ui_audio::shell::RAIL_W,
+        (EDITOR_W, EDITOR_H),
+    )
+}
 
-/// Largest size the editor accepts.
-///
-/// Not cosmetic: with no maximum, `ResizeHint::adjust_size` rubber-stamps
-/// whatever a host proposes, and hosts do propose absurd sizes — REAPER opened
-/// this editor at 3371x1017 (full screen width) because it asked "is this size
-/// OK?" and an unbounded hint said yes. Anything past roughly twice the design
-/// size is stretched chrome around a fixed control surface, so the cap is
-/// generous but real.
-pub const MAX_EDITOR_W: f32 = 2400.0;
-pub const MAX_EDITOR_H: f32 = 1400.0;
+pub fn min_editor_size() -> (f32, f32) {
+    let ((w, h), _) = bounds();
+    // The curve view is the floor on width: narrower than this and the graph
+    // and its controls stop being usable together.
+    (w as f32, h as f32)
+}
 
-/// How the host may resize this editor: freely on both axes above the
-/// minimum, no aspect-ratio lock. The EQ curve benefits from every extra
-/// pixel of width, so this is the plugin that most wants to be dragged wide.
+pub fn max_editor_size() -> (f32, f32) {
+    let (_, (w, h)) = bounds();
+    // Generous, but bounded — an unbounded hint rubber-stamps whatever a host
+    // proposes, and REAPER proposed full screen width.
+    ((w as f32 * 2.4).max(2400.0), (h as f32 * 1.4).max(1400.0))
+}
+
 pub fn resize_hint() -> ResizeHint {
+    let (min_w, min_h) = min_editor_size();
+    let (max_w, max_h) = max_editor_size();
     ResizeHint::RESIZABLE.with_min_max_logical_size(
-        Some(LogicalSize::new(MIN_EDITOR_W, MIN_EDITOR_H)),
-        Some(LogicalSize::new(MAX_EDITOR_W, MAX_EDITOR_H)),
+        Some(LogicalSize::new(min_w, min_h)),
+        Some(LogicalSize::new(max_w, max_h)),
     )
 }
 use crate::param_adapter::param_handle;

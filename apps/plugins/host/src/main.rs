@@ -162,10 +162,13 @@ fn main() -> eyre::Result<()> {
                 .window_handle()
                 .expect("host window handle")
                 .as_raw();
-            match plugin.open_gui_embedded(raw) {
-                Ok((w, h)) => {
-                    ctx.resize(baseview::dpi::PhysicalSize::new(w, h));
-                }
+            // Size the window before the editor is parented into it, the way a
+            // DAW does — so the editor's first frame is at its real size and
+            // no resize follows to paper over a missing first paint.
+            match plugin.open_gui_embedded(raw, |w, h| {
+                ctx.resize(baseview::dpi::PhysicalSize::new(w, h));
+            }) {
+                Ok(_) => {}
                 Err(e) => {
                     eprintln!("error: plugin GUI failed to embed: {e:?}");
                     ctx.request_close();

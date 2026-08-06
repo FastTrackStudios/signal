@@ -147,7 +147,7 @@ static ITEMS_1176: &[RackItem] = &[
         RackItem::TintedText {
             x: 710.0,
             y: 254.0,
-            text: "Limiting Amplifier",
+            text: "Peak Limiter",
             size: 8.0,
             color: "#bcd8e4",
         },

@@ -18,8 +18,8 @@ use crate::params::LimiterUiState;
 ///
 /// The starting size, not a ceiling — the editor opts into host resizing
 /// through [`resize_hint`].
-pub const EDITOR_W: u32 = 720;
-pub const EDITOR_H: u32 = 560;
+pub const EDITOR_W: u32 = 900;
+pub const EDITOR_H: u32 = 680;
 
 /// Smallest size the surface still works at.
 ///
