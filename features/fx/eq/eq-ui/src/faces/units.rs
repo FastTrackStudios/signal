@@ -686,8 +686,10 @@ pub static NEVE_1073: RackDesign = RackDesign {
             y: NEVE_ROW,
             d: 84.0,
             ring: Ring::Dots(&["0", "2", "4", "6", "8", "10"]),
-            tint: Some("#a8232a"),
-            style: None,
+            // Neve red, and a wing rather than a cap: the gain switch is the
+            // one control on the module you find without looking.
+            tint: Some("#9c1f27"),
+            style: Some(KnobStyle::Marconi),
         },
         // ── High shelf ───────────────────────────────────────────────────
         RackItem::Glyph {
@@ -703,7 +705,7 @@ pub static NEVE_1073: RackDesign = RackDesign {
             y: NEVE_ROW,
             d: 74.0,
             ring: Ring::Dots(&["-16", "-8", "0", "+8", "+16"]),
-            tint: Some("#9aa0a6"),
+            tint: Some("#7f858c"),
             style: None,
         },
         // ── Mid: frequency then gain, both under the bell ────────────────
@@ -720,7 +722,7 @@ pub static NEVE_1073: RackDesign = RackDesign {
             y: NEVE_ROW,
             d: 74.0,
             ring: Ring::Dots(&["Off", "0·36", "0·7", "1·6", "3·2", "4·8", "7·2"]),
-            tint: Some("#9aa0a6"),
+            tint: Some("#7f858c"),
             style: None,
         },
         RackItem::Glyph {
@@ -736,7 +738,7 @@ pub static NEVE_1073: RackDesign = RackDesign {
             y: NEVE_ROW,
             d: 74.0,
             ring: Ring::Dots(&["-16", "-8", "0", "+8", "+16"]),
-            tint: Some("#9aa0a6"),
+            tint: Some("#7f858c"),
             style: None,
         },
         // ── Low shelf: frequency then gain ───────────────────────────────
@@ -753,7 +755,7 @@ pub static NEVE_1073: RackDesign = RackDesign {
             y: NEVE_ROW,
             d: 74.0,
             ring: Ring::Dots(&["Off", "35", "60", "110", "220"]),
-            tint: Some("#9aa0a6"),
+            tint: Some("#7f858c"),
             style: None,
         },
         RackItem::Glyph {
@@ -769,7 +771,7 @@ pub static NEVE_1073: RackDesign = RackDesign {
             y: NEVE_ROW,
             d: 74.0,
             ring: Ring::Dots(&["-16", "-8", "0", "+8", "+16"]),
-            tint: Some("#9aa0a6"),
+            tint: Some("#7f858c"),
             style: None,
         },
         // ── High pass: the blue one ──────────────────────────────────────
@@ -786,8 +788,10 @@ pub static NEVE_1073: RackDesign = RackDesign {
             y: NEVE_ROW,
             d: 74.0,
             ring: Ring::Dots(&["Off", "50", "80", "160", "300"]),
-            tint: Some("#1f4a7a"),
-            style: None,
+            // Neve blue, and the same wing as the gain switch — the two
+            // coloured controls on the module are the two shaped ones.
+            tint: Some("#2b4a6d"),
+            style: Some(KnobStyle::Marconi),
         },
         RackItem::Knob {
             id: "trim",
@@ -796,7 +800,7 @@ pub static NEVE_1073: RackDesign = RackDesign {
             y: NEVE_ROW,
             d: 54.0,
             ring: Ring::Dots(&["-10", "0", "+10"]),
-            tint: Some("#9aa0a6"),
+            tint: Some("#7f858c"),
             style: None,
         },
         // ── The pale strip at the right, and what is printed on it ───────
@@ -949,6 +953,41 @@ mod tests {
                 );
             }
         }
+    }
+
+    /// The 1073's kit: the two *coloured* controls are wing knobs and every
+    /// band is a collar knob. That split is the module's silhouette — a red
+    /// and a blue bar standing off dark discs, in a row of bright rings — and
+    /// giving one control the wrong part makes the panel read as a different
+    /// console entirely.
+    #[test]
+    fn the_1073_wears_wings_on_its_coloured_controls_and_collars_on_its_bands() {
+        let mut wings = Vec::new();
+        let mut collars = Vec::new();
+        for item in NEVE_1073.items {
+            let RackItem::Knob { id, style, tint, .. } = item else {
+                continue;
+            };
+            match style.unwrap_or(NEVE_1073.knob) {
+                KnobStyle::Marconi => {
+                    assert!(
+                        tint.is_some(),
+                        "{id} is a wing knob with no colour — the wing IS the colour",
+                    );
+                    wings.push(*id);
+                }
+                KnobStyle::Neve => collars.push(*id),
+                other => panic!("{id} wears {other:?}, which is not 1073 kit"),
+            }
+        }
+        assert_eq!(wings, vec!["drive", "hpf"], "wrong controls wear wings");
+        assert_eq!(
+            collars,
+            vec![
+                "high_gain", "mid_freq", "mid_gain", "low_freq", "low_gain", "trim",
+            ],
+            "wrong controls wear collars",
+        );
     }
 
     /// SSL E and G are one panel driven by two model values, so both must
