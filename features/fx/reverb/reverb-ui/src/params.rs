@@ -7,21 +7,112 @@
 //! state so growing the list cannot repoint an old project at a different
 //! reverb.
 
+use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 use atomic_float::AtomicF32;
+use crossbeam_channel::Sender;
+use parking_lot::Mutex;
+use reverb_dsp::ir::PreparedIrPair;
 use nice_plug::prelude::*;
 
-/// Live values the editor reads and the audio thread writes.
+/// Live values the editor reads and the audio thread writes, plus the
+/// editor's side of IR loading.
 ///
-/// Plain atomics, not a channel: the editor samples them when it draws, and a
-/// frame that misses an update simply draws the next one.
+/// The meters are plain atomics rather than a channel: the editor samples them
+/// when it draws, and a frame that misses an update simply draws the next one.
 #[derive(Default)]
 pub struct ReverbUiState {
     /// Wet output level in dB, for the tail display.
     pub tail_db: AtomicF32,
     /// Input level in dB, so a face can show what is feeding it.
     pub input_db: AtomicF32,
+    /// Where finished impulse responses are posted.
+    ///
+    /// The plugin owns the other end and hands it over at construction. The
+    /// audio thread only ever *receives* on it, inside the chain, and swaps a
+    /// pointer — the decode, the resample and the FFT partitioning all happen
+    /// on a worker this state spawns.
+    pub ir_tx: Mutex<Option<Sender<PreparedIrPair>>>,
+    /// Sample rate the IR has to be resampled to. Written by the plugin when
+    /// the host tells it, read by the worker.
+    pub sample_rate: AtomicF32,
+    /// What is loaded now — the file's display name, for the panel.
+    pub ir_loaded: Mutex<String>,
+    /// A decode is in flight. The panel says so rather than looking broken
+    /// for the second and a half a long IR takes.
+    pub ir_loading: AtomicBool,
+    /// The last failure, if the file could not be read.
+    pub ir_error: Mutex<Option<String>>,
+}
+
+impl ReverbUiState {
+    /// Load an impulse response, off the GUI thread and nowhere near the
+    /// audio one.
+    ///
+    /// Reading a file, resampling it and partitioning it for convolution is
+    /// unbounded work — seconds, for a long IR — so it runs on a worker and
+    /// arrives as finished partitions that the chain swaps in with a pointer
+    /// move. Everything the panel shows while that happens (Loading…, the
+    /// name, an error) is written here by the worker.
+    pub fn load_ir(self: &Arc<Self>, path: PathBuf) {
+        let state = self.clone();
+        state.ir_loading.store(true, Ordering::Relaxed);
+        *state.ir_error.lock() = None;
+        std::thread::spawn(move || {
+            let name = path
+                .file_stem()
+                .map(|s| s.to_string_lossy().into_owned())
+                .unwrap_or_else(|| path.display().to_string());
+            let sample_rate = state.sample_rate.load(Ordering::Relaxed) as f64;
+            let sample_rate = if sample_rate > 0.0 { sample_rate } else { 48_000.0 };
+
+            match reverb_dsp::ir::IrAsset::load(&path, sample_rate) {
+                Ok(asset) => {
+                    // A mono file convolves to both sides; a stereo one keeps
+                    // its own image, which is most of why you record a space
+                    // in stereo in the first place.
+                    let left = asset.channels[0].clone();
+                    let right = asset.channels.get(1).cloned().unwrap_or_else(|| left.clone());
+                    let pair = PreparedIrPair::build(&left, &right);
+                    let sent = state
+                        .ir_tx
+                        .lock()
+                        .as_ref()
+                        .map(|tx| tx.send(pair).is_ok())
+                        .unwrap_or(false);
+                    if sent {
+                        *state.ir_loaded.lock() = name;
+                    } else {
+                        // No channel means the editor is running without a
+                        // plugin behind it (the headless harness), which is
+                        // worth saying rather than silently doing nothing.
+                        *state.ir_error.lock() = Some(format!("{name}: no engine attached"));
+                    }
+                }
+                Err(e) => *state.ir_error.lock() = Some(format!("{name}: {e}")),
+            }
+            state.ir_loading.store(false, Ordering::Relaxed);
+        });
+    }
+}
+
+/// Where impulse responses are looked for.
+///
+/// `FTS_IR_DIR` overrides; otherwise the user's own IR folder. A missing
+/// directory is not an error — it is an empty library, and the panel says so.
+pub fn ir_library_root() -> PathBuf {
+    if let Some(dir) = std::env::var_os("FTS_IR_DIR") {
+        return PathBuf::from(dir);
+    }
+    dirs_home()
+        .map(|home| home.join(".local/share/fts/irs"))
+        .unwrap_or_else(|| PathBuf::from("irs"))
+}
+
+fn dirs_home() -> Option<PathBuf> {
+    std::env::var_os("HOME").map(PathBuf::from)
 }
 
 #[derive(Params)]
@@ -116,6 +207,14 @@ pub struct ReverbParams {
     /// Non-linear's chop depth: the LFO that cuts the tail into slices.
     #[id = "chop"]
     pub chop: FloatParam,
+
+    /// The impulse response a session reopens with.
+    ///
+    /// A path rather than the audio: IRs are large, and a project that
+    /// silently embedded megabytes of convolution data would be a surprise.
+    /// A file that has moved is reported rather than guessed at.
+    #[persist = "ir_path"]
+    pub ir_path: parking_lot::RwLock<String>,
 
     /// What a session restores from.
     ///
@@ -216,6 +315,7 @@ impl Default for ReverbParams {
             chop: FloatParam::new("Chop", 0.0, FloatRange::Linear { min: 0.0, max: 1.0 })
                 .with_value_to_string(formatters::v2s_f32_percentage(0)),
 
+            ir_path: parking_lot::RwLock::new(String::new()),
             profile_id: parking_lot::RwLock::new(String::new()),
             editor_form: parking_lot::RwLock::new(String::new()),
         }

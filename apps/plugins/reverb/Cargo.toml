@@ -27,3 +27,5 @@ audiocore-dsp.workspace = true
 reverb-ui = { workspace = true, features = ["native"] }
 reverb-profiles.workspace = true
 audiocore-core = { workspace = true }
+# The IR hand-off channel: the editor's worker sends, the chain receives.
+crossbeam-channel = { workspace = true }

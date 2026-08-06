@@ -45,9 +45,17 @@ pub struct FtsReverb {
 impl Default for FtsReverb {
     fn default() -> Self {
         let params = Arc::new(ReverbParams::default());
+        // The editor's worker sends finished partitions; the chain receives
+        // them inside `process` and swaps a pointer. The audio thread never
+        // decodes, allocates or blocks for an IR.
+        let (ir_tx, ir_rx) = crossbeam_channel::bounded(4);
+        let mut chain = ReverbChain::new();
+        chain.set_prepared_ir_receiver(ir_rx);
+        let ui_state = Arc::new(ReverbUiState::default());
+        *ui_state.ir_tx.lock() = Some(ir_tx);
         Self {
             params,
-            ui_state: Arc::new(ReverbUiState::default()),
+            ui_state,
             // The editor sizes itself — see reverb_ui::control_view.
             editor_state: DioxusState::new(|| {
                 (
@@ -56,7 +64,7 @@ impl Default for FtsReverb {
                 )
             })
             .with_resize_hint(reverb_ui::control_view::resize_hint()),
-            chain: ReverbChain::new(),
+            chain,
             scratch_l: Vec::new(),
             scratch_r: Vec::new(),
             sample_rate: 48_000.0,
@@ -154,6 +162,10 @@ impl Plugin for FtsReverb {
         _context: &mut impl ActivateContext<Self>,
     ) -> bool {
         self.sample_rate = buffer_config.sample_rate as f64;
+        // The worker resamples to whatever the host is running at.
+        self.ui_state
+            .sample_rate
+            .store(buffer_config.sample_rate, std::sync::atomic::Ordering::Relaxed);
         let max = (buffer_config.max_buffer_size as usize).max(1);
         self.scratch_l = vec![0.0; max];
         self.scratch_r = vec![0.0; max];

@@ -59,3 +59,14 @@ async fn every_space() {
         shot(&fx, &profile.id.replace('_', "-"));
     }
 }
+
+/// The IR panel with a library behind it — the browser is the half of a
+/// convolution reverb that is not a knob.
+#[tokio::test]
+async fn ir_with_a_library() {
+    // Safety: the harness is single-threaded per test binary and this runs
+    // before the editor mounts.
+    unsafe { std::env::set_var("FTS_IR_DIR", concat!(env!("CARGO_MANIFEST_DIR"), "/tests/irs")) };
+    let fx = on_profile("ir").await;
+    shot(&fx, "ir-library");
+}

@@ -25,10 +25,15 @@ atomic_float = { workspace = true, optional = true }
 parking_lot = { workspace = true, optional = true }
 reverb-profiles = { workspace = true }
 reverb-dsp = { workspace = true }
+crossbeam-channel = { workspace = true }
 dioxus = { workspace = true }
 
 [[test]]
 name = "screenshots"
+required-features = ["native"]
+
+[[test]]
+name = "ir_browser"
 required-features = ["native"]
 
 [dev-dependencies]

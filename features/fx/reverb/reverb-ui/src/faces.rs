@@ -400,8 +400,19 @@ pub fn SpaceFace(
             ends: design.ends,
             texture: design.texture,
 
+            // The IR family gets a browser where the others get nothing —
+            // a convolution is only as good as the file in it.
+            if design.centre == Centrepiece::Waveform {
+                PanelSlot { scale, x: 742.0, y: 104.0, w: 320.0, h: 152.0,
+                    IrBrowser { ink: design.ink.to_string(), accent: design.accent.to_string() }
+                }
+            }
+
             // The centrepiece, in its own slot so it scales with the panel.
-            PanelSlot { scale, x: W / 2.0, y: 104.0, w: 620.0, h: 150.0,
+            PanelSlot { scale, x: if design.centre == Centrepiece::Waveform { 340.0 } else { W / 2.0 },
+                y: 104.0,
+                w: if design.centre == Centrepiece::Waveform { 400.0 } else { 620.0 },
+                h: 150.0,
                 CentreView {
                     kind: design.centre,
                     accent: design.accent.to_string(),
@@ -463,6 +474,126 @@ pub fn SpaceFace(
                         },
                         size: 9.0,
                         color: design.ink.to_string(),
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// The impulse-response browser.
+///
+/// Deliberately a list and not a file dialog: a native dialog inside a plugin
+/// window is a different can of worms on every host, and what you actually
+/// want when reaching for an IR is to see the ones you have. The library is
+/// whatever is under [`ir_library_root`](crate::params::ir_library_root)
+/// (`FTS_IR_DIR` overrides), scanned when the panel mounts and on Rescan.
+///
+/// Clicking a name does not load anything here. It leaves the path on the
+/// shared state and the plugin's worker does the decoding — see
+/// [`ReverbUiState::request_ir`](crate::params::ReverbUiState::request_ir).
+#[component]
+fn IrBrowser(ink: String, accent: String) -> Element {
+    let shared = use_context::<nice_plug_dioxus::SharedState>();
+    let ui = shared
+        .get::<crate::control_view::ReverbUi>()
+        .expect("the IR browser was mounted without its ReverbUi");
+
+    // Scanned once per mount, and again when asked. Walking a directory is
+    // not something to do sixty times a second.
+    let mut entries = use_signal(Vec::<(String, std::path::PathBuf)>::new);
+    let mut scanned = use_signal(|| false);
+    if !*scanned.read() {
+        scanned.set(true);
+        let mut library = reverb_dsp::ir::IrLibrary::new(crate::params::ir_library_root());
+        let _ = library.rescan();
+        entries.set(
+            library
+                .entries()
+                .iter()
+                .map(|e| (e.name.clone(), e.path.clone()))
+                .collect(),
+        );
+    }
+
+    let state = ui.state.clone();
+    let params = ui.params.clone();
+    let loading = state.ir_loading.load(std::sync::atomic::Ordering::Relaxed);
+    let loaded = state.ir_loaded.lock().clone();
+    let error = state.ir_error.lock().clone();
+    let list = entries.read().clone();
+    let empty = list.is_empty();
+
+    rsx! {
+        div {
+            "data-testid": "ir-browser",
+            style: format!(
+                "width:100%; height:100%; display:flex; flex-direction:column; \
+                 gap:3px; padding:6px 8px; overflow:hidden; \
+                 background:rgba(0,0,0,0.28); border:1px solid rgba(255,255,255,0.10); \
+                 border-radius:3px; color:{ink};"
+            ),
+
+            // What is loaded, and what the loader is doing about it.
+            div {
+                style: "display:flex; justify-content:space-between; align-items:center;                         font-size:8px; letter-spacing:0.10em; text-transform:uppercase;                         opacity:0.75;",
+                span { "Impulse Response" }
+                span {
+                    "data-testid": "ir-rescan",
+                    style: "cursor:pointer; opacity:0.8;",
+                    onclick: move |_| {
+                        scanned.set(false);
+                    },
+                    "Rescan"
+                }
+            }
+            div {
+                "data-testid": "ir-current",
+                style: format!(
+                    "font-size:10px; font-weight:700; white-space:nowrap; \
+                     overflow:hidden; color:{};",
+                    if error.is_some() { "#e2603f".to_string() } else { accent.clone() },
+                ),
+                if loading {
+                    "Loading…"
+                } else if let Some(err) = error.clone() {
+                    "{err}"
+                } else if loaded.is_empty() {
+                    "No impulse loaded"
+                } else {
+                    "{loaded}"
+                }
+            }
+
+            // The library.
+            div {
+                style: "flex:1; min-height:0; display:flex; flex-direction:column;                         gap:1px; overflow:hidden;",
+                if empty {
+                    div {
+                        style: "font-size:8px; opacity:0.6; line-height:1.5;",
+                        "Nothing in {crate::params::ir_library_root().display()}"
+                    }
+                }
+                for (name , path) in list.into_iter().take(7) {
+                    div {
+                        key: "{name}",
+                        "data-testid": "ir-entry",
+                        style: format!(
+                            "font-size:9px; padding:1px 4px; border-radius:2px; \
+                             white-space:nowrap; overflow:hidden; cursor:pointer; \
+                             background:{};",
+                            if loaded == name { format!("{accent}33") } else { "transparent".into() },
+                        ),
+                        onclick: {
+                            let state = state.clone();
+                            let params = params.clone();
+                            let path = path.clone();
+                            move |_| {
+                                *params.ir_path.write() = path.display().to_string();
+                                state.load_ir(path.clone());
+                            }
+                        },
+                        "{name}"
                     }
                 }
             }
@@ -793,6 +924,21 @@ mod tests {
                     spec.param,
                 );
             }
+        }
+    }
+
+    /// Only the IR panel carries a browser, and it is the only one that
+    /// should: every other family generates its space rather than loading one.
+    #[test]
+    fn the_browser_belongs_to_the_ir_panel_and_nowhere_else() {
+        for design in [&IR, &HALL, &PLATE, &ROOM, &SPRING, &AMBIENT, &SPECIAL] {
+            assert_eq!(
+                design.centre == Centrepiece::Waveform,
+                design.family == "ir",
+                "{} draws {:?}",
+                design.family,
+                design.centre,
+            );
         }
     }
 
