@@ -81,6 +81,19 @@ impl FtsReverb {
         self.chain.params.size = self.params.size.value() as f64;
         self.chain.params.damping = self.params.damping.value() as f64;
         self.chain.params.tone = self.params.tone.value() as f64;
+        self.chain.params.diffusion = self.params.diffusion.value() as f64;
+        self.chain.params.modulation = self.params.modulation.value() as f64;
+        // Frequency-dependent decay: the low band rings longer or shorter
+        // than the rest, which is most of what separates a warm hall from a
+        // plate. The high band moves the other way, so one control does the
+        // tilt rather than two that have to be kept in step.
+        let bass = self.params.bass.value() as f64;
+        self.chain.params.low_decay_mult = bass;
+        self.chain.params.high_decay_mult = (2.0 - bass).clamp(0.0, 2.0);
+        // The engine's own two controls. What they mean is the algorithm's
+        // business — the panel is what names them.
+        self.chain.params.extra_a = self.params.character_a.value() as f64;
+        self.chain.params.extra_b = self.params.character_b.value() as f64;
 
         self.chain.predelay_ms = self.params.predelay.value() as f64;
         self.chain.width = self.params.width.value() as f64;
