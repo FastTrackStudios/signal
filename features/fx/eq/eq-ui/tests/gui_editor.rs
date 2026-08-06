@@ -42,6 +42,7 @@ use eq_ui::eq_graph_interaction::GraphMapper;
 use eq_ui::params::{EqUiState, FtsEqParams};
 
 use audiocore_core::prelude::Param;
+use fts_ui_audio::hardware::rack::FilterGlyph;
 use nice_plug_dioxus::{ParamContext, SharedState};
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -690,3 +691,174 @@ async fn hovered_only_panel_still_fades_after_the_pointer_leaves() -> dioxus_tes
     Ok(())
 }
 
+
+// ─────────────────────────────────────────────────────────────────────────
+// Hardware faces
+//
+// The faceplates are drawn, so most of what is wrong with one is a picture
+// (tests/screenshots.rs). These cover the two things a picture cannot show:
+// whether a control can be operated, and whether a piece of the drawing that
+// must stay still actually does.
+// ─────────────────────────────────────────────────────────────────────────
+
+/// Mount the editor already on a hardware model, the way a host opens it.
+async fn mount_model(model: i32) -> support::Fixture {
+    let fx = mount();
+    unsafe {
+        fx.params
+            .model
+            .as_ptr()
+            ._internal_set_normalized_value(model as f32 / 5.0)
+    };
+    fx.settle().await;
+    fx
+}
+
+/// The specular highlight on a Pultec knob is the panel's lamp, not part of
+/// the knob: it must not sit inside the group that rotates with the value.
+///
+/// A reflection that turns with the control is the first thing that reads as
+/// wrong on a faceplate, and it is invisible in a code review — hence a
+/// structural assertion rather than an eyeball.
+#[tokio::test]
+async fn a_pultec_knobs_highlight_is_not_inside_the_rotating_group()
+-> dioxus_test::Result<()> {
+    let fx = mount_model(1).await;
+
+    // The light exists…
+    fx.tester
+        .query(dioxus_test::by_testid("hw-knob-low-boost-light"))
+        .immediately()?;
+
+    // …and no rotating ancestor owns it.
+    assert!(
+        fx.tester
+            .query("g[transform] [data-testid='hw-knob-low-boost-light']")
+            .immediately()
+            .is_err(),
+        "the knob's highlight turns with the knob",
+    );
+    Ok(())
+}
+
+/// The Pultec's frequency levers are draggable, like every other control on
+/// the panel. They used to respond to clicks alone, which is why a sweep
+/// across one did nothing at all.
+#[tokio::test]
+async fn a_pultec_frequency_lever_can_be_dragged() -> dioxus_test::Result<()> {
+    let fx = mount_model(1).await;
+    let bp = &fx.params.pultec_low_freq;
+
+    let paddle = fx
+        .tester
+        .query(dioxus_test::by_testid("hw-lever-low-freq-paddle"))
+        .immediately()?;
+    let (px, py) = paddle.document_origin();
+    let (pw, ph) = paddle.size();
+    assert!(pw > 0.0 && ph > 0.0, "the lever paddle has no layout box");
+    let (cx, cy) = (px + pw as f64 / 2.0, py + ph as f64 / 2.0);
+
+    let before = bp.value();
+
+    // Push the paddle to the right: a lever's travel is horizontal.
+    fx.tester.pointer_down(cx, cy);
+    fx.settle().await;
+    for step in 1..=6 {
+        fx.tester.pointer_move(cx + step as f64 * 12.0, cy, true);
+        fx.settle().await;
+    }
+    fx.tester.pointer_up(cx + 72.0, cy);
+    fx.settle().await;
+
+    assert!(
+        bp.value() > before,
+        "dragging the lever right did not raise its position: {before} → {}",
+        bp.value(),
+    );
+    Ok(())
+}
+
+/// A press that never travelled is still a click, and a click advances the
+/// lever one position — the way you use one without aiming. The drag support
+/// above must not have eaten that.
+#[tokio::test]
+async fn clicking_a_pultec_lever_still_advances_one_position()
+-> dioxus_test::Result<()> {
+    let fx = mount_model(1).await;
+
+    let index = |fx: &support::Fixture| -> usize {
+        fx.tester
+            .query(dioxus_test::by_testid("hw-lever-low-freq"))
+            .immediately()
+            .expect("lever missing")
+            .attribute("data-index")
+            .and_then(|v| v.parse().ok())
+            .expect("lever has no data-index")
+    };
+
+    let before = index(&fx);
+    let paddle = fx
+        .tester
+        .query(dioxus_test::by_testid("hw-lever-low-freq-paddle"))
+        .immediately()?;
+    let (px, py) = paddle.document_origin();
+    let (pw, ph) = paddle.size();
+    fx.tap(px + pw as f64 / 2.0, py + ph as f64 / 2.0).await;
+
+    assert_eq!(
+        index(&fx),
+        (before + 1) % 4,
+        "a click on the paddle did not advance the lever",
+    );
+    Ok(())
+}
+
+/// The 1073's rings are dots, and its bands are labelled by the filter's
+/// shape rather than by a word. Both are the panel's identity; a refactor
+/// that drops either leaves a face that no longer reads as a 1073.
+#[tokio::test]
+async fn the_1073_prints_dot_rings_and_filter_glyphs() -> dioxus_test::Result<()> {
+    let fx = mount_model(2).await;
+
+    // Every band knob is on the panel.
+    for id in [
+        "hw-knob-high-gain",
+        "hw-knob-mid-freq",
+        "hw-knob-mid-gain",
+        "hw-knob-low-freq",
+        "hw-knob-low-gain",
+        "hw-knob-hpf",
+        "hw-knob-drive",
+        "hw-knob-trim",
+    ] {
+        fx.tester
+            .query(dioxus_test::by_testid(id))
+            .immediately()
+            .unwrap_or_else(|e| panic!("1073 is missing {id}: {e:?}"));
+    }
+
+    // The printed ring is dots, not tick lines: circles inside the knob's
+    // panel layer, and no <line> ticks at all.
+    let dots = fx
+        .tester
+        .query_all("[data-testid='hw-knob-hpf'] circle")
+        .immediately()
+        .len();
+    assert!(dots >= 21, "1073 knob prints only {dots} ring dots");
+
+    // And the band's shape is drawn above it. Four glyph paths, one per
+    // filter symbol the panel carries plus the repeats for gain and freq.
+    let html = fx.tester.query(":root").immediately()?.inner_html();
+    for glyph in [
+        FilterGlyph::HighShelf,
+        FilterGlyph::LowShelf,
+        FilterGlyph::Bell,
+        FilterGlyph::HighPass,
+    ] {
+        assert!(
+            html.contains(glyph.path()),
+            "the 1073 panel does not draw the {glyph:?} symbol",
+        );
+    }
+    Ok(())
+}

@@ -135,6 +135,7 @@ pub fn EqRackFace(
                                         ring_r,
                                         label_r,
                                         ticks,
+                                        dots: ring.dot_count(),
                                     }
                                 }
                                 if !legend.is_empty() {
@@ -217,6 +218,23 @@ pub fn EqRackFace(
                             Silkscreen {
                                 scale, x, y: y + 62.0, width: 170.0,
                                 text: legend.to_string(), color: design.ink.to_string(),
+                            }
+                        },
+                        RackItem::Glyph { x, y, shape, w } => rsx! {
+                            PanelSlot { scale, x, y, w, h: w * (16.0 / 24.0),
+                                svg {
+                                    style: "width:100%; height:100%; display:block;",
+                                    view_box: "-12 -8 24 16",
+                                    path {
+                                        d: "{shape.path()}",
+                                        fill: "none",
+                                        stroke: "{design.ink}",
+                                        stroke_width: "1.6",
+                                        stroke_linecap: "round",
+                                        stroke_linejoin: "round",
+                                        opacity: "0.85",
+                                    }
+                                }
                             }
                         },
                         RackItem::Readout { id, x, y } => {

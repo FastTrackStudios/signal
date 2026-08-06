@@ -20,7 +20,7 @@
 use fts_ui_audio::hardware::panel::{PanelEnds, PanelTexture};
 use fts_ui_audio::hardware::vu_svg::VuScale;
 use fts_ui_audio::hardware::knob::KnobStyle;
-use fts_ui_audio::hardware::rack::{RackDesign, RackItem, Ring};
+use fts_ui_audio::hardware::rack::{FilterGlyph, RackDesign, RackItem, Ring};
 use fts_ui_audio::hardware::vu::VuFace;
 
 /// Panel drawing size shared by the EQ faces. Taller than the compressor's
@@ -636,141 +636,194 @@ pub static API_550A: RackDesign = RackDesign {
 /// The console channel: a fixed 12 kHz top, a stepped mid, a stepped low
 /// shelf, a stepped high-pass. Four decisions and no continuous frequency
 /// anywhere, which is why it is fast to use and hard to make sound bad.
+/// The 1073's own panel proportion. The module is a tall channel strip, but
+/// its controls are one row along its length — laid out here the way the unit
+/// is photographed and the way it reads on a desk: wide, short, one row.
+const NEVE_W: f64 = 1240.0;
+const NEVE_H: f64 = 300.0;
+
+/// Where the 1073's single row of controls sits, and the arc of its glyphs.
+const NEVE_ROW: f64 = 170.0;
+const NEVE_GLYPH_Y: f64 = 74.0;
+
+/// The 1073, laid out from the module's own front: one row, a red gain switch
+/// at the left, the bands' knobs each inside a printed ring of dots with the
+/// filter's *shape* drawn above it, and the latching buttons stacked on a pale
+/// strip at the right.
+///
+/// The details that are the unit rather than decoration:
+///
+/// - The rings are **dots**, not ticks. It is the first thing you see of a
+///   1073 from across a room and the reason its knobs read as haloed.
+/// - Neve prints the band's **shape** over the control instead of naming it,
+///   which is why the module is readable with no English on it at all.
+/// - The gain switch is red, the high-pass blue, the bands grey. The colour
+///   is the index — you find the control you want before reading anything.
+/// - The frequencies are the module's own stepped values (0·36–7·2 kHz mid,
+///   35–220 Hz low, 50–300 Hz high-pass), because a 1073 does not sweep.
 pub static NEVE_1073: RackDesign = RackDesign {
     id: "eq_neve_1073",
-    w: W,
-    h: H,
-    paint: "linear-gradient(178deg, #3a3c40 0%, #2a2c30 50%, #1e2023 100%)",
-    ink: "#ece8e0",
-    dim_ink: "#9d9a94",
-    chrome: "#9fa3a8",
+    w: NEVE_W,
+    h: NEVE_H,
+    // Near-black with the blue in it that the unit's paint has under light.
+    paint: "linear-gradient(178deg, #2c3139 0%, #232830 54%, #191d24 100%)",
+    ink: "#eef1f4",
+    dim_ink: "#9aa1aa",
+    chrome: "#aeb4ba",
     vu: VuFace::Amber,
     vu_bezel: false,
     vu_card: VuScale::Vu,
     ends: PanelEnds::RackEars,
     texture: PanelTexture::Painted,
-    // Marconi wing knobs, and Neve's colour coding rides on them.
-    knob: KnobStyle::Marconi,
+    // Moulded caps with a dark index, read against the printed dots.
+    knob: KnobStyle::Neve,
     items: &[
-        RackItem::Text {
-            x: 450.0,
-            y: 44.0,
-            text: "Channel Amplifier",
-            size: 15.0,
-            strong: true,
+        // ── The gain switch: red, and the biggest thing on the panel ──────
+        RackItem::Knob {
+            id: "drive",
+            legend: "dB",
+            x: 118.0,
+            y: NEVE_ROW,
+            d: 84.0,
+            ring: Ring::Dots(&["0", "2", "4", "6", "8", "10"]),
+            tint: Some("#a8232a"),
+            style: None,
         },
-        RackItem::Text {
-            x: 450.0,
-            y: 68.0,
-            text: "Class A",
-            size: 9.0,
-            strong: false,
+        // ── High shelf ───────────────────────────────────────────────────
+        RackItem::Glyph {
+            x: 258.0,
+            y: NEVE_GLYPH_Y,
+            shape: FilterGlyph::HighShelf,
+            w: 30.0,
         },
         RackItem::Knob {
             id: "high_gain",
-            legend: "High 12k",
-            x: 150.0,
-            y: ROW_A,
-            d: 52.0,
-            ring: Ring::Linear {
-                from: -16.0,
-                to: 16.0,
-                majors: 5,
-            },
-            tint: Some("#8d9196"),
+            legend: "12 kHz",
+            x: 258.0,
+            y: NEVE_ROW,
+            d: 74.0,
+            ring: Ring::Dots(&["-16", "-8", "0", "+8", "+16"]),
+            tint: Some("#9aa0a6"),
             style: None,
+        },
+        // ── Mid: frequency then gain, both under the bell ────────────────
+        RackItem::Glyph {
+            x: 398.0,
+            y: NEVE_GLYPH_Y,
+            shape: FilterGlyph::Bell,
+            w: 30.0,
         },
         RackItem::Knob {
             id: "mid_freq",
-            legend: "Mid Freq",
-            x: 330.0,
-            y: ROW_A,
-            d: 52.0,
-            ring: Ring::Detents(&["Off", "360", "700", "1.6k", "3.2k", "4.8k", "7.2k"]),
-            tint: Some("#8e2f38"),
+            legend: "KHz",
+            x: 398.0,
+            y: NEVE_ROW,
+            d: 74.0,
+            ring: Ring::Dots(&["Off", "0·36", "0·7", "1·6", "3·2", "4·8", "7·2"]),
+            tint: Some("#9aa0a6"),
             style: None,
+        },
+        RackItem::Glyph {
+            x: 538.0,
+            y: NEVE_GLYPH_Y,
+            shape: FilterGlyph::Bell,
+            w: 30.0,
         },
         RackItem::Knob {
             id: "mid_gain",
             legend: "Mid",
-            x: 510.0,
-            y: ROW_A,
-            d: 52.0,
-            ring: Ring::Linear {
-                from: -16.0,
-                to: 16.0,
-                majors: 5,
-            },
-            tint: Some("#8e2f38"),
+            x: 538.0,
+            y: NEVE_ROW,
+            d: 74.0,
+            ring: Ring::Dots(&["-16", "-8", "0", "+8", "+16"]),
+            tint: Some("#9aa0a6"),
             style: None,
         },
-        RackItem::Knob {
-            id: "drive",
-            legend: "Drive",
-            x: 676.0,
-            y: ROW_A,
-            d: 46.0,
-            ring: Ring::Plain { majors: 5 },
-            tint: Some("#8e2f38"),
-            style: None,
-        },
-        RackItem::Switch {
-            id: "eq_in",
-            legend: "EQ",
-            x: 800.0,
-            y: ROW_A,
-            labels: ["Out", "In"],
+        // ── Low shelf: frequency then gain ───────────────────────────────
+        RackItem::Glyph {
+            x: 678.0,
+            y: NEVE_GLYPH_Y,
+            shape: FilterGlyph::LowShelf,
+            w: 30.0,
         },
         RackItem::Knob {
             id: "low_freq",
-            legend: "Low Freq",
-            x: 150.0,
-            y: ROW_B,
-            d: 52.0,
-            ring: Ring::Detents(&["Off", "35", "60", "110", "220"]),
-            tint: Some("#28527f"),
+            legend: "Hz",
+            x: 678.0,
+            y: NEVE_ROW,
+            d: 74.0,
+            ring: Ring::Dots(&["Off", "35", "60", "110", "220"]),
+            tint: Some("#9aa0a6"),
             style: None,
+        },
+        RackItem::Glyph {
+            x: 818.0,
+            y: NEVE_GLYPH_Y,
+            shape: FilterGlyph::LowShelf,
+            w: 30.0,
         },
         RackItem::Knob {
             id: "low_gain",
             legend: "Low",
-            x: 330.0,
-            y: ROW_B,
-            d: 52.0,
-            ring: Ring::Linear {
-                from: -16.0,
-                to: 16.0,
-                majors: 5,
-            },
-            tint: Some("#28527f"),
+            x: 818.0,
+            y: NEVE_ROW,
+            d: 74.0,
+            ring: Ring::Dots(&["-16", "-8", "0", "+8", "+16"]),
+            tint: Some("#9aa0a6"),
             style: None,
+        },
+        // ── High pass: the blue one ──────────────────────────────────────
+        RackItem::Glyph {
+            x: 958.0,
+            y: NEVE_GLYPH_Y,
+            shape: FilterGlyph::HighPass,
+            w: 30.0,
         },
         RackItem::Knob {
             id: "hpf",
-            legend: "High Pass",
-            x: 510.0,
-            y: ROW_B,
-            d: 52.0,
-            ring: Ring::Detents(&["Off", "50", "80", "160", "300"]),
-            tint: Some("#28527f"),
+            legend: "Hz",
+            x: 958.0,
+            y: NEVE_ROW,
+            d: 74.0,
+            ring: Ring::Dots(&["Off", "50", "80", "160", "300"]),
+            tint: Some("#1f4a7a"),
             style: None,
         },
         RackItem::Knob {
             id: "trim",
             legend: "Trim",
-            x: 676.0,
-            y: ROW_B,
-            d: 46.0,
-            ring: Ring::Plain { majors: 5 },
-            tint: Some("#8e2f38"),
+            x: 1076.0,
+            y: NEVE_ROW,
+            d: 54.0,
+            ring: Ring::Dots(&["-10", "0", "+10"]),
+            tint: Some("#9aa0a6"),
             style: None,
         },
-        RackItem::Switch {
+        // ── The pale strip at the right, and what is printed on it ───────
+        RackItem::Button {
             id: "phase",
-            legend: "Phase",
-            x: 800.0,
-            y: ROW_B,
-            labels: ["Norm", "Ø"],
+            label: "Phase",
+            x: 1176.0,
+            y: 104.0,
+            color: "#e6e4dc",
+            ink: "#20242b",
+            led: "#d24a3a",
+        },
+        RackItem::Button {
+            id: "eq_in",
+            label: "EQL",
+            x: 1176.0,
+            y: 204.0,
+            color: "#e6e4dc",
+            ink: "#20242b",
+            led: "#d24a3a",
+        },
+        RackItem::Text {
+            x: 1176.0,
+            y: 268.0,
+            text: "1073",
+            size: 10.0,
+            strong: true,
         },
     ],
 };
