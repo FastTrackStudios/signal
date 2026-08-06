@@ -132,9 +132,11 @@ static ITEMS_1176: &[RackItem] = &[
             h: 268.0,
             color: "#1b5f79",
         },
+        // The jewel above the frame, on the blue.
+        RackItem::Lamp { x: 710.0, y: 38.0, color: "#e33a2a" },
         RackItem::Vu {
             x: 710.0,
-            y: 118.0,
+            y: 136.0,
             w: 182.0,
             mode: VuMode::GainReduction,
             legend: "Gain Reduction",

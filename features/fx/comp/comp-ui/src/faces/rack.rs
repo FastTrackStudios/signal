@@ -279,8 +279,8 @@ pub fn RackFace(
                             }
                         },
                         RackItem::Lamp { x, y, color } => rsx! {
-                            PanelSlot { scale, x, y, w: 26.0, h: 26.0,
-                                Lamp { scale, color: color.to_string(), d: 13.0 }
+                            PanelSlot { scale, x, y, w: 30.0, h: 30.0,
+                                Lamp { scale, color: color.to_string(), d: 17.0 }
                             }
                         },
                         RackItem::Lever { .. }
