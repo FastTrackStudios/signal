@@ -63,6 +63,17 @@
       # (~/fasttrackstudio/reaper.ini), hardware-specific bits stripped.
       reaperIniTemplate = vendor + "/assets/reaper.ini.template";
 
+      # This repo's versioned REAPER configuration — keybindings,
+      # toolbars, mouse modifiers, FX tags/folders, screensets, the
+      # active theme, and the ReaPack manifest. See
+      # nix/reaper-config/README.md for what is and is not in here.
+      #
+      # ~4 MB, because ReaPack's ~994 downloaded scripts are NOT
+      # versioned: `ReaPack/registry.db` is the manifest they are
+      # restored from. First launch on a new machine therefore needs one
+      # ReaPack "synchronise packages" to fetch them.
+      ftsReaperConfig = ../../reaper-config;
+
       fts-reaper = pkgs.writeShellApplication {
         name = "fts-reaper";
         text = ''
@@ -74,6 +85,39 @@
           # install -m: the nix store source is read-only; REAPER needs to
           # write this file back on exit.
           [ -f "$CONFIG_DIR/reaper.ini" ] || install -m 644 "${reaperIniTemplate}" "$CONFIG_DIR/reaper.ini"
+
+          # The versioned configuration. Copied (not symlinked) and made
+          # writable: REAPER rewrites these files as you work, and a
+          # symlink into the read-only nix store would make every
+          # toolbar edit fail.
+          #
+          # Absolute paths inside reaper.ini were tokenised on export —
+          # the active theme's path among them — so they are expanded to
+          # this machine's config dir here. Without that, a config
+          # exported on one machine points at a directory that does not
+          # exist on the next.
+          for f in "${ftsReaperConfig}"/*.ini "${ftsReaperConfig}"/*.db; do
+            [ -e "$f" ] || continue
+            install -m 644 "$f" "$CONFIG_DIR/$(basename "$f")"
+          done
+          for d in ColorThemes MenuSets TrackTemplates ProjectTemplates Configurations ReaPack; do
+            if [ -d "${ftsReaperConfig}/$d" ]; then
+              mkdir -p "$CONFIG_DIR/$d"
+              cp -RL --no-preserve=mode "${ftsReaperConfig}/$d"/. "$CONFIG_DIR/$d/"
+            fi
+          done
+          # Our own scripts and JSFX, alongside whatever ReaPack manages.
+          for d in Scripts Effects; do
+            if [ -d "${ftsReaperConfig}/$d" ]; then
+              mkdir -p "$CONFIG_DIR/$d"
+              cp -RL --no-preserve=mode "${ftsReaperConfig}/$d"/. "$CONFIG_DIR/$d/"
+            fi
+          done
+
+          # $REAPER_RESOURCES → this config dir.
+          if grep -q 'REAPER_RESOURCES' "$CONFIG_DIR/reaper.ini" 2>/dev/null; then
+            sed -i "s|\$REAPER_RESOURCES|$CONFIG_DIR|g" "$CONFIG_DIR/reaper.ini"
+          fi
 
           ln -sf "${sws}"/UserPlugins/* "$CONFIG_DIR/UserPlugins/" 2>/dev/null || true
           ln -sf "${reapack}"/UserPlugins/* "$CONFIG_DIR/UserPlugins/" 2>/dev/null || true

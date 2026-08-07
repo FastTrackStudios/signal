@@ -10,6 +10,7 @@ worth keeping.
 | FX tags + folders, screensets | `UserPlugins/` — binaries |
 | `reapack.ini` + `ReaPack/registry.db` | `Data/`, `ColorThemes/` — ship with REAPER |
 | track/project templates, menu sets | `Reaper/`, `sandbox/` — scratch state |
+| the theme in use | `Default_*.ReaperTheme*` — ship with REAPER |
 | a **filtered** `reaper.ini` | plugin-scan caches, logs, `.bak`s |
 
 ## The ReaPack registry is the manifest
@@ -40,6 +41,31 @@ geometry, recent files). Machine keys are stripped on export, and on
 apply the file is **merged** — the target keeps its own hardware and
 takes these preferences. Applying config should never reset your sound
 card.
+
+## A new machine
+
+```sh
+nix run github:FastTrackStudios/FastTrackStudio#fts-reaper
+```
+
+REAPER launches already configured: keys, toolbars, mouse modifiers,
+theme, templates. Then one ReaPack **Synchronise packages** fetches the
+~994 scripts the registry lists, and the machine matches.
+
+### Absolute paths are tokenised
+
+REAPER writes absolute paths for some settings — the active theme among
+them (`lastthemefn5=/home/cody/fts-dev/ColorThemes/…`). Those are true
+of exactly one machine, so export rewrites the resource-dir prefix to
+`$REAPER_RESOURCES` and both `apply` and the `fts-reaper` launcher
+expand it again. Without that, a config exported on one machine points
+at a directory that does not exist on the next.
+
+### Config is copied, not symlinked
+
+REAPER rewrites these files as you work. A symlink into the read-only
+nix store would make every toolbar edit fail, so the launcher copies
+them and clears the read-only bit.
 
 ## Usage
 
