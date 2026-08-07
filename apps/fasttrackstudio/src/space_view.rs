@@ -69,11 +69,10 @@ pub fn SpaceView() -> Element {
         if let Some(c) = client() {
             spawn(async move {
                 let list = c.spaces().await.unwrap_or_default();
-                if active.peek().is_empty() {
-                    if let Some(first) = list.first() {
+                if active.peek().is_empty()
+                    && let Some(first) = list.first() {
                         active.set(first.name.clone());
                     }
-                }
                 spaces.set(list);
             });
         }

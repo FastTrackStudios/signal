@@ -621,7 +621,7 @@ fn CentreView(
     // Everything below draws in a 620x150 box, which is the slot it sits in.
     let (w, h) = (620.0, 150.0);
     let glow = (0.28 + decay * 0.5).min(0.92) * lift.min(1.5);
-    let body = format!("{accent}");
+    let body = accent.to_string();
 
     let inner = match kind {
         // A hall, seen end-on: the arch of the ceiling, with the tail as
@@ -736,7 +736,7 @@ fn CentreView(
             while i < turns {
                 let x = x0 + step * (i as f64 + 1.0);
                 let dir = if i % 2 == 0 { -1.0 } else { 1.0 };
-                let mid = h / 2.0 + sag * ((i as f64 / turns as f64) * 2.0 - 1.0).abs() * -1.0 + sag;
+                let mid = h / 2.0 + -(sag * ((i as f64 / turns as f64) * 2.0 - 1.0).abs()) + sag;
                 d.push_str(&format!(
                     " Q {:.1} {:.1} {:.1} {:.1}",
                     x - step / 2.0,

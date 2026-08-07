@@ -42,7 +42,7 @@ pub const DIM: usize = EQ_BANDS + 8 + 2;
 pub struct NamProbe {
     /// Per-band response in dB, mean-centered (voicing, level-independent).
     pub eq: [f32; EQ_BANDS],
-    /// Output RMS in dBFS at each [`IO_STEPS`] input level.
+    /// Output RMS in dBFS at each `IO_STEPS` input level.
     pub io: [f32; 8],
     /// Output level at −18 dBFS in (the reference operating point).
     pub output_db: f32,
