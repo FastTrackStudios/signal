@@ -221,3 +221,10 @@ that are invisible in a diff and obvious in a screenshot:
   `#FFFF00` in theme art are nine-slice guides. Recolouring them breaks how
   the image stretches, and being fully saturated they also win any
   "dominant colour" heuristic.
+- **Theme images have sizes REAPER expects.** They are not free. `mcp_bg`
+  ships as **4×4** with two marker pixels at opposite corners; `mcp_volbg`
+  is 23×55 and marks only its left and right columns. Generating a
+  replacement at a size you chose — even a "nicer" one — makes REAPER stop
+  reading the magenta as guides and draw it as **visible magenta pixels**
+  in the mixer. Read the size and marker layout off the image you are
+  replacing.
