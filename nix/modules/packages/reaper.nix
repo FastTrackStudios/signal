@@ -114,6 +114,31 @@
             fi
           done
 
+          # Reuse a licence this machine already has.
+          #
+          # The key is personal and deliberately NOT versioned — putting
+          # it in a public repo would be publishing it. But a machine
+          # that already runs REAPER has one lying around, and making
+          # someone re-enter it just because they launched a different
+          # config dir is pointless friction. So: look in the usual
+          # places, copy the first hit, and never overwrite one that is
+          # already here.
+          if [ ! -f "$CONFIG_DIR/reaper-license.rk" ]; then
+            for candidate in \
+              "''${FTS_REAPER_LICENSE:-}" \
+              "$HOME/.config/REAPER/reaper-license.rk" \
+              "$HOME/.config/reaper/reaper-license.rk" \
+              "$HOME/fts-dev/reaper-license.rk" \
+              "$HOME/.reaper/reaper-license.rk" \
+              "$HOME/Library/Application Support/REAPER/reaper-license.rk"; do
+              if [ -n "$candidate" ] && [ -f "$candidate" ]; then
+                install -m 600 "$candidate" "$CONFIG_DIR/reaper-license.rk"
+                echo "fts-reaper: reusing licence from $candidate" >&2
+                break
+              fi
+            done
+          fi
+
           # $REAPER_RESOURCES → this config dir.
           if grep -q 'REAPER_RESOURCES' "$CONFIG_DIR/reaper.ini" 2>/dev/null; then
             sed -i "s|\$REAPER_RESOURCES|$CONFIG_DIR|g" "$CONFIG_DIR/reaper.ini"
