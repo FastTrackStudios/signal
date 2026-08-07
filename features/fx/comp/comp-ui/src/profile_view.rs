@@ -135,6 +135,29 @@ pub struct ProfileParamWrite {
 }
 
 pub fn profile_skin(profile_id: &str) -> ProfileSkin {
+    // The FET limiter's three finishes are one unit as far as the rail is
+    // concerned, so they share a skin — but not a colour. The rail badge is
+    // how you tell which finish you are on, so it takes the colour of the
+    // plate: the meter stripe's blue on the blackface, a brighter cut of it
+    // on the natural-aluminium one, the plum anodising on the LN.
+    if let "urei_1176_silver" | "urei_1176_ln" = profile_id {
+        let mut skin = profile_skin("urei_1176");
+        match profile_id {
+            "urei_1176_silver" => {
+                skin.profile_id = "urei_1176_silver";
+                skin.accent = "#4fb0d6";
+                skin.border = "rgba(79,176,214,0.40)";
+                skin.highlight = "rgba(150,216,240,0.13)";
+            }
+            _ => {
+                skin.profile_id = "urei_1176_ln";
+                skin.accent = "#b085b8";
+                skin.border = "rgba(176,133,184,0.40)";
+                skin.highlight = "rgba(214,180,220,0.13)";
+            }
+        }
+        return skin;
+    }
     match profile_id {
         "la2a" => ProfileSkin {
             profile_id: "la2a",
@@ -213,16 +236,18 @@ pub fn profile_skin(profile_id: &str) -> ProfileSkin {
             strip_bg: "linear-gradient(180deg, rgba(22,44,56,0.98), rgba(13,26,34,0.98))",
             overlay_gradient: "linear-gradient(to top, rgba(18,40,52,0.74) 0%, rgba(18,40,52,0.26) 55%, transparent 100%)",
         },
+        // The three FET finishes share a skin — the rail tints from the
+        // unit, and they are one unit.
         "urei_1176" => ProfileSkin {
             profile_id: "urei_1176",
             macro_group_label: "FET",
             strip_groups: PROFILE_STRIP,
-            text: "#f3e9df",
-            accent: "#d66f45",
-            border: "rgba(214,111,69,0.40)",
-            highlight: "rgba(255,189,142,0.13)",
-            strip_bg: "linear-gradient(180deg, rgba(53,31,23,0.98), rgba(28,20,18,0.98))",
-            overlay_gradient: "linear-gradient(to top, rgba(54,29,20,0.74) 0%, rgba(54,29,20,0.26) 55%, transparent 100%)",
+            text: "#e6eef3",
+            accent: "#2e86ab",
+            border: "rgba(46,134,171,0.40)",
+            highlight: "rgba(140,205,232,0.13)",
+            strip_bg: "linear-gradient(180deg, rgba(20,38,47,0.98), rgba(14,24,30,0.98))",
+            overlay_gradient: "linear-gradient(to top, rgba(18,44,56,0.74) 0%, rgba(18,44,56,0.26) 55%, transparent 100%)",
         },
         _ => ProfileSkin {
             profile_id: "control",

@@ -39,7 +39,20 @@ pub static MANLEY_VARI_MU: ManleyVariMuProfile = ManleyVariMuProfile;
 pub static SSL_BUS: SslBusProfile = SslBusProfile;
 pub static DBX_160: Dbx160Profile = Dbx160Profile;
 pub static DISTRESSOR: DistressorProfile = DistressorProfile;
-pub static UREI_1176: Urei1176Profile = Urei1176Profile;
+/// The three finishes the FET limiter came in. Same circuit, same controls —
+/// see [`Urei1176Profile`].
+pub static UREI_1176: Urei1176Profile = Urei1176Profile {
+    id: "urei_1176",
+    name: "FET Limiter · Blackface",
+};
+pub static UREI_1176_SILVER: Urei1176Profile = Urei1176Profile {
+    id: "urei_1176_silver",
+    name: "FET Limiter · Silver",
+};
+pub static UREI_1176_LN: Urei1176Profile = Urei1176Profile {
+    id: "urei_1176_ln",
+    name: "FET Limiter · LN",
+};
 
 /// Every profile, in the order the UI lists them: the FTS surface first, then
 /// each compressor family, and within a family the units in the order the
@@ -48,7 +61,7 @@ pub static UREI_1176: Urei1176Profile = Urei1176Profile;
 /// This order IS the `profile` parameter's value order, so **append only** —
 /// hosts persist the parameter, and reordering silently repoints a saved
 /// session at a different unit.
-pub fn all_profiles() -> [&'static (dyn Profile + Sync); 9] {
+pub fn all_profiles() -> [&'static (dyn Profile + Sync); 11] {
     [
         &CONTROL,
         &UREI_1176,
@@ -59,6 +72,10 @@ pub fn all_profiles() -> [&'static (dyn Profile + Sync); 9] {
         &SSL_BUS,
         &DBX_160,
         &DISTRESSOR,
+        // Appended: the parameter's value order is this order, and the id is
+        // what a session restores from either way.
+        &UREI_1176_SILVER,
+        &UREI_1176_LN,
         // NOTE: keep in sync with `CATEGORIES` below — the test
         // `every_profile_belongs_to_exactly_one_category` is the guard.
     ]
@@ -95,7 +112,9 @@ pub static CATEGORIES: &[Category] = &[
         id: "fet",
         label: "FET",
         badge: "FET",
-        profiles: &["urei_1176"],
+        // Three finishes of one unit — the second click changes the paint,
+        // not the circuit.
+        profiles: &["urei_1176_silver", "urei_1176", "urei_1176_ln"],
     },
     Category {
         id: "opto",

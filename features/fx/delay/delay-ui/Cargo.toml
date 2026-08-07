@@ -1,0 +1,38 @@
+[package]
+name = "delay-ui"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+edition = "2021"
+description = "Delay GUI — the six families, each with its own panel"
+
+[features]
+default = []
+native = [
+    "dep:nice-plug",
+    "dep:nice-plug-dioxus",
+    "dep:fts-ui",
+    "dep:atomic_float",
+    "dep:parking_lot",
+]
+
+[dependencies]
+fts-ui = { workspace = true, optional = true }
+fts-ui-audio = { workspace = true }
+nice-plug = { workspace = true, optional = true }
+nice-plug-dioxus = { workspace = true, optional = true }
+atomic_float = { workspace = true, optional = true }
+parking_lot = { workspace = true, optional = true }
+delay-profiles = { workspace = true }
+delay-dsp = { workspace = true }
+crossbeam-channel = { workspace = true }
+dioxus = { workspace = true }
+
+[[test]]
+name = "screenshots"
+required-features = ["native"]
+
+[dev-dependencies]
+dioxus = { workspace = true }
+dioxus-test = { workspace = true }
+tokio = { workspace = true, features = ["macros", "rt"] }

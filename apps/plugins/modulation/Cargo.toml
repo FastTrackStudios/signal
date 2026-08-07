@@ -11,6 +11,14 @@ description = "FTS Modulation — CLAP/VST3 multi-mode modulation plugin (chorus
 crate-type = ["cdylib", "lib"]
 
 [dependencies]
+audiocore-core = { workspace = true }
+# What each circuit IS, and the only place that knows how a knob reaches the
+# DSP — the shell deliberately carries no engine table of its own.
+modulation-profiles.workspace = true
+# The Blitz/nice-plug editor: the five circuits and their panels.
+modulation-ui = { workspace = true, features = ["native"] }
+# The meters the editor reads.
+atomic_float = { workspace = true }
 # Plugin framework. `nice_plug` must be a DIRECT dep: `#[derive(Params)]` and
 # `nice_export_clap!`/`nice_export_vst3!` expand to absolute `::nice_plug::…`
 # paths, so the crate has to be nameable here. `vst3` is on by default.

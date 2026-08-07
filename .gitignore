@@ -1,4 +1,8 @@
 target/
+# Any scratch target dir — agents run parallel builds into their own, and one
+# that lands inside the source tree gets swept into a commit. 7 GB of build
+# artifacts reached HEAD that way once.
+target-*/
 dist/
 node_modules/
 .DS_Store
@@ -20,3 +24,16 @@ result-*
 # Symlink to the resolved lumen-blocks checkout, created by `just tailwind`
 # so Tailwind scans the pinned revision instead of every cached one.
 apps/fasttrackstudio/.lumen-blocks
+
+# local reference checkouts (upstream scripts we port from)
+.reference/
+
+# Stray cargo target directories.
+#
+# `/target` covers the workspace's own, but a `cargo` run with CARGO_TARGET_DIR
+# set inside a crate leaves one wherever it was pointed — and 7.6 GB of .rlib
+# files once made it into a commit, which GitHub then refused to accept (its
+# limit is 100 MB per file). Anything named like a target directory is build
+# output no matter where it turns up.
+target-*/
+**/target/

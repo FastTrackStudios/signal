@@ -62,6 +62,14 @@ jobs:
           # task-telemetry). Sourced from the repo secret — never committed
           # (public repo). Empty when the secret is unset → telemetry no-op.
           TASK_SENTRY_DSN: ${{ secrets.TASK_SENTRY_DSN }}
+          # OTLP export, baked the same way (option_env! in task-telemetry).
+          # The endpoint is task-server's authenticated /otlp proxy, not the
+          # collector — the collector is a ClusterIP on purpose. The token is
+          # a static ingest bearer: an OTLP exporter is constructed at process
+          # start, before anyone signs in, so a session token can't be the
+          # credential. Both empty → the client stays telemetry-free.
+          TASK_OTLP_ENDPOINT: ${{ vars.TASK_OTLP_ENDPOINT }}
+          TASK_OTLP_TOKEN: ${{ secrets.TASK_OTLP_TOKEN }}
         run: |
           set -euo pipefail
           export PATH="/nix/var/nix/profiles/default/bin:$PATH"

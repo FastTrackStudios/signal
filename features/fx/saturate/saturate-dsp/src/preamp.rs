@@ -82,7 +82,42 @@ impl SideShaper {
 /// Output DC-blocker pole: ~10 Hz at 48 kHz — strong, like the output
 /// coupling of a 1073-class design.
 const DC_BLOCK_HZ: f32 = 10.0;
+/// Where the tilt filter splits low from high. 700 Hz is the usual
+/// emphasis hinge: high enough that it is the *top* being pushed, low
+/// enough that turning it the other way reaches the body of a bass.
+const TILT_HZ: f32 = 700.0;
+/// The widest tilt either way. Beyond this the de-emphasis is undoing
+/// so much that the stage is mostly filter.
+pub const TILT_MAX_DB: f32 = 12.0;
+/// Widest crossover deadband, in shaper units.
+const CROSSOVER_MAX: f32 = 0.15;
+/// The input level [`Makeup::Matched`] matches at: −6 dBFS, which is where
+/// most program actually sits.
+const MAKEUP_REF: f32 = 0.5;
 pub const MAX_CHANNELS: usize = 2;
+
+/// How a driven stage gives the gain back.
+///
+/// This is not a detail. A saturator whose loudness moves with its drive
+/// cannot be auditioned — every comparison becomes "which is louder", which
+/// is a question the ear always answers the same way.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Makeup {
+    /// Divide by the drive. Exactly unity for small signals, because every
+    /// curve here is unity-slope at the origin — but only for small signals:
+    /// once the stage is saturating, its output is bounded by the headroom
+    /// and dividing by a large drive buries it. Fine up to a few times over,
+    /// wrong for anything that squares up.
+    InverseDrive,
+    /// Level-matched at [`MAKEUP_REF`] — the stage's own gain at a realistic
+    /// input level, inverted. Correct whether the stage is barely working or
+    /// fully squared off, which is why it is what the profiles use.
+    /// [`ClassAPreamp::refresh_makeup`] computes it.
+    Matched(f32),
+    /// None at all. A clipper's ceiling is fixed and its drive is genuinely
+    /// level, so there is nothing to give back.
+    None,
+}
 
 #[derive(Debug, Clone)]
 pub struct ClassAPreamp {
@@ -100,6 +135,28 @@ pub struct ClassAPreamp {
     /// MORE asymmetry, so even harmonics bloom dynamically instead of
     /// sitting at a static level.
     pub sag: f32,
+    /// Per-side onset asymmetry, −1..1. Applied as a gain INTO the
+    /// shaper and taken straight back out, so the small-signal slope
+    /// stays unity on both halves and only the *knee* moves. That
+    /// matters: scaling one half's output would put a kink at the zero
+    /// crossing (a buzz), whereas moving where each half runs out of
+    /// room is what a real single-ended stage does — and is where its
+    /// even harmonics come from. Positive = the top half clips first.
+    pub skew: f32,
+    /// Headroom, ~0.25..4. Scales where the knee sits without changing
+    /// the small-signal gain: a bigger core, a higher rail, a tape
+    /// biased hotter. Above 1 the stage stays clean longer.
+    pub headroom: f32,
+    /// Blend of the chosen shapers toward a hard rail clip, 0..1. The
+    /// corner a solid-state stage has and a valve does not.
+    pub knee: f32,
+    /// Class-B crossover deadband, 0..1. Both halves hand over at zero
+    /// and neither is conducting in between — the notch that makes an
+    /// underbiased transistor stage buzz on quiet passages, and the
+    /// same mechanism that gates a starved fuzz.
+    pub crossover: f32,
+    /// How the stage gives back the gain it took.
+    pub makeup: Makeup,
     /// Dry/wet (1 = fully processed).
     pub mix: f32,
     /// Output trim (linear).
@@ -108,9 +165,28 @@ pub struct ClassAPreamp {
     dc_x1: [f32; MAX_CHANNELS],
     dc_y1: [f32; MAX_CHANNELS],
     dc_r: f32,
-    /// Sag envelope (per channel, ~30 ms ballistics).
+    /// Sag envelope (per channel).
     sag_env: [f32; MAX_CHANNELS],
     sag_coeff: f32,
+    sag_ms: f32,
+    /// Tilt: pre-emphasis into the stage, de-emphasis out of it. Which
+    /// part of the spectrum drives the circuit hardest is most of what
+    /// separates one saturator from another — a transformer takes its
+    /// lows into the core first, a tape machine pre-emphasises the top.
+    ///
+    /// The emphasis is a first-order shelf built from the one-pole
+    /// split at [`TILT_HZ`]; the de-emphasis is its **exact** inverse
+    /// rather than a mirrored second shelf, which two shelves are not.
+    /// That matters here: the whole point is that the tilt changes what
+    /// the shaper sees and nothing else, so anything it leaves behind
+    /// in the output is a lie about what the knob does.
+    tilt_db: f32,
+    // Emphasis H(z) = (b0 + b1·z⁻¹) / (1 + a1·z⁻¹).
+    tilt_b0: f32,
+    tilt_b1: f32,
+    tilt_a1: f32,
+    tilt_pre: [(f32, f32); MAX_CHANNELS],
+    tilt_post: [(f32, f32); MAX_CHANNELS],
     sample_rate: f32,
 }
 
@@ -122,6 +198,13 @@ impl ClassAPreamp {
             positive: SideShaper::Clean,
             negative: SideShaper::Clean,
             sag: 0.0,
+            skew: 0.0,
+            headroom: 1.0,
+            knee: 0.0,
+            crossover: 0.0,
+            // The default keeps the long-standing behaviour for callers that
+            // set fields directly and never ask for a refresh.
+            makeup: Makeup::InverseDrive,
             mix: 1.0,
             output_gain: 1.0,
             dc_x1: [0.0; MAX_CHANNELS],
@@ -129,6 +212,13 @@ impl ClassAPreamp {
             dc_r: 0.0,
             sag_env: [0.0; MAX_CHANNELS],
             sag_coeff: 0.0,
+            sag_ms: 30.0,
+            tilt_db: 0.0,
+            tilt_b0: 1.0,
+            tilt_b1: 0.0,
+            tilt_a1: 0.0,
+            tilt_pre: [(0.0, 0.0); MAX_CHANNELS],
+            tilt_post: [(0.0, 0.0); MAX_CHANNELS],
             sample_rate: 48_000.0,
         };
         p.set_sample_rate(sample_rate);
@@ -138,65 +228,210 @@ impl ClassAPreamp {
     pub fn set_sample_rate(&mut self, sample_rate: f32) {
         self.sample_rate = sample_rate.max(1.0);
         self.dc_r = 1.0 - core::f32::consts::TAU * DC_BLOCK_HZ / self.sample_rate;
-        // ~30 ms sag ballistics. Padé form of 1 − e^(−x) for tiny x —
-        // keeps the crate honestly no_std (f32::exp only resolves here
-        // when a feature happens to link std).
-        let x = 1.0 / (0.030 * self.sample_rate);
+        let ms = self.sag_ms;
+        self.set_sag_ms(ms);
+        let db = self.tilt_db;
+        self.set_tilt_db(db);
+    }
+
+    /// Sag ballistics in milliseconds. A tape machine's recovery is
+    /// slower than a valve's cathode, and how long the stage stays bent
+    /// after a transient is audibly a different machine.
+    pub fn set_sag_ms(&mut self, ms: f32) {
+        self.sag_ms = ms.clamp(1.0, 500.0);
+        // Padé form of 1 − e^(−x) for tiny x — keeps the crate honestly
+        // no_std (f32::exp only resolves here when a feature happens to
+        // link std).
+        let x = 1.0 / (self.sag_ms * 0.001 * self.sample_rate);
         self.sag_coeff = x / (1.0 + x);
     }
 
-    /// The static (stateless) transfer: bias, side-split shaping. The
-    /// DC the blocker removes at rest is subtracted so the curve is
-    /// origin-anchored — this is what the display draws.
-    #[inline]
-    pub fn transfer(&self, x: f32) -> f32 {
-        let v = x * self.drive + self.q_point;
-        let shaped = if v >= 0.0 {
-            self.positive.shape(v)
-        } else {
-            self.negative.shape(v)
-        };
-        let rest = if self.q_point >= 0.0 {
-            self.positive.shape(self.q_point)
-        } else {
-            self.negative.shape(self.q_point)
-        };
-        shaped - rest
+    pub fn sag_ms(&self) -> f32 {
+        self.sag_ms
     }
 
-    /// Process one sample on channel `ch`.
+    /// Pre-emphasis tilt in dB: positive drives the top of the spectrum
+    /// into the stage harder, negative drives the bottom. The mirror
+    /// image is applied on the way out, so the tilt decides *what*
+    /// distorts rather than what the output sounds like.
+    pub fn set_tilt_db(&mut self, db: f32) {
+        self.tilt_db = db.clamp(-TILT_MAX_DB, TILT_MAX_DB);
+        // The shelf, written out from the one-pole split. With
+        // L(z) = a / (1 − (1−a)z⁻¹) and H = lo·L + hi·(1 − L):
+        //   H(z) = (hi + (lo − hi)a − hi(1−a)z⁻¹) / (1 − (1−a)z⁻¹)
+        let a = (core::f32::consts::TAU * TILT_HZ / self.sample_rate).clamp(1.0e-4, 1.0);
+        let hi = crate::db_to_gain(self.tilt_db);
+        let lo = crate::db_to_gain(-self.tilt_db);
+        self.tilt_b0 = hi + (lo - hi) * a;
+        self.tilt_b1 = -hi * (1.0 - a);
+        self.tilt_a1 = -(1.0 - a);
+    }
+
+    pub fn tilt_db(&self) -> f32 {
+        self.tilt_db
+    }
+
+    /// The class-B crossover deadband: neither half conducts until the
+    /// signal has climbed out of it.
+    #[inline]
+    fn deadband(&self, x: f32) -> f32 {
+        if self.crossover <= 0.0 {
+            return x;
+        }
+        let d = self.crossover.min(1.0) * CROSSOVER_MAX;
+        if x > d {
+            x - d
+        } else if x < -d {
+            x + d
+        } else {
+            0.0
+        }
+    }
+
+    /// One half of the wave through its own shaper, at this stage's
+    /// headroom, skew and knee.
+    #[inline]
+    fn shape_side(&self, v: f32) -> f32 {
+        let h = self.headroom.clamp(0.05, 16.0);
+        // Skew is headroom asymmetry: the skewed half runs out of room
+        // sooner, the other half keeps what the stage has. Note that it
+        // only ever takes room AWAY — the alternative, scaling one side
+        // up, would let a strongly skewed stage stop limiting on that
+        // half altogether and hand back whatever was fed to it.
+        //
+        // `shape(v / scale) * scale` is unity-slope at the origin for
+        // any scale, so the two halves still meet smoothly however far
+        // apart their knees are. That is the whole trick: the ONSET is
+        // asymmetric and the small-signal gain is not, which is what
+        // makes even harmonics instead of a kink at the zero crossing.
+        let s = self.skew.clamp(-0.95, 0.95);
+        let scale = if (v >= 0.0) == (s >= 0.0) {
+            h * (1.0 - s.abs())
+        } else {
+            h
+        }
+        .max(1.0e-3);
+        let side = if v >= 0.0 { self.positive } else { self.negative };
+        let soft = side.shape(v / scale) * scale;
+        if self.knee > 0.0 {
+            let hard = (v / h).clamp(-1.0, 1.0) * h;
+            soft + (hard - soft) * self.knee.min(1.0)
+        } else {
+            soft
+        }
+    }
+
+    /// The static (stateless) transfer: crossover, bias, side-split
+    /// shaping. The DC the blocker removes at rest is subtracted so the
+    /// curve is origin-anchored — this is what the display draws.
+    ///
+    /// Tilt is deliberately absent: it is a filter pair, so it has no
+    /// single transfer curve to draw. Everything a panel *can* draw is
+    /// here, and it is the same arithmetic `process` runs.
+    #[inline]
+    pub fn transfer(&self, x: f32) -> f32 {
+        let v = self.deadband(x * self.drive) + self.q_point;
+        self.shape_side(v) - self.shape_side(self.q_point)
+    }
+
+    /// Measure the stage's own gain at [`MAKEUP_REF`] and set
+    /// [`Makeup::Matched`] to its inverse.
+    ///
+    /// Call after changing anything that shapes: drive, headroom, the
+    /// shapers, skew, knee, crossover, bias. It samples the static transfer,
+    /// so it is a handful of arithmetic and belongs on the setter path, never
+    /// in `process`.
+    pub fn refresh_makeup(&mut self) {
+        // Both halves, averaged. A one-sided measurement is wrong exactly
+        // where this stage is most interesting: on a strongly skewed
+        // transfer one half is crushed to nothing while the other still
+        // has all its room, and matching against the crushed half alone
+        // sets a makeup that the other half then shouts through.
+        let up = self.transfer(MAKEUP_REF).abs();
+        let down = self.transfer(-MAKEUP_REF).abs();
+        let gain = (up + down) / (2.0 * MAKEUP_REF);
+        self.makeup = Makeup::Matched((1.0 / gain.max(1.0e-3)).clamp(0.02, 8.0));
+    }
+
+    /// The makeup as a plain multiplier — what the display has to divide by
+    /// to draw the curve the listener will actually hear.
+    #[inline]
+    pub fn makeup_gain(&self) -> f32 {
+        match self.makeup {
+            Makeup::InverseDrive => 1.0 / self.drive.max(1.0e-3),
+            Makeup::Matched(gain) => gain,
+            Makeup::None => 1.0,
+        }
+    }
+
+    /// Process one sample on channel `ch`, dry/wet mixed and trimmed.
     #[inline]
     pub fn process(&mut self, ch: usize, input: f32) -> f32 {
+        let wet = self.process_wet(ch, input);
+        (input + (wet - input) * self.mix) * self.output_gain
+    }
+
+    /// The stage alone: emphasis, shaping, de-emphasis — no mix, no
+    /// output trim. Callers that put another stage after this one (the
+    /// digital family runs [`crate::digital::DigitalStage`] on the wet
+    /// path) need to mix *after* that, not here.
+    #[inline]
+    pub fn process_wet(&mut self, ch: usize, input: f32) -> f32 {
+        let ch = ch.min(MAX_CHANNELS - 1);
+        let x = self.tilt_in(ch, input);
         // Sag: program level pulls the operating point off center.
         let bias = if self.sag > 0.0 {
             let e = &mut self.sag_env[ch];
-            *e += (input.abs() * self.drive - *e) * self.sag_coeff;
+            *e += (x.abs() * self.drive - *e) * self.sag_coeff;
             self.q_point + self.sag * (*e).min(2.0) * 0.4
         } else {
             self.q_point
         };
-        let shaped = {
-            let v = input * self.drive + bias;
-            if v >= 0.0 {
-                self.positive.shape(v)
-            } else {
-                self.negative.shape(v)
-            }
-        };
+        let shaped = self.shape_side(self.deadband(x * self.drive) + bias);
         // Output DC blocker — the bias voltage never leaves the box.
         let y = shaped - self.dc_x1[ch] + self.dc_r * self.dc_y1[ch];
         self.dc_x1[ch] = shaped;
         self.dc_y1[ch] = y;
-        // Small-signal gain compensation (drive is unity-slope at the
-        // origin for every curve, so 1/drive re-centers loudness).
-        let wet = y / self.drive.max(1.0e-3);
-        (input + (wet - input) * self.mix) * self.output_gain
+        let wet = match self.makeup {
+            Makeup::InverseDrive => y / self.drive.max(1.0e-3),
+            Makeup::Matched(gain) => y * gain,
+            Makeup::None => y,
+        };
+        self.tilt_out(ch, wet)
+    }
+
+    /// Pre-emphasis: the shelf, applied.
+    ///
+    /// Run unconditionally rather than short-circuited at zero tilt —
+    /// at zero the coefficients make it an identity anyway, and keeping
+    /// the state warm means moving the knob (or switching profile) does
+    /// not click.
+    #[inline]
+    fn tilt_in(&mut self, ch: usize, x: f32) -> f32 {
+        let (x1, y1) = &mut self.tilt_pre[ch];
+        let y = self.tilt_b0 * x + self.tilt_b1 * *x1 - self.tilt_a1 * *y1;
+        *x1 = x;
+        *y1 = y;
+        y
+    }
+
+    /// De-emphasis: 1/H(z), so the signal comes out exactly level. What
+    /// changed is only which part of it was pushed into the knee.
+    #[inline]
+    fn tilt_out(&mut self, ch: usize, x: f32) -> f32 {
+        let (x1, y1) = &mut self.tilt_post[ch];
+        let y = (x + self.tilt_a1 * *x1 - self.tilt_b1 * *y1) / self.tilt_b0;
+        *x1 = x;
+        *y1 = y;
+        y
     }
 
     pub fn reset(&mut self) {
         self.dc_x1 = [0.0; MAX_CHANNELS];
         self.dc_y1 = [0.0; MAX_CHANNELS];
         self.sag_env = [0.0; MAX_CHANNELS];
+        self.tilt_pre = [(0.0, 0.0); MAX_CHANNELS];
+        self.tilt_post = [(0.0, 0.0); MAX_CHANNELS];
     }
 }
 
@@ -346,6 +581,170 @@ mod tests {
         assert!(
             mean.abs() < 1.0e-3,
             "output DC must be blocked: mean={mean:e}"
+        );
+    }
+
+    /// Skew is the other route to even harmonics, and the one a Heat
+    /// knob rides: same shaper on both halves, centered Q, and the
+    /// asymmetry comes purely from one side reaching its knee first.
+    #[test]
+    fn skew_alone_springs_even_harmonics() {
+        let mut p = ClassAPreamp::new(48_000.0);
+        p.drive = 4.0;
+        p.positive = SideShaper::OpAmp;
+        p.negative = SideShaper::OpAmp;
+        let mut flat = [0.0f32; 4];
+        harmonic_spectrum(&p, &mut flat);
+        p.skew = 0.5;
+        let mut skewed = [0.0f32; 4];
+        harmonic_spectrum(&p, &mut skewed);
+        assert!(
+            db(skewed[1]) > db(flat[1]) + 20.0,
+            "skew must raise the 2nd: {} → {} dB",
+            db(flat[1]),
+            db(skewed[1]),
+        );
+    }
+
+    /// …and it must do it without putting a kink at the zero crossing.
+    /// A gain applied to one half's OUTPUT would break the slope there,
+    /// which is a buzz rather than a warmth.
+    #[test]
+    fn skew_leaves_the_slope_continuous_at_zero() {
+        let mut p = ClassAPreamp::new(48_000.0);
+        p.drive = 1.0;
+        p.positive = SideShaper::Tube;
+        p.negative = SideShaper::OpAmp;
+        p.skew = 0.8;
+        let e = 1.0e-4;
+        let up = (p.transfer(e) - p.transfer(0.0)) / e;
+        let down = (p.transfer(0.0) - p.transfer(-e)) / e;
+        assert!(
+            (up - down).abs() < 1.0e-2,
+            "slope jumps across zero: {up} vs {down}",
+        );
+    }
+
+    /// Headroom moves the knee, not the gain. Below it the stage is the
+    /// same wire it was; the difference is only how far you can push.
+    #[test]
+    fn headroom_moves_the_knee_and_not_the_small_signal_gain() {
+        let mut tight = ClassAPreamp::new(48_000.0);
+        tight.drive = 1.0;
+        tight.positive = SideShaper::OpAmp;
+        tight.negative = SideShaper::OpAmp;
+        let mut roomy = tight.clone();
+        roomy.headroom = 3.0;
+
+        // Small signal: indistinguishable.
+        assert!((tight.transfer(0.01) - roomy.transfer(0.01)).abs() < 1.0e-3);
+        // Hard into it: the roomier stage is still climbing.
+        assert!(
+            roomy.transfer(2.0) > tight.transfer(2.0) * 1.5,
+            "headroom must hold the knee off: {} vs {}",
+            tight.transfer(2.0),
+            roomy.transfer(2.0),
+        );
+    }
+
+    /// The corner a solid-state stage has. Fully up, the knee IS a hard
+    /// rail, whatever shapers the profile named — so the curve has to
+    /// land exactly on one.
+    #[test]
+    fn a_full_knee_is_a_hard_rail_whatever_the_shapers_were() {
+        let mut p = ClassAPreamp::new(48_000.0);
+        p.drive = 1.0;
+        p.positive = SideShaper::Tube;
+        p.negative = SideShaper::Transformer;
+        p.knee = 1.0;
+        for i in -40..=40 {
+            let x = i as f32 / 20.0;
+            assert!(
+                (p.transfer(x) - x.clamp(-1.0, 1.0)).abs() < 1.0e-5,
+                "knee=1 must be a hard clip at {x}: {}",
+                p.transfer(x),
+            );
+        }
+    }
+
+    /// …and on the way there it sharpens the curve, which is audible as
+    /// high-order odd content the soft shaper does not make.
+    #[test]
+    fn knee_sharpens_toward_a_hard_clip() {
+        let mut soft = ClassAPreamp::new(48_000.0);
+        soft.drive = 4.0;
+        soft.positive = SideShaper::Tube;
+        soft.negative = SideShaper::Tube;
+        let mut hard = soft.clone();
+        hard.knee = 1.0;
+        let (mut a, mut b) = ([0.0f32; 8], [0.0f32; 8]);
+        harmonic_spectrum(&soft, &mut a);
+        harmonic_spectrum(&hard, &mut b);
+        assert!(
+            db(b[4]) > db(a[4]) + 4.0,
+            "a hard corner has more 5th: {} → {} dB",
+            db(a[4]),
+            db(b[4]),
+        );
+    }
+
+    /// Crossover is a deadband, so quiet signal genuinely stops. That
+    /// is the gating a starved supply does, and it should be audible as
+    /// silence rather than as a quieter version of the input.
+    #[test]
+    fn crossover_gates_what_sits_inside_the_deadband() {
+        let mut p = ClassAPreamp::new(48_000.0);
+        p.drive = 1.0;
+        p.crossover = 1.0;
+        assert_eq!(p.transfer(0.05), 0.0, "inside the deadband must be silence");
+        assert!(p.transfer(0.5) != 0.0, "outside it, the stage conducts");
+    }
+
+    /// Tilt decides what distorts, not what the output sounds like: a
+    /// clean stage with any tilt is still a wire, because the
+    /// de-emphasis is the mirror of the emphasis.
+    #[test]
+    fn tilt_is_undone_when_the_stage_is_clean() {
+        let mut p = ClassAPreamp::new(48_000.0);
+        p.set_tilt_db(9.0);
+        let mut max_err = 0.0f32;
+        for i in 0..48_000 {
+            let x = (core::f32::consts::TAU * 1_000.0 * i as f32 / 48_000.0).sin() * 0.5;
+            let y = p.process(0, x);
+            if i > 24_000 {
+                max_err = max_err.max((y - x).abs());
+            }
+        }
+        assert!(max_err < 0.05, "emphasis must mirror out: {max_err}");
+    }
+
+    /// …and it does change which band drives the knee. Tilted at the
+    /// top, a bass note saturates less than it did flat.
+    #[test]
+    fn tilt_decides_which_band_meets_the_knee() {
+        let harmonics_of = |tilt: f32| {
+            let mut p = ClassAPreamp::new(48_000.0);
+            p.drive = 6.0;
+            p.positive = SideShaper::OpAmp;
+            p.negative = SideShaper::OpAmp;
+            p.set_tilt_db(tilt);
+            // 60 Hz — well below the 700 Hz hinge.
+            let mut peak = 0.0f32;
+            for i in 0..48_000 {
+                let x = (core::f32::consts::TAU * 60.0 * i as f32 / 48_000.0).sin() * 0.5;
+                let y = p.process(0, x);
+                if i > 24_000 {
+                    peak = peak.max(y.abs());
+                }
+            }
+            peak
+        };
+        // Driving the TOP harder means the low note arrives at the
+        // shaper quieter, so less of it is clipped away and more of it
+        // survives to the output.
+        assert!(
+            harmonics_of(9.0) > harmonics_of(-9.0),
+            "a low note must clip less when the tilt favours the top",
         );
     }
 

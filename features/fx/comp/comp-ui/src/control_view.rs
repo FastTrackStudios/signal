@@ -50,44 +50,57 @@ pub const RAIL_W: f64 = fts_ui_audio::shell::RAIL_W;
 /// overflow-scroll a height-constrained container, so a section that does not
 /// fit collapses to 0×0 and becomes unreachable rather than being clipped.
 /// `advanced_page_fits_the_plugin_editor_size` guards the default.
-pub const EDITOR_W: u32 = 980;
-pub const EDITOR_H: u32 = 660;
-
-/// Smallest size the surface still works at.
 ///
-/// Below this the graph and the section row stop fitting, and — per the note on
-/// [`EDITOR_W`] — not fitting means collapsing, not clipping. So this floor is
-/// what keeps a host-driven resize from making controls unreachable, and it is
-/// enforced rather than advisory: `DioxusEditorHandle::set_size` refuses
-/// anything smaller.
-pub const MIN_EDITOR_W: f32 = 720.0;
-/// Low enough for the rack faces, which are 4:1 drawings and ask the host for
-/// roughly a third of the FTS surface's height (see
-/// [`crate::faces::preferred_editor_size`]). The FTS surface survives it
-/// because its controls float over the graph rather than sitting under it —
-/// they overlap it when the window is squeezed, but nothing collapses.
-pub const MIN_EDITOR_H: f32 = 300.0;
+/// It is the size every face asks for ([`crate::faces::preferred_editor_size`])
+/// and not a value of its own: opening at a size the first render immediately
+/// wants to change means the editor asks the host to resize before it has
+/// painted, and until that resize lands there is nothing on screen. Open at
+/// the size we are going to want and the first frame is the real one.
+/// Sized to the rack drawing rather than picked: the faces are 960x300, so at
+/// 1280 wide the panel scales to ~1.28 and stands 385px tall, and the window
+/// is that plus a margin. Bigger than the 1000x348 it opened at first — Main
+/// gets the extra room for its graph, and a faceplate still fills the box
+/// instead of floating in black.
+pub const EDITOR_W: u32 = 1280;
+pub const EDITOR_H: u32 = 440;
 
-/// Largest size the editor accepts.
+/// The editor's resize bounds — the extremes of the size presets.
 ///
-/// Not cosmetic: with no maximum, `ResizeHint::adjust_size` rubber-stamps
-/// whatever a host proposes, and hosts do propose absurd sizes — REAPER opened
-/// this editor at 3371x1017 (full screen width) because it asked "is this size
-/// OK?" and an unbounded hint said yes. Anything past roughly twice the design
-/// size is stretched chrome around a fixed control surface, so the cap is
-/// generous but real.
-pub const MAX_EDITOR_W: f32 = 1960.0;
-pub const MAX_EDITOR_H: f32 = 1320.0;
+/// Deliberately derived rather than chosen. Every preset in
+/// [`EDITOR_FORMS`](fts_ui_audio::EDITOR_FORMS) is offered on the rail, and a
+/// host clamps a resize request to the bounds the plugin declared, so any
+/// bound tighter than the presets is not caution — it is a size button that
+/// lies. A 300px height floor made 1U and 2U the same window; a 720px width
+/// floor made the portrait 500-series module landscape.
+///
+/// The face's own preferred size is inside these by construction: it is the
+/// rack shape, and the rack forms are what set the wide end.
+fn bounds() -> ((u32, u32), (u32, u32)) {
+    fts_ui_audio::EditorForm::size_bounds(RAIL_W, crate::faces::preferred_editor_size(0))
+}
 
-/// How the host may resize this editor.
-///
-/// Freely resizable on both axes above [`MIN_EDITOR_W`] x [`MIN_EDITOR_H`],
-/// with no aspect-ratio lock — the layout is a graph over a row of sections and
-/// both are happy to grow in either direction.
+pub fn min_editor_size() -> (f32, f32) {
+    let ((w, h), _) = bounds();
+    (w as f32, h as f32)
+}
+
+pub fn max_editor_size() -> (f32, f32) {
+    let (_, (w, h)) = bounds();
+    // Room to stretch past the largest preset — a host may hand over a bigger
+    // window, and chrome around a fixed control surface is fine. What is not
+    // fine is unbounded: REAPER once opened this editor at 3371x1017 because
+    // an unbounded hint rubber-stamped its proposal.
+    ((w as f32 * 2.0).max(1960.0), (h as f32 * 1.4).max(1320.0))
+}
+
+/// How the host may resize this editor: freely on both axes between
+/// [`min_editor_size`] and [`max_editor_size`], no aspect-ratio lock.
 pub fn resize_hint() -> ResizeHint {
+    let (min_w, min_h) = min_editor_size();
+    let (max_w, max_h) = max_editor_size();
     ResizeHint::RESIZABLE.with_min_max_logical_size(
-        Some(LogicalSize::new(MIN_EDITOR_W, MIN_EDITOR_H)),
-        Some(LogicalSize::new(MAX_EDITOR_W, MAX_EDITOR_H)),
+        Some(LogicalSize::new(min_w, min_h)),
+        Some(LogicalSize::new(max_w, max_h)),
     )
 }
 

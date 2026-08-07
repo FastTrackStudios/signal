@@ -105,6 +105,8 @@ pub fn EqRackFace(
             scale,
             background: design.paint.to_string(),
             chrome: design.chrome.to_string(),
+            ends: design.ends,
+            texture: design.texture,
 
             for item in design.items.iter().copied() {
                 {
@@ -133,6 +135,7 @@ pub fn EqRackFace(
                                         ring_r,
                                         label_r,
                                         ticks,
+                                        dots: ring.dot_count(),
                                     }
                                 }
                                 if !legend.is_empty() {
@@ -143,14 +146,15 @@ pub fn EqRackFace(
                                 }
                             }
                         }
-                        RackItem::Buttons { id, legend, x, y, labels } => rsx! {
-                            PanelSlot { scale, x, y, w: 90.0, h: 180.0,
+                        RackItem::Buttons { id, legend, x, y, labels, reverse } => rsx! {
+                            PanelSlot { scale, x, y, w: 96.0, h: 210.0,
                                 RatioButtons {
                                     handle: handle(id),
                                     testid: id.replace('_', "-"),
                                     scale,
                                     labels: labels.iter().map(|s| s.to_string()).collect(),
                                     ink: design.ink.to_string(),
+                                    reverse,
                                 }
                             }
                             Silkscreen {
@@ -216,6 +220,54 @@ pub fn EqRackFace(
                                 text: legend.to_string(), color: design.ink.to_string(),
                             }
                         },
+                        RackItem::Concentric {
+                            outer_id, inner_id, legend, x, y, d, ring, tint,
+                        } => {
+                            let box_w = d * 2.0;
+                            let (ring_r, label_r, ticks) = ring.geometry();
+                            rsx! {
+                                PanelSlot { scale, x, y, w: box_w, h: box_w,
+                                    HardwareKnob {
+                                        handle: handle(outer_id),
+                                        inner_handle: handle(inner_id),
+                                        testid: outer_id.replace('_', "-"),
+                                        scale,
+                                        diameter: d,
+                                        style: design.knob,
+                                        ink: design.ink.to_string(),
+                                        marks: ring.marks(),
+                                        tint: tint.map(str::to_string),
+                                        ring_r,
+                                        label_r,
+                                        ticks,
+                                        dots: ring.dot_count(),
+                                    }
+                                }
+                                if !legend.is_empty() {
+                                    Silkscreen {
+                                        scale, x, y: y + legend_drop(d, label_r), width: LEGEND_W,
+                                        text: legend.to_string(), color: design.ink.to_string(),
+                                    }
+                                }
+                            }
+                        }
+                        RackItem::Glyph { x, y, shape, w } => rsx! {
+                            PanelSlot { scale, x, y, w, h: w * (16.0 / 24.0),
+                                svg {
+                                    style: "width:100%; height:100%; display:block;",
+                                    view_box: "-12 -8 24 16",
+                                    path {
+                                        d: "{shape.path()}",
+                                        fill: "none",
+                                        stroke: "{design.ink}",
+                                        stroke_width: "1.6",
+                                        stroke_linecap: "round",
+                                        stroke_linejoin: "round",
+                                        opacity: "0.85",
+                                    }
+                                }
+                            }
+                        },
                         RackItem::Readout { id, x, y } => {
                             // The panel's own 0–10 scale, which is what the
                             // numerals around the knob mean too — not the
@@ -249,7 +301,7 @@ pub fn EqRackFace(
                                 }
                             }
                         },
-                        RackItem::Button { id, label, x, y, color, ink, led } => rsx! {
+                        RackItem::Button { id, label, x, y, color, ink, led, style } => rsx! {
                             PanelSlot { scale, x, y, w: 64.0, h: 86.0,
                                 PanelButton {
                                     // An empty id is a control the panel has
@@ -266,6 +318,7 @@ pub fn EqRackFace(
                                     color: color.to_string(),
                                     ink: ink.to_string(),
                                     led: led.to_string(),
+                                    style: style.unwrap_or_default(),
                                 }
                             }
                         },
@@ -296,7 +349,8 @@ pub fn EqRackFace(
                         RackItem::Vu { .. }
                         | RackItem::LedBar { .. }
                         | RackItem::LedSelect { .. }
-                        | RackItem::Frame { .. } => rsx! {},
+                        | RackItem::Frame { .. }
+                        | RackItem::Region { .. } => rsx! {},
                     }
                 }
             }
