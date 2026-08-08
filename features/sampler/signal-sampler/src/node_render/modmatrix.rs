@@ -108,7 +108,7 @@ impl ModEngine {
         let module = module.to_lowercase();
         let leaf = leaf.to_lowercase();
         (0..self.leaf_names.len()).find(|&i| {
-            self.leaf_names[i] == leaf && self.leaf_paths[i].iter().any(|seg| *seg == module)
+            self.leaf_names[i] == leaf && self.leaf_paths[i].contains(&module)
         })
     }
 
@@ -140,7 +140,7 @@ impl ModEngine {
         let name = name.to_lowercase();
         let sr = self.sample_rate;
         for (i, (path, source_name)) in self.source_paths.iter().enumerate() {
-            if *source_name == name && path.iter().any(|seg| *seg == module) {
+            if *source_name == name && path.contains(&module) {
                 return self.sources[i].set_env_params(sr, params);
             }
         }
@@ -171,7 +171,7 @@ impl ModEngine {
         for r in &mut self.routes {
             if r.leaf == leaf_idx && r.param == p.id {
                 let (path, name) = &self.source_paths[r.source];
-                if *name == source && path.iter().any(|seg| *seg == module) {
+                if *name == source && path.contains(&module) {
                     r.depth = depth;
                     hit = true;
                 }

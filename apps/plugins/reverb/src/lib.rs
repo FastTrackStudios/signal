@@ -16,7 +16,6 @@
 //! `signal-sampler-clap`; the nice-plug-dioxus editor is a follow-up.
 
 use audiocore_core::prelude::*;
-use nice_plug::prelude::*;
 use reverb_ui::params::{ReverbParams, ReverbUiState};
 use std::sync::Arc;
 

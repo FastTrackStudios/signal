@@ -15,8 +15,8 @@
 //! a knob reaches the DSP — which is also why the editor's curve is the
 //! engine's curve rather than a drawing of one.
 //!
-//! Engine: [`saturate_dsp::preamp::ClassAPreamp`] for the nonlinearity, plus
-//! [`saturate_dsp::digital::DigitalStage`] on the wet path for the digital
+//! Engine: [`saturate::preamp::ClassAPreamp`] for the nonlinearity, plus
+//! [`saturate::digital::DigitalStage`] on the wet path for the digital
 //! family (there is no transfer curve that produces an alias, so quantisation
 //! and rate reduction cannot be a shaper).
 

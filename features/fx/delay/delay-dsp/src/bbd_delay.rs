@@ -8,7 +8,7 @@
 //! which smears or crossfades.
 //!
 //! Signal flow per channel:
-//! Input → AA filter → [write @ clock rate → N stages → read @ clock rate]
+//! Input → AA filter → `[write @ clock rate → N stages → read @ clock rate]`
 //!       → reconstruction filter → output; feedback: output → tone LP →
 //!       (analog-voiced, peaking near max filtering) → back into the write.
 //!

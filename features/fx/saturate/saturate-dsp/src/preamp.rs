@@ -109,7 +109,7 @@ pub enum Makeup {
     /// and dividing by a large drive buries it. Fine up to a few times over,
     /// wrong for anything that squares up.
     InverseDrive,
-    /// Level-matched at [`MAKEUP_REF`] — the stage's own gain at a realistic
+    /// Level-matched at `MAKEUP_REF` — the stage's own gain at a realistic
     /// input level, inverted. Correct whether the stage is barely working or
     /// fully squared off, which is why it is what the profiles use.
     /// [`ClassAPreamp::refresh_makeup`] computes it.
@@ -334,7 +334,7 @@ impl ClassAPreamp {
         self.shape_side(v) - self.shape_side(self.q_point)
     }
 
-    /// Measure the stage's own gain at [`MAKEUP_REF`] and set
+    /// Measure the stage's own gain at `MAKEUP_REF` and set
     /// [`Makeup::Matched`] to its inverse.
     ///
     /// Call after changing anything that shapes: drive, headroom, the

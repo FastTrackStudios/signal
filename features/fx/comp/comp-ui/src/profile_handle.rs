@@ -4,7 +4,7 @@
 //! engine params on linked curves; the 1176's INPUT writes three; the LA-2A's
 //! GAIN writes one, but only over the slice of its range the unit can reach.
 //! `comp-profiles` already describes all of that as data
-//! ([`ParamMapping`](comp_profiles::ParamMapping)); what was missing was a
+//! ([`comp_profiles::ParamMapping`]); what was missing was a
 //! [`ParamHandle`] that a widget can turn.
 //!
 //! [`profile_control_handle`] builds one per [`ProfileControl`], so every
@@ -143,8 +143,7 @@ pub fn profile_control_handle(
         .copied()
         .chain(
             macro_slot
-                .filter(|_| matches!(control.mapping, ParamMapping::Compound { .. }))
-                .into_iter(),
+                .filter(|_| matches!(control.mapping, ParamMapping::Compound { .. })),
         )
         .collect();
 
