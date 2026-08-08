@@ -181,6 +181,34 @@ just reaper theme-contact           # photograph both surfaces
 `apply` is a **merge**, not a replacement: only keys the palette determines
 are written, so hand-tuned values for things nobody has modelled survive.
 
+### Reaching the other ~220 keys
+
+Deriving covers what a palette can model. For anything it can't — a key
+the derivation never emits, or one where you want an exact value rather
+than a relationship — use an override:
+
+```sh
+fts-themer apply --set col_arrangebg=#424242 --set marker=#00b0f9
+```
+
+Overrides are applied **last** and win, replacing a derived assignment in
+place or adding a key the derivation never touches, so all ~420 of
+REAPER's keys are addressable without hand-authoring 420 colours. They
+live on `Theme::overrides`, so a `.styx` theme can carry them and they
+round-trip.
+
+Two things are reported and skipped rather than written, because REAPER
+fails silently on both and the symptom appears far from the cause:
+
+- **a key this theme doesn't define** — REAPER ignores unknown keys, so a
+  typo is indistinguishable from a colour that "didn't take"
+- **a `*_drawmode` or `*_mode`** — those are blend modes and flags, and a
+  colour written over one changes how a layer composites
+
+The guard applies to overrides only. A *derived* key the theme happens not
+to define is normal: a theme sets what it cares about and REAPER defaults
+the rest, so adding `envcp_bg` to a theme that omits it is the point.
+
 ## Checking the result
 
 Colours are not reviewable by reading hex. Take the picture:
