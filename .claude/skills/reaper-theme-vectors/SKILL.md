@@ -33,23 +33,42 @@ nix develop .#reaper-test -c just reaper theme-shot target/theme-shots/x.png
 
 `align` is pass/fail on bounding box and alpha-weighted mean colour.
 **It passes images that are visibly wrong** — it called `track_fx_norm`
-exact while the letters sat two columns left. When a control looks off
-but scores well, rank by mean absolute per-pixel error instead; that is
-what shows on screen.
+exact while the letters sat two columns left, and it let
+`envcp_bgsel` sit at 0.706 with its entire accent bar missing, because
+its colour check trips only when the summed per-channel means move by
+more than 24 and a small bright feature on a large plate never does
+that.
+
+```sh
+cargo run -p daw-theme-art --example error              # ranked, worst first
+cargo run -p daw-theme-art --example error -- --map mcp_panthumb
+```
+
+`error` is the one to trust for "does this look right": mean absolute
+per-pixel difference over black. Start any session by running it — the
+top of that list has twice been a whole missing feature rather than a
+fidelity residual.
 
 `examples/markup` prints the SVG a control renders to. Reach for it the
 moment a PNG comes out blank or nonsensical: several failures are in the
 markup, not the geometry, and are invisible from the pixels.
 
-**A signed diff map is worth more than either.** Print `ours − source`
-per pixel, composited over black, blanking anything under ±3. It says
+**A signed diff map is worth more than either** — `error --map`. It says
 *where* the error is and which way, which no score does, and it is what
-found both structural errors in the envelope panel: a gear drawn with
-eight teeth showed +144 at three and nine o'clock and −93 at ±68°, which
-is a six-tooth gear stated as plainly as it can be; an arc bulging off
-the canvas showed a flat −28 over exactly the half it should have
-covered. Diff first, then measure the thing it points at — guessing from
-a montage costs several rounds each time.
+found every structural error so far: a gear drawn with eight teeth
+showed +144 at three and nine o'clock and −93 at ±68°, which is a
+six-tooth gear stated as plainly as it can be; an arc bulging off the
+canvas showed a flat −28 over exactly the half it should have covered; a
+thumb repeating across its own cell showed an alternating comb. Diff
+first, then measure the thing it points at — guessing from a montage
+costs several rounds each time.
+
+**Never score the markers.** They are stamped from the source after
+compositing, so comparing them only reports magenta against whatever the
+component drew underneath. On a 48×12 background that is most of the
+total, and it hid a missing accent bar through an entire pass of the
+family. Both checked-in tools exclude them; any throwaway script has to
+as well.
 
 ## Measuring
 
@@ -92,6 +111,13 @@ right or a control renders into a fraction of its own width and repeats.
 everything whose art starts at its own edge — but not for a control that
 deliberately leaves one empty. The mixer's FX toggle leaves a seam
 column; `leading_gap()` exists for exactly that.
+
+**`states()` overrides the detector, so a missing entry is a silent
+bug.** `panthumb` was left off the one-cell list, so a detector that had
+correctly found a single cell was overruled and the marker was rendered
+into a third of its width and repeated — the four worst images in the
+set. If a control looks striped or doubled, check this list before
+touching its geometry.
 
 **The cell you pass must be the cell the compositor measured.** A viewBox
 one unit wider than the box it lands in squeezes every coordinate inward
