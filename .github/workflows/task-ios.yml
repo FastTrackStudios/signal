@@ -80,6 +80,11 @@ jobs:
           # script uses `${DX_FEATURES-<default>}`, not `:-`).
           DX_FEATURES: ""
           DX_BUNDLE_ID: app.fasttrackstudio.task
+          # Home-screen name. Without this the device shows
+          # "TaskAppMobile" (dx derives it from the Dioxus.toml
+          # `[application] name`). The watch companion already sets its
+          # own CFBundleDisplayName to Task.
+          APP_DISPLAY_NAME: Task
           # Relative to DX_APP_DIR. The three Task apps share ONE tailwind
           # input at apps/task/tailwind.css (each app's assets/tailwind.css
           # is generated, gitignored output).
