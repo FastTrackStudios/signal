@@ -53,6 +53,15 @@ nothing, while *looking* like a real assertion.
 
 Every assertion must go through the DAW RPC and read state REAPER owns.
 
+**A service that touches REAPER must dispatch to the main thread.** The
+same split bites service impls, not just assertions: an RPC handler runs
+on a tokio worker, so any `thread_local!` it reads belongs to that
+worker, not to REAPER. An empty thread-local is indistinguishable from
+"nothing registered", so the handler answers confidently and wrongly.
+`daw_proto::main_thread::query` is the bridge (`architect::HasDispatcher`
+wires it in); REAPER installs the executor at startup, and backends with
+no main-thread requirement run the closure inline.
+
 If you need to observe something that only exists in extension memory,
 add a **test-only action** that makes an observable change, then assert
 on the change:
@@ -72,6 +81,21 @@ assert_eq!(pitches(&item).await?, vec![72, 76, 79]); // ask REAPER
 
 That single assertion covers load, edit and write: if the load silently
 failed the transpose is a no-op and the take is unchanged.
+
+## A panel is not project state
+
+`#[reaper_test(isolated)]` gives each test its own project tab. It does
+*not* give it its own panel — panels belong to the one REAPER the suite
+shares, so whatever ran before may have left one open. A test asserting
+"visible after one toggle" then passes or fails on test order.
+
+Put the panel in a known state first, through the dock host:
+
+```rust
+let panel = ctx.daw.dock_host().register_dock(ID, ID, DockKind::Tabbed).await?;
+ctx.daw.dock_host().hide(panel).await?;
+settle().await;
+```
 
 ## Assert on more than identity
 
