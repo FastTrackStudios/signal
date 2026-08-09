@@ -57,7 +57,7 @@ jobs:
         env:
           KEYCHAIN: fts-build.keychain
           KEYCHAIN_PW: fts-build
-          MARKETING_VER: ${{ inputs.marketing_version || '0.0.1' }}
+          MARKETING_VER: ${{ inputs.marketing_version || '0.0.2' }}
           # Sentry DSN baked in at compile time (option_env! in
           # task-telemetry). Sourced from the repo secret — never committed
           # (public repo). Empty when the secret is unset → telemetry no-op.

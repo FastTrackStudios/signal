@@ -57,7 +57,7 @@ jobs:
         env:
           KEYCHAIN: fts-build.keychain
           KEYCHAIN_PW: fts-build
-          MARKETING_VER: ${{ inputs.marketing_version || '0.0.1' }}
+          MARKETING_VER: ${{ inputs.marketing_version || '0.0.2' }}
           # 26.6 GM builds/signs/uploads; the beta's actool compiles the icon
           # catalog (26.6's actool can't produce Assets.car on macOS 27).
           ACTOOL_DEVELOPER_DIR: /Applications/Xcode-beta.app/Contents/Developer
