@@ -41,6 +41,16 @@ what shows on screen.
 moment a PNG comes out blank or nonsensical: several failures are in the
 markup, not the geometry, and are invisible from the pixels.
 
+**A signed diff map is worth more than either.** Print `ours − source`
+per pixel, composited over black, blanking anything under ±3. It says
+*where* the error is and which way, which no score does, and it is what
+found both structural errors in the envelope panel: a gear drawn with
+eight teeth showed +144 at three and nine o'clock and −93 at ±68°, which
+is a six-tooth gear stated as plainly as it can be; an arc bulging off
+the canvas showed a flat −28 over exactly the half it should have
+covered. Diff first, then measure the thing it points at — guessing from
+a montage costs several rounds each time.
+
 ## Measuring
 
 **Read coverage, not a silhouette.** Thresholding alpha quantises edges
@@ -133,6 +143,38 @@ Things that were guessed wrong and are worth knowing before measuring:
   like gradients are two bands a few levels apart.
 - **A lit ring throws light inside itself**: `#ff5f5f` outside a lit
   record button, `#ff7272` within.
+- **A mark on a scrim replaces it, it does not sit on it.** The envelope
+  options gear is `#b7b7b7` at 0.79 *instead of* the fifth of black
+  behind it. Painted over that scrim the same values composite to
+  `#a5a5a5` at 0.84 — six levels dark across the whole glyph. Pick paint
+  that lands on the source's composite, not paint that equals its
+  nominal colour.
+- **Alpha that falls inward is not stacked layers.** More black only ever
+  adds. A rim measuring 0.251, 0.224, 0.20 from the edge in is a base
+  plus two hairlines carrying the difference.
+- **Pressed often equals normal.** Every envelope-panel button has a
+  pressed cell byte-identical to its normal one; only hover moves.
+  Assuming a press always sinks the face invents a state.
+
+## Shapes that are not what they look like
+
+Three of the envelope panel's pieces read as rounded rects and none is
+one. Each is a plain rectangle unioned with a disc, and the giveaway is
+that the "corner radius" is far too large for the shape — the knob's
+slab reaches x 23.9 at its middle row and x 17.7 at its top, which is an
+arc concentric with the knob, not a corner.
+
+When writing that union as an arc, put the endpoints on the *circle*, not
+on the chord you want. `M 21 1 A 10 10 0 0 0 21 21 Z` looks like a
+half-disc flat on x 21; both endpoints share that x, so the circle's
+centre lands there too and the arc bulges the wrong way off the canvas.
+`M 11 1 A 10 10 0 0 0 11 21 H 21 V 1 Z` is the shape meant.
+
+Solve a curve's control points against measured extremes rather than
+eyeballing them: for a cubic, `B(0.5) = (P0 + 3P1 + 3P2 + P3)/8`, so
+pinning the midpoint to a measured peak is one line of algebra. Eyeballed
+control points put one wave's peak a pixel and a bit left and cost more
+than every other error in that glyph combined.
 
 ## Generating
 
