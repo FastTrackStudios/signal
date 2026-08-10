@@ -151,14 +151,33 @@ just sweep-incremental  # drop incremental caches (pure cache, always safe)
 most worktrees here belong to other agents mid-task. `just sweep-all`
 is a time-based sweep, not a wipe, which is why it's safe.
 
-## cargo rail
+## cargo rail — a hygiene tool, NOT a build-time tool here
 
 `.config/rail.toml` is configured for unused-dep detection, dead-feature
-pruning, and version unification.
+pruning, and version unification. A full `unify --check` was run
+2026-08-09. **Verdict: do not reach for it to speed up builds.**
 
-`cargo rail unify --check` takes **well over an hour** on a cold
-`compiler_diag_cache` and prints nothing while it works — it is
-compiling the tree. Run it with `run_in_background`, give it an isolated
+What it found:
+
+- **Zero unused dependencies.** Every candidate came back "preserved …
+  a manifest feature edge references this declaration". The tree is
+  already clean, so there is nothing to delete and no compile time to
+  win. Same for features: "216 optional features (user-facing, not
+  removed)".
+- Its "changed: 43 workspace deps, 388 member edits across 192 crates"
+  is version unification, workspace inheritance and key sorting — churn,
+  not removal.
+- **Applying it would loosen deliberate pins**: it converts `ort` and
+  `winit` from `=x.y.z` to caret. `ort` is load-dynamic against a
+  specific onnxruntime; do not let that float. Use `unify.exclude` or
+  `exact_pin_handling = "skip"` first if you ever do apply it.
+- One genuinely actionable dedup: **`dirs` is in the tree at both major
+  6 and 5**, so it compiles twice. rail skips it rather than picking.
+
+Cost: `unify --check` takes **well over an hour** on a cold
+`compiler_diag_cache`, prints nothing while it works (it is compiling
+the tree), and `--explain` took another 40+ min even with the cache
+warm. Run it with `run_in_background`, give it an isolated
 `CARGO_TARGET_DIR` so it doesn't take the worktree's target lock, and
 don't benchmark anything while it runs (see the contention trap).
 
