@@ -12,6 +12,11 @@
 @source "../../features/rigs/guitar/ui/src/**/*.rs";
 @source "../../crates/session/ui/src/**/*.rs";
 @source "../../features/daw-ui/daw-ui/src/**/*.rs";
+/* The vector art. It emits no Tailwind classes today — every value is a
+   presentation attribute, because inside an <svg> there is no box model to
+   style — but it is scanned anyway so the committed sheet's drift check
+   covers this code the moment that stops being true. */
+@source "../../features/daw-ui/daw-theme-art/src/**/*.rs";
 @source "../../features/chord-tool/*/src/**/*.rs";
 @source "../../libs/fts-ui/*/src/**/*.rs";
 @source "../../libs/dock/*/src/**/*.rs";
