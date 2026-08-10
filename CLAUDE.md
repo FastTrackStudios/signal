@@ -78,7 +78,31 @@ cargo check -p fasttrackstudio --target wasm32-unknown-unknown --no-default-feat
 
 Dev shell: `nix develop` (or direnv `use flake`) — root `flake.nix`
 carries the FTS 1.94 toolchain pin, `dx`, wasm target, tailwindcss, and
-the native headers (alsa, pipewire, jack, avahi for vox-discover).
+the native headers (alsa, pipewire, jack, avahi for vox-discover). Also
+mold, sccache, cargo-sweep (see build performance below).
+
+**Build performance / disk** — read the `build-performance` skill before
+touching a `[profile.*]` knob in the root Cargo.toml, benchmarking a
+build-time change, or when the dev disk fills up. The short version:
+
+- Dev debuginfo is `line-tables-only` + `split-debuginfo = "unpacked"`
+  (98% of a debug binary was DWARF; the fat test binary went 1.62 GB →
+  211 MB). Need a debugger? `--profile dev-dbg`.
+- mold is the Linux linker — after pulling, `direnv reload` or links
+  fail with `cannot find -fuse-ld=mold`. Note that
+  `target.<triple>.rustflags` REPLACES `build.rustflags`; it does not
+  merge, so a new global rustflag must go in both.
+- Dependencies build at opt-level 1, with an explicit allowlist back at
+  3 for audio-thread crates. A dev run of the rig must never xrun — if
+  one does, run `--release` or extend the allowlist, never raise
+  `package."*"` wholesale.
+- Cargo never GCs `target/`. `just disk`, `just sweep`, `just sweep-all`.
+  Never delete another agent's worktree target dir.
+- sccache is on, but it does NOT dedupe across worktrees (measured 0%);
+  it only makes wiping `target/` cheap to recover from.
+- Benchmarking: check `uptime` / `pgrep -c rustc` first — other agents
+  and background `cargo rail` runs on this 32-core box will invalidate
+  an A/B silently.
 
 Live rig: `cargo build -p fasttrackstudio` from the repo root →
 `target/debug/fasttrackstudio --engine` (ws://:4040/vox); browser remote
