@@ -192,3 +192,22 @@ queue is refilled.)
 - signal-audio remnants, duplicate wav/resampler helpers → libs/utils
   or audiocore-dsp
 - three CLIs → one `fts` CLI in apps/ (subcommands)
+
+## Agent skills
+
+### Issue tracker
+
+GitHub Issues on `FastTrackStudios/FastTrackStudio`, via the `gh` CLI.
+See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+The five canonical roles, unchanged: `needs-triage`, `needs-info`,
+`ready-for-agent`, `ready-for-human`, `wontfix`.
+See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Multi-context — `CONTEXT-MAP.md` at the root pointing at per-domain
+`CONTEXT.md` files. None exist yet; `/domain-modeling` writes them when a
+term actually needs resolving. See `docs/agents/domain.md`.
