@@ -47,6 +47,14 @@ concurrency:
 jobs:
   testflight:
     runs-on: [self-hosted, macos, airlock]
+    # Fail loudly when the airlock Mac isn't there. Without this a job
+    # with no available runner just QUEUES, and is eventually cancelled —
+    # which reads as "cancelled", not "failed", so nothing alerts and
+    # nobody looks. That is exactly how TestFlight silently missed every
+    # merge from 2026-08-09 onward while the runner was offline: four
+    # cancelled runs in a row, discovered only by picking up the phone.
+    # A timeout turns a missing runner into a red X within the hour.
+    timeout-minutes: 90
     steps:
       # clean:false keeps target/ between runs so nix+cargo build incrementally.
       - uses: actions/checkout@v4
