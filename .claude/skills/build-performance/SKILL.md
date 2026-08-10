@@ -32,7 +32,9 @@ big artifact before blaming anything else.**
 This machine has 32 cores and other agents build on it. A background
 `cargo rail unify` or another agent's build will make a change look
 *slower* than what it replaced. A real measurement was thrown away this
-way (O1 "measured" at 316s vs O3 at 221s, purely because load was ~50).
+way (O1 "measured" at 316s vs O3 at 221s, purely because load was ~50; the
+clean re-run on an idle box gave 220s vs 298s — O1 was 26% FASTER, the
+opposite of what the contaminated run said).
 
 Before an A/B: `uptime` and `pgrep -c rustc`. If load is high or rustc
 is running, wait. Build each arm into its own `CARGO_TARGET_DIR` under
@@ -84,7 +86,8 @@ worktree. Expect one full rebuild, and prefer to `just sweep` first.
 - `profile.dev` base: 1 (workspace members).
 - `package."*"`: **1** — dependencies. Was 3, which meant full LLVM
   optimization on ~1500 registry crates for every cold build and every
-  new worktree.
+  new worktree. Measured on an idle box, cold build of the `action_ids`
+  test binary: **298s at O3 → 220s at O1, −26%.**
 - An explicit allowlist back at **3** for audio-thread crates, both
   workspace (`audiocore-dsp`, `daw-audio-graph`, `signal-sampler`,
   the `*-dsp` crates, …) and third-party (`rubato`, `symphonia-*`,
