@@ -516,6 +516,11 @@ disk:
     #!/usr/bin/env bash
     du -sh $(git worktree list --porcelain | awk '/^worktree /{print $2"/target"}') 2>/dev/null | sort -rh
 
+# sccache hit rate. Hits come from rebuilding a path you previously built
+# (e.g. after `just sweep`); it does NOT dedupe across worktrees.
+cache-stats:
+    sccache --show-stats
+
 # Why is the build slow? Writes target/cargo-timings/cargo-timing.html —
 # a per-crate Gantt chart showing the critical path and link-time tail.
 timings *ARGS:
