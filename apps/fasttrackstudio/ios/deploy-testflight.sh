@@ -44,6 +44,7 @@ DX_TAILWIND="${DX_TAILWIND:-}"
 WATCH_APP="${WATCH_APP:-}"
 WATCH_SCHEME="${WATCH_SCHEME:-FTSWatch}"       # xcodebuild scheme
 WATCH_PRODUCT="${WATCH_PRODUCT:-FastTrackStudio}"   # built .app product name
+APP_DISPLAY_NAME="${APP_DISPLAY_NAME:-}"            # CFBundleDisplayName; unset = leave dx's
 WATCH_BUNDLE_ID="${WATCH_BUNDLE_ID:-app.fasttrackstudio.watch}"
 
 TEAM_ID="${TEAM_ID:-28C2G63DA7}"
@@ -155,6 +156,16 @@ MARKETING_VER="${MARKETING_VER:-0.0.1}"
 /usr/libexec/PlistBuddy -c "Delete :CFBundleSupportedPlatforms" "$APP/Info.plist" 2>/dev/null || true
 /usr/libexec/PlistBuddy -c "Add :CFBundleSupportedPlatforms array" "$APP/Info.plist"
 /usr/libexec/PlistBuddy -c "Add :CFBundleSupportedPlatforms:0 string iPhoneOS" "$APP/Info.plist"
+# Home-screen name. dx derives the bundle name from the Dioxus.toml
+# `[application] name`, so `task-app-mobile` shipped as "TaskAppMobile" on
+# the device. FTS only reads correctly because its package is already
+# called `fasttrackstudio`. CFBundleDisplayName is what iOS actually shows,
+# so set it explicitly rather than relying on the package name — the
+# macOS script and both watch targets already do.
+if [ -n "${APP_DISPLAY_NAME:-}" ]; then
+    /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName $APP_DISPLAY_NAME" "$APP/Info.plist" 2>/dev/null \
+        || /usr/libexec/PlistBuddy -c "Add :CFBundleDisplayName string $APP_DISPLAY_NAME" "$APP/Info.plist"
+fi
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $MARKETING_VER" "$APP/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD_NO" "$APP/Info.plist"
 # Minimum OS — App Store rejects a bundle without it (dx doesn't emit one).

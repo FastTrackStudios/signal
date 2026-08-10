@@ -57,7 +57,7 @@ jobs:
         env:
           KEYCHAIN: fts-build.keychain
           KEYCHAIN_PW: fts-build
-          MARKETING_VER: ${{ inputs.marketing_version || '0.0.1' }}
+          MARKETING_VER: ${{ inputs.marketing_version || '0.0.2' }}
           # 26.6 GM builds/signs/uploads; the beta's actool compiles the icon
           # catalog (26.6's actool can't produce Assets.car on macOS 27).
           ACTOOL_DEVELOPER_DIR: /Applications/Xcode-beta.app/Contents/Developer
@@ -80,6 +80,11 @@ jobs:
           # script uses `${DX_FEATURES-<default>}`, not `:-`).
           DX_FEATURES: ""
           DX_BUNDLE_ID: app.fasttrackstudio.task
+          # Home-screen name. Without this the device shows
+          # "TaskAppMobile" (dx derives it from the Dioxus.toml
+          # `[application] name`). The watch companion already sets its
+          # own CFBundleDisplayName to Task.
+          APP_DISPLAY_NAME: Task
           # Relative to DX_APP_DIR. The three Task apps share ONE tailwind
           # input at apps/task/tailwind.css (each app's assets/tailwind.css
           # is generated, gitignored output).
