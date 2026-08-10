@@ -784,9 +784,7 @@ impl KeysRigBackend {
     fn module_dsp_values(&self, layer: &str, module: usize) -> Option<[f32; 15]> {
         let s = self.inner.state.lock().ok()?;
         let lane = s.lanes.get(layer)?;
-        if lane.modules.get(module).is_none() {
-            return None;
-        }
+        lane.modules.get(module)?;
         let v = |id: &str| Self::module_value(lane, module, id);
         Some([
             v("filter.cutoff"),

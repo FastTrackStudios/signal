@@ -210,7 +210,7 @@ impl TriggerDetector {
     /// Feed one sample and return whether a trigger event occurred.
     ///
     /// Returns `Some(peak_level)` on a new trigger-on event, `None` otherwise.
-    /// Use [`is_active`] to check ongoing trigger state.
+    /// Use [`Self::is_active`] to check ongoing trigger state.
     #[inline]
     pub fn tick(&mut self, sample: f64) -> Option<f64> {
         // In spectral modes, feed the spectral detector and use its ODF

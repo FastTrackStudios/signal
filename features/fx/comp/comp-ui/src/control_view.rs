@@ -314,7 +314,7 @@ fn AppShell() -> Element {
 }
 
 /// Re-exported so callers (and tests) can resolve a profile index to its skin
-/// the same way [`AppShell`] does.
+/// the same way `AppShell` does.
 pub fn skin_for_profile_index(index: usize) -> ProfileSkin {
     profile_skin(profile_id_for_index(index))
 }

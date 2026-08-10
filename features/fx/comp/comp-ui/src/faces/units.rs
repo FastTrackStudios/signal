@@ -1097,7 +1097,7 @@ pub fn design_for(profile_id: &str) -> Option<&'static RackDesign> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use comp_profiles::{all_profiles, Profile};
+    use comp_profiles::all_profiles;
 
     /// Every control id a panel places, excluding the deliberately unwired.
     fn wired_ids(design: &RackDesign) -> Vec<&'static str> {

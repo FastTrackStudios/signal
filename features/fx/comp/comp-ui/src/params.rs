@@ -85,7 +85,7 @@ impl CompUiState {
 }
 
 /// Compression style — the detector/ballistics model. Mirrors
-/// [`comp_dsp::CompressionStyle`] ids 0..=3 (`Reserved` is not exposed).
+/// `comp_dsp::CompressionStyle` ids 0..=3 (`Reserved` is not exposed).
 pub const STYLE_LABELS: &[&str] = &["Clean", "FET", "VCA", "Opto"];
 
 /// Character (drive) waveshaper, mirroring `ProC3Compressor::drive_transfer`'s
@@ -222,7 +222,7 @@ pub struct CompParams {
     /// session that saved the ninth reloads pointing at something else — the
     /// normalized value round-trips through a different denominator. Names do
     /// not have that problem, so the id is what a session actually restores
-    /// from, and the index is reconciled to it on load ([`profile_index_for`]).
+    /// from, and the index is reconciled to it on load.
     ///
     /// Empty means "written before ids existed"; then the index stands, which
     /// is the best that can be done for those sessions.

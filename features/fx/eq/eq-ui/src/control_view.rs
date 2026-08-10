@@ -236,8 +236,8 @@ fn AppShell() -> Element {
     let analyzer_for_settings = ui.clone();
     // The *resolved* model: the persisted id when the session has one, the
     // index otherwise. See `FtsEqParams::model_id`.
-    let current_model = crate::faces::resolved_model(&params);
-    let current_form = crate::faces::resolved_form(&params);
+    let current_model = crate::faces::resolved_model(params);
+    let current_form = crate::faces::resolved_form(params);
     let hardware_mode_active = current_model != 0;
     let model_response: Option<Vec<f32>> = hardware_mode_active.then(|| {
         (0..SPECTRUM_BINS)

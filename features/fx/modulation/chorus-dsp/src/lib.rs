@@ -77,6 +77,8 @@ pub mod analysis {
     /// orbit's second rotation) are *not* locked to that cycle and will not
     /// close the loop exactly. That is not an artefact of the sampling — it is
     /// the thing those engines are for, and the panel should show it.
+    // One knob per argument; a struct here would just move the list.
+    #[allow(clippy::too_many_arguments)]
     pub fn delay_cycle(
         engine: EngineType,
         effect: EffectType,

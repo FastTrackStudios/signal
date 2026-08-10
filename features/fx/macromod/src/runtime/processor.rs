@@ -1,7 +1,7 @@
 //! Modulation processor — orchestrates all modulation sources and produces per-target offsets.
 //!
 //! The processor holds parallel arrays of [`ModulationRoute`] configs and runtime
-//! [`SourceState`] instances. Calling `tick()` advances all sources and sums their
+//! `SourceState` instances. Calling `tick()` advances all sources and sums their
 //! contributions per [`ParamTarget`], producing bipolar offsets that the downstream
 //! runtime adds to tracked base values.
 

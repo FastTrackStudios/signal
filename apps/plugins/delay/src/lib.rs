@@ -12,21 +12,14 @@
 //! matching level-plugin; the nice-plug-dioxus editor is a follow-up.
 
 use audiocore_core::prelude::*;
-use nice_plug::prelude::*;
 use std::sync::Arc;
 
 use delay_ui::params::{DelayParams, DelayUiState};
 
 use audiocore_dsp::{AudioConfig, Processor};
-use delay::{DelayChain, DelayStyle};
+use delay::DelayChain;
 
 const PLUGIN_NAME: &str = "FTS Delay";
-
-/// Delay-time range in ms. The engines pre-allocate 5 s lines, but every
-/// style clamps to at most 2.5 s ([`DelayStyle::time_range_ms`]), so the
-/// host range mirrors the widest usable span.
-const TIME_MIN_MS: f32 = 20.0;
-const TIME_MAX_MS: f32 = 2500.0;
 
 // ── Plugin ────────────────────────────────────────────────────────────────
 
