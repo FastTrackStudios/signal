@@ -88,6 +88,16 @@
         pkg-config
         rustPlatform.bindgenHook
         tailwindcss_4
+      ]
+      ++ lib.optionals pkgs.stdenv.isLinux [
+        # mold — the linker .cargo/config.toml selects for
+        # x86_64-unknown-linux-gnu. Must be on PATH or every link fails
+        # with "cannot find -fuse-ld=mold".
+        mold
+        # cargo-sweep — reclaims stale target/ artifacts. Cargo never GCs,
+        # so a long-lived worktree accumulates dozens of copies of every
+        # crate (56 of one crate, measured). `just sweep` / `just sweep-all`.
+        cargo-sweep
       ];
 
       # Env every dev/CI shell needs — build-script and bindgen paths,

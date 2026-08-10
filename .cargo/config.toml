@@ -1,7 +1,23 @@
-# Carried over from the dissolved daw/ workspace: the moire fork needs
-# intact frame-pointer chains for trace capture on NixOS glibc.
+# Frame pointers: originally for the (now retired) moire fork's trace
+# capture, kept because samply/perf profiling of the audio path on NixOS
+# glibc needs intact frame-pointer chains to unwind. Cheap; keep it.
+#
+# NOTE ON PRECEDENCE: `target.<triple>.rustflags` REPLACES `build.rustflags`
+# — cargo does not merge them. So the linux table below must repeat the
+# frame-pointer flag. This `[build]` table is what darwin/wasm/iOS get.
 [build]
 rustflags = ["-C", "force-frame-pointers=yes"]
+
+# mold instead of the default `ld.bfd`. Linking is the serial tail of every
+# build here and these binaries are huge (multi-hundred-MB desktop/plugin
+# artifacts, and the REAPER extension .so). mold is multi-threaded and
+# typically turns a 30-60s link into a few seconds. Comes from the devshell
+# (nix/modules/toolchain.nix); GCC 15 accepts -fuse-ld=mold natively.
+[target.x86_64-unknown-linux-gnu]
+rustflags = [
+  "-C", "force-frame-pointers=yes",
+  "-C", "link-arg=-fuse-ld=mold",
+]
 
 # Carried over from the dissolved session/keyflow workspaces: git deps and
 # patched git sources fetch via the git CLI so SSH / credentials work the

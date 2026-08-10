@@ -476,6 +476,52 @@ check:
 test:
     cargo test --workspace
 
+# ── Disk / build-time hygiene ────────────────────────────────────────────
+# Cargo never garbage-collects target/: every rebuild with a changed
+# fingerprint leaves the old artifact behind forever. Measured in this tree:
+# 56 stale copies of a single crate, 77 G of `debug/incremental`, ~1 TB of
+# target/ across the worktrees. These recipes are the GC cargo doesn't have.
+
+# Reclaim stale artifacts in THIS worktree (keeps anything touched recently).
+sweep days="7":
+    cargo sweep --time {{days}}
+    @du -sh target
+
+# Sweep every worktree — the thing to run when the dev disk fills up.
+# Uses `git worktree list` so new worktrees are picked up automatically.
+sweep-all days="7":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    before=$(du -sc $(git worktree list --porcelain | awk '/^worktree /{print $2"/target"}') 2>/dev/null | tail -1 | cut -f1)
+    for w in $(git worktree list --porcelain | awk '/^worktree /{print $2}'); do
+      [ -d "$w/target" ] || continue
+      echo "── sweeping $w"
+      cargo sweep --time {{days}} "$w" || true
+    done
+    after=$(du -sc $(git worktree list --porcelain | awk '/^worktree /{print $2"/target"}') 2>/dev/null | tail -1 | cut -f1)
+    echo "reclaimed $(( (before - after) / 1024 / 1024 )) GiB"
+
+# Drop incremental-compilation caches everywhere. They are pure cache —
+# safe to delete, costs one non-incremental rebuild. Was 77 G in main alone.
+sweep-incremental:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    for w in $(git worktree list --porcelain | awk '/^worktree /{print $2}'); do
+      rm -rf "$w"/target/*/incremental "$w"/target/incremental 2>/dev/null || true
+    done
+    echo "incremental caches cleared"
+
+# Where is the disk actually going? Per-worktree target/ sizes, largest first.
+disk:
+    #!/usr/bin/env bash
+    du -sh $(git worktree list --porcelain | awk '/^worktree /{print $2"/target"}') 2>/dev/null | sort -rh
+
+# Why is the build slow? Writes target/cargo-timings/cargo-timing.html —
+# a per-crate Gantt chart showing the critical path and link-time tail.
+timings *ARGS:
+    cargo build --timings {{ARGS}}
+    @echo "→ target/cargo-timings/cargo-timing.html"
+
 # ── Knowledge graph (graphify) ───────────────────────────────────────────
 # Whole-repo knowledge graph for AI assistants — parses the tree with
 # tree-sitter (100% local, no API calls) into graphify-out/ (graph.json +
