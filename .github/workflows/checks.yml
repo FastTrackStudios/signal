@@ -211,19 +211,19 @@ jobs:
           cache-on-failure: "true"
       - name: test signal-guitar
         if: needs.plan.outputs.signal == 'true'
-        run: ${NIX_DEV} cargo test -p signal-guitar
+        run: ${NIX_DEV} cargo nextest run -p signal-guitar
       - name: test daw-standalone (audio)
         if: needs.plan.outputs.signal == 'true'
-        run: ${NIX_DEV} cargo test -p daw-standalone --features audio
+        run: ${NIX_DEV} cargo nextest run -p daw-standalone --features audio
       - name: test neural-amp-modeler (incl. NAM parity)
         if: needs.plan.outputs.signal == 'true'
-        run: ${NIX_DEV} cargo test -p neural-amp-modeler
+        run: ${NIX_DEV} cargo nextest run -p neural-amp-modeler
       - name: test architect (iroh)
         if: needs.plan.outputs.signal == 'true'
-        run: ${NIX_DEV} cargo test -p architect --features iroh
+        run: ${NIX_DEV} cargo nextest run -p architect --features iroh
       - name: test pitch-dsp
         if: needs.plan.outputs.signal == 'true'
-        run: ${NIX_DEV} cargo test -p pitch-dsp
+        run: ${NIX_DEV} cargo nextest run -p pitch-dsp
 
   # Advisory while the tree isn't lint-clean — visible signal, never
   # blocks merges. Flip continue-on-error off once the tree is clean.

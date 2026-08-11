@@ -472,9 +472,15 @@ snapshot-update:
 check:
     cargo check --workspace --exclude vox-discover
 
-# Run tests
+# Run tests. nextest: parallel per-test binaries, much faster than
+# `cargo test` on this many crates. It does NOT run doctests — use
+# `just test-doc` for those.
 test:
-    cargo test --workspace
+    cargo nextest run --workspace
+
+# Doctests only — nextest can't run them (libtest owns doctests).
+test-doc:
+    cargo test --workspace --doc
 
 # ── Disk / build-time hygiene ────────────────────────────────────────────
 # Cargo never garbage-collects target/: every rebuild with a changed
