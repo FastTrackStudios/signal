@@ -40,7 +40,11 @@
         pkgs.xdotool
       ]
       ++ config.fts.buildInputs
-      ++ [ pkgs.pkg-config pkgs.rustPlatform.bindgenHook ];
+      # The shared native toolchain — pkg-config, bindgen, and on
+      # Linux, mold: .cargo/config.toml selects it for every link, so
+      # a shell without it fails with "cannot find 'ld'" the moment a
+      # test binary links.
+      ++ config.fts.nativeBuildInputs;
 
       shellHook = ''
         export PATH="$HOME/.cargo/bin:$PATH"
