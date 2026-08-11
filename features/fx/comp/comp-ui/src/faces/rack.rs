@@ -445,10 +445,10 @@ fn CompactGrMeter(
     rsx! {
         div {
             "data-testid": "compact-gr",
-            style: format!(
-                "display:flex; {}; align-items:center; gap:5px;",
-                if horizontal { "flex-direction:column" } else { "flex-direction:column" },
-            ),
+            // Column either way: the "GR" caption sits above the meter
+            // whichever way the meter itself runs. (`horizontal` does
+            // still pick the well/fill geometry above.)
+            style: "display:flex; flex-direction:column; align-items:center; gap:5px;",
             div {
                 style: format!(
                     "font-size:8px; font-weight:700; letter-spacing:0.10em; \

@@ -27,7 +27,7 @@ pub fn Section(
     width: Option<f64>,
     /// Drop the panel chrome — border, background, padding.
     ///
-    /// A section inside a [`FloatingPanel`](fts_ui_audio::shell::FloatingPanel)
+    /// A section inside a [`fts_ui_audio::shell::FloatingPanel`]
     /// is already sitting on a card; a second border around each group turns
     /// the floating bar into a row of boxes.
     #[props(default = false)]

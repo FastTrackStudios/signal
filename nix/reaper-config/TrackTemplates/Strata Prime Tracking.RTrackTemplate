@@ -1,0 +1,82 @@
+<TRACK
+  NAME Drums
+  PEAKCOL 21251311
+  BEAT -1
+  AUTOMODE 0
+  PANLAWFLAGS 3
+  VOLPAN 1 0 -1 -1 1
+  MUTESOLO 0 0 0
+  IPHASE 0
+  PLAYOFFS 0 1
+  ISBUS 0 0
+  BUSCOMP 0 0 0 0 0
+  SHOWINMIX 1 0.6667 0.5 1 0.5 0 0 0 0
+  FREEMODE 2
+  FIXEDLANES 1 0 1 0 0
+  REC 1 5088 1 0 0 0 0 0
+  VU 64
+  TRACKHEIGHT 0 0 0 0 0 0 0
+  INQ 0 0 0 0.5 100 0 0 100
+  NCHAN 2
+  FX 1
+  TRACKID {6EDE9BC3-6E03-BBB2-3736-4883B38CCEAA}
+  PERF 0
+  UNDO_HAS_TRACKENV
+  MIDIOUT -1
+  MAINSEND 1 0
+  <FXCHAIN_REC
+    WNDRECT 1440 0 887 288
+    SHOW 0
+    LASTSEL 0
+    DOCKED 0
+    BYPASS 0 0 0
+    <JS "FTS/FTS Drum Converter.jsfx" ""
+      0 1 0 110 80 55 25 1 250 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+    >
+    FLOATPOS 0 0 0 0
+    FXID {1C6457F0-01FB-D8D2-CCA5-D7ABAF38AA6E}
+    WAK 0 0
+  >
+>
+<TRACK
+  NAME "Strata Prime Midi Send"
+  PEAKCOL 16576
+  BEAT -1
+  AUTOMODE 0
+  PANLAWFLAGS 3
+  VOLPAN 1 0 -1 -1 1
+  MUTESOLO 0 0 0
+  IPHASE 0
+  PLAYOFFS 0 1
+  ISBUS 0 0
+  BUSCOMP 0 0 0 0 0
+  SHOWINMIX 1 0.6667 0.5 1 0.5 0 0 0 0
+  FREEMODE 2
+  FIXEDLANES 1 0 1 0 0
+  LANEREC -1 -1 -1 0
+  REC 0 5088 1 0 0 0 0 0
+  VU 64
+  TRACKHEIGHT 0 0 0 0 0 0 0
+  INQ 0 0 0 0.5 100 0 0 100
+  NCHAN 4
+  FX 1
+  TRACKID {0C07175E-78B9-07C7-06B7-BCA8B929F553}
+  PERF 0
+  UNDO_HAS_TRACKENV
+  AUXRECV 0 0 1 0 0 0 0 0 0 -1:U 0 -1 ''
+  MIDIOUT 2368
+  MAINSEND 1 0
+  <FXCHAIN
+    WNDRECT 1440 0 887 288
+    SHOW 0
+    LASTSEL 0
+    DOCKED 0
+    BYPASS 0 0 0
+    <JS "FTS/FTS Drum Converter.jsfx" ""
+      1 0 0 110 80 55 25 2 250 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+    >
+    FLOATPOS 0 0 0 0
+    FXID {0729CDBD-88E3-3C88-A3DB-CB8591A2A718}
+    WAK 0 0
+  >
+>

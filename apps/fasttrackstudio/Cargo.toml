@@ -202,6 +202,7 @@ name = "keys_probe"
 required-features = ["signal"]
 
 [dependencies]
+utils.workspace = true
 # Sample-space + Electronic Kit WIRE CONTRACTS (#77). Wasm-clean — the
 # browser remote renders the map and the pad grid from these; their
 # backends (signal-space / signal-ekit) stay native-only below.

@@ -41,12 +41,37 @@ on:
 # Serialize with the audio iOS build too — one iOS build at a time on the
 # single Mac. Shared group name across both workflows; queue, never cancel.
 concurrency:
-  group: ios-testflight
+  # Per-WORKFLOW, not shared across the three Apple workflows.
+  #
+  # They used to share one `ios-testflight` group, intending to stop the
+  # single Mac running two Apple builds at once. The effect was the
+  # opposite of the intent: a concurrency group holds only ONE pending
+  # run, so task-ios and task-macos evicted each other — every merge
+  # fires both, the later arrival takes the pending slot, and the other
+  # is CANCELLED. task-ios lost that race every time, which is why
+  # TestFlight went stale while every run showed "cancelled".
+  #
+  # The serialization they wanted is already guaranteed: airlock is a
+  # SINGLE self-hosted runner and runs one job at a time, so two Apple
+  # builds cannot overlap regardless. The shared group added nothing
+  # except mutual cancellation.
+  #
+  # Keeping the group per-workflow preserves the useful half — a newer
+  # run of the SAME workflow supersedes an older queued one.
+  group: ios-testflight-${{ github.workflow }}
   cancel-in-progress: false
 
 jobs:
   testflight:
     runs-on: [self-hosted, macos, airlock]
+    # Fail loudly when the airlock Mac isn't there. Without this a job
+    # with no available runner just QUEUES, and is eventually cancelled —
+    # which reads as "cancelled", not "failed", so nothing alerts and
+    # nobody looks. That is exactly how TestFlight silently missed every
+    # merge from 2026-08-09 onward while the runner was offline: four
+    # cancelled runs in a row, discovered only by picking up the phone.
+    # A timeout turns a missing runner into a red X within the hour.
+    timeout-minutes: 90
     steps:
       # clean:false keeps target/ between runs so nix+cargo build incrementally.
       - uses: actions/checkout@v4
@@ -57,7 +82,7 @@ jobs:
         env:
           KEYCHAIN: fts-build.keychain
           KEYCHAIN_PW: fts-build
-          MARKETING_VER: ${{ inputs.marketing_version || '0.0.1' }}
+          MARKETING_VER: ${{ inputs.marketing_version || '0.0.2' }}
           # 26.6 GM builds/signs/uploads; the beta's actool compiles the icon
           # catalog (26.6's actool can't produce Assets.car on macOS 27).
           ACTOOL_DEVELOPER_DIR: /Applications/Xcode-beta.app/Contents/Developer
@@ -80,6 +105,11 @@ jobs:
           # script uses `${DX_FEATURES-<default>}`, not `:-`).
           DX_FEATURES: ""
           DX_BUNDLE_ID: app.fasttrackstudio.task
+          # Home-screen name. Without this the device shows
+          # "TaskAppMobile" (dx derives it from the Dioxus.toml
+          # `[application] name`). The watch companion already sets its
+          # own CFBundleDisplayName to Task.
+          APP_DISPLAY_NAME: Task
           # Relative to DX_APP_DIR. The three Task apps share ONE tailwind
           # input at apps/task/tailwind.css (each app's assets/tailwind.css
           # is generated, gitignored output).

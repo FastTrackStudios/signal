@@ -247,6 +247,14 @@ jobs:
         with:
           shared-key: quality
           cache-on-failure: "true"
+      # Same reason as the build job: the Task apps' assets/tailwind.css
+      # is generated, and `asset!()` resolves it at compile time, so
+      # `task-app-web` cannot be linted or documented without it. This job
+      # was missing the step, which made it fail on a missing file rather
+      # than on any lint — no amount of fixing lints could turn it green.
+      - name: Generate Task tailwind sheets
+        if: needs.plan.outputs.workspace == 'true'
+        run: ${NIX_DEV} just --justfile apps/task/Justfile --working-directory apps/task css
       - name: Clippy
         if: needs.plan.outputs.workspace == 'true'
         run: |
