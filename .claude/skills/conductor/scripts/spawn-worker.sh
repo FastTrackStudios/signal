@@ -16,6 +16,9 @@ git worktree add "$wt" -b "files/$ticket-$slug" origin/main
 pane=$(herdr pane split --current --direction right --no-focus \
   | python3 -c 'import sys,json;print(json.load(sys.stdin)["result"]["pane"]["pane_id"])')
 herdr pane rename "$pane" "files-$ticket" >/dev/null
+# Full-width tab per worker: narrow split panes break herdr's agent-status
+# detection (observed at ~5-column width), which the monitors depend on.
+herdr pane move "$pane" --new-tab --label "files-$ticket" --no-focus >/dev/null
 # The pane shell is Nushell: separate commands with ';', never '&&'.
 herdr pane run "$pane" "cd $wt; direnv allow; claude --model $model"
 herdr wait agent-status "$pane" --status idle --timeout 120000 >/dev/null
