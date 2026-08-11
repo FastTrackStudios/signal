@@ -14,7 +14,9 @@ and one line per gotcha from those PRs' review threads. Name any ticket
 being worked concurrently and which internals are off-limits because of it.>
 First action: gh issue edit <N> --add-assignee @me (that is the claim).
 Rules: export CARGO_TARGET_DIR=<WORKTREE>/target-local before any cargo
-command; one cargo command at a time; meet every acceptance criterion on
+command; one cargo command at a time; run tests with cargo nextest run
+(the tree carries mold+sccache+nextest since PR #281 — direnv provides
+them); meet every acceptance criterion on
 the ticket; primary test seam per the spec's Testing Decisions; commit
 finished verified work; push your branch and open a PR titled after the
 ticket, closing #<N>; comment on the ticket with the PR link when done.
