@@ -17,7 +17,9 @@ Rules: export CARGO_TARGET_DIR=<WORKTREE>/target-local before any cargo
 command; one cargo command at a time; run tests with cargo nextest run
 (the tree carries mold+sccache+nextest since PR #281 — direnv provides
 them); meet every acceptance criterion on
-the ticket; primary test seam per the spec's Testing Decisions; commit
+the ticket; primary test seam per the spec's Testing Decisions; do NOT
+run your own code-review skill or workflow — the conductor reviews every
+PR after it opens; commit
 finished verified work; push your branch and open a PR titled after the
 ticket, closing #<N>; comment on the ticket with the PR link when done.
 ```
