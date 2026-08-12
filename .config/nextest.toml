@@ -1,5 +1,2 @@
-# A hung reconcile test must fail loudly, not wedge the runner for an
-# hour (issue #264 dev): terminate any test still running past the
-# deadline instead of leaving it parked on a futex.
 [profile.default]
 slow-timeout = { period = "30s", terminate-after = 1 }
