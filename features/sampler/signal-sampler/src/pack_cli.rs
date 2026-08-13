@@ -61,6 +61,62 @@ enum Cmd {
         #[arg(long)]
         src_root: Option<PathBuf>,
     },
+    /// Identify WHICH pack sample a reference render is playing at a given
+    /// moment, and where inside it — sample-exact.
+    ///
+    /// A Kontakt bounce of a library we hold is a mix of the very samples in
+    /// the pack, so matching is identification, not estimation: correlate each
+    /// candidate zone against the reference and the winner names the
+    /// articulation, dynamic layer and round-robin Kontakt chose, the sample
+    /// offset it started from (its `$1fvjk` skip), the onset in wall time, and
+    /// the gain it applied. Envelope comparison can only say "about 30 ms
+    /// late"; this says "RR 2, started 61.4 ms in, −3.2 dB".
+    ///
+    /// STATUS: single-candidate correlation does NOT yet identify reliably.
+    /// Self-matched against our own render — where the answer is known — it
+    /// picks the right sample family but misplaces the offset, and tops out
+    /// near corr 0.64 even at CC1=127 where one layer dominates. Two reasons,
+    /// both fixable: what sounds at any moment is a MIXTURE (crossfaded
+    /// dynamic layers, transition voice over body, vibrato pair), so no single
+    /// sample can explain more than its share of the energy and a
+    /// coincidental match can outscore the true one; and a sustained string
+    /// note is near-stationary, so mid-note windows are ambiguous by nature.
+    /// The estimator that fits: joint least squares over the small candidate
+    /// set at a SHARED onset — solve every layer's gain at once and rank on
+    /// residual — with the window placed on the attack transient, which is
+    /// unique, rather than mid-sustain. Use the numbers below as a lead, not
+    /// as ground truth, until that lands.
+    MatchRef {
+        pack: PathBuf,
+        /// Reference render (e.g. a Kontakt bounce).
+        #[arg(long)]
+        reference: PathBuf,
+        /// Seconds into the reference to identify.
+        #[arg(long)]
+        at: f64,
+        /// Window correlated, in ms. Long enough to be unique, short enough to
+        /// sit inside one note.
+        #[arg(long, default_value_t = 250.0)]
+        window_ms: f64,
+        /// How far into a candidate sample to look for the match, in ms.
+        #[arg(long, default_value_t = 600.0)]
+        search_ms: f64,
+        /// Restrict candidates by root key: "55,60-64" (names allowed).
+        #[arg(long)]
+        notes: Option<String>,
+        #[arg(long)]
+        articulation: Option<String>,
+        #[arg(long)]
+        mic: Option<String>,
+        /// Also try candidates RESAMPLED by ±1..N semitones — Kontakt fills
+        /// its whole-tone grid by resampling, so an off-grid note in the
+        /// reference is a neighbouring root played faster or slower.
+        #[arg(long, default_value_t = 2)]
+        semitones: i32,
+        /// How many candidates to report.
+        #[arg(long, default_value_t = 8)]
+        top: usize,
+    },
     /// Waveform report for pack samples: loop points, sample window, lead-in/
     /// arrival markers over each decoded waveform. Self-contained HTML.
     InspectSamples {
@@ -345,6 +401,29 @@ pub fn cli_main(argv: impl IntoIterator<Item = OsString>) -> Result<()> {
                 bail!("check: PARTIAL")
             }
         }
+        Cmd::MatchRef {
+            pack,
+            reference,
+            at,
+            window_ms,
+            search_ms,
+            notes,
+            articulation,
+            mic,
+            semitones,
+            top,
+        } => match_ref(
+            &pack,
+            &reference,
+            at,
+            window_ms,
+            search_ms,
+            notes,
+            articulation,
+            mic,
+            semitones,
+            top,
+        ),
         Cmd::InspectSamples {
             pack,
             articulation,
@@ -1342,6 +1421,252 @@ fn parse_note(s: &str) -> Result<u8> {
     }
     let oct: i32 = s[i..].parse().map_err(|_| eyre::eyre!("bad note {s:?}"))?;
     Ok(((oct + 1) * 12 + semis).clamp(0, 127) as u8)
+}
+
+/// One candidate's best explanation of the reference window.
+struct MatchHit {
+    file: String,
+    articulation: String,
+    dynamic: String,
+    rr_index: u32,
+    direction: String,
+    interval: u32,
+    root_key: u8,
+    /// Semitones the candidate was resampled by to match (Kontakt grid-fill).
+    shift: i32,
+    /// Frame inside the (resampled) sample that aligns with `at`.
+    offset_frames: usize,
+    /// Sample rate the offset is expressed in.
+    sample_rate: u32,
+    corr: f32,
+    gain_db: f32,
+}
+
+/// Mono-sum a decoded sample to `f32`.
+fn mono_of(pcm: &[f32], channels: usize, frames: usize) -> Vec<f32> {
+    let ch = channels.max(1);
+    (0..frames)
+        .map(|f| {
+            let base = f * ch;
+            (0..ch).map(|c| pcm[base + c]).sum::<f32>() / ch as f32
+        })
+        .collect()
+}
+
+/// Linear-resample `src` by `ratio` input frames per output frame.
+fn resample(src: &[f32], ratio: f64, out_len: usize) -> Vec<f32> {
+    (0..out_len)
+        .map(|i| {
+            let p = i as f64 * ratio;
+            let idx = p as usize;
+            if idx + 1 >= src.len() {
+                return 0.0;
+            }
+            let frac = (p - idx as f64) as f32;
+            src[idx] * (1.0 - frac) + src[idx + 1] * frac
+        })
+        .collect()
+}
+
+/// Best (offset, correlation, gain) aligning `cand` under the fixed `window`.
+///
+/// Coarse-to-fine: decimate both by 16 and scan every offset, then refine at
+/// full rate around the winner. Correlation is normalised, so it compares
+/// across candidates of different loudness; the gain is the least-squares fit
+/// once the offset is known, which is exactly the fader Kontakt applied.
+fn best_alignment(window: &[f32], cand: &[f32], search: usize) -> (usize, f32, f32) {
+    const D: usize = 16;
+    let dec = |x: &[f32]| -> Vec<f32> {
+        x.chunks(D)
+            .map(|c| c.iter().sum::<f32>() / D as f32)
+            .collect()
+    };
+    let (wd, cd) = (dec(window), dec(cand));
+    let wlen = wd.len();
+    if wlen == 0 || cd.len() <= wlen {
+        return (0, 0.0, 0.0);
+    }
+    let score = |c: &[f32], w: &[f32], off: usize| -> f32 {
+        let mut dot = 0.0f64;
+        let mut cc = 0.0f64;
+        let mut ww = 0.0f64;
+        for i in 0..w.len() {
+            let (a, b) = (c[off + i] as f64, w[i] as f64);
+            dot += a * b;
+            cc += a * a;
+            ww += b * b;
+        }
+        if cc <= 0.0 || ww <= 0.0 {
+            0.0
+        } else {
+            (dot / (cc.sqrt() * ww.sqrt())) as f32
+        }
+    };
+    let coarse_max = (search / D).min(cd.len().saturating_sub(wlen + 1));
+    let mut coarse: Vec<(usize, f32)> = (0..=coarse_max)
+        .map(|off| (off, score(&cd, &wd, off)))
+        .collect();
+
+    // Refine the best K coarse offsets, not just the winner. Decimating by 16
+    // low-passes to ~1.5 kHz, and a sustained string note is near-stationary
+    // there — its coarse peak is broad and frequently in the wrong place,
+    // while the full-rate peak is sharp and unambiguous. Refining only the
+    // coarse winner threw away the right answer (a self-match against our own
+    // render located the correct sample 450 ms off).
+    const K: usize = 64;
+    coarse.sort_by(|a, b| b.1.total_cmp(&a.1));
+    coarse.truncate(K);
+
+    let limit = cand.len().saturating_sub(window.len() + 1);
+    let mut fine = (0usize, f32::MIN);
+    for (c, _) in coarse {
+        let centre = c * D;
+        for off in centre.saturating_sub(D)..=(centre + D).min(limit) {
+            let s = score(cand, window, off);
+            if s > fine.1 {
+                fine = (off, s);
+            }
+        }
+    }
+    // Least-squares gain at the chosen offset.
+    let (mut dot, mut cc) = (0.0f64, 0.0f64);
+    for i in 0..window.len() {
+        let (a, b) = (cand[fine.0 + i] as f64, window[i] as f64);
+        dot += a * b;
+        cc += a * a;
+    }
+    let gain = if cc > 0.0 { (dot / cc) as f32 } else { 0.0 };
+    (fine.0, fine.1, gain)
+}
+
+/// See [`Cmd::MatchRef`].
+#[allow(clippy::too_many_arguments)]
+fn match_ref(
+    pack_path: &Path,
+    reference: &Path,
+    at: f64,
+    window_ms: f64,
+    search_ms: f64,
+    notes: Option<String>,
+    articulation: Option<String>,
+    mic: Option<String>,
+    semitones: i32,
+    top: usize,
+) -> Result<()> {
+    let patch = crate::PlayerPatch::from_pack(pack_path)?;
+    let pack = patch
+        .pack
+        .clone()
+        .ok_or_else(|| eyre::eyre!("not a pack"))?;
+    let cache = SampleCache::with_pack(pack);
+    let note_set = notes.as_deref().map(parse_note_set).transpose()?;
+
+    let refd = crate::engine::cache::load_sample(reference)
+        .map_err(|e| eyre::eyre!("load {}: {e}", reference.display()))?;
+    let sr = refd.sample_rate;
+    let refmono = mono_of(&refd.to_f32(), refd.channels as usize, refd.num_frames);
+
+    let wlen = ((window_ms / 1000.0) * f64::from(sr)) as usize;
+    let start = (at * f64::from(sr)) as usize;
+    if start + wlen >= refmono.len() {
+        bail!(
+            "--at {at}s + window is past the end of {}",
+            reference.display()
+        );
+    }
+    let window = &refmono[start..start + wlen];
+    let search = ((search_ms / 1000.0) * f64::from(sr)) as usize;
+
+    let mut hits: Vec<MatchHit> = Vec::new();
+    for z in &patch.spec.zones {
+        if articulation.as_ref().is_some_and(|a| &z.articulation != a) {
+            continue;
+        }
+        if mic.as_ref().is_some_and(|m| &z.mic != m) {
+            continue;
+        }
+        if note_set.as_ref().is_some_and(|s| !s.contains(&z.root_key)) {
+            continue;
+        }
+        let Ok(data) = cache.get(Path::new(&z.file)) else {
+            continue;
+        };
+        let cand = mono_of(&data.to_f32(), data.channels as usize, data.num_frames);
+        for shift in -semitones..=semitones {
+            // Kontakt grid-fill is RESAMPLING: an off-grid note is a
+            // neighbouring root played faster (up) or slower (down), so the
+            // candidate has to be rate-changed before it will correlate.
+            let ratio = 2.0f64.powf(f64::from(shift) / 12.0);
+            let need = search + wlen + 2;
+            let played = if shift == 0 {
+                cand.clone()
+            } else {
+                resample(&cand, ratio, need.min((cand.len() as f64 / ratio) as usize))
+            };
+            let (offset, corr, gain) = best_alignment(window, &played, search);
+            if corr.is_finite() && gain > 0.0 {
+                hits.push(MatchHit {
+                    file: z.file.clone(),
+                    articulation: z.articulation.clone(),
+                    dynamic: z.dynamic.clone(),
+                    rr_index: z.rr_index,
+                    direction: z.direction.clone(),
+                    interval: z.interval,
+                    root_key: z.root_key,
+                    shift,
+                    offset_frames: offset,
+                    sample_rate: sr,
+                    corr,
+                    gain_db: 20.0 * gain.log10(),
+                });
+            }
+        }
+    }
+    if hits.is_empty() {
+        bail!("no candidate zones matched the filters");
+    }
+    hits.sort_by(|a, b| b.corr.total_cmp(&a.corr));
+
+    println!(
+        "reference {} at {at:.3}s, {window_ms:.0} ms window — {} candidate(s)\n",
+        reference.display(),
+        hits.len()
+    );
+    println!(
+        "  {:>5}  {:>6}  {:>9}  {:>8}  {:<10} {:<5} {:>2}  {}",
+        "corr", "gain", "offset", "onset", "artic", "dyn", "rr", "file"
+    );
+    for h in hits.iter().take(top) {
+        let off_ms = h.offset_frames as f64 / f64::from(h.sample_rate) * 1000.0;
+        // When the sample is `off_ms` in at time `at`, it was triggered
+        // `off_ms` earlier — the note's true onset in the reference.
+        let onset = at - off_ms / 1000.0;
+        let shift = if h.shift == 0 {
+            String::new()
+        } else {
+            format!(" {:+}st", h.shift)
+        };
+        let dir = if h.direction.is_empty() {
+            String::new()
+        } else {
+            format!(" {}{}", h.direction, h.interval)
+        };
+        println!(
+            "  {:>5.3}  {:>+6.2}  {:>7.1}ms  {:>7.3}s  {:<10} {:<5} {:>2}  {} (root {}{}{})",
+            h.corr,
+            h.gain_db,
+            off_ms,
+            onset,
+            h.articulation,
+            h.dynamic,
+            h.rr_index,
+            h.file,
+            h.root_key,
+            shift,
+            dir
+        );
+    }
+    Ok(())
 }
 
 fn inspect_samples(
