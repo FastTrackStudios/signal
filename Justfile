@@ -565,6 +565,20 @@ task-worklet-wasm:
         --out-name daw_standalone \
         target/wasm32-unknown-unknown/release/daw_standalone.wasm
 
+# ── CSS A/B (orchestral sampling) ────────────────────────────────────────
+
+css_pack := '/run/media/AudioHaven/Signal/Libraries/Proxy/Orchestral/Cinematic Studio Strings/1st Violins/Legato/1st Violins - Legato - Mix.signalpack'
+
+# Score the CSS legato engine against the real Kontakt reference render.
+css-ab *ARGS:
+    cargo build -p fts-cli --bin fts
+    python3 features/sampler/signal-sampler/tests/css-ab/score.py \
+        --pack {{quote(css_pack)}} --json scratch/css-ab/score.json {{ARGS}}
+
+# Same, restricted to sections (e.g. `just css-ab-sections S10,S13`).
+css-ab-sections SECTIONS:
+    just css-ab --sections {{SECTIONS}}
+
 # ── Aliases ──────────────────────────────────────────────────────────────
 
 alias c := check
