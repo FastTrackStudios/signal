@@ -64,6 +64,27 @@
 
       shellHook = ''
         [ -f .env ] && { set -a; source .env; set +a; }
+
+        # sccache — a compiler cache in front of rustc. Scope, measured on
+        # this tree: it gives ~100% hits when the SAME path is rebuilt after
+        # target/ is wiped, and 0% across different worktrees (the target-dir
+        # path is part of sccache's Rust cache key; SCCACHE_BASEDIR does not
+        # rescue it — it makes paths relative, not equal). So this does NOT
+        # dedupe the worktrees; what it does is make `just sweep` / a full
+        # target/ wipe cheap to recover from, which is the point when disk is
+        # the binding constraint.
+        #
+        # Only dependencies are cached: cargo passes -C incremental for
+        # workspace members only, and sccache skips those — so the edit loop
+        # keeps incremental compilation.
+        #
+        # Cache lives on the dev disk, not root (~/.cache would fill /).
+        # Opt out with FTS_NO_SCCACHE=1.
+        if [ -z "''${FTS_NO_SCCACHE:-}" ] && [ -z "''${CI:-}" ]; then
+          export SCCACHE_DIR="''${SCCACHE_DIR:-/run/media/Development/.cache/sccache}"
+          export SCCACHE_CACHE_SIZE="''${SCCACHE_CACHE_SIZE:-60G}"
+          export RUSTC_WRAPPER=sccache
+        fi
         # Append (not prepend): store-provided tools (dx, wasm-bindgen)
         # must win over stale cargo-installed copies; cargo/uv bins
         # (tracey, graphify) only need to be reachable.

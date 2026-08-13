@@ -1,10 +1,10 @@
 ---
 name: logging-best-practices
-description: Logging best practices focused on wide events (canonical log lines) for powerful debugging and analytics
+description: Wide-events (canonical log lines) logging — MANDATORY before writing ANY log or debug output in this repo. Triggers on tracing::info!/warn!/error!, eprintln!, println!, dbg!, console.log, "add logging", "debug this server", instrumenting a handler/RPC, or reviewing observability. The span IS the wide event — enrich it via task_telemetry::wide::set; never scatter print/log lines, never print-debug server code (write a failing test or query the span instead).
 license: MIT
 metadata:
   author: boristane
-  version: "1.0.0"
+  version: "1.1.0"
 ---
 
 # Logging Best Practices Skill

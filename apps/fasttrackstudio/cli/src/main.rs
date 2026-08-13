@@ -2,6 +2,8 @@
 //!
 //! Mounts the domain CLIs as subcommands (`fts daw <...>` → `daw::cli`,
 //! `fts keyflow <...>` → `keyflow-cli`) and manages the headless engines:
+//! `fts template <...>` classifies names through the Dynamic Template
+//! offline (no DAW involved).
 //! `fts signal engine` runs the headless signal engine — the
 //! `fasttrackstudio` binary in `--engine` mode (the rig core,
 //! ws://:4040/vox), `fts session engine` runs the standalone session
@@ -15,6 +17,8 @@ use eyre::Result;
 
 #[cfg(feature = "session")]
 mod session_engine;
+#[cfg(feature = "template")]
+mod template;
 
 #[derive(Parser)]
 #[command(name = "fts", about = "FastTrackStudio — one CLI over the whole stack")]
@@ -50,6 +54,13 @@ enum Cmd {
     Session {
         #[command(subcommand)]
         command: SessionCmd,
+    },
+    /// Dynamic Template, offline — classify names into folders and colours.
+    #[cfg(feature = "template")]
+    #[command(alias = "dynamic-template")]
+    Template {
+        #[command(subcommand)]
+        command: template::TemplateCommand,
     },
     /// Probe the known engine ports and report up/down.
     Status,
@@ -131,6 +142,8 @@ fn main() -> Result<()> {
         Cmd::Session {
             command: SessionCmd::Engine { addr },
         } => session_engine_cmd(addr),
+        #[cfg(feature = "template")]
+        Cmd::Template { command } => template::run(command),
         Cmd::Status => {
             status();
             Ok(())

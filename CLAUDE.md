@@ -78,7 +78,31 @@ cargo check -p fasttrackstudio --target wasm32-unknown-unknown --no-default-feat
 
 Dev shell: `nix develop` (or direnv `use flake`) — root `flake.nix`
 carries the FTS 1.94 toolchain pin, `dx`, wasm target, tailwindcss, and
-the native headers (alsa, pipewire, jack, avahi for vox-discover).
+the native headers (alsa, pipewire, jack, avahi for vox-discover). Also
+mold, sccache, cargo-sweep (see build performance below).
+
+**Build performance / disk** — read the `build-performance` skill before
+touching a `[profile.*]` knob in the root Cargo.toml, benchmarking a
+build-time change, or when the dev disk fills up. The short version:
+
+- Dev debuginfo is `line-tables-only` + `split-debuginfo = "unpacked"`
+  (98% of a debug binary was DWARF; the fat test binary went 1.62 GB →
+  211 MB). Need a debugger? `--profile dev-dbg`.
+- mold is the Linux linker — after pulling, `direnv reload` or links
+  fail with `cannot find -fuse-ld=mold`. Note that
+  `target.<triple>.rustflags` REPLACES `build.rustflags`; it does not
+  merge, so a new global rustflag must go in both.
+- Dependencies build at opt-level 1, with an explicit allowlist back at
+  3 for audio-thread crates. A dev run of the rig must never xrun — if
+  one does, run `--release` or extend the allowlist, never raise
+  `package."*"` wholesale.
+- Cargo never GCs `target/`. `just disk`, `just sweep`, `just sweep-all`.
+  Never delete another agent's worktree target dir.
+- sccache is on, but it does NOT dedupe across worktrees (measured 0%);
+  it only makes wiping `target/` cheap to recover from.
+- Benchmarking: check `uptime` / `pgrep -c rustc` first — other agents
+  and background `cargo rail` runs on this 32-core box will invalidate
+  an A/B silently.
 
 Live rig: `cargo build -p fasttrackstudio` from the repo root →
 `target/debug/fasttrackstudio --engine` (ws://:4040/vox); browser remote
@@ -192,6 +216,32 @@ queue is refilled.)
 - signal-audio remnants, duplicate wav/resampler helpers → libs/utils
   or audiocore-dsp
 - three CLIs → one `fts` CLI in apps/ (subcommands)
+
+## Logging & tracing — wide events, ALWAYS
+
+Before writing ANY log or debug output, load the
+`logging-best-practices` skill (`.claude/skills/logging-best-practices/`
+— read `rules/fts-rust.md` first). The rules are not optional:
+
+- **The span IS the wide event.** `architect` opens one span per vox
+  RPC, `tower_http` one per HTTP request. Enrich it with
+  `task_telemetry::wide::set("namespace.field", value)` — one
+  context-rich event per request, never scattered log lines.
+- **Never `println!`/`eprintln!`/`dbg!` in server or library code** —
+  not in committed code, and not as debug scaffolding either. To chase
+  a bug, reproduce it in a failing unit test (the artifact that
+  outlives the session) or query the span fields; if you must watch a
+  live process, use `tracing` with structured fields behind `RUST_LOG`
+  and delete it before committing.
+- Follow the established field names (`org.slug`, `auth.*`, `perm.*`,
+  `media.*`, `share.*`); record the **shape**, never the secret (no
+  tokens, no passwords, no raw note paths/URIs in fields).
+- Denials/refusals get ONE `tracing::warn!` line (alertable); allowed
+  outcomes ride the span only.
+- New surface = new fields: any new HTTP route or RPC service must set
+  its outcome fields on the span the way `authorize_media`
+  (`media.authorized`, `media.auth_via`) and the share gate
+  (`share.outcome`, `share.target_kind`) do.
 
 ## Agent skills
 

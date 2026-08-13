@@ -20,6 +20,14 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 cd "$SCRIPT_DIR/.."
 
+# Every scratch dir this script mktemp's, removed on exit (success OR failure).
+# Each build stages a multi-hundred-MB watch DerivedData tree and an IPA
+# Payload; leaking them accumulated ~13 GB of /var/folders junk on airlock and
+# eventually failed builds outright with "No space left on device".
+TMP_DIRS=()
+cleanup_tmp() { [ ${#TMP_DIRS[@]} -eq 0 ] || rm -rf "${TMP_DIRS[@]}"; }
+trap cleanup_tmp EXIT
+
 # Which product to build+ship. Defaults to the FastTrackStudio app; override
 # for Task (or any dx iOS app in the tree):
 #   DX_PACKAGE=task-app-mobile DX_APP_DIR=apps/task/mobile DX_FEATURES="" \
@@ -266,10 +274,7 @@ if [ -n "$WATCH_APP" ]; then
             || { echo "ERROR: xcodegen failed"; tail -25 /tmp/fts-watch-xcodegen.log; exit 1; }
     fi
     WATCH_DD="$(mktemp -d)"
-    # Clean the watch DerivedData on exit — otherwise every build leaks a
-    # multi-hundred-MB temp dir (they accumulated to gigabytes and filled the
-    # airlock disk, failing builds with "No space left on device").
-    trap 'rm -rf "$WATCH_DD"' EXIT
+    TMP_DIRS+=("$WATCH_DD")
     # The watch build's Xcode is decoupled from the iOS build's: the dx iOS
     # Rust build's HOST build scripts fail to link under Xcode 27 beta
     # (ld: symbol(s) not found for arm64), so the main build must stay on the
@@ -331,6 +336,7 @@ codesign --verify --deep --strict "$APP"
 
 echo "=== packaging IPA ==="
 WORK="$(mktemp -d)"
+TMP_DIRS+=("$WORK")
 mkdir -p "$WORK/Payload"
 cp -R "$APP" "$WORK/Payload/"
 IPA="$WORK/FastTrackStudio.ipa"
