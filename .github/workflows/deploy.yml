@@ -130,8 +130,14 @@ jobs:
           # absence here is the same failure the note above describes — a
           # session-only commit that FIXED the task-web wasm build did not
           # redeploy task, so the fix sat on main while prod stayed broken.
-          task_paths='^apps/task/|^crates/task/|^features/task/|^crates/session/|^libs/architect/|^libs/editor/|^libs/fts-ui/|^Cargo\.(toml|lock)$|^flake\.(nix|lock)$|^\.github/workflows/deploy\.yml$'
-          site_paths='^apps/site/|^libs/editor/|^libs/fts-ui/|^crates/keyflow/|^features/engraver/|^crates/input/input-config-proto/|^features/reaper/reaper-input/config/|^Cargo\.(toml|lock)$|^flake\.(nix|lock)$|^\.github/workflows/deploy\.yml$'
+          # `nix/` for the same reason as flake.nix: the root flake is
+          # dendritic, so the build plumbing that produces these images
+          # lives in nix/modules/ (crane.nix, packages/task-server.nix),
+          # not in flake.nix itself. Third instance of this bug — the
+          # commit that unbroke the image build (mold in the sandbox) did
+          # not itself redeploy, so prod stayed on the last good image.
+          task_paths='^apps/task/|^crates/task/|^features/task/|^crates/session/|^libs/architect/|^libs/editor/|^libs/fts-ui/|^Cargo\.(toml|lock)$|^flake\.(nix|lock)$|^nix/|^\.github/workflows/deploy\.yml$'
+          site_paths='^apps/site/|^libs/editor/|^libs/fts-ui/|^crates/keyflow/|^features/engraver/|^crates/input/input-config-proto/|^features/reaper/reaper-input/config/|^Cargo\.(toml|lock)$|^flake\.(nix|lock)$|^nix/|^\.github/workflows/deploy\.yml$'
 
           task=false; site=false
           grep -qE "$task_paths" /tmp/changed && task=true
