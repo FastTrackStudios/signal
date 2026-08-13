@@ -80,6 +80,7 @@ arc-swap    = "1.7"
 # restores a hosted CLAP/VST3 plugin's saved parameters.
 base64      = "0.22"
 hound       = "3.5"
+realfft.workspace = true
 # Content-hash NAM models to key the loudness-calibration cache (matches
 # signal-nam's SHA-256 file identity).
 sha2        = "0.10"

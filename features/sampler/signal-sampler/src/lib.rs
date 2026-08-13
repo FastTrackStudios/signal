@@ -98,6 +98,7 @@ pub mod node_render;
 pub mod nord;
 pub mod pack_cli;
 pub mod pack_rewrite;
+pub mod ref_match;
 pub mod report;
 pub mod preset_registry;
 pub mod preset_spec;
