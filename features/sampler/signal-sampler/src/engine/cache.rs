@@ -189,9 +189,20 @@ impl Pcm {
     }
 
     /// The samples as floats, copying only when they are not already floats.
+    ///
+    /// A BULK read: it allocates the whole sample, so it is never realtime-safe
+    /// and has no business on the audio thread. Being off the audio thread is
+    /// also why it must be COMPLETE rather than fast — a streamed sample is
+    /// decoded in full here instead of being read through
+    /// [`Pcm::sample`], which answers 0.0 for any chunk the streamer has not
+    /// fetched yet and merely queues a request. Read that way, a streamed
+    /// sample returns silence wherever streaming has not caught up, and
+    /// different audio on every run; every offline consumer (loudness,
+    /// extraction, analysis, reference matching) was quietly affected.
     pub fn to_f32(&self) -> std::borrow::Cow<'_, [f32]> {
         match self {
             Self::F32(v) => std::borrow::Cow::Borrowed(v.as_slice()),
+            Self::Streamed(s) => std::borrow::Cow::Owned(s.decode_all()),
             _ => std::borrow::Cow::Owned((0..self.len()).map(|i| self.sample(i)).collect()),
         }
     }

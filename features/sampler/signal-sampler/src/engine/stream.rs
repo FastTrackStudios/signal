@@ -212,6 +212,47 @@ impl StreamedSample {
         self.chunks.store(Arc::new(kept));
     }
 
+    /// Decode the WHOLE sample, here and now, as interleaved floats.
+    ///
+    /// [`sample`](Self::sample) answers 0.0 for a chunk that has not been
+    /// fetched yet and merely requests it — the only correct behaviour on the
+    /// audio thread, where blocking is a dropout. But an offline consumer
+    /// (analysis, loudness, extraction, reference matching) reading through
+    /// that path gets SILENCE wherever the streamer has not caught up, and
+    /// gets different audio every run depending on timing. This is the path
+    /// for those callers: it decodes every chunk synchronously, touches
+    /// neither the resident set nor the request queue, and always returns the
+    /// same samples.
+    ///
+    /// Never call it from a realtime context — it decodes the entire sample.
+    pub fn decode_all(&self) -> Vec<f32> {
+        const SCALE: f32 = 1.0 / 32768.0;
+        let ch = self.channels.max(1) as usize;
+        let total = self.num_frames * ch;
+        let mut out = Vec::with_capacity(total);
+        // The head is already decoded and always resident.
+        out.extend(self.head.iter().map(|s| *s as f32 * SCALE));
+        let Some(stream) = self.map.get(self.offset..self.offset + self.bytes) else {
+            out.resize(total, 0.0);
+            return out;
+        };
+        let mut frame = (out.len() / ch) as u32;
+        while (out.len()) < total {
+            let want = CHUNK_FRAMES.min(self.num_frames as u32 - frame);
+            match decode_chunk(stream, &self.index, frame, want, self.channels) {
+                Some(chunk) if !chunk.is_empty() => {
+                    out.extend(chunk.iter().map(|s| *s as f32 * SCALE));
+                    frame += (chunk.len() / ch) as u32;
+                }
+                // A chunk that will not decode ends the sample rather than
+                // silently padding it with zeros that read as real audio.
+                _ => break,
+            }
+        }
+        out.truncate(total);
+        out
+    }
+
     /// Anonymous bytes this sample holds right now: its head plus whatever
     /// chunks are resident.
     pub fn resident_bytes(&self) -> usize {
@@ -516,6 +557,62 @@ mod tests {
     /// side by side makes fill latency (not correctness) the thing under
     /// test. Serialise them.
     static SERIAL: Mutex<()> = Mutex::new(());
+
+    /// A bulk read of a streamed sample must be COMPLETE and the same every
+    /// time — the per-sample path answers 0.0 for a chunk that has not been
+    /// fetched yet, which made `to_f32()` return silence wherever streaming
+    /// had not caught up, and different audio on every run.
+    #[test]
+    fn decode_all_is_complete_and_deterministic() {
+        let _serial = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+        let (sr, ch, secs) = (48_000u32, 2u16, 4.0f64);
+        let n = (sr as f64 * secs) as usize;
+        let pcm: Vec<f32> = (0..n)
+            .flat_map(|i| {
+                let t = i as f64 / sr as f64;
+                let v = (t * 220.0 * std::f64::consts::TAU).sin() as f32 * 0.8;
+                [v, -v]
+            })
+            .collect();
+        let ints: Vec<i32> = pcm
+            .iter()
+            .map(|s| (s.clamp(-1.0, 1.0) * 8_388_607.0) as i32)
+            .collect();
+        let Ok(flac) = super::super::cache::encode_flac_i24_for_test(&ints, ch, sr) else {
+            return;
+        };
+        let tmp = std::env::temp_dir().join(format!("fts-decode-all-{}.flac", std::process::id()));
+        std::fs::write(&tmp, &flac).expect("write");
+        let file = std::fs::File::open(&tmp).expect("open");
+        let map = Arc::new(unsafe { memmap2::Mmap::map(&file) }.expect("map"));
+        let s = StreamedSample::open(Arc::clone(&map), 0, flac.len(), ch, sr, n)
+            .expect("index + head");
+
+        // Nothing beyond the head has been fetched, which is exactly the
+        // state that used to yield silence.
+        assert!(s.chunks.load().is_empty(), "expected a cold sample");
+        let all = s.decode_all();
+        assert_eq!(all.len(), n * ch as usize, "must decode every frame");
+
+        // Correct well past the head, where the streamer had fetched nothing.
+        let far = (HEAD_FRAMES as usize + CHUNK_FRAMES as usize + 500) * ch as usize;
+        assert!(
+            (all[far] - pcm[far]).abs() < 0.01,
+            "far sample {far}: {} vs {}",
+            all[far],
+            pcm[far]
+        );
+        let tail = n * ch as usize - 4;
+        assert!(
+            (all[tail] - pcm[tail]).abs() < 0.01,
+            "tail sample: {} vs {}",
+            all[tail],
+            pcm[tail]
+        );
+        // Same answer regardless of what streaming has done in between.
+        assert_eq!(all, s.decode_all(), "bulk decode must be deterministic");
+        let _ = std::fs::remove_file(&tmp);
+    }
 
     /// A streamed sample must read back the same audio as decoding the whole
     /// file — head, chunk boundaries and all — while holding only its head.
