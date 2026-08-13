@@ -99,3 +99,26 @@ Loki, for the log records that carry the same trace id:
 ```
 {service_name="task-server"} | json | perm_decision="deny"
 ```
+
+## Debugging is not printing
+
+The `eprintln!` reflex is the anti-pattern this skill exists to
+delete, and it applies to *scaffolding* too, not just committed code:
+
+1. **Reproduce in a failing unit test.** A test is the artifact that
+   outlives the session — it pins the bug, proves the fix, and guards
+   the regression. `eprintln!` output proves nothing once the terminal
+   scrolls.
+2. **Query the span.** If the code already runs under a request span,
+   the answer is usually a missing `wide::set` field away — add the
+   field, keep it, and read it in Tempo/`--no-capture` test output.
+   That field is *useful forever*; a print statement is noise you must
+   remember to remove.
+3. **Live process, last resort:** `tracing::debug!` with structured
+   fields behind `RUST_LOG=target=debug`, and delete it before
+   committing. Never `println!`/`eprintln!`/`dbg!` — they bypass the
+   subscriber, can't be filtered, and end up committed.
+
+In tests themselves, assertions with rich messages
+(`assert!(cond, "context: {value}")`) replace prints — a failing
+assertion shows its context exactly when needed.
