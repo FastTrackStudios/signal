@@ -35,33 +35,41 @@
 //! decimated peak on a sustained note is broad and frequently in the wrong
 //! place, which is exactly how the first attempt at this went wrong.
 //!
-//! # Status: identification works, alignment does not yet
+//! # Overlapping voices
 //!
-//! Measured on real material, this reliably names the right zone family — a
-//! G4 render puts root 67 top every time, at every window length tried — and
-//! the fit ranks correctly WHEN the true offset is among the proposals: given
-//! a 20 ms scan it finds the onset to 1.1 ms and explains 74.9%, against 57.5%
-//! for the best wrong offset.
+//! A legato transition is not one sample: the outgoing body, the transition
+//! recording and the incoming body sound together, each from its OWN onset. A
+//! single shared-offset fit cannot express that — given two onsets it locks
+//! onto one and leaves the other in the residual. [`decompose`] pulls that
+//! thread: fit the best group, subtract exactly what it contributed, fit
+//! again. Each pass names another voice and the moment it entered.
 //!
-//! Widen the scan to seconds and it goes astray, returning offsets that imply
-//! a note starting before the file did. Two compounding reasons, both real:
+//! # What it took to be trustworthy
 //!
-//! - A sustained string note is PERIODICALLY SELF-SIMILAR, so offsets a period
-//!   apart alias, and the ambiguity does not go away with a longer window
-//!   (tried out to 1.5 s).
-//! - Our own render is not `sample × constant gain`: the engine imposes its
-//!   ENV_FLEX attack, two-stage fades and the vibrato pair, so the attack —
-//!   the one landmark that is NOT periodic — is exactly where render and raw
-//!   sample differ most. The fit therefore prefers steady regions, where
-//!   per-block gains can absorb the difference and every offset looks alike.
+//! Four things, each found by a ground-truth test on REAL samples (see the
+//! `--self-test` mode of `fts signal pack match-ref`) rather than reasoned
+//! about — the noise-based unit tests below pass happily without any of them,
+//! because noise has neither periodic structure nor an envelope:
 //!
-//! So the honest use today is a TIGHT scan around a known note time (we have
-//! the MIDI, so onsets are known to ±300 ms), not a blind multi-second sweep.
-//! To make a wide scan trustworthy, the next steps are: an end-to-end test
-//! that mixes REAL pack samples at known offsets and gains (the unit tests
-//! below use noise, which has no periodic ambiguity, so they cannot catch
-//! this), and rejecting physically impossible fits — an offset implying an
-//! onset before the reference starts is never right.
+//! - **Gains per block.** A sampler's output is the sample times a MOVING
+//!   gain, so one constant gain cannot span a window that rises 20 dB.
+//! - **A ridge term**, because the dynamic layers of one note are
+//!   near-collinear and plain least squares answered with large cancelling
+//!   gains.
+//! - **Whitening with a CENTRED MOVING rms** in the coarse sweep. Per-block
+//!   whitening does not commute with shifting, which distorts every lag
+//!   differently and destroys the peak: an exact mixture of real samples fit
+//!   at 33%, 216 ms off.
+//! - **Proposals on a uniform grid**, not only the coarse ranking. The window
+//!   is a mixture of members that resemble each other, so the correlation peak
+//!   is not dependable — the true offset, which the fit explains at 100%, was
+//!   not in the coarse top 48 at all while the search settled for 60%
+//!   elsewhere. The fit cannot be fooled; the ranking can, so the ranking only
+//!   proposes.
+//!
+//! Measured on an exact mixture of three real dynamic layers: offset recovered
+//! sample-exactly, gains 0.800/0.397/0.243 against a truth of 0.8/0.4/0.267,
+//! and both onsets of an overlapping pair found to the sample.
 
 use realfft::RealFftPlanner;
 use realfft::num_complex::Complex32;
@@ -75,6 +83,19 @@ pub struct GroupFit {
     pub explained: f32,
     /// Least-squares gain per member, in the order given.
     pub gains: Vec<f32>,
+    /// The fitted signal itself, window-length — what this group contributes.
+    /// Subtracting it is how overlapping voices are peeled apart.
+    pub model: Vec<f32>,
+}
+
+/// One voice found in a window: which group, and how it was fitted.
+#[derive(Debug, Clone)]
+pub struct VoiceFit {
+    /// Index into the `groups` passed to [`decompose`].
+    pub group: usize,
+    pub fit: GroupFit,
+    /// Fraction of the ORIGINAL window energy this voice accounts for.
+    pub share: f32,
 }
 
 /// Sliding dot products of `window` against `hay`, via FFT.
@@ -119,16 +140,29 @@ fn xcorr(hay: &[f32], window: &[f32], planner: &mut RealFftPlanner<f32>) -> Vec<
 /// offering it offsets that fit 57.5%. Whitening makes a quiet region as
 /// proposable as a loud one; the fit, which models the envelope properly,
 /// still decides.
+/// The normaliser is a CENTRED MOVING rms, not a per-block one, because
+/// whitening has to commute with shifting. Fixed blocks do not: shift the
+/// signal half a block and different samples share a normaliser, so every lag
+/// is distorted differently and the correlation peak is destroyed. That bug
+/// made an exact mixture of real samples — no envelope, no engine, a window
+/// that IS the model — fit at 33% and 216 ms off.
 fn whiten(x: &[f32]) -> Vec<f32> {
-    let global: f32 = (x.iter().map(|v| v * v).sum::<f32>() / x.len().max(1) as f32).sqrt();
-    let floor = (global * 1e-3).max(1e-9);
-    let mut out = Vec::with_capacity(x.len());
-    for chunk in x.chunks(BLOCK) {
-        let rms = (chunk.iter().map(|v| v * v).sum::<f32>() / chunk.len() as f32).sqrt();
-        let g = 1.0 / rms.max(floor);
-        out.extend(chunk.iter().map(|v| v * g));
+    let n = x.len();
+    if n == 0 {
+        return Vec::new();
     }
-    out
+    let e = energy_prefix(x);
+    let global = (e[n] / n as f64).sqrt();
+    let floor = (global * 1e-3).max(1e-12);
+    let half = BLOCK / 2;
+    (0..n)
+        .map(|i| {
+            let lo = i.saturating_sub(half);
+            let hi = (i + half).min(n);
+            let rms = ((e[hi] - e[lo]) / (hi - lo).max(1) as f64).max(0.0).sqrt();
+            (x[i] as f64 / rms.max(floor)) as f32
+        })
+        .collect()
 }
 
 /// Running `Σ x²` prefix sums, for window energies in O(1).
@@ -201,7 +235,11 @@ const RIDGE: f64 = 1e-3;
 ///
 /// Returns the mean gain of each member (energy-weighted across blocks) and
 /// the fraction of the window's energy explained.
-fn fit_at(window: &[f32], members: &[Vec<f32>], offset: usize) -> Option<(Vec<f32>, f32)> {
+fn fit_at(
+    window: &[f32],
+    members: &[Vec<f32>],
+    offset: usize,
+) -> Option<(Vec<f32>, f32, Vec<f32>)> {
     let w = window.len();
     if members.iter().any(|m| offset + w > m.len()) {
         return None;
@@ -211,6 +249,7 @@ fn fit_at(window: &[f32], members: &[Vec<f32>], offset: usize) -> Option<(Vec<f3
     let mut energy_total = 0.0f64;
     let mut gain_acc = vec![0.0f64; k];
     let mut weight_acc = 0.0f64;
+    let mut model = vec![0.0f32; w];
 
     for b0 in (0..w).step_by(BLOCK) {
         let b1 = (b0 + BLOCK).min(w);
@@ -251,6 +290,13 @@ fn fit_at(window: &[f32], members: &[Vec<f32>], offset: usize) -> Option<(Vec<f3
             resid_total += energy;
             continue;
         };
+        for i in 0..k {
+            let ci = &members[i][offset + b0..offset + b1];
+            let g = gains[i] as f32;
+            for (m, c) in model[b0..b1].iter_mut().zip(ci) {
+                *m += g * c;
+            }
+        }
         let mut resid = energy;
         for i in 0..k {
             resid -= 2.0 * gains[i] * rhs[i];
@@ -275,7 +321,7 @@ fn fit_at(window: &[f32], members: &[Vec<f32>], offset: usize) -> Option<(Vec<f3
         .into_iter()
         .map(|g| (g / weight_acc) as f32)
         .collect();
-    Some((gains, explained))
+    Some((gains, explained, model))
 }
 
 /// Best alignment of a candidate group under `window`.
@@ -324,12 +370,25 @@ pub fn best_fit(
     let mut order: Vec<usize> = (0..=limit).collect();
     order.sort_by(|&a, &b| coarse[b].total_cmp(&coarse[a]));
 
+    // Coverage, not just ranking. The coarse score correlates each member
+    // against the window, but the window is a MIXTURE of members that are
+    // themselves alike (one note at several dynamics), so its peak is not
+    // dependable: measured on an exact mixture of real samples, the true
+    // offset — which the fit explains at 100% — was not in the coarse top 48
+    // at all, and the search settled for 60% elsewhere. So propose a uniform
+    // grid as well and let the fit, which cannot be fooled, decide between
+    // them. The grid step is the refine radius, so every offset is within
+    // reach of some proposal.
+    let step = refine.max(1);
+    order.truncate(peaks);
+    order.extend((0..=limit).step_by(step));
+
     // Fine stage: joint least squares at the best proposals. The coarse score
     // only proposes; the fit decides, because only the fit can tell a group
     // that explains the mixture from one that merely resembles part of it.
     let mut best: Option<GroupFit> = None;
     let mut seen: Vec<usize> = Vec::new();
-    for &c in order.iter().take(peaks) {
+    for &c in order.iter() {
         if seen.iter().any(|&s| c.abs_diff(s) <= refine) {
             continue;
         }
@@ -337,18 +396,81 @@ pub fn best_fit(
         let lo = c.saturating_sub(refine);
         let hi = (c + refine).min(limit);
         for off in lo..=hi {
-            if let Some((gains, explained)) = fit_at(window, members, off) {
+            if let Some((gains, explained, model)) = fit_at(window, members, off) {
                 if best.as_ref().is_none_or(|b| explained > b.explained) {
                     best = Some(GroupFit {
                         offset: off,
                         explained,
                         gains,
+                        model,
                     });
                 }
             }
         }
     }
     best
+}
+
+/// Peel overlapping voices apart, one at a time.
+///
+/// A legato transition is not one sample: the outgoing body, the transition
+/// recording and the incoming body sound TOGETHER, each from its own onset. A
+/// single shared-offset fit cannot express that — offered two onsets it locks
+/// onto one and leaves the other in the residual, which is exactly the handle
+/// to pull. So fit the best group anywhere in the scan, subtract precisely
+/// what it contributed, and fit again: each pass names another voice and the
+/// timing it entered at, which is what "which samples were added together, and
+/// when" means concretely.
+///
+/// Stops at `max_voices`, or when a pass explains less than `min_share` of the
+/// original window — an honest floor, since with enough candidates something
+/// will always shave a little off a residual.
+pub fn decompose(
+    window: &[f32],
+    groups: &[Vec<Vec<f32>>],
+    scan: usize,
+    peaks: usize,
+    refine: usize,
+    max_voices: usize,
+    min_share: f32,
+) -> Vec<VoiceFit> {
+    let total: f64 = window.iter().map(|v| (*v as f64) * (*v as f64)).sum();
+    if total <= 0.0 {
+        return Vec::new();
+    }
+    let mut residual = window.to_vec();
+    let mut found = Vec::new();
+    for _ in 0..max_voices {
+        let mut best: Option<(usize, GroupFit)> = None;
+        for (gi, members) in groups.iter().enumerate() {
+            let Some(fit) = best_fit(&residual, members, scan, peaks, refine) else {
+                continue;
+            };
+            if best
+                .as_ref()
+                .is_none_or(|(_, b)| fit.explained > b.explained)
+            {
+                best = Some((gi, fit));
+            }
+        }
+        let Some((gi, fit)) = best else { break };
+        // Share of the ORIGINAL window, not of the shrinking residual, so the
+        // numbers across voices stay comparable and the floor means something.
+        let energy: f64 = fit.model.iter().map(|v| (*v as f64) * (*v as f64)).sum();
+        let share = (energy / total) as f32;
+        if share < min_share {
+            break;
+        }
+        for (r, m) in residual.iter_mut().zip(&fit.model) {
+            *r -= m;
+        }
+        found.push(VoiceFit {
+            group: gi,
+            fit,
+            share,
+        });
+    }
+    found
 }
 
 #[cfg(test)]

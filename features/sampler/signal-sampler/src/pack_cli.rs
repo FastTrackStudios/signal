@@ -82,7 +82,7 @@ enum Cmd {
     MatchRef {
         pack: PathBuf,
         /// Reference render (e.g. a Kontakt bounce).
-        #[arg(long)]
+        #[arg(long, default_value = "")]
         reference: PathBuf,
         /// Seconds into the reference to identify.
         #[arg(long)]
@@ -111,6 +111,12 @@ enum Cmd {
         /// How many candidate groups to report.
         #[arg(long, default_value_t = 8)]
         top: usize,
+        /// Ignore `--reference` and score the matcher against a reference
+        /// BUILT from this pack's own samples at known offsets and gains.
+        /// Real content, known answer — the check the noise-based unit tests
+        /// cannot make, because noise has no periodic self-similarity.
+        #[arg(long)]
+        self_test: bool,
     },
     /// Waveform report for pack samples: loop points, sample window, lead-in/
     /// arrival markers over each decoded waveform. Self-contained HTML.
@@ -407,18 +413,25 @@ pub fn cli_main(argv: impl IntoIterator<Item = OsString>) -> Result<()> {
             mic,
             semitones,
             top,
-        } => match_ref(
-            &pack,
-            &reference,
-            at,
-            window_ms,
-            scan_ms,
-            notes,
-            articulation,
-            mic,
-            semitones,
-            top,
-        ),
+            self_test,
+        } => {
+            if self_test {
+                match_ref_self_test(&pack, window_ms, scan_ms, articulation, mic)
+            } else {
+                match_ref(
+                    &pack,
+                    &reference,
+                    at,
+                    window_ms,
+                    scan_ms,
+                    notes,
+                    articulation,
+                    mic,
+                    semitones,
+                    top,
+                )
+            }
+        }
         Cmd::InspectSamples {
             pack,
             articulation,
@@ -1458,6 +1471,191 @@ fn resample(src: &[f32], ratio: f64, out_len: usize) -> Vec<f32> {
             src[idx] * (1.0 - frac) + src[idx + 1] * frac
         })
         .collect()
+}
+
+
+/// Score the matcher against a reference built from the pack's OWN samples at
+/// known offsets and gains — see [`Cmd::MatchRef::self_test`].
+///
+/// The unit tests in [`crate::ref_match`] fit synthetic noise, which has no
+/// periodic structure and so cannot exhibit the ambiguity that real sustained
+/// strings do. This builds the same experiment out of real samples: place one
+/// zone at a known onset, sum a second zone at a different known onset (the
+/// crossfade case — a transition is two samples overlapping), and ask the
+/// matcher to recover what it was given.
+fn match_ref_self_test(
+    pack_path: &Path,
+    window_ms: f64,
+    scan_ms: f64,
+    articulation: Option<String>,
+    mic: Option<String>,
+) -> Result<()> {
+    let patch = crate::PlayerPatch::from_pack(pack_path)?;
+    let pack = patch.pack.clone().ok_or_else(|| eyre::eyre!("not a pack"))?;
+    let cache = SampleCache::with_pack(pack);
+
+    // One group: the dynamic layers of a single zone family.
+    let mut chosen: Option<(String, u8, String, u32, u32)> = None;
+    let mut group: Vec<(String, Vec<f32>)> = Vec::new();
+    let mut sr = 48_000u32;
+    for z in &patch.spec.zones {
+        if articulation.as_ref().is_some_and(|a| &z.articulation != a) {
+            continue;
+        }
+        if mic.as_ref().is_some_and(|m| &z.mic != m) {
+            continue;
+        }
+        let key = (
+            z.articulation.clone(),
+            z.root_key,
+            z.direction.clone(),
+            z.interval,
+            z.rr_index,
+        );
+        if chosen.as_ref().is_some_and(|c| c != &key) {
+            continue;
+        }
+        let Ok(data) = cache.get(Path::new(&z.file)) else {
+            continue;
+        };
+        sr = data.sample_rate;
+        chosen = Some(key);
+        group.push((
+            z.dynamic.clone(),
+            mono_of(&data.to_f32(), data.channels as usize, data.num_frames),
+        ));
+    }
+    let (Some(key), false) = (chosen, group.is_empty()) else {
+        bail!("no zones matched the filters");
+    };
+    let members: Vec<Vec<f32>> = group.iter().map(|(_, a)| a.clone()).collect();
+    let shortest = members.iter().map(|m| m.len()).min().unwrap_or(0);
+
+    let wlen = ((window_ms / 1000.0) * f64::from(sr)) as usize;
+    let scan = ((scan_ms / 1000.0) * f64::from(sr)) as usize;
+    // A known offset inside every member, comfortably past the attack.
+    let truth = (scan / 3).min(shortest.saturating_sub(wlen + 1));
+    if truth == 0 || wlen == 0 {
+        bail!("samples too short for a {window_ms} ms window");
+    }
+    let gains: Vec<f32> = (0..members.len())
+        .map(|i| 0.8 / (1.0 + i as f32))
+        .collect();
+
+    println!(
+        "self-test on {} root {} rr {} — {} layer(s), truth offset {:.1} ms\n",
+        key.0,
+        key.1,
+        key.4,
+        members.len(),
+        truth as f64 / f64::from(sr) * 1000.0
+    );
+
+    // Case 1: a static mixture of the group's layers at one shared onset.
+    let window: Vec<f32> = (0..wlen)
+        .map(|i| {
+            members
+                .iter()
+                .zip(&gains)
+                .map(|(m, g)| g * m[truth + i])
+                .sum()
+        })
+        .collect();
+    match crate::ref_match::best_fit(&window, &members, scan, 48, 24) {
+        Some(fit) => {
+            let err = fit.offset as f64 - truth as f64;
+            println!(
+                "  one group      offset {:+.1} ms off truth   explained {:.1}%   gains {}",
+                err / f64::from(sr) * 1000.0,
+                fit.explained * 100.0,
+                fit.gains
+                    .iter()
+                    .map(|g| format!("{g:.3}"))
+                    .collect::<Vec<_>>()
+                    .join(" ")
+            );
+            println!(
+                "                 {}",
+                if err.abs() <= 2.0 {
+                    "PASS — sample-exact on real content"
+                } else {
+                    "FAIL — the offset is wrong on real content"
+                }
+            );
+        }
+        None => println!("  one group      FAIL — no fit"),
+    }
+
+    // Case 1b: the same mixture, but placed at offset ZERO. If the search can
+    // find a mixture only when it sits at the very start of the scan, the
+    // coarse stage is what is broken, not the fit.
+    let window0: Vec<f32> = (0..wlen)
+        .map(|i| members.iter().zip(&gains).map(|(m, g)| g * m[i]).sum())
+        .collect();
+    match crate::ref_match::best_fit(&window0, &members, scan, 48, 24) {
+        Some(fit) => println!(
+            "  at offset 0    found {:.1} ms   explained {:.1}%",
+            fit.offset as f64 / f64::from(sr) * 1000.0,
+            fit.explained * 100.0
+        ),
+        None => println!("  at offset 0    no fit"),
+    }
+
+    // Case 2: the crossfade case — the same layers, but a SECOND copy laid in
+    // at a different onset, as an overlapping transition would be. A model
+    // that assumes one shared offset cannot express this; the point is to
+    // measure how badly it goes wrong before the multi-voice fit lands.
+    let second = truth / 2;
+    let window2: Vec<f32> = (0..wlen)
+        .map(|i| {
+            let a: f32 = members
+                .iter()
+                .zip(&gains)
+                .map(|(m, g)| g * m[truth + i])
+                .sum();
+            let b: f32 = members
+                .iter()
+                .map(|m| 0.5 * m[second + i])
+                .sum();
+            a + b
+        })
+        .collect();
+    println!(
+        "\n  crossfade truth: a voice at {:.1} ms and another at {:.1} ms",
+        truth as f64 / f64::from(sr) * 1000.0,
+        second as f64 / f64::from(sr) * 1000.0
+    );
+    let groups = vec![members.clone()];
+    let voices = crate::ref_match::decompose(&window2, &groups, scan, 48, 24, 3, 0.02);
+    if voices.is_empty() {
+        println!("  two onsets     FAIL — nothing found");
+    }
+    for (i, v) in voices.iter().enumerate() {
+        let off_ms = v.fit.offset as f64 / f64::from(sr) * 1000.0;
+        let d_late = off_ms - truth as f64 / f64::from(sr) * 1000.0;
+        let d_early = off_ms - second as f64 / f64::from(sr) * 1000.0;
+        let hit = if d_late.abs() <= 2.0 {
+            "= the later voice "
+        } else if d_early.abs() <= 2.0 {
+            "= the earlier voice"
+        } else {
+            "?? matches neither"
+        };
+        println!(
+            "  voice {}        offset {:8.1} ms  {}   share {:5.1}%   gains {}",
+            i + 1,
+            off_ms,
+            hit,
+            v.share * 100.0,
+            v.fit
+                .gains
+                .iter()
+                .map(|g| format!("{g:.3}"))
+                .collect::<Vec<_>>()
+                .join(" ")
+        );
+    }
+    Ok(())
 }
 
 /// See [`Cmd::MatchRef`].
