@@ -176,45 +176,86 @@ def rms(a: Audio, start: float, end: float) -> float:
 class SectionScore:
     name: str
     level_ratio: float  # ref / ours, linear (1.0 = same loudness)
-    mean_abs_db: float  # mean |20*log10(ref/ours)| over the envelope
-    shape_db: float  # the same, after gain-matching ours to ref
+    lag_ms: float  # how late ours is vs the reference (envelope cross-correlation)
+    shape_db: float  # envelope difference, gain-matched AND lag-aligned
+    mean_abs_db: float  # mean |20*log10(ref/ours)|, raw — the rounds 1-7 number
     max_abs_db: float
     ref_rms_db: float
     ours_rms_db: float
 
     def bad(self) -> bool:
-        return self.shape_db >= 4.0 or not (0.8 <= self.level_ratio <= 1.25)
+        return (
+            self.shape_db >= 4.0
+            or not (0.8 <= self.level_ratio <= 1.25)
+            or abs(self.lag_ms) > 20.0
+        )
 
     def row(self) -> str:
         return (
             f"{'!!' if self.bad() else '  '} {self.name:24s} lvl {self.level_ratio:6.2f}  "
-            f"shape {self.shape_db:6.2f} dB  raw {self.mean_abs_db:6.2f} dB  "
-            f"max {self.max_abs_db:7.2f} dB  ref {self.ref_rms_db:7.2f}  ours {self.ours_rms_db:7.2f}"
+            f"lag {self.lag_ms:+6.0f} ms  shape {self.shape_db:6.2f} dB  "
+            f"raw {self.mean_abs_db:6.2f} dB  ref {self.ref_rms_db:7.2f}  ours {self.ours_rms_db:7.2f}"
         )
 
 
-def score_section(ref: Audio, ours: Audio, start: float, end: float, name: str) -> SectionScore:
-    """Two independent numbers, deliberately kept apart.
+# How far the lag search looks in each direction.
+MAX_LAG_MS = 200.0
 
-    `level_ratio` is loudness — a single gain constant, fixed by a trim.
-    `shape_db` is contour — the envelope difference AFTER that gain is matched
-    out, i.e. what is left when loudness is not the problem. Rounds 1-7 scored
-    on the un-normalized `mean_abs_db`, where a section could look bad purely
-    because of a trim, or look fine while its contour was wrong in
-    compensating directions. Both are reported; `shape_db` is what a fix to
-    the legato *model* should move.
+
+def score_section(ref: Audio, ours: Audio, start: float, end: float, name: str) -> SectionScore:
+    """Three independent axes, deliberately kept apart.
+
+    - `level_ratio` is loudness. One gain constant; a trim fixes it.
+    - `lag_ms` is timing: how late our render speaks relative to Kontakt,
+      found by correlating the two dB envelopes. Positive = we are late.
+    - `shape_db` is contour — the envelope difference once level AND lag are
+      matched out. Attack shapes, swells, retire fades, release tails.
+
+    Rounds 1-7 scored only the un-normalised `mean_abs_db`, which sums all
+    three. That number cannot distinguish "3 dB quiet", "40 ms late" and "wrong
+    release tail", and the three routinely cancel: a section can score well
+    while two errors offset, or score badly for a trim it shares with every
+    other section. All four numbers are reported; `mean_abs_db` is kept so
+    earlier scoreboards stay comparable.
+
+    A caution on `shape_db`: round-robin variance floors it near 3 dB — we and
+    Kontakt play different takes of the same note, and no engine fix closes
+    that.
     """
-    er, eo = envelope(ref, start, end), envelope(ours, start, end)
-    n = min(len(er), len(eo))
-    diffs = [20.0 * math.log10(er[i] / eo[i]) for i in range(n)]
+    er = [20.0 * math.log10(v) for v in envelope(ref, start, end)]
+    hop_s = HOP_MS / 1000.0
+    max_lag = int(MAX_LAG_MS / HOP_MS)
+    ext = [
+        20.0 * math.log10(v)
+        for v in envelope(ours, start - max_lag * hop_s, end + max_lag * hop_s)
+    ]
+    n = min(len(er), len(ext) - 2 * max_lag)
+
+    best = (0, -2.0, 0.0)  # (lag steps, correlation, mean offset dB)
+    if n >= 10:
+        mr = sum(er[:n]) / n
+        vr = math.sqrt(sum((er[i] - mr) ** 2 for i in range(n))) or 1e-9
+        for lag in range(-max_lag, max_lag + 1):
+            seg = ext[max_lag + lag : max_lag + lag + n]
+            mo = sum(seg) / n
+            vo = math.sqrt(sum((s - mo) ** 2 for s in seg)) or 1e-9
+            corr = sum((er[i] - mr) * (seg[i] - mo) for i in range(n)) / (vr * vo)
+            if corr > best[1]:
+                best = (lag, corr, mr - mo)
+
+    lag, _, offset = best
+    aligned = ext[max_lag + lag : max_lag + lag + n]
+    shape = sum(abs((er[i] - aligned[i]) - offset) for i in range(n)) / n if n else 0.0
+
+    zero = ext[max_lag : max_lag + n]
+    diffs = [er[i] - zero[i] for i in range(n)]
     rr, ro = rms(ref, start, end), rms(ours, start, end)
-    ratio = (rr / ro) if ro > 0 else float("inf")
-    offset = 20.0 * math.log10(ratio) if ro > 0 else 0.0
     return SectionScore(
         name=name,
-        level_ratio=ratio,
+        level_ratio=(rr / ro) if ro > 0 else float("inf"),
+        lag_ms=lag * HOP_MS,
+        shape_db=shape,
         mean_abs_db=(sum(abs(d) for d in diffs) / len(diffs)) if diffs else 0.0,
-        shape_db=(sum(abs(d - offset) for d in diffs) / len(diffs)) if diffs else 0.0,
         max_abs_db=max((abs(d) for d in diffs), default=0.0),
         ref_rms_db=20.0 * math.log10(max(rr, ENV_FLOOR)),
         ours_rms_db=20.0 * math.log10(max(ro, ENV_FLOOR)),
@@ -289,7 +330,7 @@ AB_PAGE = """<!doctype html>
   <span style="color:#6b7280;padding:6px 0">— click a section to play it</span>
 </div>
 <audio id="a" controls src="{ref_rel}"></audio>
-<table><thead><tr><th>section</th><th>t</th><th class="n">lvl</th><th class="n">shape dB</th><th class="n">max dB</th></tr></thead>
+<table><thead><tr><th>section</th><th>t</th><th class="n">lvl</th><th class="n">lag ms</th><th class="n">shape dB</th><th class="n">max dB</th></tr></thead>
 <tbody>{rows}</tbody></table>
 <script>
 const REF={ref_json}, OURS={ours_json};
@@ -310,7 +351,7 @@ def write_ab_page(path: Path, title: str, ref: Path, ours: Path, scores: list[Se
         bad = "" if not sc.bad() else ' class="bad"'
         rows.append(
             f'<tr{bad} data-t="{start:.3f}"><td>{name}</td><td>{start:.1f}–{end:.1f}s</td>'
-            f'<td class="n">{sc.level_ratio:.2f}</td><td class="n">{sc.shape_db:.2f}</td>'
+            f'<td class="n">{sc.level_ratio:.2f}</td><td class="n">{sc.lag_ms:+.0f}</td><td class="n">{sc.shape_db:.2f}</td>'
             f'<td class="n">{sc.max_abs_db:.1f}</td></tr>'
         )
     path.write_text(
@@ -373,8 +414,9 @@ def main() -> int:
         print(sc.row())
     overall = sum(s.mean_abs_db for s in scores) / len(scores)
     shape = sum(s.shape_db for s in scores) / len(scores)
+    lag = sum(abs(s.lag_ms) for s in scores) / len(scores)
     print(
-        f"\n   OVERALL shape {shape:.2f} dB   raw {overall:.2f} dB"
+        f"\n   OVERALL shape {shape:.2f} dB   |lag| {lag:.0f} ms   raw {overall:.2f} dB"
         f"   over {len(scores)} sections"
     )
 
@@ -385,7 +427,7 @@ def main() -> int:
     if args.json:
         args.json.write_text(
             json.dumps(
-                {"overall_shape_db": shape, "overall_mean_abs_db": overall, "sections": [vars(s) for s in scores]},
+                {"overall_shape_db": shape, "overall_abs_lag_ms": lag, "overall_mean_abs_db": overall, "sections": [vars(s) for s in scores]},
                 indent=1,
             )
         )
