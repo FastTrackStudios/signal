@@ -217,6 +217,32 @@ queue is refilled.)
   or audiocore-dsp
 - three CLIs → one `fts` CLI in apps/ (subcommands)
 
+## Logging & tracing — wide events, ALWAYS
+
+Before writing ANY log or debug output, load the
+`logging-best-practices` skill (`.claude/skills/logging-best-practices/`
+— read `rules/fts-rust.md` first). The rules are not optional:
+
+- **The span IS the wide event.** `architect` opens one span per vox
+  RPC, `tower_http` one per HTTP request. Enrich it with
+  `task_telemetry::wide::set("namespace.field", value)` — one
+  context-rich event per request, never scattered log lines.
+- **Never `println!`/`eprintln!`/`dbg!` in server or library code** —
+  not in committed code, and not as debug scaffolding either. To chase
+  a bug, reproduce it in a failing unit test (the artifact that
+  outlives the session) or query the span fields; if you must watch a
+  live process, use `tracing` with structured fields behind `RUST_LOG`
+  and delete it before committing.
+- Follow the established field names (`org.slug`, `auth.*`, `perm.*`,
+  `media.*`, `share.*`); record the **shape**, never the secret (no
+  tokens, no passwords, no raw note paths/URIs in fields).
+- Denials/refusals get ONE `tracing::warn!` line (alertable); allowed
+  outcomes ride the span only.
+- New surface = new fields: any new HTTP route or RPC service must set
+  its outcome fields on the span the way `authorize_media`
+  (`media.authorized`, `media.auth_via`) and the share gate
+  (`share.outcome`, `share.target_kind`) do.
+
 ## Agent skills
 
 ### Issue tracker
