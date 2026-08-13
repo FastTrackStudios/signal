@@ -13,6 +13,8 @@ description = "fts — the one FastTrackStudio CLI (daw, keyflow, engines, statu
 #                            alias: fts kf)
 #   fts signal engine        spawn `fasttrackstudio --engine` (headless rig core)
 #   fts session engine       in-process standalone session engine on ws://:3030/ws
+#   fts template <...>       Dynamic Template classification, offline (feature
+#                            `template`; alias: fts dynamic-template)
 #   fts status               probe the known engine ports and report up/down
 #
 # The heavy domains are feature-gated (default = all) so a lean build is
@@ -23,7 +25,7 @@ name = "fts"
 path = "src/main.rs"
 
 [features]
-default = ["daw", "keyflow", "session", "pack"]
+default = ["daw", "keyflow", "session", "pack", "template"]
 # `fts signal pack <...>` — signalpack inspect/edit/build/transcode
 # (signal_sampler::pack_cli's clap tree).
 pack = ["dep:signal-sampler"]
@@ -40,6 +42,15 @@ session = [
     "dep:architect",
     "dep:axum",
     "dep:vox",
+]
+# `fts template <...>` — the Dynamic Template classifier with no DAW in
+# the loop. Pulls `session` for the colour classifier (grouping and
+# colour come from one monarchy_sort pass, so they cannot disagree).
+template = [
+    "dep:dynamic-template",
+    "dep:session",
+    "dep:serde",
+    "dep:serde_json",
 ]
 
 [dependencies]
@@ -66,6 +77,11 @@ session = { workspace = true, optional = true }
 architect = { workspace = true, features = ["vox", "local", "server-axum"], optional = true }
 axum = { workspace = true, optional = true }
 vox = { workspace = true, optional = true }
+
+# fts template — the classifier plus JSON output
+dynamic-template = { workspace = true, optional = true }
+serde = { workspace = true, features = ["derive"], optional = true }
+serde_json = { workspace = true, optional = true }
 
 [lints]
 workspace = true
