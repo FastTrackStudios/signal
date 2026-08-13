@@ -40,3 +40,4 @@ target-*/
 
 # Local render/scoring scratch (CSS A/B renders are hundreds of MB).
 scratch/
+__pycache__/
