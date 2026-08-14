@@ -128,6 +128,16 @@ enum Cmd {
         /// the window and the same note reads +1 ms.
         #[arg(long, default_value_t = 0.03)]
         lead: f64,
+        /// Use the MIDI to narrow the candidates: a step offers only the
+        /// transition zones of THAT direction and interval (plus the bodies,
+        /// which sound underneath it), a phrase start only bodies.
+        ///
+        /// Much faster and much less prone to misidentification — but it
+        /// ASSUMES the zone rather than discovering it, so the agreement
+        /// column stops being an independent check. Establish trust with an
+        /// open sweep first; this is for the runs that follow.
+        #[arg(long)]
+        guided: bool,
         /// Only sweep notes starting at or after this second.
         #[arg(long)]
         from: Option<f64>,
@@ -441,6 +451,7 @@ pub fn cli_main(argv: impl IntoIterator<Item = OsString>) -> Result<()> {
             lead,
             from,
             to,
+            guided,
         } => {
             if let Some(midi) = sweep {
                 match_ref_sweep(
@@ -455,6 +466,7 @@ pub fn cli_main(argv: impl IntoIterator<Item = OsString>) -> Result<()> {
                     semitones,
                     from,
                     to,
+                    guided,
                 )
             } else if self_test {
                 match_ref_self_test(&pack, window_ms, scan_ms, articulation, mic)
@@ -1565,6 +1577,7 @@ fn match_ref_sweep(
     semitones: i32,
     from: Option<f64>,
     to: Option<f64>,
+    guided: bool,
 ) -> Result<()> {
     let (notes, _ccs, _bpm) = parse_smf(midi)?;
     let patch = crate::PlayerPatch::from_pack(pack_path)?;
@@ -1663,6 +1676,22 @@ fn match_ref_sweep(
             {
                 continue;
             }
+            // MIDI-guided narrowing: we know the move, so we know which
+            // transition CSS can have fired. A body is always admissible —
+            // the outgoing and incoming sustains sound under the transition,
+            // and the decomposition needs them to explain the window.
+            if guided {
+                let is_transition = !z.direction.is_empty();
+                match (&expect[ni], is_transition) {
+                    (Some((dir, iv)), true) => {
+                        if !z.direction.eq_ignore_ascii_case(dir) || z.interval != *iv {
+                            continue;
+                        }
+                    }
+                    (None, true) => continue,
+                    _ => {}
+                }
+            }
             // Which note this zone SOUNDS. A sustain sounds its root; a
             // transition sounds its destination, which for an upward zone is
             // root+interval. Filtering on the root alone would offer a
@@ -1693,7 +1722,7 @@ fn match_ref_sweep(
         // single-group fit can only ever explain its share of that.
         let mut labels: Vec<String> = Vec::new();
         let mut keys: Vec<Key> = Vec::new();
-        let mut sets: Vec<Vec<Vec<f32>>> = Vec::new();
+        let mut sets: Vec<Vec<std::sync::Arc<Vec<f32>>>> = Vec::new();
         for (key, zones) in &groups {
             let sounds = if key.2.eq_ignore_ascii_case("up") {
                 i32::from(key.1) + key.3 as i32
@@ -1702,7 +1731,7 @@ fn match_ref_sweep(
             };
             let shift = i32::from(n.note) - sounds;
             let mut lab = Vec::new();
-            let mut members: Vec<Vec<f32>> = Vec::new();
+            let mut members: Vec<std::sync::Arc<Vec<f32>>> = Vec::new();
             for z in zones {
                 let key_c = (z.file.clone(), shift);
                 if !mono.contains_key(&key_c) {
@@ -1736,7 +1765,11 @@ fn match_ref_sweep(
                 }
                 if let Some(m) = mono.get(&key_c) {
                     lab.push(z.dynamic.clone());
-                    members.push(m.as_ref().clone());
+                    // Arc, not a copy: cloning the Vec here copied a
+                    // multi-second sample per group per NOTE — hundreds of
+                    // megabytes of memcpy for one window, and nine notes in
+                    // twenty-one minutes.
+                    members.push(std::sync::Arc::clone(m));
                 }
             }
             if members.is_empty() {
@@ -1747,7 +1780,11 @@ fn match_ref_sweep(
             sets.push(members);
         }
 
-        let voices = crate::ref_match::decompose(window, &sets, scan, 48, 24, 3, 0.03);
+        let borrowed: Vec<Vec<&[f32]>> = sets
+            .iter()
+            .map(|g| g.iter().map(|m| m.as_slice()).collect())
+            .collect();
+        let voices = crate::ref_match::decompose(window, &borrowed, scan, 48, 24, 3, 0.03);
         if voices.is_empty() {
             println!("  {:>6.3}s  {:>4}  (no fit)", n.start, n.note);
             checked += 1;
@@ -1947,7 +1984,8 @@ fn match_ref_self_test(
                 .sum()
         })
         .collect();
-    match crate::ref_match::best_fit(&window, &members, scan, 48, 24) {
+    let refs: Vec<&[f32]> = members.iter().map(|m| m.as_slice()).collect();
+    match crate::ref_match::best_fit(&window, &refs, scan, 48, 24) {
         Some(fit) => {
             let err = fit.offset as f64 - truth as f64;
             println!(
@@ -1978,7 +2016,7 @@ fn match_ref_self_test(
     let window0: Vec<f32> = (0..wlen)
         .map(|i| members.iter().zip(&gains).map(|(m, g)| g * m[i]).sum())
         .collect();
-    match crate::ref_match::best_fit(&window0, &members, scan, 48, 24) {
+    match crate::ref_match::best_fit(&window0, &refs, scan, 48, 24) {
         Some(fit) => println!(
             "  at offset 0    found {:.1} ms   explained {:.1}%",
             fit.offset as f64 / f64::from(sr) * 1000.0,
@@ -2011,7 +2049,7 @@ fn match_ref_self_test(
         truth as f64 / f64::from(sr) * 1000.0,
         second as f64 / f64::from(sr) * 1000.0
     );
-    let groups = vec![members.clone()];
+    let groups = vec![refs.clone()];
     let voices = crate::ref_match::decompose(&window2, &groups, scan, 48, 24, 3, 0.02);
     if voices.is_empty() {
         println!("  two onsets     FAIL — nothing found");
@@ -2154,7 +2192,8 @@ fn match_ref(
                 ]
             };
             for (fill, members) in variants {
-            let Some(fit) = crate::ref_match::best_fit(window, &members, scan, 48, 24) else {
+            let refs: Vec<&[f32]> = members.iter().map(|m| m.as_slice()).collect();
+            let Some(fit) = crate::ref_match::best_fit(window, &refs, scan, 48, 24) else {
                 continue;
             };
             let mut layers: Vec<(String, f32)> = decoded

@@ -237,7 +237,7 @@ const RIDGE: f64 = 1e-3;
 /// the fraction of the window's energy explained.
 fn fit_at(
     window: &[f32],
-    members: &[Vec<f32>],
+    members: &[&[f32]],
     offset: usize,
 ) -> Option<(Vec<f32>, f32, Vec<f32>)> {
     let w = window.len();
@@ -331,7 +331,7 @@ fn fit_at(
 /// the FFT sweep are fitted at full rate, each refined over ±`refine` frames.
 pub fn best_fit(
     window: &[f32],
-    members: &[Vec<f32>],
+    members: &[&[f32]],
     scan: usize,
     peaks: usize,
     refine: usize,
@@ -383,9 +383,13 @@ pub fn best_fit(
     order.truncate(peaks);
     order.extend((0..=limit).step_by(step));
 
-    // Fine stage: joint least squares at the best proposals. The coarse score
-    // only proposes; the fit decides, because only the fit can tell a group
-    // that explains the mixture from one that merely resembles part of it.
+    // Fitting stage. Every surviving proposal is refined SAMPLE BY SAMPLE,
+    // because a fit is only meaningful within a few samples of the truth: at a
+    // grid step of half a millisecond the waveform is already a third of a
+    // period out of phase, so scoring proposals at their grid point alone
+    // ranks the true region below its neighbours and the answer lands 5 ms
+    // off. Speed has to come from having fewer CANDIDATES — which is what
+    // knowing the MIDI buys — not from fitting each one less carefully.
     let mut best: Option<GroupFit> = None;
     let mut seen: Vec<usize> = Vec::new();
     for &c in order.iter() {
@@ -427,7 +431,7 @@ pub fn best_fit(
 /// will always shave a little off a residual.
 pub fn decompose(
     window: &[f32],
-    groups: &[Vec<Vec<f32>>],
+    groups: &[Vec<&[f32]>],
     scan: usize,
     peaks: usize,
     refine: usize,
@@ -500,7 +504,7 @@ mod tests {
             .map(|i| ga * a[offset + i] + gb * b[offset + i])
             .collect();
 
-        let fit = best_fit(&window, &[a, b], 30000, 32, 24).expect("a fit");
+        let fit = best_fit(&window, &[a.as_slice(), b.as_slice()], 30000, 32, 24).expect("a fit");
         assert_eq!(fit.offset, offset, "offset must be sample-exact");
         assert!((fit.gains[0] - ga).abs() < 1e-3, "gain a {:?}", fit.gains);
         assert!((fit.gains[1] - gb).abs() < 1e-3, "gain b {:?}", fit.gains);
@@ -515,8 +519,8 @@ mod tests {
         let other = noise(48000, 99);
         let window: Vec<f32> = real[5000..5000 + 4096].to_vec();
 
-        let right = best_fit(&window, &[real], 30000, 32, 24).expect("fit");
-        let wrong = best_fit(&window, &[other], 30000, 32, 24).expect("fit");
+        let right = best_fit(&window, &[real.as_slice()], 30000, 32, 24).expect("fit");
+        let wrong = best_fit(&window, &[other.as_slice()], 30000, 32, 24).expect("fit");
         assert!(right.explained > 0.995, "right {}", right.explained);
         assert!(
             wrong.explained < 0.2,
