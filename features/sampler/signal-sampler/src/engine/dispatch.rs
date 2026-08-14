@@ -5,8 +5,19 @@ use super::*;
 
 /// Fade time for the previous same-note body when a key is re-struck (see
 /// [`SampleEngine::trigger_short`]). Smooth enough to subsume the old ring, not
-/// so long that fast repeats overlap into a pileup.
+/// so long that fast repeats overlap into a pileup. Chosen by ear; deliberately
+/// NOT the CSS number below, because this path also serves live re-strikes
+/// under a held pedal, where a long fade stacks 30 s voices until the pool
+/// steals still-ringing notes.
 const RETRIGGER_FADE_MS: u32 = 90;
+
+/// `$jvqtp` "Old out" — the fade the OUTGOING body takes when a new body starts
+/// (script_1.ksp 19239, `fade_out($eyijx,$jvqtp*1000,1)`; shipped persistent
+/// 250). It sits outside the interval guard at 19247, so it runs on every new
+/// body: a pitch change and a pedal-less repeat alike. Scoped to the CSS legato
+/// re-attack; measured neutral on the param test (S10 shape 6.00 → 5.99), so
+/// the S10 decay is NOT this fade.
+const CSS_OLD_OUT_MS: u32 = 250;
 
 impl SampleEngine {
     pub(crate) fn trigger_sustain(&mut self, note: u8) {
@@ -415,12 +426,11 @@ impl SampleEngine {
         // attack-transient dip) with the bloom recovery — with deep gaps at
         // the boundaries from the old voice's retrigger fade.
         if from_note == to_note && !self.cc64_held {
-            let fade = ms_to_frames(RETRIGGER_FADE_MS, self.sample_rate);
+            let fade = ms_to_frames(CSS_OLD_OUT_MS, self.sample_rate);
             self.voices.retrigger_fade_note(to_note, fade);
             let trim_zone = self.patch.spec.legato_cfg().velocity_range(velocity) <= 2;
             self.legato_sustain = true;
-            // $3tsb0 is chord-only (§11): no −6 dB trim on re-attacks either;
-            // the −3 dB same-pitch dip below is the decoded repeat attenuation.
+            // $3tsb0 is chord-only (§11): no −6 dB trim on re-attacks either.
             self.legato_trim = false;
             self.legato_attack_dip_db = self.css_ab_dip_db(!trim_zone);
             self.trigger_zoned_sustain(to_note);

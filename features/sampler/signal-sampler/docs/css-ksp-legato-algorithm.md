@@ -1092,3 +1092,39 @@ Net: **−3 dB on connected notes arriving within 250 ms of the phrase's
 first note, 0 dB everywhere else.** Not a per-repeat anti-machine-gun
 dip. On the param test this reaches only the first transition of S11 and
 S12; every other section is untouched.
+
+### 12.5 `$jvqtp` "Old out" = 250 ms — and what S10 is NOT
+
+`fade_out($eyijx,$jvqtp*1000,1)` at 19239 fades the outgoing body whenever a
+new one starts. `$eyijx` is set to `$dtxpw` on the line below, so it always
+holds the previous body. The call sits OUTSIDE the interval guard at 19247,
+so it runs on a pitch change and a pedal-less repeat alike. Shipped
+persistent `$jvqtp` = **250 ms**.
+
+Adopted for the CSS legato re-attack (`CSS_OLD_OUT_MS`). Deliberately not
+applied to the general re-strike path, which shares this shape but also
+serves live pedal-held playing, where a 250 ms subsume stacks voices.
+
+**Measured: this is not the S10 mechanism.** 90 → 250 ms moves S10 shape
+6.00 → 5.99. Per-repeat peak levels over the five repeats (30 ms RMS
+envelope, relative to repeat 1):
+
+| repeat | reference | ours   |
+|--------|-----------|--------|
+| 1      |  +0.00    | +0.00  |
+| 2      |  −3.83    | −7.80  |
+| 3      | −10.92    | −5.17  |
+| 4      | −10.13    | −5.16  |
+| 5      | −11.05    | −5.17  |
+
+The reference decays over the first three repeats and then **plateaus about
+10.5 dB down**. Ours dips too deep on repeat 2, recovers, and plateaus about
+5 dB down — half the reference's attenuation, and the wrong trajectory. A
+plateau rather than a continued decay means something keeps re-exciting at a
+reduced level; a pure ring-out would keep falling. Whatever produces the
+extra ~5 dB and the three-repeat ramp is still unidentified.
+
+Note also the absolute offset: reference repeat 1 peaks at −31.20 dB, ours at
+−35.31. That ~4 dB gap is the section's `lvl` ratio and is systematic across
+the whole param test (every section reads 1.14-2.03), so it is a separate
+issue from the S10 decay shape.
