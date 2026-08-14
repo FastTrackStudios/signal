@@ -1040,11 +1040,55 @@ Our re-attack path (`dispatch.rs`, `from_note == to_note && !cc64_held`)
 already fades the old note and triggers a new body, which is the right
 shape. Two things do not follow from the source:
 
-- We apply `css_attack_transient_dip_db` (−3 dB inside 250 ms) to the
+- We applied `css_attack_transient_dip_db` (−3 dB inside 250 ms) to the
   re-attack. Its origin `%i35so` is at 12717 — inside the 12xxx CHORD
-  region (§11.0), like `$3tsb0` before it. It has no mono-legato
-  counterpart in the script.
+  region (§11.0), like `$3tsb0` before it. **Corrected:** there IS a
+  mono-legato counterpart, at 20038-20090, and it is a different rule —
+  see §12.4. (It was also dead code: the dip was read only inside
+  `if legato_trim`, which has been false since `$3tsb0` went chord-only.)
 - Across five repeats the reference DECAYS about 10 dB while ours
   repeats an almost identical envelope. Body-against-body crossfading is
   the mechanism; the shipped fade times for the pedal-less branch are
   the numbers still to pull.
+
+### 12.4 The mono-legato AB dip (`$1z3x0`, 20038-20090)
+
+The dip we had been reading out of the chord branch does exist in the
+mono path, but as a different rule. Structure:
+
+```
+if ($ocjln=0)                            ; mono legato
+  if ($xp1ku=3 and ($shybn=0))           ; velocity zone 3
+      $1z3x0 := $x0jlu                   ; 0 dB shipped, anchor untouched
+  else
+      if ($ENGINE_UPTIME-$0nind<=$xu41m)             ; A
+          $1z3x0 := $4lqhx*100-($ee3a4*100*e/$xu41m)
+      else
+          if ($ENGINE_UPTIME-$0nind<=$c2hkn)         ; B
+              $1z3x0 := $ee3a4*100+(e*(abs($ee3a4)*100/$c2hkn))
+          end if                                     ; C: $1z3x0 stale
+          $0nind := $ENGINE_UPTIME-$xu41m
+      end if
+  end if
+end if
+...
+change_vol($dtxpw,$1z3x0*100,1)
+```
+
+Shipped persistents (`persistent_1.tsv`): `$4lqhx`=−30, `$ee3a4`=0,
+`$xu41m`=250, `$c2hkn`=2000, `$x0jlu`=0. `$4lqhx` is deci-dB, so branch A
+is a flat **−3.0 dB** (the `$ee3a4` ramp term vanishes) and branch B is
+identically **0 dB**.
+
+The part that matters is the anchor. `$0nind` is planted at the note time
+only at a phrase start (17528, gated `%f4tl5[$cztyy]=0 and $4pcsa<2` —
+nothing sounding in the slot, polyphony under 2). Branch A does **not**
+advance it; B and C push it to `now - $xu41m`, which makes the following
+note's elapsed `IOI + 250` — always outside the window. So branch A
+cannot fire twice in a row, and after the first over-window note the dip
+is off for the rest of the phrase.
+
+Net: **−3 dB on connected notes arriving within 250 ms of the phrase's
+first note, 0 dB everywhere else.** Not a per-repeat anti-machine-gun
+dip. On the param test this reaches only the first transition of S11 and
+S12; every other section is untouched.
