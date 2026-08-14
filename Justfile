@@ -572,7 +572,10 @@ css_pack := '/run/media/AudioHaven/Signal/Libraries/Proxy/Orchestral/Cinematic S
 # Score the CSS legato engine against the real Kontakt reference render.
 css-ab *ARGS:
     cargo build -p fts-cli --bin fts
+    # Score the binary we just BUILT. score.py defaults to ./target/debug/fts,
+    # so under a CARGO_TARGET_DIR override it would silently score a stale one.
     python3 features/sampler/signal-sampler/tests/css-ab/score.py \
+        --fts "${CARGO_TARGET_DIR:-target}/debug/fts" \
         --pack {{quote(css_pack)}} --json scratch/css-ab/score.json {{ARGS}}
 
 # Same, restricted to sections (e.g. `just css-ab-sections S10,S13`).

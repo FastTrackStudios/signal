@@ -153,8 +153,14 @@ impl SampleEngine {
         // Blend every body LAYER present for this note+dynamic (the base plus
         // any `_2` hard-hit layer) as one coherent round-robin take.
         let primary = self.articulation.clone();
-        let mut body_spawned =
-            self.spawn_layers(&primary, note, &dynamic, voice_kind.clone(), gain, release_frames);
+        let mut body_spawned = self.spawn_layers(
+            &primary,
+            note,
+            &dynamic,
+            voice_kind.clone(),
+            gain,
+            release_frames,
+        );
         if body_spawned {
             self.body_voiced.insert(note);
         } else {
@@ -179,8 +185,14 @@ impl SampleEngine {
                 .collect();
             for alt_id in alt_ids {
                 let alt_dyn = self.dynamic_for_artic(&alt_id, velocity);
-                if self.spawn_layers(&alt_id, note, &alt_dyn, voice_kind.clone(), gain, release_frames)
-                {
+                if self.spawn_layers(
+                    &alt_id,
+                    note,
+                    &alt_dyn,
+                    voice_kind.clone(),
+                    gain,
+                    release_frames,
+                ) {
                     self.body_voiced.insert(note);
                     body_spawned = true;
                     break;
@@ -223,9 +235,17 @@ impl SampleEngine {
             .layer_directions(&section, artic, &mic, note, dynamic);
         if layers.is_empty() {
             // No exact (note, dynamic) layers — single nearest-match voice.
-            if let Some(v) =
-                self.make_voice(artic, &section, &mic, dynamic, note, "", kind, gain, release_frames)
-            {
+            if let Some(v) = self.make_voice(
+                artic,
+                &section,
+                &mic,
+                dynamic,
+                note,
+                "",
+                kind,
+                gain,
+                release_frames,
+            ) {
                 self.voices.spawn(v);
                 return true;
             }
@@ -273,6 +293,43 @@ impl SampleEngine {
             release_frames,
         ) {
             self.voices.spawn(v);
+        }
+    }
+
+    /// The `$1z3x0` "AB volume" dip a mono-legato (`$ocjln=0`) connected note
+    /// takes, decoded from script_1.ksp 20038-20068 — the mono counterpart of
+    /// the chord-mode dip at 12717, which is the one we had been reading.
+    ///
+    /// ```text
+    /// if ($xp1ku=3 and ($shybn=0))            ; velocity zone 3
+    ///     $1z3x0 := $x0jlu                    ; = 0 dB shipped, anchor untouched
+    /// else
+    ///     if ($ENGINE_UPTIME-$0nind<=$xu41m)  ; A: within 250 ms of the anchor
+    ///         $1z3x0 := $4lqhx*100-($ee3a4*100*elapsed/$xu41m)   ; = -3.0 dB flat
+    ///     else                                ; B/C: outside it
+    ///         ...                             ; = 0 dB
+    ///         $0nind := $ENGINE_UPTIME-$xu41m ; anchor pushed to now-250
+    ///     end if
+    /// end if
+    /// ```
+    ///
+    /// The anchor only gets planted at a phrase start (17528). Because B/C
+    /// leave it at `now - 250`, the following note's elapsed is `IOI + 250`,
+    /// which is always outside the window — so branch A cannot fire twice in a
+    /// row. Net behaviour: −3 dB on connected notes arriving within 250 ms of
+    /// the phrase's FIRST note, 0 dB everywhere else. It is not a per-repeat
+    /// anti-machine-gun dip, which is how we had it.
+    pub(crate) fn css_ab_dip_db(&mut self, zone3: bool) -> f32 {
+        if zone3 {
+            return crate::engine::CSS_AB_ZONE3_DB;
+        }
+        let now = self.frames_rendered;
+        let window = ms_to_frames(crate::engine::CSS_AB_WINDOW_MS, self.sample_rate) as u64;
+        if now.saturating_sub(self.ab_anchor_frame) <= window {
+            crate::engine::CSS_AB_DIP_DB
+        } else {
+            self.ab_anchor_frame = now.saturating_sub(window);
+            0.0
         }
     }
 
@@ -365,11 +422,7 @@ impl SampleEngine {
             // $3tsb0 is chord-only (§11): no −6 dB trim on re-attacks either;
             // the −3 dB same-pitch dip below is the decoded repeat attenuation.
             self.legato_trim = false;
-            self.legato_attack_dip_db = if trim_zone {
-                crate::engine::css_attack_transient_dip_db(ioi_ms)
-            } else {
-                0.0
-            };
+            self.legato_attack_dip_db = self.css_ab_dip_db(!trim_zone);
             self.trigger_zoned_sustain(to_note);
             self.legato_sustain = false;
             self.legato_trim = false;
@@ -377,25 +430,24 @@ impl SampleEngine {
             self.line_mut().note = Some(to_note);
             return;
         }
-        let log_idx = if self.legato_fire_log_enabled
-            && self.legato_fire_log.len() < LEGATO_FIRE_LOG_CAP
-        {
-            self.legato_fire_log.push(LegatoFireEvent {
-                frame: self.frames_rendered,
-                line: self.cur_line as u8,
-                from_note,
-                to_note,
-                velocity,
-                portamento,
-                // Patched below from `last_arrival_prediction` once the
-                // transition voice has spawned and the actually-chosen zone's
-                // arrival marker (lead_in) and start offset are known.
-                arrival: self.frames_rendered,
-            });
-            Some(self.legato_fire_log.len() - 1)
-        } else {
-            None
-        };
+        let log_idx =
+            if self.legato_fire_log_enabled && self.legato_fire_log.len() < LEGATO_FIRE_LOG_CAP {
+                self.legato_fire_log.push(LegatoFireEvent {
+                    frame: self.frames_rendered,
+                    line: self.cur_line as u8,
+                    from_note,
+                    to_note,
+                    velocity,
+                    portamento,
+                    // Patched below from `last_arrival_prediction` once the
+                    // transition voice has spawned and the actually-chosen zone's
+                    // arrival marker (lead_in) and start offset are known.
+                    arrival: self.frames_rendered,
+                });
+                Some(self.legato_fire_log.len() - 1)
+            } else {
+                None
+            };
         // Default: arrival == fire frame (re-bow / legacy / non-zoned);
         // `spawn_transition_voice` overwrites for measured transition zones.
         self.last_arrival_prediction = self.frames_rendered;
@@ -600,12 +652,11 @@ impl SampleEngine {
                 // (Empirically re-verified on the param-test: flipping this off
                 // is measured, not assumed — see commit.)
                 self.legato_trim = false;
-                let _ = trim_zone;
-                // Attack-transient dip: DECODED as same-PITCH-keyed
-                // (%i35so[$EVENT_NOTE], script 12716) — a pitch TRANSITION's
-                // destination almost never re-sounded within 250 ms, so no dip
-                // here (the re-attack path passes the real same-pitch gap).
-                self.legato_attack_dip_db = 0.0;
+                // The AB dip is NOT same-pitch-keyed in the mono path — that
+                // was the chord branch (12717, `%i35so[$EVENT_NOTE]`). Here it
+                // runs off the phrase anchor, so an ordinary pitch transition
+                // takes it too when it lands inside the window.
+                self.legato_attack_dip_db = self.css_ab_dip_db(!trim_zone);
                 self.trigger_zoned_sustain(to_note);
                 self.legato_sustain = false;
                 self.legato_trim = false;
@@ -823,7 +874,12 @@ impl SampleEngine {
         }
     }
 
-    pub(crate) fn do_note_off_with_release_frames(&mut self, note: u8, velocity: u8, release_frames: usize) {
+    pub(crate) fn do_note_off_with_release_frames(
+        &mut self,
+        note: u8,
+        velocity: u8,
+        release_frames: usize,
+    ) {
         // Trigger release trail if the current articulation specifies one.
         let release_artic = self
             .patch
@@ -845,7 +901,11 @@ impl SampleEngine {
             // release default is -10 dB below the note).
             let strike = {
                 let s = self.note_strike_vel[note as usize];
-                if s > 0 { s } else { velocity.max(1) }
+                if s > 0 {
+                    s
+                } else {
+                    velocity.max(1)
+                }
             };
             let rel_dyn = self.dynamic_for_artic(rel_id, strike);
             // Scale the release STRICTLY to the note body that is still
@@ -933,7 +993,8 @@ impl SampleEngine {
             .unwrap_or(false);
         let (nv_artic, vib_artic) = if base_is_vib {
             (
-                self.find_vibrato_pair_id(&cur).unwrap_or_else(|| cur.clone()),
+                self.find_vibrato_pair_id(&cur)
+                    .unwrap_or_else(|| cur.clone()),
                 Some(cur),
             )
         } else {
@@ -1187,5 +1248,4 @@ impl SampleEngine {
             kn.label.eq_ignore_ascii_case(&label) || kn.label.eq_ignore_ascii_case(stem)
         });
     }
-
 }
