@@ -111,6 +111,18 @@ enum Cmd {
         /// How many candidate groups to report.
         #[arg(long, default_value_t = 8)]
         top: usize,
+        /// Sweep every note of this MIDI — the file the reference was
+        /// rendered from — and report, per note, what the reference actually
+        /// played and WHEN. With the notes known, each window is scanned in a
+        /// tight neighbourhood of its nominal onset, which is the regime the
+        /// matcher is exact in.
+        #[arg(long)]
+        sweep: Option<PathBuf>,
+        /// Seconds after the nominal onset to place each sweep window. Far
+        /// enough in to be past the attack, close enough to stay inside the
+        /// note.
+        #[arg(long, default_value_t = 0.20)]
+        lead: f64,
         /// Ignore `--reference` and score the matcher against a reference
         /// BUILT from this pack's own samples at known offsets and gains.
         /// Real content, known answer — the check the noise-based unit tests
@@ -414,8 +426,22 @@ pub fn cli_main(argv: impl IntoIterator<Item = OsString>) -> Result<()> {
             semitones,
             top,
             self_test,
+            sweep,
+            lead,
         } => {
-            if self_test {
+            if let Some(midi) = sweep {
+                match_ref_sweep(
+                    &pack,
+                    &reference,
+                    &midi,
+                    lead,
+                    window_ms,
+                    scan_ms,
+                    articulation,
+                    mic,
+                    semitones,
+                )
+            } else if self_test {
                 match_ref_self_test(&pack, window_ms, scan_ms, articulation, mic)
             } else {
                 match_ref(
@@ -1473,6 +1499,183 @@ fn resample(src: &[f32], ratio: f64, out_len: usize) -> Vec<f32> {
         .collect()
 }
 
+
+
+/// Sweep a whole reference render note by note — see [`Cmd::MatchRef::sweep`].
+///
+/// The MIDI that produced the reference gives every note's NOMINAL onset. For
+/// each note this places a window `lead` seconds later and asks what the
+/// reference is playing there; the recovered offset says how far into its
+/// sample the reference had got, so `at − offset` is the note's ACTUAL onset.
+/// The difference between the two is the drift, per note, sample-exact — and
+/// the same sweep run against our own render makes the two directly
+/// comparable.
+#[allow(clippy::too_many_arguments)]
+fn match_ref_sweep(
+    pack_path: &Path,
+    reference: &Path,
+    midi: &Path,
+    lead: f64,
+    window_ms: f64,
+    scan_ms: f64,
+    articulation: Option<String>,
+    mic: Option<String>,
+    semitones: i32,
+) -> Result<()> {
+    let (notes, _ccs, _bpm) = parse_smf(midi)?;
+    let patch = crate::PlayerPatch::from_pack(pack_path)?;
+    let pack = patch.pack.clone().ok_or_else(|| eyre::eyre!("not a pack"))?;
+    let cache = SampleCache::with_pack(pack);
+
+    let refd = crate::engine::cache::load_sample(reference)
+        .map_err(|e| eyre::eyre!("load {}: {e}", reference.display()))?;
+    let sr = refd.sample_rate;
+    let refmono = mono_of(&refd.to_f32(), refd.channels as usize, refd.num_frames);
+    let wlen = ((window_ms / 1000.0) * f64::from(sr)) as usize;
+    let scan = ((scan_ms / 1000.0) * f64::from(sr)) as usize;
+
+    println!(
+        "sweep {} against {} — {} note(s), window {:.0} ms at +{:.0} ms\n",
+        midi.display(),
+        reference.display(),
+        notes.len(),
+        window_ms,
+        lead * 1000.0
+    );
+    println!(
+        "  {:>7}  {:>4}  {:>9}  {:>9}  {:>7}  {:<22} {}",
+        "nominal", "note", "actual", "drift", "share", "played", "gains"
+    );
+
+    for n in &notes {
+        let at = f64::from(n.start) + lead;
+        let start = (at * f64::from(sr)) as usize;
+        if start + wlen >= refmono.len() {
+            continue;
+        }
+        let window = &refmono[start..start + wlen];
+
+        // Only zones this note could plausibly be: Kontakt grid-fills by
+        // resampling a neighbour, so roots within `semitones` of the note.
+        type Key = (String, u8, String, u32, u32);
+        let mut groups: std::collections::BTreeMap<Key, Vec<&crate::spec::ZoneSpec>> =
+            std::collections::BTreeMap::new();
+        for z in &patch.spec.zones {
+            if articulation.as_ref().is_some_and(|a| &z.articulation != a) {
+                continue;
+            }
+            if mic.as_ref().is_some_and(|m| &z.mic != m) {
+                continue;
+            }
+            if (i32::from(z.root_key) - i32::from(n.note)).abs() > semitones {
+                continue;
+            }
+            groups
+                .entry((
+                    z.articulation.clone(),
+                    z.root_key,
+                    z.direction.clone(),
+                    z.interval,
+                    z.rr_index,
+                ))
+                .or_default()
+                .push(z);
+        }
+
+        // Every plausible group, each resampled to this note the way Kontakt
+        // would have, then peeled apart: mid-phrase a window holds the
+        // outgoing body, the transition and the incoming body at once, and a
+        // single-group fit can only ever explain its share of that.
+        let mut labels: Vec<String> = Vec::new();
+        let mut keys: Vec<Key> = Vec::new();
+        let mut sets: Vec<Vec<Vec<f32>>> = Vec::new();
+        for (key, zones) in &groups {
+            let mut lab = Vec::new();
+            let mut members = Vec::new();
+            for z in zones {
+                let Ok(data) = cache.get(Path::new(&z.file)) else {
+                    continue;
+                };
+                lab.push(z.dynamic.clone());
+                members.push(mono_of(
+                    &data.to_f32(),
+                    data.channels as usize,
+                    data.num_frames,
+                ));
+            }
+            if members.is_empty() {
+                continue;
+            }
+            let shift = i32::from(n.note) - i32::from(key.1);
+            if shift != 0 {
+                let ratio = 2.0f64.powf(f64::from(shift) / 12.0);
+                let need = scan + wlen + 2;
+                members = members
+                    .iter()
+                    .map(|a| resample(a, ratio, need.min((a.len() as f64 / ratio) as usize)))
+                    .collect();
+            }
+            labels.push(lab.join("/"));
+            keys.push(key.clone());
+            sets.push(members);
+        }
+
+        let voices = crate::ref_match::decompose(window, &sets, scan, 48, 24, 3, 0.03);
+        if voices.is_empty() {
+            println!("  {:>6.3}s  {:>4}  (no fit)", n.start, n.note);
+            continue;
+        }
+        for (vi, v) in voices.iter().enumerate() {
+            let off_s = v.fit.offset as f64 / f64::from(sr);
+            let actual = at - off_s;
+            let drift = (actual - f64::from(n.start)) * 1000.0;
+            let key = &keys[v.group];
+            let shift = i32::from(n.note) - i32::from(key.1);
+            let gains = v
+                .fit
+                .gains
+                .iter()
+                .zip(labels[v.group].split('/'))
+                .filter(|(g, _)| **g > 0.01)
+                .map(|(g, l)| format!("{l} {:+.1}", 20.0 * g.log10()))
+                .collect::<Vec<_>>()
+                .join("  ");
+            println!(
+                "  {:>6}  {:>4}  {:>8.3}s  {:>+7.1}ms  {:>6.1}%  {:<22} {}",
+                if vi == 0 {
+                    format!("{:.3}s", n.start)
+                } else {
+                    String::new()
+                },
+                if vi == 0 {
+                    format!("{}", n.note)
+                } else {
+                    String::new()
+                },
+                actual,
+                drift,
+                v.share * 100.0,
+                format!(
+                    "{} {}{}{}",
+                    key.0,
+                    key.1,
+                    if shift == 0 {
+                        String::new()
+                    } else {
+                        format!("{shift:+}st")
+                    },
+                    if key.2.is_empty() {
+                        String::new()
+                    } else {
+                        format!(" {}{}", key.2, key.3)
+                    }
+                ),
+                gains
+            );
+        }
+    }
+    Ok(())
+}
 
 /// Score the matcher against a reference built from the pack's OWN samples at
 /// known offsets and gains — see [`Cmd::MatchRef::self_test`].
