@@ -91,6 +91,9 @@ impl SampleEngine {
                 self.play_direction = "up".to_string();
                 self.trigger_zoned_sustain(note);
                 self.line_mut().note = Some(note);
+                // The IOI clock runs on the document path too — see below.
+                let now = self.frames_rendered;
+                self.line_mut().last_onset_frame = now;
             }
             // Fire the transition — no reactive countdown. The scheduler
             // subtracted the pre-bow lead from the trigger time; the spawn
@@ -104,11 +107,23 @@ impl SampleEngine {
             // hold-back is gone — voice holds are sample-exact and immune to
             // the forced-RR race a countdown re-dispatch had.)
             Some(cur) => {
-                // Document prefire: the scheduler already computed the lead
-                // (IOI-driven); here we only need the portamento flag.
+                // Document prefire: the scheduler already computed the LEAD
+                // from the IOI, so only the portamento flag is needed from
+                // `legato_timing`. The IOI ITSELF still is: the transition
+                // trim, the retire lerp, the two-stage swell shaping and the
+                // attack-transient dip are every one of them IOI-indexed, and
+                // passing 0 here pinned all of them to their fast extreme on
+                // the document path — which is the path the offline renderer
+                // and the A/B comparison both use.
+                let now = self.frames_rendered;
+                let ioi_ms = frames_to_ms(
+                    now.saturating_sub(self.line().last_onset_frame),
+                    self.sample_rate,
+                );
+                self.line_mut().last_onset_frame = now;
                 let (_delay_ms, portamento) = self.legato_timing(velocity, 0);
                 self.play_direction = if note >= cur { "up" } else { "down" }.to_string();
-                self.fire_legato_with_lead(cur, note, velocity, portamento, sched_lead, 0.0);
+                self.fire_legato_with_lead(cur, note, velocity, portamento, sched_lead, ioi_ms);
             }
         }
     }

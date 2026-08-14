@@ -1028,10 +1028,17 @@ impl SampleEngine {
         // continuous CC1→loudness curve the held note is gained by.
         //
         // The transition (`%ftriy`) is the attack ornament, NOT the held body,
-        // so it takes NO makeup here (neither OUTPUT_MAKEUP nor the −6 dB
-        // `$3tsb0`). It plays at recorded level × CC1 — the same net level as the
-        // legato SUSTAIN it overlays (which nets 0 dB: +6 OUTPUT_MAKEUP − 6
-        // $3tsb0). `$3tsb0` lands on the sustain voice via `legato_sustain`.
+        // so it takes NO makeup here: recorded level × CC1.
+        //
+        // It also carries NO `$1z3x0` trim, and that is a measured decision
+        // rather than an oversight. The decode (§11.1) puts a trim on exactly
+        // this voice — −3 dB inside 250 ms for standard legato, −9 dB for a
+        // fast step under the expressive ramp — and both were tried against
+        // the reference: expressive cost 0.6 dB of overall envelope match and
+        // crushed the fast runs (S12 level ratio 1.21 -> 2.87), standard cost
+        // 0.2 dB. Neither improved the contour. Something else in our level
+        // model already accounts for it, so applying the decoded number on
+        // top would be tuning to the decode instead of to Kontakt.
         // `cc1_expression` applies in pure playback too — it is the CSS
         // bottom-rolloff (calibrated on the reference; the pure expr=1.0 gate
         // was starving the S05 recalibration on legato lines).
