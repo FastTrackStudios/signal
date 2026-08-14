@@ -128,6 +128,12 @@ enum Cmd {
         /// the window and the same note reads +1 ms.
         #[arg(long, default_value_t = 0.03)]
         lead: f64,
+        /// Only sweep notes starting at or after this second.
+        #[arg(long)]
+        from: Option<f64>,
+        /// Only sweep notes starting before this second.
+        #[arg(long)]
+        to: Option<f64>,
         /// Ignore `--reference` and score the matcher against a reference
         /// BUILT from this pack's own samples at known offsets and gains.
         /// Real content, known answer — the check the noise-based unit tests
@@ -433,6 +439,8 @@ pub fn cli_main(argv: impl IntoIterator<Item = OsString>) -> Result<()> {
             self_test,
             sweep,
             lead,
+            from,
+            to,
         } => {
             if let Some(midi) = sweep {
                 match_ref_sweep(
@@ -445,6 +453,8 @@ pub fn cli_main(argv: impl IntoIterator<Item = OsString>) -> Result<()> {
                     articulation,
                     mic,
                     semitones,
+                    from,
+                    to,
                 )
             } else if self_test {
                 match_ref_self_test(&pack, window_ms, scan_ms, articulation, mic)
@@ -1553,6 +1563,8 @@ fn match_ref_sweep(
     articulation: Option<String>,
     mic: Option<String>,
     semitones: i32,
+    from: Option<f64>,
+    to: Option<f64>,
 ) -> Result<()> {
     let (notes, _ccs, _bpm) = parse_smf(midi)?;
     let patch = crate::PlayerPatch::from_pack(pack_path)?;
@@ -1579,7 +1591,48 @@ fn match_ref_sweep(
         "nominal", "note", "actual", "drift", "share", "played", "gains"
     );
 
-    for n in &notes {
+    // What the MIDI says each note IS: a step from the note before it on the
+    // same line, or a fresh start when nothing was sounding. The matcher is
+    // never told this — it is the independent check that turns a plausible fit
+    // into ground truth.
+    let mut expect: Vec<Option<(String, u32)>> = Vec::with_capacity(notes.len());
+    for (i, n) in notes.iter().enumerate() {
+        expect.push(if i == 0 {
+            None
+        } else {
+            let prev = &notes[i - 1];
+            let gap = f64::from(n.start) - f64::from(prev.start + prev.dur);
+            // A note well after the line fell silent starts a phrase; CSS
+            // plays a body, not a transition.
+            if gap > 0.5 || prev.note == n.note {
+                None
+            } else {
+                let delta = i32::from(n.note) - i32::from(prev.note);
+                Some((
+                    if delta > 0 { "up" } else { "down" }.to_string(),
+                    delta.unsigned_abs(),
+                ))
+            }
+        });
+    }
+
+    let mut agreed: Vec<f64> = Vec::new();
+    let mut checked = 0usize;
+    // Decode each sample ONCE. `to_f32` on a streamed sample decodes the whole
+    // thing (it has to — a partial decode is what made every offline reading
+    // of a FLAC pack wrong), so calling it per zone per note turned a 9-note
+    // run into 20 minutes. Resampled and shifted variants are cached the same
+    // way, keyed by the semitone move.
+    let mut mono: std::collections::HashMap<(String, i32), std::sync::Arc<Vec<f32>>> =
+        std::collections::HashMap::new();
+
+    for (ni, n) in notes.iter().enumerate() {
+        if from.is_some_and(|f| f64::from(n.start) < f) {
+            continue;
+        }
+        if to.is_some_and(|t| f64::from(n.start) >= t) {
+            continue;
+        }
         let at = f64::from(n.start) + lead;
         let start = (at * f64::from(sr)) as usize;
         if start + wlen >= refmono.len() {
@@ -1597,6 +1650,17 @@ fn match_ref_sweep(
                 continue;
             }
             if mic.as_ref().is_some_and(|m| &z.mic != m) {
+                continue;
+            }
+            // A release sample is what a note ENDS with, never what it starts
+            // with — but it is the same players in the same room, so it fits an
+            // onset window well enough to win one (measured: a release zone
+            // took the first note at 79.6%). Not a candidate here.
+            if patch
+                .spec
+                .articulation(&z.articulation)
+                .is_some_and(|a| matches!(a.kind, crate::spec::ArticulationKind::Release))
+            {
                 continue;
             }
             // Which note this zone SOUNDS. A sustain sounds its root; a
@@ -1631,35 +1695,52 @@ fn match_ref_sweep(
         let mut keys: Vec<Key> = Vec::new();
         let mut sets: Vec<Vec<Vec<f32>>> = Vec::new();
         for (key, zones) in &groups {
-            let mut lab = Vec::new();
-            let mut members = Vec::new();
-            for z in zones {
-                let Ok(data) = cache.get(Path::new(&z.file)) else {
-                    continue;
-                };
-                lab.push(z.dynamic.clone());
-                members.push(mono_of(
-                    &data.to_f32(),
-                    data.channels as usize,
-                    data.num_frames,
-                ));
-            }
-            if members.is_empty() {
-                continue;
-            }
             let sounds = if key.2.eq_ignore_ascii_case("up") {
                 i32::from(key.1) + key.3 as i32
             } else {
                 i32::from(key.1)
             };
             let shift = i32::from(n.note) - sounds;
-            if shift != 0 {
-                let ratio = 2.0f64.powf(f64::from(shift) / 12.0);
-                let need = scan + wlen + 2;
-                members = members
-                    .iter()
-                    .map(|a| resample(a, ratio, need.min((a.len() as f64 / ratio) as usize)))
-                    .collect();
+            let mut lab = Vec::new();
+            let mut members: Vec<Vec<f32>> = Vec::new();
+            for z in zones {
+                let key_c = (z.file.clone(), shift);
+                if !mono.contains_key(&key_c) {
+                    let Ok(data) = cache.get(Path::new(&z.file)) else {
+                        continue;
+                    };
+                    let base = match mono.get(&(z.file.clone(), 0)) {
+                        Some(b) => std::sync::Arc::clone(b),
+                        None => {
+                            let b = std::sync::Arc::new(mono_of(
+                                &data.to_f32(),
+                                data.channels as usize,
+                                data.num_frames,
+                            ));
+                            mono.insert((z.file.clone(), 0), std::sync::Arc::clone(&b));
+                            b
+                        }
+                    };
+                    let made = if shift == 0 {
+                        base
+                    } else {
+                        let ratio = 2.0f64.powf(f64::from(shift) / 12.0);
+                        let need = scan + wlen + 2;
+                        std::sync::Arc::new(resample(
+                            &base,
+                            ratio,
+                            need.min((base.len() as f64 / ratio) as usize),
+                        ))
+                    };
+                    mono.insert(key_c.clone(), made);
+                }
+                if let Some(m) = mono.get(&key_c) {
+                    lab.push(z.dynamic.clone());
+                    members.push(m.as_ref().clone());
+                }
+            }
+            if members.is_empty() {
+                continue;
             }
             labels.push(lab.join("/"));
             keys.push(key.clone());
@@ -1669,8 +1750,10 @@ fn match_ref_sweep(
         let voices = crate::ref_match::decompose(window, &sets, scan, 48, 24, 3, 0.03);
         if voices.is_empty() {
             println!("  {:>6.3}s  {:>4}  (no fit)", n.start, n.note);
+            checked += 1;
             continue;
         }
+        checked += 1;
         for (vi, v) in voices.iter().enumerate() {
             let off_s = v.fit.offset as f64 / f64::from(sr);
             let actual = at - off_s;
@@ -1691,8 +1774,31 @@ fn match_ref_sweep(
                 .map(|(g, l)| format!("{l} {:+.1}", 20.0 * g.log10()))
                 .collect::<Vec<_>>()
                 .join("  ");
+            // Does the primary voice agree with the move the MIDI makes?
+            let mark = if vi > 0 {
+                " "
+            } else {
+                match (&expect[ni], key.2.is_empty()) {
+                    // A transition was expected: direction and interval must
+                    // both match the step.
+                    (Some((dir, iv)), false) => {
+                        if key.2.eq_ignore_ascii_case(dir) && key.3 == *iv {
+                            agreed.push(drift);
+                            "OK"
+                        } else {
+                            "xx"
+                        }
+                    }
+                    // A phrase start was expected: a body, not a transition.
+                    (None, true) => {
+                        agreed.push(drift);
+                        "OK"
+                    }
+                    _ => "xx",
+                }
+            };
             println!(
-                "  {:>6}  {:>4}  {:>8.3}s  {:>+7.1}ms  {:>6.1}%  {:<22} {}",
+                "{mark}{:>6}  {:>4}  {:>8.3}s  {:>+7.1}ms  {:>6.1}%  {:<22} {}",
                 if vi == 0 {
                     format!("{:.3}s", n.start)
                 } else {
@@ -1725,6 +1831,32 @@ fn match_ref_sweep(
             );
         }
     }
+
+    // Only rows whose zone agrees with the MIDI are worth averaging: the rest
+    // are misidentifications, and their drift is noise about a note that was
+    // never played.
+    if agreed.is_empty() {
+        println!("\n  no row agreed with the MIDI — nothing to calibrate from");
+        return Ok(());
+    }
+    let mut sorted = agreed.clone();
+    sorted.sort_by(f64::total_cmp);
+    let median = sorted[sorted.len() / 2];
+    let mean = agreed.iter().sum::<f64>() / agreed.len() as f64;
+    let spread = (agreed.iter().map(|d| (d - mean).powi(2)).sum::<f64>()
+        / agreed.len() as f64)
+        .sqrt();
+    println!(
+        "\n  {}/{} notes agreed with the MIDI\n  drift  median {:+.1} ms   mean {:+.1} ms   sd {:.1} ms",
+        agreed.len(),
+        checked,
+        median,
+        mean,
+        spread
+    );
+    println!(
+        "  the median is the reference's own constant offset; subtract it and\n  what remains is per-note drift worth tuning against"
+    );
     Ok(())
 }
 
