@@ -244,12 +244,15 @@ impl StreamedSample {
                     out.extend(chunk.iter().map(|s| *s as f32 * SCALE));
                     frame += (chunk.len() / ch) as u32;
                 }
-                // A chunk that will not decode ends the sample rather than
-                // silently padding it with zeros that read as real audio.
+                // A chunk that will not decode ends the decode; the length
+                // contract is still honoured below.
                 _ => break,
             }
         }
-        out.truncate(total);
+        // ALWAYS `num_frames * channels` long. Callers index this by
+        // `num_frames` — a short buffer panics them, which is exactly what a
+        // late chunk that would not decode did.
+        out.resize(total, 0.0);
         out
     }
 
@@ -592,7 +595,11 @@ mod tests {
         // state that used to yield silence.
         assert!(s.chunks.load().is_empty(), "expected a cold sample");
         let all = s.decode_all();
-        assert_eq!(all.len(), n * ch as usize, "must decode every frame");
+        assert_eq!(
+            all.len(),
+            n * ch as usize,
+            "the length contract is absolute: callers index this by num_frames"
+        );
 
         // Correct well past the head, where the streamer had fetched nothing.
         let far = (HEAD_FRAMES as usize + CHUNK_FRAMES as usize + 500) * ch as usize;

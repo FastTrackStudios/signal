@@ -118,10 +118,15 @@ enum Cmd {
         /// matcher is exact in.
         #[arg(long)]
         sweep: Option<PathBuf>,
-        /// Seconds after the nominal onset to place each sweep window. Far
-        /// enough in to be past the attack, close enough to stay inside the
-        /// note.
-        #[arg(long, default_value_t = 0.20)]
+        /// Seconds after the nominal onset to place each sweep window.
+        ///
+        /// Small ON PURPOSE. The attack is the only landmark a sustained
+        /// string note has — its body is periodic, so a window placed deep in
+        /// it matches at nearly any offset and the fit wanders (measured: a
+        /// window at +200 ms put an on-grid note's onset 198 ms BEFORE its own
+        /// note-on, pinned to the edge of the scan). Keep the attack inside
+        /// the window and the same note reads +1 ms.
+        #[arg(long, default_value_t = 0.03)]
         lead: f64,
         /// Ignore `--reference` and score the matcher against a reference
         /// BUILT from this pack's own samples at known offsets and gains.
@@ -1594,7 +1599,16 @@ fn match_ref_sweep(
             if mic.as_ref().is_some_and(|m| &z.mic != m) {
                 continue;
             }
-            if (i32::from(z.root_key) - i32::from(n.note)).abs() > semitones {
+            // Which note this zone SOUNDS. A sustain sounds its root; a
+            // transition sounds its destination, which for an upward zone is
+            // root+interval. Filtering on the root alone would offer a
+            // transition group for the wrong note entirely.
+            let sounds = if z.direction.eq_ignore_ascii_case("up") {
+                i32::from(z.root_key) + z.interval as i32
+            } else {
+                i32::from(z.root_key)
+            };
+            if (sounds - i32::from(n.note)).abs() > semitones {
                 continue;
             }
             groups
@@ -1633,7 +1647,12 @@ fn match_ref_sweep(
             if members.is_empty() {
                 continue;
             }
-            let shift = i32::from(n.note) - i32::from(key.1);
+            let sounds = if key.2.eq_ignore_ascii_case("up") {
+                i32::from(key.1) + key.3 as i32
+            } else {
+                i32::from(key.1)
+            };
+            let shift = i32::from(n.note) - sounds;
             if shift != 0 {
                 let ratio = 2.0f64.powf(f64::from(shift) / 12.0);
                 let need = scan + wlen + 2;
@@ -1657,7 +1676,12 @@ fn match_ref_sweep(
             let actual = at - off_s;
             let drift = (actual - f64::from(n.start)) * 1000.0;
             let key = &keys[v.group];
-            let shift = i32::from(n.note) - i32::from(key.1);
+            let sounds = if key.2.eq_ignore_ascii_case("up") {
+                i32::from(key.1) + key.3 as i32
+            } else {
+                i32::from(key.1)
+            };
+            let shift = i32::from(n.note) - sounds;
             let gains = v
                 .fit
                 .gains
