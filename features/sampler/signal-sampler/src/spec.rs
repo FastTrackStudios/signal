@@ -702,6 +702,15 @@ pub struct Cc1ExpressionSpec {
     pub knee: u8,
     #[facet(default = -5.4f32)]
     pub floor_db: f32,
+    /// Curve exponent on the normalised distance below the knee. 1.0 is the
+    /// original straight line. Above 1.0 the attenuation concentrates near
+    /// CC1=0, which is the shape the Kontakt reference actually has: measured
+    /// on the S14 CC1 sweep, the reference falls ~44 dB from CC1=127 to CC1=1
+    /// but is already within a few dB of its knee level by CC1≈30, so a
+    /// straight ramp cannot be steep enough at the bottom without being far
+    /// too steep in the middle.
+    #[facet(default = 1.0f32)]
+    pub shape: f32,
 }
 
 impl Default for Cc1ExpressionSpec {
@@ -709,6 +718,7 @@ impl Default for Cc1ExpressionSpec {
         Self {
             knee: 45,
             floor_db: -5.4,
+            shape: 1.0,
         }
     }
 }
@@ -716,13 +726,15 @@ impl Default for Cc1ExpressionSpec {
 impl DynamicsSpec {
     /// CC1 → linear loudness gain from [`DynamicsSpec::cc1_expression`]
     /// (falling back to the CSS-calibrated defaults): 0 dB at/above the knee,
-    /// linear to `floor_db` at CC1=0.
+    /// falling to `floor_db` at CC1=0 along `shape` (1.0 = straight line).
     pub fn cc1_expression_gain(&self, cc1: u8) -> f32 {
         let c = self.cc1_expression.unwrap_or_default();
         let db = if cc1 >= c.knee || c.knee == 0 {
             0.0
         } else {
-            c.floor_db * (c.knee - cc1) as f32 / c.knee as f32
+            let x = (c.knee - cc1) as f32 / c.knee as f32;
+            let x = if c.shape > 0.0 && c.shape != 1.0 { x.powf(c.shape) } else { x };
+            c.floor_db * x
         };
         10f32.powf(db / 20.0)
     }
@@ -2399,4 +2411,50 @@ mod tests {
         assert_eq!(snare.sample_end, 128);
         assert_eq!(snare.tune_cents, 95.0);
     }
+
+    /// `shape` must leave the original straight ramp bit-identical at 1.0, and
+    /// above 1.0 must concentrate the attenuation near CC1=0 — steeper at the
+    /// bottom while staying at or above the linear curve in the middle. The
+    /// concavity is the point: it is what let the CSS curve match the
+    /// reference's ~44 dB sweep without over-attenuating CC1≈20.
+    #[test]
+    fn cc1_expression_shape_is_concave_and_defaults_to_the_straight_ramp() {
+        let with = |shape: f32| DynamicsSpec {
+            cc1_expression: Some(Cc1ExpressionSpec {
+                knee: 45,
+                floor_db: -30.0,
+                shape,
+            }),
+            ..Default::default()
+        };
+        let lin = with(1.0);
+        let cur = with(2.5);
+        let db = |g: f32| 20.0 * g.log10();
+
+        // At and above the knee both are unity; at CC1=0 both hit the floor.
+        for c in [45u8, 60, 127] {
+            assert_eq!(lin.cc1_expression_gain(c), 1.0);
+            assert_eq!(cur.cc1_expression_gain(c), 1.0);
+        }
+        assert!((db(lin.cc1_expression_gain(0)) - -30.0).abs() < 0.01);
+        assert!((db(cur.cc1_expression_gain(0)) - -30.0).abs() < 0.01);
+
+        // The straight ramp stays exactly linear in dB.
+        assert!((db(lin.cc1_expression_gain(15)) - -20.0).abs() < 0.05);
+
+        // Concave: never below the straight ramp, and well above it mid-range.
+        for c in 1..45u8 {
+            assert!(
+                db(cur.cc1_expression_gain(c)) >= db(lin.cc1_expression_gain(c)) - 0.01,
+                "cc1={c} dipped below the straight ramp",
+            );
+        }
+        assert!(db(cur.cc1_expression_gain(22)) - db(lin.cc1_expression_gain(22)) > 5.0);
+
+        // Monotone rising in CC1.
+        for c in 0..127u8 {
+            assert!(cur.cc1_expression_gain(c + 1) >= cur.cc1_expression_gain(c));
+        }
+    }
+
 }
