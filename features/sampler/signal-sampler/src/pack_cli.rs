@@ -2437,6 +2437,22 @@ fn parse_smf(path: &Path) -> Result<Smf> {
                             let (p, v) = (d[i], d[i + 1]);
                             i += 2;
                             if (st & 0xF0) == 0x90 && v > 0 {
+                                // A note-on for a pitch that is already
+                                // sounding ENDS the sounding one here. Simply
+                                // overwriting loses it, and the overlapping
+                                // same-pitch repeat is not a corner case: the
+                                // re-bow test section is five of them, whose
+                                // first note vanished from the schedule
+                                // entirely and took the section's whole A/B
+                                // comparison with it.
+                                if let Some((t0, vel)) = open.remove(&p) {
+                                    notes.push(ScriptNote {
+                                        note: p,
+                                        velocity: vel,
+                                        start: (t0 * sec_per_tick) as f32,
+                                        dur: ((t - t0) * sec_per_tick) as f32,
+                                    });
+                                }
                                 open.insert(p, (t, v));
                             } else if let Some((t0, vel)) = open.remove(&p) {
                                 notes.push(ScriptNote {
