@@ -1464,8 +1464,11 @@ struct GroupHit {
     direction: String,
     interval: u32,
     root_key: u8,
-    /// Semitones the group was resampled by to match (Kontakt grid-fill).
+    /// Semitones the group was shifted by to match (grid-fill).
     shift: i32,
+    /// Which grid-fill model produced this candidate: "resampled" (rate
+    /// change, classic sampler) or "shifted" (time-preserving, ours).
+    fill: String,
     /// Per-member `(dynamic label, gain dB)`, loudest first.
     layers: Vec<(String, f32)>,
     offset_frames: usize,
@@ -1482,6 +1485,30 @@ fn mono_of(pcm: &[f32], channels: usize, frames: usize) -> Vec<f32> {
             (0..ch).map(|c| pcm[base + c]).sum::<f32>() / ch as f32
         })
         .collect()
+}
+
+/// Pitch-shift `src` by `semitones` WITHOUT changing its duration — our
+/// engine's grid-fill, as opposed to [`resample`], which is Kontakt's if
+/// Kontakt fills its whole-tone grid the way a classic sampler does.
+///
+/// Offering the matcher both is the only way to tell the two apart. A note
+/// that is off the sampling grid has no unshifted candidate, so the matcher is
+/// FORCED to pick a neighbour whichever way it was filled; only the fit
+/// quality of the two variants distinguishes them.
+fn pitch_shifted(src: &[f32], semitones: i32) -> Vec<f32> {
+    use crate::engine::pitch_shift::PitchShifter;
+    let cents = f64::from(semitones) * 100.0;
+    if PitchShifter::is_unity(cents) {
+        return src.to_vec();
+    }
+    let mut sh = PitchShifter::new(cents);
+    let startup = sh.startup_frames().min(src.len());
+    // Same startup compensation the engine applies: feed the head through
+    // first, then emit from where that left off.
+    for &v in &src[..startup] {
+        sh.tick(v);
+    }
+    src[startup..].iter().map(|&v| sh.tick(v)).collect()
 }
 
 /// Linear-resample `src` by `ratio` input frames per output frame.
@@ -1944,18 +1971,33 @@ fn match_ref(
             continue;
         }
         for shift in -semitones..=semitones {
-            let ratio = 2.0f64.powf(f64::from(shift) / 12.0);
-            let need = scan + wlen + 2;
-            let members: Vec<Vec<f32>> = decoded
-                .iter()
-                .map(|(_, a)| {
-                    if shift == 0 {
-                        a.clone()
-                    } else {
-                        resample(a, ratio, need.min((a.len() as f64 / ratio) as usize))
-                    }
-                })
-                .collect();
+            // Both grid-fill models, so the fit can say which one the
+            // reference actually used.
+            let variants: Vec<(&str, Vec<Vec<f32>>)> = if shift == 0 {
+                vec![("", decoded.iter().map(|(_, a)| a.clone()).collect())]
+            } else {
+                let ratio = 2.0f64.powf(f64::from(shift) / 12.0);
+                let need = scan + wlen + 2;
+                vec![
+                    (
+                        "resampled",
+                        decoded
+                            .iter()
+                            .map(|(_, a)| {
+                                resample(a, ratio, need.min((a.len() as f64 / ratio) as usize))
+                            })
+                            .collect(),
+                    ),
+                    (
+                        "shifted",
+                        decoded
+                            .iter()
+                            .map(|(_, a)| pitch_shifted(a, shift))
+                            .collect(),
+                    ),
+                ]
+            };
+            for (fill, members) in variants {
             let Some(fit) = crate::ref_match::best_fit(window, &members, scan, 48, 24) else {
                 continue;
             };
@@ -1977,11 +2019,13 @@ fn match_ref(
                 interval: key.3,
                 rr_index: key.4,
                 shift,
+                fill: fill.to_string(),
                 layers,
                 offset_frames: fit.offset,
                 sample_rate: sr,
                 explained: fit.explained,
             });
+            }
         }
     }
     if hits.is_empty() {
@@ -1995,7 +2039,7 @@ fn match_ref(
         groups.len()
     );
     println!(
-        "  {:>8}  {:>9}  {:>9}  {:<10} {:>2}  {:<24} {}",
+        "  {:>8}  {:>9}  {:>9}  {:<10} {:>2}  {:<26} {}",
         "explained", "offset", "onset", "artic", "rr", "root", "layer gains"
     );
     for h in hits.iter().take(top) {
@@ -2006,7 +2050,7 @@ fn match_ref(
         let shift = if h.shift == 0 {
             String::new()
         } else {
-            format!(" {:+}st", h.shift)
+            format!(" {:+}st {}", h.shift, h.fill)
         };
         let dir = if h.direction.is_empty() {
             String::new()
@@ -2021,7 +2065,7 @@ fn match_ref(
             .collect::<Vec<_>>()
             .join("  ");
         println!(
-            "  {:>7.1}%  {:>7.1}ms  {:>8.3}s  {:<10} {:>2}  {:<24} {}",
+            "  {:>7.1}%  {:>7.1}ms  {:>8.3}s  {:<10} {:>2}  {:<26} {}",
             h.explained * 100.0,
             off_ms,
             onset,
