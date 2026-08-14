@@ -977,3 +977,74 @@ note at transition time.**
    (expressive). Do NOT apply the −6 dB `$3tsb0` (chord-mode-only).
 7. **No group-volume deltas**: all CSS groups sit at 0 dB — remove any
    engine-side static transition/release group trim assumptions.
+
+---
+
+## 12. Re-bows without the pedal (read from source, 2026-08-14)
+
+Read directly out of `script_1.ksp` while chasing the re-bow section of
+the parameter test, which was the worst-matching part of the A/B by a
+wide margin.
+
+### 12.1 `$gfkjw` is only ever set while the sustain pedal is held
+
+`$gfkjw` is the "previous note" that every re-bow test compares against
+(`if ($EVENT_NOTE=$gfkjw ...)`). In the mono-legato path it is assigned
+in exactly two places, and both sit under a pedal gate:
+
+```
+18096:  if ($ocjln=0 and ($zs1l1=1))
+18098:      $gfkjw := $EVENT_NOTE      ← only reachable with the pedal down
+18100:      $gfkjw := -1
+
+20425:  if ($zs1l1=1)
+20429:      $gfkjw := $EVENT_NOTE
+20437:  else
+20438:      $gfkjw := -1               ← pedal up: cleared unconditionally
+```
+
+It is declared `-1` (5773) and cleared again at 21793. So **with no
+pedal `$gfkjw` is always −1 and `$EVENT_NOTE = $gfkjw` is never true.**
+
+Everything the earlier sections describe as re-bow behaviour is
+therefore unreachable without CC64 held:
+
+- the Legzero `$1fvjk` offsets (`$knvx2`/`$zk0vu`/`$iufx3`, 18678),
+- the 550 / 500 / 500 ms re-bow fades (`$tdjzq`/`$3ivkj`/`$u0t23`, §11.3),
+- the same-pitch body crossfade branch (20164).
+
+This is stronger than §11's note that Legzero "requires CC64 held". It
+is not that a pedal-less repeat takes a different re-bow path — there is
+no re-bow at all.
+
+### 12.2 So what DOES a pedal-less repeat play? A body, and nothing else
+
+It falls through to the ordinary transition machinery, where the
+transition-sample selection is guarded (19247) by
+
+```
+if ($EVENT_NOTE # $gfkjw and (%2t4y1[$cztyy] # %2t4y1[1-$cztyy]))
+```
+
+The second clause requires the two slot notes to DIFFER. On a repeat
+they are the same note, so the whole `disallow_group`/`allow_group`
+block is skipped and **no transition sample is played**. What remains is
+the destination body against the outgoing body.
+
+A pedal-less repeated note in CSS is thus: new body, old body faded
+against it, no transition recording, no attack ornament, no Legzero.
+
+### 12.3 What this says about our engine
+
+Our re-attack path (`dispatch.rs`, `from_note == to_note && !cc64_held`)
+already fades the old note and triggers a new body, which is the right
+shape. Two things do not follow from the source:
+
+- We apply `css_attack_transient_dip_db` (−3 dB inside 250 ms) to the
+  re-attack. Its origin `%i35so` is at 12717 — inside the 12xxx CHORD
+  region (§11.0), like `$3tsb0` before it. It has no mono-legato
+  counterpart in the script.
+- Across five repeats the reference DECAYS about 10 dB while ours
+  repeats an almost identical envelope. Body-against-body crossfading is
+  the mechanism; the shipped fade times for the pedal-less branch are
+  the numbers still to pull.
