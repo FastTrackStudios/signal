@@ -1631,6 +1631,7 @@ fn match_ref_sweep(
 
     let mut agreed: Vec<f64> = Vec::new();
     let mut checked = 0usize;
+    let mut edges = 0usize;
     // Decode each sample ONCE. `to_f32` on a streamed sample decodes the whole
     // thing (it has to — a partial decode is what made every offline reading
     // of a FLAC pack wrong), so calling it per zone per note turned a 9-note
@@ -1811,10 +1812,21 @@ fn match_ref_sweep(
                 .map(|(g, l)| format!("{l} {:+.1}", 20.0 * g.log10()))
                 .collect::<Vec<_>>()
                 .join("  ");
-            // Does the primary voice agree with the move the MIDI makes?
+            // A fit sitting on either end of the scan is CLIPPED, not
+            // measured: the search wanted to go further and could not. Those
+            // rows read as confident numbers while being artefacts of the
+            // range — the phrase starts, whose skip must be one constant,
+            // scattered over 146 ms and every outlier was an edge.
+            let edge = v.fit.offset <= 24 || v.fit.offset + 24 >= scan;
+            if edge && vi == 0 {
+                edges += 1;
+            }
             let mark = if vi > 0 {
                 " "
             } else {
+                if edge {
+                    "ED"
+                } else {
                 match (&expect[ni], key.2.is_empty()) {
                     // A transition was expected: direction and interval must
                     // both match the step.
@@ -1832,6 +1844,7 @@ fn match_ref_sweep(
                         "OK"
                     }
                     _ => "xx",
+                }
                 }
             };
             println!(
@@ -1884,9 +1897,10 @@ fn match_ref_sweep(
         / agreed.len() as f64)
         .sqrt();
     println!(
-        "\n  {}/{} notes agreed with the MIDI\n  drift  median {:+.1} ms   mean {:+.1} ms   sd {:.1} ms",
+        "\n  {}/{} notes agreed with the MIDI ({} clipped at a scan edge, excluded)\n  drift  median {:+.1} ms   mean {:+.1} ms   sd {:.1} ms",
         agreed.len(),
         checked,
+        edges,
         median,
         mean,
         spread
