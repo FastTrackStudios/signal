@@ -165,7 +165,7 @@ jobs:
         run: ${NIX_DEV} just tailwind-check
       - name: cargo check --workspace
         if: needs.plan.outputs.workspace == 'true'
-        run: ${NIX_DEV} cargo check --workspace --exclude vox-discover
+        run: ${NIX_DEV} cargo check --workspace
       # Patchbay is excluded from the full-workspace gate (leaf domain);
       # a patchbay-only change still gets its own compile check.
       - name: cargo check patchbay (patchbay-only change)
@@ -242,10 +242,10 @@ jobs:
       - name: Clippy
         if: needs.plan.outputs.workspace == 'true'
         run: |
-          ${NIX_DEV} cargo clippy --workspace --exclude vox-discover \
+          ${NIX_DEV} cargo clippy --workspace \
             --all-targets -- -D warnings
       - name: Docs
         if: needs.plan.outputs.workspace == 'true'
         env:
           RUSTDOCFLAGS: -D warnings
-        run: ${NIX_DEV} cargo doc --workspace --exclude vox-discover --no-deps
+        run: ${NIX_DEV} cargo doc --workspace --no-deps

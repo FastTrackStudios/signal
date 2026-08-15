@@ -125,7 +125,7 @@
         echo ""
         echo "  FastTrackStudio dev shell"
         echo "  ─────────────────────────────────────────────"
-        echo "  cargo check --workspace --exclude vox-discover"
+        echo "  cargo check --workspace"
         echo "  cargo build -p fasttrackstudio — THE app (--engine = headless rig)"
         echo "  (cd apps/fasttrackstudio && dx build --platform web --no-default-features --features signal)"
         echo ""

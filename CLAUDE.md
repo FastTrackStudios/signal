@@ -14,7 +14,7 @@ elsewhere:
 One root Cargo workspace (249 members), one lockfile, one `target/`, one
 flake. Intra-repo dependencies are path deps in root
 `[workspace.dependencies]`, consumed as `x.workspace = true`. Cross-repo
-dependencies are **git deps pinned to a tag** — see LAYOUT.md for the map.
+dependencies are **git deps pinned to a tag**.
 
 **Co-developing across repos**: override the tag with a local checkout
 rather than pushing a tag to test:
@@ -47,7 +47,7 @@ features/  capabilities — audio, sync, dawfile, reaper, standalone,
            expression-editor, chord-tool, song,
            launcher/ (fts-launcher — the REAPER DawModule glue; the
            launcher engine itself is architect-launcher-*)
-libs/      infra libraries — dock, nice-plug, utils, vox-discover,
+libs/      infra libraries — dock, nice-plug, utils,
            installer-core, neural-amp-modeler, monarchy, devtools,
            ui/ (fts-plug-ui, fts-audio-ui — the audio-specific UI that
            did NOT move to architect-ui, plus a vendored copy of
@@ -113,7 +113,7 @@ with it; `fts-plug-ui` and `fts-audio-ui` stayed here because they link
 Everything builds from the repo root (one workspace):
 
 ```bash
-cargo check --workspace --exclude vox-discover   # the whole tree
+cargo check --workspace                          # the whole tree
 cargo build -p fasttrackstudio                   # THE app (GUI; `--engine` = headless signal engine)
 cargo build -p fts-cli                           # the unified `fts` CLI (fts daw / fts kf / fts signal engine / fts status)
 cargo check -p fasttrackstudio --target wasm32-unknown-unknown --no-default-features --features signal  # browser remote (web build)
@@ -121,7 +121,7 @@ cargo check -p fasttrackstudio --target wasm32-unknown-unknown --no-default-feat
 
 Dev shell: `nix develop` (or direnv `use flake`) — root `flake.nix`
 carries the FTS 1.94 toolchain pin, `dx`, wasm target, tailwindcss, and
-the native headers (alsa, pipewire, jack, avahi for vox-discover). Also
+the native headers (alsa, pipewire, jack). Also
 mold, sccache, cargo-sweep (see build performance below).
 
 **Build performance / disk** — read the `build-performance` skill before
@@ -249,9 +249,9 @@ queue is refilled.)
 3. ~~Retire `FastTrackStudio/apps/*`.~~ DONE — the legacy app is parked;
    `apps/installer` (fts-installer) survived as a root member.
 4. ~~Root flake.nix.~~ DONE — adopted signal's flake at the root
-   (dioxus-flake toolchain, rust 1.94 + wasm, avahi/pipewire/jack shells).
+   (dioxus-flake toolchain, rust 1.94 + wasm, pipewire/jack shells).
 
-### Dedup queue (from LAYOUT.md, after the merge)
+### Dedup queue
 
 - keyflow-daw-analysis's daw types → daw-proto only
 - audio-controls (vendored) → fold into features/daw-ui or delete after
@@ -301,6 +301,7 @@ See `docs/agents/triage-labels.md`.
 
 ### Domain docs
 
-Multi-context — `CONTEXT-MAP.md` at the root pointing at per-domain
-`CONTEXT.md` files. None exist yet; `/domain-modeling` writes them when a
-term actually needs resolving. See `docs/agents/domain.md`.
+Per-domain `CONTEXT.md` files, written by `/domain-modeling` when a term
+actually needs resolving. (The root `CONTEXT-MAP.md` pointing at them was
+removed — it indexed files that never got written.) See
+`docs/agents/domain.md`.
