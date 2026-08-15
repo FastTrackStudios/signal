@@ -7,11 +7,11 @@
 //! HPF/LPF, velocity min/max), segmented selects for the detection algorithm
 //! and velocity curve, a MIDI-note stepper, and the Listen toggle. Reusable
 //! widgets (knobs, toggle, segmented, drag provider) come from
-//! [`fts_ui_audio`]; theme + layout primitives from [`architect_ui`].
+//! [`fts_audio_ui`]; theme + layout primitives from [`architect_ui`].
 
 use audiocore_core::prelude::*;
 use architect_ui::prelude::{ThemeMode, ThemeProvider, ThemeState, default_theme_preset};
-use fts_ui_audio::prelude::*;
+use fts_audio_ui::prelude::*;
 
 use crate::param_adapter::param_handle;
 use crate::params::TriggerUiState;

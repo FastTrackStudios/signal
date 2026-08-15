@@ -193,7 +193,7 @@ async fn shot_every_other_unit() {
 /// tell you.
 #[tokio::test]
 async fn shot_every_editor_form() {
-    for form in fts_ui_audio::EDITOR_FORMS {
+    for form in fts_audio_ui::EDITOR_FORMS {
         let index = comp_profiles::profile_index("la2a").unwrap();
         let (w, h) = comp_ui::faces::editor_size_for(index, *form);
         let params = std::sync::Arc::new(comp_ui::params::CompParams::default());

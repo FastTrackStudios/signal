@@ -17,14 +17,14 @@ native = [
     "dep:nice-plug-dioxus",
     "dep:audiocore-core",
     "dep:architect-ui",
-    "dep:fts-ui-audio",
+    "dep:fts-audio-ui",
     "dep:atomic_float",
 ]
 
 [dependencies]
 audiocore-core = { workspace = true, optional = true }
 architect-ui = { workspace = true, optional = true }
-fts-ui-audio = { workspace = true, optional = true }
+fts-audio-ui = { workspace = true, optional = true }
 nice-plug = { workspace = true, optional = true }
 nice-plug-dioxus = { workspace = true, optional = true }
 atomic_float = { workspace = true, optional = true }

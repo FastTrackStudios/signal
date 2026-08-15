@@ -1,7 +1,7 @@
 //! Drawing a [`RackDesign`] for the EQ.
 //!
 //! The description of a panel is shared with the compressor
-//! ([`fts_ui_audio::hardware::rack`]); what is local is where a control id
+//! ([`fts_audio_ui::hardware::rack`]); what is local is where a control id
 //! turns into a [`ParamHandle`] — here, one parameter per control through
 //! [`crate::faces::params_map`].
 //!
@@ -10,14 +10,14 @@
 //! the Main face.
 
 use audiocore_core::prelude::*;
-use fts_ui_audio::hardware::button::{LedMeter, PanelButton};
-use fts_ui_audio::hardware::knob::HardwareKnob;
-use fts_ui_audio::hardware::lever::LeverSwitch;
-use fts_ui_audio::hardware::panel::{panel_scale, Panel, PanelSlot, Silkscreen};
-use fts_ui_audio::hardware::rack::{RackDesign, RackItem};
-use fts_ui_audio::hardware::switches::{RatioButtons, ToggleSwitch};
-use fts_ui_audio::shell::RAIL_W;
-use fts_ui_audio::ParamHandle;
+use fts_audio_ui::hardware::button::{LedMeter, PanelButton};
+use fts_audio_ui::hardware::knob::HardwareKnob;
+use fts_audio_ui::hardware::lever::LeverSwitch;
+use fts_audio_ui::hardware::panel::{panel_scale, Panel, PanelSlot, Silkscreen};
+use fts_audio_ui::hardware::rack::{RackDesign, RackItem};
+use fts_audio_ui::hardware::switches::{RatioButtons, ToggleSwitch};
+use fts_audio_ui::shell::RAIL_W;
+use fts_audio_ui::ParamHandle;
 
 use crate::faces::params_map::control_ptr;
 use crate::param_adapter::param_handle;
@@ -61,7 +61,7 @@ pub fn EqRackFace(
     /// shape it was never for — a portrait 500-series module, a 1U sliver —
     /// the face flows its controls instead of shrinking the panel past
     /// legibility.
-    form: fts_ui_audio::EditorForm,
+    form: fts_audio_ui::EditorForm,
 ) -> Element {
     let _ = frame;
     let shared = use_context::<SharedState>();
@@ -90,7 +90,7 @@ pub fn EqRackFace(
         param_handle(ptr, ctx.clone())
     };
 
-    let (win_w, win_h) = fts_ui_audio::hardware::panel::window_logical_size()
+    let (win_w, win_h) = fts_audio_ui::hardware::panel::window_logical_size()
         .unwrap_or((design.w + RAIL_W, design.h));
     if !form.wants_panel(design.w, design.h, win_w - RAIL_W, win_h) {
         return rsx! {
@@ -445,7 +445,7 @@ fn CompactEqRack(design: RackDesign, model: i32, avail_h: f64) -> Element {
                                 diameter: knob_d,
                                 style: design.knob,
                                 ink: design.ink.to_string(),
-                                marks: fts_ui_audio::hardware::rack::Ring::Detents(labels).marks(),
+                                marks: fts_audio_ui::hardware::rack::Ring::Detents(labels).marks(),
                             }
                         }),
                         RackItem::Switch { id, legend, labels, .. } => cell(id, legend, rsx! {

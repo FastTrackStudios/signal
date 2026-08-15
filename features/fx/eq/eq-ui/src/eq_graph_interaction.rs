@@ -1,7 +1,7 @@
 //! Coordinate mapping and hit-testing helpers for the EQ graph.
 
 use super::eq_graph_model::{EqBand, EqBandShape};
-use fts_ui_audio::axis::{DbAxis, FreqAxis};
+use fts_audio_ui::axis::{DbAxis, FreqAxis};
 
 #[derive(Clone, Copy, Debug)]
 pub struct GraphMapper {

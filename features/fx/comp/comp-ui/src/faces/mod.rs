@@ -18,8 +18,8 @@ use std::sync::Arc;
 
 use audiocore_core::prelude::*;
 use comp_profiles::Profile;
-use fts_ui_audio::shell::ShellItem;
-use fts_ui_audio::ParamHandle;
+use fts_audio_ui::shell::ShellItem;
+use fts_audio_ui::ParamHandle;
 use nice_plug_dioxus::prelude::ParamContext;
 
 use crate::params::CompUiState;
@@ -151,7 +151,7 @@ pub fn preferred_editor_size(_profile_index: usize) -> (u32, u32) {
 
 /// The editor size for a profile *and* a chosen form: the form decides, except
 /// for Responsive, which defers to the face.
-pub fn editor_size_for(profile_index: usize, form: fts_ui_audio::EditorForm) -> (u32, u32) {
+pub fn editor_size_for(profile_index: usize, form: fts_audio_ui::EditorForm) -> (u32, u32) {
     form.editor_size(
         crate::control_view::RAIL_W,
         preferred_editor_size(profile_index),
@@ -175,7 +175,7 @@ pub fn Face(
     frame: u64,
     /// The editor's form factor — a face draws its panel or flows its controls
     /// depending on whether the panel fits the shape.
-    form: fts_ui_audio::EditorForm,
+    form: fts_audio_ui::EditorForm,
 ) -> Element {
     let _ = frame;
     match units::design_for(profile_id_for_index(profile_index)) {
@@ -273,7 +273,7 @@ mod tests {
         let (min_w, min_h) = crate::control_view::min_editor_size();
         let (max_w, max_h) = crate::control_view::max_editor_size();
         for index in 0..profile_ids().len() {
-            for form in fts_ui_audio::EDITOR_FORMS {
+            for form in fts_audio_ui::EDITOR_FORMS {
                 let (w, h) = editor_size_for(index, *form);
                 let (w, h) = (w as f32, h as f32);
                 assert!(

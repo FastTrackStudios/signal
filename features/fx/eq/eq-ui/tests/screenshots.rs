@@ -87,7 +87,7 @@ fn mount_with(params: Arc<FtsEqParams>, width: u32, height: u32) -> Fixture {
         .with_window_size(width, height)
         // The panels size themselves from the window `nice-plug-dioxus` puts
         // in context on resize; a headless mount has no window, so state it.
-        .with_root_context(fts_ui_audio::hardware::panel::EditorSize(
+        .with_root_context(fts_audio_ui::hardware::panel::EditorSize(
             width as f64,
             height as f64,
         ))
@@ -191,7 +191,7 @@ async fn switching_models_by_rail_click_does_not_panic() {
 /// a size in a table can tell you.
 #[tokio::test]
 async fn shot_every_editor_form() {
-    for form in fts_ui_audio::EDITOR_FORMS {
+    for form in fts_audio_ui::EDITOR_FORMS {
         let (w, h) = eq_ui::faces::editor_size_for(1, *form);
         let params = Arc::new(FtsEqParams::default());
         unsafe { params.model.as_ptr()._internal_set_normalized_value(1.0 / 5.0) };

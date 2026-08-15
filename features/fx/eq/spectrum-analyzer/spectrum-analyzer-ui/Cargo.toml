@@ -20,4 +20,4 @@ spectrum-analyzer-dsp = { workspace = true }
 nice-plug-dioxus = { workspace = true }
 audiocore-core = { workspace = true }
 architect-ui = { workspace = true }
-fts-ui-audio = { workspace = true }
+fts-audio-ui = { workspace = true }

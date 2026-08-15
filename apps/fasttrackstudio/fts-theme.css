@@ -3,7 +3,7 @@
  * canonical FTS design tokens.
  *
  * The canonical sheet now lives in the architect repo (architect-ui);
- * libs/fts-ui/assets/fts-theme.css is a vendored copy of it, and is
+ * libs/ui/assets/fts-theme.css is a vendored copy of it, and is
  * imported verbatim below. This app is always dark (it is stage gear —
  * there is no light mode), so it promotes the canonical DARK values into
  * an unconditional `:root`. The values below are copied from the
@@ -23,7 +23,7 @@
  * the signal-UI inline-styles rule in CLAUDE.md.
  */
 
-@import "../../libs/fts-ui/assets/fts-theme.css";
+@import "../../libs/ui/assets/fts-theme.css";
 
 /* Dark values as the unconditional default (the desktop/stage app is
  * always dark). Mirrors the canonical dark block exactly. */

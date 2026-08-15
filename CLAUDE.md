@@ -44,24 +44,23 @@ crates/    domain cores — daw, session, keyflow, signal (facade+proto+
 features/  capabilities — audio, sync, dawfile, reaper, standalone,
            surfaces, daw-ui, guide, engraver, dynamic-template,
            fx (built-in FX), rigs, sampler, nam, plugin-host,
-           task/* (Task's ~28 feature slices: project, inbox, agent, …)
-libs/      UI + infra libraries — architect-ui, fts-story, dock, nice-plug,
-           utils, vox-discover, installer-core, neural-amp-modeler,
-           monarchy, devtools,
-           editor (subtree-imported Editor stack: editor-state/-view/
-           -vim/-keyflow/… — used by apps/site and Task),
-           vendor/ (patched third-party: styx-format)
+           expression-editor, chord-tool, song,
+           launcher/ (fts-launcher — the REAPER DawModule glue; the
+           launcher engine itself is architect-launcher-*)
+libs/      infra libraries — dock, nice-plug, utils, vox-discover,
+           installer-core, neural-amp-modeler, monarchy, devtools,
+           ui/ (fts-plug-ui, fts-audio-ui — the audio-specific UI that
+           did NOT move to architect-ui, plus a vendored copy of
+           fts-theme.css that Tailwind builds @import),
+           vendor/ (dioxus-test, facet-swift, world)
 apps/      fasttrackstudio (THE app: desktop GUI = signal / session /
            full / tts; `fasttrackstudio --engine` = the headless signal
            engine; the dx web build is the browser remote, embeddable in
            the binary via feature embed-web),
-           daw-cli, keyflow-cli, installer,
+           daw-cli, keyflow-cli, installer, plugins/, extensions/,
            site (fts-site — fasttrackstudio.app website, dioxus web),
            docs-site (docs.fasttrackstudio.app — dodeca + kf docs, NOT a
-           cargo member; `just docs-build` / `just docs-serve`),
-           task/ (subtree-imported Task product home: cli/desktop/
-           mobile/server/web apps + its docs/deploy/skills; core crates
-           at crates/task/*, feature slices at features/task/*)
+           cargo member; `just docs-build` / `just docs-serve`)
 docs/      cross-domain guides (facet, styx, tracey, spec/)
 ```
 
@@ -69,7 +68,7 @@ docs/      cross-domain guides (facet, styx, tracey, spec/)
 changes are made there, tagged, and pulled in by bumping the tag here —
 with a local `[patch]` override for the edit/test loop. `architect-ui`
 (formerly `fts-ui`) and `architect-story-*` (formerly `fts-story-*`) went
-with it; `fts-plug-ui` and `fts-ui-audio` stayed here because they link
+with it; `fts-plug-ui` and `fts-audio-ui` stayed here because they link
 `audiocore-core` and `nice-plug`.
 
 ## Rules
@@ -78,12 +77,14 @@ with it; `fts-plug-ui` and `fts-ui-audio` stayed here because they link
   `[patch]` block's URL is a repo that no longer exists, it is either dead
   (delete it) or load-bearing for a *transitive* git dep. Check the
   lockfile before touching — and note that a `[patch]` **cannot rename a
-  crate**, which is what broke `fts-launcher` at the split: its
-  `launcher-ui` dep wants a crate literally named `fts-ui`, and there is
-  no longer one to redirect to. `features/launcher/fts-launcher` is
-  therefore excluded from the workspace and `mod-launcher` is off by
-  default in `fts-extensions`; the fix is to vendor `dioxus-launcher` and
-  repoint it at `architect-ui`.
+  crate**. That is what briefly broke `fts-launcher` at the split: its
+  `launcher-ui` dep wanted a crate literally named `fts-ui`, with nothing
+  left to redirect to, so it resolved a stale Codeberg copy carrying its
+  own dioxus. Fixed by vendoring the engine into architect as
+  `architect-launcher-*` (v0.2.0), where it is an ordinary path dep on
+  `architect-ui`. `fts-launcher` is now only the REAPER DawModule glue.
+- **`default-features = false` cannot be applied to a workspace-inherited
+  dep.** Put it on the `[workspace.dependencies]` entry, not the consumer.
 - **`include_str!` / `@import` across a repo boundary does not work.** A
   git dep has no stable path on disk, and these are invisible to cargo's
   dependency graph, so they fail at compile time rather than resolution

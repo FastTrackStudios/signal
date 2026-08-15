@@ -18,7 +18,7 @@
    covers this code the moment that stops being true. */
 @source "../../features/daw-ui/daw-theme-art/src/**/*.rs";
 @source "../../features/chord-tool/*/src/**/*.rs";
-@source "../../libs/fts-ui/*/src/**/*.rs";
+@source "../../libs/ui/*/src/**/*.rs";
 @source "../../libs/dock/*/src/**/*.rs";
 /* lumen-blocks is still a git dep. `.lumen-blocks` is a symlink to the
  * checkout cargo resolved, refreshed by `just tailwind` (recipe

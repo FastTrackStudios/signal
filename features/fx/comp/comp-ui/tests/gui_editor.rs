@@ -21,7 +21,7 @@
 //!   blitz-dom processes `<style>` anywhere in the tree. Without them every
 //!   Tailwind class (`flex-1`, `grid`, …) is undefined and the layout
 //!   collapses.
-//! - Knob dragging goes through `fts_ui_audio`'s `DragProvider`: mousedown on
+//! - Knob dragging goes through `fts_audio_ui`'s `DragProvider`: mousedown on
 //!   the knob's overlay starts the gesture, mousemoves anywhere in the window
 //!   move the value (vertical, up = increase), mouseup ends it.
 
@@ -737,7 +737,7 @@ async fn the_size_button_cycles_the_forms_and_each_asks_for_its_own_box() -> dio
     let (max_w, max_h) = comp_ui::control_view::max_editor_size();
 
     let mut seen = Vec::new();
-    for _ in 0..fts_ui_audio::EDITOR_FORMS.len() {
+    for _ in 0..fts_audio_ui::EDITOR_FORMS.len() {
         let form = fx.params.resolved_editor_form();
         let size = comp_ui::faces::editor_size_for(0, form);
         assert!(
@@ -778,8 +778,8 @@ async fn the_size_button_cycles_the_forms_and_each_asks_for_its_own_box() -> dio
         "more than one pair of forms resolves to the same window"
     );
     assert_eq!(
-        comp_ui::faces::editor_size_for(0, fts_ui_audio::EditorForm::Rack2U),
-        comp_ui::faces::editor_size_for(0, fts_ui_audio::EditorForm::Responsive),
+        comp_ui::faces::editor_size_for(0, fts_audio_ui::EditorForm::Rack2U),
+        comp_ui::faces::editor_size_for(0, fts_audio_ui::EditorForm::Responsive),
         "a face's own size is its 2U size",
     );
     Ok(())

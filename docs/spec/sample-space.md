@@ -73,7 +73,7 @@ metrics, auto stereo-pair build (phase check + level match), EQ "synergize".
 - **Map UI prior art**: `view-knowledge-graph` (deterministic FR layout +
   SVG pan/zoom/hover/label-density renderer, Dioxus),
   `signal_ui::PanZoomCanvas` (generic pan/zoom wrapper, Blitz-safe),
-  `fts_ui_audio::axis` (value↔pixel math), `MappingView` (zone rectangles),
+  `fts_audio_ui::axis` (value↔pixel math), `MappingView` (zone rectangles),
   `signal-grid-ui` (pad/grid components), `star_rating.rs`.
 - **NAM probe infra**: `neural-amp-modeler` (inference),
   `nam_calibrate.rs` (DI clip → LUFS → makeup gain — half the probe

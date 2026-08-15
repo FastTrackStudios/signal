@@ -10,8 +10,8 @@ use std::sync::Arc;
 
 use dioxus::prelude::*;
 use architect_ui::prelude::{default_theme_preset, ThemeMode, ThemeProvider, ThemeState};
-use fts_ui_audio::prelude::*;
-use fts_ui_audio::shell::{PluginShell, RailButton, ShellItem};
+use fts_audio_ui::prelude::*;
+use fts_audio_ui::shell::{PluginShell, RailButton, ShellItem};
 use nice_plug::editor::dpi::LogicalSize;
 use nice_plug::prelude::Param;
 use nice_plug::editor::ResizeHint;
@@ -21,7 +21,7 @@ use crate::faces::ModFace;
 use crate::param_adapter::param_handle;
 use crate::params::{ModParams, ModUiState};
 
-pub use fts_ui_audio::shell::RAIL_W;
+pub use fts_audio_ui::shell::RAIL_W;
 
 /// Editor size on open. The faces are drawn 2U, and this is that drawing plus
 /// the rail and a margin — see the compressor's note on why every face asks
@@ -30,7 +30,7 @@ pub const EDITOR_W: u32 = 1280;
 pub const EDITOR_H: u32 = 440;
 
 fn bounds() -> ((u32, u32), (u32, u32)) {
-    fts_ui_audio::EditorForm::size_bounds(RAIL_W, (EDITOR_W, EDITOR_H))
+    fts_audio_ui::EditorForm::size_bounds(RAIL_W, (EDITOR_W, EDITOR_H))
 }
 
 pub fn min_editor_size() -> (f32, f32) {
@@ -62,7 +62,7 @@ pub struct ModUi {
 }
 
 /// The editor's size for a profile and a chosen form.
-pub fn editor_size_for(_profile_index: usize, form: fts_ui_audio::EditorForm) -> (u32, u32) {
+pub fn editor_size_for(_profile_index: usize, form: fts_audio_ui::EditorForm) -> (u32, u32) {
     form.editor_size(RAIL_W, (EDITOR_W, EDITOR_H))
 }
 
@@ -98,7 +98,7 @@ pub fn App() -> Element {
     // than an effect: the profile lives in a plugin param, not a signal, so
     // comparing here also catches the host automating it.
     #[allow(clippy::type_complexity)]
-    let last: std::rc::Rc<std::cell::Cell<Option<(usize, fts_ui_audio::EditorForm)>>> =
+    let last: std::rc::Rc<std::cell::Cell<Option<(usize, fts_audio_ui::EditorForm)>>> =
         use_hook(|| std::rc::Rc::new(std::cell::Cell::new(None)));
     if last.get() != Some((profile_index, form)) {
         last.set(Some((profile_index, form)));
@@ -201,10 +201,10 @@ pub fn App() -> Element {
                         testid: "form-cycle".to_string(),
                         label: form.badge().to_string(),
                         title: format!("Editor size — {} (click to cycle)", form.label()),
-                        active: form != fts_ui_audio::EditorForm::default(),
+                        active: form != fts_audio_ui::EditorForm::default(),
                         accent: accent_for_form.clone(),
                         on_click: move |_| {
-                            let forms = fts_ui_audio::EDITOR_FORMS;
+                            let forms = fts_audio_ui::EDITOR_FORMS;
                             let index = forms.iter().position(|f| *f == form).unwrap_or(0);
                             params_for_form.store_editor_form(forms[(index + 1) % forms.len()]);
                         },

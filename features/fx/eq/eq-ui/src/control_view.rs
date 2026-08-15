@@ -2,7 +2,7 @@
 //!
 //! Pro-Q style spectrum analyzer with draggable band nodes, level meters, and
 //! a per-band detail panel. Reusable widgets (knobs, meters, drag provider)
-//! and the theme system come from [`fts_ui_audio`]; the EQ-specific graph
+//! and the theme system come from [`fts_audio_ui`]; the EQ-specific graph
 //! lives in [`crate::eq_graph`].
 
 use std::sync::atomic::Ordering;
@@ -18,7 +18,7 @@ use architect_ui::prelude::{
     SegmentedControlSize, Select, SelectContent, SelectItem, Switch, TabContent, TabList,
     TabTrigger, Tabs, ThemeMode, ThemeProvider, ThemeState, default_theme_preset,
 };
-use fts_ui_audio::prelude::*;
+use fts_audio_ui::prelude::*;
 
 use crate::eq_graph::{EqBand, EqBandShape, EqGraph, OverlayChoice};
 
@@ -31,14 +31,14 @@ pub const EDITOR_H: u32 = 720;
 
 /// The editor's resize bounds — the extremes of the size presets.
 ///
-/// Derived from [`EDITOR_FORMS`](fts_ui_audio::EDITOR_FORMS) rather than
+/// Derived from [`EDITOR_FORMS`](fts_audio_ui::EDITOR_FORMS) rather than
 /// chosen, because a host clamps a resize request to the bounds the plugin
 /// declared: any bound tighter than a preset the rail offers turns that
 /// preset into a window that never arrives. A 520px height floor collapsed
 /// 1U and 2U onto the same box.
 fn bounds() -> ((u32, u32), (u32, u32)) {
-    fts_ui_audio::EditorForm::size_bounds(
-        fts_ui_audio::shell::RAIL_W,
+    fts_audio_ui::EditorForm::size_bounds(
+        fts_audio_ui::shell::RAIL_W,
         (EDITOR_W, EDITOR_H),
     )
 }
@@ -301,7 +301,7 @@ fn AppShell() -> Element {
 
     // Drive the root colors / typography from the architect-ui CSS variables so
     // the EQ shell respects the active ThemeProvider preset. The
-    // fts_ui_audio theme is still in scope for spacing tokens but its
+    // fts_audio_ui theme is still in scope for spacing tokens but its
     // hardcoded palette is no longer used at this level.
     let base_css = "*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; } \
          html, body { width: 100%; height: 100%; overflow: hidden; \
@@ -360,12 +360,12 @@ fn AppShell() -> Element {
                         testid: "form-cycle".to_string(),
                         label: current_form.badge().to_string(),
                         title: format!("Editor size — {} (click to cycle)", current_form.label()),
-                        active: current_form != fts_ui_audio::EditorForm::default(),
+                        active: current_form != fts_audio_ui::EditorForm::default(),
                         accent: "#8aa4ff".to_string(),
                         on_click: {
                             let params = params.clone();
                             move |_| {
-                                let forms = fts_ui_audio::EDITOR_FORMS;
+                                let forms = fts_audio_ui::EDITOR_FORMS;
                                 let index =
                                     forms.iter().position(|f| *f == current_form).unwrap_or(0);
                                 crate::faces::store_form(&params, forms[(index + 1) % forms.len()]);

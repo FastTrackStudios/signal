@@ -225,9 +225,9 @@ with usvg (`blitz-dom/src/util.rs:170`, `usvg::Options { fontdb, ..Default::defa
    `fill="oklch(0.7 0.1 30)"` — which usvg's `svgtypes` cannot parse, so
    the attribute is dropped and the shape paints black or transparent.
    The tree already knows this:
-   `libs/fts-ui/ui-snapshot/tests/pixel_probes.rs:105–120` is an
+   `libs/ui/ui-snapshot/tests/pixel_probes.rs:105–120` is an
    `#[ignore]`d regression gate saying precisely that, and
-   `libs/fts-ui/docs/blitz-diagnosis.md:148–156` generalises it:
+   `libs/ui/docs/blitz-diagnosis.md:148–156` generalises it:
 
    > Stylo formats computed colours in their source space. Anything
    > downstream that uses `Color::to_css_string()` and feeds the result
@@ -352,7 +352,7 @@ In-tree (branch `worktree-reaper-theme` for the `daw-theme-art` paths):
 - `features/daw-ui/daw-ui/src/test_panels.rs` — Tailwind under Blitz in REAPER, today
 - `features/daw-ui/daw-ui/src/panels/` — 117 inline `style:`, 2 `class:`
 - `apps/fasttrackstudio/src/rig_view.rs`, `mobile_view.rs`, `input.css`, `Justfile`
-- `libs/fts-ui/docs/blitz-diagnosis.md`, `libs/fts-ui/ui-snapshot/tests/pixel_probes.rs`
+- `libs/ui/docs/blitz-diagnosis.md`, `libs/ui/ui-snapshot/tests/pixel_probes.rs`
 - skill `reaper-theme-vectors` — exporter constraints (strokes, clip-path, `<defs>`, sprite cells, markers)
 
 Pinned dependency source:
