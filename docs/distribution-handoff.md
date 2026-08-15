@@ -109,7 +109,7 @@ to starcommand (the server + served web app); the self-host artifact.
   `DYLD_LIBRARY_PATH` unset (fixed in toolchain.nix). `wasm-opt` still crashes
   on darwin (same dylib issue) — non-fatal, ships an unoptimized wasm.
 - Tailwind: `@source`/`@import` paths must track the monorepo layout
-  (`../../../crates/task/…`, `../../../libs/fts-ui/…`); the pre-monorepo
+  (`../../../crates/task/…`, `../../../libs/ui/…`); the pre-monorepo
   `FastTrackStudio/fts-ui` paths are dead. Vendor `fts-theme.css` in-tree.
 
 ## 7. ⭐ THE WATCH WORK

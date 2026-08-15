@@ -17,11 +17,11 @@
 //! Panel drawings are wide and short, so a face asks the host for a shorter
 //! editor — see [`crate::faces::preferred_editor_size`].
 
-use fts_ui_audio::hardware::panel::{PanelEnds, PanelTexture};
-use fts_ui_audio::hardware::vu_svg::VuScale;
-use fts_ui_audio::hardware::knob::KnobStyle;
-use fts_ui_audio::hardware::rack::{FilterGlyph, RackDesign, RackItem, Ring};
-use fts_ui_audio::hardware::vu::VuFace;
+use fts_audio_ui::hardware::panel::{PanelEnds, PanelTexture};
+use fts_audio_ui::hardware::vu_svg::VuScale;
+use fts_audio_ui::hardware::knob::KnobStyle;
+use fts_audio_ui::hardware::rack::{FilterGlyph, RackDesign, RackItem, Ring};
+use fts_audio_ui::hardware::vu::VuFace;
 
 /// Panel drawing size shared by the EQ faces. Taller than the compressor's
 /// because these units are 2–3U and carry two rows of controls; the ratio is

@@ -10,7 +10,7 @@
 //! surface without the layout code knowing which profile is active.
 
 use audiocore_core::prelude::*;
-use fts_ui_audio::prelude::*;
+use fts_audio_ui::prelude::*;
 
 use crate::profile_view::ProfileSkin;
 
@@ -27,7 +27,7 @@ pub fn Section(
     width: Option<f64>,
     /// Drop the panel chrome — border, background, padding.
     ///
-    /// A section inside a [`fts_ui_audio::shell::FloatingPanel`]
+    /// A section inside a [`fts_audio_ui::shell::FloatingPanel`]
     /// is already sitting on a card; a second border around each group turns
     /// the floating bar into a row of boxes.
     #[props(default = false)]
@@ -140,7 +140,7 @@ pub fn ParamDropdown(
             }
             // Qualified: `architect_ui` has a `Dropdown` of its own (a menu, not a
             // param control) and both preludes are in scope here.
-            fts_ui_audio::controls::Dropdown {
+            fts_audio_ui::controls::Dropdown {
                 handle,
                 options,
                 color: skin.accent.to_string(),

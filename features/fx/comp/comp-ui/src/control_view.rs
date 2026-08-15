@@ -19,7 +19,7 @@
 //! Selecting a profile therefore swaps the whole UI rather than recolouring
 //! it. The `profile` param persists, so the face survives a session reload.
 //!
-//! Reusable widgets (knobs, meters, drag provider) come from [`fts_ui_audio`];
+//! Reusable widgets (knobs, meters, drag provider) come from [`fts_audio_ui`];
 //! theme + layout primitives from [`architect_ui`]; the section wrappers from
 //! [`crate::sections`].
 
@@ -27,7 +27,7 @@ use audiocore_core::prelude::*;
 use nice_plug::editor::dpi::LogicalSize;
 use nice_plug::editor::ResizeHint;
 use architect_ui::prelude::{ThemeMode, ThemeProvider, ThemeState, default_theme_preset};
-use fts_ui_audio::prelude::*;
+use fts_audio_ui::prelude::*;
 
 use crate::faces::{profile_id_for_index, Face};
 use crate::param_adapter::param_handle;
@@ -40,7 +40,7 @@ use crate::profile_view::{ProfileSkin, profile_skin};
 /// the space *beside* the rail, so the fit has to know how much of the window
 /// the rail already took. There is no header any more, so the faces get the
 /// window's full height.
-pub const RAIL_W: f64 = fts_ui_audio::shell::RAIL_W;
+pub const RAIL_W: f64 = fts_audio_ui::shell::RAIL_W;
 
 /// Editor size the plugin shell requests from the host on open.
 ///
@@ -67,7 +67,7 @@ pub const EDITOR_H: u32 = 440;
 /// The editor's resize bounds — the extremes of the size presets.
 ///
 /// Deliberately derived rather than chosen. Every preset in
-/// [`EDITOR_FORMS`](fts_ui_audio::EDITOR_FORMS) is offered on the rail, and a
+/// [`EDITOR_FORMS`](fts_audio_ui::EDITOR_FORMS) is offered on the rail, and a
 /// host clamps a resize request to the bounds the plugin declared, so any
 /// bound tighter than the presets is not caution — it is a size button that
 /// lies. A 300px height floor made 1U and 2U the same window; a 720px width
@@ -76,7 +76,7 @@ pub const EDITOR_H: u32 = 440;
 /// The face's own preferred size is inside these by construction: it is the
 /// rack shape, and the rack forms are what set the wide end.
 fn bounds() -> ((u32, u32), (u32, u32)) {
-    fts_ui_audio::EditorForm::size_bounds(RAIL_W, crate::faces::preferred_editor_size(0))
+    fts_audio_ui::EditorForm::size_bounds(RAIL_W, crate::faces::preferred_editor_size(0))
 }
 
 pub fn min_editor_size() -> (f32, f32) {
@@ -170,7 +170,7 @@ fn AppShell() -> Element {
     // a plugin param, not a signal: this shell re-renders on the redraw tick
     // anyway, so comparing here also catches the host automating the param.
     #[allow(clippy::type_complexity)]
-    let last_profile: std::rc::Rc<std::cell::Cell<Option<(usize, fts_ui_audio::EditorForm)>>> =
+    let last_profile: std::rc::Rc<std::cell::Cell<Option<(usize, fts_audio_ui::EditorForm)>>> =
         use_hook(|| std::rc::Rc::new(std::cell::Cell::new(None)));
 
     // The face comes from the *resolved* profile: the persisted id when the
@@ -276,10 +276,10 @@ fn AppShell() -> Element {
                             testid: "form-cycle".to_string(),
                             label: form.badge().to_string(),
                             title: format!("Editor size — {} (click to cycle)", form.label()),
-                            active: form != fts_ui_audio::EditorForm::default(),
+                            active: form != fts_audio_ui::EditorForm::default(),
                             accent: skin.accent.to_string(),
                             on_click: move |_| {
-                                let forms = fts_ui_audio::EDITOR_FORMS;
+                                let forms = fts_audio_ui::EDITOR_FORMS;
                                 let index = forms.iter().position(|f| *f == form).unwrap_or(0);
                                 params_for_form.store_editor_form(forms[(index + 1) % forms.len()]);
                             },

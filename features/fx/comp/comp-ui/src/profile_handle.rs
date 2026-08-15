@@ -9,7 +9,7 @@
 //!
 //! [`profile_control_handle`] builds one per [`ProfileControl`], so every
 //! control on a face — one-to-one, stepped or compound — is driven the same
-//! way and the widgets stay ordinary `fts_ui_audio` widgets.
+//! way and the widgets stay ordinary `fts_audio_ui` widgets.
 //!
 //! # Reading the position back
 //!
@@ -24,7 +24,7 @@ use std::sync::Arc;
 
 use audiocore_core::prelude::Param;
 use comp_profiles::{map_control_value, ParamMapping, Profile, ProfileControl};
-use fts_ui_audio::ParamHandle;
+use fts_audio_ui::ParamHandle;
 use nice_plug::prelude::ParamPtr;
 use nice_plug_dioxus::prelude::ParamContext;
 

@@ -1,10 +1,10 @@
 @import "tailwindcss";
-@import "../../../../../libs/fts-ui/assets/fts-theme.css";
+@import "../../../../../libs/ui/assets/fts-theme.css";
 
 /* Scan paths are relative to THIS file (the source). */
 @source "./src/**/*.{rs,html,css}";
 @source "../../crates/eq-ui/src/**/*.rs";
-@source "../../../../../libs/fts-ui/fts-ui-audio/src/**/*.rs";
+@source "../../../../../libs/ui/fts-audio-ui/src/**/*.rs";
 /* architect-ui's sources live in the architect repo (git dep), so there is
  * no stable path to scan and utilities used only inside its components are
  * NOT generated here. (The two paths that used to sit here pointed at a

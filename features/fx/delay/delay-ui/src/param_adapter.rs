@@ -1,11 +1,11 @@
 //! Adapter from nice_plug's `ParamPtr` + `ParamContext` to
-//! [`fts_ui_audio::ParamHandle`].
+//! [`fts_audio_ui::ParamHandle`].
 //!
-//! Lives in `delay-ui` because it depends on nice_plug; `fts-ui-audio` itself
+//! Lives in `delay-ui` because it depends on nice_plug; `fts-audio-ui` itself
 //! is provider-agnostic. Same shape as `eq-ui::param_adapter` — use this
 //! whenever you wire a Dioxus audio widget to a plugin parameter.
 
-use fts_ui_audio::ParamHandle;
+use fts_audio_ui::ParamHandle;
 use nice_plug::prelude::ParamPtr;
 use nice_plug_dioxus::prelude::ParamContext;
 

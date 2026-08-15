@@ -133,7 +133,7 @@ pub fn mount_with(params: Arc<SatParams>, width: u32, height: u32) -> Fixture {
         // size `nice-plug-dioxus` puts in context on resize. A headless
         // mount has no window, so state the size explicitly — without it
         // every mount looks like the design size and nothing scales.
-        .with_root_context(fts_ui_audio::hardware::panel::EditorSize(
+        .with_root_context(fts_audio_ui::hardware::panel::EditorSize(
             width as f64,
             height as f64,
         ))

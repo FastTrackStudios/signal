@@ -12,7 +12,7 @@
 //! everything that should be identical across nine panels anyway.
 //!
 //! The tables themselves are [`RackDesign`]s from the shared hardware kit (see
-//! [`fts_ui_audio::hardware::rack`]); this is the compressor's *drawing* of
+//! [`fts_audio_ui::hardware::rack`]); this is the compressor's *drawing* of
 //! one. Every control is looked up on the unit's `comp-profiles` profile by id
 //! and driven through [`crate::profile_handle`], so a design cannot silently
 //! reference a control the profile does not have — it panics at mount, in a
@@ -24,7 +24,7 @@ use audiocore_core::prelude::*;
 
 use crate::faces::use_face_context;
 use crate::hardware::knob::HardwareKnob;
-use fts_ui_audio::hardware::button::{Lamp, LedBar, LedMeter, LedSelect, PanelButton};
+use fts_audio_ui::hardware::button::{Lamp, LedBar, LedMeter, LedSelect, PanelButton};
 use crate::hardware::rack::{RackDesign, RackItem};
 use crate::hardware::panel::{panel_scale, Panel, PanelSlot, Silkscreen};
 use crate::hardware::switches::{RatioButtons, ToggleSwitch};
@@ -53,7 +53,7 @@ pub fn RackFace(
     /// shape it was never for — a portrait 500-series module, a 1U sliver —
     /// the face flows its controls instead of shrinking the panel past
     /// legibility. Same controls, same handles, different rendering.
-    form: fts_ui_audio::EditorForm,
+    form: fts_audio_ui::EditorForm,
     /// The shell's redraw tick — see [`crate::faces::Face`]. Not read; its only
     /// job is to change, so the panel re-renders against fresh param and meter
     /// values instead of being memoized away.
@@ -67,7 +67,7 @@ pub fn RackFace(
     let out_db = face.ui.output_peak_db.load(Ordering::Relaxed);
     let scale = panel_scale(design.w, design.h, crate::control_view::RAIL_W);
 
-    let (win_w, win_h) = fts_ui_audio::hardware::panel::window_logical_size()
+    let (win_w, win_h) = fts_audio_ui::hardware::panel::window_logical_size()
         .unwrap_or((design.w + crate::control_view::RAIL_W, design.h));
     if !form.wants_panel(
         design.w,
@@ -412,7 +412,7 @@ fn design_control_count(design: &RackDesign) -> usize {
 
 /// Gain reduction, in the panel's own ink.
 ///
-/// The shared [`GrMeter`](fts_ui_audio::prelude::GrMeter) is a dark-theme
+/// The shared [`GrMeter`](fts_audio_ui::prelude::GrMeter) is a dark-theme
 /// widget — surface, border and text all come from the app palette — and on a
 /// grey leveling-amplifier plate it reads as a black sticker someone left on
 /// the panel. This one is drawn from the design: the plate's ink for the fill,

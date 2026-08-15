@@ -12,9 +12,9 @@
 //! are the repeats you will hear.
 
 use dioxus::prelude::*;
-use fts_ui_audio::hardware::knob::{HardwareKnob, KnobStyle};
-use fts_ui_audio::hardware::panel::{Panel, PanelEnds, PanelSlot, PanelTexture, Silkscreen};
-use fts_ui_audio::ParamHandle;
+use fts_audio_ui::hardware::knob::{HardwareKnob, KnobStyle};
+use fts_audio_ui::hardware::panel::{Panel, PanelEnds, PanelSlot, PanelTexture, Silkscreen};
+use fts_audio_ui::ParamHandle;
 
 /// Panel drawing size — 2U, like the compressor's faces.
 pub const W: f64 = 960.0;
@@ -285,7 +285,7 @@ pub fn EchoFace(
     let design = design_for(&profile_id);
     let profile =
         delay_profiles::profile_by_id(&profile_id).unwrap_or(&delay_profiles::PROFILES[0]);
-    let scale = fts_ui_audio::hardware::panel::panel_scale(W, H, crate::control_view::RAIL_W);
+    let scale = fts_audio_ui::hardware::panel::panel_scale(W, H, crate::control_view::RAIL_W);
 
     let value = |name: &str| {
         handles

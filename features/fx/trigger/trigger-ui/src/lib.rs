@@ -2,8 +2,8 @@
 //!
 //! Hosts the trigger-specific Dioxus root component, the nice_plug parameter
 //! tree, and the bridging glue from `nice_plug` parameters to
-//! [`fts_ui_audio`] widgets. General-purpose widgets (knobs, toggles,
-//! segmented controls, drag provider) come from `fts_ui_audio`; layout
+//! [`fts_audio_ui`] widgets. General-purpose widgets (knobs, toggles,
+//! segmented controls, drag provider) come from `fts_audio_ui`; layout
 //! primitives from `architect_ui`.
 //!
 //! - [`control_view`]: the plugin editor — analysis waveform + param surface
@@ -12,7 +12,7 @@
 //!   FTS-Trigger `TriggerWaveform`)
 //! - [`trigger_waveform_svg`]: the portable path/coordinate math
 //! - [`params`]: nice_plug parameter tree + shared UI state
-//! - [`param_adapter`]: nice_plug `ParamPtr` → `fts_ui_audio::ParamHandle`
+//! - [`param_adapter`]: nice_plug `ParamPtr` → `fts_audio_ui::ParamHandle`
 
 // ── Portable core (no plugin framework; compiles for wasm) ──
 pub mod trigger_waveform_svg;

@@ -12,7 +12,7 @@
         # "libstdc++.so.6: cannot open shared object file".
         [ stdenv.cc.cc.lib fontconfig freetype openssl ]
         ++ lib.optionals pkgs.stdenv.isLinux [
-          alsa-lib avahi libjack2 pipewire
+          alsa-lib libjack2 pipewire
           libGL vulkan-loader gtk3 glib
           gdk-pixbuf pango cairo atk
           libx11 libxcb libxkbcommon wayland
@@ -62,9 +62,6 @@
         # ORT_DYLIB_PATH (below) — never a downloaded binary, which Nix
         # rejects.
         onnxruntime
-        # avahi — vox-discover links libavahi-client (mDNS service
-        # discovery for the rig remotes); `.dev` carries the headers.
-        avahi avahi.dev
         # JACK headers/lib for cpal's `jack` feature (signal-sampler).
         # At runtime, run under `pw-jack` to route through PipeWire.
         libjack2

@@ -15,9 +15,9 @@
 //! nothing periodic drives it at all.
 
 use dioxus::prelude::*;
-use fts_ui_audio::hardware::knob::{HardwareKnob, KnobStyle};
-use fts_ui_audio::hardware::panel::{Panel, PanelEnds, PanelSlot, PanelTexture, Silkscreen};
-use fts_ui_audio::ParamHandle;
+use fts_audio_ui::hardware::knob::{HardwareKnob, KnobStyle};
+use fts_audio_ui::hardware::panel::{Panel, PanelEnds, PanelSlot, PanelTexture, Silkscreen};
+use fts_audio_ui::ParamHandle;
 use modulation_profiles::Character;
 
 /// Panel drawing size — 2U, like the saturator's faces.
@@ -237,7 +237,7 @@ pub fn ModFace(
     let design = design_for(&profile_id);
     let profile = modulation_profiles::profile_by_id(&profile_id)
         .unwrap_or(&modulation_profiles::PROFILES[0]);
-    let scale = fts_ui_audio::hardware::panel::panel_scale(W, H, fts_ui_audio::shell::RAIL_W);
+    let scale = fts_audio_ui::hardware::panel::panel_scale(W, H, fts_audio_ui::shell::RAIL_W);
 
     let value = |name: &str, fallback: f32| {
         handles

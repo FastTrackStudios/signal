@@ -1,5 +1,5 @@
 @import "tailwindcss";
-@import "../../../../libs/fts-ui/assets/fts-theme.css";
+@import "../../../../libs/ui/assets/fts-theme.css";
 
 /* trigger-ui's OWN Tailwind build — the plugin editor embeds the compiled
  * output (assets/tailwind.css) via include_str! in control_view.rs.
@@ -11,7 +11,7 @@
 /* architect-ui sources now live in the architect repo (git dep) — no
  * stable path to scan. Utilities used only inside architect-ui
  * components are NOT generated here. See the split follow-up. */
-@source "../../../../libs/fts-ui/fts-ui-audio/src/**/*.rs";
+@source "../../../../libs/ui/fts-audio-ui/src/**/*.rs";
 
 @layer base {
     html {

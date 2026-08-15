@@ -37,8 +37,8 @@ fn hex_to_color_alpha(hex: &str, alpha: f32) -> Color {
 // ── Coordinate helpers ──────────────────────────────────────────────
 
 struct CoordMapper {
-    freq_axis: fts_ui_audio::axis::FreqAxis,
-    db_axis: fts_ui_audio::axis::DbAxis,
+    freq_axis: fts_audio_ui::axis::FreqAxis,
+    db_axis: fts_audio_ui::axis::DbAxis,
     padding: f64,
     graph_w: f64,
     graph_h: f64,
@@ -47,8 +47,8 @@ struct CoordMapper {
 impl CoordMapper {
     fn new(cfg: &GraphConfig, padding: f64) -> Self {
         Self {
-            freq_axis: fts_ui_audio::axis::FreqAxis::new(cfg.min_freq, cfg.max_freq),
-            db_axis: fts_ui_audio::axis::DbAxis::symmetric(cfg.db_range),
+            freq_axis: fts_audio_ui::axis::FreqAxis::new(cfg.min_freq, cfg.max_freq),
+            db_axis: fts_audio_ui::axis::DbAxis::symmetric(cfg.db_range),
             padding,
             graph_w: cfg.rect_w - padding * 2.0,
             graph_h: cfg.rect_h - padding * 2.0,

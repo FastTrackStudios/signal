@@ -10,7 +10,7 @@ default:
 # BOTH apps/fasttrackstudio/src/rig_view.rs (signal UI) and
 # src/main.rs SessionChrome (session UI) via include_str!; rebuild it
 # whenever UI-crate class usage changes. input.css @source globs scan the
-# signal/session UI crates + libs/fts-ui + libs/dock.
+# signal/session UI crates + libs/ui + libs/dock.
 
 # Point apps/fasttrackstudio/.lumen-blocks at the lumen-blocks checkout
 # cargo actually resolved.
@@ -131,21 +131,6 @@ install: rig-install
     gtk-update-icon-cache ~/.local/share/icons/hicolor 2>/dev/null || true
     echo "installed: fasttrackstudio + fts in ~/.local/bin, launcher entry ready"
 
-# Install the Task CLI: `task` on PATH (symlinked from ~/.local/lib/fts).
-# Debug build on purpose — the CLI is a network-bound vox client, so
-# release opt buys nothing but a much slower rebuild; debug keeps the
-# "edit → just task-install → run" loop fast. Re-run after CLI changes.
-task-install:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    cargo build -p task-cli
-    install -d ~/.local/lib/fts
-    install -m 755 target/debug/task ~/.local/lib/fts/task.new
-    mv -T ~/.local/lib/fts/task.new ~/.local/lib/fts/task
-    install -d ~/.local/bin
-    ln -sf ~/.local/lib/fts/task ~/.local/bin/task
-    echo "installed: task in ~/.local/bin — re-run 'just task-install' to update"
-
 # Install Patchbay (the PipeWire studio-routing app): release binary in
 # ~/.local/lib/fts, `patchbay` on PATH, launcher entry + icon.
 # dx web build of the patchbay browser remote → apps/patchbay/web-dist/,
@@ -247,12 +232,12 @@ release-package: web-stage
     ls -lh "dist/$tarball" "dist/fts-installer-$plat" dist/SHA256SUMS
 
 # Rebuild eq-ui's embedded Tailwind (features/fx/eq/eq-ui/assets/
-# tailwind.css) after class changes in eq-ui / fts-ui.
+# tailwind.css) after class changes in eq-ui / architect-ui.
 tailwind-eq:
     tailwindcss -i features/fx/eq/eq-ui/tailwind.css -o features/fx/eq/eq-ui/assets/tailwind.css --minify
 
 # Rebuild comp-ui's embedded Tailwind (features/fx/comp/comp-ui/assets/
-# tailwind.css) after class changes in comp-ui / fts-ui.
+# tailwind.css) after class changes in comp-ui / architect-ui.
 tailwind-comp:
     tailwindcss -i features/fx/comp/comp-ui/tailwind.css -o features/fx/comp/comp-ui/assets/tailwind.css --minify
 
@@ -260,7 +245,7 @@ tailwind-limiter:
     tailwindcss -i features/fx/comp/limiter-ui/tailwind.css -o features/fx/comp/limiter-ui/assets/tailwind.css --minify
 
 # Rebuild trigger-ui's embedded Tailwind (features/fx/trigger/trigger-ui/
-# assets/tailwind.css) after class changes in trigger-ui / fts-ui.
+# assets/tailwind.css) after class changes in trigger-ui / architect-ui.
 tailwind-trigger:
     tailwindcss -i features/fx/trigger/trigger-ui/tailwind.css -o features/fx/trigger/trigger-ui/assets/tailwind.css --minify
 
@@ -445,7 +430,7 @@ docs-deploy:
 #   just reaper build       build the release cdylib
 #   just reaper uninstall   remove the symlink
 #   just reaper log         tail the live extension log
-mod reaper
+mod reaper 'features/reaper/reaper.just'
 
 # The UI snapshot regression gate (ui-snapshot) moved to the architect
 # repo with architect-ui in the August 2026 split. Run it there:
@@ -460,7 +445,7 @@ mod reaper
 
 # Check the whole workspace compiles
 check:
-    cargo check --workspace --exclude vox-discover
+    cargo check --workspace
 
 # Run tests. nextest: parallel per-test binaries, much faster than
 # `cargo test` on this many crates. It does NOT run doctests — use

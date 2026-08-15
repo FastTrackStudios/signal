@@ -269,11 +269,11 @@ impl CompParams {
 
     /// The editor form a loaded session should open at. An unknown or missing
     /// id means Responsive, which is the size the face asks for anyway.
-    pub fn resolved_editor_form(&self) -> fts_ui_audio::EditorForm {
-        fts_ui_audio::EditorForm::from_id(&self.editor_form.read()).unwrap_or_default()
+    pub fn resolved_editor_form(&self) -> fts_audio_ui::EditorForm {
+        fts_audio_ui::EditorForm::from_id(&self.editor_form.read()).unwrap_or_default()
     }
 
-    pub fn store_editor_form(&self, form: fts_ui_audio::EditorForm) {
+    pub fn store_editor_form(&self, form: fts_audio_ui::EditorForm) {
         *self.editor_form.write() = form.id().to_string();
     }
 

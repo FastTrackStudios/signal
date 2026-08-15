@@ -16,7 +16,7 @@
 //! area stays the same size whichever page you are on.
 
 use audiocore_core::prelude::*;
-use fts_ui_audio::prelude::*;
+use fts_audio_ui::prelude::*;
 
 use crate::param_adapter::param_handle;
 use crate::params::{CompUiState, CHARACTER_LABELS, STYLE_LABELS};

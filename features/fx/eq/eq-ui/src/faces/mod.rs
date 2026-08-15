@@ -2,7 +2,7 @@
 //!
 //! Selecting a model in the shell rail swaps the whole surface: `Main` is the
 //! FTS curve editor, and the other four are the unit's own front panel, drawn
-//! from the shared hardware kit in [`fts_ui_audio::hardware`].
+//! from the shared hardware kit in [`fts_audio_ui::hardware`].
 //!
 //! The EQ needs no mapping layer to do it. Unlike the compressor — where a
 //! hardware control writes several engine params through `comp-profiles` — the
@@ -15,7 +15,7 @@ pub mod params_map;
 pub mod rack;
 pub mod units;
 
-use fts_ui_audio::shell::ShellItem;
+use fts_audio_ui::shell::ShellItem;
 
 /// A rail entry: an EQ family, and the models it cycles through.
 pub struct EqCategory {
@@ -101,18 +101,18 @@ pub fn resolved_model(params: &crate::params::FtsEqParams) -> i32 {
 
 /// The editor form a loaded session should open at. An unknown or missing id
 /// means Responsive, which is the size the face asks for anyway.
-pub fn resolved_form(params: &crate::params::FtsEqParams) -> fts_ui_audio::EditorForm {
-    fts_ui_audio::EditorForm::from_id(&params.editor_form.read()).unwrap_or_default()
+pub fn resolved_form(params: &crate::params::FtsEqParams) -> fts_audio_ui::EditorForm {
+    fts_audio_ui::EditorForm::from_id(&params.editor_form.read()).unwrap_or_default()
 }
 
-pub fn store_form(params: &crate::params::FtsEqParams, form: fts_ui_audio::EditorForm) {
+pub fn store_form(params: &crate::params::FtsEqParams, form: fts_audio_ui::EditorForm) {
     *params.editor_form.write() = form.id().to_string();
 }
 
 /// The editor size for a model *and* a chosen form: the form decides, except
 /// for Responsive, which defers to the face.
-pub fn editor_size_for(model: i32, form: fts_ui_audio::EditorForm) -> (u32, u32) {
-    form.editor_size(fts_ui_audio::shell::RAIL_W, preferred_editor_size(model))
+pub fn editor_size_for(model: i32, form: fts_audio_ui::EditorForm) -> (u32, u32) {
+    form.editor_size(fts_audio_ui::shell::RAIL_W, preferred_editor_size(model))
 }
 
 /// Record the id for `model` — call this wherever the model changes.
@@ -170,7 +170,7 @@ pub fn rail_click_target(model: i32, clicked_category: usize) -> i32 {
 pub fn preferred_editor_size(model: i32) -> (u32, u32) {
     match units::design_for(model) {
         Some(design) => (
-            (design.w + fts_ui_audio::shell::RAIL_W + 52.0) as u32,
+            (design.w + fts_audio_ui::shell::RAIL_W + 52.0) as u32,
             (design.h + 48.0) as u32,
         ),
         None => (crate::control_view::EDITOR_W, crate::control_view::EDITOR_H),
