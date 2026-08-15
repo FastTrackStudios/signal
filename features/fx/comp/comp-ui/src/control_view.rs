@@ -20,13 +20,13 @@
 //! it. The `profile` param persists, so the face survives a session reload.
 //!
 //! Reusable widgets (knobs, meters, drag provider) come from [`fts_ui_audio`];
-//! theme + layout primitives from [`fts_ui`]; the section wrappers from
+//! theme + layout primitives from [`architect_ui`]; the section wrappers from
 //! [`crate::sections`].
 
 use audiocore_core::prelude::*;
 use nice_plug::editor::dpi::LogicalSize;
 use nice_plug::editor::ResizeHint;
-use fts_ui::prelude::{ThemeMode, ThemeProvider, ThemeState, default_theme_preset};
+use architect_ui::prelude::{ThemeMode, ThemeProvider, ThemeState, default_theme_preset};
 use fts_ui_audio::prelude::*;
 
 use crate::faces::{profile_id_for_index, Face};
@@ -106,7 +106,7 @@ pub fn resize_hint() -> ResizeHint {
 
 /// Root editor component.
 ///
-/// Wraps the comp shell in `fts_ui::ThemeProvider` so themed widgets pick up
+/// Wraps the comp shell in `architect_ui::ThemeProvider` so themed widgets pick up
 /// the active preset. The plugin embedded path and any standalone path both
 /// go through here.
 #[component]

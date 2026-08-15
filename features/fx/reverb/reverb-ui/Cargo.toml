@@ -11,13 +11,13 @@ default = []
 native = [
     "dep:nice-plug",
     "dep:nice-plug-dioxus",
-    "dep:fts-ui",
+    "dep:architect-ui",
     "dep:atomic_float",
     "dep:parking_lot",
 ]
 
 [dependencies]
-fts-ui = { workspace = true, optional = true }
+architect-ui = { workspace = true, optional = true }
 fts-ui-audio = { workspace = true }
 nice-plug = { workspace = true, optional = true }
 nice-plug-dioxus = { workspace = true, optional = true }

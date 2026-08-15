@@ -1,7 +1,7 @@
 //! Toolbar components: search, sort, tag filter panel, active tag chips.
 
 use dioxus::prelude::*;
-use fts_ui::prelude::*;
+use architect_ui::prelude::*;
 use signal_proto::tagging::TagCategory;
 
 use super::detail_panel::{tag_category_label, tag_display_value};

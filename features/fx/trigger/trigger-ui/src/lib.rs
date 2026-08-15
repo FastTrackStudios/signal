@@ -4,7 +4,7 @@
 //! tree, and the bridging glue from `nice_plug` parameters to
 //! [`fts_ui_audio`] widgets. General-purpose widgets (knobs, toggles,
 //! segmented controls, drag provider) come from `fts_ui_audio`; layout
-//! primitives from `fts_ui`.
+//! primitives from `architect_ui`.
 //!
 //! - [`control_view`]: the plugin editor — analysis waveform + param surface
 //! - [`trigger_waveform`]: the scrolling-peaks display with the draggable

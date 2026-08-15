@@ -9,7 +9,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use dioxus::prelude::*;
-use fts_ui::prelude::{default_theme_preset, ThemeMode, ThemeProvider, ThemeState};
+use architect_ui::prelude::{default_theme_preset, ThemeMode, ThemeProvider, ThemeState};
 use fts_ui_audio::prelude::*;
 use fts_ui_audio::shell::{PluginShell, RailButton, ShellItem};
 use nice_plug::editor::dpi::LogicalSize;

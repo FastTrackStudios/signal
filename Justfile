@@ -447,19 +447,9 @@ docs-deploy:
 #   just reaper log         tail the live extension log
 mod reaper
 
-# ── fts-ui snapshot regression gate (libs/fts-ui/ui-snapshot) ───────────
-
-# Render every scene headlessly and fail on pixel diff above tolerance
-snapshot-check:
-    cargo run -p ui-snapshot --release -- check
-
-# Render one scene to target/ui-snapshots/<name>.png
-snapshot-render name:
-    cargo run -p ui-snapshot --release -- render {{name}}
-
-# Regenerate all reference PNGs after intentional UI changes
-snapshot-update:
-    cargo run -p ui-snapshot --release -- update
+# The UI snapshot regression gate (ui-snapshot) moved to the architect
+# repo with architect-ui in the August 2026 split. Run it there:
+#   just snapshot-check / snapshot-render <name> / snapshot-update
 
 # REAPER integration tests moved into the `reaper` module:
 #   just reaper integration-test        (was: just reaper-integration-test)
@@ -553,15 +543,25 @@ graph-serve:
 
 # Rebuild the browser setlist player's AudioWorklet wasm bundle — a small
 # RELEASE build of daw-standalone (the render graph that runs ON the audio
-# thread; see apps/task/web/assets/worklet/processor.js). wasm-bindgen-cli
-# comes from the dev shell, pinned to the workspace wasm-bindgen version.
-# Re-run after changing daw-standalone's audio/render/web code; artifacts
-# are committed so plain `dx serve` / CI need no extra step.
-task-worklet-wasm:
-    cd apps/task && cargo build -p daw-standalone --lib \
+# thread; see the task repo's apps/web/assets/worklet/processor.js).
+# wasm-bindgen-cli comes from the dev shell, pinned to the workspace
+# wasm-bindgen version.
+#
+# CROSS-REPO since the August 2026 split: the source lives here, the built
+# artifact is COMMITTED in the task repo (so plain `dx serve` / CI there
+# need no extra step). Pass the path to your task checkout:
+#
+#   just task-worklet-wasm ../task
+#
+# Re-run after changing daw-standalone's audio/render/web code, then commit
+# the result in the task repo.
+task-worklet-wasm task_repo='../task':
+    cargo build -p daw-standalone --lib \
         --target wasm32-unknown-unknown --release \
         --no-default-features --features decode,web
-    wasm-bindgen --target web --out-dir apps/task/web/assets/worklet \
+    test -d {{task_repo}}/apps/web/assets/worklet \
+        || { echo "no worklet dir at {{task_repo}}/apps/web/assets/worklet — pass the task checkout path"; exit 1; }
+    wasm-bindgen --target web --out-dir {{task_repo}}/apps/web/assets/worklet \
         --out-name daw_standalone \
         target/wasm32-unknown-unknown/release/daw_standalone.wasm
 

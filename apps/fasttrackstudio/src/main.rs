@@ -841,7 +841,7 @@ fn UpdateCheck(msg: Signal<String>) -> Element {
 
 /// The comprehensive Tailwind sheet — built by `just tailwind` from
 /// `input.css`, which scans every UI crate (app src, signal-ui,
-/// guitar-ui, session-ui, fts-ui, dock). Inlined rather than loaded as
+/// guitar-ui, session-ui, architect-ui, dock). Inlined rather than loaded as
 /// an external stylesheet so it can't go stale against a committed file
 /// (the same sheet `rig_view` inlines as `SIGNAL_TAILWIND`).
 #[cfg(feature = "session")]

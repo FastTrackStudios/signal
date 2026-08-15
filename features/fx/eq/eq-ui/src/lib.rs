@@ -4,7 +4,7 @@
 //! nice_plug parameter tree, and the bridging glue from `nice_plug` parameters
 //! to [`fts_ui_audio`] widgets. EQ-specific visualizations live here. General-
 //! purpose widgets (knobs, sliders, meters) come from [`fts_ui_audio`];
-//! general layout primitives come from [`fts_ui`].
+//! general layout primitives come from [`architect_ui`].
 //!
 //! - [`control_view`]: Pro-Q style spectrum analyzer with draggable band nodes
 //! - [`eq_graph`] / [`eq_graph_painter`]: vello-rendered frequency-response graph

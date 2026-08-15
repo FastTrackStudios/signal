@@ -13,7 +13,7 @@ use audiocore_core::prelude::*;
 use nice_plug::context::gui::GuiContext;
 use nice_plug::editor::dpi::LogicalSize;
 use nice_plug::editor::ResizeHint;
-use fts_ui::prelude::{
+use architect_ui::prelude::{
     Button, ButtonSize, ButtonVariant, Card, CardContent, CardHeader, CardTitle, SegmentedControl,
     SegmentedControlSize, Select, SelectContent, SelectItem, Switch, TabContent, TabList,
     TabTrigger, Tabs, ThemeMode, ThemeProvider, ThemeState, default_theme_preset,
@@ -122,7 +122,7 @@ fn int_to_shape(v: i32) -> EqBandShape {
 
 /// Root editor component.
 ///
-/// Wraps the EQ shell in `fts_ui::ThemeProvider` so all shadcn-style
+/// Wraps the EQ shell in `architect_ui::ThemeProvider` so all shadcn-style
 /// components (`Card`, `Button`, `Tabs`, etc.) pick up the active theme.
 /// The plugin embedded path and the standalone path both go through here.
 #[component]
@@ -251,7 +251,7 @@ fn AppShell() -> Element {
     // selector below and the EqGraph (passed as a prop). `Auto` resolves from
     // the track name via the TrackInfoProvider.
     let mut overlay_sel: Signal<OverlayChoice> = use_signal(|| OverlayChoice::Auto);
-    // String mirror of `overlay_sel` for the fts_ui `Select` component (it works
+    // String mirror of `overlay_sel` for the architect_ui `Select` component (it works
     // on string values). Kept in sync each render so the graph dropdown and this
     // selector stay consistent. "auto"/"off"/<profile index>.
     let profile_value: String = match *overlay_sel.read() {
@@ -299,7 +299,7 @@ fn AppShell() -> Element {
     let mut graph_bands_signal = use_signal(|| graph_bands_vec.clone());
     *graph_bands_signal.write() = graph_bands_vec;
 
-    // Drive the root colors / typography from the fts-ui CSS variables so
+    // Drive the root colors / typography from the architect-ui CSS variables so
     // the EQ shell respects the active ThemeProvider preset. The
     // fts_ui_audio theme is still in scope for spacing tokens but its
     // hardcoded palette is no longer used at this level.
@@ -419,7 +419,7 @@ fn AppShell() -> Element {
             //
             // Theme-driven: background `--card`, border `--border`, text
             // `--foreground` / `--muted-foreground`. Tailwind utilities
-            // come from the fts-ui scan paths configured in tailwind.css.
+            // come from the architect-ui scan paths configured in tailwind.css.
             if SHOW_CHROME { // header (parked: graph-only editor, issue #31)
             div {
                 class: "flex flex-wrap justify-between items-center gap-2 px-4 py-3 border-b border-border bg-card/50 backdrop-blur-sm",
@@ -608,7 +608,7 @@ fn AppShell() -> Element {
                         }
                         // Instrument cheat-sheet profile — manual select. `Auto`
                         // follows the host track name; drives the same selection
-                        // the graph overlay uses (shared signal). Uses the fts_ui
+                        // the graph overlay uses (shared signal). Uses the architect_ui
                         // Select (Blitz doesn't render native <select>).
                         div { class: "flex items-center gap-2 mt-2",
                             div { class: "text-[10px] uppercase tracking-wider text-muted-foreground shrink-0", "Profile" }

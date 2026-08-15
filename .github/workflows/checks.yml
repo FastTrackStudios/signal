@@ -148,14 +148,6 @@ jobs:
       - name: Manifests + lockfile
         if: needs.plan.outputs.workspace == 'true' || needs.plan.outputs.patchbay == 'true'
         run: ${NIX_DEV} cargo metadata --locked --format-version 1 > /dev/null
-      # The Task apps' assets/tailwind.css is generated, not committed,
-      # and `asset!()` resolves it at compile time — so it has to exist
-      # before cargo runs. `dx` builds it during a normal `dx serve` /
-      # `dx build`, but CI drives plain cargo, so generate it here.
-      # tailwindcss comes from the .#ci shell.
-      - name: Generate Task tailwind sheets
-        if: needs.plan.outputs.workspace == 'true'
-        run: ${NIX_DEV} just --justfile apps/task/Justfile --working-directory apps/task css
       # The opposite case to Task's sheets: apps/fasttrackstudio's
       # tailwind-signal.css IS committed, because main.rs / rig_view.rs /
       # mobile_view.rs `include_str!` it. That means it can rot silently
@@ -247,14 +239,6 @@ jobs:
         with:
           shared-key: quality
           cache-on-failure: "true"
-      # Same reason as the build job: the Task apps' assets/tailwind.css
-      # is generated, and `asset!()` resolves it at compile time, so
-      # `task-app-web` cannot be linted or documented without it. This job
-      # was missing the step, which made it fail on a missing file rather
-      # than on any lint — no amount of fixing lints could turn it green.
-      - name: Generate Task tailwind sheets
-        if: needs.plan.outputs.workspace == 'true'
-        run: ${NIX_DEV} just --justfile apps/task/Justfile --working-directory apps/task css
       - name: Clippy
         if: needs.plan.outputs.workspace == 'true'
         run: |

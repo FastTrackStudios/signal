@@ -5,7 +5,7 @@
 //! configures labels and placeholders via [`ModalConfig`].
 
 use dioxus::prelude::*;
-use fts_ui::prelude::*;
+use architect_ui::prelude::*;
 
 // region: --- Config & Data Types
 

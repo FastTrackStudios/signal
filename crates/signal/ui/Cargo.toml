@@ -9,7 +9,7 @@ authors.workspace = true
 dioxus.workspace = true
 # Shared audio-gui widgets (knob + arc geometry).
 signal-widgets.workspace = true
-fts-ui.workspace = true
+architect-ui.workspace = true
 lumen-blocks.workspace = true
 # Wasm-clean domain DATA types (BlockType, SignalChain, tagging, rig, song, …).
 # The UI reads these directly instead of via the `signal` facade, which links

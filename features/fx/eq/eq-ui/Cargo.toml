@@ -18,7 +18,7 @@ native = [
     "dep:nice-plug",
     "dep:nice-plug-dioxus",
     "dep:audiocore-core",
-    "dep:fts-ui",
+    "dep:architect-ui",
     "dep:eq-profiles",
     "dep:futures-timer",
     "dep:atomic_float",
@@ -31,7 +31,7 @@ gpu-tests = []
 
 [dependencies]
 audiocore-core = { workspace = true, optional = true }
-fts-ui = { workspace = true, optional = true }
+architect-ui = { workspace = true, optional = true }
 fts-ui-audio = { workspace = true }
 nice-plug = { workspace = true, optional = true }
 nice-plug-dioxus = { workspace = true, optional = true }
