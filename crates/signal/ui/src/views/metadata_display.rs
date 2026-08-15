@@ -4,7 +4,7 @@
 //! the `HasMetadata` trait. Used by collection cards, editors, and browsers.
 
 use dioxus::prelude::*;
-use fts_ui::prelude::*;
+use architect_ui::prelude::*;
 
 /// Displays metadata (tags, description, notes) for any entity.
 ///

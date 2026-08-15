@@ -1,6 +1,6 @@
 //! Popup and context-menu controls for the EQ graph.
 
-use fts_ui::prelude::{Button, ButtonSize, ButtonVariant, Select, SelectContent, SelectItem};
+use architect_ui::prelude::{Button, ButtonSize, ButtonVariant, Select, SelectContent, SelectItem};
 use nice_plug_dioxus::prelude::*;
 
 use super::eq_graph_model::{

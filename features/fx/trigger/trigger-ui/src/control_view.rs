@@ -7,10 +7,10 @@
 //! HPF/LPF, velocity min/max), segmented selects for the detection algorithm
 //! and velocity curve, a MIDI-note stepper, and the Listen toggle. Reusable
 //! widgets (knobs, toggle, segmented, drag provider) come from
-//! [`fts_ui_audio`]; theme + layout primitives from [`fts_ui`].
+//! [`fts_ui_audio`]; theme + layout primitives from [`architect_ui`].
 
 use audiocore_core::prelude::*;
-use fts_ui::prelude::{ThemeMode, ThemeProvider, ThemeState, default_theme_preset};
+use architect_ui::prelude::{ThemeMode, ThemeProvider, ThemeState, default_theme_preset};
 use fts_ui_audio::prelude::*;
 
 use crate::param_adapter::param_handle;
@@ -18,7 +18,7 @@ use crate::params::TriggerUiState;
 
 /// Root editor component.
 ///
-/// Wraps the trigger shell in `fts_ui::ThemeProvider` so themed widgets pick
+/// Wraps the trigger shell in `architect_ui::ThemeProvider` so themed widgets pick
 /// up the active preset. The plugin embedded path and any standalone path
 /// both go through here.
 #[component]

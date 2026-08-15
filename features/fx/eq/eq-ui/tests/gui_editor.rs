@@ -230,7 +230,7 @@ mod support {
 
         /// A control inside the detail panel, found by its exact label.
         ///
-        /// `fts_ui`'s `Button` has no attribute passthrough, so the panel's
+        /// `architect_ui`'s `Button` has no attribute passthrough, so the panel's
         /// controls are addressed the way a user sees them — by their caption.
         pub fn panel_control(&self, label: &str) -> dioxus_test::ResolvedElement {
             let sel = format!("[data-testid='{PANEL_TESTID}'] button");

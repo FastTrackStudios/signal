@@ -4,7 +4,7 @@
 //! the CSS `transform: scale()` stacking context.
 
 use dioxus::prelude::*;
-use fts_ui::prelude::*;
+use architect_ui::prelude::*;
 use signal_proto::block::BlockCategory;
 use signal_proto::defaults::{
     NDSP_ARCHETYPE_X_PLUGIN_NAMES, archetype_label, archetype_seed_slug, archetype_x_templates,

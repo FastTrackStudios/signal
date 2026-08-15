@@ -4,7 +4,7 @@
 //! interactive parameter sliders, morph point controls, and snapshot management.
 
 use dioxus::prelude::*;
-use fts_ui::prelude::*;
+use architect_ui::prelude::*;
 
 use crate::components::dynamic_grid::{GridSelection, GridSlot};
 

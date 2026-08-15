@@ -24,10 +24,10 @@ trace spans."*
 ## Adding fields
 
 `tracing`'s macros take a **static** field list — you cannot add a field
-the macro did not declare. That is what `task_telemetry::wide` is for:
+the macro did not declare. That is what `architect_telemetry::wide` is for:
 
 ```rust
-use task_telemetry::wide;
+use architect_telemetry::wide;
 
 wide::set("auth.principal_kind", "anonymous");
 wide::set("auth.user_id", user_id.clone());

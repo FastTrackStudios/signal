@@ -164,7 +164,7 @@ unreliable"* — the failure is total and deterministic, not flaky.
 
 **This repo already does exactly this, in REAPER.**
 `features/daw-ui/daw-ui/src/test_panels.rs:35–58` `include_str!`s a full
-64 KB Tailwind sheet plus the fts-ui theme sheet and mounts them with
+64 KB Tailwind sheet plus the architect-ui theme sheet and mounts them with
 `document::Style { … }` inside a Blitz-rendered REAPER panel. Same
 pattern in `apps/fasttrackstudio/src/rig_view.rs:29`/`:384` and
 `mobile_view.rs:24`/`:59` for the signal UI. `Justfile:31–52` builds the

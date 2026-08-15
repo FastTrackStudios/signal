@@ -1847,7 +1847,7 @@ fn src_tab(active: bool) -> String {
 // Filtering reuses the shared tagging engine: each item's encoded `"cat:value"`
 // tag keys are re-parsed into a `signal_proto::tagging::TagSet` and matched with
 // `contains_key`, exactly like `collection_browser::detail_panel::filter_and_sort`.
-// Inline styles only (Blitz-safe); no fts-ui/Tailwind widgets.
+// Inline styles only (Blitz-safe); no architect-ui/Tailwind widgets.
 
 /// The facet categories surfaced as filter-chip groups, in display order —
 /// mirrors `signal_browser::types::FILTER_CATEGORIES` (Instrument first, since

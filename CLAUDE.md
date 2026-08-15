@@ -1,10 +1,39 @@
-# FastTrackStudio — Monorepo Instructions
+# FastTrackStudio — Repo Instructions
 
-One tree, ONE root Cargo workspace (~160 members), one lockfile, one
-`target/`, one flake. Every intra-stack dependency is declared once in
-root `[workspace.dependencies]` as a **path dep** and consumed as
-`x.workspace = true` — never add a git dep on anything that lives in
-this tree. See LAYOUT.md for the full map.
+**This repo is the audio/music product.** It was split into four repos in
+August 2026; Task, the framework, and the third-party forks now live
+elsewhere:
+
+| repo | holds | consumed as |
+|---|---|---|
+| **fasttrackstudio** (here) | signal, daw, session, keyflow, patchbay, fx, sampler, reaper, the app, the site | — |
+| [architect](https://github.com/FastTrackStudios/architect) | the framework (entity/RPC, atom, form, auth, permissions, crdt), `architect-ui`, `architect-story-*`, `architect-telemetry` | git dep, tag `v0.1.1` |
+| [task](https://github.com/FastTrackStudios/task) | the Task product + the Editor stack | git dep, `branch = "main"` (repin to a tag) |
+| [vendor](https://github.com/FastTrackStudios/vendor) | `phon`, `phon-jit`, `styx-format` forks (pinned rc.5) | `[patch.crates-io]`, tag `v0.1.0` |
+
+One root Cargo workspace (249 members), one lockfile, one `target/`, one
+flake. Intra-repo dependencies are path deps in root
+`[workspace.dependencies]`, consumed as `x.workspace = true`. Cross-repo
+dependencies are **git deps pinned to a tag** — see LAYOUT.md for the map.
+
+**Co-developing across repos**: override the tag with a local checkout
+rather than pushing a tag to test:
+
+```toml
+[patch."https://github.com/FastTrackStudios/architect"]
+architect = { path = "../architect/architect" }
+```
+
+Never commit those overrides — the paths are machine-specific.
+
+**The dependency arrow is bidirectional** (a deliberate choice): this repo
+takes `editor`, `editor-keyflow*`, `view-knowledge-graph`,
+`collection-proto` and `attachments-proto` from task, while task takes
+`daw`, `session`, `keyflow*`, `engraver`, `input`, `actions-*`, `song` and
+`dioxus-test` from here. Cargo's package graph stays acyclic, but a change
+spanning both repos needs two bumps in sequence — land here, tag, bump
+there. Use the local `[patch]` while developing; only the release needs
+the round trip.
 
 ## Layout
 
@@ -16,7 +45,7 @@ features/  capabilities — audio, sync, dawfile, reaper, standalone,
            surfaces, daw-ui, guide, engraver, dynamic-template,
            fx (built-in FX), rigs, sampler, nam, plugin-host,
            task/* (Task's ~28 feature slices: project, inbox, agent, …)
-libs/      UI + infra libraries — fts-ui, fts-story, dock, nice-plug,
+libs/      UI + infra libraries — architect-ui, fts-story, dock, nice-plug,
            utils, vox-discover, installer-core, neural-amp-modeler,
            monarchy, devtools,
            editor (subtree-imported Editor stack: editor-state/-view/
@@ -36,19 +65,32 @@ apps/      fasttrackstudio (THE app: desktop GUI = signal / session /
 docs/      cross-domain guides (facet, styx, tracey, spec/)
 ```
 
-**architect lives in-tree** at `libs/architect/` (subtree-imported with
-history; `architect` + derive macros + atom/form/auth/crdt are ordinary
-workspace members, consumed as `architect.workspace = true`). Framework
-changes are ordinary in-tree refactors — no patch blocks, no sibling
-checkout. External consumers (the `task` project) take a git dep on this
-monorepo.
+**architect is a separate repo** as of the August 2026 split. Framework
+changes are made there, tagged, and pulled in by bumping the tag here —
+with a local `[patch]` override for the edit/test loop. `architect-ui`
+(formerly `fts-ui`) and `architect-story-*` (formerly `fts-story-*`) went
+with it; `fts-plug-ui` and `fts-ui-audio` stayed here because they link
+`audiocore-core` and `nice-plug`.
 
 ## Rules
 
-- **Path deps only** between tree members. If a `[patch]` block's URL
-  is a repo that no longer exists, it is either dead (delete it) or
-  load-bearing for a *transitive* git dep. Check the lockfile before
-  touching. (The last such table — keyflow.git for Editor.git — died
+- **Path deps within this repo; tagged git deps across repos.** If a
+  `[patch]` block's URL is a repo that no longer exists, it is either dead
+  (delete it) or load-bearing for a *transitive* git dep. Check the
+  lockfile before touching — and note that a `[patch]` **cannot rename a
+  crate**, which is what broke `fts-launcher` at the split: its
+  `launcher-ui` dep wants a crate literally named `fts-ui`, and there is
+  no longer one to redirect to. `features/launcher/fts-launcher` is
+  therefore excluded from the workspace and `mod-launcher` is off by
+  default in `fts-extensions`; the fix is to vendor `dioxus-launcher` and
+  repoint it at `architect-ui`.
+- **`include_str!` / `@import` across a repo boundary does not work.** A
+  git dep has no stable path on disk, and these are invisible to cargo's
+  dependency graph, so they fail at compile time rather than resolution
+  time. Export the bytes from the owning crate instead — that is what
+  `architect_ui::THEME_CSS` is. (This class of break bit the split three
+  times.)
+  (The last dead patch table — keyflow.git for Editor.git — died
   when Editor was imported in-tree 2026-07-10.)
 - **Architect idiom everywhere**: services are `#[architect::rpc]`
   traits; live updates are `#[subscribe]` streams served from
@@ -225,7 +267,7 @@ Before writing ANY log or debug output, load the
 
 - **The span IS the wide event.** `architect` opens one span per vox
   RPC, `tower_http` one per HTTP request. Enrich it with
-  `task_telemetry::wide::set("namespace.field", value)` — one
+  `architect_telemetry::wide::set("namespace.field", value)` — one
   context-rich event per request, never scattered log lines.
 - **Never `println!`/`eprintln!`/`dbg!` in server or library code** —
   not in committed code, and not as debug scaffolding either. To chase

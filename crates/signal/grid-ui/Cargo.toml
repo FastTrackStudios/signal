@@ -15,7 +15,7 @@ dioxus.workspace = true
 uuid = { version = "1", features = ["v4"] }
 signal-proto.workspace = true
 signal-grid.workspace = true
-fts-ui.workspace = true
+architect-ui.workspace = true
 lumen-blocks.workspace = true
 audio-controls.workspace = true
 # Portable timing (`platform::sleep`): tokio native / browser timers on wasm.

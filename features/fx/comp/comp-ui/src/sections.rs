@@ -138,7 +138,7 @@ pub fn ParamDropdown(
                 style: format!("font-size:10px; color:{}; letter-spacing:0.06em;", skin.text),
                 "{label}"
             }
-            // Qualified: `fts_ui` has a `Dropdown` of its own (a menu, not a
+            // Qualified: `architect_ui` has a `Dropdown` of its own (a menu, not a
             // param control) and both preludes are in scope here.
             fts_ui_audio::controls::Dropdown {
                 handle,

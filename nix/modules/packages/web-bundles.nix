@@ -1,5 +1,5 @@
-# dx web bundles (task-webapp, fts-site-web) + their static-site OCI
-# images. dx bundle → $out/www (+ brotli pre-compression).
+# dx web bundles (fts-site-web) + their static-site OCI images.
+# dx bundle → $out/www (+ brotli pre-compression).
 { ... }:
 {
   perSystem = { pkgs, lib, config, ... }:
@@ -73,22 +73,8 @@
           doCheck = false;
         });
 
-      task-webapp = mkDxWebBundle {
-        pname = "task-webapp";
-        appDir = "apps/task/web";
-        dxName = "task-app-web";
-        # assets/tailwind.css is generated, not committed. dx detects the
-        # `tailwind.css` at the crate root and builds it, but it reads
-        # assets/ before cargo runs, so build it up front to avoid the
-        # race — from the ONE shared input at apps/task/tailwind.css.
-        #
-        # cwd is irrelevant to the result: the input sets `source(none)`
-        # and names every source explicitly, so the sheet is identical
-        # from anywhere. Run from apps/task/ purely for the short path.
-        preBuild = ''
-          (cd apps/task && tailwindcss -i tailwind.css -o web/assets/tailwind.css)
-        '';
-      };
+      # task-webapp moved to the task repo with the August 2026 split,
+      # along with task-server and the ui-lab bundle.
 
       # fasttrackstudio.app website — `just site-build` is a plain
       # `dx build --platform web --release` (assets/tailwind.css is
@@ -100,12 +86,8 @@
       };
     in
     {
-      packages = { inherit task-webapp fts-site-web; }
+      packages = { inherit fts-site-web; }
       // lib.optionalAttrs pkgs.stdenv.isLinux {
-        task-web-image = mkStaticSite {
-          name = "task-web";
-          siteRoot = "${task-webapp}/www";
-        };
         fts-site-image = mkStaticSite {
           name = "fts-site";
           siteRoot = "${fts-site-web}/www";

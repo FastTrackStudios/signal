@@ -1,13 +1,15 @@
 @import "tailwindcss";
-@import "../../../../../libs/fts-ui/fts-ui/assets/fts-theme.css";
+@import "../../../../../libs/fts-ui/assets/fts-theme.css";
 
-/* Scan paths are relative to THIS file (the source).
- * apps/eq-standalone/ → ../../crates is FTS-EQ/crates;
- * ../../../../fts-ui is the sibling fts-ui repo at the workspace root. */
+/* Scan paths are relative to THIS file (the source). */
 @source "./src/**/*.{rs,html,css}";
 @source "../../crates/eq-ui/src/**/*.rs";
-@source "../../../../fts-ui/crates/fts-ui/src/**/*.rs";
-@source "../../../../fts-ui/crates/fts-ui-audio/src/**/*.rs";
+@source "../../../../../libs/fts-ui/fts-ui-audio/src/**/*.rs";
+/* architect-ui's sources live in the architect repo (git dep), so there is
+ * no stable path to scan and utilities used only inside its components are
+ * NOT generated here. (The two paths that used to sit here pointed at a
+ * `../../../../fts-ui/crates/` sibling-repo layout and had already been
+ * dead for some time before the split.) */
 
 @layer base {
     html {

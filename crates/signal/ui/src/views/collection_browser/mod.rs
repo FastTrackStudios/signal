@@ -19,7 +19,7 @@ mod rig_grid_panel;
 mod toolbar;
 
 use dioxus::prelude::*;
-use fts_ui::prelude::*;
+use architect_ui::prelude::*;
 use signal_proto::rig::RigType;
 use signal_proto::tagging::TagSet;
 use signal::{ALL_BLOCK_TYPES, ALL_MODULE_TYPES, BlockType};

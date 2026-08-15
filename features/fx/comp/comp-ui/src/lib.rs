@@ -3,7 +3,7 @@
 //! Hosts the comp-specific Dioxus root component, the nice_plug parameter
 //! tree, and the bridging glue from `nice_plug` parameters to
 //! [`fts_ui_audio`] widgets. General-purpose widgets (knobs, meters, drag
-//! provider) come from [`fts_ui_audio`]; layout primitives from [`fts_ui`].
+//! provider) come from [`fts_ui_audio`]; layout primitives from [`architect_ui`].
 //!
 //! - [`control_view`]: the plugin editor shell — header, profile picker, and
 //!   the face the selected profile swaps in
