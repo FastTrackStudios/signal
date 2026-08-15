@@ -551,24 +551,47 @@ impl Voice {
         self
     }
 
-    /// Prime the pitch shifter's delay line with the sample frames immediately
-    /// before the voice's first output frame, so it produces valid audio from
-    /// tick 0 — no empty-buffer startup jump (which clicks). Call once after
-    /// the builder chain (needs `start_frame` set). No-op without a shifter or
-    /// when the voice starts at frame 0.
+    /// Compensate the pitch shifter's startup latency, so the voice's intended
+    /// first frame is what comes out on tick 0.
+    ///
+    /// The barberpole's full-gain head reads half a buffer behind the write
+    /// pointer, so for its first `PitchShifter::startup_frames()` input frames
+    /// its output belongs to sample content EARLIER than `start_frame` — and
+    /// for a voice starting at frame 0 there is none, so it emitted silence
+    /// for ~80 ms and then jumped when real audio caught up. That is why every
+    /// off-grid fresh note spoke 80 ms late; on a whole-tone sampling grid
+    /// that is half of all notes. Transitions hid the same latency rather than
+    /// escaping it: starting partway in, their head had real audio to read —
+    /// the wrong 80 ms of it.
+    ///
+    /// The fix is to run those frames through the shifter up front and then
+    /// continue from where that left off: feed `start_frame .. start_frame +
+    /// startup`, and start the read cursor past them. The ring stays
+    /// contiguous — no fabricated history, no junction to cross — and the head
+    /// is reading the intended frame when the voice is first heard.
+    ///
+    /// Call once after the builder chain (needs `start_frame` set). No-op
+    /// without a shifter.
     pub fn prime_pitch_shifters(&mut self) {
-        if self.pitch.is_none() || self.start_frame == 0 {
+        let Some(startup) = self.pitch.as_ref().map(|p| p[0].startup_frames()) else {
+            return;
+        };
+        let data = self.data.clone();
+        let start = self.start_frame;
+        let n = startup.min(data.num_frames.saturating_sub(start));
+        if n == 0 {
             return;
         }
-        let start = self.start_frame;
-        let n = start.min(8191);
-        let data = self.data.clone();
-        let hl: Vec<f32> = (start - n..start).map(|f| data.frame(f).0).collect();
-        let hr: Vec<f32> = (start - n..start).map(|f| data.frame(f).1).collect();
+        let hl: Vec<f32> = (start..start + n).map(|f| data.frame(f).0).collect();
+        let hr: Vec<f32> = (start..start + n).map(|f| data.frame(f).1).collect();
         if let Some(shift) = self.pitch.as_mut() {
             shift[0].prime(&hl);
             shift[1].prime(&hr);
         }
+        // Only the read CURSOR moves past what priming consumed; `start_frame`
+        // stays put, since it is the window floor a loop crossfade reads back
+        // into, not the cursor.
+        self.position = (start + n) as f64;
     }
 
     /// Set the mic index this voice routes to. `mic_index` indexes into

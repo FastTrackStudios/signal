@@ -10,11 +10,14 @@
 //! Ported from `pitch-dsp`'s barberpole `AllpassShifter` (Dattorro/Schroeder,
 //! Eventide-H3000-style): two read heads sweep a circular buffer at a rate set
 //! by the pitch ratio, cubic-interpolated, crossfaded so the windows sum to 1.
-//! **Zero latency** (output is immediate) — which keeps the arrival predictor
+//! **No added latency** in steady state — which keeps the arrival predictor
 //! exact with no compensation term — and **no hot-path allocation** (the ring
 //! buffer is sized once at construction). If the slight barberpole chorusing
 //! is audible on long exposed sustains, swap in a granular shifter (with a
 //! latency-compensation term on the arrival hold).
+//!
+//! Steady state is the operative phrase: the delay line must be PRIMED before
+//! the first `tick` (see [`STARTUP_HISTORY`]) or the first ~80 ms are silent.
 
 use std::f64::consts::PI;
 
@@ -22,6 +25,18 @@ const BUFFER_SIZE: usize = 8192;
 /// Cubic interpolation needs 2 samples on each side.
 const MARGIN: f64 = 4.0;
 const SWEEP_LEN: f64 = (BUFFER_SIZE as f64) - MARGIN * 2.0;
+
+/// How much history [`PitchShifter::prime`] wants before the first `tick`.
+///
+/// The two heads sweep in antiphase, and the crossfade `sin²(πφ)` is ZERO at
+/// φ = 0 and 1 — so the head carrying full gain at startup is the one at
+/// mid-sweep, half a buffer behind the write pointer. Start it against an
+/// empty buffer and it reads silence, and keeps reading silence until its
+/// drifting offset meets the growing history — `STARTUP_HISTORY / ratio`
+/// samples, 80.5 ms at 48 kHz for a semitone up, ending in an abrupt jump
+/// when real audio finally appears. Every off-grid note spoke 80 ms late that
+/// way, which on a whole-tone sampling grid is half of all notes.
+pub const STARTUP_HISTORY: usize = BUFFER_SIZE / 2;
 
 /// Fixed-ratio, time-preserving pitch shifter (one audio channel).
 pub struct PitchShifter {
@@ -49,6 +64,24 @@ impl PitchShifter {
     /// True when this shifter is effectively unity (caller can bypass).
     pub fn is_unity(cents: f64) -> bool {
         cents.abs() < 0.5
+    }
+
+    /// Frames of the sample that must be fed through the shifter BEFORE its
+    /// output is the intended content — the startup latency, in input frames.
+    ///
+    /// The full-gain head starts [`STARTUP_HISTORY`] behind the write pointer
+    /// and its offset drifts at `|1 − ratio|` per sample, so it reaches the
+    /// first frame ever written after `STARTUP_HISTORY / ratio` frames (the
+    /// drift adds for a shift up and subtracts for a shift down). Until then
+    /// its output belongs to earlier sample content — or, with nothing
+    /// earlier, to silence.
+    ///
+    /// So a voice that wants frame `S` to be heard at tick 0 must feed frames
+    /// `S .. S + startup_frames()` first and then continue from there;
+    /// [`Voice::prime_pitch_shifters`](crate::engine::voice::Voice::prime_pitch_shifters)
+    /// does exactly that.
+    pub fn startup_frames(&self) -> usize {
+        (STARTUP_HISTORY as f64 / self.ratio).ceil() as usize
     }
 
     /// Pre-fill the delay line with `history` (the sample frames immediately
@@ -166,6 +199,50 @@ mod tests {
         assert!(
             (ratio - 0.9439).abs() < 0.02,
             "expected ~0.944 period ratio for +1 semitone, got {ratio:.4} (pd={pd:.2} pw={pw:.2})"
+        );
+    }
+
+    /// A primed shifter speaks on its FIRST tick.
+    ///
+    /// Unprimed it does not: the full-gain head starts half a buffer behind
+    /// the write pointer, reads the empty ring, and stays silent for
+    /// `STARTUP_HISTORY / ratio` samples — 80.5 ms at 48 kHz for a semitone
+    /// up. Every fresh off-grid note was late by exactly that, which the
+    /// pitch-accuracy tests above could not see because they skip the first
+    /// 9000 samples before measuring.
+    #[test]
+    fn primed_shifter_speaks_immediately() {
+        let sr = 48000.0f32;
+        let f = 220.0f32;
+        let sine = |i: usize| (2.0 * std::f32::consts::PI * f * i as f32 / sr).sin() * 0.5;
+
+        // The engine feeds `startup_frames()` of the sample through the
+        // shifter and then continues from there (`prime_pitch_shifters`).
+        let mut up = PitchShifter::new(100.0);
+        let startup = up.startup_frames();
+        let history: Vec<f32> = (0..startup).map(sine).collect();
+        up.prime(&history);
+
+        let first_ms = 5;
+        let n = (sr as usize * first_ms) / 1000;
+        let peak = (0..n)
+            .map(|i| up.tick(sine(startup + i)).abs())
+            .fold(0.0f32, f32::max);
+        assert!(
+            peak > 0.1,
+            "primed shifter must produce audio within {first_ms} ms; peak was {peak:.4}"
+        );
+
+        // And the unprimed path is what that guards against.
+        let mut cold = PitchShifter::new(100.0);
+        let cold_peak = (0..n)
+            .map(|i| cold.tick(sine(i)).abs())
+            .fold(0.0f32, f32::max);
+        assert!(
+            cold_peak < 0.01,
+            "an unprimed shifter is expected to be silent at startup — if this \
+             fails the barberpole's startup changed and priming may be moot \
+             (cold peak {cold_peak:.4})"
         );
     }
 

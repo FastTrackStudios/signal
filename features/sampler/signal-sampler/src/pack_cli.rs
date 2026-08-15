@@ -61,6 +61,96 @@ enum Cmd {
         #[arg(long)]
         src_root: Option<PathBuf>,
     },
+    /// Identify WHAT a reference render is playing at a given moment, and
+    /// where inside the samples — sample-exactly.
+    ///
+    /// A Kontakt bounce of a library we hold is a mix of the very samples in
+    /// the pack, and the round-robin set is finite, so this is identification
+    /// rather than estimation. Each candidate GROUP (the dynamic layers of one
+    /// zone family, which sound together from a shared onset) is fitted to the
+    /// reference window by least squares over a multi-second scan: the winner
+    /// names the articulation, round-robin and layer Kontakt chose, the offset
+    /// it started from (its `$1fvjk` skip), the note's onset in wall time, and
+    /// the gain on each layer. `explained` is the fraction of the window's
+    /// energy the group accounts for — a wrong group cannot fake it.
+    ///
+    /// STATUS: identification is reliable, alignment is not yet. Use a TIGHT
+    /// `--scan-ms` around a note time you already know (the MIDI gives onsets
+    /// to ±300 ms) — a blind multi-second sweep still returns offsets that
+    /// imply a note starting before the file did. See [`crate::ref_match`] for
+    /// why, and for what single-sample correlation gets wrong.
+    MatchRef {
+        pack: PathBuf,
+        /// Reference render (e.g. a Kontakt bounce).
+        #[arg(long, default_value = "")]
+        reference: PathBuf,
+        /// Seconds into the reference to identify.
+        #[arg(long)]
+        at: f64,
+        /// Window fitted, in ms. Long enough to be unique, short enough to sit
+        /// inside one note.
+        #[arg(long, default_value_t = 250.0)]
+        window_ms: f64,
+        /// How far into each candidate sample to scan, in ms — i.e. how long
+        /// before `at` the note may have started. Keep this tight: a wide
+        /// scan is where alignment currently goes wrong.
+        #[arg(long, default_value_t = 400.0)]
+        scan_ms: f64,
+        /// Restrict candidates by root key: "55,60-64" (names allowed).
+        #[arg(long)]
+        notes: Option<String>,
+        #[arg(long)]
+        articulation: Option<String>,
+        #[arg(long)]
+        mic: Option<String>,
+        /// Also try candidates RESAMPLED by ±1..N semitones — Kontakt fills
+        /// its whole-tone grid by resampling, so an off-grid note in the
+        /// reference is a neighbouring root played faster or slower.
+        #[arg(long, default_value_t = 2)]
+        semitones: i32,
+        /// How many candidate groups to report.
+        #[arg(long, default_value_t = 8)]
+        top: usize,
+        /// Sweep every note of this MIDI — the file the reference was
+        /// rendered from — and report, per note, what the reference actually
+        /// played and WHEN. With the notes known, each window is scanned in a
+        /// tight neighbourhood of its nominal onset, which is the regime the
+        /// matcher is exact in.
+        #[arg(long)]
+        sweep: Option<PathBuf>,
+        /// Seconds after the nominal onset to place each sweep window.
+        ///
+        /// Small ON PURPOSE. The attack is the only landmark a sustained
+        /// string note has — its body is periodic, so a window placed deep in
+        /// it matches at nearly any offset and the fit wanders (measured: a
+        /// window at +200 ms put an on-grid note's onset 198 ms BEFORE its own
+        /// note-on, pinned to the edge of the scan). Keep the attack inside
+        /// the window and the same note reads +1 ms.
+        #[arg(long, default_value_t = 0.03)]
+        lead: f64,
+        /// Use the MIDI to narrow the candidates: a step offers only the
+        /// transition zones of THAT direction and interval (plus the bodies,
+        /// which sound underneath it), a phrase start only bodies.
+        ///
+        /// Much faster and much less prone to misidentification — but it
+        /// ASSUMES the zone rather than discovering it, so the agreement
+        /// column stops being an independent check. Establish trust with an
+        /// open sweep first; this is for the runs that follow.
+        #[arg(long)]
+        guided: bool,
+        /// Only sweep notes starting at or after this second.
+        #[arg(long)]
+        from: Option<f64>,
+        /// Only sweep notes starting before this second.
+        #[arg(long)]
+        to: Option<f64>,
+        /// Ignore `--reference` and score the matcher against a reference
+        /// BUILT from this pack's own samples at known offsets and gains.
+        /// Real content, known answer — the check the noise-based unit tests
+        /// cannot make, because noise has no periodic self-similarity.
+        #[arg(long)]
+        self_test: bool,
+    },
     /// Waveform report for pack samples: loop points, sample window, lead-in/
     /// arrival markers over each decoded waveform. Self-contained HTML.
     InspectSamples {
@@ -343,6 +433,56 @@ pub fn cli_main(argv: impl IntoIterator<Item = OsString>) -> Result<()> {
                 Ok(())
             } else {
                 bail!("check: PARTIAL")
+            }
+        }
+        Cmd::MatchRef {
+            pack,
+            reference,
+            at,
+            window_ms,
+            scan_ms,
+            notes,
+            articulation,
+            mic,
+            semitones,
+            top,
+            self_test,
+            sweep,
+            lead,
+            from,
+            to,
+            guided,
+        } => {
+            if let Some(midi) = sweep {
+                match_ref_sweep(
+                    &pack,
+                    &reference,
+                    &midi,
+                    lead,
+                    window_ms,
+                    scan_ms,
+                    articulation,
+                    mic,
+                    semitones,
+                    from,
+                    to,
+                    guided,
+                )
+            } else if self_test {
+                match_ref_self_test(&pack, window_ms, scan_ms, articulation, mic)
+            } else {
+                match_ref(
+                    &pack,
+                    &reference,
+                    at,
+                    window_ms,
+                    scan_ms,
+                    notes,
+                    articulation,
+                    mic,
+                    semitones,
+                    top,
+                )
             }
         }
         Cmd::InspectSamples {
@@ -1344,6 +1484,809 @@ fn parse_note(s: &str) -> Result<u8> {
     Ok(((oct + 1) * 12 + semis).clamp(0, 127) as u8)
 }
 
+/// One candidate group's best explanation of the reference window.
+struct GroupHit {
+    articulation: String,
+    rr_index: u32,
+    direction: String,
+    interval: u32,
+    root_key: u8,
+    /// Semitones the group was shifted by to match (grid-fill).
+    shift: i32,
+    /// Which grid-fill model produced this candidate: "resampled" (rate
+    /// change, classic sampler) or "shifted" (time-preserving, ours).
+    fill: String,
+    /// Per-member `(dynamic label, gain dB)`, loudest first.
+    layers: Vec<(String, f32)>,
+    offset_frames: usize,
+    sample_rate: u32,
+    explained: f32,
+}
+
+/// Mono-sum a decoded sample to `f32`.
+fn mono_of(pcm: &[f32], channels: usize, frames: usize) -> Vec<f32> {
+    let ch = channels.max(1);
+    (0..frames)
+        .map(|f| {
+            let base = f * ch;
+            (0..ch).map(|c| pcm[base + c]).sum::<f32>() / ch as f32
+        })
+        .collect()
+}
+
+/// Pitch-shift `src` by `semitones` WITHOUT changing its duration — our
+/// engine's grid-fill, as opposed to [`resample`], which is Kontakt's if
+/// Kontakt fills its whole-tone grid the way a classic sampler does.
+///
+/// Offering the matcher both is the only way to tell the two apart. A note
+/// that is off the sampling grid has no unshifted candidate, so the matcher is
+/// FORCED to pick a neighbour whichever way it was filled; only the fit
+/// quality of the two variants distinguishes them.
+fn pitch_shifted(src: &[f32], semitones: i32) -> Vec<f32> {
+    use crate::engine::pitch_shift::PitchShifter;
+    let cents = f64::from(semitones) * 100.0;
+    if PitchShifter::is_unity(cents) {
+        return src.to_vec();
+    }
+    let mut sh = PitchShifter::new(cents);
+    let startup = sh.startup_frames().min(src.len());
+    // Same startup compensation the engine applies: feed the head through
+    // first, then emit from where that left off.
+    for &v in &src[..startup] {
+        sh.tick(v);
+    }
+    src[startup..].iter().map(|&v| sh.tick(v)).collect()
+}
+
+/// Linear-resample `src` by `ratio` input frames per output frame.
+fn resample(src: &[f32], ratio: f64, out_len: usize) -> Vec<f32> {
+    (0..out_len)
+        .map(|i| {
+            let p = i as f64 * ratio;
+            let idx = p as usize;
+            if idx + 1 >= src.len() {
+                return 0.0;
+            }
+            let frac = (p - idx as f64) as f32;
+            src[idx] * (1.0 - frac) + src[idx + 1] * frac
+        })
+        .collect()
+}
+
+
+
+/// Sweep a whole reference render note by note — see [`Cmd::MatchRef::sweep`].
+///
+/// The MIDI that produced the reference gives every note's NOMINAL onset. For
+/// each note this places a window `lead` seconds later and asks what the
+/// reference is playing there; the recovered offset says how far into its
+/// sample the reference had got, so `at − offset` is the note's ACTUAL onset.
+/// The difference between the two is the drift, per note, sample-exact — and
+/// the same sweep run against our own render makes the two directly
+/// comparable.
+#[allow(clippy::too_many_arguments)]
+fn match_ref_sweep(
+    pack_path: &Path,
+    reference: &Path,
+    midi: &Path,
+    lead: f64,
+    window_ms: f64,
+    scan_ms: f64,
+    articulation: Option<String>,
+    mic: Option<String>,
+    semitones: i32,
+    from: Option<f64>,
+    to: Option<f64>,
+    guided: bool,
+) -> Result<()> {
+    let (notes, _ccs, _bpm) = parse_smf(midi)?;
+    let patch = crate::PlayerPatch::from_pack(pack_path)?;
+    let pack = patch.pack.clone().ok_or_else(|| eyre::eyre!("not a pack"))?;
+    let cache = SampleCache::with_pack(pack);
+
+    let refd = crate::engine::cache::load_sample(reference)
+        .map_err(|e| eyre::eyre!("load {}: {e}", reference.display()))?;
+    let sr = refd.sample_rate;
+    let refmono = mono_of(&refd.to_f32(), refd.channels as usize, refd.num_frames);
+    let wlen = ((window_ms / 1000.0) * f64::from(sr)) as usize;
+    let scan = ((scan_ms / 1000.0) * f64::from(sr)) as usize;
+
+    println!(
+        "sweep {} against {} — {} note(s), window {:.0} ms at +{:.0} ms\n",
+        midi.display(),
+        reference.display(),
+        notes.len(),
+        window_ms,
+        lead * 1000.0
+    );
+    println!(
+        "  {:>7}  {:>4}  {:>9}  {:>9}  {:>7}  {:<22} {}",
+        "nominal", "note", "actual", "drift", "share", "played", "gains"
+    );
+
+    // What the MIDI says each note IS: a step from the note before it on the
+    // same line, or a fresh start when nothing was sounding. The matcher is
+    // never told this — it is the independent check that turns a plausible fit
+    // into ground truth.
+    let mut expect: Vec<Option<(String, u32)>> = Vec::with_capacity(notes.len());
+    for (i, n) in notes.iter().enumerate() {
+        expect.push(if i == 0 {
+            None
+        } else {
+            let prev = &notes[i - 1];
+            let gap = f64::from(n.start) - f64::from(prev.start + prev.dur);
+            // A note well after the line fell silent starts a phrase; CSS
+            // plays a body, not a transition.
+            if gap > 0.5 || prev.note == n.note {
+                None
+            } else {
+                let delta = i32::from(n.note) - i32::from(prev.note);
+                Some((
+                    if delta > 0 { "up" } else { "down" }.to_string(),
+                    delta.unsigned_abs(),
+                ))
+            }
+        });
+    }
+
+    let mut agreed: Vec<f64> = Vec::new();
+    let mut checked = 0usize;
+    let mut edges = 0usize;
+    // Decode each sample ONCE. `to_f32` on a streamed sample decodes the whole
+    // thing (it has to — a partial decode is what made every offline reading
+    // of a FLAC pack wrong), so calling it per zone per note turned a 9-note
+    // run into 20 minutes. Resampled and shifted variants are cached the same
+    // way, keyed by the semitone move.
+    let mut mono: std::collections::HashMap<(String, i32), std::sync::Arc<Vec<f32>>> =
+        std::collections::HashMap::new();
+
+    for (ni, n) in notes.iter().enumerate() {
+        if from.is_some_and(|f| f64::from(n.start) < f) {
+            continue;
+        }
+        if to.is_some_and(|t| f64::from(n.start) >= t) {
+            continue;
+        }
+        let at = f64::from(n.start) + lead;
+        let start = (at * f64::from(sr)) as usize;
+        if start + wlen >= refmono.len() {
+            continue;
+        }
+        let window = &refmono[start..start + wlen];
+
+        // Only zones this note could plausibly be: Kontakt grid-fills by
+        // resampling a neighbour, so roots within `semitones` of the note.
+        type Key = (String, u8, String, u32, u32);
+        let mut groups: std::collections::BTreeMap<Key, Vec<&crate::spec::ZoneSpec>> =
+            std::collections::BTreeMap::new();
+        for z in &patch.spec.zones {
+            if articulation.as_ref().is_some_and(|a| &z.articulation != a) {
+                continue;
+            }
+            if mic.as_ref().is_some_and(|m| &z.mic != m) {
+                continue;
+            }
+            // A release sample is what a note ENDS with, never what it starts
+            // with — but it is the same players in the same room, so it fits an
+            // onset window well enough to win one (measured: a release zone
+            // took the first note at 79.6%). Not a candidate here.
+            if patch
+                .spec
+                .articulation(&z.articulation)
+                .is_some_and(|a| matches!(a.kind, crate::spec::ArticulationKind::Release))
+            {
+                continue;
+            }
+            // MIDI-guided narrowing: we know the move, so we know which
+            // transition CSS can have fired. A body is always admissible —
+            // the outgoing and incoming sustains sound under the transition,
+            // and the decomposition needs them to explain the window.
+            if guided {
+                let is_transition = !z.direction.is_empty();
+                match (&expect[ni], is_transition) {
+                    (Some((dir, iv)), true) => {
+                        if !z.direction.eq_ignore_ascii_case(dir) || z.interval != *iv {
+                            continue;
+                        }
+                    }
+                    (None, true) => continue,
+                    _ => {}
+                }
+            }
+            // Which note this zone SOUNDS. A sustain sounds its root; a
+            // transition sounds its destination, which for an upward zone is
+            // root+interval. Filtering on the root alone would offer a
+            // transition group for the wrong note entirely.
+            let sounds = if z.direction.eq_ignore_ascii_case("up") {
+                i32::from(z.root_key) + z.interval as i32
+            } else {
+                i32::from(z.root_key)
+            };
+            if (sounds - i32::from(n.note)).abs() > semitones {
+                continue;
+            }
+            groups
+                .entry((
+                    z.articulation.clone(),
+                    z.root_key,
+                    z.direction.clone(),
+                    z.interval,
+                    z.rr_index,
+                ))
+                .or_default()
+                .push(z);
+        }
+
+        // Every plausible group, each resampled to this note the way Kontakt
+        // would have, then peeled apart: mid-phrase a window holds the
+        // outgoing body, the transition and the incoming body at once, and a
+        // single-group fit can only ever explain its share of that.
+        let mut labels: Vec<String> = Vec::new();
+        let mut keys: Vec<Key> = Vec::new();
+        let mut sets: Vec<Vec<std::sync::Arc<Vec<f32>>>> = Vec::new();
+        for (key, zones) in &groups {
+            let sounds = if key.2.eq_ignore_ascii_case("up") {
+                i32::from(key.1) + key.3 as i32
+            } else {
+                i32::from(key.1)
+            };
+            let shift = i32::from(n.note) - sounds;
+            let mut lab = Vec::new();
+            let mut members: Vec<std::sync::Arc<Vec<f32>>> = Vec::new();
+            for z in zones {
+                let key_c = (z.file.clone(), shift);
+                if !mono.contains_key(&key_c) {
+                    let Ok(data) = cache.get(Path::new(&z.file)) else {
+                        continue;
+                    };
+                    let base = match mono.get(&(z.file.clone(), 0)) {
+                        Some(b) => std::sync::Arc::clone(b),
+                        None => {
+                            let b = std::sync::Arc::new(mono_of(
+                                &data.to_f32(),
+                                data.channels as usize,
+                                data.num_frames,
+                            ));
+                            mono.insert((z.file.clone(), 0), std::sync::Arc::clone(&b));
+                            b
+                        }
+                    };
+                    let made = if shift == 0 {
+                        base
+                    } else {
+                        let ratio = 2.0f64.powf(f64::from(shift) / 12.0);
+                        let need = scan + wlen + 2;
+                        std::sync::Arc::new(resample(
+                            &base,
+                            ratio,
+                            need.min((base.len() as f64 / ratio) as usize),
+                        ))
+                    };
+                    mono.insert(key_c.clone(), made);
+                }
+                if let Some(m) = mono.get(&key_c) {
+                    lab.push(z.dynamic.clone());
+                    // Arc, not a copy: cloning the Vec here copied a
+                    // multi-second sample per group per NOTE — hundreds of
+                    // megabytes of memcpy for one window, and nine notes in
+                    // twenty-one minutes.
+                    members.push(std::sync::Arc::clone(m));
+                }
+            }
+            if members.is_empty() {
+                continue;
+            }
+            labels.push(lab.join("/"));
+            keys.push(key.clone());
+            sets.push(members);
+        }
+
+        let borrowed: Vec<Vec<&[f32]>> = sets
+            .iter()
+            .map(|g| g.iter().map(|m| m.as_slice()).collect())
+            .collect();
+        let voices = crate::ref_match::decompose(window, &borrowed, scan, 48, 24, 3, 0.03);
+        if voices.is_empty() {
+            println!("  {:>6.3}s  {:>4}  (no fit)", n.start, n.note);
+            checked += 1;
+            continue;
+        }
+        checked += 1;
+        for (vi, v) in voices.iter().enumerate() {
+            let off_s = v.fit.offset as f64 / f64::from(sr);
+            let actual = at - off_s;
+            let drift = (actual - f64::from(n.start)) * 1000.0;
+            let key = &keys[v.group];
+            let sounds = if key.2.eq_ignore_ascii_case("up") {
+                i32::from(key.1) + key.3 as i32
+            } else {
+                i32::from(key.1)
+            };
+            let shift = i32::from(n.note) - sounds;
+            let gains = v
+                .fit
+                .gains
+                .iter()
+                .zip(labels[v.group].split('/'))
+                .filter(|(g, _)| **g > 0.01)
+                .map(|(g, l)| format!("{l} {:+.1}", 20.0 * g.log10()))
+                .collect::<Vec<_>>()
+                .join("  ");
+            // A fit sitting on either end of the scan is CLIPPED, not
+            // measured: the search wanted to go further and could not. Those
+            // rows read as confident numbers while being artefacts of the
+            // range — the phrase starts, whose skip must be one constant,
+            // scattered over 146 ms and every outlier was an edge.
+            let edge = v.fit.offset <= 24 || v.fit.offset + 24 >= scan;
+            if edge && vi == 0 {
+                edges += 1;
+            }
+            let mark = if vi > 0 {
+                " "
+            } else {
+                if edge {
+                    "ED"
+                } else {
+                match (&expect[ni], key.2.is_empty()) {
+                    // A transition was expected: direction and interval must
+                    // both match the step.
+                    (Some((dir, iv)), false) => {
+                        if key.2.eq_ignore_ascii_case(dir) && key.3 == *iv {
+                            agreed.push(drift);
+                            "OK"
+                        } else {
+                            "xx"
+                        }
+                    }
+                    // A phrase start was expected: a body, not a transition.
+                    (None, true) => {
+                        agreed.push(drift);
+                        "OK"
+                    }
+                    _ => "xx",
+                }
+                }
+            };
+            println!(
+                "{mark}{:>6}  {:>4}  {:>8.3}s  {:>+7.1}ms  {:>6.1}%  {:<22} {}",
+                if vi == 0 {
+                    format!("{:.3}s", n.start)
+                } else {
+                    String::new()
+                },
+                if vi == 0 {
+                    format!("{}", n.note)
+                } else {
+                    String::new()
+                },
+                actual,
+                drift,
+                v.share * 100.0,
+                format!(
+                    "{} {}{}{}",
+                    key.0,
+                    key.1,
+                    if shift == 0 {
+                        String::new()
+                    } else {
+                        format!("{shift:+}st")
+                    },
+                    if key.2.is_empty() {
+                        String::new()
+                    } else {
+                        format!(" {}{}", key.2, key.3)
+                    }
+                ),
+                gains
+            );
+        }
+    }
+
+    // Only rows whose zone agrees with the MIDI are worth averaging: the rest
+    // are misidentifications, and their drift is noise about a note that was
+    // never played.
+    if agreed.is_empty() {
+        println!("\n  no row agreed with the MIDI — nothing to calibrate from");
+        return Ok(());
+    }
+    let mut sorted = agreed.clone();
+    sorted.sort_by(f64::total_cmp);
+    let median = sorted[sorted.len() / 2];
+    let mean = agreed.iter().sum::<f64>() / agreed.len() as f64;
+    let spread = (agreed.iter().map(|d| (d - mean).powi(2)).sum::<f64>()
+        / agreed.len() as f64)
+        .sqrt();
+    println!(
+        "\n  {}/{} notes agreed with the MIDI ({} clipped at a scan edge, excluded)\n  drift  median {:+.1} ms   mean {:+.1} ms   sd {:.1} ms",
+        agreed.len(),
+        checked,
+        edges,
+        median,
+        mean,
+        spread
+    );
+    println!(
+        "  the median is the reference's own constant offset; subtract it and\n  what remains is per-note drift worth tuning against"
+    );
+    Ok(())
+}
+
+/// Score the matcher against a reference built from the pack's OWN samples at
+/// known offsets and gains — see [`Cmd::MatchRef::self_test`].
+///
+/// The unit tests in [`crate::ref_match`] fit synthetic noise, which has no
+/// periodic structure and so cannot exhibit the ambiguity that real sustained
+/// strings do. This builds the same experiment out of real samples: place one
+/// zone at a known onset, sum a second zone at a different known onset (the
+/// crossfade case — a transition is two samples overlapping), and ask the
+/// matcher to recover what it was given.
+fn match_ref_self_test(
+    pack_path: &Path,
+    window_ms: f64,
+    scan_ms: f64,
+    articulation: Option<String>,
+    mic: Option<String>,
+) -> Result<()> {
+    let patch = crate::PlayerPatch::from_pack(pack_path)?;
+    let pack = patch.pack.clone().ok_or_else(|| eyre::eyre!("not a pack"))?;
+    let cache = SampleCache::with_pack(pack);
+
+    // One group: the dynamic layers of a single zone family.
+    let mut chosen: Option<(String, u8, String, u32, u32)> = None;
+    let mut group: Vec<(String, Vec<f32>)> = Vec::new();
+    let mut sr = 48_000u32;
+    for z in &patch.spec.zones {
+        if articulation.as_ref().is_some_and(|a| &z.articulation != a) {
+            continue;
+        }
+        if mic.as_ref().is_some_and(|m| &z.mic != m) {
+            continue;
+        }
+        let key = (
+            z.articulation.clone(),
+            z.root_key,
+            z.direction.clone(),
+            z.interval,
+            z.rr_index,
+        );
+        if chosen.as_ref().is_some_and(|c| c != &key) {
+            continue;
+        }
+        let Ok(data) = cache.get(Path::new(&z.file)) else {
+            continue;
+        };
+        sr = data.sample_rate;
+        chosen = Some(key);
+        group.push((
+            z.dynamic.clone(),
+            mono_of(&data.to_f32(), data.channels as usize, data.num_frames),
+        ));
+    }
+    let (Some(key), false) = (chosen, group.is_empty()) else {
+        bail!("no zones matched the filters");
+    };
+    let members: Vec<Vec<f32>> = group.iter().map(|(_, a)| a.clone()).collect();
+    let shortest = members.iter().map(|m| m.len()).min().unwrap_or(0);
+
+    let wlen = ((window_ms / 1000.0) * f64::from(sr)) as usize;
+    let scan = ((scan_ms / 1000.0) * f64::from(sr)) as usize;
+    // A known offset inside every member, comfortably past the attack.
+    let truth = (scan / 3).min(shortest.saturating_sub(wlen + 1));
+    if truth == 0 || wlen == 0 {
+        bail!("samples too short for a {window_ms} ms window");
+    }
+    let gains: Vec<f32> = (0..members.len())
+        .map(|i| 0.8 / (1.0 + i as f32))
+        .collect();
+
+    println!(
+        "self-test on {} root {} rr {} — {} layer(s), truth offset {:.1} ms\n",
+        key.0,
+        key.1,
+        key.4,
+        members.len(),
+        truth as f64 / f64::from(sr) * 1000.0
+    );
+
+    // Case 1: a static mixture of the group's layers at one shared onset.
+    let window: Vec<f32> = (0..wlen)
+        .map(|i| {
+            members
+                .iter()
+                .zip(&gains)
+                .map(|(m, g)| g * m[truth + i])
+                .sum()
+        })
+        .collect();
+    let refs: Vec<&[f32]> = members.iter().map(|m| m.as_slice()).collect();
+    match crate::ref_match::best_fit(&window, &refs, scan, 48, 24) {
+        Some(fit) => {
+            let err = fit.offset as f64 - truth as f64;
+            println!(
+                "  one group      offset {:+.1} ms off truth   explained {:.1}%   gains {}",
+                err / f64::from(sr) * 1000.0,
+                fit.explained * 100.0,
+                fit.gains
+                    .iter()
+                    .map(|g| format!("{g:.3}"))
+                    .collect::<Vec<_>>()
+                    .join(" ")
+            );
+            println!(
+                "                 {}",
+                if err.abs() <= 2.0 {
+                    "PASS — sample-exact on real content"
+                } else {
+                    "FAIL — the offset is wrong on real content"
+                }
+            );
+        }
+        None => println!("  one group      FAIL — no fit"),
+    }
+
+    // Case 1b: the same mixture, but placed at offset ZERO. If the search can
+    // find a mixture only when it sits at the very start of the scan, the
+    // coarse stage is what is broken, not the fit.
+    let window0: Vec<f32> = (0..wlen)
+        .map(|i| members.iter().zip(&gains).map(|(m, g)| g * m[i]).sum())
+        .collect();
+    match crate::ref_match::best_fit(&window0, &refs, scan, 48, 24) {
+        Some(fit) => println!(
+            "  at offset 0    found {:.1} ms   explained {:.1}%",
+            fit.offset as f64 / f64::from(sr) * 1000.0,
+            fit.explained * 100.0
+        ),
+        None => println!("  at offset 0    no fit"),
+    }
+
+    // Case 2: the crossfade case — the same layers, but a SECOND copy laid in
+    // at a different onset, as an overlapping transition would be. A model
+    // that assumes one shared offset cannot express this; the point is to
+    // measure how badly it goes wrong before the multi-voice fit lands.
+    let second = truth / 2;
+    let window2: Vec<f32> = (0..wlen)
+        .map(|i| {
+            let a: f32 = members
+                .iter()
+                .zip(&gains)
+                .map(|(m, g)| g * m[truth + i])
+                .sum();
+            let b: f32 = members
+                .iter()
+                .map(|m| 0.5 * m[second + i])
+                .sum();
+            a + b
+        })
+        .collect();
+    println!(
+        "\n  crossfade truth: a voice at {:.1} ms and another at {:.1} ms",
+        truth as f64 / f64::from(sr) * 1000.0,
+        second as f64 / f64::from(sr) * 1000.0
+    );
+    let groups = vec![refs.clone()];
+    let voices = crate::ref_match::decompose(&window2, &groups, scan, 48, 24, 3, 0.02);
+    if voices.is_empty() {
+        println!("  two onsets     FAIL — nothing found");
+    }
+    for (i, v) in voices.iter().enumerate() {
+        let off_ms = v.fit.offset as f64 / f64::from(sr) * 1000.0;
+        let d_late = off_ms - truth as f64 / f64::from(sr) * 1000.0;
+        let d_early = off_ms - second as f64 / f64::from(sr) * 1000.0;
+        let hit = if d_late.abs() <= 2.0 {
+            "= the later voice "
+        } else if d_early.abs() <= 2.0 {
+            "= the earlier voice"
+        } else {
+            "?? matches neither"
+        };
+        println!(
+            "  voice {}        offset {:8.1} ms  {}   share {:5.1}%   gains {}",
+            i + 1,
+            off_ms,
+            hit,
+            v.share * 100.0,
+            v.fit
+                .gains
+                .iter()
+                .map(|g| format!("{g:.3}"))
+                .collect::<Vec<_>>()
+                .join(" ")
+        );
+    }
+    Ok(())
+}
+
+/// See [`Cmd::MatchRef`].
+#[allow(clippy::too_many_arguments)]
+fn match_ref(
+    pack_path: &Path,
+    reference: &Path,
+    at: f64,
+    window_ms: f64,
+    scan_ms: f64,
+    notes: Option<String>,
+    articulation: Option<String>,
+    mic: Option<String>,
+    semitones: i32,
+    top: usize,
+) -> Result<()> {
+    let patch = crate::PlayerPatch::from_pack(pack_path)?;
+    let pack = patch.pack.clone().ok_or_else(|| eyre::eyre!("not a pack"))?;
+    let cache = SampleCache::with_pack(pack);
+    let note_set = notes.as_deref().map(parse_note_set).transpose()?;
+
+    let refd = crate::engine::cache::load_sample(reference)
+        .map_err(|e| eyre::eyre!("load {}: {e}", reference.display()))?;
+    let sr = refd.sample_rate;
+    let refmono = mono_of(&refd.to_f32(), refd.channels as usize, refd.num_frames);
+
+    let wlen = ((window_ms / 1000.0) * f64::from(sr)) as usize;
+    let start = (at * f64::from(sr)) as usize;
+    if start + wlen >= refmono.len() {
+        bail!(
+            "--at {at}s + window is past the end of {}",
+            reference.display()
+        );
+    }
+    let window = &refmono[start..start + wlen];
+    let scan = ((scan_ms / 1000.0) * f64::from(sr)) as usize;
+
+    // Group the zones that sound TOGETHER: one zone family's dynamic layers,
+    // which share an onset and are crossfaded by CC1. Fitting them jointly is
+    // what lets the score separate the group that is playing from one that
+    // merely resembles part of the mixture.
+    type Key = (String, u8, String, u32, u32);
+    let mut groups: std::collections::BTreeMap<Key, Vec<&crate::spec::ZoneSpec>> =
+        std::collections::BTreeMap::new();
+    for z in &patch.spec.zones {
+        if articulation.as_ref().is_some_and(|a| &z.articulation != a) {
+            continue;
+        }
+        if mic.as_ref().is_some_and(|m| &z.mic != m) {
+            continue;
+        }
+        if note_set.as_ref().is_some_and(|s| !s.contains(&z.root_key)) {
+            continue;
+        }
+        groups
+            .entry((
+                z.articulation.clone(),
+                z.root_key,
+                z.direction.clone(),
+                z.interval,
+                z.rr_index,
+            ))
+            .or_default()
+            .push(z);
+    }
+    if groups.is_empty() {
+        bail!("no zones matched the filters");
+    }
+
+    let mut hits: Vec<GroupHit> = Vec::new();
+    for (key, zones) in &groups {
+        let mut decoded: Vec<(String, Vec<f32>)> = Vec::new();
+        for z in zones {
+            let Ok(data) = cache.get(Path::new(&z.file)) else {
+                continue;
+            };
+            decoded.push((
+                z.dynamic.clone(),
+                mono_of(&data.to_f32(), data.channels as usize, data.num_frames),
+            ));
+        }
+        if decoded.is_empty() {
+            continue;
+        }
+        for shift in -semitones..=semitones {
+            // Both grid-fill models, so the fit can say which one the
+            // reference actually used.
+            let variants: Vec<(&str, Vec<Vec<f32>>)> = if shift == 0 {
+                vec![("", decoded.iter().map(|(_, a)| a.clone()).collect())]
+            } else {
+                let ratio = 2.0f64.powf(f64::from(shift) / 12.0);
+                let need = scan + wlen + 2;
+                vec![
+                    (
+                        "resampled",
+                        decoded
+                            .iter()
+                            .map(|(_, a)| {
+                                resample(a, ratio, need.min((a.len() as f64 / ratio) as usize))
+                            })
+                            .collect(),
+                    ),
+                    (
+                        "shifted",
+                        decoded
+                            .iter()
+                            .map(|(_, a)| pitch_shifted(a, shift))
+                            .collect(),
+                    ),
+                ]
+            };
+            for (fill, members) in variants {
+            let refs: Vec<&[f32]> = members.iter().map(|m| m.as_slice()).collect();
+            let Some(fit) = crate::ref_match::best_fit(window, &refs, scan, 48, 24) else {
+                continue;
+            };
+            let mut layers: Vec<(String, f32)> = decoded
+                .iter()
+                .zip(&fit.gains)
+                .map(|((label, _), g)| {
+                    (
+                        label.clone(),
+                        if *g > 0.0 { 20.0 * g.log10() } else { f32::NEG_INFINITY },
+                    )
+                })
+                .collect();
+            layers.sort_by(|a, b| b.1.total_cmp(&a.1));
+            hits.push(GroupHit {
+                articulation: key.0.clone(),
+                root_key: key.1,
+                direction: key.2.clone(),
+                interval: key.3,
+                rr_index: key.4,
+                shift,
+                fill: fill.to_string(),
+                layers,
+                offset_frames: fit.offset,
+                sample_rate: sr,
+                explained: fit.explained,
+            });
+            }
+        }
+    }
+    if hits.is_empty() {
+        bail!("no candidate group could be fitted");
+    }
+    hits.sort_by(|a, b| b.explained.total_cmp(&a.explained));
+
+    println!(
+        "reference {} at {at:.3}s, {window_ms:.0} ms window, {scan_ms:.0} ms scan — {} group(s)\n",
+        reference.display(),
+        groups.len()
+    );
+    println!(
+        "  {:>8}  {:>9}  {:>9}  {:<10} {:>2}  {:<26} {}",
+        "explained", "offset", "onset", "artic", "rr", "root", "layer gains"
+    );
+    for h in hits.iter().take(top) {
+        let off_ms = h.offset_frames as f64 / f64::from(h.sample_rate) * 1000.0;
+        // The sample is `off_ms` in at time `at`, so it was triggered that
+        // much earlier — the note's true onset in the reference.
+        let onset = at - off_ms / 1000.0;
+        let shift = if h.shift == 0 {
+            String::new()
+        } else {
+            format!(" {:+}st {}", h.shift, h.fill)
+        };
+        let dir = if h.direction.is_empty() {
+            String::new()
+        } else {
+            format!(" {}{}", h.direction, h.interval)
+        };
+        let gains = h
+            .layers
+            .iter()
+            .filter(|(_, db)| db.is_finite())
+            .map(|(l, db)| format!("{l} {db:+.1}"))
+            .collect::<Vec<_>>()
+            .join("  ");
+        println!(
+            "  {:>7.1}%  {:>7.1}ms  {:>8.3}s  {:<10} {:>2}  {:<26} {}",
+            h.explained * 100.0,
+            off_ms,
+            onset,
+            h.articulation,
+            h.rr_index,
+            format!("{}{}{}", h.root_key, shift, dir),
+            gains
+        );
+    }
+    Ok(())
+}
+
 fn inspect_samples(
     pack_path: &Path,
     articulation: Option<String>,
@@ -1494,6 +2437,22 @@ fn parse_smf(path: &Path) -> Result<Smf> {
                             let (p, v) = (d[i], d[i + 1]);
                             i += 2;
                             if (st & 0xF0) == 0x90 && v > 0 {
+                                // A note-on for a pitch that is already
+                                // sounding ENDS the sounding one here. Simply
+                                // overwriting loses it, and the overlapping
+                                // same-pitch repeat is not a corner case: the
+                                // re-bow test section is five of them, whose
+                                // first note vanished from the schedule
+                                // entirely and took the section's whole A/B
+                                // comparison with it.
+                                if let Some((t0, vel)) = open.remove(&p) {
+                                    notes.push(ScriptNote {
+                                        note: p,
+                                        velocity: vel,
+                                        start: (t0 * sec_per_tick) as f32,
+                                        dur: ((t - t0) * sec_per_tick) as f32,
+                                    });
+                                }
                                 open.insert(p, (t, v));
                             } else if let Some((t0, vel)) = open.remove(&p) {
                                 notes.push(ScriptNote {

@@ -37,3 +37,7 @@ apps/fasttrackstudio/.lumen-blocks
 # output no matter where it turns up.
 target-*/
 **/target/
+
+# Local render/scoring scratch (CSS A/B renders are hundreds of MB).
+scratch/
+__pycache__/
