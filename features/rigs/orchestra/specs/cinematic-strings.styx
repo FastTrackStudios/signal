@@ -204,7 +204,13 @@ dynamics {
     // Continuous CC1 → loudness on top of the layer crossfade: 0 dB from the
     // knee up, linear to floor_db at CC1=0. Calibrated on the reference
     // render (CC1=20 → −3.0 dB, flat from CC1≈45).
-    cc1_expression { knee 45, floor_db -12.0 }  // calibrated vs Kontakt param-test S05 (CC1=20 → −8.3 dB)
+    // Calibrated against the Kontakt param-test S14 CC1 sweep (a single held
+    // C4 with CC1 0→127, i.e. the transfer curve in one section). The
+    // reference falls ~44 dB from CC1=127 to CC1=1 but is within a few dB of
+    // its knee level by CC1≈30 — concave, so `shape` carries the steepness
+    // down to the bottom instead of a straight ramp over-attenuating CC1≈20.
+    // S14 shape 5.56 → 4.16 dB; S05 (CC1=20) unchanged at 4.23.
+    cc1_expression { knee 45, floor_db -30.0, shape 2.5 }
 }
 
 // ── Articulations ─────────────────────────────────────────────────────────────

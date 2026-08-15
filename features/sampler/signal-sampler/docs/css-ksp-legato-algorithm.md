@@ -977,3 +977,154 @@ note at transition time.**
    (expressive). Do NOT apply the −6 dB `$3tsb0` (chord-mode-only).
 7. **No group-volume deltas**: all CSS groups sit at 0 dB — remove any
    engine-side static transition/release group trim assumptions.
+
+---
+
+## 12. Re-bows without the pedal (read from source, 2026-08-14)
+
+Read directly out of `script_1.ksp` while chasing the re-bow section of
+the parameter test, which was the worst-matching part of the A/B by a
+wide margin.
+
+### 12.1 `$gfkjw` is only ever set while the sustain pedal is held
+
+`$gfkjw` is the "previous note" that every re-bow test compares against
+(`if ($EVENT_NOTE=$gfkjw ...)`). In the mono-legato path it is assigned
+in exactly two places, and both sit under a pedal gate:
+
+```
+18096:  if ($ocjln=0 and ($zs1l1=1))
+18098:      $gfkjw := $EVENT_NOTE      ← only reachable with the pedal down
+18100:      $gfkjw := -1
+
+20425:  if ($zs1l1=1)
+20429:      $gfkjw := $EVENT_NOTE
+20437:  else
+20438:      $gfkjw := -1               ← pedal up: cleared unconditionally
+```
+
+It is declared `-1` (5773) and cleared again at 21793. So **with no
+pedal `$gfkjw` is always −1 and `$EVENT_NOTE = $gfkjw` is never true.**
+
+Everything the earlier sections describe as re-bow behaviour is
+therefore unreachable without CC64 held:
+
+- the Legzero `$1fvjk` offsets (`$knvx2`/`$zk0vu`/`$iufx3`, 18678),
+- the 550 / 500 / 500 ms re-bow fades (`$tdjzq`/`$3ivkj`/`$u0t23`, §11.3),
+- the same-pitch body crossfade branch (20164).
+
+This is stronger than §11's note that Legzero "requires CC64 held". It
+is not that a pedal-less repeat takes a different re-bow path — there is
+no re-bow at all.
+
+### 12.2 So what DOES a pedal-less repeat play? A body, and nothing else
+
+It falls through to the ordinary transition machinery, where the
+transition-sample selection is guarded (19247) by
+
+```
+if ($EVENT_NOTE # $gfkjw and (%2t4y1[$cztyy] # %2t4y1[1-$cztyy]))
+```
+
+The second clause requires the two slot notes to DIFFER. On a repeat
+they are the same note, so the whole `disallow_group`/`allow_group`
+block is skipped and **no transition sample is played**. What remains is
+the destination body against the outgoing body.
+
+A pedal-less repeated note in CSS is thus: new body, old body faded
+against it, no transition recording, no attack ornament, no Legzero.
+
+### 12.3 What this says about our engine
+
+Our re-attack path (`dispatch.rs`, `from_note == to_note && !cc64_held`)
+already fades the old note and triggers a new body, which is the right
+shape. Two things do not follow from the source:
+
+- We applied `css_attack_transient_dip_db` (−3 dB inside 250 ms) to the
+  re-attack. Its origin `%i35so` is at 12717 — inside the 12xxx CHORD
+  region (§11.0), like `$3tsb0` before it. **Corrected:** there IS a
+  mono-legato counterpart, at 20038-20090, and it is a different rule —
+  see §12.4. (It was also dead code: the dip was read only inside
+  `if legato_trim`, which has been false since `$3tsb0` went chord-only.)
+- Across five repeats the reference DECAYS about 10 dB while ours
+  repeats an almost identical envelope. Body-against-body crossfading is
+  the mechanism; the shipped fade times for the pedal-less branch are
+  the numbers still to pull.
+
+### 12.4 The mono-legato AB dip (`$1z3x0`, 20038-20090)
+
+The dip we had been reading out of the chord branch does exist in the
+mono path, but as a different rule. Structure:
+
+```
+if ($ocjln=0)                            ; mono legato
+  if ($xp1ku=3 and ($shybn=0))           ; velocity zone 3
+      $1z3x0 := $x0jlu                   ; 0 dB shipped, anchor untouched
+  else
+      if ($ENGINE_UPTIME-$0nind<=$xu41m)             ; A
+          $1z3x0 := $4lqhx*100-($ee3a4*100*e/$xu41m)
+      else
+          if ($ENGINE_UPTIME-$0nind<=$c2hkn)         ; B
+              $1z3x0 := $ee3a4*100+(e*(abs($ee3a4)*100/$c2hkn))
+          end if                                     ; C: $1z3x0 stale
+          $0nind := $ENGINE_UPTIME-$xu41m
+      end if
+  end if
+end if
+...
+change_vol($dtxpw,$1z3x0*100,1)
+```
+
+Shipped persistents (`persistent_1.tsv`): `$4lqhx`=−30, `$ee3a4`=0,
+`$xu41m`=250, `$c2hkn`=2000, `$x0jlu`=0. `$4lqhx` is deci-dB, so branch A
+is a flat **−3.0 dB** (the `$ee3a4` ramp term vanishes) and branch B is
+identically **0 dB**.
+
+The part that matters is the anchor. `$0nind` is planted at the note time
+only at a phrase start (17528, gated `%f4tl5[$cztyy]=0 and $4pcsa<2` —
+nothing sounding in the slot, polyphony under 2). Branch A does **not**
+advance it; B and C push it to `now - $xu41m`, which makes the following
+note's elapsed `IOI + 250` — always outside the window. So branch A
+cannot fire twice in a row, and after the first over-window note the dip
+is off for the rest of the phrase.
+
+Net: **−3 dB on connected notes arriving within 250 ms of the phrase's
+first note, 0 dB everywhere else.** Not a per-repeat anti-machine-gun
+dip. On the param test this reaches only the first transition of S11 and
+S12; every other section is untouched.
+
+### 12.5 `$jvqtp` "Old out" = 250 ms — and what S10 is NOT
+
+`fade_out($eyijx,$jvqtp*1000,1)` at 19239 fades the outgoing body whenever a
+new one starts. `$eyijx` is set to `$dtxpw` on the line below, so it always
+holds the previous body. The call sits OUTSIDE the interval guard at 19247,
+so it runs on a pitch change and a pedal-less repeat alike. Shipped
+persistent `$jvqtp` = **250 ms**.
+
+Adopted for the CSS legato re-attack (`CSS_OLD_OUT_MS`). Deliberately not
+applied to the general re-strike path, which shares this shape but also
+serves live pedal-held playing, where a 250 ms subsume stacks voices.
+
+**Measured: this is not the S10 mechanism.** 90 → 250 ms moves S10 shape
+6.00 → 5.99. Per-repeat peak levels over the five repeats (30 ms RMS
+envelope, relative to repeat 1):
+
+| repeat | reference | ours   |
+|--------|-----------|--------|
+| 1      |  +0.00    | +0.00  |
+| 2      |  −3.83    | −7.80  |
+| 3      | −10.92    | −5.17  |
+| 4      | −10.13    | −5.16  |
+| 5      | −11.05    | −5.17  |
+
+The reference decays over the first three repeats and then **plateaus about
+10.5 dB down**. Ours dips too deep on repeat 2, recovers, and plateaus about
+5 dB down — half the reference's attenuation, and the wrong trajectory. A
+plateau rather than a continued decay means something keeps re-exciting at a
+reduced level; a pure ring-out would keep falling. Whatever produces the
+extra ~5 dB and the three-repeat ramp is still unidentified.
+
+Note also the absolute offset: reference repeat 1 peaks at −31.20 dB, ours at
+−35.31. That ~4 dB gap is the section's `lvl` ratio and is systematic across
+the whole param test (every section reads 1.14-2.03), so it is a separate
+issue from the S10 decay shape.

@@ -177,27 +177,15 @@ fn css_bend_cents(interval: u8, ioi_ms: f32) -> f32 {
     }
 }
 
-/// Attack-transient anti-machine-gun dip (dB, KSP §7.3): a connected note within
-/// `$xu41m` (250 ms) of the previous onset plays quieter — from 0 dB at 250 ms
-/// down to `$4lqhx` (~−3 dB shipped) at 0 ms — so rapid re-articulations don't
-/// machine-gun. (The `$c2hkn` 1-2 s recovery is approximated by the per-note IOI
-/// mapping: a note is dipped by how close it sits to the previous onset.)
-/// DECODED CORRECTION (script_1.ksp 12716-12731, shipped persistent values):
-/// the window is keyed on `%i35so[$EVENT_NOTE]` — the SAME PITCH's last onset,
-/// not the line IOI — and shipped `$4lqhx`=−30/`$ee3a4`=0 make it a FLAT −3 dB
-/// within `$xu41m`=250 ms of the same pitch (no slope, no recovery ramp since
-/// ee3a4=0). Scale runs never trigger it; only rapid same-pitch repeats do.
-/// Callers pass the SAME-PITCH gap; the line-IOI misuse was corrected at the
-/// call sites (dispatch.rs re-attack path passes the same-note gap).
-fn css_attack_transient_dip_db(same_pitch_gap_ms: f32) -> f32 {
-    const WINDOW_MS: f32 = 250.0; // $xu41m
-    const DIP_DB: f32 = -3.0; // $4lqhx=-30, flat ($ee3a4=0 → no slope)
-    if same_pitch_gap_ms > 0.0 && same_pitch_gap_ms <= WINDOW_MS {
-        DIP_DB
-    } else {
-        0.0
-    }
-}
+/// `$xu41m` — the AB-dip window (ms). Shipped persistent: 250.
+const CSS_AB_WINDOW_MS: u32 = 250;
+/// `$4lqhx` — the in-window dip. Shipped persistent −30, in deci-dB → −3.0 dB.
+/// (`$ee3a4`=0 shipped, so the ramp term vanishes and the dip is flat; and
+/// branch B's `$ee3a4 + elapsed*|$ee3a4|/$c2hkn` is identically 0 dB.)
+const CSS_AB_DIP_DB: f32 = -3.0;
+/// `$x0jlu` — the fixed offset a velocity-zone-3 hard attack takes instead of
+/// the AB dip. Shipped persistent 0.
+const CSS_AB_ZONE3_DB: f32 = 0.0;
 
 /// Onset declick (ms) for legato transitions, release tails, and any voice that
 /// starts mid-sample (`start_offset`). Long enough to remove the onset step
@@ -600,10 +588,16 @@ pub struct SampleEngine {
     /// Set alongside `legato_sustain` but only when the attack velocity is in
     /// zone 1-2; the crossfade-fill still applies to every connected note.
     legato_trim: bool,
-    /// Extra dB dip on the connected note from the attack-transient envelope
-    /// (`css_attack_transient_dip_db`, KSP §7.3) — 0 unless the note falls within
-    /// 250 ms of the previous onset. Set alongside `legato_trim`.
+    /// `$1z3x0` — the AB-volume offset `change_vol`'d onto the connected body
+    /// (see [`Engine::css_ab_dip_db`]). Applied on its own, NOT gated on
+    /// `legato_trim`: in the script the `$3tsb0` chord trim and this dip are
+    /// separate writes to the same variable in separate branches.
     legato_attack_dip_db: f32,
+    /// `$0nind` — the anchor the AB dip measures `elapsed` from. Set to the
+    /// note time at a phrase start (script 17528, under the `%f4tl5[$cztyy]=0
+    /// and $4pcsa<2` gate), then pushed to `now - $xu41m` by any note that
+    /// lands outside the window.
+    ab_anchor_frame: u64,
     /// Portamento micro-glide `(start_cents, frames)` for the incoming legato
     /// voices (CSS `$ma0b1`/`$1mwwo`/`$ruv02`, KSP §3.2) — the arriving note
     /// starts detuned toward the departed note and scoops to true pitch. Set
@@ -775,8 +769,10 @@ impl SampleEngine {
         // Library-authored defaults (CSS: 198 ms arco-attack bloom / 400 ms
         // note-off overlap) — callers can still override via
         // `set_attack_frames` / `set_release_frames`.
-        let release_frames =
-            ms_to_frames(patch.spec.performance.release_ms.unwrap_or(RELEASE_MS), sample_rate);
+        let release_frames = ms_to_frames(
+            patch.spec.performance.release_ms.unwrap_or(RELEASE_MS),
+            sample_rate,
+        );
         let spec_attack_frames = patch
             .spec
             .performance
@@ -878,6 +874,7 @@ impl SampleEngine {
             legato_sustain: false,
             legato_trim: false,
             legato_attack_dip_db: 0.0,
+            ab_anchor_frame: 0,
             legato_glide: None,
             transition_fade: None,
             sord_filter: BiquadFilter::lowpass(filter::SORD_FC, filter::SORD_Q, sample_rate),
@@ -1486,7 +1483,6 @@ impl SampleEngine {
             }
         }
     }
-
 }
 
 // ── VoicePool extension ───────────────────────────────────────────────────────

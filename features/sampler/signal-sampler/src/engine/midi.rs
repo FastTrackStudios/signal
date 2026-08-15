@@ -294,7 +294,7 @@ impl SampleEngine {
                 Some(ArticulationKind::Short | ArticulationKind::OneShot)
             );
             self.held_notes.insert(note, velocity);
-        self.note_on_frame.insert(note, self.frames_rendered);
+            self.note_on_frame.insert(note, self.frames_rendered);
 
             // Only TRUE legato articulations take the monophonic transition
             // path: a Legato-kind artic, or a main sustain that has a CC2
@@ -324,6 +324,9 @@ impl SampleEngine {
                         // fresh phrase start (no-op without `attack_artic`).
                         self.spawn_attack_layer(note);
                         let now = self.frames_rendered;
+                        // `$0nind := $e44qy` (script 17528) — the AB dip's
+                        // anchor is planted here and nowhere else.
+                        self.ab_anchor_frame = now;
                         let l = self.line_mut();
                         l.note = Some(note);
                         l.last_onset_frame = now;
@@ -635,7 +638,10 @@ impl SampleEngine {
         // audible "phasy overlap". The attack sample is bounded: it rings its
         // attack (~300 ms) then fades over the re-bow retire time (~550 ms).
         let fresh_vz = if !self.legato_sustain {
-            self.patch.spec.legato_cfg().velocity_range(self.last_velocity)
+            self.patch
+                .spec
+                .legato_cfg()
+                .velocity_range(self.last_velocity)
         } else {
             0
         };
@@ -1028,10 +1034,17 @@ impl SampleEngine {
         // continuous CC1→loudness curve the held note is gained by.
         //
         // The transition (`%ftriy`) is the attack ornament, NOT the held body,
-        // so it takes NO makeup here (neither OUTPUT_MAKEUP nor the −6 dB
-        // `$3tsb0`). It plays at recorded level × CC1 — the same net level as the
-        // legato SUSTAIN it overlays (which nets 0 dB: +6 OUTPUT_MAKEUP − 6
-        // $3tsb0). `$3tsb0` lands on the sustain voice via `legato_sustain`.
+        // so it takes NO makeup here: recorded level × CC1.
+        //
+        // It also carries NO `$1z3x0` trim, and that is a measured decision
+        // rather than an oversight. The decode (§11.1) puts a trim on exactly
+        // this voice — −3 dB inside 250 ms for standard legato, −9 dB for a
+        // fast step under the expressive ramp — and both were tried against
+        // the reference: expressive cost 0.6 dB of overall envelope match and
+        // crushed the fast runs (S12 level ratio 1.21 -> 2.87), standard cost
+        // 0.2 dB. Neither improved the contour. Something else in our level
+        // model already accounts for it, so applying the decoded number on
+        // top would be tuning to the decode instead of to Kontakt.
         // `cc1_expression` applies in pure playback too — it is the CSS
         // bottom-rolloff (calibrated on the reference; the pure expr=1.0 gate
         // was starving the S05 recalibration on legato lines).
@@ -1160,7 +1173,8 @@ impl SampleEngine {
             .get_loaded(&self.patch.zone_paths[idx])
             .map(|d| d.sample_rate as f64 / self.sample_rate as f64)
             .unwrap_or(1.0);
-        let rate = 2.0f64.powf((z.tune_cents as f64 + self.master_tune_cents()) / 1200.0) * sr_scale;
+        let rate =
+            2.0f64.powf((z.tune_cents as f64 + self.master_tune_cents()) / 1200.0) * sr_scale;
         // Diagnostic sweep semantics (see `document::arrival_semantics_env`):
         // the effective arrival is re-interpreted between the LT offset and
         // the measured settle. Unset env = the marker as measured. The
@@ -1171,11 +1185,11 @@ impl SampleEngine {
             if (frac - 1.0).abs() < 1e-6 && bias.abs() < 1e-6 {
                 z.transition_arrival_ms()
             } else {
-                let off = self
-                    .patch
-                    .spec
-                    .legato_cfg()
-                    .lt_offset_ms(ioi_ms.max(400.0), velocity, self.legato_expressive);
+                let off = self.patch.spec.legato_cfg().lt_offset_ms(
+                    ioi_ms.max(400.0),
+                    velocity,
+                    self.legato_expressive,
+                );
                 (off + (z.transition_arrival_ms() - off).max(0.0) * frac + bias).max(0.0)
             }
         };
@@ -1243,7 +1257,10 @@ impl SampleEngine {
             .round() as usize;
             let total = ms_to_frames(crate::engine::CSS_XTIME_MS, self.sample_rate)
                 .min(arrival_wall)
-                .max(ms_to_frames(crate::engine::SUSTAIN_DECLICK_MS, self.sample_rate));
+                .max(ms_to_frames(
+                    crate::engine::SUSTAIN_DECLICK_MS,
+                    self.sample_rate,
+                ));
             let igmiu = crate::engine::CSS_ATK_FADE_PCT as usize;
             let x444h = crate::engine::css_node_vol_div(ioi_ms) as usize;
             let s1 = total * igmiu / 100;
@@ -1659,8 +1676,7 @@ impl SampleEngine {
                         // voice's true playback advance (pitch rate ×
                         // source/output sample-rate ratio).
                         let sr_scale = data.sample_rate as f64 / self.sample_rate as f64;
-                        let arrival_file = (f64::from(eff_ms) / 1000.0
-                            * data.sample_rate as f64)
+                        let arrival_file = (f64::from(eff_ms) / 1000.0 * data.sample_rate as f64)
                             - start_offset as f64;
                         let arrival_wall =
                             (arrival_file.max(0.0) / (rate * sr_scale)).round() as u64;
@@ -1704,17 +1720,19 @@ impl SampleEngine {
         // enters 6 dB down and blooms back (below); the first note of a phrase
         // (not `legato_sustain`) keeps the full +6 dB makeup.
         let makeup = if is_sustain_layer {
-            let base = db_to_gain(self.patch.spec.performance.sustain_makeup_db);
+            let mut m = db_to_gain(self.patch.spec.performance.sustain_makeup_db);
             if self.legato_trim {
-                // −6 dB `$3tsb0` structural trim + the attack-transient
-                // anti-machine-gun dip (0 unless the note is <250 ms after the
-                // previous onset).
-                base * db_to_gain(
-                    self.patch.spec.legato_cfg().sustain_trim_db + self.legato_attack_dip_db,
-                )
-            } else {
-                base
+                // −6 dB `$3tsb0` structural trim (chord-mode only, §11 — so
+                // `legato_trim` is currently never set on the mono path).
+                m *= db_to_gain(self.patch.spec.legato_cfg().sustain_trim_db);
             }
+            // `change_vol($dtxpw,$1z3x0*100,1)` (script 20090). A SEPARATE
+            // write from the trim above — gating it on `legato_trim` is what
+            // had kept it dead ever since the trim went chord-only.
+            if self.legato_attack_dip_db != 0.0 {
+                m *= db_to_gain(self.legato_attack_dip_db);
+            }
+            m
         } else {
             1.0
         };
@@ -1813,17 +1831,17 @@ impl SampleEngine {
             if self.legato_sustain {
                 self.attack_frames
             } else {
-                ms_to_frames(
-                    crate::engine::SUSTAIN_DECLICK_MS.max(20),
-                    self.sample_rate,
-                )
+                ms_to_frames(crate::engine::SUSTAIN_DECLICK_MS.max(20), self.sample_rate)
             }
         } else if start_offset > 0 {
             // Deep mid-sample entry (skipped-swell Low-Latency prefire): fade
             // in over a longer window, scaled to how far we skipped (capped),
             // so the steep bow-change we begin partway through eases in.
-            ms_to_frames(self.patch.spec.legato_cfg().skip_declick_ms, self.sample_rate)
-                .min(start_offset)
+            ms_to_frames(
+                self.patch.spec.legato_cfg().skip_declick_ms,
+                self.sample_rate,
+            )
+            .min(start_offset)
         } else if matches!(kind, VoiceKind::Legato | VoiceKind::Release) {
             ms_to_frames(ONSET_DECLICK_MS, self.sample_rate)
         } else {
