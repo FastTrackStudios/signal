@@ -564,9 +564,9 @@ css-ab-sections SECTIONS:
 
 # ── Expression editor ────────────────────────────────────────────────────
 
-# The expression editor in a window you keep open: `dx serve` drives the
-# same nice-plug-dioxus -> Blitz -> Vello -> baseview pipeline the VST3
-# and the REAPER panel render through, with rsx! hot reload. Pick the
+# The expression editor in a window you keep open, with rsx! hot reload.
+# Blitz -> Vello -> winit via dioxus-native: the same renderer the VST3
+# editor and the REAPER panel use, without the plugin windowing. Pick the
 # file to edit inside the window; set EXPRESSION_EDITOR_LIBRARY to point
 # the chooser at a folder of material.
 ee-serve *ARGS:
@@ -576,6 +576,17 @@ ee-serve *ARGS:
 # One-shot window on a file (no hot reload, no chooser).
 ee SOURCE="phrase" *ARGS:
     cargo run -p expression-editor-standalone --example editor -- {{SOURCE}} {{ARGS}}
+
+# Repaint the visual-inspection PNGs into target/gui-shots/expression-editor.
+#
+# These are artefacts for a human to look at, not assertions, so they are
+# #[ignore]d and never run in `cargo nextest run` — one of them paints ~49
+# scenes through a software rasterizer for minutes, which starved the rest
+# of the suite into timing out. Single-threaded on purpose: they are all
+# CPU rasterization, so running them in parallel only makes each slower.
+ee-shots *ARGS:
+    cargo test -p expression-editor-ui --test screenshots \
+        -- --ignored --test-threads 1 {{ARGS}}
 
 # ── Aliases ──────────────────────────────────────────────────────────────
 
