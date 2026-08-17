@@ -497,11 +497,6 @@ disk:
     #!/usr/bin/env bash
     du -sh $(git worktree list --porcelain | awk '/^worktree /{print $2"/target"}') 2>/dev/null | sort -rh
 
-# sccache hit rate. Hits come from rebuilding a path you previously built
-# (e.g. after `just sweep`); it does NOT dedupe across worktrees.
-cache-stats:
-    sccache --show-stats
-
 # Why is the build slow? Writes target/cargo-timings/cargo-timing.html —
 # a per-crate Gantt chart showing the critical path and link-time tail.
 timings *ARGS:
@@ -566,6 +561,21 @@ css-ab *ARGS:
 # Same, restricted to sections (e.g. `just css-ab-sections S10,S13`).
 css-ab-sections SECTIONS:
     just css-ab --sections {{SECTIONS}}
+
+# ── Expression editor ────────────────────────────────────────────────────
+
+# The expression editor in a window you keep open: `dx serve` drives the
+# same nice-plug-dioxus -> Blitz -> Vello -> baseview pipeline the VST3
+# and the REAPER panel render through, with rsx! hot reload. Pick the
+# file to edit inside the window; set EXPRESSION_EDITOR_LIBRARY to point
+# the chooser at a folder of material.
+ee-serve *ARGS:
+    dx serve -p expression-editor-standalone --example serve \
+        --platform desktop --renderer native {{ARGS}}
+
+# One-shot window on a file (no hot reload, no chooser).
+ee SOURCE="phrase" *ARGS:
+    cargo run -p expression-editor-standalone --example editor -- {{SOURCE}} {{ARGS}}
 
 # ── Aliases ──────────────────────────────────────────────────────────────
 
