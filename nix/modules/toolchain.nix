@@ -95,10 +95,6 @@
         # so a long-lived worktree accumulates dozens of copies of every
         # crate (56 of one crate, measured). `just sweep` / `just sweep-all`.
         cargo-sweep
-        # sccache — compiler cache; wired up as RUSTC_WRAPPER in
-        # nix/modules/shells/default.nix (see the note there for what it
-        # does and does not cache).
-        sccache
       ];
 
       # Env every dev/CI shell needs — build-script and bindgen paths,

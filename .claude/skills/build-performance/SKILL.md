@@ -1,6 +1,6 @@
 ---
 name: build-performance
-description: "Diagnose and fix slow builds or a full disk in this monorepo — target/ growth across worktrees, link times, debuginfo, opt-level choices, sccache, cargo-sweep, and cargo rail. Use when builds feel slow, when the dev disk fills up, when deciding whether to change a profile knob in the root Cargo.toml, or before benchmarking any build-time change."
+description: "Diagnose and fix slow builds or a full disk in this monorepo — target/ growth across worktrees, link times, debuginfo, opt-level choices, cargo-sweep, and cargo rail. Use when builds feel slow, when the dev disk fills up, when deciding whether to change a profile knob in the root Cargo.toml, or before benchmarking any build-time change."
 ---
 
 # Build performance in this tree
@@ -14,12 +14,12 @@ to measure the next thing without fooling yourself.
 
 Everything below was established by measurement, not by reading blog
 posts. Do the same — most "obvious" Rust build wins are worth nothing
-here, and one of them (sccache across worktrees) is worth literally zero.
+here, and one of them (sccache across worktrees) was worth literally zero
+and has since been removed.
 
 ```bash
 just disk            # per-worktree target/ sizes, largest first
 just timings -p foo  # cargo --timings → per-crate Gantt + link tail
-just cache-stats     # sccache hit rate
 du -sh target/debug/{deps,incremental,build}
 size --format=sysv <binary> | awk '/^\.debug/{s+=$2} END{print s/1e9" GB"}'
 ```
@@ -105,34 +105,40 @@ to 3 wholesale. Regenerate the list with `cargo tree` over the audio
 crates; note `package."*"` matches dependencies only, never workspace
 members.
 
-## sccache — know its actual scope
+## sccache — removed, and why it stays removed
 
-Wired as `RUSTC_WRAPPER` in the devshell. Opt out: `FTS_NO_SCCACHE=1`.
-Cache lives on the dev disk, not `~/.cache` (which would fill `/`).
+There is **no `RUSTC_WRAPPER`** in this tree. sccache was wired into the
+devshell until August 2026; it was removed. Don't reintroduce it without
+answering both points below.
 
-Measured on this tree:
+Measured on this tree, before removal:
 
 | Scenario | Hit rate |
 |---|---|
 | Rebuild the **same path** after wiping `target/` | ~100% |
 | Build the **same code in a different worktree** | **0%** |
 
-**It does not dedupe worktrees.** The target-dir path is part of
-sccache's Rust cache key. `SCCACHE_BASEDIR` does not fix this — it
-makes paths *relative*, not *equal*, so `FastTrackStudio/target` and
-`herdr-worktrees/FastTrackStudio/target` still hash differently. This
-was tested with basedir at the tree root and per-target-dir; both 0%.
-Don't re-litigate it without new evidence.
+**It never deduped worktrees.** The target-dir path is part of sccache's
+Rust cache key. `SCCACHE_BASEDIR` does not fix this — it makes paths
+*relative*, not *equal*, so `FastTrackStudio/target` and
+`herdr-worktrees/FastTrackStudio/target` still hash differently. Tested
+with basedir at the tree root and per-target-dir; both 0%. So the one
+thing that actually costs disk here was the one thing it did not help.
 
-What it buys: wiping `target/` becomes cheap to recover from, which is
-what matters when disk is the binding constraint.
+All it bought was making a `target/` wipe cheap to recover from.
 
-It costs nothing in incremental compilation: cargo emits `-C incremental`
-for workspace members only, and sccache skips exactly those units.
+**What it cost: every `dx` build.** dx drives rustc through its own
+wrapper binary, and sccache rejects it outright —
 
-Gotcha: sccache is a **daemon** and reads its config at server start.
-Changing `SCCACHE_*` in your shell does nothing until
-`sccache --stop-server`. Confirm with `sccache --show-stats`.
+```
+sccache: error: failed to execute compile
+sccache: caused by: Compiler not supported: "error: expected one of `!` or `[`, found keyword `if`"
+```
+
+so `dx build`, `dx serve` and `just ee-serve` all had to be run with
+`RUSTC_WRAPPER=` cleared by hand, and failed confusingly when they were
+not. A cache that breaks the UI dev loop to speed up a rare full wipe is
+the wrong trade.
 
 ## Disk: cargo never garbage-collects
 
@@ -189,6 +195,7 @@ Blitz/servo stack.
 
 - **Shared `CARGO_TARGET_DIR` across worktrees** — causes fingerprint
   clobbering with concurrent agent builds. Use worktree-local targets.
-- **sccache for cross-worktree dedup** — 0%, see above.
+- **sccache, in any form** — 0% across worktrees, and it breaks `dx`.
+  Removed Aug 2026; see above.
 - **`-Z threads=N` (parallel frontend), cranelift** — need nightly; the
   workspace is pinned to stable 1.94.

@@ -122,7 +122,7 @@ cargo check -p fasttrackstudio --target wasm32-unknown-unknown --no-default-feat
 Dev shell: `nix develop` (or direnv `use flake`) — root `flake.nix`
 carries the FTS 1.94 toolchain pin, `dx`, wasm target, tailwindcss, and
 the native headers (alsa, pipewire, jack). Also
-mold, sccache, cargo-sweep (see build performance below).
+mold and cargo-sweep (see build performance below).
 
 **Build performance / disk** — read the `build-performance` skill before
 touching a `[profile.*]` knob in the root Cargo.toml, benchmarking a
@@ -141,8 +141,11 @@ build-time change, or when the dev disk fills up. The short version:
   `package."*"` wholesale.
 - Cargo never GCs `target/`. `just disk`, `just sweep`, `just sweep-all`.
   Never delete another agent's worktree target dir.
-- sccache is on, but it does NOT dedupe across worktrees (measured 0%);
-  it only makes wiping `target/` cheap to recover from.
+- There is no `RUSTC_WRAPPER`. sccache was removed (Aug 2026): measured
+  0% hits across worktrees, so it never deduped what actually costs
+  disk, and it breaks every `dx build` / `dx serve` — sccache refuses
+  dx's rustc shim with "Compiler not supported". Do not reintroduce it
+  without solving that.
 - Benchmarking: check `uptime` / `pgrep -c rustc` first — other agents
   and background `cargo rail` runs on this 32-core box will invalidate
   an A/B silently.

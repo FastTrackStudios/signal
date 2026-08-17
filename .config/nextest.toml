@@ -1,2 +1,10 @@
 [profile.default]
 slow-timeout = { period = "30s", terminate-after = 1 }
+
+# The expression editor's screenshot harness paints ~49 scenes through a
+# CPU rasterizer in one test, so it is legitimately minutes long rather
+# than hung. Without this the suite is red out of the box on a clean
+# tree, which trains everyone to ignore a red run.
+[[profile.default.overrides]]
+filter = 'test(=shoot_every_scene)'
+slow-timeout = { period = "60s", terminate-after = 10 }
