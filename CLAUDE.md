@@ -71,6 +71,22 @@ with a local `[patch]` override for the edit/test loop. `architect-ui`
 with it; `fts-plug-ui` and `fts-audio-ui` stayed here because they link
 `audiocore-core` and `nice-plug`.
 
+## Licence
+
+**GPL-3.0-or-later.** The workspace `license` field, every FTS-owned
+crate, and `LICENSE` at the root all say so; a new crate inherits it via
+`license.workspace = true` and should not declare its own.
+
+Two vendored crates keep the licence of the code they vendor, because it
+is not ours to change: `libs/vendor/world` (WORLD vocoder, M. Morise,
+BSD-3-Clause) and `libs/vendor/dioxus-test` (DioxusLabs, MIT OR
+Apache-2.0). Anything else vendored follows the same rule.
+
+Incoming code must be GPL-compatible: MIT, BSD and Apache-2.0 sources can
+be brought in (keeping their copyright notice and licence text), and the
+combined work is GPL. Code cannot go the other way — this is a one-way
+door, which is why the tree was MIT OR Apache-2.0 until August 2026.
+
 ## Rules
 
 - **Path deps within this repo; tagged git deps across repos.** If a

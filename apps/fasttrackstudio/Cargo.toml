@@ -2,7 +2,7 @@
 name = "fasttrackstudio"
 version = "0.0.2-alpha"
 edition = "2024"
-license = "MIT"
+license = "GPL-3.0-or-later"
 authors = ["FastTrackStudio"]
 
 # THE app. One binary over three domain axes — all on by default; drop any one
