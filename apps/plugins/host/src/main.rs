@@ -6,15 +6,21 @@
 //! shows — unlike eq-standalone's dioxus-native shell, which renders through
 //! a different windowing stack.
 //!
-//! The parent window is a **baseview** window (crates.io 0.2, core-X11), not
-//! winit: winit selects XInput2 on its window, which starves the plugin's
-//! core-X11-only baseview child of pointer/key events — REAPER's plain X11
-//! parent is what makes input work there, and this shell reproduces it.
+//! The parent window is a **baseview** window (crates.io 0.2), not winit. On
+//! Linux that matters for input: winit selects XInput2 on its window, which
+//! starves the plugin's core-X11-only baseview child of pointer/key events —
+//! REAPER's plain X11 parent is what makes input work there, and this shell
+//! reproduces it. On macOS baseview gives an NSView parent, the same shape
+//! REAPER embeds into.
+//!
+//! Runs on Linux and macOS. Bare plugin names resolve against whichever
+//! per-user CLAP directory this platform uses (`~/.clap`, or
+//! `~/Library/Audio/Plug-Ins/CLAP` on macOS) and then `target/bundled`.
 //!
 //! ```sh
-//! fts-clap-host "FTS EQ"                    # resolves ~/.clap/FTS EQ.clap
+//! fts-clap-host "FTS EQ"                    # resolves the installed bundle
 //! fts-clap-host "FTS Guide" --note-names    # print piano-roll key labels, no GUI
-//! fts-clap-host ~/.clap/"FTS EQ.clap"       # explicit bundle path
+//! fts-clap-host --probe "FTS Comp"          # headless: what a DAW sees, no window
 //! fts-clap-host target/bundled/"FTS EQ.clap" --index 0
 //! ```
 //!
@@ -27,19 +33,68 @@ use std::cell::RefCell;
 use std::path::PathBuf;
 
 use baseview::{Event, EventStatus, Window, WindowEvent, WindowHandler, WindowOpenOptions};
-use daw_standalone::audio_engine::plugin_host::{ClapHost, LoadedClapPlugin};
+use daw_standalone::audio_engine::plugin_host::{
+    ClapHost, LoadedClapPlugin, gui_api_uses_logical_size,
+};
 use raw_window_handle::HasWindowHandle;
 
+/// Resize this window to a size the PLUGIN reported.
+///
+/// CLAP sizes are in the GUI API's unit — logical pixels on macOS (Cocoa),
+/// physical on X11/Win32 — so handing them straight to `PhysicalSize` is only
+/// right on Linux and Windows. On a 2x Retina Mac it produced an editor at
+/// half the size it asked for.
+fn resize_to_plugin_size(ctx: &baseview::WindowContext, width: u32, height: u32) {
+    if gui_api_uses_logical_size() {
+        ctx.resize(baseview::dpi::LogicalSize::new(width as f64, height as f64));
+    } else {
+        ctx.resize(baseview::dpi::PhysicalSize::new(width as f64, height as f64));
+    }
+}
+
+/// The size to hand BACK to a plugin for a window that is now `size`, in
+/// whichever unit that plugin's GUI API speaks. The mirror of the above: a
+/// host reporting physical pixels to a Cocoa plugin tells it it is twice as
+/// big as it is.
+fn plugin_size_of(size: &baseview::WindowSize) -> (u32, u32) {
+    if gui_api_uses_logical_size() {
+        (size.logical.width as u32, size.logical.height as u32)
+    } else {
+        (size.physical.width, size.physical.height)
+    }
+}
+
+/// Turn `"FTS EQ"` into a bundle path, searching the places CLAP plugins are
+/// actually installed on this platform, plus the repo's own build output.
+///
+/// An existing path is taken as-is. Otherwise the name is resolved against the
+/// per-user plugin dir — `~/.clap` on Linux, `~/Library/Audio/Plug-Ins/CLAP`
+/// on macOS, which is why bare names never resolved there — then the system
+/// dir, then `target/bundled` so a freshly built plugin can be opened without
+/// installing it first.
 fn resolve_bundle(arg: &str) -> PathBuf {
     let direct = PathBuf::from(arg);
     if direct.exists() {
         return direct;
     }
-    // "FTS EQ" → ~/.clap/FTS EQ.clap
+    let file = format!("{}.clap", arg.trim_end_matches(".clap"));
+    let mut candidates: Vec<PathBuf> = Vec::new();
     if let Some(home) = std::env::var_os("HOME") {
-        let named = PathBuf::from(home)
-            .join(".clap")
-            .join(format!("{}.clap", arg.trim_end_matches(".clap")));
+        let home = PathBuf::from(home);
+        if cfg!(target_os = "macos") {
+            candidates.push(home.join("Library/Audio/Plug-Ins/CLAP"));
+        } else {
+            candidates.push(home.join(".clap"));
+        }
+    }
+    if cfg!(target_os = "macos") {
+        candidates.push(PathBuf::from("/Library/Audio/Plug-Ins/CLAP"));
+    } else {
+        candidates.push(PathBuf::from("/usr/lib/clap"));
+    }
+    candidates.push(PathBuf::from("target/bundled"));
+    for dir in candidates {
+        let named = dir.join(&file);
         if named.exists() {
             return named;
         }
@@ -80,8 +135,7 @@ impl WindowHandler for HostHandler {
                 if std::env::var_os("FTS_HOST_TRACE").is_some() {
                     eprintln!("[host] plugin requested resize: {w}x{h}");
                 }
-                self.window
-                    .resize(baseview::dpi::PhysicalSize::new(w as f64, h as f64));
+                resize_to_plugin_size(&self.window, w, h);
                 plugin.gui_set_size(w, h);
             }
         }
@@ -89,7 +143,7 @@ impl WindowHandler for HostHandler {
 
     fn resized(&self, new_size: baseview::WindowSize) {
         if let Some(plugin) = self.plugin.borrow_mut().as_mut() {
-            let (w, h) = (new_size.physical.width, new_size.physical.height);
+            let (w, h) = plugin_size_of(&new_size);
             if w > 0 && h > 0 {
                 plugin.gui_set_size(w, h);
             }
@@ -120,16 +174,14 @@ impl WindowHandler for HostHandler {
 
 fn main() -> eyre::Result<()> {
     let mut args = std::env::args().skip(1);
-    let Some(bundle_arg) = args.next() else {
-        eprintln!(
-            "usage: fts-clap-host <bundle.clap | plugin name> [--index N] [--note-names]"
-        );
-        std::process::exit(2);
-    };
     let mut plugin_index = 0usize;
     let mut note_names = false;
-    while let Some(flag) = args.next() {
-        match flag.as_str() {
+    let mut probe = false;
+    // The bundle is the first non-flag argument, so flags may come before or
+    // after it — `--probe "FTS EQ"` and `"FTS EQ" --probe` both work.
+    let mut bundle_arg: Option<String> = None;
+    while let Some(arg) = args.next() {
+        match arg.as_str() {
             "--index" => {
                 plugin_index = args
                     .next()
@@ -137,9 +189,19 @@ fn main() -> eyre::Result<()> {
                     .unwrap_or_default();
             }
             "--note-names" => note_names = true,
+            "--probe" => probe = true,
+            other if bundle_arg.is_none() && !other.starts_with("--") => {
+                bundle_arg = Some(other.to_string());
+            }
             _ => {}
         }
     }
+    let Some(bundle_arg) = bundle_arg else {
+        eprintln!(
+            "usage: fts-clap-host <bundle.clap | plugin name> [--index N] [--note-names] [--probe]"
+        );
+        std::process::exit(2);
+    };
 
     let bundle = resolve_bundle(&bundle_arg);
     eyre::ensure!(bundle.exists(), "no such bundle: {}", bundle.display());
@@ -147,6 +209,29 @@ fn main() -> eyre::Result<()> {
         "fts-clap-host — {}",
         bundle.file_stem().unwrap_or_default().to_string_lossy()
     );
+
+    // Headless probe: instantiate and report what a DAW would find, without
+    // ever opening a window. This is the sweep mode — it runs over SSH and in
+    // CI, on machines with no display, which the embedded path cannot.
+    if probe {
+        let mut plugin = ClapHost::default().load(&bundle, plugin_index)?;
+        let (name, id) = {
+            let d = plugin.descriptor();
+            (d.name.clone(), d.id.clone())
+        };
+        let (audio_in, audio_out) = plugin.audio_port_count();
+        let (note_in, note_out) = plugin.note_port_count();
+        let params = plugin.params().len();
+        let unit = if gui_api_uses_logical_size() { "logical" } else { "physical" };
+        let gui = match plugin.probe_gui_size() {
+            Ok((w, h)) => format!("{w}x{h} {unit}"),
+            Err(e) => format!("none ({e:?})"),
+        };
+        println!(
+            "{name}\t{id}\taudio={audio_in}in/{audio_out}out\tnote={note_in}in/{note_out}out\tparams={params}\tgui={gui}"
+        );
+        return Ok(());
+    }
 
     // Inspection mode: instantiate, dump the `note-name` extension, exit.
     // No window, so this answers "does the plugin actually serve its key
@@ -195,6 +280,23 @@ fn main() -> eyre::Result<()> {
                 plugin.descriptor().name,
                 plugin.descriptor().id
             );
+            // The scale factor is the whole story behind macOS sizing: the
+            // plugin reports its editor size in logical pixels there, so on a
+            // 2x display the window is twice the pixel size of the same
+            // plugin on Linux. Print it so a wrong-looking window can be
+            // read off the log instead of guessed at.
+            {
+                let size = ctx.size();
+                eprintln!(
+                    "[host] window: {}x{} logical, {}x{} physical, scale {} — plugin sizes are {}",
+                    size.logical.width,
+                    size.logical.height,
+                    size.physical.width,
+                    size.physical.height,
+                    size.scale_factor,
+                    if gui_api_uses_logical_size() { "LOGICAL" } else { "PHYSICAL" },
+                );
+            }
 
             let raw = ctx
                 .window_handle()
@@ -204,7 +306,7 @@ fn main() -> eyre::Result<()> {
             // DAW does — so the editor's first frame is at its real size and
             // no resize follows to paper over a missing first paint.
             match plugin.open_gui_embedded(raw, |w, h| {
-                ctx.resize(baseview::dpi::PhysicalSize::new(w, h));
+                resize_to_plugin_size(&ctx, w, h);
             }) {
                 Ok(_) => {}
                 Err(e) => {
