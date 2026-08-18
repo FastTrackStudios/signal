@@ -319,6 +319,45 @@ plugins-bundle plugins=fts_plugins:
 plugins-install: plugins-bundle
     cargo run -q -p fts-installer -- plugins install --from target/bundled
 
+# Prove every bundle in target/bundled actually LOADS — dlopen it, run its
+# entry point, and walk its factory (apps/plugins/verify/). A plugin that
+# compiles, links, and exports the right symbol can still fail in a host: a
+# missing dependency or a panicking init only shows up at load time, and
+# `nm` cannot see either.
+#
+# Works on both platforms, including their different bundle shapes (Linux
+# .clap is a bare shared object, macOS .clap is a directory) and different
+# VST3 entry-point names (ModuleEntry vs bundleEntry). On macOS, pass an
+# arch to run the universal binaries in one personality:
+#   just plugins-verify              # native
+#   just plugins-verify x86_64       # the Intel half, under Rosetta
+plugins-verify arch="":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    [ -d target/bundled ] || { echo "no target/bundled — run 'just plugins-bundle' first" >&2; exit 1; }
+    out="target/plugin-verify"; mkdir -p "$out"
+    archflag=""
+    [ -n "{{arch}}" ] && archflag="-arch {{arch}}"
+    cc $archflag -o "$out/clap_load" apps/plugins/verify/clap_load.c -ldl
+    cc $archflag -o "$out/vst3_load" apps/plugins/verify/vst3_load.c -ldl
+    # The loadable binary inside a bundle, whatever shape the bundle is.
+    binary_in() {
+        if [ -d "$1" ]; then find "$1/Contents" -type f -perm -u+x ! -name "*.txt" ! -name "PkgInfo" | head -1
+        else echo "$1"; fi
+    }
+    fail=0
+    for b in target/bundled/*.clap target/bundled/*.vst3; do
+        [ -e "$b" ] || continue
+        case "$b" in *.clap) loader="$out/clap_load";; *) loader="$out/vst3_load";; esac
+        bin="$(binary_in "$b")"
+        if [ -z "$bin" ]; then printf "%-24s FAIL no binary in bundle\n" "$(basename "$b")"; fail=1; continue; fi
+        result="$("$loader" "$bin" 2>&1 | tail -1)"
+        printf "%-24s %s\n" "$(basename "$b")" "$result"
+        case "$result" in OK*) ;; *) fail=1;; esac
+    done
+    [ "$fail" = 0 ] || { echo "FAILURES — some bundles do not load" >&2; exit 1; }
+    echo "all bundles load"
+
 # Remove every plugin recorded in the install manifest.
 plugins-uninstall:
     cargo run -q -p fts-installer -- plugins uninstall
