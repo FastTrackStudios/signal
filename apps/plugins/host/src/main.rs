@@ -64,6 +64,44 @@ fn plugin_size_of(size: &baseview::WindowSize) -> (u32, u32) {
     }
 }
 
+/// Make the host window user-resizable.
+///
+/// baseview builds its NSWindow with `Titled | Closable | Miniaturizable` and
+/// no `Resizable` bit, so on macOS the frame cannot be dragged to a new size —
+/// which makes it useless for the thing this host exists to check, since a
+/// plugin's response to being resized is most of its editor's layout
+/// behaviour. X11 imposes no such restriction, so Linux windows already
+/// resize and this is macOS-only.
+///
+/// Adding the bit after the fact is the smallest fix available: the
+/// alternative is patching baseview, which would also change every plugin's
+/// own window.
+#[cfg(target_os = "macos")]
+fn make_window_resizable(handle: &raw_window_handle::RawWindowHandle) {
+    use objc2_app_kit::{NSView, NSWindowStyleMask};
+
+    let raw_window_handle::RawWindowHandle::AppKit(appkit) = handle else {
+        return;
+    };
+    // SAFETY: baseview handed us this NSView pointer for the window it just
+    // created and keeps it alive for the window's lifetime; we are on the main
+    // thread (the build closure runs there), which is where AppKit requires
+    // window mutation.
+    let view: &NSView = unsafe { appkit.ns_view.cast().as_ref() };
+    let Some(window) = view.window() else {
+        eprintln!("[host] view has no window yet — not made resizable");
+        return;
+    };
+    let mask = window.styleMask() | NSWindowStyleMask::Resizable;
+    window.setStyleMask(mask);
+}
+
+#[cfg(not(target_os = "macos"))]
+fn make_window_resizable(_handle: &raw_window_handle::RawWindowHandle) {
+    // X11 windows are resizable unless the client sets size hints forbidding
+    // it, and baseview sets none.
+}
+
 /// Turn `"FTS EQ"` into a bundle path, searching the places CLAP plugins are
 /// actually installed on this platform, plus the repo's own build output.
 ///
@@ -316,6 +354,9 @@ fn main() -> eyre::Result<()> {
                 .window_handle()
                 .expect("host window handle")
                 .as_raw();
+            // Let the frame be dragged to a new size — the plugin's response
+            // to that is most of what this host is for.
+            make_window_resizable(&raw);
             // Size the window before the editor is parented into it, the way a
             // DAW does — so the editor's first frame is at its real size and
             // no resize follows to paper over a missing first paint.
