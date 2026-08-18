@@ -268,7 +268,21 @@ fn main() -> eyre::Result<()> {
     let mut options = WindowOpenOptions::default();
     options.title = title;
     options.size = baseview::dpi::LogicalSize::new(800.0, 500.0).into();
-    options.scale = baseview::WindowScalePolicy::SystemScaleFactor;
+    // FTS_HOST_SCALE forces a DPI scale instead of taking the display's.
+    // Scale is the one condition that cannot be reproduced by moving the
+    // window: an SSH session, a CI box, and a non-Retina panel all report 1,
+    // so every scale-dependent bug is invisible there while being the normal
+    // case on the Mac laptops these plugins run on.
+    //
+    // LINUX AND WINDOWS ONLY. baseview's macOS backend takes the scale from
+    // the NSWindow's `backingScaleFactor()` and never reads `options.scale`
+    // (platform/macos/window.rs), so this cannot fake a Retina session on the
+    // platform that most needs it — a macOS scale-2 repro has to run on an
+    // actual Retina display, not over SSH.
+    options.scale = match std::env::var("FTS_HOST_SCALE").ok().and_then(|v| v.parse::<f64>().ok()) {
+        Some(scale) if scale > 0.0 => baseview::WindowScalePolicy::ScaleFactor(scale),
+        _ => baseview::WindowScalePolicy::SystemScaleFactor,
+    };
     Window::open_blocking(
         options,
         move |ctx| {
