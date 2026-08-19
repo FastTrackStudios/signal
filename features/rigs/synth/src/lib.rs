@@ -16,11 +16,13 @@
 /// The Signal Engine — the canonical layer program every rig loads
 /// patches into (source stack → filters → amp → FX + modulators).
 pub mod engine;
+/// Reading a Gig Performer rig back out of a `.gig` file.
+pub mod gig;
 pub mod omni;
 pub mod omni_import;
 pub mod pack;
 
-pub use engine::{Source, signal_layer};
+pub use engine::{signal_layer, Source};
 pub use omni::{omnisphere_preset, omnisphere_soundsource_preset};
 
 /// Register the Omnisphere built-in presets into `r`.

@@ -2,9 +2,9 @@
 
 use std::path::Path;
 
-use super::model::{OmniPatch, parse_patch_node};
+use super::model::{parse_patch_node, OmniPatch};
 use super::tree::patch_to_container;
-use super::{SoundsourceIndex, parse_xml};
+use super::{parse_xml, SoundsourceIndex};
 use signal_sampler::rig_node::Container;
 
 // ── Multis ───────────────────────────────────────────────────────────────────

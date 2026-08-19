@@ -14,6 +14,8 @@ signal-sampler.workspace = true
 signal-proto.workspace = true
 # The pack builder serializes the loop/tag-enriched styx before packing.
 facet-styx.workspace = true
+# `gig`: PROCESSORSTATEZ payloads are zlib — the "Z" in the tag name.
+flate2 = "1"
 
 [dev-dependencies]
 # The `#[ignore]`d machine-local render tests drive hosted-plugin note events.

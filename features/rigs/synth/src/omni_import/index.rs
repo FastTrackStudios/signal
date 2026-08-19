@@ -36,8 +36,8 @@ impl SoundsourceIndex {
             .unwrap_or_else(|_| crate::omni::OMNISPHERE_ROOT.into());
         let mut idx = Self::default();
         idx.scan_dir(Path::new(&root), 0);
-        let packs = std::env::var("FTS_OMNISPHERE_PACKS")
-            .unwrap_or_else(|_| OMNISPHERE_PACKS_ROOT.into());
+        let packs =
+            std::env::var("FTS_OMNISPHERE_PACKS").unwrap_or_else(|_| OMNISPHERE_PACKS_ROOT.into());
         idx.scan_dir(Path::new(&packs), 0); // packs overwrite raw entries
         idx
     }
@@ -61,7 +61,10 @@ impl SoundsourceIndex {
                 } else {
                     self.scan_dir(&path, depth + 1);
                 }
-            } else if path.extension().is_some_and(|e| e.eq_ignore_ascii_case("signalpack")) {
+            } else if path
+                .extension()
+                .is_some_and(|e| e.eq_ignore_ascii_case("signalpack"))
+            {
                 // A built pack (preferred): <Name>.signalpack.
                 if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
                     self.by_name.insert(stem.to_lowercase(), path.clone());

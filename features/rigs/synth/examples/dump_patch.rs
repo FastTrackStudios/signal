@@ -7,7 +7,7 @@
 //! ```
 
 use signal_sampler::rig_node::{Container, RigNode};
-use signal_synth::omni_import::{SoundsourceIndex, load_patch_file};
+use signal_synth::omni_import::{load_patch_file, SoundsourceIndex};
 
 fn walk<'a>(c: &'a Container, out: &mut Vec<&'a Container>) {
     out.push(c);
@@ -19,7 +19,9 @@ fn walk<'a>(c: &'a Container, out: &mut Vec<&'a Container>) {
 }
 
 fn main() {
-    let path = std::env::args().nth(1).expect("usage: dump_patch <patch.prt_omn>");
+    let path = std::env::args()
+        .nth(1)
+        .expect("usage: dump_patch <patch.prt_omn>");
     let index = SoundsourceIndex::scan_default();
     dump_raw(std::path::Path::new(&path));
     let tree = load_patch_file(std::path::Path::new(&path), &index).expect("import");
@@ -66,7 +68,10 @@ fn main() {
         }
         // mod routes on this layer
         for rt in &c.mod_routes {
-            println!("  route: {} -> {}  depth={:.3}", rt.source, rt.target, rt.depth);
+            println!(
+                "  route: {} -> {}  depth={:.3}",
+                rt.source, rt.target, rt.depth
+            );
         }
     }
 }
@@ -76,7 +81,11 @@ fn main() {
 fn dump_raw(path: &std::path::Path) {
     let xml = std::fs::read_to_string(path).expect("read");
     let p = signal_synth::omni_import::parse_patch(&xml).expect("parse");
-    println!("\n--- raw parse: {} ({} layers) ---", p.name, p.layers.len());
+    println!(
+        "\n--- raw parse: {} ({} layers) ---",
+        p.name,
+        p.layers.len()
+    );
     for (i, l) in p.layers.iter().enumerate() {
         println!(
             "  L{i}: ss={:?} lib={:?} lvl={:.3} filt={}({:.3}/{:.3}) act={} uni={}x{:.2} amp={:?} fenv={:?} fdepth={:.3} fx={:?}",

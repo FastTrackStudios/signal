@@ -17,7 +17,7 @@
 
 mod xml;
 
-pub use xml::{XmlNode, omni_num, parse_xml};
+pub use xml::{omni_num, parse_xml, XmlNode};
 mod index;
 mod model;
 mod multi;
@@ -25,8 +25,10 @@ pub mod state;
 mod tree;
 
 pub use index::SoundsourceIndex;
-pub use model::{OmniLayer, OmniModRoute, OmniPatch, classify_filter_full, omni_cutoff_hz, parse_patch};
-pub use multi::{OmniMulti, load_multi_file, multi_to_container, parse_multi};
+pub use model::{
+    classify_filter_full, omni_cutoff_hz, parse_patch, OmniLayer, OmniModRoute, OmniPatch,
+};
+pub use multi::{load_multi_file, multi_to_container, parse_multi, OmniMulti};
 pub use tree::{load_patch_file, patch_to_container};
 
 #[cfg(test)]

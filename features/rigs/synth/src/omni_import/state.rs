@@ -45,12 +45,22 @@ pub fn build_state(multi_xml: &str) -> Vec<u8> {
 }
 
 /// Extract the Multi XML from a state chunk (the inverse of [`build_state`]).
+///
+/// Accepts both spellings of the chunk. `save_state` writes the full form
+/// above; `IComponent::getState` — what a host stores, and so what comes out
+/// of a Gig Performer file via [`crate::gig`] — omits the leading `"DAW3"` and
+/// length words and starts at the magic. Same body either way.
 pub fn parse_state(chunk: &[u8]) -> Result<String, String> {
-    if chunk.len() < 32 || &chunk[0..4] != b"DAW3" {
-        return Err("not a DAW3 state chunk".into());
+    let body = if chunk.len() >= 12 && &chunk[0..4] == b"DAW3" {
+        &chunk[8..]
+    } else {
+        chunk
+    };
+    if body.len() < 24 || u32::from_le_bytes(body[0..4].try_into().unwrap()) != MAGIC {
+        return Err("not an Omnisphere state chunk".into());
     }
-    let xml_len = u32::from_le_bytes(chunk[24..28].try_into().unwrap()) as usize;
-    let xml = chunk.get(32..32 + xml_len).ok_or("truncated state chunk")?;
+    let xml_len = u32::from_le_bytes(body[16..20].try_into().unwrap()) as usize;
+    let xml = body.get(24..24 + xml_len).ok_or("truncated state chunk")?;
     Ok(String::from_utf8_lossy(xml)
         .trim_end_matches(['\0', ' '])
         .to_string())

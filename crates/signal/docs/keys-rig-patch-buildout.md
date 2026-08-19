@@ -44,13 +44,12 @@ MIDI ins: `Keys [1]`, `Arturia [1]`, `Mono Bass [9]`, `Drum Pads [10]`.
 | Massive Worship | Synth Pluck · Trance · Amb Key | holds **Dissolved Pluck** |
 | Gospel Gospel GOSPEL | Dulcimer · Trance | + `Dulcimer Comp` |
 
-> **Gotcha**: Gig Performer stores plugin state in `PROCESSOR/PROCESSORSTATEZ`
-> as base64 of an *obfuscated* blob — not zlib, not raw. So the Omnisphere
-> patch names above are **not** greppable out of the .gig. We got the rig map
-> from `prop_str_nodeName` (plaintext) only. If we ever want automated import,
-> deobfuscating STATEZ is its own task; otherwise read patch names off the
-> screen in GP and drive the existing `.prt_omn` reader from the Spectrasonics
-> library on disk.
+> **The gig is fully readable** — see §3.0. `signal_synth::gig::read_gig`
+> unwraps every hosted plugin's state, and for the Omnisphere instances hands
+> back the `SynthMaster` Multi XML the existing `.prt_omn`/`.mlt_omn` reader
+> already parses. `cargo run -p signal-synth --example gig_extract -- omni <file.gig>`
+> prints the patch inventory below; `… -- dump <file.gig> <dir>` writes every
+> chunk. Nothing here was transcribed off a screen.
 
 ---
 
@@ -180,7 +179,7 @@ Packs live in `/run/media/AudioHaven/Signal/Libraries/Keys/Keyscape/Packs/`
 
 ---
 
-## 3. Omnisphere — the six patches
+## 3. Omnisphere — the seven patches
 
 The reader is in good shape: `features/rigs/synth/src/omni_import/` parses
 `.prt_omn` (AmberPart XML), `.mlt_omn` multis, and `DAW3` VST3 state chunks
@@ -191,24 +190,69 @@ Soundsources are extracted to `/run/media/AudioHaven/Sampled/Keys/Omnisphere/`
 `Signal/Libraries/Keys/Omnisphere/Packs/` — but **contains no `.signalpack`
 files yet**. That is the gap.
 
-| # | patch | GP instance | target Signal lane |
-|---|---|---|---|
-| O1 | **American Obesity** | Omni Pads | Pad Engine → `Pad` |
-| O2 | **Gentle Gothics** | Omni Pads | Pad Engine → `Shimmer` |
-| O3 | **Worship PHAT bass** | Omni Synths (Dulcimer Dance) | Aux Engine |
-| O4 | **Hammered Dolceola** (stock) | Omni Synths | Aux Engine — "Dulcimer" lane |
-| O5 | **Club Europe Plucking Pulsars** (stock) | Omni Synths | Aux Engine — "Trance" lane |
-| O6 | **Dissolved Pluck** | Omni Synths (Massive Worship) | Aux Engine |
+### 3.0 Reading the gig — solved
+
+`signal_synth::gig` (`features/rigs/synth/src/gig.rs`) recovers every hosted
+plugin's state from a `.gig`. It read all 138 processors in Worship Gig 3.
+
+The state is not encrypted, only stacked four deep, and the trap is the
+outer/inner base64: JUCE's `MemoryBlock::toBase64Encoding` uses **its own
+64-character table starting with `.`**, packs six bits at a time **LSB-first**,
+and carries the decoded length as a decimal prefix (`"380876.+mrl6…"`). Hand
+that to an RFC 4648 decoder and you get high-entropy noise that reads as
+encryption — which is exactly the wrong conclusion.
+
+```text
+<PROCESSORSTATEZ>  "<size>.<chars>"   JUCE MemoryBlock base64
+  └─ zlib (78 da)                     the "Z" in STATEZ
+      └─ "VC2!" <VST3PluginState><IComponent>…   JUCE VST3 wrapper
+          └─ "<size>.<chars>"         JUCE base64 again
+              └─ the plugin's own chunk
+```
+
+For Omnisphere the innermost chunk is the familiar `DAW3` body **minus its
+first 8 bytes** — `IComponent::getState` starts at the `999999999` magic — so
+`omni_import::state::parse_state` now accepts both spellings and the existing
+`.mlt_omn` reader consumes the result unchanged. Verified: all five Omnisphere
+instances parse to 8 parts each (`gig_extract`'s `#[ignore]`d
+`recovered_multi_parses`, run with `GIG_FILE=…`).
+
+The Kontakt chunk (`hsin`, 967 KB) and the Arturia one
+(`22 serialization`, 75 KB) are recovered but not parsed.
+
+### 3.1 The actual patch inventory
+
+Straight out of `gig_extract omni` — note several names differ from memory:
+it is **Club *Europa*** (not Europe), **Worship PHAT *Bass***, Dolceola is from
+**Keyscape Creative**, and there is a seventh patch nobody mentioned.
+
+| # | patch (exact) | library | GP instance / part | target Signal lane |
+|---|---|---|---|---|
+| O1 | `KEY │ American Obesity` | Live Keyboardist | Omni Pads · 1 | Pad Engine → `Pad` |
+| O2 | `AD │ Gentle Gothics` | Ambient Dreams | Omni Pads · 2 | Pad Engine → `Shimmer` |
+| O3 | `Worship PHAT Bass` | **User** | Omni Synths · 1 (all three rackspaces) | Aux Engine |
+| O4 | `Hammered Dolceola` | Keyscape Creative | Omni Synths · 2 (Dulcimer Dance) | Aux — `Dulcimer` |
+| O5 | `CLUB │ Club Europa Plucking Pulsars` | Club Land | Omni Synths · 5 (all three) | Aux — `Trance` |
+| O6 | `AV │ Dissolved Pluck` | Analog Vibes | Omni Synths · 3 (Massive Worship) | Aux — `Synth Pluck` |
+| O7 | `MK-80 Rhodes` | Keyscape Library | Omni Synths · 3 (Gospel) | Keys Engine (new) |
+
+`Omni Keys` turns out to be pure Keyscape — parts 1–4 are
+`Vintage Vibe Electric Piano`, `Rhodes - LA Custom`, `Double Felt Grand`,
+`Wing Upright`. That is **exactly** the §2 rebuild list, which confirms the
+lane mapping in §0 and means §2 and the `Omni Keys` lane are one job.
+
+`Worship PHAT Bass` is a **User** patch — it exists only in this gig and in the
+Spectrasonics user library on the Mac. Back it up before touching anything.
 
 `worship_profile()` (`features/rigs/keys/src/profile.rs:410`) already anticipates
 O1: the Pad layer is authored as module A `OB-8 PWM Big Strings` + module B
 `Juno 60 Raw Sub` — the two soundsources American Obesity stacks. `Shimmer`,
 `Aux A/B/C`, `Organ A/B`, `Drone`, `SFX A/B` are all empty lanes waiting.
 
-- [ ] **O-0 — Build the Omnisphere soundsource packs** the six patches need
+- [ ] **O-0 — Build the Omnisphere soundsource packs** the seven patches need
       (`build_omni_pack`). Per `omnisphere-soundsource-packs`, loops live in the
       FLAC `STINFO` tag and `build_omni_pack` bakes them in — do not hand-roll.
-- [ ] **O-1..O-6 — one patch at a time**: locate the `.prt_omn` (user patches in
+- [ ] **O-1..O-7 — one patch at a time**: locate the `.prt_omn` (user patches in
       the Spectrasonics user library, stock ones in the factory library) →
       `patch_to_container` → drop into the right `LayerDef` →
       A/B against the real plugin. Each is its own ticket; O4/O5 (stock) are the
@@ -256,7 +300,9 @@ Per-lane RAM is bounded by `engine::budget` (15% of RAM, ≤4 GB — see
 2. Do the other three pianos' scripts use the same `$COLOR_OFFSET` /
    `$DYN_OFFSET` constants, or per-library ones? Diff `script_0.ksp` across all
    four before generalising `PianoVoice`.
-3. Is deobfuscating Gig Performer's `PROCESSORSTATEZ` worth it? It would let us
-   import the whole gig mechanically instead of transcribing it — but only if
-   the Omnisphere and Kontakt states inside are then readable by the existing
-   readers.
+3. ~~Is deobfuscating Gig Performer's `PROCESSORSTATEZ` worth it?~~
+   **Answered** — it was never obfuscated, just unusually encoded (§3.0). All
+   138 processors decode. The Omnisphere states feed the existing reader
+   directly; the Kontakt (`hsin`) and Arturia (`22 serialization`) chunks are
+   recovered but not yet parsed, which is a separate piece of work and only
+   worth doing if the KSP route (§1) leaves something unanswered.

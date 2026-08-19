@@ -19,15 +19,15 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-use signal_sampler::LibrarySpec;
 use signal_sampler::engine::cache::create_signal_pack;
+use signal_sampler::LibrarySpec;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut args = std::env::args().skip(1);
-    let dir = PathBuf::from(
-        args.next()
-            .expect("usage: build_omni_pack <dir> <out.signalpack> [category] [instrument] [styles]"),
-    );
+    let dir =
+        PathBuf::from(args.next().expect(
+            "usage: build_omni_pack <dir> <out.signalpack> [category] [instrument] [styles]",
+        ));
     let out = PathBuf::from(args.next().expect("missing <out.signalpack>"));
     let category = args.next().unwrap_or_default();
     let instrument = args.next().unwrap_or_default();
@@ -61,7 +61,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         loops.len()
     );
     if loops.is_empty() {
-        eprintln!("build_omni_pack: WARNING — no loops recovered (STINFO missing?); pad zones will decay");
+        eprintln!(
+            "build_omni_pack: WARNING — no loops recovered (STINFO missing?); pad zones will decay"
+        );
     }
 
     let original = std::fs::read_to_string(&styx)?;
@@ -74,7 +76,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     std::fs::write(&tmp_styx, &enriched)?;
 
     // Sanity: the injected spec must still parse (it embeds into the pack).
-    LibrarySpec::from_file(&tmp_styx).map_err(|e| format!("enriched styx no longer parses: {e}"))?;
+    LibrarySpec::from_file(&tmp_styx)
+        .map_err(|e| format!("enriched styx no longer parses: {e}"))?;
 
     // Every audio file directly under the soundsource dir.
     let mut paths: Vec<PathBuf> = std::fs::read_dir(&dir)?
@@ -83,7 +86,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .filter(|p| {
             p.extension()
                 .and_then(|e| e.to_str())
-                .map(|e| matches!(e.to_ascii_lowercase().as_str(), "flac" | "wav" | "aif" | "aiff"))
+                .map(|e| {
+                    matches!(
+                        e.to_ascii_lowercase().as_str(),
+                        "flac" | "wav" | "aif" | "aiff"
+                    )
+                })
                 .unwrap_or(false)
         })
         .collect();

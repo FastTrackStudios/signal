@@ -10,8 +10,8 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
+use signal_sampler::engine::cache::{create_signal_pack, PrepareStats};
 use signal_sampler::LibrarySpec;
-use signal_sampler::engine::cache::{PrepareStats, create_signal_pack};
 
 /// Browser tags applied to a built pack.
 #[derive(Debug, Clone, Default)]
@@ -55,7 +55,8 @@ pub fn build_soundsource_pack(
     let tmp_styx = tmp_dir.join("library.styx");
     std::fs::write(&tmp_styx, &enriched).map_err(|e| e.to_string())?;
     // The injected spec must still parse (it embeds into the pack).
-    LibrarySpec::from_file(&tmp_styx).map_err(|e| format!("enriched styx no longer parses: {e}"))?;
+    LibrarySpec::from_file(&tmp_styx)
+        .map_err(|e| format!("enriched styx no longer parses: {e}"))?;
 
     let mut paths: Vec<PathBuf> = std::fs::read_dir(dir)
         .map_err(|e| e.to_string())?
@@ -64,7 +65,12 @@ pub fn build_soundsource_pack(
         .filter(|p| {
             p.extension()
                 .and_then(|e| e.to_str())
-                .map(|e| matches!(e.to_ascii_lowercase().as_str(), "flac" | "wav" | "aif" | "aiff"))
+                .map(|e| {
+                    matches!(
+                        e.to_ascii_lowercase().as_str(),
+                        "flac" | "wav" | "aif" | "aiff"
+                    )
+                })
                 .unwrap_or(false)
         })
         .collect();

@@ -6,7 +6,7 @@ use std::path::Path;
 use signal_proto::block::BlockType;
 
 use super::model::{
-    OmniModRoute, OmniPatch, classify_effect, classify_filter_full, classify_type1, omni_cutoff_hz,
+    classify_effect, classify_filter_full, classify_type1, omni_cutoff_hz, OmniModRoute, OmniPatch,
 };
 
 /// Omnisphere's normalized cutoff → OUR normalized cutoff param, via the
@@ -14,7 +14,7 @@ use super::model::{
 fn omni_cutoff_norm(v: f32) -> f32 {
     signal_sampler::native::NativeFilter::norm_from_cutoff(omni_cutoff_hz(v))
 }
-use super::{SoundsourceIndex, parse_patch};
+use super::{parse_patch, SoundsourceIndex};
 use signal_sampler::rig::RigBlock;
 use signal_sampler::rig_node::Container;
 

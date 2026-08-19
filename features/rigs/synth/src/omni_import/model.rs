@@ -345,7 +345,7 @@ fn parse_env_breakpoints(e: &XmlNode) -> Option<(f32, f32, f32, f32)> {
     let peak_idx = pts
         .iter()
         .enumerate()
-        .max_by(|a, b| a.1.0.total_cmp(&b.1.0))
+        .max_by(|a, b| a.1 .0.total_cmp(&b.1 .0))
         .map(|(i, _)| i)?;
     let last = pts.len() - 1;
     let sus_idx = if last > peak_idx { last - 1 } else { peak_idx };
@@ -483,7 +483,11 @@ pub(crate) fn parse_patch_node(root: &XmlNode) -> Result<OmniPatch, String> {
                 // inv flips the direction.
                 let hz = |f: Option<f32>, inv: bool| {
                     let v = (f.unwrap_or(0.5) - 0.5) * 4000.0;
-                    if inv { -v } else { v }
+                    if inv {
+                        -v
+                    } else {
+                        v
+                    }
                 };
                 layer.dfs = Some((
                     hz(dfs.num("freqA"), dfs.num("invA").unwrap_or(0.0) != 0.0),

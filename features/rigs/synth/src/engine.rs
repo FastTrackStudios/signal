@@ -60,7 +60,11 @@ pub fn module_slot(index: usize) -> String {
     const LETTERS: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ";
     let letter = LETTERS[index % LETTERS.len()] as char;
     let wrap = index / LETTERS.len();
-    if wrap == 0 { letter.to_string() } else { format!("{letter}{wrap}") }
+    if wrap == 0 {
+        letter.to_string()
+    } else {
+        format!("{letter}{wrap}")
+    }
 }
 
 /// The first four slot labels — the common case, kept for call sites that
@@ -126,7 +130,10 @@ impl Default for ModuleSettings {
 impl ModuleSettings {
     /// Settings for a bare source, everything else at its default.
     pub fn from_source(source: Source) -> Self {
-        Self { source, ..Self::default() }
+        Self {
+            source,
+            ..Self::default()
+        }
     }
 }
 
@@ -159,8 +166,14 @@ fn module_shell(name: &str, set: &ModuleSettings) -> Container {
             // The sampler's own per-voice amplitude envelope: the attack and
             // release a note actually gets.
             block = block
-                .with_param("amp_attack", format!("{:.4}", set.amp_env.0.max(0.0) / 1000.0))
-                .with_param("amp_release", format!("{:.4}", set.amp_env.3.max(0.0) / 1000.0));
+                .with_param(
+                    "amp_attack",
+                    format!("{:.4}", set.amp_env.0.max(0.0) / 1000.0),
+                )
+                .with_param(
+                    "amp_release",
+                    format!("{:.4}", set.amp_env.3.max(0.0) / 1000.0),
+                );
             if set.unison > 1 {
                 block = block
                     .with_param("unison", set.unison.to_string())
@@ -177,15 +190,27 @@ fn module_shell(name: &str, set: &ModuleSettings) -> Container {
                 .named("Soundsource")
                 .with_param("amp_attack", format!("{:.3}", set.amp_env.0.max(0.0)))
                 .with_param("amp_decay", format!("{:.3}", set.amp_env.1.max(0.0)))
-                .with_param("amp_sustain", format!("{:.4}", set.amp_env.2.clamp(0.0, 1.0)))
+                .with_param(
+                    "amp_sustain",
+                    format!("{:.4}", set.amp_env.2.clamp(0.0, 1.0)),
+                )
                 .with_param("amp_release", format!("{:.3}", set.amp_env.3.max(0.0)))
                 .with_param("filter_attack", format!("{:.3}", set.filter_env.0.max(0.0)))
                 .with_param("filter_decay", format!("{:.3}", set.filter_env.1.max(0.0)))
-                .with_param("filter_sustain", format!("{:.4}", set.filter_env.2.clamp(0.0, 1.0)))
-                .with_param("filter_release", format!("{:.3}", set.filter_env.3.max(0.0)))
+                .with_param(
+                    "filter_sustain",
+                    format!("{:.4}", set.filter_env.2.clamp(0.0, 1.0)),
+                )
+                .with_param(
+                    "filter_release",
+                    format!("{:.3}", set.filter_env.3.max(0.0)),
+                )
                 .with_param("cutoff", format!("{cutoff_norm:.4}"))
                 .with_param("resonance", format!("{:.4}", set.resonance.clamp(0.0, 1.0)))
-                .with_param("env_amt", format!("{:.4}", set.filter_env_depth.clamp(-1.0, 1.0)));
+                .with_param(
+                    "env_amt",
+                    format!("{:.4}", set.filter_env_depth.clamp(-1.0, 1.0)),
+                );
             Container::module("Source").add(block)
         }
         // Nothing loaded — a placeholder that passes audio (silent lane).
@@ -200,8 +225,11 @@ fn module_shell(name: &str, set: &ModuleSettings) -> Container {
     } else {
         signal_sampler::native::NativeFilter::norm_from_cutoff(set.cutoff_hz)
     };
-    let chain_res =
-        if matches!(set.source, Source::Synth) { 0.0 } else { set.resonance.clamp(0.0, 1.0) };
+    let chain_res = if matches!(set.source, Source::Synth) {
+        0.0
+    } else {
+        set.resonance.clamp(0.0, 1.0)
+    };
     let filters = Container::module("Filters")
         .add(
             RigBlock::of_type(BlockType::Filter)
@@ -220,11 +248,15 @@ fn module_shell(name: &str, set: &ModuleSettings) -> Container {
         // starts at zero and is opened by its envelope; a sampler's Amp is
         // just a gain stage at unity, because its voices carry their own
         // envelopes.
-        .add(Container::module("Amp").add(
-            // Unity for every source: the voice's own amp envelope shapes
-            // the level (the old synth-only closed-Amp + env route is gone).
-            RigBlock::of_type(BlockType::Amp).named("Amp").with_param("gain", "0.5"),
-        ))
+        .add(
+            Container::module("Amp").add(
+                // Unity for every source: the voice's own amp envelope shapes
+                // the level (the old synth-only closed-Amp + env route is gone).
+                RigBlock::of_type(BlockType::Amp)
+                    .named("Amp")
+                    .with_param("gain", "0.5"),
+            ),
+        )
         .add(fx_rack("FX"))
         // Each module routes to the Part's aux rack independently (rigs
         // without an Aux Rack container simply drop the send).
@@ -260,8 +292,11 @@ fn with_module_envelopes(module: Container, _set: &ModuleSettings) -> Container 
 /// `sources[i]` realizes module `MODULE_SLOTS[i]`; `Source::Empty` leaves a
 /// structured but silent module, so the shape is always the full quad.
 pub fn signal_layer(name: &str, sources: &[Source]) -> Container {
-    let settings: Vec<ModuleSettings> =
-        sources.iter().cloned().map(ModuleSettings::from_source).collect();
+    let settings: Vec<ModuleSettings> = sources
+        .iter()
+        .cloned()
+        .map(ModuleSettings::from_source)
+        .collect();
     signal_layer_with(name, &settings)
 }
 
@@ -270,7 +305,10 @@ pub fn signal_layer(name: &str, sources: &[Source]) -> Container {
 pub fn signal_layer_with(name: &str, settings: &[ModuleSettings]) -> Container {
     let mut modules = Container::parallel(format!("{name} Modules"));
     for (i, set) in settings.iter().enumerate() {
-        modules = modules.add(signal_module_with(&format!("{name} {}", module_slot(i)), set));
+        modules = modules.add(signal_module_with(
+            &format!("{name} {}", module_slot(i)),
+            set,
+        ));
     }
     Container::layer(name).add(modules)
 }
@@ -295,7 +333,14 @@ pub fn fx_rack(name: &str) -> Container {
 /// These name the *panels*; each group's parameters are declared by the rig
 /// that owns the lane (see `signal-keys`'s layer detail).
 pub const MACRO_GROUPS: [&str; 8] = [
-    "Source", "Tone", "Filter", "Filter Env", "Amp Env", "Vibrato", "Ambience", "Effects",
+    "Source",
+    "Tone",
+    "Filter",
+    "Filter Env",
+    "Amp Env",
+    "Vibrato",
+    "Ambience",
+    "Effects",
 ];
 
 /// One module's worth of imported settings — an Omnisphere layer flattened
@@ -356,7 +401,11 @@ pub fn import_omni_patch(path: &std::path::Path) -> Result<ImportedPatch, String
         .map(|l| ImportedModule {
             source: l.soundsource.clone(),
             // `level` is normalized; unity sits at 1.0.
-            level_db: if l.level > 0.0 { 20.0 * l.level.log10() } else { -60.0 },
+            level_db: if l.level > 0.0 {
+                20.0 * l.level.log10()
+            } else {
+                -60.0
+            },
             cutoff_hz: crate::omni_import::omni_cutoff_hz(l.filter_freq),
             resonance: l.filter_res,
             filter_env_depth: l.filter_env_depth,
@@ -387,10 +436,18 @@ pub fn import_omni_patch(path: &std::path::Path) -> Result<ImportedPatch, String
                 .filter(|r| r.source.starts_with(&tag))
                 .map(|r| r.depth.abs())
                 .fold(0.0f32, f32::max);
-            (omni_lfo_hz(*rate), depth.clamp(0.0, 1.0), (kind * 4.0).clamp(0.0, 4.0))
+            (
+                omni_lfo_hz(*rate),
+                depth.clamp(0.0, 1.0),
+                (kind * 4.0).clamp(0.0, 4.0),
+            )
         })
         .collect();
-    Ok(ImportedPatch { name: patch.name.clone(), modules, lfos })
+    Ok(ImportedPatch {
+        name: patch.name.clone(),
+        modules,
+        lfos,
+    })
 }
 
 #[cfg(test)]
@@ -427,19 +484,29 @@ mod tests {
             }
         };
 
-        let set = ModuleSettings { source: Source::Synth, ..ModuleSettings::default() };
+        let set = ModuleSettings {
+            source: Source::Synth,
+            ..ModuleSettings::default()
+        };
         let tree = signal_layer_with("S", &[set]);
         let mut rn = RenderNode::compile(&tree, 48_000);
         rn.prepare(48_000.0, 512);
 
         let run = |rn: &mut RenderNode, midi: &[PluginMidiEvent], frames: usize| {
             let (mut l, mut r) = (vec![0.0f32; frames], vec![0.0f32; frames]);
-            let ev = PluginEvents { params: &[], midi, note_expressions: &[] };
+            let ev = PluginEvents {
+                params: &[],
+                midi,
+                note_expressions: &[],
+            };
             rn.render(&mut l, &mut r, &ev);
             l
         };
         let freq = |s: &[f32]| {
-            s.windows(2).filter(|w| (w[0] <= 0.0) != (w[1] <= 0.0)).count() as f32 / 2.0
+            s.windows(2)
+                .filter(|w| (w[0] <= 0.0) != (w[1] <= 0.0))
+                .count() as f32
+                / 2.0
                 / (s.len() as f32 / 48_000.0)
         };
 

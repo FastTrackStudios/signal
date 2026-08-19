@@ -14,8 +14,8 @@ use daw::service::{Channel, ControllerNumber, ControllerValue, KeyNumber, MidiEv
 use signal_plugin_host::{PluginEvents, PluginMidiEvent};
 use signal_sampler::node_render::RenderNode;
 use signal_sampler::rig_node::Container;
+use signal_synth::engine::{signal_layer_with, ModuleSettings};
 use signal_synth::Source;
-use signal_synth::engine::{ModuleSettings, signal_layer_with};
 
 const PACK: &str = "/run/media/AudioHaven/Signal/Libraries/Keys/Keyscape/\
 Packs/LA Custom C7 Grand.signalpack";
@@ -30,7 +30,10 @@ fn main() {
     let mut node = RenderNode::compile(&tree, 48_000);
     node.prepare(48_000.0, 512);
 
-    let ev = |m: MidiEvent| PluginMidiEvent { offset: 0, message: m };
+    let ev = |m: MidiEvent| PluginMidiEvent {
+        offset: 0,
+        message: m,
+    };
     let note_on = ev(MidiEvent::NoteOn {
         channel: Channel::new(0),
         key: KeyNumber::new(60),
@@ -57,7 +60,11 @@ fn main() {
             l.fill(0.0);
             r.fill(0.0);
             let m = if b == 0 { midi.clone() } else { Vec::new() };
-            let events = PluginEvents { params: &[], midi: &m, note_expressions: &[] };
+            let events = PluginEvents {
+                params: &[],
+                midi: &m,
+                note_expressions: &[],
+            };
             node.process(&sl, &sr, &mut l, &mut r, &events);
             peak = peak.max(l.iter().fold(0.0f32, |a, s| a.max(s.abs())));
             std::thread::sleep(std::time::Duration::from_micros(10_667));
@@ -80,7 +87,10 @@ fn main() {
     println!("key UP, pedal held      peak {key_up:.4}   (must keep sounding)");
     println!(
         "pedal up, decaying      {}   (must fall away)",
-        tail.iter().map(|v| format!("{v:.4}")).collect::<Vec<_>>().join(" → "),
+        tail.iter()
+            .map(|v| format!("{v:.4}"))
+            .collect::<Vec<_>>()
+            .join(" → "),
     );
 
     let held = sounding > 1e-3 && key_up > sounding * 0.15;

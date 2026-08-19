@@ -6,11 +6,11 @@
 //! cargo run -p signal-synth --example module_dsp
 //! ```
 
-use signal_plugin_host::{PluginEvents, PluginMidiEvent};
 use daw::service::{Channel, KeyNumber, MidiEvent, Velocity};
+use signal_plugin_host::{PluginEvents, PluginMidiEvent};
 use signal_sampler::node_render::RenderNode;
 use signal_sampler::rig_node::Container;
-use signal_synth::engine::{ModuleSettings, signal_module_with};
+use signal_synth::engine::{signal_module_with, ModuleSettings};
 use signal_synth::Source;
 
 const SR: u32 = 48_000;
@@ -40,7 +40,11 @@ fn render(set: &ModuleSettings, frames: usize) -> Vec<f32> {
                 },
             }]
         };
-        let events = PluginEvents { params: &[], midi: &midi, note_expressions: &[] };
+        let events = PluginEvents {
+            params: &[],
+            midi: &midi,
+            note_expressions: &[],
+        };
         node.process(&silence_l, &silence_r, &mut out_l, &mut out_r, &events);
         all.extend_from_slice(&out_l);
     }
@@ -53,16 +57,28 @@ fn rms(x: &[f32]) -> f32 {
 }
 
 fn main() {
-    let base = ModuleSettings { source: Source::Synth, ..ModuleSettings::default() };
+    let base = ModuleSettings {
+        source: Source::Synth,
+        ..ModuleSettings::default()
+    };
 
     // 1. Wide open, instant attack — the reference.
     let open = render(&base, SR as usize / 2);
     // 2. Same, filter closed to 200 Hz: a saw through a low cutoff has to be
     //    quieter.
-    let closed = render(&ModuleSettings { cutoff_hz: 200.0, ..base.clone() }, SR as usize / 2);
+    let closed = render(
+        &ModuleSettings {
+            cutoff_hz: 200.0,
+            ..base.clone()
+        },
+        SR as usize / 2,
+    );
     // 3. Same, with a half-second attack: the first 50 ms must be near silent.
     let slow = render(
-        &ModuleSettings { amp_env: (500.0, 0.0, 1.0, 200.0), ..base.clone() },
+        &ModuleSettings {
+            amp_env: (500.0, 0.0, 1.0, 200.0),
+            ..base.clone()
+        },
         SR as usize / 2,
     );
 
@@ -71,7 +87,10 @@ fn main() {
     let (slow_head, open_head) = (rms(&slow[..head]), rms(&open[..head]));
 
     println!("open      rms {open_rms:.5}");
-    println!("cutoff200 rms {closed_rms:.5}   ({:.0}% of open)", closed_rms / open_rms.max(1e-9) * 100.0);
+    println!(
+        "cutoff200 rms {closed_rms:.5}   ({:.0}% of open)",
+        closed_rms / open_rms.max(1e-9) * 100.0
+    );
     println!("attack500 first 50ms rms {slow_head:.5}  vs open {open_head:.5}");
 
     let filter_works = open_rms > 1e-4 && closed_rms < open_rms * 0.7;

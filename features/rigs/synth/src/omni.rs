@@ -161,16 +161,14 @@ mod tests {
             .filter(|m| m.block_type == BlockType::Lfo)
             .count();
         assert_eq!(lfos, 8, "8 independent LFOs");
-        assert!(
-            p.modulators
-                .iter()
-                .any(|m| m.block_type == BlockType::ModMatrix)
-        );
-        assert!(
-            p.modulators
-                .iter()
-                .any(|m| m.block_type == BlockType::Arpeggiator)
-        );
+        assert!(p
+            .modulators
+            .iter()
+            .any(|m| m.block_type == BlockType::ModMatrix));
+        assert!(p
+            .modulators
+            .iter()
+            .any(|m| m.block_type == BlockType::Arpeggiator));
         // 12 envelopes: 3 per module × the Part's 4 modules.
         let envs: usize = ["Layer A", "Layer B", "Layer C", "Layer D"]
             .iter()

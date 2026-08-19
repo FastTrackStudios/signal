@@ -15,7 +15,7 @@
 
 use std::path::{Path, PathBuf};
 
-use signal_synth::pack::{PackTags, build_soundsource_pack};
+use signal_synth::pack::{build_soundsource_pack, PackTags};
 
 const EXTRACTION: &str = "/run/media/AudioHaven/Sampled/Keys/Omnisphere";
 const PACKS: &str = "/run/media/AudioHaven/Signal/Libraries/Keys/Omnisphere/Packs";
@@ -23,11 +23,21 @@ const PACKS: &str = "/run/media/AudioHaven/Signal/Libraries/Keys/Omnisphere/Pack
 fn main() {
     let mut args = std::env::args().skip(1).peekable();
     let ext_root = PathBuf::from(
-        args.peek().filter(|a| !a.starts_with("--")).cloned().inspect(|_| { args.next(); })
+        args.peek()
+            .filter(|a| !a.starts_with("--"))
+            .cloned()
+            .inspect(|_| {
+                args.next();
+            })
             .unwrap_or_else(|| EXTRACTION.into()),
     );
     let packs_root = PathBuf::from(
-        args.peek().filter(|a| !a.starts_with("--")).cloned().inspect(|_| { args.next(); })
+        args.peek()
+            .filter(|a| !a.starts_with("--"))
+            .cloned()
+            .inspect(|_| {
+                args.next();
+            })
             .unwrap_or_else(|| PACKS.into()),
     );
     let force = std::env::args().any(|a| a == "--force");
@@ -40,7 +50,9 @@ fn main() {
             sources.push(dir);
             continue; // don't descend into a soundsource
         }
-        let Ok(entries) = std::fs::read_dir(&dir) else { continue };
+        let Ok(entries) = std::fs::read_dir(&dir) else {
+            continue;
+        };
         for e in entries.flatten() {
             let p = e.path();
             let name = p.file_name().and_then(|s| s.to_str()).unwrap_or("");
@@ -50,7 +62,10 @@ fn main() {
         }
     }
     sources.sort();
-    eprintln!("build_omni_packs_all: {} multisample soundsources", sources.len());
+    eprintln!(
+        "build_omni_packs_all: {} multisample soundsources",
+        sources.len()
+    );
 
     let t = std::time::Instant::now();
     let (mut built, mut skipped, mut failed, mut zones_looped) = (0u32, 0u32, 0u32, 0u64);
@@ -67,7 +82,12 @@ fn main() {
             Ok(_stats) => {
                 built += 1;
                 if let Ok(h) = signal_sampler::read_pack_header(&out) {
-                    zones_looped += h.spec.zones.iter().filter(|z| z.loop_end > z.loop_start).count() as u64;
+                    zones_looped += h
+                        .spec
+                        .zones
+                        .iter()
+                        .filter(|z| z.loop_end > z.loop_start)
+                        .count() as u64;
                 }
             }
             Err(e) => {

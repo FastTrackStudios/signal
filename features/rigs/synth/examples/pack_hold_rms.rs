@@ -22,14 +22,15 @@ fn main() {
         .init();
 
     let mut args = std::env::args().skip(1);
-    let spec = args.next().expect("usage: pack_hold_rms <spec_path> [note]");
+    let spec = args
+        .next()
+        .expect("usage: pack_hold_rms <spec_path> [note]");
     let note: u8 = args.next().and_then(|s| s.parse().ok()).unwrap_or(60);
 
     // Minimal tree: one layer, one sample block realized by the spec.
     let tree = Container::preset("probe").add(
-        Container::engine("e").add(
-            Container::layer("A").add(Container::module("src").sample_block("Source", spec)),
-        ),
+        Container::engine("e")
+            .add(Container::layer("A").add(Container::module("src").sample_block("Source", spec))),
     );
 
     let mut rn = RenderNode::compile(&tree, 48_000);

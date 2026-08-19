@@ -10,13 +10,14 @@
 use signal_plugin_host::{PluginEvents, PluginMidiEvent};
 use signal_sampler::node_render::RenderNode;
 use signal_sampler::rig_node::{Container, RigNode};
-use signal_synth::omni_import::{SoundsourceIndex, load_patch_file};
+use signal_synth::omni_import::{load_patch_file, SoundsourceIndex};
 
 /// Clone the tree, dropping any container named "Filters".
 fn strip_filters(c: &Container) -> Container {
     let mut out = c.clone();
-    out.children
-        .retain(|ch| !matches!(ch, RigNode::Container { container } if container.name == "Filters"));
+    out.children.retain(
+        |ch| !matches!(ch, RigNode::Container { container } if container.name == "Filters"),
+    );
     for ch in out.children.iter_mut() {
         if let RigNode::Container { container } = ch {
             *container = strip_filters(container);
@@ -31,9 +32,9 @@ fn sample_only_osc(c: &Container) -> Container {
     use signal_proto::block::BlockType;
     let mut out = c.clone();
     if out.name == "Oscillator" {
-        out.children.retain(|ch| {
-            matches!(ch, RigNode::Block { block } if block.block_type == BlockType::Sampler)
-        });
+        out.children.retain(
+            |ch| matches!(ch, RigNode::Block { block } if block.block_type == BlockType::Sampler),
+        );
     }
     for ch in out.children.iter_mut() {
         if let RigNode::Container { container } = ch {
@@ -45,8 +46,14 @@ fn sample_only_osc(c: &Container) -> Container {
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
-    let path = args.first().expect("usage: patch_hold_rms <patch.prt_omn> [note] [--no-filters]");
-    let note: u8 = args.iter().skip(1).find_map(|a| a.parse().ok()).unwrap_or(60);
+    let path = args
+        .first()
+        .expect("usage: patch_hold_rms <patch.prt_omn> [note] [--no-filters]");
+    let note: u8 = args
+        .iter()
+        .skip(1)
+        .find_map(|a| a.parse().ok())
+        .unwrap_or(60);
     let no_filters = args.iter().any(|a| a == "--no-filters");
     let sample_only = args.iter().any(|a| a == "--sample-only");
 
