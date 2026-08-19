@@ -921,3 +921,175 @@ async fn advanced_page_survives_the_size_the_editor_opens_at() -> dioxus_test::R
     }
     Ok(())
 }
+
+// ─────────────────────────────────────────────────────────────────────────
+// Shared control gestures (docs/spec/fx/controls.md)
+// ─────────────────────────────────────────────────────────────────────────
+
+/// Drag the threshold knob `dy` px (negative = up) with `mods` held, through
+/// real pointer events, and return the value it landed on.
+async fn drag_threshold(fx: &mut Fixture, dy: f64, mods: dioxus_test::Modifiers) -> f32 {
+    let (sx, sy) = fx.knob_center("knob-threshold");
+    fx.tester.pointer_down_mods(sx, sy, mods);
+    let _ = fx.tester.pump().await;
+    for step in 1..=3 {
+        let t = step as f64 / 3.0;
+        fx.tester.pointer_move_mods(sx, sy + dy * t, true, mods);
+        let _ = fx.tester.pump().await;
+    }
+    fx.tester.pointer_up_mods(sx, sy + dy, mods);
+    let _ = fx.tester.pump().await;
+    fx.params.threshold_db.value()
+}
+
+/// Ctrl is the fine modifier: the same 30 px drag that moves the threshold
+/// +12 dB bare moves it +12/8 = +1.5 dB with Ctrl held. Shift gives the same
+/// ratio.
+// r[verify fx.control.fine]
+#[tokio::test]
+async fn ctrl_and_shift_drag_are_fine() -> dioxus_test::Result<()> {
+    use dioxus_test::Modifiers;
+    for mods in [Modifiers::CONTROL, Modifiers::SHIFT] {
+        let mut fx = mount();
+        let before = fx.params.threshold_db.value();
+        let after = drag_threshold(&mut fx, -30.0, mods).await;
+        let expected = before + (30.0 / 150.0) * 60.0 / 8.0;
+        assert!(
+            (after - expected).abs() < 0.3,
+            "{mods:?}: fine drag landed at {after} dB, expected ~{expected} dB (from {before})"
+        );
+    }
+    Ok(())
+}
+
+/// Pressing the modifier mid-drag re-anchors: the value never jumps when the
+/// ratio changes, it just continues finer from where it is.
+// r[verify fx.control.fine]
+#[tokio::test]
+async fn modifier_mid_drag_does_not_jump() -> dioxus_test::Result<()> {
+    use dioxus_test::Modifiers;
+    let fx = mount();
+    let before = fx.params.threshold_db.value();
+    let (sx, sy) = fx.knob_center("knob-threshold");
+    fx.tester.pointer_down(sx, sy);
+    let _ = fx.tester.pump().await;
+    // 30 px bare = +12 dB.
+    fx.tester.pointer_move(sx, sy - 30.0, true);
+    let _ = fx.tester.pump().await;
+    let coarse = fx.params.threshold_db.value();
+    assert!((coarse - (before + 12.0)).abs() < 0.5, "coarse leg: {coarse}");
+    // Press Ctrl without moving: nothing changes.
+    fx.tester.pointer_move_mods(sx, sy - 30.0, true, Modifiers::CONTROL);
+    let _ = fx.tester.pump().await;
+    let held = fx.params.threshold_db.value();
+    assert!((held - coarse).abs() < 1e-3, "pressing Ctrl jumped the value: {coarse} → {held}");
+    // Another 30 px with Ctrl = +1.5 dB on top.
+    fx.tester.pointer_move_mods(sx, sy - 60.0, true, Modifiers::CONTROL);
+    let _ = fx.tester.pump().await;
+    fx.tester.pointer_up_mods(sx, sy - 60.0, Modifiers::CONTROL);
+    let _ = fx.tester.pump().await;
+    let after = fx.params.threshold_db.value();
+    assert!((after - (coarse + 1.5)).abs() < 0.3, "fine leg: {coarse} → {after}");
+    Ok(())
+}
+
+/// Double-click on a knob body resets it to the parameter's default.
+// r[verify fx.control.reset]
+#[tokio::test]
+async fn double_click_resets_knob_to_default() -> dioxus_test::Result<()> {
+    let mut fx = mount();
+    let default = fx.params.threshold_db.default_plain_value();
+    let moved = drag_threshold(&mut fx, -30.0, dioxus_test::Modifiers::empty()).await;
+    assert!((moved - default).abs() > 5.0, "drag did not move off default");
+
+    let (x, y) = fx.knob_center("knob-threshold");
+    // Two quick clicks at the same spot: blitz counts them and fires dblclick.
+    fx.tester.pointer_down(x, y);
+    fx.tester.pointer_up(x, y);
+    let _ = fx.tester.pump().await;
+    fx.tester.pointer_down(x, y);
+    fx.tester.pointer_up(x, y);
+    let _ = fx.tester.pump().await;
+
+    let after = fx.params.threshold_db.value();
+    assert!(
+        (after - default).abs() < 1e-3,
+        "double-click did not reset: {moved} → {after} (default {default})"
+    );
+    Ok(())
+}
+
+/// Alt-click is the compatibility reset.
+// r[verify fx.control.reset]
+#[tokio::test]
+async fn alt_click_resets_knob_to_default() -> dioxus_test::Result<()> {
+    use dioxus_test::Modifiers;
+    let mut fx = mount();
+    let default = fx.params.threshold_db.default_plain_value();
+    drag_threshold(&mut fx, -30.0, Modifiers::empty()).await;
+    let (x, y) = fx.knob_center("knob-threshold");
+    fx.tester.pointer_down_mods(x, y, Modifiers::ALT);
+    fx.tester.pointer_up_mods(x, y, Modifiers::ALT);
+    let _ = fx.tester.pump().await;
+    let after = fx.params.threshold_db.value();
+    assert!((after - default).abs() < 1e-3, "alt-click did not reset: {after}");
+    Ok(())
+}
+
+/// Click the readout under a knob, type a value, Enter: the parameter takes
+/// it. The typed text may omit the unit.
+// r[verify fx.control.text-entry]
+// r[verify fx.control.text-entry.parse]
+#[tokio::test]
+async fn clicking_readout_and_typing_sets_value() -> dioxus_test::Result<()> {
+    let mut fx = mount();
+    let name = fx.params.threshold_db.name().to_string();
+    let readout_id = format!("knob-{name}-readout");
+    let el = fx
+        .tester
+        .query(by_testid(&readout_id))
+        .immediately()
+        .unwrap_or_else(|e| panic!("readout {readout_id} not in DOM: {e:?}"));
+    let (ox, oy) = el.document_origin();
+    let (w, h) = el.size();
+    fx.tester.click_at((ox + w as f64 / 2.0) as f32, (oy + h as f64 / 2.0) as f32);
+    fx.settle().await;
+
+    let input_id = format!("knob-{name}-input");
+    fx.tester
+        .query(by_testid(&input_id))
+        .immediately()
+        .unwrap_or_else(|e| panic!("text entry {input_id} did not open: {e:?}"));
+
+    // Replace the pre-filled value: Home, then shift-select is not available
+    // in the harness, so clear with backspaces and type fresh.
+    for _ in 0..12 {
+        fx.tester.press_key(dioxus_test::Key::Backspace, dioxus_test::Modifiers::empty());
+    }
+    fx.tester.type_text("-30\n");
+    fx.settle().await;
+
+    let after = fx.params.threshold_db.value();
+    assert!((after - (-30.0)).abs() < 0.05, "typed -30, threshold is {after}");
+    Ok(())
+}
+
+/// Wheel over a knob nudges it by the coarse step; Ctrl makes it fine.
+// r[verify fx.control.wheel]
+#[tokio::test]
+async fn wheel_nudges_and_ctrl_wheel_is_fine() -> dioxus_test::Result<()> {
+    use dioxus_test::Modifiers;
+    let fx = mount();
+    let before = fx.params.threshold_db.value();
+    let (x, y) = fx.knob_center("knob-threshold");
+    fx.tester.wheel_mods(x, y, -1.0, Modifiers::empty());
+    let _ = fx.tester.pump().await;
+    let coarse = fx.params.threshold_db.value();
+    // 2 % of 60 dB = 1.2 dB per notch, up.
+    assert!((coarse - (before + 1.2)).abs() < 0.1, "coarse notch: {before} → {coarse}");
+    fx.tester.wheel_mods(x, y, -1.0, Modifiers::CONTROL);
+    let _ = fx.tester.pump().await;
+    let fine = fx.params.threshold_db.value();
+    assert!((fine - (coarse + 0.15)).abs() < 0.05, "fine notch: {coarse} → {fine}");
+    Ok(())
+}

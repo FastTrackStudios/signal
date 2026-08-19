@@ -40,7 +40,7 @@ pub mod control_view;
 #[cfg(feature = "native")]
 pub mod faces;
 #[cfg(feature = "native")]
-pub mod param_adapter;
+pub use fts_plug_ui::param_adapter;
 #[cfg(feature = "native")]
 pub mod param_map;
 #[cfg(feature = "native")]

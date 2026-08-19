@@ -10,6 +10,7 @@ description = "Reverb GUI — the seven families, each with its own panel"
 default = []
 native = [
     "dep:nice-plug",
+    "dep:fts-plug-ui",
     "dep:nice-plug-dioxus",
     "dep:architect-ui",
     "dep:atomic_float",
@@ -20,6 +21,7 @@ native = [
 architect-ui = { workspace = true, optional = true }
 fts-audio-ui = { workspace = true }
 nice-plug = { workspace = true, optional = true }
+fts-plug-ui = { workspace = true, optional = true }
 nice-plug-dioxus = { workspace = true, optional = true }
 atomic_float = { workspace = true, optional = true }
 parking_lot = { workspace = true, optional = true }
