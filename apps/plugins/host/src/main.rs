@@ -153,34 +153,54 @@ struct HostHandler {
 impl WindowHandler for HostHandler {
     fn on_frame(&self) {
         // The DAW-timer equivalent: run the plugin's deferred main-thread
-        // work every frame (~60 Hz) so param/GUI tasks keep flowing.
-        if let Some(plugin) = self.plugin.borrow_mut().as_mut() {
+        // work every frame (~60 Hz) so param/GUI tasks keep flowing, and drain
+        // any resize the plugin asked for. FTS Comp changes its own editor size
+        // when you switch profiles — a 4:1 rack face and a tall control surface
+        // are different shapes — and a host that ignores that leaves the new
+        // face rendering inside the old frame.
+        //
+        // The borrow is released before the window is touched. On macOS
+        // `resize()` synchronously calls back into `resized()` on this same
+        // handler, which borrows the plugin again — holding the borrow across
+        // it panicked with "RefCell already borrowed" the moment any plugin
+        // requested a resize. X11 hid this: there the resize is a request and
+        // the ConfigureNotify arrives on a later turn of the loop, so the
+        // re-entrancy never happened.
+        let pending_resize = {
+            let mut guard = self.plugin.borrow_mut();
+            let Some(plugin) = guard.as_mut() else {
+                return;
+            };
             plugin.pump_main_thread();
             // GUI-only host: drain GUI-issued param gestures every frame —
             // the process() loop that normally applies them doesn't exist
             // here, and without this the editor's edits never take effect.
             plugin.flush_params();
+            plugin.take_requested_resize()
+        };
 
-            // …and drain resizes the plugin asked for. FTS Comp changes its
-            // own editor size when you switch profiles — a 4:1 rack face and
-            // a tall control surface are different shapes — and a host that
-            // does not do this leaves the new face rendering inside the old
-            // frame, which is exactly what it looked like.
-            //
-            // Both halves are needed: resize the frame, then tell the plugin
-            // the size it now has.
-            if let Some((w, h)) = plugin.take_requested_resize() {
-                if std::env::var_os("FTS_HOST_TRACE").is_some() {
-                    eprintln!("[host] plugin requested resize: {w}x{h}");
-                }
-                resize_to_plugin_size(&self.window, w, h);
+        if let Some((w, h)) = pending_resize {
+            if std::env::var_os("FTS_HOST_TRACE").is_some() {
+                eprintln!("[host] plugin requested resize: {w}x{h}");
+            }
+            // May re-enter `resized()` below, which is why nothing is borrowed
+            // here. That callback tells the plugin its new size; on platforms
+            // where it does not fire, the explicit call after it does.
+            resize_to_plugin_size(&self.window, w, h);
+            if let Some(plugin) = self.plugin.borrow_mut().as_mut() {
                 plugin.gui_set_size(w, h);
             }
         }
     }
 
     fn resized(&self, new_size: baseview::WindowSize) {
-        if let Some(plugin) = self.plugin.borrow_mut().as_mut() {
+        // `try_borrow_mut`, not `borrow_mut`: this can be re-entered from
+        // inside a window resize we ourselves initiated. Skipping is correct —
+        // whoever holds the borrow is mid-resize and applies the size itself.
+        let Ok(mut guard) = self.plugin.try_borrow_mut() else {
+            return;
+        };
+        if let Some(plugin) = guard.as_mut() {
             let (w, h) = plugin_size_of(&new_size);
             if w > 0 && h > 0 {
                 plugin.gui_set_size(w, h);
