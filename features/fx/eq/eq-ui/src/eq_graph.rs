@@ -102,9 +102,19 @@ pub enum OverlayChoice {
 pub fn EqGraph(
     /// Signal containing the EQ bands.
     bands: Signal<Vec<EqBand>>,
-    /// dB range (symmetric around 0).
-    #[props(default = 24.0)]
+    /// dB range (symmetric around 0). Defaults to the ONE canonical default
+    /// (`fx.eq.display.defaults-agree`).
+    #[props(default = super::eq_graph_model::DEFAULT_DB_RANGE)]
     db_range: f64,
+    /// Expand `db_range` automatically when a band is dragged outside it
+    /// (`fx.eq.display.auto-range`). Expansion is emitted through
+    /// `on_db_range_change`; contraction is never automatic.
+    #[props(default = true)]
+    auto_range: bool,
+    /// The user picked (or auto-range requests) a new display range, in dB.
+    /// The owner maps it back to its `db_range` param.
+    #[props(default)]
+    on_db_range_change: Option<EventHandler<f64>>,
     /// Minimum frequency in Hz.
     #[props(default = 20.0)]
     min_freq: f64,
@@ -533,6 +543,18 @@ pub fn EqGraph(
                             let start_bands = { drag_start_bands.read().clone() };
                             if let Some(&(_, orig_freq, orig_gain)) = start_bands.iter().find(|(i, _, _)| *i == band_idx) {
                                 let new_gain = mapper.y_to_db(y).clamp(-30.0, 30.0) as f32;
+                                // r[impl fx.eq.display.auto-range]
+                                if auto_range && (new_gain.abs() as f64) >= db_range * 0.95 {
+                                    if let (Some(cb), Some(next)) = (
+                                        &on_db_range_change,
+                                        super::eq_graph_model::DB_RANGE_STEPS
+                                            .iter()
+                                            .copied()
+                                            .find(|&r| r > db_range),
+                                    ) {
+                                        cb.call(next);
+                                    }
+                                }
                                 let gain_delta = new_gain - orig_gain;
                                 let scale = if orig_gain.abs() > 0.01 { new_gain / orig_gain } else { 1.0 + gain_delta / 10.0 };
                                 let new_freq = mapper.x_to_freq(x).clamp(10.0, 30000.0) as f32;
@@ -559,6 +581,25 @@ pub fn EqGraph(
                     } else {
                         let nf = mapper.x_to_freq(x).clamp(10.0, 30000.0) as f32;
                         let pointer_gain = mapper.y_to_db(y).clamp(-30.0, 30.0);
+                        // Auto-range: dragging the band into the display's
+                        // top/bottom edge expands the range to the next step
+                        // so the curve is never clipped mid-edit
+                        // (`fx.eq.display.auto-range`). Never contracts. The
+                        // trigger is the edge (≥95 % of the range), because
+                        // the mouse handlers are element-scoped — a move
+                        // beyond the box never arrives.
+                        // r[impl fx.eq.display.auto-range]
+                        if auto_range && pointer_gain.abs() >= db_range * 0.95 {
+                            if let (Some(cb), Some(next)) = (
+                                &on_db_range_change,
+                                super::eq_graph_model::DB_RANGE_STEPS
+                                    .iter()
+                                    .copied()
+                                    .find(|&r| r > db_range),
+                            ) {
+                                cb.call(next);
+                            }
+                        }
                         let updated = {
                             let mut bv = bands.write();
                             if band_idx < bv.len() {
@@ -832,6 +873,37 @@ pub fn EqGraph(
                 style: "position:absolute; top:0; left:0; right:0; bottom:0; \
                         width:100%; height:100%; \
                         display:block; pointer-events:none;",
+            }
+
+            // Display range selector — always reachable from the graph
+            // surface, at the top of the dB scale (`fx.eq.display.range`).
+            // Double-click returns to the default range.
+            // r[impl fx.eq.display.range]
+            select {
+                "data-testid": "eq-db-range",
+                style: "position:absolute; top:6px; left:6px; z-index:30; \
+                        background:rgba(15,15,18,0.92); color:#ddd; \
+                        border:1px solid rgba(80,80,85,0.6); border-radius:4px; \
+                        font-size:10px; padding:2px 5px; pointer-events:auto;",
+                onchange: move |evt| {
+                    if let Ok(db) = evt.value().parse::<f64>() {
+                        if let Some(cb) = &on_db_range_change {
+                            cb.call(db);
+                        }
+                    }
+                },
+                ondoubleclick: move |_| {
+                    if let Some(cb) = &on_db_range_change {
+                        cb.call(super::eq_graph_model::DEFAULT_DB_RANGE);
+                    }
+                },
+                for r in super::eq_graph_model::DB_RANGE_STEPS {
+                    option {
+                        value: "{r}",
+                        selected: (db_range - r).abs() < 0.5,
+                        "± {r:.0} dB"
+                    }
+                }
             }
 
             // EQ cheat-sheet overlay selector (top-right corner).
