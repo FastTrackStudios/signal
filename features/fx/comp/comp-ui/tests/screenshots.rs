@@ -76,7 +76,7 @@ async fn select_profile(fx: &mut Fixture, profile_id: &str) {
     let target = comp_profiles::profile_index(profile_id).unwrap() as i32;
     let rail_id = comp_profiles::CATEGORIES[category].id;
     for _ in 0..8 {
-        if fx.params.profile.value() == target {
+        if fx.params.stage1.profile.value() == target {
             return;
         }
         click_testid(fx, &format!("rail-item-{rail_id}")).await;
@@ -197,7 +197,7 @@ async fn shot_every_editor_form() {
         let index = comp_profiles::profile_index("la2a").unwrap();
         let (w, h) = comp_ui::faces::editor_size_for(index, *form);
         let params = std::sync::Arc::new(comp_ui::params::CompParams::default());
-        params.store_profile_id(index);
+        params.stage1.store_profile_id(index);
         params.store_editor_form(*form);
         let mut fx = support::mount_with(params, w, h);
         fx.settle().await;

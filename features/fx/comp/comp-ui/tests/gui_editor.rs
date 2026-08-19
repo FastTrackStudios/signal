@@ -55,7 +55,7 @@ async fn select_profile(fx: &mut Fixture, profile_id: &str) -> dioxus_test::Resu
     let rail_id = comp_profiles::CATEGORIES[category].id;
 
     for _ in 0..8 {
-        if fx.params.profile.value() == target {
+        if fx.params.stage1.profile.value() == target {
             return Ok(());
         }
         let item = fx.tester.query(by_testid(&format!("rail-item-{rail_id}"))).immediately()?;
@@ -69,8 +69,53 @@ async fn select_profile(fx: &mut Fixture, profile_id: &str) -> dioxus_test::Resu
     }
     panic!(
         "rail never reached {profile_id}: stuck at {}",
-        fx.params.profile.value()
+        fx.params.stage1.profile.value()
     );
+}
+
+/// Press-and-release at a horizontal fraction across an element by testid
+/// (0.5 = centre; a stage chip's left side is the focus surface, its right
+/// edge the × remove).
+async fn tap_testid_at(fx: &mut Fixture, testid: &str, fx_x: f64) {
+    let el = fx
+        .tester
+        .query(by_testid(testid))
+        .immediately()
+        .unwrap_or_else(|e| panic!("{testid} not in DOM: {e:?}"));
+    let (ox, oy) = el.document_origin();
+    let (w, h) = el.size();
+    let (x, y) = (ox + w as f64 * fx_x, oy + h as f64 / 2.0);
+    // Hover first: blitz resolves pointer targets through its hover state,
+    // which only a MOVE updates — a down at a spot the pointer never crossed
+    // lands on whatever was hovered before. Then down and up back-to-back
+    // (no pump between, so a tick re-render cannot swap the node under the
+    // press mid-click).
+    fx.tester.pointer_move(x, y, false);
+    let _ = fx.tester.pump().await;
+    fx.tester.pointer_down(x, y);
+    fx.tester.pointer_up(x, y);
+    fx.settle().await;
+}
+
+/// Press-and-release on the centre of an element by testid.
+async fn tap_testid(fx: &mut Fixture, testid: &str) {
+    tap_testid_at(fx, testid, 0.5).await;
+}
+
+/// Click the centre of a rail family with modifiers held.
+async fn click_rail_mods(fx: &mut Fixture, rail_id: &str, mods: dioxus_test::Modifiers) {
+    let item = fx
+        .tester
+        .query(by_testid(&format!("rail-item-{rail_id}")))
+        .immediately()
+        .unwrap_or_else(|e| panic!("rail item {rail_id} not in DOM: {e:?}"));
+    let (ox, oy) = item.document_origin();
+    let (w, h) = item.size();
+    let (x, y) = (ox + w as f64 / 2.0, oy + h as f64 / 2.0);
+    fx.tester.pointer_down_mods(x, y, mods);
+    let _ = fx.tester.pump().await;
+    fx.tester.pointer_up_mods(x, y, mods);
+    fx.settle().await;
 }
 
 /// Rendered size of the faceplate itself (the drawing, not the space around
@@ -147,8 +192,8 @@ async fn editor_mounts_headless_with_knobs_and_readouts() -> dioxus_test::Result
 #[tokio::test]
 async fn clicking_a_knob_without_dragging_changes_nothing() -> dioxus_test::Result<()> {
     let fx = mount();
-    let key = ptr_key(fx.params.ratio.as_ptr());
-    let before = fx.params.ratio.value();
+    let key = ptr_key(fx.params.stage1.ratio.as_ptr());
+    let before = fx.params.stage1.ratio.value();
 
     let (x, y) = fx.knob_center("knob-ratio");
     fx.tester.pointer_down(x, y);
@@ -156,7 +201,7 @@ async fn clicking_a_knob_without_dragging_changes_nothing() -> dioxus_test::Resu
     fx.tester.pointer_up(x, y);
     let _ = fx.tester.pump().await;
 
-    assert_eq!(fx.params.ratio.value(), before, "click alone moved the ratio");
+    assert_eq!(fx.params.stage1.ratio.value(), before, "click alone moved the ratio");
     let log = fx.log.lock().unwrap();
     let sets = log.iter().filter(|g| matches!(g, Gesture::Set(k, _) if *k == key)).count();
     assert_eq!(sets, 0, "click without drag recorded value sets: {log:?}");
@@ -170,7 +215,7 @@ async fn clicking_a_knob_without_dragging_changes_nothing() -> dioxus_test::Resu
 #[tokio::test]
 async fn dragging_threshold_knob_up_raises_threshold() -> dioxus_test::Result<()> {
     let fx = mount();
-    let tp = &fx.params.threshold_db;
+    let tp = &fx.params.stage1.threshold_db;
     let key = ptr_key(tp.as_ptr());
 
     let before = tp.value();
@@ -263,7 +308,7 @@ async fn graph_renders_transfer_curve() -> dioxus_test::Result<()> {
 #[tokio::test]
 async fn dragging_threshold_line_on_graph_lowers_threshold() -> dioxus_test::Result<()> {
     let fx = mount();
-    let tp = &fx.params.threshold_db;
+    let tp = &fx.params.stage1.threshold_db;
     let key = ptr_key(tp.as_ptr());
     let before = tp.value();
     assert!((before - (-20.0)).abs() < 1e-4, "default threshold: {before}");
@@ -327,9 +372,9 @@ async fn dragging_threshold_line_on_graph_lowers_threshold() -> dioxus_test::Res
 #[tokio::test]
 async fn dragging_above_knee_on_graph_raises_ratio() -> dioxus_test::Result<()> {
     let fx = mount();
-    let rp = &fx.params.ratio;
+    let rp = &fx.params.stage1.ratio;
     let key = ptr_key(rp.as_ptr());
-    let thr_key = ptr_key(fx.params.threshold_db.as_ptr());
+    let thr_key = ptr_key(fx.params.stage1.threshold_db.as_ptr());
     let before = rp.value();
     assert!((before - 4.0).abs() < 1e-4, "default ratio: {before}");
 
@@ -486,7 +531,7 @@ async fn dragging_an_advanced_knob_drives_its_param() -> dioxus_test::Result<()>
     fx.tester.pointer_up(ox + w as f64 / 2.0, oy + h as f64 / 2.0);
     fx.settle().await;
 
-    let dp = &fx.params.ceiling;
+    let dp = &fx.params.stage1.ceiling;
     let key = ptr_key(dp.as_ptr());
     let before = dp.value();
     assert!(before.abs() < 1e-6, "ceiling should default to 0: {before}");
@@ -533,7 +578,7 @@ async fn choosing_a_profile_swaps_in_its_faceplate() -> dioxus_test::Result<()> 
 
     select_profile(&mut fx, "la2a").await?;
     assert_eq!(
-        fx.params.profile.value(),
+        fx.params.stage1.profile.value(),
         comp_profiles::profile_index("la2a").unwrap() as i32,
         "profile param did not move to LA-2A"
     );
@@ -630,12 +675,12 @@ async fn dragging_peak_reduction_drives_every_param_behind_it() -> dioxus_test::
     fx.settle().await;
 
     let before = (
-        fx.params.threshold_db.value(),
-        fx.params.ratio.value(),
-        fx.params.knee_db.value(),
-        fx.params.range_db.value(),
-        fx.params.drive.value(),
-        fx.params.macro1.value(),
+        fx.params.stage1.threshold_db.value(),
+        fx.params.stage1.ratio.value(),
+        fx.params.stage1.knee_db.value(),
+        fx.params.stage1.range_db.value(),
+        fx.params.stage1.drive.value(),
+        fx.params.stage1.macro1.value(),
     );
 
     let (sx, sy) = fx.knob_center("hw-knob-peak-reduction");
@@ -652,12 +697,12 @@ async fn dragging_peak_reduction_drives_every_param_behind_it() -> dioxus_test::
     fx.settle().await;
 
     let after = (
-        fx.params.threshold_db.value(),
-        fx.params.ratio.value(),
-        fx.params.knee_db.value(),
-        fx.params.range_db.value(),
-        fx.params.drive.value(),
-        fx.params.macro1.value(),
+        fx.params.stage1.threshold_db.value(),
+        fx.params.stage1.ratio.value(),
+        fx.params.stage1.knee_db.value(),
+        fx.params.stage1.range_db.value(),
+        fx.params.stage1.drive.value(),
+        fx.params.stage1.macro1.value(),
     );
 
     assert!(after.5 < before.5, "the macro slot did not store the new position");
@@ -673,10 +718,10 @@ async fn dragging_peak_reduction_drives_every_param_behind_it() -> dioxus_test::
     // knob — automation records the engine, not the macro alone.
     let log = fx.log.lock().unwrap();
     for (name, key) in [
-        ("threshold", ptr_key(fx.params.threshold_db.as_ptr())),
-        ("ratio", ptr_key(fx.params.ratio.as_ptr())),
-        ("knee", ptr_key(fx.params.knee_db.as_ptr())),
-        ("macro1", ptr_key(fx.params.macro1.as_ptr())),
+        ("threshold", ptr_key(fx.params.stage1.threshold_db.as_ptr())),
+        ("ratio", ptr_key(fx.params.stage1.ratio.as_ptr())),
+        ("knee", ptr_key(fx.params.stage1.knee_db.as_ptr())),
+        ("macro1", ptr_key(fx.params.stage1.macro1.as_ptr())),
     ] {
         assert!(
             log.iter().any(|g| matches!(g, Gesture::Begin(k) if *k == key)),
@@ -708,9 +753,9 @@ async fn pressing_a_ratio_button_sets_that_ratio() -> dioxus_test::Result<()> {
     fx.settle().await;
 
     assert!(
-        (fx.params.ratio.value() - 20.0).abs() < 0.01,
+        (fx.params.stage1.ratio.value() - 20.0).abs() < 0.01,
         "ratio is {} after pressing the 20 button",
-        fx.params.ratio.value()
+        fx.params.stage1.ratio.value()
     );
     // …and the button stays in, read back off the ratio the engine now holds.
     let group = fx.tester.query(by_testid("hw-buttons-ratio")).immediately()?;
@@ -939,7 +984,7 @@ async fn drag_threshold(fx: &mut Fixture, dy: f64, mods: dioxus_test::Modifiers)
     }
     fx.tester.pointer_up_mods(sx, sy + dy, mods);
     let _ = fx.tester.pump().await;
-    fx.params.threshold_db.value()
+    fx.params.stage1.threshold_db.value()
 }
 
 /// Ctrl is the fine modifier: the same 30 px drag that moves the threshold
@@ -951,7 +996,7 @@ async fn ctrl_and_shift_drag_are_fine() -> dioxus_test::Result<()> {
     use dioxus_test::Modifiers;
     for mods in [Modifiers::CONTROL, Modifiers::SHIFT] {
         let mut fx = mount();
-        let before = fx.params.threshold_db.value();
+        let before = fx.params.stage1.threshold_db.value();
         let after = drag_threshold(&mut fx, -30.0, mods).await;
         let expected = before + (30.0 / 150.0) * 60.0 / 8.0;
         assert!(
@@ -969,26 +1014,26 @@ async fn ctrl_and_shift_drag_are_fine() -> dioxus_test::Result<()> {
 async fn modifier_mid_drag_does_not_jump() -> dioxus_test::Result<()> {
     use dioxus_test::Modifiers;
     let fx = mount();
-    let before = fx.params.threshold_db.value();
+    let before = fx.params.stage1.threshold_db.value();
     let (sx, sy) = fx.knob_center("knob-threshold");
     fx.tester.pointer_down(sx, sy);
     let _ = fx.tester.pump().await;
     // 30 px bare = +12 dB.
     fx.tester.pointer_move(sx, sy - 30.0, true);
     let _ = fx.tester.pump().await;
-    let coarse = fx.params.threshold_db.value();
+    let coarse = fx.params.stage1.threshold_db.value();
     assert!((coarse - (before + 12.0)).abs() < 0.5, "coarse leg: {coarse}");
     // Press Ctrl without moving: nothing changes.
     fx.tester.pointer_move_mods(sx, sy - 30.0, true, Modifiers::CONTROL);
     let _ = fx.tester.pump().await;
-    let held = fx.params.threshold_db.value();
+    let held = fx.params.stage1.threshold_db.value();
     assert!((held - coarse).abs() < 1e-3, "pressing Ctrl jumped the value: {coarse} → {held}");
     // Another 30 px with Ctrl = +1.5 dB on top.
     fx.tester.pointer_move_mods(sx, sy - 60.0, true, Modifiers::CONTROL);
     let _ = fx.tester.pump().await;
     fx.tester.pointer_up_mods(sx, sy - 60.0, Modifiers::CONTROL);
     let _ = fx.tester.pump().await;
-    let after = fx.params.threshold_db.value();
+    let after = fx.params.stage1.threshold_db.value();
     assert!((after - (coarse + 1.5)).abs() < 0.3, "fine leg: {coarse} → {after}");
     Ok(())
 }
@@ -998,7 +1043,7 @@ async fn modifier_mid_drag_does_not_jump() -> dioxus_test::Result<()> {
 #[tokio::test]
 async fn double_click_resets_knob_to_default() -> dioxus_test::Result<()> {
     let mut fx = mount();
-    let default = fx.params.threshold_db.default_plain_value();
+    let default = fx.params.stage1.threshold_db.default_plain_value();
     let moved = drag_threshold(&mut fx, -30.0, dioxus_test::Modifiers::empty()).await;
     assert!((moved - default).abs() > 5.0, "drag did not move off default");
 
@@ -1011,7 +1056,7 @@ async fn double_click_resets_knob_to_default() -> dioxus_test::Result<()> {
     fx.tester.pointer_up(x, y);
     let _ = fx.tester.pump().await;
 
-    let after = fx.params.threshold_db.value();
+    let after = fx.params.stage1.threshold_db.value();
     assert!(
         (after - default).abs() < 1e-3,
         "double-click did not reset: {moved} → {after} (default {default})"
@@ -1025,13 +1070,13 @@ async fn double_click_resets_knob_to_default() -> dioxus_test::Result<()> {
 async fn alt_click_resets_knob_to_default() -> dioxus_test::Result<()> {
     use dioxus_test::Modifiers;
     let mut fx = mount();
-    let default = fx.params.threshold_db.default_plain_value();
+    let default = fx.params.stage1.threshold_db.default_plain_value();
     drag_threshold(&mut fx, -30.0, Modifiers::empty()).await;
     let (x, y) = fx.knob_center("knob-threshold");
     fx.tester.pointer_down_mods(x, y, Modifiers::ALT);
     fx.tester.pointer_up_mods(x, y, Modifiers::ALT);
     let _ = fx.tester.pump().await;
-    let after = fx.params.threshold_db.value();
+    let after = fx.params.stage1.threshold_db.value();
     assert!((after - default).abs() < 1e-3, "alt-click did not reset: {after}");
     Ok(())
 }
@@ -1043,7 +1088,7 @@ async fn alt_click_resets_knob_to_default() -> dioxus_test::Result<()> {
 #[tokio::test]
 async fn clicking_readout_and_typing_sets_value() -> dioxus_test::Result<()> {
     let mut fx = mount();
-    let name = fx.params.threshold_db.name().to_string();
+    let name = fx.params.stage1.threshold_db.name().to_string();
     let readout_id = format!("knob-{name}-readout");
     let el = fx
         .tester
@@ -1069,7 +1114,7 @@ async fn clicking_readout_and_typing_sets_value() -> dioxus_test::Result<()> {
     fx.tester.type_text("-30\n");
     fx.settle().await;
 
-    let after = fx.params.threshold_db.value();
+    let after = fx.params.stage1.threshold_db.value();
     assert!((after - (-30.0)).abs() < 0.05, "typed -30, threshold is {after}");
     Ok(())
 }
@@ -1080,16 +1125,108 @@ async fn clicking_readout_and_typing_sets_value() -> dioxus_test::Result<()> {
 async fn wheel_nudges_and_ctrl_wheel_is_fine() -> dioxus_test::Result<()> {
     use dioxus_test::Modifiers;
     let fx = mount();
-    let before = fx.params.threshold_db.value();
+    let before = fx.params.stage1.threshold_db.value();
     let (x, y) = fx.knob_center("knob-threshold");
     fx.tester.wheel_mods(x, y, -1.0, Modifiers::empty());
     let _ = fx.tester.pump().await;
-    let coarse = fx.params.threshold_db.value();
+    let coarse = fx.params.stage1.threshold_db.value();
     // 2 % of 60 dB = 1.2 dB per notch, up.
     assert!((coarse - (before + 1.2)).abs() < 0.1, "coarse notch: {before} → {coarse}");
     fx.tester.wheel_mods(x, y, -1.0, Modifiers::CONTROL);
     let _ = fx.tester.pump().await;
-    let fine = fx.params.threshold_db.value();
+    let fine = fx.params.stage1.threshold_db.value();
     assert!((fine - (coarse + 0.15)).abs() < 0.05, "fine notch: {coarse} → {fine}");
+    Ok(())
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// The stack (docs/spec/fx/stack.md)
+// ─────────────────────────────────────────────────────────────────────────
+
+/// Shift-clicking a style on the rail STACKS it after the focused stage on
+/// the same lane instead of replacing it; the strip appears with one chip
+/// per stage and the new stage is focused.
+// r[verify fx.stack.add]
+// r[verify fx.stack.strip]
+// r[verify fx.stack.focus]
+#[tokio::test]
+async fn shift_clicking_a_style_stacks_it_serially() -> dioxus_test::Result<()> {
+    use dioxus_test::Modifiers;
+    let mut fx = mount();
+    assert!(!fx.params.stage2.in_use.value(), "stage 2 starts unused");
+    assert!(
+        fx.tester.query(by_testid("stack-strip")).immediately().is_err(),
+        "the strip must be hidden while the stack is one stage"
+    );
+
+    click_rail_mods(&mut fx, "opto", Modifiers::SHIFT).await;
+
+    // Stage 2 joined the stack, serial on stage 1's lane, wearing the Opto
+    // family's first unit; stage 1 is untouched.
+    assert!(fx.params.stage2.in_use.value(), "stage 2 did not join the stack");
+    assert_eq!(fx.params.stage2.lane.value(), fx.params.stage1.lane.value());
+    assert_eq!(
+        fx.params.stage2.resolved_profile_index(),
+        comp_profiles::profile_index("la2a").unwrap(),
+    );
+    assert_eq!(
+        fx.params.stage1.resolved_profile_index(),
+        0,
+        "shift-click must not replace the focused stage's profile"
+    );
+
+    // The strip is up, with both chips, and the new stage focused.
+    fx.tester.query(by_testid("stack-strip")).immediately()?;
+    fx.tester.query(by_testid("stage-chip-1")).immediately()?;
+    let chip2 = fx.tester.query(by_testid("stage-chip-2")).immediately()?;
+    assert_eq!(chip2.attribute("data-focused").as_deref(), Some("true"));
+    Ok(())
+}
+
+/// Ctrl+Shift-click adds the style on a NEW parallel lane.
+// r[verify fx.stack.add]
+#[tokio::test]
+async fn ctrl_shift_click_stacks_in_parallel() -> dioxus_test::Result<()> {
+    use dioxus_test::Modifiers;
+    let mut fx = mount();
+    click_rail_mods(&mut fx, "fet", Modifiers::SHIFT | Modifiers::CONTROL).await;
+
+    assert!(fx.params.stage2.in_use.value());
+    assert_eq!(fx.params.stage1.lane.value(), 0);
+    assert_eq!(fx.params.stage2.lane.value(), 1, "parallel = a fresh lane");
+    // Parallel lanes get the lane mute/solo dots on the strip.
+    fx.tester.query(by_testid("lane-mute-1")).immediately()?;
+    fx.tester.query(by_testid("lane-solo-1")).immediately()?;
+    Ok(())
+}
+
+/// Clicking a chip focuses that stage: the face and rail now edit it. The ×
+/// removes it and focus falls back to the first remaining stage.
+// r[verify fx.stack.focus]
+// r[verify fx.stack.strip]
+#[tokio::test]
+async fn chips_focus_and_remove_stages() -> dioxus_test::Result<()> {
+    use dioxus_test::Modifiers;
+    let mut fx = mount();
+    click_rail_mods(&mut fx, "opto", Modifiers::SHIFT).await;
+
+    // Focus back to stage 1 by clicking its chip (badge side — the right
+    // edge is the ×).
+    tap_testid_at(&mut fx, "stage-chip-1", 0.3).await;
+    assert_eq!(
+        fx.params.resolved_focused_stage(),
+        0,
+        "chip click did not run (persisted focus unchanged)"
+    );
+    let chip1 = fx.tester.query(by_testid("stage-chip-1")).immediately()?;
+    assert_eq!(chip1.attribute("data-focused").as_deref(), Some("true"));
+
+    // Remove stage 2 via its ×: it leaves the stack and the strip folds away.
+    tap_testid(&mut fx, "stage-remove-2").await;
+    assert!(!fx.params.stage2.in_use.value(), "× did not remove stage 2");
+    assert!(
+        fx.tester.query(by_testid("stack-strip")).immediately().is_err(),
+        "the strip must fold away at one stage"
+    );
     Ok(())
 }

@@ -159,6 +159,16 @@ fn AppShell() -> Element {
 
     let mut advanced = use_signal(|| false);
 
+    // Which stack stage the editor is on (`fx.stack.focus`) — provided to
+    // every component below (faces, graph, strip), restored from the session.
+    let focus = use_context_provider(|| {
+        Signal::new(crate::focus::FocusedStage(ui.params.resolved_focused_stage()))
+    });
+    let focused_stage = focus.read().0;
+    // The audio thread meters the focused stage.
+    ui.focused_stage
+        .store(focused_stage, std::sync::atomic::Ordering::Relaxed);
+
     // The editor's form factor: Responsive, a rack size, a 500-series module.
     // Persisted by id like the profile, and the reason the size reconciliation
     // below has two inputs rather than one.
@@ -173,9 +183,11 @@ fn AppShell() -> Element {
     let last_profile: std::rc::Rc<std::cell::Cell<Option<(usize, fts_audio_ui::EditorForm)>>> =
         use_hook(|| std::rc::Rc::new(std::cell::Cell::new(None)));
 
-    // The face comes from the *resolved* profile: the persisted id when the
-    // session has one, the index otherwise. See `CompParams::profile_id`.
-    let profile_idx = params.resolved_profile_index();
+    // The face comes from the FOCUSED stage's *resolved* profile: the
+    // persisted id when the session has one, the index otherwise. See
+    // `CompStageParams::profile_id`.
+    let stage = params.stage(focused_stage);
+    let profile_idx = stage.resolved_profile_index();
     let profile_id = profile_id_for_index(profile_idx);
     let skin = profile_skin(profile_id);
     let is_control_face = profile_id == "control";
@@ -185,8 +197,8 @@ fn AppShell() -> Element {
         // A session restored from its id can land with the index parameter
         // still on whatever number that id used to be; put it back in line so
         // the host reads the same face the editor shows.
-        if params.profile.value().max(0) as usize != profile_idx {
-            let ptr = params.profile.as_ptr();
+        if stage.profile.value().max(0) as usize != profile_idx {
+            let ptr = stage.profile.as_ptr();
             let count = PROFILE_LABELS.len();
             let normalized = if count > 1 {
                 profile_idx as f32 / (count - 1) as f32
@@ -222,12 +234,13 @@ fn AppShell() -> Element {
 
     let is_advanced = *advanced.read();
 
-    // The rail writes the profile param through the same host-gesture path as
-    // any other control, so switching faces is automatable and undoable like
-    // everything else.
-    let profile_handle = param_handle(params.profile.as_ptr(), ctx.clone());
+    // The rail writes the focused stage's profile param through the same
+    // host-gesture path as any other control, so switching faces is
+    // automatable and undoable like everything else.
+    let profile_handle = param_handle(stage.profile.as_ptr(), ctx.clone());
     let params_for_id = ui.params.clone();
     let params_for_form = ui.params.clone();
+    let ctx_for_rail = ctx.clone();
     let profile_count = PROFILE_LABELS.len();
     // One rail entry per compressor family, badged with the active unit.
     let items = crate::faces::rail_items(profile_idx);
@@ -250,10 +263,38 @@ fn AppShell() -> Element {
                     items,
                     selected: active_category,
                     accent: skin.accent.to_string(),
-                    on_select: move |category: usize| {
+                    on_select_mods: move |(category, mods): (usize, fts_audio_ui::shell::RailModifiers)| {
                         // Clicking the active family cycles the units inside
                         // it; clicking another lands on its first unit.
                         let index = crate::faces::rail_click_target(profile_idx, category);
+                        let shift = mods.shift();
+                        let ctrl = mods.ctrl() || mods.meta();
+                        if shift {
+                            // Shift-click: STACK the style instead of
+                            // replacing — serial on the focused stage's lane;
+                            // Ctrl+Shift: a new parallel lane (`fx.stack.add`).
+                            let lane = if ctrl {
+                                params_for_id.first_free_lane()
+                            } else {
+                                Some(
+                                    params_for_id
+                                        .stage(focus.peek().0)
+                                        .lane
+                                        .value()
+                                        .max(0) as usize,
+                                )
+                            };
+                            if let Some(lane) = lane {
+                                crate::stack_strip::add_stage(
+                                    &params_for_id,
+                                    &ctx_for_rail,
+                                    focus,
+                                    index,
+                                    lane,
+                                );
+                            }
+                            return;
+                        }
                         let normalized = if profile_count > 1 {
                             index as f32 / (profile_count - 1) as f32
                         } else {
@@ -263,7 +304,7 @@ fn AppShell() -> Element {
                         profile_handle.set_normalized(normalized);
                         profile_handle.end_edit();
                         // What the session restores from.
-                        params_for_id.store_profile_id(index);
+                        params_for_id.stage(focus.peek().0).store_profile_id(index);
                     },
                     rail_footer: rsx! {
                         // Basic/Advanced disclosure. Local UI state — never a
@@ -301,12 +342,23 @@ fn AppShell() -> Element {
                         }
                     },
 
-                    Face {
-                        profile_index: profile_idx,
-                        advanced: is_advanced,
-                        frame: frame_counter,
-                        form,
+                    for key in [format!("stage-{focused_stage}")] {
+                        Face {
+                            key: "{key}",
+                            profile_index: profile_idx,
+                            advanced: is_advanced,
+                            frame: frame_counter,
+                            form,
+                        }
                     }
+
+                    // The strip floats over whichever face is up, so stacking
+                    // is visible and editable from every profile
+                    // (`fx.stack.strip`). Mounted AFTER the face: blitz
+                    // hit-tests in document order, so an earlier sibling
+                    // would lose its clicks to the face's full-surface
+                    // overlay regardless of z-index.
+                    crate::stack_strip::StackStrip { frame: frame_counter }
                 }
             }
         }

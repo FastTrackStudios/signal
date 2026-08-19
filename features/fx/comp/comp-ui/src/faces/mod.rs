@@ -199,6 +199,8 @@ pub struct FaceContext {
     pub ui: Arc<CompUiState>,
     pub ctx: ParamContext,
     pub profile: &'static (dyn Profile + Sync),
+    /// The stack stage this face is editing (`fx.stack.focus`).
+    pub stage: usize,
 }
 
 impl FaceContext {
@@ -220,6 +222,7 @@ impl FaceContext {
             self.profile,
             control_id,
             self.ui.params.clone(),
+            self.stage,
             self.ctx.clone(),
         )
         .unwrap_or_else(|| {
@@ -239,6 +242,7 @@ pub fn use_face_context(profile: &'static (dyn Profile + Sync)) -> FaceContext {
         ui,
         ctx: use_param_context(),
         profile,
+        stage: crate::focus::use_focused_stage(),
     }
 }
 

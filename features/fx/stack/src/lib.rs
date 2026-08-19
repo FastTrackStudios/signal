@@ -20,7 +20,10 @@ extern crate alloc;
 use alloc::vec;
 use alloc::vec::Vec;
 
+pub mod pool;
 pub mod verify;
+
+pub use pool::{LaneCtl, StagePool};
 
 // ── Stage ─────────────────────────────────────────────────────────────────
 
