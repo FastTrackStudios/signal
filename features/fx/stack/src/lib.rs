@@ -20,6 +20,8 @@ extern crate alloc;
 use alloc::vec;
 use alloc::vec::Vec;
 
+pub mod verify;
+
 // ── Stage ─────────────────────────────────────────────────────────────────
 
 /// One style of a kind, processing stereo f64 in place.

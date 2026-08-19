@@ -91,9 +91,14 @@ const TILT_HZ: f32 = 700.0;
 pub const TILT_MAX_DB: f32 = 12.0;
 /// Widest crossover deadband, in shaper units.
 const CROSSOVER_MAX: f32 = 0.15;
-/// The input level [`Makeup::Matched`] matches at: −6 dBFS, which is where
-/// most program actually sits.
-const MAKEUP_REF: f32 = 0.5;
+/// The signal level [`Makeup::Matched`] matches at: −18 dBFS RMS, the
+/// gain-compensation reference (`fx.gain-comp.reference`,
+/// docs/spec/fx/gain-comp.md). As an amplitude σ of a Gaussian-ish program
+/// distribution — matching at one fixed amplitude instead (the old ±0.5
+/// point match) mis-predicted the gain by up to 6 dB, because program at
+/// the reference level spends most of its time in the small-signal region
+/// where the gain is the raw drive slope.
+const MAKEUP_REF_SIGMA: f32 = 0.126; // 10^(−18/20)
 pub const MAX_CHANNELS: usize = 2;
 
 /// How a driven stage gives the gain back.
@@ -185,6 +190,10 @@ pub struct ClassAPreamp {
     tilt_b0: f32,
     tilt_b1: f32,
     tilt_a1: f32,
+    /// Pink-weighted RMS gain of the emphasis shelf — the level multiplier
+    /// the shaper sees relative to the input. Cached by
+    /// [`Self::set_tilt_db`] for [`Self::refresh_makeup`].
+    tilt_sigma_gain: f32,
     tilt_pre: [(f32, f32); MAX_CHANNELS],
     tilt_post: [(f32, f32); MAX_CHANNELS],
     sample_rate: f32,
@@ -214,6 +223,7 @@ impl ClassAPreamp {
             sag_coeff: 0.0,
             sag_ms: 30.0,
             tilt_db: 0.0,
+            tilt_sigma_gain: 1.0,
             tilt_b0: 1.0,
             tilt_b1: 0.0,
             tilt_a1: 0.0,
@@ -265,6 +275,18 @@ impl ClassAPreamp {
         self.tilt_b0 = hi + (lo - hi) * a;
         self.tilt_b1 = -hi * (1.0 - a);
         self.tilt_a1 = -(1.0 - a);
+
+        // What the emphasis does to the LEVEL reaching the shaper, for pink
+        // program (equal power per octave, 20 Hz–20 kHz): the octaves below
+        // the hinge see `lo`, the octaves above see `hi`. Cached for
+        // [`Self::refresh_makeup`], which must calibrate at the level the
+        // shaper actually sees rather than the input level — the 700 Hz
+        // hinge splits the audible band log2(700/20) : log2(20k/700).
+        const OCT_BELOW: f32 = 5.129;
+        const OCT_ABOVE: f32 = 4.836;
+        self.tilt_sigma_gain = crate::sqrt_approx(
+            (OCT_BELOW * lo * lo + OCT_ABOVE * hi * hi) / (OCT_BELOW + OCT_ABOVE),
+        );
     }
 
     pub fn tilt_db(&self) -> f32 {
@@ -334,22 +356,53 @@ impl ClassAPreamp {
         self.shape_side(v) - self.shape_side(self.q_point)
     }
 
-    /// Measure the stage's own gain at `MAKEUP_REF` and set
-    /// [`Makeup::Matched`] to its inverse.
+    /// Measure the stage's own RMS gain for program at the reference level
+    /// and set [`Makeup::Matched`] to its inverse
+    /// (`fx.gain-comp.deterministic` — derived from the parameters, never
+    /// from the signal).
     ///
     /// Call after changing anything that shapes: drive, headroom, the
-    /// shapers, skew, knee, crossover, bias. It samples the static transfer,
-    /// so it is a handful of arithmetic and belongs on the setter path, never
-    /// in `process`.
+    /// shapers, skew, knee, crossover, bias. It samples the static transfer
+    /// over a Gaussian amplitude distribution with σ = [`MAKEUP_REF_SIGMA`]
+    /// (5-point Gauss–Hermite, both polarities — so a skewed transfer whose
+    /// crushed half would lie about the gain is measured as the ear hears
+    /// it, and DC the bias adds is excluded). A handful of arithmetic:
+    /// belongs on the setter path, never in `process`.
+    // r[impl fx.gain-comp.saturate]
     pub fn refresh_makeup(&mut self) {
-        // Both halves, averaged. A one-sided measurement is wrong exactly
-        // where this stage is most interesting: on a strongly skewed
-        // transfer one half is crushed to nothing while the other still
-        // has all its room, and matching against the crushed half alone
-        // sets a makeup that the other half then shouts through.
-        let up = self.transfer(MAKEUP_REF).abs();
-        let down = self.transfer(-MAKEUP_REF).abs();
-        let gain = (up + down) / (2.0 * MAKEUP_REF);
+        // Trapezoid over ±4σ with Gaussian weights — dense enough to see
+        // the crossover deadband's kink, which a few quadrature points step
+        // right over. 65 static-transfer evaluations: still trivially cheap
+        // on the setter path.
+        const N: usize = 65;
+        const SPAN: f32 = 4.0;
+        // The shaper sees the *emphasized* signal: calibrate at that level
+        // (`tilt_sigma_gain`, cached by [`Self::set_tilt_db`]). The
+        // de-emphasis restores the linear content symmetrically, so the RMS
+        // gain measured here is the stage's net gain to a first order.
+        let sigma = MAKEUP_REF_SIGMA * self.tilt_sigma_gain.max(1.0e-3);
+        let mut w_sum = 0.0f32;
+        let mut mean = 0.0f32;
+        let mut mean_sq = 0.0f32;
+        let mut x_var = 0.0f32;
+        for i in 0..N {
+            let z = -SPAN + 2.0 * SPAN * (i as f32) / ((N - 1) as f32);
+            // exp(−z²/2) via exp2: e^a = 2^(a·log2e).
+            let w = crate::exp2_approx(-z * z * 0.5 * core::f32::consts::LOG2_E);
+            let x = sigma * z;
+            let y = self.transfer(x);
+            w_sum += w;
+            mean += w * y;
+            mean_sq += w * y * y;
+            x_var += w * x * x;
+        }
+        mean /= w_sum;
+        mean_sq /= w_sum;
+        x_var /= w_sum;
+        // AC power only: the q-point bias shifts the whole transfer, and the
+        // DC it adds is not loudness.
+        let var = (mean_sq - mean * mean).max(1.0e-12);
+        let gain = crate::sqrt_approx(var / x_var.max(1.0e-12));
         self.makeup = Makeup::Matched((1.0 / gain.max(1.0e-3)).clamp(0.02, 8.0));
     }
 
