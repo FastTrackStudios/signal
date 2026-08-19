@@ -194,6 +194,10 @@ pub struct ClassAPreamp {
     /// the shaper sees relative to the input. Cached by
     /// [`Self::set_tilt_db`] for [`Self::refresh_makeup`].
     tilt_sigma_gain: f32,
+    /// Same, for an EXTERNAL emphasis stage ahead of this preamp (the
+    /// 6-band emphasis EQ, `fx.sat.emphasis.makeup`) — set from
+    /// [`crate::emphasis::EmphasisEq::sigma_gain`] before makeup refresh.
+    emphasis_sigma_gain: f32,
     tilt_pre: [(f32, f32); MAX_CHANNELS],
     tilt_post: [(f32, f32); MAX_CHANNELS],
     sample_rate: f32,
@@ -224,6 +228,7 @@ impl ClassAPreamp {
             sag_ms: 30.0,
             tilt_db: 0.0,
             tilt_sigma_gain: 1.0,
+            emphasis_sigma_gain: 1.0,
             tilt_b0: 1.0,
             tilt_b1: 0.0,
             tilt_a1: 0.0,
@@ -291,6 +296,14 @@ impl ClassAPreamp {
 
     pub fn tilt_db(&self) -> f32 {
         self.tilt_db
+    }
+
+    /// Tell the makeup calibration what an EXTERNAL emphasis stage ahead of
+    /// this preamp does to the level the shaper sees
+    /// (`fx.sat.emphasis.makeup`). Call before [`Self::refresh_makeup`]
+    /// (profiles' `apply` runs that last).
+    pub fn set_emphasis_sigma_gain(&mut self, gain: f32) {
+        self.emphasis_sigma_gain = gain.clamp(0.05, 20.0);
     }
 
     /// The class-B crossover deadband: neither half conducts until the
@@ -380,7 +393,9 @@ impl ClassAPreamp {
         // (`tilt_sigma_gain`, cached by [`Self::set_tilt_db`]). The
         // de-emphasis restores the linear content symmetrically, so the RMS
         // gain measured here is the stage's net gain to a first order.
-        let sigma = MAKEUP_REF_SIGMA * self.tilt_sigma_gain.max(1.0e-3);
+        let sigma = MAKEUP_REF_SIGMA
+            * self.tilt_sigma_gain.max(1.0e-3)
+            * self.emphasis_sigma_gain.max(1.0e-3);
         let mut w_sum = 0.0f32;
         let mut mean = 0.0f32;
         let mut mean_sq = 0.0f32;

@@ -15,6 +15,10 @@ native = [
     "dep:architect-ui",
     "dep:atomic_float",
     "dep:parking_lot",
+    # The shared EQ surface — the emphasis EQ view embeds eq-ui's EqGraph
+    # (fx.embed-eq.one-surface).
+    "dep:eq-ui",
+    "eq-ui/native",
 ]
 
 [dependencies]
@@ -27,6 +31,7 @@ atomic_float = { workspace = true, optional = true }
 parking_lot = { workspace = true, optional = true }
 saturate-profiles = { workspace = true }
 saturate-dsp = { workspace = true }
+eq-ui = { workspace = true, optional = true }
 crossbeam-channel = { workspace = true }
 dioxus = { workspace = true }
 

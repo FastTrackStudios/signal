@@ -171,6 +171,12 @@ pub fn App() -> Element {
     let profile_count = saturate_profiles::PROFILES.len();
     let accent = design.accent.to_string();
     let accent_for_form = accent.clone();
+    let accent_for_eq = accent.clone();
+
+    // The emphasis EQ view (`fx.sat.emphasis.display`) — a rail toggle, like
+    // the comp's Advanced page. Local UI state, never a plugin param.
+    let mut emphasis_view = use_signal(|| false);
+    let emphasis_on = *emphasis_view.read();
 
     rsx! {
         ThemeProvider { state: theme,
@@ -198,6 +204,18 @@ pub fn App() -> Element {
                 },
                 rail_footer: rsx! {
                     RailButton {
+                        testid: "emphasis-toggle".to_string(),
+                        label: "EQ".to_string(),
+                        title: if emphasis_on {
+                            "Emphasis EQ (on) — shapes what distorts, mirrored out".to_string()
+                        } else {
+                            "Emphasis EQ — shapes what distorts, mirrored out".to_string()
+                        },
+                        active: emphasis_on,
+                        accent: accent_for_eq.clone(),
+                        on_click: move |_| emphasis_view.toggle(),
+                    }
+                    RailButton {
                         testid: "form-cycle".to_string(),
                         label: form.badge().to_string(),
                         title: format!("Editor size — {} (click to cycle)", form.label()),
@@ -211,14 +229,25 @@ pub fn App() -> Element {
                     }
                 },
 
-                // Keyed list of one: swapping a face swaps a whole subtree,
-                // and blitz's mutator wants a stable, keyed node to land on.
-                for id in [profile.id] {
-                    SatFace {
-                        key: "{id}",
-                        profile_id: id.to_string(),
-                        handles: handles.clone(),
-                        frame,
+                // Keyed list of one: swapping a face (or the emphasis EQ
+                // view) swaps a whole subtree, and blitz's mutator wants a
+                // stable, keyed node to land on.
+                if emphasis_on {
+                    for key in ["emphasis"] {
+                        crate::emphasis_view::EmphasisView {
+                            key: "{key}",
+                            frame,
+                            handles: handles.clone(),
+                        }
+                    }
+                } else {
+                    for id in [profile.id] {
+                        SatFace {
+                            key: "{id}",
+                            profile_id: id.to_string(),
+                            handles: handles.clone(),
+                            frame,
+                        }
                     }
                 }
             }

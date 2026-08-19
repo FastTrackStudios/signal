@@ -89,7 +89,92 @@ pub struct SatParams {
     /// The editor's form factor, persisted by id.
     #[persist = "editor_form"]
     pub editor_form: parking_lot::RwLock<String>,
+
+    // ── Appended (never reorder anything above) ────────────────────────
+    /// The emphasis / de-emphasis EQ (`fx.sat.emphasis`,
+    /// docs/spec/fx/embedded-eq.md): six bands applied before the stage and
+    /// exactly inverted after it, so the curve chooses what distorts. Ids
+    /// come out `eshape_1`…`eq_6`.
+    #[nested(array, group = "Emphasis")]
+    pub emph: [EmphBandParams; saturate_dsp::emphasis::BANDS],
 }
+
+/// One emphasis band (`fx.embed-eq.band-params`). Bell / Low Shelf / High
+/// Shelf only — cut shapes have no inverse (`fx.sat.emphasis.mirror`). A
+/// band at 0 dB is idle and costs nothing.
+#[derive(Params)]
+pub struct EmphBandParams {
+    #[id = "eshape"]
+    pub shape: IntParam,
+    #[id = "efreq"]
+    pub freq_hz: FloatParam,
+    #[id = "egain"]
+    pub gain_db: FloatParam,
+    #[id = "eq"]
+    pub q: FloatParam,
+}
+
+/// Emphasis shape labels, in `eshape` value order
+/// (`saturate_dsp::emphasis::EmphShape`).
+pub const EMPH_SHAPE_LABELS: &[&str] = &["Bell", "Low Shelf", "High Shelf"];
+
+impl EmphBandParams {
+    fn new(default_freq: f32) -> Self {
+        Self {
+            shape: IntParam::new("Emph Shape", 0, IntRange::Linear { min: 0, max: 2 })
+                .with_value_to_string(Arc::new(|v| {
+                    EMPH_SHAPE_LABELS
+                        .get(v.max(0) as usize)
+                        .map(|s| s.to_string())
+                        .unwrap_or_else(|| v.to_string())
+                })),
+            freq_hz: FloatParam::new(
+                "Emph Freq",
+                default_freq,
+                FloatRange::Skewed {
+                    min: 20.0,
+                    max: 20_000.0,
+                    factor: FloatRange::skew_factor(-2.0),
+                },
+            )
+            .with_unit(" Hz")
+            .with_value_to_string(formatters::v2s_f32_hz_then_khz(1))
+            .with_string_to_value(formatters::s2v_f32_hz_then_khz()),
+            gain_db: FloatParam::new(
+                "Emph Gain",
+                0.0,
+                FloatRange::Linear { min: -12.0, max: 12.0 },
+            )
+            .with_unit(" dB")
+            .with_value_to_string(formatters::v2s_f32_rounded(1)),
+            q: FloatParam::new(
+                "Emph Q",
+                0.707,
+                FloatRange::Skewed {
+                    min: 0.1,
+                    max: 18.0,
+                    factor: FloatRange::skew_factor(-1.5),
+                },
+            )
+            .with_value_to_string(formatters::v2s_f32_rounded(2)),
+        }
+    }
+
+    /// This band as the DSP sees it.
+    pub fn to_band(&self) -> saturate_dsp::emphasis::EmphBand {
+        saturate_dsp::emphasis::EmphBand {
+            shape: saturate_dsp::emphasis::EmphShape::from_index(self.shape.value().max(0) as u32),
+            freq_hz: self.freq_hz.value(),
+            gain_db: self.gain_db.value(),
+            q: self.q.value(),
+        }
+    }
+}
+
+/// The default emphasis band frequencies — a useful spread, all at 0 dB
+/// (idle) until moved.
+pub const EMPH_DEFAULT_FREQS: [f32; saturate_dsp::emphasis::BANDS] =
+    [80.0, 250.0, 700.0, 1_800.0, 4_500.0, 10_000.0];
 
 impl Default for SatParams {
     fn default() -> Self {
@@ -137,6 +222,7 @@ impl Default for SatParams {
 
             profile_id: parking_lot::RwLock::new(String::new()),
             editor_form: parking_lot::RwLock::new(String::new()),
+            emph: std::array::from_fn(|i| EmphBandParams::new(EMPH_DEFAULT_FREQS[i])),
         }
     }
 }
