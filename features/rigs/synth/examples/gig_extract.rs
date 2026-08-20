@@ -54,6 +54,48 @@ fn part_names(xml: &str) -> Vec<(String, String)> {
     out
 }
 
+/// Split a `SynthMaster` Multi into its parts, each wrapped back up as a
+/// standalone `AmberPart` document — the `.prt_omn` form.
+///
+/// A part is one `<SynthSubEngine>`; its `<SynthEngine>` subtree is exactly
+/// what a `.prt_omn` holds, so re-wrapping is all it takes to turn a part of a
+/// Multi back into a patch file the ordinary reader accepts.
+fn split_parts(multi_xml: &str) -> Vec<Option<(String, String)>> {
+    let mut out = Vec::new();
+    let mut rest = multi_xml;
+    while let Some(at) = rest.find("<SynthSubEngine") {
+        rest = &rest[at..];
+        let end = match rest.find("</SynthSubEngine>") {
+            Some(e) => e + "</SynthSubEngine>".len(),
+            None => break,
+        };
+        let part = &rest[..end];
+        rest = &rest[end..];
+
+        let engine = part.find("<SynthEngine").and_then(|s| {
+            part.rfind("</SynthEngine>")
+                .map(|e| &part[s..e + "</SynthEngine>".len()])
+        });
+        let name = part
+            .find("<ENTRYDESCR ")
+            .and_then(|s| part[s..].find('>').map(|e| &part[s..s + e]))
+            .and_then(|tag| {
+                tag.find("name=\"")
+                    .map(|i| i + 6)
+                    .and_then(|i| tag[i..].find('"').map(|e| tag[i..i + e].trim().to_string()))
+            })
+            .unwrap_or_default();
+        // An empty slot is not a patch.
+        out.push(match (engine, name.as_str()) {
+            (Some(e), n) if !n.is_empty() && n != "Empty" => {
+                Some((name.clone(), format!("<AmberPart >\n{e}\n</AmberPart>\n")))
+            }
+            _ => None,
+        });
+    }
+    out
+}
+
 fn slug(s: &str) -> String {
     s.chars()
         .map(|c| if c.is_alphanumeric() { c } else { '_' })
@@ -240,6 +282,16 @@ fn main() {
                 if let Some(xml) = p.omni_multi_xml() {
                     std::fs::write(dir.join(format!("{stem}.multi.xml")), &xml)
                         .expect("write multi xml");
+                    // Each part back out as a standalone `.prt_omn`. Some of
+                    // these exist NOWHERE else: the rig's "Worship PHAT Bass"
+                    // was never saved to the Spectrasonics user library, so
+                    // the gig's plugin state is its only copy. Writing them as
+                    // files makes them ours instead of hostage to one .gig.
+                    for (n, part) in split_parts(&xml).into_iter().enumerate() {
+                        let Some((name, body)) = part else { continue };
+                        let file = format!("{stem}.part{}.{}.prt_omn", n + 1, slug(&name));
+                        std::fs::write(dir.join(file), body).expect("write patch");
+                    }
                 }
                 println!("{stem}  ({} bytes)", p.state.len());
             }

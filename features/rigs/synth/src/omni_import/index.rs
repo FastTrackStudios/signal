@@ -21,6 +21,13 @@ pub(crate) const KEYSCAPE_PACKS_ROOT: &str =
 /// `FTS_NI_PIANO_PACKS`.
 pub(crate) const NI_PIANO_PACKS_ROOT: &str = "/run/media/AudioHaven/Signal/Libraries/Full/Keys";
 
+/// Root of the authored `.prt_omn` patches. A synthesis-mode patch realizes a
+/// source block as an oscillator the same way a pack realizes one as a
+/// sampler, so patches are soundsources too. Override with
+/// `FTS_OMNISPHERE_PATCHES`.
+pub(crate) const PATCH_ROOT: &str =
+    "/run/media/AudioHaven/Sampled/Synth/Spectrasonics-Patches/Omnisphere/Settings Library/Patches";
+
 // ── Soundsource index ────────────────────────────────────────────────────────
 
 /// Name → spec-path index over the local soundsource extraction. A built
@@ -64,6 +71,10 @@ impl SoundsourceIndex {
         // profile can name.
         let ni = std::env::var("FTS_NI_PIANO_PACKS").unwrap_or_else(|_| NI_PIANO_PACKS_ROOT.into());
         idx.scan_dir(Path::new(&ni), 0);
+        // Finally the authored patches. Last so a built pack of the same name
+        // wins: a pack is cheaper to play than re-realizing a patch tree.
+        let patches = std::env::var("FTS_OMNISPHERE_PATCHES").unwrap_or_else(|_| PATCH_ROOT.into());
+        idx.scan_dir(Path::new(&patches), 0);
         idx
     }
 
@@ -93,6 +104,26 @@ impl SoundsourceIndex {
                 // A built pack (preferred): <Name>.signalpack.
                 if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
                     self.by_name.insert(stem.to_lowercase(), path.clone());
+                }
+            } else if path
+                .extension()
+                .is_some_and(|e| e.eq_ignore_ascii_case("prt_omn"))
+            {
+                // An Omnisphere patch. A soundsource is *what realizes a
+                // source block*, and a synthesis-mode patch realizes one as an
+                // oscillator exactly as a pack realizes one as a sampler — so
+                // it belongs in the same index. The rig's "Worship PHAT Bass"
+                // is only reachable this way: it names no soundsource and was
+                // never saved to the Spectrasonics library, so the copy
+                // exported from the gig is the only one there is.
+                //
+                // Keyed by the patch's own name, taken from the filename after
+                // any `<instance>.partN.` prefix that `gig_extract dump` adds.
+                if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
+                    let name = stem.rsplit_once('.').map_or(stem, |(_, n)| n);
+                    self.by_name
+                        .entry(name.replace('_', " ").to_lowercase())
+                        .or_insert_with(|| path.clone());
                 }
             } else if path.extension().is_some_and(|e| e == "styx")
                 && path.file_name().is_some_and(|f| f != "library.styx")

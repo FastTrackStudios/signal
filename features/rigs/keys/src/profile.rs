@@ -511,13 +511,18 @@ pub fn worship_profile() -> KeysProfile {
                 // pad swell — so it wants its own fader, its own FX tail and
                 // its own place in a scene, which is exactly what an engine is.
                 //
-                // EMPTY on purpose. The live rig's bass is "Worship PHAT Bass",
-                // a User patch that runs Omnisphere in **synthesis mode** — it
-                // names no soundsource at all, so there is no pack to point at
-                // and a sampler lane cannot reproduce it. It needs the synth
-                // voice path, not this one. Leaving it empty is honest; naming
-                // a lookalike pack here would quietly ship the wrong bass.
-                layers: vec![LayerDef::new("Bass", "")],
+                // "Worship PHAT Bass", part level 0.35. A **synthesis-mode**
+                // patch — it names no soundsource, so there is no pack to
+                // point at; the Signal Engine builds it as a Wavetable voice
+                // instead (`omni_import::patch_to_container`), carrying its
+                // waveform, amp envelope and the two Harmonia voices at −1 and
+                // −12 semitones that are what makes it "PHAT".
+                //
+                // The patch name is the address here, not a pack stem: the
+                // importer resolves it out of the gig / the Spectrasonics user
+                // library. It is the one User patch in the rig, so it exists
+                // nowhere else — back it up.
+                layers: vec![LayerDef::new("Bass", "Worship PHAT Bass")],
             },
             EngineDef {
                 name: "Aux".into(),

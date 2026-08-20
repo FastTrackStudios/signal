@@ -38,6 +38,15 @@ pub struct OmniLayer {
     pub unison_drift: f32,
     /// FM modulator waveform morph 0..1 (`OSC fmwf`).
     pub fm_shape: f32,
+    /// The oscillator's own waveform, 0..1 (`OSC type`).
+    ///
+    /// Without this a synthesis-mode patch imported with whatever waveform the
+    /// wavetable block defaults to, which is the difference between a PHAT
+    /// bass and a sine. Note Omnisphere's `type` is a *selector* over its wave
+    /// list while our `shape` is a continuous sine→triangle→saw→square morph,
+    /// so passing it straight through is a first approximation, not a match —
+    /// calibrating the two axes is its own job.
+    pub osc_wave: f32,
     /// Amplitude AHDSR `(attack_s, decay_s, sustain, release_s)`.
     pub amp_env: Option<(f32, f32, f32, f32)>,
     /// Filter AHDSR `(attack_s, decay_s, sustain, release_s)`.
@@ -425,6 +434,7 @@ pub(crate) fn parse_patch_node(root: &XmlNode) -> Result<OmniPatch, String> {
             layer.level = osc.num("level").unwrap_or(0.5);
             layer.fm_depth = osc.num("fm").unwrap_or(0.0).clamp(0.0, 1.0);
             layer.fm_shape = osc.num("fmwf").unwrap_or(0.0).clamp(0.0, 1.0);
+            layer.osc_wave = osc.num("type").unwrap_or(0.0).clamp(0.0, 1.0);
             layer.ring_mix = osc.num("am").unwrap_or(0.0).clamp(0.0, 1.0);
             // Unison: the newer UNI element wins; older patches carry the
             // uns*/u* attrs directly on OSC.

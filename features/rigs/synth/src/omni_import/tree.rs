@@ -133,7 +133,17 @@ pub fn patch_to_container(patch: &OmniPatch, index: &SoundsourceIndex) -> Contai
         osc = if layer.soundsource.is_empty() {
             // Synth mode: the wavetable voice carries the whole oscillator
             // stack (unison / harmonia / FM / ring) as build params.
-            let mut wt = RigBlock::of_type(BlockType::Wavetable).named("Synth Osc");
+            let mut wt = RigBlock::of_type(BlockType::Wavetable)
+                .named("Synth Osc")
+                // The oscillator's waveform. Omnisphere's `OSC type` is a
+                // selector over its wave list and our `shape` is a continuous
+                // sine→triangle→saw→square morph, so this is a first
+                // approximation rather than a match — but carrying it is
+                // strictly better than defaulting, which imported every
+                // synthesis-mode patch with the same waveform regardless of
+                // what it asked for. Calibrating the two axes against the
+                // plugin is a separate pass.
+                .with_param("shape", format!("{:.4}", layer.osc_wave));
             if layer.unison_count > 1 {
                 wt = wt
                     .with_param("unison_voices", layer.unison_count.to_string())
