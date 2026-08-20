@@ -57,5 +57,8 @@ pub fn variations_for(preset: &str) -> &'static [Variation] {
 
 /// Just the names, for the wire.
 pub fn variation_names(preset: &str) -> Vec<String> {
-    variations_for(preset).iter().map(|v| v.name.to_string()).collect()
+    variations_for(preset)
+        .iter()
+        .map(|v| v.name.to_string())
+        .collect()
 }

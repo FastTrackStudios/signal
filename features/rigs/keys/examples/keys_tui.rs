@@ -15,12 +15,12 @@ use std::collections::HashSet;
 use std::time::Duration;
 
 use daw_audio_io::AudioIoPrefs;
-use ratatui::Frame;
 use ratatui::crossterm::event::{self, Event, KeyCode, KeyEventKind};
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Gauge, Paragraph};
+use ratatui::Frame;
 use signal_keys::KeysRig;
 use signal_sampler::{
     Container, MidiEvent, MidiInputHandle, MidiSelection, PresetRegistry, RigNode,

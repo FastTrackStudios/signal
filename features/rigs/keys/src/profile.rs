@@ -10,13 +10,22 @@
 //! ```text
 //! Profile "Worship"
 //! ├─ Engines (parallel)
-//! │  ├─ Keys   → Keys A · Keys B          (piano / EP)
-//! │  ├─ Pad    → Pad · Shimmer            (the wash, and its sparkle)
-//! │  ├─ Organ  → Organ A · Organ B        (drawbar upper / lower)
-//! │  ├─ Aux    → Aux A · Aux B · Aux C    (whatever the song needs)
-//! │  ├─ Drone  → Drone                    (the bed a moment sits on)
-//! │  └─ SFX    → SFX A · SFX B            (risers, impacts — fired)
+//! │  ├─ Keys   → Keys 1 · Keys 2 · Keys 3   (the piano stack)
+//! │  ├─ Pad    → Pad · Shimmer              (the wash, and its sparkle)
+//! │  ├─ Organ  → Organ A · Organ B          (drawbar upper / lower)
+//! │  ├─ Aux    → Bass · Synth 1 · Synth 2   (whatever the song needs)
+//! │  ├─ Drone  → Drone                      (the bed a moment sits on)
+//! │  └─ SFX    → SFX A · SFX B              (risers, impacts — fired)
 //! └─ Global    → master FX tail
+//!
+//! The lane names track the live rig's mixer strip, so a player moving off it
+//! reaches for the same fader by the same name.
+//!
+//! One thing deliberately NOT carried across: that rig also had a 4×2 palette
+//! of source toggles (four NI pianos, four Keyscape layers) for switching
+//! piano on the fly. It existed because every source was permanently resident
+//! and switching meant muting. Here a lane simply loads the pack it needs, so
+//! "which piano" is a patch choice — the palette has nothing to do.
 //!
 //! Stacks: Spotlight · Verse · Energy · Hooks · Underscore
 //! ```
@@ -50,12 +59,22 @@ pub struct SceneSlot {
 
 impl SceneSlot {
     pub fn new(layer: impl Into<String>, patch: impl Into<String>, gain_db: f32) -> Self {
-        Self { layer: layer.into(), patch: patch.into(), gain_db, muted: false }
+        Self {
+            layer: layer.into(),
+            patch: patch.into(),
+            gain_db,
+            muted: false,
+        }
     }
 
     /// A slot that silences its layer in this scene.
     pub fn off(layer: impl Into<String>) -> Self {
-        Self { layer: layer.into(), patch: String::new(), gain_db: 0.0, muted: true }
+        Self {
+            layer: layer.into(),
+            patch: String::new(),
+            gain_db: 0.0,
+            muted: true,
+        }
     }
 }
 
@@ -218,12 +237,20 @@ impl KeysProfile {
         if let Ok(p) = std::env::var("FTS_KEYS_PROFILE") {
             return Some(std::path::PathBuf::from(p));
         }
-        let base = std::env::var("XDG_CONFIG_HOME").map(std::path::PathBuf::from).ok().or_else(
-            || std::env::var("HOME").ok().map(|h| std::path::PathBuf::from(h).join(".config")),
-        )?;
+        let base = std::env::var("XDG_CONFIG_HOME")
+            .map(std::path::PathBuf::from)
+            .ok()
+            .or_else(|| {
+                std::env::var("HOME")
+                    .ok()
+                    .map(|h| std::path::PathBuf::from(h).join(".config"))
+            })?;
         let file = name.trim();
         let file = if file.is_empty() { "Worship" } else { file };
-        Some(base.join("signal/keys/profiles").join(format!("{file}.styx")))
+        Some(
+            base.join("signal/keys/profiles")
+                .join(format!("{file}.styx")),
+        )
     }
 
     /// Write the profile back to disk — the edits a player makes to their
@@ -233,7 +260,9 @@ impl KeysProfile {
     /// Best-effort: a rig that cannot write its config still plays, and losing
     /// a reorder is not worth failing a service for.
     pub fn save(&self) {
-        let Some(path) = Self::config_path(&self.name) else { return };
+        let Some(path) = Self::config_path(&self.name) else {
+            return;
+        };
         if let Some(dir) = path.parent() {
             if let Err(e) = std::fs::create_dir_all(dir) {
                 tracing::warn!(?path, "keys profile not saved: {e}");
@@ -259,7 +288,10 @@ impl KeysProfile {
                 Some(p)
             }
             Err(e) => {
-                tracing::error!(?path, "saved keys profile is unreadable ({e}); using the built-in");
+                tracing::error!(
+                    ?path,
+                    "saved keys profile is unreadable ({e}); using the built-in"
+                );
                 None
             }
         }
@@ -280,7 +312,9 @@ impl KeysProfile {
     /// unresolvable render as silent lanes, so a profile is playable before
     /// every pack is downloaded.
     pub fn build_tree(&self, resolve: impl Fn(&str) -> Option<String>) -> Container {
-        self.build_tree_with(resolve, |_, _| signal_synth::engine::ModuleSettings::default())
+        self.build_tree_with(resolve, |_, _| {
+            signal_synth::engine::ModuleSettings::default()
+        })
     }
 
     /// As [`build_tree`](Self::build_tree), with the live macro values for
@@ -301,8 +335,7 @@ impl KeysProfile {
             for layer in &engine.layers {
                 // The authored fader rides in as the tree default (the live
                 // mixer's cells overwrite it once running).
-                let lane =
-                    Self::lane_container(layer, &resolve, &module_set).volume(layer.gain_db);
+                let lane = Self::lane_container(layer, &resolve, &module_set).volume(layer.gain_db);
                 voices = voices.add(lane);
             }
             engines = engines.add(eng.add(voices));
@@ -414,12 +447,18 @@ pub fn worship_profile() -> KeysProfile {
             EngineDef {
                 name: "Keys".into(),
                 gain_db: 0.0,
+                // Three lanes, matching the live rig's mixer strip
+                // (Keys 1 / Keys 2 / Keys 3). Nearly every patch in the gig
+                // stacks a main piano with a second keyboard colour under or
+                // over it, and the third lane is what a bright layer or a
+                // second piano goes in without displacing either.
                 layers: vec![
                     // The piano under everything: excluded from the engine
                     // and rig globals by default, so a filter sweep or an
                     // envelope change over the rig leaves it alone.
-                    LayerDef::new("Keys A", "LA Custom C7 Grand").excluded_from_globals(),
-                    LayerDef::new("Keys B", "Rhodes - LA Custom"),
+                    LayerDef::new("Keys 1", "The Grandeur - Piano").excluded_from_globals(),
+                    LayerDef::new("Keys 2", "Double Felt Grand"),
+                    LayerDef::new("Keys 3", ""),
                 ],
             },
             EngineDef {
@@ -449,18 +488,20 @@ pub fn worship_profile() -> KeysProfile {
             EngineDef {
                 name: "Organ".into(),
                 gain_db: 0.0,
-                layers: vec![
-                    LayerDef::new("Organ A", ""),
-                    LayerDef::new("Organ B", ""),
-                ],
+                layers: vec![LayerDef::new("Organ A", ""), LayerDef::new("Organ B", "")],
             },
             EngineDef {
                 name: "Aux".into(),
                 gain_db: 0.0,
+                // Everything that is neither piano nor wash, named after the
+                // rest of the live rig's mixer strip. These are the lanes the
+                // gig's rackspaces drove — the PHAT bass, and the two synth
+                // voices a song reaches for (Dulcimer, Trance, Synth Pluck,
+                // Amb Key all landed in one of these two).
                 layers: vec![
-                    LayerDef::new("Aux A", ""),
-                    LayerDef::new("Aux B", ""),
-                    LayerDef::new("Aux C", ""),
+                    LayerDef::new("Bass", ""),
+                    LayerDef::new("Synth 1", ""),
+                    LayerDef::new("Synth 2", ""),
                 ],
             },
             EngineDef {
@@ -491,11 +532,12 @@ pub fn worship_profile() -> KeysProfile {
                 name: "Spotlight".into(),
                 blurb: "Solo grand — nothing under it".into(),
                 slots: vec![
-                    SceneSlot::new("Keys A", "", 0.0),
-                    SceneSlot::off("Keys B"),
-                    SceneSlot::off("Aux A"),
-                    SceneSlot::off("Aux B"),
-                    SceneSlot::off("Aux C"),
+                    SceneSlot::new("Keys 1", "", 0.0),
+                    SceneSlot::off("Keys 2"),
+                    SceneSlot::off("Keys 3"),
+                    SceneSlot::off("Bass"),
+                    SceneSlot::off("Synth 1"),
+                    SceneSlot::off("Synth 2"),
                     SceneSlot::off("Organ A"),
                     SceneSlot::off("Organ B"),
                     SceneSlot::off("Pad"),
@@ -509,11 +551,12 @@ pub fn worship_profile() -> KeysProfile {
                 name: "Verse".into(),
                 blurb: "Piano + soft pad bed".into(),
                 slots: vec![
-                    SceneSlot::new("Keys A", "", -1.0),
-                    SceneSlot::off("Keys B"),
-                    SceneSlot::off("Aux A"),
-                    SceneSlot::off("Aux B"),
-                    SceneSlot::off("Aux C"),
+                    SceneSlot::new("Keys 1", "", -1.0),
+                    SceneSlot::off("Keys 2"),
+                    SceneSlot::off("Keys 3"),
+                    SceneSlot::off("Bass"),
+                    SceneSlot::off("Synth 1"),
+                    SceneSlot::off("Synth 2"),
                     SceneSlot::off("Organ A"),
                     SceneSlot::off("Organ B"),
                     SceneSlot::new("Pad", "", -8.0),
@@ -527,11 +570,12 @@ pub fn worship_profile() -> KeysProfile {
                 name: "Energy".into(),
                 blurb: "Full band — piano, EP, synth, pad".into(),
                 slots: vec![
-                    SceneSlot::new("Keys A", "", 0.0),
-                    SceneSlot::new("Keys B", "", -4.0),
-                    SceneSlot::new("Aux A", "", -6.0),
-                    SceneSlot::off("Aux B"),
-                    SceneSlot::off("Aux C"),
+                    SceneSlot::new("Keys 1", "", 0.0),
+                    SceneSlot::new("Keys 2", "", -4.0),
+                    SceneSlot::new("Keys 3", "", -8.0),
+                    SceneSlot::new("Bass", "", -6.0),
+                    SceneSlot::off("Synth 1"),
+                    SceneSlot::off("Synth 2"),
                     SceneSlot::new("Organ A", "", -10.0),
                     SceneSlot::off("Organ B"),
                     SceneSlot::new("Pad", "", -6.0),
@@ -545,11 +589,12 @@ pub fn worship_profile() -> KeysProfile {
                 name: "Hooks".into(),
                 blurb: "Lead synth over the piano bed".into(),
                 slots: vec![
-                    SceneSlot::new("Keys A", "", -4.0),
-                    SceneSlot::off("Keys B"),
-                    SceneSlot::new("Aux A", "", 0.0),
-                    SceneSlot::new("Aux B", "", -6.0),
-                    SceneSlot::off("Aux C"),
+                    SceneSlot::new("Keys 1", "", -4.0),
+                    SceneSlot::off("Keys 2"),
+                    SceneSlot::off("Keys 3"),
+                    SceneSlot::new("Bass", "", 0.0),
+                    SceneSlot::new("Synth 1", "", -6.0),
+                    SceneSlot::off("Synth 2"),
                     SceneSlot::off("Organ A"),
                     SceneSlot::off("Organ B"),
                     SceneSlot::new("Pad", "", -10.0),
@@ -563,11 +608,12 @@ pub fn worship_profile() -> KeysProfile {
                 name: "Underscore".into(),
                 blurb: "Pad + swell under speaking".into(),
                 slots: vec![
-                    SceneSlot::off("Keys A"),
-                    SceneSlot::off("Keys B"),
-                    SceneSlot::off("Aux A"),
-                    SceneSlot::off("Aux B"),
-                    SceneSlot::new("Aux C", "", -12.0),
+                    SceneSlot::off("Keys 1"),
+                    SceneSlot::off("Keys 2"),
+                    SceneSlot::off("Keys 3"),
+                    SceneSlot::off("Bass"),
+                    SceneSlot::off("Synth 1"),
+                    SceneSlot::new("Synth 2", "", -12.0),
                     SceneSlot::off("Organ A"),
                     SceneSlot::off("Organ B"),
                     SceneSlot::new("Pad", "", -4.0),
@@ -590,8 +636,35 @@ mod tests {
         let p = worship_profile();
         // Keys · Pad · Organ · Aux · Drone · SFX.
         assert_eq!(p.engines.len(), 6);
-        assert_eq!(p.engine("Keys").unwrap().layers.len(), 2);
-        assert_eq!(p.engine("Aux").unwrap().layers.len(), 3);
+        // The live rig's mixer strip: Keys 1/2/3, Pad + Shimmer, then the rest.
+        let keys = p.engine("Keys").unwrap();
+        assert_eq!(keys.layers.len(), 3);
+        assert_eq!(
+            keys.layers
+                .iter()
+                .map(|l| l.name.as_str())
+                .collect::<Vec<_>>(),
+            ["Keys 1", "Keys 2", "Keys 3"]
+        );
+        assert_eq!(
+            p.engine("Pad")
+                .unwrap()
+                .layers
+                .iter()
+                .map(|l| l.name.as_str())
+                .collect::<Vec<_>>(),
+            ["Pad", "Shimmer"]
+        );
+        assert_eq!(
+            p.engine("Aux")
+                .unwrap()
+                .layers
+                .iter()
+                .map(|l| l.name.as_str())
+                .collect::<Vec<_>>(),
+            ["Bass", "Synth 1", "Synth 2"]
+        );
+        assert_eq!(p.engine("Organ").unwrap().layers.len(), 2);
         assert_eq!(p.engine("Organ").unwrap().layers.len(), 2);
         assert_eq!(p.stacks.len(), 5);
         // Every stack addresses every layer — no lane is left undefined.
@@ -611,8 +684,7 @@ mod tests {
     fn tree_has_a_fader_per_lane() {
         let p = worship_profile();
         let tree = p.build_tree(|_| None);
-        let (_, cells) =
-            signal_sampler::node_render::RenderNode::compile_with_cells(&tree, 48_000);
+        let (_, cells) = signal_sampler::node_render::RenderNode::compile_with_cells(&tree, 48_000);
         use signal_sampler::rig_node::Role;
         use std::sync::Arc;
         for name in p.layer_names() {
@@ -630,7 +702,11 @@ mod tests {
         }
         // A one-lane engine named after its lane ("Pad" holding "Pad") must
         // still be two cells — see the render tree's like-named test.
-        for engine in p.engines.iter().filter(|e| e.layers.iter().any(|l| l.name == e.name)) {
+        for engine in p
+            .engines
+            .iter()
+            .filter(|e| e.layers.iter().any(|l| l.name == e.name))
+        {
             assert!(
                 !Arc::ptr_eq(
                     cells.get(Role::Engine, &engine.name).expect("engine cell"),
@@ -661,7 +737,10 @@ mod order_tests {
     fn order_round_trips_and_tolerates_new_engines() {
         let mut p = worship_profile();
         p.apply_order(&["SFX".into(), "Drone".into()]);
-        assert_eq!(&p.engine_order()[..2], &["SFX".to_string(), "Drone".to_string()]);
+        assert_eq!(
+            &p.engine_order()[..2],
+            &["SFX".to_string(), "Drone".to_string()]
+        );
 
         let text = p.to_styx_string().expect("serialize");
         let back = KeysProfile::from_styx_str(&text).expect("parse");
@@ -677,7 +756,10 @@ mod order_tests {
             layers: vec![LayerDef::new("Brass A", "")],
         });
         fresh.apply_order(&saved_order);
-        assert_eq!(&fresh.engine_order()[..2], &["SFX".to_string(), "Drone".to_string()]);
+        assert_eq!(
+            &fresh.engine_order()[..2],
+            &["SFX".to_string(), "Drone".to_string()]
+        );
         assert!(fresh.engine("Brass").is_some());
     }
 }

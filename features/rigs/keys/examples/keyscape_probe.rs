@@ -46,7 +46,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("peak {pk:.4}  rms {rms:.5}");
     println!(
         "\n{}",
-        if pk > 0.001 { "PASS — Keyscape C7 grand plays" } else { "FAIL — silent" }
+        if pk > 0.001 {
+            "PASS — Keyscape C7 grand plays"
+        } else {
+            "FAIL — silent"
+        }
     );
     Ok(())
 }

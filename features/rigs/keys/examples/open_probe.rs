@@ -12,7 +12,13 @@ use signal_keys_proto::keys::KeysRig as KeysRigSvc;
 fn main() {
     tracing_subscriber::fmt().with_env_filter("info").init();
     let backend = signal_keys::KeysRigBackend::new();
-    println!("presets: {:?}", KeysRigSvc::presets(&backend).iter().map(|p| &p.name).collect::<Vec<_>>());
+    println!(
+        "presets: {:?}",
+        KeysRigSvc::presets(&backend)
+            .iter()
+            .map(|p| &p.name)
+            .collect::<Vec<_>>()
+    );
     KeysRigSvc::start(&backend);
     for _ in 0..16 {
         std::thread::sleep(std::time::Duration::from_millis(500));
@@ -21,7 +27,11 @@ fn main() {
             "running={} loaded={:?} err={:?}",
             s.running, s.loaded_preset, s.last_error
         );
-        if s.running || s.last_error.as_deref().is_some_and(|e| !e.starts_with("opening")) {
+        if s.running
+            || s.last_error
+                .as_deref()
+                .is_some_and(|e| !e.starts_with("opening"))
+        {
             break;
         }
     }

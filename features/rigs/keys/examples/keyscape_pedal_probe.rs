@@ -66,7 +66,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let _ = render_peak(&rig, &mut buf, 8); // pedal-noise one-shot decays
     rig.midi_message(0, 0x90, 62, 100); // strike D4 under the pedal
     let body_pedal = render_peak(&rig, &mut buf, 20);
-    println!("B. D4 body peak, pedal DOWN : {body_pedal:.4}  voices={}", rig.active_voices(ID));
+    println!(
+        "B. D4 body peak, pedal DOWN : {body_pedal:.4}  voices={}",
+        rig.active_voices(ID)
+    );
 
     rig.midi_message(0, 0x80, 62, 0); // note-off (rings under pedal → relsl)
     rig.midi_message(0, 0xB0, 64, 0); // pedal up
@@ -82,7 +85,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // ── verdict ───────────────────────────────────────────────────────────
     // The body under the pedal must be within a sane ratio of the un-pedaled
     // body. Before the fix it collapsed to the ~tiny pedal-noise sample.
-    let ratio = if body_no_pedal > 0.0 { body_pedal / body_no_pedal } else { 0.0 };
+    let ratio = if body_no_pedal > 0.0 {
+        body_pedal / body_no_pedal
+    } else {
+        0.0
+    };
     println!("\nbody(pedal)/body(no pedal) = {ratio:.2}");
     let ok = body_no_pedal > 0.01 && ratio > 0.3;
     println!(

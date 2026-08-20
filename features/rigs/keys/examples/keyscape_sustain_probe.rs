@@ -16,7 +16,13 @@ const BLK: usize = 512;
 
 /// Render `secs` of audio; return (peak over the whole span, peak in the
 /// window `[from_s, to_s)`).
-fn render_window(rig: &SamplerRig, buf: &mut [f32], secs: f32, from_s: f32, to_s: f32) -> (f32, f32) {
+fn render_window(
+    rig: &SamplerRig,
+    buf: &mut [f32],
+    secs: f32,
+    from_s: f32,
+    to_s: f32,
+) -> (f32, f32) {
     let blocks = (secs * SR as f32 / BLK as f32) as usize;
     let from_b = (from_s * SR as f32 / BLK as f32) as usize;
     let to_b = (to_s * SR as f32 / BLK as f32) as usize;
@@ -58,13 +64,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let (attack, sustain) = render_window(&rig, &mut buf, 1.3, 0.95, 1.05);
         rig.midi_message(0, 0x80, note, 0);
         let _ = render_window(&rig, &mut buf, 0.8, 0.0, 0.1); // let the tail die
-        // Audible at 1 s = still ≥1% of the attack and above the noise floor.
+                                                              // Audible at 1 s = still ≥1% of the attack and above the noise floor.
         let ok = sustain >= 0.002 && sustain >= 0.01 * attack;
-        if ok { alive += 1 } else { died.push(note) }
+        if ok {
+            alive += 1
+        } else {
+            died.push(note)
+        }
         if note % 3 == 0 {
-            println!("{note:>4} {attack:>8.4} {sustain:>8.4}  {}", if ok { "ok" } else { "DIED" });
+            println!(
+                "{note:>4} {attack:>8.4} {sustain:>8.4}  {}",
+                if ok { "ok" } else { "DIED" }
+            );
         }
     }
-    println!("\naudible-at-1s: {alive}/{}   still-dead: {died:?}", 108 - 21 + 1);
+    println!(
+        "\naudible-at-1s: {alive}/{}   still-dead: {died:?}",
+        108 - 21 + 1
+    );
     Ok(())
 }

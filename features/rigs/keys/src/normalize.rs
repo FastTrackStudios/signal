@@ -81,7 +81,10 @@ pub struct PackLevels {
 
 impl Default for PackLevels {
     fn default() -> Self {
-        Self { target_lufs: DEFAULT_TARGET_LUFS, packs: Vec::new() }
+        Self {
+            target_lufs: DEFAULT_TARGET_LUFS,
+            packs: Vec::new(),
+        }
     }
 }
 
@@ -90,25 +93,41 @@ impl PackLevels {
         if let Ok(p) = std::env::var("FTS_KEYS_PACK_LEVELS") {
             return Some(std::path::PathBuf::from(p));
         }
-        let base = std::env::var("XDG_CONFIG_HOME").map(std::path::PathBuf::from).ok().or_else(
-            || std::env::var("HOME").ok().map(|h| std::path::PathBuf::from(h).join(".config")),
-        )?;
+        let base = std::env::var("XDG_CONFIG_HOME")
+            .map(std::path::PathBuf::from)
+            .ok()
+            .or_else(|| {
+                std::env::var("HOME")
+                    .ok()
+                    .map(|h| std::path::PathBuf::from(h).join(".config"))
+            })?;
         Some(base.join("signal/keys/pack-levels.styx"))
     }
 
     fn load() -> Self {
-        let Some(path) = Self::path() else { return Self::default() };
-        let Ok(text) = std::fs::read_to_string(&path) else { return Self::default() };
+        let Some(path) = Self::path() else {
+            return Self::default();
+        };
+        let Ok(text) = std::fs::read_to_string(&path) else {
+            return Self::default();
+        };
         match facet_styx::from_str::<Self>(&text) {
             Ok(mut levels) => {
                 if levels.target_lufs == 0.0 {
                     levels.target_lufs = DEFAULT_TARGET_LUFS;
                 }
-                tracing::info!(?path, packs = levels.packs.len(), "keys: pack levels loaded");
+                tracing::info!(
+                    ?path,
+                    packs = levels.packs.len(),
+                    "keys: pack levels loaded"
+                );
                 levels
             }
             Err(e) => {
-                tracing::error!(?path, "keys: pack levels unreadable ({e}); no trims applied");
+                tracing::error!(
+                    ?path,
+                    "keys: pack levels unreadable ({e}); no trims applied"
+                );
                 Self::default()
             }
         }
@@ -153,7 +172,10 @@ pub fn trim_db(pack: &str) -> f32 {
         }
         let trim = levels().trim_for(pack);
         if trim == 0.0 {
-            tracing::debug!(pack, "keys: no measured level for pack — playing it untrimmed");
+            tracing::debug!(
+                pack,
+                "keys: no measured level for pack — playing it untrimmed"
+            );
         } else {
             tracing::info!(pack, trim_db = trim, "keys: pack level trim");
         }
@@ -172,12 +194,28 @@ mod tests {
         let levels = PackLevels {
             target_lufs: -18.0,
             packs: vec![
-                PackLevel { name: "Quiet".into(), lufs: Some(-31.0), trim_db: None },
-                PackLevel { name: "Loud".into(), lufs: Some(-12.0), trim_db: None },
+                PackLevel {
+                    name: "Quiet".into(),
+                    lufs: Some(-31.0),
+                    trim_db: None,
+                },
+                PackLevel {
+                    name: "Loud".into(),
+                    lufs: Some(-12.0),
+                    trim_db: None,
+                },
                 // A measurement so far off it would swamp everything.
-                PackLevel { name: "Broken".into(), lufs: Some(-90.0), trim_db: None },
+                PackLevel {
+                    name: "Broken".into(),
+                    lufs: Some(-90.0),
+                    trim_db: None,
+                },
                 // A hand-set override wins over any measurement.
-                PackLevel { name: "Judged".into(), lufs: Some(-31.0), trim_db: Some(-2.0) },
+                PackLevel {
+                    name: "Judged".into(),
+                    lufs: Some(-31.0),
+                    trim_db: Some(-2.0),
+                },
             ],
         };
         assert!((levels.trim_for("Quiet") - 13.0).abs() < 0.001);

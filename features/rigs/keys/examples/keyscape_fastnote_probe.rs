@@ -81,25 +81,51 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // ── dump the trace ──
     let trace = rig.render_trace(ID);
     let bl = |frame: u64| frame as f32 / SR as f32 * 1000.0; // ms
-    println!("\n{:>7} {:>5} {:>12} {:>6} {:>6}  file", "t(ms)", "note", "kind", "rate", "gain");
+    println!(
+        "\n{:>7} {:>5} {:>12} {:>6} {:>6}  file",
+        "t(ms)", "note", "kind", "rate", "gain"
+    );
     for e in &trace.events {
         match &e.kind {
             TraceKind::VoiceSpawn(v) => {
                 println!(
                     "{:>7.0} {:>5} {:>12} {:>6.3} {:>6.3}  {}",
-                    bl(e.frame), v.note, v.voice_kind, v.rate, v.gain, v.file
+                    bl(e.frame),
+                    v.note,
+                    v.voice_kind,
+                    v.rate,
+                    v.gain,
+                    v.file
                 );
             }
             TraceKind::NoteOff { note } => {
                 println!("{:>7.0} {:>5} {:>12}", bl(e.frame), note, "NOTE-OFF");
             }
             TraceKind::Transition { from, to, .. } => {
-                println!("{:>7.0} {:>2}->{:<2} {:>12}", bl(e.frame), from, to, "TRANSITION");
+                println!(
+                    "{:>7.0} {:>2}->{:<2} {:>12}",
+                    bl(e.frame),
+                    from,
+                    to,
+                    "TRANSITION"
+                );
             }
-            TraceKind::SampleMiss { note, articulation, dynamic, rr, reason } => {
+            TraceKind::SampleMiss {
+                note,
+                articulation,
+                dynamic,
+                rr,
+                reason,
+            } => {
                 println!(
                     "{:>7.0} {:>5} {:>12}  {} dyn={} rr={} ({:?})",
-                    bl(e.frame), note, "MISS", articulation, dynamic, rr, reason
+                    bl(e.frame),
+                    note,
+                    "MISS",
+                    articulation,
+                    dynamic,
+                    rr,
+                    reason
                 );
             }
             TraceKind::VoiceEnd { voice_id } => {

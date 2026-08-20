@@ -10,11 +10,11 @@
 
 mod backend;
 pub mod normalize;
-pub mod variations;
 /// Profiles: the engine/layer mixer shape + the footswitch stacks (scenes)
 /// that recall it. The Worship profile lives here.
 pub mod profile;
+pub mod variations;
 pub use backend::KeysRigBackend;
-pub use profile::{EngineDef, KeysProfile, KeysStackDef, LayerDef, SceneSlot, worship_profile};
+pub use profile::{worship_profile, EngineDef, KeysProfile, KeysStackDef, LayerDef, SceneSlot};
 pub use signal_keys_proto as proto;
 pub use signal_sampler::keys_rig::{KeysInstrument, KeysRig};

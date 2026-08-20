@@ -27,7 +27,7 @@ use crate::module_edit::KnobRow;
 /// One lane's time-domain settings, as the mixer reports them.
 #[derive(Clone, PartialEq, Debug)]
 pub struct FxLane {
-    /// Lane name ("Keys A") — the label on a focused tail.
+    /// Lane name ("Keys 1") — the label on a focused tail.
     pub label: String,
     /// The engine's colour: this is how a tail is identified.
     pub color: String,

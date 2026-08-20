@@ -4047,7 +4047,7 @@ mod tests {
     fn excluded_lanes_stay_out_of_global_scope() {
         let mut s = State::default();
         s.adopt_profile(worship_profile());
-        for lane in ["Keys A", "Keys B"] {
+        for lane in ["Keys 1", "Keys 2"] {
             let l = s.lanes.get_mut(lane).expect("lane");
             l.modules = vec![ModuleState {
                 patch: "test".into(),
@@ -4057,10 +4057,10 @@ mod tests {
         }
         let targets = keys_targets(&s);
         assert!(
-            !targets.iter().any(|(lane, _)| lane == "Keys A"),
+            !targets.iter().any(|(lane, _)| lane == "Keys 1"),
             "the piano is excluded from the engine's global scope"
         );
-        assert!(targets.iter().any(|(lane, _)| lane == "Keys B"));
+        assert!(targets.iter().any(|(lane, _)| lane == "Keys 2"));
     }
 
     fn cutoff(s: &State, lane: &str) -> f32 {
@@ -4073,7 +4073,7 @@ mod tests {
 
     #[test]
     fn an_engine_knob_writes_through_while_its_lanes_agree() {
-        let mut s = keys_state(&[("Keys A", 8000.0), ("Keys B", 8000.0)]);
+        let mut s = keys_state(&[("Keys 1", 8000.0), ("Keys 2", 8000.0)]);
         let targets = keys_targets(&s);
         let def = global_def("e.filter.cutoff").expect("engine cutoff");
         let span =
@@ -4083,8 +4083,8 @@ mod tests {
             span.is_none(),
             "an agreeing engine is absolute — nothing to remember"
         );
-        assert_eq!(cutoff(&s, "Keys A"), 4000.0);
-        assert_eq!(cutoff(&s, "Keys B"), 4000.0);
+        assert_eq!(cutoff(&s, "Keys 1"), 4000.0);
+        assert_eq!(cutoff(&s, "Keys 2"), 4000.0);
 
         let est = s.engines.get("Keys").cloned().expect("engine");
         let models = KeysRigBackend::global_models(&s, ENGINE, &targets, &est.globals, &est.spans);
@@ -4098,13 +4098,13 @@ mod tests {
 
     #[test]
     fn an_engine_knob_offsets_lanes_that_disagree_and_gives_them_back() {
-        let mut s = keys_state(&[("Keys A", 2000.0), ("Keys B", 8000.0)]);
+        let mut s = keys_state(&[("Keys 1", 2000.0), ("Keys 2", 8000.0)]);
         let targets = keys_targets(&s);
         let def = global_def("e.filter.cutoff").expect("engine cutoff");
 
         let span = KeysRigBackend::drive_global(&mut s, def, "filter.cutoff", &targets, None, 0.5)
             .expect("a disagreeing engine holds its baseline");
-        let (a, b) = (cutoff(&s, "Keys A"), cutoff(&s, "Keys B"));
+        let (a, b) = (cutoff(&s, "Keys 1"), cutoff(&s, "Keys 2"));
         assert!(a > 2000.0 && b > 8000.0, "both lanes travelled: {a} {b}");
         assert!(
             (b / a - 4.0).abs() < 1e-2,
@@ -4116,15 +4116,15 @@ mod tests {
         let back =
             KeysRigBackend::drive_global(&mut s, def, "filter.cutoff", &targets, Some(span), 0.0);
         assert!(back.is_none(), "centred — the span is dropped");
-        assert!((cutoff(&s, "Keys A") - 2000.0).abs() < 1e-2);
-        assert!((cutoff(&s, "Keys B") - 8000.0).abs() < 1e-2);
+        assert!((cutoff(&s, "Keys 1") - 2000.0).abs() < 1e-2);
+        assert!((cutoff(&s, "Keys 2") - 8000.0).abs() < 1e-2);
     }
 
     #[test]
     fn a_rig_knob_reaches_every_engine() {
         // Two engines, one lane each, disagreeing — the rig level should
         // still move both together and hand them back at the detent.
-        let mut s = keys_state(&[("Keys A", 2000.0), ("Pad", 8000.0)]);
+        let mut s = keys_state(&[("Keys 1", 2000.0), ("Pad", 8000.0)]);
         let targets = KeysRigBackend::scope_targets(&s, &KeysRigBackend::all_lanes(&s));
         let def = global_def("r.filter.cutoff").expect("rig cutoff");
 
@@ -4132,7 +4132,7 @@ mod tests {
         // upward there is nowhere to go — the ceiling is the group's leader.
         let span = KeysRigBackend::drive_global(&mut s, def, "filter.cutoff", &targets, None, -0.5)
             .expect("a disagreeing rig holds its baseline");
-        let (keys, pad) = (cutoff(&s, "Keys A"), cutoff(&s, "Pad"));
+        let (keys, pad) = (cutoff(&s, "Keys 1"), cutoff(&s, "Pad"));
         assert!(
             keys < 2000.0 && pad < 8000.0,
             "both engines travelled: {keys} {pad}"
@@ -4145,22 +4145,22 @@ mod tests {
         let back =
             KeysRigBackend::drive_global(&mut s, def, "filter.cutoff", &targets, Some(span), 0.0);
         assert!(back.is_none());
-        assert!((cutoff(&s, "Keys A") - 2000.0).abs() < 1e-2);
+        assert!((cutoff(&s, "Keys 1") - 2000.0).abs() < 1e-2);
         assert!((cutoff(&s, "Pad") - 8000.0).abs() < 1e-2);
     }
 
     #[test]
     fn an_edit_underneath_rebases_the_engine_knob() {
-        let mut s = keys_state(&[("Keys A", 2000.0), ("Keys B", 8000.0)]);
+        let mut s = keys_state(&[("Keys 1", 2000.0), ("Keys 2", 8000.0)]);
         s.engines.get_mut("Keys").expect("engine").spans.insert(
             "e.filter.cutoff".into(),
-            (0.5, vec![("Keys A".into(), 0, 2000.0)]),
+            (0.5, vec![("Keys 1".into(), 0, 2000.0)]),
         );
 
         KeysRigBackend::rebase_others(
             &mut s,
             &["Keys".to_string()],
-            &["Keys A".to_string()],
+            &["Keys 1".to_string()],
             "filter.cutoff",
             "",
         );

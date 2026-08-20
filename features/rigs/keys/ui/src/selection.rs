@@ -7,7 +7,7 @@
 //!
 //! ```text
 //! click the engine card    → Selection::Engine("Keys")   → engine programs
-//! click a lane             → Selection::Layer("Keys A")  → layer presets
+//! click a lane             → Selection::Layer("Keys 1")  → layer presets
 //! pick a module in the zoom→ Selection::Module{…}        → soundsources
 //! ```
 
