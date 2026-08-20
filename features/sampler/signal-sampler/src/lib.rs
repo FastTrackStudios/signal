@@ -223,23 +223,9 @@ pub type InstrumentId = String;
 
 // ── Error ─────────────────────────────────────────────────────────────────────
 
-#[derive(Debug, thiserror::Error)]
-pub enum SamplerError {
-    #[error("I/O error: {0}")]
-    Io(#[from] std::io::Error),
-
-    #[error("spec parse error: {0}")]
-    SpecParse(String),
-
-    #[error("invalid MIDI note name: {0:?}")]
-    BadNoteName(String),
-
-    #[error("spec missing section {0:?}")]
-    MissingSection(String),
-
-    #[error("spec missing articulation {0:?}")]
-    MissingArticulation(String),
-}
+// Defined in fts-sample (the audio-file engine layer); re-exported so both
+// `crate::SamplerError` and `signal_sampler::SamplerError` keep working.
+pub use fts_sample::SamplerError;
 
 // ── PlayerPatch ───────────────────────────────────────────────────────────────
 

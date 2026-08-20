@@ -75,7 +75,6 @@ midicore = { workspace = true, features = ["vox", "midir"] }
 # CLAP backend links once.
 daw         = { workspace = true, features = ["standalone-audio", "clap-host"] }
 crossbeam-channel = { workspace = true }
-arc-swap    = "1.7"
 # Decode persisted plugin state chunks (`state_b64`) when a rig "plugin" block
 # restores a hosted CLAP/VST3 plugin's saved parameters.
 base64      = "0.22"
@@ -84,30 +83,17 @@ realfft.workspace = true
 # Content-hash NAM models to key the loudness-calibration cache (matches
 # signal-nam's SHA-256 file identity).
 sha2        = "0.10"
-# FLAC decode for .signalpack samples. Primary path is symphonia (faster on
-# 24-bit); claxon is kept as a correctness fallback. See `load_flac_bytes`:
-# symphonia rejects our streams' short final block (STREAMINFO min<max read as
-# variable-blocksize), so we normalize STREAMINFO min:=max in the copy we feed
-# it. claxon decodes the raw bytes regardless and backstops any oddball pack.
-claxon      = "0.4"
-symphonia   = { version = "0.5", default-features = false, features = ["flac"] }
-symphonia-bundle-flac = "0.5"
-symphonia-core = "0.5"
-# Ogg Vorbis proxy packs (kind 6): pure-Rust decode via symphonia (runtime,
-# wasm-clean); encode via vorbis_rs (vendored aoTuV libvorbis — builder-side
-# only, `create_signal_pack_with(PackCodec::OggVorbis)`).
-symphonia-format-ogg  = "0.5"
-symphonia-codec-vorbis = "0.5"
-vorbis_rs   = "0.5"
-memmap2     = "0.9"
+# The audio-file engine layer — RAM budget, sample cache + .signalpack
+# access (FLAC/Vorbis decode, flacenc/vorbis_rs encode), FLAC seek index,
+# chunked streaming, on-disk stream cache, and SamplerError. Re-exported as
+# `engine::{budget, cache, flac_index, stream, stream_cache}`.
+fts-sample.workspace = true
 zstd        = "0.13"
-flacenc     = "0.5.1"
 
 # `fts signal pack` CLI (src/pack_cli.rs) — mounted by fts-cli.
 clap        = { workspace = true }
 
 # Error handling
-thiserror   = { workspace = true }
 eyre        = { workspace = true }
 tracing     = { workspace = true }
 rayon       = "1"
@@ -115,6 +101,9 @@ walkdir     = "2"
 
 [dev-dependencies]
 tracing-subscriber = { workspace = true }
+# The relocated "held looping voice over a streamed sample" test (engine::voice)
+# mmaps its FLAC fixture to feed `StreamedSample::open`.
+memmap2 = { workspace = true }
 # TUI for the live guitar-rig example (input/output meters + patch switching).
 ratatui = "0.30"
 # dup2 — redirect stray stderr to a log while the rig TUI owns the terminal.

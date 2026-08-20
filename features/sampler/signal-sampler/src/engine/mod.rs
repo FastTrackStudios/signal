@@ -27,11 +27,11 @@
 //! the velocity-based pre-delay in the spec). When the countdown expires the
 //! old sustain is faded out and the legato transition sample fires.
 
-pub mod budget;
-pub mod cache;
-pub mod flac_index;
-pub mod stream;
-pub mod stream_cache;
+// The audio-file layer (RAM budget, sample cache + .signalpack access, FLAC
+// seek index, chunked streaming, on-disk stream cache) lives in `fts-sample`
+// (crates/audiocore/fts-sample). Re-exported here so every existing
+// `crate::engine::cache::...` path keeps working unchanged.
+pub use fts_sample::{budget, cache, flac_index, stream, stream_cache};
 pub mod filter;
 pub mod pitch_shift;
 pub mod rr;
