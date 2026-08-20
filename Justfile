@@ -596,6 +596,13 @@ ee-serve *ARGS:
 ee SOURCE="phrase" *ARGS:
     cargo run -p expression-editor-standalone --example editor -- {{SOURCE}} {{ARGS}}
 
+# The workstation: arrangement + TCP over the drum-mode editor, mixer
+# down the right, audio out the default output. Defaults to the drum-
+# mode reference session; pass any .rpp to open something else.
+workstation SOURCE="/run/media/AudioHaven/Project/02 LORD OF THE FIGHT/02 LORD OF THE FIGHT.RPP" *ARGS:
+    cargo run --release -p expression-editor-standalone --example workstation -- \
+        "{{SOURCE}}" --drums --size 1920x1080 {{ARGS}}
+
 # Repaint the visual-inspection PNGs into target/gui-shots/expression-editor.
 #
 # These are artefacts for a human to look at, not assertions, so they are
