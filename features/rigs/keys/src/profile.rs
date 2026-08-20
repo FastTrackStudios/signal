@@ -13,7 +13,8 @@
 //! │  ├─ Keys   → Keys 1 · Keys 2 · Keys 3   (the piano stack)
 //! │  ├─ Pad    → Pad · Shimmer              (the wash, and its sparkle)
 //! │  ├─ Organ  → Organ A · Organ B          (drawbar upper / lower)
-//! │  ├─ Aux    → Bass · Synth 1 · Synth 2   (whatever the song needs)
+//! │  ├─ Bass   → Bass                       (its own register, its own tail)
+//! │  ├─ Aux    → Synth 1 · Synth 2          (whatever the song needs)
 //! │  ├─ Drone  → Drone                      (the bed a moment sits on)
 //! │  └─ SFX    → SFX A · SFX B              (risers, impacts — fired)
 //! └─ Global    → master FX tail
@@ -491,18 +492,22 @@ pub fn worship_profile() -> KeysProfile {
                 layers: vec![LayerDef::new("Organ A", ""), LayerDef::new("Organ B", "")],
             },
             EngineDef {
+                name: "Bass".into(),
+                gain_db: 0.0,
+                // Its own engine, not an Aux lane. Bass occupies a register
+                // nothing else in the rig touches, it is nearly always mono
+                // and nearly always the one voice that must not be ducked by a
+                // pad swell — so it wants its own fader, its own FX tail and
+                // its own place in a scene, which is exactly what an engine is.
+                layers: vec![LayerDef::new("Bass", "")],
+            },
+            EngineDef {
                 name: "Aux".into(),
                 gain_db: 0.0,
-                // Everything that is neither piano nor wash, named after the
-                // rest of the live rig's mixer strip. These are the lanes the
-                // gig's rackspaces drove — the PHAT bass, and the two synth
-                // voices a song reaches for (Dulcimer, Trance, Synth Pluck,
-                // Amb Key all landed in one of these two).
-                layers: vec![
-                    LayerDef::new("Bass", ""),
-                    LayerDef::new("Synth 1", ""),
-                    LayerDef::new("Synth 2", ""),
-                ],
+                // The two synth voices a song reaches for. In the gig every
+                // rackspace lane that was not piano, pad or bass — Dulcimer,
+                // Trance, Synth Pluck, Amb Key — landed in one of these two.
+                layers: vec![LayerDef::new("Synth 1", ""), LayerDef::new("Synth 2", "")],
             },
             EngineDef {
                 name: "Drone".into(),
@@ -634,8 +639,8 @@ mod tests {
     #[test]
     fn worship_shape() {
         let p = worship_profile();
-        // Keys · Pad · Organ · Aux · Drone · SFX.
-        assert_eq!(p.engines.len(), 6);
+        // Keys · Pad · Organ · Bass · Aux · Drone · SFX.
+        assert_eq!(p.engines.len(), 7);
         // The live rig's mixer strip: Keys 1/2/3, Pad + Shimmer, then the rest.
         let keys = p.engine("Keys").unwrap();
         assert_eq!(keys.layers.len(), 3);
@@ -655,6 +660,16 @@ mod tests {
                 .collect::<Vec<_>>(),
             ["Pad", "Shimmer"]
         );
+        // Bass is its own engine, not an Aux lane.
+        assert_eq!(
+            p.engine("Bass")
+                .unwrap()
+                .layers
+                .iter()
+                .map(|l| l.name.as_str())
+                .collect::<Vec<_>>(),
+            ["Bass"]
+        );
         assert_eq!(
             p.engine("Aux")
                 .unwrap()
@@ -662,7 +677,7 @@ mod tests {
                 .iter()
                 .map(|l| l.name.as_str())
                 .collect::<Vec<_>>(),
-            ["Bass", "Synth 1", "Synth 2"]
+            ["Synth 1", "Synth 2"]
         );
         assert_eq!(p.engine("Organ").unwrap().layers.len(), 2);
         assert_eq!(p.engine("Organ").unwrap().layers.len(), 2);
