@@ -124,7 +124,27 @@ pub fn EmphasisView(
     rsx! {
         div {
             "data-testid": "emphasis-view",
-            style: "position:absolute; inset:0; overflow:hidden;",
+            style: "position:absolute; inset:0; display:flex; \
+                    flex-direction:column; overflow:hidden;",
+
+            // Header bar — what this scale MEANS: drive emphasis, not
+            // output tone (`fx.sat.emphasis.display`).
+            div {
+                style: "flex:none; height:20px; display:flex; align-items:center; \
+                        padding:0 10px; font-size:9px; letter-spacing:0.08em; \
+                        text-transform:uppercase; font-weight:700; \
+                        color:var(--muted-foreground); \
+                        border-bottom:1px solid var(--border, rgba(148,163,184,0.2));",
+                "Emphasis — drives the stage, mirrored out"
+            }
+
+            // The graph, framed with breathing room.
+            div {
+                "data-testid": "emphasis-graph",
+                style: "flex:1; min-height:0; position:relative; margin:8px; \
+                        border:1px solid var(--border, rgba(148,163,184,0.25)); \
+                        border-radius:6px; overflow:hidden; \
+                        background:color-mix(in oklab, var(--card, #101216) 30%, transparent);",
 
             EqGraph {
                 bands,
@@ -149,25 +169,14 @@ pub fn EmphasisView(
                 },
             }
 
-            // The label that says what this scale MEANS: drive emphasis, not
-            // output tone (`fx.sat.emphasis.display`).
-            div {
-                style: "position:absolute; top:6px; left:0; right:0; margin:0 auto; \
-                        width:max-content; font-size:10px; letter-spacing:0.08em; \
-                        text-transform:uppercase; color:var(--muted-foreground); \
-                        background:color-mix(in oklab, var(--card, #101216) 80%, transparent); \
-                        border:1px solid var(--border, rgba(148,163,184,0.3)); \
-                        border-radius:6px; padding:2px 8px; pointer-events:none;",
-                "Emphasis — drives the stage, mirrored out"
-            }
-
-            // Drive rides along at the bottom so shaping and pushing are one
-            // motion.
+            // Drive rides along inside the frame so shaping and pushing are
+            // one motion.
             if let Some(drive) = handles.get("drive") {
                 div {
-                    style: "position:absolute; right:16px; bottom:12px;",
+                    style: "position:absolute; right:12px; bottom:8px;",
                     fts_audio_ui::controls::Knob { handle: drive.clone() }
                 }
+            }
             }
         }
     }

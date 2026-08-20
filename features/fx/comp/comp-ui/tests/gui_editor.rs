@@ -1233,8 +1233,10 @@ async fn the_sidechain_eq_sidecar_opens_and_edits_its_stage() -> dioxus_test::Re
     fx.tester.query(by_testid("comp-graph")).immediately()?;
 
     // Drag band 3 (700 Hz, 0 dB) up on the sidecar. Headless, the embedded
-    // graph hit-tests through its 800×350 fallback mapper.
-    let (ox, oy) = sidecar.document_origin();
+    // graph hit-tests through its 800×350 fallback mapper, relative to the
+    // graph FRAME (the view carries a header and margins around it).
+    let graph = fx.tester.query(by_testid("sc-eq-graph-1")).immediately()?;
+    let (ox, oy) = graph.document_origin();
     let mapper =
         eq_ui::eq_graph_interaction::GraphMapper::new(20.0, 20_000.0, 24.0, 800.0, 350.0, 0.0);
     let bp = &fx.params.stage1.sc_eq[2];

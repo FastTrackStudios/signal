@@ -65,7 +65,7 @@ async fn dragging_a_band_writes_the_emphasis_params() -> dioxus_test::Result<()>
     let mut fx = mount();
     open_eq(&mut fx).await;
 
-    let strip = fx.tester.query(by_testid("emphasis-view")).immediately()?;
+    let strip = fx.tester.query(by_testid("emphasis-graph")).immediately()?;
     let (ox, oy) = strip.document_origin();
 
     // Band 3 defaults to 700 Hz / 0 dB. Headless, the graph's canvas rect is

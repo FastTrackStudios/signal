@@ -73,7 +73,28 @@ pub fn SidechainEqView(stage: usize, frame: u64, accent: String) -> Element {
     rsx! {
         div {
             "data-testid": "sc-eq-view-{stage + 1}",
-            style: "position:absolute; inset:0; overflow:hidden;",
+            style: "position:absolute; inset:0; display:flex; \
+                    flex-direction:column; overflow:hidden;",
+
+            // Header bar — the label lives above the graph, not over it.
+            div {
+                style: format!(
+                    "flex:none; height:20px; display:flex; align-items:center; \
+                     padding:0 10px; font-size:9px; letter-spacing:0.08em; \
+                     text-transform:uppercase; font-weight:700; color:{accent}; \
+                     border-bottom:1px solid var(--border, rgba(148,163,184,0.2));"
+                ),
+                "Sidechain EQ — what S{stage + 1} listens to"
+            }
+
+            // The graph, framed with breathing room so the curve does not
+            // run into the column edges.
+            div {
+                "data-testid": "sc-eq-graph-{stage + 1}",
+                style: "flex:1; min-height:0; position:relative; margin:8px; \
+                        border:1px solid var(--border, rgba(148,163,184,0.25)); \
+                        border-radius:6px; overflow:hidden; \
+                        background:color-mix(in oklab, var(--card, #101216) 30%, transparent);",
 
             EqGraph {
                 bands,
@@ -119,14 +140,6 @@ pub fn SidechainEqView(stage: usize, frame: u64, accent: String) -> Element {
                     ctx_remove.end_set_raw(ptr);
                 },
             }
-
-            div {
-                style: format!(
-                    "position:absolute; top:4px; left:10px; font-size:9px; \
-                     letter-spacing:0.08em; text-transform:uppercase; font-weight:700; \
-                     color:{accent}; pointer-events:none;"
-                ),
-                "Sidechain EQ — what S{stage + 1} listens to"
             }
         }
     }
