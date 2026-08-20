@@ -104,6 +104,27 @@ async fn shot_stack_of_three() {
     shot(&fx, "stack-of-three");
 }
 
+/// A faceplate at a SMALL window: the panel scales down to fit instead of
+/// cropping (the resize contract — no scale floor in the way).
+#[tokio::test]
+async fn shot_1176_scaled_down() {
+    // 500 wide is well under the old 0.55 scale floor that used to crop.
+    // Opened directly on the persisted id — at this size the rail is too
+    // short to click through.
+    use nice_plug::prelude::Param;
+    let params = std::sync::Arc::new(comp_ui::params::CompParams::default());
+    let index = comp_profiles::profile_index("urei_1176").unwrap();
+    params.stage1.store_profile_id(index);
+    unsafe {
+        let p = &params.stage1.profile;
+        p.as_ptr()
+            ._internal_set_normalized_value(p.preview_normalized(index as i32));
+    }
+    let mut fx = mount_with(params, 500, 170);
+    fx.settle().await;
+    shot(&fx, "u76-small-window");
+}
+
 /// A stage's sidechain-EQ sidecar, open under the FTS surface
 /// (`fx.embed-eq.one-surface`).
 #[tokio::test]
