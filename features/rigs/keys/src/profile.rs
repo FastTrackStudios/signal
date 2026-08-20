@@ -510,15 +510,47 @@ pub fn worship_profile() -> KeysProfile {
                 // and nearly always the one voice that must not be ducked by a
                 // pad swell — so it wants its own fader, its own FX tail and
                 // its own place in a scene, which is exactly what an engine is.
+                //
+                // EMPTY on purpose. The live rig's bass is "Worship PHAT Bass",
+                // a User patch that runs Omnisphere in **synthesis mode** — it
+                // names no soundsource at all, so there is no pack to point at
+                // and a sampler lane cannot reproduce it. It needs the synth
+                // voice path, not this one. Leaving it empty is honest; naming
+                // a lookalike pack here would quietly ship the wrong bass.
                 layers: vec![LayerDef::new("Bass", "")],
             },
             EngineDef {
                 name: "Aux".into(),
                 gain_db: 0.0,
-                // The two synth voices a song reaches for. In the gig every
-                // rackspace lane that was not piano, pad or bass — Dulcimer,
-                // Trance, Synth Pluck, Amb Key — landed in one of these two.
-                layers: vec![LayerDef::new("Synth 1", ""), LayerDef::new("Synth 2", "")],
+                // The two synth voices a song reaches for, seeded from the
+                // rackspaces' `Omni Synths` instance. Synth 1 is the plucked
+                // colour a song is built around; Synth 2 is the pulsing lead
+                // that every rackspace kept loaded.
+                layers: vec![
+                    // "Hammered Dolceola" (Keyscape Creative), part level 0.32
+                    // — the Dulcimer lane. Both its layers are Keyscape
+                    // sources played through Omnisphere.
+                    LayerDef {
+                        name: "Synth 1".into(),
+                        patch: "Dolceola ^ RR Lite".into(),
+                        extra_modules: vec!["Clavichord a ^ RR".into()],
+                        gain_db: -9.9,
+                        key_lo: 0,
+                        key_hi: 127,
+                        exclude_global: false,
+                    },
+                    // "CLUB │ Club Europa Plucking Pulsars" (Club Land), part
+                    // level 0.34 — the Trance lane, one soundsource.
+                    LayerDef {
+                        name: "Synth 2".into(),
+                        patch: "Big Berthas Lead".into(),
+                        extra_modules: Vec::new(),
+                        gain_db: -9.4,
+                        key_lo: 0,
+                        key_hi: 127,
+                        exclude_global: false,
+                    },
+                ],
             },
             EngineDef {
                 name: "Drone".into(),
@@ -704,6 +736,40 @@ mod tests {
                 );
             }
         }
+    }
+
+    /// Every patch the profile names must actually resolve to a source on
+    /// disk. This is the check that would have caught the Aux lanes silently
+    /// half-loading: their Keyscape layers were not in the Omnisphere index,
+    /// so the patch would have played thin rather than failed.
+    ///
+    /// Machine-local (it reads the sample library), so `#[ignore]`d — run with
+    /// `cargo test -p signal-keys -- --ignored`.
+    #[test]
+    #[ignore = "needs the local sample library"]
+    fn every_authored_patch_resolves_to_a_source() {
+        let idx = signal_synth::omni_import::SoundsourceIndex::scan_default();
+        assert!(idx.len() > 100, "index looks empty: {}", idx.len());
+
+        let mut missing = Vec::new();
+        for engine in &worship_profile().engines {
+            for lane in &engine.layers {
+                for patch in lane.module_patches() {
+                    // An empty module is a deliberately empty slot.
+                    if patch.is_empty() {
+                        continue;
+                    }
+                    if idx.find(&patch).is_none() {
+                        missing.push(format!("{}/{}: {patch}", engine.name, lane.name));
+                    }
+                }
+            }
+        }
+        assert!(
+            missing.is_empty(),
+            "unresolved patches:\n  {}",
+            missing.join("\n  ")
+        );
     }
 
     #[test]

@@ -9,6 +9,18 @@ use std::path::{Path, PathBuf};
 pub(crate) const OMNISPHERE_PACKS_ROOT: &str =
     "/run/media/AudioHaven/Signal/Libraries/Keys/Omnisphere/Packs";
 
+/// Root of the built Keyscape packs. Indexed alongside the Omnisphere ones
+/// because Keyscape is an Omnisphere library — its soundsources are nameable
+/// from an ordinary Omnisphere patch. Override with `FTS_KEYSCAPE_PACKS`.
+pub(crate) const KEYSCAPE_PACKS_ROOT: &str =
+    "/run/media/AudioHaven/Signal/Libraries/Keys/Keyscape/Packs";
+
+/// Root of the built NI Essential Piano packs. Not an Omnisphere library, but
+/// indexed here because this is the rig's one name→source lookup and a keys
+/// profile names all three families through it. Override with
+/// `FTS_NI_PIANO_PACKS`.
+pub(crate) const NI_PIANO_PACKS_ROOT: &str = "/run/media/AudioHaven/Signal/Libraries/Full/Keys";
+
 // ── Soundsource index ────────────────────────────────────────────────────────
 
 /// Name → spec-path index over the local soundsource extraction. A built
@@ -38,7 +50,20 @@ impl SoundsourceIndex {
         idx.scan_dir(Path::new(&root), 0);
         let packs =
             std::env::var("FTS_OMNISPHERE_PACKS").unwrap_or_else(|_| OMNISPHERE_PACKS_ROOT.into());
-        idx.scan_dir(Path::new(&packs), 0); // packs overwrite raw entries
+        // Packs overwrite raw entries.
+        idx.scan_dir(Path::new(&packs), 0);
+
+        // Keyscape runs *inside* Omnisphere, so an Omnisphere patch can name a
+        // Keyscape soundsource — the gig's "Hammered Dolceola" and "MK-80
+        // Rhodes" both do. Those packs live in their own tree, so without this
+        // the patch resolves half its layers and quietly plays thin.
+        let keyscape =
+            std::env::var("FTS_KEYSCAPE_PACKS").unwrap_or_else(|_| KEYSCAPE_PACKS_ROOT.into());
+        idx.scan_dir(Path::new(&keyscape), 0);
+        // …and the NI pianos, so one index answers for every family a keys
+        // profile can name.
+        let ni = std::env::var("FTS_NI_PIANO_PACKS").unwrap_or_else(|_| NI_PIANO_PACKS_ROOT.into());
+        idx.scan_dir(Path::new(&ni), 0);
         idx
     }
 
@@ -110,6 +135,22 @@ impl SoundsourceIndex {
         if want.is_empty() {
             return None;
         }
+        if let Some(p) = self.find_normalized(&want) {
+            return Some(p);
+        }
+        // Last tier: a trailing single-letter word is a Keyscape capture
+        // variant (`Clavichord a ^ RR` against a `Clavichord` pack) that the
+        // extraction flattened away. Deliberately narrow — a general prefix
+        // match would let "Choir Men Ahs" find a "Choir Men", and playing the
+        // wrong instrument is worse than failing to find one.
+        let (head, last) = want.rsplit_once(' ')?;
+        if last.chars().count() == 1 && last.chars().all(|c| c.is_ascii_alphabetic()) {
+            return self.find_normalized(head);
+        }
+        None
+    }
+
+    fn find_normalized(&self, want: &str) -> Option<&Path> {
         self.by_name
             .iter()
             .find(|(k, _)| normalize_ss_name(k) == want)
@@ -121,8 +162,14 @@ impl SoundsourceIndex {
 /// than which of its dynamic layers a patch wanted.
 fn normalize_ss_name(name: &str) -> String {
     let mut s = name.to_lowercase();
-    // Drop the multi-dynamic marker.
-    s = s.trim_end().trim_end_matches('^').trim_end().to_string();
+    // Everything from the `^` marker onward describes *which capture* of the
+    // source a patch wanted — the marker itself, and any round-robin variant
+    // after it (`Dolceola ^ RR Lite`, `Clavichord a ^ RR`). The extraction
+    // ships one folder per source, so all of that resolves to the same pack.
+    if let Some(caret) = s.find('^') {
+        s.truncate(caret);
+    }
+    s = s.trim_end().to_string();
     // Drop a trailing dynamic selector: " - mf", " - ff", " - p" …
     if let Some((head, tail)) = s.rsplit_once(" - ") {
         const DYNAMICS: [&str; 8] = ["ppp", "pp", "p", "mp", "mf", "f", "ff", "fff"];
@@ -154,6 +201,41 @@ mod tests {
         for dyn_ in ["ppp", "pp", "p", "mp", "mf", "f", "ff", "fff"] {
             assert_eq!(normalize_ss_name(&format!("Pad - {dyn_}")), "pad");
         }
+    }
+
+    /// Everything from `^` onward is which-capture, not which-source.
+    #[test]
+    fn round_robin_variants_after_the_caret_normalize_to_the_base_source() {
+        assert_eq!(normalize_ss_name("Dolceola ^ RR Lite"), "dolceola");
+        assert_eq!(
+            normalize_ss_name("MK-80 Contemporary Rhodes ^"),
+            "mk-80 contemporary rhodes"
+        );
+        assert_eq!(normalize_ss_name("Clavichord a ^ RR"), "clavichord a");
+    }
+
+    /// The trailing-letter tier is narrow on purpose. A general prefix match
+    /// would let a query find a strictly shorter source and play the wrong
+    /// instrument, which is worse than not finding one.
+    #[test]
+    fn only_a_single_trailing_letter_is_treated_as_a_capture_variant() {
+        let strip = |q: &str| -> Option<String> {
+            let want = normalize_ss_name(q);
+            let (head, last) = want.rsplit_once(' ')?;
+            (last.chars().count() == 1 && last.chars().all(|c| c.is_ascii_alphabetic()))
+                .then(|| head.to_string())
+        };
+        assert_eq!(strip("Clavichord a ^ RR").as_deref(), Some("clavichord"));
+        // A real name whose last word is one letter would also strip — but only
+        // AFTER exact and normalized lookups miss, and "Hohner Clavinet" is not
+        // a source, so nothing wrong can be reached.
+        assert_eq!(
+            strip("Hohner Clavinet C").as_deref(),
+            Some("hohner clavinet")
+        );
+        // Multi-letter tails are never stripped.
+        assert_eq!(strip("Choir Men Ahs"), None);
+        assert_eq!(strip("Big Berthas Lead"), None);
     }
 
     #[test]
