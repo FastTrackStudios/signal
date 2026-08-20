@@ -18,6 +18,11 @@ facet-styx.workspace = true
 flate2 = "1"
 
 [dev-dependencies]
+# `import_gig_songs` writes the gig's song library out as song folders. A
+# dev-dep so the direction stays one-way: `song` is portable storage and must
+# never learn about a rig.
+song.workspace = true
+uuid = { workspace = true, features = ["v4"] }
 # The `#[ignore]`d machine-local render tests drive hosted-plugin note events.
 signal-plugin-host.workspace = true
 # `daw::service::MidiMessage` in those same render tests + the omni_state example.
