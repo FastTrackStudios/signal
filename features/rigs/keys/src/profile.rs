@@ -448,11 +448,19 @@ pub fn worship_profile() -> KeysProfile {
             EngineDef {
                 name: "Keys".into(),
                 gain_db: 0.0,
-                // Three lanes, matching the live rig's mixer strip
-                // (Keys 1 / Keys 2 / Keys 3). Nearly every patch in the gig
-                // stacks a main piano with a second keyboard colour under or
-                // over it, and the third lane is what a bright layer or a
-                // second piano goes in without displacing either.
+                // Three lanes, matching the live rig's mixer strip. Traced
+                // through that rig's connection graph, they carried:
+                //
+                //   Keys 1  all four NI pianos + the Keyscape EPs (Vintage /
+                //           Rhodes), summed through Pro-C 2 → CLA-2A →
+                //           Decapitator → Chorus — the main piano channel.
+                //   Keys 2  Keyscape Felt + Wing, direct.
+                //   Keys 3  the Arturia Augmented Grand.
+                //
+                // Keys 3 is empty here because the Arturia is parked (§4 of
+                // the buildout doc: its samples are locked in PLC2, and the
+                // patch's sound is the Augmented engine rather than those
+                // samples). The lane stays so the strip still reads the same.
                 layers: vec![
                     // The piano under everything: excluded from the engine
                     // and rig globals by default, so a filter sweep or an

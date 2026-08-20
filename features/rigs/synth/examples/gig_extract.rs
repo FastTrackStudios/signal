@@ -287,10 +287,18 @@ fn main() {
                     // was never saved to the Spectrasonics user library, so
                     // the gig's plugin state is its only copy. Writing them as
                     // files makes them ours instead of hostage to one .gig.
-                    for (n, part) in split_parts(&xml).into_iter().enumerate() {
-                        let Some((name, body)) = part else { continue };
-                        let file = format!("{stem}.part{}.{}.prt_omn", n + 1, slug(&name));
-                        std::fs::write(dir.join(file), body).expect("write patch");
+                    //
+                    // Named by the PATCH, not by where it sat: in a patch
+                    // library the name is the identity, and that is the name
+                    // a profile and the rig's own scanner look it up by. A
+                    // patch loaded into two rackspaces is one patch, so the
+                    // first write wins rather than the last.
+                    for part in split_parts(&xml).into_iter().flatten() {
+                        let (name, body) = part;
+                        let out = dir.join(format!("{name}.prt_omn"));
+                        if !out.exists() {
+                            std::fs::write(&out, body).expect("write patch");
+                        }
                     }
                 }
                 println!("{stem}  ({} bytes)", p.state.len());

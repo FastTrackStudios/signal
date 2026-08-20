@@ -24,7 +24,7 @@ mod multi;
 pub mod state;
 mod tree;
 
-pub use index::SoundsourceIndex;
+pub use index::{normalize_soundsource_name, resolve_name, SoundsourceIndex};
 pub use model::{
     classify_filter_full, omni_cutoff_hz, parse_patch, OmniLayer, OmniModRoute, OmniPatch,
 };

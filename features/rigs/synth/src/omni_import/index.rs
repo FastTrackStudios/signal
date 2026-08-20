@@ -162,36 +162,66 @@ impl SoundsourceIndex {
         if let Some(p) = self.by_name.get(&name.to_lowercase()) {
             return Some(p.as_path());
         }
-        let want = normalize_ss_name(name);
+        let want = normalize_soundsource_name(name);
         if want.is_empty() {
             return None;
         }
-        if let Some(p) = self.find_normalized(&want) {
-            return Some(p);
-        }
-        // Last tier: a trailing single-letter word is a Keyscape capture
-        // variant (`Clavichord a ^ RR` against a `Clavichord` pack) that the
-        // extraction flattened away. Deliberately narrow — a general prefix
-        // match would let "Choir Men Ahs" find a "Choir Men", and playing the
-        // wrong instrument is worse than failing to find one.
-        let (head, last) = want.rsplit_once(' ')?;
-        if last.chars().count() == 1 && last.chars().all(|c| c.is_ascii_alphabetic()) {
-            return self.find_normalized(head);
-        }
-        None
+        let keys: Vec<&str> = self.by_name.keys().map(String::as_str).collect();
+        let hit = resolve_name(name, keys.iter().copied())?.to_string();
+        self.by_name.get(&hit).map(|p| p.as_path())
     }
+}
 
-    fn find_normalized(&self, want: &str) -> Option<&Path> {
-        self.by_name
-            .iter()
-            .find(|(k, _)| normalize_ss_name(k) == want)
-            .map(|(_, p)| p.as_path())
+/// Match `want` against a set of known names, in three tiers.
+///
+/// Shared so every lookup agrees: the index resolves a patch to a file, the
+/// keys backend resolves the same name against its own scanned library, and
+/// the two disagreeing is precisely how a lane ends up silently empty. It has
+/// happened once already.
+///
+/// 1. Exact (case-insensitive).
+/// 2. [`normalize_soundsource_name`] on both sides — drops the `^`
+///    multi-dynamic marker and anything after it, plus a trailing ` - <dyn>`.
+/// 3. A trailing single-letter word, which is a Keyscape capture variant the
+///    extraction flattened (`Clavichord a ^ RR` against `Clavichord`).
+///
+/// Tier 3 is deliberately narrow. A general prefix match would let
+/// "Choir Men Ahs" find a "Choir Men", and playing the wrong instrument is
+/// worse than failing to find one.
+pub fn resolve_name<'a>(
+    want: &str,
+    known: impl Iterator<Item = &'a str> + Clone,
+) -> Option<&'a str> {
+    let lower = want.to_lowercase();
+    if let Some(k) = known.clone().find(|k| k.to_lowercase() == lower) {
+        return Some(k);
     }
+    let norm = normalize_soundsource_name(want);
+    if norm.is_empty() {
+        return None;
+    }
+    if let Some(k) = known
+        .clone()
+        .find(|k| normalize_soundsource_name(k) == norm)
+    {
+        return Some(k);
+    }
+    let (head, last) = norm.rsplit_once(' ')?;
+    if last.chars().count() == 1 && last.chars().all(|c| c.is_ascii_alphabetic()) {
+        return known
+            .into_iter()
+            .find(|k| normalize_soundsource_name(k) == head);
+    }
+    None
 }
 
 /// Reduce a soundsource name to the part that identifies the *source* rather
 /// than which of its dynamic layers a patch wanted.
-fn normalize_ss_name(name: &str) -> String {
+///
+/// Public because the keys backend does its own library scan and needs to
+/// match names the same way — two lookups disagreeing is how a lane ends up
+/// silently empty.
+pub fn normalize_soundsource_name(name: &str) -> String {
     let mut s = name.to_lowercase();
     // Everything from the `^` marker onward describes *which capture* of the
     // source a patch wanted — the marker itself, and any round-robin variant
@@ -214,35 +244,38 @@ fn normalize_ss_name(name: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::normalize_ss_name;
+    use super::normalize_soundsource_name;
 
     #[test]
     fn dynamic_suffix_and_multidynamic_marker_normalize_together() {
         // The real mismatch: the gig's Gentle Gothics asks for these names,
         // the extraction wrote those folders.
         assert_eq!(
-            normalize_ss_name("Choir Men Ohs - mf"),
-            normalize_ss_name("Choir Men Ohs  ^")
+            normalize_soundsource_name("Choir Men Ohs - mf"),
+            normalize_soundsource_name("Choir Men Ohs  ^")
         );
         assert_eq!(
-            normalize_ss_name("Choir Women Oos - mf"),
-            normalize_ss_name("Choir Women Oos  ^")
+            normalize_soundsource_name("Choir Women Oos - mf"),
+            normalize_soundsource_name("Choir Women Oos  ^")
         );
         // Every dynamic marker, not just mf.
         for dyn_ in ["ppp", "pp", "p", "mp", "mf", "f", "ff", "fff"] {
-            assert_eq!(normalize_ss_name(&format!("Pad - {dyn_}")), "pad");
+            assert_eq!(normalize_soundsource_name(&format!("Pad - {dyn_}")), "pad");
         }
     }
 
     /// Everything from `^` onward is which-capture, not which-source.
     #[test]
     fn round_robin_variants_after_the_caret_normalize_to_the_base_source() {
-        assert_eq!(normalize_ss_name("Dolceola ^ RR Lite"), "dolceola");
+        assert_eq!(normalize_soundsource_name("Dolceola ^ RR Lite"), "dolceola");
         assert_eq!(
-            normalize_ss_name("MK-80 Contemporary Rhodes ^"),
+            normalize_soundsource_name("MK-80 Contemporary Rhodes ^"),
             "mk-80 contemporary rhodes"
         );
-        assert_eq!(normalize_ss_name("Clavichord a ^ RR"), "clavichord a");
+        assert_eq!(
+            normalize_soundsource_name("Clavichord a ^ RR"),
+            "clavichord a"
+        );
     }
 
     /// The trailing-letter tier is narrow on purpose. A general prefix match
@@ -251,7 +284,7 @@ mod tests {
     #[test]
     fn only_a_single_trailing_letter_is_treated_as_a_capture_variant() {
         let strip = |q: &str| -> Option<String> {
-            let want = normalize_ss_name(q);
+            let want = normalize_soundsource_name(q);
             let (head, last) = want.rsplit_once(' ')?;
             (last.chars().count() == 1 && last.chars().all(|c| c.is_ascii_alphabetic()))
                 .then(|| head.to_string())
@@ -274,16 +307,16 @@ mod tests {
         // Real soundsource names contain hyphens; only a trailing dynamic
         // token may be stripped, or distinct sources would collide.
         assert_eq!(
-            normalize_ss_name("OB-8 PWM Big Strings"),
+            normalize_soundsource_name("OB-8 PWM Big Strings"),
             "ob-8 pwm big strings"
         );
         assert_eq!(
-            normalize_ss_name("Rhodes - LA Custom"),
+            normalize_soundsource_name("Rhodes - LA Custom"),
             "rhodes - la custom"
         );
         assert_ne!(
-            normalize_ss_name("Choir Men Ohs - mf"),
-            normalize_ss_name("Choir Men Ahs - mf")
+            normalize_soundsource_name("Choir Men Ohs - mf"),
+            normalize_soundsource_name("Choir Men Ahs - mf")
         );
     }
 }

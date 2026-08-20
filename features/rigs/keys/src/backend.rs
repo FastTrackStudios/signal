@@ -2034,12 +2034,29 @@ impl KeysRigBackend {
         state.adopt_profile(profile);
         // Lanes whose authored patch isn't in the library start empty rather
         // than silently pointing at a missing pack.
+        //
+        // Matched with the same normalization the soundsource index uses, and
+        // rewritten to the library's own spelling on a match: a profile names
+        // a patch the way the patch does (`Dolceola ^ RR Lite`) while the
+        // library names it the way the extraction wrote the folder
+        // (`Dolceola`). Two lookups disagreeing is exactly how a lane ends up
+        // quietly empty, which is what this loop exists to prevent.
         let known: Vec<String> = state.presets.iter().map(|p| p.name.clone()).collect();
+        let canonical = |want: &str| -> Option<String> {
+            signal_synth::omni_import::resolve_name(want, known.iter().map(String::as_str))
+                .map(str::to_string)
+        };
         for lane in state.lanes.values_mut() {
             for m in lane.modules.iter_mut() {
-                if !m.patch.is_empty() && !known.contains(&m.patch) {
-                    tracing::info!(patch = %m.patch, "keys rig: profile patch not in library — module starts empty");
-                    m.patch.clear();
+                if m.patch.is_empty() {
+                    continue;
+                }
+                match canonical(&m.patch) {
+                    Some(name) => m.patch = name,
+                    None => {
+                        tracing::info!(patch = %m.patch, "keys rig: profile patch not in library — module starts empty");
+                        m.patch.clear();
+                    }
                 }
             }
         }
