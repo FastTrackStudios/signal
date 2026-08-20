@@ -25,9 +25,9 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use crate::{
-    SamplerError,
     midi::{nearest_grid_note, note_name_to_midi},
     spec::LibrarySpec,
+    SamplerError,
 };
 
 // ── Sample key ────────────────────────────────────────────────────────────────
@@ -765,7 +765,10 @@ fn underscore_note(stem: &str) -> Option<u8> {
                 j += 1;
             }
             // digits, then '-', then at least one digit → a `<note>-<vel>` group
-            if j > i + 1 && j < b.len() && b[j] == b'-' && b.get(j + 1).is_some_and(u8::is_ascii_digit)
+            if j > i + 1
+                && j < b.len()
+                && b[j] == b'-'
+                && b.get(j + 1).is_some_and(u8::is_ascii_digit)
             {
                 if let Ok(n) = stem[i + 1..j].parse::<u16>() {
                     if n <= 127 {
@@ -983,6 +986,47 @@ mod tests {
         assert_eq!(key.note, 100);
     }
 
+    /// Real filenames from the Keyscape patches whose packs shipped
+    /// incomplete. The packs were missing the *files* (the out-of-tree builder
+    /// that selected them is gone), not failing to parse — but a rebuild is
+    /// only worth doing if the map can then reach what it packs, so these pin
+    /// that down before the rebuild rather than after.
+    #[test]
+    fn parse_keyscape_space_separated_body_samples() {
+        // Vintage Vibe EP. Its pack held 4516 release samples and zero bodies;
+        // the body names carry a space *inside* the articulation token
+        // ("VVEP r06") and a " v10" velocity field rather than "-100".
+        let body = parse_sample_stem("RR01_SL01 VVEP r06_100 v10").expect("body parses");
+        assert_eq!(body.articulation, "vvepr06", "matches the styx artic id");
+        assert_eq!(body.note, 100);
+        assert_eq!(body.rr, 0);
+        // v01..v19 map across 1..=127, so layers cannot collapse onto one key.
+        assert_eq!(body.dynamic, "67", "v10 of 19 lands mid-scale");
+        let louder = parse_sample_stem("RR01_SL01 VVEP r06_100 v19").unwrap();
+        assert_ne!(louder.dynamic, body.dynamic, "velocity layers stay distinct");
+
+        // The releases from the same patch — these are what did get packed.
+        let rel = parse_sample_stem("RR01_SL01 VVRFstr04_100-100").expect("release parses");
+        assert_eq!(rel.articulation, "vvrfstr04");
+        assert_eq!(rel.note, 100);
+
+        // MKS-20 E Piano 1: 1320 files became 15 pack entries. Spaces run
+        // right through the articulation token here.
+        let mks = parse_sample_stem("MKS20 EP 1 r2_100-107").expect("MKS-20 body parses");
+        assert_eq!(mks.note, 100, "the note is the _<note>-<vel> group");
+        assert_eq!(mks.dynamic, "107");
+        assert!(
+            mks.articulation.starts_with("mks20ep"),
+            "articulation keeps the name tokens, got {:?}",
+            mks.articulation
+        );
+
+        // Rhodes Bass: space-separated throughout, half the files missing.
+        let rbd = parse_sample_stem("RR01_SL01 rbd rel 109 28").expect("Rhodes Bass parses");
+        assert_eq!(rbd.note, 109);
+        assert_eq!(rbd.direction, "rel", "a release layer, not a body");
+    }
+
     #[test]
     fn nearest_numeric_dynamic_uses_available_rr_layer() {
         let mut map = HashMap::new();
@@ -1130,6 +1174,9 @@ mod tests {
                 },
             )
             .expect("resolve dyn 84 rr2");
-        assert_eq!(path.file_name().unwrap().to_string_lossy(), "RR03 lacrm 60 84.flac");
+        assert_eq!(
+            path.file_name().unwrap().to_string_lossy(),
+            "RR03 lacrm 60 84.flac"
+        );
     }
 }
