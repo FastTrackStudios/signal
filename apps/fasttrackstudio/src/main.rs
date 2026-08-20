@@ -115,6 +115,12 @@ fn main() {
         }
     }
 
+    // `--keys` / `--workspace X --rig Y`: open straight to a place instead of
+    // wherever the app was last left. Before the engine branch so `--engine`
+    // stays unaffected.
+    #[cfg(not(target_arch = "wasm32"))]
+    apply_open_args();
+
     // `fasttrackstudio --engine` = the headless signal engine (the former
     // `signal-engine` binary): no GUI, no in-process session engine — just
     // the rig core + its vox router + the embedded web remote. Dispatch
@@ -370,12 +376,73 @@ fn hash_workspace() -> Option<Workspace> {
 
 /// Where the app lands: the URL hash (web), else the persisted last
 /// choice, else Home.
+/// Match a workspace by its label, case-insensitively (`"signal"`, `"Charts"`).
+///
+/// The label is already the user-facing name of the place, so it is the slug
+/// too rather than inventing a second vocabulary for the command line.
+#[cfg(not(target_arch = "wasm32"))]
+fn workspace_from_slug(slug: &str) -> Option<Workspace> {
+    Workspace::all()
+        .into_iter()
+        .find(|(_, label)| label.eq_ignore_ascii_case(slug.trim()))
+        .map(|(w, _)| w)
+}
+
 fn initial_workspace() -> Option<Workspace> {
+    // An explicit request beats the remembered workspace, for the same reason
+    // as `FTS_OPEN_RIG` above it.
+    #[cfg(not(target_arch = "wasm32"))]
+    if let Some(w) = std::env::var("FTS_OPEN_WORKSPACE")
+        .ok()
+        .and_then(|s| workspace_from_slug(&s))
+    {
+        return Some(w);
+    }
     #[cfg(target_arch = "wasm32")]
     if let Some(w) = hash_workspace() {
         return Some(w);
     }
     Some(load_last_workspace().unwrap_or(Workspace::Home))
+}
+
+/// Turn `--workspace`/`--rig` (and the `--keys`-style shorthands) into the env
+/// vars `initial_workspace` and `load_last_rig` read.
+///
+/// Env rather than threaded state because both readers are deep inside
+/// component init, on both the desktop and wasm sides — and because it means
+/// the same override works without a flag when launching from a unit file or
+/// a wrapper script.
+///
+/// # Safety
+/// Called once at the top of `main`, before any thread or GUI init.
+#[cfg(not(target_arch = "wasm32"))]
+fn apply_open_args() {
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    let value_of = |flag: &str| -> Option<String> {
+        args.iter()
+            .position(|a| a == flag)
+            .and_then(|i| args.get(i + 1))
+            .cloned()
+    };
+    let mut workspace = value_of("--workspace");
+    let mut rig = value_of("--rig");
+    // `--<rig>` shorthand: `--keys` is `--workspace signal --rig keys`. These
+    // are the ones typed most often while iterating on a rig.
+    for slug in ["guitar", "bass", "drums", "keys", "synth", "ekit"] {
+        if args.iter().any(|a| a == &format!("--{slug}")) {
+            workspace.get_or_insert_with(|| "signal".to_string());
+            rig.get_or_insert_with(|| slug.to_string());
+        }
+    }
+    // SAFETY: single-threaded, before any GUI or thread init.
+    unsafe {
+        if let Some(w) = workspace {
+            std::env::set_var("FTS_OPEN_WORKSPACE", w);
+        }
+        if let Some(r) = rig {
+            std::env::set_var("FTS_OPEN_RIG", r);
+        }
+    }
 }
 
 #[component]

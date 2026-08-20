@@ -127,6 +127,17 @@ impl RigKind {
 }
 
 fn load_last_rig() -> Option<RigKind> {
+    // An explicit request wins over the remembered rig: `--rig keys` (or
+    // `FTS_OPEN_RIG=keys`) is someone saying "open here now", and having it
+    // lose to last session's choice would make the flag useless exactly when
+    // you reach for it.
+    #[cfg(not(target_arch = "wasm32"))]
+    if let Some(k) = std::env::var("FTS_OPEN_RIG")
+        .ok()
+        .and_then(|s| RigKind::from_slug(s.trim()))
+    {
+        return Some(k);
+    }
     #[cfg(target_arch = "wasm32")]
     {
         let hash = web_sys::window()
