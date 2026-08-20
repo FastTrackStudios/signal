@@ -256,7 +256,11 @@ Everything else in the library was already 0.94–1.00 and was left alone.
       Vintage Vibe EP.db` reproduces the corruption exactly: same 6055 files,
       same 1539 bodies undecodable, releases fine. So this is not data rot on
       disk, it is the extractor.
-- [ ] **KS8 — Fix `sc-import steam` for the Vintage Vibe EP bodies.** Lives in
+- [ ] **KS8 — Fix `sc-import steam` for the Vintage Vibe EP bodies.**
+      **PARKED, low priority: no patch in the rig uses Vintage Vibe EP.**
+      `gig_extract presets` reports it as one of the two sources no patch ever
+      enables, so the broken pack costs the live rig nothing. Kept as an
+      availability gap, not a defect to chase. Lives in
       the **`sample-collector` repo** (`/run/media/Development/FastTrackStudio-legacy/
       sample-collector`, `crates/sc-import`, prebuilt at `target/release/sc-import`),
       not here — so it is a cross-repo job, which is why it is filed rather than
