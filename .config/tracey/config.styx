@@ -11,6 +11,7 @@ specs (
         include (
             docs/spec/**/*.md
             features/expression-editor/spec/**/*.md
+            features/rigs/*/spec/**/*.md
         )
         impls (
             {

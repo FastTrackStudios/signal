@@ -213,18 +213,30 @@ fn library_styx(lib_name: &str, pack: &str, vendor: &str, zones: &[Zone]) -> Str
     s.push_str("mics ({\n  id Main\n  label Main\n  kind blended\n  default true\n})\n\n");
     s.push_str("dynamics {\n  short_note_controller velocity\n}\n\n");
 
-    // One articulation per KSP group present. Everything on these pianos is
-    // velocity-switched and note-off-terminated; the Release group is what
-    // fires on note-off, so it is the only @Release kind.
-    let groups: BTreeSet<&str> = zones.iter().map(|z| z.group.as_str()).collect();
-    let has_release = groups.contains("Release");
+    // One articulation per KSP group present.
+    //
+    // Kind and ORDER both matter: `engine::default_articulation` picks the
+    // first `@Sustain` articulation that isn't obviously auxiliary, so a naive
+    // alphabetical emit makes "Damper" — a two-key noise group — the default
+    // voice, and the pack plays damper thuds instead of a piano. The noise
+    // groups are one-shots, which is both semantically right and enough to
+    // keep them out of that race; DryTones is emitted first regardless.
+    let present: BTreeSet<&str> = zones.iter().map(|z| z.group.as_str()).collect();
+    let has_release = present.contains("Release");
+    let kind_of = |g: &str| match g {
+        "Release" => "@Release",
+        // Struck/mechanical noises: fire once, no sustain, never the default.
+        "Hammer" | "Damper" | "Pedal" | "Stringnoise" => "@OneShot",
+        // DryTones, Resonance, SSR — held, velocity-switched.
+        _ => "@Sustain",
+    };
+    let groups: Vec<&str> = std::iter::once("DryTones")
+        .filter(|g| present.contains(g))
+        .chain(present.iter().copied().filter(|g| *g != "DryTones"))
+        .collect();
     s.push_str("articulations (");
     for (i, g) in groups.iter().enumerate() {
-        let kind = if *g == "Release" {
-            "@Release"
-        } else {
-            "@Sustain"
-        };
+        let kind = kind_of(g);
         if i > 0 {
             s.push(' ');
         }
