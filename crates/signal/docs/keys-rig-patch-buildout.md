@@ -187,26 +187,37 @@ Packs live in `/run/media/AudioHaven/Signal/Libraries/Keys/Keyscape/Packs/`
 | **Double Felt Grand** | 2628 MB | 2624 MB | 1.00 | complete |
 | **Wing Upright** | 10042 MB | 10028 MB | 1.00 | complete |
 
-### 2.1 Root cause — the filename convention parser
+### 2.1 Root cause — the packs were never given the files
 
-Keyscape packs are built in **convention mode**: articulation, note and
-velocity are parsed out of the filename. Where a patch's articulation token
-contains spaces, or the fields are space-separated rather than `_`/`-`
-separated, the parse fails and those samples are dropped **silently**.
+First reading of this was "the filename convention parser drops them". That is
+**wrong**, and worth stating plainly because it points at the wrong fix.
 
-Vintage Vibe EP is the clean demonstration. Its two filename shapes:
+`create_signal_pack` packs the paths it is handed; it does not parse names.
+Name parsing (`sample_map::parse_sample_stem`) happens later, at map time. So a
+pack containing **zero** body samples means the builder was never given them.
+
+And the parser handles these names fine. Tracing `parse_keyscape_loose_stem`
+over the body filename:
 
 ```
-RR01_SL01 VVRFstr04_100-100.flac    release — <artic>_<note>-<vel>   → parses
-RR01_SL01 VVEP r06_100 v10.flac     body    — space in "VVEP r06",
-                                              " v10" velocity form   → dropped
+RR01_SL01 VVEP r06_100 v10
+  loose_tokens → ["rr01","sl01","vvep","r06","100","v10"]
+  note      = 100        (the only token ≤ 127)
+  dynamic   = 67         (v10 → (10/19)×127, the velocity-layer mapping)
+  artic     = "vvepr06"  (rr*/sl* skipped, remainder joined)
 ```
 
-The pack holds **4516 entries, every one a release sample, and zero body
-samples** (`grep -c VVEP` over the pack = 0). It is a Vintage Vibe with no
-Vintage Vibe in it — note-off tails only. That is why 2.1 G became 117 MB, and
-why "it sounds thin" would never have been the report; it makes almost no
-sound at all.
+`vvepr06` is exactly the articulation id in that patch's `library.styx`. The
+parser and the spec agree; the samples are simply absent.
+
+**Which means the tool is the problem, and the tool is gone.** `build_pack`'s
+own header says it: *"the CLI that built the existing packs is not in-tree."*
+Whatever selected the file set for these 43 packs is not in this repo and
+cannot be inspected or fixed. There is no in-tree Keyscape builder at all.
+
+So the fix is a **rebuild with in-tree tooling**, not a parser patch — and
+`build_pack` already does the safe thing by globbing every audio file under the
+sample root, leaving no selection logic to get wrong.
 
 ### 2.2 The sweep — this hits 10 of 43 packs
 
@@ -237,22 +248,32 @@ Nothing else in the tree is affected: `LA Custom C7 Grand`, `Wing Upright`,
 
 ### 2.3 Tasks
 
-- [x] **KS2 — Diagnose Vintage Vibe EP.** Done, above — and it turned up nine
-      more.
-- [ ] **KS4 — Fix the convention parser** so a space-bearing articulation token
-      and a ` v<NN>` velocity field parse. This is the actual bug; the rebuilds
-      depend on it.
-- [ ] **KS5 — Make the failure loud.** The Keyscape builder should refuse, or at
-      minimum warn hard, when the samples it packed are materially fewer than
-      the audio files it was pointed at. Ten packs shipped broken because
-      nothing compared those two numbers. `build_ni_packs` now does this for
-      undecodable samples (§1.2 K2/K3); the same guard belongs here.
+- [x] **KS2 — Diagnose Vintage Vibe EP.** Done — and it turned up nine more.
+- [ ] **KS4 — A Keyscape pack builder, in-tree.** Modelled on `build_ni_packs`:
+      glob the sample root, build Full + Proxy, and refuse to write a pack whose
+      packed count is materially below the input count. `build_pack` is the
+      minimum viable version of this today (it globs, so it cannot repeat the
+      selection bug) but it is single-pack, lossless-only and has no guard.
+- [ ] **KS4a — Pin the parser with tests first.** Before rebuilding anything,
+      unit-test `parse_sample_stem` against real filenames from all ten
+      suspect patches. The trace in §2.1 is a desk check, not a test run, and
+      a pack full of samples the map cannot reach would look exactly as broken
+      as the current one. This is cheap and it de-risks every rebuild below.
+- [ ] **KS5 — Make the failure loud.** Ten packs shipped broken because nothing
+      compared packed-count against input-count. `build_ni_packs` now errors on
+      undecodable samples (§1.2); the count check belongs everywhere.
 - [ ] **KS1 — Confirm whether the 2026-05-05 extraction predates the NCW
       mid/side decode fix.** If so, re-extract before rebuilding. See the
       `ncw-midside-decode-bug` note.
-- [ ] **KS3 — Rebuild.** The four in §2.0 first (that is what the rig needs),
-      then the other six. Reminder from `keyscape-pack-loading`: the rig loads
-      `.signalpack` only, so a re-extract without a rebuild never reaches it.
+- [ ] **KS3 — Rebuild.** Vintage Vibe EP first (the only one of §2.0's four that
+      is broken), then the other nine. Reminder from `keyscape-pack-loading`:
+      the rig loads `.signalpack` only, so a re-extract without a rebuild never
+      reaches it.
+- [ ] **KS6 — Re-verify the 0.34–0.58 group at entry level.** The byte ratio is
+      a proxy. Vintage Vibe EP and MKS-20 were confirmed by counting entries in
+      the pack; Simone Celeste, Dulcitone, Rhodes Bass, Rhodes - Pre-Piano and
+      Electric Harpsichord have not been, and a legitimate reason for half the
+      bytes (mono sources, a dropped duplicate layer) has not been ruled out.
 
 ---
 
