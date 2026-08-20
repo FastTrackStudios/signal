@@ -8,15 +8,18 @@
 //!
 //! ~30 KB/s mutation throughput per pack regardless of audio size, vs. minutes
 //! to fully re-pack a library with its source samples.
+//!
+//! Header parsing/encoding delegates to [`PackFileHeader`] — the one
+//! `.signalpack` header implementation (it lives with the pack reader in
+//! `fts-sample`); this module only patches the index span and carries every
+//! other header byte forward verbatim.
 
 use std::fs::File;
 use std::io::{BufWriter, Read, Seek, SeekFrom, Write};
 use std::path::Path;
 
 use crate::SamplerError;
-
-const SIGNAL_PACK_MAGIC: &[u8; 8] = b"SIGPACK\0";
-const SIGNAL_PACK_HEADER_LEN: usize = 64;
+use crate::engine::cache::PackFileHeader;
 
 const SPEC_BEGIN: &str = "# spec_begin\n";
 const SPEC_END: &str = "# spec_end";
@@ -32,23 +35,10 @@ where
     F: FnOnce(&str) -> String,
 {
     let mut file = File::open(pack_path)?;
-    let mut header = [0u8; SIGNAL_PACK_HEADER_LEN];
-    file.read_exact(&mut header)?;
-    if &header[0..8] != SIGNAL_PACK_MAGIC {
-        return Err(invalid_data(format!(
-            "{}: invalid signal pack magic",
-            pack_path.display()
-        )));
-    }
-    let body_offset = read_u64(&header, 16)? as usize;
-    let index_offset = read_u64(&header, 24)? as usize;
-    let index_len = read_u64(&header, 32)? as usize;
-    if body_offset != SIGNAL_PACK_HEADER_LEN || index_offset < body_offset {
-        return Err(invalid_data(format!(
-            "{}: implausible header offsets",
-            pack_path.display()
-        )));
-    }
+    let header = PackFileHeader::read(&mut file)?;
+    let body_offset = header.body_offset() as usize;
+    let index_offset = header.index_offset() as usize;
+    let index_len = header.index_len() as usize;
 
     // Copy audio body verbatim.
     let body_size = index_offset - body_offset;
@@ -68,11 +58,10 @@ where
     let tmp_path = pack_path.with_extension("signalpack.tmp");
     {
         let mut out = BufWriter::new(File::create(&tmp_path)?);
-        let mut new_header = header;
         let new_index_offset = body_offset + body.len();
-        write_u64(&mut new_header, 24, new_index_offset as u64);
-        write_u64(&mut new_header, 32, new_index.len() as u64);
-        out.write_all(&new_header)?;
+        let new_header =
+            header.with_index_span(new_index_offset as u64, new_index.len() as u64);
+        out.write_all(new_header.as_bytes())?;
         out.write_all(&body)?;
         out.write_all(&new_index)?;
         out.flush()?;
@@ -85,18 +74,9 @@ where
 /// index. Cheap header-only read for tools that only need the spec content.
 pub fn read_embedded_spec(pack_path: &Path) -> Result<String, SamplerError> {
     let mut file = File::open(pack_path)?;
-    let mut header = [0u8; SIGNAL_PACK_HEADER_LEN];
-    file.read_exact(&mut header)?;
-    if &header[0..8] != SIGNAL_PACK_MAGIC {
-        return Err(invalid_data(format!(
-            "{}: invalid signal pack magic",
-            pack_path.display()
-        )));
-    }
-    let index_offset = read_u64(&header, 24)? as usize;
-    let index_len = read_u64(&header, 32)? as usize;
-    file.seek(SeekFrom::Start(index_offset as u64))?;
-    let mut buf = vec![0u8; index_len];
+    let header = PackFileHeader::read(&mut file)?;
+    file.seek(SeekFrom::Start(header.index_offset()))?;
+    let mut buf = vec![0u8; header.index_len() as usize];
     file.read_exact(&mut buf)?;
     let text = std::str::from_utf8(&buf)
         .map_err(|_| invalid_data(format!("{}: non-utf8 index", pack_path.display())))?;
@@ -149,17 +129,6 @@ fn find_line_start(hay: &str, needle: &str) -> Option<usize> {
     Some(pos + 1) // step past the newline so the slice ends right at the marker
 }
 
-fn read_u64(bytes: &[u8], offset: usize) -> Result<u64, SamplerError> {
-    let slice = bytes
-        .get(offset..offset + 8)
-        .ok_or_else(|| invalid_data("header truncated"))?;
-    Ok(u64::from_le_bytes(slice.try_into().unwrap()))
-}
-
-fn write_u64(bytes: &mut [u8], offset: usize, value: u64) {
-    bytes[offset..offset + 8].copy_from_slice(&value.to_le_bytes());
-}
-
 fn invalid_data(msg: impl Into<String>) -> SamplerError {
     SamplerError::Io(std::io::Error::new(
         std::io::ErrorKind::InvalidData,
@@ -174,7 +143,7 @@ mod tests {
     fn build_minimal_pack(spec: &str) -> Vec<u8> {
         // Synthetic pack: 64-byte header + 16-byte fake audio body + index.
         let body = b"AUDIOBYTESxxxxxx";
-        let body_offset = SIGNAL_PACK_HEADER_LEN as u64;
+        let body_offset = PackFileHeader::LEN as u64;
         let index_offset = body_offset + body.len() as u64;
         let mut index = String::new();
         index.push_str("# signalpack-index-v1\n");
@@ -187,16 +156,10 @@ mod tests {
         index.push_str("# spec_end\n");
         index.push_str("# source\toffset\tbytes\tchannels\tsample_rate\tnum_frames\tsamples\n");
         index.push_str("foo.flac\t64\t16\t1\t44100\t8\t8\n");
-        let mut header = [0u8; SIGNAL_PACK_HEADER_LEN];
-        header[..8].copy_from_slice(SIGNAL_PACK_MAGIC);
-        // version=1, kind=5 (FLAC_I24)
-        header[8..12].copy_from_slice(&1u32.to_le_bytes());
-        header[12..16].copy_from_slice(&5u32.to_le_bytes());
-        write_u64(&mut header, 16, body_offset);
-        write_u64(&mut header, 24, index_offset);
-        write_u64(&mut header, 32, index.len() as u64);
+        // kind=5 (FLAC_I24), one entry.
+        let header = PackFileHeader::new(5, index_offset, index.len() as u64, 1);
         let mut out = Vec::new();
-        out.extend_from_slice(&header);
+        out.extend_from_slice(header.as_bytes());
         out.extend_from_slice(body);
         out.extend_from_slice(index.as_bytes());
         out
@@ -225,5 +188,9 @@ mod tests {
         // Audio body must survive verbatim.
         let bytes = std::fs::read(&path).unwrap();
         assert_eq!(&bytes[64..80], b"AUDIOBYTESxxxxxx");
+        // Entry count survives the rewrite verbatim.
+        let mut f = std::fs::File::open(&path).unwrap();
+        let header = PackFileHeader::read(&mut f).unwrap();
+        assert_eq!(header.entry_count(), 1);
     }
 }
