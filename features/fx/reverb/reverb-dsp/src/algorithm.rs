@@ -158,6 +158,99 @@ pub struct AlgorithmParams {
     pub high_decay_mult: f64,
     /// Crossover frequency for the two decay bands.
     pub band_crossover_hz: f64,
+    /// The Decay Rate EQ (`fx.reverb.decay-eq`, docs/spec/fx/embedded-eq.md):
+    /// up to six Bell / Shelf / Notch curves of decay-time multipliers over
+    /// frequency, generalizing the low/high crossover pair above. The FDN
+    /// algorithms (the Hall family) realize it exactly in the feedback path
+    /// ([`crate::primitives::fdn::Fdn::set_decay_curve`]); other engines
+    /// collapse it onto `low_decay_mult` / `high_decay_mult`
+    /// ([`decay_bands_collapsed`]).
+    pub decay_bands: [DecayBand; DECAY_BANDS],
+}
+
+/// Number of Decay Rate EQ bands.
+pub const DECAY_BANDS: usize = 6;
+
+/// One Decay Rate EQ band: a curve of decay-TIME multipliers over frequency
+/// (`fx.reverb.decay-eq`). `rate` 1.0 = the space's natural decay; 4.0 =
+/// four times longer at this band; 0.25 = a quarter (Pro-R 2's 25 %–400 %).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct DecayBand {
+    /// 0 = Bell, 1 = Low Shelf, 2 = High Shelf (a Notch is a Bell with a
+    /// small `rate` and high `q`).
+    pub shape: u32,
+    pub freq_hz: f64,
+    /// Decay-time multiplier, 0.25..=4.0.
+    pub rate: f64,
+    pub q: f64,
+}
+
+impl Default for DecayBand {
+    fn default() -> Self {
+        Self {
+            shape: 0,
+            freq_hz: 1000.0,
+            rate: 1.0,
+            q: 0.707,
+        }
+    }
+}
+
+impl DecayBand {
+    /// Whether this band changes anything.
+    pub fn is_active(&self) -> bool {
+        (self.rate - 1.0).abs() > 0.005
+    }
+
+    /// The band's rate contribution at `freq`, in "rate dB"
+    /// (20·log10(rate) shaped by the band's curve — the same bell/shelf
+    /// magnitude the EQ display draws).
+    pub fn rate_db_at(&self, freq: f64) -> f64 {
+        let peak_db = 20.0 * self.rate.clamp(0.25, 4.0).log10();
+        let f0 = self.freq_hz.max(10.0);
+        let q = self.q.clamp(0.1, 18.0);
+        // Analog-prototype magnitudes — display-and-collapse grade.
+        let w = freq / f0;
+        match self.shape {
+            1 => {
+                // Low shelf: full below f0, none far above.
+                let t = 1.0 / (1.0 + (w * q * 1.414).powi(2));
+                peak_db * t
+            }
+            2 => {
+                // High shelf: full above f0.
+                let t = 1.0 - 1.0 / (1.0 + (w / (q * 1.414).recip()).powi(2));
+                let t = t.clamp(0.0, 1.0);
+                peak_db * t
+            }
+            _ => {
+                // Bell.
+                let bw = w - 1.0 / w.max(1e-9);
+                peak_db / (1.0 + (bw * q).powi(2))
+            }
+        }
+    }
+}
+
+/// The whole curve's decay-rate multiplier at `freq` (bands sum in rate-dB,
+/// clamped to Pro-R's 0.25..4 range).
+pub fn decay_rate_at(bands: &[DecayBand; DECAY_BANDS], freq: f64) -> f64 {
+    let db: f64 = bands
+        .iter()
+        .filter(|b| b.is_active())
+        .map(|b| b.rate_db_at(freq))
+        .sum();
+    10.0f64.powf(db / 20.0).clamp(0.25, 4.0)
+}
+
+/// Collapse the curve to the legacy low/high multiplier pair, for engines
+/// without a per-frequency feedback path: the rate sampled in the bass
+/// (100 Hz) and the top (6 kHz).
+pub fn decay_bands_collapsed(bands: &[DecayBand; DECAY_BANDS]) -> (f64, f64) {
+    if !bands.iter().any(|b| b.is_active()) {
+        return (1.0, 1.0);
+    }
+    (decay_rate_at(bands, 100.0), decay_rate_at(bands, 6000.0))
 }
 
 impl Default for AlgorithmParams {
@@ -174,6 +267,7 @@ impl Default for AlgorithmParams {
             low_decay_mult: 1.0,
             high_decay_mult: 1.0,
             band_crossover_hz: 700.0,
+            decay_bands: [DecayBand::default(); DECAY_BANDS],
         }
     }
 }

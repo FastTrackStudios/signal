@@ -181,6 +181,12 @@ pub fn App() -> Element {
     let profile_count = reverb_profiles::PROFILES.len();
     let accent = design.accent.to_string();
     let accent_for_form = accent.clone();
+    let accent_for_eq = accent.clone();
+
+    // 0 = the space's face, 1 = Post EQ, 2 = Decay Rate EQ
+    // (`fx.reverb.eq-display`).
+    let mut eq_view = use_signal(|| 0usize);
+    let eq_page = *eq_view.read();
 
     rsx! {
         ThemeProvider { state: theme,
@@ -207,6 +213,28 @@ pub fn App() -> Element {
                     params_for_id.store_profile_id(index);
                 },
                 rail_footer: rsx! {
+                    // The two embedded EQs (`fx.reverb.eq-display`): one
+                    // button cycles Space → Post EQ → Decay Rate EQ. Local
+                    // UI state, never a plugin param.
+                    RailButton {
+                        testid: "eq-view-cycle".to_string(),
+                        label: match eq_page {
+                            1 => "PEQ".to_string(),
+                            2 => "DEQ".to_string(),
+                            _ => "EQ".to_string(),
+                        },
+                        title: match eq_page {
+                            1 => "Post EQ (click for Decay Rate EQ)".to_string(),
+                            2 => "Decay Rate EQ (click for the space)".to_string(),
+                            _ => "EQ — Post EQ / Decay Rate EQ".to_string(),
+                        },
+                        active: eq_page != 0,
+                        accent: accent_for_eq.clone(),
+                        on_click: move |_| {
+                            let next = (*eq_view.peek() + 1) % 3;
+                            eq_view.set(next);
+                        },
+                    }
                     RailButton {
                         testid: "form-cycle".to_string(),
                         label: form.badge().to_string(),
@@ -221,14 +249,25 @@ pub fn App() -> Element {
                     }
                 },
 
-                // Keyed list of one: swapping a face swaps a whole subtree,
-                // and blitz's mutator wants a stable, keyed node to land on.
-                for id in [profile.id] {
-                    SpaceFace {
-                        key: "{id}",
-                        profile_id: id.to_string(),
-                        handles: handles.clone(),
-                        frame,
+                // Keyed list of one: swapping a face (or an EQ view) swaps a
+                // whole subtree, and blitz's mutator wants a stable, keyed
+                // node to land on.
+                if eq_page != 0 {
+                    for key in [format!("eq-{eq_page}")] {
+                        crate::eq_view::ReverbEqView {
+                            key: "{key}",
+                            mode_is_decay: eq_page == 2,
+                            frame,
+                        }
+                    }
+                } else {
+                    for id in [profile.id] {
+                        SpaceFace {
+                            key: "{id}",
+                            profile_id: id.to_string(),
+                            handles: handles.clone(),
+                            frame,
+                        }
                     }
                 }
             }

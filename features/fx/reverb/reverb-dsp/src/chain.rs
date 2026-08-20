@@ -74,6 +74,73 @@ pub struct ChainParamSurface {
     pub duck_release_ms: f64,
     pub freeze: bool,
     pub infinite_mode: InfiniteMode,
+    pub post_eq: [PostEqBand; POST_EQ_BANDS],
+}
+
+/// Number of Post EQ bands (`fx.reverb.post-eq`).
+pub const POST_EQ_BANDS: usize = 6;
+
+/// One Post EQ band — the 6-band EQ on the final reverb sound
+/// (`fx.reverb.post-eq`, docs/spec/fx/embedded-eq.md). Wet path only; the
+/// wet gain auto-compensates for the curve so shaping the reverb never
+/// rides the mix.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct PostEqBand {
+    /// 0 = Bell, 1 = Low Shelf, 2 = High Shelf, 3 = Low Cut, 4 = High Cut.
+    pub shape: u32,
+    pub freq_hz: f64,
+    /// Ignored by the cut shapes.
+    pub gain_db: f64,
+    pub q: f64,
+}
+
+impl Default for PostEqBand {
+    fn default() -> Self {
+        Self {
+            shape: 0,
+            freq_hz: 1000.0,
+            gain_db: 0.0,
+            q: 0.707,
+        }
+    }
+}
+
+impl PostEqBand {
+    /// Whether this band shapes anything. Cuts count when their corner is
+    /// inside the audible band; gain shapes when their gain is non-zero.
+    pub fn is_active(&self) -> bool {
+        match self.shape {
+            3 => self.freq_hz > 21.0,
+            4 => self.freq_hz < 19_500.0,
+            _ => self.gain_db.abs() > 0.01,
+        }
+    }
+
+    /// This band's magnitude at `freq`, in dB — analog-prototype grade, for
+    /// the display curve and the wet-gain compensation.
+    pub fn magnitude_db(&self, freq: f64) -> f64 {
+        let f0 = self.freq_hz.max(10.0);
+        let q = self.q.clamp(0.1, 18.0);
+        let w = freq / f0;
+        match self.shape {
+            1 => {
+                let t = 1.0 / (1.0 + (w * q * 1.414).powi(2));
+                self.gain_db * t
+            }
+            2 => {
+                let t = (1.0 - 1.0 / (1.0 + (w * (q * 1.414)).powi(2))).clamp(0.0, 1.0);
+                self.gain_db * t
+            }
+            // 2nd-order cuts: −12 dB/oct past the corner, clamped for the
+            // compensation math.
+            3 => (40.0 * w.max(1e-6).log10()).clamp(-24.0, 0.0),
+            4 => (-40.0 * w.max(1e-6).log10()).clamp(-24.0, 0.0),
+            _ => {
+                let bw = w - 1.0 / w.max(1e-9);
+                self.gain_db / (1.0 + (bw * q).powi(2))
+            }
+        }
+    }
 }
 
 /// Full reverb processing chain.
@@ -268,6 +335,17 @@ pub struct ReverbChain {
     applied_voice: ReverbVoice,
     /// Hall Mid EQ (wet-bus peak around 1 kHz; stereo via channel idx).
     mid_eq: Biquad,
+
+    /// The Post EQ (`fx.reverb.post-eq`): the band table the plugin writes,
+    /// the designed filters, and the auto wet-gain compensation.
+    pub post_eq: [PostEqBand; POST_EQ_BANDS],
+    post_eq_filters: [Biquad; POST_EQ_BANDS],
+    post_eq_on: [bool; POST_EQ_BANDS],
+    post_eq_any: bool,
+    /// Linear wet gain undoing the curve's pink-weighted mean gain
+    /// (`fx.gain-comp.eq` on the wet path).
+    post_eq_comp: f64,
+    post_eq_applied: [PostEqBand; POST_EQ_BANDS],
     /// Hall Swell state: input envelope + the ramped swell gain.
     swell_env: EnvelopeFollower,
     swell_level: f64,
@@ -405,6 +483,12 @@ impl ReverbChain {
             tempo_bpm: None,
             applied_voice: ReverbVoice::default(),
             mid_eq: Biquad::new(),
+            post_eq: [PostEqBand::default(); POST_EQ_BANDS],
+            post_eq_filters: core::array::from_fn(|_| Biquad::new()),
+            post_eq_on: [false; POST_EQ_BANDS],
+            post_eq_any: false,
+            post_eq_comp: 1.0,
+            post_eq_applied: [PostEqBand::default(); POST_EQ_BANDS],
             swell_env: {
                 let mut e = EnvelopeFollower::new(0.0);
                 e.set_times_ms(10.0, 600.0, sample_rate);
@@ -642,6 +726,7 @@ impl ReverbChain {
             duck_release_ms: self.duck_release_ms,
             freeze: self.freeze,
             infinite_mode: self.infinite_mode,
+            post_eq: self.post_eq,
         }
     }
 
@@ -680,6 +765,7 @@ impl ReverbChain {
         self.duck_release_ms = s.duck_release_ms;
         self.freeze = s.freeze;
         self.infinite_mode = s.infinite_mode;
+        self.post_eq = s.post_eq;
     }
 
     /// Input bandwidth including the Classic-voice vintage cap: the
@@ -732,6 +818,16 @@ impl ReverbChain {
         let mut p = self.params;
         if self.infinite_engaged() {
             p.decay = 1.0;
+        }
+        // Engines without a per-frequency feedback path collapse the Decay
+        // Rate EQ onto the legacy low/high multiplier pair (the Hall family
+        // realizes the full curve in its FDN — `fx.reverb.decay-eq`).
+        if !matches!(self.algorithm_type, AlgorithmType::Hall) {
+            let (lo, hi) = crate::algorithm::decay_bands_collapsed(&p.decay_bands);
+            if (lo - 1.0).abs() > 0.005 || (hi - 1.0).abs() > 0.005 {
+                p.low_decay_mult = (p.low_decay_mult * lo).clamp(0.05, 4.0);
+                p.high_decay_mult = (p.high_decay_mult * hi).clamp(0.05, 4.0);
+            }
         }
         // Classic voice re-tune for the engines without a second
         // heritage implementation (Plate/Spring pair-map onto variants
@@ -828,9 +924,60 @@ impl ReverbChain {
     /// instead of stepping coefficients instantly. Everything else (size,
     /// diffusion, modulation, tone, ...) still applies immediately.
     /// For an instant snap (preset load), call `update()` instead.
+    /// Re-design the Post EQ filters when the band table moved
+    /// (`fx.reverb.post-eq`). Change-detected, so calling every
+    /// `update_params` costs a comparison.
+    fn configure_post_eq(&mut self) {
+        if self.post_eq == self.post_eq_applied {
+            return;
+        }
+        self.post_eq_applied = self.post_eq;
+        self.post_eq_any = false;
+        for (i, band) in self.post_eq.iter().enumerate() {
+            self.post_eq_on[i] = band.is_active();
+            if !band.is_active() {
+                continue;
+            }
+            self.post_eq_any = true;
+            let f = band.freq_hz.clamp(20.0, self.sample_rate * 0.45);
+            let q = band.q.clamp(0.1, 18.0);
+            let gain_db = band.gain_db.clamp(-24.0, 24.0);
+            let ftype = match band.shape {
+                1 => FilterType::LowShelf { gain_db },
+                2 => FilterType::HighShelf { gain_db },
+                3 => FilterType::Highpass,
+                4 => FilterType::Lowpass,
+                _ => FilterType::Peak { gain_db },
+            };
+            self.post_eq_filters[i].set(ftype, f, q, self.sample_rate);
+            self.post_eq_filters[i].reset();
+        }
+        // Wet-gain compensation: undo the curve's pink-weighted mean gain
+        // (equal power per octave → log-spaced points weight equally), so
+        // shaping the reverb keeps its loudness (`fx.gain-comp.eq`).
+        self.post_eq_comp = if self.post_eq_any {
+            const POINTS: usize = 24;
+            let mean_db: f64 = (0..POINTS)
+                .map(|k| {
+                    let f = 20.0 * 10.0f64.powf(3.0 * k as f64 / (POINTS - 1) as f64);
+                    self.post_eq
+                        .iter()
+                        .filter(|b| b.is_active())
+                        .map(|b| b.magnitude_db(f))
+                        .sum::<f64>()
+                })
+                .sum::<f64>()
+                / POINTS as f64;
+            10.0f64.powf(-mean_db / 20.0).clamp(0.1, 10.0)
+        } else {
+            1.0
+        };
+    }
+
     pub fn update_params(&mut self) {
         self.apply_voice_pairing();
         self.configure_hall();
+        self.configure_post_eq();
         let mut p = self.effective_params();
         self.decay_smoother.set_target(p.decay);
         self.damping_smoother.set_target(p.damping);
@@ -891,6 +1038,9 @@ impl Processor for ReverbChain {
         self.duck_env.reset(0.0);
         self.duck_gain = 1.0;
         self.mid_eq.reset();
+        for f in self.post_eq_filters.iter_mut() {
+            f.reset();
+        }
         self.swell_env.reset(0.0);
         self.swell_level = if self.hall.swell_rise > 1e-9 { 0.0 } else { 1.0 };
         self.trem_phase = 0.0;
@@ -900,6 +1050,12 @@ impl Processor for ReverbChain {
         self.sample_rate = config.sample_rate;
         self.apply_voice_pairing();
         self.configure_hall();
+        // Re-design at the new sample rate even if the bands are unchanged.
+        self.post_eq_applied = [PostEqBand {
+            freq_hz: -1.0,
+            ..PostEqBand::default()
+        }; POST_EQ_BANDS];
+        self.configure_post_eq();
         self.swell_level = if self.hall.swell_rise > 1e-9 { 0.0 } else { 1.0 };
 
         let max_predelay = (config.sample_rate * 0.5) as usize;
@@ -1228,6 +1384,20 @@ impl Processor for ReverbChain {
                 if mid_on {
                     wet_l = self.mid_eq.tick(wet_l, 0);
                     wet_r = self.mid_eq.tick(wet_r, 1);
+                }
+
+                // Post EQ (`fx.reverb.post-eq`): the 6-band curve on the
+                // final reverb sound, wet path only, with the wet gain
+                // compensated for the curve so shaping never rides the mix.
+                if self.post_eq_any {
+                    for (i, on) in self.post_eq_on.iter().enumerate() {
+                        if *on {
+                            wet_l = self.post_eq_filters[i].tick(wet_l, 0);
+                            wet_r = self.post_eq_filters[i].tick(wet_r, 1);
+                        }
+                    }
+                    wet_l *= self.post_eq_comp;
+                    wet_r *= self.post_eq_comp;
                 }
 
                 // Width (mid-side)
@@ -1798,6 +1968,106 @@ mod tests {
         assert!(
             low_cut < low_kept,
             "Lower low_decay_mult should reduce LF tail energy: kept={low_kept}, cut={low_cut}"
+        );
+    }
+
+    /// A flat Post EQ never touches the samples (`fx.reverb.post-eq`).
+    // r[verify fx.reverb.post-eq]
+    #[test]
+    fn flat_post_eq_is_bit_identical() {
+        let render = |set: bool| -> Vec<f64> {
+            let mut c = ReverbChain::new();
+            c.mix = 1.0;
+            if set {
+                // Touch the table but leave every band inactive.
+                c.post_eq[2].freq_hz = 3000.0;
+                c.post_eq[2].q = 2.0;
+            }
+            c.update(config());
+            let mut l: Vec<f64> = (0..9600).map(|i| if i < 8 { 1.0 } else { 0.0 }).collect();
+            let mut r = l.clone();
+            c.process(&mut l, &mut r);
+            l
+        };
+        for (a, b) in render(false).iter().zip(render(true).iter()) {
+            assert!((a - b).abs() < 1e-15, "flat post EQ must be bit-identical");
+        }
+    }
+
+    /// A high-shelf cut on the Post EQ darkens the wet tail, and the
+    /// compensation keeps the overall wet level in the same ballpark.
+    // r[verify fx.reverb.post-eq]
+    #[test]
+    fn post_eq_shapes_the_wet_and_stays_level() {
+        let render = |gain_db: f64| -> (f64, f64) {
+            let mut c = ReverbChain::new();
+            c.set_algorithm(AlgorithmType::Hall);
+            c.mix = 1.0;
+            c.post_eq[0] = PostEqBand { shape: 2, freq_hz: 3000.0, gain_db, q: 0.707 };
+            c.update(config());
+            let n = (SR as usize) * 2;
+            let mut l: Vec<f64> = (0..n).map(|i| if i < 32 { 0.5 } else { 0.0 }).collect();
+            let mut r = l.clone();
+            c.process(&mut l, &mut r);
+            // Total energy, and HF energy via a crude first difference.
+            let total: f64 = l.iter().map(|x| x * x).sum();
+            let hf: f64 = l.windows(2).map(|w| (w[1] - w[0]).powi(2)).sum();
+            (total, hf)
+        };
+        let (flat_total, flat_hf) = render(0.0);
+        let (cut_total, cut_hf) = render(-12.0);
+        // The comparison is compensated (the wet gain rises to keep the
+        // level), so the HF ratio understates the shelf; what matters is a
+        // clear darkening at roughly constant level.
+        assert!(
+            cut_hf < flat_hf * 0.8,
+            "a −12 dB high shelf must darken the tail: {flat_hf} → {cut_hf}"
+        );
+        // Compensated: the overall level moves far less than the 12 dB the
+        // shelf takes out of the top.
+        let ratio_db = 10.0 * (cut_total / flat_total).log10();
+        assert!(
+            ratio_db.abs() < 6.0,
+            "wet-gain compensation failed: total moved {ratio_db:.1} dB"
+        );
+    }
+
+    /// The Decay Rate EQ stretches the band it boosts: rate 4 on a low
+    /// shelf keeps LF tail energy alive far longer than rate 1
+    /// (`fx.reverb.decay-eq`).
+    // r[verify fx.reverb.decay-eq]
+    #[test]
+    fn decay_rate_eq_stretches_the_band() {
+        let make = |rate: f64| -> f64 {
+            let mut c = ReverbChain::new();
+            c.set_algorithm(AlgorithmType::Hall);
+            c.mix = 1.0;
+            c.params.decay = 0.5;
+            c.params.decay_bands[0] = crate::algorithm::DecayBand {
+                shape: 1,
+                freq_hz: 300.0,
+                rate,
+                q: 0.707,
+            };
+            c.update(config());
+            let n = (SR as usize) * 2;
+            let mut l: Vec<f64> = (0..n)
+                .map(|i| (2.0 * PI * 100.0 * i as f64 / SR).sin() * 0.4 * f64::from(i < 4800))
+                .collect();
+            let mut r = l.clone();
+            c.process(&mut l, &mut r);
+            l[(n - 9600)..].iter().map(|x| x * x).sum::<f64>()
+        };
+        let natural = make(1.0);
+        let stretched = make(4.0);
+        let shortened = make(0.25);
+        assert!(
+            stretched > natural * 2.0,
+            "rate 4 low shelf must extend the LF tail: {natural} → {stretched}"
+        );
+        assert!(
+            shortened < natural * 0.5,
+            "rate 0.25 low shelf must shorten the LF tail: {natural} → {shortened}"
         );
     }
 

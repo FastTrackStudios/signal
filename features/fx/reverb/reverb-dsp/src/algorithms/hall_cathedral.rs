@@ -272,6 +272,11 @@ impl ReverbAlgorithm for HallCathedral {
         let t60_ny = (t60 * hf_ratio).max(0.02);
         self.fdn_l.set_t60(t60_dc, t60_ny, self.sample_rate);
         self.fdn_r.set_t60(t60_dc, t60_ny, self.sample_rate);
+        // Decay Rate EQ (`fx.reverb.decay-eq`), layered over the T60 shelf.
+        self.fdn_l
+            .set_decay_curve(t60, &params.decay_bands, self.sample_rate);
+        self.fdn_r
+            .set_decay_curve(t60, &params.decay_bands, self.sample_rate);
 
         // In-loop allpasses (zita-style ±): hall density builds with
         // every recirculation instead of only at the input diffuser.
