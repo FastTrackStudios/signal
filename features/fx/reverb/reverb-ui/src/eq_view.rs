@@ -105,7 +105,29 @@ fn write(ctx: &ParamContext, ptr: ParamPtr, normalized: f32) {
     ctx.end_set_raw(ptr);
 }
 
-/// The view: one EqGraph over the chosen band set.
+/// The reverb layer's sidecar: BOTH curves side by side — Post EQ on the
+/// left (what the reverb sounds like), Decay Rate EQ on the right (how long
+/// each band rings) — per `fx.reverb.eq-display`.
+#[component]
+pub fn ReverbEqSidecar(frame: u64) -> Element {
+    rsx! {
+        div {
+            "data-testid": "reverb-eq-sidecar",
+            style: "position:absolute; inset:0; display:flex; overflow:hidden;",
+            div {
+                style: "position:relative; flex:1; min-width:0; overflow:hidden;",
+                ReverbEqView { mode_is_decay: false, frame }
+            }
+            div {
+                style: "position:relative; flex:1; min-width:0; overflow:hidden; \
+                        border-left:1px solid var(--border, rgba(148,163,184,0.3));",
+                ReverbEqView { mode_is_decay: true, frame }
+            }
+        }
+    }
+}
+
+/// One curve: an EqGraph over the chosen band set.
 #[component]
 pub fn ReverbEqView(mode_is_decay: bool, frame: u64) -> Element {
     let _ = frame;
@@ -163,8 +185,8 @@ pub fn ReverbEqView(mode_is_decay: bool, frame: u64) -> Element {
     let ctx_remove = ctx.clone();
 
     let (label, db_range) = match mode {
-        EqViewMode::Post => ("Post EQ — the reverb sound, level compensated", 24.0),
-        EqViewMode::Decay => ("Decay Rate EQ — ×0.25 … ×4 decay time per band", 12.0),
+        EqViewMode::Post => ("Post EQ — the reverb sound", 24.0),
+        EqViewMode::Decay => ("Decay EQ — ring time ×0.25…×4", 12.0),
     };
 
     rsx! {

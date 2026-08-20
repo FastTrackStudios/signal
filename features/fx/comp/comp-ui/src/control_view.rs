@@ -164,6 +164,11 @@ fn AppShell() -> Element {
     let focus = use_context_provider(|| {
         Signal::new(crate::focus::FocusedStage(ui.params.resolved_focused_stage()))
     });
+
+    // Which stages have their sidechain-EQ sidecar open (a bit per stage) —
+    // UI state, shared so row headers and the rail toggle agree.
+    let sidecars: Signal<u64> = use_context_provider(|| Signal::new(0u64));
+    let sidecar_mask = *sidecars.read();
     let focused_stage = focus.read().0;
     // The audio thread meters the focused stage.
     ui.focused_stage
@@ -181,7 +186,7 @@ fn AppShell() -> Element {
     // anyway, so comparing here also catches the host automating the param.
     #[allow(clippy::type_complexity)]
     let last_profile: std::rc::Rc<
-        std::cell::Cell<Option<(usize, fts_audio_ui::EditorForm, usize)>>,
+        std::cell::Cell<Option<(usize, fts_audio_ui::EditorForm, usize, u64)>>,
     > = use_hook(|| std::rc::Rc::new(std::cell::Cell::new(None)));
 
     // The rail edits the FOCUSED stage's *resolved* profile: the persisted id
@@ -204,8 +209,8 @@ fn AppShell() -> Element {
     }
     let n_rows = rows.len();
 
-    if last_profile.get() != Some((profile_idx, form, n_rows)) {
-        last_profile.set(Some((profile_idx, form, n_rows)));
+    if last_profile.get() != Some((profile_idx, form, n_rows, sidecar_mask)) {
+        last_profile.set(Some((profile_idx, form, n_rows, sidecar_mask)));
         // A session restored from its id can land with the index parameter
         // still on whatever number that id used to be; put it back in line so
         // the host reads the same face the editor shows.
@@ -224,7 +229,8 @@ fn AppShell() -> Element {
         // Absent when the editor is embedded without a nice-plug window
         // (headless tests): nothing to resize, so nothing to do.
         if let Some(state) = try_consume_context::<std::sync::Arc<nice_plug_dioxus::DioxusState>>() {
-            let (w, h) = crate::faces::stack_editor_size_rows(&params, &rows, form);
+            let (w, h) =
+                crate::faces::stack_editor_size_rows(params, &rows, form, sidecar_mask);
             if state.size() != (w, h) {
                 state.request_resize(w, h);
             }
@@ -236,11 +242,11 @@ fn AppShell() -> Element {
     // set scaled together when the window cannot grow to the sum. The face
     // scales itself to the box through the `PanelBox` it is given.
     let (win_w, win_h) = fts_audio_ui::hardware::panel::window_logical_size().unwrap_or({
-        let (w, h) = crate::faces::stack_editor_size_rows(&params, &rows, form);
+        let (w, h) = crate::faces::stack_editor_size_rows(params, &rows, form, sidecar_mask);
         (w as f64, h as f64)
     });
     let (mut row_heights, preferred_total) =
-        crate::faces::stack_row_heights(&params, &rows, win_w);
+        crate::faces::stack_row_heights(params, &rows, win_w, sidecar_mask);
     // The window may be a different height than preferred (host clamp, user
     // resize): scale the rows to what is actually there.
     if preferred_total > 1.0 && (win_h - preferred_total).abs() > 1.0 {
@@ -357,6 +363,22 @@ fn AppShell() -> Element {
                             },
                         }
 
+                        RailButton {
+                            testid: "sc-eq-rail-toggle".to_string(),
+                            label: "SC".to_string(),
+                            title: "Sidechain EQ for the focused stage".to_string(),
+                            active: sidecar_mask & (1 << focused_stage.min(63)) != 0,
+                            accent: skin.accent.to_string(),
+                            on_click: {
+                                let mut sidecars = sidecars;
+                                move |_| {
+                                    let bit = 1u64 << focus.peek().0.min(63);
+                                    let cur = *sidecars.peek();
+                                    sidecars.set(cur ^ bit);
+                                }
+                            },
+                        }
+
                         if is_control_face {
                             RailButton {
                                 testid: "advanced-toggle".to_string(),
@@ -432,17 +454,37 @@ fn StageRow(
     // The ROOT focus signal, captured before this row shadows the context.
     let root_focus = crate::focus::use_focus_signal();
     let focused = root_focus.map(|f| f.read().0 == stage).unwrap_or(true);
+    // The sidecar mask lives at the root (the same context the sizing read).
+    let mut sidecars: Signal<u64> = use_context();
+    let sidecar_open = *sidecars.read() & (1 << stage.min(63)) != 0;
 
     let header_h = if show_header {
         crate::faces::ROW_HEADER_H
     } else {
         0.0
     };
+    let sidecar_h = if sidecar_open {
+        // The sidecar shares the row's scale: its nominal height times
+        // whatever squeeze the row set got.
+        (crate::faces::SIDECAR_H
+            * (row_h
+                / (crate::faces::preferred_row_height(
+                    params.stage(stage).resolved_profile_index(),
+                    row_w,
+                ) + header_h
+                    + crate::faces::SIDECAR_H)))
+            .min(crate::faces::SIDECAR_H)
+    } else {
+        0.0
+    };
     // Shadow the focus for everything inside the row, and hand the face the
-    // row's content box.
+    // row's content box (what is left above the sidecar).
     use_context_provider(|| Signal::new(crate::focus::FocusedStage(stage)));
     use_context_provider(|| {
-        fts_audio_ui::hardware::panel::PanelBox(row_w, (row_h - header_h).max(60.0))
+        fts_audio_ui::hardware::panel::PanelBox(
+            row_w,
+            (row_h - header_h - sidecar_h).max(60.0),
+        )
     });
 
     let sp = params.stage(stage);
@@ -490,19 +532,59 @@ fn StageRow(
                     if !enabled {
                         span { style: "opacity:0.6;", "· bypassed" }
                     }
+                    // The layer's sidecar toggle (`fx.embed-eq.one-surface`).
+                    span {
+                        "data-testid": "sc-eq-toggle-{stage + 1}",
+                        style: format!(
+                            "margin-left:auto; cursor:pointer; padding:0 6px; \
+                             border-radius:4px; font-size:9px; font-weight:800; \
+                             color:{}; background:{};",
+                            if sidecar_open { "#0b0b0d" } else { "var(--muted-foreground)" },
+                            if sidecar_open { accent } else { "transparent" },
+                        ),
+                        title: "Sidechain EQ — what this stage listens to",
+                        onmousedown: move |evt: MouseEvent| {
+                            evt.stop_propagation();
+                            let bit = 1u64 << stage.min(63);
+                            let cur = *sidecars.peek();
+                            sidecars.set(cur ^ bit);
+                        },
+                        "SC EQ"
+                    }
                 }
             }
 
             div {
                 style: format!(
-                    "position:absolute; top:{header_h}px; left:0; right:0; bottom:0; \
-                     overflow:hidden;"
+                    "position:absolute; top:{header_h}px; left:0; right:0; \
+                     bottom:{sidecar_h}px; overflow:hidden;"
                 ),
                 Face {
                     profile_index: profile_idx,
                     advanced,
                     frame,
                     form,
+                }
+            }
+
+            // The layer's sidecar: the sidechain EQ, attached under ITS face
+            // (`fx.embed-eq.one-surface`).
+            if sidecar_open {
+                div {
+                    style: format!(
+                        "position:absolute; left:0; right:0; bottom:0; \
+                         height:{sidecar_h}px; overflow:hidden; \
+                         border-top:1px solid var(--border, rgba(148,163,184,0.3)); \
+                         background:var(--background);"
+                    ),
+                    for key in [format!("sc-{stage}")] {
+                        crate::sc_eq_view::SidechainEqView {
+                            key: "{key}",
+                            stage,
+                            frame,
+                            accent: accent.to_string(),
+                        }
+                    }
                 }
             }
         }

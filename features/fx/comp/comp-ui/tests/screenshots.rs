@@ -96,11 +96,39 @@ async fn shot_stack_of_three() {
         &params,
         &[0, 1, 2],
         fts_audio_ui::EditorForm::default(),
+        0,
     );
     let _ = base_h;
     let mut fx = mount_with(params, w, h);
     fx.settle().await;
     shot(&fx, "stack-of-three");
+}
+
+/// A stage's sidechain-EQ sidecar, open under the FTS surface
+/// (`fx.embed-eq.one-surface`).
+#[tokio::test]
+async fn shot_sidechain_sidecar() {
+    use nice_plug::prelude::Param;
+    let (w, base_h) = comp_ui::faces::preferred_editor_size(0);
+    let params = std::sync::Arc::new(comp_ui::params::CompParams::default());
+    // Pose the curve: kick notch + de-ess boost.
+    unsafe {
+        let b0 = &params.stage1.sc_eq[0].gain_db;
+        b0.as_ptr()
+            ._internal_set_normalized_value(b0.preview_normalized(-9.0));
+        let b4 = &params.stage1.sc_eq[4].gain_db;
+        b4.as_ptr()
+            ._internal_set_normalized_value(b4.preview_normalized(7.0));
+    }
+    let mut fx = mount_with(
+        params,
+        w,
+        base_h + comp_ui::faces::SIDECAR_H as u32,
+    );
+    fx.settle().await;
+    // Open the sidecar through the rail toggle, like a hand would.
+    click_testid(&mut fx, "sc-eq-rail-toggle").await;
+    shot(&fx, "sidechain-sidecar");
 }
 
 /// Mount, switch to a profile, and size the window the way the host would:

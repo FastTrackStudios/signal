@@ -161,6 +161,10 @@ pub fn editor_size_for(profile_index: usize, form: fts_audio_ui::EditorForm) -> 
 /// Height of a stage row's header strip, in CSS px.
 pub const ROW_HEADER_H: f64 = 18.0;
 
+/// Height of a stage's sidechain-EQ sidecar, in CSS px
+/// (`fx.embed-eq.one-surface`).
+pub const SIDECAR_H: f64 = 240.0;
+
 /// The row height a stage's face WANTS at `row_w` window width — so a
 /// faceplate fills its row instead of floating in dead space: a hardware
 /// panel's row is its design aspect at full width (the drawing's own
@@ -187,6 +191,7 @@ pub fn stack_row_heights(
     params: &crate::params::CompParams,
     rows: &[usize],
     row_w: f64,
+    sidecar_mask: u64,
 ) -> (Vec<f64>, f64) {
     let with_headers = rows.len() > 1;
     let mut heights: Vec<f64> = rows
@@ -194,6 +199,11 @@ pub fn stack_row_heights(
         .map(|&si| {
             preferred_row_height(params.stage(si).resolved_profile_index(), row_w)
                 + if with_headers { ROW_HEADER_H } else { 0.0 }
+                + if sidecar_mask & (1 << si.min(63)) != 0 {
+                    SIDECAR_H
+                } else {
+                    0.0
+                }
         })
         .collect();
     let total: f64 = heights.iter().sum();
@@ -215,14 +225,15 @@ pub fn stack_editor_size_rows(
     params: &crate::params::CompParams,
     rows: &[usize],
     form: fts_audio_ui::EditorForm,
+    sidecar_mask: u64,
 ) -> (u32, u32) {
     let focused = rows.first().copied().unwrap_or(0);
     let (w, single_h) =
         editor_size_for(params.stage(focused).resolved_profile_index(), form);
-    if rows.len() <= 1 {
+    if rows.len() <= 1 && sidecar_mask == 0 {
         return (w, single_h);
     }
-    let (_, total) = stack_row_heights(params, rows, w as f64);
+    let (_, total) = stack_row_heights(params, rows, w as f64, sidecar_mask);
     (w, (total.ceil() as u32).max(single_h))
 }
 

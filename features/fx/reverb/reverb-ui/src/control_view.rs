@@ -113,10 +113,10 @@ pub fn App() -> Element {
     let design = crate::faces::design_for(profile.id);
     let form = params.resolved_editor_form();
 
-    // 0 = strip closed, 1 = Post EQ, 2 = Decay Rate EQ — both shown in a
-    // strip UNDER the panel (`fx.reverb.eq-display`). Local UI state.
-    let mut eq_view = use_signal(|| 0usize);
-    let eq_page = *eq_view.read();
+    // The layer's sidecar: Post EQ + Decay Rate EQ side by side, in a strip
+    // UNDER the panel (`fx.reverb.eq-display`). Local UI state.
+    let mut eq_view = use_signal(|| false);
+    let eq_open = *eq_view.read();
 
     // Profile / form / EQ-strip change → ask the host to resize. A plain
     // Cell rather than an effect: the profile lives in a plugin param, not a
@@ -124,8 +124,8 @@ pub fn App() -> Element {
     #[allow(clippy::type_complexity)]
     let last: std::rc::Rc<std::cell::Cell<Option<(usize, fts_audio_ui::EditorForm, bool)>>> =
         use_hook(|| std::rc::Rc::new(std::cell::Cell::new(None)));
-    if last.get() != Some((profile_index, form, eq_page != 0)) {
-        last.set(Some((profile_index, form, eq_page != 0)));
+    if last.get() != Some((profile_index, form, eq_open)) {
+        last.set(Some((profile_index, form, eq_open)));
         // Keep the automatable index in step with the persisted id.
         if params.profile.value().max(0) as usize != profile_index {
             let ptr = params.profile.as_ptr();
@@ -140,7 +140,7 @@ pub fn App() -> Element {
             ctx.end_set_raw(ptr);
         }
         if let Some(state) = try_consume_context::<Arc<nice_plug_dioxus::DioxusState>>() {
-            let (w, h) = editor_size_with_eq(profile_index, form, eq_page != 0);
+            let (w, h) = editor_size_with_eq(profile_index, form, eq_open);
             if state.size() != (w, h) {
                 state.request_resize(w, h);
             }
@@ -149,10 +149,10 @@ pub fn App() -> Element {
 
     // The face's box: the window minus the EQ strip when it is open.
     let (win_w, win_h) = fts_audio_ui::hardware::panel::window_logical_size().unwrap_or({
-        let (w, h) = editor_size_with_eq(profile_index, form, eq_page != 0);
+        let (w, h) = editor_size_with_eq(profile_index, form, eq_open);
         (w as f64, h as f64)
     });
-    let strip_h = if eq_page != 0 {
+    let strip_h = if eq_open {
         (EQ_STRIP_H as f64).min(win_h * 0.6)
     } else {
         0.0
@@ -250,27 +250,16 @@ pub fn App() -> Element {
                     params_for_id.store_profile_id(index);
                 },
                 rail_footer: rsx! {
-                    // The two embedded EQs (`fx.reverb.eq-display`): one
-                    // button cycles Space → Post EQ → Decay Rate EQ. Local
-                    // UI state, never a plugin param.
+                    // The layer's sidecar toggle (`fx.reverb.eq-display`):
+                    // Post EQ + Decay Rate EQ, together, under the panel.
+                    // Local UI state, never a plugin param.
                     RailButton {
                         testid: "eq-view-cycle".to_string(),
-                        label: match eq_page {
-                            1 => "PEQ".to_string(),
-                            2 => "DEQ".to_string(),
-                            _ => "EQ".to_string(),
-                        },
-                        title: match eq_page {
-                            1 => "Post EQ (click for Decay Rate EQ)".to_string(),
-                            2 => "Decay Rate EQ (click for the space)".to_string(),
-                            _ => "EQ — Post EQ / Decay Rate EQ".to_string(),
-                        },
-                        active: eq_page != 0,
+                        label: "EQ".to_string(),
+                        title: "Post EQ + Decay Rate EQ".to_string(),
+                        active: eq_open,
                         accent: accent_for_eq.clone(),
-                        on_click: move |_| {
-                            let next = (*eq_view.peek() + 1) % 3;
-                            eq_view.set(next);
-                        },
+                        on_click: move |_| eq_view.toggle(),
                     }
                     RailButton {
                         testid: "form-cycle".to_string(),
@@ -309,7 +298,7 @@ pub fn App() -> Element {
                             }
                         }
                     }
-                    if eq_page != 0 {
+                    if eq_open {
                         div {
                             style: format!(
                                 "position:relative; flex:none; height:{strip_h}px; \
@@ -317,10 +306,9 @@ pub fn App() -> Element {
                                  border-top:1px solid var(--border, rgba(148,163,184,0.3)); \
                                  background:var(--background);"
                             ),
-                            for key in [format!("eq-{eq_page}")] {
-                                crate::eq_view::ReverbEqView {
+                            for key in ["eq-sidecar"] {
+                                crate::eq_view::ReverbEqSidecar {
                                     key: "{key}",
-                                    mode_is_decay: eq_page == 2,
                                     frame,
                                 }
                             }

@@ -1215,6 +1215,49 @@ async fn stacked_stages_are_all_visible_as_rows() -> dioxus_test::Result<()> {
     Ok(())
 }
 
+/// Every layer carries its own sidecar: the rail SC toggle opens the
+/// focused stage's sidechain EQ under its face, and dragging a band on it
+/// writes that stage's `sc_eq` params (`fx.embed-eq.one-surface`).
+// r[verify fx.embed-eq.one-surface]
+#[tokio::test]
+async fn the_sidechain_eq_sidecar_opens_and_edits_its_stage() -> dioxus_test::Result<()> {
+    let mut fx = mount();
+    assert!(fx.tester.query(by_testid("sc-eq-view-1")).immediately().is_err());
+
+    tap_testid(&mut fx, "sc-eq-rail-toggle").await;
+
+    let sidecar = fx.tester.query(by_testid("sc-eq-view-1")).immediately()?;
+    let (w, h) = sidecar.size();
+    assert!(w > 400.0 && h > 150.0, "sidecar collapsed: {w}x{h}");
+    // Below the face: the graph surface is still up too.
+    fx.tester.query(by_testid("comp-graph")).immediately()?;
+
+    // Drag band 3 (700 Hz, 0 dB) up on the sidecar. Headless, the embedded
+    // graph hit-tests through its 800×350 fallback mapper.
+    let (ox, oy) = sidecar.document_origin();
+    let mapper =
+        eq_ui::eq_graph_interaction::GraphMapper::new(20.0, 20_000.0, 24.0, 800.0, 350.0, 0.0);
+    let bp = &fx.params.stage1.sc_eq[2];
+    let (x, y) = (ox + mapper.freq_to_x(bp.freq_hz.value() as f64), oy + mapper.db_to_y(0.0));
+    fx.tester.pointer_move(x, y, false);
+    let _ = fx.tester.pump().await;
+    fx.tester.pointer_down(x, y);
+    let _ = fx.tester.pump().await;
+    for step in 1..=4 {
+        fx.tester.pointer_move(x, y - 10.0 * step as f64, true);
+        let _ = fx.tester.pump().await;
+    }
+    fx.tester.pointer_up(x, y - 40.0);
+    fx.settle().await;
+
+    assert!(
+        fx.params.stage1.sc_eq[2].gain_db.value() > 0.5,
+        "dragging the sidecar band did not write the sidechain gain: {}",
+        fx.params.stage1.sc_eq[2].gain_db.value()
+    );
+    Ok(())
+}
+
 /// Ctrl+Shift-click adds the style on a NEW parallel lane.
 // r[verify fx.stack.add]
 #[tokio::test]

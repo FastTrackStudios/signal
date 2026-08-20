@@ -31,6 +31,11 @@ const PLUGIN_NAME: &str = "FTS Comp";
 /// alignment buffers (`fx.stack.latency`).
 const MAX_LOOKAHEAD_MS: f64 = 10.0;
 
+// The param layer and the DSP must agree on the sidechain EQ's band count —
+// they cannot share the constant (comp-ui does not link the DSP), so the
+// crate that links both pins it.
+const _: () = assert!(comp_ui::params::SC_EQ_BANDS == comp::chain::SC_EQ_BANDS);
+
 // ── Stage adapter ─────────────────────────────────────────────────────────
 
 /// One [`CompChain`] as a stack [`Stage`].
@@ -79,6 +84,19 @@ impl CompStage {
         c.upward_ratio = p.upward_ratio.value() as f64;
         c.ceiling = p.ceiling.value() as f64;
         c.update(self.sample_rate);
+
+        // The stage's sidecar: the 6-band sidechain EQ on the detector key
+        // (`fx.embed-eq.one-surface`). Change-detected inside.
+        self.chain
+            .set_sidechain_eq(std::array::from_fn(|i| {
+                let b = &p.sc_eq[i];
+                comp::chain::SidechainBand {
+                    shape: b.shape.value().max(0) as u32,
+                    freq_hz: b.freq_hz.value() as f64,
+                    gain_db: b.gain_db.value() as f64,
+                    q: b.q.value() as f64,
+                }
+            }));
 
         // Chain-level params: the sidechain setters early-out on an unchanged
         // frequency; `set_lookahead` only reallocates when the sample count

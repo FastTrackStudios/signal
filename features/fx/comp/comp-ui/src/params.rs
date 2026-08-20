@@ -263,6 +263,13 @@ pub struct CompStageParams {
     #[id = "macro2"]
     pub macro2: FloatParam,
 
+    /// The stage's sidecar: a 6-band EQ on the DETECTOR key
+    /// (`fx.embed-eq.one-surface`) — what this compressor listens to, not
+    /// what it outputs. Ids `scshape_1`…`scq_6` (stage-prefixed for stages
+    /// 2+).
+    #[nested(array, group = "Sidechain EQ")]
+    pub sc_eq: [ScBandParams; SC_EQ_BANDS],
+
     // ── Stack placement (appended — `fx.stack.params`) ────────────────────
     /// Whether this stage is part of the stack at all. Stage 1 defaults on
     /// (the plain plugin); the rest off until shift-click adds them
@@ -309,6 +316,68 @@ impl CompStageParams {
             0 => Some(&self.macro1),
             1 => Some(&self.macro2),
             _ => None,
+        }
+    }
+}
+
+/// Number of sidechain EQ bands — must match `comp_dsp::chain::SC_EQ_BANDS`
+/// (pinned by a test in comp-plugin, which links both).
+pub const SC_EQ_BANDS: usize = 6;
+
+/// One sidechain EQ band (`fx.embed-eq.band-params`).
+#[derive(Params)]
+pub struct ScBandParams {
+    /// 0 Bell, 1 Low Shelf, 2 High Shelf, 3 Low Cut, 4 High Cut.
+    #[id = "scshape"]
+    pub shape: IntParam,
+    #[id = "scfreq"]
+    pub freq_hz: FloatParam,
+    #[id = "scgain"]
+    pub gain_db: FloatParam,
+    #[id = "scq"]
+    pub q: FloatParam,
+}
+
+pub const SC_SHAPE_LABELS: &[&str] = &["Bell", "Low Shelf", "High Shelf", "Low Cut", "High Cut"];
+
+/// Default sidechain band frequencies — a useful spread, idle at 0 dB.
+pub const SC_DEFAULT_FREQS: [f32; SC_EQ_BANDS] =
+    [80.0, 250.0, 700.0, 1_800.0, 4_500.0, 10_000.0];
+
+impl ScBandParams {
+    fn new(default_freq: f32) -> Self {
+        Self {
+            shape: IntParam::new("SC Shape", 0, IntRange::Linear { min: 0, max: 4 })
+                .with_value_to_string(label_formatter(SC_SHAPE_LABELS)),
+            freq_hz: FloatParam::new(
+                "SC Freq",
+                default_freq,
+                FloatRange::Skewed {
+                    min: 20.0,
+                    max: 20_000.0,
+                    factor: FloatRange::skew_factor(-2.0),
+                },
+            )
+            .with_unit(" Hz")
+            .with_value_to_string(formatters::v2s_f32_hz_then_khz(1))
+            .with_string_to_value(formatters::s2v_f32_hz_then_khz()),
+            gain_db: FloatParam::new(
+                "SC Gain",
+                0.0,
+                FloatRange::Linear { min: -24.0, max: 24.0 },
+            )
+            .with_unit(" dB")
+            .with_value_to_string(formatters::v2s_f32_rounded(1)),
+            q: FloatParam::new(
+                "SC Q",
+                0.707,
+                FloatRange::Skewed {
+                    min: 0.1,
+                    max: 18.0,
+                    factor: FloatRange::skew_factor(-1.5),
+                },
+            )
+            .with_value_to_string(formatters::v2s_f32_rounded(2)),
         }
     }
 }
@@ -497,6 +566,7 @@ impl CompStageParams {
     /// plain plugin); the rest start unused until added.
     pub fn new(first: bool) -> Self {
         Self {
+            sc_eq: std::array::from_fn(|i| ScBandParams::new(SC_DEFAULT_FREQS[i])),
             in_use: BoolParam::new("In Stack", first),
             stage_on: BoolParam::new("Stage On", true),
             lane: IntParam::new(

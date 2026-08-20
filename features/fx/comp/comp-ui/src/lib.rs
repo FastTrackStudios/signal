@@ -42,6 +42,8 @@ pub mod faces;
 #[cfg(feature = "native")]
 pub mod focus;
 #[cfg(feature = "native")]
+pub mod sc_eq_view;
+#[cfg(feature = "native")]
 pub mod stack_strip;
 #[cfg(feature = "native")]
 pub use fts_plug_ui::param_adapter;
