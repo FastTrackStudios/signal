@@ -13,7 +13,7 @@ use std::sync::{Arc, Mutex};
 
 use architect::dispatch::CurrentThreadDispatcher;
 use architect::rig::RigBackend;
-use architect::{HasDispatcher, Layer, PubSub, Services, layers};
+use architect::{layers, HasDispatcher, Layer, PubSub, Services};
 use daw_audio_io::AudioIoPrefs;
 use midicore::MidiEvent;
 use signal_keys_proto::keys::{KeysEvent, KeysRig as KeysRigSvc, KeysRigStreamSource};
@@ -22,7 +22,7 @@ use signal_keys_proto::{
     KeysMixer, KeysNode, KeysPerform, KeysPreset, KeysStack, KeysStatus,
 };
 
-use crate::profile::{KeysProfile, worship_profile};
+use crate::profile::{worship_profile, KeysProfile};
 use signal_rig_host::mixer::{self as rig_mixer, db_to_linear};
 use signal_sampler::rig_node::{RigNode, Role};
 use signal_sampler::{Container, MidiInputHandle};
@@ -71,7 +71,11 @@ struct State {
 
 /// What the program builders read: the live profile, the patch-name →
 /// spec-path index, and the lane snapshot.
-type ProfileInputs = (KeysProfile, BTreeMap<String, PathBuf>, BTreeMap<String, LaneState>);
+type ProfileInputs = (
+    KeysProfile,
+    BTreeMap<String, PathBuf>,
+    BTreeMap<String, LaneState>,
+);
 
 /// Live per-layer mixer state (the profile holds the authored defaults).
 #[derive(Clone, Debug)]
@@ -134,12 +138,17 @@ impl LaneState {
         if !self.preset.is_empty() {
             return self.preset.clone();
         }
-        self.modules.first().map(|m| m.patch.clone()).unwrap_or_default()
+        self.modules
+            .first()
+            .map(|m| m.patch.clone())
+            .unwrap_or_default()
     }
 
     /// Any module sounding?
     fn any_live(&self) -> bool {
-        self.modules.iter().any(|m| !m.patch.is_empty() && m.enabled)
+        self.modules
+            .iter()
+            .any(|m| !m.patch.is_empty() && m.enabled)
     }
 
     /// The linear gain a module renders at (off / empty = silent).
@@ -183,77 +192,653 @@ struct MacroDef {
 /// audio through).
 const MACROS: &[MacroDef] = &[
     // ── Source ──────────────────────────────────────────────────────────
-    MacroDef { id: "source.level", name: "Level", group: "Source", default: 0.0, min: -24.0, max: 12.0, unit: "dB", live: true },
-    MacroDef { id: "source.pan", name: "Pan", group: "Source", default: 0.0, min: -1.0, max: 1.0, unit: "", live: false },
-    MacroDef { id: "source.transpose", name: "Transpose", group: "Source", default: 0.0, min: -24.0, max: 24.0, unit: "st", live: false },
-    MacroDef { id: "source.fine", name: "Fine", group: "Source", default: 0.0, min: -100.0, max: 100.0, unit: "c", live: false },
-    MacroDef { id: "source.unison", name: "Unison", group: "Source", default: 1.0, min: 1.0, max: 8.0, unit: "v", live: true },
-    MacroDef { id: "source.detune", name: "Detune", group: "Source", default: 0.1, min: 0.0, max: 2.0, unit: "", live: true },
+    MacroDef {
+        id: "source.level",
+        name: "Level",
+        group: "Source",
+        default: 0.0,
+        min: -24.0,
+        max: 12.0,
+        unit: "dB",
+        live: true,
+    },
+    MacroDef {
+        id: "source.pan",
+        name: "Pan",
+        group: "Source",
+        default: 0.0,
+        min: -1.0,
+        max: 1.0,
+        unit: "",
+        live: false,
+    },
+    MacroDef {
+        id: "source.transpose",
+        name: "Transpose",
+        group: "Source",
+        default: 0.0,
+        min: -24.0,
+        max: 24.0,
+        unit: "st",
+        live: false,
+    },
+    MacroDef {
+        id: "source.fine",
+        name: "Fine",
+        group: "Source",
+        default: 0.0,
+        min: -100.0,
+        max: 100.0,
+        unit: "c",
+        live: false,
+    },
+    MacroDef {
+        id: "source.unison",
+        name: "Unison",
+        group: "Source",
+        default: 1.0,
+        min: 1.0,
+        max: 8.0,
+        unit: "v",
+        live: true,
+    },
+    MacroDef {
+        id: "source.detune",
+        name: "Detune",
+        group: "Source",
+        default: 0.1,
+        min: 0.0,
+        max: 2.0,
+        unit: "",
+        live: true,
+    },
     // ── Filter ──────────────────────────────────────────────────────────
-    MacroDef { id: "filter.cutoff", name: "Cutoff", group: "Filter", default: 20000.0, min: 20.0, max: 20000.0, unit: "Hz", live: true },
-    MacroDef { id: "filter.reso", name: "Resonance", group: "Filter", default: 0.0, min: 0.0, max: 1.0, unit: "", live: true },
-    MacroDef { id: "filter.env_amt", name: "Env Amt", group: "Filter", default: 0.0, min: -1.0, max: 1.0, unit: "", live: true },
-    MacroDef { id: "filter.keytrack", name: "Key Trk", group: "Filter", default: 0.0, min: 0.0, max: 1.0, unit: "", live: false },
-    MacroDef { id: "filter.drive", name: "Drive", group: "Filter", default: 0.0, min: 0.0, max: 1.0, unit: "", live: false },
-    MacroDef { id: "filter.mix", name: "Mix", group: "Filter", default: 1.0, min: 0.0, max: 1.0, unit: "", live: false },
+    MacroDef {
+        id: "filter.cutoff",
+        name: "Cutoff",
+        group: "Filter",
+        default: 20000.0,
+        min: 20.0,
+        max: 20000.0,
+        unit: "Hz",
+        live: true,
+    },
+    MacroDef {
+        id: "filter.reso",
+        name: "Resonance",
+        group: "Filter",
+        default: 0.0,
+        min: 0.0,
+        max: 1.0,
+        unit: "",
+        live: true,
+    },
+    MacroDef {
+        id: "filter.env_amt",
+        name: "Env Amt",
+        group: "Filter",
+        default: 0.0,
+        min: -1.0,
+        max: 1.0,
+        unit: "",
+        live: true,
+    },
+    MacroDef {
+        id: "filter.keytrack",
+        name: "Key Trk",
+        group: "Filter",
+        default: 0.0,
+        min: 0.0,
+        max: 1.0,
+        unit: "",
+        live: false,
+    },
+    MacroDef {
+        id: "filter.drive",
+        name: "Drive",
+        group: "Filter",
+        default: 0.0,
+        min: 0.0,
+        max: 1.0,
+        unit: "",
+        live: false,
+    },
+    MacroDef {
+        id: "filter.mix",
+        name: "Mix",
+        group: "Filter",
+        default: 1.0,
+        min: 0.0,
+        max: 1.0,
+        unit: "",
+        live: false,
+    },
     // ── Envelopes 1..4 ──────────────────────────────────────────────────
     // ENV 1 is bound to the Amp and ENV 2 to the Filter (the bindings the
     // engine assumes today; unbinding lands with the mod matrix). 3 and 4
     // are free — route them from the matrix.
-    MacroDef { id: "env1.delay", name: "Delay", group: "Env 1", default: 0.0, min: 0.0, max: 2000.0, unit: "ms", live: false },
-    MacroDef { id: "env1.attack", name: "Attack", group: "Env 1", default: 0.0, min: 0.0, max: 5000.0, unit: "ms", live: true },
-    MacroDef { id: "env1.hold", name: "Hold", group: "Env 1", default: 0.0, min: 0.0, max: 2000.0, unit: "ms", live: false },
-    MacroDef { id: "env1.decay", name: "Decay", group: "Env 1", default: 0.0, min: 0.0, max: 5000.0, unit: "ms", live: true },
-    MacroDef { id: "env1.sustain", name: "Sustain", group: "Env 1", default: 1.0, min: 0.0, max: 1.0, unit: "", live: true },
-    MacroDef { id: "env1.release", name: "Release", group: "Env 1", default: 120.0, min: 0.0, max: 8000.0, unit: "ms", live: true },
-    MacroDef { id: "env2.delay", name: "Delay", group: "Env 2", default: 0.0, min: 0.0, max: 2000.0, unit: "ms", live: false },
-    MacroDef { id: "env2.attack", name: "Attack", group: "Env 2", default: 5.0, min: 0.0, max: 5000.0, unit: "ms", live: true },
-    MacroDef { id: "env2.hold", name: "Hold", group: "Env 2", default: 0.0, min: 0.0, max: 2000.0, unit: "ms", live: false },
-    MacroDef { id: "env2.decay", name: "Decay", group: "Env 2", default: 300.0, min: 0.0, max: 5000.0, unit: "ms", live: true },
-    MacroDef { id: "env2.sustain", name: "Sustain", group: "Env 2", default: 0.7, min: 0.0, max: 1.0, unit: "", live: true },
-    MacroDef { id: "env2.release", name: "Release", group: "Env 2", default: 200.0, min: 0.0, max: 8000.0, unit: "ms", live: true },
-    MacroDef { id: "env3.delay", name: "Delay", group: "Env 3", default: 0.0, min: 0.0, max: 2000.0, unit: "ms", live: false },
-    MacroDef { id: "env3.attack", name: "Attack", group: "Env 3", default: 20.0, min: 0.0, max: 5000.0, unit: "ms", live: false },
-    MacroDef { id: "env3.hold", name: "Hold", group: "Env 3", default: 0.0, min: 0.0, max: 2000.0, unit: "ms", live: false },
-    MacroDef { id: "env3.decay", name: "Decay", group: "Env 3", default: 400.0, min: 0.0, max: 5000.0, unit: "ms", live: false },
-    MacroDef { id: "env3.sustain", name: "Sustain", group: "Env 3", default: 0.5, min: 0.0, max: 1.0, unit: "", live: false },
-    MacroDef { id: "env3.release", name: "Release", group: "Env 3", default: 300.0, min: 0.0, max: 8000.0, unit: "ms", live: false },
-    MacroDef { id: "env4.delay", name: "Delay", group: "Env 4", default: 0.0, min: 0.0, max: 2000.0, unit: "ms", live: false },
-    MacroDef { id: "env4.attack", name: "Attack", group: "Env 4", default: 200.0, min: 0.0, max: 5000.0, unit: "ms", live: false },
-    MacroDef { id: "env4.hold", name: "Hold", group: "Env 4", default: 0.0, min: 0.0, max: 2000.0, unit: "ms", live: false },
-    MacroDef { id: "env4.decay", name: "Decay", group: "Env 4", default: 600.0, min: 0.0, max: 5000.0, unit: "ms", live: false },
-    MacroDef { id: "env4.sustain", name: "Sustain", group: "Env 4", default: 0.6, min: 0.0, max: 1.0, unit: "", live: false },
-    MacroDef { id: "env4.release", name: "Release", group: "Env 4", default: 500.0, min: 0.0, max: 8000.0, unit: "ms", live: false },
+    MacroDef {
+        id: "env1.delay",
+        name: "Delay",
+        group: "Env 1",
+        default: 0.0,
+        min: 0.0,
+        max: 2000.0,
+        unit: "ms",
+        live: false,
+    },
+    MacroDef {
+        id: "env1.attack",
+        name: "Attack",
+        group: "Env 1",
+        default: 0.0,
+        min: 0.0,
+        max: 5000.0,
+        unit: "ms",
+        live: true,
+    },
+    MacroDef {
+        id: "env1.hold",
+        name: "Hold",
+        group: "Env 1",
+        default: 0.0,
+        min: 0.0,
+        max: 2000.0,
+        unit: "ms",
+        live: false,
+    },
+    MacroDef {
+        id: "env1.decay",
+        name: "Decay",
+        group: "Env 1",
+        default: 0.0,
+        min: 0.0,
+        max: 5000.0,
+        unit: "ms",
+        live: true,
+    },
+    MacroDef {
+        id: "env1.sustain",
+        name: "Sustain",
+        group: "Env 1",
+        default: 1.0,
+        min: 0.0,
+        max: 1.0,
+        unit: "",
+        live: true,
+    },
+    MacroDef {
+        id: "env1.release",
+        name: "Release",
+        group: "Env 1",
+        default: 120.0,
+        min: 0.0,
+        max: 8000.0,
+        unit: "ms",
+        live: true,
+    },
+    MacroDef {
+        id: "env2.delay",
+        name: "Delay",
+        group: "Env 2",
+        default: 0.0,
+        min: 0.0,
+        max: 2000.0,
+        unit: "ms",
+        live: false,
+    },
+    MacroDef {
+        id: "env2.attack",
+        name: "Attack",
+        group: "Env 2",
+        default: 5.0,
+        min: 0.0,
+        max: 5000.0,
+        unit: "ms",
+        live: true,
+    },
+    MacroDef {
+        id: "env2.hold",
+        name: "Hold",
+        group: "Env 2",
+        default: 0.0,
+        min: 0.0,
+        max: 2000.0,
+        unit: "ms",
+        live: false,
+    },
+    MacroDef {
+        id: "env2.decay",
+        name: "Decay",
+        group: "Env 2",
+        default: 300.0,
+        min: 0.0,
+        max: 5000.0,
+        unit: "ms",
+        live: true,
+    },
+    MacroDef {
+        id: "env2.sustain",
+        name: "Sustain",
+        group: "Env 2",
+        default: 0.7,
+        min: 0.0,
+        max: 1.0,
+        unit: "",
+        live: true,
+    },
+    MacroDef {
+        id: "env2.release",
+        name: "Release",
+        group: "Env 2",
+        default: 200.0,
+        min: 0.0,
+        max: 8000.0,
+        unit: "ms",
+        live: true,
+    },
+    MacroDef {
+        id: "env3.delay",
+        name: "Delay",
+        group: "Env 3",
+        default: 0.0,
+        min: 0.0,
+        max: 2000.0,
+        unit: "ms",
+        live: false,
+    },
+    MacroDef {
+        id: "env3.attack",
+        name: "Attack",
+        group: "Env 3",
+        default: 20.0,
+        min: 0.0,
+        max: 5000.0,
+        unit: "ms",
+        live: false,
+    },
+    MacroDef {
+        id: "env3.hold",
+        name: "Hold",
+        group: "Env 3",
+        default: 0.0,
+        min: 0.0,
+        max: 2000.0,
+        unit: "ms",
+        live: false,
+    },
+    MacroDef {
+        id: "env3.decay",
+        name: "Decay",
+        group: "Env 3",
+        default: 400.0,
+        min: 0.0,
+        max: 5000.0,
+        unit: "ms",
+        live: false,
+    },
+    MacroDef {
+        id: "env3.sustain",
+        name: "Sustain",
+        group: "Env 3",
+        default: 0.5,
+        min: 0.0,
+        max: 1.0,
+        unit: "",
+        live: false,
+    },
+    MacroDef {
+        id: "env3.release",
+        name: "Release",
+        group: "Env 3",
+        default: 300.0,
+        min: 0.0,
+        max: 8000.0,
+        unit: "ms",
+        live: false,
+    },
+    MacroDef {
+        id: "env4.delay",
+        name: "Delay",
+        group: "Env 4",
+        default: 0.0,
+        min: 0.0,
+        max: 2000.0,
+        unit: "ms",
+        live: false,
+    },
+    MacroDef {
+        id: "env4.attack",
+        name: "Attack",
+        group: "Env 4",
+        default: 200.0,
+        min: 0.0,
+        max: 5000.0,
+        unit: "ms",
+        live: false,
+    },
+    MacroDef {
+        id: "env4.hold",
+        name: "Hold",
+        group: "Env 4",
+        default: 0.0,
+        min: 0.0,
+        max: 2000.0,
+        unit: "ms",
+        live: false,
+    },
+    MacroDef {
+        id: "env4.decay",
+        name: "Decay",
+        group: "Env 4",
+        default: 600.0,
+        min: 0.0,
+        max: 5000.0,
+        unit: "ms",
+        live: false,
+    },
+    MacroDef {
+        id: "env4.sustain",
+        name: "Sustain",
+        group: "Env 4",
+        default: 0.6,
+        min: 0.0,
+        max: 1.0,
+        unit: "",
+        live: false,
+    },
+    MacroDef {
+        id: "env4.release",
+        name: "Release",
+        group: "Env 4",
+        default: 500.0,
+        min: 0.0,
+        max: 8000.0,
+        unit: "ms",
+        live: false,
+    },
     // ── LFOs 1..4 ───────────────────────────────────────────────────────
-    MacroDef { id: "lfo1.rate", name: "Rate", group: "LFO 1", default: 2.0, min: 0.01, max: 40.0, unit: "Hz", live: false },
-    MacroDef { id: "lfo1.depth", name: "Depth", group: "LFO 1", default: 0.0, min: 0.0, max: 1.0, unit: "", live: false },
-    MacroDef { id: "lfo1.shape", name: "Shape", group: "LFO 1", default: 0.0, min: 0.0, max: 4.0, unit: "", live: false },
-    MacroDef { id: "lfo1.fade", name: "Fade In", group: "LFO 1", default: 0.0, min: 0.0, max: 4000.0, unit: "ms", live: false },
-    MacroDef { id: "lfo2.rate", name: "Rate", group: "LFO 2", default: 0.5, min: 0.01, max: 40.0, unit: "Hz", live: false },
-    MacroDef { id: "lfo2.depth", name: "Depth", group: "LFO 2", default: 0.0, min: 0.0, max: 1.0, unit: "", live: false },
-    MacroDef { id: "lfo2.shape", name: "Shape", group: "LFO 2", default: 1.0, min: 0.0, max: 4.0, unit: "", live: false },
-    MacroDef { id: "lfo2.fade", name: "Fade In", group: "LFO 2", default: 0.0, min: 0.0, max: 4000.0, unit: "ms", live: false },
-    MacroDef { id: "lfo3.rate", name: "Rate", group: "LFO 3", default: 4.0, min: 0.01, max: 40.0, unit: "Hz", live: false },
-    MacroDef { id: "lfo3.depth", name: "Depth", group: "LFO 3", default: 0.0, min: 0.0, max: 1.0, unit: "", live: false },
-    MacroDef { id: "lfo3.shape", name: "Shape", group: "LFO 3", default: 2.0, min: 0.0, max: 4.0, unit: "", live: false },
-    MacroDef { id: "lfo3.fade", name: "Fade In", group: "LFO 3", default: 0.0, min: 0.0, max: 4000.0, unit: "ms", live: false },
-    MacroDef { id: "lfo4.rate", name: "Rate", group: "LFO 4", default: 8.0, min: 0.01, max: 40.0, unit: "Hz", live: false },
-    MacroDef { id: "lfo4.depth", name: "Depth", group: "LFO 4", default: 0.0, min: 0.0, max: 1.0, unit: "", live: false },
-    MacroDef { id: "lfo4.shape", name: "Shape", group: "LFO 4", default: 3.0, min: 0.0, max: 4.0, unit: "", live: false },
-    MacroDef { id: "lfo4.fade", name: "Fade In", group: "LFO 4", default: 0.0, min: 0.0, max: 4000.0, unit: "ms", live: false },
+    MacroDef {
+        id: "lfo1.rate",
+        name: "Rate",
+        group: "LFO 1",
+        default: 2.0,
+        min: 0.01,
+        max: 40.0,
+        unit: "Hz",
+        live: false,
+    },
+    MacroDef {
+        id: "lfo1.depth",
+        name: "Depth",
+        group: "LFO 1",
+        default: 0.0,
+        min: 0.0,
+        max: 1.0,
+        unit: "",
+        live: false,
+    },
+    MacroDef {
+        id: "lfo1.shape",
+        name: "Shape",
+        group: "LFO 1",
+        default: 0.0,
+        min: 0.0,
+        max: 4.0,
+        unit: "",
+        live: false,
+    },
+    MacroDef {
+        id: "lfo1.fade",
+        name: "Fade In",
+        group: "LFO 1",
+        default: 0.0,
+        min: 0.0,
+        max: 4000.0,
+        unit: "ms",
+        live: false,
+    },
+    MacroDef {
+        id: "lfo2.rate",
+        name: "Rate",
+        group: "LFO 2",
+        default: 0.5,
+        min: 0.01,
+        max: 40.0,
+        unit: "Hz",
+        live: false,
+    },
+    MacroDef {
+        id: "lfo2.depth",
+        name: "Depth",
+        group: "LFO 2",
+        default: 0.0,
+        min: 0.0,
+        max: 1.0,
+        unit: "",
+        live: false,
+    },
+    MacroDef {
+        id: "lfo2.shape",
+        name: "Shape",
+        group: "LFO 2",
+        default: 1.0,
+        min: 0.0,
+        max: 4.0,
+        unit: "",
+        live: false,
+    },
+    MacroDef {
+        id: "lfo2.fade",
+        name: "Fade In",
+        group: "LFO 2",
+        default: 0.0,
+        min: 0.0,
+        max: 4000.0,
+        unit: "ms",
+        live: false,
+    },
+    MacroDef {
+        id: "lfo3.rate",
+        name: "Rate",
+        group: "LFO 3",
+        default: 4.0,
+        min: 0.01,
+        max: 40.0,
+        unit: "Hz",
+        live: false,
+    },
+    MacroDef {
+        id: "lfo3.depth",
+        name: "Depth",
+        group: "LFO 3",
+        default: 0.0,
+        min: 0.0,
+        max: 1.0,
+        unit: "",
+        live: false,
+    },
+    MacroDef {
+        id: "lfo3.shape",
+        name: "Shape",
+        group: "LFO 3",
+        default: 2.0,
+        min: 0.0,
+        max: 4.0,
+        unit: "",
+        live: false,
+    },
+    MacroDef {
+        id: "lfo3.fade",
+        name: "Fade In",
+        group: "LFO 3",
+        default: 0.0,
+        min: 0.0,
+        max: 4000.0,
+        unit: "ms",
+        live: false,
+    },
+    MacroDef {
+        id: "lfo4.rate",
+        name: "Rate",
+        group: "LFO 4",
+        default: 8.0,
+        min: 0.01,
+        max: 40.0,
+        unit: "Hz",
+        live: false,
+    },
+    MacroDef {
+        id: "lfo4.depth",
+        name: "Depth",
+        group: "LFO 4",
+        default: 0.0,
+        min: 0.0,
+        max: 1.0,
+        unit: "",
+        live: false,
+    },
+    MacroDef {
+        id: "lfo4.shape",
+        name: "Shape",
+        group: "LFO 4",
+        default: 3.0,
+        min: 0.0,
+        max: 4.0,
+        unit: "",
+        live: false,
+    },
+    MacroDef {
+        id: "lfo4.fade",
+        name: "Fade In",
+        group: "LFO 4",
+        default: 0.0,
+        min: 0.0,
+        max: 4000.0,
+        unit: "ms",
+        live: false,
+    },
     // ── Tone / Vibrato / Ambience / Effects (per module) ─────────────────
-    MacroDef { id: "tone.warmth", name: "Warmth", group: "Tone", default: 0.5, min: 0.0, max: 1.0, unit: "", live: false },
-    MacroDef { id: "tone.drive", name: "Drive", group: "Tone", default: 0.0, min: 0.0, max: 1.0, unit: "", live: false },
-    MacroDef { id: "tone.body", name: "Body", group: "Tone", default: 0.5, min: 0.0, max: 1.0, unit: "", live: false },
-    MacroDef { id: "vib.rate", name: "Rate", group: "Vibrato", default: 5.0, min: 0.1, max: 12.0, unit: "Hz", live: true },
-    MacroDef { id: "vib.depth", name: "Depth", group: "Vibrato", default: 0.0, min: 0.0, max: 1.0, unit: "", live: true },
-    MacroDef { id: "vib.delay", name: "Delay", group: "Vibrato", default: 300.0, min: 0.0, max: 3000.0, unit: "ms", live: false },
-    MacroDef { id: "amb.bypass", name: "Bypass", group: "Ambience", default: 0.0, min: 0.0, max: 1.0, unit: "", live: false },
-    MacroDef { id: "amb.algo", name: "Algorithm", group: "Ambience", default: 1.0, min: 0.0, max: 14.0, unit: "", live: false },
-    MacroDef { id: "amb.size", name: "Size", group: "Ambience", default: 0.5, min: 0.0, max: 1.0, unit: "", live: false },
-    MacroDef { id: "amb.mix", name: "Mix", group: "Ambience", default: 0.15, min: 0.0, max: 1.0, unit: "", live: false },
-    MacroDef { id: "amb.predelay", name: "Pre-dly", group: "Ambience", default: 20.0, min: 0.0, max: 250.0, unit: "ms", live: false },
-    MacroDef { id: "amb.decay", name: "Decay", group: "Ambience", default: 0.45, min: 0.02, max: 1.0, unit: "", live: false },
+    MacroDef {
+        id: "tone.warmth",
+        name: "Warmth",
+        group: "Tone",
+        default: 0.5,
+        min: 0.0,
+        max: 1.0,
+        unit: "",
+        live: false,
+    },
+    MacroDef {
+        id: "tone.drive",
+        name: "Drive",
+        group: "Tone",
+        default: 0.0,
+        min: 0.0,
+        max: 1.0,
+        unit: "",
+        live: false,
+    },
+    MacroDef {
+        id: "tone.body",
+        name: "Body",
+        group: "Tone",
+        default: 0.5,
+        min: 0.0,
+        max: 1.0,
+        unit: "",
+        live: false,
+    },
+    MacroDef {
+        id: "vib.rate",
+        name: "Rate",
+        group: "Vibrato",
+        default: 5.0,
+        min: 0.1,
+        max: 12.0,
+        unit: "Hz",
+        live: true,
+    },
+    MacroDef {
+        id: "vib.depth",
+        name: "Depth",
+        group: "Vibrato",
+        default: 0.0,
+        min: 0.0,
+        max: 1.0,
+        unit: "",
+        live: true,
+    },
+    MacroDef {
+        id: "vib.delay",
+        name: "Delay",
+        group: "Vibrato",
+        default: 300.0,
+        min: 0.0,
+        max: 3000.0,
+        unit: "ms",
+        live: false,
+    },
+    MacroDef {
+        id: "amb.bypass",
+        name: "Bypass",
+        group: "Ambience",
+        default: 0.0,
+        min: 0.0,
+        max: 1.0,
+        unit: "",
+        live: false,
+    },
+    MacroDef {
+        id: "amb.algo",
+        name: "Algorithm",
+        group: "Ambience",
+        default: 1.0,
+        min: 0.0,
+        max: 14.0,
+        unit: "",
+        live: false,
+    },
+    MacroDef {
+        id: "amb.size",
+        name: "Size",
+        group: "Ambience",
+        default: 0.5,
+        min: 0.0,
+        max: 1.0,
+        unit: "",
+        live: false,
+    },
+    MacroDef {
+        id: "amb.mix",
+        name: "Mix",
+        group: "Ambience",
+        default: 0.15,
+        min: 0.0,
+        max: 1.0,
+        unit: "",
+        live: false,
+    },
+    MacroDef {
+        id: "amb.predelay",
+        name: "Pre-dly",
+        group: "Ambience",
+        default: 20.0,
+        min: 0.0,
+        max: 250.0,
+        unit: "ms",
+        live: false,
+    },
+    MacroDef {
+        id: "amb.decay",
+        name: "Decay",
+        group: "Ambience",
+        default: 0.45,
+        min: 0.02,
+        max: 1.0,
+        unit: "",
+        live: false,
+    },
     // The delay is its own section, not an Effects amount: it is the other
     // half of the time-domain picture the band draws, and it needs a time and
     // a feedback to draw at all.
@@ -262,17 +847,97 @@ const MACROS: &[MacroDef] = &[
     // Machine / algorithm: an index into the rig's tables (see
     // signal-keys-ui's `algos`), the same shape the guitar rig's picker writes.
     // 0 engaged, 1 bypassed — the same sense as the engine lamp beside it.
-    MacroDef { id: "dly.bypass", name: "Bypass", group: "Delay", default: 0.0, min: 0.0, max: 1.0, unit: "", live: false },
-    MacroDef { id: "dly.algo", name: "Machine", group: "Delay", default: 0.0, min: 0.0, max: 12.0, unit: "", live: false },
-    MacroDef { id: "dly.div", name: "Div", group: "Delay", default: 3.0, min: 0.0, max: 7.0, unit: "", live: false },
-    MacroDef { id: "dly.time", name: "Time", group: "Delay", default: 375.0, min: 20.0, max: 2000.0, unit: "ms", live: false },
-    MacroDef { id: "dly.feedback", name: "Feedback", group: "Delay", default: 0.35, min: 0.0, max: 0.95, unit: "", live: false },
-    MacroDef { id: "dly.mix", name: "Mix", group: "Delay", default: 0.0, min: 0.0, max: 1.0, unit: "", live: false },
-    MacroDef { id: "fx.chorus", name: "Chorus", group: "Effects", default: 0.0, min: 0.0, max: 1.0, unit: "", live: false },
-    MacroDef { id: "fx.delay", name: "Delay", group: "Effects", default: 0.0, min: 0.0, max: 1.0, unit: "", live: false },
-    MacroDef { id: "fx.width", name: "Width", group: "Effects", default: 0.5, min: 0.0, max: 1.0, unit: "", live: false },
+    MacroDef {
+        id: "dly.bypass",
+        name: "Bypass",
+        group: "Delay",
+        default: 0.0,
+        min: 0.0,
+        max: 1.0,
+        unit: "",
+        live: false,
+    },
+    MacroDef {
+        id: "dly.algo",
+        name: "Machine",
+        group: "Delay",
+        default: 0.0,
+        min: 0.0,
+        max: 12.0,
+        unit: "",
+        live: false,
+    },
+    MacroDef {
+        id: "dly.div",
+        name: "Div",
+        group: "Delay",
+        default: 3.0,
+        min: 0.0,
+        max: 7.0,
+        unit: "",
+        live: false,
+    },
+    MacroDef {
+        id: "dly.time",
+        name: "Time",
+        group: "Delay",
+        default: 375.0,
+        min: 20.0,
+        max: 2000.0,
+        unit: "ms",
+        live: false,
+    },
+    MacroDef {
+        id: "dly.feedback",
+        name: "Feedback",
+        group: "Delay",
+        default: 0.35,
+        min: 0.0,
+        max: 0.95,
+        unit: "",
+        live: false,
+    },
+    MacroDef {
+        id: "dly.mix",
+        name: "Mix",
+        group: "Delay",
+        default: 0.0,
+        min: 0.0,
+        max: 1.0,
+        unit: "",
+        live: false,
+    },
+    MacroDef {
+        id: "fx.chorus",
+        name: "Chorus",
+        group: "Effects",
+        default: 0.0,
+        min: 0.0,
+        max: 1.0,
+        unit: "",
+        live: false,
+    },
+    MacroDef {
+        id: "fx.delay",
+        name: "Delay",
+        group: "Effects",
+        default: 0.0,
+        min: 0.0,
+        max: 1.0,
+        unit: "",
+        live: false,
+    },
+    MacroDef {
+        id: "fx.width",
+        name: "Width",
+        group: "Effects",
+        default: 0.5,
+        min: 0.0,
+        max: 1.0,
+        unit: "",
+        live: false,
+    },
 ];
-
 
 /// One **Global Control** — Omnisphere's Main-page model: a knob that drives
 /// the same parameter on every audible module beneath it.
@@ -307,44 +972,354 @@ struct GlobalDef {
 /// Limiter.
 const GLOBALS: &[GlobalDef] = &[
     // ── Filter ───────────────────────────────────────────────────────────
-    GlobalDef { key: "filter.cutoff", name: "Cutoff", group: "Filter", target: Some("filter.cutoff"), default: 20000.0, min: 20.0, max: 20000.0, unit: "Hz", live: false },
-    GlobalDef { key: "filter.reso", name: "Resonance", group: "Filter", target: Some("filter.reso"), default: 0.0, min: 0.0, max: 1.0, unit: "", live: false },
-    GlobalDef { key: "filter.env", name: "Env Amt", group: "Filter", target: Some("filter.env_amt"), default: 0.0, min: -1.0, max: 1.0, unit: "", live: false },
+    GlobalDef {
+        key: "filter.cutoff",
+        name: "Cutoff",
+        group: "Filter",
+        target: Some("filter.cutoff"),
+        default: 20000.0,
+        min: 20.0,
+        max: 20000.0,
+        unit: "Hz",
+        live: false,
+    },
+    GlobalDef {
+        key: "filter.reso",
+        name: "Resonance",
+        group: "Filter",
+        target: Some("filter.reso"),
+        default: 0.0,
+        min: 0.0,
+        max: 1.0,
+        unit: "",
+        live: false,
+    },
+    GlobalDef {
+        key: "filter.env",
+        name: "Env Amt",
+        group: "Filter",
+        target: Some("filter.env_amt"),
+        default: 0.0,
+        min: -1.0,
+        max: 1.0,
+        unit: "",
+        live: false,
+    },
     // ── Envelope: the Amp ADSR (ENV 1) then the Filter ADSR (ENV 2) ──────
-    GlobalDef { key: "amp.attack", name: "A", group: "Amp Env", target: Some("env1.attack"), default: 0.0, min: 0.0, max: 5000.0, unit: "ms", live: true },
-    GlobalDef { key: "amp.decay", name: "D", group: "Amp Env", target: Some("env1.decay"), default: 0.0, min: 0.0, max: 5000.0, unit: "ms", live: false },
-    GlobalDef { key: "amp.sustain", name: "S", group: "Amp Env", target: Some("env1.sustain"), default: 1.0, min: 0.0, max: 1.0, unit: "", live: false },
-    GlobalDef { key: "amp.release", name: "R", group: "Amp Env", target: Some("env1.release"), default: 120.0, min: 0.0, max: 8000.0, unit: "ms", live: true },
-    GlobalDef { key: "fenv.attack", name: "A", group: "Filter Env", target: Some("env2.attack"), default: 0.0, min: 0.0, max: 5000.0, unit: "ms", live: false },
-    GlobalDef { key: "fenv.decay", name: "D", group: "Filter Env", target: Some("env2.decay"), default: 0.0, min: 0.0, max: 5000.0, unit: "ms", live: false },
-    GlobalDef { key: "fenv.sustain", name: "S", group: "Filter Env", target: Some("env2.sustain"), default: 1.0, min: 0.0, max: 1.0, unit: "", live: false },
-    GlobalDef { key: "fenv.release", name: "R", group: "Filter Env", target: Some("env2.release"), default: 120.0, min: 0.0, max: 8000.0, unit: "ms", live: false },
+    GlobalDef {
+        key: "amp.attack",
+        name: "A",
+        group: "Amp Env",
+        target: Some("env1.attack"),
+        default: 0.0,
+        min: 0.0,
+        max: 5000.0,
+        unit: "ms",
+        live: true,
+    },
+    GlobalDef {
+        key: "amp.decay",
+        name: "D",
+        group: "Amp Env",
+        target: Some("env1.decay"),
+        default: 0.0,
+        min: 0.0,
+        max: 5000.0,
+        unit: "ms",
+        live: false,
+    },
+    GlobalDef {
+        key: "amp.sustain",
+        name: "S",
+        group: "Amp Env",
+        target: Some("env1.sustain"),
+        default: 1.0,
+        min: 0.0,
+        max: 1.0,
+        unit: "",
+        live: false,
+    },
+    GlobalDef {
+        key: "amp.release",
+        name: "R",
+        group: "Amp Env",
+        target: Some("env1.release"),
+        default: 120.0,
+        min: 0.0,
+        max: 8000.0,
+        unit: "ms",
+        live: true,
+    },
+    GlobalDef {
+        key: "fenv.attack",
+        name: "A",
+        group: "Filter Env",
+        target: Some("env2.attack"),
+        default: 0.0,
+        min: 0.0,
+        max: 5000.0,
+        unit: "ms",
+        live: false,
+    },
+    GlobalDef {
+        key: "fenv.decay",
+        name: "D",
+        group: "Filter Env",
+        target: Some("env2.decay"),
+        default: 0.0,
+        min: 0.0,
+        max: 5000.0,
+        unit: "ms",
+        live: false,
+    },
+    GlobalDef {
+        key: "fenv.sustain",
+        name: "S",
+        group: "Filter Env",
+        target: Some("env2.sustain"),
+        default: 1.0,
+        min: 0.0,
+        max: 1.0,
+        unit: "",
+        live: false,
+    },
+    GlobalDef {
+        key: "fenv.release",
+        name: "R",
+        group: "Filter Env",
+        target: Some("env2.release"),
+        default: 120.0,
+        min: 0.0,
+        max: 8000.0,
+        unit: "ms",
+        live: false,
+    },
     // ── Vibrato ──────────────────────────────────────────────────────────
-    GlobalDef { key: "vib.rate", name: "Rate", group: "Vibrato", target: Some("vib.rate"), default: 5.0, min: 0.1, max: 12.0, unit: "Hz", live: false },
-    GlobalDef { key: "vib.depth", name: "Depth", group: "Vibrato", target: Some("vib.depth"), default: 0.0, min: 0.0, max: 1.0, unit: "", live: false },
+    GlobalDef {
+        key: "vib.rate",
+        name: "Rate",
+        group: "Vibrato",
+        target: Some("vib.rate"),
+        default: 5.0,
+        min: 0.1,
+        max: 12.0,
+        unit: "Hz",
+        live: false,
+    },
+    GlobalDef {
+        key: "vib.depth",
+        name: "Depth",
+        group: "Vibrato",
+        target: Some("vib.depth"),
+        default: 0.0,
+        min: 0.0,
+        max: 1.0,
+        unit: "",
+        live: false,
+    },
     // ── Unison ───────────────────────────────────────────────────────────
-    GlobalDef { key: "uni.voices", name: "Voices", group: "Unison", target: Some("source.unison"), default: 1.0, min: 1.0, max: 8.0, unit: "v", live: true },
-    GlobalDef { key: "uni.detune", name: "Detune", group: "Unison", target: Some("source.detune"), default: 0.1, min: 0.0, max: 2.0, unit: "", live: true },
+    GlobalDef {
+        key: "uni.voices",
+        name: "Voices",
+        group: "Unison",
+        target: Some("source.unison"),
+        default: 1.0,
+        min: 1.0,
+        max: 8.0,
+        unit: "v",
+        live: true,
+    },
+    GlobalDef {
+        key: "uni.detune",
+        name: "Detune",
+        group: "Unison",
+        target: Some("source.detune"),
+        default: 0.1,
+        min: 0.0,
+        max: 2.0,
+        unit: "",
+        live: true,
+    },
     // ── Ambience ─────────────────────────────────────────────────────────
-    GlobalDef { key: "amb.bypass", name: "Bypass", group: "Ambience", target: Some("amb.bypass"), default: 0.0, min: 0.0, max: 1.0, unit: "", live: false },
-    GlobalDef { key: "amb.algo", name: "Algorithm", group: "Ambience", target: Some("amb.algo"), default: 1.0, min: 0.0, max: 14.0, unit: "", live: false },
-    GlobalDef { key: "amb.amount", name: "Amount", group: "Ambience", target: Some("amb.mix"), default: 0.15, min: 0.0, max: 1.0, unit: "", live: false },
-    GlobalDef { key: "amb.length", name: "Length", group: "Ambience", target: Some("amb.size"), default: 0.5, min: 0.0, max: 1.0, unit: "", live: false },
-    GlobalDef { key: "amb.decay", name: "Decay", group: "Ambience", target: Some("amb.decay"), default: 0.45, min: 0.02, max: 1.0, unit: "", live: false },
+    GlobalDef {
+        key: "amb.bypass",
+        name: "Bypass",
+        group: "Ambience",
+        target: Some("amb.bypass"),
+        default: 0.0,
+        min: 0.0,
+        max: 1.0,
+        unit: "",
+        live: false,
+    },
+    GlobalDef {
+        key: "amb.algo",
+        name: "Algorithm",
+        group: "Ambience",
+        target: Some("amb.algo"),
+        default: 1.0,
+        min: 0.0,
+        max: 14.0,
+        unit: "",
+        live: false,
+    },
+    GlobalDef {
+        key: "amb.amount",
+        name: "Amount",
+        group: "Ambience",
+        target: Some("amb.mix"),
+        default: 0.15,
+        min: 0.0,
+        max: 1.0,
+        unit: "",
+        live: false,
+    },
+    GlobalDef {
+        key: "amb.length",
+        name: "Length",
+        group: "Ambience",
+        target: Some("amb.size"),
+        default: 0.5,
+        min: 0.0,
+        max: 1.0,
+        unit: "",
+        live: false,
+    },
+    GlobalDef {
+        key: "amb.decay",
+        name: "Decay",
+        group: "Ambience",
+        target: Some("amb.decay"),
+        default: 0.45,
+        min: 0.02,
+        max: 1.0,
+        unit: "",
+        live: false,
+    },
     // ── Delay, at every level: the rig's tail, an engine's, a lane's ─────
-    GlobalDef { key: "dly.bypass", name: "Bypass", group: "Delay", target: Some("dly.bypass"), default: 0.0, min: 0.0, max: 1.0, unit: "", live: false },
-    GlobalDef { key: "dly.algo", name: "Machine", group: "Delay", target: Some("dly.algo"), default: 0.0, min: 0.0, max: 12.0, unit: "", live: false },
-    GlobalDef { key: "dly.div", name: "Div", group: "Delay", target: Some("dly.div"), default: 3.0, min: 0.0, max: 7.0, unit: "", live: false },
-    GlobalDef { key: "dly.time", name: "Time", group: "Delay", target: Some("dly.time"), default: 375.0, min: 20.0, max: 2000.0, unit: "ms", live: false },
-    GlobalDef { key: "dly.feedback", name: "Feedback", group: "Delay", target: Some("dly.feedback"), default: 0.35, min: 0.0, max: 0.95, unit: "", live: false },
-    GlobalDef { key: "dly.mix", name: "Mix", group: "Delay", target: Some("dly.mix"), default: 0.0, min: 0.0, max: 1.0, unit: "", live: false },
+    GlobalDef {
+        key: "dly.bypass",
+        name: "Bypass",
+        group: "Delay",
+        target: Some("dly.bypass"),
+        default: 0.0,
+        min: 0.0,
+        max: 1.0,
+        unit: "",
+        live: false,
+    },
+    GlobalDef {
+        key: "dly.algo",
+        name: "Machine",
+        group: "Delay",
+        target: Some("dly.algo"),
+        default: 0.0,
+        min: 0.0,
+        max: 12.0,
+        unit: "",
+        live: false,
+    },
+    GlobalDef {
+        key: "dly.div",
+        name: "Div",
+        group: "Delay",
+        target: Some("dly.div"),
+        default: 3.0,
+        min: 0.0,
+        max: 7.0,
+        unit: "",
+        live: false,
+    },
+    GlobalDef {
+        key: "dly.time",
+        name: "Time",
+        group: "Delay",
+        target: Some("dly.time"),
+        default: 375.0,
+        min: 20.0,
+        max: 2000.0,
+        unit: "ms",
+        live: false,
+    },
+    GlobalDef {
+        key: "dly.feedback",
+        name: "Feedback",
+        group: "Delay",
+        target: Some("dly.feedback"),
+        default: 0.35,
+        min: 0.0,
+        max: 0.95,
+        unit: "",
+        live: false,
+    },
+    GlobalDef {
+        key: "dly.mix",
+        name: "Mix",
+        group: "Delay",
+        target: Some("dly.mix"),
+        default: 0.0,
+        min: 0.0,
+        max: 1.0,
+        unit: "",
+        live: false,
+    },
     // ── Tone: the scope's EQ, centred = bypassed ─────────────────────────
-    GlobalDef { key: "tone.low", name: "Low", group: "Tone", target: None, default: 0.0, min: -12.0, max: 12.0, unit: "dB", live: false },
-    GlobalDef { key: "tone.mid", name: "Mid", group: "Tone", target: None, default: 0.0, min: -12.0, max: 12.0, unit: "dB", live: false },
-    GlobalDef { key: "tone.high", name: "High", group: "Tone", target: None, default: 0.0, min: -12.0, max: 12.0, unit: "dB", live: false },
+    GlobalDef {
+        key: "tone.low",
+        name: "Low",
+        group: "Tone",
+        target: None,
+        default: 0.0,
+        min: -12.0,
+        max: 12.0,
+        unit: "dB",
+        live: false,
+    },
+    GlobalDef {
+        key: "tone.mid",
+        name: "Mid",
+        group: "Tone",
+        target: None,
+        default: 0.0,
+        min: -12.0,
+        max: 12.0,
+        unit: "dB",
+        live: false,
+    },
+    GlobalDef {
+        key: "tone.high",
+        name: "High",
+        group: "Tone",
+        target: None,
+        default: 0.0,
+        min: -12.0,
+        max: 12.0,
+        unit: "dB",
+        live: false,
+    },
     // ── Effects + Limiter, at the scope's output ─────────────────────────
-    GlobalDef { key: "fx.bypass", name: "Bypass", group: "Effects", target: None, default: 0.0, min: 0.0, max: 1.0, unit: "", live: false },
-    GlobalDef { key: "limiter", name: "Limiter", group: "Effects", target: None, default: 0.0, min: 0.0, max: 1.0, unit: "", live: false },
+    GlobalDef {
+        key: "fx.bypass",
+        name: "Bypass",
+        group: "Effects",
+        target: None,
+        default: 0.0,
+        min: 0.0,
+        max: 1.0,
+        unit: "",
+        live: false,
+    },
+    GlobalDef {
+        key: "limiter",
+        name: "Limiter",
+        group: "Effects",
+        target: None,
+        default: 0.0,
+        min: 0.0,
+        max: 1.0,
+        unit: "",
+        live: false,
+    },
 ];
 
 /// Id prefixes for the three levels a Global Control lives at. The wire ids
@@ -380,7 +1355,10 @@ fn macro_def(id: &str) -> Option<&'static MacroDef> {
 }
 
 fn default_macros() -> BTreeMap<String, f32> {
-    MACROS.iter().map(|m| (m.id.to_string(), m.default)).collect()
+    MACROS
+        .iter()
+        .map(|m| (m.id.to_string(), m.default))
+        .collect()
 }
 
 /// Live per-engine mixer state — its trim, its bypass, and the level of
@@ -453,7 +1431,9 @@ impl State {
     /// mute, solo-exclusion and its engine's mute. Engine *faders* are their
     /// own cell, so they're not folded in here.
     fn lane_gain(&self, name: &str) -> f32 {
-        let Some(lane) = self.lanes.get(name) else { return 0.0 };
+        let Some(lane) = self.lanes.get(name) else {
+            return 0.0;
+        };
         let engine_muted = self.engines.get(&lane.engine).is_some_and(|e| e.muted);
         let mix = rig_mixer::LaneMix {
             gain_db: lane.gain_db,
@@ -672,7 +1652,9 @@ impl KeysRigBackend {
 
     /// The layer's Global Controls — its own modules, under the `l.` prefix.
     fn layer_macro_models(s: &State, layer: &str) -> Vec<KeysMacro> {
-        let Some(lane) = s.lanes.get(layer) else { return Vec::new() };
+        let Some(lane) = s.lanes.get(layer) else {
+            return Vec::new();
+        };
         let targets = Self::scope_targets(s, &[layer.to_string()]);
         Self::global_models(s, LAYER, &targets, &lane.globals, &lane.spans)
     }
@@ -748,7 +1730,13 @@ impl KeysRigBackend {
                 Some(match acc {
                     None => b,
                     // Whichever module would hit the edge first.
-                    Some(a) => if offset >= 0.0 { a.max(b) } else { a.min(b) },
+                    Some(a) => {
+                        if offset >= 0.0 {
+                            a.max(b)
+                        } else {
+                            a.min(b)
+                        }
+                    }
                 })
             })
             .unwrap_or(0.0);
@@ -759,7 +1747,11 @@ impl KeysRigBackend {
         };
         let shift = (edge - leader) * k;
         for (lane, i, b) in base.clone() {
-            let v = if ratio && leader > 0.0 && edge > 0.0 { b * scale } else { b + shift };
+            let v = if ratio && leader > 0.0 && edge > 0.0 {
+                b * scale
+            } else {
+                b + shift
+            };
             write(s, &lane, i, v);
         }
         (offset.abs() >= 1e-4).then_some((offset, base))
@@ -815,20 +1807,25 @@ impl KeysRigBackend {
     /// hosted) — the caller falls back to the rebuild path.
     fn push_module_dsp(&self, layer: &str, module_idx: usize) -> bool {
         use signal_sampler::native::AdsrParams;
-        let Some(vals) = self.module_dsp_values(layer, module_idx) else { return false };
+        let Some(vals) = self.module_dsp_values(layer, module_idx) else {
+            return false;
+        };
         let [cutoff_hz, reso, env_amt, a1, d1, s1, r1, a2, d2, s2, r2, unison, detune, vib_rate, vib_depth] =
             vals;
         let module = format!("{layer} {}", signal_synth::engine::module_slot(module_idx));
-        let Ok(rig) = self.inner.rig.lock() else { return false };
-        let Some(rig) = rig.as_ref() else { return false };
+        let Ok(rig) = self.inner.rig.lock() else {
+            return false;
+        };
+        let Some(rig) = rig.as_ref() else {
+            return false;
+        };
         let sample_rate = rig.sample_rate().max(1);
         rig.edit_lane(layer, |inst| {
             let render = inst.render_mut();
             // Filter block params (normalized on the block's own scale).
             let cutoff_norm =
                 signal_sampler::native::NativeFilter::norm_from_cutoff(cutoff_hz) as f64;
-            let mut applied =
-                render.set_leaf_param(&module, "Filter 1", "cutoff", cutoff_norm);
+            let mut applied = render.set_leaf_param(&module, "Filter 1", "cutoff", cutoff_norm);
             applied |= render.set_leaf_param(
                 &module,
                 "Filter 1",
@@ -859,14 +1856,29 @@ impl KeysRigBackend {
             let seg = |ms: f32| ((ms.max(0.0) / 1000.0) / 8.0).clamp(0.0, 1.0) as f64;
             applied |= render.set_leaf_param(&module, "Soundsource", "amp_attack", seg(a1));
             render.set_leaf_param(&module, "Soundsource", "amp_decay", seg(d1));
-            render.set_leaf_param(&module, "Soundsource", "amp_sustain", s1.clamp(0.0, 1.0) as f64);
+            render.set_leaf_param(
+                &module,
+                "Soundsource",
+                "amp_sustain",
+                s1.clamp(0.0, 1.0) as f64,
+            );
             render.set_leaf_param(&module, "Soundsource", "amp_release", seg(r1));
             render.set_leaf_param(&module, "Soundsource", "filter_attack", seg(a2));
             render.set_leaf_param(&module, "Soundsource", "filter_decay", seg(d2));
-            render.set_leaf_param(&module, "Soundsource", "filter_sustain", s2.clamp(0.0, 1.0) as f64);
+            render.set_leaf_param(
+                &module,
+                "Soundsource",
+                "filter_sustain",
+                s2.clamp(0.0, 1.0) as f64,
+            );
             render.set_leaf_param(&module, "Soundsource", "filter_release", seg(r2));
             render.set_leaf_param(&module, "Soundsource", "cutoff", cutoff_norm);
-            render.set_leaf_param(&module, "Soundsource", "resonance", reso.clamp(0.0, 1.0) as f64);
+            render.set_leaf_param(
+                &module,
+                "Soundsource",
+                "resonance",
+                reso.clamp(0.0, 1.0) as f64,
+            );
             render.set_leaf_param(
                 &module,
                 "Soundsource",
@@ -889,12 +1901,8 @@ impl KeysRigBackend {
             // Sampler source: per-voice amp attack/release + unison.
             applied |= render.with_sampler_source(&module, "Soundsource", |sampler| {
                 let engine = sampler.engine_mut();
-                engine.set_attack_frames(
-                    ((a1.max(0.0) / 1000.0) * sample_rate as f32) as usize,
-                );
-                engine.set_release_frames(
-                    ((r1.max(0.0) / 1000.0) * sample_rate as f32) as usize,
-                );
+                engine.set_attack_frames(((a1.max(0.0) / 1000.0) * sample_rate as f32) as usize);
+                engine.set_release_frames(((r1.max(0.0) / 1000.0) * sample_rate as f32) as usize);
                 engine.set_unison(
                     (unison.max(1.0).round() as u8).min(8),
                     detune.clamp(0.0, 2.0) * 100.0,
@@ -910,7 +1918,9 @@ impl KeysRigBackend {
     /// applied (any miss → the caller rebuilds, which covers them all).
     fn push_targets_dsp(&self, targets: &[(String, usize)]) -> bool {
         !targets.is_empty()
-            && targets.iter().all(|(layer, i)| self.push_module_dsp(layer, *i))
+            && targets
+                .iter()
+                .all(|(layer, i)| self.push_module_dsp(layer, *i))
     }
 
     /// Rebuild the program shortly, once the knob stops moving.
@@ -1005,15 +2015,22 @@ impl KeysRigBackend {
             .or_else(|| (!presets.is_empty()).then_some(0));
         tracing::info!(
             presets = presets.len(),
-            default = default_idx.and_then(|i| presets.get(i)).map(|p| p.name.as_str()).unwrap_or("<first>"),
+            default = default_idx
+                .and_then(|i| presets.get(i))
+                .map(|p| p.name.as_str())
+                .unwrap_or("<first>"),
             "keys rig: scanned library"
         );
         // The rig boots as a PROFILE — engines, layers, stacks — not a single
         // patch. `FTS_KEYS_PROFILE` points at a `.styx` profile; the built-in
         // Worship profile is the default.
         let profile = load_profile();
-        let mut state =
-            State { presets, specs, loaded: default_idx, ..State::default() };
+        let mut state = State {
+            presets,
+            specs,
+            loaded: default_idx,
+            ..State::default()
+        };
         state.adopt_profile(profile);
         // Lanes whose authored patch isn't in the library start empty rather
         // than silently pointing at a missing pack.
@@ -1065,7 +2082,9 @@ impl KeysRigBackend {
         let mut profile = s.profile.clone();
         for engine in &mut profile.engines {
             for layer in &mut engine.layers {
-                let Some(lane) = s.lanes.get(&layer.name) else { continue };
+                let Some(lane) = s.lanes.get(&layer.name) else {
+                    continue;
+                };
                 let patches: Vec<String> = lane.modules.iter().map(|m| m.patch.clone()).collect();
                 layer.patch = patches.first().cloned().unwrap_or_default();
                 layer.extra_modules = patches.into_iter().skip(1).collect();
@@ -1083,7 +2102,9 @@ impl KeysRigBackend {
         module: usize,
     ) -> signal_synth::engine::ModuleSettings {
         let mut set = signal_synth::engine::ModuleSettings::default();
-        let Some(lane) = lanes.get(layer) else { return set };
+        let Some(lane) = lanes.get(layer) else {
+            return set;
+        };
         let v = |id: &str| {
             lane.modules
                 .get(module)
@@ -1138,9 +2159,13 @@ impl KeysRigBackend {
     /// in-tree cells. Single mode: everything is cells, with the mute/solo
     /// fold computed here. Both are safe at UI drag rate.
     fn apply_mixer(&self) {
-        let Ok(rig) = self.inner.rig.lock() else { return };
+        let Ok(rig) = self.inner.rig.lock() else {
+            return;
+        };
         let Some(rig) = rig.as_ref() else { return };
-        let Ok(s) = self.inner.state.lock() else { return };
+        let Ok(s) = self.inner.state.lock() else {
+            return;
+        };
         if rig.is_lanes() {
             for (name, lane) in s.lanes.iter() {
                 rig.set_lane_volume(Role::Layer, name, db_to_linear(lane.gain_db));
@@ -1169,8 +2194,7 @@ impl KeysRigBackend {
                 cells.set(Role::Layer, name, s.lane_gain(name));
                 // Modules are named "<layer> <slot>" in the tree.
                 for i in 0..lane.modules.len() {
-                    let module_name =
-                        format!("{name} {}", signal_synth::engine::module_slot(i));
+                    let module_name = format!("{name} {}", signal_synth::engine::module_slot(i));
                     cells.set(Role::Module, &module_name, lane.module_gain(i));
                 }
             }
@@ -1190,7 +2214,9 @@ impl KeysRigBackend {
         tracing::debug!("keys rig: rebuild — building program");
         // The single tree is always built: it is the control-view structure
         // (`s.tree`) even when the audio is hosted per lane.
-        let Some(tree) = self.profile_program() else { return };
+        let Some(tree) = self.profile_program() else {
+            return;
+        };
         tracing::debug!("keys rig: rebuild — ensuring audio");
         if !self.ensure_open() {
             self.publish_all();
@@ -1245,11 +2271,15 @@ impl KeysRigBackend {
             }
         };
         {
-            let Ok(mut s) = self.inner.state.lock() else { return };
+            let Ok(mut s) = self.inner.state.lock() else {
+                return;
+            };
             // Soundsource names resolve against the same library the modules
             // load from; an unknown one leaves that module empty.
             let known: Vec<String> = s.presets.iter().map(|p| p.name.clone()).collect();
-            let Some(lane) = s.lanes.get_mut(layer) else { return };
+            let Some(lane) = s.lanes.get_mut(layer) else {
+                return;
+            };
             // Opening a preset names the LANE — the modules keep their own
             // soundsource names.
             if start == 0 {
@@ -1324,7 +2354,9 @@ impl KeysRigBackend {
 
     /// The wire mixer snapshot.
     fn mixer_model(&self) -> KeysMixer {
-        let Ok(s) = self.inner.state.lock() else { return KeysMixer::default() };
+        let Ok(s) = self.inner.state.lock() else {
+            return KeysMixer::default();
+        };
         let engines = s
             .profile
             .engines
@@ -1376,21 +2408,51 @@ impl KeysRigBackend {
                                                 enabled: m.enabled,
                                                 amp_env: Self::module_env(lane, i, "env1"),
                                                 filter_env: Self::module_env(lane, i, "env2"),
-                                                cutoff_hz: Self::module_value(lane, i, "filter.cutoff"),
-                                                resonance: Self::module_value(lane, i, "filter.reso"),
-                                                dly_time_ms: Self::module_value(lane, i, "dly.time"),
+                                                cutoff_hz: Self::module_value(
+                                                    lane,
+                                                    i,
+                                                    "filter.cutoff",
+                                                ),
+                                                resonance: Self::module_value(
+                                                    lane,
+                                                    i,
+                                                    "filter.reso",
+                                                ),
+                                                dly_time_ms: Self::module_value(
+                                                    lane, i, "dly.time",
+                                                ),
                                                 dly_div: Self::module_value(lane, i, "dly.div"),
-                                                dly_feedback: Self::module_value(lane, i, "dly.feedback"),
+                                                dly_feedback: Self::module_value(
+                                                    lane,
+                                                    i,
+                                                    "dly.feedback",
+                                                ),
                                                 dly_mix: Self::module_value(lane, i, "dly.mix"),
                                                 amb_size: Self::module_value(lane, i, "amb.size"),
                                                 amb_mix: Self::module_value(lane, i, "amb.mix"),
-                                                amb_predelay_ms: Self::module_value(lane, i, "amb.predelay"),
+                                                amb_predelay_ms: Self::module_value(
+                                                    lane,
+                                                    i,
+                                                    "amb.predelay",
+                                                ),
                                                 amb_decay: Self::module_value(lane, i, "amb.decay"),
-                                                unison: Self::module_value(lane, i, "source.unison"),
-                                                detune: Self::module_value(lane, i, "source.detune"),
+                                                unison: Self::module_value(
+                                                    lane,
+                                                    i,
+                                                    "source.unison",
+                                                ),
+                                                detune: Self::module_value(
+                                                    lane,
+                                                    i,
+                                                    "source.detune",
+                                                ),
                                                 vib_rate: Self::module_value(lane, i, "vib.rate"),
                                                 vib_depth: Self::module_value(lane, i, "vib.depth"),
-                                                vib_delay_ms: Self::module_value(lane, i, "vib.delay"),
+                                                vib_delay_ms: Self::module_value(
+                                                    lane,
+                                                    i,
+                                                    "vib.delay",
+                                                ),
                                             })
                                             .collect()
                                     })
@@ -1401,12 +2463,18 @@ impl KeysRigBackend {
                 }
             })
             .collect();
-        KeysMixer { profile: s.profile.name.clone(), engines, master_db: s.master_db }
+        KeysMixer {
+            profile: s.profile.name.clone(),
+            engines,
+            master_db: s.master_db,
+        }
     }
 
     /// The wire performance snapshot.
     fn perform_model(&self) -> KeysPerform {
-        let Ok(s) = self.inner.state.lock() else { return KeysPerform::default() };
+        let Ok(s) = self.inner.state.lock() else {
+            return KeysPerform::default();
+        };
         KeysPerform {
             profile_name: s.profile.name.clone(),
             stacks: s
@@ -1426,11 +2494,15 @@ impl KeysRigBackend {
     }
 
     fn publish_mixer(&self) {
-        self.inner.events.publish(KeysEvent::Mixer(self.mixer_model()));
+        self.inner
+            .events
+            .publish(KeysEvent::Mixer(self.mixer_model()));
     }
 
     fn publish_perform(&self) {
-        self.inner.events.publish(KeysEvent::Perform(self.perform_model()));
+        self.inner
+            .events
+            .publish(KeysEvent::Perform(self.perform_model()));
     }
 
     /// Open audio with the given (or first) preset, if not already open.
@@ -1444,7 +2516,13 @@ impl KeysRigBackend {
         // hosted as per-lane daw tracks (the fully daw-based mixer). A
         // profile-less build falls back to the single-patch, single-track
         // program, which is what the mobile shell's one-pack case wants.
-        let idx = self.inner.state.lock().ok().and_then(|s| s.loaded).unwrap_or(0);
+        let idx = self
+            .inner
+            .state
+            .lock()
+            .ok()
+            .and_then(|s| s.loaded)
+            .unwrap_or(0);
         let lane_program = self.profile_lane_program();
         // The single tree doubles as the control-view structure either way.
         let tree = self.profile_program().or_else(|| self.program_for(idx));
@@ -1470,7 +2548,9 @@ impl KeysRigBackend {
         if let Ok(mut s) = self.inner.state.lock() {
             s.last_error = Some("opening audio device…".into());
         }
-        self.inner.events.publish(KeysEvent::Status(KeysRigSvc::status(self)));
+        self.inner
+            .events
+            .publish(KeysEvent::Status(KeysRigSvc::status(self)));
         let opened = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             match (&lane_program, &tree) {
                 (Some(prog), _) => KeysRig::open_lanes(&prefs, prog),
@@ -1509,7 +2589,9 @@ impl KeysRigBackend {
                 if let Ok(mut s) = self.inner.state.lock() {
                     s.last_error = Some(format!("audio open failed: {e}"));
                 }
-                self.inner.events.publish(KeysEvent::Status(KeysRigSvc::status(self)));
+                self.inner
+                    .events
+                    .publish(KeysEvent::Status(KeysRigSvc::status(self)));
                 false
             }
         }
@@ -1563,7 +2645,12 @@ impl KeysRigBackend {
     }
 
     fn reattach_midi(&self) {
-        let port = self.inner.state.lock().ok().and_then(|s| s.midi_port.clone());
+        let port = self
+            .inner
+            .state
+            .lock()
+            .ok()
+            .and_then(|s| s.midi_port.clone());
         midicore::attach::reattach(
             "keys rig",
             port.as_deref(),
@@ -1590,13 +2677,18 @@ impl KeysRigBackend {
     }
 
     fn publish_all(&self) {
-        self.inner.events.publish(KeysEvent::Library(KeysRigSvc::presets(self)));
-        self.inner.events.publish(KeysEvent::Tree(KeysRigSvc::tree(self)));
-        self.inner.events.publish(KeysEvent::Status(KeysRigSvc::status(self)));
+        self.inner
+            .events
+            .publish(KeysEvent::Library(KeysRigSvc::presets(self)));
+        self.inner
+            .events
+            .publish(KeysEvent::Tree(KeysRigSvc::tree(self)));
+        self.inner
+            .events
+            .publish(KeysEvent::Status(KeysRigSvc::status(self)));
         self.publish_mixer();
         self.publish_perform();
     }
-
 }
 
 // r[impl primitives.architect.rig-backend]
@@ -1617,13 +2709,21 @@ impl RigBackend for KeysRigBackend {
     }
 
     fn on_running_edge(&self, _running: bool) {
-        self.inner.events.publish(KeysEvent::Status(KeysRigSvc::status(self)));
-        self.inner.events.publish(KeysEvent::Tree(KeysRigSvc::tree(self)));
+        self.inner
+            .events
+            .publish(KeysEvent::Status(KeysRigSvc::status(self)));
+        self.inner
+            .events
+            .publish(KeysEvent::Tree(KeysRigSvc::tree(self)));
     }
 
     fn on_running_tick(&self) {
-        self.inner.events.publish(KeysEvent::Status(KeysRigSvc::status(self)));
-        self.inner.events.publish(KeysEvent::Midi(KeysRigSvc::midi_recent(self)));
+        self.inner
+            .events
+            .publish(KeysEvent::Status(KeysRigSvc::status(self)));
+        self.inner
+            .events
+            .publish(KeysEvent::Midi(KeysRigSvc::midi_recent(self)));
     }
 
     fn midi_ports(&self) -> Vec<String> {
@@ -1641,7 +2741,9 @@ impl RigBackend for KeysRigBackend {
         // omni stream without touching the UI.
         tracing::info!(?ports, "keys rig: MIDI ports changed — re-attaching");
         self.reattach_midi();
-        self.inner.events.publish(KeysEvent::Status(KeysRigSvc::status(self)));
+        self.inner
+            .events
+            .publish(KeysEvent::Status(KeysRigSvc::status(self)));
     }
 }
 
@@ -1670,14 +2772,19 @@ impl KeysRigSvc for KeysRigBackend {
         if let Ok(mut rig) = self.inner.rig.lock() {
             *rig = None;
         }
-        self.inner.events.publish(KeysEvent::Status(KeysRigSvc::status(self)));
+        self.inner
+            .events
+            .publish(KeysEvent::Status(KeysRigSvc::status(self)));
     }
 
     fn status(&self) -> KeysStatus {
         tracing::debug!("keys rpc: status →");
         let running = self.inner.rig.lock().map(|r| r.is_some()).unwrap_or(false);
         let s = self.inner.state.lock().unwrap();
-        let loaded_preset = s.loaded.and_then(|i| s.presets.get(i)).map(|p| p.name.clone());
+        let loaded_preset = s
+            .loaded
+            .and_then(|i| s.presets.get(i))
+            .map(|p| p.name.clone());
         let (master_peak, meters) = if running {
             self.inner
                 .rig
@@ -1714,15 +2821,21 @@ impl KeysRigSvc for KeysRigBackend {
 
     fn presets(&self) -> Vec<KeysPreset> {
         tracing::debug!("keys rpc: presets →");
-        self.inner.state.lock().map(|s| s.presets.clone()).unwrap_or_default()
+        self.inner
+            .state
+            .lock()
+            .map(|s| s.presets.clone())
+            .unwrap_or_default()
     }
 
     fn rescan(&self) {
         let (presets, specs) = scan_keyscape();
         if let Ok(mut s) = self.inner.state.lock() {
             // Keep the loaded preset marked if it survived the rescan.
-            let loaded_name =
-                s.loaded.and_then(|i| s.presets.get(i)).map(|p| p.name.clone());
+            let loaded_name = s
+                .loaded
+                .and_then(|i| s.presets.get(i))
+                .map(|p| p.name.clone());
             s.loaded = loaded_name
                 .as_deref()
                 .and_then(|n| presets.iter().position(|p| p.name == n))
@@ -1799,7 +2912,9 @@ impl KeysRigSvc for KeysRigBackend {
             s.midi_port = if name.is_empty() { None } else { Some(name) };
         }
         self.reattach_midi();
-        self.inner.events.publish(KeysEvent::Status(KeysRigSvc::status(self)));
+        self.inner
+            .events
+            .publish(KeysEvent::Status(KeysRigSvc::status(self)));
     }
 
     fn midi_recent(&self) -> Vec<MidiEvent> {
@@ -1820,7 +2935,9 @@ impl KeysRigSvc for KeysRigBackend {
 
     fn set_layer_gain(&self, layer: String, db: f32) {
         if let Ok(mut s) = self.inner.state.lock() {
-            let Some(lane) = s.lanes.get_mut(&layer) else { return };
+            let Some(lane) = s.lanes.get_mut(&layer) else {
+                return;
+            };
             lane.gain_db = db.clamp(MIN_FADER_DB, MAX_FADER_DB);
         }
         self.apply_mixer();
@@ -1829,7 +2946,9 @@ impl KeysRigSvc for KeysRigBackend {
 
     fn set_engine_gain(&self, engine: String, db: f32) {
         if let Ok(mut s) = self.inner.state.lock() {
-            let Some(e) = s.engines.get_mut(&engine) else { return };
+            let Some(e) = s.engines.get_mut(&engine) else {
+                return;
+            };
             e.gain_db = db.clamp(MIN_FADER_DB, MAX_FADER_DB);
         }
         self.apply_mixer();
@@ -1846,7 +2965,9 @@ impl KeysRigSvc for KeysRigBackend {
 
     fn set_layer_mute(&self, layer: String, muted: bool) {
         if let Ok(mut s) = self.inner.state.lock() {
-            let Some(lane) = s.lanes.get_mut(&layer) else { return };
+            let Some(lane) = s.lanes.get_mut(&layer) else {
+                return;
+            };
             lane.muted = muted;
         }
         self.apply_mixer();
@@ -1855,7 +2976,9 @@ impl KeysRigSvc for KeysRigBackend {
 
     fn set_engine_mute(&self, engine: String, muted: bool) {
         if let Ok(mut s) = self.inner.state.lock() {
-            let Some(e) = s.engines.get_mut(&engine) else { return };
+            let Some(e) = s.engines.get_mut(&engine) else {
+                return;
+            };
             e.muted = muted;
         }
         self.apply_mixer();
@@ -1864,7 +2987,9 @@ impl KeysRigSvc for KeysRigBackend {
 
     fn set_layer_exclude_global(&self, layer: String, excluded: bool) {
         {
-            let Ok(mut s) = self.inner.state.lock() else { return };
+            let Ok(mut s) = self.inner.state.lock() else {
+                return;
+            };
             let Some(def) = s
                 .profile
                 .engines
@@ -1895,7 +3020,9 @@ impl KeysRigSvc for KeysRigBackend {
 
     fn set_layer_solo(&self, layer: String, soloed: bool) {
         if let Ok(mut s) = self.inner.state.lock() {
-            let Some(lane) = s.lanes.get_mut(&layer) else { return };
+            let Some(lane) = s.lanes.get_mut(&layer) else {
+                return;
+            };
             lane.soloed = soloed;
         }
         self.apply_mixer();
@@ -1912,18 +3039,27 @@ impl KeysRigSvc for KeysRigBackend {
             .lock()
             .ok()
             .and_then(|s| s.specs.get(preset as usize).cloned())
-            .filter(|p| p.extension().is_some_and(|x| x.eq_ignore_ascii_case("prt_omn")));
+            .filter(|p| {
+                p.extension()
+                    .is_some_and(|x| x.eq_ignore_ascii_case("prt_omn"))
+            });
         if let Some(file) = patch_file {
             self.load_omni_patch(&layer, module as usize, &file);
             return;
         }
         {
-            let Ok(mut s) = self.inner.state.lock() else { return };
+            let Ok(mut s) = self.inner.state.lock() else {
+                return;
+            };
             let Some(name) = s.presets.get(preset as usize).map(|p| p.name.clone()) else {
                 return;
             };
-            let Some(lane) = s.lanes.get_mut(&layer) else { return };
-            let Some(m) = lane.modules.get_mut(module as usize) else { return };
+            let Some(lane) = s.lanes.get_mut(&layer) else {
+                return;
+            };
+            let Some(m) = lane.modules.get_mut(module as usize) else {
+                return;
+            };
             if m.patch == name {
                 return;
             }
@@ -1944,8 +3080,12 @@ impl KeysRigSvc for KeysRigBackend {
 
     fn layer_detail(&self, layer: String, module: u32) -> KeysLayerDetail {
         tracing::debug!(%layer, module, "keys rpc: layer_detail →");
-        let Ok(s) = self.inner.state.lock() else { return KeysLayerDetail::default() };
-        let Some(lane) = s.lanes.get(&layer) else { return KeysLayerDetail::default() };
+        let Ok(s) = self.inner.state.lock() else {
+            return KeysLayerDetail::default();
+        };
+        let Some(lane) = s.lanes.get(&layer) else {
+            return KeysLayerDetail::default();
+        };
         let slot = (module as usize).min(lane.modules.len().saturating_sub(1));
         let (key_lo, key_hi) = s
             .profile
@@ -2033,8 +3173,12 @@ impl KeysRigSvc for KeysRigBackend {
         let rebuild;
         let dsp_targets;
         {
-            let Ok(mut s) = self.inner.state.lock() else { return };
-            let Some(lane) = s.lanes.get_mut(&layer) else { return };
+            let Ok(mut s) = self.inner.state.lock() else {
+                return;
+            };
+            let Some(lane) = s.lanes.get_mut(&layer) else {
+                return;
+            };
             let engine = lane.engine.clone();
             let Some(target) = def.target else {
                 lane.globals.insert(id, value.clamp(def.min, def.max));
@@ -2053,7 +3197,13 @@ impl KeysRigSvc for KeysRigBackend {
             }
             // The engine's knob for the same parameter now describes a patch
             // that moved under it.
-            Self::rebase_others(&mut s, std::slice::from_ref(&engine), std::slice::from_ref(&layer), target, &id);
+            Self::rebase_others(
+                &mut s,
+                std::slice::from_ref(&engine),
+                std::slice::from_ref(&layer),
+                target,
+                &id,
+            );
             rebuild = Self::macro_is_dsp(target);
             dsp_targets = targets;
         }
@@ -2062,7 +3212,9 @@ impl KeysRigSvc for KeysRigBackend {
 
     fn engine_detail(&self, engine: String) -> KeysEngineDetail {
         tracing::debug!(%engine, "keys rpc: engine_detail →");
-        let Ok(s) = self.inner.state.lock() else { return KeysEngineDetail::default() };
+        let Ok(s) = self.inner.state.lock() else {
+            return KeysEngineDetail::default();
+        };
         let Some(est) = s.engines.get(&engine).cloned() else {
             return KeysEngineDetail::default();
         };
@@ -2088,7 +3240,9 @@ impl KeysRigSvc for KeysRigBackend {
         let rebuild;
         let dsp_targets;
         {
-            let Ok(mut s) = self.inner.state.lock() else { return };
+            let Ok(mut s) = self.inner.state.lock() else {
+                return;
+            };
             if !s.engines.contains_key(&engine) {
                 return;
             }
@@ -2102,7 +3256,10 @@ impl KeysRigSvc for KeysRigBackend {
             };
             let lanes = Self::engine_lanes(&s, &engine);
             let targets = Self::scope_targets(&s, &lanes);
-            let span = s.engines.get(&engine).and_then(|e| e.spans.get(&id).cloned());
+            let span = s
+                .engines
+                .get(&engine)
+                .and_then(|e| e.spans.get(&id).cloned());
             let next = Self::drive_global(&mut s, def, target, &targets, span, value);
             if let Some(e) = s.engines.get_mut(&engine) {
                 match next {
@@ -2119,7 +3276,9 @@ impl KeysRigSvc for KeysRigBackend {
     }
 
     fn rig_macros(&self) -> Vec<KeysMacro> {
-        let Ok(s) = self.inner.state.lock() else { return Vec::new() };
+        let Ok(s) = self.inner.state.lock() else {
+            return Vec::new();
+        };
         let targets = Self::scope_targets(&s, &Self::all_lanes(&s));
         Self::global_models(&s, RIG, &targets, &s.rig_globals, &s.rig_spans)
     }
@@ -2130,7 +3289,9 @@ impl KeysRigSvc for KeysRigBackend {
         let rebuild;
         let dsp_targets;
         {
-            let Ok(mut s) = self.inner.state.lock() else { return };
+            let Ok(mut s) = self.inner.state.lock() else {
+                return;
+            };
             let Some(target) = def.target else {
                 s.rig_globals.insert(id, value.clamp(def.min, def.max));
                 drop(s);
@@ -2158,13 +3319,23 @@ impl KeysRigSvc for KeysRigBackend {
     fn set_layer_macro(&self, layer: String, module: u32, id: String, value: f32) {
         let Some(def) = macro_def(&id) else { return };
         if let Ok(mut s) = self.inner.state.lock() {
-            let Some(lane) = s.lanes.get(&layer) else { return };
+            let Some(lane) = s.lanes.get(&layer) else {
+                return;
+            };
             let engine = lane.engine.clone();
             // A hand edit re-bases every Global Control above it that drives
             // this parameter — their baselines described a patch that is gone.
-            Self::rebase_others(&mut s, std::slice::from_ref(&engine), std::slice::from_ref(&layer), def.id, "");
-            let Some(m) =
-                s.lanes.get_mut(&layer).and_then(|l| l.modules.get_mut(module as usize))
+            Self::rebase_others(
+                &mut s,
+                std::slice::from_ref(&engine),
+                std::slice::from_ref(&layer),
+                def.id,
+                "",
+            );
+            let Some(m) = s
+                .lanes
+                .get_mut(&layer)
+                .and_then(|l| l.modules.get_mut(module as usize))
             else {
                 return;
             };
@@ -2243,9 +3414,15 @@ impl KeysRigSvc for KeysRigBackend {
 
     fn clear_layer(&self, layer: String, module: u32) {
         {
-            let Ok(mut s) = self.inner.state.lock() else { return };
-            let Some(lane) = s.lanes.get_mut(&layer) else { return };
-            let Some(m) = lane.modules.get_mut(module as usize) else { return };
+            let Ok(mut s) = self.inner.state.lock() else {
+                return;
+            };
+            let Some(lane) = s.lanes.get_mut(&layer) else {
+                return;
+            };
+            let Some(m) = lane.modules.get_mut(module as usize) else {
+                return;
+            };
             if m.patch.is_empty() {
                 return;
             }
@@ -2263,8 +3440,12 @@ impl KeysRigSvc for KeysRigBackend {
 
     fn set_module_gain(&self, layer: String, module: u32, db: f32) {
         if let Ok(mut s) = self.inner.state.lock() {
-            let Some(lane) = s.lanes.get_mut(&layer) else { return };
-            let Some(m) = lane.modules.get_mut(module as usize) else { return };
+            let Some(lane) = s.lanes.get_mut(&layer) else {
+                return;
+            };
+            let Some(m) = lane.modules.get_mut(module as usize) else {
+                return;
+            };
             m.gain_db = db.clamp(MIN_FADER_DB, MAX_FADER_DB);
         }
         self.apply_mixer();
@@ -2273,8 +3454,12 @@ impl KeysRigSvc for KeysRigBackend {
 
     fn set_module_enabled(&self, layer: String, module: u32, on: bool) {
         if let Ok(mut s) = self.inner.state.lock() {
-            let Some(lane) = s.lanes.get_mut(&layer) else { return };
-            let Some(m) = lane.modules.get_mut(module as usize) else { return };
+            let Some(lane) = s.lanes.get_mut(&layer) else {
+                return;
+            };
+            let Some(m) = lane.modules.get_mut(module as usize) else {
+                return;
+            };
             m.enabled = on;
         }
         self.apply_mixer();
@@ -2290,11 +3475,17 @@ impl KeysRigSvc for KeysRigBackend {
 
     fn press_stack(&self, index: u32) {
         let needs_rebuild = {
-            let Ok(mut s) = self.inner.state.lock() else { return };
-            let Some(stack) = s.profile.stack(index as usize).cloned() else { return };
+            let Ok(mut s) = self.inner.state.lock() else {
+                return;
+            };
+            let Some(stack) = s.profile.stack(index as usize).cloned() else {
+                return;
+            };
             let mut rebuild = false;
             for slot in &stack.slots {
-                let Some(lane) = s.lanes.get_mut(&slot.layer) else { continue };
+                let Some(lane) = s.lanes.get_mut(&slot.layer) else {
+                    continue;
+                };
                 lane.muted = slot.muted;
                 lane.gain_db = slot.gain_db;
                 // An empty scene patch keeps whatever the lane holds — the
@@ -2338,7 +3529,9 @@ impl KeysRigSvc for KeysRigBackend {
     fn capture_stack(&self, index: u32) {
         if let Ok(mut s) = self.inner.state.lock() {
             let lanes = s.lanes.clone();
-            let Some(stack) = s.profile.stacks.get_mut(index as usize) else { return };
+            let Some(stack) = s.profile.stacks.get_mut(index as usize) else {
+                return;
+            };
             stack.slots = lanes
                 .iter()
                 .map(|(name, lane)| crate::profile::SceneSlot {
@@ -2367,7 +3560,10 @@ impl signal_rigs_proto::rig_core::RigCore for KeysRigBackend {
     fn presets(&self) -> Vec<signal_rigs_proto::RigPresetInfo> {
         KeysRigSvc::presets(self)
             .into_iter()
-            .map(|p| signal_rigs_proto::RigPresetInfo { name: p.name, loaded: p.loaded })
+            .map(|p| signal_rigs_proto::RigPresetInfo {
+                name: p.name,
+                loaded: p.loaded,
+            })
             .collect()
     }
     fn load_preset(&self, index: u32) {
@@ -2380,7 +3576,10 @@ impl signal_rigs_proto::rig_core::RigCore for KeysRigBackend {
         KeysRigSvc::set_midi_port(self, name);
     }
     fn midi_recent(&self) -> Vec<String> {
-        KeysRigSvc::midi_recent(self).iter().map(|e| format!("{e:?}")).collect()
+        KeysRigSvc::midi_recent(self)
+            .iter()
+            .map(|e| format!("{e:?}"))
+            .collect()
     }
 }
 
@@ -2403,7 +3602,11 @@ impl Services for KeysRigBackend {
 
 fn note_ev(note: u8, velocity: u8) -> MidiEvent {
     use midicore::{Channel, KeyNumber, Velocity};
-    MidiEvent::NoteOn { channel: Channel::new(0), key: KeyNumber::new(note), velocity: Velocity::new(velocity) }
+    MidiEvent::NoteOn {
+        channel: Channel::new(0),
+        key: KeyNumber::new(note),
+        velocity: Velocity::new(velocity),
+    }
 }
 
 /// Fader travel — matches a console strip (−∞…+6 dB, clamped at −60).
@@ -2428,7 +3631,10 @@ fn load_profile() -> KeysProfile {
             None => built_in,
         };
     };
-    match std::fs::read_to_string(&path).map_err(|e| e.to_string()).and_then(|t| KeysProfile::from_styx_str(&t)) {
+    match std::fs::read_to_string(&path)
+        .map_err(|e| e.to_string())
+        .and_then(|t| KeysProfile::from_styx_str(&t))
+    {
         Ok(p) => {
             tracing::info!(path, profile = %p.name, "keys rig: loaded profile");
             p
@@ -2445,9 +3651,8 @@ fn load_profile() -> KeysProfile {
 fn keys_program(name: &str, spec: String) -> Container {
     Container::preset(name).add(
         Container::engine("Keys").add(
-            Container::layer("Layer A").add(
-                Container::module("Piano Source").sample_block("Piano", spec),
-            ),
+            Container::layer("Layer A")
+                .add(Container::module("Piano Source").sample_block("Piano", spec)),
         ),
     )
 }
@@ -2466,12 +3671,21 @@ fn scan_keyscape() -> (Vec<KeysPreset>, Vec<PathBuf>) {
     // the Signal Engine's Soundsource block).
     let omni_root =
         std::env::var("FTS_OMNISPHERE_PACKS").unwrap_or_else(|_| OMNISPHERE_PACKS_ROOT.into());
-    let (omni, omni_specs) = scan_packs_recursive(&omni_root);
+    let (omni, omni_specs) = scan_packs_recursive_as(&omni_root, "Soundsource", "module", "Synth");
     packs.extend(omni);
     pack_specs.extend(omni_specs);
+    // The NI Essential Pianos. A pack is a whole lane's worth of instrument
+    // (the Piano packs) or its pedal-down resonance layer, which loads on its
+    // own so a tight-memory rig can leave it out — see `ni-pianos.styx`.
+    let ni_root =
+        std::env::var("FTS_NI_PIANO_PACKS").unwrap_or_else(|_| NI_PIANO_PACKS_ROOT.into());
+    let (ni, ni_specs) = scan_packs_recursive_as(&ni_root, "Grand", "layer", "Keys");
+    tracing::info!(packs = ni.len(), "keys rig: NI piano packs");
+    packs.extend(ni);
+    pack_specs.extend(ni_specs);
     // Authored Omnisphere patches — these open into a whole layer.
-    let patch_root = std::env::var("FTS_OMNISPHERE_PATCHES")
-        .unwrap_or_else(|_| OMNISPHERE_PATCH_ROOT.into());
+    let patch_root =
+        std::env::var("FTS_OMNISPHERE_PATCHES").unwrap_or_else(|_| OMNISPHERE_PATCH_ROOT.into());
     let (patches, patch_specs) = scan_omni_patches(&patch_root);
     tracing::info!(patches = patches.len(), "keys rig: omnisphere patches");
     packs.extend(patches);
@@ -2483,12 +3697,20 @@ fn scan_keyscape() -> (Vec<KeysPreset>, Vec<PathBuf>) {
     let mut presets = Vec::new();
     let mut specs = Vec::new();
     if let Ok(entries) = std::fs::read_dir(&root) {
-        let mut dirs: Vec<_> = entries.flatten().map(|e| e.path()).filter(|p| p.is_dir()).collect();
+        let mut dirs: Vec<_> = entries
+            .flatten()
+            .map(|e| e.path())
+            .filter(|p| p.is_dir())
+            .collect();
         dirs.sort();
         for dir in dirs {
             let styx = dir.join("library.styx");
             if styx.exists() {
-                let name = dir.file_name().and_then(|s| s.to_str()).unwrap_or("").to_string();
+                let name = dir
+                    .file_name()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("")
+                    .to_string();
                 if name.is_empty() {
                     continue;
                 }
@@ -2524,19 +3746,26 @@ fn scan_omni_patches(root: &str) -> (Vec<KeysPreset>, Vec<PathBuf>) {
     let mut specs = Vec::new();
     let mut stack = vec![PathBuf::from(root)];
     while let Some(dir) = stack.pop() {
-        let Ok(entries) = std::fs::read_dir(&dir) else { continue };
+        let Ok(entries) = std::fs::read_dir(&dir) else {
+            continue;
+        };
         let mut found: Vec<PathBuf> = Vec::new();
         for e in entries.flatten() {
             let p = e.path();
             if p.is_dir() {
                 stack.push(p);
-            } else if p.extension().is_some_and(|x| x.eq_ignore_ascii_case("prt_omn")) {
+            } else if p
+                .extension()
+                .is_some_and(|x| x.eq_ignore_ascii_case("prt_omn"))
+            {
                 found.push(p);
             }
         }
         found.sort();
         for patch in found {
-            let Some(name) = patch.file_stem().and_then(|s| s.to_str()) else { continue };
+            let Some(name) = patch.file_stem().and_then(|s| s.to_str()) else {
+                continue;
+            };
             // Factory names carry a library prefix ("KEY │ American Obesity").
             let display = name.rsplit('│').next().unwrap_or(name).trim().to_string();
             if display.is_empty() {
@@ -2558,41 +3787,61 @@ fn scan_omni_patches(root: &str) -> (Vec<KeysPreset>, Vec<PathBuf>) {
     (presets, specs)
 }
 
+/// Root of the built NI Essential Piano packs (`<Library>/<Library> - <Pack>`,
+/// so this is scanned recursively). Override with `FTS_NI_PIANO_PACKS`.
+///
+/// The **Full** tree by default: these are the rig's primary pianos and the
+/// proxy tier is audibly lossy (peak error ~3.7e-2 against source). Point this
+/// at `Libraries/Proxy/Keys` on a machine that cannot spare the disk.
+const NI_PIANO_PACKS_ROOT: &str = "/run/media/AudioHaven/Signal/Libraries/Full/Keys";
+
 /// Root of the built Omnisphere soundsource packs — the synth half of the
 /// shared library. Override with `FTS_OMNISPHERE_PACKS`.
-const OMNISPHERE_PACKS_ROOT: &str =
-    "/run/media/AudioHaven/Signal/Libraries/Keys/Omnisphere/Packs";
+const OMNISPHERE_PACKS_ROOT: &str = "/run/media/AudioHaven/Signal/Libraries/Keys/Omnisphere/Packs";
 
 /// Enumerate `*.signalpack` files under `root`, at any depth (the Omnisphere
-/// library nests by family). The file stem is the source name.
-fn scan_packs_recursive(root: &str) -> (Vec<KeysPreset>, Vec<PathBuf>) {
+/// library nests by family; the NI pianos nest by library). The file stem is
+/// the source name. `kind`/`scope`/`tag` say what the caller's tree holds — a
+/// soundsource fills one module, a piano fills a whole lane.
+fn scan_packs_recursive_as(
+    root: &str,
+    kind: &str,
+    scope: &str,
+    tag_kind: &str,
+) -> (Vec<KeysPreset>, Vec<PathBuf>) {
     let mut presets = Vec::new();
     let mut specs = Vec::new();
     let mut stack = vec![PathBuf::from(root)];
     while let Some(dir) = stack.pop() {
-        let Ok(entries) = std::fs::read_dir(&dir) else { continue };
+        let Ok(entries) = std::fs::read_dir(&dir) else {
+            continue;
+        };
         let mut found: Vec<PathBuf> = Vec::new();
         for e in entries.flatten() {
             let p = e.path();
             if p.is_dir() {
                 stack.push(p);
-            } else if p.extension().is_some_and(|x| x.eq_ignore_ascii_case("signalpack")) {
+            } else if p
+                .extension()
+                .is_some_and(|x| x.eq_ignore_ascii_case("signalpack"))
+            {
                 found.push(p);
             }
         }
         found.sort();
         for pack in found {
-            let Some(name) = pack.file_stem().and_then(|s| s.to_str()) else { continue };
+            let Some(name) = pack.file_stem().and_then(|s| s.to_str()) else {
+                continue;
+            };
             if name.is_empty() {
                 continue;
             }
-            // A soundsource fills one module, not a whole lane.
-            let tags = tags_for("Synth", name);
+            let tags = tags_for(tag_kind, name);
             presets.push(KeysPreset {
-                kind: "Soundsource".into(),
+                kind: kind.to_string(),
                 name: name.to_string(),
                 loaded: false,
-                scope: "module".into(),
+                scope: scope.to_string(),
                 tags,
                 variants: crate::variations::variation_names(name),
             });
@@ -2611,11 +3860,18 @@ fn scan_packs(root: &str) -> (Vec<KeysPreset>, Vec<PathBuf>) {
         let mut packs: Vec<_> = entries
             .flatten()
             .map(|e| e.path())
-            .filter(|p| p.extension().is_some_and(|e| e.eq_ignore_ascii_case("signalpack")))
+            .filter(|p| {
+                p.extension()
+                    .is_some_and(|e| e.eq_ignore_ascii_case("signalpack"))
+            })
             .collect();
         packs.sort();
         for pack in packs {
-            let name = pack.file_stem().and_then(|s| s.to_str()).unwrap_or("").to_string();
+            let name = pack
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or("")
+                .to_string();
             if name.is_empty() {
                 continue;
             }
@@ -2645,13 +3901,29 @@ fn is_drone(engine: &str) -> bool {
 
 fn kind_of(name: &str) -> String {
     let n = name.to_ascii_lowercase();
-    if n.contains("grand") || (n.contains("piano") && !n.contains("e piano")) { "Grand".into() }
-    else if n.contains("rhodes") { "Rhodes".into() }
-    else if n.contains("wurl") { "Wurlitzer".into() }
-    else if n.contains("clav") { "Clav".into() }
-    else if n.contains("mks") || n.contains("mk-80") || n.contains("e piano") || n.contains("electric") { "Electric".into() }
-    else if n.contains("toy") || n.contains("celeste") || n.contains("glock") || n.contains("bell") { "Toy/Bell".into() }
-    else { "Other".into() }
+    if n.contains("grand") || (n.contains("piano") && !n.contains("e piano")) {
+        "Grand".into()
+    } else if n.contains("rhodes") {
+        "Rhodes".into()
+    } else if n.contains("wurl") {
+        "Wurlitzer".into()
+    } else if n.contains("clav") {
+        "Clav".into()
+    } else if n.contains("mks")
+        || n.contains("mk-80")
+        || n.contains("e piano")
+        || n.contains("electric")
+    {
+        "Electric".into()
+    } else if n.contains("toy")
+        || n.contains("celeste")
+        || n.contains("glock")
+        || n.contains("bell")
+    {
+        "Toy/Bell".into()
+    } else {
+        "Other".into()
+    }
 }
 
 /// Which engines a preset belongs to. A library instrument is Keys work; the
@@ -2666,8 +3938,12 @@ fn tags_for(kind: &str, name: &str) -> Vec<String> {
     if n.contains("drone") || n.contains("sustain") || n.contains("bed") {
         tags.push("Drone".to_string());
     }
-    if n.contains("riser") || n.contains("impact") || n.contains("swell")
-        || n.contains("noise") || n.contains("whoosh") || n.contains("hit")
+    if n.contains("riser")
+        || n.contains("impact")
+        || n.contains("swell")
+        || n.contains("noise")
+        || n.contains("whoosh")
+        || n.contains("hit")
     {
         tags.push("SFX".to_string());
     }
@@ -2682,12 +3958,19 @@ fn tags_for(kind: &str, name: &str) -> Vec<String> {
 }
 
 fn slug(s: &str) -> String {
-    s.to_ascii_lowercase().chars().map(|c| if c.is_ascii_alphanumeric() { c } else { '-' }).collect()
+    s.to_ascii_lowercase()
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
+        .collect()
 }
 
 /// Convert a composition [`Container`] into a wire [`KeysNode`] tree.
 fn node_of(c: &Container, parent: &str) -> KeysNode {
-    let id = if parent.is_empty() { slug(&c.name) } else { format!("{parent}/{}", slug(&c.name)) };
+    let id = if parent.is_empty() {
+        slug(&c.name)
+    } else {
+        format!("{parent}/{}", slug(&c.name))
+    };
     let mut children = Vec::new();
     let mut any_live = false;
     for n in &c.children {
@@ -2704,7 +3987,13 @@ fn node_of(c: &Container, parent: &str) -> KeysNode {
         any_live |= child.live;
         children.push(child);
     }
-    KeysNode { id, label: c.name.clone(), role: role_tag(c.role), live: any_live, children }
+    KeysNode {
+        id,
+        label: c.name.clone(),
+        role: role_tag(c.role),
+        live: any_live,
+        children,
+    }
 }
 
 fn role_tag(role: Role) -> String {
@@ -2743,7 +4032,11 @@ mod tests {
             let l = s.lanes.get_mut(*lane).expect("lane in the worship profile");
             let mut macros = default_macros();
             macros.insert("filter.cutoff".into(), *cutoff);
-            l.modules = vec![ModuleState { patch: "test".into(), macros, ..ModuleState::default() }];
+            l.modules = vec![ModuleState {
+                patch: "test".into(),
+                macros,
+                ..ModuleState::default()
+            }];
         }
         s
     }
@@ -2756,8 +4049,11 @@ mod tests {
         s.adopt_profile(worship_profile());
         for lane in ["Keys A", "Keys B"] {
             let l = s.lanes.get_mut(lane).expect("lane");
-            l.modules =
-                vec![ModuleState { patch: "test".into(), macros: default_macros(), ..ModuleState::default() }];
+            l.modules = vec![ModuleState {
+                patch: "test".into(),
+                macros: default_macros(),
+                ..ModuleState::default()
+            }];
         }
         let targets = keys_targets(&s);
         assert!(
@@ -2783,13 +4079,19 @@ mod tests {
         let span =
             KeysRigBackend::drive_global(&mut s, def, "filter.cutoff", &targets, None, 4000.0);
 
-        assert!(span.is_none(), "an agreeing engine is absolute — nothing to remember");
+        assert!(
+            span.is_none(),
+            "an agreeing engine is absolute — nothing to remember"
+        );
         assert_eq!(cutoff(&s, "Keys A"), 4000.0);
         assert_eq!(cutoff(&s, "Keys B"), 4000.0);
 
         let est = s.engines.get("Keys").cloned().expect("engine");
         let models = KeysRigBackend::global_models(&s, ENGINE, &targets, &est.globals, &est.spans);
-        let read = models.iter().find(|m| m.id == "e.filter.cutoff").expect("model");
+        let read = models
+            .iter()
+            .find(|m| m.id == "e.filter.cutoff")
+            .expect("model");
         assert!(!read.bipolar, "and it reads back as the value itself");
         assert_eq!(read.value, 4000.0);
     }
@@ -2804,7 +4106,10 @@ mod tests {
             .expect("a disagreeing engine holds its baseline");
         let (a, b) = (cutoff(&s, "Keys A"), cutoff(&s, "Keys B"));
         assert!(a > 2000.0 && b > 8000.0, "both lanes travelled: {a} {b}");
-        assert!((b / a - 4.0).abs() < 1e-2, "and kept their spacing: {a} {b}");
+        assert!(
+            (b / a - 4.0).abs() < 1e-2,
+            "and kept their spacing: {a} {b}"
+        );
         assert_eq!(span.1.len(), 2, "the baseline spans both lanes");
 
         // Back to the detent: the patch's own values come back untouched.
@@ -2828,8 +4133,14 @@ mod tests {
         let span = KeysRigBackend::drive_global(&mut s, def, "filter.cutoff", &targets, None, -0.5)
             .expect("a disagreeing rig holds its baseline");
         let (keys, pad) = (cutoff(&s, "Keys A"), cutoff(&s, "Pad"));
-        assert!(keys < 2000.0 && pad < 8000.0, "both engines travelled: {keys} {pad}");
-        assert!((pad / keys - 4.0).abs() < 1e-2, "and kept their spacing: {keys} {pad}");
+        assert!(
+            keys < 2000.0 && pad < 8000.0,
+            "both engines travelled: {keys} {pad}"
+        );
+        assert!(
+            (pad / keys - 4.0).abs() < 1e-2,
+            "and kept their spacing: {keys} {pad}"
+        );
 
         let back =
             KeysRigBackend::drive_global(&mut s, def, "filter.cutoff", &targets, Some(span), 0.0);
@@ -2841,11 +4152,10 @@ mod tests {
     #[test]
     fn an_edit_underneath_rebases_the_engine_knob() {
         let mut s = keys_state(&[("Keys A", 2000.0), ("Keys B", 8000.0)]);
-        s.engines
-            .get_mut("Keys")
-            .expect("engine")
-            .spans
-            .insert("e.filter.cutoff".into(), (0.5, vec![("Keys A".into(), 0, 2000.0)]));
+        s.engines.get_mut("Keys").expect("engine").spans.insert(
+            "e.filter.cutoff".into(),
+            (0.5, vec![("Keys A".into(), 0, 2000.0)]),
+        );
 
         KeysRigBackend::rebase_others(
             &mut s,

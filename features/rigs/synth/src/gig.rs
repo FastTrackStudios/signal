@@ -282,3 +282,233 @@ mod tests {
         assert_eq!(procs[1].node_name, "Omni Synths");
     }
 }
+
+// ── Patches (Gig Performer "presets") ────────────────────────────────────────
+
+/// One patch: a named scene over a rackspace's widgets.
+///
+/// Gig Performer calls these PRESETs. Each is a flat list of
+/// `widgetId -> value`, so the widget table is what makes them legible —
+/// widget 493 means nothing, `The Giant = 1.0` means the patch plays The Giant.
+#[derive(Debug, Clone)]
+pub struct GigPreset {
+    pub name: String,
+    pub rackspace: String,
+    /// Resolved `(widget caption, value)` for every param the patch sets.
+    pub params: Vec<(String, f32)>,
+}
+
+impl GigPreset {
+    /// Value of the first param with this caption.
+    pub fn get(&self, caption: &str) -> Option<f32> {
+        self.params
+            .iter()
+            .find(|(c, _)| c == caption)
+            .map(|(_, v)| *v)
+    }
+
+    /// Captions whose value reads as "on" (>= 0.5), restricted to `names`.
+    /// This is how you recover which instruments a patch actually loads.
+    pub fn enabled<'a>(&self, names: &[&'a str]) -> Vec<&'a str> {
+        names
+            .iter()
+            .copied()
+            .filter(|n| self.get(n).is_some_and(|v| v >= 0.5))
+            .collect()
+    }
+}
+
+/// One song in the gig's library.
+#[derive(Debug, Clone)]
+pub struct GigSong {
+    pub name: String,
+    pub artist: String,
+    pub bpm: f32,
+    pub sig_num: u32,
+    pub sig_den: u32,
+    /// The key as Gig Performer stores it (`rootNote` 0..11, plus a minor
+    /// flag). **Frequently stale** — see [`GigSong::key_from_name`].
+    pub root_note: u8,
+    pub minor: bool,
+    pub transpose: i32,
+    /// `(part name, rackspace, variation)` in running order.
+    pub parts: Vec<(String, String, String)>,
+}
+
+const NOTE_NAMES: [&str; 12] = [
+    "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B",
+];
+
+impl GigSong {
+    /// The stored key — `rootNote` rendered as a note name plus `m` for minor.
+    pub fn stored_key(&self) -> String {
+        format!(
+            "{}{}",
+            NOTE_NAMES[self.root_note as usize % 12],
+            if self.minor { "m" } else { "" }
+        )
+    }
+
+    /// The key from the song title's `" - <key>"` suffix, which is the field
+    /// a human actually maintains.
+    ///
+    /// Prefer this over [`GigSong::stored_key`]: in the reference gig,
+    /// `rootNote` disagreed with the title on 6 of 19 titled songs (and
+    /// `transpose` was 0 throughout, so it does not explain the gap). A title
+    /// says `Center - D` while `rootNote` says G.
+    pub fn key_from_name(&self) -> Option<&str> {
+        let suffix = self.name.rsplit_once(" - ")?.1.trim();
+        let head = suffix.trim_end_matches('m');
+        let ok = matches!(head.len(), 1..=2)
+            && head.starts_with(|c: char| c.is_ascii_uppercase() && c <= 'G')
+            && head[1..].chars().all(|c| c == '#' || c == 'b');
+        ok.then_some(suffix)
+    }
+
+    /// Title with the trailing key suffix removed.
+    pub fn title(&self) -> &str {
+        match (self.key_from_name(), self.name.rsplit_once(" - ")) {
+            (Some(_), Some((head, _))) => head.trim(),
+            _ => self.name.as_str(),
+        }
+    }
+}
+
+/// One setlist: an ordered run of song names.
+#[derive(Debug, Clone)]
+pub struct GigSetlist {
+    pub name: String,
+    pub songs: Vec<String>,
+}
+
+/// A crude document-order walk yielding `(depth, tag, open_tag_text)` for
+/// element opens, and closes as `None` tags — enough to attribute children to
+/// parents without building a tree.
+fn walk_tags(xml: &str, mut f: impl FnMut(&str, &str, bool)) {
+    let mut rest = xml;
+    while let Some(lt) = rest.find('<') {
+        rest = &rest[lt..];
+        let Some(gt) = rest.find('>') else { break };
+        let tag = &rest[..=gt];
+        let body = tag.trim_start_matches('<').trim_end_matches('>');
+        if let Some(name) = body.strip_prefix('/') {
+            f(name.trim(), tag, false);
+        } else if !body.starts_with('?') && !body.starts_with('!') {
+            let name = body
+                .split([' ', '\t', '\r', '\n', '/'])
+                .next()
+                .unwrap_or(body);
+            f(name, tag, true);
+            // Self-closing elements close immediately.
+            if body.ends_with('/') {
+                f(name, tag, false);
+            }
+        }
+        rest = &rest[gt + 1..];
+    }
+}
+
+/// Read the patch list, with widget ids resolved to their captions.
+pub fn read_presets(xml: &str) -> Vec<GigPreset> {
+    // Pass 1: widget id -> caption.
+    let mut captions: Vec<(String, String)> = Vec::new();
+    walk_tags(xml, |name, tag, open| {
+        if open && name == "WIDGET" {
+            if let Some(id) = attr(tag, "id") {
+                captions.push((id, attr(tag, "caption").unwrap_or_default()));
+            }
+        }
+    });
+    let caption_of = |id: &str| -> Option<&str> {
+        captions
+            .iter()
+            .find(|(i, _)| i == id)
+            .map(|(_, c)| c.trim())
+    };
+
+    // Pass 2: presets, attributed to the enclosing rackspace.
+    let mut out: Vec<GigPreset> = Vec::new();
+    let mut rackspace = String::new();
+    let mut in_preset = false;
+    walk_tags(xml, |name, tag, open| match (name, open) {
+        ("GLOBALRACKSPACE" | "RACKSPACE", true) => {
+            rackspace = attr(tag, "name").unwrap_or_default();
+        }
+        ("PRESET", true) => {
+            in_preset = true;
+            out.push(GigPreset {
+                name: attr(tag, "name").unwrap_or_default(),
+                rackspace: rackspace.clone(),
+                params: Vec::new(),
+            });
+        }
+        ("PRESET", false) => in_preset = false,
+        ("PARAM", true) if in_preset => {
+            let (Some(id), Some(v)) = (attr(tag, "widgetId"), attr(tag, "value")) else {
+                return;
+            };
+            let Ok(v) = v.parse::<f32>() else { return };
+            if let (Some(cap), Some(p)) = (caption_of(&id), out.last_mut()) {
+                if !cap.is_empty() {
+                    p.params.push((cap.to_string(), v));
+                }
+            }
+        }
+        _ => {}
+    });
+    out
+}
+
+/// Read the song library. Songs recur across setlists; this returns every
+/// occurrence, so dedupe by name for the library view.
+pub fn read_songs(xml: &str) -> Vec<GigSong> {
+    let mut out: Vec<GigSong> = Vec::new();
+    let num = |tag: &str, k: &str, d: f32| attr(tag, k).and_then(|v| v.parse().ok()).unwrap_or(d);
+    walk_tags(xml, |name, tag, open| match (name, open) {
+        ("SONG", true) => out.push(GigSong {
+            name: attr(tag, "songName").unwrap_or_default(),
+            artist: attr(tag, "songArtist").unwrap_or_default(),
+            bpm: num(tag, "bpm", 0.0),
+            sig_num: num(tag, "sigNum", 4.0) as u32,
+            sig_den: num(tag, "sigDen", 4.0) as u32,
+            root_note: num(tag, "rootNote", 0.0) as u8,
+            minor: attr(tag, "usesMinorKey").as_deref() == Some("true"),
+            transpose: num(tag, "transpose", 0.0) as i32,
+            parts: Vec::new(),
+        }),
+        ("SONG_PART", true) => {
+            if let Some(s) = out.last_mut() {
+                s.parts.push((
+                    attr(tag, "songPartName").unwrap_or_default(),
+                    attr(tag, "rackspace").unwrap_or_default(),
+                    attr(tag, "variation").unwrap_or_default(),
+                ));
+            }
+        }
+        _ => {}
+    });
+    out
+}
+
+/// Read the setlists, each an ordered run of song names.
+pub fn read_setlists(xml: &str) -> Vec<GigSetlist> {
+    let mut out: Vec<GigSetlist> = Vec::new();
+    let mut depth_in_setlist = false;
+    walk_tags(xml, |name, tag, open| match (name, open) {
+        ("SETLIST", true) => {
+            depth_in_setlist = true;
+            out.push(GigSetlist {
+                name: attr(tag, "name").unwrap_or_default(),
+                songs: Vec::new(),
+            });
+        }
+        ("SETLIST", false) => depth_in_setlist = false,
+        ("SONG", true) if depth_in_setlist => {
+            if let Some(sl) = out.last_mut() {
+                sl.songs.push(attr(tag, "songName").unwrap_or_default());
+            }
+        }
+        _ => {}
+    });
+    out
+}
