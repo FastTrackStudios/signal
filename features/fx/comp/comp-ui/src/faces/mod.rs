@@ -163,7 +163,7 @@ pub const ROW_HEADER_H: f64 = 18.0;
 
 /// Width of a stage's sidechain-EQ sidecar, in CSS px — the EQ column that
 /// opens to the RIGHT of the stage's face (`fx.embed-eq.one-surface`).
-pub const SIDECAR_W: f64 = 460.0;
+pub const SIDECAR_W: f64 = 560.0;
 
 /// The row height a stage's face WANTS at `row_w` window width — so a
 /// faceplate fills its row instead of floating in dead space: a hardware

@@ -76,19 +76,9 @@ pub fn SidechainEqView(stage: usize, frame: u64, accent: String) -> Element {
             style: "position:absolute; inset:0; display:flex; \
                     flex-direction:column; overflow:hidden;",
 
-            // Header bar — the label lives above the graph, not over it.
-            div {
-                style: format!(
-                    "flex:none; height:20px; display:flex; align-items:center; \
-                     padding:0 10px; font-size:9px; letter-spacing:0.08em; \
-                     text-transform:uppercase; font-weight:700; color:{accent}; \
-                     border-bottom:1px solid var(--border, rgba(148,163,184,0.2));"
-                ),
-                "Sidechain EQ — what S{stage + 1} listens to"
-            }
-
             // The graph, framed with breathing room so the curve does not
-            // run into the column edges.
+            // run into the column edges. A small in-frame tag says what the
+            // curve IS (the detector key, not the audio).
             div {
                 "data-testid": "sc-eq-graph-{stage + 1}",
                 style: "flex:1; min-height:0; position:relative; margin:8px; \
@@ -139,6 +129,16 @@ pub fn SidechainEqView(stage: usize, frame: u64, accent: String) -> Element {
                     ctx_remove.set_normalized_raw(ptr, normalized);
                     ctx_remove.end_set_raw(ptr);
                 },
+            }
+
+            div {
+                style: format!(
+                    "position:absolute; bottom:4px; left:8px; font-size:8px; \
+                     letter-spacing:0.08em; text-transform:uppercase; \
+                     font-weight:700; color:{accent}; opacity:0.75; \
+                     pointer-events:none;"
+                ),
+                "SC · S{stage + 1}"
             }
             }
         }

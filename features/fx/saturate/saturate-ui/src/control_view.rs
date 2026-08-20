@@ -69,7 +69,7 @@ pub fn editor_size_for(_profile_index: usize, form: fts_audio_ui::EditorForm) ->
 /// Width of the emphasis EQ sidecar, to the RIGHT of the panel
 /// (`fx.sat.emphasis.display` — the EQ EXTENDS the window rightward; the
 /// circuit's panel keeps its size).
-pub const EQ_SIDECAR_W: u32 = 460;
+pub const EQ_SIDECAR_W: u32 = 560;
 
 /// The editor size with the emphasis sidecar open: the face's box plus the
 /// column, capped at the resize bounds.

@@ -127,18 +127,9 @@ pub fn EmphasisView(
             style: "position:absolute; inset:0; display:flex; \
                     flex-direction:column; overflow:hidden;",
 
-            // Header bar — what this scale MEANS: drive emphasis, not
-            // output tone (`fx.sat.emphasis.display`).
-            div {
-                style: "flex:none; height:20px; display:flex; align-items:center; \
-                        padding:0 10px; font-size:9px; letter-spacing:0.08em; \
-                        text-transform:uppercase; font-weight:700; \
-                        color:var(--muted-foreground); \
-                        border-bottom:1px solid var(--border, rgba(148,163,184,0.2));",
-                "Emphasis — drives the stage, mirrored out"
-            }
-
-            // The graph, framed with breathing room.
+            // The graph, framed with breathing room. A small in-frame tag
+            // says what the scale MEANS: drive emphasis, not output tone
+            // (`fx.sat.emphasis.display`).
             div {
                 "data-testid": "emphasis-graph",
                 style: "flex:1; min-height:0; position:relative; margin:8px; \
@@ -176,6 +167,14 @@ pub fn EmphasisView(
                     style: "position:absolute; right:12px; bottom:8px;",
                     fts_audio_ui::controls::Knob { handle: drive.clone() }
                 }
+            }
+
+            div {
+                style: "position:absolute; bottom:4px; left:8px; font-size:8px; \
+                        letter-spacing:0.08em; text-transform:uppercase; \
+                        font-weight:700; color:var(--muted-foreground); \
+                        opacity:0.75; pointer-events:none;",
+                "Emphasis"
             }
             }
         }

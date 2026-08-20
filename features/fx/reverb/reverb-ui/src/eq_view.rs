@@ -196,17 +196,8 @@ pub fn ReverbEqView(mode_is_decay: bool, frame: u64) -> Element {
             style: "position:absolute; inset:0; display:flex; \
                     flex-direction:column; overflow:hidden;",
 
-            // Header bar — the label lives above the graph, not over it.
-            div {
-                style: "flex:none; height:20px; display:flex; align-items:center; \
-                        padding:0 10px; font-size:9px; letter-spacing:0.08em; \
-                        text-transform:uppercase; font-weight:700; \
-                        color:var(--muted-foreground); \
-                        border-bottom:1px solid var(--border, rgba(148,163,184,0.2));",
-                "{label}"
-            }
-
-            // The graph, framed with breathing room.
+            // The graph, framed with breathing room; the two stacked curves
+            // are told apart by a small in-frame tag.
             div {
                 style: "flex:1; min-height:0; position:relative; margin:8px; \
                         border:1px solid var(--border, rgba(148,163,184,0.25)); \
@@ -257,6 +248,14 @@ pub fn ReverbEqView(mode_is_decay: bool, frame: u64) -> Element {
                         write(&ctx_remove, ptrs.gain, ptrs.gain.preview_normalized(0.0));
                     }
                 },
+            }
+
+            div {
+                style: "position:absolute; bottom:4px; left:8px; font-size:8px; \
+                        letter-spacing:0.08em; text-transform:uppercase; \
+                        font-weight:700; color:var(--muted-foreground); \
+                        opacity:0.75; pointer-events:none;",
+                "{label}"
             }
             }
         }

@@ -69,7 +69,7 @@ pub fn editor_size_for(_profile_index: usize, form: fts_audio_ui::EditorForm) ->
 /// Width of the EQ sidecar (`fx.reverb.eq-display` — the Post / Decay Rate
 /// EQ pair EXTENDS the window rightward, stacked in a column; the space's
 /// panel keeps its size).
-pub const EQ_SIDECAR_W: u32 = 460;
+pub const EQ_SIDECAR_W: u32 = 560;
 
 /// The editor size with the EQ sidecar open, capped at the resize bounds.
 pub fn editor_size_with_eq(
