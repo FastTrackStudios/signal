@@ -642,6 +642,25 @@ css-ab-sections SECTIONS:
 # editor and the REAPER panel use, without the plugin windowing. Pick the
 # file to edit inside the window; set EXPRESSION_EDITOR_LIBRARY to point
 # the chooser at a folder of material.
+#
+# ⚠ RESTART IT AFTER A STRUCTURAL rsx! EDIT. Hot reload replaces the
+# template in the running app, and dioxus's template diffing cannot
+# handle a template whose *node count* changed — adding or removing an
+# element, an `if` block, or a component. The next render walks a
+# mutation path into a node that is no longer there and you get
+#
+#     blitz-dom/src/mutator.rs: invalid key        (node_at_path)
+#
+# which reads like a bug in whatever key you just pressed and is not:
+# the same markup mounts fine from a cold start, and the headless
+# suite — which has no hot reload — never sees it. Upstream knows the
+# class (DioxusLabs/dioxus#3459, #3567); this is its Blitz spelling,
+# because blitz-dom holds nodes in a slab and a stale index there says
+# "invalid key" rather than "index out of bounds".
+#
+# Editing *values* — a colour, a size, a string — hot reloads fine. It
+# is only shape. To rule it out entirely: `just ee-serve --hot-reload
+# false`, or `just ee` for a one-shot window.
 ee-serve *ARGS:
     dx serve -p expression-editor-standalone --example serve \
         --platform desktop --renderer native {{ARGS}}
@@ -649,6 +668,13 @@ ee-serve *ARGS:
 # One-shot window on a file (no hot reload, no chooser).
 ee SOURCE="phrase" *ARGS:
     cargo run -p expression-editor-standalone --example editor -- {{SOURCE}} {{ARGS}}
+
+# The workstation: arrangement + TCP over the drum-mode editor, mixer
+# down the right, audio out the default output. Defaults to the drum-
+# mode reference session; pass any .rpp to open something else.
+workstation SOURCE="/run/media/AudioHaven/Project/02 LORD OF THE FIGHT/02 LORD OF THE FIGHT.RPP" *ARGS:
+    cargo run --release -p expression-editor-standalone --example workstation -- \
+        "{{SOURCE}}" --drums --size 1920x1080 {{ARGS}}
 
 # Repaint the visual-inspection PNGs into target/gui-shots/expression-editor.
 #

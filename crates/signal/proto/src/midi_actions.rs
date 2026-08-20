@@ -24,7 +24,7 @@
 use facet::Facet;
 use serde::{Deserialize, Serialize};
 
-use crate::actions::{signal_actions, switch_to_variation_action};
+use crate::actions::{NEXT_SONG, PREVIOUS_SONG, switch_to_variation_action};
 
 // ── Trigger types ─────────────────────────────────────────────────────────────
 
@@ -163,18 +163,18 @@ impl MidiActionMap {
         // Switch to Variation 1–8 via CH1 CC 101–108
         for i in 0u8..8 {
             if let Some(action) = switch_to_variation_action((i + 1) as usize) {
-                map.add(MidiActionTrigger::cc_ch(0, 101 + i), action.as_str());
+                map.add(MidiActionTrigger::cc_ch(0, 101 + i), action.id);
             }
         }
 
         // Navigation: CH1 CC 109 = Previous Song, CC 110 = Next Song
         map.add(
             MidiActionTrigger::cc_ch(0, 109),
-            signal_actions::PREVIOUS_SONG.as_str(),
+            PREVIOUS_SONG.id,
         );
         map.add(
             MidiActionTrigger::cc_ch(0, 110),
-            signal_actions::NEXT_SONG.as_str(),
+            NEXT_SONG.id,
         );
 
         map
@@ -230,18 +230,17 @@ impl MidiActionMap {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::actions::signal_actions;
 
     #[test]
     fn default_map_has_navigation_bindings() {
         let map = MidiActionMap::with_defaults();
         assert_eq!(
             map.find(&MidiActionTrigger::cc_ch(0, 109)),
-            Some(signal_actions::PREVIOUS_SONG.as_str())
+            Some(PREVIOUS_SONG.id)
         );
         assert_eq!(
             map.find(&MidiActionTrigger::cc_ch(0, 110)),
-            Some(signal_actions::NEXT_SONG.as_str())
+            Some(NEXT_SONG.id)
         );
     }
 
@@ -254,7 +253,7 @@ mod tests {
                 .find(&trigger)
                 .unwrap_or_else(|| panic!("CC {} should be bound", 101 + i));
             assert!(
-                action.starts_with("fts.signal.load_variant."),
+                action.starts_with("FTS_SIGNAL_SWITCH_TO_VARIATION_"),
                 "CC {} → {action}",
                 101 + i
             );
@@ -294,7 +293,7 @@ mod tests {
     #[test]
     fn triggers_for_finds_variant_action() {
         let map = MidiActionMap::with_defaults();
-        let variant_1_id = signal_actions::SWITCH_TO_VARIATION_1.as_str();
+        let variant_1_id = crate::actions::SWITCH_TO_VARIATION_1.id;
         let triggers: Vec<_> = map.triggers_for(variant_1_id).collect();
         assert_eq!(triggers.len(), 1);
         assert_eq!(*triggers[0], MidiActionTrigger::cc_ch(0, 101));

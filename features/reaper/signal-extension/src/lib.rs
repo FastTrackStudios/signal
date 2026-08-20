@@ -1,7 +1,7 @@
 //! Signal domain in-process REAPER extension.
 //!
 //! Loaded directly by REAPER from `UserPlugins/`. Registers signal-domain
-//! actions (action defs come from `signal::actions::signal_actions`) and
+//! actions (action defs come from `signal::actions::SignalActions`) and
 //! routes their triggers to the matching handler module in this crate.
 //!
 //! Migrated off the old SHM-guest model (commit 7a6e470 in daw repo). The
@@ -25,7 +25,7 @@ use daw_extension_runtime::ExtensionRuntime;
 use fragile::Fragile;
 use reaper_low::PluginContext;
 use reaper_macros::reaper_extension_plugin;
-use signal::actions::signal_actions;
+use signal::actions::SignalActionsActions;
 use tracing::{debug, error, info};
 
 thread_local! {
@@ -55,12 +55,12 @@ impl SignalExtension {
 
             // Register signal-domain actions.
             let registry = daw.action_registry();
-            let defs = signal_actions::definitions();
+            let defs = SignalActionsActions::all();
             let total = defs.len();
             let mut registered = 0usize;
-            for def in &defs {
-                let cmd_name = def.id.to_command_id();
-                match registry.register(&cmd_name, &def.display_name()).await {
+            for def in defs {
+                let cmd_name = def.id;
+                match registry.register(cmd_name, def.display_name).await {
                     Ok(cmd_id) if cmd_id > 0 => {
                         registered += 1;
                     }

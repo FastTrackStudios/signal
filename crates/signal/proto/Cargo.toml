@@ -6,7 +6,7 @@ license.workspace = true
 authors.workspace = true
 
 [dependencies]
-actions-proto.workspace = true
+architect.workspace = true
 signal-macromod.workspace = true
 utils.workspace = true
 serde.workspace = true
