@@ -1999,7 +1999,7 @@ impl KeysRigBackend {
 
     /// Build the backend and scan the Keyscape library. Does not open audio.
     pub fn new() -> Self {
-        let (presets, specs) = scan_keyscape();
+        let (presets, specs) = prefer_packs_from_scan();
         // Default patch: the LA Custom Rhodes if present, else the first found.
         let default_idx = presets
             .iter()
@@ -2041,9 +2041,30 @@ impl KeysRigBackend {
         // library names it the way the extraction wrote the folder
         // (`Dolceola`). Two lookups disagreeing is exactly how a lane ends up
         // quietly empty, which is what this loop exists to prevent.
+        // A `.signalpack` is preferred over a `.prt_omn` of the same name, and
+        // resolution is tried against packs FIRST.
+        //
+        // Both can carry one name — "Choir Men Ohs" is a built pack and an
+        // Omnisphere factory patch — and only the pack is loadable today: the
+        // sampler's spec loader cannot parse a patch file, so picking the
+        // patch fails the lane outright with
+        // `spec parse error: unexpected token`. Preferring packs is also just
+        // right on the merits; a pack is cheaper to play than a patch tree.
+        let pack_names: Vec<String> = state
+            .presets
+            .iter()
+            .zip(state.specs.iter())
+            .filter(|(_, spec)| {
+                spec.extension()
+                    .is_some_and(|e| e.eq_ignore_ascii_case("signalpack"))
+            })
+            .map(|(p, _)| p.name.clone())
+            .collect();
         let known: Vec<String> = state.presets.iter().map(|p| p.name.clone()).collect();
         let canonical = |want: &str| -> Option<String> {
-            signal_synth::omni_import::resolve_name(want, known.iter().map(String::as_str))
+            use signal_synth::omni_import::resolve_name;
+            resolve_name(want, pack_names.iter().map(String::as_str))
+                .or_else(|| resolve_name(want, known.iter().map(String::as_str)))
                 .map(str::to_string)
         };
         for lane in state.lanes.values_mut() {
@@ -2846,7 +2867,7 @@ impl KeysRigSvc for KeysRigBackend {
     }
 
     fn rescan(&self) {
-        let (presets, specs) = scan_keyscape();
+        let (presets, specs) = prefer_packs_from_scan();
         if let Ok(mut s) = self.inner.state.lock() {
             // Keep the loaded preset marked if it survived the rescan.
             let loaded_name = s
@@ -3672,6 +3693,54 @@ fn keys_program(name: &str, spec: String) -> Container {
                 .add(Container::module("Piano Source").sample_block("Piano", spec)),
         ),
     )
+}
+
+/// `scan_keyscape` with same-name non-pack presets removed.
+fn prefer_packs_from_scan() -> (Vec<KeysPreset>, Vec<PathBuf>) {
+    let (p, s) = scan_keyscape();
+    prefer_packs(p, s)
+}
+
+/// Drop a preset whose name is already held by a `.signalpack`.
+///
+/// A pack and an Omnisphere patch can carry the same name — "Choir Men Ohs  ^"
+/// is both a built pack and a factory `.prt_omn` — and only the pack is
+/// loadable today: handing a patch file to the sampler's spec loader fails the
+/// lane outright with `spec parse error: unexpected token`. Whichever was
+/// scanned last used to win, which made it a coin toss.
+///
+/// Packs are kept, duplicates behind them are dropped. When the patch path
+/// learns to realize through `omni_import::patch_to_container`, this becomes a
+/// preference rather than an exclusion.
+fn prefer_packs(presets: Vec<KeysPreset>, specs: Vec<PathBuf>) -> (Vec<KeysPreset>, Vec<PathBuf>) {
+    let is_pack = |p: &PathBuf| {
+        p.extension()
+            .is_some_and(|e| e.eq_ignore_ascii_case("signalpack"))
+    };
+    let packed: std::collections::HashSet<String> = presets
+        .iter()
+        .zip(specs.iter())
+        .filter(|(_, s)| is_pack(s))
+        .map(|(p, _)| p.name.to_lowercase())
+        .collect();
+    let mut out_p = Vec::with_capacity(presets.len());
+    let mut out_s = Vec::with_capacity(specs.len());
+    let mut dropped = 0usize;
+    for (p, s) in presets.into_iter().zip(specs) {
+        if !is_pack(&s) && packed.contains(&p.name.to_lowercase()) {
+            dropped += 1;
+            continue;
+        }
+        out_p.push(p);
+        out_s.push(s);
+    }
+    if dropped > 0 {
+        tracing::info!(
+            dropped,
+            "keys rig: non-pack presets shadowed by a pack of the same name"
+        );
+    }
+    (out_p, out_s)
 }
 
 /// Discover Keyscape instruments to load. Prefers the `.signalpack` library

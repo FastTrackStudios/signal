@@ -364,12 +364,17 @@ drums: (rig "Drum Rig")
 # that lands, drop the wrapper.) --release is REQUIRED for real-time audio.
 #
 # Open the FTS desktop app straight to the keys rig (Worship profile, loaded)
-keys:
+keys log="/tmp/fts-keys.log":
     #!/usr/bin/env bash
     set -euo pipefail
     cargo build --release -p fasttrackstudio --features signal-keys-rig
+    echo "logging to {{log}}"
+    # The engine is a child with inherited stdio, so one tee captures the app
+    # AND the engine it spawns — which is where the rig actually lives, and so
+    # where anything worth debugging gets logged.
     PIPEWIRE_PROPS='{ application.name = FTS-Signal }' \
-        exec pw-jack ./target/release/fasttrackstudio --keys
+    RUST_LOG="${RUST_LOG:-info,signal_keys=debug,signal_sampler=debug,vox_core=warn,schema_deser=off}" \
+        pw-jack ./target/release/fasttrackstudio --keys 2>&1 | tee "{{log}}"
 
 # A terminal surface over the composition-tree presets, no GUI. This was
 # `just keys` before the app grew a keys mode.
