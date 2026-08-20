@@ -173,29 +173,86 @@ that file as the authoritative "what the patch sounds like out of the box".
 
 ---
 
-## 2. Keyscape — re-extract / rebuild
+## 2. Keyscape — 10 packs are incomplete, not 1
 
 Packs live in `/run/media/AudioHaven/Signal/Libraries/Keys/Keyscape/Packs/`
 (all built 2026-07-13; sources extracted 2026-05-05).
 
-| patch | source on disk | pack | verdict |
-|---|---|---|---|
-| **Vintage Vibe Electric Piano** | `Vintage Vibe EP/` 2.1 G, 6056 files | `Vintage Vibe EP.signalpack` **123 MB** | ❌ **broken** — pack is ~6% of the source. Rebuild is mandatory. |
-| **Rhodes - LA Custom** | 2.5 G, 6864 files | 2.64 G | size plausible; re-extract to pick up the NCW mid/side fix |
-| **Double Felt Grand** | 2.6 G, 1606 files | 2.75 G | size plausible; same |
-| **Wing Upright** | `Wing Upright Piano/` 9.9 G, 7057 files | 10.5 G | size plausible; same |
+### 2.0 The four this rig needs
 
-- [ ] **KS1 — Confirm whether the 2026-05-05 Keyscape extraction predates the
-      NCW mid/side decode fix.** If it does, re-extract all four (right-channel
-      pops otherwise). See the `ncw-midside-decode-bug` note.
-- [ ] **KS2 — Diagnose Vintage Vibe EP.** 123 MB from a 2.1 G source is not a
-      compression win; the builder dropped zones silently. Find out why before
-      rebuilding, and add a size/zone-count sanity assert to the builder so this
-      class of failure fails loudly.
-- [ ] **KS3 — Rebuild all four packs (Full + Proxy) and re-verify.**
-      Reminder from `keyscape-pack-loading`: the keys rig loads `.signalpack`
-      only — a re-extract that isn't followed by a pack rebuild never reaches
-      the rig.
+| patch | source | pack | ratio | verdict |
+|---|---|---|---|---|
+| **Vintage Vibe Electric Piano** | 2120 MB, 6055 files | 117 MB | **0.06** | ❌ **broken** — see 2.1 |
+| **Rhodes - LA Custom** | 2535 MB | 2520 MB | 0.99 | complete |
+| **Double Felt Grand** | 2628 MB | 2624 MB | 1.00 | complete |
+| **Wing Upright** | 10042 MB | 10028 MB | 1.00 | complete |
+
+### 2.1 Root cause — the filename convention parser
+
+Keyscape packs are built in **convention mode**: articulation, note and
+velocity are parsed out of the filename. Where a patch's articulation token
+contains spaces, or the fields are space-separated rather than `_`/`-`
+separated, the parse fails and those samples are dropped **silently**.
+
+Vintage Vibe EP is the clean demonstration. Its two filename shapes:
+
+```
+RR01_SL01 VVRFstr04_100-100.flac    release — <artic>_<note>-<vel>   → parses
+RR01_SL01 VVEP r06_100 v10.flac     body    — space in "VVEP r06",
+                                              " v10" velocity form   → dropped
+```
+
+The pack holds **4516 entries, every one a release sample, and zero body
+samples** (`grep -c VVEP` over the pack = 0). It is a Vintage Vibe with no
+Vintage Vibe in it — note-off tails only. That is why 2.1 G became 117 MB, and
+why "it sounds thin" would never have been the report; it makes almost no
+sound at all.
+
+### 2.2 The sweep — this hits 10 of 43 packs
+
+Pack-bytes ÷ source-bytes across every Keyscape pack. A healthy pack sits at
+0.94–1.00; anything below that lost samples.
+
+| patch | source | pack | ratio | note |
+|---|---|---|---|---|
+| MKS-20 Piano 1 | 276 MB | 3 MB | **0.01** | 1320 files → 15 entries |
+| MKS-20 Piano 2 | 315 MB | 4 MB | **0.01** | |
+| MKS-20 E Piano 1 | 477 MB | 6 MB | **0.01** | `MKS20 EP 1 r2_…` — spaces in the token |
+| MKS-20 E Piano 2 | 563 MB | 6 MB | **0.01** | |
+| Vintage Vibe EP | 2120 MB | 117 MB | **0.06** | body missing entirely |
+| Simone Celeste | 2286 MB | 770 MB | 0.34 | 4558 → 1520 files, exactly ⅓ |
+| Dulcitone | 1336 MB | 661 MB | 0.49 | |
+| Rhodes Bass | 923 MB | 457 MB | 0.50 | 3584 → 1792, exactly ½; `rbd rel 109 28` |
+| Rhodes - Pre-Piano | 1830 MB | 922 MB | 0.50 | |
+| Electric Harpsichord | 850 MB | 493 MB | 0.58 | |
+
+The exact ½ and ⅓ fractions say whole articulations are dropping out, not
+scattered files. `Rhodes - Classic` has 1615 space-form filenames and still
+rates 0.99, so space-in-filename is a *trigger*, not the whole rule — the
+parser needs reading, not guessing at.
+
+Nothing else in the tree is affected: `LA Custom C7 Grand`, `Wing Upright`,
+`Wing Tack`, `Wurlitzer 140B`, `Vintage Vibe Vibanet` and the rest all sit at
+0.99–1.00.
+
+### 2.3 Tasks
+
+- [x] **KS2 — Diagnose Vintage Vibe EP.** Done, above — and it turned up nine
+      more.
+- [ ] **KS4 — Fix the convention parser** so a space-bearing articulation token
+      and a ` v<NN>` velocity field parse. This is the actual bug; the rebuilds
+      depend on it.
+- [ ] **KS5 — Make the failure loud.** The Keyscape builder should refuse, or at
+      minimum warn hard, when the samples it packed are materially fewer than
+      the audio files it was pointed at. Ten packs shipped broken because
+      nothing compared those two numbers. `build_ni_packs` now does this for
+      undecodable samples (§1.2 K2/K3); the same guard belongs here.
+- [ ] **KS1 — Confirm whether the 2026-05-05 extraction predates the NCW
+      mid/side decode fix.** If so, re-extract before rebuilding. See the
+      `ncw-midside-decode-bug` note.
+- [ ] **KS3 — Rebuild.** The four in §2.0 first (that is what the rig needs),
+      then the other six. Reminder from `keyscape-pack-loading`: the rig loads
+      `.signalpack` only, so a re-extract without a rebuild never reaches it.
 
 ---
 
