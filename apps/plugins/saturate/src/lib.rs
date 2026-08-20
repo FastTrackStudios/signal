@@ -27,6 +27,7 @@ use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
 use saturate::digital::DigitalStage;
+use saturate::emphasis::EmphasisEq;
 use saturate::preamp::ClassAPreamp;
 use saturate_ui::params::{SatParams, SatUiState};
 
@@ -45,6 +46,9 @@ pub struct FtsSaturate {
     /// state) plus one more: a shared dither sequence would collapse into the
     /// middle of the stereo image instead of sitting behind it.
     quantiser: [DigitalStage; 2],
+    /// The emphasis / de-emphasis EQ pair (`fx.sat.emphasis`): applied
+    /// around the whole wet path, per channel like the preamps.
+    emph: [EmphasisEq; 2],
 }
 
 impl Default for FtsSaturate {
@@ -62,6 +66,7 @@ impl Default for FtsSaturate {
             .with_resize_hint(saturate_ui::control_view::resize_hint()),
             pre: [ClassAPreamp::new(48_000.0), ClassAPreamp::new(48_000.0)],
             quantiser: [DigitalStage::new(), DigitalStage::new()],
+            emph: [EmphasisEq::new(48_000.0), EmphasisEq::new(48_000.0)],
         }
     }
 }
@@ -83,7 +88,21 @@ impl FtsSaturate {
             character_b: self.params.character_b.value(),
             mix: self.params.mix.value(),
         };
+        // The emphasis bands, designed once per block (setters early-out on
+        // unchanged values inside the biquad design's own cheapness — the
+        // whole table is a handful of arithmetic).
+        let bands = std::array::from_fn(|i| self.params.emph[i].to_band());
+        for emph in self.emph.iter_mut() {
+            if *emph.bands() != bands {
+                emph.set_bands(&bands);
+            }
+        }
+        // The makeup calibrates at the level the shaper actually sees — the
+        // emphasis raises it exactly like the tilt does
+        // (`fx.sat.emphasis.makeup`). Before `apply`, which refreshes makeup.
+        let sigma_gain = self.emph[0].sigma_gain();
         for (pre, quantiser) in self.pre.iter_mut().zip(self.quantiser.iter_mut()) {
+            pre.set_emphasis_sigma_gain(sigma_gain);
             saturate_profiles::apply(profile, &controls, pre, quantiser);
         }
         profile.voicing.digital && !self.quantiser[0].is_transparent()
@@ -134,6 +153,9 @@ impl Plugin for FtsSaturate {
             pre.reset();
             quantiser.reset();
         }
+        for emph in self.emph.iter_mut() {
+            emph.set_sample_rate(buffer_config.sample_rate);
+        }
         // Land the settings before the first block, so the tilt filters and
         // the sag ballistics start on the real values rather than ramping
         // out of a default nobody chose.
@@ -145,6 +167,9 @@ impl Plugin for FtsSaturate {
         for (pre, quantiser) in self.pre.iter_mut().zip(self.quantiser.iter_mut()) {
             pre.reset();
             quantiser.reset();
+        }
+        for emph in self.emph.iter_mut() {
+            emph.reset();
         }
     }
 
@@ -167,13 +192,18 @@ impl Plugin for FtsSaturate {
                 let dry = *sample;
                 input_peak = input_peak.max(dry.abs());
 
-                // The stage alone, then the quantiser, and only THEN the
-                // mix: a bitcrusher blended in after its own dry/wet would
-                // be crushing a signal that had already been un-crushed.
-                let mut wet = self.pre[ch].process_wet(ch, dry);
+                // Emphasis in, the stage, the quantiser, de-emphasis out,
+                // and only THEN the mix (`fx.sat.emphasis`): the EQ pair
+                // wraps the whole wet path so it shapes what distorts —
+                // including what the bitcrusher chews on — and is net-flat
+                // around it. A flat EQ short-circuits to identity, keeping
+                // the default path bit-exact.
+                let emphasized = self.emph[ch].pre(dry);
+                let mut wet = self.pre[ch].process_wet(ch, emphasized);
                 if crushing {
                     wet = self.quantiser[ch].process(ch, wet);
                 }
+                wet = self.emph[ch].post(wet);
                 let out = (dry + (wet - dry) * mix) * output;
                 output_peak = output_peak.max(out.abs());
                 *sample = out;

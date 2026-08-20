@@ -377,7 +377,22 @@ pub struct FtsEqParams {
 
     #[nested(array, group = "Band {}")]
     pub bands: [BandParams; NUM_BANDS],
+
+    // ── Appended params (never reorder anything above: hosts persist VST3
+    //    state by index) ──────────────────────────────────────────────────
+    /// Auto-expand the display range when a curve is dragged outside it
+    /// (`fx.eq.display.auto-range`). Display behaviour, but a param so it
+    /// persists with the session and presets.
+    #[id = "auto_range"]
+    pub auto_range: FloatParam,
 }
+
+// The range table itself lives in the portable graph model
+// (`eq_graph_model::DB_RANGE_STEPS`) so wasm builds share it; re-exported
+// here because the param layer is its natural address.
+pub use crate::eq_graph_model::{
+    db_range_for_index, db_range_index_containing, DB_RANGE_STEPS, DEFAULT_DB_RANGE,
+};
 
 impl Default for FtsEqParams {
     fn default() -> Self {
@@ -623,6 +638,13 @@ impl Default for FtsEqParams {
             ssl_trim_db: db_param("SSL Trim", 0.0, -24.0, 24.0),
 
             bands: std::array::from_fn(BandParams::new),
+
+            auto_range: FloatParam::new(
+                "Auto Range",
+                1.0,
+                FloatRange::Linear { min: 0.0, max: 1.0 },
+            )
+            .with_value_to_string(on_off_string("On", "Off")),
         }
     }
 }

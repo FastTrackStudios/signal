@@ -10,26 +10,37 @@ description = "Saturation GUI — the five circuits, each with its own panel"
 default = []
 native = [
     "dep:nice-plug",
+    "dep:fts-plug-ui",
     "dep:nice-plug-dioxus",
     "dep:architect-ui",
     "dep:atomic_float",
     "dep:parking_lot",
+    # The shared EQ surface — the emphasis EQ view embeds eq-ui's EqGraph
+    # (fx.embed-eq.one-surface).
+    "dep:eq-ui",
+    "eq-ui/native",
 ]
 
 [dependencies]
 architect-ui = { workspace = true, optional = true }
 fts-audio-ui = { workspace = true }
 nice-plug = { workspace = true, optional = true }
+fts-plug-ui = { workspace = true, optional = true }
 nice-plug-dioxus = { workspace = true, optional = true }
 atomic_float = { workspace = true, optional = true }
 parking_lot = { workspace = true, optional = true }
 saturate-profiles = { workspace = true }
 saturate-dsp = { workspace = true }
+eq-ui = { workspace = true, optional = true }
 crossbeam-channel = { workspace = true }
 dioxus = { workspace = true }
 
 [[test]]
 name = "screenshots"
+required-features = ["native"]
+
+[[test]]
+name = "emphasis_eq"
 required-features = ["native"]
 
 [dev-dependencies]

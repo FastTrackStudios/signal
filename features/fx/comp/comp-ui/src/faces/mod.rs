@@ -158,6 +158,99 @@ pub fn editor_size_for(profile_index: usize, form: fts_audio_ui::EditorForm) -> 
     )
 }
 
+/// Height of a stage row's header strip, in CSS px.
+pub const ROW_HEADER_H: f64 = 18.0;
+
+/// Width of a stage's sidechain-EQ sidecar, in CSS px — the EQ column that
+/// opens to the RIGHT of the stage's face (`fx.embed-eq.one-surface`).
+pub const SIDECAR_W: f64 = 560.0;
+
+/// The row height a stage's face WANTS at `row_w` window width — so a
+/// faceplate fills its row instead of floating in dead space: a hardware
+/// panel's row is its design aspect at full width (the drawing's own
+/// proportions, rack ears to rack ears), the FTS surface's is the graph's
+/// standard height.
+pub fn preferred_row_height(profile_index: usize, row_w: f64) -> f64 {
+    let face_w = (row_w - crate::control_view::RAIL_W).max(1.0);
+    match units::design_for(profile_id_for_index(profile_index)) {
+        Some(design) => {
+            let scale = (face_w / design.w)
+                .clamp(crate::hardware::panel_svg::MIN_SCALE, crate::hardware::panel_svg::MAX_SCALE);
+            (design.h * scale).max(160.0)
+        }
+        // The FTS surface (graph) is flexible; give it its standard box.
+        None => crate::control_view::EDITOR_H as f64,
+    }
+}
+
+/// The stack's rows at `row_w` width, each at its face's preferred height
+/// (`fx.stack.strip`): `(heights, total)`, headers included when more than
+/// one stage is up, scaled down together when the total passes the resize
+/// bound so the proportions hold.
+pub fn stack_row_heights(
+    params: &crate::params::CompParams,
+    rows: &[usize],
+    row_w: f64,
+    sidecar_mask: u64,
+) -> (Vec<f64>, f64) {
+    let with_headers = rows.len() > 1;
+    // A row with its sidecar open keeps the face at the width the sidecar
+    // leaves it; the row is at least tall enough for a usable EQ.
+    let mut heights: Vec<f64> = rows
+        .iter()
+        .map(|&si| {
+            let face_w = if sidecar_mask & (1 << si.min(63)) != 0 {
+                row_w - SIDECAR_W
+            } else {
+                row_w
+            };
+            preferred_row_height(params.stage(si).resolved_profile_index(), face_w)
+                .max(if sidecar_mask & (1 << si.min(63)) != 0 {
+                    220.0
+                } else {
+                    0.0
+                })
+                + if with_headers { ROW_HEADER_H } else { 0.0 }
+        })
+        .collect();
+    let total: f64 = heights.iter().sum();
+    let max_h = crate::control_view::max_editor_size().1 as f64;
+    if total > max_h {
+        let k = max_h / total;
+        for h in &mut heights {
+            *h *= k;
+        }
+        (heights, max_h)
+    } else {
+        (heights, total)
+    }
+}
+
+/// The editor size for a STACK (`fx.stack.strip`): the form's width, the sum
+/// of every row's preferred height, capped at the resize bounds.
+pub fn stack_editor_size_rows(
+    params: &crate::params::CompParams,
+    rows: &[usize],
+    form: fts_audio_ui::EditorForm,
+    sidecar_mask: u64,
+) -> (u32, u32) {
+    let focused = rows.first().copied().unwrap_or(0);
+    let (base_w, single_h) =
+        editor_size_for(params.stage(focused).resolved_profile_index(), form);
+    // An open sidecar extends the window to the RIGHT — the faces keep
+    // their size and the EQ column takes the new width.
+    let w = if sidecar_mask != 0 {
+        base_w + SIDECAR_W as u32
+    } else {
+        base_w
+    };
+    if rows.len() <= 1 && sidecar_mask == 0 {
+        return (w, single_h);
+    }
+    let (_, total) = stack_row_heights(params, rows, w as f64, sidecar_mask);
+    (w, (total.ceil() as u32).max(single_h))
+}
+
 /// The editor body for a profile index.
 ///
 /// `advanced` is the FTS surface's page selection; the hardware faces ignore
@@ -199,6 +292,8 @@ pub struct FaceContext {
     pub ui: Arc<CompUiState>,
     pub ctx: ParamContext,
     pub profile: &'static (dyn Profile + Sync),
+    /// The stack stage this face is editing (`fx.stack.focus`).
+    pub stage: usize,
 }
 
 impl FaceContext {
@@ -220,6 +315,7 @@ impl FaceContext {
             self.profile,
             control_id,
             self.ui.params.clone(),
+            self.stage,
             self.ctx.clone(),
         )
         .unwrap_or_else(|| {
@@ -239,6 +335,7 @@ pub fn use_face_context(profile: &'static (dyn Profile + Sync)) -> FaceContext {
         ui,
         ctx: use_param_context(),
         profile,
+        stage: crate::focus::use_focused_stage(),
     }
 }
 

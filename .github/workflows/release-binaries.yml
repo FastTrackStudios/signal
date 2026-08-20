@@ -100,7 +100,8 @@ jobs:
           echo "uploaded $artifact to $tag"
 
   linux-plugins:
-    # The FTS plugin bundle (11 CLAP+VST3 plugins, issue #31): built with the
+    # The FTS plugin bundle (17 CLAP+VST3 plugins — the `fts_plugins` list in
+    # the Justfile is the source of truth, issue #31): built with the
     # same nix devshell, packaged by `just plugins-package`, attached as
     # fts-plugins-v<version>-x86_64-linux.tar.gz.
     runs-on: [self-hosted, nix-host]

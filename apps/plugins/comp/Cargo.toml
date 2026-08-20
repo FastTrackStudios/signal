@@ -19,6 +19,9 @@ nice-plug.workspace = true
 
 # The DSP facade (re-exports comp-dsp). Never depend on comp-dsp directly.
 comp.workspace = true
+# The stack core (docs/spec/fx/stack.md): lanes of serial stages, sum laws,
+# lane latency compensation.
+fx-stack.workspace = true
 # The full Dioxus plugin editor (control view, params, GR meter) —
 # `native` pulls nice-plug-dioxus/Blitz.
 comp-ui = { workspace = true, features = ["native"] }

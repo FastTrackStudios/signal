@@ -41,6 +41,7 @@ pub fn profile_control_handle(
     profile: &'static (dyn Profile + Sync),
     control: &'static ProfileControl,
     params: Arc<CompParams>,
+    stage: usize,
     ctx: ParamContext,
     macro_slot: Option<ParamPtr>,
 ) -> Option<ParamHandle> {
@@ -49,7 +50,7 @@ pub fn profile_control_handle(
     // gesture for the host.
     let targets: Vec<ParamPtr> = target_params(control)
         .into_iter()
-        .filter_map(|name| core_param_ptr(&params, name))
+        .filter_map(|name| core_param_ptr(params.stage(stage), name))
         .collect();
     if targets.is_empty() {
         return None;
@@ -126,7 +127,7 @@ pub fn profile_control_handle(
             for (name, plain) in
                 map_control_value(profile, control_id, normalized as f64).unwrap_or_default()
             {
-                let Some(ptr) = core_param_ptr(&params, name) else {
+                let Some(ptr) = core_param_ptr(params.stage(stage), name) else {
                     continue;
                 };
                 let n = unsafe { ptr.preview_normalized(plain as f32) };
@@ -247,17 +248,19 @@ pub fn profile_control(
 }
 
 /// Build the handle for a control named by id — the form the faces use.
+/// `stage` is the stack stage this face is editing (`fx.stack.focus`).
 pub fn handle_for(
     profile: &'static (dyn Profile + Sync),
     control_id: &str,
     params: Arc<CompParams>,
+    stage: usize,
     ctx: ParamContext,
 ) -> Option<ParamHandle> {
     let control = profile_control(profile, control_id)?;
     let slot = macro_slot_index(profile, control_id)
-        .and_then(|i| params.macro_slot(i))
+        .and_then(|i| params.stage(stage).macro_slot(i))
         .map(|p| p.as_ptr());
-    profile_control_handle(profile, control, params, ctx, slot)
+    profile_control_handle(profile, control, params, stage, ctx, slot)
 }
 
 #[cfg(test)]

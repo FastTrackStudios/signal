@@ -16,6 +16,7 @@
 #![no_std]
 
 pub mod digital;
+pub mod emphasis;
 pub mod preamp;
 
 /// Saturation transfer-curve family.

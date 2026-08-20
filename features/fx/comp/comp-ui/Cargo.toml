@@ -14,11 +14,16 @@ default = []
 # adapter. Off → only the portable core (profile view data model) compiles.
 native = [
     "dep:nice-plug",
+    "dep:fts-plug-ui",
     "dep:nice-plug-dioxus",
     "dep:audiocore-core",
     "dep:architect-ui",
     "dep:atomic_float",
     "dep:parking_lot",
+    # The shared EQ surface — each stage's sidechain-EQ sidecar embeds
+    # eq-ui's EqGraph (fx.embed-eq.one-surface).
+    "dep:eq-ui",
+    "eq-ui/native",
 ]
 
 [dependencies]
@@ -26,12 +31,14 @@ audiocore-core = { workspace = true, optional = true }
 architect-ui = { workspace = true, optional = true }
 fts-audio-ui = { workspace = true }
 nice-plug = { workspace = true, optional = true }
+fts-plug-ui = { workspace = true, optional = true }
 nice-plug-dioxus = { workspace = true, optional = true }
 atomic_float = { workspace = true, optional = true }
 # The persisted profile id (see params::CompParams::profile_id) — nice-plug's
 # `#[persist]` wants a field with interior mutability.
 parking_lot = { workspace = true, optional = true }
 comp-profiles = { path = "../comp-profiles" }
+eq-ui = { workspace = true, optional = true }
 
 # The real-editor behavioral tests (tests/gui_editor.rs) mount
 # `control_view::App` — the `native`-gated plugin editor surface — on the

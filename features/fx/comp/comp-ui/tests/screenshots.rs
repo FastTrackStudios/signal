@@ -27,7 +27,7 @@ use dioxus_test::by_testid;
 #[path = "support/mod.rs"]
 mod support;
 
-use support::{mount_sized, Fixture};
+use support::{mount_sized, mount_with, Fixture};
 
 /// Where the PNGs land. `target/gui-shots/comp` by default so they are
 /// gitignored and easy to find; `FTS_SHOTS_DIR` overrides it.
@@ -57,6 +57,101 @@ fn mount_design() -> Fixture {
     )
 }
 
+/// The stack, three stages deep: FTS surface + LA-2A serial, an 1176 on a
+/// parallel lane — every stage visible as a row (`fx.stack.strip`).
+#[tokio::test]
+async fn shot_stack_of_three() {
+    use nice_plug::prelude::Param;
+    let (w, base_h) = comp_ui::faces::preferred_editor_size(0);
+    let params = std::sync::Arc::new(comp_ui::params::CompParams::default());
+    unsafe {
+        let set_int = |p: &nice_plug::prelude::IntParam, v: i32| {
+            p.as_ptr()
+                ._internal_set_normalized_value(p.preview_normalized(v));
+        };
+        let set_bool = |p: &nice_plug::prelude::BoolParam| {
+            p.as_ptr()._internal_set_normalized_value(1.0);
+        };
+        set_int(
+            &params.stage2.profile,
+            comp_profiles::profile_index("la2a").unwrap() as i32,
+        );
+        params
+            .stage2
+            .store_profile_id(comp_profiles::profile_index("la2a").unwrap());
+        set_bool(&params.stage2.in_use);
+        set_int(
+            &params.stage3.profile,
+            comp_profiles::profile_index("urei_1176").unwrap() as i32,
+        );
+        params
+            .stage3
+            .store_profile_id(comp_profiles::profile_index("urei_1176").unwrap());
+        set_bool(&params.stage3.in_use);
+        set_int(&params.stage3.lane, 1);
+    }
+    // The window the editor would ask the host for: each row at its face's
+    // preferred height.
+    let (w, h) = comp_ui::faces::stack_editor_size_rows(
+        &params,
+        &[0, 1, 2],
+        fts_audio_ui::EditorForm::default(),
+        0,
+    );
+    let _ = base_h;
+    let mut fx = mount_with(params, w, h);
+    fx.settle().await;
+    shot(&fx, "stack-of-three");
+}
+
+/// A faceplate at a SMALL window: the panel scales down to fit instead of
+/// cropping (the resize contract — no scale floor in the way).
+#[tokio::test]
+async fn shot_1176_scaled_down() {
+    // 500 wide is well under the old 0.55 scale floor that used to crop.
+    // Opened directly on the persisted id — at this size the rail is too
+    // short to click through.
+    use nice_plug::prelude::Param;
+    let params = std::sync::Arc::new(comp_ui::params::CompParams::default());
+    let index = comp_profiles::profile_index("urei_1176").unwrap();
+    params.stage1.store_profile_id(index);
+    unsafe {
+        let p = &params.stage1.profile;
+        p.as_ptr()
+            ._internal_set_normalized_value(p.preview_normalized(index as i32));
+    }
+    let mut fx = mount_with(params, 500, 170);
+    fx.settle().await;
+    shot(&fx, "u76-small-window");
+}
+
+/// A stage's sidechain-EQ sidecar, open under the FTS surface
+/// (`fx.embed-eq.one-surface`).
+#[tokio::test]
+async fn shot_sidechain_sidecar() {
+    use nice_plug::prelude::Param;
+    let (w, base_h) = comp_ui::faces::preferred_editor_size(0);
+    let params = std::sync::Arc::new(comp_ui::params::CompParams::default());
+    // Pose the curve: kick notch + de-ess boost.
+    unsafe {
+        let b0 = &params.stage1.sc_eq[0].gain_db;
+        b0.as_ptr()
+            ._internal_set_normalized_value(b0.preview_normalized(-9.0));
+        let b4 = &params.stage1.sc_eq[4].gain_db;
+        b4.as_ptr()
+            ._internal_set_normalized_value(b4.preview_normalized(7.0));
+    }
+    let mut fx = mount_with(
+        params,
+        w + comp_ui::faces::SIDECAR_W as u32,
+        base_h,
+    );
+    fx.settle().await;
+    // Open the sidecar through the rail toggle, like a hand would.
+    click_testid(&mut fx, "sc-eq-rail-toggle").await;
+    shot(&fx, "sidechain-sidecar");
+}
+
 /// Mount, switch to a profile, and size the window the way the host would:
 /// switching profile asks for that face's size, so a shot taken at the FTS
 /// surface's size is not what anyone sees.
@@ -76,7 +171,7 @@ async fn select_profile(fx: &mut Fixture, profile_id: &str) {
     let target = comp_profiles::profile_index(profile_id).unwrap() as i32;
     let rail_id = comp_profiles::CATEGORIES[category].id;
     for _ in 0..8 {
-        if fx.params.profile.value() == target {
+        if fx.params.stage1.profile.value() == target {
             return;
         }
         click_testid(fx, &format!("rail-item-{rail_id}")).await;
@@ -197,7 +292,7 @@ async fn shot_every_editor_form() {
         let index = comp_profiles::profile_index("la2a").unwrap();
         let (w, h) = comp_ui::faces::editor_size_for(index, *form);
         let params = std::sync::Arc::new(comp_ui::params::CompParams::default());
-        params.store_profile_id(index);
+        params.stage1.store_profile_id(index);
         params.store_editor_form(*form);
         let mut fx = support::mount_with(params, w, h);
         fx.settle().await;

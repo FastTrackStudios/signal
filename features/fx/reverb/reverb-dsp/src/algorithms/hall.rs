@@ -268,6 +268,13 @@ impl ReverbAlgorithm for Hall {
         self.fdn_l.set_t60(t60_dc, t60_ny, self.sample_rate);
         self.fdn_r.set_t60(t60_dc, t60_ny, self.sample_rate);
 
+        // The Decay Rate EQ, realized exactly in the feedback path
+        // (`fx.reverb.decay-eq`) — layered over the T60 shelf.
+        self.fdn_l
+            .set_decay_curve(t60, &params.decay_bands, self.sample_rate);
+        self.fdn_r
+            .set_decay_curve(t60, &params.decay_bands, self.sample_rate);
+
         // In-loop allpasses (zita-style ±): hall density builds with
         // every recirculation instead of only at the input diffuser.
         self.fdn_l.set_loop_allpass(0.6);

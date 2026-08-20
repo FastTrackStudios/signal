@@ -214,15 +214,10 @@ fn AppShell() -> Element {
     let output_db = ui.output_peak_db.load(Ordering::Relaxed);
     let sample_rate = ui.sample_rate.load(Ordering::Relaxed) as f64;
 
+    // One mapping for the display range (`fx.eq.display.defaults-agree`).
     let db_range_idx = params.db_range.value();
-    let db_range: f64 = match db_range_idx {
-        0 => 3.0,
-        1 => 6.0,
-        2 => 12.0,
-        3 => 18.0,
-        4 => 24.0,
-        _ => 30.0,
-    };
+    let db_range = crate::eq_graph_model::db_range_for_index(db_range_idx);
+    let auto_range = params.auto_range.value() >= 0.5;
 
     let spectrum: Vec<f32> = (0..SPECTRUM_BINS)
         .map(|i| ui.spectrum_bins[i].load(Ordering::Relaxed))
@@ -469,6 +464,27 @@ fn AppShell() -> Element {
                     EqGraph {
                         bands: graph_bands_signal,
                         db_range: db_range,
+                        auto_range: auto_range,
+                        on_db_range_change: {
+                            let ctx = ctx.clone();
+                            let params = ui.params.clone();
+                            move |db: f64| {
+                                // Map the requested range back to its index
+                                // and write it as an ordinary param gesture,
+                                // so it persists and is automatable.
+                                if let Some(idx) = crate::eq_graph_model::DB_RANGE_STEPS
+                                    .iter()
+                                    .position(|&r| (r - db).abs() < 0.5)
+                                {
+                                    let ptr = params.db_range.as_ptr();
+                                    let norm =
+                                        params.db_range.preview_normalized(idx as i32);
+                                    ctx.begin_set_raw(ptr);
+                                    ctx.set_normalized_raw(ptr, norm);
+                                    ctx.end_set_raw(ptr);
+                                }
+                            }
+                        },
                         sample_rate: sample_rate,
                         spectrum_db: spectrum,
                         analyzer_snapshot: analyzer_snapshot,

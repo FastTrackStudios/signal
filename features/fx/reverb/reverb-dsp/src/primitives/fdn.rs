@@ -50,6 +50,18 @@ pub struct Fdn {
     tc_b: f64,
     tc_prev: f64,
 
+    // ── Decay Rate EQ (opt-in via `set_decay_curve`) ───────────────
+    // The Pro-R-style generalization of the T60 shelf
+    // (`fx.reverb.decay-eq`): per line i, each active band adds a
+    // biquad to the feedback path whose centre gain is
+    // Gmid_dB(i)·(1/rate − 1) — i.e. the per-pass loop attenuation the
+    // band's decay-time multiplier demands. Boost totals are scaled
+    // down per line so the loop gain always keeps a safety margin
+    // below unity.
+    decay_eq_active: bool,
+    decay_eq_on: [bool; crate::algorithm::DECAY_BANDS],
+    decay_eq: Vec<[audiocore_dsp::biquad::Biquad; crate::algorithm::DECAY_BANDS]>,
+
     // ── Slow orthogonal rotation (opt-in via `set_rotation`) ───────
     // Post-matrix Givens rotations between line pairs with slowly
     // swept angles: animates the tail with no decay error and no
@@ -130,6 +142,11 @@ impl Fdn {
             shelf_state: vec![0.0; n],
             tc_b: 0.0,
             tc_prev: 0.0,
+            decay_eq_active: false,
+            decay_eq_on: [false; crate::algorithm::DECAY_BANDS],
+            decay_eq: (0..n)
+                .map(|_| core::array::from_fn(|_| audiocore_dsp::biquad::Biquad::new()))
+                .collect(),
             rot_depth: 0.0,
             rot_inc: 0.0,
             rot_phase: 0.0,
@@ -228,6 +245,81 @@ impl Fdn {
 
     pub fn clear_t60(&mut self) {
         self.t60_mode = false;
+    }
+
+    /// The Decay Rate EQ (`fx.reverb.decay-eq`): shape decay time per
+    /// frequency with up to six Bell/Shelf curves of T60 multipliers,
+    /// realized as per-line biquads in the feedback path.
+    ///
+    /// For line i, the per-pass loop attenuation at the reference decay is
+    /// `Gmid_dB(i) = −60·Mi/(fs·t60_mid)`; a band whose multiplier is `r`
+    /// needs the loop gain at its frequency moved to `Gmid_dB/r`, i.e. a
+    /// filter of `Gmid_dB·(1/r − 1)` dB there. Longer decays are boosts
+    /// toward (never past) unity: each line's total boost is scaled to keep
+    /// a ≥5 % margin of its base attenuation, so the loop cannot run away
+    /// however the bands overlap.
+    ///
+    /// Layered ON TOP of `set_t60` / the legacy path (it multiplies the
+    /// loop response); flat bands cost nothing. Disable by passing a curve
+    /// with no active band.
+    // r[impl fx.reverb.decay-eq]
+    pub fn set_decay_curve(
+        &mut self,
+        t60_mid: f64,
+        bands: &[crate::algorithm::DecayBand; crate::algorithm::DECAY_BANDS],
+        sample_rate: f64,
+    ) {
+        use audiocore_dsp::biquad::FilterType;
+        let any = bands.iter().any(|b| b.is_active());
+        self.decay_eq_active = any;
+        if !any {
+            return;
+        }
+        let t60 = t60_mid.max(0.01);
+        for i in 0..self.num_lines {
+            let mi = self.delay_samples[i] as f64;
+            let gmid_db = -60.0 * mi / (sample_rate * t60);
+            // First pass: per-band target gains at this line.
+            let mut gains = [0.0f64; crate::algorithm::DECAY_BANDS];
+            let mut boost_sum = 0.0f64;
+            for (b, band) in bands.iter().enumerate() {
+                self.decay_eq_on[b] = band.is_active();
+                if !band.is_active() {
+                    continue;
+                }
+                let r = band.rate.clamp(0.25, 4.0);
+                let g = gmid_db * (1.0 / r - 1.0);
+                gains[b] = g;
+                if g > 0.0 {
+                    boost_sum += g;
+                }
+            }
+            // Keep ≥5 % of the base attenuation however boosts overlap.
+            let headroom = -gmid_db * 0.95;
+            let scale = if boost_sum > headroom && boost_sum > 0.0 {
+                headroom / boost_sum
+            } else {
+                1.0
+            };
+            for (b, band) in bands.iter().enumerate() {
+                if !band.is_active() {
+                    continue;
+                }
+                let gain_db = if gains[b] > 0.0 {
+                    gains[b] * scale
+                } else {
+                    gains[b]
+                };
+                let q = band.q.clamp(0.1, 18.0);
+                let f = band.freq_hz.clamp(20.0, sample_rate * 0.45);
+                let ftype = match band.shape {
+                    1 => FilterType::LowShelf { gain_db },
+                    2 => FilterType::HighShelf { gain_db },
+                    _ => FilterType::Peak { gain_db },
+                };
+                self.decay_eq[i][b].set(ftype, f, q, sample_rate);
+            }
+        }
     }
 
     /// Slow orthogonal-rotation tail animation: Givens rotations
@@ -396,6 +488,17 @@ impl Fdn {
                 sig
             };
 
+            // Decay Rate EQ: the per-line curve filters, multiplying the
+            // loop response so decay time follows the drawn curve
+            // (`fx.reverb.decay-eq`).
+            if self.decay_eq_active {
+                for b in 0..crate::algorithm::DECAY_BANDS {
+                    if self.decay_eq_on[b] {
+                        sig = self.decay_eq[i][b].tick(sig, 0);
+                    }
+                }
+            }
+
             // In-loop allpass: density compounds each recirculation.
             if self.loop_ap_coeff.abs() > 1e-4 && !self.loop_ap.is_empty() {
                 let g = if i % 2 == 0 {
@@ -450,6 +553,11 @@ impl Fdn {
         }
         for ap in &mut self.loop_ap {
             ap.clear();
+        }
+        for line in &mut self.decay_eq {
+            for bq in line.iter_mut() {
+                bq.reset();
+            }
         }
         for lp in &mut self.eq_low_lp {
             lp.reset();

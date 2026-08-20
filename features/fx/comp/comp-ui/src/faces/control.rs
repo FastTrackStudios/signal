@@ -33,7 +33,8 @@ pub fn ControlFace(
     let shared = use_context::<SharedState>();
     let ui = shared.get::<CompUiState>().expect("CompUiState missing");
     let ctx = use_param_context();
-    let params = &ui.params;
+    // The face edits the FOCUSED stage (`fx.stack.focus`).
+    let params = ui.params.stage(crate::focus::use_focused_stage());
     let skin = profile_skin("control");
 
     let is_advanced = advanced;

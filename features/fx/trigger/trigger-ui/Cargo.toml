@@ -14,6 +14,7 @@ default = []
 # adapter. Off → only the portable core (waveform SVG math) compiles.
 native = [
     "dep:nice-plug",
+    "dep:fts-plug-ui",
     "dep:nice-plug-dioxus",
     "dep:audiocore-core",
     "dep:architect-ui",
@@ -26,6 +27,7 @@ audiocore-core = { workspace = true, optional = true }
 architect-ui = { workspace = true, optional = true }
 fts-audio-ui = { workspace = true, optional = true }
 nice-plug = { workspace = true, optional = true }
+fts-plug-ui = { workspace = true, optional = true }
 nice-plug-dioxus = { workspace = true, optional = true }
 atomic_float = { workspace = true, optional = true }
 

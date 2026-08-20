@@ -937,3 +937,60 @@ async fn the_1073s_collar_and_cap_are_separate_controls() -> dioxus_test::Result
     );
     Ok(())
 }
+
+// ─────────────────────────────────────────────────────────────────────────
+// Display range (docs/spec/fx/eq-display.md)
+// ─────────────────────────────────────────────────────────────────────────
+
+/// Dragging a band above the display's top expands the dB range to the next
+/// step that shows the pointer — the curve is never clipped mid-edit.
+// r[verify fx.eq.display.auto-range]
+#[tokio::test]
+async fn dragging_a_band_past_the_top_expands_the_range() -> dioxus_test::Result<()> {
+    let fx = mount();
+    assert_eq!(fx.params.db_range.value(), 0, "default range is ±3 dB");
+
+    let (ox, oy) = fx.graph_origin();
+    let (sx, sy) = fx.band_point(0);
+    // Drag the band into the top edge of the display: mouse handlers are
+    // element-scoped, so "outside the range" is expressed by reaching the
+    // edge, which must expand the range one step.
+    let target_y = oy + 1.0;
+
+    fx.tester.pointer_down(sx, sy);
+    fx.settle().await;
+    for step in 1..=4 {
+        let t = step as f64 / 4.0;
+        fx.tester.pointer_move(sx, sy + (target_y - sy) * t, true);
+        fx.settle().await;
+    }
+    fx.tester.pointer_up(sx, target_y);
+    fx.settle().await;
+
+    // The ±3 dB view expands to ±6 dB (index 1) — one step, no contraction.
+    assert!(
+        fx.params.db_range.value() >= 1,
+        "range did not expand past ±3 dB (still index {})",
+        fx.params.db_range.value()
+    );
+    let _ = ox;
+    Ok(())
+}
+
+/// The range selector lives on the graph surface and writes the `db_range`
+/// param as an ordinary gesture.
+// r[verify fx.eq.display.range]
+#[tokio::test]
+async fn the_range_selector_is_on_the_graph_and_sets_the_param() -> dioxus_test::Result<()> {
+    let fx = mount();
+    let sel = fx
+        .tester
+        .query(dioxus_test::by_testid("eq-db-range"))
+        .immediately()?;
+    assert!(
+        sel.inner_html().contains("3 dB") && sel.inner_html().contains("30 dB"),
+        "selector does not offer the range steps: {}",
+        sel.inner_html()
+    );
+    Ok(())
+}

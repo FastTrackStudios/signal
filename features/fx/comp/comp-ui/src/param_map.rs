@@ -15,10 +15,12 @@
 use audiocore_core::prelude::Param;
 use nice_plug::prelude::ParamPtr;
 
-use crate::params::CompParams;
+use crate::params::CompStageParams;
 
-/// Resolve a `comp_profiles` core param name to the matching plugin param.
-pub fn core_param_ptr(params: &CompParams, core_name: &str) -> Option<ParamPtr> {
+/// Resolve a `comp_profiles` core param name to the matching plugin param —
+/// on ONE stage of the stack (each stage is a complete compressor,
+/// `fx.stack.params-share`).
+pub fn core_param_ptr(params: &CompStageParams, core_name: &str) -> Option<ParamPtr> {
     Some(match core_name {
         "threshold_db" => params.threshold_db.as_ptr(),
         "ratio" => params.ratio.as_ptr(),

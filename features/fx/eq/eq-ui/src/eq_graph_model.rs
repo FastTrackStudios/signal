@@ -260,6 +260,39 @@ impl EqGraphRenderState {
     }
 }
 
+/// The selectable display ranges, in `db_range` param index order
+/// (`fx.eq.display.range`). THE source of truth for the display range —
+/// the graph component, the painter, this model and the param formatter all
+/// map through it; none carries its own default
+/// (`fx.eq.display.defaults-agree`).
+// r[impl fx.eq.display.range]
+// r[impl fx.eq.display.defaults-agree]
+pub const DB_RANGE_STEPS: [f64; 6] = [3.0, 6.0, 12.0, 18.0, 24.0, 30.0];
+
+/// Default display range: the `db_range` param default (index 0 = ±3 dB —
+/// a tight range suits the subtle, shelf-first baseline moves).
+pub const DEFAULT_DB_RANGE: f64 = DB_RANGE_STEPS[0];
+
+/// The dB range a `db_range` param index selects.
+pub fn db_range_for_index(index: i32) -> f64 {
+    DB_RANGE_STEPS
+        .get(index.max(0) as usize)
+        .copied()
+        .unwrap_or(30.0)
+}
+
+/// The smallest index whose range shows `db` without clipping, when that is
+/// larger than `from` — the auto-range expansion step
+/// (`fx.eq.display.auto-range`).
+// r[impl fx.eq.display.auto-range]
+pub fn db_range_index_containing(db: f64, from: i32) -> Option<i32> {
+    DB_RANGE_STEPS
+        .iter()
+        .position(|&r| r >= db.abs())
+        .map(|i| i as i32)
+        .filter(|&i| i > from)
+}
+
 #[derive(Clone)]
 pub struct GraphConfig {
     pub db_range: f64,
@@ -286,7 +319,7 @@ pub struct GraphConfig {
 impl Default for GraphConfig {
     fn default() -> Self {
         Self {
-            db_range: 24.0,
+            db_range: DEFAULT_DB_RANGE,
             min_freq: 20.0,
             max_freq: 20000.0,
             sample_rate: 48000.0,

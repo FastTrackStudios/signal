@@ -117,6 +117,17 @@ impl FtsReverb {
         self.chain.width = self.params.width.value() as f64;
         self.chain.mix = self.params.mix.value() as f64;
 
+        // The two embedded EQs (docs/spec/fx/embedded-eq.md): the Post EQ on
+        // the wet output, the Decay Rate EQ into the algorithm's feedback
+        // path (exact on the Hall family, collapsed elsewhere). Both are
+        // change-detected downstream, so writing every block costs a compare.
+        for i in 0..reverb::chain::POST_EQ_BANDS {
+            self.chain.post_eq[i] = self.params.post_eq[i].to_band();
+        }
+        for i in 0..reverb::algorithm::DECAY_BANDS {
+            self.chain.params.decay_bands[i] = self.params.decay_eq[i].to_band();
+        }
+
         self.chain.update_params();
     }
 }

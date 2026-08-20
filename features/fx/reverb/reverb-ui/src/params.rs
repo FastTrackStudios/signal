@@ -228,7 +228,151 @@ pub struct ReverbParams {
     /// The editor's form factor, persisted by id.
     #[persist = "editor_form"]
     pub editor_form: parking_lot::RwLock<String>,
+
+    // ── Appended (never reorder anything above) ────────────────────────
+    /// The Post EQ (`fx.reverb.post-eq`): six bands on the final reverb
+    /// sound, wet path only, wet gain auto-compensated. Ids `pshape_1`…
+    /// `pq_6`.
+    #[nested(array, group = "Post EQ")]
+    pub post_eq: [PostBandParams; reverb_dsp::chain::POST_EQ_BANDS],
+    /// The Decay Rate EQ (`fx.reverb.decay-eq`): six curves of decay-time
+    /// multipliers over frequency, ×0.25…×4. Ids `dshape_1`…`dq_6`.
+    #[nested(array, group = "Decay EQ")]
+    pub decay_eq: [DecayBandParams; reverb_dsp::algorithm::DECAY_BANDS],
 }
+
+/// One Post EQ band (`fx.embed-eq.band-params`).
+#[derive(Params)]
+pub struct PostBandParams {
+    /// 0 Bell, 1 Low Shelf, 2 High Shelf, 3 Low Cut, 4 High Cut.
+    #[id = "pshape"]
+    pub shape: IntParam,
+    #[id = "pfreq"]
+    pub freq_hz: FloatParam,
+    #[id = "pgain"]
+    pub gain_db: FloatParam,
+    #[id = "pq"]
+    pub q: FloatParam,
+}
+
+pub const POST_SHAPE_LABELS: &[&str] = &["Bell", "Low Shelf", "High Shelf", "Low Cut", "High Cut"];
+
+impl PostBandParams {
+    fn new(default_freq: f32) -> Self {
+        Self {
+            shape: IntParam::new("Post Shape", 0, IntRange::Linear { min: 0, max: 4 })
+                .with_value_to_string(Arc::new(|v| {
+                    POST_SHAPE_LABELS
+                        .get(v.max(0) as usize)
+                        .map(|s| s.to_string())
+                        .unwrap_or_else(|| v.to_string())
+                })),
+            freq_hz: band_freq_param("Post Freq", default_freq),
+            gain_db: FloatParam::new(
+                "Post Gain",
+                0.0,
+                FloatRange::Linear { min: -24.0, max: 24.0 },
+            )
+            .with_unit(" dB")
+            .with_value_to_string(formatters::v2s_f32_rounded(1)),
+            q: band_q_param("Post Q"),
+        }
+    }
+
+    /// This band as the chain takes it.
+    pub fn to_band(&self) -> reverb_dsp::chain::PostEqBand {
+        reverb_dsp::chain::PostEqBand {
+            shape: self.shape.value().max(0) as u32,
+            freq_hz: self.freq_hz.value() as f64,
+            gain_db: self.gain_db.value() as f64,
+            q: self.q.value() as f64,
+        }
+    }
+}
+
+/// One Decay Rate EQ band. `rate_db` is 20·log10 of the decay multiplier:
+/// ±12 dB ≡ ×0.25…×4 — exactly the EQ display's gain axis
+/// (`fx.reverb.eq-display`).
+#[derive(Params)]
+pub struct DecayBandParams {
+    /// 0 Bell, 1 Low Shelf, 2 High Shelf.
+    #[id = "dshape"]
+    pub shape: IntParam,
+    #[id = "dfreq"]
+    pub freq_hz: FloatParam,
+    #[id = "drate"]
+    pub rate_db: FloatParam,
+    #[id = "dq"]
+    pub q: FloatParam,
+}
+
+pub const DECAY_SHAPE_LABELS: &[&str] = &["Bell", "Low Shelf", "High Shelf"];
+
+impl DecayBandParams {
+    fn new(default_freq: f32) -> Self {
+        Self {
+            shape: IntParam::new("Decay Shape", 0, IntRange::Linear { min: 0, max: 2 })
+                .with_value_to_string(Arc::new(|v| {
+                    DECAY_SHAPE_LABELS
+                        .get(v.max(0) as usize)
+                        .map(|s| s.to_string())
+                        .unwrap_or_else(|| v.to_string())
+                })),
+            freq_hz: band_freq_param("Decay Freq", default_freq),
+            rate_db: FloatParam::new(
+                "Decay Rate",
+                0.0,
+                FloatRange::Linear { min: -12.0, max: 12.0 },
+            )
+            .with_value_to_string(Arc::new(|v| {
+                format!("{:.2}×", 10.0f32.powf(v / 20.0))
+            })),
+            q: band_q_param("Decay Q"),
+        }
+    }
+
+    /// This band as the algorithm takes it.
+    pub fn to_band(&self) -> reverb_dsp::algorithm::DecayBand {
+        reverb_dsp::algorithm::DecayBand {
+            shape: self.shape.value().max(0) as u32,
+            freq_hz: self.freq_hz.value() as f64,
+            rate: 10.0f64.powf(self.rate_db.value() as f64 / 20.0),
+            q: self.q.value() as f64,
+        }
+    }
+}
+
+fn band_freq_param(name: &'static str, default_freq: f32) -> FloatParam {
+    FloatParam::new(
+        name,
+        default_freq,
+        FloatRange::Skewed {
+            min: 20.0,
+            max: 20_000.0,
+            factor: FloatRange::skew_factor(-2.0),
+        },
+    )
+    .with_unit(" Hz")
+    .with_value_to_string(formatters::v2s_f32_hz_then_khz(1))
+    .with_string_to_value(formatters::s2v_f32_hz_then_khz())
+}
+
+fn band_q_param(name: &'static str) -> FloatParam {
+    FloatParam::new(
+        name,
+        0.707,
+        FloatRange::Skewed {
+            min: 0.1,
+            max: 18.0,
+            factor: FloatRange::skew_factor(-1.5),
+        },
+    )
+    .with_value_to_string(formatters::v2s_f32_rounded(2))
+}
+
+/// Default band frequencies for both embedded EQs — a useful spread, idle
+/// until moved.
+pub const EQ_DEFAULT_FREQS: [f32; 6] = [80.0, 250.0, 700.0, 1_800.0, 4_500.0, 10_000.0];
 
 impl Default for ReverbParams {
     fn default() -> Self {
@@ -318,6 +462,8 @@ impl Default for ReverbParams {
             ir_path: parking_lot::RwLock::new(String::new()),
             profile_id: parking_lot::RwLock::new(String::new()),
             editor_form: parking_lot::RwLock::new(String::new()),
+            post_eq: std::array::from_fn(|i| PostBandParams::new(EQ_DEFAULT_FREQS[i])),
+            decay_eq: std::array::from_fn(|i| DecayBandParams::new(EQ_DEFAULT_FREQS[i])),
         }
     }
 }

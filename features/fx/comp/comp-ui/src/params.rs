@@ -59,6 +59,10 @@ impl WaveRing {
 /// Audio-thread → UI metering data.
 pub struct CompUiState {
     pub params: Arc<CompParams>,
+    /// The stage the editor is focused on (`fx.stack.focus`) — written by the
+    /// editor, read by the audio thread so the meters and traces below
+    /// describe the stage the user is looking at.
+    pub focused_stage: AtomicUsize,
     /// Current gain reduction in dB (positive = reducing).
     pub gain_reduction_db: AtomicF32,
     pub input_peak_db: AtomicF32,
@@ -74,6 +78,7 @@ impl CompUiState {
     pub fn new(params: Arc<CompParams>) -> Self {
         Self {
             params,
+            focused_stage: AtomicUsize::new(0),
             gain_reduction_db: AtomicF32::new(0.0),
             input_peak_db: AtomicF32::new(-100.0),
             output_peak_db: AtomicF32::new(-100.0),
@@ -111,7 +116,15 @@ pub const PROFILE_LABELS: &[&str] = &[
     "1176 LN",
 ];
 
-/// Full parameter tree.
+/// How many stages the compressor stack can hold (`fx.stack.limits`).
+pub const MAX_STAGES: usize = 8;
+
+/// One stage's complete parameter set (`fx.stack.model`): a full compressor
+/// — profile, classic surface, extended surface — plus its place in the
+/// stack. [`CompParams`] holds [`MAX_STAGES`] of these; stage 1 is declared
+/// bare (`#[nested]`) so its ids are exactly the pre-stack plugin's and a
+/// saved single-stage session loads into it bit-for-bit
+/// (`fx.stack.params`); stages 2+ get `s{n}_` id prefixes.
 ///
 /// The first eight ids (`threshold`…`link`) are the original classic set and
 /// **must keep their order and ids** — hosts persist VST3 state by index.
@@ -119,9 +132,10 @@ pub const PROFILE_LABELS: &[&str] = &[
 /// character + drive, input gain + auto makeup, detector shaping (RMS blend,
 /// feedback, hold, lookahead, inertia), sidechain EQ, range, the expander and
 /// upward-compression stages, and the soft ceiling. The multiband stage is
-/// still not exposed (it wants its own crossover UI).
+/// still not exposed (it wants its own crossover UI). The stack-placement
+/// params (`use`/`on`/`lane`) are appended after those.
 #[derive(Params)]
-pub struct CompParams {
+pub struct CompStageParams {
     /// Level above which compression starts.
     #[id = "threshold"]
     pub threshold_db: FloatParam,
@@ -229,11 +243,6 @@ pub struct CompParams {
     #[persist = "profile_id"]
     pub profile_id: parking_lot::RwLock<String>,
 
-    /// The editor's form factor — Responsive, a rack size, a 500-series
-    /// module. Persisted by id for the same reason the profile is.
-    #[persist = "editor_form"]
-    pub editor_form: parking_lot::RwLock<String>,
-
     /// Position of the active profile's first compound ("macro") control.
     ///
     /// A hardware macro — LA-2A PEAK REDUCTION, 1176 INPUT — writes several
@@ -253,9 +262,30 @@ pub struct CompParams {
     /// profile can add one without a state-breaking param insert.
     #[id = "macro2"]
     pub macro2: FloatParam,
+
+    /// The stage's sidecar: a 6-band EQ on the DETECTOR key
+    /// (`fx.embed-eq.one-surface`) — what this compressor listens to, not
+    /// what it outputs. Ids `scshape_1`…`scq_6` (stage-prefixed for stages
+    /// 2+).
+    #[nested(array, group = "Sidechain EQ")]
+    pub sc_eq: [ScBandParams; SC_EQ_BANDS],
+
+    // ── Stack placement (appended — `fx.stack.params`) ────────────────────
+    /// Whether this stage is part of the stack at all. Stage 1 defaults on
+    /// (the plain plugin); the rest off until shift-click adds them
+    /// (`fx.stack.add`).
+    #[id = "use"]
+    pub in_use: BoolParam,
+    /// Stage bypass — present in the topology, crossfaded to identity.
+    #[id = "on"]
+    pub stage_on: BoolParam,
+    /// Which parallel lane this stage feeds (`fx.stack.topology`). Within a
+    /// lane, stages run serially in stage-number order.
+    #[id = "lane"]
+    pub lane: IntParam,
 }
 
-impl CompParams {
+impl CompStageParams {
     /// The profile index a loaded session should be showing.
     ///
     /// The persisted id wins when it names a profile we still have: it survives
@@ -265,16 +295,6 @@ impl CompParams {
     pub fn resolved_profile_index(&self) -> usize {
         let id = self.profile_id.read();
         comp_profiles::profile_index(&id).unwrap_or_else(|| self.profile.value().max(0) as usize)
-    }
-
-    /// The editor form a loaded session should open at. An unknown or missing
-    /// id means Responsive, which is the size the face asks for anyway.
-    pub fn resolved_editor_form(&self) -> fts_audio_ui::EditorForm {
-        fts_audio_ui::EditorForm::from_id(&self.editor_form.read()).unwrap_or_default()
-    }
-
-    pub fn store_editor_form(&self, form: fts_audio_ui::EditorForm) {
-        *self.editor_form.write() = form.id().to_string();
     }
 
     /// Record the id for `index` — call this wherever the profile changes, so
@@ -290,7 +310,7 @@ impl CompParams {
 
 /// The macro slots, in assignment order — index N backs the Nth compound
 /// control of the active profile.
-impl CompParams {
+impl CompStageParams {
     pub fn macro_slot(&self, index: usize) -> Option<&FloatParam> {
         match index {
             0 => Some(&self.macro1),
@@ -300,9 +320,260 @@ impl CompParams {
     }
 }
 
+/// Number of sidechain EQ bands — must match `comp_dsp::chain::SC_EQ_BANDS`
+/// (pinned by a test in comp-plugin, which links both).
+pub const SC_EQ_BANDS: usize = 6;
+
+/// One sidechain EQ band (`fx.embed-eq.band-params`).
+#[derive(Params)]
+pub struct ScBandParams {
+    /// 0 Bell, 1 Low Shelf, 2 High Shelf, 3 Low Cut, 4 High Cut.
+    #[id = "scshape"]
+    pub shape: IntParam,
+    #[id = "scfreq"]
+    pub freq_hz: FloatParam,
+    #[id = "scgain"]
+    pub gain_db: FloatParam,
+    #[id = "scq"]
+    pub q: FloatParam,
+}
+
+pub const SC_SHAPE_LABELS: &[&str] = &["Bell", "Low Shelf", "High Shelf", "Low Cut", "High Cut"];
+
+/// Default sidechain band frequencies — a useful spread, idle at 0 dB.
+pub const SC_DEFAULT_FREQS: [f32; SC_EQ_BANDS] =
+    [80.0, 250.0, 700.0, 1_800.0, 4_500.0, 10_000.0];
+
+impl ScBandParams {
+    fn new(default_freq: f32) -> Self {
+        Self {
+            shape: IntParam::new("SC Shape", 0, IntRange::Linear { min: 0, max: 4 })
+                .with_value_to_string(label_formatter(SC_SHAPE_LABELS)),
+            freq_hz: FloatParam::new(
+                "SC Freq",
+                default_freq,
+                FloatRange::Skewed {
+                    min: 20.0,
+                    max: 20_000.0,
+                    factor: FloatRange::skew_factor(-2.0),
+                },
+            )
+            .with_unit(" Hz")
+            .with_value_to_string(formatters::v2s_f32_hz_then_khz(1))
+            .with_string_to_value(formatters::s2v_f32_hz_then_khz()),
+            gain_db: FloatParam::new(
+                "SC Gain",
+                0.0,
+                FloatRange::Linear { min: -24.0, max: 24.0 },
+            )
+            .with_unit(" dB")
+            .with_value_to_string(formatters::v2s_f32_rounded(1)),
+            q: FloatParam::new(
+                "SC Q",
+                0.707,
+                FloatRange::Skewed {
+                    min: 0.1,
+                    max: 18.0,
+                    factor: FloatRange::skew_factor(-1.5),
+                },
+            )
+            .with_value_to_string(formatters::v2s_f32_rounded(2)),
+        }
+    }
+}
+
+/// One parallel lane's mix controls (`fx.stack.sum`). Nested as an array,
+/// so the ids come out `lgain_1..lgain_8` etc.
+#[derive(Params)]
+pub struct LaneParams {
+    #[id = "lgain"]
+    pub gain_db: FloatParam,
+    #[id = "lmute"]
+    pub mute: BoolParam,
+    #[id = "lsolo"]
+    pub solo: BoolParam,
+}
+
+impl Default for LaneParams {
+    fn default() -> Self {
+        Self {
+            gain_db: FloatParam::new(
+                "Lane Gain",
+                0.0,
+                FloatRange::Linear { min: -24.0, max: 24.0 },
+            )
+            .with_unit(" dB")
+            .with_value_to_string(formatters::v2s_f32_rounded(1)),
+            mute: BoolParam::new("Lane Mute", false),
+            solo: BoolParam::new("Lane Solo", false),
+        }
+    }
+}
+
+/// The full parameter tree: the stage pool, the lanes, and the stack
+/// globals (`fx.stack.params`). Stage 1 is nested bare so its ids are the
+/// pre-stack plugin's, unchanged; stages 2–8 are prefixed `s2_`…`s8_`.
+#[derive(Params)]
+pub struct CompParams {
+    #[nested]
+    pub stage1: CompStageParams,
+    #[nested(id_prefix = "s2", group = "Stage 2")]
+    pub stage2: CompStageParams,
+    #[nested(id_prefix = "s3", group = "Stage 3")]
+    pub stage3: CompStageParams,
+    #[nested(id_prefix = "s4", group = "Stage 4")]
+    pub stage4: CompStageParams,
+    #[nested(id_prefix = "s5", group = "Stage 5")]
+    pub stage5: CompStageParams,
+    #[nested(id_prefix = "s6", group = "Stage 6")]
+    pub stage6: CompStageParams,
+    #[nested(id_prefix = "s7", group = "Stage 7")]
+    pub stage7: CompStageParams,
+    #[nested(id_prefix = "s8", group = "Stage 8")]
+    pub stage8: CompStageParams,
+
+    /// Per-lane gain / mute / solo, ids `lgain_1`…`lsolo_8`.
+    #[nested(array, group = "Lane")]
+    pub lanes: [LaneParams; MAX_STAGES],
+
+    /// Parallel sum law: 0 = coherent (1/N), 1 = power (1/√N), 2 = raw
+    /// (`fx.stack.sum`).
+    #[id = "summode"]
+    pub sum_mode: IntParam,
+    /// Stack output trim.
+    #[id = "stktrim"]
+    pub output_trim_db: FloatParam,
+
+    /// The editor's form factor — Responsive, a rack size, a 500-series
+    /// module. Persisted by id for the same reason the profile is.
+    #[persist = "editor_form"]
+    pub editor_form: parking_lot::RwLock<String>,
+
+    /// Which stage the editor is focused on (`fx.stack.focus`) — UI state,
+    /// persisted so the editor reopens where it was left. 1-based, as a
+    /// string for persist-plumbing simplicity.
+    #[persist = "focused_stage"]
+    pub focused_stage: parking_lot::RwLock<String>,
+}
+
+impl CompParams {
+    /// Stage `i` (0-based). Panics past [`MAX_STAGES`].
+    pub fn stage(&self, i: usize) -> &CompStageParams {
+        match i {
+            0 => &self.stage1,
+            1 => &self.stage2,
+            2 => &self.stage3,
+            3 => &self.stage4,
+            4 => &self.stage5,
+            5 => &self.stage6,
+            6 => &self.stage7,
+            7 => &self.stage8,
+            _ => panic!("stage {i} out of range"),
+        }
+    }
+
+    /// All stages, in stack order.
+    pub fn stages(&self) -> impl Iterator<Item = &CompStageParams> {
+        (0..MAX_STAGES).map(|i| self.stage(i))
+    }
+
+    /// Indices of the stages currently in the stack.
+    pub fn stages_in_use(&self) -> Vec<usize> {
+        (0..MAX_STAGES)
+            .filter(|&i| self.stage(i).in_use.value())
+            .collect()
+    }
+
+    /// The editor form a loaded session should open at. An unknown or missing
+    /// id means Responsive, which is the size the face asks for anyway.
+    pub fn resolved_editor_form(&self) -> fts_audio_ui::EditorForm {
+        fts_audio_ui::EditorForm::from_id(&self.editor_form.read()).unwrap_or_default()
+    }
+
+    pub fn store_editor_form(&self, form: fts_audio_ui::EditorForm) {
+        *self.editor_form.write() = form.id().to_string();
+    }
+
+    /// The focused stage (0-based), clamped to a stage that is in use.
+    pub fn resolved_focused_stage(&self) -> usize {
+        let raw: usize = self.focused_stage.read().parse().unwrap_or(0);
+        let idx = raw.min(MAX_STAGES - 1);
+        if self.stage(idx).in_use.value() {
+            idx
+        } else {
+            self.stages_in_use().first().copied().unwrap_or(0)
+        }
+    }
+
+    pub fn store_focused_stage(&self, idx: usize) {
+        *self.focused_stage.write() = idx.min(MAX_STAGES - 1).to_string();
+    }
+
+    /// First pool slot not in the stack, if any (`fx.stack.add`).
+    pub fn first_free_stage(&self) -> Option<usize> {
+        (0..MAX_STAGES).find(|&i| !self.stage(i).in_use.value())
+    }
+
+    /// First lane index no in-use stage feeds (`fx.stack.add`, the
+    /// Ctrl+Shift-click target).
+    pub fn first_free_lane(&self) -> Option<usize> {
+        (0..MAX_STAGES).find(|&l| {
+            !self
+                .stages()
+                .any(|s| s.in_use.value() && s.lane.value().max(0) as usize == l)
+        })
+    }
+}
+
 impl Default for CompParams {
     fn default() -> Self {
         Self {
+            stage1: CompStageParams::new(true),
+            stage2: CompStageParams::new(false),
+            stage3: CompStageParams::new(false),
+            stage4: CompStageParams::new(false),
+            stage5: CompStageParams::new(false),
+            stage6: CompStageParams::new(false),
+            stage7: CompStageParams::new(false),
+            stage8: CompStageParams::new(false),
+            lanes: std::array::from_fn(|_| LaneParams::default()),
+            sum_mode: IntParam::new("Sum Mode", 0, IntRange::Linear { min: 0, max: 2 })
+                .with_value_to_string(label_formatter(SUM_MODE_LABELS)),
+            output_trim_db: FloatParam::new(
+                "Stack Trim",
+                0.0,
+                FloatRange::Linear { min: -24.0, max: 24.0 },
+            )
+            .with_unit(" dB")
+            .with_value_to_string(formatters::v2s_f32_rounded(1)),
+            editor_form: parking_lot::RwLock::new(String::new()),
+            focused_stage: parking_lot::RwLock::new(String::new()),
+        }
+    }
+}
+
+/// Sum-law labels, in `sum_mode` value order.
+pub const SUM_MODE_LABELS: &[&str] = &["1/N", "Power", "Raw"];
+
+impl Default for CompStageParams {
+    fn default() -> Self {
+        Self::new(true)
+    }
+}
+
+impl CompStageParams {
+    /// A stage's params. `first` = stage 1, which starts in the stack (the
+    /// plain plugin); the rest start unused until added.
+    pub fn new(first: bool) -> Self {
+        Self {
+            sc_eq: std::array::from_fn(|i| ScBandParams::new(SC_DEFAULT_FREQS[i])),
+            in_use: BoolParam::new("In Stack", first),
+            stage_on: BoolParam::new("Stage On", true),
+            lane: IntParam::new(
+                "Lane",
+                0,
+                IntRange::Linear { min: 0, max: MAX_STAGES as i32 - 1 },
+            ),
             threshold_db: FloatParam::new(
                 "Threshold",
                 -20.0,
@@ -506,7 +777,6 @@ impl Default for CompParams {
             )
             .with_value_to_string(label_formatter(PROFILE_LABELS)),
             profile_id: parking_lot::RwLock::new(String::new()),
-            editor_form: parking_lot::RwLock::new(String::new()),
             macro1: macro_slot_param("Macro 1"),
             macro2: macro_slot_param("Macro 2"),
         }
@@ -540,12 +810,14 @@ mod tests {
     #[test]
     fn a_session_restores_from_the_profile_id_not_the_index() {
         let params = CompParams::default();
-        params.store_profile_id(comp_profiles::profile_index("dbx160").unwrap());
+        params
+            .stage1
+            .store_profile_id(comp_profiles::profile_index("dbx160").unwrap());
         // Whatever the index parameter happens to hold — a stale number from a
         // shorter list, a value the host round-tripped through a different
         // denominator — the id decides.
         assert_eq!(
-            params.resolved_profile_index(),
+            params.stage1.resolved_profile_index(),
             comp_profiles::profile_index("dbx160").unwrap()
         );
     }
@@ -554,15 +826,47 @@ mod tests {
     fn an_unknown_id_falls_back_to_the_index_rather_than_guessing() {
         let params = CompParams::default();
         // A project saved by a newer build naming a profile we do not have.
-        *params.profile_id.write() = "some_future_comp".to_string();
-        assert_eq!(params.resolved_profile_index(), 0);
+        *params.stage1.profile_id.write() = "some_future_comp".to_string();
+        assert_eq!(params.stage1.resolved_profile_index(), 0);
     }
 
     #[test]
     fn a_session_saved_before_ids_still_resolves() {
         let params = CompParams::default();
-        assert!(params.profile_id.read().is_empty());
-        assert_eq!(params.resolved_profile_index(), 0);
+        assert!(params.stage1.profile_id.read().is_empty());
+        assert_eq!(params.stage1.resolved_profile_index(), 0);
+    }
+
+    // r[verify fx.stack.params]
+    #[test]
+    fn stage_one_keeps_the_pre_stack_ids_and_the_rest_are_prefixed() {
+        let params = CompParams::default();
+        let map = params.param_map();
+        let ids: Vec<&str> = map.iter().map(|(id, _, _)| id.as_str()).collect();
+        // Stage 1 = the pre-stack plugin, bit-for-bit: classic eight first,
+        // in order, unprefixed.
+        assert_eq!(
+            &ids[..8],
+            &["threshold", "ratio", "attack", "release", "knee", "makeup", "mix", "link"],
+        );
+        // Stage 2+ prefixed.
+        assert!(ids.contains(&"s2_threshold"));
+        assert!(ids.contains(&"s8_lane"));
+        // Lanes as a suffixed array, stack globals appended.
+        assert!(ids.contains(&"lgain_1"));
+        assert!(ids.contains(&"lsolo_8"));
+        assert!(ids.contains(&"summode"));
+        assert!(ids.contains(&"stktrim"));
+    }
+
+    // r[verify fx.stack.model]
+    #[test]
+    fn a_default_stack_is_one_stage_on_lane_zero() {
+        let params = CompParams::default();
+        assert_eq!(params.stages_in_use(), vec![0]);
+        assert_eq!(params.resolved_focused_stage(), 0);
+        assert_eq!(params.first_free_stage(), Some(1));
+        assert_eq!(params.first_free_lane(), Some(1));
     }
 
     /// The bug this whole mechanism exists for: an index-valued parameter is

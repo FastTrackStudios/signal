@@ -282,32 +282,105 @@ saturate-shots:
 modulation-shots:
     cargo test -p modulation-ui --features native --test screenshots -- --nocapture
 
+# THE plugin suite — the one list every plugin recipe iterates. A name here
+# is `<name>-plugin` as a cargo package and "FTS <Name>" as a bundle (see
+# bundler.toml); adding a plugin means touching this line and that file.
+fts_plugins := "eq comp reverb delay tune modulation nam level saturate signal guide gate limiter trigger meter pitch unison"
+
 # Bundle every FTS plugin as .clap + .vst3 (target/bundled/, names from
-# bundler.toml). Debug of a single plugin: cargo run -p fts-plugin-xtask
-# -- bundle -p eq-plugin
+# bundler.toml). Pass a subset to bundle only those:
+#   just plugins-bundle "eq comp"
+# Debug of a single plugin: cargo run -p fts-plugin-xtask -- bundle -p eq-plugin
 #
 # On macOS this uses nice-plug-xtask's `bundle-universal` instead of
 # `bundle`: it builds both aarch64-apple-darwin and x86_64-apple-darwin and
 # lipo's them into one universal .clap/.vst3 per plugin — no custom lipo
 # scripting needed. Requires the x86_64-apple-darwin rustc target (added to
 # fts.rustToolchain for darwin — nix/modules/toolchain.nix).
-plugins-bundle:
+plugins-bundle plugins=fts_plugins:
     #!/usr/bin/env bash
     set -euo pipefail
     cmd=bundle
     [ "$(uname)" = "Darwin" ] && cmd=bundle-universal
-    for p in eq comp reverb delay tune modulation nam level saturate signal guide gate limiter trigger meter pitch unison; do
+    for p in {{plugins}}; do
         cargo run -q -p fts-plugin-xtask -- "$cmd" -p "$p-plugin" --release
     done
     ls target/bundled/
 
+# Install the bundled plugins into THIS machine's user plugin dirs, straight
+# from target/bundled — no release download, no network. Linux: ~/.clap and
+# ~/.vst3; macOS: ~/Library/Audio/Plug-Ins/{CLAP,VST3}. Writes the same
+# manifest the release installer does, so `just plugins-uninstall` removes
+# exactly this set (and replaces any stale symlink or older copy of the same
+# name left over from a previous worktree).
+#
+# Build + install everything:        just plugins-install
+# Iterate on one:                    just plugins-bundle eq && just plugins-install
+plugins-install: plugins-bundle
+    cargo run -q -p fts-installer -- plugins install --from target/bundled
+
+# Prove every bundle in target/bundled actually LOADS — dlopen it, run its
+# entry point, and walk its factory (apps/plugins/verify/). A plugin that
+# compiles, links, and exports the right symbol can still fail in a host: a
+# missing dependency or a panicking init only shows up at load time, and
+# `nm` cannot see either.
+#
+# Works on both platforms, including their different bundle shapes (Linux
+# .clap is a bare shared object, macOS .clap is a directory) and different
+# VST3 entry-point names (ModuleEntry vs bundleEntry). On macOS, pass an
+# arch to run the universal binaries in one personality:
+#   just plugins-verify              # native
+#   just plugins-verify x86_64       # the Intel half, under Rosetta
+plugins-verify arch="":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    [ -d target/bundled ] || { echo "no target/bundled — run 'just plugins-bundle' first" >&2; exit 1; }
+    out="target/plugin-verify"; mkdir -p "$out"
+    archflag=""
+    [ -n "{{arch}}" ] && archflag="-arch {{arch}}"
+    cc $archflag -o "$out/clap_load" apps/plugins/verify/clap_load.c -ldl
+    cc $archflag -o "$out/vst3_load" apps/plugins/verify/vst3_load.c -ldl
+    # The loadable binary inside a bundle, whatever shape the bundle is.
+    binary_in() {
+        if [ -d "$1" ]; then find "$1/Contents" -type f -perm -u+x ! -name "*.txt" ! -name "PkgInfo" | head -1
+        else echo "$1"; fi
+    }
+    fail=0
+    for b in target/bundled/*.clap target/bundled/*.vst3; do
+        [ -e "$b" ] || continue
+        case "$b" in *.clap) loader="$out/clap_load";; *) loader="$out/vst3_load";; esac
+        bin="$(binary_in "$b")"
+        if [ -z "$bin" ]; then printf "%-24s FAIL no binary in bundle\n" "$(basename "$b")"; fail=1; continue; fi
+        result="$("$loader" "$bin" 2>&1 | tail -1)"
+        printf "%-24s %s\n" "$(basename "$b")" "$result"
+        case "$result" in OK*) ;; *) fail=1;; esac
+    done
+    [ "$fail" = 0 ] || { echo "FAILURES — some bundles do not load" >&2; exit 1; }
+    echo "all bundles load"
+
+# Remove every plugin recorded in the install manifest.
+plugins-uninstall:
+    cargo run -q -p fts-installer -- plugins uninstall
+
+# What the manifest says is installed, and from which version.
+plugins-list:
+    cargo run -q -p fts-installer -- plugins list
+
 # Package the plugin bundles as a single release tarball in dist/
-# (fts-plugins-v<version>-x86_64-linux.tar.gz + SHA256SUMS entry).
+# (fts-plugins-v<version>-<platform>.tar.gz + SHA256SUMS entry). The macOS
+# release artifact is NOT this — it's the signed+notarized .zip built by
+# apps/fasttrackstudio/ios/deploy-macos-plugins.sh, since Apple only accepts
+# zip/pkg/dmg for notarization.
 plugins-package: plugins-bundle
     #!/usr/bin/env bash
     set -euo pipefail
     version="$(cargo pkgid -p eq-plugin | sed 's/.*[#@]//')"
-    plat=x86_64-linux
+    case "$(uname)-$(uname -m)" in
+        Darwin-*)        plat=macos ;;
+        Linux-x86_64)    plat=x86_64-linux ;;
+        Linux-aarch64)   plat=aarch64-linux ;;
+        *) echo "unsupported platform: $(uname)-$(uname -m)" >&2; exit 1 ;;
+    esac
     mkdir -p dist
     tarball="fts-plugins-v$version-$plat.tar.gz"
     tar -czf "dist/$tarball" -C target/bundled .
