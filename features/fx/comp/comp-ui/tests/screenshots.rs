@@ -122,8 +122,8 @@ async fn shot_sidechain_sidecar() {
     }
     let mut fx = mount_with(
         params,
-        w,
-        base_h + comp_ui::faces::SIDECAR_H as u32,
+        w + comp_ui::faces::SIDECAR_W as u32,
+        base_h,
     );
     fx.settle().await;
     // Open the sidecar through the rail toggle, like a hand would.

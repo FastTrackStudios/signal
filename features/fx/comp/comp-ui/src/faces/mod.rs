@@ -161,9 +161,9 @@ pub fn editor_size_for(profile_index: usize, form: fts_audio_ui::EditorForm) -> 
 /// Height of a stage row's header strip, in CSS px.
 pub const ROW_HEADER_H: f64 = 18.0;
 
-/// Height of a stage's sidechain-EQ sidecar, in CSS px
-/// (`fx.embed-eq.one-surface`).
-pub const SIDECAR_H: f64 = 240.0;
+/// Width of a stage's sidechain-EQ sidecar, in CSS px — the EQ column that
+/// opens to the RIGHT of the stage's face (`fx.embed-eq.one-surface`).
+pub const SIDECAR_W: f64 = 460.0;
 
 /// The row height a stage's face WANTS at `row_w` window width — so a
 /// faceplate fills its row instead of floating in dead space: a hardware
@@ -194,16 +194,23 @@ pub fn stack_row_heights(
     sidecar_mask: u64,
 ) -> (Vec<f64>, f64) {
     let with_headers = rows.len() > 1;
+    // A row with its sidecar open keeps the face at the width the sidecar
+    // leaves it; the row is at least tall enough for a usable EQ.
     let mut heights: Vec<f64> = rows
         .iter()
         .map(|&si| {
-            preferred_row_height(params.stage(si).resolved_profile_index(), row_w)
-                + if with_headers { ROW_HEADER_H } else { 0.0 }
-                + if sidecar_mask & (1 << si.min(63)) != 0 {
-                    SIDECAR_H
+            let face_w = if sidecar_mask & (1 << si.min(63)) != 0 {
+                row_w - SIDECAR_W
+            } else {
+                row_w
+            };
+            preferred_row_height(params.stage(si).resolved_profile_index(), face_w)
+                .max(if sidecar_mask & (1 << si.min(63)) != 0 {
+                    220.0
                 } else {
                     0.0
-                }
+                })
+                + if with_headers { ROW_HEADER_H } else { 0.0 }
         })
         .collect();
     let total: f64 = heights.iter().sum();
@@ -228,8 +235,15 @@ pub fn stack_editor_size_rows(
     sidecar_mask: u64,
 ) -> (u32, u32) {
     let focused = rows.first().copied().unwrap_or(0);
-    let (w, single_h) =
+    let (base_w, single_h) =
         editor_size_for(params.stage(focused).resolved_profile_index(), form);
+    // An open sidecar extends the window to the RIGHT — the faces keep
+    // their size and the EQ column takes the new width.
+    let w = if sidecar_mask != 0 {
+        base_w + SIDECAR_W as u32
+    } else {
+        base_w
+    };
     if rows.len() <= 1 && sidecar_mask == 0 {
         return (w, single_h);
     }

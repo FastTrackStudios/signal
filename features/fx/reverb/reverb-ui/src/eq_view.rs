@@ -105,22 +105,23 @@ fn write(ctx: &ParamContext, ptr: ParamPtr, normalized: f32) {
     ctx.end_set_raw(ptr);
 }
 
-/// The reverb layer's sidecar: BOTH curves side by side — Post EQ on the
-/// left (what the reverb sounds like), Decay Rate EQ on the right (how long
-/// each band rings) — per `fx.reverb.eq-display`.
+/// The reverb layer's sidecar: BOTH curves in one column beside the panel —
+/// Post EQ on top (what the reverb sounds like), Decay Rate EQ below (how
+/// long each band rings) — per `fx.reverb.eq-display`.
 #[component]
 pub fn ReverbEqSidecar(frame: u64) -> Element {
     rsx! {
         div {
             "data-testid": "reverb-eq-sidecar",
-            style: "position:absolute; inset:0; display:flex; overflow:hidden;",
+            style: "position:absolute; inset:0; display:flex; \
+                    flex-direction:column; overflow:hidden;",
             div {
-                style: "position:relative; flex:1; min-width:0; overflow:hidden;",
+                style: "position:relative; flex:1; min-height:0; overflow:hidden;",
                 ReverbEqView { mode_is_decay: false, frame }
             }
             div {
-                style: "position:relative; flex:1; min-width:0; overflow:hidden; \
-                        border-left:1px solid var(--border, rgba(148,163,184,0.3));",
+                style: "position:relative; flex:1; min-height:0; overflow:hidden; \
+                        border-top:1px solid var(--border, rgba(148,163,184,0.3));",
                 ReverbEqView { mode_is_decay: true, frame }
             }
         }

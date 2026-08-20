@@ -463,27 +463,20 @@ fn StageRow(
     } else {
         0.0
     };
-    let sidecar_h = if sidecar_open {
-        // The sidecar shares the row's scale: its nominal height times
-        // whatever squeeze the row set got.
-        (crate::faces::SIDECAR_H
-            * (row_h
-                / (crate::faces::preferred_row_height(
-                    params.stage(stage).resolved_profile_index(),
-                    row_w,
-                ) + header_h
-                    + crate::faces::SIDECAR_H)))
-            .min(crate::faces::SIDECAR_H)
+    // The sidecar opens to the RIGHT of the face; the face keeps the width
+    // the column leaves it.
+    let sidecar_w = if sidecar_open {
+        crate::faces::SIDECAR_W.min(row_w * 0.45)
     } else {
         0.0
     };
     // Shadow the focus for everything inside the row, and hand the face the
-    // row's content box (what is left above the sidecar).
+    // row's content box (what is left beside the sidecar).
     use_context_provider(|| Signal::new(crate::focus::FocusedStage(stage)));
     use_context_provider(|| {
         fts_audio_ui::hardware::panel::PanelBox(
-            row_w,
-            (row_h - header_h - sidecar_h).max(60.0),
+            (row_w - sidecar_w).max(120.0),
+            (row_h - header_h).max(60.0),
         )
     });
 
@@ -556,8 +549,8 @@ fn StageRow(
 
             div {
                 style: format!(
-                    "position:absolute; top:{header_h}px; left:0; right:0; \
-                     bottom:{sidecar_h}px; overflow:hidden;"
+                    "position:absolute; top:{header_h}px; left:0; \
+                     right:{sidecar_w}px; bottom:0; overflow:hidden;"
                 ),
                 Face {
                     profile_index: profile_idx,
@@ -567,14 +560,14 @@ fn StageRow(
                 }
             }
 
-            // The layer's sidecar: the sidechain EQ, attached under ITS face
-            // (`fx.embed-eq.one-surface`).
+            // The layer's sidecar: the sidechain EQ, attached to the RIGHT
+            // of ITS face (`fx.embed-eq.one-surface`).
             if sidecar_open {
                 div {
                     style: format!(
-                        "position:absolute; left:0; right:0; bottom:0; \
-                         height:{sidecar_h}px; overflow:hidden; \
-                         border-top:1px solid var(--border, rgba(148,163,184,0.3)); \
+                        "position:absolute; top:{header_h}px; right:0; bottom:0; \
+                         width:{sidecar_w}px; overflow:hidden; \
+                         border-left:1px solid var(--border, rgba(148,163,184,0.3)); \
                          background:var(--background);"
                     ),
                     for key in [format!("sc-{stage}")] {

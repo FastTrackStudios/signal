@@ -67,8 +67,8 @@ async fn emphasis_strip_open() {
             ._internal_set_normalized_value(b3.preview_normalized(6.0));
     }
     let (w, h) = (
-        saturate_ui::control_view::EDITOR_W,
-        saturate_ui::control_view::EDITOR_H + saturate_ui::control_view::EQ_STRIP_H,
+        saturate_ui::control_view::EDITOR_W + saturate_ui::control_view::EQ_SIDECAR_W,
+        saturate_ui::control_view::EDITOR_H,
     );
     let mut fx = mount_with(params, w, h);
     fx.settle().await;

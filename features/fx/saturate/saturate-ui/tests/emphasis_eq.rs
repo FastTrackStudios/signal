@@ -41,17 +41,17 @@ async fn the_eq_strip_opens_below_the_panel() -> dioxus_test::Result<()> {
 
     open_eq(&mut fx).await;
 
-    // The strip exists, has real layout, and sits BELOW the panel — the
-    // panel is still mounted (not hidden).
+    // The sidecar exists, has real layout, and sits to the RIGHT of the
+    // panel — the panel is still mounted (not hidden).
     let strip = fx.tester.query(by_testid("emphasis-view")).immediately()?;
     let (strip_w, strip_h) = strip.size();
-    assert!(strip_w > 400.0 && strip_h > 150.0, "strip collapsed: {strip_w}x{strip_h}");
+    assert!(strip_w > 300.0 && strip_h > 150.0, "sidecar collapsed: {strip_w}x{strip_h}");
     let panel = fx.tester.query(by_testid("hardware-panel")).immediately()?;
-    let (_, oy_panel) = panel.document_origin();
-    let (_, oy_strip) = strip.document_origin();
+    let (ox_panel, _) = panel.document_origin();
+    let (ox_strip, _) = strip.document_origin();
     assert!(
-        oy_strip > oy_panel,
-        "the EQ must extend the editor BELOW the panel"
+        ox_strip > ox_panel,
+        "the EQ sidecar must sit to the RIGHT of the panel"
     );
     let _ = panel_h_before;
     Ok(())

@@ -66,12 +66,13 @@ pub fn editor_size_for(_profile_index: usize, form: fts_audio_ui::EditorForm) ->
     form.editor_size(RAIL_W, (EDITOR_W, EDITOR_H))
 }
 
-/// Height of the emphasis EQ strip under the panel (`fx.sat.emphasis.display`
-/// — the EQ EXTENDS the window downward; the circuit's panel stays up).
-pub const EQ_STRIP_H: u32 = 320;
+/// Width of the emphasis EQ sidecar, to the RIGHT of the panel
+/// (`fx.sat.emphasis.display` — the EQ EXTENDS the window rightward; the
+/// circuit's panel keeps its size).
+pub const EQ_SIDECAR_W: u32 = 460;
 
-/// The editor size with the emphasis strip open: the face's box plus the
-/// strip, capped at the resize bounds.
+/// The editor size with the emphasis sidecar open: the face's box plus the
+/// column, capped at the resize bounds.
 pub fn editor_size_with_eq(
     profile_index: usize,
     form: fts_audio_ui::EditorForm,
@@ -79,7 +80,7 @@ pub fn editor_size_with_eq(
 ) -> (u32, u32) {
     let (w, h) = editor_size_for(profile_index, form);
     if eq_open {
-        (w, (h + EQ_STRIP_H).min(max_editor_size().1 as u32))
+        ((w + EQ_SIDECAR_W).min(max_editor_size().0 as u32), h)
     } else {
         (w, h)
     }
@@ -148,18 +149,18 @@ pub fn App() -> Element {
         }
     }
 
-    // The face's box: the window minus the EQ strip when it is open. Faces
-    // scale themselves to the `PanelBox` they are given.
+    // The face's box: the window minus the EQ sidecar when it is open.
+    // Faces scale themselves to the `PanelBox` they are given.
     let (win_w, win_h) = fts_audio_ui::hardware::panel::window_logical_size().unwrap_or({
         let (w, h) = editor_size_with_eq(profile_index, form, emphasis_on);
         (w as f64, h as f64)
     });
-    let strip_h = if emphasis_on {
-        (EQ_STRIP_H as f64).min(win_h * 0.6)
+    let sidecar_w = if emphasis_on {
+        (EQ_SIDECAR_W as f64).min(win_w * 0.45)
     } else {
         0.0
     };
-    let face_h = (win_h - strip_h).max(120.0);
+    let face_w = (win_w - sidecar_w).max(240.0);
 
     // Every control the faces can bind, by name.
     let handles: HashMap<String, ParamHandle> = [
@@ -268,17 +269,16 @@ pub fn App() -> Element {
                     }
                 },
 
-                // The panel above; the emphasis EQ strip UNDER it when open
-                // (`fx.sat.emphasis.display`) — the window grew to make room,
-                // the circuit's panel stays up. Both keyed: swapping a face
-                // swaps a whole subtree, and blitz's mutator wants a stable,
-                // keyed node to land on.
+                // The panel keeps its box; the emphasis EQ opens as a
+                // SIDECAR to its right (`fx.sat.emphasis.display`) — the
+                // window grew rightward to make room. Both keyed: swapping a
+                // face swaps a whole subtree, and blitz's mutator wants a
+                // stable, keyed node to land on.
                 div {
-                    style: "position:absolute; inset:0; display:flex; \
-                            flex-direction:column; overflow:hidden;",
+                    style: "position:absolute; inset:0; display:flex; overflow:hidden;",
                     div {
                         style: format!(
-                            "position:relative; flex:none; height:{face_h}px; overflow:hidden;"
+                            "position:relative; flex:none; width:{face_w}px; overflow:hidden;"
                         ),
                         for id in [profile.id] {
                             FaceInBox {
@@ -286,17 +286,17 @@ pub fn App() -> Element {
                                 profile_id: id.to_string(),
                                 handles: handles.clone(),
                                 frame,
-                                box_w: win_w,
-                                box_h: face_h,
+                                box_w: face_w,
+                                box_h: win_h,
                             }
                         }
                     }
                     if emphasis_on {
                         div {
                             style: format!(
-                                "position:relative; flex:none; height:{strip_h}px; \
+                                "position:relative; flex:none; width:{sidecar_w}px; \
                                  overflow:hidden; \
-                                 border-top:1px solid var(--border, rgba(148,163,184,0.3)); \
+                                 border-left:1px solid var(--border, rgba(148,163,184,0.3)); \
                                  background:var(--background);"
                             ),
                             for key in ["emphasis"] {
