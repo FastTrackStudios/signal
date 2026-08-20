@@ -238,7 +238,7 @@ Rebuilt, verified with `check_pack_resolve`:
 | Dulcitone | 693 MB | 1395 MB | ⚠️ 58/61 notes |
 | Rhodes Bass | 480 MB | 960 MB | ⚠️ 32/100 on the default artic (17 artics — likely velocity variants, not a defect) |
 | Electric Harpsichord | 517 MB | 877 MB | ⚠️ 2/89 — default artic is a muted variant; needs its own look |
-| **Vintage Vibe EP** | 117 MB | — | ❌ blocked on re-extraction |
+| **Vintage Vibe EP** | 117 MB | — | ❌ blocked on an extractor bug (KS8) — re-extraction reproduces it |
 
 Everything else in the library was already 0.94–1.00 and was left alone.
 
@@ -251,11 +251,37 @@ Everything else in the library was already 0.94–1.00 and was left alone.
       `vvepr06` — which is exactly the id in that patch's styx. The parser was
       never the problem.
 - [x] **KS3 — Rebuild the nine.** Done, above.
-- [ ] **KS1 — Re-extract Vintage Vibe EP.** The only fix for it. Worth checking
-      at the same time whether the extraction predates the NCW mid/side decode
-      fix (see the `ncw-midside-decode-bug` note), and whether the corruption
-      is that bug or a separate one — the failure signature here is CRC
-      mismatch at frame 0, which does not obviously look like a mid/side error.
+- [x] **KS1 — Re-extract Vintage Vibe EP.** Tried. **It does not help** — a
+      fresh `sc-import steam` run over `SourceLibraries/Keyscape/Keyboards/
+      Vintage Vibe EP.db` reproduces the corruption exactly: same 6055 files,
+      same 1539 bodies undecodable, releases fine. So this is not data rot on
+      disk, it is the extractor.
+- [ ] **KS8 — Fix `sc-import steam` for the Vintage Vibe EP bodies.** Lives in
+      the **`sample-collector` repo** (`/run/media/Development/FastTrackStudio-legacy/
+      sample-collector`, `crates/sc-import`, prebuilt at `target/release/sc-import`),
+      not here — so it is a cross-repo job, which is why it is filed rather than
+      done.
+
+      What is known, to save the next person the bisect:
+      - Isolated to this soundsource. Re-extracting `Weltmeister Bassett II.db`
+        as a control gives 104/104 clean files, so the SpCA→FLAC path is not
+        broken in general.
+      - Only the **body** group fails. All 4516 release samples
+        (`VVRSlor`/`VVRMedr`/`VVRFstr`) decode; all 1539 `VVEP` bodies do not.
+      - The container is *not* obviously malformed. STREAMINFO is sane and
+        matches a working file's shape (mono, 24-bit, 44100 Hz, 4096 blocksize),
+        the first frame starts at a valid sync (`0xfff8`), and the frame headers
+        of a good and a bad file differ only in their CRC byte
+        (`fff8c90c00c144` vs `fff8c90c00c14c`). libFLAC gets `BAD_HEADER` then
+        `LOST_SYNC` **after 0 samples**, so the break is in the first frame's
+        subframe payload, not the metadata.
+      - The bodies are also the only group named with the ` v<NN>` velocity
+        form rather than `-<vel>`, which hints they are a differently-authored
+        multi-velocity soundsource in the `.db` — the likely place the extractor
+        diverges.
+      - A fresh extraction is parked at
+        `/run/media/AudioHaven/INBOX/vvep-reextract` (2.1 GB) for whoever picks
+        this up; delete it if it goes stale.
 - [ ] **KS5 — Make the failure loud.** Ten packs shipped broken because nothing
       compared packed-count against input-count, and nothing checked that a
       spec's declared range contained its own samples. `build_ni_packs` errors
