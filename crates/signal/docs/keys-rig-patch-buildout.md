@@ -27,7 +27,7 @@ song scenes that borrow it.
 | — | (same Kontakt/Keyscape group) | Felt · Wing | `EQ: Keyscape Felt`, `EQ: Keyscape Wing` |
 | `Omni Keys` | Omnisphere | EP 1 · EP 2 | `EQ: EP Vintage`, `EQ: EP Rhodes`, `EP Color Filter` |
 | `Omni Pads` | Omnisphere | Pad · Pad Shimmer | `EQ: Omni Pad`, `EQ: Omni Pad Shimmer` |
-| `Augmented GRAND PIANO` | Arturia | one lane | `EQ: Arturia Grand` |
+| `Augmented GRAND PIANO` | Arturia | one lane — preset `Grand Energy` (§4) | `EQ: Arturia Grand` |
 
 Buses: `BUS: Keys`, `BUS: Pads`, `BUS: Shimmer`, `BUS: Delay`, `BUS: Reverb`,
 `BUS: Synths`. Sends: `SEND Keys`, `SEND: Pads`, `SEND: Synths`.
@@ -262,7 +262,57 @@ O1: the Pad layer is authored as module A `OB-8 PWM Big Strings` + module B
 
 ---
 
-## 4. Profile wiring
+## 4. Arturia Augmented GRAND PIANO — resample, don't extract
+
+The gig's Arturia chunk turned out to be the *most* readable of the three:
+Arturia's `serialization::archive` is length-prefixed **plain text**, so the
+preset reads straight out of `gig_extract dump`:
+
+> **`Grand Energy`** — User bank, author JT Wright, derived from the factory
+> preset `Go for It` (Type Piano / Subtype Acoustic Grand). Its own blurb:
+> *"Heavily compressed pop piano patch with a bit of chorus on top… then
+> there's the organ-like layer that can be easily added with the Morph Macro."*
+> All ~1491 parameters follow as named `key value` pairs.
+
+The samples are on voyager, as remembered — `/Library/Arturia/Samples/Augmented GRAND PIANO`
+(2.6 G), split into two very different halves:
+
+| what | format | verdict |
+|---|---|---|
+| **Mapping** — 51 `.sfz` + 13 `.sfzi` under `Factory/SFZ/Real Piano/` | **plain-text SFZ** | fully open. Per-region `sample=`, `pitch_keycenter`, `lokey`/`hikey`, `tune`, velocity groups, per-region envelopes, the release/resonance layers and their CC controls (`cc1300` Release Volume, `cc1301` Release CrossFade, `cc1302` Release Decay). 21 articulations: Felt, Paper, Pure, Bowed, Damped, Deep Resonance, Finger Pluck, Hammer Noises, Ping Pong, Soft Mallet, Stick Attack, Twine, Wood Pick, … |
+| **Audio** — 2983 `.arta` | **`PLC2`, proprietary** | 16-byte header (`PLC2` + `0101` + zeros — no sample rate, channel count or frame count in the clear), then incompressible bytes (gzip *expands* them). No `PLC2` symbols exported from `libaugmentedgrandpianoProcessor.dylib`. Reverse-engineering this is an NCW-sized project, not an afternoon. |
+| IRs (29), Wavetables (203), one-shot Samples (143) | **plain WAV** | usable today if we ever want them |
+
+**Recommendation: don't attack PLC2 — resample the plugin.** Not because the
+extraction is hard, but because it would give us the wrong thing. What the rig
+needs is `Grand Energy`, and that patch's sound *is* the Augmented engine — two
+layers, the Morph macro, chorus, delay, reverb, heavy compression. The `.arta`
+files are the dry Felt/Paper/Pure bodies underneath all of that. Extract them
+and we would still have to rebuild the engine on top; resample the plugin and
+we capture the patch as it is actually heard, which is the only version that
+has ever been on stage.
+
+This is also nearly free. `signal-plugin-host`'s `load_plugin` example already
+takes `--note`, `--render`, `--secs` and `--load-state`, and §3.0 hands us the
+exact `Grand Energy` state chunk out of the gig — so the autosampler is a loop
+over notes and velocities around machinery that exists.
+
+- [ ] **A1 — Render `Grand Energy` to a pack.** Load the extracted chunk via
+      `--load-state`, sweep note × velocity, capture, build a `.signalpack`.
+      **Must run on voyager**: Arturia ships macOS/Windows only, so this needs
+      `signal-plugin-host` building on macOS — verify that before scoping the
+      rest.
+- [ ] **A2 — Decide the sampling grid** (every semitone or every minor third,
+      how many velocity layers, tail length). A resampled patch is only as good
+      as its grid, and this one has a long compressed tail.
+- [ ] **A3 — Optional: teach the sampler to read SFZ.** The Arturia mapping is
+      a complete, well-formed SFZ description of a 21-articulation piano. Even
+      with the audio locked, that is a good reference — and an SFZ importer
+      would pay off well beyond Arturia.
+
+---
+
+## 5. Profile wiring
 
 - [ ] **P1** — Extend `worship_profile()` so every lane in §0's table has a
       patch: Keys A/B (already `LA Custom C7 Grand` / `Rhodes - LA Custom`),
@@ -273,12 +323,12 @@ O1: the Pad layer is authored as module A `OB-8 PWM Big Strings` + module B
       that hold nothing.
 - [ ] **P3** — Recreate the bus topology (Keys / Pads / Shimmer / Delay / Reverb
       sends) as container sends rather than a flat plugin graph.
-- [ ] **P4** — Decide what happens to the Arturia Augmented Grand lane. It has no
-      sampled source we own; either drop it or find the nearest pack.
+- [ ] **P4** — Wire the Arturia lane to whatever §4 produces (`Grand Energy`
+      resampled), or drop it if A1 stalls on the macOS build.
 
 ---
 
-## 5. The budget — why this is worth doing
+## 6. The budget — why this is worth doing
 
 Per-lane RAM is bounded by `engine::budget` (15% of RAM, ≤4 GB — see
 `sampler-preload-ram`), and the four NI pianos plus Keyscape's big grands are
