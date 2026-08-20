@@ -115,8 +115,8 @@ pub fn StackStrip(frame: u64) -> Element {
             // the headless tests). Document order does the stacking: the
             // strip is the LAST sibling of the face, so it paints and hits on
             // top.
-            style: "position:absolute; top:8px; left:0; right:0; \
-                    margin:0 auto; width:max-content; \
+            style: "position:absolute; top:4px; right:12px; \
+                    width:max-content; \
                     display:flex; align-items:center; gap:6px; \
                     padding:4px 8px; border-radius:8px; \
                     background:color-mix(in oklab, var(--card, #101216) 88%, transparent); \

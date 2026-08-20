@@ -163,6 +163,13 @@ pub fn EqGraph(
     /// its own internal selection (defaulting to `Auto`).
     #[props(default)]
     overlay_sel: Option<Signal<OverlayChoice>>,
+    /// The mix-EQ teaching furniture — the ear-band ruler, the too-much /
+    /// too-little range labels, the overlay selector. On for the EQ plugin;
+    /// off when the surface is embedded as some OTHER curve (drive emphasis,
+    /// decay rate), where the words would be lies
+    /// (`fx.embed-eq.one-surface`).
+    #[props(default = true)]
+    show_hints: bool,
     /// Optional spectrum analyzer data (dB values for logarithmically-spaced bins).
     #[props(default)]
     spectrum_db: Option<Vec<f32>>,
@@ -907,6 +914,7 @@ pub fn EqGraph(
             }
 
             // EQ cheat-sheet overlay selector (top-right corner).
+            if show_hints {
             select {
                 style: "position:absolute; top:6px; right:6px; z-index:30; \
                         background:rgba(15,15,18,0.92); color:#ddd; \
@@ -949,6 +957,7 @@ pub fn EqGraph(
                     }
                 }
             }
+            }
 
             // Cheat-sheet zone labels (DOM, positioned via the mapper). One per
             // zone, tinted by direction, at the zone's center frequency.
@@ -980,9 +989,11 @@ pub fn EqGraph(
 
             // ISO-octave ear-training ruler (vowel / haptic / sibilance cues) at
             // each octave center along the TOP, tinted by the same frequency→color
-            // map as the band nodes. Always on, faint, as a constant reference.
+            // map as the band nodes. A constant reference for a MIX EQ; an
+            // embedded curve (drive emphasis, decay rate) turns it off with
+            // `show_hints: false`.
             {
-                rsx! {
+                if show_hints { rsx! {
                     for eb in crate::cheatsheet::EAR_BANDS.iter() {
                         {
                             let ex = mapper.freq_to_x(eb.center_hz as f64);
@@ -1002,7 +1013,7 @@ pub fn EqGraph(
                             }
                         }
                     }
-                }
+                } } else { rsx! {} }
             }
 
             // Too-much / too-little range descriptors near the 0 dB line:
@@ -1012,7 +1023,7 @@ pub fn EqGraph(
                 let center_y = mapper.db_to_y(0.0);
                 let tm_y = center_y - 2.0;
                 let tl_y = center_y + 2.0;
-                rsx! {
+                if show_hints { rsx! {
                     for fr in crate::cheatsheet::FREQ_RANGES.iter() {
                         {
                             let cx = mapper.freq_to_x((fr.lo_hz as f64 * fr.hi_hz as f64).sqrt());
@@ -1045,7 +1056,7 @@ pub fn EqGraph(
                             }
                         }
                     }
-                }
+                } } else { rsx! {} }
             }
 
             // Band name labels — show the user's annotation above each named

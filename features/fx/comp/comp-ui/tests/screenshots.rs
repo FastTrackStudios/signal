@@ -27,7 +27,7 @@ use dioxus_test::by_testid;
 #[path = "support/mod.rs"]
 mod support;
 
-use support::{mount_sized, Fixture};
+use support::{mount_sized, mount_with, Fixture};
 
 /// Where the PNGs land. `target/gui-shots/comp` by default so they are
 /// gitignored and easy to find; `FTS_SHOTS_DIR` overrides it.
@@ -55,6 +55,44 @@ fn mount_design() -> Fixture {
         comp_ui::control_view::EDITOR_W,
         comp_ui::control_view::EDITOR_H,
     )
+}
+
+/// The stack, three stages deep: FTS surface + LA-2A serial, an 1176 on a
+/// parallel lane — every stage visible as a row (`fx.stack.strip`).
+#[tokio::test]
+async fn shot_stack_of_three() {
+    use nice_plug::prelude::Param;
+    let (w, base_h) = comp_ui::faces::preferred_editor_size(0);
+    let params = std::sync::Arc::new(comp_ui::params::CompParams::default());
+    unsafe {
+        let set_int = |p: &nice_plug::prelude::IntParam, v: i32| {
+            p.as_ptr()
+                ._internal_set_normalized_value(p.preview_normalized(v));
+        };
+        let set_bool = |p: &nice_plug::prelude::BoolParam| {
+            p.as_ptr()._internal_set_normalized_value(1.0);
+        };
+        set_int(
+            &params.stage2.profile,
+            comp_profiles::profile_index("la2a").unwrap() as i32,
+        );
+        params
+            .stage2
+            .store_profile_id(comp_profiles::profile_index("la2a").unwrap());
+        set_bool(&params.stage2.in_use);
+        set_int(
+            &params.stage3.profile,
+            comp_profiles::profile_index("urei_1176").unwrap() as i32,
+        );
+        params
+            .stage3
+            .store_profile_id(comp_profiles::profile_index("urei_1176").unwrap());
+        set_bool(&params.stage3.in_use);
+        set_int(&params.stage3.lane, 1);
+    }
+    let mut fx = mount_with(params, w, (base_h * 3).min(1320));
+    fx.settle().await;
+    shot(&fx, "stack-of-three");
 }
 
 /// Mount, switch to a profile, and size the window the way the host would:

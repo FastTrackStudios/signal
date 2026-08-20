@@ -154,6 +154,9 @@ pub fn ReverbEqView(mode_is_decay: bool, frame: u64) -> Element {
     let mut bands = use_signal(|| bands_vec.clone());
     *bands.write() = bands_vec;
 
+    // No instrument cheat-sheet in an embedded EQ.
+    let overlay_off = use_signal(|| eq_ui::eq_graph::OverlayChoice::Off);
+
     let params_change: Arc<ReverbParams> = params.clone();
     let ctx_change = ctx.clone();
     let params_remove = params.clone();
@@ -173,6 +176,8 @@ pub fn ReverbEqView(mode_is_decay: bool, frame: u64) -> Element {
                 bands,
                 db_range,
                 auto_range: false,
+                show_hints: false,
+                overlay_sel: overlay_off,
                 sample_rate: 48_000.0,
                 on_band_change: move |(idx, band): (usize, EqBand)| {
                     if idx >= 6 {

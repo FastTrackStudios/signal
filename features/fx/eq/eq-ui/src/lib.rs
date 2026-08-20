@@ -26,6 +26,16 @@ pub mod eq_graph_svg;
 pub mod control_view;
 #[cfg(feature = "native")]
 pub mod eq_graph;
+
+/// The compiled utilities + theme tokens the EQ surface's DOM parts (band
+/// popup, context menus, selectors) style themselves with. An editor that
+/// EMBEDS [`eq_graph::EqGraph`] (`fx.embed-eq.one-surface` — the saturator,
+/// the reverb) must inject this via `document::Style`, exactly as the EQ
+/// plugin does — without it the popup's layout classes are undefined and
+/// collapse. Exported as bytes because `include_str!` cannot cross a crate
+/// boundary.
+#[cfg(feature = "native")]
+pub const TAILWIND_CSS: &str = include_str!("../assets/tailwind.css");
 #[cfg(feature = "native")]
 pub mod faces;
 #[cfg(feature = "native")]

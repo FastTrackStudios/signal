@@ -1183,6 +1183,38 @@ async fn shift_clicking_a_style_stacks_it_serially() -> dioxus_test::Result<()> 
     Ok(())
 }
 
+/// Stacking shows EVERY stage at once: two rows, each with its own face,
+/// stacked vertically — the new stage does not hide the first.
+// r[verify fx.stack.strip]
+#[tokio::test]
+async fn stacked_stages_are_all_visible_as_rows() -> dioxus_test::Result<()> {
+    use dioxus_test::Modifiers;
+    let mut fx = mount();
+    // One stage: a single row, header hidden (the plain plugin look).
+    fx.tester.query(by_testid("stage-row-1")).immediately()?;
+    assert!(
+        fx.tester.query(by_testid("stage-row-header-1")).immediately().is_err(),
+        "a single-stage stack must not show row headers"
+    );
+
+    click_rail_mods(&mut fx, "opto", Modifiers::SHIFT).await;
+
+    // Two rows now, both with real (non-collapsed) layout, both faces up:
+    // row 1 the FTS surface (graph), row 2 the LA-2A faceplate.
+    let row1 = fx.tester.query(by_testid("stage-row-1")).immediately()?;
+    let row2 = fx.tester.query(by_testid("stage-row-2")).immediately()?;
+    let (_, h1) = row1.size();
+    let (_, h2) = row2.size();
+    assert!(h1 > 100.0 && h2 > 100.0, "rows collapsed: {h1} / {h2}");
+    fx.tester.query(by_testid("comp-graph")).immediately()?;
+    fx.tester.query(by_testid("hardware-panel")).immediately()?;
+    // Headers appear, and the focused row is the new stage.
+    let hdr2 = fx.tester.query(by_testid("stage-row-header-2")).immediately()?;
+    assert!(hdr2.inner_html().contains("LA-2A"));
+    assert_eq!(row2.attribute("data-focused").as_deref(), Some("true"));
+    Ok(())
+}
+
 /// Ctrl+Shift-click adds the style on a NEW parallel lane.
 // r[verify fx.stack.add]
 #[tokio::test]

@@ -158,6 +158,19 @@ pub fn editor_size_for(profile_index: usize, form: fts_audio_ui::EditorForm) -> 
     )
 }
 
+/// The editor size for a STACK of `n_stages` rows (`fx.stack.strip`): one
+/// face's box per stage, extending the window downward, capped at the
+/// resize bounds — past the cap the rows share what there is.
+pub fn stack_editor_size(
+    profile_index: usize,
+    form: fts_audio_ui::EditorForm,
+    n_stages: usize,
+) -> (u32, u32) {
+    let (w, h) = editor_size_for(profile_index, form);
+    let max_h = crate::control_view::max_editor_size().1 as u32;
+    (w, (h * n_stages.max(1) as u32).min(max_h))
+}
+
 /// The editor body for a profile index.
 ///
 /// `advanced` is the FTS surface's page selection; the hardware faces ignore

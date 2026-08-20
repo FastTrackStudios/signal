@@ -39,6 +39,10 @@ dioxus = { workspace = true }
 name = "screenshots"
 required-features = ["native"]
 
+[[test]]
+name = "emphasis_eq"
+required-features = ["native"]
+
 [dev-dependencies]
 dioxus = { workspace = true }
 dioxus-test = { workspace = true }

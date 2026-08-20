@@ -112,6 +112,10 @@ pub fn EmphasisView(
     let mut bands = use_signal(|| bands_vec.clone());
     *bands.write() = bands_vec;
 
+    // No instrument cheat-sheet in an embedded EQ — the zone labels are
+    // about MIX moves, and this curve is a drive control.
+    let overlay_off = use_signal(|| eq_ui::eq_graph::OverlayChoice::Off);
+
     let params_change = params.clone();
     let ctx_change = ctx.clone();
     let params_remove = params.clone();
@@ -126,6 +130,8 @@ pub fn EmphasisView(
                 bands,
                 db_range: 12.0,
                 auto_range: false,
+                show_hints: false,
+                overlay_sel: overlay_off,
                 sample_rate: 48_000.0,
                 on_band_change: move |(idx, band): (usize, EqBand)| {
                     commit_band(&params_change, &ctx_change, idx, &band);
