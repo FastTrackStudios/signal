@@ -158,17 +158,72 @@ pub fn editor_size_for(profile_index: usize, form: fts_audio_ui::EditorForm) -> 
     )
 }
 
-/// The editor size for a STACK of `n_stages` rows (`fx.stack.strip`): one
-/// face's box per stage, extending the window downward, capped at the
-/// resize bounds — past the cap the rows share what there is.
-pub fn stack_editor_size(
-    profile_index: usize,
+/// Height of a stage row's header strip, in CSS px.
+pub const ROW_HEADER_H: f64 = 18.0;
+
+/// The row height a stage's face WANTS at `row_w` window width — so a
+/// faceplate fills its row instead of floating in dead space: a hardware
+/// panel's row is its design aspect at full width (the drawing's own
+/// proportions, rack ears to rack ears), the FTS surface's is the graph's
+/// standard height.
+pub fn preferred_row_height(profile_index: usize, row_w: f64) -> f64 {
+    let face_w = (row_w - crate::control_view::RAIL_W).max(1.0);
+    match units::design_for(profile_id_for_index(profile_index)) {
+        Some(design) => {
+            let scale = (face_w / design.w)
+                .clamp(crate::hardware::panel_svg::MIN_SCALE, crate::hardware::panel_svg::MAX_SCALE);
+            (design.h * scale).max(160.0)
+        }
+        // The FTS surface (graph) is flexible; give it its standard box.
+        None => crate::control_view::EDITOR_H as f64,
+    }
+}
+
+/// The stack's rows at `row_w` width, each at its face's preferred height
+/// (`fx.stack.strip`): `(heights, total)`, headers included when more than
+/// one stage is up, scaled down together when the total passes the resize
+/// bound so the proportions hold.
+pub fn stack_row_heights(
+    params: &crate::params::CompParams,
+    rows: &[usize],
+    row_w: f64,
+) -> (Vec<f64>, f64) {
+    let with_headers = rows.len() > 1;
+    let mut heights: Vec<f64> = rows
+        .iter()
+        .map(|&si| {
+            preferred_row_height(params.stage(si).resolved_profile_index(), row_w)
+                + if with_headers { ROW_HEADER_H } else { 0.0 }
+        })
+        .collect();
+    let total: f64 = heights.iter().sum();
+    let max_h = crate::control_view::max_editor_size().1 as f64;
+    if total > max_h {
+        let k = max_h / total;
+        for h in &mut heights {
+            *h *= k;
+        }
+        (heights, max_h)
+    } else {
+        (heights, total)
+    }
+}
+
+/// The editor size for a STACK (`fx.stack.strip`): the form's width, the sum
+/// of every row's preferred height, capped at the resize bounds.
+pub fn stack_editor_size_rows(
+    params: &crate::params::CompParams,
+    rows: &[usize],
     form: fts_audio_ui::EditorForm,
-    n_stages: usize,
 ) -> (u32, u32) {
-    let (w, h) = editor_size_for(profile_index, form);
-    let max_h = crate::control_view::max_editor_size().1 as u32;
-    (w, (h * n_stages.max(1) as u32).min(max_h))
+    let focused = rows.first().copied().unwrap_or(0);
+    let (w, single_h) =
+        editor_size_for(params.stage(focused).resolved_profile_index(), form);
+    if rows.len() <= 1 {
+        return (w, single_h);
+    }
+    let (_, total) = stack_row_heights(params, rows, w as f64);
+    (w, (total.ceil() as u32).max(single_h))
 }
 
 /// The editor body for a profile index.

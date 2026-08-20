@@ -224,21 +224,31 @@ fn AppShell() -> Element {
         // Absent when the editor is embedded without a nice-plug window
         // (headless tests): nothing to resize, so nothing to do.
         if let Some(state) = try_consume_context::<std::sync::Arc<nice_plug_dioxus::DioxusState>>() {
-            let (w, h) = crate::faces::stack_editor_size(profile_idx, form, n_rows);
+            let (w, h) = crate::faces::stack_editor_size_rows(&params, &rows, form);
             if state.size() != (w, h) {
                 state.request_resize(w, h);
             }
         }
     }
 
-    // Row geometry: the window (or the design size, headless) divided over
-    // the rows. Every stage gets the same box; a face scales itself to it
-    // through the `PanelBox` it is given.
+    // Row geometry: each row at ITS face's preferred height (a faceplate's
+    // own aspect at full width — no dead space under a shallow panel), the
+    // set scaled together when the window cannot grow to the sum. The face
+    // scales itself to the box through the `PanelBox` it is given.
     let (win_w, win_h) = fts_audio_ui::hardware::panel::window_logical_size().unwrap_or({
-        let (w, h) = crate::faces::stack_editor_size(profile_idx, form, n_rows);
+        let (w, h) = crate::faces::stack_editor_size_rows(&params, &rows, form);
         (w as f64, h as f64)
     });
-    let row_h = (win_h / n_rows as f64).floor().max(120.0);
+    let (mut row_heights, preferred_total) =
+        crate::faces::stack_row_heights(&params, &rows, win_w);
+    // The window may be a different height than preferred (host clamp, user
+    // resize): scale the rows to what is actually there.
+    if preferred_total > 1.0 && (win_h - preferred_total).abs() > 1.0 {
+        let k = win_h / preferred_total;
+        for h in &mut row_heights {
+            *h *= k;
+        }
+    }
 
     let base_css = "*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; } \
          html, body { width: 100%; height: 100%; overflow: hidden; \
@@ -374,7 +384,7 @@ fn AppShell() -> Element {
                                 key: "{si}-{params.stage(si).resolved_profile_index()}",
                                 stage: si,
                                 row_w: win_w,
-                                row_h,
+                                row_h: row_heights[row_idx],
                                 show_header: n_rows > 1,
                                 is_last: row_idx == n_rows - 1,
                                 advanced: is_advanced,
@@ -423,7 +433,11 @@ fn StageRow(
     let root_focus = crate::focus::use_focus_signal();
     let focused = root_focus.map(|f| f.read().0 == stage).unwrap_or(true);
 
-    let header_h = if show_header { 18.0 } else { 0.0 };
+    let header_h = if show_header {
+        crate::faces::ROW_HEADER_H
+    } else {
+        0.0
+    };
     // Shadow the focus for everything inside the row, and hand the face the
     // row's content box.
     use_context_provider(|| Signal::new(crate::focus::FocusedStage(stage)));

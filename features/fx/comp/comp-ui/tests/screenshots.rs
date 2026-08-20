@@ -90,7 +90,15 @@ async fn shot_stack_of_three() {
         set_bool(&params.stage3.in_use);
         set_int(&params.stage3.lane, 1);
     }
-    let mut fx = mount_with(params, w, (base_h * 3).min(1320));
+    // The window the editor would ask the host for: each row at its face's
+    // preferred height.
+    let (w, h) = comp_ui::faces::stack_editor_size_rows(
+        &params,
+        &[0, 1, 2],
+        fts_audio_ui::EditorForm::default(),
+    );
+    let _ = base_h;
+    let mut fx = mount_with(params, w, h);
     fx.settle().await;
     shot(&fx, "stack-of-three");
 }
