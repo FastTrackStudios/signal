@@ -13,7 +13,13 @@ Range**, **Resonances** and **Space**. This is what those controls actually do,
 recovered from the shipped KSP, and what Signal must do to match.
 
 Source of truth: `Sampled/Keys/The Grandeur Library/The Grandeur/script_0.ksp`
-(line refs below) plus `persistent_0.tsv` for the shipped defaults. The pack
+(line refs below) plus `persistent_0.tsv` for the shipped defaults.
+
+**Two scripts, not one.** The Grandeur, The Maverick and The Gentleman share
+`NI ESSENTIAL PIANOS - MAIN SCRIPT`; The Giant ships `THE GIANT - MAIN SCRIPT`,
+its own engine. They implement the same Color law, but only the shared script
+carries the per-instrument offsets below — The Giant has no offset term at all.
+An earlier draft of this spec treated all four as one engine; they are not. The pack
 side is `features/rigs/keys/specs/ni-pianos.styx` +
 `signal-sampler --example build_ni_packs`.
 
@@ -64,6 +70,28 @@ sounds like more than a level change:
 
 Implementing (1) alone is the obvious mistake: it gets the sample right and
 still sounds wrong, because the tone curve did not move with it.
+
+r[keys.piano.color.per-instrument-offset]
+`$COLOR_OFFSET` is **not the same for every piano**, so the Color law MUST be
+parameterised per instrument rather than shared. The shared script picks its
+constants by which group is present (`find_group("<n>_DRY_A#-1")`):
+
+| instrument | `$DYN_OFFSET` | `$KK_DYN_OFFSET` | `$LOW_KEYS_OFFSET` | `$COLOR_OFFSET` |
+|---|---|---|---|---|
+| The Maverick (0) | −50 | −25 | 10 | **−5** |
+| The Grandeur (1) | −55 | −25 | 0 | 0 |
+| The Gentleman (3) | −50 | −10 | 22 | 0 |
+| The Giant (own script) | — | — | — | *no offset term* |
+
+The Maverick being −5 means its Color knob is biased: at a nominal 0 it is
+already playing five velocity steps softer than the others. Getting this wrong
+would sound like "the Maverick is a bit dull" and would be very hard to trace.
+
+These constants were invisible until the extractor was fixed — `extract_script`
+took the longest run of printable ASCII, so the umlaut in a German comment
+truncated 73 KB off the head of every `script_0`, taking the whole `on init`
+block with it. See the `nkx-extract` commit "extract_script truncated every
+script with a non-ASCII byte".
 
 r[keys.piano.color.range]
 `Color` MUST expose the range `-50..=+50` with a default of `0`
@@ -119,11 +147,19 @@ r[keys.piano.space.controls]
 Space MUST expose on/off, send amount, pre-delay, size and IR selection
 (`:177-181`; automation names at `:508-510`).
 
-**Blocked**: the IRs are addressed by `load_ir_sample` path rather than by a
-zone, so the zone-driven extractor never pulled them, and `!SpaceNames` /
-`!SpacePaths` are not in the four `.ksp` dumps either — they come from the
-instrument's string tables. Both need the NKI decoder before this is
-implementable. See K1/K5 in `crates/signal/docs/keys-rig-patch-buildout.md`.
+r[keys.piano.space.ir-table]
+The IR menu is 29 entries (`declare const $NUM_IRS := 26` spaces over 29 IRs),
+declared as parallel `!SpaceNames` / `!SpacePaths` arrays — display name
+("Concert Hall 1", "Cham. M. Hall 1") against sample stem
+(`Space_GI_CONCERT HALL`, `Space_GI_CHAMBER MUSIC HALL`). Signal MUST present
+the same names in the same order so a preset written against the plugin means
+the same thing here.
+
+**Partly unblocked**: the name/path tables came back with the extractor fix, so
+the menu is known. Still outstanding is pulling the IR audio itself — the
+`.ncw` files are addressed by `load_ir_sample` path rather than by a zone, so
+the zone-driven extractor does not reach them. See K1/K5 in
+`crates/signal/docs/keys-rig-patch-buildout.md`.
 
 ## Noise groups
 
