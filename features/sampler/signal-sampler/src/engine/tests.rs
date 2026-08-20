@@ -416,6 +416,56 @@
         );
     }
 
+    /// The resonance bed must not be *allocated* with the pedal up, not merely
+    /// faded out — on a ~1000-zone resonance pack that is the difference
+    /// between free and expensive.
+    #[test]
+    fn resonance_zones_are_rejected_until_the_pedal_goes_down() {
+        use crate::piano_voice::{PianoOffsets, PianoVoice};
+        let spec = crate::LibrarySpec::from_styx(
+            "name \"p\"\n\
+             zones (\n\
+               {file \"body.wav\", key_min 60, key_max 60, root_key 60, vel_min 0, vel_max 127, articulation \"DryTones\"}\n\
+               {file \"reso.wav\", key_min 60, key_max 60, root_key 60, vel_min 0, vel_max 127, articulation \"Resonance\"}\n\
+             )\n",
+        )
+        .expect("parse styx");
+        let mut patch = crate::PlayerPatch::from_spec(spec);
+        patch.zone_paths = patch
+            .spec
+            .zones
+            .iter()
+            .map(|z| std::path::PathBuf::from(&z.file))
+            .collect();
+        let mut eng = SampleEngine::new(patch, 48_000, "main", "Main");
+        let body = eng.patch().spec.zones[0].clone();
+        let reso = eng.patch().spec.zones[1].clone();
+
+        eng.set_piano_voice(Some(PianoVoice::new(PianoOffsets::GRANDEUR)));
+
+        // Pedal up: the body sounds, the resonance does not.
+        assert!(eng.zone_selected(&body, 60, 100, ZoneTrigger::Attack));
+        assert!(!eng.zone_selected(&reso, 60, 100, ZoneTrigger::Attack));
+
+        // Pedal down: both.
+        eng.cc(64, 127);
+        assert!(eng.zone_selected(&body, 60, 100, ZoneTrigger::Attack));
+        assert!(eng.zone_selected(&reso, 60, 100, ZoneTrigger::Attack));
+
+        // Control at zero silences it even with the pedal held.
+        let mut pv = PianoVoice::new(PianoOffsets::GRANDEUR);
+        pv.resonance = 0.0;
+        eng.set_piano_voice(Some(pv));
+        assert!(!eng.zone_selected(&reso, 60, 100, ZoneTrigger::Attack));
+        assert!(eng.zone_selected(&body, 60, 100, ZoneTrigger::Attack), "body unaffected");
+
+        // And with no piano voice installed, a pack that happens to name an
+        // articulation "Resonance" is not gated behind a control it has not got.
+        eng.set_piano_voice(None);
+        eng.cc(64, 0);
+        assert!(eng.zone_selected(&reso, 60, 100, ZoneTrigger::Attack));
+    }
+
     #[test]
     fn without_a_piano_voice_nothing_changes() {
         let mut eng = two_layer_piano();

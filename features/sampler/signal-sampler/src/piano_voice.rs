@@ -100,6 +100,14 @@ pub struct PianoVoice {
     /// `$Ana_mnuVelo == 4` — the shipped default, and the only mode that
     /// brings `kk_dynamics` into the helper.
     pub velo_mode_4: bool,
+    /// `$Mas_sliAnaReso` normalised to 0..1 — the level of the sympathetic
+    /// string-resonance group, which sounds **only while the sustain pedal is
+    /// down** (`r[keys.piano.resonance.pedal-gate]`).
+    ///
+    /// Shipped default 0.63 (`persistent_0.tsv: $Mas_sliAnaReso 630000`, on
+    /// Kontakt's 0..1e6 scale). At 0 the group is silent and need not be
+    /// loaded at all — which is the point of shipping it as its own pack.
+    pub resonance: f32,
     pub offsets: PianoOffsets,
 }
 
@@ -109,6 +117,7 @@ impl Default for PianoVoice {
             color: 0,
             dynamic_range: 0,
             velo_mode_4: true,
+            resonance: 0.63,
             offsets: PianoOffsets::GRANDEUR,
         }
     }
@@ -148,6 +157,32 @@ impl PianoVoice {
     /// the one before it. Clamping is what the code plainly means.
     fn effective_color(&self) -> i32 {
         (self.color + self.offsets.color).clamp(-50, 50)
+    }
+
+    /// Whether an articulation id names a sympathetic-resonance group.
+    ///
+    /// These are the group names `build_ni_packs` writes from the KSP's own
+    /// twelve-group table: `Resonance` (the pedal-down string bed) and `SSR`
+    /// (sympathetic string resonance / overtones). Both are pedal-gated and
+    /// both ride the Resonances control.
+    pub fn is_resonance_group(articulation: &str) -> bool {
+        articulation.eq_ignore_ascii_case("Resonance") || articulation.eq_ignore_ascii_case("SSR")
+    }
+
+    /// Gain for a resonance voice, or `None` if it must not sound.
+    ///
+    /// `r[keys.piano.resonance.pedal-gate]`: silent unless the pedal is down
+    /// AND the control is above zero — the KSP's
+    /// `if ($Mas_sliAnaReso > 0 and $PedalDown = 1)`.
+    pub fn resonance_gain_db(&self, pedal_held: bool) -> Option<f32> {
+        if !pedal_held || self.resonance <= 0.0 {
+            return None;
+        }
+        // Kontakt's volume scale is not linear in the slider; 0..1 maps onto
+        // -inf..0 dB as a straight amplitude ratio here, which keeps the
+        // control's *shape* without pretending to Kontakt's exact taper. The
+        // taper is a K6 A/B question, not something to guess at.
+        Some(20.0 * self.resonance.clamp(0.0, 1.0).log10())
     }
 
     /// The KSP's Dynamic Range gain, in millidecibels — the literal law,
@@ -390,6 +425,41 @@ mod tests {
             b.apply(40).trim_db,
             "but the knob's effect is the same either way"
         );
+    }
+
+    #[test]
+    fn resonance_is_silent_unless_the_pedal_is_down() {
+        let mut v = PianoVoice::default();
+        assert_eq!(v.resonance, 0.63, "the shipped $Mas_sliAnaReso");
+
+        assert!(
+            v.resonance_gain_db(false).is_none(),
+            "pedal up: no resonance at all, not merely quiet"
+        );
+        let held = v.resonance_gain_db(true).expect("pedal down: sounds");
+        assert!(held < 0.0 && held > -6.0, "0.63 is a trim, got {held}");
+
+        // Control at zero is also silent, pedal or not — that is what lets a
+        // tight-memory rig skip the resonance pack entirely.
+        v.resonance = 0.0;
+        assert!(v.resonance_gain_db(true).is_none());
+        assert!(v.resonance_gain_db(false).is_none());
+
+        // Full is unity, not a boost.
+        v.resonance = 1.0;
+        assert_eq!(v.resonance_gain_db(true), Some(0.0));
+    }
+
+    #[test]
+    fn resonance_groups_are_named_from_the_ksp_group_table() {
+        assert!(PianoVoice::is_resonance_group("Resonance"));
+        assert!(PianoVoice::is_resonance_group("SSR"));
+        assert!(PianoVoice::is_resonance_group("resonance"), "case-insensitive");
+        // The struck note and its noises are not resonance and must never be
+        // pedal-gated — that would silence the piano.
+        for other in ["DryTones", "Release", "Hammer", "Damper", "Pedal", "Stringnoise"] {
+            assert!(!PianoVoice::is_resonance_group(other), "{other}");
+        }
     }
 
     #[test]

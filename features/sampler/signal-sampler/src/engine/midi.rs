@@ -1553,6 +1553,9 @@ impl SampleEngine {
         let z = &self.patch.spec.zones[idx];
         let (root_key, tune_cents, gain_db, mic, pan) =
             (z.root_key, z.tune_cents, z.gain_db, z.mic.clone(), z.pan);
+        // Copied out for the same borrow reason: the piano-voice gain below
+        // needs it after `self` has been mutably borrowed.
+        let zone_artic = z.articulation.clone();
         // Per-articulation fixed transpose (CSS Harmonics -12: shipped zones are
         // mapped an octave above CSS's sounded pitch). Applied to the playback
         // rate only; zone selection already keyed off the played note.
@@ -1771,10 +1774,17 @@ impl SampleEngine {
         // The piano controls' compensating trim for this note — 0 dB (unity)
         // whenever no piano voice is installed. Multiplicative alongside the
         // zone gain so CC-driven re-levelling downstream still works.
-        let gain = 10.0f32.powf(gain_db / 20.0)
-            * gain_scale
-            * makeup
-            * db_to_gain(self.piano_trim_db);
+        //
+        // A resonance voice takes the Resonances level *instead* of the
+        // note's Color/Dynamic trim: it is a sympathetic bed, not the struck
+        // note, and the KSP levels it on its own bus.
+        let piano_db = match self.piano_voice {
+            Some(pv) if crate::piano_voice::PianoVoice::is_resonance_group(&zone_artic) => {
+                pv.resonance_gain_db(self.cc64_held).unwrap_or(0.0)
+            }
+            _ => self.piano_trim_db,
+        };
+        let gain = 10.0f32.powf(gain_db / 20.0) * gain_scale * makeup * db_to_gain(piano_db);
         let mic_index = self.mic_index_for(&mic);
 
         // Decoded ENV_FLEX amp envelope for this voice's articulation family

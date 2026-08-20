@@ -341,6 +341,18 @@ impl SampleEngine {
         if velocity < zone.vel_min || velocity > zone.vel_max {
             return false;
         }
+        // Sympathetic resonance sounds only under a held pedal, and only when
+        // its control is up (`r[keys.piano.resonance.pedal-gate]`). Gating here
+        // rather than at spawn keeps the voice from being allocated at all,
+        // which is the difference between a quiet voice and no voice on a
+        // 1000-zone resonance pack.
+        if let Some(pv) = self.piano_voice {
+            if crate::piano_voice::PianoVoice::is_resonance_group(&zone.articulation)
+                && pv.resonance_gain_db(self.cc64_held).is_none()
+            {
+                return false;
+            }
+        }
         // An explicit pin (percussion kits / routed triggers) matches by
         // articulation ONLY, ignoring the key — any routed note plays the pinned
         // articulation's zone.
