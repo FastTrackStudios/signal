@@ -89,7 +89,88 @@ impl SoundsourceIndex {
     }
 
     /// Look a soundsource up by its patch name (case-insensitive).
+    ///
+    /// Falls back to a normalized match when the exact name misses, because
+    /// patch names and extracted folder names disagree in two systematic ways:
+    ///
+    /// - Omnisphere marks a multi-dynamic soundsource with a trailing `^`
+    ///   (`Choir Men Ohs  ^`, sometimes double-spaced) and a patch selects one
+    ///   of its layers with a ` - <dyn>` suffix (`Choir Men Ohs - mf`). Our
+    ///   extraction flattens the dynamics into the one folder, so the suffix
+    ///   has nothing left to select and the base name is the right target.
+    /// - Whitespace runs differ between the two.
+    ///
+    /// Exact matches always win, so this can only rescue a lookup that would
+    /// otherwise have failed outright.
     pub fn find(&self, name: &str) -> Option<&Path> {
-        self.by_name.get(&name.to_lowercase()).map(|p| p.as_path())
+        if let Some(p) = self.by_name.get(&name.to_lowercase()) {
+            return Some(p.as_path());
+        }
+        let want = normalize_ss_name(name);
+        if want.is_empty() {
+            return None;
+        }
+        self.by_name
+            .iter()
+            .find(|(k, _)| normalize_ss_name(k) == want)
+            .map(|(_, p)| p.as_path())
+    }
+}
+
+/// Reduce a soundsource name to the part that identifies the *source* rather
+/// than which of its dynamic layers a patch wanted.
+fn normalize_ss_name(name: &str) -> String {
+    let mut s = name.to_lowercase();
+    // Drop the multi-dynamic marker.
+    s = s.trim_end().trim_end_matches('^').trim_end().to_string();
+    // Drop a trailing dynamic selector: " - mf", " - ff", " - p" …
+    if let Some((head, tail)) = s.rsplit_once(" - ") {
+        const DYNAMICS: [&str; 8] = ["ppp", "pp", "p", "mp", "mf", "f", "ff", "fff"];
+        if DYNAMICS.contains(&tail.trim()) {
+            s = head.to_string();
+        }
+    }
+    // Collapse whitespace runs — folder names carry stray doubles.
+    s.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::normalize_ss_name;
+
+    #[test]
+    fn dynamic_suffix_and_multidynamic_marker_normalize_together() {
+        // The real mismatch: the gig's Gentle Gothics asks for these names,
+        // the extraction wrote those folders.
+        assert_eq!(
+            normalize_ss_name("Choir Men Ohs - mf"),
+            normalize_ss_name("Choir Men Ohs  ^")
+        );
+        assert_eq!(
+            normalize_ss_name("Choir Women Oos - mf"),
+            normalize_ss_name("Choir Women Oos  ^")
+        );
+        // Every dynamic marker, not just mf.
+        for dyn_ in ["ppp", "pp", "p", "mp", "mf", "f", "ff", "fff"] {
+            assert_eq!(normalize_ss_name(&format!("Pad - {dyn_}")), "pad");
+        }
+    }
+
+    #[test]
+    fn a_hyphen_that_is_not_a_dynamic_is_left_alone() {
+        // Real soundsource names contain hyphens; only a trailing dynamic
+        // token may be stripped, or distinct sources would collide.
+        assert_eq!(
+            normalize_ss_name("OB-8 PWM Big Strings"),
+            "ob-8 pwm big strings"
+        );
+        assert_eq!(
+            normalize_ss_name("Rhodes - LA Custom"),
+            "rhodes - la custom"
+        );
+        assert_ne!(
+            normalize_ss_name("Choir Men Ohs - mf"),
+            normalize_ss_name("Choir Men Ahs - mf")
+        );
     }
 }

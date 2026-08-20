@@ -465,25 +465,36 @@ pub fn worship_profile() -> KeysProfile {
             EngineDef {
                 name: "Pad".into(),
                 gain_db: 0.0,
-                // The wash under everything: "American Obesity" (Live
-                // Keyboardist), rebuilt as one layer of the Signal Engine.
-                // The patch stacks two soundsources — OB-8 PWM Big Strings
-                // over a Juno 60 sub — so it lands as module A + module B,
-                // which is exactly what the quad is for.
+                // Both lanes are read off the live rig's `Omni Pads` instance
+                // rather than guessed — see `gig_extract omni`. Each patch
+                // stacks two soundsources, which is what modules A and B are
+                // for; levels are the Omnisphere part levels in dB.
                 layers: vec![
+                    // "KEY │ American Obesity" (Live Keyboardist), part level
+                    // 0.44. An earlier draft had module B as a Juno 60 sub —
+                    // the patch actually stacks a Prophet 5.
                     LayerDef {
                         name: "Pad".into(),
                         patch: "OB-8 PWM Big Strings".into(),
-                        extra_modules: vec!["Juno 60 Raw Sub".into()],
-                        gain_db: 0.0,
+                        extra_modules: vec!["Prophet 5 Classic".into()],
+                        gain_db: -7.1,
                         key_lo: 0,
                         key_hi: 127,
                         exclude_global: false,
                     },
-                    // The bright half of the wash — the octave-up sparkle that
-                    // sits over the pad rather than inside it, so it can be
-                    // ridden (or dropped) on its own.
-                    LayerDef::new("Shimmer", ""),
+                    // "AD │ Gentle Gothics" (Ambient Dreams), part level 0.30.
+                    // Not a synth sparkle at all — it is a men's + women's
+                    // choir, which is why the wash sounds vocal rather than
+                    // bright.
+                    LayerDef {
+                        name: "Shimmer".into(),
+                        patch: "Choir Men Ohs - mf".into(),
+                        extra_modules: vec!["Choir Women Oos - mf".into()],
+                        gain_db: -10.5,
+                        key_lo: 0,
+                        key_hi: 127,
+                        exclude_global: false,
+                    },
                 ],
             },
             EngineDef {

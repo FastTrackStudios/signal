@@ -183,6 +183,10 @@ fn main() {
                     continue;
                 };
                 println!("\n=== [{}] {}", p.rackspace, p.node_name);
+                // The Multi parsed properly, so each part's layers (and the
+                // soundsource each one loads) come out too — which is what you
+                // actually need to rebuild the patch, not just its name.
+                let parsed = signal_synth::omni_import::parse_multi(&xml).ok();
                 for (i, (name, library)) in part_names(&xml).into_iter().enumerate() {
                     if name.is_empty() || name == "Empty" {
                         continue;
@@ -193,6 +197,37 @@ fn main() {
                         format!("part {i}")
                     };
                     println!("  {slot:<7} {name}   [{library}]");
+                    // Part n is index n-1 in the parts list; the multi's own
+                    // descriptor is not a part.
+                    let Some(part) = parsed
+                        .as_ref()
+                        .filter(|_| i > 0)
+                        .and_then(|m| m.parts.get(i - 1))
+                    else {
+                        continue;
+                    };
+                    let (patch, level, muted) = part;
+                    for (n, layer) in patch.layers.iter().enumerate() {
+                        if layer.soundsource.is_empty() {
+                            continue;
+                        }
+                        println!(
+                            "            layer {}: {}   [{}]{}",
+                            (b'A' + n as u8) as char,
+                            layer.soundsource,
+                            layer.ss_library,
+                            if layer.filter_active {
+                                format!("  filter {}", layer.filter_name)
+                            } else {
+                                String::new()
+                            }
+                        );
+                    }
+                    println!(
+                        "            level {:.2}{}",
+                        level,
+                        if *muted { "  (MUTED)" } else { "" }
+                    );
                 }
             }
         }
