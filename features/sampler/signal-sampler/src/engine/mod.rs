@@ -588,6 +588,19 @@ pub struct SampleEngine {
     /// Set alongside `legato_sustain` but only when the attack velocity is in
     /// zone 1-2; the crossfade-fill still applies to every connected note.
     legato_trim: bool,
+    /// The NI-piano Color / Dynamic Range controls, when this engine is
+    /// hosting one of those libraries. `None` for everything else, which is
+    /// most things — see [`crate::piano_voice`].
+    piano_voice: Option<crate::piano_voice::PianoVoice>,
+    /// Gain trim (dB) the piano controls computed for the note currently being
+    /// dispatched, folded into the voice gain at spawn.
+    ///
+    /// A field rather than a parameter because `note_on` reaches `spawn_zone_voice`
+    /// through several layers (divisi, legato, line dispatch) that have no
+    /// business knowing about it, and the whole path is synchronous within one
+    /// `note_on` call — it is set immediately before dispatch and consumed
+    /// during it.
+    piano_trim_db: f32,
     /// `$1z3x0` — the AB-volume offset `change_vol`'d onto the connected body
     /// (see [`Engine::css_ab_dip_db`]). Applied on its own, NOT gated on
     /// `legato_trim`: in the script the `$3tsb0` chord trim and this dip are
@@ -873,6 +886,8 @@ impl SampleEngine {
             sustain_fade_in: None,
             legato_sustain: false,
             legato_trim: false,
+            piano_voice: None,
+            piano_trim_db: 0.0,
             legato_attack_dip_db: 0.0,
             ab_anchor_frame: 0,
             legato_glide: None,
@@ -1107,6 +1122,20 @@ impl SampleEngine {
     /// Pitch-bend range in semitones (full wheel throw; default 2).
     pub fn set_bend_range(&mut self, semitones: f32) {
         self.bend_range_st = semitones.clamp(0.0, 24.0);
+    }
+
+    /// Install (or clear) the NI-piano Color / Dynamic Range controls.
+    ///
+    /// Pass the offsets for the library this engine is playing —
+    /// [`PianoOffsets::for_library`](crate::piano_voice::PianoOffsets::for_library)
+    /// derives them from a pack name. `None` restores plain behaviour.
+    pub fn set_piano_voice(&mut self, voice: Option<crate::piano_voice::PianoVoice>) {
+        self.piano_voice = voice;
+    }
+
+    /// The piano controls in force, if any.
+    pub fn piano_voice(&self) -> Option<crate::piano_voice::PianoVoice> {
+        self.piano_voice
     }
 
     pub fn set_unison(&mut self, voices: u8, detune_cents: f32, width: f32) {

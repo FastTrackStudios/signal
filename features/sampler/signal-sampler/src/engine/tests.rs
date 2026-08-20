@@ -359,6 +359,102 @@
         SampleEngine::new(patch, 48_000, "", "")
     }
 
+    /// A two-velocity-layer piano note: soft below 64, hard above.
+    ///
+    /// `from_spec` leaves `zone_paths` empty, and `is_zoned()` keys off that,
+    /// so a zone-mode patch has to have them filled in or every `resolve_zone`
+    /// silently returns `None`.
+    fn two_layer_piano() -> SampleEngine {
+        let spec = crate::LibrarySpec::from_styx(
+            "name \"p\"\n\
+             zones (\n\
+               {file \"soft.wav\", key_min 60, key_max 60, root_key 60, vel_min 0, vel_max 63, articulation \"DryTones\"}\n\
+               {file \"hard.wav\", key_min 60, key_max 60, root_key 60, vel_min 64, vel_max 127, articulation \"DryTones\"}\n\
+             )\n",
+        )
+        .expect("parse styx");
+        let mut patch = crate::PlayerPatch::from_spec(spec);
+        patch.zone_paths = patch
+            .spec
+            .zones
+            .iter()
+            .map(|z| std::path::PathBuf::from(&z.file))
+            .collect();
+        SampleEngine::new(patch, 48_000, "main", "Main")
+    }
+
+    /// Color must reach zone selection: a note played soft, with Color hard
+    /// up, has to pick the hard-struck recording. Selecting the same sample
+    /// and merely turning it up is the failure this guards
+    /// (`r[keys.piano.color.three-effects]`).
+    #[test]
+    fn piano_color_shifts_which_velocity_layer_plays() {
+        use crate::piano_voice::{PianoOffsets, PianoVoice};
+        let mut eng = two_layer_piano();
+
+        let played = 40u8;
+        let soft = eng.patch().resolve_zone(60, played, 0).expect("soft zone");
+        assert!(soft.path.ends_with("soft.wav"), "as played picks soft");
+
+        let mut pv = PianoVoice::new(PianoOffsets::GRANDEUR);
+        pv.color = 50;
+        let shifted = pv.apply(played).velocity;
+        assert_eq!(shifted, 90);
+        let hard = eng.patch().resolve_zone(60, shifted, 0).expect("hard zone");
+        assert!(hard.path.ends_with("hard.wav"), "Color reaches the hard layer");
+
+        // And the engine actually runs it on note-on, recording the
+        // compensating trim for the voice about to spawn.
+        eng.set_piano_voice(Some(pv));
+        eng.note_on(60, played);
+        // (-40 + 150) * -120 mdB at this velocity — the hard layer is louder,
+        // so the trim pulls it back down.
+        assert!(
+            (eng.piano_trim_db - -13.2).abs() < 0.01,
+            "compensating trim applied, got {}",
+            eng.piano_trim_db
+        );
+    }
+
+    #[test]
+    fn without_a_piano_voice_nothing_changes() {
+        let mut eng = two_layer_piano();
+        assert!(eng.piano_voice().is_none());
+        eng.note_on(60, 40);
+        assert_eq!(eng.piano_trim_db, 0.0, "no trim when no piano voice");
+    }
+
+    /// A keyswitch is a command, not a note. Re-aiming it with a tone control
+    /// would silently select the wrong articulation.
+    #[test]
+    fn piano_color_leaves_keyswitches_alone() {
+        use crate::piano_voice::{PianoOffsets, PianoVoice};
+        let mut eng = engine_from_styx(
+            "name \"p\"\n\
+             keyswitch {\n\
+               notes (\n\
+                 {\n\
+                   note \"C0\"\n\
+                   label \"A\"\n\
+                   vel_map { 0-127 \"A\" }\n\
+                 }\n\
+               )\n\
+             }\n\
+             zones (\n\
+               {file \"a.wav\", key_min 60, key_max 60, root_key 60, vel_min 0, vel_max 127, articulation \"A\"}\n\
+               {file \"b.wav\", key_min 60, key_max 60, root_key 60, vel_min 0, vel_max 127, articulation \"B\"}\n\
+             )\n",
+        );
+        let mut pv = PianoVoice::new(PianoOffsets::GRANDEUR);
+        pv.color = -50;
+        eng.set_piano_voice(Some(pv));
+        eng.note_on(12, 100);
+        assert_eq!(
+            eng.piano_trim_db, 0.0,
+            "a keyswitch takes no trim and no velocity shift"
+        );
+    }
+
     #[test]
     fn percussion_single_key_fires_on_any_note() {
         // Kick-style pack: drum-kit, one articulation on a single key.

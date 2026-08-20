@@ -70,6 +70,23 @@ impl SampleEngine {
     }
 
     pub fn note_on(&mut self, note: u8, velocity: u8) {
+        // NI-piano Color / Dynamic Range, before anything looks at velocity.
+        // Color is a velocity offset (r[keys.piano.color.velocity-offset]), so
+        // it has to land here or zone selection, the per-velocity volume and
+        // the filter cutoff all see the wrong number. A keyswitch is a command,
+        // not a note, and must not be re-aimed by a tone control.
+        let velocity = match self.piano_voice {
+            Some(pv) if velocity > 0 && !self.keyswitch_notes.contains_key(&note) => {
+                let shift = pv.apply(velocity);
+                self.piano_trim_db = shift.trim_db;
+                shift.velocity
+            }
+            _ => {
+                self.piano_trim_db = 0.0;
+                velocity
+            }
+        };
+
         // A pending CC58 velocity-group resolves to its concrete articulation
         // from THIS note's velocity before any routing decision — so the live
         // auto-divisi gate below and every downstream path see the real artic
@@ -1751,7 +1768,13 @@ impl SampleEngine {
         } else {
             None
         };
-        let gain = 10.0f32.powf(gain_db / 20.0) * gain_scale * makeup;
+        // The piano controls' compensating trim for this note — 0 dB (unity)
+        // whenever no piano voice is installed. Multiplicative alongside the
+        // zone gain so CC-driven re-levelling downstream still works.
+        let gain = 10.0f32.powf(gain_db / 20.0)
+            * gain_scale
+            * makeup
+            * db_to_gain(self.piano_trim_db);
         let mic_index = self.mic_index_for(&mic);
 
         // Decoded ENV_FLEX amp envelope for this voice's articulation family

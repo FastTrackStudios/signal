@@ -98,6 +98,9 @@ pub mod node_render;
 pub mod nord;
 pub mod pack_cli;
 pub mod pack_rewrite;
+/// The NI Essential Pianos' Color / Dynamic Range controls, as velocity-domain
+/// transforms. See `features/rigs/keys/spec/piano-voice.md`.
+pub mod piano_voice;
 pub mod ref_match;
 pub mod report;
 pub mod preset_registry;
