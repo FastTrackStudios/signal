@@ -182,6 +182,11 @@ impl SynthRigBackend {
                     let mut rig = self.inner.rig.lock().unwrap();
                     *rig = Some(r);
                 }
+                // A freshly opened rig has no MIDI input yet, and every
+                // caller of ensure_open needs one — attaching here makes
+                // this THE single open path, so a rig can never end up
+                // audible-but-deaf.
+                self.reattach_midi();
                 if let Ok(mut s) = self.inner.state.lock() {
                     if s.loaded.is_none() {
                         s.loaded = Some(idx);
@@ -291,9 +296,8 @@ impl SynthRigSvc for SynthRigBackend {
         let _ = std::thread::Builder::new()
             .name("synth-open".into())
             .spawn(move || {
-                if b.ensure_open() {
-                    b.reattach_midi();
-                }
+                // ensure_open attaches MIDI itself — the single open path.
+                let _ = b.ensure_open();
                 b.publish_all();
             });
     }

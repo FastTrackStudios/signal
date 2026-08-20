@@ -2610,6 +2610,11 @@ impl KeysRigBackend {
                     let mut rig = self.inner.rig.lock().unwrap();
                     *rig = Some(r);
                 }
+                // A freshly opened rig has no MIDI input yet, and every
+                // caller of ensure_open (start, preset load, rebuild) needs
+                // one — attaching here makes this THE single open path, so a
+                // rig can never end up audible-but-deaf.
+                self.reattach_midi();
                 if let Ok(mut s) = self.inner.state.lock() {
                     if s.loaded.is_none() {
                         s.loaded = Some(idx);
@@ -2794,8 +2799,9 @@ impl KeysRigSvc for KeysRigBackend {
             .name("keys-open".into())
             .spawn(move || {
                 let _rt = keys_runtime().enter();
+                // ensure_open attaches MIDI itself — it is the single open
+                // path for every entry point (start, preset load, rebuild).
                 if b.ensure_open() {
-                    b.reattach_midi();
                     // Lanes start at their profile/scene levels, not unity.
                     b.apply_mixer();
                 }
