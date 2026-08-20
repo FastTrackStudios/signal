@@ -271,25 +271,12 @@ pub const DEFAULT_CLICK_SAMPLE: &str =
 /// Decode a click WAV to a mono f32 grain at `sample_rate` (linear-resampled),
 /// trimmed to ~120 ms so beats never overlap. `None` if it can't be read.
 fn load_click_grain(path: &Path, sample_rate: u32) -> Option<Vec<f32>> {
-    let data = crate::engine::cache::load_sample(path).ok()?;
-    let ch = data.channels.max(1) as usize;
-    let src_frames = data.num_frames;
-    let mono: Vec<f32> = (0..src_frames)
-        .map(|f| {
-            (0..ch).map(|c| data.pcm.sample(f * ch + c)).sum::<f32>() / ch as f32
-        })
-        .collect();
-    let ratio = data.sample_rate as f64 / sample_rate as f64;
-    let out_len = ((src_frames as f64 / ratio) as usize).min(sample_rate as usize / 8);
-    let mut grain = Vec::with_capacity(out_len);
-    for i in 0..out_len {
-        let sp = i as f64 * ratio;
-        let i0 = sp as usize;
-        let frac = (sp - i0 as f64) as f32;
-        let a = mono.get(i0).copied().unwrap_or(0.0);
-        let b = mono.get(i0 + 1).copied().unwrap_or(a);
-        grain.push(a + (b - a) * frac);
-    }
+    // Low (linear) quality: a click grain's fidelity is irrelevant next to
+    // its timing, and this runs per report render.
+    let (mut grain, _) =
+        fts_sample::load_mono_f32(path, Some(sample_rate), fts_sample::ResampleQuality::Low)
+            .ok()?;
+    grain.truncate(sample_rate as usize / 8);
     Some(grain)
 }
 

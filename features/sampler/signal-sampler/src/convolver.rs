@@ -41,25 +41,12 @@ impl Convolver {
     /// and truncates to [`MAX_TAPS`].
     pub fn load(path: impl AsRef<Path>) -> Result<Self, String> {
         let path = path.as_ref();
-        let mut reader =
-            hound::WavReader::open(path).map_err(|e| format!("open IR {}: {e}", path.display()))?;
-        let spec = reader.spec();
-        let ch = spec.channels.max(1) as usize;
-
-        let interleaved: Vec<f32> = match spec.sample_format {
-            hound::SampleFormat::Float => reader.samples::<f32>().filter_map(Result::ok).collect(),
-            hound::SampleFormat::Int => {
-                let scale = 1.0 / ((1i64 << (spec.bits_per_sample.max(1) - 1)) as f32);
-                reader
-                    .samples::<i32>()
-                    .filter_map(Result::ok)
-                    .map(|s| s as f32 * scale)
-                    .collect()
-            }
-        };
+        let loaded =
+            fts_sample::load_planar_f32(path, None, fts_sample::ResampleQuality::default())
+                .map_err(|e| format!("open IR {e}"))?;
 
         // Channel 0 only (guitar cabs are captured mono per mic).
-        let mut ir: Vec<f32> = interleaved.iter().step_by(ch).copied().collect();
+        let mut ir: Vec<f32> = loaded.channels.into_iter().next().unwrap_or_default();
         ir.truncate(MAX_TAPS);
         if ir.is_empty() {
             return Err(format!("IR {} has no samples", path.display()));

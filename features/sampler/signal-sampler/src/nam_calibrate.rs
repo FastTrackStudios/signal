@@ -86,34 +86,15 @@ impl DiReference {
     /// Load the DI at `path`, downmixed to mono `f64` and resampled to
     /// `target_sr`. WAV via `hound`; integer formats are normalised to ±1.0.
     pub fn load(path: &Path, target_sr: f64) -> Result<Self, String> {
-        let mut reader =
-            hound::WavReader::open(path).map_err(|e| format!("open DI {}: {e}", path.display()))?;
-        let spec = reader.spec();
-        let channels = spec.channels.max(1) as usize;
-        let src_sr = spec.sample_rate as f64;
-
-        // Read interleaved → downmix to mono.
-        let interleaved: Vec<f64> = match spec.sample_format {
-            hound::SampleFormat::Float => reader
-                .samples::<f32>()
-                .map(|s| s.unwrap_or(0.0) as f64)
-                .collect(),
-            hound::SampleFormat::Int => {
-                let scale = 1.0 / ((1i64 << (spec.bits_per_sample - 1)) as f64);
-                reader
-                    .samples::<i32>()
-                    .map(|s| s.unwrap_or(0) as f64 * scale)
-                    .collect()
-            }
-        };
-        let frames = interleaved.len() / channels;
-        let mut mono = Vec::with_capacity(frames);
-        for f in 0..frames {
-            let sum: f64 = (0..channels).map(|c| interleaved[f * channels + c]).sum();
-            mono.push(sum / channels as f64);
-        }
-
-        let resampled = resample_linear(&mono, src_sr, target_sr);
+        // The DI is measured offline and quality only has to preserve
+        // loudness — linear (Low) is more than enough.
+        let (mono_f32, _) = fts_sample::load_mono_f32(
+            path,
+            Some(target_sr as u32),
+            fts_sample::ResampleQuality::Low,
+        )
+        .map_err(|e| format!("open DI {e}"))?;
+        let resampled: Vec<f64> = mono_f32.iter().map(|&s| s as f64).collect();
         // Cap the measured window so a long "official" reamp file (NAM's
         // v3_0_0.wav is ~3 min) doesn't make per-model calibration glacial, and
         // take it from the centre so we skip the head calibration tones and any
@@ -203,26 +184,6 @@ fn hex(bytes: &[u8]) -> String {
         let _ = write!(s, "{b:02x}");
     }
     s
-}
-
-/// Naive linear resampler. The DI is measured offline, so quality here only has
-/// to preserve loudness — linear is more than enough and dependency-free.
-fn resample_linear(input: &[f64], src_sr: f64, dst_sr: f64) -> Vec<f64> {
-    if (src_sr - dst_sr).abs() < 1.0 || input.is_empty() {
-        return input.to_vec();
-    }
-    let ratio = dst_sr / src_sr;
-    let out_len = ((input.len() as f64) * ratio) as usize;
-    let mut out = Vec::with_capacity(out_len);
-    for i in 0..out_len {
-        let src_pos = i as f64 / ratio;
-        let idx = src_pos.floor() as usize;
-        let frac = src_pos - idx as f64;
-        let a = input.get(idx).copied().unwrap_or(0.0);
-        let b = input.get(idx + 1).copied().unwrap_or(a);
-        out.push(a + (b - a) * frac);
-    }
-    out
 }
 
 /// Run `di` through `model` (mono, in `max_block`-sized chunks) and return the
@@ -430,15 +391,6 @@ mod tests {
         // Shorter-than-window input is returned whole.
         assert_eq!(center_window(&s, 1000).len(), 100);
         assert_eq!(center_window(&s, 0).len(), 100);
-    }
-
-    #[test]
-    fn resample_preserves_length_ratio() {
-        let src = vec![0.0; 48_000];
-        let up = resample_linear(&src, 48_000.0, 96_000.0);
-        assert!((up.len() as i64 - 96_000).abs() <= 1);
-        let same = resample_linear(&src, 48_000.0, 48_000.0);
-        assert_eq!(same.len(), src.len());
     }
 
     fn fixture(name: &str) -> std::path::PathBuf {

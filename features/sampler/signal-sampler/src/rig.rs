@@ -620,19 +620,13 @@ impl InputMeterShared {
 /// alive, no instrument plugged in.
 fn load_fake_di() -> Option<Vec<f32>> {
     let path = std::env::var("SIGNAL_FAKE_DI").ok().filter(|p| !p.is_empty())?;
-    let mut reader = hound::WavReader::open(&path)
-        .map_err(|e| tracing::warn!("fake DI: {path}: {e}"))
-        .ok()?;
-    let spec = reader.spec();
-    let samples: Vec<f32> = match spec.sample_format {
-        hound::SampleFormat::Float => reader.samples::<f32>().filter_map(Result::ok).collect(),
-        hound::SampleFormat::Int => {
-            let scale = 1.0 / (1i64 << (spec.bits_per_sample - 1)) as f32;
-            reader.samples::<i32>().filter_map(Result::ok).map(|s| s as f32 * scale).collect()
-        }
-    };
-    let ch = spec.channels.max(1) as usize;
-    let mono: Vec<f32> = samples.chunks(ch).map(|f| f.iter().sum::<f32>() / ch as f32).collect();
+    let (mono, _) = fts_sample::load_mono_f32(
+        std::path::Path::new(&path),
+        None,
+        fts_sample::ResampleQuality::default(),
+    )
+    .map_err(|e| tracing::warn!("fake DI: {e}"))
+    .ok()?;
     (!mono.is_empty()).then(|| {
         tracing::info!("fake DI active: {path} ({:.1}s loop)", mono.len() as f32 / 48_000.0);
         mono

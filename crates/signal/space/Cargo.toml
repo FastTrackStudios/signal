@@ -10,7 +10,7 @@ description = "Asset similarity space — analyze audio assets into feature vect
 workspace = true
 
 [dependencies]
-hound = "3.5"
+fts-sample = { workspace = true, features = ["load"] }
 realfft = { workspace = true }
 rayon = "1.10"
 serde = { version = "1", features = ["derive"] }

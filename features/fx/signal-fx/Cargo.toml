@@ -6,7 +6,7 @@ license.workspace = true
 description = "Built-in FX for signal — PluginInstance wrappers over the vendored FX DSP cores (eq-dsp, comp-dsp, …)."
 
 [dependencies]
-hound = "3.5"
+fts-sample = { workspace = true, features = ["load"] }
 signal-plugin-host = { workspace = true }
 saturate-dsp = { workspace = true, features = ["analysis"] }
 tune = { workspace = true }

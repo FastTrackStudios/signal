@@ -42,56 +42,20 @@ pub struct Analysis {
 /// removed + [`MAX_ANALYSIS_S`]. Returns the mono buffer and the full
 /// (untrimmed) duration in seconds.
 pub fn decode_wav_mono(path: &std::path::Path) -> Result<(Vec<f32>, f32), String> {
-    let mut reader = hound::WavReader::open(path).map_err(|e| e.to_string())?;
-    let spec = reader.spec();
-    let sr = spec.sample_rate;
-    let ch = spec.channels.max(1) as usize;
-    let mut mono: Vec<f32> = Vec::new();
-    match spec.sample_format {
-        hound::SampleFormat::Float => {
-            let mut acc = 0.0f32;
-            for (i, s) in reader.samples::<f32>().enumerate() {
-                acc += s.map_err(|e| e.to_string())?;
-                if i % ch == ch - 1 {
-                    mono.push(acc / ch as f32);
-                    acc = 0.0;
-                }
-            }
-        }
-        hound::SampleFormat::Int => {
-            let scale = 1.0 / (1i64 << (spec.bits_per_sample - 1)) as f32;
-            let mut acc = 0.0f32;
-            for (i, s) in reader.samples::<i32>().enumerate() {
-                acc += s.map_err(|e| e.to_string())? as f32 * scale;
-                if i % ch == ch - 1 {
-                    mono.push(acc / ch as f32);
-                    acc = 0.0;
-                }
-            }
-        }
-    }
-    let full_dur = mono.len() as f32 / sr.max(1) as f32;
+    // Quality is deliberately the lowest (linear interpolation): fidelity is
+    // irrelevant for similarity features and speed matters across 10^5 files.
+    let (mut mono, _) = fts_sample::load_mono_f32(
+        path,
+        Some(ANALYSIS_SR),
+        fts_sample::ResampleQuality::Low,
+    )
+    .map_err(|e| e.to_string())?;
+    let full_dur = mono.len() as f32 / ANALYSIS_SR as f32;
     // Trim leading silence (< -60 dBFS), keep 2 ms pre-roll.
     let thr = 10f32.powf(-60.0 / 20.0);
     let start = mono.iter().position(|s| s.abs() > thr).unwrap_or(0);
-    let start = start.saturating_sub((sr as usize) / 500);
+    let start = start.saturating_sub((ANALYSIS_SR as usize) / 500);
     mono.drain(..start);
-    // Naive linear resample to the analysis rate (fidelity is irrelevant for
-    // similarity features; speed matters across 10^5 files).
-    if sr != ANALYSIS_SR {
-        let ratio = sr as f64 / ANALYSIS_SR as f64;
-        let out_len = (mono.len() as f64 / ratio) as usize;
-        let mut out = Vec::with_capacity(out_len);
-        for i in 0..out_len {
-            let pos = i as f64 * ratio;
-            let i0 = pos as usize;
-            let frac = (pos - i0 as f64) as f32;
-            let a = mono.get(i0).copied().unwrap_or(0.0);
-            let b = mono.get(i0 + 1).copied().unwrap_or(a);
-            out.push(a + (b - a) * frac);
-        }
-        mono = out;
-    }
     mono.truncate((MAX_ANALYSIS_S * ANALYSIS_SR as f32) as usize);
     Ok((mono, full_dur))
 }

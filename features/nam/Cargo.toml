@@ -10,6 +10,8 @@ signal-proto.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
+# Header-only WAV probing for the IR scanner (no features: probe is always on).
+fts-sample.workspace = true
 sha2 = "0.10"
 walkdir = "2"
 # The similarity space + the model inference the prober drives (#77 M5).

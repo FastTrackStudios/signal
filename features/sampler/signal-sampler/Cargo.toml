@@ -87,7 +87,7 @@ sha2        = "0.10"
 # access (FLAC/Vorbis decode, flacenc/vorbis_rs encode), FLAC seek index,
 # chunked streaming, on-disk stream cache, and SamplerError. Re-exported as
 # `engine::{budget, cache, flac_index, stream, stream_cache}`.
-fts-sample.workspace = true
+fts-sample = { workspace = true, features = ["load", "engine"] }
 zstd        = "0.13"
 
 # `fts signal pack` CLI (src/pack_cli.rs) — mounted by fts-cli.
