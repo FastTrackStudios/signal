@@ -123,22 +123,42 @@ that file as the authoritative "what the patch sounds like out of the box".
       `load_ir_sample`, and recover `!SpaceNames` / `!SpacePaths` (they are not
       in the four `.ksp` dumps — they come from the instrument's string tables,
       so the NKI decoder needs to emit those too).
-- [ ] **K2 — Sample-group classifier per library.** `zones.tsv` has no
-      articulation column; the group is encoded in the sample filename and the
-      prefix differs per library:
-      | library | body | releases | hammer | resonance | misc |
-      |---|---|---|---|---|---|
-      | Grandeur | `GI_PP_SD_` (2552) | `GI_SD_RELEASE(S)_` (639) | `GI_SD_Hammer_` (88) | `OVERTONE …_SD` | `Pedalnoise`, `Stringnoise`, `DampUp`, `DampOff` |
-      | Maverick | `GI_MAV_<note>_` | `GI_MAV_RELEASE_` (594) | `GI_MAV_HAMMER_` (88) | `GI_MAV_RESO_` (935) | mixed `MAV`/`Mav` case — fold case |
-      | Gentleman | `GI_GMF_<note>_` | `GI_GMF_Release_` (603) | `GI_PP_BS_` (88) | `GI_GMF_RESO_` (968) | |
-      | Giant | `GI_K370_<date>_` | `GI_K370_Release_` (350) | — | `OVERTONE …_K370` | `GI_Tower_Pedalplus` |
-      Model it on `features/rigs/orchestra/specs/cs-piano-packs.styx` +
-      `signal-sampler/examples/build_cs_packs.rs` (that builder already errors
-      on any unclaimed zone — keep that property).
-- [ ] **K3 — Build the packs.** One `.signalpack` per piano per group, Full +
-      Proxy, into `/run/media/AudioHaven/Signal/Libraries/Keys/<Library>/Packs/`
-      (which does not exist yet — today only Keyscape/Omnisphere/Trilian do).
-      Sizes to expect: Grandeur 13 G, Maverick 14 G, Gentleman 8.8 G, Giant 7.7 G.
+- [x] **K2 — Sample-group classifier.** DONE — `features/rigs/keys/specs/ni-pianos.styx`
+      + `signal-sampler --example build_ni_packs`. `zones.tsv` has no
+      articulation column, so the group comes from keywords in the sample
+      filename. The *prefixes* are library-specific (`GI_PP_SD` / `GI_MAV` /
+      `GI_GMF` / `GI_K370`) but the *keywords* are not, so one rule set covers
+      all five instruments. Census, all zones classified, none unclaimed:
+
+      | instrument | zones | DryTones | Release | Resonance | SSR | Hammer | noises |
+      |---|---|---|---|---|---|---|---|
+      | The Grandeur | 3358 | 1584 | 639 | 968 | 64 | 88 | 15 |
+      | The Maverick | 3282 | 1587 | 594 | 935 | 66 | 88 | 12 |
+      | The Gentleman | 3148 | 1411 | 603 | 968 | 66 | 88 (`_BS_`) | 12 |
+      | The Giant | 2003 | 1144 | 350 | 352 | 62 | 88 | 7 |
+      | The Giant Cinematic | 610 | 169 | 280 | 99 | 62 | — | — |
+
+      Every zone in all five resolves to a decoded WAV (3358/3358, 3282/3282,
+      3148/3148, 2003/2003, 610/610) — the extraction is complete.
+- [ ] **K3 — Build the packs.** *(pipeline validated end-to-end; the four
+      main pianos are building now.)* Two packs per instrument, Full + Proxy:
+      **Piano** (DryTones + Release + Hammer + Damper + Pedal + Stringnoise —
+      everything needed to sound a note) and **Resonance** (Resonance + SSR —
+      the pedal-down layer, ~30% of the zones and inaudible until a foot goes
+      down, so it loads on demand). Output:
+      `Signal/Libraries/{Full,Proxy}/Keys/<Library>/<Library> - <Pack>.signalpack`,
+      matching the CS two-tree convention rather than the older
+      `Libraries/Keys/<Lib>/Packs/` layout.
+- [ ] **K3b — The Giant Cinematic pack.** Blocked on K7 — the FX instrument is
+      the only one that touches the malformed WAVs.
+- [ ] **K7 — Fix 14 malformed WAVs in The Giant's extraction.** Each has a
+      `data` chunk 3 bytes past a frame boundary (block align 6), so the decoder
+      rejects the whole file: `data 24579 % 6 = 3`. 14 of 9062 across all four
+      libraries, **all in The Giant**, and used **only** by `The Giant - Cinematic`
+      — the four main pianos are clean. Most are near-empty stubs (`data` = 3,
+      15, 27, 39, 57 bytes); two carry real audio (`GI_pianoscratch reso_05.wav`,
+      `K370_Plucked_A#4.wav`). Fix in the NCW→WAV writer (truncate the trailing
+      partial frame), not by patching the files, or it comes back on re-extract.
 - [ ] **K4 — `PianoVoice` control layer.** Implement Color / Dynamic Range /
       Resonances over the sampler as described above. Color and Dynamic Range are
       *velocity-domain* transforms that must run before zone selection, so they
@@ -262,7 +282,12 @@ O1: the Pad layer is authored as module A `OB-8 PWM Big Strings` + module B
 
 ---
 
-## 4. Arturia Augmented GRAND PIANO — resample, don't extract
+## 4. Arturia Augmented GRAND PIANO — PARKED
+
+**Not being worked (2026-08-19).** Findings kept because they were paid for; the
+lane is out of scope until the rest of the rig plays. The one live takeaway is
+that Arturia's IRs, wavetables and one-shots are plain WAV and free to use
+elsewhere in the tree.
 
 The gig's Arturia chunk turned out to be the *most* readable of the three:
 Arturia's `serialization::archive` is length-prefixed **plain text**, so the
@@ -297,15 +322,15 @@ takes `--note`, `--render`, `--secs` and `--load-state`, and §3.0 hands us the
 exact `Grand Energy` state chunk out of the gig — so the autosampler is a loop
 over notes and velocities around machinery that exists.
 
-- [ ] **A1 — Render `Grand Energy` to a pack.** Load the extracted chunk via
+- [ ] ~~**A1 — Render `Grand Energy` to a pack.**~~ *(parked)* Load the extracted chunk via
       `--load-state`, sweep note × velocity, capture, build a `.signalpack`.
       **Must run on voyager**: Arturia ships macOS/Windows only, so this needs
       `signal-plugin-host` building on macOS — verify that before scoping the
       rest.
-- [ ] **A2 — Decide the sampling grid** (every semitone or every minor third,
+- [ ] ~~**A2 — Decide the sampling grid**~~ *(parked)* (every semitone or every minor third,
       how many velocity layers, tail length). A resampled patch is only as good
       as its grid, and this one has a long compressed tail.
-- [ ] **A3 — Optional: teach the sampler to read SFZ.** The Arturia mapping is
+- [ ] **A3 — Teach the sampler to read SFZ.** *(still live — pays off beyond Arturia)* The Arturia mapping is
       a complete, well-formed SFZ description of a 21-articulation piano. Even
       with the audio locked, that is a good reference — and an SFZ importer
       would pay off well beyond Arturia.
@@ -323,8 +348,7 @@ over notes and velocities around machinery that exists.
       that hold nothing.
 - [ ] **P3** — Recreate the bus topology (Keys / Pads / Shimmer / Delay / Reverb
       sends) as container sends rather than a flat plugin graph.
-- [ ] **P4** — Wire the Arturia lane to whatever §4 produces (`Grand Energy`
-      resampled), or drop it if A1 stalls on the macOS build.
+- [ ] **P4** — Arturia lane is parked (§4). The rig ships without it.
 
 ---
 
