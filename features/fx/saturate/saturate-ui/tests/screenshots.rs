@@ -50,6 +50,42 @@ async fn on_profile(profile_id: &str) -> Fixture {
     fx
 }
 
+/// The emphasis EQ strip, open under the tape panel
+/// (`fx.sat.emphasis.display`).
+#[tokio::test]
+async fn emphasis_strip_open() {
+    let params = std::sync::Arc::new(saturate_ui::params::SatParams::default());
+    params.store_profile_id(saturate_profiles::profile_index("tape").unwrap());
+    // Pose the curve so the shot shows a real emphasis, not a flat line.
+    unsafe {
+        use nice_plug::prelude::Param;
+        let b1 = &params.emph[1].gain_db;
+        b1.as_ptr()
+            ._internal_set_normalized_value(b1.preview_normalized(-4.0));
+        let b3 = &params.emph[3].gain_db;
+        b3.as_ptr()
+            ._internal_set_normalized_value(b3.preview_normalized(6.0));
+    }
+    let (w, h) = (
+        saturate_ui::control_view::EDITOR_W + saturate_ui::control_view::EQ_SIDECAR_W,
+        saturate_ui::control_view::EDITOR_H,
+    );
+    let mut fx = mount_with(params, w, h);
+    fx.settle().await;
+    // Open the strip through the rail toggle, like a hand would.
+    let el = fx
+        .tester
+        .query(dioxus_test::by_testid("emphasis-toggle"))
+        .immediately()
+        .expect("emphasis toggle");
+    let (ox, oy) = el.document_origin();
+    let (bw, bh) = el.size();
+    fx.tester.pointer_down(ox + bw as f64 / 2.0, oy + bh as f64 / 2.0);
+    fx.tester.pointer_up(ox + bw as f64 / 2.0, oy + bh as f64 / 2.0);
+    fx.settle().await;
+    shot(&fx, "emphasis-strip-open");
+}
+
 /// One shot per family, plus every variant — the point of the exercise is
 /// that they do not look like each other.
 #[tokio::test]

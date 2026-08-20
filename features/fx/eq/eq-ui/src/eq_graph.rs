@@ -102,9 +102,19 @@ pub enum OverlayChoice {
 pub fn EqGraph(
     /// Signal containing the EQ bands.
     bands: Signal<Vec<EqBand>>,
-    /// dB range (symmetric around 0).
-    #[props(default = 24.0)]
+    /// dB range (symmetric around 0). Defaults to the ONE canonical default
+    /// (`fx.eq.display.defaults-agree`).
+    #[props(default = super::eq_graph_model::DEFAULT_DB_RANGE)]
     db_range: f64,
+    /// Expand `db_range` automatically when a band is dragged outside it
+    /// (`fx.eq.display.auto-range`). Expansion is emitted through
+    /// `on_db_range_change`; contraction is never automatic.
+    #[props(default = true)]
+    auto_range: bool,
+    /// The user picked (or auto-range requests) a new display range, in dB.
+    /// The owner maps it back to its `db_range` param.
+    #[props(default)]
+    on_db_range_change: Option<EventHandler<f64>>,
     /// Minimum frequency in Hz.
     #[props(default = 20.0)]
     min_freq: f64,
@@ -153,6 +163,13 @@ pub fn EqGraph(
     /// its own internal selection (defaulting to `Auto`).
     #[props(default)]
     overlay_sel: Option<Signal<OverlayChoice>>,
+    /// The mix-EQ teaching furniture — the ear-band ruler, the too-much /
+    /// too-little range labels, the overlay selector. On for the EQ plugin;
+    /// off when the surface is embedded as some OTHER curve (drive emphasis,
+    /// decay rate), where the words would be lies
+    /// (`fx.embed-eq.one-surface`).
+    #[props(default = true)]
+    show_hints: bool,
     /// Optional spectrum analyzer data (dB values for logarithmically-spaced bins).
     #[props(default)]
     spectrum_db: Option<Vec<f32>>,
@@ -533,6 +550,18 @@ pub fn EqGraph(
                             let start_bands = { drag_start_bands.read().clone() };
                             if let Some(&(_, orig_freq, orig_gain)) = start_bands.iter().find(|(i, _, _)| *i == band_idx) {
                                 let new_gain = mapper.y_to_db(y).clamp(-30.0, 30.0) as f32;
+                                // r[impl fx.eq.display.auto-range]
+                                if auto_range && (new_gain.abs() as f64) >= db_range * 0.95 {
+                                    if let (Some(cb), Some(next)) = (
+                                        &on_db_range_change,
+                                        super::eq_graph_model::DB_RANGE_STEPS
+                                            .iter()
+                                            .copied()
+                                            .find(|&r| r > db_range),
+                                    ) {
+                                        cb.call(next);
+                                    }
+                                }
                                 let gain_delta = new_gain - orig_gain;
                                 let scale = if orig_gain.abs() > 0.01 { new_gain / orig_gain } else { 1.0 + gain_delta / 10.0 };
                                 let new_freq = mapper.x_to_freq(x).clamp(10.0, 30000.0) as f32;
@@ -559,6 +588,25 @@ pub fn EqGraph(
                     } else {
                         let nf = mapper.x_to_freq(x).clamp(10.0, 30000.0) as f32;
                         let pointer_gain = mapper.y_to_db(y).clamp(-30.0, 30.0);
+                        // Auto-range: dragging the band into the display's
+                        // top/bottom edge expands the range to the next step
+                        // so the curve is never clipped mid-edit
+                        // (`fx.eq.display.auto-range`). Never contracts. The
+                        // trigger is the edge (≥95 % of the range), because
+                        // the mouse handlers are element-scoped — a move
+                        // beyond the box never arrives.
+                        // r[impl fx.eq.display.auto-range]
+                        if auto_range && pointer_gain.abs() >= db_range * 0.95 {
+                            if let (Some(cb), Some(next)) = (
+                                &on_db_range_change,
+                                super::eq_graph_model::DB_RANGE_STEPS
+                                    .iter()
+                                    .copied()
+                                    .find(|&r| r > db_range),
+                            ) {
+                                cb.call(next);
+                            }
+                        }
                         let updated = {
                             let mut bv = bands.write();
                             if band_idx < bv.len() {
@@ -834,7 +882,39 @@ pub fn EqGraph(
                         display:block; pointer-events:none;",
             }
 
+            // Display range selector — always reachable from the graph
+            // surface, at the top of the dB scale (`fx.eq.display.range`).
+            // Double-click returns to the default range.
+            // r[impl fx.eq.display.range]
+            select {
+                "data-testid": "eq-db-range",
+                style: "position:absolute; top:6px; left:6px; z-index:30; \
+                        background:rgba(15,15,18,0.92); color:#ddd; \
+                        border:1px solid rgba(80,80,85,0.6); border-radius:4px; \
+                        font-size:10px; padding:2px 5px; pointer-events:auto;",
+                onchange: move |evt| {
+                    if let Ok(db) = evt.value().parse::<f64>() {
+                        if let Some(cb) = &on_db_range_change {
+                            cb.call(db);
+                        }
+                    }
+                },
+                ondoubleclick: move |_| {
+                    if let Some(cb) = &on_db_range_change {
+                        cb.call(super::eq_graph_model::DEFAULT_DB_RANGE);
+                    }
+                },
+                for r in super::eq_graph_model::DB_RANGE_STEPS {
+                    option {
+                        value: "{r}",
+                        selected: (db_range - r).abs() < 0.5,
+                        "± {r:.0} dB"
+                    }
+                }
+            }
+
             // EQ cheat-sheet overlay selector (top-right corner).
+            if show_hints {
             select {
                 style: "position:absolute; top:6px; right:6px; z-index:30; \
                         background:rgba(15,15,18,0.92); color:#ddd; \
@@ -877,6 +957,7 @@ pub fn EqGraph(
                     }
                 }
             }
+            }
 
             // Cheat-sheet zone labels (DOM, positioned via the mapper). One per
             // zone, tinted by direction, at the zone's center frequency.
@@ -908,9 +989,11 @@ pub fn EqGraph(
 
             // ISO-octave ear-training ruler (vowel / haptic / sibilance cues) at
             // each octave center along the TOP, tinted by the same frequency→color
-            // map as the band nodes. Always on, faint, as a constant reference.
+            // map as the band nodes. A constant reference for a MIX EQ; an
+            // embedded curve (drive emphasis, decay rate) turns it off with
+            // `show_hints: false`.
             {
-                rsx! {
+                if show_hints { rsx! {
                     for eb in crate::cheatsheet::EAR_BANDS.iter() {
                         {
                             let ex = mapper.freq_to_x(eb.center_hz as f64);
@@ -930,7 +1013,7 @@ pub fn EqGraph(
                             }
                         }
                     }
-                }
+                } } else { rsx! {} }
             }
 
             // Too-much / too-little range descriptors near the 0 dB line:
@@ -940,7 +1023,7 @@ pub fn EqGraph(
                 let center_y = mapper.db_to_y(0.0);
                 let tm_y = center_y - 2.0;
                 let tl_y = center_y + 2.0;
-                rsx! {
+                if show_hints { rsx! {
                     for fr in crate::cheatsheet::FREQ_RANGES.iter() {
                         {
                             let cx = mapper.freq_to_x((fr.lo_hz as f64 * fr.hi_hz as f64).sqrt());
@@ -973,7 +1056,7 @@ pub fn EqGraph(
                             }
                         }
                     }
-                }
+                } } else { rsx! {} }
             }
 
             // Band name labels — show the user's annotation above each named

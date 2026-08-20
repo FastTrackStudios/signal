@@ -21,3 +21,15 @@ daw-standalone = { workspace = true, features = ["clap-host", "audio"] }
 baseview = "0.2.2"
 raw-window-handle = "0.6"
 eyre = { workspace = true }
+
+# macOS only: baseview builds its NSWindow with Titled|Closable|Miniaturizable
+# and no Resizable bit, so the host window cannot be dragged to a new size —
+# see `make_window_resizable` in main.rs. Versions match baseview 0.2.2's own
+# objc2 deps so the graph keeps one copy.
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6.4"
+objc2-app-kit = { version = "0.3.2", default-features = false, features = [
+    "NSResponder",
+    "NSView",
+    "NSWindow",
+] }

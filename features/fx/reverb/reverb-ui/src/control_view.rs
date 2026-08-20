@@ -66,6 +66,25 @@ pub fn editor_size_for(_profile_index: usize, form: fts_audio_ui::EditorForm) ->
     form.editor_size(RAIL_W, (EDITOR_W, EDITOR_H))
 }
 
+/// Width of the EQ sidecar (`fx.reverb.eq-display` — the Post / Decay Rate
+/// EQ pair EXTENDS the window rightward, stacked in a column; the space's
+/// panel keeps its size).
+pub const EQ_SIDECAR_W: u32 = 560;
+
+/// The editor size with the EQ sidecar open, capped at the resize bounds.
+pub fn editor_size_with_eq(
+    profile_index: usize,
+    form: fts_audio_ui::EditorForm,
+    eq_open: bool,
+) -> (u32, u32) {
+    let (w, h) = editor_size_for(profile_index, form);
+    if eq_open {
+        ((w + EQ_SIDECAR_W).min(max_editor_size().0 as u32), h)
+    } else {
+        (w, h)
+    }
+}
+
 /// Root editor component. Takes no props — the plugin puts [`ReverbUi`] in
 /// context — so the same component serves the plugin editor and any standalone
 /// mount.
@@ -94,14 +113,19 @@ pub fn App() -> Element {
     let design = crate::faces::design_for(profile.id);
     let form = params.resolved_editor_form();
 
-    // Profile or form change → ask the host to resize. A plain Cell rather
-    // than an effect: the profile lives in a plugin param, not a signal, so
-    // comparing here also catches the host automating it.
+    // The layer's sidecar: Post EQ + Decay Rate EQ side by side, in a strip
+    // UNDER the panel (`fx.reverb.eq-display`). Local UI state.
+    let mut eq_view = use_signal(|| false);
+    let eq_open = *eq_view.read();
+
+    // Profile / form / EQ-strip change → ask the host to resize. A plain
+    // Cell rather than an effect: the profile lives in a plugin param, not a
+    // signal, so comparing here also catches the host automating it.
     #[allow(clippy::type_complexity)]
-    let last: std::rc::Rc<std::cell::Cell<Option<(usize, fts_audio_ui::EditorForm)>>> =
+    let last: std::rc::Rc<std::cell::Cell<Option<(usize, fts_audio_ui::EditorForm, bool)>>> =
         use_hook(|| std::rc::Rc::new(std::cell::Cell::new(None)));
-    if last.get() != Some((profile_index, form)) {
-        last.set(Some((profile_index, form)));
+    if last.get() != Some((profile_index, form, eq_open)) {
+        last.set(Some((profile_index, form, eq_open)));
         // Keep the automatable index in step with the persisted id.
         if params.profile.value().max(0) as usize != profile_index {
             let ptr = params.profile.as_ptr();
@@ -116,12 +140,24 @@ pub fn App() -> Element {
             ctx.end_set_raw(ptr);
         }
         if let Some(state) = try_consume_context::<Arc<nice_plug_dioxus::DioxusState>>() {
-            let (w, h) = editor_size_for(profile_index, form);
+            let (w, h) = editor_size_with_eq(profile_index, form, eq_open);
             if state.size() != (w, h) {
                 state.request_resize(w, h);
             }
         }
     }
+
+    // The face's box: the window minus the EQ sidecar when it is open.
+    let (win_w, win_h) = fts_audio_ui::hardware::panel::window_logical_size().unwrap_or({
+        let (w, h) = editor_size_with_eq(profile_index, form, eq_open);
+        (w as f64, h as f64)
+    });
+    let sidecar_w = if eq_open {
+        (EQ_SIDECAR_W as f64).min(win_w * 0.45)
+    } else {
+        0.0
+    };
+    let face_w = (win_w - sidecar_w).max(240.0);
 
     // Every control the faces can bind, by name.
     let handles: HashMap<String, ParamHandle> = [
@@ -181,8 +217,15 @@ pub fn App() -> Element {
     let profile_count = reverb_profiles::PROFILES.len();
     let accent = design.accent.to_string();
     let accent_for_form = accent.clone();
+    let accent_for_eq = accent.clone();
 
     rsx! {
+        // The embedded EQ surface's DOM parts (band popup, menus) style
+        // themselves with eq-ui's compiled utilities — without these the
+        // popup's layout classes are undefined and collapse
+        // (`fx.embed-eq.one-surface`).
+        document::Style { {nice_plug_dioxus::TAILWIND_CSS} }
+        document::Style { {eq_ui::TAILWIND_CSS} }
         ThemeProvider { state: theme,
             // Knobs capture the pointer through the shared drag provider —
             // without it a knob panics the moment it is drawn.
@@ -207,6 +250,17 @@ pub fn App() -> Element {
                     params_for_id.store_profile_id(index);
                 },
                 rail_footer: rsx! {
+                    // The layer's sidecar toggle (`fx.reverb.eq-display`):
+                    // Post EQ + Decay Rate EQ, together, under the panel.
+                    // Local UI state, never a plugin param.
+                    RailButton {
+                        testid: "eq-view-cycle".to_string(),
+                        label: "EQ".to_string(),
+                        title: "Post EQ + Decay Rate EQ".to_string(),
+                        active: eq_open,
+                        accent: accent_for_eq.clone(),
+                        on_click: move |_| eq_view.toggle(),
+                    }
                     RailButton {
                         testid: "form-cycle".to_string(),
                         label: form.badge().to_string(),
@@ -221,19 +275,64 @@ pub fn App() -> Element {
                     }
                 },
 
-                // Keyed list of one: swapping a face swaps a whole subtree,
-                // and blitz's mutator wants a stable, keyed node to land on.
-                for id in [profile.id] {
-                    SpaceFace {
-                        key: "{id}",
-                        profile_id: id.to_string(),
-                        handles: handles.clone(),
-                        frame,
+                // The panel keeps its box; the Post + Decay pair opens as a
+                // SIDECAR column to its right (`fx.reverb.eq-display`) — the
+                // window grew rightward to make room. Both keyed: swapping a
+                // face swaps a whole subtree, and blitz's mutator wants a
+                // stable, keyed node to land on.
+                div {
+                    style: "position:absolute; inset:0; display:flex; overflow:hidden;",
+                    div {
+                        style: format!(
+                            "position:relative; flex:none; width:{face_w}px; overflow:hidden;"
+                        ),
+                        for id in [profile.id] {
+                            FaceInBox {
+                                key: "{id}",
+                                profile_id: id.to_string(),
+                                handles: handles.clone(),
+                                frame,
+                                box_w: face_w,
+                                box_h: win_h,
+                            }
+                        }
+                    }
+                    if eq_open {
+                        div {
+                            style: format!(
+                                "position:relative; flex:none; width:{sidecar_w}px; \
+                                 overflow:hidden; \
+                                 border-left:1px solid var(--border, rgba(148,163,184,0.3)); \
+                                 background:var(--background);"
+                            ),
+                            for key in ["eq-sidecar"] {
+                                crate::eq_view::ReverbEqSidecar {
+                                    key: "{key}",
+                                    frame,
+                                }
+                            }
+                        }
                     }
                 }
             }
             }
         }
+    }
+}
+
+/// [`SpaceFace`] wrapped with a [`fts_audio_ui::hardware::panel::PanelBox`]
+/// of its row, so the panel scales to the space above the EQ strip.
+#[component]
+fn FaceInBox(
+    profile_id: String,
+    handles: HashMap<String, ParamHandle>,
+    frame: u64,
+    box_w: f64,
+    box_h: f64,
+) -> Element {
+    use_context_provider(|| fts_audio_ui::hardware::panel::PanelBox(box_w, box_h));
+    rsx! {
+        SpaceFace { profile_id, handles, frame }
     }
 }
 

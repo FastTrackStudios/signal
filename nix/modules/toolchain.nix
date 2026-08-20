@@ -85,6 +85,13 @@
         pkg-config
         rustPlatform.bindgenHook
         tailwindcss_4
+        # git — cargo shells out to it to fetch every git dependency, and this
+        # tree has plenty (architect, task, nice-plug, baseview, the vendor
+        # forks). On macOS the system `/usr/bin/git` is an xcrun shim that
+        # resolves through DEVELOPER_DIR, which this shell points at the nix
+        # SDK — so the shim fails with "tool 'git' not found" and every git dep
+        # fails to resolve. A real git on PATH shadows the shim.
+        git
       ]
       ++ lib.optionals pkgs.stdenv.isLinux [
         # mold — the linker .cargo/config.toml selects for

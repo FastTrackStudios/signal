@@ -103,6 +103,8 @@ pub fn CompGraph(
     let ui = shared.get::<CompUiState>().expect("CompUiState missing");
     let ctx = use_param_context();
     let params = ui.params.clone();
+    // The graph draws and edits the FOCUSED stage (`fx.stack.focus`).
+    let stage_idx = crate::focus::use_focused_stage();
 
     let mut dragging = use_signal(|| None::<CompDrag>);
 
@@ -122,9 +124,9 @@ pub fn CompGraph(
     let _ = *frame_tick.read();
 
     // ── Current values ───────────────────────────────────────────────────
-    let threshold = params.threshold_db.value();
-    let ratio = params.ratio.value().max(1.0);
-    let knee = params.knee_db.value();
+    let threshold = params.stage(stage_idx).threshold_db.value();
+    let ratio = params.stage(stage_idx).ratio.value().max(1.0);
+    let knee = params.stage(stage_idx).knee_db.value();
     let gr_db = ui.gain_reduction_db.load(Ordering::Relaxed);
     let in_db = ui.input_peak_db.load(Ordering::Relaxed);
 
@@ -155,17 +157,17 @@ pub fn CompGraph(
                 let ctx = ctx.clone();
                 move |evt: MouseEvent| {
                     let y = evt.element_coordinates().y;
-                    let ty = db_to_y(params.threshold_db.value() as f64, height);
+                    let ty = db_to_y(params.stage(stage_idx).threshold_db.value() as f64, height);
                     if (y - ty).abs() < THRESHOLD_GRAB_PX {
-                        ctx.begin_set_raw(params.threshold_db.as_ptr());
+                        ctx.begin_set_raw(params.stage(stage_idx).threshold_db.as_ptr());
                         dragging.set(Some(CompDrag::Threshold));
                     } else if y < ty {
                         // Above the threshold line = the compressed region —
                         // dragging tilts the slope.
-                        ctx.begin_set_raw(params.ratio.as_ptr());
+                        ctx.begin_set_raw(params.stage(stage_idx).ratio.as_ptr());
                         dragging.set(Some(CompDrag::Ratio {
                             start_y: y,
-                            start_ratio: params.ratio.value(),
+                            start_ratio: params.stage(stage_idx).ratio.value(),
                         }));
                     }
                     evt.prevent_default();
@@ -180,8 +182,8 @@ pub fn CompGraph(
                     // re-entry instead of resuming it (eq_graph idiom).
                     if evt.held_buttons().is_empty() {
                         let ptr = match mode {
-                            CompDrag::Threshold => params.threshold_db.as_ptr(),
-                            CompDrag::Ratio { .. } => params.ratio.as_ptr(),
+                            CompDrag::Threshold => params.stage(stage_idx).threshold_db.as_ptr(),
+                            CompDrag::Ratio { .. } => params.stage(stage_idx).ratio.as_ptr(),
                         };
                         ctx.end_set_raw(ptr);
                         dragging.set(None);
@@ -192,8 +194,8 @@ pub fn CompGraph(
                         CompDrag::Threshold => {
                             let db = y_to_db(y, height).clamp(-(RANGE_DB as f64), 0.0) as f32;
                             ctx.set_normalized_raw(
-                                params.threshold_db.as_ptr(),
-                                params.threshold_db.preview_normalized(db),
+                                params.stage(stage_idx).threshold_db.as_ptr(),
+                                params.stage(stage_idx).threshold_db.preview_normalized(db),
                             );
                         }
                         CompDrag::Ratio { start_y, start_ratio } => {
@@ -201,8 +203,8 @@ pub fn CompGraph(
                             let factor = ((y - start_y) / RATIO_PX_PER_DOUBLING) as f32;
                             let ratio = (start_ratio * factor.exp2()).clamp(1.0, 20.0);
                             ctx.set_normalized_raw(
-                                params.ratio.as_ptr(),
-                                params.ratio.preview_normalized(ratio),
+                                params.stage(stage_idx).ratio.as_ptr(),
+                                params.stage(stage_idx).ratio.preview_normalized(ratio),
                             );
                         }
                     }
@@ -215,8 +217,8 @@ pub fn CompGraph(
                     let mode = { *dragging.read() };
                     if let Some(mode) = mode {
                         let ptr = match mode {
-                            CompDrag::Threshold => params.threshold_db.as_ptr(),
-                            CompDrag::Ratio { .. } => params.ratio.as_ptr(),
+                            CompDrag::Threshold => params.stage(stage_idx).threshold_db.as_ptr(),
+                            CompDrag::Ratio { .. } => params.stage(stage_idx).ratio.as_ptr(),
                         };
                         ctx.end_set_raw(ptr);
                         dragging.set(None);
@@ -234,10 +236,10 @@ pub fn CompGraph(
                     }
                     // Scroll up = wider knee, ±1 dB per notch.
                     let step = if delta < 0.0 { 1.0 } else { -1.0 };
-                    let knee = (params.knee_db.value() + step).clamp(0.0, 24.0);
-                    let ptr = params.knee_db.as_ptr();
+                    let knee = (params.stage(stage_idx).knee_db.value() + step).clamp(0.0, 24.0);
+                    let ptr = params.stage(stage_idx).knee_db.as_ptr();
                     ctx.begin_set_raw(ptr);
-                    ctx.set_normalized_raw(ptr, params.knee_db.preview_normalized(knee));
+                    ctx.set_normalized_raw(ptr, params.stage(stage_idx).knee_db.preview_normalized(knee));
                     ctx.end_set_raw(ptr);
                 }
             },

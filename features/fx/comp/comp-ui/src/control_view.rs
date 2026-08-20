@@ -159,6 +159,21 @@ fn AppShell() -> Element {
 
     let mut advanced = use_signal(|| false);
 
+    // Which stack stage the editor is on (`fx.stack.focus`) — provided to
+    // every component below (faces, graph, strip), restored from the session.
+    let focus = use_context_provider(|| {
+        Signal::new(crate::focus::FocusedStage(ui.params.resolved_focused_stage()))
+    });
+
+    // Which stages have their sidechain-EQ sidecar open (a bit per stage) —
+    // UI state, shared so row headers and the rail toggle agree.
+    let sidecars: Signal<u64> = use_context_provider(|| Signal::new(0u64));
+    let sidecar_mask = *sidecars.read();
+    let focused_stage = focus.read().0;
+    // The audio thread meters the focused stage.
+    ui.focused_stage
+        .store(focused_stage, std::sync::atomic::Ordering::Relaxed);
+
     // The editor's form factor: Responsive, a rack size, a 500-series module.
     // Persisted by id like the profile, and the reason the size reconciliation
     // below has two inputs rather than one.
@@ -170,23 +185,37 @@ fn AppShell() -> Element {
     // a plugin param, not a signal: this shell re-renders on the redraw tick
     // anyway, so comparing here also catches the host automating the param.
     #[allow(clippy::type_complexity)]
-    let last_profile: std::rc::Rc<std::cell::Cell<Option<(usize, fts_audio_ui::EditorForm)>>> =
-        use_hook(|| std::rc::Rc::new(std::cell::Cell::new(None)));
+    let last_profile: std::rc::Rc<
+        std::cell::Cell<Option<(usize, fts_audio_ui::EditorForm, usize, u64)>>,
+    > = use_hook(|| std::rc::Rc::new(std::cell::Cell::new(None)));
 
-    // The face comes from the *resolved* profile: the persisted id when the
-    // session has one, the index otherwise. See `CompParams::profile_id`.
-    let profile_idx = params.resolved_profile_index();
+    // The rail edits the FOCUSED stage's *resolved* profile: the persisted id
+    // when the session has one, the index otherwise. See
+    // `CompStageParams::profile_id`.
+    let stage = params.stage(focused_stage);
+    let profile_idx = stage.resolved_profile_index();
     let profile_id = profile_id_for_index(profile_idx);
     let skin = profile_skin(profile_id);
     let is_control_face = profile_id == "control";
 
-    if last_profile.get() != Some((profile_idx, form)) {
-        last_profile.set(Some((profile_idx, form)));
+    // The stack's rows, in topology order: lanes left to right become rows
+    // top to bottom, a lane's serial stages in pool order
+    // (`fx.stack.strip` — every stage stays visible; a focused-only single
+    // view can come later).
+    let mut rows: Vec<usize> = params.stages_in_use();
+    rows.sort_by_key(|&i| (params.stage(i).lane.value().max(0), i));
+    if rows.is_empty() {
+        rows.push(0);
+    }
+    let n_rows = rows.len();
+
+    if last_profile.get() != Some((profile_idx, form, n_rows, sidecar_mask)) {
+        last_profile.set(Some((profile_idx, form, n_rows, sidecar_mask)));
         // A session restored from its id can land with the index parameter
         // still on whatever number that id used to be; put it back in line so
         // the host reads the same face the editor shows.
-        if params.profile.value().max(0) as usize != profile_idx {
-            let ptr = params.profile.as_ptr();
+        if stage.profile.value().max(0) as usize != profile_idx {
+            let ptr = stage.profile.as_ptr();
             let count = PROFILE_LABELS.len();
             let normalized = if count > 1 {
                 profile_idx as f32 / (count - 1) as f32
@@ -200,10 +229,30 @@ fn AppShell() -> Element {
         // Absent when the editor is embedded without a nice-plug window
         // (headless tests): nothing to resize, so nothing to do.
         if let Some(state) = try_consume_context::<std::sync::Arc<nice_plug_dioxus::DioxusState>>() {
-            let (w, h) = crate::faces::editor_size_for(profile_idx, form);
+            let (w, h) =
+                crate::faces::stack_editor_size_rows(params, &rows, form, sidecar_mask);
             if state.size() != (w, h) {
                 state.request_resize(w, h);
             }
+        }
+    }
+
+    // Row geometry: each row at ITS face's preferred height (a faceplate's
+    // own aspect at full width — no dead space under a shallow panel), the
+    // set scaled together when the window cannot grow to the sum. The face
+    // scales itself to the box through the `PanelBox` it is given.
+    let (win_w, win_h) = fts_audio_ui::hardware::panel::window_logical_size().unwrap_or({
+        let (w, h) = crate::faces::stack_editor_size_rows(params, &rows, form, sidecar_mask);
+        (w as f64, h as f64)
+    });
+    let (mut row_heights, preferred_total) =
+        crate::faces::stack_row_heights(params, &rows, win_w, sidecar_mask);
+    // The window may be a different height than preferred (host clamp, user
+    // resize): scale the rows to what is actually there.
+    if preferred_total > 1.0 && (win_h - preferred_total).abs() > 1.0 {
+        let k = win_h / preferred_total;
+        for h in &mut row_heights {
+            *h *= k;
         }
     }
 
@@ -222,12 +271,13 @@ fn AppShell() -> Element {
 
     let is_advanced = *advanced.read();
 
-    // The rail writes the profile param through the same host-gesture path as
-    // any other control, so switching faces is automatable and undoable like
-    // everything else.
-    let profile_handle = param_handle(params.profile.as_ptr(), ctx.clone());
+    // The rail writes the focused stage's profile param through the same
+    // host-gesture path as any other control, so switching faces is
+    // automatable and undoable like everything else.
+    let profile_handle = param_handle(stage.profile.as_ptr(), ctx.clone());
     let params_for_id = ui.params.clone();
     let params_for_form = ui.params.clone();
+    let ctx_for_rail = ctx.clone();
     let profile_count = PROFILE_LABELS.len();
     // One rail entry per compressor family, badged with the active unit.
     let items = crate::faces::rail_items(profile_idx);
@@ -250,10 +300,38 @@ fn AppShell() -> Element {
                     items,
                     selected: active_category,
                     accent: skin.accent.to_string(),
-                    on_select: move |category: usize| {
+                    on_select_mods: move |(category, mods): (usize, fts_audio_ui::shell::RailModifiers)| {
                         // Clicking the active family cycles the units inside
                         // it; clicking another lands on its first unit.
                         let index = crate::faces::rail_click_target(profile_idx, category);
+                        let shift = mods.shift();
+                        let ctrl = mods.ctrl() || mods.meta();
+                        if shift {
+                            // Shift-click: STACK the style instead of
+                            // replacing — serial on the focused stage's lane;
+                            // Ctrl+Shift: a new parallel lane (`fx.stack.add`).
+                            let lane = if ctrl {
+                                params_for_id.first_free_lane()
+                            } else {
+                                Some(
+                                    params_for_id
+                                        .stage(focus.peek().0)
+                                        .lane
+                                        .value()
+                                        .max(0) as usize,
+                                )
+                            };
+                            if let Some(lane) = lane {
+                                crate::stack_strip::add_stage(
+                                    &params_for_id,
+                                    &ctx_for_rail,
+                                    focus,
+                                    index,
+                                    lane,
+                                );
+                            }
+                            return;
+                        }
                         let normalized = if profile_count > 1 {
                             index as f32 / (profile_count - 1) as f32
                         } else {
@@ -263,7 +341,7 @@ fn AppShell() -> Element {
                         profile_handle.set_normalized(normalized);
                         profile_handle.end_edit();
                         // What the session restores from.
-                        params_for_id.store_profile_id(index);
+                        params_for_id.stage(focus.peek().0).store_profile_id(index);
                     },
                     rail_footer: rsx! {
                         // Basic/Advanced disclosure. Local UI state — never a
@@ -285,6 +363,22 @@ fn AppShell() -> Element {
                             },
                         }
 
+                        RailButton {
+                            testid: "sc-eq-rail-toggle".to_string(),
+                            label: "SC".to_string(),
+                            title: "Sidechain EQ for the focused stage".to_string(),
+                            active: sidecar_mask & (1 << focused_stage.min(63)) != 0,
+                            accent: skin.accent.to_string(),
+                            on_click: {
+                                let mut sidecars = sidecars;
+                                move |_| {
+                                    let bit = 1u64 << focus.peek().0.min(63);
+                                    let cur = *sidecars.peek();
+                                    sidecars.set(cur ^ bit);
+                                }
+                            },
+                        }
+
                         if is_control_face {
                             RailButton {
                                 testid: "advanced-toggle".to_string(),
@@ -301,11 +395,188 @@ fn AppShell() -> Element {
                         }
                     },
 
-                    Face {
-                        profile_index: profile_idx,
-                        advanced: is_advanced,
-                        frame: frame_counter,
-                        form,
+                    // Every stage in the stack, stacked VERTICALLY — the
+                    // whole rack is visible at once (`fx.stack.strip`), each
+                    // row scaled to its share of the window.
+                    div {
+                        style: "position:absolute; inset:0; display:flex; \
+                                flex-direction:column; overflow:hidden;",
+                        for (row_idx, si) in rows.iter().copied().enumerate() {
+                            StageRow {
+                                key: "{si}-{params.stage(si).resolved_profile_index()}",
+                                stage: si,
+                                row_w: win_w,
+                                row_h: row_heights[row_idx],
+                                show_header: n_rows > 1,
+                                is_last: row_idx == n_rows - 1,
+                                advanced: is_advanced,
+                                frame: frame_counter,
+                                form,
+                            }
+                        }
+                    }
+
+                    // The strip floats over the rows: add/remove/lane
+                    // controls in one place (`fx.stack.strip`). Mounted
+                    // AFTER them: blitz hit-tests in document order, so an
+                    // earlier sibling would lose its clicks to the rows'
+                    // surfaces regardless of z-index.
+                    crate::stack_strip::StackStrip { frame: frame_counter }
+                }
+            }
+        }
+    }
+}
+
+/// One stage of the stack, as a row of the editor.
+///
+/// The row provides two per-subtree contexts: a `FocusedStage` pinned to ITS
+/// stage — so the face, graph and profile handles inside edit this stage
+/// regardless of the global focus — and a
+/// [`fts_audio_ui::hardware::panel::PanelBox`] of the row's box, so the face
+/// scales itself to the row rather than the window. Clicking the row's
+/// header focuses the stage globally (the rail then edits it).
+#[component]
+fn StageRow(
+    stage: usize,
+    row_w: f64,
+    row_h: f64,
+    /// Hidden while the stack is a single stage — the plain plugin look.
+    show_header: bool,
+    is_last: bool,
+    advanced: bool,
+    frame: u64,
+    form: fts_audio_ui::EditorForm,
+) -> Element {
+    let shared = use_context::<SharedState>();
+    let ui = shared.get::<CompUiState>().expect("CompUiState missing");
+    let params = ui.params.clone();
+    // The ROOT focus signal, captured before this row shadows the context.
+    let root_focus = crate::focus::use_focus_signal();
+    let focused = root_focus.map(|f| f.read().0 == stage).unwrap_or(true);
+    // The sidecar mask lives at the root (the same context the sizing read).
+    let mut sidecars: Signal<u64> = use_context();
+    let sidecar_open = *sidecars.read() & (1 << stage.min(63)) != 0;
+
+    let header_h = if show_header {
+        crate::faces::ROW_HEADER_H
+    } else {
+        0.0
+    };
+    // The sidecar opens to the RIGHT of the face; the face keeps the width
+    // the column leaves it.
+    let sidecar_w = if sidecar_open {
+        crate::faces::SIDECAR_W.min(row_w * 0.45)
+    } else {
+        0.0
+    };
+    // Shadow the focus for everything inside the row, and hand the face the
+    // row's content box (what is left beside the sidecar).
+    use_context_provider(|| Signal::new(crate::focus::FocusedStage(stage)));
+    use_context_provider(|| {
+        fts_audio_ui::hardware::panel::PanelBox(
+            (row_w - sidecar_w).max(120.0),
+            (row_h - header_h).max(60.0),
+        )
+    });
+
+    let sp = params.stage(stage);
+    let profile_idx = sp.resolved_profile_index();
+    let profile_name = PROFILE_LABELS.get(profile_idx).copied().unwrap_or("?");
+    let lane = sp.lane.value().max(0) as usize;
+    let enabled = sp.stage_on.value();
+    let skin = skin_for_profile_index(profile_idx);
+    let accent = skin.accent;
+
+    rsx! {
+        div {
+            "data-testid": "stage-row-{stage + 1}",
+            "data-focused": "{focused}",
+            style: format!(
+                "position:relative; flex:none; height:{row_h}px; overflow:hidden; \
+                 opacity:{}; {}",
+                if enabled { "1.0" } else { "0.55" },
+                if is_last { "" } else { "border-bottom:1px solid var(--border, rgba(148,163,184,0.25));" },
+            ),
+
+            if show_header {
+                div {
+                    "data-testid": "stage-row-header-{stage + 1}",
+                    style: format!(
+                        "height:{header_h}px; display:flex; align-items:center; gap:8px; \
+                         padding:0 10px; cursor:pointer; font-size:9px; font-weight:700; \
+                         letter-spacing:0.08em; text-transform:uppercase; \
+                         color:{}; background:color-mix(in oklab, {} {}%, transparent); \
+                         border-left:2px solid {};",
+                        if focused { "var(--foreground)" } else { "var(--muted-foreground)" },
+                        accent,
+                        if focused { 16 } else { 6 },
+                        if focused { accent } else { "transparent" },
+                    ),
+                    onmousedown: move |_| {
+                        if let Some(mut f) = root_focus {
+                            params.store_focused_stage(stage);
+                            f.set(crate::focus::FocusedStage(stage));
+                        }
+                    },
+                    span { "S{stage + 1}" }
+                    span { style: "opacity:0.8;", "{profile_name}" }
+                    span { style: "opacity:0.5;", "Lane {lane + 1}" }
+                    if !enabled {
+                        span { style: "opacity:0.6;", "· bypassed" }
+                    }
+                    // The layer's sidecar toggle (`fx.embed-eq.one-surface`).
+                    span {
+                        "data-testid": "sc-eq-toggle-{stage + 1}",
+                        style: format!(
+                            "margin-left:auto; cursor:pointer; padding:0 6px; \
+                             border-radius:4px; font-size:9px; font-weight:800; \
+                             color:{}; background:{};",
+                            if sidecar_open { "#0b0b0d" } else { "var(--muted-foreground)" },
+                            if sidecar_open { accent } else { "transparent" },
+                        ),
+                        title: "Sidechain EQ — what this stage listens to",
+                        onmousedown: move |evt: MouseEvent| {
+                            evt.stop_propagation();
+                            let bit = 1u64 << stage.min(63);
+                            let cur = *sidecars.peek();
+                            sidecars.set(cur ^ bit);
+                        },
+                        "SC EQ"
+                    }
+                }
+            }
+
+            div {
+                style: format!(
+                    "position:absolute; top:{header_h}px; left:0; \
+                     right:{sidecar_w}px; bottom:0; overflow:hidden;"
+                ),
+                Face {
+                    profile_index: profile_idx,
+                    advanced,
+                    frame,
+                    form,
+                }
+            }
+
+            // The layer's sidecar: the sidechain EQ, attached to the RIGHT
+            // of ITS face (`fx.embed-eq.one-surface`).
+            if sidecar_open {
+                div {
+                    style: format!(
+                        "position:absolute; top:{header_h}px; right:0; bottom:0; \
+                         width:{sidecar_w}px; overflow:hidden; \
+                         border-left:1px solid var(--border, rgba(148,163,184,0.3)); \
+                         background:var(--background);"
+                    ),
+                    for key in [format!("sc-{stage}")] {
+                        crate::sc_eq_view::SidechainEqView {
+                            key: "{key}",
+                            stage,
+                            frame,
+                            accent: accent.to_string(),
+                        }
                     }
                 }
             }

@@ -1,0 +1,18 @@
+[package]
+name = "fx-stack"
+version.workspace = true
+edition = "2021"          # kept on 2021 — matches the fx tree
+license.workspace = true
+authors.workspace = true
+description = "The FX stack core — lanes of serial stages summed in parallel, one topology for every FTS effect kind (docs/spec/fx/stack.md)"
+
+[dependencies]
+# no_std + alloc; libm for the few float ops core does not provide there.
+libm = { version = "0.2", default-features = false }
+
+[features]
+default = ["std"]
+std = []
+
+[lints]
+workspace = true
