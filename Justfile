@@ -355,9 +355,27 @@ guitar: (rig "Guitar Rig")
 # Open the default drums rig (needs `just rig-setup "Drum Rig" ...` first)
 drums: (rig "Drum Rig")
 
-# Nord Stage-style keys rig — play a composition-tree preset from a MIDI
-# keyboard. --release is REQUIRED for real-time.
-keys preset="Nord Stage" midi="all":
+# Built then run separately, under `pw-jack`, for one reason: midir's MIDI
+# backend on Linux is JACK-over-pipewire-jack, but the dev shell links the real
+# libjack2, so the binary looks for a `jackd` that is not running and hardware
+# MIDI silently never attaches. `pw-jack` points it at PipeWire's shim instead.
+# Wrapping only the run keeps that LD_LIBRARY_PATH off the build toolchain.
+# (The real fix is the flake shipping pipewire.jack rather than libjack2; when
+# that lands, drop the wrapper.) --release is REQUIRED for real-time audio.
+#
+# Open the FTS desktop app straight to the keys rig (Worship profile, loaded)
+keys:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cargo build --release -p fasttrackstudio --features signal-keys-rig
+    PIPEWIRE_PROPS='{ application.name = FTS-Signal }' \
+        exec pw-jack ./target/release/fasttrackstudio --keys
+
+# A terminal surface over the composition-tree presets, no GUI. This was
+# `just keys` before the app grew a keys mode.
+#
+# Nord Stage-style keys TUI — play a preset from a MIDI keyboard
+keys-tui preset="Nord Stage" midi="all":
     PIPEWIRE_PROPS='{ application.name = FTS-Signal }' cargo run --release -p signal-keys --features pipewire --example keys_tui -- --preset "{{preset}}" --midi "{{midi}}"
 
 # Play the City Grand physically-modeled piano from a MIDI keyboard.
