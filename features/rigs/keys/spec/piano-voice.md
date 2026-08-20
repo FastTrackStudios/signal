@@ -155,11 +155,27 @@ declared as parallel `!SpaceNames` / `!SpacePaths` arrays — display name
 the same names in the same order so a preset written against the plugin means
 the same thing here.
 
-**Partly unblocked**: the name/path tables came back with the extractor fix, so
-the menu is known. Still outstanding is pulling the IR audio itself — the
-`.ncw` files are addressed by `load_ir_sample` path rather than by a zone, so
-the zone-driven extractor does not reach them. See K1/K5 in
+**Status: located, not yet extracted.** The name/path tables came back with the
+extractor fix, so the menu is known. The audio is in the library's **resource
+container**, not its sample archives:
+
+```
+The Grandeur.nkr   →  Resources/ir_samples/Space_GI_CATHEDRAL.wav
+                      Resources/ir_samples/Space_GI_CHAMBER MUSIC HALL bright.wav
+                      …25 entries, all EncryptedFile
+```
+
+`nkx-extract list` reads the directory fine, and the KSP's `.ncw` suffix is a
+red herring — they are stored as `.wav`. But every entry fails to decrypt with
+the library key that works on its `.nkx` samples, under either reading of the
+set id (`487` decimal or `1e7` hex; the CS Piano precedent says decimal-to-hex,
+which is `1e7`). So the resource container is keyed or framed differently from
+the sample archives, and that is the remaining unknown. Tracked as K5 in
 `crates/signal/docs/keys-rig-patch-buildout.md`.
+
+Until then Space is implementable against *any* IR set — the convolver and its
+controls do not depend on shipping NI's own impulses, and a stand-in room is
+better than no Space at all.
 
 ## Noise groups
 
