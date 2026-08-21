@@ -188,7 +188,40 @@ test('audio out: notes and the demo player move the master peak', async () => {
     10_000, 100, 'masterPeak() > 0.001 while demo-play-0 plays',
   );
   expect(demoPeak).toBeGreaterThan(0.001);
+
+  // ── W8: render-load + latency are measured and sane while the demo
+  // plays. The load window turns over every ~0.7 s (250 quanta) and the
+  // page polls it at 2 Hz, so give it a few seconds to show a non-zero
+  // completed window. < 0.9 = the rig fits the budget on this box.
+  const load = await pollUntil(
+    () => page.evaluate(() => (window as any).__ftsRig?.renderLoad() ?? null),
+    (l) => typeof l === 'number' && l > 0,
+    15_000, 250, 'renderLoad() > 0 while the demo plays',
+  );
+  expect(load).toBeGreaterThan(0);
+  expect(load).toBeLessThan(0.9);
+  const latency = await page.evaluate(() => (window as any).__ftsRig?.latencyMs() ?? null);
+  expect(latency).toBeGreaterThan(0);
+  const statsJson = await page.evaluate(() => (window as any).__ftsRig?.audioStats() ?? '');
+  const stats = JSON.parse(statsJson);
+  expect(stats.quanta).toBeGreaterThan(0);
+  expect(stats.sampleRate).toBeGreaterThan(0);
+
+  // The audio panel popover, as a visual artifact (close the ssm popover
+  // first so the two don't overlap in the shot).
+  await page.getByTestId('ssm-button').click();
+  await page.getByTestId('audio-button').click();
+  await expect(page.getByTestId('audio-popover')).toBeVisible({ timeout: 5_000 });
+  await expect(page.getByTestId('audio-load')).toBeVisible();
+  await page.screenshot({
+    path: test.info().outputPath('audio-popover.png'),
+    fullPage: true,
+  });
+  await page.getByTestId('audio-button').click();
+
+  await page.getByTestId('ssm-button').click();
   await page.getByTestId('demo-stop').click();
+  await page.getByTestId('ssm-button').click();
 });
 
 test('refresh-resume: cached packs return to ready from OPFS, no re-stream', async () => {
@@ -211,4 +244,57 @@ test('refresh-resume: cached packs return to ready from OPFS, no re-stream', asy
   for (const p of smallPacksOf(states)) {
     expect(p.bytes, `${p.name} served whole from cache`).toBe(p.total);
   }
+});
+
+test('latency hint: flipping to playback re-boots the audio path and sound survives', async () => {
+  // W8: the selector stores fts.keys-latency-hint and re-runs the whole
+  // boot (new AudioContext with the hint, cached program, OPFS packs) —
+  // this is also a regression test of the in-page re-boot path.
+  test.setTimeout(180_000);
+  await pollUntil(
+    rigState,
+    (s) => s === 'running' || s === 'ready',
+    60_000, 500, "state() running before the flip",
+  );
+  await page.getByTestId('audio-button').click();
+  const hint = page.getByTestId('audio-latency-hint');
+  await expect(hint).toBeVisible({ timeout: 5_000 });
+  await expect(hint).toBeEnabled({ timeout: 30_000 });
+  await hint.selectOption('playback');
+
+  // The pref landed…
+  const stored = await page.evaluate(() => localStorage.getItem('fts.keys-latency-hint'));
+  expect(stored).toBe('playback');
+
+  // …and the rig comes back: state recovers past the restart, the cached
+  // small packs re-attach, the context runs, and a note still sounds.
+  await pollUntil(
+    rigState,
+    (s) => s === 'running' || s === 'ready',
+    60_000, 500, "state() to recover after the latency-hint flip",
+  );
+  await pollUntil(
+    packStates,
+    (ps) => {
+      const small = smallPacksOf(ps);
+      return small.length === SMALL_PACKS.length && small.every((p) => p.state === 'ready');
+    },
+    60_000, 500, 'cached packs ready after the latency-hint re-boot',
+  );
+  const audioState = await pollUntil(
+    rigAudioState,
+    (s) => s === 'running',
+    15_000, 250, "audioState() 'running' after the flip",
+  );
+  expect(audioState).toBe('running');
+  const peak = await pollUntil(
+    async () => {
+      await page.evaluate(() => (window as any).__ftsRig.noteOn(60, 100));
+      return masterPeak();
+    },
+    (p) => typeof p === 'number' && p > 0.001,
+    20_000, 500, 'masterPeak() > 0.001 after the latency-hint re-boot',
+  );
+  expect(peak).toBeGreaterThan(0.001);
+  await page.evaluate(() => (window as any).__ftsRig.noteOff(60));
 });

@@ -354,6 +354,19 @@ mod web {
         pub fn is_open(&self) -> bool {
             self.rig.borrow().is_some()
         }
+
+        /// Voices currently alive across every lane's sampler sources
+        /// (0 before `openLanes`) — polled by the processor's `audio_stats`
+        /// reply for the page's audio panel. Cheap: a `Vec::len` per
+        /// sampler leaf, single-threaded in the worklet scope.
+        #[wasm_bindgen(js_name = activeVoices)]
+        pub fn active_voices(&self) -> u32 {
+            self.rig
+                .borrow()
+                .as_ref()
+                .map(|rig| rig.active_voices() as u32)
+                .unwrap_or(0)
+        }
     }
 }
 

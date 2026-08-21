@@ -376,7 +376,8 @@ web-sys = { version = "0.3", features = [
     "Window", "Storage", "Location",
     # ── Browser keys rig (/rigs/keys/:profile — web_keys_rig.rs) ──
     # AudioWorklet boot + the main-thread ↔ worklet message port.
-    "AudioContext", "BaseAudioContext", "AudioWorklet", "AudioWorkletNode",
+    "AudioContext", "AudioContextOptions", "BaseAudioContext", "AudioWorklet",
+    "AudioWorkletNode",
     "AudioWorkletNodeOptions", "AudioNode", "AudioDestinationNode",
     "MessagePort", "MessageEvent", "Event", "EventTarget", "Response",
     # OPFS pack cache (web_packs.rs).

@@ -769,6 +769,24 @@ impl KeysRig {
     pub fn note_off(&self, note: u8) {
         self.dispatch(ev_note_off(note));
     }
+
+    /// Voices currently alive across every lane's **sampler** sources
+    /// (synth backends keep private voice vecs and are not counted) — a
+    /// cheap diagnostic read for load panels, reached through the same
+    /// plugin-map lock as [`edit_lane`](Self::edit_lane). Single-threaded
+    /// on the worklet; on native it briefly serializes with the renderer,
+    /// so poll it at panel rates (a few Hz), not per block.
+    pub fn active_voices(&self) -> usize {
+        let layers: Vec<String> = match &self.hosting {
+            // `edit_lane` ignores the layer name in single mode.
+            Hosting::Single { .. } => vec![String::new()],
+            Hosting::Lanes(l) => l.layers.iter().map(|t| t.name.clone()).collect(),
+        };
+        layers
+            .iter()
+            .filter_map(|layer| self.edit_lane(layer, |inst| inst.render_mut().active_voices()))
+            .sum()
+    }
     pub fn cc(&self, controller: u8, value: u8) {
         self.dispatch(ev_cc(controller, value));
     }

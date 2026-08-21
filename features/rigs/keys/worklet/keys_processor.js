@@ -22,6 +22,8 @@
 //   midi        { bytes: [status, d1, d2] }
 //   all_notes_off | panic
 //   track_peaks { replyTo }                          → [peak, …] (0 = master)
+//   audio_stats { replyTo }                          → { load, worstMs, quanta,
+//                                                        sampleRate, voices }
 //   set_track_volume { index, volume } | set_track_mute { index, muted }
 //   play | pause | stop
 //
@@ -56,6 +58,25 @@ class KeysRigProcessor extends AudioWorkletProcessor {
     // must not grow this without limit.
     this.misses = [];
     this.missKeys = new Set();
+    // ── Render-load tracing (W8) ───────────────────────────────────────
+    // The worklet clock is the polyfill's Date.now-backed performance
+    // (~1 ms resolution) against a ~2.67 ms quantum, so a single render's
+    // measurement is mostly 0-or-1 quantization noise. AGGREGATE instead:
+    // sum measured render ms over a 250-quantum window (~0.7 s @ 48 kHz)
+    // and divide by the window's AUDIO time (quanta × quantum-ms) — never
+    // by wall time between process() calls, which includes the browser's
+    // own callback pacing and would understate load. Per-window worst
+    // single-quantum cost is kept too (coarse, but a spike that decodes or
+    // GCs mid-render shows up as a multi-ms outlier). All preallocated
+    // numbers — no per-quantum allocation.
+    this.statWindowQuanta = 250;
+    this.statQuantumMs = (128 / sampleRate) * 1000; // sampleRate: worklet global
+    this.statRenderMs = 0;   // accumulating window
+    this.statQuanta = 0;
+    this.statWorstMs = 0;
+    this.statLoad = 0;       // last COMPLETED window: render ms / audio ms
+    this.statLoadWorstMs = 0;
+    this.statTotalQuanta = 0; // monotonic, never reset
     this.port.onmessage = (e) => this.handleMessage(e.data);
   }
 
@@ -274,6 +295,28 @@ class KeysRigProcessor extends AudioWorkletProcessor {
         case 'track_peaks':
           this.reply(msg, this.renderer ? Array.from(this.renderer.trackPeaks()) : []);
           break;
+        case 'audio_stats': {
+          // `load` / `worstMs` are the last COMPLETED window's numbers —
+          // stable for ~0.7 s at a time, which is exactly the cadence a
+          // panel wants. `voices` is -1 when the renderer (or the export)
+          // is not there yet.
+          let voices = -1;
+          try {
+            if (this.renderer && typeof this.renderer.activeVoices === 'function') {
+              voices = this.renderer.activeVoices();
+            }
+          } catch (_e) {
+            // A trapped wasm instance must not take the stats reply down.
+          }
+          this.reply(msg, {
+            load: this.statLoad,
+            worstMs: this.statLoadWorstMs,
+            quanta: this.statTotalQuanta,
+            sampleRate,
+            voices,
+          });
+          break;
+        }
         case 'set_track_volume':
           this.renderer?.setTrackVolume(msg.index, msg.volume);
           break;
@@ -306,7 +349,22 @@ class KeysRigProcessor extends AudioWorkletProcessor {
       return true;
     }
     const out = outputs[0];
+    // Time the render with the coarse (~1 ms) worklet clock and aggregate —
+    // see the constructor's stats comment for why raw per-call numbers lie.
+    const t0 = Date.now();
     this.renderer.render(out[0], out[1] ?? out[0]);
+    const dt = Date.now() - t0;
+    this.statRenderMs += dt;
+    if (dt > this.statWorstMs) this.statWorstMs = dt;
+    this.statQuanta += 1;
+    this.statTotalQuanta += 1;
+    if (this.statQuanta >= this.statWindowQuanta) {
+      this.statLoad = this.statRenderMs / (this.statQuanta * this.statQuantumMs);
+      this.statLoadWorstMs = this.statWorstMs;
+      this.statRenderMs = 0;
+      this.statWorstMs = 0;
+      this.statQuanta = 0;
+    }
     return true;
   }
 }

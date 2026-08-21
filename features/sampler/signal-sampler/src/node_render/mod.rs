@@ -657,6 +657,30 @@ impl RenderNode {
         }
     }
 
+    /// Sum the voices currently alive across this subtree's **sampler**
+    /// sources (`SamplerInstrument` leaves — synth/percussion backends keep
+    /// their own voice vecs and are not counted). A cheap read for
+    /// load/diagnostic panels; `&mut` only because the leaf downcast goes
+    /// through `as_any_mut`.
+    pub fn active_voices(&mut self) -> usize {
+        match self {
+            RenderNode::Leaf { inst: Some(LeafBackend::Source(src)), .. } => src
+                .as_any_mut()
+                .and_then(|a| a.downcast_mut::<crate::SamplerInstrument>())
+                .map(|s| s.engine().active_voices())
+                .unwrap_or(0),
+            RenderNode::Leaf { .. } => 0,
+            RenderNode::Serial(v) | RenderNode::Parallel(v) => {
+                v.iter_mut().map(|n| n.active_voices()).sum()
+            }
+            RenderNode::Zoned { inner, .. }
+            | RenderNode::Gain { inner, .. }
+            | RenderNode::Modulated { inner, .. }
+            | RenderNode::SendTap { inner, .. }
+            | RenderNode::BusInject { inner, .. } => inner.active_voices(),
+        }
+    }
+
     /// The generator kinds of this subtree's **source** leaves, in compile
     /// order — the tree-side view remotes classify layers by (processors
     /// and placeholders are skipped).

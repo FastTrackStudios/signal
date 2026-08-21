@@ -46,6 +46,22 @@ pub(crate) const WORKLET_WASM_URL: &str = "/worklet/signal_keys_worklet_bg.wasm"
 /// offline boot still opens the lanes (packs then come from OPFS).
 const PROGRAM_CACHE_KEY: &str = "lane-program";
 
+/// localStorage key for the AudioContext `latencyHint` choice (W8). Read
+/// at worklet boot; changing it in the audio panel re-runs the whole boot
+/// path (new AudioContext, packs re-attach from OPFS).
+const LATENCY_HINT_KEY: &str = "fts.keys-latency-hint";
+
+/// The stored `latencyHint` (validated), defaulting to `interactive` —
+/// the browser default for `new AudioContext()` and the right choice for
+/// a playable instrument.
+fn latency_hint_pref() -> String {
+    web_sys::window()
+        .and_then(|w| w.local_storage().ok().flatten())
+        .and_then(|s| s.get_item(LATENCY_HINT_KEY).ok().flatten())
+        .filter(|v| matches!(v.as_str(), "interactive" | "balanced" | "playback"))
+        .unwrap_or_else(|| "interactive".into())
+}
+
 /// The demo SMFs are authored at this tempo (they carry no tempo meta;
 /// see examples/demo_midi_gen.rs).
 const DEMO_BPM: f64 = 74.0;
@@ -189,6 +205,29 @@ impl Worklet {
             .collect()
     }
 
+    /// The processor's render-load window (`audio_stats`), plus the page
+    /// side's AudioContext latency figures (Reflect — the getters aren't in
+    /// this crate's web-sys feature set, and a number is all we need).
+    async fn audio_stats(&self) -> Option<AudioStats> {
+        let v = self.rpc("audio_stats", &[], None).await.ok()?;
+        let f = |key: &str| Reflect::get(&v, &key.into()).ok().and_then(|x| x.as_f64());
+        let lat = |key: &str| {
+            Reflect::get(self.ctx.as_ref(), &key.into())
+                .ok()
+                .and_then(|x| x.as_f64())
+                .unwrap_or(0.0)
+        };
+        Some(AudioStats {
+            load: f("load")?,
+            worst_ms: f("worstMs").unwrap_or(0.0),
+            quanta: f("quanta").unwrap_or(0.0),
+            sample_rate: f("sampleRate").unwrap_or_else(|| f64::from(self.ctx.sample_rate())),
+            voices: f("voices").unwrap_or(-1.0) as i32,
+            base_ms: lat("baseLatency") * 1000.0,
+            output_ms: lat("outputLatency") * 1000.0,
+        })
+    }
+
     /// Raw 3-byte MIDI to every lane.
     pub(crate) fn midi(&self, status: u8, d1: u8, d2: u8) {
         let arr = Array::of3(&status.into(), &d1.into(), &d2.into());
@@ -245,7 +284,13 @@ impl Worklet {
 /// gesture (autoplay policy).
 async fn boot_worklet() -> Result<Worklet, String> {
     let window = web_sys::window().ok_or("no window")?;
-    let ctx = AudioContext::new().map_err(|e| format!("AudioContext: {}", js_str(e)))?;
+    // The stored latencyHint rides AudioContextOptions (Reflect-set onto
+    // the options dict — it is a plain JS object, and the union-typed
+    // setter shape varies across web-sys versions).
+    let opts = web_sys::AudioContextOptions::new();
+    let _ = Reflect::set(&opts, &"latencyHint".into(), &latency_hint_pref().as_str().into());
+    let ctx = AudioContext::new_with_context_options(&opts)
+        .map_err(|e| format!("AudioContext: {}", js_str(e)))?;
     // Autoplay insurance: a context created outside a real user gesture
     // starts 'suspended' and our own resume() call is then rejected too —
     // silence with everything else working. Any genuine pointer press on the
@@ -484,6 +529,34 @@ fn lane_tracks(lanes: &[signal_keys_proto::KeysLaneRef]) -> Vec<u32> {
     out
 }
 
+/// One `audio_stats` reading: the processor's render-load window plus the
+/// page-side AudioContext latency figures (W8).
+#[derive(Clone, Copy, PartialEq, Default)]
+struct AudioStats {
+    /// Render load 0..1+ — total measured render ms over the window's
+    /// AUDIO ms (quanta × quantum-ms). See the processor's stats comment
+    /// for the coarse-clock aggregation.
+    load: f64,
+    /// Worst single-quantum render cost in the last window (ms, ~1 ms
+    /// resolution — coarse, but spikes show).
+    worst_ms: f64,
+    /// Monotonic quantum counter since the worklet booted.
+    quanta: f64,
+    sample_rate: f64,
+    /// Active sampler voices, or -1 when unavailable.
+    voices: i32,
+    /// `ctx.baseLatency` in ms.
+    base_ms: f64,
+    /// `ctx.outputLatency` in ms (0 where the browser doesn't expose it).
+    output_ms: f64,
+}
+
+impl AudioStats {
+    fn latency_ms(&self) -> f64 {
+        self.base_ms + self.output_ms
+    }
+}
+
 /// The `window.__ftsRig` state hook W5's Playwright test polls.
 #[derive(Default)]
 struct RigHook {
@@ -492,6 +565,9 @@ struct RigHook {
     master_peak: f64,
     /// Rig-wide Resolution 0–100 (see [`resolution_pct`]).
     resolution: f64,
+    /// Last audio_stats reading (W8) — `renderLoad()` / `latencyMs()` /
+    /// `audioStats()` read these.
+    audio: AudioStats,
 }
 
 thread_local! {
@@ -542,6 +618,29 @@ fn hook_set_peak(peak: f64) {
     RIG_HOOK.with(|h| h.borrow_mut().master_peak = peak);
 }
 
+fn hook_set_audio(stats: AudioStats) {
+    RIG_HOOK.with(|h| h.borrow_mut().audio = stats);
+}
+
+/// The `audioStats()` JSON row (mirrors [`AudioStats`], camelCase keys for
+/// the e2e suite / remote debugging).
+#[derive(facet::Facet, Default)]
+struct HookAudio {
+    load: f64,
+    #[facet(rename = "worstMs")]
+    worst_ms: f64,
+    quanta: f64,
+    #[facet(rename = "sampleRate")]
+    sample_rate: f64,
+    voices: i32,
+    #[facet(rename = "baseMs")]
+    base_ms: f64,
+    #[facet(rename = "outputMs")]
+    output_ms: f64,
+    #[facet(rename = "latencyMs")]
+    latency_ms: f64,
+}
+
 /// Install `window.__ftsRig = { state, packStates, masterPeak }` once.
 fn install_hook() {
     let Some(window) = web_sys::window() else { return };
@@ -561,16 +660,44 @@ fn install_hook() {
     let resolution = Closure::<dyn FnMut() -> JsValue>::new(|| {
         RIG_HOOK.with(|h| JsValue::from_f64(h.borrow().resolution))
     });
+    // W8 audio diagnostics. These read the thread-local (not a captured
+    // worklet), so they survive the latency-hint re-boot unchanged.
+    let render_load = Closure::<dyn FnMut() -> JsValue>::new(|| {
+        RIG_HOOK.with(|h| JsValue::from_f64(h.borrow().audio.load))
+    });
+    let latency_ms = Closure::<dyn FnMut() -> JsValue>::new(|| {
+        RIG_HOOK.with(|h| JsValue::from_f64(h.borrow().audio.latency_ms()))
+    });
+    let audio_stats = Closure::<dyn FnMut() -> JsValue>::new(|| {
+        let a = RIG_HOOK.with(|h| h.borrow().audio);
+        let row = HookAudio {
+            load: a.load,
+            worst_ms: a.worst_ms,
+            quanta: a.quanta,
+            sample_rate: a.sample_rate,
+            voices: a.voices,
+            base_ms: a.base_ms,
+            output_ms: a.output_ms,
+            latency_ms: a.latency_ms(),
+        };
+        JsValue::from_str(&facet_json::to_string(&row).unwrap_or_default())
+    });
     let _ = Reflect::set(&obj, &"state".into(), state.as_ref());
     let _ = Reflect::set(&obj, &"packStates".into(), packs.as_ref());
     let _ = Reflect::set(&obj, &"masterPeak".into(), peak.as_ref());
     let _ = Reflect::set(&obj, &"resolution".into(), resolution.as_ref());
+    let _ = Reflect::set(&obj, &"renderLoad".into(), render_load.as_ref());
+    let _ = Reflect::set(&obj, &"latencyMs".into(), latency_ms.as_ref());
+    let _ = Reflect::set(&obj, &"audioStats".into(), audio_stats.as_ref());
     let _ = Reflect::set(&window, &"__ftsRig".into(), &obj);
     // Page-lifetime closures.
     state.forget();
     packs.forget();
     peak.forget();
     resolution.forget();
+    render_load.forget();
+    latency_ms.forget();
+    audio_stats.forget();
 }
 
 // ── Engine plumbing ────────────────────────────────────────────────────────
@@ -657,6 +784,8 @@ pub fn KeysWebRig() -> Element {
     let master = use_signal(|| 0.0f32);
     let midi_inputs = use_signal(Vec::<String>::new);
     let ssm_open = use_signal(|| false);
+    let audio_open = use_signal(|| false);
+    let astats = use_signal(AudioStats::default);
     // (index playing, looping, generation) — generation cancels schedulers.
     let demo = use_signal(|| (Option::<usize>::None, false, 0u64));
 
@@ -671,7 +800,30 @@ pub fn KeysWebRig() -> Element {
         }
         boot.set(Boot::Starting("booting audio worklet…".into()));
         hook_set_state("starting");
-        spawn(boot_rig(boot, packs, lanes, worklet, master, midi_inputs));
+        spawn(boot_rig(boot, packs, lanes, worklet, master, midi_inputs, astats));
+    });
+
+    // Full re-boot of the audio path (the latency-hint selector's change
+    // path): close the old AudioContext, drop the worklet, and run the
+    // ordinary boot again — the new context picks up the stored hint, the
+    // lane program comes from the IndexedDB cache, and every pack
+    // re-attaches from OPFS with no network. The old poll loops park
+    // themselves when they see the worklet signal changed.
+    let restart = use_callback(move |_: ()| {
+        let mut boot = boot;
+        let mut worklet = worklet;
+        let mut packs = packs;
+        let mut lanes = lanes;
+        if let Some(w) = worklet.peek().clone() {
+            w.all_notes_off();
+            let _ = w.ctx.close();
+        }
+        worklet.set(None);
+        packs.set(Vec::new());
+        lanes.set(Vec::new());
+        boot.set(Boot::Starting("restarting audio…".into()));
+        hook_set_state("starting");
+        spawn(boot_rig(boot, packs, lanes, worklet, master, midi_inputs, astats));
     });
 
     // Usable = attached and sounding (ready OR playable-while-filling);
@@ -719,6 +871,19 @@ pub fn KeysWebRig() -> Element {
                     }
                 }
                 MasterMeter { master }
+                button {
+                    "data-testid": "audio-button",
+                    style: "display:flex; align-items:center; gap:6px; padding:4px 10px; border-radius:6px; background:#111113; color:#e4e4e7; border:1px solid #27272a; font-size:12px; cursor:pointer;",
+                    onclick: {
+                        let mut audio_open = audio_open;
+                        move |_| { let v = *audio_open.peek(); audio_open.set(!v); }
+                    },
+                    span { "🎚" }
+                    span { style: "color:#a1a1aa;", "Audio" }
+                }
+                if audio_open() {
+                    AudioPanel { astats, restart, boot_running: matches!(boot(), Boot::Running) }
+                }
                 button {
                     "data-testid": "ssm-button",
                     style: "display:flex; align-items:center; gap:6px; padding:4px 10px; border-radius:6px; background:#111113; color:#e4e4e7; border:1px solid #27272a; font-size:12px; cursor:pointer;",
@@ -788,6 +953,7 @@ async fn boot_rig(
     mut worklet_out: Signal<Option<Worklet>>,
     master: Signal<f32>,
     midi_inputs: Signal<Vec<String>>,
+    astats: Signal<AudioStats>,
 ) {
     let fail = |boot: &mut Signal<Boot>, msg: String| {
         hook_set_state("failed");
@@ -873,8 +1039,10 @@ async fn boot_rig(
     // 4. WebMIDI in the background.
     spawn(init_webmidi(worklet.clone(), midi_inputs));
 
-    // 5. Meter poll.
-    spawn(poll_peaks(worklet.clone(), lanes, master));
+    // 5. Meter poll (~10 Hz) + audio-stats poll (2 Hz — the processor's
+    // load window only turns over every ~0.7 s anyway).
+    spawn(poll_peaks(worklet.clone(), worklet_out, lanes, master));
+    spawn(poll_audio_stats(worklet.clone(), worklet_out, astats));
 
     // 6. Stream the packs, lane order. Small packs stream whole (the W6
     // path — seconds); packs past PROGRESSIVE_THRESHOLD go PROGRESSIVE:
@@ -1564,10 +1732,24 @@ async fn init_webmidi(worklet: Worklet, mut names_out: Signal<Vec<String>>) {
     names_out.set(names);
 }
 
+/// True while `worklet` is still the page's live worklet — poll loops
+/// park themselves once the latency-hint restart swapped it out.
+fn still_current(worklet: &Worklet, current: &Signal<Option<Worklet>>) -> bool {
+    current.peek().as_ref() == Some(worklet)
+}
+
 /// ~10 Hz meter poll off the worklet's `trackPeaks`.
-async fn poll_peaks(worklet: Worklet, mut lanes: Signal<Vec<LaneRow>>, mut master: Signal<f32>) {
+async fn poll_peaks(
+    worklet: Worklet,
+    current: Signal<Option<Worklet>>,
+    mut lanes: Signal<Vec<LaneRow>>,
+    mut master: Signal<f32>,
+) {
     loop {
         architect::platform::sleep(std::time::Duration::from_millis(100)).await;
+        if !still_current(&worklet, &current) {
+            return;
+        }
         let Ok(v) = worklet.rpc("track_peaks", &[], None).await else {
             continue;
         };
@@ -1583,6 +1765,27 @@ async fn poll_peaks(worklet: Worklet, mut lanes: Signal<Vec<LaneRow>>, mut maste
         for row in rows.iter_mut() {
             row.peak = peaks.get(row.track as usize).copied().unwrap_or(0.0);
         }
+    }
+}
+
+/// 2 Hz audio-stats poll (W8): the processor's render-load window plus the
+/// AudioContext latency figures, mirrored to the panel signal and the
+/// `__ftsRig` hook.
+async fn poll_audio_stats(
+    worklet: Worklet,
+    current: Signal<Option<Worklet>>,
+    mut astats: Signal<AudioStats>,
+) {
+    loop {
+        architect::platform::sleep(std::time::Duration::from_millis(500)).await;
+        if !still_current(&worklet, &current) {
+            return;
+        }
+        let Some(stats) = worklet.audio_stats().await else {
+            continue;
+        };
+        astats.set(stats);
+        hook_set_audio(stats);
     }
 }
 
@@ -1602,6 +1805,109 @@ fn MasterMeter(master: Signal<f32>) -> Element {
 
 fn mb(bytes: u64) -> String {
     format!("{:.1} MB", bytes as f64 / (1024.0 * 1024.0))
+}
+
+/// The Audio panel popover (W8): latency visibility + render-load tracing
+/// + the latencyHint selector (whose change re-boots the audio path).
+#[component]
+fn AudioPanel(
+    astats: Signal<AudioStats>,
+    restart: Callback<()>,
+    boot_running: bool,
+) -> Element {
+    let a = astats();
+    let load_pct = (a.load * 100.0).max(0.0);
+    let load_bar_pct = load_pct.min(100.0);
+    let load_color = if load_pct < 60.0 {
+        "#22c55e"
+    } else if load_pct < 90.0 {
+        "#fbbf24"
+    } else {
+        "#ef4444"
+    };
+    let uptime_s = if a.sample_rate > 0.0 {
+        a.quanta * 128.0 / a.sample_rate
+    } else {
+        0.0
+    };
+    let hint = latency_hint_pref();
+    let row_style = "display:flex; align-items:baseline; gap:8px;";
+    let key_style = "font-size:11px; color:#71717a; flex:1;";
+    let val_style = "font-size:12px; color:#e4e4e7;";
+
+    rsx! {
+        div {
+            "data-testid": "audio-popover",
+            style: "position:absolute; top:44px; right:12px; z-index:60; width:300px; background:#111113; border:1px solid #27272a; border-radius:10px; padding:12px; display:flex; flex-direction:column; gap:8px; box-shadow:0 8px 30px rgba(0,0,0,.5);",
+            span { style: "font-size:12px; font-weight:700; letter-spacing:1px; color:#a1a1aa; text-transform:uppercase;", "Audio" }
+            div { style: row_style,
+                span { style: key_style, "sample rate" }
+                span { style: val_style, "{a.sample_rate as u32} Hz" }
+            }
+            div { style: row_style,
+                span { style: key_style, "quantum" }
+                span { style: val_style, "128 samples" }
+            }
+            div { style: row_style,
+                span { style: key_style, "latency (base + output)" }
+                span { style: val_style,
+                    "{a.base_ms:.1} + {a.output_ms:.1} = {a.latency_ms():.1} ms"
+                }
+            }
+            div { style: "display:flex; flex-direction:column; gap:3px;",
+                div { style: row_style,
+                    span { style: key_style, "render load" }
+                    span { style: "font-size:12px; color:{load_color};", "{load_pct:.0}%" }
+                }
+                div {
+                    style: "height:6px; border-radius:3px; background:#18181b; border:1px solid #27272a; overflow:hidden;",
+                    div {
+                        "data-testid": "audio-load",
+                        style: "height:100%; width:{load_bar_pct}%; background:{load_color};",
+                    }
+                }
+            }
+            div { style: row_style,
+                span { style: key_style, "worst quantum" }
+                span { style: val_style, "{a.worst_ms:.0} ms" }
+            }
+            if a.voices >= 0 {
+                div { style: row_style,
+                    span { style: key_style, "voices" }
+                    span { style: val_style, "{a.voices}" }
+                }
+            }
+            div { style: row_style,
+                span { style: key_style, "latency hint" }
+                select {
+                    "data-testid": "audio-latency-hint",
+                    disabled: !boot_running,
+                    style: "background:#18181b; color:#e4e4e7; border:1px solid #27272a; border-radius:4px; font-size:12px; padding:2px 6px;",
+                    value: "{hint}",
+                    onchange: move |ev| {
+                        let choice = ev.value();
+                        if !matches!(choice.as_str(), "interactive" | "balanced" | "playback") {
+                            return;
+                        }
+                        if let Some(s) = web_sys::window().and_then(|w| w.local_storage().ok().flatten()) {
+                            let _ = s.set_item(LATENCY_HINT_KEY, &choice);
+                        }
+                        // Applying the hint needs a NEW AudioContext — run
+                        // the full re-boot (cached program + OPFS packs, no
+                        // network).
+                        restart.call(());
+                    },
+                    option { value: "interactive", "interactive" }
+                    option { value: "balanced", "balanced" }
+                    option { value: "playback", "playback" }
+                }
+            }
+            div { style: row_style,
+                span { style: key_style, "quanta / uptime" }
+                span { style: val_style, "{a.quanta as u64} · {uptime_s:.0} s" }
+            }
+        }
+    }
 }
 
 /// The Soundsource Manager popover: per-pack rows + the demo MIDI player

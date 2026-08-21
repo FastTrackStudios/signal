@@ -284,6 +284,55 @@ Reuse, don't reinvent:
     the miss path; everything `ready`, resolution 100, FULL RESOLUTION
     rendered. The W6 suite runs unchanged before it.
 
+- **W8 — the Audio panel: latency visibility + render-load tracing** —
+  DONE.
+  - **Render load, measured in the processor** (keys_processor.js):
+    `this.renderer.render(...)` in `process()` is timed with the
+    polyfill's Date.now-backed clock (~1 ms resolution vs a ~2.67 ms
+    quantum — a single call's reading is 0-or-1 quantization noise), so
+    the numbers are AGGREGATED: render ms summed over a 250-quantum
+    window (~0.7 s @ 48 kHz) and divided by the window's AUDIO time
+    (quanta × 128000/sampleRate ms) — never by wall time between
+    `process()` calls, which includes the browser's callback pacing and
+    would understate load. Per-window worst single-quantum cost (coarse
+    but spike-catching) and a monotonic quantum counter ride along. All
+    preallocated numbers — nothing allocates per quantum. New message
+    `audio_stats { replyTo }` → `{ load, worstMs, quanta, sampleRate,
+    voices }`.
+  - **Voice count**: `SampleEngine::active_voices()` already existed
+    (`VoicePool::active_count`, a `Vec::len`); W8 added the shallow walk
+    up — `RenderNode::active_voices()` (sums `SamplerInstrument` leaves;
+    synth backends keep private voice vecs and are not counted) and
+    `KeysRig::active_voices()` (per-lane `edit_lane`, same seam as
+    `warm_note`), exported as `KeysWorklet::activeVoices`.
+  - **Latency, page-side**: `ctx.baseLatency` + `ctx.outputLatency` read
+    via Reflect (the getters aren't in the app's web-sys feature set),
+    refreshed by a dedicated 2 Hz `audio_stats` poll (the load window
+    only turns over every ~0.7 s; 10 Hz would re-read the same window).
+  - **latencyHint** (interactive | balanced | playback): stored in
+    localStorage `fts.keys-latency-hint`, applied at `boot_worklet` via
+    `AudioContextOptions` (the option object Reflect-set — the web-sys
+    union setter shape varies by version; feature `AudioContextOptions`
+    added for `new_with_context_options`). Changing it runs an IN-PAGE
+    re-boot, not a reload: close the old context, drop the worklet,
+    re-run `boot_rig` — cached lane program (IndexedDB) + OPFS packs
+    mean no network. Poll loops carry the worklet signal and park
+    themselves when superseded. (Known benign race: a pack attach still
+    in flight from the old boot can stamp its row Ready in the new
+    list — same pack, same totals.)
+  - **Panel**: a top-bar "Audio" button (`audio-button`) opens
+    `audio-popover`: sample rate, quantum, base/output/total latency ms,
+    the render-load bar (`audio-load`; green < 60%, amber < 90%, red
+    past), worst-quantum ms, voices (when ≥ 0), the hint selector
+    (`audio-latency-hint`), quanta/uptime. `__ftsRig` gains
+    `renderLoad()`, `latencyMs()`, `audioStats()` (JSON) — reading the
+    thread-local hook state, so they survive the re-boot uninstalled.
+  - **e2e**: the audio test asserts `renderLoad()` ∈ (0, 0.9) and
+    `latencyMs() > 0` while the demo plays and screenshots the popover;
+    a fourth serial test flips the hint to `playback` and proves the rig
+    recovers (state, cached packs, `audioState() === 'running'`, a note
+    still moves the master peak) — the re-boot path's regression test.
+
 ## Open questions / later
 
 - Piano-lane weight on travel links: consider a lower-quality travel
