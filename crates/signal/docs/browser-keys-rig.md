@@ -333,6 +333,67 @@ Reuse, don't reinvent:
     recovers (state, cached packs, `audioState() === 'running'`, a note
     still moves the master peak) — the re-boot path's regression test.
 
+- **W9 — full UI parity: the page body is `signal_keys_ui::KeysRigRemote`**
+  — DONE. The same remote component the desktop (`rig_view.rs`) and phone
+  mount, backed by REAL `KeysRigClient`/`KeysRigStreamClient` vox clients
+  — served locally, in-process, in the tab.
+  - **Transport (choice (a))**: architect's `LocalServer` works on wasm —
+    it carries its own in-memory `Link` (`architect/src/memory_link.rs`,
+    wasm-only, built exactly for "the in-process browser engine's `!Send`
+    backend") and the `#[architect::rpc]` derive relaxes backend bounds to
+    `MaybeSendSync` (empty on wasm). So no seam in signal-keys-ui at all:
+    `web_keys_backend.rs` implements the `KeysRig` trait +
+    `KeysRigStreamSource` + `Services` (`layers![Service, StreamService]`,
+    `CurrentThreadDispatcher`), `LocalServer::serve(into_router(), scope)`
+    establishes the two typed clients, and the page provides them in
+    context precisely as `rig_view.rs` does over the network. The UI
+    cannot tell it isn't remote.
+  - **`WebKeysBackend`** (apps/fasttrackstudio/src/web_keys_backend.rs):
+    state page-side, audio in the worklet. Real: status (peaks/voices/ctx
+    state), mixer (engines/lanes from the lane program; gains, mutes,
+    solos with native solo semantics, master trim — dB → linear onto the
+    worklet's folder/lane tracks), tree, engine order, trigger/pitch
+    bend/mod wheel (raw MIDI to the worklet), `midi_ports`/`set_midi_port`
+    (WebMIDI input selection, checked per message), `midi_recent` (a ring
+    fed by the ONE `Worklet::midi` seam — WebMIDI, demo player, on-screen
+    keys, `trigger`), start/stop (AudioContext resume/suspend),
+    `lane_program_wire` (the cached program). Honest stubs (engine-side
+    state only): preset library (ONE row — the resolved profile),
+    `load_preset`/`set_layer_patch`/`set_layer_variant`/`clear_layer`
+    (`last_error` says why), macros/Global Controls (empty lists — they
+    drive engine DSP rebuilds), per-module gain/enable (lanes run one
+    fused instrument in-tab), stacks (empty; `perform_mode` stored),
+    drones. The full table is in the module docs.
+  - **Events**: a local `PubSub::sliding(64)` hub. The 10 Hz peak poll is
+    the meter pump (Status + queued Midi each tick); Mixer/Tree/Library/
+    Perform publish on change — the UI's reactive paths light up as packs
+    attach (`update_row` mirrors pack usability onto lane `live` flags).
+  - **Chrome/layout**: the W3–W8 header (RESOLUTION, Soundsources popover
+    incl. demo player, Audio panel) stays; `fts_chrome::provide_chrome()`
+    + a `PanelRail` at the remote's right edge make the rig's Routing and
+    MIDI-monitor panels openable; below the remote sits a compact footer
+    with the on-screen octave and the **compat lane strip** — kept VISIBLE
+    and functional (per-lane volume/mute now routed through the backend so
+    the remote mixer and the strip stay coherent; strip state re-syncs
+    from the backend every peak tick). All `lane-row-*`/`lane-mute-*`
+    testids (and `data-pack-name`) live there unchanged; every other
+    testid + the `__ftsRig` hook untouched.
+  - **Clients survive the latency-hint re-boot**: the backend is stable;
+    `install` refreshes its shared state, `set_worklet(None → new)` swaps
+    the audio path, the mounted remote never re-establishes.
+  - Verified: both e2e suites 8/8 green twice; a manual playwright probe
+    confirms the remote mounts (perform strip, engine cards, patches) and
+    that a mute clicked in the remote mixer round-trips through the
+    in-process RPC to the worklet and back out to the strip.
+  - Parity scope, per region: **full** — mixer zooms' faders/mutes/solos/
+    meters, tree/routing panel, MIDI monitor + keyboard lights, perform
+    mode buttons, on-screen input; **partial** — layer/engine zoom render
+    with empty macro panels and one module slot (no Global Controls DSP
+    in-tab), browser lists the single resolved profile; **absent by
+    honest stub** — preset loading, stacks, drones, module editing (all
+    engine-side state; the methods answer with current state and
+    `last_error` text where a click would otherwise lie).
+
 ## Open questions / later
 
 - Piano-lane weight on travel links: consider a lower-quality travel

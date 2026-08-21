@@ -10,11 +10,14 @@
 //! WebMIDI inputs and the bundled demo SMFs; a top-bar **Soundsource
 //! Manager** popover shows per-pack streaming state.
 //!
-//! v1 is a MINIMAL rig page (lane list + volumes/mutes + on-screen keys +
-//! master meter) rather than `signal_keys_ui::KeysRigRemote`: the remote
-//! needs real `KeysRigClient`/`KeysRigStreamClient` vox clients, and a
-//! local backend proxying 30+ service methods onto the worklet is a
-//! follow-up, not a page.
+//! Since W9 the page body is the REAL remote UI —
+//! `signal_keys_ui::KeysRigRemote`, the same component the desktop and
+//! phone mount — backed by real `KeysRigClient`/`KeysRigStreamClient`
+//! vox clients served in-process by `web_keys_backend.rs` (architect's
+//! `LocalServer` over its wasm memory link). The W3–W8 top-bar chrome
+//! (Resolution, Soundsources + demo player, Audio panel) stays around it,
+//! with the compact lane strip + on-screen octave below (the strip also
+//! carries the `lane-row-*`/`lane-mute-*` e2e testids).
 
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
@@ -23,7 +26,8 @@ use std::rc::Rc;
 use dioxus::prelude::*;
 use js_sys::{Array, Object, Reflect};
 use signal_keys_proto::KeysLaneProgram;
-use signal_keys_proto::keys::KeysRigClient;
+use signal_keys_proto::keys::{KeysRigClient, KeysRigStreamClient};
+use signal_keys_ui::KeysRigRemote;
 use signal_packs_proto::PackInfo;
 use signal_packs_proto::packs::PackLibraryClient;
 use wasm_bindgen::prelude::*;
@@ -228,24 +232,39 @@ impl Worklet {
         })
     }
 
-    /// Raw 3-byte MIDI to every lane.
+    /// Raw 3-byte MIDI to every lane. The ONE seam every source goes
+    /// through (WebMIDI, demo player, on-screen keys, the backend's
+    /// `trigger`), so it also feeds the monitor's recent-MIDI ring.
     pub(crate) fn midi(&self, status: u8, d1: u8, d2: u8) {
+        crate::web_keys_backend::midi_seen(status, d1, d2);
         let arr = Array::of3(&status.into(), &d1.into(), &d2.into());
         self.fire("midi", &[("bytes", arr.into())]);
+    }
+
+    /// Resume the AudioContext (the backend's `start`; a no-op while
+    /// already running).
+    pub(crate) fn resume(&self) {
+        let _ = self.ctx.resume();
+    }
+
+    /// Suspend the AudioContext (the backend's `stop` — audio pauses,
+    /// packs and the lane program stay).
+    pub(crate) fn suspend(&self) {
+        let _ = self.ctx.suspend();
     }
 
     pub(crate) fn all_notes_off(&self) {
         self.fire("all_notes_off", &[]);
     }
 
-    fn set_track_volume(&self, index: u32, volume: f64) {
+    pub(crate) fn set_track_volume(&self, index: u32, volume: f64) {
         self.fire(
             "set_track_volume",
             &[("index", index.into()), ("volume", volume.into())],
         );
     }
 
-    fn set_track_mute(&self, index: u32, muted: bool) {
+    pub(crate) fn set_track_mute(&self, index: u32, muted: bool) {
         self.fire(
             "set_track_mute",
             &[("index", index.into()), ("muted", muted.into())],
@@ -773,6 +792,11 @@ fn pick_variant(listing: &[PackInfo], name: &str) -> Option<PackWant> {
 
 // ── The page ───────────────────────────────────────────────────────────────
 
+/// The compiled Tailwind sheet the signal UI components style themselves
+/// with (additive — signal-keys-ui is inline-styles-first). The same file
+/// `rig_view.rs` inlines for the desktop remotes.
+const SIGNAL_TAILWIND: &str = include_str!("../assets/tailwind-signal.css");
+
 /// The browser keys rig root. Reads the URL itself; no props.
 #[component]
 pub fn KeysWebRig() -> Element {
@@ -786,8 +810,15 @@ pub fn KeysWebRig() -> Element {
     let ssm_open = use_signal(|| false);
     let audio_open = use_signal(|| false);
     let astats = use_signal(AudioStats::default);
+    // The in-process vox clients KeysRigRemote consumes (established once
+    // the backend is installed; survive the latency-hint re-boot).
+    let clients = use_signal(|| Option::<(KeysRigClient, KeysRigStreamClient)>::None);
     // (index playing, looping, generation) — generation cancels schedulers.
     let demo = use_signal(|| (Option::<usize>::None, false, 0u64));
+
+    // The remote UI publishes its readouts/panels into the app chrome —
+    // provide one shared Chrome so its PanelHosts and our PanelRail agree.
+    fts_chrome::provide_chrome();
 
     use_hook(|| {
         install_hook();
@@ -800,7 +831,7 @@ pub fn KeysWebRig() -> Element {
         }
         boot.set(Boot::Starting("booting audio worklet…".into()));
         hook_set_state("starting");
-        spawn(boot_rig(boot, packs, lanes, worklet, master, midi_inputs, astats));
+        spawn(boot_rig(boot, packs, lanes, worklet, master, midi_inputs, astats, clients));
     });
 
     // Full re-boot of the audio path (the latency-hint selector's change
@@ -819,11 +850,12 @@ pub fn KeysWebRig() -> Element {
             let _ = w.ctx.close();
         }
         worklet.set(None);
+        crate::web_keys_backend::set_worklet(None);
         packs.set(Vec::new());
         lanes.set(Vec::new());
         boot.set(Boot::Starting("restarting audio…".into()));
         hook_set_state("starting");
-        spawn(boot_rig(boot, packs, lanes, worklet, master, midi_inputs, astats));
+        spawn(boot_rig(boot, packs, lanes, worklet, master, midi_inputs, astats, clients));
     });
 
     // Usable = attached and sounding (ready OR playable-while-filling);
@@ -905,7 +937,13 @@ pub fn KeysWebRig() -> Element {
                 }
             }
             // ── Body ───────────────────────────────────────────────────
-            main { style: "flex:1; display:flex; flex-direction:column; gap:16px; padding:20px; max-width:860px; width:100%; margin:0 auto;",
+            main {
+                style: if matches!(boot(), Boot::Running) {
+                    // The full remote UI wants the whole viewport.
+                    "flex:1; min-height:0; display:flex; flex-direction:column;"
+                } else {
+                    "flex:1; display:flex; flex-direction:column; gap:16px; padding:20px; max-width:860px; width:100%; margin:0 auto;"
+                },
                 match boot() {
                     Boot::Idle => rsx! {
                         div { style: "display:flex; flex-direction:column; align-items:center; gap:12px; margin:auto;",
@@ -936,8 +974,32 @@ pub fn KeysWebRig() -> Element {
                         }
                     },
                     Boot::Running => rsx! {
-                        LaneList { lanes, packs, worklet }
-                        OnScreenKeys { worklet }
+                        document::Style { {SIGNAL_TAILWIND} }
+                        // The real remote UI over the in-process clients,
+                        // with the chrome's panel rail at its right edge
+                        // (Routing + MIDI monitor open beside the mixer).
+                        div { style: "flex:1; min-height:0; display:flex;",
+                            match clients() {
+                                Some((rig, stream)) => {
+                                    let _ = provide_context(rig);
+                                    let _ = provide_context(stream);
+                                    rsx! { KeysRigRemote {} }
+                                }
+                                None => rsx! {
+                                    div { style: "display:flex; align-items:center; justify-content:center; flex:1; color:#71717a; font-size:13px;",
+                                        "Wiring the rig UI…"
+                                    }
+                                },
+                            }
+                            fts_chrome::PanelRail {}
+                        }
+                        // The no-hardware input + the compact lane strip
+                        // (per-lane mute/volume straight onto the worklet
+                        // tracks — also the e2e suite's lane testids).
+                        div { style: "flex:none; border-top:1px solid #27272a; padding:8px 14px; display:flex; flex-direction:column; gap:8px; max-height:38vh; overflow-y:auto;",
+                            OnScreenKeys { worklet }
+                            LaneList { lanes, packs, worklet }
+                        }
                     },
                 }
             }
@@ -946,6 +1008,7 @@ pub fn KeysWebRig() -> Element {
 }
 
 /// The whole boot sequence, spawned from the Start gesture.
+#[allow(clippy::too_many_arguments)]
 async fn boot_rig(
     mut boot: Signal<Boot>,
     mut packs: Signal<Vec<PackRow>>,
@@ -954,6 +1017,7 @@ async fn boot_rig(
     master: Signal<f32>,
     midi_inputs: Signal<Vec<String>>,
     astats: Signal<AudioStats>,
+    mut clients: Signal<Option<(KeysRigClient, KeysRigStreamClient)>>,
 ) {
     let fail = |boot: &mut Signal<Boot>, msg: String| {
         hook_set_state("failed");
@@ -1003,6 +1067,23 @@ async fn boot_rig(
             .collect(),
     );
     worklet_out.set(Some(worklet.clone()));
+
+    // W9: install (or refresh, on a re-boot) the in-tab backend and hand
+    // it the worklet; establish the in-process vox clients KeysRigRemote
+    // mounts over. Clients survive a re-boot — the backend is stable and
+    // only its worklet handle swaps.
+    let backend =
+        crate::web_keys_backend::install(&profile_from_path().unwrap_or_default(), &program);
+    crate::web_keys_backend::set_worklet(Some(worklet.clone()));
+    if clients.peek().is_none() {
+        match backend.clients().await {
+            Ok(pair) => clients.set(Some(pair)),
+            Err(e) => {
+                tracing::warn!("in-process keys clients failed to establish: {e:?}");
+            }
+        }
+    }
+
     boot.set(Boot::Running);
     hook_set_state("running");
 
@@ -1104,6 +1185,14 @@ fn update_row(packs: &mut Signal<Vec<PackRow>>, i: usize, f: impl FnOnce(&mut Pa
         }
     }
     hook_set_packs(&packs.peek());
+    // Mirror pack usability onto the backend's lane `live` flags (the
+    // remote UI's tree/mixer light up as packs attach).
+    let usable: Vec<(String, bool)> = packs
+        .peek()
+        .iter()
+        .map(|r| (r.key.clone(), r.phase.usable()))
+        .collect();
+    crate::web_keys_backend::on_packs(&usable);
 }
 
 /// OPFS-first fetch of one manifest pack, attach + lane reload on success.
@@ -1712,10 +1801,17 @@ async fn init_webmidi(worklet: Worklet, mut names_out: Signal<Vec<String>>) {
             let Ok(input) = pair.get(1).dyn_into::<web_sys::MidiInput>() else {
                 continue;
             };
-            names.push(input.name().unwrap_or_else(|| "MIDI input".into()));
+            let name = input.name().unwrap_or_else(|| "MIDI input".into());
+            names.push(name.clone());
             let w = worklet.clone();
             let onmsg = Closure::<dyn FnMut(web_sys::MidiMessageEvent)>::new(
                 move |ev: web_sys::MidiMessageEvent| {
+                    // `set_midi_port` selects which input forwards (omni
+                    // when none is selected) — checked per message so the
+                    // choice applies live, no re-enumeration.
+                    if !crate::web_keys_backend::midi_allows(&name) {
+                        return;
+                    }
                     if let Ok(data) = ev.data()
                         && !data.is_empty()
                     {
@@ -1729,6 +1825,7 @@ async fn init_webmidi(worklet: Worklet, mut names_out: Signal<Vec<String>>) {
             onmsg.forget(); // page-lifetime
         }
     }
+    crate::web_keys_backend::set_webmidi_inputs(names.clone());
     names_out.set(names);
 }
 
@@ -1761,9 +1858,19 @@ async fn poll_peaks(
         let m = peaks.first().copied().unwrap_or(0.0);
         master.set(m);
         hook_set_peak(f64::from(m));
+        // The backend's meter tick: Status (+ any queued MIDI) onto the
+        // remote UI's event stream.
+        crate::web_keys_backend::on_peaks(&peaks);
+        // Keep the compat strip coherent with mixer edits made through
+        // KeysRigRemote (both index off the same program lane order).
+        let strip = crate::web_keys_backend::strip_state();
         let mut rows = lanes.write();
-        for row in rows.iter_mut() {
+        for (i, row) in rows.iter_mut().enumerate() {
             row.peak = peaks.get(row.track as usize).copied().unwrap_or(0.0);
+            if let Some((volume, muted)) = strip.get(i) {
+                row.volume = *volume;
+                row.muted = *muted;
+            }
         }
     }
 }
@@ -1786,6 +1893,7 @@ async fn poll_audio_stats(
         };
         astats.set(stats);
         hook_set_audio(stats);
+        crate::web_keys_backend::on_voices(stats.voices);
     }
 }
 
@@ -2231,6 +2339,9 @@ fn LaneList(
     packs: Signal<Vec<PackRow>>,
     worklet: Signal<Option<Worklet>>,
 ) -> Element {
+    // Mixer writes go through the backend now (kept as a prop so the
+    // strip stays mountable before the backend exists).
+    let _ = worklet;
     let rows = lanes.read().clone();
     let pack_phase = |key: &str| -> Option<PackPhase> {
         packs.read().iter().find(|p| p.key == key).map(|p| p.phase.clone())
@@ -2260,7 +2371,6 @@ fn LaneList(
                     };
                     let peak_pct = (row.peak.clamp(0.0, 1.0) * 100.0) as u32;
                     let vol_pct = (row.volume * 80.0) as i64;
-                    let track = row.track;
                     let muted = row.muted;
                     let lane_pack = pack_name(&row.key);
                     rsx! {
@@ -2283,7 +2393,9 @@ fn LaneList(
                                 oninput: move |ev| {
                                     let v = ev.value().parse::<f64>().unwrap_or(80.0) / 80.0;
                                     if let Some(row) = lanes.write().get_mut(i) { row.volume = v; }
-                                    if let Some(w) = worklet.peek().clone() { w.set_track_volume(track, v); }
+                                    // Through the backend so KeysRigRemote's
+                                    // mixer sees the same fader move.
+                                    crate::web_keys_backend::strip_set_volume(i, v);
                                 },
                             }
                             button {
@@ -2294,9 +2406,8 @@ fn LaneList(
                                     "padding:1px 8px; border-radius:4px; background:transparent; color:#a1a1aa; border:1px solid #27272a; font-size:11px; cursor:pointer;"
                                 },
                                 onclick: move |_| {
-                                    let now = !muted;
+                                    let now = crate::web_keys_backend::strip_toggle_mute(i);
                                     if let Some(row) = lanes.write().get_mut(i) { row.muted = now; }
-                                    if let Some(w) = worklet.peek().clone() { w.set_track_mute(track, now); }
                                 },
                                 "M"
                             }

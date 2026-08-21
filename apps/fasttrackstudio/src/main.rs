@@ -58,6 +58,10 @@ mod rig_view;
 // plays rigs through the engine instead.
 #[cfg(all(feature = "signal", target_arch = "wasm32"))]
 mod web_keys_rig;
+// W9: the in-tab keys backend — KeysRigRemote's client surface served
+// locally over architect's in-process LocalServer (wasm memory link).
+#[cfg(all(feature = "signal", target_arch = "wasm32"))]
+mod web_keys_backend;
 #[cfg(all(feature = "signal", target_arch = "wasm32"))]
 mod web_packs;
 mod ekit_view;

@@ -101,6 +101,7 @@ signal = [
     "dep:signal-drums-ui",
     "dep:signal-keys-proto",
     "dep:signal-keys-ui",
+    "dep:midicore-proto",
     "dep:signal-synth-proto",
     "dep:signal-synth-ui",
     # The embedded rig remote (rig_view.rs) — vox over a native WebSocket —
@@ -234,6 +235,9 @@ signal-drums-proto = { workspace = true, optional = true }
 signal-drums-ui = { workspace = true, optional = true }
 signal-keys-proto = { workspace = true, optional = true }
 signal-keys-ui = { workspace = true, optional = true }
+# MidiEvent — the in-tab keys backend (web_keys_backend.rs) decodes the raw
+# 3-byte messages it forwards into the monitor's wire events.
+midicore-proto = { workspace = true, optional = true }
 signal-synth-proto = { workspace = true, optional = true }
 signal-synth-ui = { workspace = true, optional = true }
 signal-packs-proto = { workspace = true, optional = true }
