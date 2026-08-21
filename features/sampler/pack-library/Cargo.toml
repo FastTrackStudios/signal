@@ -19,6 +19,10 @@ tokio = { workspace = true, features = ["fs", "io-util"] }
 walkdir.workspace = true
 sha2.workspace = true
 tracing.workspace = true
+# Wide-event enrichment (`wide::set`) on architect's per-RPC span. No
+# `otel` feature here — the calls are no-op stubs unless the hosting
+# binary (fasttrackstudio) enables it, which unifies the feature on.
+architect-telemetry.workspace = true
 
 [dev-dependencies]
 # In-process vox roundtrip of the W7 plan/range RPCs (tests/plan_roundtrip.rs).

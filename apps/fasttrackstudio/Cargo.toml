@@ -276,6 +276,11 @@ dioxus = { workspace = true, default-features = true, features = ["desktop", "la
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 tracing-subscriber.workspace = true
+# Telemetry: fmt console logs + optional Sentry + OTLP export (traces,
+# logs, metrics). Doubly opt-in — the `otel` cargo feature carries the
+# dependency weight, and at runtime nothing exports unless
+# OTEL_EXPORTER_OTLP_ENDPOINT is set (http/protobuf, port 4318).
+architect-telemetry = { workspace = true, features = ["otel"] }
 session-ui = { workspace = true, features = ["desktop"], optional = true }
 # The real DAW panels (MixerPanel / ArrangementView) — self-contained,
 # wired to the in-process daw facade. `web` = the dioxus (WebView) renderer

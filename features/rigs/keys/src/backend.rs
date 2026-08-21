@@ -2951,6 +2951,13 @@ impl KeysRigSvc for KeysRigBackend {
             }
         };
         let (packs, lanes) = self.profile_pack_refs();
+        // Wide event: enrich architect's per-RPC span — a browser boot that
+        // fetched an empty or wrong program names its profile here.
+        if let Some(profile) = self.inner.state.lock().ok().map(|s| s.profile.name.clone()) {
+            architect_telemetry::wide::set("keys.profile", profile);
+        }
+        architect_telemetry::wide::set("keys.pack_count", packs.len() as i64);
+        architect_telemetry::wide::set("keys.lane_count", lanes.len() as i64);
         KeysLaneProgram {
             program_json,
             packs,

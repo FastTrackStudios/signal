@@ -43,6 +43,10 @@ architect = { workspace = true, features = ["vox", "rig"] }
 # (in-process on iOS, engine mode, tests).
 tokio = { workspace = true, features = ["rt-multi-thread"] }
 tracing.workspace = true
+# Wide-event enrichment (`wide::set`) on architect's per-RPC span. No
+# `otel` feature here — the calls are no-op stubs unless the hosting
+# binary (fasttrackstudio) enables it, which unifies the feature on.
+architect-telemetry.workspace = true
 eyre.workspace = true
 
 [dev-dependencies]

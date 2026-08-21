@@ -125,7 +125,12 @@ fn spawn_parent_watchdog() {
 /// Entry point for `fasttrackstudio --engine`: builds the multi-thread tokio
 /// runtime and never returns until the server dies.
 pub fn run() {
-    host::init_tracing("info");
+    // Console logs (RUST_LOG-filtered fmt, same as host::init_tracing) plus
+    // telemetry: Sentry when TASK_SENTRY_DSN is set, and OTLP export of
+    // traces/logs/metrics when OTEL_EXPORTER_OTLP_ENDPOINT is set
+    // (http/protobuf → the local collector on :4318). Both guards must live
+    // for the whole process — dropping them flushes and stops the exporters.
+    let (_sentry, _otel) = architect_telemetry::init_tracing_full("fts-engine", "info");
     // Log every panic loudly (thread name + backtrace). Panics stay
     // unwinding — control-plane panics are caught and survived (the rig's
     // meter pump self-heals; audio keeps playing) — but none die silently.

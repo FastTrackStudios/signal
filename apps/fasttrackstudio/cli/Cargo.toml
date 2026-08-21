@@ -59,6 +59,9 @@ eyre = { workspace = true }
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "signal"] }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
+# Telemetry: Sentry + OTLP export, engaged only when
+# OTEL_EXPORTER_OTLP_ENDPOINT is set (http/protobuf, :4318).
+architect-telemetry = { workspace = true, features = ["otel"] }
 engine-launcher = { workspace = true }
 
 # fts daw / fts session engine

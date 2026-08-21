@@ -142,18 +142,36 @@ fn main() {
         return;
     }
 
+    // Console logs (RUST_LOG-filtered fmt) + the in-memory log ring, plus
+    // telemetry: Sentry (TASK_SENTRY_DSN) and OTLP export of traces/logs/
+    // metrics when OTEL_EXPORTER_OTLP_ENDPOINT is set (http/protobuf →
+    // the local collector on :4318). Hand-composed rather than
+    // `architect_telemetry::init_tracing_full` because the app adds its own
+    // RingLayer; the layer set is otherwise identical. The guards are
+    // deliberately leaked — main hands control to the dioxus event loop,
+    // which never returns normally.
     #[cfg(not(target_arch = "wasm32"))]
     {
         use tracing_subscriber::layer::SubscriberExt as _;
         use tracing_subscriber::util::SubscriberInitExt as _;
-        tracing_subscriber::registry()
+        if let Some(guard) = architect_telemetry::init("fts-app") {
+            std::mem::forget(guard);
+        }
+        let registry = tracing_subscriber::registry()
             .with(
                 tracing_subscriber::EnvFilter::try_from_default_env()
                     .unwrap_or_else(|_| "info,vox_core=warn,schema_deser=off".into()),
             )
             .with(tracing_subscriber::fmt::layer())
             .with(log_ring::RingLayer::new())
-            .init();
+            .with(architect_telemetry::tracing_layer());
+        match architect_telemetry::otel::init("fts-app") {
+            Some((otel_guard, layers)) => {
+                registry.with(layers).init();
+                std::mem::forget(otel_guard);
+            }
+            None => registry.init(),
+        }
         log_ring::install_panic_hook();
     }
 

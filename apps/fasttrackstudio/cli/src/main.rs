@@ -104,15 +104,41 @@ enum SessionCmd {
 }
 
 fn main() -> Result<()> {
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                // symphonia logs per-stream demux INFO — noise during pack
-                // decode probes/transcodes.
-                .unwrap_or_else(|_| "info,symphonia_format_ogg=warn,symphonia_core=warn".into()),
-        )
-        .with_writer(std::io::stderr)
-        .init();
+    // Console logs on STDERR (stdout is command output), plus telemetry:
+    // Sentry (TASK_SENTRY_DSN) and OTLP export when
+    // OTEL_EXPORTER_OTLP_ENDPOINT is set (http/protobuf → :4318).
+    // Hand-composed (not `architect_telemetry::init_tracing_full`) to keep
+    // the stderr writer. Guards live in main's scope so exporters flush on
+    // exit — a CLI run is short, so the final flush is the export.
+    let _sentry = architect_telemetry::init("fts-cli");
+    let registry = {
+        use tracing_subscriber::layer::SubscriberExt as _;
+        tracing_subscriber::registry()
+            .with(
+                tracing_subscriber::EnvFilter::try_from_default_env()
+                    // symphonia logs per-stream demux INFO — noise during pack
+                    // decode probes/transcodes.
+                    .unwrap_or_else(|_| {
+                        "info,symphonia_format_ogg=warn,symphonia_core=warn".into()
+                    }),
+            )
+            .with(tracing_subscriber::fmt::layer().with_writer(std::io::stderr))
+            .with(architect_telemetry::tracing_layer())
+    };
+    let _otel = {
+        use tracing_subscriber::layer::SubscriberExt as _;
+        use tracing_subscriber::util::SubscriberInitExt as _;
+        match architect_telemetry::otel::init("fts-cli") {
+            Some((guard, layers)) => {
+                registry.with(layers).init();
+                Some(guard)
+            }
+            None => {
+                registry.init();
+                None
+            }
+        }
+    };
 
     match Fts::parse().command {
         #[cfg(feature = "daw")]

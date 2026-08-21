@@ -394,6 +394,39 @@ Reuse, don't reinvent:
     engine-side state; the methods answer with current state and
     `last_error` text where a click would otherwise lie).
 
+### W10 — full telemetry (DONE)
+
+Every FTS process exports logs/traces/metrics via OTLP to the live
+collector (the Task observability stack: collector → Tempo/Loki,
+Grafana on top), the same `architect_telemetry` pattern as task-server.
+
+- **The env contract**: export is doubly opt-in — the `otel` cargo
+  feature on `architect-telemetry` carries the dependency weight, and at
+  runtime nothing initializes unless `OTEL_EXPORTER_OTLP_ENDPOINT` is
+  set. The exporter speaks **http/protobuf**, so the endpoint is the
+  collector's HTTP port: `http://127.0.0.1:4318` (NOT gRPC 4317).
+  Unsetting the var silently disables all export; console logs are
+  unaffected. `RUST_LOG` keeps working exactly as before (EnvFilter with
+  the same per-binary defaults).
+- **Service names**: `fts-engine` (`fasttrackstudio --engine`, incl. the
+  systemd `signal-engine` unit, which now sets the endpoint in its
+  `Environment=`), `fts-app` (desktop GUI), `fts-patchbay`
+  (`fts-patchbay`), `fts-cli` (`fts`). The name is passed to
+  `architect_telemetry` at init and wins over `OTEL_SERVICE_NAME`.
+- **Wide events**: architect's per-RPC span is the wide event
+  (`TransportRpc/get_state`, `KeysRigSvc/lane_program_wire`, … appear as
+  root traces in Tempo). Enrichments ride `architect_telemetry::wide::set`:
+  the pack library sets `pack.name` / `pack.variant` /
+  `pack.range_start` / `pack.range_len` / `pack.plan_cached`; the keys
+  backend sets `keys.profile` / `keys.pack_count` / `keys.lane_count` on
+  `lane_program_wire`.
+- **Finding FTS in Grafana** (Explore):
+  - Loki: `{service_name="fts-engine"}`
+  - Tempo (TraceQL): `{ resource.service.name = "fts-engine" }`, e.g.
+    `{ resource.service.name = "fts-engine" && span.pack.name != "" }`
+- Browser-side telemetry (wasm page errors → engine) is a follow-up;
+  `architect_telemetry` is no-op stubs on wasm today.
+
 ## Open questions / later
 
 - Piano-lane weight on travel links: consider a lower-quality travel

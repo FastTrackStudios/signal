@@ -175,6 +175,12 @@ impl PackLibrary for PackLibraryBackend {
         tx: vox::Tx<PackChunk>,
     ) -> Result<(), PackError> {
         let range: PackRange = range.parse().map_err(PackError::InvalidRange)?;
+        // Wide event: enrich architect's per-RPC span so a slow or failing
+        // range fetch names the pack and the bytes asked for.
+        architect_telemetry::wide::set("pack.name", name.clone());
+        architect_telemetry::wide::set("pack.variant", variant.clone());
+        architect_telemetry::wide::set("pack.range_start", range.start as i64);
+        architect_telemetry::wide::set("pack.range_len", range.len as i64);
         let entry = self.find(&name, &variant).ok_or(PackError::NotFound)?;
         let size = entry.info.size_bytes;
         let end = range
@@ -228,10 +234,15 @@ impl PackLibrary for PackLibraryBackend {
         start: u64,
         tx: vox::Tx<PackChunk>,
     ) -> Result<(), PackError> {
+        // Wide event: name the pack on architect's per-RPC span, and record
+        // whether the plan came from the memo or was computed fresh.
+        architect_telemetry::wide::set("pack.name", name.clone());
+        architect_telemetry::wide::set("pack.variant", variant.clone());
         let entry = self.find(&name, &variant).ok_or(PackError::NotFound)?;
         let total = entry.info.size_bytes;
         let key = (name, variant);
         let cached = self.plans.lock().ok().and_then(|p| p.get(&key).cloned());
+        architect_telemetry::wide::set("pack.plan_cached", cached.is_some());
         let json = match cached {
             Some(json) => json,
             None => {

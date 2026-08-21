@@ -18,6 +18,13 @@ Wants=pipewire.service
 [Service]
 ExecStart=%h/.local/lib/fts/fasttrackstudio --engine
 Environment=RUST_BACKTRACE=1
+# OTLP telemetry (traces + logs + metrics) to the local collector
+# (the Task observability stack: collector → Tempo/Loki, Grafana on top).
+# The exporter speaks http/protobuf, so this is the collector's HTTP port
+# (4318), NOT the gRPC one (4317). Service name: fts-engine.
+# REMOVING this line silently disables ALL export — the engine runs fine
+# but nothing lands in Grafana; console/journal logs are unaffected.
+Environment=OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318
 # Crash-only: whatever happens, be back in ~1s.
 Restart=always
 RestartSec=1
